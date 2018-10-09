@@ -253,6 +253,7 @@ method Contains(tree: Tree, value: int) returns (present: bool)
 
 method Insert(tree: Tree, value: int) returns (newtree: Tree)
 	requires(TTTree(tree));
+	ensures(TTTree(newtree));
 	ensures(Contents(newtree) == Contents(tree) + {value});
 	ensures(newtree.NonEmptyTree?);
 {
