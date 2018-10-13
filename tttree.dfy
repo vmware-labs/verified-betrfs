@@ -26,11 +26,12 @@ predicate ContentsAreGreaterEqualThan(pivot: int, tree: Node) {
 
 predicate OrderedTree(tree: Node) {
     if tree.Leaf?
-			then true
+			then SubtreeContents(tree) != {}
 		else if tree.TwoNode?
       then
 			ContentsAreLessThan(tree.left, tree.pivot) &&
 			ContentsAreGreaterEqualThan(tree.pivot, tree.right) &&
+			SubtreeContents(tree) != {} &&
 			OrderedTree(tree.left) &&
 			OrderedTree(tree.right)
 		else
@@ -39,6 +40,7 @@ predicate OrderedTree(tree: Node) {
 			ContentsAreGreaterEqualThan(tree.pivota, tree.middle) &&
 			ContentsAreLessThan(tree.middle, tree.pivotb) &&
 			ContentsAreGreaterEqualThan(tree.pivotb, tree.right) &&
+			SubtreeContents(tree) != {} &&
 			OrderedTree(tree.left) &&
 			OrderedTree(tree.middle) &&
 			OrderedTree(tree.right)
@@ -88,18 +90,15 @@ predicate TTSubtree(tree: Node) {
 
 	if tree.Leaf?
 		then OrderedTree(tree) &&
-		balanced(tree) &&
-		SubtreeContents(tree) != {}
+		balanced(tree)
 	else if tree.TwoNode?
 		then OrderedTree(tree) &&
 		balanced(tree) &&
-		SubtreeContents(tree) != {} &&
 		TTSubtree(tree.left) &&
 		TTSubtree(tree.right)
 	else
 		OrderedTree(tree) &&
 		balanced(tree) &&
-		SubtreeContents(tree) != {} &&
 		TTSubtree(tree.left) &&
 		TTSubtree(tree.middle) &&
 		TTSubtree(tree.right)
@@ -111,7 +110,7 @@ function Height(tree: Node) : int
 	minHeight(tree)
 }
 
-method NodeContains(tree: Node, value: int) returns (present: bool)
+method SubtreeContains(tree: Node, value: int) returns (present: bool)
     requires OrderedTree(tree);
     ensures present == (value in SubtreeContents(tree));
 {
@@ -119,24 +118,40 @@ method NodeContains(tree: Node, value: int) returns (present: bool)
 		present := value == tree.value;
 	} else if tree.TwoNode? {
 		if value < tree.pivot {
-			present := NodeContains(tree.left, value);
+			present := SubtreeContains(tree.left, value);
 		} else {
-			present := NodeContains(tree.right, value);
+			present := SubtreeContains(tree.right, value);
 		}
 	} else {
 		if value < tree.pivota {
-			present := NodeContains(tree.left, value);
+			present := SubtreeContains(tree.left, value);
 		} else if value < tree.pivotb {
-			present := NodeContains(tree.middle, value);
+			present := SubtreeContains(tree.middle, value);
 		} else {
-			present := NodeContains(tree.right, value);
+			present := SubtreeContains(tree.right, value);
 		}
 	}
 }
 
+function minElementOfSubtree(tree: Node) : int
+	requires(OrderedTree(tree));
+	ensures(forall x :: x in SubtreeContents(tree) ==> x >= minElementOfSubtree(tree));
+{
+	if tree.Leaf? then tree.value
+	else minElementOfSubtree(tree.left)
+}
+
+function maxElementOfSubtree(tree: Node) : int
+	requires(OrderedTree(tree));
+	ensures(forall x :: x in SubtreeContents(tree) ==> x <= maxElementOfSubtree(tree));
+{
+	if tree.Leaf? then tree.value
+	else maxElementOfSubtree(tree.right)
+}
+
 datatype InsertionResult = InsertionResult(tree: Node, split: bool)
 	
-method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
+method InsertIntoSubtree(tree: Node, value: int) returns (result: InsertionResult)
 	requires TTSubtree(tree);
 	ensures TTSubtree(result.tree);
 	ensures SubtreeContents(result.tree) == SubtreeContents(tree) + {value};
@@ -162,7 +177,7 @@ method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
 		}
 	} else if tree.TwoNode? {
 		if value < tree.pivot {
-			var subresult := InternalInsert(tree.left, value);
+			var subresult := InsertIntoSubtree(tree.left, value);
 			if !subresult.split {
 				result := InsertionResult(TwoNode(subresult.tree, tree.pivot, tree.right), false);
 			} else {
@@ -171,7 +186,7 @@ method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
 																					 tree.right), false);
 			}
 		} else {
-			var subresult := InternalInsert(tree.right, value);
+			var subresult := InsertIntoSubtree(tree.right, value);
 			if !subresult.split {
 				result := InsertionResult(TwoNode(tree.left, tree.pivot, subresult.tree), false);
 			} else {
@@ -182,7 +197,7 @@ method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
 		}
 	} else if tree.ThreeNode? {
 		if value < tree.pivota {
-			var subresult := InternalInsert(tree.left, value);
+			var subresult := InsertIntoSubtree(tree.left, value);
 			if !subresult.split {
 				result := InsertionResult(ThreeNode(subresult.tree, tree.pivota,
 					                                  tree.middle, tree.pivotb,
@@ -195,7 +210,7 @@ method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
 				result := InsertionResult(newtree, true);
 			}
 		} else if value < tree.pivotb {
-			var subresult := InternalInsert(tree.middle, value);
+			var subresult := InsertIntoSubtree(tree.middle, value);
 			if !subresult.split {
 				result := InsertionResult(ThreeNode(tree.left, tree.pivota,
 					                                  subresult.tree, tree.pivotb,
@@ -210,7 +225,7 @@ method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
 				result := InsertionResult(newtree, true);
 				}
 		} else {
-			var subresult := InternalInsert(tree.right, value);
+			var subresult := InsertIntoSubtree(tree.right, value);
 			if !subresult.split {
 				result := InsertionResult(ThreeNode(tree.left, tree.pivota,
 					                                  tree.middle, tree.pivotb,
@@ -227,7 +242,7 @@ method InternalInsert(tree: Node, value: int) returns (result: InsertionResult)
 }
 
 datatype Tree = EmptyTree | NonEmptyTree(root: Node)
-
+		
 predicate TTTree(tree: Tree) {
 	tree.EmptyTree? || TTSubtree(tree.root)
 }
@@ -247,7 +262,7 @@ method Contains(tree: Tree, value: int) returns (present: bool)
 	if tree.EmptyTree? {
 		present := false;
 	} else { 
-		present := NodeContains(tree.root, value);
+		present := SubtreeContains(tree.root, value);
 	}
 }
 
@@ -260,7 +275,34 @@ method Insert(tree: Tree, value: int) returns (newtree: Tree)
 	if tree.EmptyTree? {
 		newtree := NonEmptyTree(Leaf(value));
 	} else {
-		var result := InternalInsert(tree.root, value);
+		var result := InsertIntoSubtree(tree.root, value);
 		newtree := NonEmptyTree(result.tree);
 	}
 }
+
+datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
+	
+function DeleteFromSubtree(tree: Tree, value: int) : DeletionResult
+	requires TTTree(tree);
+	ensures TTTree(result.tree);
+	ensures Contents(result.tree) == Contents(tree) - {value};
+{
+	if tree.EmptyTree? then
+		DeletionResult(EmptyTree, false)
+	else
+		match tree.root {
+			case Leaf(v) =>
+				if v == value then DeletionResult(EmptyTree, true)
+				else DeletionResult(tree, false)
+			case TwoNode(left, pivot, right) =>
+				if value < pivot then {
+					var subresult := DeleteFromSubtree(left, value);
+					if !subresult.merged then
+						DeletionResult(NonEmptyTree(subresult.root, tree.root.pivot, tree.root.right))
+					else
+						
+				} else {
+				}
+		}
+}
+
