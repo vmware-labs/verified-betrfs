@@ -74,17 +74,8 @@ function method SummaryInterval(tree: Node) : Interval {
 	if tree.Leaf? then tree.value else tree.interval
 }
 	
-function method mkTwoNode(left: Node, pivot: int, right: Node) : Node {
-	TwoNode(left, pivot, right, IntervalUnion(SummaryInterval(left), SummaryInterval(right)))
-}
-						
-function method mkThreeNode(left: Node, pivota: int, middle: Node, pivotb: int, right: Node) : Node {
-	ThreeNode(left, pivota, middle, pivotb, right,
-		IntervalUnion3(SummaryInterval(left), SummaryInterval(middle), SummaryInterval(right)))
-}
-
 function SubtreeContents(tree: Node) : set<Interval>
-	ensures SubtreeContents(tree) != {};
+	ensures SubtreeContents(tree) != {}
 {
 	if tree.Leaf?
 		then {tree.value}
@@ -165,6 +156,14 @@ predicate Balanced(tree: Node)
 		(tree.ThreeNode? ==> Balanced(tree.left) && Balanced(tree.middle) && Balanced(tree.right))
 }
 
+function method Height(tree: Node) : int
+	requires Balanced(tree);
+	ensures Height(tree) == minHeight(tree);
+	ensures Height(tree) == maxHeight(tree);
+{
+	if tree.Leaf? then 0 else 1 + Height(tree.left)
+}
+
 predicate ITTSubtree(tree: Node) {
 
 	if tree.Leaf? then
@@ -186,16 +185,38 @@ predicate ITTSubtree(tree: Node) {
 		ITTSubtree(tree.right)
 }
 
-function method Height(tree: Node) : int
-	requires Balanced(tree);
-	ensures Height(tree) == minHeight(tree);
-	ensures Height(tree) == maxHeight(tree);
+function method mkTwoNode(left: Node, pivot: int, right: Node) : Node
+	requires ITTSubtree(left);
+	requires ITTSubtree(right);
+	requires forall intrvl: Interval :: intrvl in SubtreeContents(left) ==> intrvl.low.point <= pivot;
+	requires forall intrvl: Interval :: intrvl in SubtreeContents(right) ==> pivot <= intrvl.low.point;
+	requires Height(left) == Height(right);
+	ensures ITTSubtree(mkTwoNode(left, pivot, right));
+	ensures Height(mkTwoNode(left, pivot, right)) == Height(left) + 1;
 {
-	if tree.Leaf? then 0 else 1 + Height(tree.left)
+	TwoNode(left, pivot, right, IntervalUnion(SummaryInterval(left), SummaryInterval(right)))
+}
+						
+function method mkThreeNode(left: Node, pivota: int, middle: Node, pivotb: int, right: Node) : Node
+	requires ITTSubtree(left);
+	requires ITTSubtree(right);
+	requires ITTSubtree(middle);
+	requires forall intrvl: Interval :: intrvl in SubtreeContents(left) ==> intrvl.low.point <= pivota;
+	requires forall intrvl: Interval :: intrvl in SubtreeContents(middle) ==> pivota <= intrvl.low.point &&
+		                                                                intrvl.low.point <= pivotb;
+	requires forall intrvl: Interval :: intrvl in SubtreeContents(right) ==> pivotb <= intrvl.low.point;
+	requires Height(left) == Height(middle);
+	requires Height(middle) == Height(right);
+	ensures ITTSubtree(mkThreeNode(left, pivota, middle, pivotb, right));
+	ensures Height(mkThreeNode(left, pivota, middle, pivotb, right)) == Height(left) + 1;
+{
+	ThreeNode(left, pivota, middle, pivotb, right,
+		IntervalUnion3(SummaryInterval(left), SummaryInterval(middle), SummaryInterval(right)))
 }
 
+
 datatype InsertionResult = InsertionResult(tree: Node, split: bool)
-	
+
 method InternalInsert(tree: Node, intrvl: Interval) returns (result: InsertionResult)
 	requires ITTSubtree(tree);
 	ensures ITTSubtree(result.tree);
