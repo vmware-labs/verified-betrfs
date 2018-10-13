@@ -193,6 +193,7 @@ function method mkTwoNode(left: Node, pivot: int, right: Node) : Node
 	requires Height(left) == Height(right);
 	ensures ITTSubtree(mkTwoNode(left, pivot, right));
 	ensures Height(mkTwoNode(left, pivot, right)) == Height(left) + 1;
+	ensures SubtreeContents(mkTwoNode(left, pivot, right)) == SubtreeContents(left) + SubtreeContents(right);
 {
 	TwoNode(left, pivot, right, IntervalUnion(SummaryInterval(left), SummaryInterval(right)))
 }
@@ -209,6 +210,8 @@ function method mkThreeNode(left: Node, pivota: int, middle: Node, pivotb: int, 
 	requires Height(middle) == Height(right);
 	ensures ITTSubtree(mkThreeNode(left, pivota, middle, pivotb, right));
 	ensures Height(mkThreeNode(left, pivota, middle, pivotb, right)) == Height(left) + 1;
+	ensures SubtreeContents(mkThreeNode(left, pivota, middle, pivotb, right)) ==
+		SubtreeContents(left) + SubtreeContents(middle) + SubtreeContents(right);
 {
 	ThreeNode(left, pivota, middle, pivotb, right,
 		IntervalUnion3(SummaryInterval(left), SummaryInterval(middle), SummaryInterval(right)))
@@ -244,6 +247,7 @@ method InternalInsert(tree: Node, intrvl: Interval) returns (result: InsertionRe
 	} else if tree.TwoNode? {
 		if intrvl.low.point < tree.pivot {
 			var subresult := InternalInsert(tree.left, intrvl);
+			assert(SubtreeContents(subresult.tree) == SubtreeContents(tree.left) + {intrvl});
 			if !subresult.split {
 				result := InsertionResult(mkTwoNode(subresult.tree, tree.pivot, tree.right), false);
 			} else {
