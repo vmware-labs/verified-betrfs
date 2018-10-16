@@ -223,7 +223,7 @@ method InsertIntoSubtree(tree: Node, value: int) returns (result: InsertionResul
 				assert(Height(newright) == Height(tree));
 				assert(Height(newtree) == Height(tree) + 1);
 				result := InsertionResult(newtree, true);
-				}
+			}
 		} else {
 			var subresult := InsertIntoSubtree(tree.right, value);
 			if !subresult.split {
@@ -280,29 +280,29 @@ method Insert(tree: Tree, value: int) returns (newtree: Tree)
 	}
 }
 
-datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
+// datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
 	
-function DeleteFromSubtree(tree: Tree, value: int) : DeletionResult
-	requires TTTree(tree);
-	ensures TTTree(result.tree);
-	ensures Contents(result.tree) == Contents(tree) - {value};
-{
-	if tree.EmptyTree? then
-		DeletionResult(EmptyTree, false)
-	else
-		match tree.root {
-			case Leaf(v) =>
-				if v == value then DeletionResult(EmptyTree, true)
-				else DeletionResult(tree, false)
-			case TwoNode(left, pivot, right) =>
-				if value < pivot then {
-					var subresult := DeleteFromSubtree(left, value);
-					if !subresult.merged then
-						DeletionResult(NonEmptyTree(subresult.root, tree.root.pivot, tree.root.right))
-					else
+// function DeleteFromSubtree(tree: Tree, value: int) : DeletionResult
+// 	requires TTTree(tree);
+// 	ensures TTTree(result.tree);
+// 	ensures Contents(result.tree) == Contents(tree) - {value};
+// {
+// 	if tree.EmptyTree? then
+// 		DeletionResult(EmptyTree, false)
+// 	else
+// 		match tree.root {
+// 			case Leaf(v) =>
+// 				if v == value then DeletionResult(EmptyTree, true)
+// 				else DeletionResult(tree, false)
+// 			case TwoNode(left, pivot, right) =>
+// 				if value < pivot then {
+// 					var subresult := DeleteFromSubtree(left, value);
+// 					if !subresult.merged then
+// 						DeletionResult(NonEmptyTree(subresult.root, tree.root.pivot, tree.root.right))
+// 					else
 						
-				} else {
-				}
-		}
-}
+// 				} else {
+// 				}
+// 		}
+// }
 
