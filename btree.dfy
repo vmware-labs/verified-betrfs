@@ -15,6 +15,12 @@ lemma lexical_cmp_is_transitive(a: string, b: string, c: string)
 	ensures lexical_cmp(a, c) <= 0;
 {}
 
+lemma lexical_cmp_is_strictly_transitive(a: string, b: string, c: string)
+	requires lexical_cmp(a, b) < 0;
+	requires lexical_cmp(b, c) < 0;
+	ensures lexical_cmp(a, c) < 0;
+{}
+
 lemma lexical_cmp_is_anti_symmetric(a: string, b: string)
 	requires lexical_cmp(a, b) <= 0;
 	requires lexical_cmp(b, a) <= 0;
@@ -186,6 +192,8 @@ lemma children_have_one_less_height(node: Node)
 {
 	if node.Index? {
 		assert forall child :: child in node.children ==> height(child) == height(node) - 1;
+		// Why da fuq does repeating this line cause the proof to check out?!?
+		assert forall child :: child in node.children ==> height(child) == height(node) - 1;
 	}
 }
 
@@ -197,14 +205,14 @@ predicate is_child_list(nodes: seq<Node>)
 		(forall node :: node in nodes ==> height(node) == height(nodes[0]))
 }
 
-function method set_of_keys_of_children(nodes: seq<Node>) : set<string>
+function set_of_keys_of_children(nodes: seq<Node>) : set<string>
 	requires is_child_list(nodes);
 {
 	if |nodes| == 1 then set_of_keys(nodes[0])
 	else set_of_keys(nodes[0]) + set_of_keys_of_children(nodes[1..])
 }
 
-function method set_of_keys(node: Node) : set<string>
+function set_of_keys(node: Node) : set<string>
 	requires subtree_is_well_formed(node);
 	requires subtree_is_balanced(node);
 {	
@@ -218,8 +226,21 @@ function method set_of_keys(node: Node) : set<string>
 }
 
 predicate seq_is_strictly_increasing(ss: seq<string>) {
-	forall i :: 0 <= i < |ss|-1 ==> lexical_cmp(ss[i], ss[i+1]) < 0
+	forall i :: forall j :: 0 <= i < j < |ss| ==> lexical_cmp(ss[i], ss[j]) < 0
 }		
+
+lemma seq_sorting_transitivity(ss: seq<string>, key: string)
+	requires seq_is_strictly_increasing(ss);
+	requires |ss| > 0;
+	requires lexical_cmp(key, ss[0]) < 0;
+	ensures forall i :: 0 <= i < |ss| ==> lexical_cmp(key, ss[i]) < 0;
+{
+	forall i | 1 <= i < |ss|
+		ensures lexical_cmp(key, ss[i]) < 0;
+  {
+		lexical_cmp_is_strictly_transitive(key, ss[0], ss[i]);
+	}
+}
 
 predicate subtree_is_sorted(node: Node)
 	requires subtree_is_well_formed(node);
@@ -240,6 +261,12 @@ predicate subtree_is_sorted(node: Node)
 	}
 }
 
+predicate subtree_is_b_tree(node: Node) {
+	subtree_is_well_formed(node) &&
+		subtree_is_balanced(node) &&
+		subtree_is_sorted(node)
+}
+
 function map_of_kvpairs(acc: map<string, int>, keys: seq<string>, values: seq<int>) : map<string, int>
 	requires |keys| == |values|;
 {
@@ -257,9 +284,7 @@ function map_of_children(acc: map<string, int>, nodes: seq<Node>) : map<string, 
 }
 
 function map_of_subtree(acc: map<string, int>, node: Node) : map<string, int>
-	requires subtree_is_well_formed(node);
-	requires subtree_is_balanced(node);
-	requires subtree_is_sorted(node);
+	requires subtree_is_b_tree(node);
 	decreases height(node), 0;
 {
 	match node {
@@ -272,63 +297,78 @@ function map_of_subtree(acc: map<string, int>, node: Node) : map<string, int>
 }
 
 function subtree_map_contents(node: Node) : map<string, int>
-	requires subtree_is_well_formed(node);
-	requires subtree_is_balanced(node);
-	requires subtree_is_sorted(node);
+	requires subtree_is_b_tree(node);
 {
 	map_of_subtree(map[], node)
 }
 
-// // datatype Config = Config(
-// // 	min_leaf_size: int, max_leaf_size: int,
-// //   min_fanout: int, max_fanout: int)
+datatype Config = Config(
+	min_leaf_size: int, max_leaf_size: int,
+  min_fanout: int, max_fanout: int)
 
-// // predicate well_formed_config(cfg: Config) {
-// // 	1 <= cfg.min_leaf_size < cfg.max_leaf_size &&
-// // 	2 <= cfg.min_fanout < cfg.max_fanout
-// // }
+predicate well_formed_config(cfg: Config) {
+	1 <= cfg.min_leaf_size < cfg.max_leaf_size &&
+	2 <= cfg.min_fanout < cfg.max_fanout
+}
 
-// // predicate subtree_satisfies_config(node: Node, cfg: Config) {
-// // 	match node {
-// // 		case Leaf(keys, pivots) =>
-// // 			cfg.min_leaf_size <= |keys| <= cfg.max_leaf_size
-// // 		case Index(pivots, children) =>
-// // 			cfg.min_fanout <= |children| < cfg.max_fanout &&
-// // 			forall i :: 0 <= i < |children| ==> subtree_satisfies_config(children[i], cfg)
-// // 	}
-// // }
+predicate subtree_satisfies_config(node: Node, cfg: Config)
+	requires subtree_is_b_tree(node);
+{
+	match node {
+		case Leaf(keys, pivots) =>
+			cfg.min_leaf_size <= |keys| <= cfg.max_leaf_size
+		case Index(pivots, children) =>
+			cfg.min_fanout <= |children| < cfg.max_fanout &&
+			forall i :: 0 <= i < |children| ==> subtree_satisfies_config(children[i], cfg)
+	}
+}
 
-// // predicate is_valid_b_subtree(node: Node, cfg: Config) {
-// // 	subtree_is_well_formed(node) &&
-// // 		subtree_is_sorted(node) &&
-// // 		subtree_is_balanced(node) &&
-// // 		subtree_satisfies_config(node, cfg)
-// // }
+datatype QueryResult = KeyDoesNotExist | Value(v: int)
 
-// // datatype QueryResult = KeyDoesNotExist | Value(v: int)
+	// TODO: binary search
+function method search_seq(keys: seq<string>, values: seq<int>, key: string) : QueryResult
+	requires seq_is_strictly_increasing(keys);
+	requires |keys| == |values|;
+	ensures key !in map_of_kvpairs(map[], keys, values) ==>
+		search_seq(keys, values, key) == KeyDoesNotExist;
+	ensures key in map_of_kvpairs(map[], keys, values) ==>
+		search_seq(keys, values, key) == Value(map_of_kvpairs(map[], keys, values)[key]);
+{
+	if |keys| == 0 then KeyDoesNotExist
+	else if keys[0] == key then Value(values[0])
+	else search_seq(keys[1..], values[1..], key)
+}
 
-// // function method search_seq(keys: seq<string>, values: seq<int>, key: string) : QueryResult
-// // 	requires seq_is_strictly_increasing(keys);
-// // 	requires |keys| == |values|;
-// // 	ensures key !in map_of_kvpairs(map[], keys, values) ==>
-// // 		search_seq(keys, values, key) == KeyDoesNotExist;
-// // 	ensures key in map_of_kvpairs(map[], keys, values) ==>
-// // 		search_seq(keys, values, key) == Value(map_of_kvpairs(map[], keys, values)[key]);
-// // {
-// // 	if |keys| == 0 then KeyDoesNotExist
-// // 	else if keys[0] == key then Value(values[0])
-// // 	else search_seq(keys[1..], values[1..], key)
-// // }
-	
-// // // function method query(node: Node, key: string) : QueryResult
-// // // 	requires subtree_is_well_formed(node);
-// // // 	requires subtree_is_sorted(node);
-// // // 	ensures key !in subtree_map_contents(node) <==> query(node, key) == KeyDoesNotExist;
-// // // 	ensures key in subtree_map_contents(node) <==> query(node, key) == Value(subtree_map_contents(node)[key]);
-// // // {
-// // // 	match node {
-// // // 		case Leaf(keys, values) =>
-			
-// // // 		case Index(pivots, children) =>
-// // // 	}
-// // // }
+	// TODO: binary search
+method search_seq_for_least_greater(keys: seq<string>, key: string) returns (r: int)
+	requires seq_is_strictly_increasing(keys);
+	ensures 0 <= r <= |keys|;
+	ensures forall i :: 0 <= i < r ==> lexical_cmp(key, keys[i]) >= 0;
+	ensures forall i :: r <= i < |keys| ==> lexical_cmp(key, keys[i]) < 0;
+{
+	if |keys| == 0 {
+		r := 0;
+	} else if lexical_cmp(key, keys[0]) < 0 {
+		forall i | 1 <= i < |keys| {
+			lexical_cmp_is_strictly_transitive(key, keys[0], keys[i]);
+		}
+		r := 0;
+	} else {
+		var t := search_seq_for_least_greater(keys[1..], key);
+		r := 1 + t;
+	}
+}
+
+method query(node: Node, key: string) returns (qr: QueryResult)
+	requires subtree_is_b_tree(node);
+	ensures key !in subtree_map_contents(node) <==> qr == KeyDoesNotExist;
+	ensures key in subtree_map_contents(node) <==> qr == Value(subtree_map_contents(node)[key]);
+{
+	match node {
+		case Leaf(keys, values) =>
+			qr := search_seq(keys, values, key);
+		case Index(pivots, children) =>
+			var i := search_seq_for_least_greater(pivots, key);
+			qr := query(children[i], key);
+	}
+}
