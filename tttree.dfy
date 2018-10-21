@@ -196,22 +196,6 @@ function method QuerySubtree<Value>(tree: Node<Value>, key: Key) : QueryResult<V
 		QuerySubtree(tree.right, key)
 }
 
-// // function minElementOfSubtree(tree: Node) : int
-// // 	requires(OrderedTree(tree));
-// // 	ensures(forall x :: x in SubtreeContents(tree) ==> x >= minElementOfSubtree(tree));
-// // {
-// // 	if tree.Leaf? then tree.key
-// // 	else minElementOfSubtree(tree.left)
-// // }
-
-// // function maxElementOfSubtree(tree: Node) : int
-// // 	requires(OrderedTree(tree));
-// // 	ensures(forall x :: x in SubtreeContents(tree) ==> x <= maxElementOfSubtree(tree));
-// // {
-// // 	if tree.Leaf? then tree.key
-// // 	else maxElementOfSubtree(tree.right)
-// // }
-
 datatype InsertionResult<Value> = InsertionResult(tree: Node<Value>, split: bool)
 	
 method InsertIntoSubtree<Value>(tree: Node<Value>, key: Key, value: Value)
@@ -309,70 +293,70 @@ method InsertIntoSubtree<Value>(tree: Node<Value>, key: Key, value: Value)
 	} 
 }
 
-// // datatype Tree<Value> = EmptyTree | NonEmptyTree(root: Node<Value>)
+datatype Tree<Value> = EmptyTree | NonEmptyTree(root: Node<Value>)
 		
-// // predicate TTTree<Value>(tree: Tree<Value>) {
-// // 	tree.EmptyTree? || TTSubtree(tree.root)
-// // }
+predicate TTTree<Value>(tree: Tree<Value>) {
+	tree.EmptyTree? || TTSubtree(tree.root)
+}
 
-// // function Contents<Value>(tree: Tree<Value>) : map<int, Value>
-// // {
-// // 	if tree.EmptyTree?
-// // 		then map[]
-// // 	else
-// // 		SubtreeContents(tree.root)
-// // }
+function Contents<Value>(tree: Tree<Value>) : map<int, Value>
+{
+	if tree.EmptyTree?
+		then map[]
+	else
+		SubtreeContents(tree.root)
+}
 
-// // function method Query<Value>(tree: Tree<Value>, key: int) : QueryResult<Value>
-// // 	requires(TTTree(tree));
-// //   ensures Query(tree, key) == KeyDoesNotExist <==>
-// // 		(key !in Contents(tree));
-// //   ensures Query(tree, key).ValueForKey? <==>
-// // 		(key in Contents(tree) && Contents(tree)[key] == Query(tree, key).value);
-// // {
-// // 	if tree.EmptyTree? then
-// // 		KeyDoesNotExist
-// // 	else
-// // 		QuerySubtree(tree.root, key)
-// // }
+function method Query<Value>(tree: Tree<Value>, key: int) : QueryResult<Value>
+	requires(TTTree(tree));
+  ensures Query(tree, key) == KeyDoesNotExist <==>
+		(key !in Contents(tree));
+  ensures Query(tree, key).ValueForKey? <==>
+		(key in Contents(tree) && Contents(tree)[key] == Query(tree, key).value);
+{
+	if tree.EmptyTree? then
+		KeyDoesNotExist
+	else
+		QuerySubtree(tree.root, key)
+}
 
-// // method Insert<Value>(tree: Tree<Value>, key: int, value: Value) returns (newtree: Tree<Value>)
-// // 	requires TTTree(tree);
-// // 	ensures TTTree(newtree);
-// // 	ensures Contents(newtree) == Contents(tree)[key := value];
-// // 	ensures newtree.NonEmptyTree?;
-// // {
-// // 	if tree.EmptyTree? {
-// // 		newtree := NonEmptyTree(Leaf(key, value));
-// // 	} else {
-// // 		var result := InsertIntoSubtree(tree.root, key, value);
-// // 		newtree := NonEmptyTree(result.tree);
-// // 	}
-// // }
+method Insert<Value>(tree: Tree<Value>, key: int, value: Value) returns (newtree: Tree<Value>)
+	requires TTTree(tree);
+	ensures TTTree(newtree);
+	ensures Contents(newtree) == Contents(tree)[key := value];
+	ensures newtree.NonEmptyTree?;
+{
+	if tree.EmptyTree? {
+		newtree := NonEmptyTree(Leaf(key, value));
+	} else {
+		var result := InsertIntoSubtree(tree.root, key, value);
+		newtree := NonEmptyTree(result.tree);
+	}
+}
 
-// // // // datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
+// datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
 	
-// // // // function DeleteFromSubtree(tree: Tree, key: int) : DeletionResult
-// // // // 	requires TTTree(tree);
-// // // // 	ensures TTTree(result.tree);
-// // // // 	ensures Contents(result.tree) == Contents(tree) - {key};
-// // // // {
-// // // // 	if tree.EmptyTree? then
-// // // // 		DeletionResult(EmptyTree, false)
-// // // // 	else
-// // // // 		match tree.root {
-// // // // 			case Leaf(v) =>
-// // // // 				if v == key then DeletionResult(EmptyTree, true)
-// // // // 				else DeletionResult(tree, false)
-// // // // 			case TwoNode(left, pivot, right) =>
-// // // // 				if key < pivot then {
-// // // // 					var subresult := DeleteFromSubtree(left, key);
-// // // // 					if !subresult.merged then
-// // // // 						DeletionResult(NonEmptyTree(subresult.root, tree.root.pivot, tree.root.right))
-// // // // 					else
+// function DeleteFromSubtree(tree: Tree, key: int) : DeletionResult
+// 	requires TTTree(tree);
+// 	ensures TTTree(result.tree);
+// 	ensures Contents(result.tree) == Contents(tree) - {key};
+// {
+// 	if tree.EmptyTree? then
+// 		DeletionResult(EmptyTree, false)
+// 	else
+// 		match tree.root {
+// 			case Leaf(v) =>
+// 				if v == key then DeletionResult(EmptyTree, true)
+// 				else DeletionResult(tree, false)
+// 			case TwoNode(left, pivot, right) =>
+// 				if key < pivot then {
+// 					var subresult := DeleteFromSubtree(left, key);
+// 					if !subresult.merged then
+// 						DeletionResult(NonEmptyTree(subresult.root, tree.root.pivot, tree.root.right))
+// 					else
 						
-// // // // 				} else {
-// // // // 				}
-// // // // 		}
-// // // // }
+// 				} else {
+// 				}
+// 		}
+// }
 
