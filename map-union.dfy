@@ -3,16 +3,16 @@ function domain(m:map<int, int>) : set<int>
     set k | k in m
 }
 
-function mapunion(a:map<int, int>, b:map<int, int>) : map<int, int>
+function mapunion_internal(a:map<int, int>, b:map<int, int>) : map<int, int>
     requires domain(a) * domain(b) == {};
-    ensures domain(a) + domain(b) == domain(mapunion(a, b));
+    ensures domain(a) + domain(b) == domain(mapunion_internal(a, b));
 {
     map k| k in domain(a) + domain(b) :: if k in domain(a) then a[k] else b[k]
 }
 
 lemma mapunionLemma(a:map<int, int>, b:map<int, int>, c:map<int, int>)
     requires domain(a) * domain(b) == {};
-    requires c == mapunion(a, b);
+    requires c == mapunion_internal(a, b);
     ensures forall k :: k in domain(a) ==> a[k] == c[k];
     ensures forall k :: k in domain(b) ==> b[k] == c[k];
 {
@@ -31,4 +31,15 @@ lemma mapunionLemma(a:map<int, int>, b:map<int, int>, c:map<int, int>)
             //assert c[k] == b[k];
         }
     }
+}
+
+function mapunion(a:map<int, int>, b:map<int, int>) : map<int, int>
+    requires domain(a) * domain(b) == {};
+    ensures domain(a) + domain(b) == domain(mapunion(a, b));
+    ensures forall k :: k in domain(a) ==> a[k] == mapunion(a,b)[k];
+    ensures forall k :: k in domain(b) ==> b[k] == mapunion(a,b)[k];
+{
+    var c := mapunion_internal(a, b);
+    mapunionLemma(a, b, c);
+    c
 }
