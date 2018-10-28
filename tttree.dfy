@@ -191,33 +191,32 @@ abstract module TwoThreeTree {
 				(SubtreeAllKeys(result.tree) == SubtreeAllKeys(tree) + {key}) &&
 				(SubtreeContents(result.tree) == SubtreeContents(tree)[key := value]) &&
 				(result.split ==> result.tree.TwoNode?) &&
-				(result.split ==> result.tree.pivot in SubtreeAllKeys(tree) + {key}) &&
 				(result.split ==> Height(result.tree) == Height(tree) + 1) &&
 				(!result.split ==> Height(result.tree) == Height(tree))
 		}
 
-		method InsertIntoLeaf<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-			returns (result: InsertionResult<Value>)
-			requires TTSubtree(tree);
-			requires tree.Leaf?;
-			ensures ValidInsertionResult(result, tree, key, value);
-		{
-			if tree.key == key {
-				result := InsertionResult(Leaf(key, value), false);
-			} else if Keyspace.lt(tree.key, key) {
-				var newright := Leaf(key, value);
-				var newtree := mkTwoNode(tree, key, newright);
-				assert(Height(newright) == Height(tree));
-				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
-			} else {
-				var newleft := Leaf(key, value);
-				var newtree := mkTwoNode(newleft, tree.key, tree);
-				assert(Height(newleft) == Height(tree));
-				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
-			}
-		}
+		// method InsertIntoLeaf<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+		// 	returns (result: InsertionResult<Value>)
+		// 	requires TTSubtree(tree);
+		// 	requires tree.Leaf?;
+		// 	ensures ValidInsertionResult(result, tree, key, value);
+		// {
+		// 	if tree.key == key {
+		// 		result := InsertionResult(Leaf(key, value), false);
+		// 	} else if Keyspace.lt(tree.key, key) {
+		// 		var newright := Leaf(key, value);
+		// 		var newtree := mkTwoNode(tree, key, newright);
+		// 		assert(Height(newright) == Height(tree));
+		// 		assert(Height(newtree) == Height(tree) + 1);
+		// 		result := InsertionResult(newtree, true);
+		// 	} else {
+		// 		var newleft := Leaf(key, value);
+		// 		var newtree := mkTwoNode(newleft, tree.key, tree);
+		// 		assert(Height(newleft) == Height(tree));
+		// 		assert(Height(newtree) == Height(tree) + 1);
+		// 		result := InsertionResult(newtree, true);
+		// 	}
+		// }
 
 		// method InsertIntoTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
 		// 	returns (result: InsertionResult<Value>)
@@ -237,23 +236,25 @@ abstract module TwoThreeTree {
 		// 	}
 		// }
 
-		// method InsertIntoTwoNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-		// 	returns (result: InsertionResult<Value>)
-		// 	requires TTSubtree(tree);
-		// 	requires tree.TwoNode?;
-		// 	requires key == tree.pivot || Keyspace.lt(tree.pivot, key);
-		// 	ensures ValidInsertionResult(result, tree, key, value);
-		// 	decreases tree, 0;
-		// {
-		// 	var subresult := InsertIntoSubtree(tree.right, key, value);
-		// 	if !subresult.split {
-		// 		result := InsertionResult(mkTwoNode(tree.left, tree.pivot, subresult.tree), false);
-		// 	} else {
-		// 		result := InsertionResult(mkThreeNode(tree.left, tree.pivot,
-		// 	    subresult.tree.left, subresult.tree.pivot,
-		// 			subresult.tree.right), false);
-		// 	}
-		// }
+		method InsertIntoTwoNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+			returns (result: InsertionResult<Value>)
+			requires TTSubtree(tree);
+			requires tree.TwoNode?;
+			requires key == tree.pivot || Keyspace.lt(tree.pivot, key);
+			ensures ValidInsertionResult(result, tree, key, value);
+			decreases tree, 0;
+		{
+			var subresult := InsertIntoSubtree(tree.right, key, value);
+			if !subresult.split {
+				//result := InsertionResult(mkTwoNode(tree.left, tree.pivot, subresult.tree), false);
+				result := subresult;
+				assume ValidInsertionResult(result, tree, key, value);
+			} else {
+					result := InsertionResult(mkThreeNode(tree.left, tree.pivot,
+				                           subresult.tree.left, subresult.tree.pivot,
+																	 subresult.tree.right), false);
+		  }
+		}
 
 		// method InsertIntoTwoNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
 		// 	returns (result: InsertionResult<Value>)
@@ -367,7 +368,9 @@ abstract module TwoThreeTree {
 			// 	result := InsertIntoTwoNode(tree, key, value);
 			// } else {
 			// 	result := InsertIntoThreeNode(tree, key, value);
-			// }
+		  // }
+			result := InsertionResult(tree, false);
+			assume ValidInsertionResult(result, tree, key, value);
 		}
 		
 		// method InsertIntoSubtree<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
