@@ -1,58 +1,8 @@
-function method lexical_cmp(a: string, b: string) : int
-	ensures a == b ==> lexical_cmp(a, b) == 0;
-{
-	if |a| == 0 && |b| == 0 then  0
-	else if |a| == 0       then -1
-	else if |b| == 0       then  1
-	else if a[0] < b[0]    then -1
-	else if a[0] > b[0]    then  1
-	else lexical_cmp(a[1..], b[1..])
-}
+include "lexical.dfy"
+	
+import Lex = Lexically
 
-lemma lexical_cmp_is_transitive(a: string, b: string, c: string)
-	requires lexical_cmp(a, b) <= 0;
-	requires lexical_cmp(b, c) <= 0;
-	ensures lexical_cmp(a, c) <= 0;
-{}
-
-lemma lexical_cmp_is_strictly_transitive(a: string, b: string, c: string)
-	requires lexical_cmp(a, b) < 0;
-	requires lexical_cmp(b, c) < 0;
-	ensures lexical_cmp(a, c) < 0;
-{}
-
-lemma lexical_cmp_is_anti_symmetric(a: string, b: string)
-	requires lexical_cmp(a, b) <= 0;
-	requires lexical_cmp(b, a) <= 0;
-	ensures a == b;
-{}
-
-function method longest_common_prefix<T(==)>(a: seq<T>, b: seq<T>) : seq<T>
-	ensures longest_common_prefix<T>(a, b) <= a;
-	ensures longest_common_prefix<T>(a, b) <= b;
-	ensures
-		|longest_common_prefix<T>(a, b)| == |a| ||
-		|longest_common_prefix<T>(a, b)| == |b| ||
-		a[|longest_common_prefix<T>(a, b)|] != b[|longest_common_prefix<T>(a, b)|];
-{
-	if |a| == 0 || |b| == 0 || a[0] != b[0] then []
-	else [a[0]] + longest_common_prefix<T>(a[1..], b[1..])
-}
-
-lemma lexical_cmp_between_implies_common_prefix(a: string, b: string, c: string)
-	requires lexical_cmp(a, b) <= 0;
-	requires lexical_cmp(b, c) <= 0;
-	ensures
-		longest_common_prefix<char>(a, c) == longest_common_prefix<char>(a, b) ||
-		longest_common_prefix<char>(a, c) == longest_common_prefix<char>(b, c);
-{
-	if |longest_common_prefix<char>(a, c)| > 0 {
-		assert a[0] == b[0] && b[0] == c[0];
-		lexical_cmp_between_implies_common_prefix(a[1..], b[1..], c[1..]);
-	}
-}
-
-//////////////////////////////////////////////
+	//////////////////////////////////////////////
 
 function method min(a: int, b: int) : int
 {
@@ -205,8 +155,8 @@ predicate is_child_list(pivots: seq<string>, nodes: seq<Node>)
 		(forall node :: node in nodes ==> subtree_is_balanced(node)) &&
 		(forall node :: node in nodes ==> height(node) == height(nodes[0])) &&
 		(
-		forall i :: 0 <= i < |nodes| - 1 ==> forall k :: k in set_of_keys(nodes[i]) ==> lexical_cmp(k, pivots[i]) < 0) &&
-		(forall i :: 1 <= i < |nodes| ==> forall k :: k in set_of_keys(nodes[i]) ==> lexical_cmp(pivots[i-1], k) <= 0)
+		forall i :: 0 <= i < |nodes| - 1 ==> forall k :: k in set_of_keys(nodes[i]) ==> Lex.lt(k, pivots[i])) &&
+		(forall i :: 1 <= i < |nodes| ==> forall k :: k in set_of_keys(nodes[i]) ==> Lex.lte(pivots[i-1], k))
 }
 
 function set_of_keys_of_children(pivots: seq<string>, nodes: seq<Node>) : set<string>
@@ -230,20 +180,15 @@ function set_of_keys(node: Node) : set<string>
 }
 
 predicate seq_is_strictly_increasing(ss: seq<string>) {
-	forall i :: forall j :: 0 <= i < j < |ss| ==> lexical_cmp(ss[i], ss[j]) < 0
+	forall i :: forall j :: 0 <= i < j < |ss| ==> Lex.lt(ss[i], ss[j])
 }		
 
 lemma seq_sorting_transitivity(ss: seq<string>, key: string)
 	requires seq_is_strictly_increasing(ss);
 	requires |ss| > 0;
-	requires lexical_cmp(key, ss[0]) < 0;
-	ensures forall i :: 0 <= i < |ss| ==> lexical_cmp(key, ss[i]) < 0;
+	requires Lex.lt(key, ss[0]);
+	ensures forall i :: 0 <= i < |ss| ==> Lex.lt(key, ss[i]);
 {
-	forall i | 1 <= i < |ss|
-		ensures lexical_cmp(key, ss[i]) < 0;
-  {
-		lexical_cmp_is_strictly_transitive(key, ss[0], ss[i]);
-	}
 }
 
 predicate subtree_is_sorted(node: Node)
@@ -257,10 +202,10 @@ predicate subtree_is_sorted(node: Node)
 			seq_is_strictly_increasing(pivots) &&
 			(forall i :: 0 <= i < |children|-1 ==>
 			  (forall x :: x in set_of_keys(children[i]) ==>
-			    lexical_cmp(x, pivots[i]) < 0)) &&
+			    Lex.lt(x, pivots[i]))) &&
 			(forall i :: 1 <= i < |children| ==>
 			  (forall x :: x in set_of_keys(children[i]) ==>
-			    lexical_cmp(pivots[i-1], x) <= 0)) &&
+			    Lex.lte(pivots[i-1], x))) &&
 			forall i :: 0 <= i < |children| ==> subtree_is_sorted(children[i])
 	}
 }
@@ -302,12 +247,12 @@ function map_of_children<Value>(pivots: seq<string>, nodes: seq<Node<Value> >) :
 	if |nodes| == 1 then map_of_subtree(nodes[0])
 	else
 		var map1 := map_of_subtree(nodes[0]);
-		assert forall k :: k in set_of_keys(nodes[0]) ==> lexical_cmp(k, pivots[0]) < 0;
+		assert forall k :: k in set_of_keys(nodes[0]) ==> Lex.lt(k, pivots[0]);
 		assert map1.Keys == set_of_keys(nodes[0]);
-		assert forall k :: k in map1.Keys ==> lexical_cmp(k, pivots[0]) < 0;
+		assert forall k :: k in map1.Keys ==> Lex.lt(k, pivots[0]);
 		var map2 := map_of_children(pivots[1..], nodes[1..]);
 		assert map2.Keys == set_of_keys_of_children(pivots[1..], nodes[1..]);
-		assert forall k :: k in map2.Keys ==> lexical_cmp(pivots[0], k) <= 0;
+		assert forall k :: k in map2.Keys ==> Lex.lte(pivots[0], k);
 		merge_disjoint_maps(map1, map2)
 }
 
@@ -380,15 +325,12 @@ function method search_seq<Value>(keys: seq<string>, values: seq<Value>, key: st
 method search_seq_for_least_greater(keys: seq<string>, key: string) returns (r: int)
 	requires seq_is_strictly_increasing(keys);
 	ensures 0 <= r <= |keys|;
-	ensures forall i :: 0 <= i < r ==> lexical_cmp(key, keys[i]) >= 0;
-	ensures forall i :: r <= i < |keys| ==> lexical_cmp(key, keys[i]) < 0;
+	ensures forall i :: 0 <= i < r ==> Lex.lte(keys[i], key);
+	ensures forall i :: r <= i < |keys| ==> Lex.lt(key, keys[i]);
 {
 	if |keys| == 0 {
 		r := 0;
-	} else if lexical_cmp(key, keys[0]) < 0 {
-		forall i | 1 <= i < |keys| {
-			lexical_cmp_is_strictly_transitive(key, keys[0], keys[i]);
-		}
+	} else if Lex.lt(key, keys[0]) {
 		r := 0;
 	} else {
 		var t := search_seq_for_least_greater(keys[1..], key);
