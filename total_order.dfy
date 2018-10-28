@@ -1,22 +1,17 @@
-abstract module Totally_Ordered_Type {
+abstract module Total_Order {
 
 	type Element(!new,==)
 
 	predicate method lt(a: Element, b: Element)
-		ensures lt(a, b) == ltdef(a, b);
-		ensures ltdef(a, b) || ltdef(b, a) || a == b; 
-		ensures ltdef(a, b) ==> a != b && !ltdef(b, a); 
-		ensures forall a, b, c :: ltdef(a, b) && ltdef(b, c) ==> ltdef(a, c);
-		// ensures forall a, b, c :: ltdef(a, b) && ltedef(b, c) ==> ltdef(a, c);
-		// ensures forall a, b, c :: ltedef(a, b) && ltdef(b, c) ==> ltdef(a, c);
-
-	// predicate method lte(a: Element, b: Element)
-	// 	ensures lte(a, b) == ltedef(a, b);
-	// 	ensures forall a, b :: ltedef(a, b) && ltedef(b, a) ==> a == b;
-	// 	ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c);
-		// ensures forall a, b, c :: ltdef(a, b) && ltedef(b, c) ==> ltdef(a, c);
-		// ensures forall a, b, c :: ltedef(a, b) && ltdef(b, c) ==> ltdef(a, c);
+	{
+		lte(a, b) && a != b
+	}
 		
-	predicate ltdef(a: Element, b: Element)
-	//predicate ltedef(a: Element, b: Element)
+	predicate method lte(a: Element, b: Element)
+		ensures lte(a, b) == ltedef(a, b);
+		ensures ltedef(a, b) || ltedef(b, a); // Total
+		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
+		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
+
+	predicate ltedef(a: Element, b: Element)
 }

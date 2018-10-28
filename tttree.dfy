@@ -3,17 +3,16 @@ include "map_utils.dfy"
 include "mathematics.dfy"
 
 abstract module TwoThreeTree {
-	import Keyspace : Totally_Ordered_Type
+	import Keyspace : Total_Order
 	import Maps = Map_Utils
 	import Math = Mathematics
 	
 	datatype Node<Value> =
 		Leaf(key: Keyspace.Element, value: Value) |
-		TwoNode(left: Node, pivot: Keyspace.Element,
-	  right: Node) |
+		TwoNode(left: Node, pivot: Keyspace.Element, right: Node) |
 		ThreeNode(left: Node, pivota: Keyspace.Element,
-	  middle: Node, pivotb: Keyspace.Element,
-		right: Node)
+   	          middle: Node, pivotb: Keyspace.Element,
+							right: Node)
 
 		function SubtreeAllKeys(tree: Node) : set<Keyspace.Element>
 			ensures SubtreeAllKeys(tree) != {};
