@@ -195,6 +195,7 @@ predicate MostlyRBTree(tree:Node, kc: int, value: int, b: Node)
     // The properties provided by 'inner' invocations of Insert -- *almost*
     // a red-black tree, except we allow a single red-red violation at
     // the root.
+    // b is tree + value
 {
        OrderedTree(b)
     && !b.Nil?
@@ -266,11 +267,13 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     requires ColorOf(changedSubtree).Red?;
     requires ColorOf(child(tree, opposite(changedSide))).Black?;
     requires ColorOf(child(changedSubtree, changedSide)).Red?;
+    // insert obeyed tree.value pivot.
+    requires SideIsOrdered(changedSubtree, changedSide, tree.value);
     // Stable grandchild didn't change.
     requires child(tree, changedSide).Node?;
     requires child(changedSubtree, opposite(changedSide))
         == child(child(tree, changedSide), opposite(changedSide));
-    requires MostlyRBTree(child(tree, changedSide), kc, value, changedSubtree);
+    requires MostlyRBTree(child(tree, changedSide), kc - 1, value, changedSubtree);
     ensures MostlyRBTree(tree, kc, value, b);
 {
     ghost var origSubtree := child(tree, changedSide);
@@ -282,175 +285,168 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
 
     var rotatedGrandparent := WologNode(
         stableSide, uncle, sub3, tree.value, Red);
-
-    assert Contents(rotatedGrandparent) == Contents(sub3) + multiset{tree.value} + Contents(uncle);
-    b := WologNode(changedSide, newNode, rotatedGrandparent,
-        changedSubtree.value, Black);
-    calc {
-        Contents(b);
-//        == Contents(newNode) + Contents(rotatedGrandparent) + multiset{changedSubtree.value};
-//        == Contents(newNode) + Contents(sub3) + Contents(uncle) + multiset{tree.value} + multiset{changedSubtree.value};
-        == Contents(changedSubtree) + Contents(uncle) + multiset{tree.value};   // OBSERVE
-//        == Contents(origSubtree) + multiset{value} + Contents(uncle) + multiset{tree.value};
-//        == Contents(tree) + multiset{value};
-    }
-    assert Contents(b) == Contents(tree) + multiset{value};
-    assert BlackCountOnAllPaths(uncle, kc-1);
-    assert BlackCountOnAllPaths(origSubtree, kc-1);
-    assert sub3 == child(origSubtree, stableSide);
-    assert BlackCountOnAllPaths(sub3, kc-1);
-    BlackCountInheritance(rotatedGrandparent, kc - 1);
-    assert BlackCountOnAllPaths(rotatedGrandparent, kc-1);
-    assert BlackCountOnAllPaths(changedSubtree, kc-1);
-    assert BlackCountOnAllPaths(newNode, kc-1);
-    assert BlackCountOnAllPaths(b, kc);
-    assert redOnRedViolation(b).Some? ==> ColorOf(tree).Red?;
-    assert OrderedTree(b);
-}
-
-method RepairCase2Terminate(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
-    requires MostlyRBTree(child(tree, changedSide), kc, value, changedSubtree);
-    ensures MostlyRBTree(tree, kc, value, b);
-{
-    var stableSide := opposite(changedSide);
-    var stableSubtree := child(tree, stableSide);
-    b := WologNode(changedSide, changedSubtree, stableSubtree,
-        tree.value, tree.color);
-    assert RedNodesHaveBlackChildren(b.left);
-    assert RedNodesHaveBlackChildren(b.right);
-    assert Contents(b) == Contents(tree) + multiset{value};
-    assert BlackCountOnAllPaths(b, kc);
-    assert redOnRedViolation(b).Some? ==> ColorOf(tree).Red?;
-}
-
-// May violate red-has-black-children rule at top level.
-// This implementation will continue checking as it recurses back up
-// the tree, but that's okay because we have to rebuild the tree pointers
-// anyway.
-method InnerInsert(tree: Node, ghost kc: int, value: int) returns (b: Node)
-    requires RBTree(tree, kc);
-    ensures MostlyRBTree(tree, kc, value, b);
-{
-    if tree.Nil? {
-        b := Node(Nil, value, Nil, Red);
-        assert MostlyRBTree(tree, kc, value, b);
-    } else {
-        var changedSide := if (value < tree.value) then Left else Right;
-        var stableSide := opposite(changedSide);
-        ghost var kcc := SubtreeBlackCount(tree, kc);
-        var stableSubtree := child(tree, stableSide);
-        var changedSubtree := InnerInsert(child(tree, changedSide), kcc, value);
-        assert MostlyRBTree(child(tree, changedSide), kcc, value, changedSubtree);
-
-        var violation := redOnRedViolation(changedSubtree);
-        if (violation.Some?) {
-            assert ColorOf(changedSubtree).Red?;
-            if ColorOf(changedSubtree) == ColorOf(stableSubtree) {
-                b := RepairCase3Recolor(tree, kc, value,
-                    changedSide, changedSubtree);
-            }
-
-            var grandchildSide := violation.t;
-            if (grandchildSide != changedSide) {
-                changedSubtree := RepairCase4pt1RotateOutside(child(tree, changedSide), kcc, value, changedSubtree, changedSide);
-                grandchildSide := changedSide;
-            }
-
-            b := RepairCase4pt2RotateUp(tree, kc, value, changedSide, changedSubtree);
+    // Show by case analysis that rotatedGrandparent ends up on the correct
+    // side of changedSubtree.value.
+    forall x | x in Contents(rotatedGrandparent)
+        ensures ValueIsOrdered(x, stableSide, changedSubtree.value);
+    {
+        assert ValueIsOrdered(changedSubtree.value, changedSide, tree.value);
+        if x in Contents(uncle) {
+        } else if x in Contents(sub3) {
         } else {
-            b := RepairCase2Terminate(tree, kc, value, changedSide, changedSubtree);
+            assert x == tree.value;
         }
     }
+
+    b := WologNode(changedSide, newNode, rotatedGrandparent,
+        changedSubtree.value, Black);
+    assert Contents(b) == Contents(changedSubtree) + Contents(uncle) + multiset{tree.value};   // OBSERVE
 }
 
-method Insert(tree: Node, ghost kc: int, value: int) returns (updated: Node, ghost ukc: int)
-    requires RBTree(tree, kc);
-    ensures RBTree(updated, ukc);
-    ensures Contents(updated) == Contents(tree) + multiset{value};
-{
-    updated := InnerInsert(tree, kc, value);
-    assert RBTree(updated, ukc);
-    assert Contents(updated) == Contents(tree) + multiset{value};
-}
-
-
-/*
-method Contains(tree: Node, value: int) returns (present: bool)
-    requires RBTree(tree);
-    ensures present == (value in Contents(tree));
-{
-    if tree.Nil? {
-        present := false;
-        return;
-    }
-    if value == tree.value {
-        present := true;
-        return;
-    }
-    if value < tree.value {
-        present := Contains(tree.left, value);
-        return;
-    }
-    present := Contains(tree.right, value);
-}
-
-*/
-
-method spaces(indent: int) {
-    var i := 0;
-    while (i < indent) {
-        print " ";
-        i := i + 1;
-    }
-}
-
-method printTree(t: Node, indent: int) {
-    if (t.Nil?) {
-        return;
-    }
-    printTree(t.left, indent+2);
-    spaces(indent);
-    print t.value;
-    print "\n";
-    printTree(t.right, indent+2);
-}
-
-predicate eRBTree(tree: Node) {
-    exists kc :: RBTree(tree, kc)
-}
-
-method eInsert(tree: Node, value: int) returns (updated: Node)
-    requires eRBTree(tree);
-    ensures eRBTree(updated);
-{
-    ghost var kc :| RBTree(tree, kc);
-    ghost var ekc : int;
-    updated, ekc := Insert(tree, kc, value);
-}
-
-method Main() {
-    var t := Nil;
-    RBTreeNil(t);
-    t := eInsert(t, 6);
-    t := eInsert(t, 3);
-    t := eInsert(t, 8);
-    t := eInsert(t, 4);
-    t := eInsert(t, 1);
-    t := eInsert(t, 7);
-    t := eInsert(t, 9);
-    printTree(t, 0);
-    print Contents(t);
-    print "\n";
-
-    t := Nil;
-    t := eInsert(t, 1);
-    t := eInsert(t, 3);
-    t := eInsert(t, 4);
-    t := eInsert(t, 6);
-    t := eInsert(t, 7);
-    t := eInsert(t, 8);
-    t := eInsert(t, 9);
-    printTree(t, 0);
-    print Contents(t);
-    print "\n";
-}
+//XX
+//XXmethod RepairCase2Terminate(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
+//XX    requires MostlyRBTree(child(tree, changedSide), kc, value, changedSubtree);
+//XX    ensures MostlyRBTree(tree, kc, value, b);
+//XX{
+//XX    var stableSide := opposite(changedSide);
+//XX    var stableSubtree := child(tree, stableSide);
+//XX    b := WologNode(changedSide, changedSubtree, stableSubtree,
+//XX        tree.value, tree.color);
+//XX    assert RedNodesHaveBlackChildren(b.left);
+//XX    assert RedNodesHaveBlackChildren(b.right);
+//XX    assert Contents(b) == Contents(tree) + multiset{value};
+//XX    assert BlackCountOnAllPaths(b, kc);
+//XX    assert redOnRedViolation(b).Some? ==> ColorOf(tree).Red?;
+//XX}
+//XX
+//XX// May violate red-has-black-children rule at top level.
+//XX// This implementation will continue checking as it recurses back up
+//XX// the tree, but that's okay because we have to rebuild the tree pointers
+//XX// anyway.
+//XXmethod InnerInsert(tree: Node, ghost kc: int, value: int) returns (b: Node)
+//XX    requires RBTree(tree, kc);
+//XX    ensures MostlyRBTree(tree, kc, value, b);
+//XX{
+//XX    if tree.Nil? {
+//XX        b := Node(Nil, value, Nil, Red);
+//XX        assert MostlyRBTree(tree, kc, value, b);
+//XX    } else {
+//XX        var changedSide := if (value < tree.value) then Left else Right;
+//XX        var stableSide := opposite(changedSide);
+//XX        ghost var kcc := SubtreeBlackCount(tree, kc);
+//XX        var stableSubtree := child(tree, stableSide);
+//XX        var changedSubtree := InnerInsert(child(tree, changedSide), kcc, value);
+//XX        assert MostlyRBTree(child(tree, changedSide), kcc, value, changedSubtree);
+//XX
+//XX        var violation := redOnRedViolation(changedSubtree);
+//XX        if (violation.Some?) {
+//XX            assert ColorOf(changedSubtree).Red?;
+//XX            if ColorOf(changedSubtree) == ColorOf(stableSubtree) {
+//XX                b := RepairCase3Recolor(tree, kc, value,
+//XX                    changedSide, changedSubtree);
+//XX            }
+//XX
+//XX            var grandchildSide := violation.t;
+//XX            if (grandchildSide != changedSide) {
+//XX                changedSubtree := RepairCase4pt1RotateOutside(child(tree, changedSide), kcc, value, changedSubtree, changedSide);
+//XX                grandchildSide := changedSide;
+//XX            }
+//XX
+//XX            b := RepairCase4pt2RotateUp(tree, kc, value, changedSide, changedSubtree);
+//XX        } else {
+//XX            b := RepairCase2Terminate(tree, kc, value, changedSide, changedSubtree);
+//XX        }
+//XX    }
+//XX}
+//XX
+//XXmethod Insert(tree: Node, ghost kc: int, value: int) returns (updated: Node, ghost ukc: int)
+//XX    requires RBTree(tree, kc);
+//XX    ensures RBTree(updated, ukc);
+//XX    ensures Contents(updated) == Contents(tree) + multiset{value};
+//XX{
+//XX    updated := InnerInsert(tree, kc, value);
+//XX    assert RBTree(updated, ukc);
+//XX    assert Contents(updated) == Contents(tree) + multiset{value};
+//XX}
+//XX
+//XX
+//XX/*
+//XXmethod Contains(tree: Node, value: int) returns (present: bool)
+//XX    requires RBTree(tree);
+//XX    ensures present == (value in Contents(tree));
+//XX{
+//XX    if tree.Nil? {
+//XX        present := false;
+//XX        return;
+//XX    }
+//XX    if value == tree.value {
+//XX        present := true;
+//XX        return;
+//XX    }
+//XX    if value < tree.value {
+//XX        present := Contains(tree.left, value);
+//XX        return;
+//XX    }
+//XX    present := Contains(tree.right, value);
+//XX}
+//XX
+//XX*/
+//XX
+//XXmethod spaces(indent: int) {
+//XX    var i := 0;
+//XX    while (i < indent) {
+//XX        print " ";
+//XX        i := i + 1;
+//XX    }
+//XX}
+//XX
+//XXmethod printTree(t: Node, indent: int) {
+//XX    if (t.Nil?) {
+//XX        return;
+//XX    }
+//XX    printTree(t.left, indent+2);
+//XX    spaces(indent);
+//XX    print t.value;
+//XX    print "\n";
+//XX    printTree(t.right, indent+2);
+//XX}
+//XX
+//XXpredicate eRBTree(tree: Node) {
+//XX    exists kc :: RBTree(tree, kc)
+//XX}
+//XX
+//XXmethod eInsert(tree: Node, value: int) returns (updated: Node)
+//XX    requires eRBTree(tree);
+//XX    ensures eRBTree(updated);
+//XX{
+//XX    ghost var kc :| RBTree(tree, kc);
+//XX    ghost var ekc : int;
+//XX    updated, ekc := Insert(tree, kc, value);
+//XX}
+//XX
+//XXmethod Main() {
+//XX    var t := Nil;
+//XX    RBTreeNil(t);
+//XX    t := eInsert(t, 6);
+//XX    t := eInsert(t, 3);
+//XX    t := eInsert(t, 8);
+//XX    t := eInsert(t, 4);
+//XX    t := eInsert(t, 1);
+//XX    t := eInsert(t, 7);
+//XX    t := eInsert(t, 9);
+//XX    printTree(t, 0);
+//XX    print Contents(t);
+//XX    print "\n";
+//XX
+//XX    t := Nil;
+//XX    t := eInsert(t, 1);
+//XX    t := eInsert(t, 3);
+//XX    t := eInsert(t, 4);
+//XX    t := eInsert(t, 6);
+//XX    t := eInsert(t, 7);
+//XX    t := eInsert(t, 8);
+//XX    t := eInsert(t, 9);
+//XX    printTree(t, 0);
+//XX    print Contents(t);
+//XX    print "\n";
+//XX}
