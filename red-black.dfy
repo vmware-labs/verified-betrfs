@@ -223,15 +223,6 @@ method RepairCase4pt1RotateOutside(childTree: Node, ghost kcc: int, value: int, 
     ensures ColorOf(rotated).Red?;
     ensures ColorOf(child(rotated, opposite(changedSide))).Red?;
 {
-/*
-    assert ColorOf(childTree).Red?;
-    var stableSide := opposite(changedSide);
-    var sub1 := child(childTree, stableSide);
-    var inner := child(childTree, changedSide);
-    assert ColorOf(inner).Red?;
-    var sub2 := child(inner, stableSide);
-    var sub3 := child(inner, changedSide);
-*/
     var stableSide := opposite(changedSide);
     var sub1 := child(changedTree, stableSide);
     var inner := child(changedTree, changedSide);
@@ -257,14 +248,6 @@ method RepairCase4pt1RotateOutside(childTree: Node, ghost kcc: int, value: int, 
 //    assert BlackCountOnAllPaths(rotated, kcc);    // goal
 }
 
-lemma BlackCountInheritance(t: Node, kcc: int)
-    requires ColorOf(t).Red?;
-    requires BlackCountOnAllPaths(child(t, Left), kcc);
-    requires BlackCountOnAllPaths(child(t, Right), kcc);
-    ensures BlackCountOnAllPaths(t, kcc);
-{
-}
-
 method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide: Side,
     changedSubtree: Node) returns (b: Node)
     requires RBTree(tree, kc);
@@ -282,7 +265,6 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     ghost var origSubtree := child(tree, changedSide);
     var stableSide := opposite(changedSide);
     var uncle := child(tree, stableSide);
-    assert tree.color.Black?;
     var newNode := child(changedSubtree, changedSide);
     var sub3 := child(changedSubtree, stableSide);
 
@@ -293,12 +275,9 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     forall x | x in Contents(rotatedGrandparent)
         ensures ValueIsOrdered(x, stableSide, changedSubtree.value);
     {
-        assert ValueIsOrdered(changedSubtree.value, changedSide, tree.value);
-        if x in Contents(uncle) {
-        } else if x in Contents(sub3) {
-        } else {
-            assert x == tree.value;
-        }
+        assert ValueIsOrdered(changedSubtree.value, changedSide, tree.value);   // OBSERVE
+        // A case analysis would help Dafny out right here...
+        if x in Contents(uncle) { } // ... and she sees the rest.
     }
 
     b := WologNode(changedSide, newNode, rotatedGrandparent,
@@ -322,6 +301,9 @@ method RepairCase2Terminate(tree: Node, ghost kc: int, value: int, changedSide: 
         tree.value, Black);
 }
 
+// The changedSubtree has no violation. If the root is black, then b has no
+// violation; if it's red, we pass through a single violation (as the recursion
+// rule allows) for the next layer to fix.
 method RepairCase2Passthrough(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
     requires tree.Node?;
     requires RBTree(tree, kc);
@@ -329,7 +311,6 @@ method RepairCase2Passthrough(tree: Node, ghost kc: int, value: int, changedSide
     requires SideIsOrdered(changedSubtree, changedSide, tree.value);
     requires MostlyRBTree(child(tree, changedSide), SubtreeBlackCount(tree, kc), value, changedSubtree);
     ensures MostlyRBTree(tree, kc, value, b);
-    //ensures redOnRedViolation(b).Some? ==> ColorOf(child(tree, changedSide)).Red?;
 {
     var stableSide := opposite(changedSide);
     var stableSubtree := child(tree, stableSide);
@@ -345,7 +326,6 @@ method InnerInsert(tree: Node, ghost kc: int, value: int)
     returns (b: Node, ghost changedSideOut: Side)
     requires RBTree(tree, kc);
     ensures MostlyRBTree(tree, kc, value, b);
-    //ensures redOnRedViolation(b).Some? ==> ColorOf(child(tree, changedSideOut)).Red?;
 {
     if tree.Nil? {
         b := Node(Nil, value, Nil, Red);
