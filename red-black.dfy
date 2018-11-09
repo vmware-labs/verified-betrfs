@@ -86,17 +86,6 @@ lemma RBTreeNil(tree: Node)
     assert BlackCountOnAllPaths(tree, 1);
 }
 
-lemma RBTreeRecursion(tree: Node, kc: int)
-    requires RBTree(tree, kc);
-    requires tree.Node?;
-    ensures RBTree(tree.left, SubtreeBlackCount(tree, kc));
-    ensures RBTree(tree.right, SubtreeBlackCount(tree, kc));
-{
-    //assert BlackCountOnAllPaths(tree.left, SubtreeBlackCount(tree, kc));
-    //assert BlackCountOnAllPaths(tree.right, SubtreeBlackCount(tree, kc));
-    // TODO: Not sure this lemma is needed any longer.
-}
-
 datatype Side = Left | Right
 
 function method child(tree: Node, side: Side) : Node
@@ -112,39 +101,6 @@ function method opposite(side: Side) : Side
 
 datatype Option<T> = None | Some(t: T)
 
-//method RotateRight(a: Node, ghost kc: int) returns (b: Node)
-//    requires RBTree(a, kc);
-//    requires !a.Nil? && !a.left.Nil?;
-//    ensures !b.Nil?;
-//    ensures Contents(a) == Contents(b);
-//{
-//    var l := a.left;
-//    var r := Node(l.right, a.value, a.right, Black);
-//
-//    // Dafny needs help realizing why everything in r is right of l.value;
-//    // it needs me to point out that l.value < a.value.
-//    forall x | x in Contents(r) 
-//        ensures l.value <= x;
-//    {
-//        assert OrderedTree(l);
-//        assert l.value in Contents(a.left);
-//        // Think about the cases, Dafny! (In particular, expand Contents).
-//        if x in Contents(r.left) {
-//        } else if x in Contents(r.right) {
-//        } else if x in multiset{r.value} {
-//        }
-//    }
-//    // A similar property that r.left (l.right) is left of r.value, because
-//    // it was left of a.value in the precondition.
-//    forall x | x in Contents(r.left)
-//        ensures x <= r.value;
-//    {
-//        assert x in Contents(a.left);
-//    }
-//
-//    b := Node(l.left, l.value, r, Black);
-//}
-
 function method redOnRedViolation(tree: Node) : Option<Side>
 {
     if ColorOf(tree).Black? then
@@ -157,7 +113,7 @@ function method redOnRedViolation(tree: Node) : Option<Side>
         None
 }
 
-function method WologNode(side: Side, t1: Node, t2: Node, value: int, color: Color) : Node
+function method NodeBySide(side: Side, t1: Node, t2: Node, value: int, color: Color) : Node
 {
     if side.Left?
     then Node(t1, value, t2, color)
@@ -204,7 +160,7 @@ method RepairCase3Recolor(tree: Node, ghost kc: int, value: int, changedSide: Si
         changedSubtree.value, changedSubtree.right, Black);
     var newStable := Node(stableSubtree.left,
         stableSubtree.value, stableSubtree.right, Black);
-    b := WologNode(changedSide, recoloredChanged, newStable, tree.value, Red);
+    b := NodeBySide(changedSide, recoloredChanged, newStable, tree.value, Red);
     assert RedNodesHaveBlackChildren(child(tree, stableSide));  //observe
     ghost var ekc := SubtreeBlackCount(tree, kc);
     assert BlackCountOnAllPaths(stableSubtree, ekc);    // observe
@@ -230,19 +186,19 @@ method RepairCase4pt1RotateOutside(childTree: Node, ghost kcc: int, value: int, 
     var sub2 := child(inner, stableSide);
     var sub3 := child(inner, changedSide);
 
-    var outer := WologNode(stableSide, sub1, sub2, changedTree.value, Red);
-    rotated := WologNode(changedSide, sub3, outer, inner.value, Red);
+    var outer := NodeBySide(stableSide, sub1, sub2, changedTree.value, Red);
+    rotated := NodeBySide(changedSide, sub3, outer, inner.value, Red);
 
     // Whoah. Somehow this whole calculation is required to get OrderedTree,
     // which is bizarre. These spooky actions-at-a-distance make me suspect I'm
     // bumping into unrolling limits from having recursive definitions opened.
     // Instant regret.
     assert Contents(rotated) == Contents(changedTree);  // observe
-    assert Contents(rotated) == Contents(childTree) + multiset{value}; // goal
+//    assert Contents(rotated) == Contents(childTree) + multiset{value}; // goal
 
     assert OrderedTree(inner);  // observe to unpack recursion for sub2
     assert ValueIsOrdered(inner.value, changedSide, changedTree.value); // observe
-    assert OrderedTree(rotated);  // goal
+//    assert OrderedTree(rotated);  // goal
 
     assert BlackCountOnAllPaths(inner, kcc);    // observe (recursive unpack)
 //    assert BlackCountOnAllPaths(rotated, kcc);    // goal
@@ -268,7 +224,7 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     var newNode := child(changedSubtree, changedSide);
     var sub3 := child(changedSubtree, stableSide);
 
-    var rotatedGrandparent := WologNode(
+    var rotatedGrandparent := NodeBySide(
         stableSide, uncle, sub3, tree.value, Red);
     // Show by case analysis that rotatedGrandparent ends up on the correct
     // side of changedSubtree.value.
@@ -280,7 +236,7 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
         if x in Contents(uncle) { } // ... and she sees the rest.
     }
 
-    b := WologNode(changedSide, newNode, rotatedGrandparent,
+    b := NodeBySide(changedSide, newNode, rotatedGrandparent,
         changedSubtree.value, Black);
     assert Contents(b) == Contents(changedSubtree) + Contents(uncle) + multiset{tree.value};   // OBSERVE
 }
@@ -297,7 +253,7 @@ method RepairCase2Terminate(tree: Node, ghost kc: int, value: int, changedSide: 
 {
     var stableSide := opposite(changedSide);
     var stableSubtree := child(tree, stableSide);
-    b := WologNode(changedSide, changedSubtree, stableSubtree,
+    b := NodeBySide(changedSide, changedSubtree, stableSubtree,
         tree.value, Black);
 }
 
@@ -314,7 +270,7 @@ method RepairCase2Passthrough(tree: Node, ghost kc: int, value: int, changedSide
 {
     var stableSide := opposite(changedSide);
     var stableSubtree := child(tree, stableSide);
-    b := WologNode(changedSide, changedSubtree, stableSubtree,
+    b := NodeBySide(changedSide, changedSubtree, stableSubtree,
         tree.value, tree.color);
 }
 
