@@ -349,7 +349,6 @@ method InnerInsert(tree: Node, ghost kc: int, value: int)
 {
     if tree.Nil? {
         b := Node(Nil, value, Nil, Red);
-        assert MostlyRBTree(tree, kc, value, b);
     } else {
         var changedSide := if (value < tree.value) then Left else Right;
         var stableSide := opposite(changedSide);
@@ -357,23 +356,18 @@ method InnerInsert(tree: Node, ghost kc: int, value: int)
         var stableSubtree := child(tree, stableSide);
         var changedSubtree, insertChanged :=
             InnerInsert(child(tree, changedSide), kcc, value);
-        assert MostlyRBTree(child(tree, changedSide), kcc, value, changedSubtree);
 
         var violation := redOnRedViolation(changedSubtree);
         if (violation.Some?) {
-//            assert ColorOf(changedSubtree).Red?;
             if ColorOf(changedSubtree) == ColorOf(stableSubtree) {
                 b := RepairCase3Recolor(tree, kc, value,
                     changedSide, changedSubtree);
             } else {
-//                assert ColorOf(tree).Black?;
-                    // or else we couldn't have got a red-on-red violation
-//                assert ColorOf(changedSubtree).Red?;
-
                 var grandchildSide := violation.t;
                 if (grandchildSide != changedSide) {
                     var origChild := child(tree, changedSide);
-                    changedSubtree := RepairCase4pt1RotateOutside(origChild, kcc, value, changedSubtree, grandchildSide);
+                    changedSubtree := RepairCase4pt1RotateOutside(
+                        origChild, kcc, value, changedSubtree, grandchildSide);
                     grandchildSide := changedSide;
                 }
                 b := RepairCase4pt2RotateUp(tree, kc, value, changedSide, changedSubtree);
@@ -381,7 +375,8 @@ method InnerInsert(tree: Node, ghost kc: int, value: int)
         } else {
             // No red-on-red violation to fix from the kid. Might have made
             // one here, though.
-            b := RepairCase2Passthrough(tree, kc, value, changedSide, changedSubtree);
+            b := RepairCase2Passthrough(
+                tree, kc, value, changedSide, changedSubtree);
         }
         changedSideOut := changedSide;
     }
@@ -410,8 +405,6 @@ method Insert(tree: Node, ghost kc: int, value: int) returns (updated: Node, gho
     var mostlyUpdated: Node;
     mostlyUpdated, innerChanged := InnerInsert(tree, kc, value);
     updated, ukc := RepairCase1Root(tree, kc, value, mostlyUpdated);
-    assert RBTree(updated, ukc);
-    assert Contents(updated) == Contents(tree) + multiset{value};
 }
 
 
