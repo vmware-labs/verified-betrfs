@@ -310,34 +310,31 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
 method RepairCase2Terminate(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
     requires tree.Node?;
     requires RBTree(tree, kc);
+    requires ColorOf(tree).Black?;
     requires redOnRedViolation(changedSubtree).None?;
-    requires MostlyRBTree(child(tree, changedSide), kc, value, changedSubtree);
+    requires SideIsOrdered(changedSubtree, changedSide, tree.value);
+    requires MostlyRBTree(child(tree, changedSide), kc - 1, value, changedSubtree);
     ensures MostlyRBTree(tree, kc, value, b);
 {
-    assume false;   //XXX
+    var stableSide := opposite(changedSide);
+    var stableSubtree := child(tree, stableSide);
+    b := WologNode(changedSide, changedSubtree, stableSubtree,
+        tree.value, Black);
+}
+
+method RepairCase2Passthrough(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
+    requires tree.Node?;
+    requires RBTree(tree, kc);
+    requires redOnRedViolation(changedSubtree).None?;
+    requires SideIsOrdered(changedSubtree, changedSide, tree.value);
+    requires MostlyRBTree(child(tree, changedSide), SubtreeBlackCount(tree, kc), value, changedSubtree);
+    ensures MostlyRBTree(tree, kc, value, b);
+    //ensures redOnRedViolation(b).Some? ==> ColorOf(child(tree, changedSide)).Red?;
+{
     var stableSide := opposite(changedSide);
     var stableSubtree := child(tree, stableSide);
     b := WologNode(changedSide, changedSubtree, stableSubtree,
         tree.value, tree.color);
-    assert RedNodesHaveBlackChildren(tree);
-    assert RedNodesHaveBlackChildren(stableSubtree);
-    assert RedNodesHaveBlackChildren(changedSubtree);
-    assert Contents(b) == Contents(tree) + multiset{value};
-    assert BlackCountOnAllPaths(changedSubtree, kc - 1);
-    assert BlackCountOnAllPaths(stableSubtree, kc - 1);
-    assert BlackCountOnAllPaths(b, kc);
-    assert redOnRedViolation(b).None?;
-    assert redOnRedViolation(b).Some? ==> ColorOf(tree).Red?;
-    assert OrderedTree(b);
-}
-
-// We don't have this property. Tree rotations break it.
-predicate Stableness(tree: Node, b: Node, changedSide: Side)
-{
-    tree.Node? ==> (
-        b.Node?
-        && Contents(child(b, opposite(changedSide))) == Contents(child(tree, opposite(changedSide)))
-    )
 }
 
 // May violate red-has-black-children rule at top level.
@@ -348,13 +345,11 @@ method InnerInsert(tree: Node, ghost kc: int, value: int)
     returns (b: Node, ghost changedSideOut: Side)
     requires RBTree(tree, kc);
     ensures MostlyRBTree(tree, kc, value, b);
-    ensures redOnRedViolation(b).Some? ==> ColorOf(child(tree, changedSideOut)).Red?;
-    ensures Stableness(tree, b, changedSideOut);
+    //ensures redOnRedViolation(b).Some? ==> ColorOf(child(tree, changedSideOut)).Red?;
 {
     if tree.Nil? {
         b := Node(Nil, value, Nil, Red);
         assert MostlyRBTree(tree, kc, value, b);
-        assert Stableness(tree, b, changedSideOut);
     } else {
         var changedSide := if (value < tree.value) then Left else Right;
         var stableSide := opposite(changedSide);
@@ -366,47 +361,44 @@ method InnerInsert(tree: Node, ghost kc: int, value: int)
 
         var violation := redOnRedViolation(changedSubtree);
         if (violation.Some?) {
-            assert ColorOf(changedSubtree).Red?;
+//            assert ColorOf(changedSubtree).Red?;
             if ColorOf(changedSubtree) == ColorOf(stableSubtree) {
                 b := RepairCase3Recolor(tree, kc, value,
                     changedSide, changedSubtree);
-                assert (Contents(child(b, opposite(changedSide))) == Contents(child(tree, opposite(changedSide))));
             } else {
-                assert ColorOf(tree).Black?;
+//                assert ColorOf(tree).Black?;
                     // or else we couldn't have got a red-on-red violation
-                assert ColorOf(changedSubtree).Red?;
+//                assert ColorOf(changedSubtree).Red?;
 
                 var grandchildSide := violation.t;
                 if (grandchildSide != changedSide) {
                     var origChild := child(tree, changedSide);
                     changedSubtree := RepairCase4pt1RotateOutside(origChild, kcc, value, changedSubtree, grandchildSide);
                     grandchildSide := changedSide;
-
-                    assert ColorOf(child(changedSubtree, changedSide)).Red?;
-//                    assert child(changedSubtree, opposite(changedSide)) == child(origChild, opposite(changedSide));
-//                    assert child(changedSubtree, opposite(changedSide)) == child(child(tree, changedSide), opposite(changedSide));
-                    assert ColorOf(changedSubtree).Red?;
                 }
-
-                assert ColorOf(child(changedSubtree, changedSide)).Red?;
-//                assert child(changedSubtree, opposite(changedSide)) == child(child(tree, changedSide), opposite(changedSide));
-                assert ColorOf(changedSubtree).Red?;
                 b := RepairCase4pt2RotateUp(tree, kc, value, changedSide, changedSubtree);
-                assert (Contents(child(b, opposite(changedSide))) == Contents(child(tree, opposite(changedSide))));
             }
-            assert (Contents(child(b, opposite(changedSide))) == Contents(child(tree, opposite(changedSide))));
-            assert Stableness(tree, b, changedSide);
-        }
-        else
-        {
-            assert ColorOf(tree).Black?;
-            b := RepairCase2Terminate(tree, kc, value, changedSide, changedSubtree);
-            assert Stableness(tree, b, changedSide);
+        } else {
+            // No red-on-red violation to fix from the kid. Might have made
+            // one here, though.
+            b := RepairCase2Passthrough(tree, kc, value, changedSide, changedSubtree);
         }
         changedSideOut := changedSide;
-        assert Stableness(tree, b, changedSideOut);
     }
-    assert Stableness(tree, b, changedSideOut);
+}
+
+method RepairCase1Root(tree: Node, ghost kc: int, value: int, b: Node) returns (c: Node, ghost nkc: int)
+    requires MostlyRBTree(tree, kc, value, b);
+    ensures RBTree(c, nkc);
+    ensures Contents(c) == Contents(tree) + multiset{value};
+{
+    if ColorOf(b).Black? {
+        c := b;
+        nkc := kc;
+    } else {
+        c := Node(b.left, b.value, b.right, Black);
+        nkc := kc + 1;
+    }
 }
 
 method Insert(tree: Node, ghost kc: int, value: int) returns (updated: Node, ghost ukc: int)
@@ -415,7 +407,9 @@ method Insert(tree: Node, ghost kc: int, value: int) returns (updated: Node, gho
     ensures Contents(updated) == Contents(tree) + multiset{value};
 {
     ghost var innerChanged: Side;
-    updated, innerChanged := InnerInsert(tree, kc, value);
+    var mostlyUpdated: Node;
+    mostlyUpdated, innerChanged := InnerInsert(tree, kc, value);
+    updated, ukc := RepairCase1Root(tree, kc, value, mostlyUpdated);
     assert RBTree(updated, ukc);
     assert Contents(updated) == Contents(tree) + multiset{value};
 }
