@@ -1,5 +1,11 @@
 datatype Color = Red | Black
-datatype Node = Nil | Node(left: Node, value: int, right: Node, color: Color)
+datatype Node = Nil | Node(
+    left: Node,
+    value: int,
+    right: Node,
+    color: Color,
+    ghost kc: int // the count of black nodes on any root-leaf path.
+    )
 
 // This function encodes "all leaves (NIL) are black"
 function method ColorOf(node: Node) : Color {
@@ -8,6 +14,14 @@ function method ColorOf(node: Node) : Color {
         Black
     else
         node.color
+}
+
+function BlackCount(node: Node) : int {
+    if node.Nil?
+    then
+        1
+    else
+        node.kc
 }
 
 predicate RedNodesHaveBlackChildren(tree: Node) {
@@ -19,28 +33,27 @@ predicate RedNodesHaveBlackChildren(tree: Node) {
     )
 }
 
-function SubtreeBlackCount(tree: Node, k: int) : int {
-    if ColorOf(tree).Black? then k - 1 else k
+function SubtreeBlackCount(tree: Node) : int {
+    if ColorOf(tree).Black? then BlackCount(tree) - 1 else BlackCount(tree)
 }
 
-
-// There is some k such that all paths from tree root to leaves have k
-// blacks.
-predicate BlackCountOnAllPaths(tree: Node, k: int) {
+// The kc field of tree accurately measures the count of black nodes on each
+// root-leaf path.
+predicate BlackCountOnAllPaths(tree: Node) {
     if tree.Nil?
     then
-        k == 1
+        true
     else
-        var expected := SubtreeBlackCount(tree, k);
-           BlackCountOnAllPaths(tree.left, expected)
-        && BlackCountOnAllPaths(tree.right, expected)
+           (SubtreeBlackCount(tree)
+               == BlackCount(tree.left) == BlackCount(tree.right))
+        && BlackCountOnAllPaths(tree.left)
+        && BlackCountOnAllPaths(tree.right)
 }
 
 // This exists is going to eventually cause trouble and need to be opaqued
-// kc is "black count" -- the number of blacks on any root-leaf path.
-predicate RedBlackInv(tree: Node, kc: int) {
+predicate RedBlackInv(tree: Node) {
        RedNodesHaveBlackChildren(tree)
-    && BlackCountOnAllPaths(tree, kc)
+    && BlackCountOnAllPaths(tree)
 }
 
 function method Contents(tree: Node) : multiset<int>
@@ -75,16 +88,11 @@ predicate OrderedTree(tree: Node) {
         )
 }
 
-predicate RBTree(tree: Node, kc: int) {
-    OrderedTree(tree) && RedBlackInv(tree, kc)
+predicate RBTree(tree: Node) {
+    OrderedTree(tree) && RedBlackInv(tree)
 }
 
-lemma RBTreeNil(tree: Node)
-    requires tree.Nil?;
-    ensures RBTree(tree, 1);
-{
-    assert BlackCountOnAllPaths(tree, 1);
-}
+// Tools to work manipulate trees without loss of generality over symmetry.
 
 datatype Side = Left | Right
 
@@ -113,18 +121,14 @@ function method redOnRedViolation(tree: Node) : Option<Side>
         None
 }
 
-function method NodeBySide(side: Side, t1: Node, t2: Node, value: int, color: Color) : Node
+function method NodeBySide(side: Side, t1: Node, t2: Node, value: int, color: Color, ghost kc: int) : Node
 {
     if side.Left?
-    then Node(t1, value, t2, color)
-    else Node(t2, value, t1, color)
+    then Node(t1, value, t2, color, kc)
+    else Node(t2, value, t1, color, kc)
 }
 
-predicate BlackDepthGrowsInCase3(b:Node, kc: int, kcbchild: int) {
-    kcbchild == if ColorOf(b).Red? && b.left.Node? && ColorOf(b.left).Black? then kc + 1 else kc
-}
-
-predicate MostlyRBTree(tree:Node, kc: int, value: int, b: Node)
+predicate MostlyRBTree(tree:Node, value: int, b: Node)
     // The properties provided by 'inner' invocations of Insert -- *almost*
     // a red-black tree, except we allow a single red-red violation at
     // the root.
@@ -135,59 +139,64 @@ predicate MostlyRBTree(tree:Node, kc: int, value: int, b: Node)
     && RedNodesHaveBlackChildren(b.left)
     && RedNodesHaveBlackChildren(b.right)
     && Contents(b) == Contents(tree) + multiset{value}
-    && BlackCountOnAllPaths(b, kc)
+    && BlackCountOnAllPaths(b)
     && (redOnRedViolation(b).Some? ==> ColorOf(tree).Red?)
        // Allow at most one red-on-red violation (a black uncle)
     && (ColorOf(b).Red? ==> ColorOf(b.left).Black? || ColorOf(b.right).Black?)
 }
 
-method RepairCase3Recolor(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
+method RepairCase3Recolor(tree: Node, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
     requires tree.Node?;
     requires tree.color.Black?;
-    requires RBTree(tree, kc);
+    requires RBTree(tree);
     requires changedSubtree.Node?;
     requires ColorOf(changedSubtree).Red?;
     requires ColorOf(child(tree, opposite(changedSide))).Red?;  // uncle is red
     requires ValueIsOrdered(value, changedSide, tree.value);
-    requires MostlyRBTree(child(tree, changedSide), SubtreeBlackCount(tree, kc), value, changedSubtree);
-    ensures MostlyRBTree(tree, kc, value, b);
+    requires MostlyRBTree(child(tree, changedSide), value, changedSubtree);
+    requires BlackCount(changedSubtree) == SubtreeBlackCount(tree);
+    ensures BlackCount(b) == BlackCount(tree);
+    ensures MostlyRBTree(tree, value, b);
     ensures Contents(child(b, opposite(changedSide))) == Contents(child(tree, opposite(changedSide)));
 {
     var stableSide := opposite(changedSide);
     var stableSubtree := child(tree, stableSide);
 
     var recoloredChanged := Node(changedSubtree.left,
-        changedSubtree.value, changedSubtree.right, Black);
+        changedSubtree.value, changedSubtree.right, Black, tree.kc);
+
     var newStable := Node(stableSubtree.left,
-        stableSubtree.value, stableSubtree.right, Black);
-    b := NodeBySide(changedSide, recoloredChanged, newStable, tree.value, Red);
+        stableSubtree.value, stableSubtree.right, Black, tree.kc);
+    assert BlackCountOnAllPaths(stableSubtree); // observe (recursion)
+
+    b := NodeBySide(changedSide, recoloredChanged, newStable, tree.value, Red, tree.kc);
     assert RedNodesHaveBlackChildren(child(tree, stableSide));  //observe
-    ghost var ekc := SubtreeBlackCount(tree, kc);
-    assert BlackCountOnAllPaths(stableSubtree, ekc);    // observe
+    assert stableSubtree.kc == SubtreeBlackCount(tree); // observe
     assert OrderedTree(stableSubtree);  // observe
 }
 
-method RepairCase4pt1RotateOutside(childTree: Node, ghost kcc: int, value: int, changedTree: Node, changedSide: Side) returns (rotated: Node)
+method RepairCase4pt1RotateOutside(childTree: Node, value: int, changedTree: Node, changedSide: Side) returns (rotated: Node)
     // changedSide is the side of childTree that changed -- the red-on-red
     // violation child.
-    requires RBTree(childTree, kcc);
-    requires MostlyRBTree(childTree, kcc, value, changedTree);
-    //requires ColorOf(childTree).Red?;
+    requires RBTree(childTree);
+    requires MostlyRBTree(childTree, value, changedTree);
     requires ColorOf(changedTree).Red?;
     requires ColorOf(child(changedTree, changedSide)).Red?;
-    ensures MostlyRBTree(childTree, kcc, value, rotated);
+    ensures BlackCount(rotated) == BlackCount(changedTree);
+    ensures MostlyRBTree(childTree, value, rotated);
     ensures ColorOf(rotated).Red?;
     ensures ColorOf(child(rotated, opposite(changedSide))).Red?;
 {
     var stableSide := opposite(changedSide);
     var sub1 := child(changedTree, stableSide);
     var inner := child(changedTree, changedSide);
+
     assert ColorOf(inner).Red?;
     var sub2 := child(inner, stableSide);
     var sub3 := child(inner, changedSide);
 
-    var outer := NodeBySide(stableSide, sub1, sub2, changedTree.value, Red);
-    rotated := NodeBySide(changedSide, sub3, outer, inner.value, Red);
+    var outer := NodeBySide(stableSide, sub1, sub2, changedTree.value, Red, changedTree.kc);
+    rotated := NodeBySide(changedSide, sub3, outer, inner.value, Red, changedTree.kc);
 
     // Whoah. Somehow this whole calculation is required to get OrderedTree,
     // which is bizarre. These spooky actions-at-a-distance make me suspect I'm
@@ -200,13 +209,13 @@ method RepairCase4pt1RotateOutside(childTree: Node, ghost kcc: int, value: int, 
     assert ValueIsOrdered(inner.value, changedSide, changedTree.value); // observe
 //    assert OrderedTree(rotated);  // goal
 
-    assert BlackCountOnAllPaths(inner, kcc);    // observe (recursive unpack)
-//    assert BlackCountOnAllPaths(rotated, kcc);    // goal
+    assert BlackCountOnAllPaths(inner);    // observe (recursive unpack)
+//    assert BlackCountOnAllPaths(rotated);    // goal
 }
 
-method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide: Side,
+method RepairCase4pt2RotateUp(tree: Node, value:int, changedSide: Side,
     changedSubtree: Node) returns (b: Node)
-    requires RBTree(tree, kc);
+    requires RBTree(tree);
     requires tree.Node?;
     requires ColorOf(changedSubtree).Red?;
     requires ColorOf(child(tree, opposite(changedSide))).Black?;
@@ -215,8 +224,10 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     requires SideIsOrdered(changedSubtree, changedSide, tree.value);
     // Stable grandchild didn't change.
     requires child(tree, changedSide).Node?;
-    requires MostlyRBTree(child(tree, changedSide), kc - 1, value, changedSubtree);
-    ensures MostlyRBTree(tree, kc, value, b);
+    requires changedSubtree.kc == tree.kc - 1;
+    requires MostlyRBTree(child(tree, changedSide), value, changedSubtree);
+    ensures BlackCount(b) ==BlackCount(tree);
+    ensures MostlyRBTree(tree, value, b);
 {
     ghost var origSubtree := child(tree, changedSide);
     var stableSide := opposite(changedSide);
@@ -225,7 +236,7 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     var sub3 := child(changedSubtree, stableSide);
 
     var rotatedGrandparent := NodeBySide(
-        stableSide, uncle, sub3, tree.value, Red);
+        stableSide, uncle, sub3, tree.value, Red, tree.kc - 1);
     // Show by case analysis that rotatedGrandparent ends up on the correct
     // side of changedSubtree.value.
     forall x | x in Contents(rotatedGrandparent)
@@ -237,110 +248,96 @@ method RepairCase4pt2RotateUp(tree: Node, ghost kc: int, value:int, changedSide:
     }
 
     b := NodeBySide(changedSide, newNode, rotatedGrandparent,
-        changedSubtree.value, Black);
+        changedSubtree.value, Black, tree.kc);
     assert Contents(b) == Contents(changedSubtree) + Contents(uncle) + multiset{tree.value};   // OBSERVE
-}
-
-
-method RepairCase2Terminate(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
-    requires tree.Node?;
-    requires RBTree(tree, kc);
-    requires ColorOf(tree).Black?;
-    requires redOnRedViolation(changedSubtree).None?;
-    requires SideIsOrdered(changedSubtree, changedSide, tree.value);
-    requires MostlyRBTree(child(tree, changedSide), kc - 1, value, changedSubtree);
-    ensures MostlyRBTree(tree, kc, value, b);
-{
-    var stableSide := opposite(changedSide);
-    var stableSubtree := child(tree, stableSide);
-    b := NodeBySide(changedSide, changedSubtree, stableSubtree,
-        tree.value, Black);
 }
 
 // The changedSubtree has no violation. If the root is black, then b has no
 // violation; if it's red, we pass through a single violation (as the recursion
 // rule allows) for the next layer to fix.
-method RepairCase2Passthrough(tree: Node, ghost kc: int, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
+method RepairCase2Passthrough(tree: Node, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
     requires tree.Node?;
-    requires RBTree(tree, kc);
+    requires RBTree(tree);
     requires redOnRedViolation(changedSubtree).None?;
     requires SideIsOrdered(changedSubtree, changedSide, tree.value);
-    requires MostlyRBTree(child(tree, changedSide), SubtreeBlackCount(tree, kc), value, changedSubtree);
-    ensures MostlyRBTree(tree, kc, value, b);
+    requires MostlyRBTree(child(tree, changedSide), value, changedSubtree);
+    requires changedSubtree.kc == SubtreeBlackCount(tree);
+    ensures BlackCount(b) == BlackCount(tree);
+    ensures MostlyRBTree(tree, value, b);
 {
     var stableSide := opposite(changedSide);
     var stableSubtree := child(tree, stableSide);
     b := NodeBySide(changedSide, changedSubtree, stableSubtree,
-        tree.value, tree.color);
+        tree.value, tree.color, tree.kc);
 }
 
 // May violate red-has-black-children rule at top level.
 // This implementation will continue checking as it recurses back up
 // the tree, but that's okay because we have to rebuild the tree pointers
 // anyway.
-method InnerInsert(tree: Node, ghost kc: int, value: int)
+method InnerInsert(tree: Node, value: int)
     returns (b: Node, ghost changedSideOut: Side)
-    requires RBTree(tree, kc);
-    ensures MostlyRBTree(tree, kc, value, b);
+    requires RBTree(tree);
+    ensures MostlyRBTree(tree, value, b);
+    ensures BlackCount(b) == BlackCount(tree);
 {
     if tree.Nil? {
-        b := Node(Nil, value, Nil, Red);
+        b := Node(Nil, value, Nil, Red, 1);
     } else {
         var changedSide := if (value < tree.value) then Left else Right;
         var stableSide := opposite(changedSide);
-        ghost var kcc := SubtreeBlackCount(tree, kc);
         var stableSubtree := child(tree, stableSide);
         var changedSubtree, insertChanged :=
-            InnerInsert(child(tree, changedSide), kcc, value);
+            InnerInsert(child(tree, changedSide), value);
 
         var violation := redOnRedViolation(changedSubtree);
         if (violation.Some?) {
             if ColorOf(changedSubtree) == ColorOf(stableSubtree) {
-                b := RepairCase3Recolor(tree, kc, value,
+                assert BlackCount(changedSubtree) == SubtreeBlackCount(tree);
+                b := RepairCase3Recolor(tree, value,
                     changedSide, changedSubtree);
             } else {
                 var grandchildSide := violation.t;
                 if (grandchildSide != changedSide) {
                     var origChild := child(tree, changedSide);
                     changedSubtree := RepairCase4pt1RotateOutside(
-                        origChild, kcc, value, changedSubtree, grandchildSide);
+                        origChild, value, changedSubtree, grandchildSide);
                     grandchildSide := changedSide;
                 }
-                b := RepairCase4pt2RotateUp(tree, kc, value, changedSide, changedSubtree);
+                b := RepairCase4pt2RotateUp(tree, value, changedSide, changedSubtree);
             }
         } else {
             // No red-on-red violation to fix from the kid. Might have made
             // one here, though.
             b := RepairCase2Passthrough(
-                tree, kc, value, changedSide, changedSubtree);
+                tree, value, changedSide, changedSubtree);
         }
         changedSideOut := changedSide;
     }
+    assert BlackCountOnAllPaths(b);
 }
 
-method RepairCase1Root(tree: Node, ghost kc: int, value: int, b: Node) returns (c: Node, ghost nkc: int)
-    requires MostlyRBTree(tree, kc, value, b);
-    ensures RBTree(c, nkc);
+method RepairCase1Root(tree: Node, value: int, b: Node) returns (c: Node)
+    requires MostlyRBTree(tree, value, b);
+    ensures RBTree(c);
     ensures Contents(c) == Contents(tree) + multiset{value};
 {
     if ColorOf(b).Black? {
         c := b;
-        nkc := kc;
     } else {
-        c := Node(b.left, b.value, b.right, Black);
-        nkc := kc + 1;
+        c := Node(b.left, b.value, b.right, Black, b.kc + 1);
     }
 }
 
-method Insert(tree: Node, ghost kc: int, value: int) returns (updated: Node, ghost ukc: int)
-    requires RBTree(tree, kc);
-    ensures RBTree(updated, ukc);
+method Insert(tree: Node, value: int) returns (updated: Node)
+    requires RBTree(tree);
+    ensures RBTree(updated);
     ensures Contents(updated) == Contents(tree) + multiset{value};
 {
     ghost var innerChanged: Side;
     var mostlyUpdated: Node;
-    mostlyUpdated, innerChanged := InnerInsert(tree, kc, value);
-    updated, ukc := RepairCase1Root(tree, kc, value, mostlyUpdated);
+    mostlyUpdated, innerChanged := InnerInsert(tree, value);
+    updated := RepairCase1Root(tree, value, mostlyUpdated);
 }
 
 
@@ -385,41 +382,27 @@ method printTree(t: Node, indent: int) {
     printTree(t.right, indent+2);
 }
 
-predicate eRBTree(tree: Node) {
-    exists kc :: RBTree(tree, kc)
-}
-
-method eInsert(tree: Node, value: int) returns (updated: Node)
-    requires eRBTree(tree);
-    ensures eRBTree(updated);
-{
-    ghost var kc :| RBTree(tree, kc);
-    ghost var ekc : int;
-    updated, ekc := Insert(tree, kc, value);
-}
-
 method Main() {
     var t := Nil;
-    RBTreeNil(t);
-    t := eInsert(t, 6);
-    t := eInsert(t, 3);
-    t := eInsert(t, 8);
-    t := eInsert(t, 4);
-    t := eInsert(t, 1);
-    t := eInsert(t, 7);
-    t := eInsert(t, 9);
+    t := Insert(t, 6);
+    t := Insert(t, 3);
+    t := Insert(t, 8);
+    t := Insert(t, 4);
+    t := Insert(t, 1);
+    t := Insert(t, 7);
+    t := Insert(t, 9);
     printTree(t, 0);
     print Contents(t);
     print "\n";
 
     t := Nil;
-    t := eInsert(t, 1);
-    t := eInsert(t, 3);
-    t := eInsert(t, 4);
-    t := eInsert(t, 6);
-    t := eInsert(t, 7);
-    t := eInsert(t, 8);
-    t := eInsert(t, 9);
+    t := Insert(t, 1);
+    t := Insert(t, 3);
+    t := Insert(t, 4);
+    t := Insert(t, 6);
+    t := Insert(t, 7);
+    t := Insert(t, 8);
+    t := Insert(t, 9);
     printTree(t, 0);
     print Contents(t);
     print "\n";
