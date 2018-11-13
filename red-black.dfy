@@ -341,7 +341,6 @@ method Insert(tree: Node, value: int) returns (updated: Node)
 }
 
 
-/*
 method Contains(tree: Node, value: int) returns (present: bool)
     requires RBTree(tree);
     ensures present == (value in Contents(tree));
@@ -360,8 +359,6 @@ method Contains(tree: Node, value: int) returns (present: bool)
     }
     present := Contains(tree.right, value);
 }
-
-*/
 
 method spaces(indent: int) {
     var i := 0;
