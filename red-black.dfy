@@ -50,7 +50,6 @@ predicate BlackCountOnAllPaths(tree: Node) {
         && BlackCountOnAllPaths(tree.right)
 }
 
-// This exists is going to eventually cause trouble and need to be opaqued
 predicate RedBlackInv(tree: Node) {
        RedNodesHaveBlackChildren(tree)
     && BlackCountOnAllPaths(tree)
