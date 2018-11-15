@@ -95,6 +95,7 @@ abstract module TwoThreeTree {
 		}
 
 		function minHeight(tree: Node) : int
+			ensures minHeight(tree) == 0 <==> tree.Leaf?;
 		{
 			if tree.Leaf?
 				then 0
@@ -180,7 +181,9 @@ abstract module TwoThreeTree {
 			ThreeNode(t1, pivota, t2, pivotb, t3)
 		}
 
-		datatype InsertionResult<Value> = InsertionResult(tree: Node<Value>, split: bool)
+		datatype InsertionResult<Value> =
+			Split(tree: Node<Value>) |
+			DidntSplit(tree: Node<Value>)
 
 		predicate ValidInsertionResult<Value>(result: InsertionResult<Value>, tree: Node<Value>,
 			key: Keyspace.Element, value: Value)
@@ -189,9 +192,9 @@ abstract module TwoThreeTree {
 			 TTSubtree(result.tree) &&
 				(SubtreeAllKeys(result.tree) == SubtreeAllKeys(tree) + {key}) &&
 				(SubtreeContents(result.tree) == SubtreeContents(tree)[key := value]) &&
-				(result.split ==> result.tree.TwoNode?) &&
-				(result.split ==> Height(result.tree) == Height(tree) + 1) &&
-				(!result.split ==> Height(result.tree) == Height(tree))
+				(result.Split? ==> result.tree.TwoNode?) &&
+				(result.Split? ==> Height(result.tree) == Height(tree) + 1) &&
+				(!result.Split? ==> Height(result.tree) == Height(tree))
 		}
 
 		method InsertIntoLeaf<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
@@ -201,19 +204,19 @@ abstract module TwoThreeTree {
 			ensures ValidInsertionResult(result, tree, key, value);
 		{
 			if tree.key == key {
-				result := InsertionResult(Leaf(key, value), false);
+				result := DidntSplit(Leaf(key, value));
 			} else if Keyspace.lt(tree.key, key) {
 				var newright := Leaf(key, value);
 				var newtree := mkTwoNode(tree, key, newright);
 				assert(Height(newright) == Height(tree));
 				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
+				result := Split(newtree);
 			} else {
 				var newleft := Leaf(key, value);
 				var newtree := mkTwoNode(newleft, tree.key, tree);
 				assert(Height(newleft) == Height(tree));
 				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
+				result := Split(newtree);
 			}
 		}
 
@@ -226,12 +229,12 @@ abstract module TwoThreeTree {
 			decreases tree, 0;
 		{
 			var subresult := InsertIntoSubtree(tree.left, key, value);
-			if !subresult.split {
-				result := InsertionResult(mkTwoNode(subresult.tree, tree.pivot, tree.right), false);
+			if !subresult.Split? {
+				result := DidntSplit(mkTwoNode(subresult.tree, tree.pivot, tree.right));
 			} else {
-				result := InsertionResult(mkThreeNode(subresult.tree.left, subresult.tree.pivot,
-					subresult.tree.right, tree.pivot,
-					tree.right), false);
+				result := DidntSplit(mkThreeNode(subresult.tree.left, subresult.tree.pivot,
+					                  subresult.tree.right, tree.pivot,
+														tree.right));
 			}
 		}
 
@@ -244,12 +247,12 @@ abstract module TwoThreeTree {
 			decreases tree, 0;
 		{
 			var subresult := InsertIntoSubtree(tree.right, key, value);
-			if !subresult.split {
-				result := InsertionResult(mkTwoNode(tree.left, tree.pivot, subresult.tree), false);
+			if !subresult.Split? {
+				result := DidntSplit(mkTwoNode(tree.left, tree.pivot, subresult.tree));
 			} else {
-				result := InsertionResult(mkThreeNode(tree.left, tree.pivot,
+				result := DidntSplit(mkThreeNode(tree.left, tree.pivot,
 				                         subresult.tree.left, subresult.tree.pivot,
-																 subresult.tree.right), false);
+																 subresult.tree.right));
 		  }
 		}
 
@@ -276,16 +279,16 @@ abstract module TwoThreeTree {
 			decreases tree, 0;
 		{
 			var subresult := InsertIntoSubtree(tree.left, key, value);
-			if !subresult.split {
-				result := InsertionResult(mkThreeNode(subresult.tree, tree.pivota,
-					tree.middle, tree.pivotb,
-					tree.right), false);
+			if !subresult.Split? {
+				result := DidntSplit(mkThreeNode(subresult.tree, tree.pivota,
+					                  tree.middle, tree.pivotb,
+														tree.right));
 			} else {
 				var newright := mkTwoNode(tree.middle, tree.pivotb, tree.right);
 				assert(Height(newright) == Height(tree));
 				var newtree := mkTwoNode(subresult.tree, tree.pivota, newright);
 				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
+				result := Split(newtree);
 			}
 		}
 
@@ -299,10 +302,10 @@ abstract module TwoThreeTree {
 			decreases tree, 0;
 		{
 			var subresult := InsertIntoSubtree(tree.middle, key, value);
-			if !subresult.split {
-				result := InsertionResult(mkThreeNode(tree.left, tree.pivota,
-					subresult.tree, tree.pivotb,
-					tree.right), false);
+			if !subresult.Split? {
+				result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
+     					              subresult.tree, tree.pivotb,
+														tree.right));
 			} else {
 				var newleft := mkTwoNode(tree.left, tree.pivota, subresult.tree.left);
 				var newright := mkTwoNode(subresult.tree.right, tree.pivotb, tree.right);
@@ -310,7 +313,7 @@ abstract module TwoThreeTree {
 				assert(Height(newleft) == Height(tree));
 				assert(Height(newright) == Height(tree));
 				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
+				result := Split(newtree);
 			}
 		}
 
@@ -323,16 +326,16 @@ abstract module TwoThreeTree {
 			decreases tree, 0;
 		{
 			var subresult := InsertIntoSubtree(tree.right, key, value);
-			if !subresult.split {
-				result := InsertionResult(mkThreeNode(tree.left, tree.pivota,
-					tree.middle, tree.pivotb,
-					subresult.tree), false);
+			if !subresult.Split? {
+				result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
+					                  tree.middle, tree.pivotb,
+														subresult.tree));
 			} else {
 				var newleft := TwoNode(tree.left, tree.pivota, tree.middle);
 				var newtree := TwoNode(newleft, tree.pivotb, subresult.tree);
 				assert(Height(newleft) == Height(tree));
 				assert(Height(newtree) == Height(tree) + 1);
-				result := InsertionResult(newtree, true);
+				result := Split(newtree);
 			}
 		}
 
@@ -366,7 +369,88 @@ abstract module TwoThreeTree {
 				result := InsertIntoThreeNode(tree, key, value);
 		  }
 		}
+		
+		
+		// datatype DeletionResult<Value> =
+		// 	NothingLeft |
+		// 	Merged(tree: Node<Value>) |
+		// 	DidntMerge(tree: Node<Value>)
 
+		// predicate ValidDeletionResult<Value>(result: DeletionResult<Value>, tree: Node<Value>,
+		// 	key: Keyspace.Element)
+		// 	requires TTSubtree(tree);
+		// {
+		// 	if result.NothingLeft? then
+		// 		tree.Leaf? && tree.key == key
+		// 	else 
+		// 	 TTSubtree(result.tree) &&
+		// 	 (SubtreeAllKeys(result.tree) <= SubtreeAllKeys(tree)) &&
+		// 	 (SubtreeContents(result.tree).Keys == SubtreeContents(tree).Keys - {key}) && 
+		// 	 (forall x :: x in SubtreeContents(result.tree) ==>
+		// 	 SubtreeContents(result.tree)[x] == SubtreeContents(tree)[x]) &&
+		// 	 (result.Merged? ==> !tree.Leaf?) &&
+		// 	 (result.Merged? ==> Height(result.tree) == Height(tree) - 1) &&
+		// 	 (!result.Merged? ==> Height(result.tree) == Height(tree))
+		// }
+			
+		// method DeleteFromLeaf<Value>(tree: Node<Value>, key: Keyspace.Element)
+		// 	returns (result: DeletionResult<Value>)
+		// 	requires TTSubtree(tree);
+		// 	requires tree.Leaf?;
+		// 	ensures ValidDeletionResult(result, tree, key);
+		// {
+		// 	if tree.key == key {
+		// 		result := NothingLeft;
+		// 	} else {
+		// 		result := DidntMerge(tree);
+		// 	}
+		// }
+
+		// method DeleteFromTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element)
+		// 	returns (result: DeletionResult<Value>)
+		// 	requires TTSubtree(tree);
+		// 	requires tree.TwoNode?;
+		// 	requires Keyspace.lt(key, tree.pivot);
+		// 	ensures ValidDeletionResult(result, tree, key);
+		// 	decreases tree, 0;
+		// {
+		// 	var subresult := DeleteFromSubtree(tree.left, key);
+		// 	if subresult.NothingLeft? {
+		// 		result := Merged(tree.right);
+		// 	} else if subresult.DidntMerge? {
+		// 		result := DidntMerge(mkTwoNode(subresult.tree, tree.pivot, tree.right));
+		// 	} else {
+		// 		if tree.right.TwoNode? {
+		// 			result := Merged(mkThreeNode(subresult.tree, tree.pivot,
+		// 				                          tree.right.left, tree.right.pivot, 
+		// 																	tree.right.right));
+		// 		} else {
+		// 			assert !tree.left.Leaf?;
+		// 			assert tree.right.ThreeNode?;
+		// 			var newleft := mkTwoNode(subresult.tree, tree.pivot, tree.right.left);
+		// 			var newright := mkTwoNode(tree.right.middle, tree.right.pivotb, tree.right.right);
+		// 			var newtree := mkTwoNode(newleft, tree.right.pivota, newright);
+		// 			result := DidntMerge(newtree);
+		// 		}
+		// 	}
+		// }
+
+		// method DeleteFromSubtree<Value>(tree: Node<Value>, key: Keyspace.Element)
+		// 	returns (result: DeletionResult<Value>)
+		// 	requires TTSubtree(tree);
+		// 	ensures ValidDeletionResult(result, tree, key);
+		// 	decreases tree, 3;
+		// {
+		// 	assume ValidDeletionResult(result, tree, key);
+		// 	// if tree.Leaf? {
+		// 	// 	result := DeleteFromLeaf(tree, key);
+		// 	// } else if tree.TwoNode? {
+		// 	// 	result := DeleteFromTwoNode(tree, key);
+		// 	// } else {
+		// 	// 	result := DeleteFromThreeNode(tree, key);
+		//   // }
+		// }
+		
 		// datatype Tree<Value> = EmptyTree | NonEmptyTree(root: Node<Value>)
 		
 		// predicate TTTree<Value>(tree: Tree<Value>) {
