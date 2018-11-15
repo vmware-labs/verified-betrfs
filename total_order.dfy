@@ -13,5 +13,5 @@ abstract module Total_Order {
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
 		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
-	predicate ltedef(a: Element, b: Element)
+	predicate method ltedef(a: Element, b: Element)
 }
