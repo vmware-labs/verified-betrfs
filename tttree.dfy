@@ -17,134 +17,134 @@ abstract module TwoThreeTree {
    	          middle: Node, pivotb: Keyspace.Element,
 							right: Node)
 
-		// function SubtreeAllKeys(tree: Node) : set<Keyspace.Element>
-		// 	ensures SubtreeAllKeys(tree) != {};
-		// {
-		// 	match tree {
-		// 		case Leaf(key, value) => {key}
-		// 		case TwoNode(left, pivot, right) => SubtreeAllKeys(left) + {pivot} + SubtreeAllKeys(right)
-		// 		case ThreeNode(left, pivota, middle, pivotb, right) =>
-		// 			SubtreeAllKeys(left) + {pivota} + SubtreeAllKeys(middle) + {pivotb} + SubtreeAllKeys(right)
-		// 	}
-		// }
+		function SubtreeAllKeys(tree: Node) : set<Keyspace.Element>
+			ensures SubtreeAllKeys(tree) != {};
+		{
+			match tree {
+				case Leaf(key, value) => {key}
+				case TwoNode(left, pivot, right) => SubtreeAllKeys(left) + {pivot} + SubtreeAllKeys(right)
+				case ThreeNode(left, pivota, middle, pivotb, right) =>
+					SubtreeAllKeys(left) + {pivota} + SubtreeAllKeys(middle) + {pivotb} + SubtreeAllKeys(right)
+			}
+		}
 
-		// predicate ContentsAreLessThan(tree: Node, pivot: Keyspace.Element) {
-		// 	forall lv :: lv in SubtreeAllKeys(tree) ==> Keyspace.lt(lv, pivot)
-		// }
+		predicate ContentsAreLessThan(tree: Node, pivot: Keyspace.Element) {
+			forall lv :: lv in SubtreeAllKeys(tree) ==> Keyspace.lt(lv, pivot)
+		}
 
-		// predicate ContentsAreGreaterEqualThan(pivot: Keyspace.Element, tree: Node) {
-		// 	forall lv :: lv in SubtreeAllKeys(tree) ==> !Keyspace.lt(lv, pivot)
-		// }
+		predicate ContentsAreGreaterEqualThan(pivot: Keyspace.Element, tree: Node) {
+			forall lv :: lv in SubtreeAllKeys(tree) ==> !Keyspace.lt(lv, pivot)
+		}
 
-		// predicate TreeIsOrdered(tree: Node) {
-		// 	if tree.Leaf?
-		// 		then true
-		// 	else if tree.TwoNode?
-		// 		then
-		// 		ContentsAreLessThan(tree.left, tree.pivot) &&
-		// 		ContentsAreGreaterEqualThan(tree.pivot, tree.right) &&
-		// 		TreeIsOrdered(tree.left) &&
-		// 		TreeIsOrdered(tree.right)
-		// 	else
-		// 		Keyspace.lt(tree.pivota, tree.pivotb) &&
-		// 		ContentsAreLessThan(tree.left, tree.pivota) &&
-		// 		ContentsAreGreaterEqualThan(tree.pivota, tree.middle) &&
-		// 		ContentsAreLessThan(tree.middle, tree.pivotb) &&
-		// 		ContentsAreGreaterEqualThan(tree.pivotb, tree.right) &&
-		// 		TreeIsOrdered(tree.left) &&
-		// 		TreeIsOrdered(tree.middle) &&
-		// 		TreeIsOrdered(tree.right)
-		// }
+		predicate TreeIsOrdered(tree: Node) {
+			if tree.Leaf?
+				then true
+			else if tree.TwoNode?
+				then
+				ContentsAreLessThan(tree.left, tree.pivot) &&
+				ContentsAreGreaterEqualThan(tree.pivot, tree.right) &&
+				TreeIsOrdered(tree.left) &&
+				TreeIsOrdered(tree.right)
+			else
+				Keyspace.lt(tree.pivota, tree.pivotb) &&
+				ContentsAreLessThan(tree.left, tree.pivota) &&
+				ContentsAreGreaterEqualThan(tree.pivota, tree.middle) &&
+				ContentsAreLessThan(tree.middle, tree.pivotb) &&
+				ContentsAreGreaterEqualThan(tree.pivotb, tree.right) &&
+				TreeIsOrdered(tree.left) &&
+				TreeIsOrdered(tree.middle) &&
+				TreeIsOrdered(tree.right)
+		}
 
- 		// function SubtreeContents<Value>(tree: Node<Value>) : map<Keyspace.Element, Value>
-		// 	requires TreeIsOrdered(tree);
-		// 	ensures SubtreeContents(tree).Keys <= SubtreeAllKeys(tree);
-		// 	ensures SubtreeContents(tree) != map[];
-		// {
-		// 	if tree.Leaf? then
-		// 		var r := map[tree.key := tree.value];
-		// 		assert tree.key in r; // observe that r is not friggin empty
-		// 		r
-		// 	else if tree.TwoNode? then
-		// 		Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.right))
-		// 	else
-		// 		var lmentries := Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.middle));
-		// 		Maps.disjoint_union(lmentries, SubtreeContents(tree.right))
-		// }
+ 		function SubtreeContents<Value>(tree: Node<Value>) : map<Keyspace.Element, Value>
+			requires TreeIsOrdered(tree);
+			ensures SubtreeContents(tree).Keys <= SubtreeAllKeys(tree);
+			ensures SubtreeContents(tree) != map[];
+		{
+			if tree.Leaf? then
+				var r := map[tree.key := tree.value];
+				assert tree.key in r; // observe that r is not friggin empty
+				r
+			else if tree.TwoNode? then
+				Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.right))
+			else
+				var lmentries := Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.middle));
+				Maps.disjoint_union(lmentries, SubtreeContents(tree.right))
+		}
 
-		// datatype QueryResult<Value> = KeyDoesNotExist | ValueForKey(value: Value)
+		datatype QueryResult<Value> = KeyDoesNotExist | ValueForKey(value: Value)
 
-		// function method QuerySubtree<Value>(tree: Node<Value>, key: Keyspace.Element) : QueryResult<Value>
-		// 	requires TreeIsOrdered(tree);
-		// 	ensures QuerySubtree(tree, key) == KeyDoesNotExist <==>
-		// 		(key !in SubtreeContents(tree));
-		// 		ensures QuerySubtree(tree, key).ValueForKey? <==>
-		// 			(key in SubtreeContents(tree) && SubtreeContents(tree)[key] == QuerySubtree(tree, key).value);
-		// {
-		// 	if tree.Leaf? && tree.key == key then
-		// 		ValueForKey(tree.value)
-		// 	else if tree.Leaf? && tree.key != key then
-		// 		KeyDoesNotExist
-		// 	else if tree.TwoNode? && Keyspace.lt(key, tree.pivot) then
-		// 		QuerySubtree(tree.left, key)
-		// 	else if tree.TwoNode? && !Keyspace.lt(key, tree.pivot) then
-		// 		QuerySubtree(tree.right, key)
-		// 	else if tree.ThreeNode? && Keyspace.lt(key, tree.pivota) then
-		// 		QuerySubtree(tree.left, key)
-		// 	else if tree.ThreeNode? && Keyspace.lt(key, tree.pivotb) then
-		// 		QuerySubtree(tree.middle, key)
-		// 	else
-		// 		QuerySubtree(tree.right, key)
-		// }
+		function method QuerySubtree<Value>(tree: Node<Value>, key: Keyspace.Element) : QueryResult<Value>
+			requires TreeIsOrdered(tree);
+			ensures QuerySubtree(tree, key) == KeyDoesNotExist <==>
+				(key !in SubtreeContents(tree));
+				ensures QuerySubtree(tree, key).ValueForKey? <==>
+					(key in SubtreeContents(tree) && SubtreeContents(tree)[key] == QuerySubtree(tree, key).value);
+		{
+			if tree.Leaf? && tree.key == key then
+				ValueForKey(tree.value)
+			else if tree.Leaf? && tree.key != key then
+				KeyDoesNotExist
+			else if tree.TwoNode? && Keyspace.lt(key, tree.pivot) then
+				QuerySubtree(tree.left, key)
+			else if tree.TwoNode? && !Keyspace.lt(key, tree.pivot) then
+				QuerySubtree(tree.right, key)
+			else if tree.ThreeNode? && Keyspace.lt(key, tree.pivota) then
+				QuerySubtree(tree.left, key)
+			else if tree.ThreeNode? && Keyspace.lt(key, tree.pivotb) then
+				QuerySubtree(tree.middle, key)
+			else
+				QuerySubtree(tree.right, key)
+		}
 
-		// function minHeight(tree: Node) : int
-		// 	ensures minHeight(tree) == 0 <==> tree.Leaf?;
-		// {
-		// 	if tree.Leaf?
-		// 		then 0
-		// 	else if tree.TwoNode?
-		// 		then 1 + Math.min(minHeight(tree.left), minHeight(tree.right))
-		// 	else 
-		// 		1 + Math.min(minHeight(tree.left), Math.min(minHeight(tree.middle), minHeight(tree.right)))
-		// }
+		function minHeight(tree: Node) : int
+			//ensures minHeight(tree) == 0 <==> tree.Leaf?;
+		{
+			if tree.Leaf?
+				then 0
+			else if tree.TwoNode?
+				then 1 + Math.min(minHeight(tree.left), minHeight(tree.right))
+			else 
+				1 + Math.min(minHeight(tree.left), Math.min(minHeight(tree.middle), minHeight(tree.right)))
+		}
 
-		// function maxHeight(tree: Node) : int
-		// {
-		// 	if tree.Leaf?
-		// 		then 0
-		// 	else if tree.TwoNode?
-		// 		then 1 + Math.max(maxHeight(tree.left), maxHeight(tree.right))
-		// 	else
-		// 		1 + Math.max(maxHeight(tree.left), Math.max(maxHeight(tree.middle), maxHeight(tree.right)))
-		// }
+		function maxHeight(tree: Node) : int
+		{
+			if tree.Leaf?
+				then 0
+			else if tree.TwoNode?
+				then 1 + Math.max(maxHeight(tree.left), maxHeight(tree.right))
+			else
+				1 + Math.max(maxHeight(tree.left), Math.max(maxHeight(tree.middle), maxHeight(tree.right)))
+		}
 
-		// predicate balanced(tree: Node) {
-		// 	minHeight(tree) == maxHeight(tree)
-		// }
+		predicate balanced(tree: Node) {
+			minHeight(tree) == maxHeight(tree)
+		}
 
-		// predicate TTSubtree(tree: Node) {
+		predicate TTSubtree(tree: Node) {
 
-		// 	if tree.Leaf?
-		// 		then TreeIsOrdered(tree) &&
-		// 		balanced(tree)
-		// 	else if tree.TwoNode?
-		// 		then TreeIsOrdered(tree) &&
-		// 		balanced(tree) &&
-		// 		TTSubtree(tree.left) &&
-		// 		TTSubtree(tree.right)
-		// 	else
-		// 		TreeIsOrdered(tree) &&
-		// 		balanced(tree) &&
-		// 		TTSubtree(tree.left) &&
-		// 		TTSubtree(tree.middle) &&
-		// 		TTSubtree(tree.right)
-		// }
+			if tree.Leaf?
+				then TreeIsOrdered(tree) &&
+				balanced(tree)
+			else if tree.TwoNode?
+				then TreeIsOrdered(tree) &&
+				balanced(tree) &&
+				TTSubtree(tree.left) &&
+				TTSubtree(tree.right)
+			else
+				TreeIsOrdered(tree) &&
+				balanced(tree) &&
+				TTSubtree(tree.left) &&
+				TTSubtree(tree.middle) &&
+				TTSubtree(tree.right)
+		}
 
-		// function Height(tree: Node) : int
-		// 	requires(balanced(tree));
-		// {
-		// 	minHeight(tree)
-		// }
+		function Height(tree: Node) : int
+			requires(balanced(tree));
+		{
+			minHeight(tree)
+		}
 
 		// function method mkTwoNode(t1: Node, pivot: Keyspace.Element, t2: Node) : Node
 		// 	requires TTSubtree(t1);
