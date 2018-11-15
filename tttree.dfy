@@ -91,6 +91,7 @@ abstract module TwoThreeTree {
 				ensures QuerySubtree(tree, key).ValueForKey? <==>
 					(key in SubtreeContents(tree) && SubtreeContents(tree)[key] == QuerySubtree(tree, key).value);
 		{
+			reveal_TreeIsOrdered();
 			if tree.Leaf? && tree.key == key then
 				ValueForKey(tree.value)
 			else if tree.Leaf? && tree.key != key then
