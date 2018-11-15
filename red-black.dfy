@@ -1,7 +1,30 @@
+predicate method Less<Value>(a:Value, b:Value)
+    // How do we insist that Value is a functional (non heap) type?
+// assumed
+
+lemma LessTransitive<Value>()
+    ensures forall a, b, c: Value :: Less(a, b) && Less(b, c) ==> Less(a, c);
+// assumed
+
+predicate LessOrEqual<Value>(a:Value, b:Value)
+{
+    Less(a, b) || a==b
+}
+
+lemma LessOrEqualTransitive<Value>()
+    ensures forall a, b, c: Value :: LessOrEqual(a, b) && LessOrEqual(b, c) ==> LessOrEqual(a, c);
+{
+    LessTransitive<Value>();
+}
+
+lemma LessAntisymmetry<Value>()
+    ensures forall a, b: Value :: !Less(a, b) ==> LessOrEqual(b, a);
+    ensures forall a, b: Value :: Less(a, b) ==> !LessOrEqual(b, a);
+
 datatype Color = Red | Black
-datatype Node = Nil | Node(
+datatype Node<Value> = Nil | Node(
     left: Node,
-    value: int,
+    value: Value,
     right: Node,
     color: Color,
     ghost kc: int // the count of black nodes on any root-leaf path.
@@ -55,7 +78,7 @@ predicate RedBlackInv(tree: Node) {
     && BlackCountOnAllPaths(tree)
 }
 
-function method Contents(tree: Node) : multiset<int>
+function method Contents<Value>(tree: Node) : multiset<Value>
 {
     if tree.Nil?
     then multiset{}
@@ -63,14 +86,20 @@ function method Contents(tree: Node) : multiset<int>
         Contents(tree.left) + Contents(tree.right) + multiset{tree.value}
 }
 
-predicate ValueIsOrdered(value: int, side: Side, pivot: int)
+predicate ValueIsOrdered<Value>(value: Value, side: Side, pivot: Value)
 {
-    if side.Left? then value <= pivot else value >= pivot
+    if side.Left? then LessOrEqual(value, pivot) else LessOrEqual(pivot, value)
+}
+
+lemma ValueIsOrderedTransitivity<Value>()
+    ensures forall a, b, c: Value, side: Side :: ValueIsOrdered(a, side, b) && ValueIsOrdered(b, side, c) ==> ValueIsOrdered(a, side, c);
+{
+    LessOrEqualTransitive<Value>();
 }
 
 // The not-recursive property that the set of elements on the left (resp) is on
 // the correct side of the pivot.
-predicate SideIsOrdered(subtree: Node, side: Side, pivot: int)
+predicate SideIsOrdered<Value>(subtree: Node, side: Side, pivot: Value)
 {
     forall x :: x in Contents(subtree) ==> ValueIsOrdered(x, side, pivot)
 }
@@ -120,14 +149,14 @@ function method redOnRedViolation(tree: Node) : Option<Side>
         None
 }
 
-function method NodeBySide(side: Side, t1: Node, t2: Node, value: int, color: Color, ghost kc: int) : Node
+function method NodeBySide<Value>(side: Side, t1: Node, t2: Node, value: Value, color: Color, ghost kc: int) : Node
 {
     if side.Left?
     then Node(t1, value, t2, color, kc)
     else Node(t2, value, t1, color, kc)
 }
 
-predicate MostlyRBTree(tree:Node, value: int, b: Node)
+predicate MostlyRBTree<Value>(tree:Node, value: Value, b: Node)
     // The properties provided by 'inner' invocations of Insert -- *almost*
     // a red-black tree, except we allow a single red-red violation at
     // the root.
@@ -144,7 +173,7 @@ predicate MostlyRBTree(tree:Node, value: int, b: Node)
     && (ColorOf(b).Red? ==> ColorOf(b.left).Black? || ColorOf(b.right).Black?)
 }
 
-method RepairCase3Recolor(tree: Node, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
+method RepairCase3Recolor<Value>(tree: Node, value: Value, changedSide: Side, changedSubtree: Node) returns (b: Node)
     requires tree.Node?;
     requires tree.color.Black?;
     requires RBTree(tree);
@@ -174,7 +203,7 @@ method RepairCase3Recolor(tree: Node, value: int, changedSide: Side, changedSubt
     assert OrderedTree(stableSubtree);  // observe
 }
 
-method RepairCase4pt1RotateOutside(childTree: Node, value: int, changedTree: Node, changedSide: Side) returns (rotated: Node)
+method RepairCase4pt1RotateOutside<Value>(childTree: Node, value: Value, changedTree: Node, changedSide: Side) returns (rotated: Node)
     // changedSide is the side of childTree that changed -- the red-on-red
     // violation child.
     requires RBTree(childTree);
@@ -206,13 +235,22 @@ method RepairCase4pt1RotateOutside(childTree: Node, value: int, changedTree: Nod
 
     assert OrderedTree(inner);  // observe to unpack recursion for sub2
     assert ValueIsOrdered(inner.value, changedSide, changedTree.value); // observe
-//    assert OrderedTree(rotated);  // goal
+
+    forall x | x in Contents(outer)
+        ensures ValueIsOrdered(x, stableSide, inner.value) {
+        if x in Contents(sub1) {
+            assert ValueIsOrdered(x, stableSide, changedTree.value);
+            assert ValueIsOrdered(changedTree.value, stableSide, inner.value);
+            ValueIsOrderedTransitivity<Value>();
+        }
+    }
+    assert OrderedTree(rotated);  // goal
 
     assert BlackCountOnAllPaths(inner);    // observe (recursive unpack)
 //    assert BlackCountOnAllPaths(rotated);    // goal
 }
 
-method RepairCase4pt2RotateUp(tree: Node, value:int, changedSide: Side,
+method RepairCase4pt2RotateUp<Value>(tree: Node, value: Value, changedSide: Side,
     changedSubtree: Node) returns (b: Node)
     requires RBTree(tree);
     requires tree.Node?;
@@ -242,8 +280,11 @@ method RepairCase4pt2RotateUp(tree: Node, value:int, changedSide: Side,
         ensures ValueIsOrdered(x, stableSide, changedSubtree.value);
     {
         assert ValueIsOrdered(changedSubtree.value, changedSide, tree.value);   // OBSERVE
-        // A case analysis would help Dafny out right here...
-        if x in Contents(uncle) { } // ... and she sees the rest.
+        if x in Contents(uncle) {
+            assert ValueIsOrdered(x, stableSide, tree.value);
+            assert ValueIsOrdered(tree.value, stableSide, changedSubtree.value);
+            ValueIsOrderedTransitivity<Value>();
+        }
     }
 
     b := NodeBySide(changedSide, newNode, rotatedGrandparent,
@@ -254,7 +295,7 @@ method RepairCase4pt2RotateUp(tree: Node, value:int, changedSide: Side,
 // The changedSubtree has no violation. If the root is black, then b has no
 // violation; if it's red, we pass through a single violation (as the recursion
 // rule allows) for the next layer to fix.
-method RepairCase2Passthrough(tree: Node, value: int, changedSide: Side, changedSubtree: Node) returns (b: Node)
+method RepairCase2Passthrough<Value>(tree: Node, value: Value, changedSide: Side, changedSubtree: Node) returns (b: Node)
     requires tree.Node?;
     requires RBTree(tree);
     requires redOnRedViolation(changedSubtree).None?;
@@ -274,7 +315,7 @@ method RepairCase2Passthrough(tree: Node, value: int, changedSide: Side, changed
 // This implementation will continue checking as it recurses back up
 // the tree, but that's okay because we have to rebuild the tree pointers
 // anyway.
-method InnerInsert(tree: Node, value: int)
+method InnerInsert<Value>(tree: Node, value: Value)
     returns (b: Node, ghost changedSideOut: Side)
     requires RBTree(tree);
     ensures MostlyRBTree(tree, value, b);
@@ -283,7 +324,8 @@ method InnerInsert(tree: Node, value: int)
     if tree.Nil? {
         b := Node(Nil, value, Nil, Red, 1);
     } else {
-        var changedSide := if (value < tree.value) then Left else Right;
+        var changedSide := if Less(value, tree.value) then Left else Right;
+        LessAntisymmetry<Value>();
         var stableSide := opposite(changedSide);
         var stableSubtree := child(tree, stableSide);
         var changedSubtree, insertChanged :=
@@ -316,7 +358,7 @@ method InnerInsert(tree: Node, value: int)
     assert BlackCountOnAllPaths(b);
 }
 
-method RepairCase1Root(tree: Node, value: int, b: Node) returns (c: Node)
+method RepairCase1Root<Value>(tree: Node, value: Value, b: Node) returns (c: Node)
     requires MostlyRBTree(tree, value, b);
     ensures RBTree(c);
     ensures Contents(c) == Contents(tree) + multiset{value};
@@ -328,7 +370,7 @@ method RepairCase1Root(tree: Node, value: int, b: Node) returns (c: Node)
     }
 }
 
-method Insert(tree: Node, value: int) returns (updated: Node)
+method Insert<Value>(tree: Node, value: Value) returns (updated: Node)
     requires RBTree(tree);
     ensures RBTree(updated);
     ensures Contents(updated) == Contents(tree) + multiset{value};
@@ -340,7 +382,7 @@ method Insert(tree: Node, value: int) returns (updated: Node)
 }
 
 
-method Contains(tree: Node, value: int) returns (present: bool)
+method Contains<Value(==)>(tree: Node, value: Value) returns (present: bool)
     requires RBTree(tree);
     ensures present == (value in Contents(tree));
 {
@@ -352,8 +394,9 @@ method Contains(tree: Node, value: int) returns (present: bool)
         present := true;
         return;
     }
-    if value < tree.value {
+    if Less(value, tree.value) {
         present := Contains(tree.left, value);
+        LessAntisymmetry<Value>();
         return;
     }
     present := Contains(tree.right, value);
