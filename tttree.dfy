@@ -133,10 +133,18 @@ abstract module TwoThreeTree {
     predicate balanced(tree: Node) {
         minHeight(tree) == maxHeight(tree)
     }
+    
+    predicate {:opaque} recursivelyBalanced(tree: Node)
+        ensures recursivelyBalanced(tree) ==> balanced(tree);
+    {
+           balanced(tree)
+        && (!tree.Leaf? ==> recursivelyBalanced(tree.left) && recursivelyBalanced(tree.right))
+        && (tree.ThreeNode? ==> recursivelyBalanced(tree.middle))
+    }
 
     predicate TTSubtree(tree: Node) {
            TreeIsOrdered(tree)
-        && balanced(tree)
+        && recursivelyBalanced(tree)
     }
 
     function Height(tree: Node) : int
@@ -158,6 +166,7 @@ abstract module TwoThreeTree {
         ensures Height(mkTwoNode(t1, pivot, t2)) == Height(t1) + 1;
     {
         reveal_TreeIsOrdered();
+        reveal_recursivelyBalanced();
         reveal_minHeight();
         reveal_maxHeight();
         TwoNode(t1, pivot, t2)
@@ -182,6 +191,7 @@ abstract module TwoThreeTree {
         ensures Height(mkThreeNode(t1, pivota, t2, pivotb, t3)) == Height(t1) + 1;
     {
         reveal_TreeIsOrdered();
+        reveal_recursivelyBalanced();
         reveal_minHeight();
         reveal_maxHeight();
         ThreeNode(t1, pivota, t2, pivotb, t3)
@@ -211,6 +221,7 @@ abstract module TwoThreeTree {
     {
         reveal_minHeight();
         reveal_maxHeight();
+        reveal_recursivelyBalanced();
         if tree.key == key {
             result := DidntSplit(Leaf(key, value));
         } else if Keyspace.lt(tree.key, key) {
@@ -231,13 +242,22 @@ abstract module TwoThreeTree {
         ensures !tree.Leaf? ==> TTSubtree(tree.right);
         ensures tree.ThreeNode? ==> TTSubtree(tree.middle);
     {
+        reveal_recursivelyBalanced();
+        reveal_TreeIsOrdered();
+    }
+
+    lemma childHeightsEqual<Value>(tree: Node<Value>)
+        requires TTSubtree(tree);
+        requires !tree.Leaf?;
+        ensures balanced(tree.left);
+        ensures balanced(tree.right);
+        ensures Height(tree.left) == Height(tree.right);
+        ensures tree.ThreeNode? ==> balanced(tree.middle) && Height(tree.left) == Height(tree.middle);
+    {
+        reveal_recursivelyBalanced();
+        reveal_TreeIsOrdered();
         reveal_minHeight();
         reveal_maxHeight();
-        reveal_TreeIsOrdered();
-        if (!tree.Leaf?) {
-            assert TreeIsOrdered(tree.left);
-            assert balanced(tree.left);
-        }
     }
 
     method InsertIntoTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
@@ -251,14 +271,23 @@ abstract module TwoThreeTree {
         childrenAreSubtrees(tree);
         assert TreeIsOrdered(tree.left);
         assert balanced(tree.left);
-        //reveal_TreeIsOrdered();
         var subresult := InsertIntoSubtree(tree.left, key, value);
         if !subresult.Split? {
+            childHeightsEqual(tree);
+            assert balanced(tree);
+            calc {
+                Height(subresult.tree);
+                == Height(tree.left);
+                == Height(tree.right);
+            }
+            assert Height(subresult.tree) == Height(tree.right);
             result := DidntSplit(mkTwoNode(subresult.tree, tree.pivot, tree.right));
+            assume ValidInsertionResult(result, tree, key, value);
         } else {
             result := DidntSplit(mkThreeNode(subresult.tree.left, subresult.tree.pivot,
                                   subresult.tree.right, tree.pivot,
                                                     tree.right));
+            assume ValidInsertionResult(result, tree, key, value);
         }
     }
 
