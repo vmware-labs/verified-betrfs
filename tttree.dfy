@@ -64,7 +64,7 @@ abstract module TwoThreeTree {
             TreeIsOrdered(tree.right)
     }
 
-        function SubtreeContents<Value>(tree: Node<Value>) : map<Keyspace.Element, Value>
+    function SubtreeContents<Value>(tree: Node<Value>) : map<Keyspace.Element, Value>
         requires TreeIsOrdered(tree);
         ensures SubtreeContents(tree).Keys <= SubtreeAllKeys(tree);
         ensures SubtreeContents(tree) != map[];
