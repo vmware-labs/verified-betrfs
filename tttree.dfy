@@ -248,12 +248,11 @@ abstract module TwoThreeTree {
 
     lemma childHeightsEqual<Value>(tree: Node<Value>)
         requires TTSubtree(tree);
-        requires !tree.Leaf?;
-        ensures balanced(tree.left);
-        ensures balanced(tree.right);
-        ensures Height(tree.left) == Height(tree.right);
-        ensures tree.ThreeNode? ==> balanced(tree.middle) && Height(tree.left) == Height(tree.middle);
-        ensures Height(tree.left) == Height(tree) - 1;
+        ensures !tree.Leaf? ==> balanced(tree.left);
+        ensures !tree.Leaf? ==> balanced(tree.right);
+        ensures !tree.Leaf? ==> (Height(tree.left) == Height(tree.right));
+        ensures tree.ThreeNode? ==> (balanced(tree.middle) && Height(tree.left) == Height(tree.middle));
+        ensures !tree.Leaf? ==> (Height(tree.left) == Height(tree) - 1);
     {
         reveal_recursivelyBalanced();
         reveal_TreeIsOrdered();
@@ -270,153 +269,149 @@ abstract module TwoThreeTree {
         decreases tree, 0;
     {
         childrenAreSubtrees(tree);
-        assert TreeIsOrdered(tree.left);
-        assert balanced(tree.left);
+        childHeightsEqual(tree);
         var subresult := InsertIntoSubtree(tree.left, key, value);
+        childrenAreSubtrees(subresult.tree);
+        childHeightsEqual(subresult.tree);
         if !subresult.Split? {
-            childHeightsEqual(tree);
-            assert balanced(tree);
-            calc {
-                Height(subresult.tree);
-                == Height(tree.left);
-                == Height(tree.right);
-            }
-            assert Height(subresult.tree) == Height(tree.right);
             result := DidntSplit(mkTwoNode(subresult.tree, tree.pivot, tree.right));
-            assume ValidInsertionResult(result, tree, key, value);
         } else {
-            childHeightsEqual(tree);
-            childHeightsEqual(subresult.tree);
-            childrenAreSubtrees(subresult.tree);
             result := DidntSplit(mkThreeNode(subresult.tree.left, subresult.tree.pivot,
                                             subresult.tree.right, tree.pivot,
                                             tree.right));
-            assume ValidInsertionResult(result, tree, key, value);
         }
     }
 
-    // method InsertIntoTwoNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-    //     returns (result: InsertionResult<Value>)
-    //     requires TTSubtree(tree);
-    //     requires tree.TwoNode?;
-    //     requires key == tree.pivot || Keyspace.lt(tree.pivot, key);
-    //     ensures ValidInsertionResult(result, tree, key, value);
-    //     decreases tree, 0;
-    // {
-    //     assume false;
-    //     var subresult := InsertIntoSubtree(tree.right, key, value);
-    //     if !subresult.Split? {
-    //         result := DidntSplit(mkTwoNode(tree.left, tree.pivot, subresult.tree));
-    //     } else {
-    //         result := DidntSplit(mkThreeNode(tree.left, tree.pivot,
-    //                                  subresult.tree.left, subresult.tree.pivot,
-    //                                                          subresult.tree.right));
-    //     }
-    // }
+    method InsertIntoTwoNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+        returns (result: InsertionResult<Value>)
+        requires TTSubtree(tree);
+        requires tree.TwoNode?;
+        requires key == tree.pivot || Keyspace.lt(tree.pivot, key);
+        ensures ValidInsertionResult(result, tree, key, value);
+        decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childHeightsEqual(tree);
+        var subresult := InsertIntoSubtree(tree.right, key, value);
+        childrenAreSubtrees(subresult.tree);
+        childHeightsEqual(subresult.tree);
+        if !subresult.Split? {
+            result := DidntSplit(mkTwoNode(tree.left, tree.pivot, subresult.tree));
+        } else {
+            result := DidntSplit(mkThreeNode(tree.left, tree.pivot,
+                                            subresult.tree.left, subresult.tree.pivot,
+                                            subresult.tree.right));
+        }
+    }
 
-    // method InsertIntoTwoNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-    //  returns (result: InsertionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.TwoNode?;
-    //  ensures ValidInsertionResult(result, tree, key, value);
-    //  decreases tree, 1;
-    // {
-    //     assume false;
-    //     if Keyspace.lt(key, tree.pivot) {
-    //         result := InsertIntoTwoNodeLeft(tree, key, value);
-    //     } else {
-    //         result := InsertIntoTwoNodeRight(tree, key, value);
-    //     }
-    // }
+    method InsertIntoTwoNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+     returns (result: InsertionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.TwoNode?;
+     ensures ValidInsertionResult(result, tree, key, value);
+     decreases tree, 1;
+    {
+        if Keyspace.lt(key, tree.pivot) {
+            result := InsertIntoTwoNodeLeft(tree, key, value);
+        } else {
+            result := InsertIntoTwoNodeRight(tree, key, value);
+        }
+    }
     
-    // method InsertIntoThreeNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-    //  returns (result: InsertionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.ThreeNode?;
-    //  requires Keyspace.lt(key, tree.pivota);
-    //  ensures ValidInsertionResult(result, tree, key, value);
-    //  decreases tree, 0;
-    // {
-    //     assume false;
-    //     var subresult := InsertIntoSubtree(tree.left, key, value);
-    //     if !subresult.Split? {
-    //         result := DidntSplit(mkThreeNode(subresult.tree, tree.pivota,
-    //                               tree.middle, tree.pivotb,
-    //                                                 tree.right));
-    //     } else {
-    //         var newright := mkTwoNode(tree.middle, tree.pivotb, tree.right);
-    //         assert(Height(newright) == Height(tree));
-    //         var newtree := mkTwoNode(subresult.tree, tree.pivota, newright);
-    //         assert(Height(newtree) == Height(tree) + 1);
-    //         result := Split(newtree);
-    //     }
-    // }
+    method InsertIntoThreeNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+     returns (result: InsertionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     requires Keyspace.lt(key, tree.pivota);
+     ensures ValidInsertionResult(result, tree, key, value);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childHeightsEqual(tree);
+        var subresult := InsertIntoSubtree(tree.left, key, value);
+        childrenAreSubtrees(subresult.tree);
+        childHeightsEqual(subresult.tree);
+        if !subresult.Split? {
+            result := DidntSplit(mkThreeNode(subresult.tree, tree.pivota,
+                                            tree.middle, tree.pivotb,
+                                            tree.right));
+        } else {
+            var newright := mkTwoNode(tree.middle, tree.pivotb, tree.right);
+            assert(Height(newright) == Height(tree));
+            var newtree := mkTwoNode(subresult.tree, tree.pivota, newright);
+            assert(Height(newtree) == Height(tree) + 1);
+            result := Split(newtree);
+        }
+    }
 
-    // method InsertIntoThreeNodeMiddle<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-    //  returns (result: InsertionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.ThreeNode?;
-    //  requires (tree.pivota == key || Keyspace.lt(tree.pivota, key));
-    //  requires Keyspace.lt(key, tree.pivotb);
-    //  ensures ValidInsertionResult(result, tree, key, value);
-    //  decreases tree, 0;
-    // {
-    //     assume false;
-    //     var subresult := InsertIntoSubtree(tree.middle, key, value);
-    //     if !subresult.Split? {
-    //         result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
-    //                                       subresult.tree, tree.pivotb,
-    //                                                 tree.right));
-    //     } else {
-    //         var newleft := mkTwoNode(tree.left, tree.pivota, subresult.tree.left);
-    //         var newright := mkTwoNode(subresult.tree.right, tree.pivotb, tree.right);
-    //         var newtree := mkTwoNode(newleft, subresult.tree.pivot, newright);
-    //         assert(Height(newleft) == Height(tree));
-    //         assert(Height(newright) == Height(tree));
-    //         assert(Height(newtree) == Height(tree) + 1);
-    //         result := Split(newtree);
-    //     }
-    // }
+    method InsertIntoThreeNodeMiddle<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+     returns (result: InsertionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     requires (tree.pivota == key || Keyspace.lt(tree.pivota, key));
+     requires Keyspace.lt(key, tree.pivotb);
+     ensures ValidInsertionResult(result, tree, key, value);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childHeightsEqual(tree);
+        var subresult := InsertIntoSubtree(tree.middle, key, value);
+        childrenAreSubtrees(subresult.tree);
+        childHeightsEqual(subresult.tree);
+        if !subresult.Split? {
+            result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
+                                          subresult.tree, tree.pivotb,
+                                                    tree.right));
+        } else {
+            var newleft := mkTwoNode(tree.left, tree.pivota, subresult.tree.left);
+            var newright := mkTwoNode(subresult.tree.right, tree.pivotb, tree.right);
+            var newtree := mkTwoNode(newleft, subresult.tree.pivot, newright);
+            assert(Height(newleft) == Height(tree));
+            assert(Height(newright) == Height(tree));
+            assert(Height(newtree) == Height(tree) + 1);
+            result := Split(newtree);
+        }
+    }
 
-    // method InsertIntoThreeNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-    //  returns (result: InsertionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.ThreeNode?;
-    //  requires tree.pivotb == key || Keyspace.lt(tree.pivotb, key);
-    //  ensures ValidInsertionResult(result, tree, key, value);
-    //  decreases tree, 0;
-    // {
-    //     assume false;
-    //     var subresult := InsertIntoSubtree(tree.right, key, value);
-    //     if !subresult.Split? {
-    //         result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
-    //                               tree.middle, tree.pivotb,
-    //                                                 subresult.tree));
-    //     } else {
-    //         var newleft := TwoNode(tree.left, tree.pivota, tree.middle);
-    //         var newtree := TwoNode(newleft, tree.pivotb, subresult.tree);
-    //         assert(Height(newleft) == Height(tree));
-    //         assert(Height(newtree) == Height(tree) + 1);
-    //         result := Split(newtree);
-    //     }
-    // }
+    method InsertIntoThreeNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+     returns (result: InsertionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     requires tree.pivotb == key || Keyspace.lt(tree.pivotb, key);
+     ensures ValidInsertionResult(result, tree, key, value);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childHeightsEqual(tree);
+        var subresult := InsertIntoSubtree(tree.right, key, value);
+        childrenAreSubtrees(subresult.tree);
+        childHeightsEqual(subresult.tree);
+        if !subresult.Split? {
+            result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
+                                  tree.middle, tree.pivotb,
+                                                    subresult.tree));
+        } else {
+            var newleft := mkTwoNode(tree.left, tree.pivota, tree.middle);
+            var newtree := mkTwoNode(newleft, tree.pivotb, subresult.tree);
+            result := Split(newtree);
+        }
+    }
 
-    // method InsertIntoThreeNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-    //  returns (result: InsertionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.ThreeNode?;
-    //  ensures ValidInsertionResult(result, tree, key, value);
-    //  decreases tree, 1;
-    // {
-    //     assume false;
-    //     if Keyspace.lt(key, tree.pivota) {
-    //         result := InsertIntoThreeNodeLeft(tree, key, value);
-    //     } else if Keyspace.lt(key, tree.pivotb) {
-    //         result := InsertIntoThreeNodeMiddle(tree, key, value);
-    //     } else {
-    //         result := InsertIntoThreeNodeRight(tree, key, value);
-    //     }
-    // }
+    method InsertIntoThreeNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
+     returns (result: InsertionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     ensures ValidInsertionResult(result, tree, key, value);
+     decreases tree, 1;
+    {
+        if Keyspace.lt(key, tree.pivota) {
+            result := InsertIntoThreeNodeLeft(tree, key, value);
+        } else if Keyspace.lt(key, tree.pivotb) {
+            result := InsertIntoThreeNodeMiddle(tree, key, value);
+        } else {
+            result := InsertIntoThreeNodeRight(tree, key, value);
+        }
+    }
     
     method InsertIntoSubtree<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
      returns (result: InsertionResult<Value>)
@@ -424,14 +419,14 @@ abstract module TwoThreeTree {
      ensures ValidInsertionResult(result, tree, key, value);
      decreases tree, 3;
     {
-        assume false; result := DidntSplit(tree);
-        // if tree.Leaf? {
-        //     result := InsertIntoLeaf(tree, key, value);
-        // } else if tree.TwoNode? {
-        //     result := InsertIntoTwoNode(tree, key, value);
-        // } else {
-        //     result := InsertIntoThreeNode(tree, key, value);
-        // }
+        //assume false; result := DidntSplit(tree);
+        if tree.Leaf? {
+            result := InsertIntoLeaf(tree, key, value);
+        } else if tree.TwoNode? {
+            result := InsertIntoTwoNode(tree, key, value);
+        } else {
+            result := InsertIntoThreeNode(tree, key, value);
+        }
     }
     
     
