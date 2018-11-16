@@ -77,10 +77,10 @@ abstract module TwoThreeTree {
             reveal_TreeIsOrdered();
             Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.right))
         else
-            // var lmentries := Maps.disjoint_union3(SubtreeContents(tree.left), SubtreeContents(tree.middle));
-            // Maps.disjoint_union(lmentries, SubtreeContents(tree.right))
             reveal_TreeIsOrdered();
-            Maps.disjoint_union3(SubtreeContents(tree.left), SubtreeContents(tree.middle), SubtreeContents(tree.right))
+            Maps.disjoint_union3(SubtreeContents(tree.left),
+                                 SubtreeContents(tree.middle), 
+                                 SubtreeContents(tree.right))
     }
 
     datatype QueryResult<Value> = KeyDoesNotExist | ValueForKey(value: Value)
@@ -110,7 +110,6 @@ abstract module TwoThreeTree {
     }
 
     function {:opaque} minHeight(tree: Node) : int
-        //ensures minHeight(tree) == 0 <==> tree.Leaf?;
     {
         if tree.Leaf?
             then 0
@@ -337,9 +336,7 @@ abstract module TwoThreeTree {
                                             tree.right));
         } else {
             var newright := mkTwoNode(tree.middle, tree.pivotb, tree.right);
-            assert(Height(newright) == Height(tree));
             var newtree := mkTwoNode(subresult.tree, tree.pivota, newright);
-            assert(Height(newtree) == Height(tree) + 1);
             result := Split(newtree);
         }
     }
@@ -366,9 +363,6 @@ abstract module TwoThreeTree {
             var newleft := mkTwoNode(tree.left, tree.pivota, subresult.tree.left);
             var newright := mkTwoNode(subresult.tree.right, tree.pivotb, tree.right);
             var newtree := mkTwoNode(newleft, subresult.tree.pivot, newright);
-            assert(Height(newleft) == Height(tree));
-            assert(Height(newright) == Height(tree));
-            assert(Height(newtree) == Height(tree) + 1);
             result := Split(newtree);
         }
     }
@@ -419,7 +413,6 @@ abstract module TwoThreeTree {
      ensures ValidInsertionResult(result, tree, key, value);
      decreases tree, 3;
     {
-        //assume false; result := DidntSplit(tree);
         if tree.Leaf? {
             result := InsertIntoLeaf(tree, key, value);
         } else if tree.TwoNode? {
