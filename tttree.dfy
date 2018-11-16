@@ -11,8 +11,8 @@ abstract module TwoThreeTree {
         Leaf(key: Keyspace.Element, value: Value) |
         TwoNode(left: Node, pivot: Keyspace.Element, right: Node) |
         ThreeNode(left: Node, pivota: Keyspace.Element,
-              middle: Node, pivotb: Keyspace.Element,
-                            right: Node)
+                  middle: Node, pivotb: Keyspace.Element,
+                  right: Node)
 
     function SubtreeAllKeys(tree: Node) : set<Keyspace.Element>
         ensures SubtreeAllKeys(tree) != {};
