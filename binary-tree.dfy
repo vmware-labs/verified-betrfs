@@ -32,7 +32,6 @@ method Insert(tree: Node, value: int) returns (updated: Node)
         } else {
             var rightSubtree := Insert(tree.right, value);
             updated := Node(tree.left, tree.value, rightSubtree);
-            assert OrderedTree(updated);
         }
     }
 }
