@@ -1,0 +1,10 @@
+Profiling
+
+From Jay
+
+If you run boogie with /proc:<mangled name> and /z3opt:TRACE=true
+it will generate z3.log
+Z3AxiomProfiler.exe
+
+dafny tttree.dfy /proc:'CheckWellformed$$_6_TwoThreeTree.__default.tempLemma' /print:/tmp/foo
+
