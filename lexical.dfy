@@ -25,7 +25,7 @@ abstract module Lexical_Order refines Total_Order {
     lemma ltedef_properties(a: Element, b: Element)
 		ensures ltedef(a, b) || ltedef(b, a); // Total
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
-        ensures forall c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitivity
+        ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitivity
     {
         reveal_ltedef();
     }
