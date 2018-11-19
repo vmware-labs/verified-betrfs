@@ -602,8 +602,8 @@ module String_TTTree refines TwoThreeTree {
 
 
 method Main() {
-    var nInsertions := 1000 * 1000;
-    var t := Integer_TTTree.Tree<int>.EmptyTree;
+    var nInsertions := 1000 * 1000 * 10;
+    var t := Integer_TTTree.Tree.EmptyTree;
     var i := 0;
     while i < nInsertions
         invariant Integer_TTTree.TTTree(t);

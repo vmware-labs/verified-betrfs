@@ -12,7 +12,7 @@ abstract module Lexical_Order refines Total_Order {
         ltedef(a, b)
 	}
 
-	predicate method ltedef(a: Element, b: Element)
+	predicate method {:opaque} ltedef(a: Element, b: Element)
 	{
 		if |a| == 0 && |b| == 0 then true
 		else if |a| == 0       then true
@@ -25,7 +25,9 @@ abstract module Lexical_Order refines Total_Order {
     lemma ltedef_properties(a: Element, b: Element)
 		ensures ltedef(a, b) || ltedef(b, a); // Total
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
+        ensures forall c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitivity
     {
+        reveal_ltedef();
     }
 
     // function method longest_common_prefix<T(==)>(a: seq<T>, b: seq<T>) : seq<T>
