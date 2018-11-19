@@ -6,8 +6,9 @@ abstract module Lexical_Order refines Total_Order {
     
  	type Element = seq<Entry.Element>
 
-	predicate method lte(a: Element, b: Element)
+	predicate method {:opaque} lte(a: Element, b: Element)
 	{
+        reveal_ltedef();
         ltedef_properties(a, b);
         ltedef(a, b)
 	}
