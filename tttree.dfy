@@ -602,14 +602,16 @@ module String_TTTree refines TwoThreeTree {
 
 
 method Main() {
+    var nInsertions := 1000 * 1000;
     var t := Integer_TTTree.Tree<int>.EmptyTree;
-    t := Integer_TTTree.Insert(t, 5, 25);
-    t := Integer_TTTree.Insert(t, -5, 25);
-    t := Integer_TTTree.Insert(t, 7, 49);
-    print Integer_TTTree.Query(t, 5); print "\n";
-    print Integer_TTTree.Query(t, -5); print "\n";
-    print Integer_TTTree.Query(t, 7); print "\n";
-    print Integer_TTTree.Query(t, 25); print "\n";
+    var i := 0;
+    while i < nInsertions
+        invariant Integer_TTTree.TTTree(t);
+    {
+        var v := (i * 1073741827) % nInsertions;
+        t := Integer_TTTree.Insert(t, v, v*v);
+        i := i + 1;
+    }
 }
 
 // Local Variables:
