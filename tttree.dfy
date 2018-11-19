@@ -1,4 +1,5 @@
 include "total_order.dfy"
+include "lexical.dfy"
 include "map_utils.dfy"
 include "mathematics.dfy"
 
@@ -75,9 +76,13 @@ abstract module TwoThreeTree {
             r
         else if tree.TwoNode? then
             reveal_TreeIsOrdered();
+            assert SubtreeContents(tree.left).Keys !! SubtreeContents(tree.right).Keys; // observe
             Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.right))
         else
             reveal_TreeIsOrdered();
+            assert SubtreeContents(tree.left).Keys
+                !! SubtreeContents(tree.middle).Keys
+                !! SubtreeContents(tree.right).Keys; // observe
             Maps.disjoint_union3(SubtreeContents(tree.left),
                                  SubtreeContents(tree.middle), 
                                  SubtreeContents(tree.right))
@@ -135,7 +140,10 @@ abstract module TwoThreeTree {
     
     predicate {:opaque} recursivelyBalanced(tree: Node)
         ensures recursivelyBalanced(tree) ==> balanced(tree);
+        ensures tree.Leaf? ==> recursivelyBalanced(tree);
     {
+        reveal_minHeight();
+        reveal_maxHeight();
            balanced(tree)
         && (!tree.Leaf? ==> recursivelyBalanced(tree.left) && recursivelyBalanced(tree.right))
         && (tree.ThreeNode? ==> recursivelyBalanced(tree.middle))
@@ -158,6 +166,7 @@ abstract module TwoThreeTree {
         requires Height(t1) == Height(t2);
         requires ContentsAreLessThan(t1, pivot);
         requires ContentsAreGreaterEqualThan(pivot, t2);
+        requires SubtreeContents(t1).Keys !! SubtreeContents(t2).Keys; // Should be implied, but dafny can't always see it
         ensures TTSubtree(mkTwoNode(t1, pivot, t2));
         ensures SubtreeAllKeys(mkTwoNode(t1, pivot, t2)) == SubtreeAllKeys(t1) + { pivot } + SubtreeAllKeys(t2);
         ensures SubtreeContents(mkTwoNode(t1, pivot, t2)) ==
@@ -182,6 +191,7 @@ abstract module TwoThreeTree {
         requires ContentsAreGreaterEqualThan(pivota, t2);
         requires ContentsAreLessThan(t2, pivotb);
         requires ContentsAreGreaterEqualThan(pivotb, t3);
+        requires SubtreeContents(t1).Keys !! SubtreeContents(t2).Keys !! SubtreeContents(t3).Keys; // Should be implied, but dafny can't always see it
         ensures TTSubtree(mkThreeNode(t1, pivota, t2, pivotb, t3));
         ensures SubtreeAllKeys(mkThreeNode(t1, pivota, t2, pivotb, t3)) ==
             SubtreeAllKeys(t1) + { pivota } + SubtreeAllKeys(t2) + { pivotb } + SubtreeAllKeys(t3);
@@ -503,46 +513,48 @@ abstract module TwoThreeTree {
     //   // }
     // }
     
-    // datatype Tree<Value> = EmptyTree | NonEmptyTree(root: Node<Value>)
+    datatype Tree<Value> = EmptyTree | NonEmptyTree(root: Node<Value>)
     
-    // predicate TTTree<Value>(tree: Tree<Value>) {
-    //  tree.EmptyTree? || TTSubtree(tree.root)
-// }
+    predicate TTTree<Value>(tree: Tree<Value>) {
+        tree.EmptyTree? || TTSubtree(tree.root)
+    }
 
-// function Contents<Value>(tree: Tree<Value>) : map<Key, Value>
-// {
-//  if tree.EmptyTree?
-//      then map[]
-//  else
-//      SubtreeContents(tree.root)
-// }
+    function Contents<Value>(tree: Tree<Value>) : map<Keyspace.Element, Value>
+        requires TTTree(tree);
+    {
+        if tree.EmptyTree?
+            then map[]
+        else
+            SubtreeContents(tree.root)
+    }
 
-// function method Query<Value>(tree: Tree<Value>, key: Key) : QueryResult<Value>
-//  requires(TTTree(tree));
-//   ensures Query(tree, key) == KeyDoesNotExist <==>
-//      (key !in Contents(tree));
-//   ensures Query(tree, key).ValueForKey? <==>
-//      (key in Contents(tree) && Contents(tree)[key] == Query(tree, key).value);
-// {
-//  if tree.EmptyTree? then
-//      KeyDoesNotExist
-//  else
-//      QuerySubtree(tree.root, key)
-// }
+    function method Query<Value>(tree: Tree<Value>, key: Keyspace.Element) : QueryResult<Value>
+        requires(TTTree(tree));
+        ensures Query(tree, key) == KeyDoesNotExist <==>
+            (key !in Contents(tree));
+            ensures Query(tree, key).ValueForKey? <==>
+                (key in Contents(tree) && Contents(tree)[key] == Query(tree, key).value);
+    {
+        if tree.EmptyTree? then
+            KeyDoesNotExist
+        else
+            QuerySubtree(tree.root, key)
+    }
 
-// method Insert<Value>(tree: Tree<Value>, key: Key, value: Value) returns (newtree: Tree<Value>)
-//  requires TTTree(tree);
-//  ensures TTTree(newtree);
-//  ensures Contents(newtree) == Contents(tree)[key := value];
-//  ensures newtree.NonEmptyTree?;
-// {
-//  if tree.EmptyTree? {
-//      newtree := NonEmptyTree(Leaf(key, value));
-//  } else {
-//      var result := InsertIntoSubtree(tree.root, key, value);
-//      newtree := NonEmptyTree(result.tree);
-//  }
-// }
+    method Insert<Value>(tree: Tree<Value>, key: Keyspace.Element, value: Value) returns (newtree: Tree<Value>)
+        requires TTTree(tree);
+        ensures TTTree(newtree);
+        ensures Contents(newtree) == Contents(tree)[key := value];
+        ensures newtree.NonEmptyTree?;
+    {
+        if tree.EmptyTree? {
+            assert TTSubtree(Leaf(key, value));
+            newtree := NonEmptyTree(Leaf(key, value));
+        } else {
+            var result := InsertIntoSubtree(tree.root, key, value);
+            newtree := NonEmptyTree(result.tree);
+        }
+    }
 
 // datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
 
@@ -570,6 +582,34 @@ abstract module TwoThreeTree {
 //      }
 // }
 
+}
+
+module Integer_TTTree refines TwoThreeTree {
+    import Keyspace = Integer_Order
+}
+
+module Seq_Int_TTTree refines TwoThreeTree {
+    import Keyspace = Seq_Int_Lex_Order
+}
+
+module Seq_Char_TTTree refines TwoThreeTree {
+    import Keyspace = Seq_Char_Lex_Order
+}
+
+module String_TTTree refines TwoThreeTree {
+    import Keyspace = String_Lex_Order
+}
+
+
+method Main() {
+    var t := Integer_TTTree.Tree<int>.EmptyTree;
+    t := Integer_TTTree.Insert(t, 5, 25);
+    t := Integer_TTTree.Insert(t, -5, 25);
+    t := Integer_TTTree.Insert(t, 7, 49);
+    print Integer_TTTree.Query(t, 5); print "\n";
+    print Integer_TTTree.Query(t, -5); print "\n";
+    print Integer_TTTree.Query(t, 7); print "\n";
+    print Integer_TTTree.Query(t, 25); print "\n";
 }
 
 // Local Variables:
