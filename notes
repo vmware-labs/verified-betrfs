@@ -8,3 +8,28 @@ Z3AxiomProfiler.exe
 
 dafny tttree.dfy /proc:'CheckWellformed$$_6_TwoThreeTree.__default.tempLemma' /print:/tmp/foo
 
+jonh@howell-thinkpad:~/dafny-base/boogie/Binaries$ ln -s ../../dafny/Binaries/z3.exe .
+
+Getting profiler working depends on getting boogie working depends on
+referencing the ELF z3, not the z3.exe (Windows binary).
+
+mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/dafny-base/dafny/Binaries/z3/bin/z3 /proc:'Impl$$_6_TwoThreeTree.__default.InsertIntoThreeNodeRight' /tmp/foo.bpl
+
+Wow, that took a long time!
+
+sudo apt install mercurial
+hg clone https://bitbucket.org/viperproject/axiom-profiler
+cd axiom-profiler/
+mono ../boogie/nuget.exe install Microsoft.Net.Compilers
+xbuild /p:Configuration=Release source/AxiomProfiler.sln
+mono ../dafny-base/axiom-profiler/bin/Release/AxiomProfiler.exe z3.log
+
+
+Wish list:
+
+A compiler flag to check for non-opaque recursive, existential, and set/map
+comprehension function definitions.
+
+Bug report:
+cf51b15 dafny ttbenchmark fails verifying something in an upstream file,
+    which feels bonkers.
