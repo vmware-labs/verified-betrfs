@@ -33,7 +33,7 @@ predicate EnqueueMutation(disk': Disk, disk: Disk, mutation: Mutation)
        0 <= address < disk.capacity
     && disk'.capacity == disk.capacity
     && disk'.blocks == disk.blocks
-    && disk'.inflight == disk.inflight + [mutation];
+    && disk'.inflight == disk.inflight + [mutation]
 }
 
 predicate NextWrite(disk': Disk, disk: Disk, address: int, data: Block)
@@ -63,6 +63,7 @@ predicate ReorderWrites(inflight': seq<Mutation>, inflight: seq<Mutation>) {
         && inflight'[idx+1] == inflight[idx]
         && inflight'[idx+2] == inflight[idx+2]
 }
+
 predicate CoalesceWrite(inflight': seq<Mutation>, inflight: seq<Mutation>) {
     exists idx :: 0 <= idx < |inflight|-1
         && inflight[idx].Write?
@@ -73,7 +74,7 @@ predicate CoalesceWrite(inflight': seq<Mutation>, inflight: seq<Mutation>) {
         && inflight'[idx..] == inflight[idx+1..]
 }
 
-predicate NextReorder(disk: Disk, disk': Disk)
+predicate NextReorder(disk': Disk, disk: Disk)
 {
        disk'.capacity == disk.capacity
     && disk'.blocks == disk.blocks
@@ -96,7 +97,7 @@ function InflightValue(inflight: seq<Write>, address: int)
         InflightValue(inflight[1:], address)
 }
 
-predicate NextRead(disk: Disk, disk': Disk, address: int, data: Block)
+predicate NextRead(disk': Disk, disk: Disk, address: int, data: Block)
     requires WFDisk(disk);
     requires WFDisk(disk');
 {
@@ -119,7 +120,7 @@ predicate NextRetireSync(disk': disk, disk: Disk, handle: int)
     && disk'.inflight == disk.inflight[1..]
 }
 
-predicate NextRetireWrite(disk: Disk, disk': Disk)
+predicate NextRetireWrite(disk': Disk, disk: Disk)
 {
        |disk.inflight|>0
     && disk.inflight[0].Write?

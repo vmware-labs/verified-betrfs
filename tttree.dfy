@@ -115,6 +115,8 @@ abstract module TwoThreeTree {
     }
 
     function {:opaque} minHeight(tree: Node) : int
+        ensures minHeight(tree) >= 0;
+        ensures tree.Leaf? <==> minHeight(tree) == 0;
     {
         if tree.Leaf?
             then 0
@@ -125,6 +127,8 @@ abstract module TwoThreeTree {
     }
 
     function {:opaque} maxHeight(tree: Node) : int
+        ensures maxHeight(tree) >= 0;
+        ensures tree.Leaf? <==> maxHeight(tree) == 0;
     {
         if tree.Leaf?
             then 0
@@ -134,28 +138,54 @@ abstract module TwoThreeTree {
             1 + Math.max(maxHeight(tree.left), Math.max(maxHeight(tree.middle), maxHeight(tree.right)))
     }
 
-    predicate balanced(tree: Node) {
-        minHeight(tree) == maxHeight(tree)
-    }
-    
-    predicate {:opaque} recursivelyBalanced(tree: Node)
-        ensures recursivelyBalanced(tree) ==> balanced(tree);
-        ensures tree.Leaf? ==> recursivelyBalanced(tree);
+    lemma minHeightLTEmaxHeight(tree: Node)
+        ensures minHeight(tree) <= maxHeight(tree);
     {
         reveal_minHeight();
         reveal_maxHeight();
-           balanced(tree)
-        && (!tree.Leaf? ==> recursivelyBalanced(tree.left) && recursivelyBalanced(tree.right))
-        && (tree.ThreeNode? ==> recursivelyBalanced(tree.middle))
+    }
+    
+    predicate balanced(tree: Node) {
+        minHeight(tree) == maxHeight(tree)
     }
 
+    lemma childrenAreBalanced(tree: Node)
+        requires balanced(tree);
+        ensures !tree.Leaf? ==> balanced(tree.left);
+        ensures !tree.Leaf? ==> balanced(tree.right);
+        ensures tree.ThreeNode? ==> balanced(tree.middle);
+        ensures !tree.Leaf? ==> Height(tree.left) == Height(tree) - 1;
+        ensures !tree.Leaf? ==> Height(tree.right) == Height(tree) - 1;
+        ensures tree.ThreeNode? ==> Height(tree.middle) == Height(tree) - 1;
+    {
+        reveal_minHeight();
+        reveal_maxHeight();
+        if !tree.Leaf? {
+            minHeightLTEmaxHeight(tree.left);
+            minHeightLTEmaxHeight(tree.right);
+        }
+        if tree.ThreeNode? {
+            minHeightLTEmaxHeight(tree.middle);
+        }
+    }    
+    
     predicate TTSubtree(tree: Node) {
-           TreeIsOrdered(tree)
-        && recursivelyBalanced(tree)
+        TreeIsOrdered(tree)
+      && balanced(tree)
+    }
+
+    lemma childrenAreSubtrees<Value>(tree: Node<Value>)
+        requires TTSubtree(tree);
+        ensures !tree.Leaf? ==> TTSubtree(tree.left);
+        ensures !tree.Leaf? ==> TTSubtree(tree.right);
+        ensures tree.ThreeNode? ==> TTSubtree(tree.middle);
+    {
+        childrenAreBalanced(tree);
+        reveal_TreeIsOrdered();
     }
 
     function Height(tree: Node) : int
-        requires(balanced(tree));
+        requires balanced(tree);
     {
         minHeight(tree)
     }
@@ -166,17 +196,18 @@ abstract module TwoThreeTree {
         requires Height(t1) == Height(t2);
         requires ContentsAreLessThan(t1, pivot);
         requires ContentsAreGreaterEqualThan(pivot, t2);
-        requires SubtreeContents(t1).Keys !! SubtreeContents(t2).Keys; // Should be implied, but dafny can't always see it
+        requires SubtreeContents(t1).Keys
+               !! SubtreeContents(t2).Keys; // Should be implied, but dafny can't always see it
         ensures TTSubtree(mkTwoNode(t1, pivot, t2));
-        ensures SubtreeAllKeys(mkTwoNode(t1, pivot, t2)) == SubtreeAllKeys(t1) + { pivot } + SubtreeAllKeys(t2);
+        ensures SubtreeAllKeys(mkTwoNode(t1, pivot, t2))
+             == SubtreeAllKeys(t1) + { pivot } + SubtreeAllKeys(t2);
         ensures SubtreeContents(mkTwoNode(t1, pivot, t2)) ==
             Maps.disjoint_union(SubtreeContents(t1), SubtreeContents(t2));
         ensures Height(mkTwoNode(t1, pivot, t2)) == Height(t1) + 1;
     {
-        reveal_TreeIsOrdered();
-        reveal_recursivelyBalanced();
         reveal_minHeight();
         reveal_maxHeight();
+        reveal_TreeIsOrdered();
         TwoNode(t1, pivot, t2)
     }
 
@@ -200,7 +231,6 @@ abstract module TwoThreeTree {
         ensures Height(mkThreeNode(t1, pivota, t2, pivotb, t3)) == Height(t1) + 1;
     {
         reveal_TreeIsOrdered();
-        reveal_recursivelyBalanced();
         reveal_minHeight();
         reveal_maxHeight();
         ThreeNode(t1, pivota, t2, pivotb, t3)
@@ -228,9 +258,7 @@ abstract module TwoThreeTree {
         requires tree.Leaf?;
         ensures ValidInsertionResult(result, tree, key, value);
     {
-        reveal_minHeight();
-        reveal_maxHeight();
-        reveal_recursivelyBalanced();
+        reveal_TreeIsOrdered();
         if tree.key == key {
             result := DidntSplit(Leaf(key, value));
         } else if Keyspace.lt(tree.key, key) {
@@ -242,31 +270,6 @@ abstract module TwoThreeTree {
             var newtree := mkTwoNode(newleft, tree.key, tree);
             result := Split(newtree);
         }
-        reveal_TreeIsOrdered();
-    }
-
-    lemma childrenAreSubtrees<Value>(tree: Node<Value>)
-        requires TTSubtree(tree);
-        ensures !tree.Leaf? ==> TTSubtree(tree.left);
-        ensures !tree.Leaf? ==> TTSubtree(tree.right);
-        ensures tree.ThreeNode? ==> TTSubtree(tree.middle);
-    {
-        reveal_recursivelyBalanced();
-        reveal_TreeIsOrdered();
-    }
-
-    lemma childHeightsEqual<Value>(tree: Node<Value>)
-        requires TTSubtree(tree);
-        ensures !tree.Leaf? ==> balanced(tree.left);
-        ensures !tree.Leaf? ==> balanced(tree.right);
-        ensures !tree.Leaf? ==> (Height(tree.left) == Height(tree.right));
-        ensures tree.ThreeNode? ==> (balanced(tree.middle) && Height(tree.left) == Height(tree.middle));
-        ensures !tree.Leaf? ==> (Height(tree.left) == Height(tree) - 1);
-    {
-        reveal_recursivelyBalanced();
-        reveal_TreeIsOrdered();
-        reveal_minHeight();
-        reveal_maxHeight();
     }
 
     method InsertIntoTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
@@ -278,13 +281,13 @@ abstract module TwoThreeTree {
         decreases tree, 0;
     {
         childrenAreSubtrees(tree);
-        childHeightsEqual(tree);
+        childrenAreBalanced(tree);
         var subresult := InsertIntoSubtree(tree.left, key, value);
-        childrenAreSubtrees(subresult.tree);
-        childHeightsEqual(subresult.tree);
         if !subresult.Split? {
             result := DidntSplit(mkTwoNode(subresult.tree, tree.pivot, tree.right));
         } else {
+            childrenAreSubtrees(subresult.tree);
+            childrenAreBalanced(subresult.tree);
             result := DidntSplit(mkThreeNode(subresult.tree.left, subresult.tree.pivot,
                                             subresult.tree.right, tree.pivot,
                                             tree.right));
@@ -300,13 +303,13 @@ abstract module TwoThreeTree {
         decreases tree, 0;
     {
         childrenAreSubtrees(tree);
-        childHeightsEqual(tree);
+        childrenAreBalanced(tree);
         var subresult := InsertIntoSubtree(tree.right, key, value);
-        childrenAreSubtrees(subresult.tree);
-        childHeightsEqual(subresult.tree);
         if !subresult.Split? {
             result := DidntSplit(mkTwoNode(tree.left, tree.pivot, subresult.tree));
         } else {
+            childrenAreSubtrees(subresult.tree);
+            childrenAreBalanced(subresult.tree);
             result := DidntSplit(mkThreeNode(tree.left, tree.pivot,
                                             subresult.tree.left, subresult.tree.pivot,
                                             subresult.tree.right));
@@ -336,10 +339,8 @@ abstract module TwoThreeTree {
      decreases tree, 0;
     {
         childrenAreSubtrees(tree);
-        childHeightsEqual(tree);
+        childrenAreBalanced(tree);
         var subresult := InsertIntoSubtree(tree.left, key, value);
-        childrenAreSubtrees(subresult.tree);
-        childHeightsEqual(subresult.tree);
         if !subresult.Split? {
             result := DidntSplit(mkThreeNode(subresult.tree, tree.pivota,
                                             tree.middle, tree.pivotb,
@@ -361,15 +362,15 @@ abstract module TwoThreeTree {
      decreases tree, 0;
     {
         childrenAreSubtrees(tree);
-        childHeightsEqual(tree);
+        childrenAreBalanced(tree);
         var subresult := InsertIntoSubtree(tree.middle, key, value);
-        childrenAreSubtrees(subresult.tree);
-        childHeightsEqual(subresult.tree);
         if !subresult.Split? {
             result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
                                           subresult.tree, tree.pivotb,
                                                     tree.right));
         } else {
+            childrenAreSubtrees(subresult.tree);
+            childrenAreBalanced(subresult.tree);
             var newleft := mkTwoNode(tree.left, tree.pivota, subresult.tree.left);
             var newright := mkTwoNode(subresult.tree.right, tree.pivotb, tree.right);
             var newtree := mkTwoNode(newleft, subresult.tree.pivot, newright);
@@ -386,10 +387,8 @@ abstract module TwoThreeTree {
      decreases tree, 0;
     {
         childrenAreSubtrees(tree);
-        childHeightsEqual(tree);
+        childrenAreBalanced(tree);
         var subresult := InsertIntoSubtree(tree.right, key, value);
-        childrenAreSubtrees(subresult.tree);
-        childHeightsEqual(subresult.tree);
         if !subresult.Split? {
             result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
                                   tree.middle, tree.pivotb,
@@ -433,85 +432,254 @@ abstract module TwoThreeTree {
     }
     
     
-    // datatype DeletionResult<Value> =
-    //  NothingLeft |
-    //  Merged(tree: Node<Value>) |
-    //  DidntMerge(tree: Node<Value>)
+    datatype DeletionResult<Value> =
+     NothingLeft |
+     Merged(tree: Node<Value>) |
+     DidntMerge(tree: Node<Value>)
 
-    // predicate ValidDeletionResult<Value>(result: DeletionResult<Value>, tree: Node<Value>,
-    //  key: Keyspace.Element)
-    //  requires TTSubtree(tree);
-    // {
-    //  if result.NothingLeft? then
-    //      tree.Leaf? && tree.key == key
-    //  else 
-    //   TTSubtree(result.tree) &&
-    //   (SubtreeAllKeys(result.tree) <= SubtreeAllKeys(tree)) &&
-    //   (SubtreeContents(result.tree).Keys == SubtreeContents(tree).Keys - {key}) && 
-    //   (forall x :: x in SubtreeContents(result.tree) ==>
-    //   SubtreeContents(result.tree)[x] == SubtreeContents(tree)[x]) &&
-    //   (result.Merged? ==> !tree.Leaf?) &&
-    //   (result.Merged? ==> Height(result.tree) == Height(tree) - 1) &&
-    //   (!result.Merged? ==> Height(result.tree) == Height(tree))
-    // }
+    predicate ValidDeletionResult<Value>(result: DeletionResult<Value>, tree: Node<Value>,
+     key: Keyspace.Element)
+     requires TTSubtree(tree);
+    {
+     if result.NothingLeft? then
+         tree.Leaf? && tree.key == key
+     else 
+      TTSubtree(result.tree) &&
+      (SubtreeAllKeys(result.tree) <= SubtreeAllKeys(tree)) &&
+      (SubtreeContents(result.tree).Keys == SubtreeContents(tree).Keys - {key}) && 
+      (forall x :: x in SubtreeContents(result.tree) ==>
+      SubtreeContents(result.tree)[x] == SubtreeContents(tree)[x]) &&
+      (result.Merged? ==> !tree.Leaf?) &&
+      (result.Merged? ==> Height(result.tree) == Height(tree) - 1) &&
+      (!result.Merged? ==> Height(result.tree) == Height(tree))
+    }
         
-    // method DeleteFromLeaf<Value>(tree: Node<Value>, key: Keyspace.Element)
-    //  returns (result: DeletionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.Leaf?;
-    //  ensures ValidDeletionResult(result, tree, key);
-    // {
-    //  if tree.key == key {
-    //      result := NothingLeft;
-    //  } else {
-    //      result := DidntMerge(tree);
-    //  }
-    // }
+    method DeleteFromLeaf<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.Leaf?;
+     ensures ValidDeletionResult(result, tree, key);
+    {
+     if tree.key == key {
+         result := NothingLeft;
+     } else {
+         result := DidntMerge(tree);
+     }
+    }
 
-    // method DeleteFromTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element)
-    //  returns (result: DeletionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  requires tree.TwoNode?;
-    //  requires Keyspace.lt(key, tree.pivot);
-    //  ensures ValidDeletionResult(result, tree, key);
-    //  decreases tree, 0;
-    // {
-    //  var subresult := DeleteFromSubtree(tree.left, key);
-    //  if subresult.NothingLeft? {
-    //      result := Merged(tree.right);
-    //  } else if subresult.DidntMerge? {
-    //      result := DidntMerge(mkTwoNode(subresult.tree, tree.pivot, tree.right));
-    //  } else {
-    //      if tree.right.TwoNode? {
-    //          result := Merged(mkThreeNode(subresult.tree, tree.pivot,
-    //                                        tree.right.left, tree.right.pivot, 
-    //                                                                  tree.right.right));
-    //      } else {
-    //          assert !tree.left.Leaf?;
-    //          assert tree.right.ThreeNode?;
-    //          var newleft := mkTwoNode(subresult.tree, tree.pivot, tree.right.left);
-    //          var newright := mkTwoNode(tree.right.middle, tree.right.pivotb, tree.right.right);
-    //          var newtree := mkTwoNode(newleft, tree.right.pivota, newright);
-    //          result := DidntMerge(newtree);
-    //      }
-    //  }
-    // }
+    method DeleteFromTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.TwoNode?;
+     requires Keyspace.lt(key, tree.pivot);
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childrenAreBalanced(tree);
+        var subresult := DeleteFromSubtree(tree.left, key);
+        if subresult.NothingLeft? {
+            result := Merged(tree.right);
+        } else if subresult.DidntMerge? {
+            result := DidntMerge(mkTwoNode(subresult.tree, tree.pivot, tree.right));
+        } else {
+            if tree.right.TwoNode? {
+                childrenAreSubtrees(tree.right);
+                childrenAreBalanced(tree.right);
+                result := Merged(mkThreeNode(subresult.tree, tree.pivot,
+                                            tree.right.left, tree.right.pivot, 
+                                            tree.right.right));
+            } else {
+                childrenAreSubtrees(tree.right);
+                childrenAreBalanced(tree.right);
+                var newleft := mkTwoNode(subresult.tree, tree.pivot, tree.right.left);
+                var newright := mkTwoNode(tree.right.middle, tree.right.pivotb, tree.right.right);
+                var newtree := mkTwoNode(newleft, tree.right.pivota, newright);
+                result := DidntMerge(newtree);
+            }
+        }
+    }
 
-    // method DeleteFromSubtree<Value>(tree: Node<Value>, key: Keyspace.Element)
-    //  returns (result: DeletionResult<Value>)
-    //  requires TTSubtree(tree);
-    //  ensures ValidDeletionResult(result, tree, key);
-    //  decreases tree, 3;
-    // {
-    //  assume ValidDeletionResult(result, tree, key);
-    //  // if tree.Leaf? {
-    //  //  result := DeleteFromLeaf(tree, key);
-    //  // } else if tree.TwoNode? {
-    //  //  result := DeleteFromTwoNode(tree, key);
-    //  // } else {
-    //  //  result := DeleteFromThreeNode(tree, key);
-    //   // }
-    // }
+    method DeleteFromTwoNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.TwoNode?;
+     requires Keyspace.lte(tree.pivot, key);
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childrenAreBalanced(tree);
+        var subresult := DeleteFromSubtree(tree.right, key);
+        if subresult.NothingLeft? {
+            result := Merged(tree.left);
+        } else if subresult.DidntMerge? {
+            result := DidntMerge(mkTwoNode(tree.left, tree.pivot, subresult.tree));
+        } else {
+            if tree.left.TwoNode? {
+                childrenAreSubtrees(tree.left);
+                childrenAreBalanced(tree.left);
+                result := Merged(mkThreeNode(tree.left.left, tree.left.pivot,
+                                            tree.left.right, tree.pivot, 
+                                            subresult.tree));
+            } else {
+                childrenAreSubtrees(tree.left);
+                childrenAreBalanced(tree.left);
+                var newleft := mkTwoNode(tree.left.left, tree.left.pivota, tree.left.middle);
+                var newright := mkTwoNode(tree.left.right, tree.pivot, subresult.tree);
+                var newtree := mkTwoNode(newleft, tree.left.pivotb, newright);
+                result := DidntMerge(newtree);
+            }
+        }
+    }
+
+    method DeleteFromTwoNode<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.TwoNode?;
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 1;
+    {
+        if Keyspace.lt(key, tree.pivot) {
+            result := DeleteFromTwoNodeLeft(tree, key);
+        } else {
+            result := DeleteFromTwoNodeRight(tree, key);
+        }
+    }
+
+    method DeleteFromThreeNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     requires Keyspace.lt(key, tree.pivota);
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childrenAreBalanced(tree);
+        var subresult := DeleteFromSubtree(tree.left, key);
+        if subresult.NothingLeft? {
+            result := DidntMerge(mkTwoNode(tree.middle, tree.pivotb, tree.right));
+        } else if subresult.DidntMerge? {
+            result := DidntMerge(mkThreeNode(subresult.tree, tree.pivota,
+                                            tree.middle, tree.pivotb, 
+                                            tree.right));
+        } else {
+            childrenAreSubtrees(tree.middle);
+            childrenAreBalanced(tree.middle);
+            if tree.middle.TwoNode? {
+                var newleft := mkThreeNode(subresult.tree, tree.pivota,
+                                          tree.middle.left, tree.middle.pivot,
+                                          tree.middle.right);
+                result := DidntMerge(mkTwoNode(newleft, tree.pivotb, tree.right));
+            } else {
+                var newleft := mkTwoNode(subresult.tree, tree.pivota, tree.middle.left);
+                var newmiddle := mkTwoNode(tree.middle.middle, tree.middle.pivotb, tree.middle.right);
+                var newtree := mkThreeNode(newleft, tree.middle.pivota, newmiddle, tree.pivotb, tree.right);
+                result := DidntMerge(newtree);
+            }
+        }
+    }
+
+    method DeleteFromThreeNodeMiddle<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     requires Keyspace.lte(tree.pivota, key);
+     requires Keyspace.lt(key, tree.pivotb);
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childrenAreBalanced(tree);
+        var subresult := DeleteFromSubtree(tree.middle, key);
+        if subresult.NothingLeft? {
+            result := DidntMerge(mkTwoNode(tree.left, tree.pivotb, tree.right));
+        } else if subresult.DidntMerge? {
+            result := DidntMerge(mkThreeNode(tree.left, tree.pivota,
+                                            subresult.tree, tree.pivotb, 
+                                            tree.right));
+        } else {
+            childrenAreSubtrees(tree.left);
+            childrenAreBalanced(tree.left);
+            if tree.left.TwoNode? {
+                var newleft := mkThreeNode(tree.left.left, tree.left.pivot,
+                                          tree.left.right, tree.pivota,
+                                          subresult.tree);
+                result := DidntMerge(mkTwoNode(newleft, tree.pivotb, tree.right));
+            } else {
+                var newleft := mkTwoNode(tree.left.left, tree.left.pivota, tree.left.middle);
+                var newmiddle := mkTwoNode(tree.left.right, tree.pivota, subresult.tree);
+                var newtree := mkThreeNode(newleft, tree.left.pivotb, newmiddle, tree.pivotb, tree.right);
+                result := DidntMerge(newtree);
+            }
+        }
+    }
+
+    method DeleteFromThreeNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     requires Keyspace.lte(tree.pivotb, key);
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 0;
+    {
+        childrenAreSubtrees(tree);
+        childrenAreBalanced(tree);
+        var subresult := DeleteFromSubtree(tree.right, key);
+        if subresult.NothingLeft? {
+            result := DidntMerge(mkTwoNode(tree.left, tree.pivota, tree.middle));
+        } else if subresult.DidntMerge? {
+            result := DidntMerge(mkThreeNode(tree.left, tree.pivota,
+                                            tree.middle, tree.pivotb, 
+                                            subresult.tree));
+        } else {
+            childrenAreSubtrees(tree.middle);
+            childrenAreBalanced(tree.middle);
+            if tree.middle.TwoNode? {
+                var newright := mkThreeNode(tree.middle.left, tree.middle.pivot,
+                                          tree.middle.right, tree.pivotb,
+                                          subresult.tree);
+                result := DidntMerge(mkTwoNode(tree.left, tree.pivota, newright));
+            } else {
+                var newmiddle := mkTwoNode(tree.middle.left, tree.middle.pivota, tree.middle.middle);
+                var newright := mkTwoNode(tree.middle.right, tree.pivotb, subresult.tree);
+                var newtree := mkThreeNode(tree.left, tree.pivota, newmiddle, tree.middle.pivotb, newright);
+                result := DidntMerge(newtree);
+            }
+        }
+    }
+
+    method DeleteFromThreeNode<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     requires tree.ThreeNode?;
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 1;
+    {
+        if Keyspace.lt(key, tree.pivota) {
+            result := DeleteFromThreeNodeLeft(tree, key);
+        } else if Keyspace.lt(key, tree.pivotb) {
+            result := DeleteFromThreeNodeMiddle(tree, key);
+        } else {
+            result := DeleteFromThreeNodeRight(tree, key);
+        }
+    }
+    
+    method DeleteFromSubtree<Value>(tree: Node<Value>, key: Keyspace.Element)
+     returns (result: DeletionResult<Value>)
+     requires TTSubtree(tree);
+     ensures ValidDeletionResult(result, tree, key);
+     decreases tree, 3;
+    {
+        if tree.Leaf? {
+            result := DeleteFromLeaf(tree, key);
+        } else if tree.TwoNode? {
+            result := DeleteFromTwoNode(tree, key);
+        } else {
+            result := DeleteFromThreeNode(tree, key);
+        }
+    }
     
     datatype Tree<Value> = EmptyTree | NonEmptyTree(root: Node<Value>)
     
@@ -548,7 +716,6 @@ abstract module TwoThreeTree {
         ensures newtree.NonEmptyTree?;
     {
         if tree.EmptyTree? {
-            assert TTSubtree(Leaf(key, value));
             newtree := NonEmptyTree(Leaf(key, value));
         } else {
             var result := InsertIntoSubtree(tree.root, key, value);
@@ -556,32 +723,23 @@ abstract module TwoThreeTree {
         }
     }
 
-// datatype DeletionResult = DeletionResult(tree: Tree, merged: bool)
-
-// function DeleteFromSubtree(tree: Tree, key: int) : DeletionResult
-//  requires TTTree(tree);
-//  ensures TTTree(result.tree);
-//  ensures Contents(result.tree) == Contents(tree) - {key};
-// {
-//  if tree.EmptyTree? then
-//      DeletionResult(EmptyTree, false)
-//  else
-//      match tree.root {
-//          case Leaf(v) =>
-//              if v == key then DeletionResult(EmptyTree, true)
-//              else DeletionResult(tree, false)
-//          case TwoNode(left, pivot, right) =>
-//              if key < pivot then {
-//                  var subresult := DeleteFromSubtree(left, key);
-//                  if !subresult.merged then
-//                      DeletionResult(NonEmptyTree(subresult.root, tree.root.pivot, tree.root.right))
-//                  else
-
-//              } else {
-//              }
-//      }
-// }
-
+    method Delete<Value>(tree: Tree<Value>, key: Keyspace.Element) returns (newtree: Tree<Value>)
+        requires TTTree(tree);
+        ensures TTTree(newtree);
+        ensures Contents(newtree).Keys == Contents(tree).Keys - {key};
+        ensures forall k :: k in Contents(newtree).Keys ==> Contents(newtree)[k] == Contents(tree)[k];
+    {
+        if tree.EmptyTree? {
+            newtree := EmptyTree;
+        } else {
+            var result := DeleteFromSubtree(tree.root, key);
+            if result.NothingLeft? {
+                newtree := EmptyTree;
+            } else {
+                newtree := NonEmptyTree(result.tree);
+            }
+        }
+    }
 }
 
 // Local Variables:
