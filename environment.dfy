@@ -69,7 +69,7 @@ predicate CoalesceWrite(inflight': seq<Mutation>, inflight: seq<Mutation>) {
         && inflight[idx].Write?
         && inflight[idx+1].Write?
         && inflight[idx].address == inflight[idx+1].address
-        // coaesce away the first write, keeping the second.
+        // coalesce away the first write, keeping the second.
         && inflight'[..idx] == inflight[..idx]
         && inflight'[idx..] == inflight[idx+1..]
 }
@@ -152,7 +152,11 @@ predicate Next(disk': Disk, disk: Disk)
     || exists handle :: NextRetireSync(disk', disk, handle)
     || NextRetireWrite(disk', disk)
     || exists idx :: NextRetire(disk', disk, idx)
-    || NextReorder(disk: Disk, disk': Disk)
+    || NextReorder(disk', disk)
     || NextCrash(disk', disk)
     || NextAdversarialCrash(disk', disk)
 }
+
+// Local Variables:
+// tab-width: 4
+// End:
