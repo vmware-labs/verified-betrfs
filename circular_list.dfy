@@ -225,7 +225,6 @@ module Circular_List {
   {
     BringToFront(n);
     NonSingletonFacts(n);
-    NextIsValid(n);
     other := n.next;
     assert n.nodes[1] == other; // Observe
     Splice(n, other);
