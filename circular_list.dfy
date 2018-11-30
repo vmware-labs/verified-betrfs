@@ -2,15 +2,15 @@ module Circular_List {
   
   class Node<T> {
     var value: T
-      var prev: Node<T>
-      var next: Node<T>
-      ghost var nodes: seq<Node<T> >;
+    var prev: Node<T>
+    var next: Node<T>
+    ghost var nodes: seq<Node<T> >;
 
-      constructor(x: T) {
-        value := x;
-        prev := this;
-        next := this;
-      }
+    constructor(x: T) {
+      value := x;
+      prev := this;
+      next := this;
+    }
   }
 
   predicate NoDupes<T>(a: seq<T>) {
