@@ -17,6 +17,19 @@ module Circular_List {
     (forall i, j :: 0 <= i < |a| && 0 <= j < |a| && i != j ==> a[i] != a[j])
   }
 
+  lemma DisjointConcatenation<T(==)>(a: seq<T>, b: seq<T>)
+    requires NoDupes(a);
+    requires NoDupes(b);
+    requires multiset(a) !! multiset(b);
+    ensures NoDupes(a + b);
+  {
+    var c := a + b;
+    if |c| > 1 {
+      assert forall i, j :: i != j && 0 <= i < |a| && |a| <= j < |c| ==>
+        c[i] in multiset(a) && c[j] in multiset(b) && c[i] != c[j]; // Observe
+    }
+  }
+
   function IndexOf<T(==)>(s: seq<T>, e: T) : int
     requires e in s;
     ensures 0 <= IndexOf(s,e) < |s|;
@@ -41,7 +54,7 @@ module Circular_List {
     (forall node' :: node' in nodes ==> node'.nodes == nodes) &&
     // There's no duplicates in the list (technically reduncant but helpful)
     NoDupes(nodes) &&
-    // next and prevs point right and left in the list, respectively
+    // nexts and prevs point right and left in the list, respectively
     (forall i :: 0 <= i < |nodes|-1 ==> nodes[i].next == nodes[i+1]) &&
     nodes[|nodes|-1].next == nodes[0] &&
     (forall i :: 1 <= i < |nodes| ==> nodes[i].prev == nodes[i-1]) &&
@@ -96,19 +109,20 @@ module Circular_List {
     }
   }
 
-  lemma DisjointConcatenation<T(==)>(a: seq<T>, b: seq<T>)
-    requires NoDupes(a);
-    requires NoDupes(b);
-    requires multiset(a) !! multiset(b);
-    ensures NoDupes(a + b);
-  {
-    var c := a + b;
-    if |c| > 1 {
-      assert forall i, j :: i != j && 0 <= i < |a| && |a| <= j < |c| ==>
-        c[i] in multiset(a) && c[j] in multiset(b) && c[i] != c[j]; // Observe
-    }
-  }
-
+  // The veg-o-matic of circular lists.
+  //
+  // - If a and b are nodes in separate circular lists, then
+  //   this method will join them into the list
+  //      a, a.next, ..., a.prev, b, b.next, ..., b.prev
+  //
+  // - If a and b are distinct nodes in the same circular list,
+  //   then this method will divide them into two lists:
+  //      a, a.next, ..., b.prev
+  //   and
+  //      b, b.next, ..., a.prev
+  //
+  // Thus this method can be used to insert nodes, remove nodes,
+  // concatenate lists, slice up lists, etc.
   method Splice(a: Node, b: Node)
     requires Valid(a);
     requires Valid(b);
@@ -122,21 +136,23 @@ module Circular_List {
       (multiset(a.nodes) !! multiset(b.nodes) &&
       a.nodes == old(a.nodes[..IndexOf(a.nodes, b)]) &&
       b.nodes == old(b.nodes[IndexOf(b.nodes, b)..]));
-      ensures multiset(old(a.nodes)) !! multiset(old(b.nodes)) ==>
-        (a.nodes == old(a.nodes) + old(b.nodes) &&
-        a.nodes == b.nodes);
-        modifies a, b, a.nodes, b.nodes;
+    ensures multiset(old(a.nodes)) !! multiset(old(b.nodes)) ==>
+      (a.nodes == old(a.nodes) + old(b.nodes) &&
+      a.nodes == b.nodes);
+    modifies a, b, a.nodes, b.nodes;
   {
     var a_last := a.prev;
     var b_last := b.prev;
 
     assert IndexOf(b.nodes, b) > 0 ==> b_last == b.nodes[IndexOf(b.nodes, b)-1]; // Observe
 
+    // Le code
     a_last.next := b;
     b_last.next := a;
     a.prev := b_last;
     b.prev := a_last;
 
+    // Le proof
     if a.nodes != b.nodes {
       DisjointConcatenation(a.nodes, b.nodes);
       ghost var newnodes := a.nodes + b.nodes;
@@ -185,13 +201,12 @@ module Circular_List {
     ensures a.nodes == old(a.nodes[IndexOf(a.nodes, a)+1..]) + old(a.nodes[..IndexOf(a.nodes, a)+1]) + [b];
     modifies a, a.nodes, a.next, a.next.nodes, b, b.nodes;
   {
-    var a' := a.next;
     SingletonFacts(b);
     NextIsValid(a);
     PrevNextCancel(a);
-    BringToFront(a');
+    BringToFront(a.next);
     BringToFront(b);
-    Splice(a', b);
+    Splice(a.next, b);
   }
 
   lemma NonSingletonFacts(n: Node)
@@ -225,8 +240,8 @@ module Circular_List {
   {
     BringToFront(n);
     NonSingletonFacts(n);
+    assert n.nodes[1] == n.next; // Observe
     other := n.next;
-    assert n.nodes[1] == other; // Observe
     Splice(n, other);
   }
 }
