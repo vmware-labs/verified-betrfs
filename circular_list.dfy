@@ -220,8 +220,8 @@ module Circular_List {
     ensures Valid(n);
     ensures Valid(other);
     ensures Singleton(n);
-    ensures other.nodes == old(n.nodes[IndexOf(n.nodes,n)+1..]) + old(n.nodes[..IndexOf(n.nodes,n)])
-      modifies n, n.next, n.nodes, n.next.nodes;
+    ensures other.nodes == old(n.nodes[IndexOf(n.nodes,n)+1..]) + old(n.nodes[..IndexOf(n.nodes,n)]);
+    modifies n, n.next, n.nodes, n.next.nodes;
   {
     BringToFront(n);
     NonSingletonFacts(n);
