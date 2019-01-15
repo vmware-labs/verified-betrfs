@@ -98,7 +98,53 @@ module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
       assert disk'' == disk[0 := (LastEntry(disk) + |mem|, 0)]; // Observe
     }
   }
+
+  lemma ElementIsMissing(disk: Disk, mem: InMemoryState, k: int)
+    requires Valid(disk);
+    requires forall j :: 1 <= j <= LastEntry(disk) ==> disk[j].0 != k;
+    requires forall j :: 0 <= j < |mem| ==> mem[j].0 != k;
+    ensures k !in OverallInterpretation(disk, mem);
+    decreases LastEntry(disk) + |mem|;
+  {
+    if |mem| > 0 {
+      ElementIsMissing(disk, mem[..|mem|-1], k);
+    } else if LastEntry(disk) == 0 {
+    } else {
+      var disk' := disk[0 := (LastEntry(disk) - 1, 0)];
+      ElementIsMissing(disk', mem, k);
+    }
+  }
+
+  lemma InMemImpliesInInterpretation(disk: Disk, mem: InMemoryState, k: int)
+    requires Valid(disk);
+    requires exists i :: 0 <= i < |mem| && mem[i].0 == k;
+    ensures k in OverallInterpretation(disk, mem);
+  {
+    if mem[|mem|-1].0 == k {
+    } else {
+      assert exists i :: 0 <= i < |mem|-1 && mem[i].0 == k;
+      InMemImpliesInInterpretation(disk, mem[..|mem|-1], k);
+    }
+  }
+
+  lemma InDiskImpliesInInterpretation(disk: Disk, mem: InMemoryState, k: int)
+    requires Valid(disk);
+    requires exists i :: 1 <= i <= LastEntry(disk) && disk[i].0 == k;
+    ensures k in OverallInterpretation(disk, mem);
+    decreases LastEntry(disk);
+  {
+    if disk[LastEntry(disk)].0 == k {
+    } else {
+      assert exists i :: 1 <= i <= LastEntry(disk)-1 && disk[i].0 == k;
+      var disk' := TrimLastLogEntry(disk);
+      assert forall i :: 1 <= i <= LastEntry(disk) ==> disk'[i] == disk[i];
+      assert exists i :: 1 <= i <= LastEntry(disk') && disk'[i].0 == k;
+      InDiskImpliesInInterpretation(disk', mem, k);
+    }
+  }
   
+  datatype QueryResult = DNE | QueryResult(v: int)
+
   class Logging_int_int_Map {
     var disk: Disk
     var mem: InMemoryState
@@ -112,6 +158,52 @@ module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
       mem := mem + [(k, v)];
     }
 
+    method Query(k: int) returns (result: QueryResult)
+      requires Valid(disk);
+      ensures Valid(disk);
+      ensures OverallInterpretation(disk, mem) == old(OverallInterpretation(disk, mem));
+      ensures PostCrashInterpretation(disk) == old(PostCrashInterpretation(disk));
+      ensures k !in OverallInterpretation(disk, mem) <==> result == DNE;
+      ensures k in OverallInterpretation(disk, mem) ==>
+        result == QueryResult(OverallInterpretation(disk, mem)[k]);
+        
+    {
+      var i := |mem| - 1;
+      while i >= 0
+        invariant i >= -1;
+        invariant forall j :: |mem| > j > i ==> mem[j].0 != k;
+        invariant mem == old(mem);
+        invariant disk == old(disk);
+      {
+        if mem[i].0 == k {
+          InMemImpliesInInterpretation(disk, mem, k);
+          result := QueryResult(mem[i].1);
+          return;
+        }
+        i := i - 1;
+      }
+      assert forall j :: 0 <= j < |mem| ==> mem[j].0 != k;
+      i := LastEntry(disk);
+      while i >= 1
+        invariant i >= 0;
+        invariant forall j :: LastEntry(disk) >= j > i ==> disk[j].0 != k;
+        invariant mem == old(mem);
+        invariant disk == old(disk);
+      {
+        if disk[i].0 == k {
+          InDiskImpliesInInterpretation(disk, mem, k);
+          result := QueryResult(disk[i].1);
+          assume false;
+          return;
+        }
+        i := i - 1;
+      }
+      assert forall j :: 1 <= j <= LastEntry(disk) ==> disk[j].0 != k;
+      assert forall j :: 0 <= j < |mem| ==> mem[j].0 != k;
+      ElementIsMissing(disk, mem, k);
+      result := DNE;
+    }
+      
     method MakeDurable()
       requires Valid(disk);
       ensures Valid(disk);
@@ -124,7 +216,7 @@ module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
         while i < |mem|
           invariant 0 <= i <= |mem|;
           invariant Valid(disk);
-          invariant |mem| > 0;
+          invariant mem == old(mem);
           invariant forall j :: LastEntry(disk) + 1 <= j < LastEntry(disk) + 1 + i ==> j in disk;
           invariant forall j :: 0 <= j < i ==> disk[LastEntry(disk) + j + 1] == mem[j];
           invariant OverallInterpretation(disk, mem) == old(OverallInterpretation(disk, mem));
