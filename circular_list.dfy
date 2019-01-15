@@ -17,7 +17,7 @@ module Circular_List {
     (forall i, j :: 0 <= i < |a| && 0 <= j < |a| && i != j ==> a[i] != a[j])
   }
 
-  lemma DisjointConcatenation<T(==)>(a: seq<T>, b: seq<T>)
+  lemma DisjointConcatenation<T>(a: seq<T>, b: seq<T>)
     requires NoDupes(a);
     requires NoDupes(b);
     requires multiset(a) !! multiset(b);
@@ -30,7 +30,7 @@ module Circular_List {
     }
   }
 
-  function IndexOf<T(==)>(s: seq<T>, e: T) : int
+  function IndexOf<T>(s: seq<T>, e: T) : int
     requires e in s;
     ensures 0 <= IndexOf(s,e) < |s|;
     ensures s[IndexOf(s,e)] == e;
@@ -52,7 +52,7 @@ module Circular_List {
     (node in nodes) &&
     // Everybody in the list agrees on the list
     (forall node' :: node' in nodes ==> node'.nodes == nodes) &&
-    // There's no duplicates in the list (technically reduncant but helpful)
+    // There's no duplicates in the list (technically redundant but helpful)
     NoDupes(nodes) &&
     // nexts and prevs point right and left in the list, respectively
     (forall i :: 0 <= i < |nodes|-1 ==> nodes[i].next == nodes[i+1]) &&
