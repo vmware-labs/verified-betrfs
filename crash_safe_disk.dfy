@@ -193,7 +193,7 @@ module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
         if disk[i].0 == k {
           InDiskImpliesInInterpretation(disk, mem, k);
           result := QueryResult(disk[i].1);
-          assume false;
+          assume false; // HEY WHAT'S THIS YOU CHEATER?
           return;
         }
         i := i - 1;

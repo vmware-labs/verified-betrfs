@@ -13,7 +13,7 @@ jonh@howell-thinkpad:~/dafny-base/boogie/Binaries$ ln -s ../../dafny/Binaries/z3
 Getting profiler working depends on getting boogie working depends on
 referencing the ELF z3, not the z3.exe (Windows binary).
 
-mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/dafny-base/dafny/Binaries/z3/bin/z3 /proc:'Impl$$_6_TwoThreeTree.__default.InsertIntoThreeNodeRight' /tmp/foo.bpl
+mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/dafny-base/dafny/Binaries/z3/bin/z3 /proc:'Impl$$_6_TwoThreeTree.__default.InsertIntoThreeNodeRight' /tmp/foo.bpl /z3opt:TRACE=true
 
 Wow, that took a long time!
 
@@ -23,6 +23,17 @@ cd axiom-profiler/
 mono ../boogie/nuget.exe install Microsoft.Net.Compilers
 xbuild /p:Configuration=Release source/AxiomProfiler.sln
 mono ../dafny-base/axiom-profiler/bin/Release/AxiomProfiler.exe z3.log
+
+Tragically, it throws an exception on my logfile.
+
+Trying again with https://github.com/Nils-Becker/z3.git
+per https://bitbucket.org/viperproject/axiom-profiler/issues/2/exception-expected-pattern-but-found-term
+
+mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/dafny-base/nils-z3/z3/build/z3 /proc:'Impl$$_6_TwoThreeTree.__default.InsertIntoThreeNodeRight' /tmp/foo.bpl /z3opt:TRACE=true /z3opt:PROOF=true
+
+test1: original z3
+test2: new z3, no PROOF=true
+test3: new z3, PROOF=true
 
 
 Wish list:
