@@ -1,5 +1,12 @@
 module AppTypes {
-    datatype Datum = Datum(key:int, value:int)
+
+datatype Datum = Datum(key:int, value:int)
+
+function EmptyValue() : int
+{
+    0
+}
+
 }
 
 module AbstractMap {
@@ -22,11 +29,6 @@ predicate WF(s:Variables)
 predicate InDomain(k:int)
 {
     true
-}
-
-function EmptyValue() : int
-{
-    0
 }
 
 function EmptyMap() : (zmap : imap<int,int>)

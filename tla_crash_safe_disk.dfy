@@ -31,8 +31,8 @@ predicate Peek(k:Constants, s:Variables, lba:LBA, datum:Datum)
 }
 
 function PeekF(k:Constants, s:Variables, lba:LBA) : Datum
-    requires WF(k, s);
-    requires ValidLBA(k, lba);
+    requires WF(k, s)
+    requires ValidLBA(k, lba)
 {
     s.sectors[lba]
 }
@@ -183,7 +183,7 @@ function EvalLog(log:seq<Datum>, key:int) : Datum
     var index := FindIndexInLog(log, key);
     if index.Some?
     then log[index.t]
-    else Datum(key, 0)
+    else Datum(key, EmptyValue())
 }
 
 predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)
@@ -269,11 +269,11 @@ predicate Next(k:Constants, s:Variables, s':Variables)
     exists step:Step :: NextStep(k, s, s', step)
 }
 
-predicate DiskLogPlausible(k:Constants, s:Variables)
+predicate DiskLogPlausible(k:Disk.Constants, s:Disk.Variables)
 {
-    && 1 <= k.disk.size
-    && Disk.WF(k.disk, s.disk)
-    && 1 <= DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size
+    && 1 <= k.size
+    && Disk.WF(k, s)
+    && 1 <= DiskLogAddr(s.sectors[0].value) <= k.size
 }
 
 predicate LogSizeValid(k:Constants, s:Variables)
@@ -310,7 +310,7 @@ predicate ScanInv(k:Constants, s:Variables)
 
 predicate Inv(k:Constants, s:Variables)
 {
-    && DiskLogPlausible(k, s)
+    && DiskLogPlausible(k.disk, s.disk)
     && LogSizeValid(k, s)
     && ScanInv(k, s)
     && LogPrefixAgrees(k, s)
