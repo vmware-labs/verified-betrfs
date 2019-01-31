@@ -103,6 +103,7 @@ predicate Init(k:Constants, s:Variables)
 // trusted component, the way we do networks in distributed systems.
 predicate CrashAndRecover(k:Constants, s:Variables, s':Variables)
 {
+    && Disk.Idle(k.disk, s.disk, s'.disk)
     && s'.mode.Reboot?
     // By saying nothing about the other variables, they can "havoc" (take
     // on arbitrary values). So clearly we're not relying on memlog.

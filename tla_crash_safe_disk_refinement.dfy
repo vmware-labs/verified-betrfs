@@ -25,12 +25,6 @@ function {:opaque} ILog(log:seq<Datum>) : imap<int, int>
     imap k | AbstractMap.InDomain(k) :: ILogKey(log, k)
 }
 
-// Interpret the ephemeral system state (memlog) as a map
-function IEphemeral(k:Constants, s:Variables) : imap<int, int>
-{
-    ILog(s.memlog)
-}
-
 function {:opaque} DiskLogRecursive(k:Constants, s:Variables, len:nat) : seq<Datum>
     requires len+1 <= k.disk.size;
     requires Disk.WF(k.disk, s.disk);
@@ -53,6 +47,15 @@ function IPersistent(k:Constants, s:Variables) : imap<int, int>
     requires Inv(k, s)
 {
     ILog(DiskLog(k, s))
+}
+
+// Interpret the ephemeral system state (memlog) as a map
+function IEphemeral(k:Constants, s:Variables) : imap<int, int>
+    requires Inv(k, s)
+{
+    if s.mode.Running?
+    then ILog(s.memlog)
+    else IPersistent(k, s)
 }
 
 // Refinement to an AbstractMap
@@ -104,6 +107,17 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
 
     match step {
         case CrashAndRecover => {
+            assert !s'.mode.Running?;
+            assert DiskLog(k, s) == DiskLog(k, s');
+            calc {
+                Is'.ephemeral;
+                IEphemeral(k, s');
+                //if s'.mode.Running? then ILog(s'.memlog) else IPersistent(k, s');
+                IPersistent(k, s');
+                IPersistent(k, s);
+                Is.persistent;
+            }
+            assert Is'.persistent == Is.persistent;
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.SpontaneousCrash);
         }
         case ReadSuperblock => {
