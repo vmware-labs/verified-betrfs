@@ -319,71 +319,71 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
     ensures Inv(k, s')
 {
-    var step :| NextStep(k, s, s', step);
-    match step {
-        case CrashAndRecover => {
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case ReadSuperblock => {
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case ScanDiskLog => {
-            assert LogSizeValid(k, s');
-            //assert s'.diskCommittedSize <= |s'.memlog|;
-            //assert (forall i :: 0 <= i < s'.diskCommittedSize ==> s'.disk.sectors[i+1] == s'.memlog[i]);
-            if s'.mode.Running? {
-                assert |s'.memlog| == s.mode.next + 1;
-                assert s.mode.next + 1 >= s.diskCommittedSize;
-                assert s.mode.next + 1 == s.diskCommittedSize;
-                assert s.diskCommittedSize == s'.diskCommittedSize;
-                assert s'.diskCommittedSize == s'.diskPersistedSize;
-                assert s.mode.next + 1 == s'.diskPersistedSize;
-                assert s'.diskPersistedSize <= |s'.memlog|;
-            }
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case TerminateScan => {
-            assert Inv(k, s');
-        }
-        case Append(datum) => {
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case Query(datum) => {
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case PushLogData => {
-            assert s'.diskCommittedSize == s'.disk.sectors[0].value;
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case PushLogMetadata => {
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-        case CompleteSync => {
-            assert s.diskPersistedSize <= |s.memlog|;
-            assert s'.diskCommittedSize == |s.memlog|;
-            assert s'.diskCommittedSize <= s'.diskPersistedSize;
-            assert s'.diskPersistedSize == s'.diskCommittedSize;
-            assert s'.diskPersistedSize <= |s'.memlog|;
-            assert DiskLogAddr(s'.diskCommittedSize) <= DiskLogAddr(s'.diskPersistedSize);
-            assert DiskLogAddr(s'.diskPersistedSize) <= k.disk.size;
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-            assert Inv(k, s');
-        }
-    }
+//    var step :| NextStep(k, s, s', step);
+//    match step {
+//        case CrashAndRecover => {
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case ReadSuperblock => {
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case ScanDiskLog => {
+////            assert LogSizeValid(k, s');
+////            //assert s'.diskCommittedSize <= |s'.memlog|;
+////            //assert (forall i :: 0 <= i < s'.diskCommittedSize ==> s'.disk.sectors[i+1] == s'.memlog[i]);
+////            if s'.mode.Running? {
+////                assert |s'.memlog| == s.mode.next + 1;
+////                assert s.mode.next + 1 >= s.diskCommittedSize;
+////                assert s.mode.next + 1 == s.diskCommittedSize;
+////                assert s.diskCommittedSize == s'.diskCommittedSize;
+////                assert s'.diskCommittedSize == s'.diskPersistedSize;
+////                assert s.mode.next + 1 == s'.diskPersistedSize;
+////                assert s'.diskPersistedSize <= |s'.memlog|;
+////            }
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case TerminateScan => {
+//            assert Inv(k, s');
+//        }
+//        case Append(datum) => {
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case Query(datum) => {
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case PushLogData => {
+////            assert s'.diskCommittedSize == s'.disk.sectors[0].value;
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case PushLogMetadata => {
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//        case CompleteSync => {
+////            assert s.diskPersistedSize <= |s.memlog|;
+////            assert s'.diskCommittedSize == |s.memlog|;
+////            assert s'.diskCommittedSize <= s'.diskPersistedSize;
+////            assert s'.diskPersistedSize == s'.diskCommittedSize;
+////            assert s'.diskPersistedSize <= |s'.memlog|;
+////            assert DiskLogAddr(s'.diskCommittedSize) <= DiskLogAddr(s'.diskPersistedSize);
+////            assert DiskLogAddr(s'.diskPersistedSize) <= k.disk.size;
+////            assert LogSizeValid(k, s');
+////            assert LogPrefixAgrees(k, s');
+//            assert Inv(k, s');
+//        }
+//    }
 }
 
 } // module LogImpl
