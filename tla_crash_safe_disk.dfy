@@ -24,11 +24,16 @@ predicate Init(k:Constants, s:Variables, size:int)
     && WF(k, s)
 }
 
-predicate Read(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
+predicate Peek(k:Constants, s:Variables, lba:LBA, datum:Datum)
 {
     && WF(k, s)
     && ValidLBA(k, lba)
     && s.sectors[lba] == datum
+}
+
+predicate Read(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
+{
+    && Peek(k, s, lba, datum)
     && s' == s
 }
 
@@ -52,28 +57,21 @@ import Disk
 type LBA = Disk.LBA
 
 // The "program counter" for IO steps.
-datatype Mode = Erase | Reboot | Recover(next:LBA) | Running
+datatype Mode = Reboot | Recover(next:LBA) | Running
 
 datatype Constants = Constants(disk:Disk.Constants)
 datatype Variables = Variables(disk:Disk.Variables, mode:Mode, diskLogSize:LBA, memlog:seq<Datum>)
 
 predicate Init(k:Constants, s:Variables, diskSize:int)
 {
-    && s.mode.Erase?
     // By saying nothing about the other variables, they can "havoc" (take
     // on arbitrary values).
     && Disk.Init(k.disk, s.disk, diskSize)
-}
-
-// If we cold start, the first IO we do zeros the disk log, so we don't
-// have to write an assumption about what was on there before we started.
-predicate EraseDisk(k:Constants, s:Variables, s':Variables)
-{
-    && s.mode.Erase?
-    && Disk.Write(k.disk, s.disk, s'.disk, 0, Datum(0, 0))
-    && s'.mode == Running
-    && s'.diskLogSize == 0
-    && s'.memlog == []
+    // Assume the disk has been mkfs'ed:
+    && Disk.Peek(k.disk, s.disk, 0, Datum(0, 0))
+    && s.mode.Running?
+    && s.diskLogSize == 0
+    && s.memlog == []
 }
 
 // This organization hides the crash operation in unchecked code, which
@@ -191,8 +189,7 @@ predicate CompleteSync(k:Constants, s:Variables, s':Variables)
 }
 
 datatype Step = 
-      EraseDisk()
-    | CrashAndRecover()
+      CrashAndRecover()
     | ReadSuperblock()
     | ScanDiskLog()
     | Append(datum: Datum)
@@ -203,7 +200,6 @@ datatype Step =
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 {
     match step {
-        case EraseDisk => EraseDisk(k, s, s')
         case CrashAndRecover => CrashAndRecover(k, s, s')
         case ReadSuperblock => ReadSuperblock(k, s, s')
         case ScanDiskLog => ScanDiskLog(k, s, s')
@@ -221,10 +217,9 @@ predicate Next(k:Constants, s:Variables, s':Variables)
 
 predicate DiskLogPlausible(k:Constants, s:Variables)
 {
-    !s.mode.Erase? ==>
-        && 1 <= k.disk.size
-        && Disk.WF(k.disk, s.disk)
-        && DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size
+    && 1 <= k.disk.size
+    && Disk.WF(k.disk, s.disk)
+    && DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size
 }
 
 predicate LogSizeValid(k:Constants, s:Variables)
@@ -232,7 +227,7 @@ predicate LogSizeValid(k:Constants, s:Variables)
     && 1 <= k.disk.size
     && Disk.WF(k.disk, s.disk)
     && (
-        !(s.mode.Erase? || s.mode.Reboot?) ==>
+        !s.mode.Reboot? ==>
             && s.diskLogSize == s.disk.sectors[0].value
             && DiskLogAddr(s.diskLogSize) <= k.disk.size
        )
@@ -268,18 +263,9 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
 {
     var step :| NextStep(k, s, s', step);
     match step {
-        case EraseDisk => {
-            assert LogSizeValid(k, s');
-            assert LogPrefixAgrees(k, s');
-        }
         case CrashAndRecover => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
-            assert DiskLogPlausible(k, s);
-            assert !s.mode.Erase?;
-            assert DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size;
-            assert DiskLogAddr(s'.disk.sectors[0].value) <= k.disk.size;
-            assert DiskLogPlausible(k, s');
         }
         case ReadSuperblock => {
             assert LogSizeValid(k, s');
@@ -287,6 +273,8 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
         }
         case ScanDiskLog => {
             assert LogSizeValid(k, s');
+            assert s'.diskLogSize <= |s'.memlog|;
+            assert (forall i :: 0 <= i < s'.diskLogSize ==> s'.disk.sectors[i+1] == s'.memlog[i]);
             assert LogPrefixAgrees(k, s');
         }
         case Append(datum) => {
@@ -298,6 +286,7 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
             assert LogPrefixAgrees(k, s');
         }
         case WriteBack => {
+            assert s'.diskLogSize == s'.disk.sectors[0].value;
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
         }
