@@ -25,13 +25,13 @@ function {:opaque} ILog(log:seq<Datum>) : imap<int, int>
     imap k | AbstractMap.InDomain(k) :: ILogKey(log, k)
 }
 
-function {:opaque} DiskLogRecursive(k:Constants, s:Variables, len:nat) : seq<Datum>
-    requires len+1 <= k.disk.size;
-    requires Disk.WF(k.disk, s.disk);
+function {:opaque} DiskLogRecursive(k:Disk.Constants, s:Disk.Variables, len:nat) : seq<Datum>
+    requires len+1 <= k.size;
+    requires Disk.WF(k, s);
 {
     if len==0 
     then []
-    else DiskLogRecursive(k, s, len-1) + [s.disk.sectors[DiskLogAddr(len-1)]]
+    else DiskLogRecursive(k, s, len-1) + [s.sectors[DiskLogAddr(len-1)]]
 }
 
 // Interpret the disk as a Datum log
@@ -39,7 +39,7 @@ function DiskLog(k:Constants, s:Variables) : seq<Datum>
     requires DiskLogPlausible(k, s);
 {
     var super := Disk.PeekF(k.disk, s.disk, 0);
-    DiskLogRecursive(k, s, super.value)
+    DiskLogRecursive(k.disk, s.disk, super.value)
 }
 
 // Interpret the persistent system state (disk) as a map
@@ -107,17 +107,18 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
 
     match step {
         case CrashAndRecover => {
-            assert !s'.mode.Running?;
-            assert DiskLog(k, s) == DiskLog(k, s');
-            calc {
-                Is'.ephemeral;
-                IEphemeral(k, s');
-                //if s'.mode.Running? then ILog(s'.memlog) else IPersistent(k, s');
-                IPersistent(k, s');
-                IPersistent(k, s);
-                Is.persistent;
-            }
-            assert Is'.persistent == Is.persistent;
+//            assert !s'.mode.Running?;
+//            assert Disk.Idle(k.disk, s.disk, s'.disk);
+//            assert DiskLog(k, s) == DiskLog(k, s');
+//            calc {
+//                Is'.ephemeral;
+//                IEphemeral(k, s');
+//                //if s'.mode.Running? then ILog(s'.memlog) else IPersistent(k, s');
+//                IPersistent(k, s');
+//                IPersistent(k, s);
+//                Is.persistent;
+//            }
+//            assert Is'.persistent == Is.persistent;
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.SpontaneousCrash);
         }
         case ReadSuperblock => {
