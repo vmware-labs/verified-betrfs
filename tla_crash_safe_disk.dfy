@@ -107,6 +107,7 @@ predicate ReadSuperblock(k:Constants, s:Variables, s':Variables)
     exists datum ::
         && s.mode.Reboot?
         && Disk.Read(k.disk, s.disk, s'.disk, 0, datum)
+        && 0 <= datum.value // If disk holds a negative superblock value, we freeze.
         && s'.mode == Recover(0)
         && s'.diskCommittedSize == datum.value
         && s'.diskPersistedSize == datum.value
@@ -120,13 +121,23 @@ predicate ScanDiskLog(k:Constants, s:Variables, s':Variables)
     exists datum ::
         && s.mode.Recover?
         && Disk.Read(k.disk, s.disk, s'.disk, DiskLogAddr(s.mode.next), datum)
-        && (s'.mode ==
-            if s.mode.next + 1 < s.diskCommittedSize
-            then Recover(s.mode.next + 1)
-            else Running)
+        && s.mode.next + 1 < s.diskCommittedSize
+        && s'.mode == Recover(s.mode.next + 1)
         && s'.diskCommittedSize == s.diskCommittedSize
         && s'.diskPersistedSize == s.diskPersistedSize
         && s'.memlog == s.memlog + [datum]
+}
+
+// We've got all the blocks. Switch to Running mode.
+predicate TerminateScan(k:Constants, s:Variables, s':Variables)
+{
+    && s.mode.Recover?
+    && Disk.Idle(k.disk, s.disk, s'.disk)
+    && s.mode.next == s.diskCommittedSize   // Nothing more to read
+    && s'.mode == Running
+    && s'.diskCommittedSize == s.diskCommittedSize
+    && s'.diskPersistedSize == s.diskPersistedSize
+    && s'.memlog == s.memlog
 }
 
 // In-memory append.
