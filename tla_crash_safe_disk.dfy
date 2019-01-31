@@ -1,6 +1,4 @@
-module AppTypes {
-    datatype Datum = Datum(key:int, value:int)
-}
+include "abstract_map.dfy"
 
 module Disk {
 import opened AppTypes
@@ -36,13 +34,19 @@ predicate Read(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
 
 predicate Write(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
 {
-    && lba < k.size
+    && WF(k, s)
+    && ValidLBA(k, lba)
     && s'.sectors == s.sectors[lba := datum]
+}
+
+predicate Idle(k:Constants, s:Variables, s':Variables)
+{
+    && s' == s
 }
 
 } // module Disk
 
-module Log {
+module LogImpl {
 import opened AppTypes
 import Disk
 type LBA = Disk.LBA
@@ -51,7 +55,7 @@ type LBA = Disk.LBA
 datatype Mode = Erase | Reboot | Recover(next:LBA) | Running
 
 datatype Constants = Constants(disk:Disk.Constants)
-datatype Variables = Variables(mode:Mode, diskLogSize:LBA, memlog:seq<Datum>, disk:Disk.Variables)
+datatype Variables = Variables(disk:Disk.Variables, mode:Mode, diskLogSize:LBA, memlog:seq<Datum>)
 
 predicate Init(k:Constants, s:Variables, diskSize:int)
 {
@@ -91,7 +95,7 @@ predicate ReadSuperblock(k:Constants, s:Variables, s':Variables)
     exists datum ::
         && s.mode.Reboot?
         && Disk.Read(k.disk, s.disk, s'.disk, 0, datum)
-        && s'.mode == Recover(1)
+        && s'.mode == Recover(0)
         && s'.diskLogSize == datum.value
         && s'.memlog == []
 }
@@ -102,7 +106,7 @@ predicate ScanDiskLog(k:Constants, s:Variables, s':Variables)
 {
     exists datum ::
         && s.mode.Recover?
-        && Disk.Read(k.disk, s.disk, s'.disk, s.mode.next, datum)
+        && Disk.Read(k.disk, s.disk, s'.disk, DiskLogAddr(s.mode.next), datum)
         && (s'.mode ==
             if s.mode.next + 1 < s.diskLogSize
             then Recover(s.mode.next + 1)
@@ -115,9 +119,11 @@ predicate ScanDiskLog(k:Constants, s:Variables, s':Variables)
 predicate Append(k:Constants, s:Variables, s':Variables, datum:Datum)
 {
     && s.mode.Running?
+    && s'.disk == s.disk
     && s'.mode == s.mode
     && s'.diskLogSize == s.diskLogSize
     && s'.memlog == s.memlog + [datum]
+    && Disk.Idle(k.disk, s.disk, s'.disk)
 }
 
 datatype Option<T> = Some(t:T) | None
@@ -125,8 +131,8 @@ datatype Option<T> = Some(t:T) | None
 function {:opaque} FindIndexInLog(log:seq<Datum>, key:int) : (index:Option<int>)
     ensures index.Some? ==>
         && 0<=index.t<|log|
-        && (forall j :: index.t < j < |log| ==> log[j].key != key)
         && log[index.t].key == key
+        && (forall j :: index.t < j < |log| ==> log[j].key != key)
     ensures index.None? ==> forall j :: 0 <= j < |log| ==> log[j].key != key
 {
     if |log| == 0
@@ -152,6 +158,7 @@ predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)
     && s'.mode == s.mode
     && s'.diskLogSize == s.diskLogSize
     && s'.memlog == s.memlog
+    && Disk.Idle(k.disk, s.disk, s'.disk)
 }
 
 // Returns the LBA for an index in the log.
@@ -161,9 +168,7 @@ function DiskLogAddr(index:int) : LBA
     index + 1
 }
 
-// Call Flush in a loop until it returns 'durable'. That, or we need to
-// add a flush Mode, and have some way to indicate when it's done.
-predicate Flush(k:Constants, s:Variables, s':Variables, durable:bool)
+predicate WriteBack(k:Constants, s:Variables, s':Variables)
 {
     var idx := s.diskLogSize;   // The log index to flush out.
     && s.mode.Running?
@@ -172,7 +177,17 @@ predicate Flush(k:Constants, s:Variables, s':Variables, durable:bool)
     && s'.mode == s.mode
     && s'.diskLogSize == idx + 1    // Now idx is durable, too
     && s'.memlog == s.memlog
-    && durable == (idx + 1 == |s.memlog|) // We wrote the last thing.
+}
+
+// This promise is br conjunct.
+predicate CompleteSync(k:Constants, s:Variables, s':Variables)
+{
+    && s.mode.Running?
+    && s.diskLogSize == |s.memlog|
+    && s'.mode == s.mode
+    && s'.diskLogSize == s.diskLogSize
+    && s'.memlog == s.memlog
+    && Disk.Idle(k.disk, s.disk, s'.disk)
 }
 
 datatype Step = 
@@ -182,7 +197,8 @@ datatype Step =
     | ScanDiskLog()
     | Append(datum: Datum)
     | Query(datum: Datum)
-    | Flush(durable: bool)
+    | WriteBack()
+    | CompleteSync()
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 {
@@ -193,7 +209,8 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case ScanDiskLog => ScanDiskLog(k, s, s')
         case Append(datum) => Append(k, s, s', datum)
         case Query(datum) => Query(k, s, s', datum)
-        case Flush(durable) => Flush(k, s, s', durable)
+        case WriteBack() => WriteBack(k, s, s')
+        case CompleteSync => CompleteSync(k, s, s')
     }
 }
 
@@ -258,6 +275,11 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
         case CrashAndRecover => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert DiskLogPlausible(k, s);
+            assert !s.mode.Erase?;
+            assert DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size;
+            assert DiskLogAddr(s'.disk.sectors[0].value) <= k.disk.size;
+            assert DiskLogPlausible(k, s');
         }
         case ReadSuperblock => {
             assert LogSizeValid(k, s');
@@ -275,12 +297,16 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
         }
-        case Flush(durable) => {
+        case WriteBack => {
+            assert LogSizeValid(k, s');
+            assert LogPrefixAgrees(k, s');
+        }
+        case CompleteSync => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
         }
     }
 }
 
-} // module Log
+} // module LogImpl
 
