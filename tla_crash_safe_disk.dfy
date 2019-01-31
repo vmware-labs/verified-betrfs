@@ -224,6 +224,7 @@ predicate CompleteSync(k:Constants, s:Variables, s':Variables)
     && s.diskCommittedSize == |s.memlog|
     && s'.mode == s.mode
     && s'.diskCommittedSize == s.diskCommittedSize
+    && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog
     && Disk.Idle(k.disk, s.disk, s'.disk)
 }
@@ -232,6 +233,7 @@ datatype Step =
       CrashAndRecover
     | ReadSuperblock
     | ScanDiskLog
+    | TerminateScan
     | Append(datum: Datum)
     | Query(datum: Datum)
     | PushLogData
@@ -244,6 +246,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case CrashAndRecover => CrashAndRecover(k, s, s')
         case ReadSuperblock => ReadSuperblock(k, s, s')
         case ScanDiskLog => ScanDiskLog(k, s, s')
+        case TerminateScan => TerminateScan(k, s, s')
         case Append(datum) => Append(k, s, s', datum)
         case Query(datum) => Query(k, s, s', datum)
         case PushLogData => PushLogData(k, s, s')
@@ -344,6 +347,9 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
             assert LogPrefixAgrees(k, s');
             assert Inv(k, s');
         }
+        case TerminateScan => {
+            assert Inv(k, s');
+        }
         case Append(datum) => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
@@ -366,6 +372,13 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
             assert Inv(k, s');
         }
         case CompleteSync => {
+            assert s.diskPersistedSize <= |s.memlog|;
+            assert s'.diskCommittedSize == |s.memlog|;
+            assert s'.diskCommittedSize <= s'.diskPersistedSize;
+            assert s'.diskPersistedSize == s'.diskCommittedSize;
+            assert s'.diskPersistedSize <= |s'.memlog|;
+            assert DiskLogAddr(s'.diskCommittedSize) <= DiskLogAddr(s'.diskPersistedSize);
+            assert DiskLogAddr(s'.diskPersistedSize) <= k.disk.size;
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
             assert Inv(k, s');
