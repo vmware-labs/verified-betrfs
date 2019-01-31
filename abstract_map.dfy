@@ -2,7 +2,7 @@ module AppTypes {
     datatype Datum = Datum(key:int, value:int)
 }
 
-module Log {
+module AbstractMap {
 import opened AppTypes
 
 datatype Constants = Constants()
@@ -24,16 +24,21 @@ predicate InDomain(k:int)
     true
 }
 
-function ZeroMap() : (zmap : imap<int,int>)
+function EmptyValue() : int
+{
+    0
+}
+
+function EmptyMap() : (zmap : imap<int,int>)
     ensures completeMap(zmap)
 {
-    imap k | InDomain(k) :: 0
+    imap k | InDomain(k) :: EmptyValue()
 }
 
 predicate Init(k:Constants, s:Variables)
     ensures Init(k, s) ==> WF(s);
 {
-    s == Variables(ZeroMap(), ZeroMap())
+    s == Variables(EmptyMap(), EmptyMap())
 }
 
 predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)

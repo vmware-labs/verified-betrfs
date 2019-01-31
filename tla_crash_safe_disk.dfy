@@ -18,9 +18,8 @@ predicate WF(k:Constants, s:Variables)
     forall i :: ValidLBA(k, i) ==> i in s.sectors.Keys
 }
 
-predicate Init(k:Constants, s:Variables, size:int)
+predicate Init(k:Constants, s:Variables)
 {
-    && k.size == size
     && WF(k, s)
 }
 
@@ -29,6 +28,13 @@ predicate Peek(k:Constants, s:Variables, lba:LBA, datum:Datum)
     && WF(k, s)
     && ValidLBA(k, lba)
     && s.sectors[lba] == datum
+}
+
+function PeekF(k:Constants, s:Variables, lba:LBA) : Datum
+    requires WF(k, s);
+    requires ValidLBA(k, lba);
+{
+    s.sectors[lba]
 }
 
 predicate Read(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
@@ -75,11 +81,13 @@ datatype Variables = Variables(
     // The memory image of the log. Its prefix agrees with the disk.
     memlog:seq<Datum>)
 
-predicate Init(k:Constants, s:Variables, diskSize:int)
+predicate Init(k:Constants, s:Variables)
 {
     // By saying nothing about the other variables, they can "havoc" (take
     // on arbitrary values).
-    && Disk.Init(k.disk, s.disk, diskSize)
+    && Disk.Init(k.disk, s.disk)
+    // need a minimum-size disk
+    && 1 <= k.disk.size
     // Assume the disk has been mkfs'ed:
     && Disk.Peek(k.disk, s.disk, 0, Datum(0, 0))
     && s.mode.Running?
@@ -307,9 +315,8 @@ predicate Inv(k:Constants, s:Variables)
     && LogPrefixAgrees(k, s)
 }
 
-lemma InvHoldsInit(size:int, k:Constants, s:Variables)
-    requires 1<=size
-    requires Init(k, s, size)
+lemma InvHoldsInit(k:Constants, s:Variables)
+    requires Init(k, s)
     ensures Inv(k, s)
 {
 }
@@ -319,72 +326,83 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
     ensures Inv(k, s')
 {
-//    var step :| NextStep(k, s, s', step);
-//    match step {
-//        case CrashAndRecover => {
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case ReadSuperblock => {
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case ScanDiskLog => {
-////            assert LogSizeValid(k, s');
-////            //assert s'.diskCommittedSize <= |s'.memlog|;
-////            //assert (forall i :: 0 <= i < s'.diskCommittedSize ==> s'.disk.sectors[i+1] == s'.memlog[i]);
-////            if s'.mode.Running? {
-////                assert |s'.memlog| == s.mode.next + 1;
-////                assert s.mode.next + 1 >= s.diskCommittedSize;
-////                assert s.mode.next + 1 == s.diskCommittedSize;
-////                assert s.diskCommittedSize == s'.diskCommittedSize;
-////                assert s'.diskCommittedSize == s'.diskPersistedSize;
-////                assert s.mode.next + 1 == s'.diskPersistedSize;
-////                assert s'.diskPersistedSize <= |s'.memlog|;
-////            }
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case TerminateScan => {
-//            assert Inv(k, s');
-//        }
-//        case Append(datum) => {
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case Query(datum) => {
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case PushLogData => {
-////            assert s'.diskCommittedSize == s'.disk.sectors[0].value;
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case PushLogMetadata => {
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//        case CompleteSync => {
-////            assert s.diskPersistedSize <= |s.memlog|;
-////            assert s'.diskCommittedSize == |s.memlog|;
-////            assert s'.diskCommittedSize <= s'.diskPersistedSize;
-////            assert s'.diskPersistedSize == s'.diskCommittedSize;
-////            assert s'.diskPersistedSize <= |s'.memlog|;
-////            assert DiskLogAddr(s'.diskCommittedSize) <= DiskLogAddr(s'.diskPersistedSize);
-////            assert DiskLogAddr(s'.diskPersistedSize) <= k.disk.size;
-////            assert LogSizeValid(k, s');
-////            assert LogPrefixAgrees(k, s');
-//            assert Inv(k, s');
-//        }
-//    }
 }
 
 } // module LogImpl
+
+module RefinementProof {
+import opened AppTypes
+import opened LogImpl
+import AbstractMap
+
+// Find a key in a log-representation map
+function {:opaque} ILogKey(log:seq<Datum>, k:int) : int
+{
+    if log==[]
+    then
+        AbstractMap.EmptyValue()
+    else if log[|log|-1].key == k
+    then
+        log[|log|-1].value
+    else
+        ILogKey(log[..|log|-1], k)
+}
+
+// Interpret a log sequence of Datums as a map
+function ILog(log:seq<Datum>) : imap<int, int>
+{
+    imap k | AbstractMap.InDomain(k) :: ILogKey(log, k)
+}
+
+// Interpret the ephemeral system state (memlog) as a map
+function IEphemeral(k:Constants, s:Variables) : imap<int, int>
+{
+    ILog(s.memlog)
+}
+
+function {:opaque} DiskLogRecursive(k:Constants, s:Variables, len:nat) : seq<Datum>
+{
+    if len==0 
+    then []
+    else DiskLogRecursive(k, s, len-1) + [s.disk.sectors[DiskLogAddr(len-1)]]
+}
+
+// Interpret the disk as a Datum log
+function DiskLog(k:Constants, s:Variables) : seq<Datum>
+{
+    var super := Disk.PeekF(k.disk, s.disk, 0);
+    DiskLogRecursive(k, s, super.value)
+}
+
+// Interpret the persistent system state (disk) as a map
+function IPersistent(k:Constants, s:Variables) : imap<int, int>
+{
+    ILog(DiskLog(k, s))
+}
+
+// Refinement to an AbstractMap
+function I(k:Constants, s:Variables) : AbstractMap.Variables
+{
+    AbstractMap.Variables(IEphemeral(k, s), IPersistent(k, s))
+}
+
+function Ik(k:Constants) : AbstractMap.Constants
+{
+    AbstractMap.Constants()
+}
+
+lemma InvImpliesRefinementInit(k:Constants, s:Variables)
+    requires Init(k, s);
+    ensures AbstractMap.Init(Ik(k), I(k, s));
+{
+} 
+
+lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
+    requires Next(k, s, s');
+    ensures AbstractMap.Next(Ik(k), I(k, s), I(k, s'));
+{
+} 
+
+
+} // module RefinementProof
 
