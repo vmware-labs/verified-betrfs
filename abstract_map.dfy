@@ -80,7 +80,14 @@ predicate SpontaneousCrash(k:Constants, s:Variables, s':Variables)
     && s'.persistent == s.persistent
 }
 
-datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistKeys(keys:set<int>) | SpontaneousCrash
+predicate Stutter(k:Constants, s:Variables, s':Variables)
+    requires WF(s);
+{
+    && s'.ephemeral == s.ephemeral
+    && s'.persistent == s.persistent
+}
+
+datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistKeys(keys:set<int>) | SpontaneousCrash | Stutter
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s);
@@ -91,6 +98,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case CompleteSync() => CompleteSync(k, s, s')
         case PersistKeys(keys) => PersistKeys(k, s, s', keys)
         case SpontaneousCrash() => SpontaneousCrash(k, s, s')
+        case Stutter() => Stutter(k, s, s')
     }
 }
 

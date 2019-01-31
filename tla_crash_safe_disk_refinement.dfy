@@ -77,11 +77,61 @@ lemma InvImpliesRefinementInit(k:Constants, s:Variables)
     reveal_DiskLogRecursive();
 } 
 
+lemma InvImpliesWF(k:Constants, s:Variables)
+    requires Inv(k, s);
+    ensures AbstractMap.WF(I(k, s));
+{
+    reveal_ILog();
+    reveal_ILogKey();
+}
+
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s');
     requires Inv(k, s);
+    ensures AbstractMap.WF(I(k, s));
+    ensures AbstractMap.WF(I(k, s'));
     ensures AbstractMap.Next(Ik(k), I(k, s), I(k, s'));
 {
+    var Ik := Ik(k);
+    var Is := I(k, s);
+    var Is' := I(k, s');
+
+    InvImpliesWF(k, s);
+    InvHoldsInduction(k, s, s');  // OMG line unecessary: of course Dafny is just doing this whole proof again...
+    InvImpliesWF(k, s');
+
+    var step :| NextStep(k, s, s', step);
+
+    match step {
+        case CrashAndRecover => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.SpontaneousCrash);
+        }
+        case ReadSuperblock => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+        }
+        case ScanDiskLog => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+        }
+        case TerminateScan => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+        }
+        case Append(datum) => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Write(datum));
+        }
+        case Query(datum) => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Query(datum));
+        }
+        case PushLogData => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+        }
+        case PushLogMetadata => {
+            var keys := {};
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeys(keys));
+        }
+        case CompleteSync => {
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+        }
+    }
 } 
 
 
