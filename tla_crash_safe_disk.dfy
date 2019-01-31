@@ -60,7 +60,20 @@ type LBA = Disk.LBA
 datatype Mode = Reboot | Recover(next:LBA) | Running
 
 datatype Constants = Constants(disk:Disk.Constants)
-datatype Variables = Variables(disk:Disk.Variables, mode:Mode, diskLogSize:LBA, memlog:seq<Datum>)
+datatype Variables = Variables(
+    // Actual disk state. We get to keep only this state across a crash.
+    disk:Disk.Variables,
+    // Operating mode, so we can keep track of a recovery read.
+    mode:Mode,
+    // How much of the disk log is "committed": synced with the value in the log superblock.
+    // Drives refinement to abstract 'persistent' state, since this is what we'll see on a recovery.
+    diskCommittedSize:LBA,
+    // How much of the disk log agrees with the memlog. May exceed diskCommittedSize if we've
+    // done PushLogData but not yet PushLogMetadata. We need this pointer to drag the synchrony invariant
+    // forward from some PushLogDatas to a PushLogMetadata that updates diskCommittedSize.
+    diskPersistedSize:LBA,
+    // The memory image of the log. Its prefix agrees with the disk.
+    memlog:seq<Datum>)
 
 predicate Init(k:Constants, s:Variables, diskSize:int)
 {
@@ -70,7 +83,8 @@ predicate Init(k:Constants, s:Variables, diskSize:int)
     // Assume the disk has been mkfs'ed:
     && Disk.Peek(k.disk, s.disk, 0, Datum(0, 0))
     && s.mode.Running?
-    && s.diskLogSize == 0
+    && s.diskCommittedSize == 0
+    && s.diskPersistedSize == 0
     && s.memlog == []
 }
 
@@ -94,7 +108,8 @@ predicate ReadSuperblock(k:Constants, s:Variables, s':Variables)
         && s.mode.Reboot?
         && Disk.Read(k.disk, s.disk, s'.disk, 0, datum)
         && s'.mode == Recover(0)
-        && s'.diskLogSize == datum.value
+        && s'.diskCommittedSize == datum.value
+        && s'.diskPersistedSize == datum.value
         && s'.memlog == []
 }
 
@@ -106,10 +121,11 @@ predicate ScanDiskLog(k:Constants, s:Variables, s':Variables)
         && s.mode.Recover?
         && Disk.Read(k.disk, s.disk, s'.disk, DiskLogAddr(s.mode.next), datum)
         && (s'.mode ==
-            if s.mode.next + 1 < s.diskLogSize
+            if s.mode.next + 1 < s.diskCommittedSize
             then Recover(s.mode.next + 1)
             else Running)
-        && s'.diskLogSize == s.diskLogSize
+        && s'.diskCommittedSize == s.diskCommittedSize
+        && s'.diskPersistedSize == s.diskPersistedSize
         && s'.memlog == s.memlog + [datum]
 }
 
@@ -119,7 +135,8 @@ predicate Append(k:Constants, s:Variables, s':Variables, datum:Datum)
     && s.mode.Running?
     && s'.disk == s.disk
     && s'.mode == s.mode
-    && s'.diskLogSize == s.diskLogSize
+    && s'.diskCommittedSize == s.diskCommittedSize
+    && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog + [datum]
     && Disk.Idle(k.disk, s.disk, s'.disk)
 }
@@ -154,7 +171,8 @@ predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)
     && s.mode.Running?
     && datum == EvalLog(s.memlog, datum.key)
     && s'.mode == s.mode
-    && s'.diskLogSize == s.diskLogSize
+    && s'.diskCommittedSize == s.diskCommittedSize
+    && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog
     && Disk.Idle(k.disk, s.disk, s'.disk)
 }
@@ -166,14 +184,25 @@ function DiskLogAddr(index:int) : LBA
     index + 1
 }
 
-predicate WriteBack(k:Constants, s:Variables, s':Variables)
+predicate PushLogData(k:Constants, s:Variables, s':Variables)
 {
-    var idx := s.diskLogSize;   // The log index to flush out.
+    var idx := s.diskCommittedSize;   // The log index to flush out.
     && s.mode.Running?
     && 0 <= idx < |s.memlog| // there's a non-durable suffix to write
     && Disk.Write(k.disk, s.disk, s'.disk, DiskLogAddr(idx), s.memlog[idx])
     && s'.mode == s.mode
-    && s'.diskLogSize == idx + 1    // Now idx is durable, too
+    && s'.diskCommittedSize == s.diskCommittedSize
+    && s'.diskPersistedSize == idx + 1    // Now idx is durable, too
+    && s'.memlog == s.memlog
+}
+
+predicate PushLogMetadata(k:Constants, s:Variables, s':Variables)
+{
+    && s.mode.Running?
+    && Disk.Write(k.disk, s.disk, s'.disk, 0, Datum(0, s.diskPersistedSize))
+    && s'.mode == s.mode
+    && s'.diskCommittedSize == s.diskPersistedSize   // drives the refinement to PersistKeys.
+    && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog
 }
 
@@ -181,21 +210,22 @@ predicate WriteBack(k:Constants, s:Variables, s':Variables)
 predicate CompleteSync(k:Constants, s:Variables, s':Variables)
 {
     && s.mode.Running?
-    && s.diskLogSize == |s.memlog|
+    && s.diskCommittedSize == |s.memlog|
     && s'.mode == s.mode
-    && s'.diskLogSize == s.diskLogSize
+    && s'.diskCommittedSize == s.diskCommittedSize
     && s'.memlog == s.memlog
     && Disk.Idle(k.disk, s.disk, s'.disk)
 }
 
 datatype Step = 
-      CrashAndRecover()
-    | ReadSuperblock()
-    | ScanDiskLog()
+      CrashAndRecover
+    | ReadSuperblock
+    | ScanDiskLog
     | Append(datum: Datum)
     | Query(datum: Datum)
-    | WriteBack()
-    | CompleteSync()
+    | PushLogData
+    | PushLogMetadata
+    | CompleteSync
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 {
@@ -205,7 +235,8 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case ScanDiskLog => ScanDiskLog(k, s, s')
         case Append(datum) => Append(k, s, s', datum)
         case Query(datum) => Query(k, s, s', datum)
-        case WriteBack() => WriteBack(k, s, s')
+        case PushLogData => PushLogData(k, s, s')
+        case PushLogMetadata => PushLogMetadata(k, s, s')
         case CompleteSync => CompleteSync(k, s, s')
     }
 }
@@ -228,24 +259,37 @@ predicate LogSizeValid(k:Constants, s:Variables)
     && Disk.WF(k.disk, s.disk)
     && (
         !s.mode.Reboot? ==>
-            && s.diskLogSize == s.disk.sectors[0].value
-            && DiskLogAddr(s.diskLogSize) <= k.disk.size
+            && s.diskCommittedSize == s.disk.sectors[0].value
+            && DiskLogAddr(s.diskCommittedSize) <= DiskLogAddr(s.diskPersistedSize)
+            && DiskLogAddr(s.diskPersistedSize) <= k.disk.size
        )
 }
 
 predicate LogPrefixAgrees(k:Constants, s:Variables)
 {
     s.mode.Running? ==>
-        && s.diskLogSize <= |s.memlog|
+        && s.diskPersistedSize <= |s.memlog|
         && LogSizeValid(k, s)
-        && (forall i :: 0 <= i < s.diskLogSize ==>
-            s.disk.sectors[i+1] == s.memlog[i])
+        && (forall i :: 0 <= i < s.diskPersistedSize ==>
+            Disk.Peek(k.disk, s.disk, DiskLogAddr(i), s.memlog[i]))
+}
+
+predicate ScanInv(k:Constants, s:Variables)
+{
+    s.mode.Recover? ==>
+        && s.mode.next == |s.memlog|
+        && s.diskCommittedSize == s.diskPersistedSize
+        && s.mode.next <= s.diskCommittedSize
+        && (forall i :: 0 <= i < |s.memlog| ==>
+            Disk.Peek(k.disk, s.disk, DiskLogAddr(i), s.memlog[i]))
+        //XXX && |s.memlog| <= s.diskPersistedSize
 }
 
 predicate Inv(k:Constants, s:Variables)
 {
     && DiskLogPlausible(k, s)
     && LogSizeValid(k, s)
+    && ScanInv(k, s)
     && LogPrefixAgrees(k, s)
 }
 
@@ -266,33 +310,54 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
         case CrashAndRecover => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
         case ReadSuperblock => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
         case ScanDiskLog => {
             assert LogSizeValid(k, s');
-            assert s'.diskLogSize <= |s'.memlog|;
-            assert (forall i :: 0 <= i < s'.diskLogSize ==> s'.disk.sectors[i+1] == s'.memlog[i]);
+            //assert s'.diskCommittedSize <= |s'.memlog|;
+            //assert (forall i :: 0 <= i < s'.diskCommittedSize ==> s'.disk.sectors[i+1] == s'.memlog[i]);
+            if s'.mode.Running? {
+                assert |s'.memlog| == s.mode.next + 1;
+                assert s.mode.next + 1 >= s.diskCommittedSize;
+                assert s.mode.next + 1 == s.diskCommittedSize;
+                assert s.diskCommittedSize == s'.diskCommittedSize;
+                assert s'.diskCommittedSize == s'.diskPersistedSize;
+                assert s.mode.next + 1 == s'.diskPersistedSize;
+                assert s'.diskPersistedSize <= |s'.memlog|;
+            }
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
         case Append(datum) => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
         case Query(datum) => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
-        case WriteBack => {
-            assert s'.diskLogSize == s'.disk.sectors[0].value;
+        case PushLogData => {
+            assert s'.diskCommittedSize == s'.disk.sectors[0].value;
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
+        }
+        case PushLogMetadata => {
+            assert LogSizeValid(k, s');
+            assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
         case CompleteSync => {
             assert LogSizeValid(k, s');
             assert LogPrefixAgrees(k, s');
+            assert Inv(k, s');
         }
     }
 }

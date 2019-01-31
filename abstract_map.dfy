@@ -58,11 +58,13 @@ predicate CompleteSync(k:Constants, s:Variables, s':Variables)
     && s' == s
 }
 
-predicate SpontaneousUpdate(k:Constants, s:Variables, s':Variables, key:int)
+// Some group of keys get committed.
+predicate PersistKeys(k:Constants, s:Variables, s':Variables, keys:set<int>)
     requires WF(s);
 {
     && s'.ephemeral == s.ephemeral
-    && s'.persistent == s.persistent[key := s.ephemeral[key]]
+    && WF(s')
+    && forall k:int :: s'.persistent[k] == if k in keys then s.ephemeral[k] else s.persistent[k]
 }
 
 // Forget all non-persisted data.
@@ -73,7 +75,7 @@ predicate SpontaneousCrash(k:Constants, s:Variables, s':Variables)
     && s'.persistent == s.persistent
 }
 
-datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | SpontaneousUpdate(key:int) | SpontaneousCrash
+datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistKeys(keys:set<int>) | SpontaneousCrash
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s);
@@ -82,7 +84,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case Query(datum) => Query(k, s, s', datum)
         case Write(datum) => Write(k, s, s', datum)
         case CompleteSync() => CompleteSync(k, s, s')
-        case SpontaneousUpdate(key) => SpontaneousUpdate(k, s, s', key)
+        case PersistKeys(keys) => PersistKeys(k, s, s', keys)
         case SpontaneousCrash() => SpontaneousCrash(k, s, s')
     }
 }
