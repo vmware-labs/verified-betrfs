@@ -8,8 +8,9 @@ import AbstractMap
 
 // Interpret a log sequence of Datums as a map
 function {:opaque} ILog(log:seq<Datum>) : imap<int, int>
+    ensures AbstractMap.completeMap(ILog(log))
 {
-    imap k | AbstractMap.InDomain(k) :: EvalLog(log, k)
+    imap k | AbstractMap.InDomain(k) :: EvalLog(log, k).value
 }
 
 function {:opaque} DiskLogRecursive(k:Disk.Constants, s:Disk.Variables, len:nat) : seq<Datum>
@@ -25,13 +26,12 @@ function {:opaque} DiskLogRecursive(k:Disk.Constants, s:Disk.Variables, len:nat)
 function DiskLog(k:Disk.Constants, s:Disk.Variables) : seq<Datum>
     requires DiskLogPlausible(k, s)
 {
-    var super := Disk.PeekF(k, s, 0);
-    DiskLogRecursive(k, s, super.value)
+    DiskLogRecursive(k, s, DiskLogSize(k, s))
 }
 
 lemma HowToMakeADiskLog(k:Disk.Constants, s:Disk.Variables, log:seq<Datum>)
     requires DiskLogPlausible(k, s)
-    requires |log| <= Disk.PeekF(k, s, 0).value
+    requires |log| <= DiskLogSize(k, s)
     requires forall i :: 0<=i<|log| ==> log[i] == Disk.PeekF(k, s, DiskLogAddr(i))
     ensures DiskLogRecursive(k, s, |log|) == log
 {
@@ -87,6 +87,43 @@ lemma InvImpliesWF(k:Constants, s:Variables)
     reveal_FindIndexInLog();
 }
 
+lemma LogAppend(log:seq<Datum>, datum:Datum)
+    ensures ILog(log + [datum]) == ILog(log)[datum.key := datum.value]
+{
+    reveal_ILog();
+    reveal_FindIndexInLog();
+}
+
+lemma PushLogNoop(k:Disk.Constants, s:Disk.Variables, s':Disk.Variables, len:int)
+    requires DiskLogPlausible(k, s)
+    requires DiskLogPlausible(k, s')
+    requires 0 <= len <= DiskLogSize(k, s)
+    requires forall i :: 0<=i<len ==> s.sectors[i] == s'.sectors[i] // OBSERVE, probably
+    ensures DiskLog(k, s') == DiskLog(k, s)
+
+function {:opaque} UpdateKeySet(log:seq<Datum>) : (keys:set<int>)
+    ensures forall i :: 0<=i<|log| ==> log[i].key in keys
+{
+    if log==[] then {} else UpdateKeySet(log[..|log|-1]) + {log[|log|-1].key}
+}
+
+lemma PushLogMetadataRefinement(k:Constants, s:Variables, s':Variables)
+    requires LogImpl.PushLogMetadata(k, s, s')
+    requires Inv(k, s)
+    ensures AbstractMap.WF(I(k, s))
+    ensures AbstractMap.WF(I(k, s'))
+    ensures AbstractMap.Next(Ik(k), I(k, s), I(k, s'))
+{
+    var Ik := Ik(k);
+    var Is := I(k, s);
+    var Is' := I(k, s');
+    var newIdxStart := s.diskCommittedSize;
+    var newIdxEnd := s.diskPersistedSize;   // exclusive
+    var logTail := s.disk.sectors[DiskLogAddr(newIdxStart) .. DiskLogAddr(newIdxEnd)];
+    var keys := UpdateKeySet(logTail);
+    assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeys(keys));
+}
+
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
     requires Inv(k, s)
@@ -119,23 +156,19 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
         }
         case Append(datum) => {
+            LogAppend(s.memlog, datum);
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Write(datum));
         }
         case Query(datum) => {
-            calc {
-                datum.value;
-                EvalLog(s.memlog, datum.key).value;
-                IEphemeral(k, s)[datum.key];
-            }
-            assert Is' == Is;
+            reveal_ILog();
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Query(datum));
         }
         case PushLogData => {
+            PushLogNoop(k.disk, s.disk, s'.disk, DiskLogSize(k.disk, s.disk));
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
         }
-        case PushLogMetadata => {
-            var keys := {};
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeys(keys));
+        case PushLogMetadataStep => {
+            PushLogMetadataRefinement(k, s, s');
         }
         case CompleteSync => {
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());

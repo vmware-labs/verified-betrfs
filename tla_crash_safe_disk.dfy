@@ -81,6 +81,14 @@ datatype Variables = Variables(
     // The memory image of the log. Its prefix agrees with the disk.
     memlog:seq<Datum>)
 
+// The superblock's idea of how big the disk is
+function DiskLogSize(k:Disk.Constants, s:Disk.Variables) : int
+    requires 1 <= k.size
+    requires Disk.WF(k, s)
+{
+    s.sectors[0].value
+}
+
 predicate Init(k:Constants, s:Variables)
 {
     // By saying nothing about the other variables, they can "havoc" (take
@@ -89,7 +97,7 @@ predicate Init(k:Constants, s:Variables)
     // need a minimum-size disk
     && 1 <= k.disk.size
     // Assume the disk has been mkfs'ed:
-    && Disk.Peek(k.disk, s.disk, 0, Datum(0, 0))
+    && DiskLogSize(k.disk, s.disk) == 0
     && s.mode.Running?
     && s.diskCommittedSize == 0
     && s.diskPersistedSize == 0
@@ -246,7 +254,7 @@ datatype Step =
     | Append(datum: Datum)
     | Query(datum: Datum)
     | PushLogData
-    | PushLogMetadata
+    | PushLogMetadataStep
     | CompleteSync
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
@@ -259,7 +267,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case Append(datum) => Append(k, s, s', datum)
         case Query(datum) => Query(k, s, s', datum)
         case PushLogData => PushLogData(k, s, s')
-        case PushLogMetadata => PushLogMetadata(k, s, s')
+        case PushLogMetadataStep => PushLogMetadata(k, s, s')
         case CompleteSync => CompleteSync(k, s, s')
     }
 }
@@ -273,7 +281,7 @@ predicate DiskLogPlausible(k:Disk.Constants, s:Disk.Variables)
 {
     && 1 <= k.size
     && Disk.WF(k, s)
-    && 1 <= DiskLogAddr(s.sectors[0].value) <= k.size
+    && 1 <= DiskLogAddr(DiskLogSize(k, s)) <= k.size
 }
 
 predicate LogSizeValid(k:Constants, s:Variables)
@@ -282,7 +290,7 @@ predicate LogSizeValid(k:Constants, s:Variables)
     && Disk.WF(k.disk, s.disk)
     && (
         !s.mode.Reboot? ==>
-            && s.diskCommittedSize == s.disk.sectors[0].value
+            && s.diskCommittedSize == DiskLogSize(k.disk, s.disk)
             && DiskLogAddr(s.diskCommittedSize) <= DiskLogAddr(s.diskPersistedSize)
             && DiskLogAddr(s.diskPersistedSize) <= k.disk.size
        )
