@@ -272,7 +272,7 @@ predicate DiskLogPlausible(k:Constants, s:Variables)
 {
     && 1 <= k.disk.size
     && Disk.WF(k.disk, s.disk)
-    && DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size
+    && 1 <= DiskLogAddr(s.disk.sectors[0].value) <= k.disk.size
 }
 
 predicate LogSizeValid(k:Constants, s:Variables)
@@ -330,79 +330,4 @@ lemma InvHoldsInduction(k:Constants, s:Variables, s':Variables)
 
 } // module LogImpl
 
-module RefinementProof {
-import opened AppTypes
-import opened LogImpl
-import AbstractMap
-
-// Find a key in a log-representation map
-function {:opaque} ILogKey(log:seq<Datum>, k:int) : int
-{
-    if log==[]
-    then
-        AbstractMap.EmptyValue()
-    else if log[|log|-1].key == k
-    then
-        log[|log|-1].value
-    else
-        ILogKey(log[..|log|-1], k)
-}
-
-// Interpret a log sequence of Datums as a map
-function ILog(log:seq<Datum>) : imap<int, int>
-{
-    imap k | AbstractMap.InDomain(k) :: ILogKey(log, k)
-}
-
-// Interpret the ephemeral system state (memlog) as a map
-function IEphemeral(k:Constants, s:Variables) : imap<int, int>
-{
-    ILog(s.memlog)
-}
-
-function {:opaque} DiskLogRecursive(k:Constants, s:Variables, len:nat) : seq<Datum>
-{
-    if len==0 
-    then []
-    else DiskLogRecursive(k, s, len-1) + [s.disk.sectors[DiskLogAddr(len-1)]]
-}
-
-// Interpret the disk as a Datum log
-function DiskLog(k:Constants, s:Variables) : seq<Datum>
-{
-    var super := Disk.PeekF(k.disk, s.disk, 0);
-    DiskLogRecursive(k, s, super.value)
-}
-
-// Interpret the persistent system state (disk) as a map
-function IPersistent(k:Constants, s:Variables) : imap<int, int>
-{
-    ILog(DiskLog(k, s))
-}
-
-// Refinement to an AbstractMap
-function I(k:Constants, s:Variables) : AbstractMap.Variables
-{
-    AbstractMap.Variables(IEphemeral(k, s), IPersistent(k, s))
-}
-
-function Ik(k:Constants) : AbstractMap.Constants
-{
-    AbstractMap.Constants()
-}
-
-lemma InvImpliesRefinementInit(k:Constants, s:Variables)
-    requires Init(k, s);
-    ensures AbstractMap.Init(Ik(k), I(k, s));
-{
-} 
-
-lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
-    requires Next(k, s, s');
-    ensures AbstractMap.Next(Ik(k), I(k, s), I(k, s'));
-{
-} 
-
-
-} // module RefinementProof
 
