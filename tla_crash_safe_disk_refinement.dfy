@@ -27,27 +27,49 @@ function DiskLog(k:Disk.Constants, s:Disk.Variables) : seq<Datum>
     DiskLogPrefix(k, s, DiskLogSize(k, s))
 }
 
-// Interpret the persistent system state (disk) as a map
-function IPersistent(k:Constants, s:Variables) : imap<int, int>
+// The view reflecting count operations.
+function IView(k:Constants, s:Variables, count:int) : AbstractMap.View
+    requires Inv(k, s)
+{
+    ILog(s.memlog[..count])
+}
+
+function INumRunningViews(k:Constants, s:Variables) : int
+    requires Inv(k, s)
+{
+    |s.memlog| - s.diskCommittedSize + 1
+}
+
+function {:opaque} IViewsDef(k:Constants, s:Variables, start:int, count:int) : (views:seq<AbstractMap.View>)
+    ensures forall i :: 0<=i<count ==> views[i] == IView(k, s, |s.memlog| - start + i)
+{
+    if count==0 then [] else IViewsDef(k, s, start, count-1) + [IView(k, s, |s.memlog| - start + count - 1)]
+}
+
+function IRunningViews(k:Constants, s:Variables) : (views:seq<AbstractMap.View>)
+{
+    IViewsDef(k, s, s.diskCommittedSize, INumRunningViews(k, s))
+}
+
+// The view when we don't have a memlog
+function INotRunningView(k:Constants, s:Variables) : AbstractMap.View
     requires Inv(k, s)
 {
     ILog(DiskLog(k.disk, s.disk))
 }
 
-// Interpret the ephemeral system state (memlog) as a map
-function IEphemeral(k:Constants, s:Variables) : imap<int, int>
-    requires Inv(k, s)
+function IViews(k:Constants, s:Variables) : seq<AbstractMap.View>
 {
     if s.mode.Running?
-    then ILog(s.memlog)
-    else IPersistent(k, s)
+    then IRunningViews(k, s)
+    else [INotRunningView(k, s)]
 }
 
 // Refinement to an AbstractMap
 function I(k:Constants, s:Variables) : AbstractMap.Variables
     requires Inv(k, s)
 {
-    AbstractMap.Variables(IEphemeral(k, s), IPersistent(k, s))
+    AbstractMap.Variables(IViews(k, s))
 }
 
 function Ik(k:Constants) : AbstractMap.Constants
@@ -61,8 +83,7 @@ lemma InvImpliesRefinementInit(k:Constants, s:Variables)
 {
     reveal_ILog();
     reveal_FindIndexInLog();
-    assert IEphemeral(k, s) == AbstractMap.EmptyMap();  // OBSERVE
-    assert IPersistent(k, s) == AbstractMap.EmptyMap();  // OBSERVE
+//    assert IViews(k, s) == [AbstractMap.EmptyMap()];  // OBSERVE
 } 
 
 lemma InvImpliesWF(k:Constants, s:Variables)
@@ -149,7 +170,7 @@ lemma PushLogMetadataRefinement(k:Constants, s:Variables, s':Variables)
     var newIdxEnd := s.diskPersistedSize;   // exclusive
     var logTail := s.disk.sectors[DiskLogAddr(newIdxStart) .. DiskLogAddr(newIdxEnd)];
     var keys := UpdateKeySet(logTail);
-    assert Is'.ephemeral == Is.ephemeral;
+//    assert Is'.ephemeral == Is.ephemeral;
     assert AbstractMap.WF(Is');
 //    forall key
 //        ensures Is'.persistent[key] == if key in keys then Is.ephemeral[key] else Is.persistent[key]
@@ -191,8 +212,8 @@ lemma PushLogMetadataRefinement(k:Constants, s:Variables, s':Variables)
 //            assert Is'.persistent[key] == Is.persistent[key];
 //        }
 //    }
-    assert AbstractMap.PersistKeys(Ik, Is, Is', keys);
-    assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeysStep(keys));
+//    assert AbstractMap.PersistKeys(Ik, Is, Is', keys);
+//    assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeysStep(keys));
 }
 
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)

@@ -13,7 +13,16 @@ module AbstractMap {
 import opened AppTypes
 
 datatype Constants = Constants()
-datatype Variables = Variables(ephemeral:imap<int, int>, persistent:imap<int, int>)
+type View = imap<int, int>
+datatype Variables = Variables(views:seq<View>)
+// A bit of philosophy: Note that, even here in the abstract spec, we maintain
+// a list of views that haven't yet been committed to disk. Why? Becuase in the
+// future, we may commit some prefix of that view. If we've done 10 alternating
+// increments to keys A and B, a filesystem crash could expose *any* of the
+// outstanding values -- but no other values, and no views in which B is two
+// steps ahead of A. (This is a stronger guarantee than many real filesystems
+// give; we may well need to relax it later to allow the implementation more
+// freedom.)
 
 predicate completeMap<K(!new),V>(a:imap<K,V>)
 {
@@ -22,10 +31,12 @@ predicate completeMap<K(!new),V>(a:imap<K,V>)
 
 predicate WF(s:Variables)
 {
-    && completeMap(s.ephemeral)
-    && completeMap(s.persistent)
+    && 0 < |s.views|
+    && forall i :: 0<=i<|s.views| ==> completeMap(s.views[i])
 }
 
+// Dafny black magic: This name is here to give EmptyMap's forall something to
+// trigger on. (Eliminates a /!\ Warning.)
 predicate InDomain(k:int)
 {
     true
@@ -38,75 +49,82 @@ function EmptyMap() : (zmap : imap<int,int>)
 }
 
 predicate Init(k:Constants, s:Variables)
-    ensures Init(k, s) ==> WF(s);
+    ensures Init(k, s) ==> WF(s)
 {
-    s == Variables(EmptyMap(), EmptyMap())
+    s == Variables([EmptyMap()])
+}
+
+function EphemeralView(k:Constants, s:Variables) : View
+    requires WF(s)
+{
+    s.views[0]
 }
 
 predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)
-    requires WF(s);
+    requires WF(s)
 {
-    && datum.value == s.ephemeral[datum.key]
+    && datum.value == EphemeralView(k, s)[datum.key]
     && s' == s
 }
 
 predicate Write(k:Constants, s:Variables, s':Variables, datum:Datum)
-    requires WF(s);
+    requires WF(s)
 {
-    && s'.ephemeral == s.ephemeral[datum.key := datum.value]
-    && s'.persistent == s.persistent
+    // Prepend a new ephemeral view. Prior view remains on the view
+    // stack that's allowed to appear after a crash.
+    var newView := EphemeralView(k, s)[datum.key := datum.value];
+    s'.views == [newView] + s.views
 }
 
 // Report to the user that the disk is synchronized with the memory.
 predicate CompleteSync(k:Constants, s:Variables, s':Variables)
-    requires WF(s);
+    requires WF(s)
 {
-    && s.persistent == s.ephemeral
+    && |s.views| == 1
     && s' == s
 }
 
-// Some group of keys get committed.
-predicate PersistKeys(k:Constants, s:Variables, s':Variables, keys:set<int>)
-    requires WF(s);
+// Some group of writes gets committed, eliminating stale views from before.
+predicate PersistWrites(k:Constants, s:Variables, s':Variables, count:int)
+    requires WF(s)
+    ensures PersistWrites(k, s, s', count) ==> WF(s')
 {
-    && s'.ephemeral == s.ephemeral
-    && WF(s')
-    && forall k:int :: s'.persistent[k] == if k in keys then s.ephemeral[k] else s.persistent[k]
+    && 0 < count < |s.views|    // leave a view when you're done!
+    && s'.views == s.views[..|s.views|-count]
 }
 
 // Forget all non-persisted data.
 predicate SpontaneousCrash(k:Constants, s:Variables, s':Variables)
-    requires WF(s);
+    requires WF(s)
+    ensures SpontaneousCrash(k, s, s') ==> WF(s')
 {
-    && s'.ephemeral == s.persistent
-    && s'.persistent == s.persistent
+    s'.views == [s.views[|s.views|-1]]
 }
 
 predicate Stutter(k:Constants, s:Variables, s':Variables)
-    requires WF(s);
+    requires WF(s)
 {
-    && s'.ephemeral == s.ephemeral
-    && s'.persistent == s.persistent
+    s' == s
 }
 
-datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistKeysStep(keys:set<int>) | SpontaneousCrash | Stutter
+datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistWritesStep(count:int) | SpontaneousCrash | Stutter
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
-    requires WF(s);
+    requires WF(s)
 {
     match step {
         case Query(datum) => Query(k, s, s', datum)
         case Write(datum) => Write(k, s, s', datum)
         case CompleteSync() => CompleteSync(k, s, s')
-        case PersistKeysStep(keys) => PersistKeys(k, s, s', keys)
+        case PersistWritesStep(count) => PersistWrites(k, s, s', count)
         case SpontaneousCrash() => SpontaneousCrash(k, s, s')
         case Stutter() => Stutter(k, s, s')
     }
 }
 
 predicate Next(k:Constants, s:Variables, s':Variables)
-    requires WF(s);
-    ensures Next(k, s, s') ==> WF(s');
+    requires WF(s)
+    ensures Next(k, s, s') ==> WF(s')
 {
     exists step :: NextStep(k, s, s', step)
 }
