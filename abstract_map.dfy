@@ -89,7 +89,7 @@ predicate Stutter(k:Constants, s:Variables, s':Variables)
     && s'.persistent == s.persistent
 }
 
-datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistKeys(keys:set<int>) | SpontaneousCrash | Stutter
+datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistKeysStep(keys:set<int>) | SpontaneousCrash | Stutter
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s);
@@ -98,7 +98,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case Query(datum) => Query(k, s, s', datum)
         case Write(datum) => Write(k, s, s', datum)
         case CompleteSync() => CompleteSync(k, s, s')
-        case PersistKeys(keys) => PersistKeys(k, s, s', keys)
+        case PersistKeysStep(keys) => PersistKeys(k, s, s', keys)
         case SpontaneousCrash() => SpontaneousCrash(k, s, s')
         case Stutter() => Stutter(k, s, s')
     }

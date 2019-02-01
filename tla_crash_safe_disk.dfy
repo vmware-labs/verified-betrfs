@@ -5,7 +5,7 @@ import opened AppTypes
 
 type LBA = int
 datatype Constants = Constants(size:LBA)
-datatype Variables = Variables(sectors:map<LBA, Datum>)
+datatype Variables = Variables(sectors:seq<Datum>)
 
 predicate ValidLBA(k:Constants, lba:LBA)
 {
@@ -14,8 +14,8 @@ predicate ValidLBA(k:Constants, lba:LBA)
 
 predicate WF(k:Constants, s:Variables)
 {
-    // All valid lbas are present in the sectors map.
-    forall i :: ValidLBA(k, i) ==> i in s.sectors.Keys
+    // All valid lbas are present in the sectors sequence.
+    |s.sectors| == k.size
 }
 
 predicate Init(k:Constants, s:Variables)

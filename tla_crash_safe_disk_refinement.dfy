@@ -13,32 +13,18 @@ function {:opaque} ILog(log:seq<Datum>) : imap<int, int>
     imap k | AbstractMap.InDomain(k) :: EvalLog(log, k).value
 }
 
-function {:opaque} DiskLogRecursive(k:Disk.Constants, s:Disk.Variables, len:nat) : seq<Datum>
-    requires len+1 <= k.size
-    requires Disk.WF(k, s)
+function DiskLogPrefix(k:Disk.Constants, s:Disk.Variables, len:int) : seq<Datum>
+    requires 1 <= DiskLogAddr(len) <= k.size
+    requires DiskLogPlausible(k, s)
 {
-    if len==0 
-    then []
-    else DiskLogRecursive(k, s, len-1) + [s.sectors[DiskLogAddr(len-1)]]
+    s.sectors[1..DiskLogAddr(len)]
 }
 
 // Interpret the disk as a Datum log
 function DiskLog(k:Disk.Constants, s:Disk.Variables) : seq<Datum>
     requires DiskLogPlausible(k, s)
 {
-    DiskLogRecursive(k, s, DiskLogSize(k, s))
-}
-
-lemma HowToMakeADiskLog(k:Disk.Constants, s:Disk.Variables, log:seq<Datum>)
-    requires DiskLogPlausible(k, s)
-    requires |log| <= DiskLogSize(k, s)
-    requires forall i :: 0<=i<|log| ==> log[i] == Disk.PeekF(k, s, DiskLogAddr(i))
-    ensures DiskLogRecursive(k, s, |log|) == log
-{
-    reveal_DiskLogRecursive();
-    if log != [] {
-        HowToMakeADiskLog(k, s, log[..|log|-1]);
-    }
+    DiskLogPrefix(k, s, DiskLogSize(k, s))
 }
 
 // Interpret the persistent system state (disk) as a map
@@ -76,7 +62,7 @@ lemma InvImpliesRefinementInit(k:Constants, s:Variables)
     reveal_ILog();
     reveal_FindIndexInLog();
     assert IEphemeral(k, s) == AbstractMap.EmptyMap();  // OBSERVE
-    reveal_DiskLogRecursive();
+    assert IPersistent(k, s) == AbstractMap.EmptyMap();  // OBSERVE
 } 
 
 lemma InvImpliesWF(k:Constants, s:Variables)
@@ -103,8 +89,50 @@ lemma PushLogNoop(k:Disk.Constants, s:Disk.Variables, s':Disk.Variables, len:int
 
 function {:opaque} UpdateKeySet(log:seq<Datum>) : (keys:set<int>)
     ensures forall i :: 0<=i<|log| ==> log[i].key in keys
+    ensures forall k, i :: 0<=i<|log| && !(k in keys) ==> log[i].key != k
 {
     if log==[] then {} else UpdateKeySet(log[..|log|-1]) + {log[|log|-1].key}
+}
+
+function {:opaque} IndexForKey(log:seq<Datum>, key:int) : (idx:int)
+    requires key in UpdateKeySet(log)
+    ensures 0<=idx<|log|
+    ensures log[idx].key == key
+    ensures forall j :: idx < j < |log| ==> log[j].key != key
+{
+    reveal_UpdateKeySet();
+    if log[|log|-1].key == key
+    then |log|-1
+    else IndexForKey(log[..|log|-1], key)
+}
+
+lemma LogIndexFallThrough(log:seq<Datum>, logPrefix:seq<Datum>, logSuffix:seq<Datum>, k:int)
+    requires log == logPrefix + logSuffix
+    requires forall i :: 0<=i<|logSuffix| ==> logSuffix[i].key != k
+    ensures FindIndexInLog(log, k) == FindIndexInLog(logPrefix, k)
+    decreases |logSuffix|
+{
+    reveal_FindIndexInLog();
+    if logSuffix != [] {
+        var subSuffix := logSuffix[..|logSuffix|-1];
+        LogIndexFallThrough(logPrefix + subSuffix, logPrefix, subSuffix, k);
+        if |log| > 0 && log[|log|-1].key != k {
+            assert log[..|log|-1] == logPrefix + subSuffix;    // OBSERVE (sequences)
+        }
+    } else {
+        assert log == logPrefix;    // OBSERVE (sequences)
+    }
+}
+
+// If you don't find k in the suffix of a log, you can read the prefix.
+lemma LogFallThrough(log:seq<Datum>, logPrefix:seq<Datum>, logSuffix:seq<Datum>, k:int)
+    requires log == logPrefix + logSuffix
+    requires forall i :: 0<=i<|logSuffix| ==> logSuffix[i].key != k
+    ensures ILog(log)[k] == ILog(logPrefix)[k]
+{
+    reveal_ILog();
+    reveal_FindIndexInLog();
+    LogIndexFallThrough(log, logPrefix, logSuffix, k);
 }
 
 lemma PushLogMetadataRefinement(k:Constants, s:Variables, s':Variables)
@@ -121,7 +149,50 @@ lemma PushLogMetadataRefinement(k:Constants, s:Variables, s':Variables)
     var newIdxEnd := s.diskPersistedSize;   // exclusive
     var logTail := s.disk.sectors[DiskLogAddr(newIdxStart) .. DiskLogAddr(newIdxEnd)];
     var keys := UpdateKeySet(logTail);
-    assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeys(keys));
+    assert Is'.ephemeral == Is.ephemeral;
+    assert AbstractMap.WF(Is');
+//    forall key
+//        ensures Is'.persistent[key] == if key in keys then Is.ephemeral[key] else Is.persistent[key]
+//    {
+//        if key in keys {
+//            var suffixIdx := IndexForKey(logTail, key);
+//            var idx := newIdxStart + suffixIdx;
+//            var diskLog := DiskLog(k.disk, s'.disk);
+//
+//            assert FindIndexInLog(diskLog, key) == Some(idx);
+//
+//            assert |diskLog| == s'.diskCommittedSize;
+//            assert s'.diskCommittedSize == s.diskPersistedSize;
+//            assert s.diskPersistedSize == |s.memlog|;
+//            forall i | 0 <= i < s.diskPersistedSize
+//                ensures diskLog[i] == s.memlog[i]
+//            {
+//                assert Disk.Peek(k.disk, s.disk, DiskLogAddr(i), s.memlog[i]);
+//            }
+//
+//            assert diskLog == s.memlog;
+//            assert FindIndexInLog(s.memlog, key) == Some(idx);
+//            assert s.memlog[idx] == diskLog[idx];
+//            calc {
+//                IPersistent(k, s')[key];
+//                ILog(DiskLog(k.disk, s'.disk))[key];
+//                    { reveal_ILog(); }
+//                EvalLog(diskLog, key).value;
+//                EvalLog(s.memlog, key).value;
+//                    { reveal_ILog(); }
+//                IEphemeral(k, s)[key];
+//            }
+//            assert Is'.persistent[key] == Is.ephemeral[key];
+//        } else {
+//            var diskLog := DiskLog(k.disk, s.disk);
+//            var diskLog' := DiskLog(k.disk, s'.disk);
+//            var suffix := diskLog'[|diskLog|..];
+//            LogFallThrough(diskLog', diskLog, suffix, key);
+//            assert Is'.persistent[key] == Is.persistent[key];
+//        }
+//    }
+    assert AbstractMap.PersistKeys(Ik, Is, Is', keys);
+    assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistKeysStep(keys));
 }
 
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
@@ -152,7 +223,7 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
         }
         case TerminateScan => {
-            HowToMakeADiskLog(k.disk, s.disk, s.memlog);
+            assert DiskLogPrefix(k.disk, s.disk, |s.memlog|) == s.memlog;   // OBSERVE
             assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
         }
         case Append(datum) => {
