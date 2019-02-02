@@ -224,12 +224,17 @@ predicate PushLogData(k:Constants, s:Variables, s':Variables)
     && s'.memlog == s.memlog
 }
 
-predicate PushLogMetadata(k:Constants, s:Variables, s':Variables)
+predicate PushLogMetadata(k:Constants, s:Variables, s':Variables, persistentCount:int)
 {
     && s.mode.Running?
-    && Disk.Write(k.disk, s.disk, s'.disk, 0, Datum(0, s.diskPersistedSize))
+    // It's okay to bump the metadata forwards even if we don't get it all the
+    // way to the end.  Not sure *why* we'd do that, but it will likely be
+    // helpful if we later enhance the disk model to be asynchronous (presently
+    // the write is atomic).
+    && s.diskCommittedSize < persistentCount <= s.diskPersistedSize
+    && Disk.Write(k.disk, s.disk, s'.disk, 0, Datum(0, persistentCount))
     && s'.mode == s.mode
-    && s'.diskCommittedSize == s.diskPersistedSize   // drives the refinement to PersistKeys.
+    && s'.diskCommittedSize == persistentCount   // drives the refinement to PersistWrites
     && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog
 }
@@ -250,11 +255,11 @@ datatype Step =
       CrashAndRecover
     | ReadSuperblock
     | ScanDiskLog
-    | TerminateScan
-    | Append(datum: Datum)
+    | TerminateScanStep
+    | AppendStep(datum: Datum)
     | Query(datum: Datum)
-    | PushLogData
-    | PushLogMetadataStep
+    | PushLogDataStep
+    | PushLogMetadataStep(persistentCount:int)
     | CompleteSync
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
@@ -263,11 +268,11 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case CrashAndRecover => CrashAndRecover(k, s, s')
         case ReadSuperblock => ReadSuperblock(k, s, s')
         case ScanDiskLog => ScanDiskLog(k, s, s')
-        case TerminateScan => TerminateScan(k, s, s')
-        case Append(datum) => Append(k, s, s', datum)
+        case TerminateScanStep => TerminateScan(k, s, s')
+        case AppendStep(datum) => Append(k, s, s', datum)
         case Query(datum) => Query(k, s, s', datum)
-        case PushLogData => PushLogData(k, s, s')
-        case PushLogMetadataStep => PushLogMetadata(k, s, s')
+        case PushLogDataStep => PushLogData(k, s, s')
+        case PushLogMetadataStep(persistentCount) => PushLogMetadata(k, s, s', persistentCount)
         case CompleteSync => CompleteSync(k, s, s')
     }
 }

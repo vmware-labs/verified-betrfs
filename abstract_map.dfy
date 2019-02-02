@@ -85,12 +85,12 @@ predicate CompleteSync(k:Constants, s:Variables, s':Variables)
 }
 
 // Some group of writes gets committed, eliminating stale views from before.
-predicate PersistWrites(k:Constants, s:Variables, s':Variables, count:int)
+predicate PersistWrites(k:Constants, s:Variables, s':Variables, writesRetired:int)
     requires WF(s)
-    ensures PersistWrites(k, s, s', count) ==> WF(s')
+    ensures PersistWrites(k, s, s', writesRetired) ==> WF(s')
 {
-    && 0 < count < |s.views|    // leave a view when you're done!
-    && s'.views == s.views[..|s.views|-count]
+    && 0 < writesRetired < |s.views|    // leave a view when you're done!
+    && s'.views == s.views[..|s.views|-writesRetired]
 }
 
 // Forget all non-persisted data.
@@ -107,17 +107,17 @@ predicate Stutter(k:Constants, s:Variables, s':Variables)
     s' == s
 }
 
-datatype Step = Query(datum:Datum) | Write(datum:Datum) | CompleteSync | PersistWritesStep(count:int) | SpontaneousCrash | Stutter
+datatype Step = Query(datum:Datum) | WriteStep(datum:Datum) | CompleteSync | PersistWritesStep(writesRetired:int) | SpontaneousCrashStep | Stutter
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s)
 {
     match step {
         case Query(datum) => Query(k, s, s', datum)
-        case Write(datum) => Write(k, s, s', datum)
+        case WriteStep(datum) => Write(k, s, s', datum)
         case CompleteSync() => CompleteSync(k, s, s')
-        case PersistWritesStep(count) => PersistWrites(k, s, s', count)
-        case SpontaneousCrash() => SpontaneousCrash(k, s, s')
+        case PersistWritesStep(writesRetired) => PersistWrites(k, s, s', writesRetired)
+        case SpontaneousCrashStep() => SpontaneousCrash(k, s, s')
         case Stutter() => Stutter(k, s, s')
     }
 }
