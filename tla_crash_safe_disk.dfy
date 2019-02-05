@@ -111,7 +111,6 @@ predicate Init(k:Constants, s:Variables)
 // trusted component, the way we do networks in distributed systems.
 predicate CrashAndRecover(k:Constants, s:Variables, s':Variables)
 {
-    && Disk.Idle(k.disk, s.disk, s'.disk)
     && s'.mode.Reboot?
     // By saying nothing about the other variables, they can "havoc" (take
     // on arbitrary values). So clearly we're not relying on memlog.
@@ -138,7 +137,7 @@ predicate ScanDiskLog(k:Constants, s:Variables, s':Variables)
     exists datum ::
         && s.mode.Recover?
         && Disk.Read(k.disk, s.disk, s'.disk, DiskLogAddr(s.mode.next), datum)
-        && s.mode.next + 1 < s.diskCommittedSize
+        && s.mode.next + 1 <= s.diskCommittedSize
         && s'.mode == Recover(s.mode.next + 1)
         && s'.diskCommittedSize == s.diskCommittedSize
         && s'.diskPersistedSize == s.diskPersistedSize
@@ -161,12 +160,11 @@ predicate TerminateScan(k:Constants, s:Variables, s':Variables)
 predicate Append(k:Constants, s:Variables, s':Variables, datum:Datum)
 {
     && s.mode.Running?
-    && s'.disk == s.disk
+    && Disk.Idle(k.disk, s.disk, s'.disk)
     && s'.mode == s.mode
     && s'.diskCommittedSize == s.diskCommittedSize
     && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog + [datum]
-    && Disk.Idle(k.disk, s.disk, s'.disk)
 }
 
 datatype Option<T> = Some(t:T) | None
