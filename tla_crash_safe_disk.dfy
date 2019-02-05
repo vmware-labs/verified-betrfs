@@ -89,6 +89,13 @@ function DiskLogSize(k:Disk.Constants, s:Disk.Variables) : int
     s.sectors[0].value
 }
 
+// Returns the LBA for an index in the log.
+function DiskLogAddr(index:int) : LBA
+{
+    // +1 to skip superblock.
+    index + 1
+}
+
 predicate Init(k:Constants, s:Variables)
 {
     // By saying nothing about the other variables, they can "havoc" (take
@@ -203,16 +210,9 @@ predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)
     && Disk.Idle(k.disk, s.disk, s'.disk)
 }
 
-// Returns the LBA for an index in the log.
-function DiskLogAddr(index:int) : LBA
-{
-    // +1 to skip superblock.
-    index + 1
-}
-
 predicate PushLogData(k:Constants, s:Variables, s':Variables)
 {
-    var idx := s.diskCommittedSize;   // The log index to flush out.
+    var idx := s.diskPersistedSize;   // The log index to flush out.
     && s.mode.Running?
     && 0 <= idx < |s.memlog| // there's a non-durable suffix to write
     && Disk.Write(k.disk, s.disk, s'.disk, DiskLogAddr(idx), s.memlog[idx])
