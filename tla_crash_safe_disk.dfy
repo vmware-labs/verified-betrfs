@@ -237,7 +237,7 @@ predicate PushLogMetadata(k:Constants, s:Variables, s':Variables, persistentCoun
     && s'.memlog == s.memlog
 }
 
-// This promise is br conjunct.
+// TODO: fsysc() can only return once we quiesce the disk. Perhaps write SyncUpTo.
 predicate CompleteSync(k:Constants, s:Variables, s':Variables)
 {
     && s.mode.Running?
@@ -279,6 +279,9 @@ predicate Next(k:Constants, s:Variables, s':Variables)
 {
     exists step:Step :: NextStep(k, s, s', step)
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// XXX TODO Invariants below; use separate module.
 
 predicate DiskLogPlausible(k:Disk.Constants, s:Disk.Variables)
 {
