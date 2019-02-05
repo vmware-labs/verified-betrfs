@@ -1,14 +1,16 @@
 include "abstract_map.dfy"
-include "tla_crash_safe_disk.dfy"
+include "tla_crash_safe_disk_inv.dfy"
 
 module RefinementProof {
 import opened AppTypes
 import opened LogImpl
+import opened LogInvariants
 import AbstractMap
 
 // Interpret a log sequence of Datums as a map
-function {:opaque} ILog(log:seq<Datum>) : imap<int, int>
-    ensures AbstractMap.completeMap(ILog(log))
+function {:opaque} ILog(log:seq<Datum>) : (m:imap<int, int>)
+    ensures AbstractMap.completeMap(m)
+    ensures forall k :: m[k] == EvalLog(log, k).value;
 {
     imap k | AbstractMap.InDomain(k) :: EvalLog(log, k).value
 }
@@ -180,8 +182,7 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
             AppendRefinement(k, s, s', datum);
         }
         case Query(datum) => {
-            reveal_ILog();
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Query(datum));
+            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Query(datum)); // OBSERVE
         }
         case PushLogDataStep => {
             assert IViewsDef(k, s', s'.diskCommittedSize, INumRunningViews(k, s'))
