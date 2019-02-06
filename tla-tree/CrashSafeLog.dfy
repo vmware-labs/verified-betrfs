@@ -1,65 +1,15 @@
-include "abstract_map.dfy"
+include "KVTypes.dfy"
+include "Disk.dfy"
 
-module Disk {
-import opened AppTypes
-
-type LBA = int
-datatype Constants = Constants(size:LBA)
-datatype Variables = Variables(sectors:seq<Datum>)
-
-predicate ValidLBA(k:Constants, lba:LBA)
-{
-    0 <= lba < k.size
+module DatumDisk refines Disk {
+import opened KVTypes
+datatype Sector = Superblock(logSize:int) | Datablock(datum:Datum)
 }
 
-predicate WF(k:Constants, s:Variables)
-{
-    // All valid lbas are present in the sectors sequence.
-    |s.sectors| == k.size
-}
+module CrashSafeLog {
+import opened KVTypes
+import Disk = DatumDisk
 
-predicate Init(k:Constants, s:Variables)
-{
-    && WF(k, s)
-}
-
-predicate Peek(k:Constants, s:Variables, lba:LBA, datum:Datum)
-{
-    && WF(k, s)
-    && ValidLBA(k, lba)
-    && s.sectors[lba] == datum
-}
-
-function PeekF(k:Constants, s:Variables, lba:LBA) : Datum
-    requires WF(k, s)
-    requires ValidLBA(k, lba)
-{
-    s.sectors[lba]
-}
-
-predicate Read(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
-{
-    && Peek(k, s, lba, datum)
-    && s' == s
-}
-
-predicate Write(k:Constants, s:Variables, s':Variables, lba:LBA, datum:Datum)
-{
-    && WF(k, s)
-    && ValidLBA(k, lba)
-    && s'.sectors == s.sectors[lba := datum]
-}
-
-predicate Idle(k:Constants, s:Variables, s':Variables)
-{
-    && s' == s
-}
-
-} // module Disk
-
-module LogImpl {
-import opened AppTypes
-import Disk
 type LBA = Disk.LBA
 
 // The "program counter" for IO steps.
@@ -81,12 +31,20 @@ datatype Variables = Variables(
     // The memory image of the log. Its prefix agrees with the disk.
     memlog:seq<Datum>)
 
+function SuperblockLogSize(sector:Disk.Sector) : int
+{
+    match sector {
+        case Superblock(logSize) => logSize
+        case Datablock(datum) => -1
+    }
+}
+
 // The superblock's idea of how big the disk is
 function DiskLogSize(k:Disk.Constants, s:Disk.Variables) : int
     requires 1 <= k.size
     requires Disk.WF(k, s)
 {
-    s.sectors[0].value
+    SuperblockLogSize(s.sectors[0])
 }
 
 // Returns the LBA for an index in the log.
@@ -127,13 +85,13 @@ predicate CrashAndRecover(k:Constants, s:Variables, s':Variables)
 // Read the superblock, which gives the size of the valid log on disk.
 predicate ReadSuperblock(k:Constants, s:Variables, s':Variables)
 {
-    exists datum ::
+    exists sector ::
         && s.mode.Reboot?
-        && Disk.Read(k.disk, s.disk, s'.disk, 0, datum)
-        && 0 <= datum.value // If disk holds a negative superblock value, we freeze.
+        && Disk.Read(k.disk, s.disk, s'.disk, 0, sector)
+        && 0 <= SuperblockLogSize(sector)
         && s'.mode == Recover(0)
-        && s'.diskCommittedSize == datum.value
-        && s'.diskPersistedSize == datum.value
+        && s'.diskCommittedSize == SuperblockLogSize(sector)
+        && s'.diskPersistedSize == SuperblockLogSize(sector)
         && s'.memlog == []
 }
 
@@ -141,14 +99,15 @@ predicate ReadSuperblock(k:Constants, s:Variables, s':Variables)
 // Here's a PC-less event-driven thingy. Sorry.
 predicate ScanDiskLog(k:Constants, s:Variables, s':Variables)
 {
-    exists datum ::
+    exists sector ::
         && s.mode.Recover?
-        && Disk.Read(k.disk, s.disk, s'.disk, DiskLogAddr(s.mode.next), datum)
+        && Disk.Read(k.disk, s.disk, s'.disk, DiskLogAddr(s.mode.next), sector)
         && s.mode.next + 1 <= s.diskCommittedSize
         && s'.mode == Recover(s.mode.next + 1)
         && s'.diskCommittedSize == s.diskCommittedSize
         && s'.diskPersistedSize == s.diskPersistedSize
-        && s'.memlog == s.memlog + [datum]
+        && sector.Datablock?
+        && s'.memlog == s.memlog + [sector.datum]
 }
 
 // We've got all the blocks. Switch to Running mode.
@@ -176,7 +135,7 @@ predicate Append(k:Constants, s:Variables, s':Variables, datum:Datum)
 
 datatype Option<T> = Some(t:T) | None
 
-function {:opaque} FindIndexInLog(log:seq<Datum>, key:int) : (index:Option<int>)
+function {:opaque} FindIndexInLog(log:seq<Datum>, key:Key) : (index:Option<int>)
     ensures index.Some? ==>
         && 0<=index.t<|log|
         && log[index.t].key == key
@@ -191,7 +150,7 @@ function {:opaque} FindIndexInLog(log:seq<Datum>, key:int) : (index:Option<int>)
         FindIndexInLog(log[..|log|-1], key)
 }
 
-function EvalLog(log:seq<Datum>, key:int) : Datum
+function EvalLog(log:seq<Datum>, key:Key) : Datum
 {
     var index := FindIndexInLog(log, key);
     if index.Some?
@@ -215,7 +174,7 @@ predicate PushLogData(k:Constants, s:Variables, s':Variables)
     var idx := s.diskPersistedSize;   // The log index to flush out.
     && s.mode.Running?
     && 0 <= idx < |s.memlog| // there's a non-durable suffix to write
-    && Disk.Write(k.disk, s.disk, s'.disk, DiskLogAddr(idx), s.memlog[idx])
+    && Disk.Write(k.disk, s.disk, s'.disk, DiskLogAddr(idx), Disk.Datablock(s.memlog[idx]))
     && s'.mode == s.mode
     && s'.diskCommittedSize == s.diskCommittedSize
     && s'.diskPersistedSize == idx + 1    // Now idx is durable, too
@@ -230,7 +189,7 @@ predicate PushLogMetadata(k:Constants, s:Variables, s':Variables, persistentCoun
     // helpful if we later enhance the disk model to be asynchronous (presently
     // the write is atomic).
     && s.diskCommittedSize < persistentCount <= s.diskPersistedSize
-    && Disk.Write(k.disk, s.disk, s'.disk, 0, Datum(0, persistentCount))
+    && Disk.Write(k.disk, s.disk, s'.disk, 0, Disk.Superblock(persistentCount))
     && s'.mode == s.mode
     && s'.diskCommittedSize == persistentCount   // drives the refinement to PersistWrites
     && s'.diskPersistedSize == s.diskPersistedSize

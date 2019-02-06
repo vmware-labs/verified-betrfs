@@ -1,16 +1,23 @@
-include "abstract_map.dfy"
-include "tla_crash_safe_disk.dfy"
+include "CrashSafeLog.dfy"
 
-module LogInvariants {
-import opened AppTypes
-import opened LogImpl
-import AbstractMap
+module CrashSafeLogInv {
+import opened KVTypes
+import opened CrashSafeLog
 
 predicate DiskLogPlausible(k:Disk.Constants, s:Disk.Variables)
 {
     && 1 <= k.size
     && Disk.WF(k, s)
     && 1 <= DiskLogAddr(DiskLogSize(k, s)) <= k.size
+}
+
+predicate DiskSectorTypeCorrect(k:Disk.Constants, s:Disk.Variables, count:int)
+    requires DiskLogPlausible(k, s)
+    requires DiskLogAddr(count) <= k.size
+{
+    && s.sectors[0].Superblock?
+    // All used data blocks are Datablocks
+    && forall i :: 1 <= i < DiskLogAddr(count) ==> s.sectors[i].Datablock?
 }
 
 predicate LogSizeValid(k:Constants, s:Variables)
@@ -31,7 +38,7 @@ predicate LogPrefixAgrees(k:Constants, s:Variables)
         && s.diskPersistedSize <= |s.memlog|
         && LogSizeValid(k, s)
         && (forall i :: 0 <= i < s.diskPersistedSize ==>
-            Disk.Peek(k.disk, s.disk, DiskLogAddr(i), s.memlog[i]))
+            Disk.Peek(k.disk, s.disk, DiskLogAddr(i), Disk.Datablock(s.memlog[i])))
 }
 
 predicate ScanInv(k:Constants, s:Variables)
@@ -41,14 +48,23 @@ predicate ScanInv(k:Constants, s:Variables)
         && s.diskCommittedSize == s.diskPersistedSize
         && s.mode.next <= s.diskCommittedSize
         && (forall i :: 0 <= i < |s.memlog| ==>
-            Disk.Peek(k.disk, s.disk, DiskLogAddr(i), s.memlog[i]))
+            Disk.Peek(k.disk, s.disk, DiskLogAddr(i), Disk.Datablock(s.memlog[i])))
         //XXX && |s.memlog| <= s.diskPersistedSize
+}
+
+predicate SectorTypeCorrect(k:Constants, s:Variables)
+    requires DiskLogPlausible(k.disk, s.disk)
+    requires LogSizeValid(k, s)
+{
+    var count := if s.mode.Reboot? then DiskLogSize(k.disk, s.disk) else s.diskPersistedSize;
+    DiskSectorTypeCorrect(k.disk, s.disk, count)
 }
 
 predicate Inv(k:Constants, s:Variables)
 {
     && DiskLogPlausible(k.disk, s.disk)
     && LogSizeValid(k, s)
+    && SectorTypeCorrect(k, s)
     && ScanInv(k, s)
     && LogPrefixAgrees(k, s)
 }

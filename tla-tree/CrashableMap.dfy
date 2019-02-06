@@ -1,19 +1,12 @@
-module AppTypes {
+include "KVTypes.dfy"
 
-datatype Datum = Datum(key:int, value:int)
-
-function EmptyValue() : int
-{
-    0
-}
-
-}
-
-module AbstractMap {
-import opened AppTypes
+// A Map that can crash and revert to prior states, but only in
+// controlled ways, limited by a sync operation.
+module CrashableMap {
+import opened KVTypes
 
 datatype Constants = Constants()
-type View = imap<int, int>
+type View = imap<Key, Value>
 datatype Variables = Variables(views:seq<View>)
 // A bit of philosophy: Note that, even here in the abstract spec, we maintain
 // a list of views that haven't yet been committed to disk. Why? Becuase in the
@@ -24,7 +17,7 @@ datatype Variables = Variables(views:seq<View>)
 // give; we may well need to relax it later to allow the implementation more
 // freedom.)
 
-predicate completeMap<K(!new),V>(a:imap<K,V>)
+predicate completeMap(a:imap<Key,Value>)
 {
     forall k :: k in a
 }
@@ -37,12 +30,12 @@ predicate WF(s:Variables)
 
 // Dafny black magic: This name is here to give EmptyMap's forall something to
 // trigger on. (Eliminates a /!\ Warning.)
-predicate InDomain(k:int)
+predicate InDomain(k:Key)
 {
     true
 }
 
-function EmptyMap() : (zmap : imap<int,int>)
+function EmptyMap() : (zmap : imap<Key,Value>)
     ensures completeMap(zmap)
 {
     imap k | InDomain(k) :: EmptyValue()

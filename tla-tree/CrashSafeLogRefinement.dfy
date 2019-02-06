@@ -1,36 +1,42 @@
-include "abstract_map.dfy"
-include "tla_crash_safe_disk_inv.dfy"
+include "CrashableMap.dfy"
+include "CrashSafeLogInv.dfy"
 
 module RefinementProof {
-import opened AppTypes
-import opened LogImpl
-import opened LogInvariants
-import AbstractMap
+import opened KVTypes
+import opened CrashSafeLog
+import opened CrashSafeLogInv
+import CrashableMap
 
 // Interpret a log sequence of Datums as a map
-function {:opaque} ILog(log:seq<Datum>) : (m:imap<int, int>)
-    ensures AbstractMap.completeMap(m)
+function {:opaque} ILog(log:seq<Datum>) : (m:imap<Key, Value>)
+    ensures CrashableMap.completeMap(m)
     ensures forall k :: m[k] == EvalLog(log, k).value;
 {
-    imap k | AbstractMap.InDomain(k) :: EvalLog(log, k).value
+    imap k | CrashableMap.InDomain(k) :: EvalLog(log, k).value
 }
 
-function DiskLogPrefix(k:Disk.Constants, s:Disk.Variables, len:int) : seq<Datum>
+function {:opaque} DiskLogPrefix(k:Disk.Constants, s:Disk.Variables, len:int) : (datums:seq<Datum>)
     requires 1 <= DiskLogAddr(len) <= k.size
     requires DiskLogPlausible(k, s)
+    requires DiskSectorTypeCorrect(k, s, len)
+    ensures |datums| == len
+    ensures forall i :: 0<=i<len ==> s.sectors[DiskLogAddr(i)] == Disk.Datablock(datums[i])
 {
-    s.sectors[1..DiskLogAddr(len)]
+    if len==0
+    then []
+    else DiskLogPrefix(k, s, len-1) + [s.sectors[DiskLogAddr(len-1)].datum]
 }
 
 // Interpret the disk as a Datum log
 function DiskLog(k:Disk.Constants, s:Disk.Variables) : seq<Datum>
     requires DiskLogPlausible(k, s)
+    requires DiskSectorTypeCorrect(k, s, DiskLogSize(k, s))
 {
     DiskLogPrefix(k, s, DiskLogSize(k, s))
 }
 
 // The view reflecting count operations.
-function IView(k:Constants, s:Variables, count:int) : AbstractMap.View
+function IView(k:Constants, s:Variables, count:int) : CrashableMap.View
     requires Inv(k, s)
     requires 0 <= count <= |s.memlog|
 {
@@ -48,7 +54,7 @@ function INumRunningViews(k:Constants, s:Variables) : int
 // so the last entry is ..diskCommittedSize (the persistent view), and the first entry is
 // diskCommittedSize+|s.memlog|-diskCommittedSize+1-1 == |s.memlog| -- the whole log, or the
 // current ephemeral view.
-function {:opaque} IViewsDef(k:Constants, s:Variables, oldest:int, count:int) : (views:seq<AbstractMap.View>)
+function {:opaque} IViewsDef(k:Constants, s:Variables, oldest:int, count:int) : (views:seq<CrashableMap.View>)
     requires Inv(k, s)
     requires 0 <= count
     requires 0 <= oldest
@@ -60,7 +66,7 @@ function {:opaque} IViewsDef(k:Constants, s:Variables, oldest:int, count:int) : 
     if count==0 then [] else [IView(k, s, oldest + count - 1)] + IViewsDef(k, s, oldest, count-1)
 }
 
-function IRunningViews(k:Constants, s:Variables) : (views:seq<AbstractMap.View>)
+function IRunningViews(k:Constants, s:Variables) : (views:seq<CrashableMap.View>)
     requires Inv(k, s)
     requires s.mode.Running?
 {
@@ -68,13 +74,13 @@ function IRunningViews(k:Constants, s:Variables) : (views:seq<AbstractMap.View>)
 }
 
 // The view when we don't have a memlog
-function INotRunningView(k:Constants, s:Variables) : AbstractMap.View
+function INotRunningView(k:Constants, s:Variables) : CrashableMap.View
     requires Inv(k, s)
 {
     ILog(DiskLog(k.disk, s.disk))
 }
 
-function IViews(k:Constants, s:Variables) : seq<AbstractMap.View>
+function IViews(k:Constants, s:Variables) : seq<CrashableMap.View>
     requires Inv(k, s)
 {
     if s.mode.Running?
@@ -82,20 +88,20 @@ function IViews(k:Constants, s:Variables) : seq<AbstractMap.View>
     else [INotRunningView(k, s)]
 }
 
-// Refinement to an AbstractMap
-function Ik(k:Constants) : AbstractMap.Constants
+// Refinement to an CrashableMap
+function Ik(k:Constants) : CrashableMap.Constants
 {
-    AbstractMap.Constants()
+    CrashableMap.Constants()
 }
 
-function I(k:Constants, s:Variables) : AbstractMap.Variables
+function I(k:Constants, s:Variables) : CrashableMap.Variables
     requires Inv(k, s)
 {
-    AbstractMap.Variables(IViews(k, s))
+    CrashableMap.Variables(IViews(k, s))
 }
 
 lemma EmptyILog()
-    ensures ILog([]) == AbstractMap.EmptyMap()
+    ensures ILog([]) == CrashableMap.EmptyMap()
     // Dafny bug: why can't I just stick this ensures on ILog defn?
 {
     reveal_ILog();
@@ -103,7 +109,7 @@ lemma EmptyILog()
 
 lemma InvImpliesWF(k:Constants, s:Variables)
     requires Inv(k, s)
-    ensures AbstractMap.WF(I(k, s))
+    ensures CrashableMap.WF(I(k, s))
 {
     reveal_ILog();
     reveal_FindIndexInLog();
@@ -119,7 +125,7 @@ lemma LogAppend(log:seq<Datum>, datum:Datum)
 lemma AppendRefinement(k:Constants, s:Variables, s':Variables, datum:Datum)
     requires Inv(k, s)
     requires NextStep(k, s, s', AppendStep(datum));
-    ensures AbstractMap.Next(Ik(k), I(k, s), I(k, s'));
+    ensures CrashableMap.Next(Ik(k), I(k, s), I(k, s'));
 {
     var views' := IViewsDef(k, s', s'.diskCommittedSize, INumRunningViews(k, s'));
     var views := IViewsDef(k, s, s.diskCommittedSize, INumRunningViews(k, s));
@@ -132,23 +138,23 @@ lemma AppendRefinement(k:Constants, s:Variables, s':Variables, datum:Datum)
     assert s'.memlog[..|s'.memlog|] == s'.memlog;   // OBSERVE seqs
     assert s.memlog[..|s.memlog|] == s.memlog;  // OBSERVE seqs
     LogAppend(s.memlog, datum);
-    assert AbstractMap.NextStep(Ik(k), I(k, s), I(k, s'), AbstractMap.WriteStep(datum)); // OBSERVE witness (Step)
+    assert CrashableMap.NextStep(Ik(k), I(k, s), I(k, s'), CrashableMap.WriteStep(datum)); // OBSERVE witness (Step)
 }
 
 lemma InvImpliesRefinementInit(k:Constants, s:Variables)
     requires Init(k, s)
-    ensures AbstractMap.Init(Ik(k), I(k, s))
+    ensures CrashableMap.Init(Ik(k), I(k, s))
 {
     EmptyILog();
-    assert IViews(k, s) == [AbstractMap.EmptyMap()];  // OBSERVE
+    assert IViews(k, s) == [CrashableMap.EmptyMap()];  // OBSERVE
 } 
 
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
     requires Inv(k, s)
-    ensures AbstractMap.WF(I(k, s))
-    ensures AbstractMap.WF(I(k, s'))
-    ensures AbstractMap.Next(Ik(k), I(k, s), I(k, s'))
+    ensures CrashableMap.WF(I(k, s))
+    ensures CrashableMap.WF(I(k, s'))
+    ensures CrashableMap.Next(Ik(k), I(k, s), I(k, s'))
 {
     var Ik := Ik(k);
     var Is := I(k, s);
@@ -165,36 +171,36 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
             if (s.mode.Running?) {
                 assert DiskLog(k.disk, s.disk) == s.memlog[..s.diskCommittedSize];  // OBSERVE
             }
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.SpontaneousCrashStep());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.SpontaneousCrashStep());
         }
         case ReadSuperblock => {
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter());
         }
         case ScanDiskLog => {
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter());
         }
         case TerminateScanStep => {
             assert s'.memlog[..s'.diskCommittedSize] == DiskLog(k.disk, s.disk); // OBSERVE
             assert IViewsDef(k, s', s'.diskCommittedSize, 1) == [INotRunningView(k, s)];    // OBSERVE
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter()); // OBSERVE witness (Step)
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter()); // OBSERVE witness (Step)
         }
         case AppendStep(datum) => {
             AppendRefinement(k, s, s', datum);
         }
         case Query(datum) => {
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Query(datum)); // OBSERVE
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Query(datum)); // OBSERVE
         }
         case PushLogDataStep => {
             assert IViewsDef(k, s', s'.diskCommittedSize, INumRunningViews(k, s'))
                 == IViewsDef(k, s, s.diskCommittedSize, INumRunningViews(k, s)); // OBSERVE
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter); // OBSERVE witness (Step)
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter); // OBSERVE witness (Step)
         }
         case PushLogMetadataStep(persistentCount) => {
             var writesRetired := persistentCount - s.diskCommittedSize;
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.PersistWritesStep(writesRetired)); // OBSERVE witness (Step)
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.PersistWritesStep(writesRetired)); // OBSERVE witness (Step)
         }
         case CompleteSync => {
-            assert AbstractMap.NextStep(Ik, Is, Is', AbstractMap.Stutter());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter());
         }
     }
 } 
