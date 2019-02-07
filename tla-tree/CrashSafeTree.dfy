@@ -86,6 +86,12 @@ predicate CachedNodeRead(k:Constants, s:Variables, nread:NRead)
     && WFNode(nread.node)
 }
 
+predicate CachedSuperblockRead(k:Constants, s:Variables, super:Sector)
+{
+    && CachedSectorRead(k, s, SUPERBLOCK_LBA(), super)
+    && super.Superblock?
+}
+
 // Partial action: Write a sector out, through the cache
 predicate WriteThroughSector(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
 {
@@ -238,11 +244,18 @@ predicate NodeDisconnected(k:Constants, s:Variables, childRead:NRead)
     )
 }
 
+predicate SectorIsVirgin(k:Constants, s:Variables, super:Sector, lba:LBA)
+    requires super.Superblock?
+{
+    && CachedSuperblockRead(k, s, super)
+    && super.virgin <= lba
+}
 
-predicate CanAllocate(k:Constants, s:Variables, childRead:NRead)
+predicate CanAllocate(k:Constants, s:Variables, super:Sector, childRead:NRead)
 {
     || NodeDisconnected(k, s, childRead)
     || NodeIsCold(k, s, childRead.lba, TreeDisk.NodeSector(childRead.node))
+    || SectorIsVirgin(k, s, super, childRead.lba)
 }
 
 function ChildNodeForParentIdx(parentRead:NRead, i:int) : Node
@@ -251,16 +264,19 @@ function ChildNodeForParentIdx(parentRead:NRead, i:int) : Node
     TreeDisk.Node(parentRead.lba, [], [parentRead.node.children[i]])
 }
 
+// Grow the tree vertically.
 // Create a new uncommitted child that thinks it belongs to parent, ready to replace children[i].
 // We should check that this ensures KnowPrepared(s', ...)
 // (Or we could WRITE this as KnowPrepared(k, s', ...) -- but that's harder to
 // see as an implementation?)
-predicate PrepareGrowAction(k:Constants, s:Variables, s':Variables, parentRead:NRead, i:int, childRead:NRead)
+predicate PrepareGrowAction(k:Constants, s:Variables, s':Variables, super:Sector, parentRead:NRead, i:int, childRead:NRead)
 {
     && CachedNodeRead(k, s, parentRead)
     && 0<=i<|parentRead.node.children|
-    && CanAllocate(k, s, childRead)
+    && CanAllocate(k, s, super, childRead)
+
     && WriteThroughNode(k, s, s', childRead.lba, ChildNodeForParentIdx(parentRead, i))
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 predicate KnowPrepared(k:Constants, s:Variables, parentRead:NRead, i:int, childRead:NRead)
@@ -283,8 +299,10 @@ function SectorUpdateChild(parent:Node, i:int, child:Child) : Node
 predicate CommitGrowAction(k:Constants, s:Variables, s':Variables, parentRead:NRead, i:int, childRead:NRead)
 {
     && KnowPrepared(k, s, parentRead, i, childRead)
+
     && WriteThroughNode(k, s, s', parentRead.lba, SectorUpdateChild(parentRead.node, i,
         TreeDisk.Pointer(childRead.lba)))
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 predicate ContractNodeAction(k:Constants, s:Variables, s':Variables, parentRead:NRead, i:int, childRead:NRead)
@@ -293,9 +311,11 @@ predicate ContractNodeAction(k:Constants, s:Variables, s':Variables, parentRead:
     && CachedNodeRead(k, s, childRead)
     && childRead.node.pivots == []    // child has one child, which can take its place in parent.
     && 0<=i<|parentRead.node.children|
+    
+    // This write causes child to become free-by-unreachable. So child must be in committed warm set.
     && WriteThroughNode(k, s, s', parentRead.lba,
         SectorUpdateChild(parentRead.node, i, childRead.node.children[0]))
-    // This write causes child to become free-by-unreachable. So child must be in committed warm set.
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 // The witnesses to a path lookup
@@ -375,6 +395,7 @@ predicate InsertAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, l
             // New datum goes to the right, so we'll split a pivot with the new key
         else WriteThroughNode(k, s, s', nodeLba,
             SectorInsertChild(lookup.node, lookup.idx, newDatum.key, [extantChild, TreeDisk.Value(newDatum)]))
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 predicate DeleteAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, lookup:PathLookup)
@@ -384,52 +405,117 @@ predicate DeleteAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, l
     // Replace child with Empty.
     // TODO background clean up of empty children within a node where feasible.
     // (Contract action already cleans up small children.)
+
     && WriteThroughNode(k, s, s', LastElt(lookup).nread.lba,
         SectorUpdateChild(lookup.node, lookup.idx, TreeDisk.Empty))
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
+}
+
+predicate NodeIsFree(k:Constants, s:Variables, nodeRead:NRead)
+{
+    && CachedNodeRead(k, s, nodeRead)
+    && NodeDisconnected(k, s, nodeRead)
 }
 
 // Move an unreachable node onto an uncommitted free list
-predicate MoveToFreeListAction(k:Constants, s:Variables, s':Variables, lba:LBA, childRead:NRead)
+predicate MoveToFreeListAction(k:Constants, s:Variables, s':Variables, nodeRead:NRead)
 {
-    && CachedNodeRead(k, s, childRead)
-    && NodeDisconnected(k, s, childRead)
-    && WriteThroughSector(k, s, s', lba, TreeDisk.ColdFreeList(s.uncommittedFreeListHead))
-    && s'.uncommittedFreeListHead == lba
+    && NodeIsFree(k, s, nodeRead)
+
+    && WriteThroughSector(k, s, s', nodeRead.lba, TreeDisk.ColdFreeList(s.uncommittedFreeListHead))
+    && s'.uncommittedFreeListHead == nodeRead.lba
 }
 
 predicate CommitFreeListAction(k:Constants, s:Variables, s':Variables, super:Sector)
 {
-    && CachedSectorRead(k, s, SUPERBLOCK_LBA(), super)
-    && super.Superblock?
+    && CachedSuperblockRead(k, s, super)
+
     && WriteThroughSector(k, s, s', SUPERBLOCK_LBA(),
         TreeDisk.Superblock(s.uncommittedFreeListHead, super.warm, super.virgin))
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
+}
+
+predicate NodesReflectVirginRange(k:Constants, s:Variables, oldVirgin:int, newVirgin:int, nreads:seq<NRead>)
+{
+    && |nreads| == newVirgin - oldVirgin
+    && forall i :: 0<=i<|nreads| ==> nreads[i].lba == oldVirgin + i
+}
+
+predicate NodesAreFree(k:Constants, s:Variables, nreads:seq<NRead>)
+{
+    forall i :: 0<=i<|nreads| ==> NodeIsFree(k, s, nreads[i])
+}
+
+function {:opaque} NewNodeLBAs(oldVirgin:int, newVirgin:int) : (lbas:set<LBA>)
+    requires 0 <= oldVirgin <= newVirgin
+    ensures |lbas| == newVirgin - oldVirgin
+    ensures forall i :: i in lbas <==> oldVirgin <= i < newVirgin
+    decreases newVirgin
+{
+    if newVirgin == oldVirgin
+    then {}
+    else NewNodeLBAs(oldVirgin, newVirgin-1) + {newVirgin-1}
+}
+
+predicate WriteAnythingIntoVirginAction(k:Constants, s:Variables, s':Variables, super:Sector, lba:LBA, data:Sector)
+{
+    && SectorIsVirgin(k, s, super, lba)
+
+    && WriteThroughSector(k, s, s', lba, data)
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
+}
+
+// Allocate new storage from virgin storage. The new blocks must be prepared by
+// being written with data that would look free after a crash, since they're
+// going into the warm set.
+// A resaonable way to do that would be to PrepareGrowAction.
+// Or one could WriteAnythingIntoVirginAction, and have it be ColdFreeList or
+// Nodes with nonsense parent pointers.
+predicate ExpandStorageAction(k:Constants, s:Variables, s':Variables, super:Sector, newVirgin:int, nreads:seq<NRead>)
+{
+    && CachedSectorRead(k, s, SUPERBLOCK_LBA(), super)
+    && super.Superblock?
+    && 0 <= super.virgin    // precondition for NewNodeLBAs. (And implied by an invariant, so not arbitrary.)
+    && super.virgin < newVirgin // some new space is actually allocated
+    && NodesReflectVirginRange(k, s, super.virgin, newVirgin, nreads)
+    && NodesAreFree(k, s, nreads)
+
+    && WriteThroughSector(k, s, s', SUPERBLOCK_LBA(),
+        TreeDisk.Superblock(super.firstCold, super.warm + NewNodeLBAs(super.virgin, newVirgin), newVirgin))
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 datatype Step =
       CacheFaultActionStep(lba:LBA, sector:Sector)
     | CacheEvictActionStep(lba:LBA)
-    | PrepareGrowActionStep(parentRead:NRead, i:int, childRead:NRead)
+    | PrepareGrowActionStep(super:Sector, parentRead:NRead, i:int, childRead:NRead)
     | CommitGrowActionStep(parentRead:NRead, i:int, childRead:NRead)
     | ContractNodeActionStep(parentRead:NRead, i:int, childRead:NRead)
     | QueryActionStep(datum:Datum, lookup:PathLookup)
     | InsertActionStep(datum:Datum, lookup:PathLookup)
     | DeleteActionStep(datum:Datum, lookup:PathLookup)
-    | MoveToFreeListActionStep(lba:LBA, childRead:NRead)
+    | MoveToFreeListActionStep(nodeRead:NRead)
     | CommitFreeListActionStep(super:Sector)
+    | WriteAnythingIntoVirginActionStep(super:Sector, lba:LBA, data:Sector)
+    | ExpandStorageActionStep(super:Sector, newVirgin:int, nreads:seq<NRead>)
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 {
     match step {
         case CacheFaultActionStep(lba, sector) => CacheFaultAction(k, s, s', lba, sector)
         case CacheEvictActionStep(lba) => CacheEvictAction(k, s, s', lba)
-        case PrepareGrowActionStep(parentRead, i, childRead) => PrepareGrowAction(k, s, s', parentRead, i, childRead)
+        case PrepareGrowActionStep(super, parentRead, i, childRead) => PrepareGrowAction(k, s, s', super, parentRead, i, childRead)
         case CommitGrowActionStep(parentRead, i, childRead) => CommitGrowAction(k, s, s', parentRead, i, childRead)
         case ContractNodeActionStep(parentRead, i, childRead) => ContractNodeAction(k, s, s', parentRead, i, childRead)
         case QueryActionStep(datum, lookup) => QueryAction(k, s, s', datum, lookup)
         case InsertActionStep(datum, lookup) => InsertAction(k, s, s', datum, lookup)
         case DeleteActionStep(datum, lookup) => DeleteAction(k, s, s', datum, lookup)
-        case MoveToFreeListActionStep(lba, childRead) => MoveToFreeListAction(k, s, s', lba, childRead)
+        case MoveToFreeListActionStep(nodeRead) => MoveToFreeListAction(k, s, s', nodeRead)
         case CommitFreeListActionStep(super) => CommitFreeListAction(k, s, s', super)
+        case WriteAnythingIntoVirginActionStep(super, lba, data) =>
+                WriteAnythingIntoVirginAction(k, s, s', super, lba, data)
+        case ExpandStorageActionStep(super, newVirgin, nreads) =>
+                ExpandStorageAction(k, s, s', super, newVirgin, nreads)
     }
 }
 
