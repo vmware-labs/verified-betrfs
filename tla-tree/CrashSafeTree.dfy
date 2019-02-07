@@ -62,6 +62,7 @@ predicate WFNode(node:Node) {
 predicate Init(k:Constants, s:Variables)
 {
     && TreeDisk.Init(k.disk, s.disk)
+    && 2 <= k.disk.size // Disk has room for at least superblock and root
     && TreeDisk.Peek(k.disk, s.disk, SUPERBLOCK_LBA(), TreeDisk.Superblock(NULLPTR(), {}, 2))
     && TreeDisk.Peek(k.disk, s.disk, ROOT_LBA(),
         TreeDisk.NodeSector(TreeDisk.Node(NULLPTR(), [], [TreeDisk.Empty])))
@@ -297,30 +298,46 @@ predicate ContractNodeAction(k:Constants, s:Variables, s':Variables, parentRead:
     // This write causes child to become free-by-unreachable. So child must be in committed warm set.
 }
 
-// There's a live path leading to node, and it supports range as a bound for node.
-predicate LivePathBoundsChild(k:Constants, s:Variables, node:NRead, idx:int, range:Range)
+// The witnesses to a path lookup
+datatype PathLookup = PathLookup(node:Node, idx:int, range:Range, path:seq<PathElt>)
+
+function LastElt(lookup:PathLookup) : PathElt
+    requires 0<|lookup.path|
 {
-    exists path : seq<PathElt> :: (
-        && CachedPathRead(k, s, path)
-        && Last(path).nread == node
-        && Last(path).idx == idx
-        && PathHasValidChildIndices(k, s, path)
-        && RangeBoundForChildIdx(Last(path).nread.node, Last(path).range, Last(path).idx) == range
-    )
+    Last(lookup.path)
 }
 
-predicate QueryAction(k:Constants, s:Variables, s':Variables, nodeRead:NRead, idx:int, range:Range, datum:Datum)
+
+// There's a live path leading to node, and it supports range as a bound for node.
+predicate LivePathBoundsChild(k:Constants, s:Variables, lookup:PathLookup)
 {
-    && WFNode(nodeRead.node)
-    && ValidChildIndex(nodeRead.node, idx)
-    && var childRange := RangeBoundForChildIdx(nodeRead.node, range, idx);
-    && LivePathBoundsChild(k, s, nodeRead, idx, range)
-    && RangeContains(range, datum.key)
-    && var child := nodeRead.node.children[idx]; (
-        || (child.Value? && child.datum == datum)
-        || (child.Value? && child.datum.key != datum.key && datum.value == EmptyValue())
-        || (child.Empty? && datum.value == EmptyValue())
-        )
+    && CachedPathRead(k, s, lookup.path)
+    && LastElt(lookup).nread.node == lookup.node
+    && LastElt(lookup).idx == lookup.idx
+    && PathHasValidChildIndices(k, s, lookup.path)
+    && RangeBoundForChildIdx(LastElt(lookup).nread.node, LastElt(lookup).range, LastElt(lookup).idx) == lookup.range
+}
+
+// Assuming the child covers the range of datum...
+predicate ChildSatisfiesQuery(child:Child, datum:Datum)
+{
+    || (child.Value? && child.datum == datum)
+    || (child.Value? && child.datum.key != datum.key && datum.value == EmptyValue())
+    || (child.Empty? && datum.value == EmptyValue())
+}
+
+predicate QueryAction(k:Constants, s:Variables, s':Variables, datum:Datum, lookup:PathLookup)
+{
+    && WFNode(lookup.node)
+    && ValidChildIndex(lookup.node, lookup.idx)
+    && var childRange := RangeBoundForChildIdx(lookup.node, lookup.range, lookup.idx);
+    && LivePathBoundsChild(k, s, lookup)
+    && RangeContains(lookup.range, datum.key)
+    && ChildSatisfiesQuery(lookup.node.children[lookup.idx], datum)
+
+    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && s'.cache == s.cache
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 // Insert newPivot at idx (shifting old pivot[idx] to the right).
@@ -335,41 +352,40 @@ function SectorInsertChild(parent:Node, idx:int, newPivot:Key, newChildren:seq<C
         parent.children[..idx] + newChildren + parent.children[idx+1..])
 }
 // newDatum.key is absent from the tree; insert it near a neighboring pivot
-predicate InsertAction(k:Constants, s:Variables, s':Variables, newDatum:Datum)
+predicate InsertAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, lookup:PathLookup)
 {
-    exists nodeRead:NRead, range:Range, idx:int :: (
-        // Find a leaf that we can split.
-        && WFNode(nodeRead.node)
-        && ValidChildIndex(nodeRead.node, idx)
-        && var childRange := RangeBoundForChildIdx(nodeRead.node, range, idx);
-        && var extantChild := nodeRead.node.children[idx];
-        && LivePathBoundsChild(k, s, nodeRead, idx, range)
-        && RangeContains(range, newDatum.key)
-        && !extantChild.Pointer?
-        // This is an insert, not a replace
-        && if extantChild.Empty? || newDatum.key == extantChild.datum.key
-                // Replace an empty or same-key datum in place
-            then WriteThroughNode(k, s, s', nodeRead.lba,
-                SectorUpdateChild(nodeRead.node, idx, TreeDisk.Value(newDatum)))
-            else if KeyLe(newDatum.key, extantChild.datum.key)
-                // New datum goes to the left, so we'll split a pivot to the right with the old key
-            then WriteThroughNode(k, s, s', nodeRead.lba,
-                SectorInsertChild(nodeRead.node, idx, extantChild.datum.key, [TreeDisk.Value(newDatum), extantChild]))
-                // New datum goes to the right, so we'll split a pivot with the new key
-            else WriteThroughNode(k, s, s', nodeRead.lba,
-                SectorInsertChild(nodeRead.node, idx, newDatum.key, [extantChild, TreeDisk.Value(newDatum)]))
-    )
+    // Find a leaf that we can split.
+    && WFNode(lookup.node)
+    && ValidChildIndex(lookup.node, lookup.idx)
+    && var childRange := RangeBoundForChildIdx(lookup.node, lookup.range, lookup.idx);
+    && var extantChild := lookup.node.children[lookup.idx];
+    && LivePathBoundsChild(k, s, lookup)
+    && RangeContains(lookup.range, newDatum.key)
+    && !extantChild.Pointer?
+    && var nodeLba := LastElt(lookup).nread.lba;
+    // This is an insert, not a replace
+    && if extantChild.Empty? || newDatum.key == extantChild.datum.key
+            // Replace an empty or same-key datum in place
+        then WriteThroughNode(k, s, s', nodeLba,
+            SectorUpdateChild(lookup.node, lookup.idx, TreeDisk.Value(newDatum)))
+        else if KeyLe(newDatum.key, extantChild.datum.key)
+            // New datum goes to the left, so we'll split a pivot to the right with the old key
+        then WriteThroughNode(k, s, s', nodeLba,
+            SectorInsertChild(lookup.node, lookup.idx, extantChild.datum.key, [TreeDisk.Value(newDatum), extantChild]))
+            // New datum goes to the right, so we'll split a pivot with the new key
+        else WriteThroughNode(k, s, s', nodeLba,
+            SectorInsertChild(lookup.node, lookup.idx, newDatum.key, [extantChild, TreeDisk.Value(newDatum)]))
 }
 
-predicate DeleteAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, nodeRead:NRead, idx:int, range:Range)
+predicate DeleteAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, lookup:PathLookup)
 {
-    && LivePathBoundsChild(k, s, nodeRead, idx, range)  // don't actually care about range
-    && nodeRead.node.children[idx] == TreeDisk.Value(newDatum)
+    && LivePathBoundsChild(k, s, lookup)
+    && lookup.node.children[lookup.idx] == TreeDisk.Value(newDatum)
     // Replace child with Empty.
     // TODO background clean up of empty children within a node where feasible.
     // (Contract action already cleans up small children.)
-    && WriteThroughNode(k, s, s', nodeRead.lba,
-        SectorUpdateChild(nodeRead.node, idx, TreeDisk.Empty))
+    && WriteThroughNode(k, s, s', LastElt(lookup).nread.lba,
+        SectorUpdateChild(lookup.node, lookup.idx, TreeDisk.Empty))
 }
 
 // Move an unreachable node onto an uncommitted free list
@@ -387,6 +403,39 @@ predicate CommitFreeListAction(k:Constants, s:Variables, s':Variables, super:Sec
     && super.Superblock?
     && WriteThroughSector(k, s, s', SUPERBLOCK_LBA(),
         TreeDisk.Superblock(s.uncommittedFreeListHead, super.warm, super.virgin))
+}
+
+datatype Step =
+      CacheFaultActionStep(lba:LBA, sector:Sector)
+    | CacheEvictActionStep(lba:LBA)
+    | PrepareGrowActionStep(parentRead:NRead, i:int, childRead:NRead)
+    | CommitGrowActionStep(parentRead:NRead, i:int, childRead:NRead)
+    | ContractNodeActionStep(parentRead:NRead, i:int, childRead:NRead)
+    | QueryActionStep(datum:Datum, lookup:PathLookup)
+    | InsertActionStep(datum:Datum, lookup:PathLookup)
+    | DeleteActionStep(datum:Datum, lookup:PathLookup)
+    | MoveToFreeListActionStep(lba:LBA, childRead:NRead)
+    | CommitFreeListActionStep(super:Sector)
+
+predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+{
+    match step {
+        case CacheFaultActionStep(lba, sector) => CacheFaultAction(k, s, s', lba, sector)
+        case CacheEvictActionStep(lba) => CacheEvictAction(k, s, s', lba)
+        case PrepareGrowActionStep(parentRead, i, childRead) => PrepareGrowAction(k, s, s', parentRead, i, childRead)
+        case CommitGrowActionStep(parentRead, i, childRead) => CommitGrowAction(k, s, s', parentRead, i, childRead)
+        case ContractNodeActionStep(parentRead, i, childRead) => ContractNodeAction(k, s, s', parentRead, i, childRead)
+        case QueryActionStep(datum, lookup) => QueryAction(k, s, s', datum, lookup)
+        case InsertActionStep(datum, lookup) => InsertAction(k, s, s', datum, lookup)
+        case DeleteActionStep(datum, lookup) => DeleteAction(k, s, s', datum, lookup)
+        case MoveToFreeListActionStep(lba, childRead) => MoveToFreeListAction(k, s, s', lba, childRead)
+        case CommitFreeListActionStep(super) => CommitFreeListAction(k, s, s', super)
+    }
+}
+
+predicate Next(k:Constants, s:Variables, s':Variables)
+{
+    exists step:Step :: NextStep(k, s, s', step)
 }
 
 
