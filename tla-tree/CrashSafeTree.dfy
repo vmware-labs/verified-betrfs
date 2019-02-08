@@ -1,3 +1,9 @@
+// TODO entirely embarassing detritus; replace with copy-on-write
+/*
+Rob comments:
+* Copy-on-write
+* indirection table -- is also the free map.
+*/
 include "KVTypes.dfy"
 include "Disk.dfy"
 
@@ -10,7 +16,7 @@ import opened KVTypes
 // * Warm (in an open set of warm sectors known to the superblock; allocated status
 // subject to owner agreement; visited on fsck), or 
 // * Cold (in a persistent free list of cold sectors).
-datatype Child = Value(datum:Datum) | Pointer(lba:LBA) | Empty
+datatype Child = Value(datum:Datum) | Pointer(lba:LBA) | Empty  // TODO rename to Slot?
 datatype Node = Node(parent:LBA, pivots:seq<Key>, children:seq<Child>)
 datatype Sector =
       Superblock(firstCold:LBA, warm:set<LBA>, virgin:LBA)
@@ -109,6 +115,7 @@ predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, lba:LBA, sect
 {
     && TreeDisk.Read(k.disk, s.disk, s'.disk, lba, sector)
     && s'.cache == s.cache[lba := sector]
+    && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
 function {:opaque} MapRemove<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
@@ -216,8 +223,8 @@ predicate CachedPathRead(k:Constants, s:Variables, path:seq<PathElt>)
 
 predicate NodeIsLive(k:Constants, s:Variables, node:NRead)
 {
-    exists path:seq<PathElt> :: (
-        && CachedPathRead(k, s, path)
+    exists path:seq<PathElt> :: (       // TODO bubble out exists
+        && CachedPathRead(k, s, path)   // TODO should be a Lookup
         && Last(path).nread == node
     )
 }
@@ -233,7 +240,7 @@ predicate NodeIsCold(k:Constants, s:Variables, lba:LBA, sector:Sector)
 // this predicate. But it lets us always reuse a frontier of nodes.)
 predicate NodeDisconnected(k:Constants, s:Variables, childRead:NRead)
 {
-    exists parentRead:NRead :: (
+    exists parentRead:NRead :: (    // TODO bubble out exists
         // Child thinks it belongs to parent
         && CachedNodeRead(k, s, childRead)
         && childRead.node.parent == parentRead.lba
@@ -289,7 +296,7 @@ predicate KnowPrepared(k:Constants, s:Variables, parentRead:NRead, i:int, childR
     && childRead.node == ChildNodeForParentIdx(parentRead, i)
 }
 
-function SectorUpdateChild(parent:Node, i:int, child:Child) : Node
+function NodeUpdateChild(parent:Node, i:int, child:Child) : Node
     requires 0<=i<|parent.children|
 {
     TreeDisk.Node(parent.parent, parent.pivots,
@@ -300,8 +307,8 @@ predicate CommitGrowAction(k:Constants, s:Variables, s':Variables, parentRead:NR
 {
     && KnowPrepared(k, s, parentRead, i, childRead)
 
-    && WriteThroughNode(k, s, s', parentRead.lba, SectorUpdateChild(parentRead.node, i,
-        TreeDisk.Pointer(childRead.lba)))
+    && WriteThroughNode(k, s, s', parentRead.lba,
+        NodeUpdateChild(parentRead.node, i, TreeDisk.Pointer(childRead.lba)))
     && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
@@ -314,7 +321,7 @@ predicate ContractNodeAction(k:Constants, s:Variables, s':Variables, parentRead:
     
     // This write causes child to become free-by-unreachable. So child must be in committed warm set.
     && WriteThroughNode(k, s, s', parentRead.lba,
-        SectorUpdateChild(parentRead.node, i, childRead.node.children[0]))
+        NodeUpdateChild(parentRead.node, i, childRead.node.children[0]))
     && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
@@ -332,7 +339,7 @@ function LastElt(lookup:PathLookup) : PathElt
 predicate LivePathBoundsChild(k:Constants, s:Variables, lookup:PathLookup)
 {
     && CachedPathRead(k, s, lookup.path)
-    && LastElt(lookup).nread.node == lookup.node
+    && LastElt(lookup).nread.node == lookup.node    // TODO make these accessor fcns, not duplicated fields
     && LastElt(lookup).idx == lookup.idx
     && PathHasValidChildIndices(k, s, lookup.path)
     && RangeBoundForChildIdx(LastElt(lookup).nread.node, LastElt(lookup).range, LastElt(lookup).idx) == lookup.range
@@ -363,7 +370,7 @@ predicate QueryAction(k:Constants, s:Variables, s':Variables, datum:Datum, looku
 // Insert newPivot at idx (shifting old pivot[idx] to the right).
 // Replace child[idx] with newChildren.
 // In practice, |newChildren|=2, and one of its elements is the old child[idx].
-function SectorInsertChild(parent:Node, idx:int, newPivot:Key, newChildren:seq<Child>) : Node
+function NodeInsertChild(parent:Node, idx:int, newPivot:Key, newChildren:seq<Child>) : Node
     requires WFNode(parent)
     requires 0<=idx<|parent.children|
 {
@@ -387,14 +394,14 @@ predicate InsertAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, l
     && if extantChild.Empty? || newDatum.key == extantChild.datum.key
             // Replace an empty or same-key datum in place
         then WriteThroughNode(k, s, s', nodeLba,
-            SectorUpdateChild(lookup.node, lookup.idx, TreeDisk.Value(newDatum)))
+            NodeUpdateChild(lookup.node, lookup.idx, TreeDisk.Value(newDatum)))
         else if KeyLe(newDatum.key, extantChild.datum.key)
             // New datum goes to the left, so we'll split a pivot to the right with the old key
         then WriteThroughNode(k, s, s', nodeLba,
-            SectorInsertChild(lookup.node, lookup.idx, extantChild.datum.key, [TreeDisk.Value(newDatum), extantChild]))
+            NodeInsertChild(lookup.node, lookup.idx, extantChild.datum.key, [TreeDisk.Value(newDatum), extantChild]))
             // New datum goes to the right, so we'll split a pivot with the new key
         else WriteThroughNode(k, s, s', nodeLba,
-            SectorInsertChild(lookup.node, lookup.idx, newDatum.key, [extantChild, TreeDisk.Value(newDatum)]))
+            NodeInsertChild(lookup.node, lookup.idx, newDatum.key, [extantChild, TreeDisk.Value(newDatum)]))
     && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
@@ -407,7 +414,7 @@ predicate DeleteAction(k:Constants, s:Variables, s':Variables, newDatum:Datum, l
     // (Contract action already cleans up small children.)
 
     && WriteThroughNode(k, s, s', LastElt(lookup).nread.lba,
-        SectorUpdateChild(lookup.node, lookup.idx, TreeDisk.Empty))
+        NodeUpdateChild(lookup.node, lookup.idx, TreeDisk.Empty))
     && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
@@ -431,7 +438,7 @@ predicate CommitFreeListAction(k:Constants, s:Variables, s':Variables, super:Sec
     && CachedSuperblockRead(k, s, super)
 
     && WriteThroughSector(k, s, s', SUPERBLOCK_LBA(),
-        TreeDisk.Superblock(s.uncommittedFreeListHead, super.warm, super.virgin))
+        TreeDisk.Superblock(s.uncommittedFreeListHead, super.warm - {TODO}, super.virgin))
     && s'.uncommittedFreeListHead == s.uncommittedFreeListHead
 }
 
@@ -512,6 +519,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
         case DeleteActionStep(datum, lookup) => DeleteAction(k, s, s', datum, lookup)
         case MoveToFreeListActionStep(nodeRead) => MoveToFreeListAction(k, s, s', nodeRead)
         case CommitFreeListActionStep(super) => CommitFreeListAction(k, s, s', super)
+        // TODO missing move from free to warm
         case WriteAnythingIntoVirginActionStep(super, lba, data) =>
                 WriteAnythingIntoVirginAction(k, s, s', super, lba, data)
         case ExpandStorageActionStep(super, newVirgin, nreads) =>
