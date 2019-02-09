@@ -24,6 +24,13 @@ datatype Sector =
 } // module TreeDisk
 
 
+
+// TODO I was lying awake thinking: we probably actually want three tables. The persistent table,
+// which is on disk (and never in memory except to prime the ephemeral table), the ephemeral table,
+// and then a checkpointed copy of the ephemeral table so that a commit writeback can proceed in
+// parallel with ongoing activity. But I'm not sure it's worth frying that fish now, when we have
+// big data structure changes to make later.
+
 module CrashSafeTree {
 import opened MissingLibrary
 import opened KVTypes
@@ -317,6 +324,147 @@ predicate QueryAction(k:Constants, s:Variables, s':Variables, datum:Datum, looku
 
     && s' == s
 }
+
+function NodeReplaceSlot(node:Node, i:int, slot:Slot) : Node
+    requires WFNode(node)
+    requires 0<=i<|node.slots|
+{
+    TreeDisk.Node(node.pivots,
+        node.slots[..i] + [slot] + node.slots[i+1..])
+}
+
+// Replace slot (which starts at pivots[slot-1]) with newSlots, subdivided by newPivots.
+function NodeInsertSlots(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<Slot>) : Node
+    requires WFNode(node)
+    requires 0<=slot<|node.slots|
+    requires |newSlots| == |newPivots| + 1
+{
+    TreeDisk.Node(
+        node.pivots[..slot] + newPivots + node.pivots[slot..],
+        node.children[..slot] + newSlots + node.children[slot+1..])
+}
+
+
+function ReplaceSlotForInsert(node:Node, slot:int, newDatum:Datum) : Node
+    requires !slot.Pointer
+{
+    var slot := node.slots[slot];
+
+    if slot.Empty? || newDatum.key == slot.datum.key
+        // Replace an empty or same-key datum in place
+    then NodeReplaceSlot(node, slot, TreeDisk.Value(newDatum))
+    else if KeyLe(newDatum.key, slot.datum.key)
+        // New datum goes to the left, so we'll split a pivot to the right with the old key
+    then NodeInsertSlots(node, slot, [slot.datum.key], [TreeDisk.Value(newDatum), slot])
+        // New datum goes to the right, so we'll split a pivot with the new key
+    else NodeInsertSlots(node, slot, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
+}
+
+// This tree requires you to replace the entire tree (in memory) on each mutation. I'm okay with that.
+datatype ReplacementLayer = ReplacementLayer(
+    addr:int,       // The newly allocated addr
+    node:Node,      // the node at the addr
+    )
+datatype Mutation = Mutation(lookup:Lookup, rlayers:seq<ReplacementLayer>)
+
+predicate LayerReplaces(k:Constants, s:Variables, mnode:Node, childAddr:int, layer:Layer)
+{
+    var lnode := layer.node;
+    && mnode.pivots == lnode.pivots
+    && |mnode.slots| == |lnode.pivots|
+    && (forall i :: 0<=i<|mnode.slots| ==>
+        mnode.slots[i] ==
+            if i==layer.slot then TreeDisk.Pointer(childAddr) else lnode.slots[i]
+       )
+}
+
+predicate ValidAncestorReplacements(k:Constants, s:Variables, mutation:Mutation)
+// TODO do we really need k, s? Probably for preconditions...
+{
+    && |mutation.rlayers| == |mutation.lookup.layers|
+    && (forall i :: 0 <= i < |mutation.rlayers|-1 ==>
+        LayerReplaces(k, s, mutation.rlayers[i].node, mutation.rlayers[i+1].addr, mutation.lookup.layers[i]))
+}
+
+predicate ReplacementsAllocated(k:Constants, s:Variables, mutation:Mutation)
+{
+}
+
+predicate ValidMutation(k:Constants, s:Variables, mutation:Mutation)
+{
+    && ValidLookup(k, s, mutation.lookup)
+    && ValidAncestorReplacements(k, s, mutation)
+}
+
+// s' cache & ephemeralTable reflects mutation.
+predicate ApplyMutation(k:Constants, s:Variables, s':Variables, mutation:Mutation)
+{
+}
+
+// A common action for slot replacements. Caller adds enabling conditions that shape the mutation.
+predicate Replace(k:Constants, s:Variables, s':Variables, mutation:Mutation)
+{
+    && s.ready
+    && ValidMutation(k, s, mutation)
+
+    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && ApplyMutation(k, s, s', mutation.rlayers)    
+    && s'.ready == s.ready
+}
+
+predicate InsertAction(k:Constants, s:Variables, s':Variables, datum:Datum, mutation:Mutation)
+{
+    && Replace(k, s, s', mutation)
+    && LookupSatisfiesQuery(k, s, mutation.lookup, datum)
+
+    && var lastL := Last(mutation.lookup.layers);
+    && var lastM := Last(mutation.rlayers);
+    && lastM.node == ReplaceSlotForInsert(lastL.node, lastL.slot, datum)
+}
+
+predicate DeleteAction(k:Constants, s:Variables, s':Variables, datum:Datum, mutation:Mutation)
+{
+    && Replace(k, s, s', mutation)
+    && LookupSatisfiesQuery(k, s, mutation.lookup, datum)
+
+    // "undo" an insert
+    && var lastL := Last(mutation.lookup.layers);
+    && var lastM := Last(mutation.rlayers);
+    && lastL.node == ReplaceSlotForInsert(lastM.node, lastL.slot, datum)
+}
+
+datatype Tidy = Tidy(mutation:Mutation, victimAddr:int, victimNode:Node)
+
+predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:NBA, childNode:node)
+{
+    && directNode == NodeInsertSlots(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
+    && indirectNode.slots[replacedSlot] == TreeDisk.Pointer(childAddr)
+}
+
+// Contract is a no-op "insert"
+predicate ContractAction(k:Constants, s:Variables, s':Variables, tidy:Tidy)
+{
+    && Replace(k, s, s', tidy.mutation)
+    && ValidLookup(k, s, lookup)
+    && CachedNodeRead(k, s, tidy.victimAddr, tidy.victimNode)   // this node is already prepared
+    && AllocateOkay(tidy.victimAddr)
+    && ChildEquivalentToSlotGroup(lastM.node, lastL.slot, lastM.node, tidy.victimAddr, tidy.victimNode)
+}
+
+predicate ExpandAction(k:Constants, s:Variables, s':Variables, tidy:Tidy)
+{
+    && Replace(k, s, s', tidy.mutation)
+    && ValidLookup(k, s, lookup)
+    && CachedNodeRead(k, s, tidy.victimAddr, tidy.victimNode)
+    && ChildEquivalentToSlotGroup(lastM.node, lastL.slot, lastM.node, tidy.victimAddr, tidy.victimNode)
+}
+
+
+An insert typically changes a node to introduce a slot (may require a preceding Expand bg op).
+An delete typically changes a node to delete a slot (may require a preceding Contract bp op).
+
+An expand replaces a group of slots with a Pointer to a child containing those slots
+A contract replaces a Pointer slot with all of the child's slots.
 
 // TODO trusted code
 predicate CrashAction(k:Constants, s:Variables, s':Variables)
