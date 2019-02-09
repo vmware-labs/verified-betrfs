@@ -39,13 +39,18 @@ type View = map<LBA, Sector>    // A view of the disk, either through a cache or
 
 datatype NBA = Unused | Used(lba:LBA)  // A Node Block Address gets offset into the node-sectors region of the disk.
 
-type Table = seq<NBA>   // An indirection table mapping addresses (indices into the table) to NBAs
-
 datatype Constants = Constants(
     disk:TreeDisk.Constants,
     tableEntries:int,    // How many entries in the table (allocatable data blocks on the disk)
     tableSectors:int     // How many sectors to set aside for each indirection table
     )
+
+type Table = seq<NBA>   // An indirection table mapping addresses (indices into the table) to NBAs
+
+predicate WFTable(k:Constants, table:Table)
+{
+    |table| == k.tableEntries
+}
 
 function HeaderSize(k:Constants) : int
 {
@@ -113,6 +118,12 @@ function TableBegin(k:Constants, ti:TableIndex) : LBA
 }
 
 datatype TableLookup = TableLookup(ti:TableIndex, table:Table, sectors:seq<Sector>)
+
+predicate WFTableLookup(k:Constants, tl:TableLookup)
+{
+    && TreeDisk.WFTableIndex(tl.ti)
+    && WFTable(k, tl.table)
+}
 
 predicate TableInView(k:Constants, view:View, tl:TableLookup)
     requires TreeDisk.WFTableIndex(tl.ti)
@@ -198,6 +209,12 @@ datatype Layer = Layer(
 
 datatype Lookup = Lookup(layers:seq<Layer>, tl:TableLookup)
 
+predicate WFLookup(k:Constants, lookup:Lookup)
+{
+    && 0 < |lookup.layers|
+    && WFTableLookup(k, lookup.tl)
+}
+
 predicate LookupHasValidNodes(lookup:Lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==> WFNode(lookup.layers[i].node)
@@ -210,11 +227,14 @@ predicate LookupHasValidSlotIndices(lookup:Lookup)
         && ValidSlotIndex(layer.node, layer.slot)
 }
 
+predicate ValidAddress(k:Constants, addr:int)
+{
+    0 <= addr < k.tableEntries
+}
+
 predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
-        && var layer := lookup.layers[i];
-        && 0 <= layer.addr < k.tableEntries
+    forall i :: 0<=i<|lookup.layers| ==> ValidAddress(k, lookup.layers[i].addr)
 }
 
 predicate LookupHonorsPointerLinks(lookup:Lookup)
@@ -245,15 +265,20 @@ predicate LookupHonorsRanges(lookup:Lookup)
 }
 
 predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
+    requires WFLookup(k, lookup)
     requires LookupHasValidAddresses(k, lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
+    forall i :: 0<=i<|lookup.layers| ==> (
         && var layer := lookup.layers[i];
-        && CachedNodeRead(k, s, lookup.tl.table[layer.addr], layer.node)
+        && var nba := lookup.tl.table[layer.addr];
+        && nba.Used?
+        && CachedNodeRead(k, s, nba, layer.node)
+    )
 }
 
 predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
 {
+    && WFLookup(k, lookup)
     && LookupHasValidNodes(lookup)
     && LookupHasValidSlotIndices(lookup)
     && LookupHasValidAddresses(k, lookup)
@@ -271,7 +296,9 @@ predicate SlotSatisfiesQuery(slot:Slot, datum:Datum)
 }
 
 // The slot to which this lookup leads.
-function TerminalSlot(lookup:Lookup) : Slot
+function TerminalSlot(k:Constants, lookup:Lookup) : Slot
+    requires WFLookup(k, lookup)
+    requires LookupHasValidSlotIndices(lookup)
 {
     var lastLayer := Last(lookup.layers);
     lastLayer.node.slots[lastLayer.slot]
@@ -280,7 +307,7 @@ function TerminalSlot(lookup:Lookup) : Slot
 predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, datum:Datum)
 {
     && ValidLookup(k, s, lookup)
-    && SlotSatisfiesQuery(TerminalSlot(lookup), datum)
+    && SlotSatisfiesQuery(TerminalSlot(k, lookup), datum)
 }
 
 predicate QueryAction(k:Constants, s:Variables, s':Variables, datum:Datum, lookup:Lookup)
@@ -305,6 +332,7 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, pe
 {
     && !s.ready
     && KnowPersistentTableIndex(k, s, persistentTl.ti, super)
+    && TreeDisk.WFTableIndex(persistentTl.ti)
     && KnowTable(k, s, persistentTl)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
@@ -334,10 +362,9 @@ predicate CacheEvictAction(k:Constants, s:Variables, s':Variables, lba:LBA)
     && s'.ready == s.ready
 }
 
-datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
-
 predicate InitTable(table:Table, rootNba:NBA)
 {
+    && 0 < |table|
     && table[ROOT_ADDR()] == rootNba
     && (forall addr :: 0 <= addr < |table| && addr != ROOT_ADDR()
         ==> table[addr].Unused?)
@@ -346,12 +373,14 @@ predicate InitTable(table:Table, rootNba:NBA)
 function {:opaque} EmptyView() : (view:View)
     ensures view.Keys == {}
 {
-    var view:View :| view.Keys == {}; view
+    map l:LBA | l in {} :: TreeDisk.TableSector
 }
 
 
 function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lbaLimit:LBA) : (view:View)
+    requires 0 <= lbaLimit <= |s.sectors|
     ensures forall lba :: TreeDisk.ValidLBA(k, lba) && lba < lbaLimit ==> lba in view && view[lba] == s.sectors[lba]
+    decreases lbaLimit
 {
     if lbaLimit == 0
     then EmptyView()
@@ -359,18 +388,24 @@ function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lba
 }
 
 function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
+    requires TreeDisk.WF(k, s)
     ensures forall lba :: TreeDisk.ValidLBA(k, lba) ==> lba in view && view[lba] == s.sectors[lba]
 {
     ViewOfDiskDef(k, s, k.size)
 }
+
+datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
 
 predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
 {
     // right-sized disk
     && TreeDisk.Init(k.disk, s.disk)
     && k.disk.size == DiskSize(k)
+    && TreeDisk.WF(k.disk, s.disk)
+    && 0 < k.tableEntries
 
     // Empty persistent table
+    && TreeDisk.WFTableIndex(mkfs.tl.ti)
     && PersistentTableIndexInView(ViewOfDisk(k.disk, s.disk), mkfs.tl.ti, mkfs.super)
     && TableInView(k, ViewOfDisk(k.disk, s.disk), mkfs.tl)
     // I arbitrarily demand that the root block be stored in node data sector 0.
