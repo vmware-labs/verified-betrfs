@@ -135,6 +135,7 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 // These predicates are shorthands useful in the running case.
 
 predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
+    requires nba.Used?
 {
     && SectorInView(s.cache, LbaForNba(k, nba), TreeDisk.NodeSector(node))
     // We toss WFNode in here to keep other expressions tidy; as with any WF, this can
@@ -197,15 +198,27 @@ datatype Layer = Layer(
 
 datatype Lookup = Lookup(layers:seq<Layer>, tl:TableLookup)
 
-predicate LookupHasValidLayers(k:Constants, lookup:Lookup)
+predicate LookupHasValidNodes(lookup:Lookup)
+{
+    forall i :: 0<=i<|lookup.layers| ==> WFNode(lookup.layers[i].node)
+}
+
+predicate LookupHasValidSlotIndices(lookup:Lookup)
+{
+    forall i :: 0<=i<|lookup.layers| ==>
+        && var layer := lookup.layers[i];
+        && ValidSlotIndex(layer.node, layer.slot)
+}
+
+predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
         && var layer := lookup.layers[i];
         && 0 <= layer.addr < k.tableEntries
-        && ValidSlotIndex(layer.node, layer.slot)
 }
 
 predicate LookupHonorsPointerLinks(lookup:Lookup)
+    requires LookupHasValidSlotIndices(lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
         var layer := lookup.layers[i];
@@ -223,6 +236,8 @@ function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
 }
 
 predicate LookupHonorsRanges(lookup:Lookup)
+    requires LookupHasValidNodes(lookup)
+    requires LookupHasValidSlotIndices(lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
         && var layer := lookup.layers[i];
@@ -230,7 +245,7 @@ predicate LookupHonorsRanges(lookup:Lookup)
 }
 
 predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
-    requires LookupHasValidLayers(k, lookup)
+    requires LookupHasValidAddresses(k, lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
         && var layer := lookup.layers[i];
@@ -239,7 +254,9 @@ predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
 
 predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
 {
-    && LookupHasValidLayers(k, lookup)
+    && LookupHasValidNodes(lookup)
+    && LookupHasValidSlotIndices(lookup)
+    && LookupHasValidAddresses(k, lookup)
     && LookupHonorsPointerLinks(lookup)
     && LookupHonorsRanges(lookup)
     && KnowTable(k, s, lookup.tl)
