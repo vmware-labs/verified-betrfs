@@ -25,6 +25,7 @@ datatype Sector =
 
 
 module CrashSafeTree {
+import opened MissingLibrary
 import opened KVTypes
 import TreeDisk
 
@@ -61,12 +62,12 @@ function DiskSize(k:Constants) : int
 function LbaForNba(k:Constants, nba:NBA) : LBA
     requires nba.Used?
 {
-    HeaderSize(k) + nba.used
+    HeaderSize(k) + nba.lba
 }
 
 datatype Variables = Variables(
     disk:TreeDisk.Variables,
-    view:View,
+    cache:View,
     ephemeralTable:Table,    // The ephemeral table, ready to write out on a commit
 
     // True only once the ephemeral table has a history tracking back to the
@@ -79,7 +80,7 @@ datatype Variables = Variables(
 function SUPERBLOCK_LBA() : LBA { 0 }
 
 predicate WFNode(node:Node) {
-    |node.pivots| == |node.children| - 1
+    |node.pivots| == |node.slots| - 1
 }
 
 function ROOT_ADDR() : int { 0 }    // Address of the root node in either table
@@ -88,12 +89,12 @@ function ROOT_ADDR() : int { 0 }    // Address of the root node in either table
 function UnmarshallTable(k:Constants, sectors:seq<Sector>) : Table
     requires |sectors| == k.tableSectors
 
-function MarshallTable(t:Table) : seq<Sector>
+function MarshallTable(k:Constants, t:Table) : (sectors:seq<Sector>)
     ensures |sectors| == k.tableSectors
 
-lemma {:axiom} Marshalling()
-    ensures forall t :: UnmarshallTable(MarshallTable(t)) == t
-    ensures forall sectors :: UnmarshallTable(MarshallTable(sectors)) == sectors    // a bit too strong?
+lemma {:axiom} Marshalling(k:Constants)
+    ensures forall t :: UnmarshallTable(k, MarshallTable(k, t)) == t
+    ensures forall sectors :: UnmarshallTable(k, MarshallTable(k, sectors)) == sectors    // a bit too strong?
 
 ///////////////////////////////////////////////////////////////////////////////////////
 // The view predicates are usable either on the cache (running case) or against the
@@ -106,7 +107,7 @@ predicate SectorInView(view:View, lba:LBA, sector:Sector)
 }
 
 function TableBegin(k:Constants, ti:TableIndex) : LBA
-    requires WFTableIndex(ti)
+    requires TreeDisk.WFTableIndex(ti)
 {
     1 + k.tableSectors * ti
 }
@@ -114,7 +115,7 @@ function TableBegin(k:Constants, ti:TableIndex) : LBA
 datatype TableLookup = TableLookup(ti:TableIndex, table:Table, sectors:seq<Sector>)
 
 predicate TableInView(k:Constants, view:View, tl:TableLookup)
-    requires WFTableIndex(tl.ti)
+    requires TreeDisk.WFTableIndex(tl.ti)
 {
     && |tl.sectors| == k.tableSectors
     && (forall off :: 0 <= off < k.tableSectors ==>
@@ -127,7 +128,7 @@ predicate TableInView(k:Constants, view:View, tl:TableLookup)
 predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 {
     && SectorInView(view, SUPERBLOCK_LBA(), super)
-    && super == Superblock(ti)
+    && super == TreeDisk.Superblock(ti)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -135,7 +136,7 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 
 predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
 {
-    && SectorInView(s.view, LbaForNba(k, nba), TreeDisk.NodeSector(node))
+    && SectorInView(s.cache, LbaForNba(k, nba), TreeDisk.NodeSector(node))
     // We toss WFNode in here to keep other expressions tidy; as with any WF, this can
     // create a liveness problem (can't read that disk sector with a malformed node).
     // Even if we don't prove liveness, we can mitigate that concern by including a
@@ -144,14 +145,14 @@ predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
 }
 
 predicate KnowTable(k:Constants, s:Variables, tl:TableLookup)
-    requires WFTableIndex(ti)
+    requires TreeDisk.WFTableIndex(tl.ti)
 {
-    TableInView(k, s.view, tl)
+    TableInView(k, s.cache, tl)
 }
 
 predicate KnowPersistentTableIndex(k:Constants, s:Variables, ti:TableIndex, super:Sector)
 {
-    PersistentTableIndexInView(s.view, ti, super)
+    PersistentTableIndexInView(s.cache, ti, super)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -171,7 +172,7 @@ predicate RangeContains(range:Range, key:Key)
 
 predicate ValidSlotIndex(node:Node, idx:int)
 {
-     0 <= idx < |node.children|
+     0 <= idx < |node.slots|
 }
 
 // If all of node's keys are bounded by nodeRange, then
@@ -182,7 +183,7 @@ function RangeBoundForSlotIdx(node:Node, nodeRange:Range, idx:int) : (range:Rang
 {
     Range(
         if idx==0 then nodeRange.loinc else node.pivots[idx-1],
-        if idx==|node.children|-1 then nodeRange.hiexc else node.pivots[idx])
+        if idx==|node.slots|-1 then nodeRange.hiexc else node.pivots[idx])
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -212,21 +213,28 @@ predicate LookupHonorsPointerLinks(lookup:Lookup)
         then layer.addr == ROOT_ADDR()
         else
             var uplayer := lookup.layers[i-1];
-            uplayer.node.children[uplayer.slot] == Pointer(layer.addr)
+            uplayer.node.slots[uplayer.slot] == TreeDisk.Pointer(layer.addr)
+}
+
+function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
+    requires 0<=i<|lookup.layers|
+{
+    if i==0 then FULL_RANGE() else lookup.layers[i-1].slotRange
 }
 
 predicate LookupHonorsRanges(lookup:Lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
-        && var nodeRange := if i==0 then FULL_RANGE else lookup.layers[i-1].slotRange;
-        && RangeBoundForSlotIdx(layer.node, nodeRange, layer.slot) == layer.slotRange
+        && var layer := lookup.layers[i];
+        && RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
 }
 
 predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
-    requires WFLookup(k, lookup)
+    requires LookupHasValidLayers(k, lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
-        && CachedNodeRead(k, s, lookup.table[layer.addr], lookup.node)
+        && var layer := lookup.layers[i];
+        && CachedNodeRead(k, s, lookup.tl.table[layer.addr], layer.node)
 }
 
 predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
@@ -240,9 +248,9 @@ predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
 
 predicate SlotSatisfiesQuery(slot:Slot, datum:Datum)
 {
-    || (child.Value? && child.datum == datum)
-    || (child.Value? && child.datum.key != datum.key && datum.value == EmptyValue())
-    || (child.Empty? && datum.value == EmptyValue())
+    || (slot.Value? && slot.datum == datum)
+    || (slot.Value? && slot.datum.key != datum.key && datum.value == EmptyValue())
+    || (slot.Empty? && datum.value == EmptyValue())
 }
 
 // The slot to which this lookup leads.
@@ -276,7 +284,7 @@ predicate CrashAction(k:Constants, s:Variables, s':Variables)
 }
 
 // You can make an ephemeral table ready to write
-predicate RecoverAction(k:Constants, s:Variables, s':Variables, persistentTl:TableLookup)
+predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, persistentTl:TableLookup)
 {
     && !s.ready
     && KnowPersistentTableIndex(k, s, persistentTl.ti, super)
@@ -313,9 +321,30 @@ datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
 
 predicate InitTable(table:Table, rootNba:NBA)
 {
-    && table[ROOT_ADDR] == rootNba
+    && table[ROOT_ADDR()] == rootNba
     && (forall addr :: 0 <= addr < |table| && addr != ROOT_ADDR()
         ==> table[addr].Unused?)
+}
+
+function {:opaque} EmptyView() : (view:View)
+    ensures view.Keys == {}
+{
+    var view:View :| view.Keys == {}; view
+}
+
+
+function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lbaLimit:LBA) : (view:View)
+    ensures forall lba :: TreeDisk.ValidLBA(k, lba) && lba < lbaLimit ==> lba in view && view[lba] == s.sectors[lba]
+{
+    if lbaLimit == 0
+    then EmptyView()
+    else ViewOfDiskDef(k, s, lbaLimit-1)[lbaLimit-1 := s.sectors[lbaLimit-1]]
+}
+
+function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
+    ensures forall lba :: TreeDisk.ValidLBA(k, lba) ==> lba in view && view[lba] == s.sectors[lba]
+{
+    ViewOfDiskDef(k, s, k.size)
 }
 
 predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
@@ -325,10 +354,11 @@ predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
     && k.disk.size == DiskSize(k)
 
     // Empty persistent table
-    && PersistentTableIndexInView(s.disk.sectors, mkfs.tl.ti, mkfs.super)
-    && TableInView(k, s.disk.sectors, mkfs.tl)
-    && InitTable(mkfs.table, 0)
-    && s.disk.sectors[LbaForNba(k, 0)] == Node([], [Empty])
+    && PersistentTableIndexInView(ViewOfDisk(k.disk, s.disk), mkfs.tl.ti, mkfs.super)
+    && TableInView(k, ViewOfDisk(k.disk, s.disk), mkfs.tl)
+    // I arbitrarily demand that the root block be stored in node data sector 0.
+    && InitTable(mkfs.tl.table, Used(0))
+    && s.disk.sectors[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(TreeDisk.Node([], [TreeDisk.Empty]))
 }
 
 predicate Init(k:Constants, s:Variables)
