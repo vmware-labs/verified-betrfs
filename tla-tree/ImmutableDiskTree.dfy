@@ -45,7 +45,7 @@ type Sector = TreeDisk.Sector
 type View = map<LBA, Sector>    // A view of the disk, either through a cache or just by looking at the disk.
 
 datatype CacheLineState = Dirty | Clean
-datatype CacheLine = CacheLine(sector:Sector, dirty:CacheLineState)
+datatype CacheLine = CacheLine(sector:Sector, state:CacheLineState)
 type Cache = map<LBA, CacheLine>
 function {:opaque} ViewOfCache(cache:Cache) : View
 {
@@ -104,18 +104,27 @@ predicate WFNode(node:Node) {
     |node.pivots| == |node.slots| - 1
 }
 
+predicate WFVariables(k:Constants, s:Variables)
+{
+    WFTable(k, s.ephemeralTable)  // maintained as an invariant, so not unreasonable to conjoin to actions.
+}
+
 function ROOT_ADDR() : int { 0 }    // Address of the root node in either table
 
 // We assume marshalling and unmarshalling functions for Tables to sectors.
-function UnmarshallTable(k:Constants, sectors:seq<Sector>) : Table
+function UnmarshallTable(k:Constants, sectors:seq<Sector>) : (tbl:Table)
     requires |sectors| == k.tableSectors
+    ensures WFTable(k, tbl)
 
-function MarshallTable(k:Constants, t:Table) : (sectors:seq<Sector>)
+function MarshallTable(k:Constants, tbl:Table) : (sectors:seq<Sector>)
+    requires WFTable(k, tbl)
     ensures |sectors| == k.tableSectors
 
 lemma {:axiom} Marshalling(k:Constants)
-    ensures forall t :: UnmarshallTable(k, MarshallTable(k, t)) == t
-    ensures forall sectors :: UnmarshallTable(k, MarshallTable(k, sectors)) == sectors    // a bit too strong?
+    ensures forall t :: WFTable(k, t) ==>
+        UnmarshallTable(k, MarshallTable(k, t)) == t
+    ensures forall sectors :: |sectors| == k.tableSectors ==>
+        MarshallTable(k, UnmarshallTable(k, sectors)) == sectors    // a bit too strong?
 
 ///////////////////////////////////////////////////////////////////////////////////////
 // The view predicates are usable either on the cache (running case) or against the
@@ -133,7 +142,8 @@ function TableBegin(k:Constants, ti:TableIndex) : LBA
     1 + k.tableSectors * ti
 }
 
-datatype TableLookup = TableLookup(ti:TableIndex, table:Table, sectors:seq<Sector>)
+// Everything you need to look up the persistent table
+datatype TableLookup = TableLookup(super:Sector, ti:TableIndex, table:Table, sectors:seq<Sector>)
 
 predicate WFTableLookup(k:Constants, tl:TableLookup)
 {
@@ -141,14 +151,29 @@ predicate WFTableLookup(k:Constants, tl:TableLookup)
     && WFTable(k, tl.table)
 }
 
+predicate ValidTableOffset(k:Constants, tableOffset:int)
+{
+    0 <= tableOffset < k.tableEntries
+}
+
+predicate ValidTableSectorIndex(k:Constants, tblSectorIdx:int)
+{
+    0 <= tblSectorIdx < k.tableSectors
+}
+
+function LbaForTableOffset(k:Constants, ti:TableIndex, tblSectorIdx:int) : LBA
+    requires TreeDisk.WFTableIndex(ti)
+    requires ValidTableSectorIndex(k, tblSectorIdx)
+{
+    TableBegin(k, ti) + tblSectorIdx
+}
+
 predicate TableInView(k:Constants, view:View, tl:TableLookup)
     requires TreeDisk.WFTableIndex(tl.ti)
 {
     && |tl.sectors| == k.tableSectors
-    && (forall off :: 0 <= off < k.tableSectors ==>
-        && var lba := off + TableBegin(k, tl.ti);
-        && SectorInView(view, lba, tl.sectors[off])
-       )
+    && (forall sectorIdx :: ValidTableSectorIndex(k, sectorIdx) ==>
+            SectorInView(view, LbaForTableOffset(k, tl.ti, sectorIdx), tl.sectors[sectorIdx]))
     && tl.table == UnmarshallTable(k, tl.sectors)
 }
 
@@ -156,6 +181,7 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 {
     && SectorInView(view, SUPERBLOCK_LBA(), super)
     && super == TreeDisk.Superblock(ti)
+    && TreeDisk.WFTableIndex(ti)    // If you need to fsck, this spec stalls.
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -181,6 +207,12 @@ predicate KnowTable(k:Constants, s:Variables, tl:TableLookup)
 predicate KnowPersistentTableIndex(k:Constants, s:Variables, ti:TableIndex, super:Sector)
 {
     PersistentTableIndexInView(ViewOfCache(s.cache), ti, super)
+}
+
+predicate KnowPersistentTable(k:Constants, s:Variables, tl:TableLookup)
+{
+    && KnowPersistentTableIndex(k, s, tl.ti, tl.super)
+    && KnowTable(k, s, tl)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -223,12 +255,11 @@ datatype Layer = Layer(
     slotRange:Range     // the range that bounds this slot (and hence the node below)
     )
 
-datatype Lookup = Lookup(layers:seq<Layer>, tl:TableLookup)
+datatype Lookup = Lookup(layers:seq<Layer>)
 
 predicate WFLookup(k:Constants, lookup:Lookup)
 {
-    && 0 < |lookup.layers|
-    && WFTableLookup(k, lookup.tl)
+    0 < |lookup.layers|
 }
 
 predicate LookupHasValidNodes(lookup:Lookup)
@@ -282,11 +313,12 @@ predicate LookupHonorsRanges(lookup:Lookup)
 
 predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
     requires WFLookup(k, lookup)
+    requires WFTable(k, s.ephemeralTable)
     requires LookupHasValidAddresses(k, lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==> (
         && var layer := lookup.layers[i];
-        && var nba := lookup.tl.table[layer.addr];
+        && var nba := s.ephemeralTable[layer.addr];
         && nba.Used?
         && CachedNodeRead(k, s, nba, layer.node)
     )
@@ -300,7 +332,7 @@ predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
     && LookupHasValidAddresses(k, lookup)
     && LookupHonorsPointerLinks(lookup)
     && LookupHonorsRanges(lookup)
-    && KnowTable(k, s, lookup.tl)
+    && WFTable(k, s.ephemeralTable)
     && LookupMatchesCache(k, s, lookup)
 }
 
@@ -374,26 +406,45 @@ function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
     else NodeInsertSlots(node, idx, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
 }
 
-predicate AllocateNBA(k:Constants, s:Variables, nba:NBA)
+predicate NBAUnusedInTable(k:Constants, table:Table, nba:NBA)
+    requires WFTable(k, table)
+{
+    forall offset :: ValidTableOffset(k, offset) ==> table[offset] != nba
+    
+}
+
+predicate AllocateNBA(k:Constants, s:Variables, nba:NBA, persistentTl:TableLookup)
+    requires WFTable(k, s.ephemeralTable)
 {
     && nba.Used?
-    && true    // TODO
+    // Not used in the ephemeral table
+    && NBAUnusedInTable(k, s.ephemeralTable, nba)
+    // And not used in the persistent table
+    && KnowPersistentTable(k, s, persistentTl)
+    && NBAUnusedInTable(k, persistentTl.table, nba)
 }
 
 predicate AllocateAddr(k:Constants, s:Variables, childAddr:int)
+    requires WFTable(k, s.ephemeralTable)
 {
     && 0 <= childAddr < k.tableEntries
-    && true // TODO
+    && s.ephemeralTable[childAddr].Unused?
+}
+
+function WriteSectorToCache(k:Constants, cache:Cache, lba:LBA, sector:Sector) : Cache
+{
+    cache[lba := CacheLine(sector, Dirty)]
 }
 
 function WriteNodeToCache(k:Constants, cache:Cache, nba:NBA, node:Node) : Cache
     requires nba.Used?
 {
-    cache[LbaForNba(k, nba) := CacheLine(TreeDisk.NodeSector(node), Dirty)]
+    WriteSectorToCache(k, cache, LbaForNba(k, nba), TreeDisk.NodeSector(node))
 }
 
 datatype NodeEdit = NodeEdit(   // What you need to know to edit a slot of a node in the tree:
     lookup:Lookup,              // Path to the adjusted node, to prove that it belongs to the tree
+    tableLookup:TableLookup,    // Requir
     replacementNba:NBA,         // node address for the replacement node (with the changed slot)
     replacementNode:Node        // the new node that will replace the one being edited
     )
@@ -410,9 +461,9 @@ function EditLast(edit:NodeEdit) : Layer
 predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
 {
     && s.ready
+    && WFVariables(k, s)
     && LookupSatisfiesQuery(k, s, edit.lookup, datum)
-    && AllocateNBA(k, s, edit.replacementNba)
-    && WFTable(k, s.ephemeralTable)  // maintained as invariant
+    && AllocateNBA(k, s, edit.replacementNba, edit.tableLookup)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
     && s'.cache == WriteNodeToCache(k, s.cache, edit.replacementNba, edit.replacementNode)
@@ -467,8 +518,6 @@ predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int,
     && ChildEquivalentToSlotGroup(directNode, replacedSlot, indirectNode, childAddr, childNode)
 }
 
-// TODO you know what we need around here? The commit operation!
-
 datatype Janitorial = Janitorial(
     edit:NodeEdit,              // The Lookup and edit info for the parent node being modified
     childAddr:int,              // table index where child is coming from or allocated to
@@ -482,9 +531,9 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     requires ValidAddress(k, j.childAddr)
 {
     && s.ready
+    && WFVariables(k, s)
     && ValidLookup(k, s, j.edit.lookup)
-    && AllocateNBA(k, s, j.edit.replacementNba)
-    && WFTable(k, s.ephemeralTable)  // maintained as invariant
+    && AllocateNBA(k, s, j.edit.replacementNba, j.edit.tableLookup)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
 
@@ -503,7 +552,8 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 
 predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
-    && AllocateNBA(k, s, j.childNba)
+    && WFTable(k, s.ephemeralTable) // mai
+    && AllocateNBA(k, s, j.childNba, j.edit.tableLookup)
     && AllocateAddr(k, s, j.childAddr)
     && JanitorialAction(k, s, s', j)
     && ChildEquivalentToSlotGroupForExpand(EditLast(j.edit).node, EditLast(j.edit).slot, j.edit.replacementNode, j.childAddr, j.childNode)
@@ -512,8 +562,8 @@ predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 
 predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
+    && WFVariables(k, s)
     && ValidAddress(k, j.childAddr)
-    && WFTable(k, s.ephemeralTable)  // maintained as invariant
     && s.ephemeralTable[j.childAddr].Used?
     && j.childNba == s.ephemeralTable[j.childAddr]
     && JanitorialAction(k, s, s', j)
@@ -523,6 +573,65 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && j.childNba' == Unused  // free the child reference
 }
 
+predicate WriteCore(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
+{
+    && s.ready
+
+    && TreeDisk.Write(k.disk, s.disk, s'.disk, lba, sector)
+    && s'.cache == s.cache[lba := CacheLine(sector, Clean)]
+    && s'.ephemeralTable == s.ephemeralTable
+    && s'.ready == true
+}
+
+// It's always okay to write back cached sectors, whenever we feel like it,
+// except: we can't write back the superblock pointer; that's a Commit.
+predicate WriteBackAction(k:Constants, s:Variables, s':Variables, lba:LBA)
+{
+    && 1 <= lba < DiskSize(k)
+    && lba in s.cache
+    && WriteCore(k, s, s', lba, s.cache[lba].sector)
+}
+
+// Dirty a sector that stores the ephemeral table.
+predicate EmitTableAction(k:Constants, s:Variables, s':Variables, persistentTi:TableIndex, super:Sector, tblSectorIdx:int)
+{
+    && s.ready
+    && WFVariables(k, s)
+    && KnowPersistentTableIndex(k, s, persistentTi, super)
+    && var ephemeralTi := TreeDisk.OppositeTableIndex(persistentTi);
+    && ValidTableSectorIndex(k, tblSectorIdx)
+    && var lba := LbaForTableOffset(k, ephemeralTi, tblSectorIdx);
+    // Actually, once we've constrained ti and ValidTableOffset, we've got an
+    // lba in the ephemeral table region; we can write whatever we want there.
+    // The next line is just good advice about what might help to write. :v) 
+    && var sector := MarshallTable(k, s.ephemeralTable)[tblSectorIdx];
+    
+    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && s'.cache == WriteSectorToCache(k, s'.cache, lba, sector)
+    && s'.ephemeralTable == s.ephemeralTable
+    && s'.ready == true
+}
+
+predicate CacheIsClean(cache:Cache)
+{
+    forall lba :: lba in cache ==> cache[lba].state.Clean?
+}
+
+// Once we've written enough sectors (both table and node), life is good! Flip
+// the flag.
+// TODO For this version, we'll be simple and just demand that every line of
+// the cache be Clean.
+predicate CommitAction(k:Constants, s:Variables, s':Variables, persistentTi:TableIndex, super:Sector)
+{
+    && s.ready
+    && KnowPersistentTableIndex(k, s, persistentTi, super)
+    && var ephemeralTi := TreeDisk.OppositeTableIndex(persistentTi);
+    && var super := TreeDisk.Superblock(ephemeralTi);
+    && CacheIsClean(s.cache)
+
+    // Write the new superblock THROUGH the cache. Everything in the cache stays clean.
+    && WriteCore(k, s, s', SUPERBLOCK_LBA(), super)
+}
 
 // TODO trusted code
 predicate CrashAction(k:Constants, s:Variables, s':Variables)
