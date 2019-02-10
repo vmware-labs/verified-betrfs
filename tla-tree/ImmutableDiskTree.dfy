@@ -325,6 +325,9 @@ predicate QueryAction(k:Constants, s:Variables, s':Variables, datum:Datum, looku
     && s' == s
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// Mutations
+
 function NodeReplaceSlot(node:Node, i:int, slot:Slot) : Node
     requires WFNode(node)
     requires 0<=i<|node.slots|
@@ -360,111 +363,91 @@ function ReplaceSlotForInsert(node:Node, slot:int, newDatum:Datum) : Node
     else NodeInsertSlots(node, slot, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
 }
 
-// This tree requires you to replace the entire tree (in memory) on each mutation. I'm okay with that.
-datatype ReplacementLayer = ReplacementLayer(
-    addr:int,       // The newly allocated addr
-    node:Node,      // the node at the addr
-    )
-datatype Mutation = Mutation(lookup:Lookup, rlayers:seq<ReplacementLayer>)
-
-predicate LayerReplaces(k:Constants, s:Variables, mnode:Node, childAddr:int, layer:Layer)
-{
-    var lnode := layer.node;
-    && mnode.pivots == lnode.pivots
-    && |mnode.slots| == |lnode.pivots|
-    && (forall i :: 0<=i<|mnode.slots| ==>
-        mnode.slots[i] ==
-            if i==layer.slot then TreeDisk.Pointer(childAddr) else lnode.slots[i]
-       )
-}
-
-predicate ValidAncestorReplacements(k:Constants, s:Variables, mutation:Mutation)
-// TODO do we really need k, s? Probably for preconditions...
-{
-    && |mutation.rlayers| == |mutation.lookup.layers|
-    && (forall i :: 0 <= i < |mutation.rlayers|-1 ==>
-        LayerReplaces(k, s, mutation.rlayers[i].node, mutation.rlayers[i+1].addr, mutation.lookup.layers[i]))
-}
-
-predicate ReplacementsAllocated(k:Constants, s:Variables, mutation:Mutation)
-{
-}
-
-predicate ValidMutation(k:Constants, s:Variables, mutation:Mutation)
-{
-    && ValidLookup(k, s, mutation.lookup)
-    && ValidAncestorReplacements(k, s, mutation)
-}
-
-// s' cache & ephemeralTable reflects mutation.
-predicate ApplyMutation(k:Constants, s:Variables, s':Variables, mutation:Mutation)
-{
-}
-
-// A common action for slot replacements. Caller adds enabling conditions that shape the mutation.
-predicate Replace(k:Constants, s:Variables, s':Variables, mutation:Mutation)
+predicate InsertAction(k:Constants, s:Variables, s':Variables, datum:Datum)
 {
     && s.ready
-    && ValidMutation(k, s, mutation)
+    && LookupSatisfiesQuery(k, s, lookup, datum)
+    && AllocateNode(replacementNba)
+    && newNode == ReplaceSlotForInsert(lastLayer.node, lastLayer.slot, datum)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
-    && ApplyMutation(k, s, s', mutation.rlayers)    
-    && s'.ready == s.ready
+    && s'.cache == s.cache[replacementNba := newNode]
+    && var lastLayer := Last(lookup.layers);
+    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to newNode.
+    && s'.ephemeralTable == s.ephemeralTable[lastLayer.addr := replacementNba]
 }
 
-predicate InsertAction(k:Constants, s:Variables, s':Variables, datum:Datum, mutation:Mutation)
+predicate DeleteAction(k:Constants, s:Variables, s':Variables, datum:Datum)
 {
-    && Replace(k, s, s', mutation)
-    && LookupSatisfiesQuery(k, s, mutation.lookup, datum)
+    && s.ready
+    && LookupSatisfiesQuery(k, s, lookup, datum)
+    && AllocateNode(replacementNba)
+    // Delete is an un-insert.
+    && lastLayer.node == ReplaceSlotForInsert(newNode, lastLayer.slot, datum)
 
-    && var lastL := Last(mutation.lookup.layers);
-    && var lastM := Last(mutation.rlayers);
-    && lastM.node == ReplaceSlotForInsert(lastL.node, lastL.slot, datum)
+    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && s'.cache == s.cache[replacementNba := newNode]
+    && var lastLayer := Last(lookup.layers);
+    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to newNode.
+    && s'.ephemeralTable == s.ephemeralTable[lastLayer.addr := replacementNba]
 }
 
-predicate DeleteAction(k:Constants, s:Variables, s':Variables, datum:Datum, mutation:Mutation)
-{
-    && Replace(k, s, s', mutation)
-    && LookupSatisfiesQuery(k, s, mutation.lookup, datum)
-
-    // "undo" an insert
-    && var lastL := Last(mutation.lookup.layers);
-    && var lastM := Last(mutation.rlayers);
-    && lastL.node == ReplaceSlotForInsert(lastM.node, lastL.slot, datum)
-}
-
-datatype Tidy = Tidy(mutation:Mutation, victimAddr:int, victimNode:Node)
-
-predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:NBA, childNode:node)
+predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:NBA, childNode:Node)
 {
     && directNode == NodeInsertSlots(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
     && indirectNode.slots[replacedSlot] == TreeDisk.Pointer(childAddr)
 }
 
-// Contract is a no-op "insert"
-predicate ContractAction(k:Constants, s:Variables, s':Variables, tidy:Tidy)
+// TODO you know what we need around here? The commit operation!
+
+datatype Janitorial = Janitorial(
+    lookup:Lookup,              // Path to the adjusted node, to prove that it belongs to the tree
+    replacementNba:NBA,         // node address for the new node
+    replacementNode:Node,       // the new node that will replace the one being expanded from/contracted into
+    childAddr:int,              // table index where child is coming from or allocated to
+    childNba:NBA,               // node address where child is coming from or allocated to
+    childNode:Node,             // child node exchanging places with subrange of parent slots
+    childNba':NBA               // the table reference for childAddr after the action
+    )
+
+predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
-    && Replace(k, s, s', tidy.mutation)
-    && ValidLookup(k, s, lookup)
-    && CachedNodeRead(k, s, tidy.victimAddr, tidy.victimNode)   // this node is already prepared
-    && AllocateOkay(tidy.victimAddr)
-    && ChildEquivalentToSlotGroup(lastM.node, lastL.slot, lastM.node, tidy.victimAddr, tidy.victimNode)
+    && var lastLayer := Last(j.lookup.layers);
+    && s.ready
+    && ValidLookup(k, s, j.lookup)
+    && AllocateNode(j.replacementNba)
+
+    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+
+    // The second write (j.childNba) "writes" the child to memory in the expand
+    // case, and is a no-op in the contract case.
+    && s'.cache == j.updatedCache[j.replacementNba := j.replacementNode][j.childNba := j.childNode]
+
+    // Through the magic of table indirection, lastLayer.node's parent is
+    // suddenly switched to point to replacementNode.
+    && s'.ephemeralTable == j.updatedEphemeralTable[lastLayer.addr := j.replacementNba][j.childAddr := j.childNba']
+    && s'.ready
 }
 
-predicate ExpandAction(k:Constants, s:Variables, s':Variables, tidy:Tidy)
+predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
-    && Replace(k, s, s', tidy.mutation)
-    && ValidLookup(k, s, lookup)
-    && CachedNodeRead(k, s, tidy.victimAddr, tidy.victimNode)
-    && ChildEquivalentToSlotGroup(lastM.node, lastL.slot, lastM.node, tidy.victimAddr, tidy.victimNode)
+    && JanitorialAction(k, s, s', j)
+    && AllocateNode(childNba)
+    && AllocateAddr(childAddr)
+    && ChildEquivalentToSlotGroup(lastLayer.node, lastLayer.slot, replacementNode, childAddr, childNode)
+    && j.childNba' == childNba  // record the allocated reference
 }
 
+predicate ContractAction(k:Constants, s:Variables, s':Variables, datum:Datum)
+{
+    && JanitorialAction(k, s, s', j)
+    && childNba == s.ephemeralTable[childAddr]
+    && childAddr == lastLayer.node.slots[lastLayer.slot]
+    && CachedNodeRead(k, s, childNba, childNode)
+    && ChildEquivalentToSlotGroup(replacementNode, lastLayer.slot, lastLayer.node, childAddr, childNode)
+    && j.childNba' == Unused  // free the child reference
+}
 
-An insert typically changes a node to introduce a slot (may require a preceding Expand bg op).
-An delete typically changes a node to delete a slot (may require a preceding Contract bp op).
-
-An expand replaces a group of slots with a Pointer to a child containing those slots
-A contract replaces a Pointer slot with all of the child's slots.
 
 // TODO trusted code
 predicate CrashAction(k:Constants, s:Variables, s':Variables)
