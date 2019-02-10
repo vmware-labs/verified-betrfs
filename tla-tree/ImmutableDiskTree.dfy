@@ -44,6 +44,15 @@ type Sector = TreeDisk.Sector
 
 type View = map<LBA, Sector>    // A view of the disk, either through a cache or just by looking at the disk.
 
+datatype CacheLineState = Dirty | Clean
+datatype CacheLine = CacheLine(sector:Sector, dirty:CacheLineState)
+type Cache = map<LBA, CacheLine>
+function {:opaque} ViewOfCache(cache:Cache) : View
+{
+    map lba | lba in cache :: cache[lba].sector
+}
+
+
 datatype NBA = Unused | Used(lba:LBA)  // A Node Block Address gets offset into the node-sectors region of the disk.
 
 datatype Constants = Constants(
@@ -79,7 +88,7 @@ function LbaForNba(k:Constants, nba:NBA) : LBA
 
 datatype Variables = Variables(
     disk:TreeDisk.Variables,
-    cache:View,
+    cache:Cache,
     ephemeralTable:Table,    // The ephemeral table, ready to write out on a commit
 
     // True only once the ephemeral table has a history tracking back to the
@@ -155,7 +164,7 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
     requires nba.Used?
 {
-    && SectorInView(s.cache, LbaForNba(k, nba), TreeDisk.NodeSector(node))
+    && SectorInView(ViewOfCache(s.cache), LbaForNba(k, nba), TreeDisk.NodeSector(node))
     // We toss WFNode in here to keep other expressions tidy; as with any WF, this can
     // create a liveness problem (can't read that disk sector with a malformed node).
     // Even if we don't prove liveness, we can mitigate that concern by including a
@@ -166,12 +175,12 @@ predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
 predicate KnowTable(k:Constants, s:Variables, tl:TableLookup)
     requires TreeDisk.WFTableIndex(tl.ti)
 {
-    TableInView(k, s.cache, tl)
+    TableInView(k, ViewOfCache(s.cache), tl)
 }
 
 predicate KnowPersistentTableIndex(k:Constants, s:Variables, ti:TableIndex, super:Sector)
 {
-    PersistentTableIndexInView(s.cache, ti, super)
+    PersistentTableIndexInView(ViewOfCache(s.cache), ti, super)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -377,10 +386,10 @@ predicate AllocateAddr(k:Constants, s:Variables, childAddr:int)
     && true // TODO
 }
 
-function WriteNodeToView(k:Constants, view:View, nba:NBA, node:Node) : View
+function WriteNodeToCache(k:Constants, cache:Cache, nba:NBA, node:Node) : Cache
     requires nba.Used?
 {
-    view[LbaForNba(k, nba) := TreeDisk.NodeSector(node)]
+    cache[LbaForNba(k, nba) := CacheLine(TreeDisk.NodeSector(node), Dirty)]
 }
 
 datatype NodeEdit = NodeEdit(   // What you need to know to edit a slot of a node in the tree:
@@ -406,7 +415,7 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum
     && WFTable(k, s.ephemeralTable)  // maintained as invariant
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
-    && s'.cache == WriteNodeToView(k, s.cache, edit.replacementNba, edit.replacementNode)
+    && s'.cache == WriteNodeToCache(k, s.cache, edit.replacementNba, edit.replacementNode)
     // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
     && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr := edit.replacementNba]
     && s'.ready
@@ -481,8 +490,8 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 
     // The second write (j.childNba) "writes" the child to memory in the expand
     // case, and is a no-op in the contract case.
-    && s'.cache == WriteNodeToView(k,
-                    WriteNodeToView(k, s.cache, j.edit.replacementNba, j.edit.replacementNode),
+    && s'.cache == WriteNodeToCache(k,
+                    WriteNodeToCache(k, s.cache, j.edit.replacementNba, j.edit.replacementNode),
                     j.childNba, j.childNode)
 
     // Through the magic of table indirection, lastLayer.node's parent is
@@ -545,7 +554,7 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, pe
 predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
 {
     && TreeDisk.Read(k.disk, s.disk, s'.disk, lba, sector)
-    && s'.cache == s.cache[lba := sector]
+    && s'.cache == s.cache[lba := CacheLine(sector, Clean)]
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == s.ready
 }
