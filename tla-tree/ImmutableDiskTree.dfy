@@ -349,6 +349,9 @@ function NodeInsertSlots(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<S
 
 
 function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
+    requires WFNode(node)
+    requires ValidSlotIndex(node, idx)
+    requires !node.slots[idx].Pointer?
 {
     var slot := node.slots[idx];
 
@@ -364,15 +367,18 @@ function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
 
 predicate AllocateNBA(k:Constants, s:Variables, nba:NBA)
 {
-    true    // TODO
+    && nba.Used?
+    && true    // TODO
 }
 
 predicate AllocateAddr(k:Constants, s:Variables, childAddr:int)
 {
-    true // TODO
+    && 0 <= childAddr < k.tableEntries
+    && true // TODO
 }
 
 function WriteNodeToView(k:Constants, view:View, nba:NBA, node:Node) : View
+    requires nba.Used?
 {
     view[LbaForNba(k, nba) := TreeDisk.NodeSector(node)]
 }
@@ -384,41 +390,72 @@ datatype NodeEdit = NodeEdit(   // What you need to know to edit a slot of a nod
     )
 
 function EditLast(edit:NodeEdit) : Layer
+    requires 0 < |edit.lookup.layers|
 {
     Last(edit.lookup.layers)
 }
 
-predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+// This is a prototype action -- it has both enabling conditions and transition
+// relations.  The caller supplies an additional constraint that ensures the
+// 'edit' record does what its action needs.
+predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
 {
     && s.ready
     && LookupSatisfiesQuery(k, s, edit.lookup, datum)
     && AllocateNBA(k, s, edit.replacementNba)
-    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
+    && WFTable(k, s.ephemeralTable)  // maintained as invariant
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
     && s'.cache == WriteNodeToView(k, s.cache, edit.replacementNba, edit.replacementNode)
     // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
     && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr := edit.replacementNba]
+    && s'.ready
+}
+
+predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+{
+    && ApplyEdit(k, s, s', edit, datum)
+    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
+}
+
+// Delete is un-insert.
+predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, idx:int, deletedDatum:Datum)
+{
+    // Caller is 'existing' a newNode into being; we need to force it to satisfy the preconditions
+    // for ChildEquivalentToSlotGroup.
+    // (TODO We could just reduce things to this version, and accept the fact
+    // that this check will duplicate what the invariant already does.)
+    && WFNode(newNode)
+    && ValidSlotIndex(newNode, idx)
+    && !newNode.slots[idx].Pointer?
+    && oldNode == ReplaceSlotForInsert(newNode, idx, deletedDatum)
 }
 
 predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
 {
-    && s.ready
-    && LookupSatisfiesQuery(k, s, edit.lookup, datum)
-    && AllocateNBA(k, s, edit.replacementNba)
-    // Delete is un-insert.
-    && EditLast(edit).node == ReplaceSlotForInsert(edit.replacementNode, EditLast(edit).slot, datum)
-
-    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
-    && s'.cache == WriteNodeToView(k, s.cache, edit.replacementNba, edit.replacementNode)
-    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
-    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr := edit.replacementNba]
+    && ApplyEdit(k, s, s', edit, datum)
+    && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, datum)
 }
 
 predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:int, childNode:Node)
+    requires WFNode(indirectNode)
+    requires 0<=replacedSlot<|indirectNode.slots|
+    requires |childNode.slots| == |childNode.pivots| + 1
 {
     && directNode == NodeInsertSlots(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
     && indirectNode.slots[replacedSlot] == TreeDisk.Pointer(childAddr)
+}
+
+predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:int, childNode:Node)
+{
+    // Caller is 'existing' an indirectNode into being; we need to force it to satisfy the preconditions
+    // for ChildEquivalentToSlotGroup.
+    // (TODO We could just reduce things to this version, and accept the fact
+    // that this check will duplicate what the invariant already does.)
+    && WFNode(indirectNode)
+    && 0<=replacedSlot<|indirectNode.slots|
+    && |childNode.slots| == |childNode.pivots| + 1
+    && ChildEquivalentToSlotGroup(directNode, replacedSlot, indirectNode, childAddr, childNode)
 }
 
 // TODO you know what we need around here? The commit operation!
@@ -432,10 +469,13 @@ datatype Janitorial = Janitorial(
     )
 
 predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+    requires j.childNba.Used?
+    requires ValidAddress(k, j.childAddr)
 {
     && s.ready
     && ValidLookup(k, s, j.edit.lookup)
     && AllocateNBA(k, s, j.edit.replacementNba)
+    && WFTable(k, s.ephemeralTable)  // maintained as invariant
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
 
@@ -447,23 +487,27 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 
     // Through the magic of table indirection, lastLayer.node's parent is
     // suddenly switched to point to replacementNode.
-    && s'.ephemeralTable == s.ephemeralTable[EditLast(j.edit).addr := j.edit.replacementNba][j.childAddr := j.childNba']
+    && s'.ephemeralTable ==
+        s.ephemeralTable[EditLast(j.edit).addr := j.edit.replacementNba][j.childAddr := j.childNba']
     && s'.ready
 }
 
 predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
-    && JanitorialAction(k, s, s', j)
     && AllocateNBA(k, s, j.childNba)
     && AllocateAddr(k, s, j.childAddr)
-    && ChildEquivalentToSlotGroup(EditLast(j.edit).node, EditLast(j.edit).slot, j.edit.replacementNode, j.childAddr, j.childNode)
+    && JanitorialAction(k, s, s', j)
+    && ChildEquivalentToSlotGroupForExpand(EditLast(j.edit).node, EditLast(j.edit).slot, j.edit.replacementNode, j.childAddr, j.childNode)
     && j.childNba' == j.childNba  // record the allocated reference
 }
 
 predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
-    && JanitorialAction(k, s, s', j)
+    && ValidAddress(k, j.childAddr)
+    && WFTable(k, s.ephemeralTable)  // maintained as invariant
+    && s.ephemeralTable[j.childAddr].Used?
     && j.childNba == s.ephemeralTable[j.childAddr]
+    && JanitorialAction(k, s, s', j)
     && TreeDisk.Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
     && CachedNodeRead(k, s, j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
