@@ -53,7 +53,7 @@ function {:opaque} ViewOfCache(cache:Cache) : View
 }
 
 
-datatype NBA = Unused | Used(lba:LBA)  // A Node Block Address gets offset into the node-sectors region of the disk.
+datatype NBA = Unused | Used(nidx:int)  // A Node Block Address is an offset into the node-sectors region of the disk.
 
 datatype Constants = Constants(
     disk:TreeDisk.Constants,
@@ -80,10 +80,16 @@ function DiskSize(k:Constants) : int
     + k.tableEntries        // and a bunch of rewritable data sectors
 }
 
-function LbaForNba(k:Constants, nba:NBA) : LBA
-    requires nba.Used?
+predicate ValidNba(k:Constants, nba:NBA)
 {
-    HeaderSize(k) + nba.lba
+    && nba.Used?
+    && 0 <= nba.nidx < DiskSize(k) - HeaderSize(k)
+}
+
+function LbaForNba(k:Constants, nba:NBA) : LBA
+    requires ValidNba(k, nba)
+{
+    HeaderSize(k) + nba.nidx
 }
 
 datatype Variables = Variables(
@@ -188,7 +194,7 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 // These predicates are shorthands useful in the running case.
 
 predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
-    requires nba.Used?
+    requires ValidNba(k, nba)
 {
     && SectorInView(ViewOfCache(s.cache), LbaForNba(k, nba), TreeDisk.NodeSector(node))
     // We toss WFNode in here to keep other expressions tidy; as with any WF, this can
@@ -274,9 +280,19 @@ predicate LookupHasValidSlotIndices(lookup:Lookup)
         && ValidSlotIndex(layer.node, layer.slot)
 }
 
-predicate ValidAddress(k:Constants, addr:int)
+// Dafny weakness: You can build ValidAddress from ValidAddresses, but going
+// the other way gives "Error: a set comprehension must produce a finite set,
+// but Dafny's heuristics can't figure out..."
+function {:opaque} ValidAddresses(k:Constants) : set<int>
 {
-    0 <= addr < k.tableEntries
+    set addr | 0 <= addr < k.tableEntries
+}
+
+predicate ValidAddress(k:Constants, addr:int)
+    ensures ValidAddress(k, addr) ==> 0 <= addr < k.tableEntries
+{
+    reveal_ValidAddresses();
+    addr in ValidAddresses(k)
 }
 
 predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
@@ -319,7 +335,7 @@ predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
     forall i :: 0<=i<|lookup.layers| ==> (
         && var layer := lookup.layers[i];
         && var nba := s.ephemeralTable[layer.addr];
-        && nba.Used?
+        && ValidNba(k, nba)
         && CachedNodeRead(k, s, nba, layer.node)
     )
 }
@@ -406,17 +422,23 @@ function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
     else NodeInsertSlots(node, idx, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
 }
 
+function {:opaque} AllocatedNodeBlocks(k:Constants, table:Table) : set<NBA>
+    requires WFTable(k, table)
+{
+    reveal_ValidAddresses();
+    set addr | addr in ValidAddresses(k) && table[addr].Used? :: table[addr]
+}
+
 predicate NBAUnusedInTable(k:Constants, table:Table, nba:NBA)
     requires WFTable(k, table)
 {
-    forall offset :: ValidTableOffset(k, offset) ==> table[offset] != nba
-    
+    !(nba in AllocatedNodeBlocks(k, table))
 }
 
 predicate AllocateNBA(k:Constants, s:Variables, nba:NBA, persistentTl:TableLookup)
     requires WFTable(k, s.ephemeralTable)
 {
-    && nba.Used?
+    && ValidNba(k, nba)
     // Not used in the ephemeral table
     && NBAUnusedInTable(k, s.ephemeralTable, nba)
     // And not used in the persistent table
@@ -437,7 +459,7 @@ function WriteSectorToCache(k:Constants, cache:Cache, lba:LBA, sector:Sector) : 
 }
 
 function WriteNodeToCache(k:Constants, cache:Cache, nba:NBA, node:Node) : Cache
-    requires nba.Used?
+    requires ValidNba(k, nba)
 {
     WriteSectorToCache(k, cache, LbaForNba(k, nba), TreeDisk.NodeSector(node))
 }
@@ -534,6 +556,7 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && WFVariables(k, s)
     && ValidLookup(k, s, j.edit.lookup)
     && AllocateNBA(k, s, j.edit.replacementNba, j.edit.tableLookup)
+    && ValidNba(k, j.childNba)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
 
