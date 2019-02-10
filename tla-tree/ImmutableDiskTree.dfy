@@ -344,55 +344,78 @@ function NodeInsertSlots(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<S
 {
     TreeDisk.Node(
         node.pivots[..slot] + newPivots + node.pivots[slot..],
-        node.children[..slot] + newSlots + node.children[slot+1..])
+        node.slots[..slot] + newSlots + node.slots[slot+1..])
 }
 
 
-function ReplaceSlotForInsert(node:Node, slot:int, newDatum:Datum) : Node
-    requires !slot.Pointer
+function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
 {
-    var slot := node.slots[slot];
+    var slot := node.slots[idx];
 
     if slot.Empty? || newDatum.key == slot.datum.key
         // Replace an empty or same-key datum in place
-    then NodeReplaceSlot(node, slot, TreeDisk.Value(newDatum))
+    then NodeReplaceSlot(node, idx, TreeDisk.Value(newDatum))
     else if KeyLe(newDatum.key, slot.datum.key)
         // New datum goes to the left, so we'll split a pivot to the right with the old key
-    then NodeInsertSlots(node, slot, [slot.datum.key], [TreeDisk.Value(newDatum), slot])
+    then NodeInsertSlots(node, idx, [slot.datum.key], [TreeDisk.Value(newDatum), slot])
         // New datum goes to the right, so we'll split a pivot with the new key
-    else NodeInsertSlots(node, slot, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
+    else NodeInsertSlots(node, idx, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
 }
 
-predicate InsertAction(k:Constants, s:Variables, s':Variables, datum:Datum)
+predicate AllocateNBA(k:Constants, s:Variables, nba:NBA)
+{
+    true    // TODO
+}
+
+predicate AllocateAddr(k:Constants, s:Variables, childAddr:int)
+{
+    true // TODO
+}
+
+function WriteNodeToView(k:Constants, view:View, nba:NBA, node:Node) : View
+{
+    view[LbaForNba(k, nba) := TreeDisk.NodeSector(node)]
+}
+
+datatype NodeEdit = NodeEdit(   // What you need to know to edit a slot of a node in the tree:
+    lookup:Lookup,              // Path to the adjusted node, to prove that it belongs to the tree
+    replacementNba:NBA,         // node address for the replacement node (with the changed slot)
+    replacementNode:Node        // the new node that will replace the one being edited
+    )
+
+function EditLast(edit:NodeEdit) : Layer
+{
+    Last(edit.lookup.layers)
+}
+
+predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
 {
     && s.ready
-    && LookupSatisfiesQuery(k, s, lookup, datum)
-    && AllocateNode(replacementNba)
-    && newNode == ReplaceSlotForInsert(lastLayer.node, lastLayer.slot, datum)
+    && LookupSatisfiesQuery(k, s, edit.lookup, datum)
+    && AllocateNBA(k, s, edit.replacementNba)
+    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
-    && s'.cache == s.cache[replacementNba := newNode]
-    && var lastLayer := Last(lookup.layers);
-    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to newNode.
-    && s'.ephemeralTable == s.ephemeralTable[lastLayer.addr := replacementNba]
+    && s'.cache == WriteNodeToView(k, s.cache, edit.replacementNba, edit.replacementNode)
+    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
+    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr := edit.replacementNba]
 }
 
-predicate DeleteAction(k:Constants, s:Variables, s':Variables, datum:Datum)
+predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
 {
     && s.ready
-    && LookupSatisfiesQuery(k, s, lookup, datum)
-    && AllocateNode(replacementNba)
-    // Delete is an un-insert.
-    && lastLayer.node == ReplaceSlotForInsert(newNode, lastLayer.slot, datum)
+    && LookupSatisfiesQuery(k, s, edit.lookup, datum)
+    && AllocateNBA(k, s, edit.replacementNba)
+    // Delete is un-insert.
+    && EditLast(edit).node == ReplaceSlotForInsert(edit.replacementNode, EditLast(edit).slot, datum)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
-    && s'.cache == s.cache[replacementNba := newNode]
-    && var lastLayer := Last(lookup.layers);
-    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to newNode.
-    && s'.ephemeralTable == s.ephemeralTable[lastLayer.addr := replacementNba]
+    && s'.cache == WriteNodeToView(k, s.cache, edit.replacementNba, edit.replacementNode)
+    // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
+    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr := edit.replacementNba]
 }
 
-predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:NBA, childNode:Node)
+predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:int, childNode:Node)
 {
     && directNode == NodeInsertSlots(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
     && indirectNode.slots[replacedSlot] == TreeDisk.Pointer(childAddr)
@@ -401,9 +424,7 @@ predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirect
 // TODO you know what we need around here? The commit operation!
 
 datatype Janitorial = Janitorial(
-    lookup:Lookup,              // Path to the adjusted node, to prove that it belongs to the tree
-    replacementNba:NBA,         // node address for the new node
-    replacementNode:Node,       // the new node that will replace the one being expanded from/contracted into
+    edit:NodeEdit,              // The Lookup and edit info for the parent node being modified
     childAddr:int,              // table index where child is coming from or allocated to
     childNba:NBA,               // node address where child is coming from or allocated to
     childNode:Node,             // child node exchanging places with subrange of parent slots
@@ -412,39 +433,40 @@ datatype Janitorial = Janitorial(
 
 predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
-    && var lastLayer := Last(j.lookup.layers);
     && s.ready
-    && ValidLookup(k, s, j.lookup)
-    && AllocateNode(j.replacementNba)
+    && ValidLookup(k, s, j.edit.lookup)
+    && AllocateNBA(k, s, j.edit.replacementNba)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
 
     // The second write (j.childNba) "writes" the child to memory in the expand
     // case, and is a no-op in the contract case.
-    && s'.cache == j.updatedCache[j.replacementNba := j.replacementNode][j.childNba := j.childNode]
+    && s'.cache == WriteNodeToView(k,
+                    WriteNodeToView(k, s.cache, j.edit.replacementNba, j.edit.replacementNode),
+                    j.childNba, j.childNode)
 
     // Through the magic of table indirection, lastLayer.node's parent is
     // suddenly switched to point to replacementNode.
-    && s'.ephemeralTable == j.updatedEphemeralTable[lastLayer.addr := j.replacementNba][j.childAddr := j.childNba']
+    && s'.ephemeralTable == s.ephemeralTable[EditLast(j.edit).addr := j.edit.replacementNba][j.childAddr := j.childNba']
     && s'.ready
 }
 
 predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
     && JanitorialAction(k, s, s', j)
-    && AllocateNode(childNba)
-    && AllocateAddr(childAddr)
-    && ChildEquivalentToSlotGroup(lastLayer.node, lastLayer.slot, replacementNode, childAddr, childNode)
-    && j.childNba' == childNba  // record the allocated reference
+    && AllocateNBA(k, s, j.childNba)
+    && AllocateAddr(k, s, j.childAddr)
+    && ChildEquivalentToSlotGroup(EditLast(j.edit).node, EditLast(j.edit).slot, j.edit.replacementNode, j.childAddr, j.childNode)
+    && j.childNba' == j.childNba  // record the allocated reference
 }
 
-predicate ContractAction(k:Constants, s:Variables, s':Variables, datum:Datum)
+predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
     && JanitorialAction(k, s, s', j)
-    && childNba == s.ephemeralTable[childAddr]
-    && childAddr == lastLayer.node.slots[lastLayer.slot]
-    && CachedNodeRead(k, s, childNba, childNode)
-    && ChildEquivalentToSlotGroup(replacementNode, lastLayer.slot, lastLayer.node, childAddr, childNode)
+    && j.childNba == s.ephemeralTable[j.childAddr]
+    && TreeDisk.Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
+    && CachedNodeRead(k, s, j.childNba, j.childNode)
+    && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childNba' == Unused  // free the child reference
 }
 
