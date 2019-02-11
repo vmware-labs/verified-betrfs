@@ -400,7 +400,7 @@ predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, datum:Da
     && SlotSatisfiesQuery(TerminalSlot(k, lookup), datum)
 }
 
-predicate QueryAction(k:Constants, s:Variables, s':Variables, datum:Datum, lookup:Lookup)
+predicate QueryAction(k:Constants, s:Variables, s':Variables, lookup:Lookup, datum:Datum)
 {
     && s.ready
     && LookupSatisfiesQuery(k, s, lookup, datum)
@@ -854,6 +854,44 @@ predicate Init(k:Constants, s:Variables)
     && s.cache.Keys == {}
     // No constraint on ephemeralTable, because we'll use !s.ready to force a RecoveryAction.
     && s.ready == false // We'll simply RecoverAction the initial disk.
+}
+
+datatype Step =
+    | QueryActionStep(lookup:Lookup, datum:Datum)
+    | InsertActionStep(edit:NodeEdit, datum:Datum)
+    | DeleteActionStep(edit:NodeEdit, datum:Datum)
+    | ExpandActionStep(j:Janitorial)
+    | ContractActionStep(j:Janitorial)
+    | WriteBackActionStep(lba:LBA)
+    | EmitTableActionStep(persistentTi:TableIndex, super:Sector, tblSectorIdx:int)
+    | CommitActionStep(persistentTi:TableIndex, super:Sector)
+    | CrashActionStep
+    | RecoverActionStep(super:Sector, persistentTl:TableLookup)
+    | CacheFaultActionStep(lba:LBA, sector:Sector)
+    | CacheEvictActionStep(lba:LBA)
+
+predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+{
+    match step {
+        case  QueryActionStep(lookup, datum) => QueryAction(k, s, s', lookup, datum)
+        case  InsertActionStep(edit, datum) => InsertAction(k, s, s', edit, datum)
+        case  DeleteActionStep(edit, datum) => DeleteAction(k, s, s', edit, datum)
+        case  ExpandActionStep(j) => ExpandAction(k, s, s', j)
+        case  ContractActionStep(j) => ContractAction(k, s, s', j)
+        case  WriteBackActionStep(lba) => WriteBackAction(k, s, s', lba)
+        case  EmitTableActionStep(persistentTi, super, tblSectorIdx)
+                => EmitTableAction(k, s, s', persistentTi, super, tblSectorIdx)
+        case  CommitActionStep(persistentTi, super) => CommitAction(k, s, s', persistentTi, super)
+        case  CrashActionStep => CrashAction(k, s, s')
+        case  RecoverActionStep(super, persistentTl) => RecoverAction(k, s, s', super, persistentTl)
+        case  CacheFaultActionStep(lba, sector) => CacheFaultAction(k, s, s', lba, sector)
+        case  CacheEvictActionStep(lba) => CacheEvictAction(k, s, s', lba)
+    }
+}
+    
+predicate Next(k:Constants, s:Variables, s':Variables)
+{
+    exists step :: NextStep(k, s, s', step)
 }
 
 } // module
