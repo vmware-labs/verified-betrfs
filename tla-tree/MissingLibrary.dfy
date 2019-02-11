@@ -13,4 +13,11 @@ function {:opaque} MapRemove<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
     map j | j in m && j != k :: m[j]
 }
 
+datatype Option<V> = None | Some(value:V)
+
+function max(a:int, b:int) : int
+{
+    if a>b then a else b
+}
+
 } // module

@@ -31,7 +31,7 @@ datatype Sector =
 // parallel with ongoing activity. But I'm not sure it's worth frying that fish now, when we have
 // big data structure changes to make later.
 
-module CrashSafeTree {
+module ImmutableDiskTree {
 import opened MissingLibrary
 import opened KVTypes
 import TreeDisk
@@ -284,12 +284,13 @@ predicate LookupHasValidSlotIndices(lookup:Lookup)
 // the other way gives "Error: a set comprehension must produce a finite set,
 // but Dafny's heuristics can't figure out..."
 function {:opaque} ValidAddresses(k:Constants) : set<int>
+    ensures forall addr :: addr in ValidAddresses(k) <==> 0 <= addr < k.tableEntries
 {
     set addr | 0 <= addr < k.tableEntries
 }
 
 predicate ValidAddress(k:Constants, addr:int)
-    ensures ValidAddress(k, addr) ==> 0 <= addr < k.tableEntries
+    ensures ValidAddress(k, addr) <==> 0 <= addr < k.tableEntries
 {
     reveal_ValidAddresses();
     addr in ValidAddresses(k)
@@ -422,8 +423,9 @@ function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
     else NodeInsertSlots(node, idx, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
 }
 
-function {:opaque} AllocatedNodeBlocks(k:Constants, table:Table) : set<NBA>
+function {:opaque} AllocatedNodeBlocks(k:Constants, table:Table) : (alloc:set<NBA>)
     requires WFTable(k, table)
+    ensures forall nba :: nba in alloc ==> nba.Used?
 {
     reveal_ValidAddresses();
     set addr | addr in ValidAddresses(k) && table[addr].Used? :: table[addr]
@@ -716,8 +718,10 @@ function {:opaque} EmptyView() : (view:View)
 
 
 function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lbaLimit:LBA) : (view:View)
+    requires TreeDisk.WF(k, s)  // to bind |s.sectors| to k.size
     requires 0 <= lbaLimit <= |s.sectors|
-    ensures forall lba :: TreeDisk.ValidLBA(k, lba) && lba < lbaLimit ==> lba in view && view[lba] == s.sectors[lba]
+    ensures forall lba :: lba in view <==> (0 <= lba < lbaLimit && TreeDisk.ValidLBA(k, lba))
+    ensures forall lba :: TreeDisk.ValidLBA(k, lba) && 0 <= lba < lbaLimit ==> view[lba] == s.sectors[lba]
     decreases lbaLimit
 {
     if lbaLimit == 0
@@ -725,21 +729,60 @@ function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lba
     else ViewOfDiskDef(k, s, lbaLimit-1)[lbaLimit-1 := s.sectors[lbaLimit-1]]
 }
 
+predicate FullViewDisk(k:TreeDisk.Constants, view:View)
+{
+    forall lba :: TreeDisk.ValidLBA(k, lba) <==> lba in view
+}
+
+predicate FullView(k:Constants, view:View) // more usable by adding DiskSize
+{
+    && k.disk.size == DiskSize(k)
+    && FullViewDisk(k.disk, view)
+}
+
 function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
     requires TreeDisk.WF(k, s)
-    ensures forall lba :: TreeDisk.ValidLBA(k, lba) ==> lba in view && view[lba] == s.sectors[lba]
+    ensures FullViewDisk(k, view)
+    ensures forall lba :: TreeDisk.ValidLBA(k, lba) ==> view[lba] == s.sectors[lba]
 {
     ViewOfDiskDef(k, s, k.size)
 }
 
+function {:opaque} SubsequenceFromFullView(k:Constants, view:View, start:LBA, count:int) : (s:seq<Sector>)
+    requires FullView(k, view)
+    requires 0<count
+    requires TreeDisk.ValidLBA(k.disk, start)
+    requires TreeDisk.ValidLBA(k.disk, start+count-1)
+    ensures |s| == count
+    ensures forall i :: 0<=i<count ==> view[start + i] == s[i]
+{
+    if count == 1
+    then [view[start]]
+    else SubsequenceFromFullView(k, view, start, count-1) + [view[start+count-1]]
+}
+
 datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
+
+// Constraints on just the configuration (Constants)
+predicate PlausibleDiskSize(k:Constants)
+{
+    && k.disk.size == DiskSize(k)
+    && 0 < k.tableSectors
+    && 0 < k.tableEntries
+}
+
+// Plausible, and the sectors map is correctly sized.
+predicate ValidDiskSize(k:Constants, s:Variables)
+{
+    && PlausibleDiskSize(k)
+    && TreeDisk.WF(k.disk, s.disk)
+}
 
 predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
 {
     // right-sized disk
     && TreeDisk.Init(k.disk, s.disk)
-    && k.disk.size == DiskSize(k)
-    && TreeDisk.WF(k.disk, s.disk)
+    && ValidDiskSize(k, s)
     && 0 < k.tableEntries
 
     // Empty persistent table
