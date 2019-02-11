@@ -53,13 +53,6 @@ predicate WFTreeView(tv:TreeView)
     && TreeShapedGraph(tv.gv)
 }
 
-function HeightAt(tv:TreeView, addr:TableAddress) : int
-    requires WFTreeView(tv)
-    requires ValidAddress(tv.gv.k, addr)
-{
-    GraphAddrHeightMap(tv.gv)[addr]
-}
-
 predicate SaneNodeInTreeView(tv:TreeView, addr:TableAddress)
 {
     && WFTreeView(tv)
@@ -72,14 +65,20 @@ function TVNode(tv:TreeView, addr:TableAddress) : Node
     NodeAt(tv.gv, addr)
 }
 
+function HeightAt(tv:TreeView, addr:TableAddress) : int
+    requires WFTreeView(tv)
+    requires addr in AllocatedAddresses(tv.gv.k, tv.gv.table)
+{
+    GraphAddrHeightMap(tv.gv)[addr]
+}
 
-// The datums at or below slot slotNum of the tree at table[addr].
-function {:opaque} ISlotView(tv:TreeView, addr:TableAddress, slotNum:int) : CrashableMap.View
+// The datums at or below slot slotIdx of the tree at table[addr].
+function {:opaque} ISlotView(tv:TreeView, addr:TableAddress, slotIdx:int) : CrashableMap.View
     requires SaneNodeInTreeView(tv, addr)
-    requires ValidSlotIndex(TVNode(tv, addr), slotNum)
+    requires ValidSlotIndex(TVNode(tv, addr), slotIdx)
     decreases HeightAt(tv, addr), 0
 {
-    var slot := TVNode(tv, addr).slots[slotNum];
+    var slot := TVNode(tv, addr).slots[slotIdx];
     match slot {
         case Empty => CrashableMap.EmptyMap()
         case Value(datum) => SingletonImap(datum.key, datum.value)

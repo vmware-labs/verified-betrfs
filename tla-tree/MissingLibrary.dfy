@@ -6,6 +6,12 @@ function Last<T>(s:seq<T>) : T  // TODO move to library
     s[|s|-1]
 }
 
+function {:opaque} EmptyMap<K(!new),V>(any:V) : (e:map<K,V>)
+    ensures e.Keys == {}
+{
+    map k | k in {} :: any
+}
+
 function {:opaque} MapRemove<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - {k}
     ensures forall j :: j in m' ==> m'[j] == m[j]

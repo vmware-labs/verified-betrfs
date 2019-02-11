@@ -127,7 +127,7 @@ function DefineHeightAddr(gv:GraphView, heightMap:AddrHeightMap, addr:TableAddre
     ensures h.Some? ==> 0<=h.value
 {
     if TableAt(gv.k, gv.table, addr).Unused?
-    then Some(0)
+    then None
     else
         var node := NodeAt(gv, addr);
         IncrementHeight(DefineHeightNonLeafPrefix(node, heightMap, |node.slots|))
@@ -157,7 +157,7 @@ function {:opaque} GraphAddrHeightMapDef(gv:GraphView, maxHeight:int) : (heightM
     reveal_NewHeights();
     if maxHeight == 0
     then
-        map addr | addr in ValidAddresses(gv.k) && TableAt(gv.k, gv.table, addr).Unused? :: 0
+        EmptyMap<TableAddress,int>(0)
     else
         var subMap := GraphAddrHeightMapDef(gv, maxHeight-1);
         var unionMap := MapUnionPreferB(NewHeights(gv, subMap), subMap);
@@ -170,9 +170,15 @@ function GraphAddrHeightMap(gv:GraphView) : AddrHeightMap
     GraphAddrHeightMapDef(gv, gv.k.tableEntries)
 }
 
-predicate HeightMapComplete(k:Constants, heightMap:AddrHeightMap)
+// This property eliminates cycles, since cycles are made from allocated nodes,
+// but cycles don't turn up in the heightMap.
+// TODO However, it doesn't disallow a forest (nodes disconnected from the root). We'll
+// want to sort that out to show that the allocated addresses don't leak unreachable nodes.
+predicate HeightMapComplete(gv:GraphView, heightMap:AddrHeightMap)
+    requires SaneTableInView(gv)
 {
-    heightMap.Keys == ValidAddresses(k)
+    && ROOT_ADDR() in heightMap
+    && heightMap.Keys == AllocatedAddresses(gv.k, gv.table)
 }
 
 // If there are no cycles, then every address can be assigned a height.
@@ -182,7 +188,7 @@ predicate CycleFree(gv:GraphView, heightMap:AddrHeightMap)
     && SaneTableInView(gv)
     && HeightMapNests(gv, heightMap)
     && HeightMapDecreases(gv, heightMap)
-    && HeightMapComplete(gv.k, heightMap)
+    && HeightMapComplete(gv, heightMap)
 }
 
 } // module
