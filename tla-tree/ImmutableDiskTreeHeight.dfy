@@ -133,8 +133,6 @@ function DefineHeightAddr(gv:GraphView, heightMap:AddrHeightMap, addr:TableAddre
         IncrementHeight(DefineHeightNonLeafPrefix(node, heightMap, |node.slots|))
 }
 
-//////////////////////////////////////////////////////////////////////////////
-
 function {:opaque} NewHeights(gv:GraphView, subMap:AddrHeightMap) : (heightMap:AddrHeightMap)
     requires SaneTableInView(gv)
     ensures WFHeightMap(heightMap)
@@ -147,50 +145,13 @@ function {:opaque} NewHeights(gv:GraphView, subMap:AddrHeightMap) : (heightMap:A
         :: DefineHeightAddr(gv, subMap, addr).value
 }
 
-lemma NewHeightsProps(gv:GraphView, maxHeight:int, newMap:AddrHeightMap, subMap:AddrHeightMap, unionMap:AddrHeightMap)
-    requires 0<maxHeight
-    requires SaneTableInView(gv)
-    requires WFHeightMap(newMap)
-    requires WFHeightMap(subMap)
-    requires unionMap == MapUnionPreferB(newMap, subMap)
-    requires subMap == SlotHeightMapDef(gv, maxHeight-1) 
-    requires newMap == NewHeights(gv, subMap)
-    requires HeightMapNests(gv, unionMap)
-    requires HeightMapDecreases(gv, subMap)
-    ensures WFHeightMap(unionMap)
-    ensures HeightMapDecreases(gv, unionMap)
-{
-    reveal_NewHeights();
-    forall addr, idx |
-            && addr in AllocatedAddresses(gv.k, gv.table)
-            && addr in unionMap
-            && ValidSlotIndex(NodeAt(gv, addr), idx)
-            && NodeAt(gv, addr).slots[idx].Pointer?
-        ensures unionMap[NodeAt(gv, addr).slots[idx].addr] < unionMap[addr]
-    {
-        if addr in subMap {
-            assert unionMap[NodeAt(gv, addr).slots[idx].addr] < unionMap[addr];
-        } else {
-            assert unionMap[addr] == NewHeights(gv, subMap)[addr];
-            assert unionMap[addr] == DefineHeightAddr(gv, subMap, addr).value;
-            var node := NodeAt(gv, addr);
-            assert AllSlotHeightsAtMost(node, subMap, |node.slots|, unionMap[addr]);
-            if unionMap[NodeAt(gv, addr).slots[idx].addr] >= unionMap[addr] {
-                //assert HeightForSlot(node.slots[idx], subMap) >= unionMap[addr];
-            }
-
-            assert unionMap[NodeAt(gv, addr).slots[idx].addr] < unionMap[addr];
-        }
-    }
-}
-
 function {:opaque} SlotHeightMapDef(gv:GraphView, maxHeight:int) : (heightMap:AddrHeightMap)
     requires 0<=maxHeight
     requires SaneTableInView(gv)
     ensures WFHeightMap(heightMap)
     ensures 0<maxHeight ==> SlotHeightMapDef(gv, maxHeight-1).Keys <= SlotHeightMapDef(gv, maxHeight).Keys
     ensures HeightMapNests(gv, heightMap)
-    //TODO ensures HeightMapDecreases(gv, heightMap)
+    ensures HeightMapDecreases(gv, heightMap)
     decreases maxHeight
 {
     reveal_NewHeights();
