@@ -10,17 +10,47 @@ import opened MissingLibrary
 import CrashableMap
 
 
-predicate Inv(k:Constants, v:Variables)
+function PersistentGraph(k:Constants, s:Variables) : (gv:GraphView)
+    requires PersistentGraphSane(k, s)
+    ensures SaneTableInView(gv)
 {
-    true
+    var view := ViewOfDisk(k.disk, s.disk);
+    var table := PersistentTable(k, view);
+    GraphView(k, table, view)
 }
+
+function EphemeralGraph(k:Constants, s:Variables) : GraphView
+    requires TreeDisk.WF(k.disk, s.disk)
+{
+    var table := s.ephemeralTable;
+    var view := ViewThroughCache(k, s);
+    GraphView(k, table, view)
+}
+
+predicate TreeShapedGraph(gv:GraphView)
+{
+    && SaneTableInView(gv)
+    && CycleFree(gv, GraphAddrHeightMap(gv))
+}
+
+predicate TreeInv(k:Constants, s:Variables)
+{
+    && PersistentGraphSane(k, s)
+    && TreeShapedGraph(PersistentGraph(k, s))
+    && SaneNodeInView(PersistentGraph(k, s),  ROOT_ADDR())
+
+    && TreeDisk.WF(k.disk, s.disk)
+    && TreeShapedGraph(EphemeralGraph(k, s))
+    && SaneNodeInView(EphemeralGraph(k, s),  ROOT_ADDR())
+}
+
+//////////////////////////////////////////////////////////////////////////////
 
 datatype TreeView = TreeView(gv:GraphView)
 
 predicate WFTreeView(tv:TreeView)
 {
-    && SaneTableInView(tv.gv)
-    && CycleFree(tv.gv, GraphAddrHeightMap(tv.gv))
+    && TreeShapedGraph(tv.gv)
 }
 
 function HeightAt(tv:TreeView, addr:TableAddress) : int
@@ -87,46 +117,53 @@ function ITreeView(tv:TreeView) : CrashableMap.View
     ISubtreeView(tv, ROOT_ADDR())
 }
 
-function EphemeralGraph(k:Constants, s:Variables) : GraphView
-{
-    var table := s.ephemeralTable;
-    var view := ViewThroughCache(k, s);
-    GraphView(k, table, view)
-}
-
 function EphemeralTreeView(k:Constants, s:Variables) : (tv:TreeView)
-    requires SaneTableInView(EphemeralGraph(k, s))   // TODO belongs in Inv
+    requires TreeDisk.WF(k.disk, s.disk)
+    requires TreeShapedGraph(EphemeralGraph(k, s))   // TODO belongs in Inv
     ensures WFTreeView(tv)
 {
     TreeView(EphemeralGraph(k, s))
 }
 
-function PersistentGraph(k:Constants, s:Variables) : GraphView
+predicate PersistentGraphSane(k:Constants, s:Variables) // TODO belongs in Inv
 {
-    var view := ViewOfDisk(k.disk, s.disk);
-    var table := PersistentTable(k, view);
-    GraphView(k, table, view)
+    && TreeDisk.WF(k.disk, s.disk)
+    && PlausibleDiskSize(k)
+    && var view := ViewOfDisk(k.disk, s.disk);
+    && TableBlocksTypeCorrect(k, view)
+    && var table := PersistentTable(k, view);
+    && WFTable(k, table)
+    && AllocatedNbasValid(k, table)
+    && FullView(k, view)
+    && AllocatedNodeBlocksTypeCorrect(k, view, table)
 }
 
 function PersistentTreeView(k:Constants, s:Variables) : (tv:TreeView)
-    requires SaneTableInView(PersistentGraph(k, s))   // TODO belongs in Inv
+    requires PersistentGraphSane(k, s)
+    requires TreeShapedGraph(PersistentGraph(k, s))   // TODO belongs in Inv
     ensures WFTreeView(tv)
 {
     TreeView(PersistentGraph(k, s))
 }
 
 function IEphemeralView(k:Constants, s:Variables) : CrashableMap.View
+    requires TreeDisk.WF(k.disk, s.disk)
+    requires TreeShapedGraph(EphemeralGraph(k, s))   // TODO belongs in Inv
+    requires SaneNodeInView(EphemeralGraph(k, s),  ROOT_ADDR()) // TODO Inv
 {
     ITreeView(EphemeralTreeView(k, s))
 }
 
 function IPersistentView(k:Constants, s:Variables) : CrashableMap.View
+    requires PersistentGraphSane(k, s)
+    requires TreeShapedGraph(PersistentGraph(k, s))   // TODO belongs in Inv
+    requires SaneNodeInView(PersistentGraph(k, s),  ROOT_ADDR()) // TODO Inv
 {
     ITreeView(PersistentTreeView(k, s))
 }
 
 function IViews(k:Constants, s:Variables) : seq<CrashableMap.View>
-    requires Inv(k, s)
+    requires TreeInv(k, s)
 {
     if s.ready
     then [IEphemeralView(k, s), IPersistentView(k, s)]
@@ -134,7 +171,7 @@ function IViews(k:Constants, s:Variables) : seq<CrashableMap.View>
 }
 
 function I(k:Constants, s:Variables) : CrashableMap.Variables
-    requires Inv(k, s)
+    requires TreeInv(k, s)
 {
     CrashableMap.Variables(IViews(k, s))
 }
