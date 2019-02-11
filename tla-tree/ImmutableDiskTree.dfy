@@ -754,6 +754,27 @@ function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lba
     else ViewOfDiskDef(k, s, lbaLimit-1)[lbaLimit-1 := s.sectors[lbaLimit-1]]
 }
 
+function ViewLbaThroughCache(k:Constants, s:Variables, lba:LBA) : Sector
+    requires TreeDisk.WF(k.disk, s.disk)
+    requires TreeDisk.ValidLBA(k.disk, lba)
+{
+    if lba in s.cache
+    then s.cache[lba].sector
+    else s.disk.sectors[lba]
+}
+
+function {:opaque} ViewThroughCacheDef(k:Constants, s:Variables, lbaLimit:LBA) : (view:View)
+    requires TreeDisk.WF(k.disk, s.disk)  // to bind |s.disk.sectors| to k.size
+    requires 0 <= lbaLimit <= |s.disk.sectors|
+    ensures forall lba :: lba in view <==> (0 <= lba < lbaLimit && TreeDisk.ValidLBA(k.disk, lba))
+    ensures forall lba :: TreeDisk.ValidLBA(k.disk, lba) && 0 <= lba < lbaLimit ==> view[lba] == ViewLbaThroughCache(k, s, lba)
+    decreases lbaLimit
+{
+    if lbaLimit == 0
+    then EmptyView()
+    else ViewThroughCacheDef(k, s, lbaLimit-1)[lbaLimit-1 := ViewLbaThroughCache(k, s, lbaLimit-1)]
+}
+
 predicate FullViewDisk(k:TreeDisk.Constants, view:View)
 {
     forall lba :: TreeDisk.ValidLBA(k, lba) <==> lba in view
@@ -771,6 +792,14 @@ function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
     ensures forall lba :: TreeDisk.ValidLBA(k, lba) ==> view[lba] == s.sectors[lba]
 {
     ViewOfDiskDef(k, s, k.size)
+}
+
+function ViewThroughCache(k:Constants, s:Variables) : (view:View)
+    requires TreeDisk.WF(k.disk, s.disk)
+    ensures FullViewDisk(k.disk, view)
+    ensures forall lba :: TreeDisk.ValidLBA(k.disk, lba) ==> view[lba] == ViewLbaThroughCache(k, s, lba)
+{
+    ViewThroughCacheDef(k, s, k.disk.size)
 }
 
 function {:opaque} SubsequenceFromFullView(k:Constants, view:View, start:LBA, count:int) : (s:seq<Sector>)

@@ -145,11 +145,11 @@ function {:opaque} NewHeights(gv:GraphView, subMap:AddrHeightMap) : (heightMap:A
         :: DefineHeightAddr(gv, subMap, addr).value
 }
 
-function {:opaque} SlotHeightMapDef(gv:GraphView, maxHeight:int) : (heightMap:AddrHeightMap)
+function {:opaque} GraphAddrHeightMapDef(gv:GraphView, maxHeight:int) : (heightMap:AddrHeightMap)
     requires 0<=maxHeight
     requires SaneTableInView(gv)
     ensures WFHeightMap(heightMap)
-    ensures 0<maxHeight ==> SlotHeightMapDef(gv, maxHeight-1).Keys <= SlotHeightMapDef(gv, maxHeight).Keys
+    ensures 0<maxHeight ==> GraphAddrHeightMapDef(gv, maxHeight-1).Keys <= GraphAddrHeightMapDef(gv, maxHeight).Keys
     ensures HeightMapNests(gv, heightMap)
     ensures HeightMapDecreases(gv, heightMap)
     decreases maxHeight
@@ -159,15 +159,15 @@ function {:opaque} SlotHeightMapDef(gv:GraphView, maxHeight:int) : (heightMap:Ad
     then
         map addr | addr in ValidAddresses(gv.k) && TableAt(gv.k, gv.table, addr).Unused? :: 0
     else
-        var subMap := SlotHeightMapDef(gv, maxHeight-1);
+        var subMap := GraphAddrHeightMapDef(gv, maxHeight-1);
         var unionMap := MapUnionPreferB(NewHeights(gv, subMap), subMap);
         unionMap
 }
 
-function SlotHeightMap(gv:GraphView) : AddrHeightMap
+function GraphAddrHeightMap(gv:GraphView) : AddrHeightMap
     requires SaneTableInView(gv)
 {
-    SlotHeightMapDef(gv, gv.k.tableEntries)
+    GraphAddrHeightMapDef(gv, gv.k.tableEntries)
 }
 
 predicate HeightMapComplete(k:Constants, heightMap:AddrHeightMap)

@@ -1,0 +1,142 @@
+include "ImmutableDiskTreeHeight.dfy"
+include "CrashableMap.dfy"
+
+module ImmutableDiskTreeInterpretation {
+import opened TreeTypes
+import opened ImmutableDiskTree
+import opened ImmutableDiskTreeInv
+import opened ImmutableDiskTreeHeight
+import opened MissingLibrary
+import CrashableMap
+
+
+predicate Inv(k:Constants, v:Variables)
+{
+    true
+}
+
+datatype TreeView = TreeView(gv:GraphView)
+
+predicate WFTreeView(tv:TreeView)
+{
+    && SaneTableInView(tv.gv)
+    && CycleFree(tv.gv, GraphAddrHeightMap(tv.gv))
+}
+
+function HeightAt(tv:TreeView, addr:TableAddress) : int
+    requires WFTreeView(tv)
+    requires ValidAddress(tv.gv.k, addr)
+{
+    GraphAddrHeightMap(tv.gv)[addr]
+}
+
+predicate SaneNodeInTreeView(tv:TreeView, addr:TableAddress)
+{
+    && WFTreeView(tv)
+    && SaneNodeInView(tv.gv, addr)
+}
+
+function TVNode(tv:TreeView, addr:TableAddress) : Node
+    requires SaneNodeInTreeView(tv, addr)
+{
+    NodeAt(tv.gv, addr)
+}
+
+
+// The datums at or below slot slotNum of the tree at table[addr].
+function {:opaque} ISlotView(tv:TreeView, addr:TableAddress, slotNum:int) : CrashableMap.View
+    requires SaneNodeInTreeView(tv, addr)
+    requires ValidSlotIndex(TVNode(tv, addr), slotNum)
+    decreases HeightAt(tv, addr), 0
+{
+    var slot := TVNode(tv, addr).slots[slotNum];
+    match slot {
+        case Empty => CrashableMap.EmptyMap()
+        case Value(datum) => SingletonImap(datum.key, datum.value)
+        case Pointer(addr) => ISubtreeView(tv, addr)
+    }
+}
+
+// The datums in the first slotCount slots of the tree at table[addr].
+function {:opaque} ISubtreePrefixView(tv:TreeView, addr:TableAddress, slotCount:int) : CrashableMap.View
+    requires SaneNodeInTreeView(tv, addr)
+    requires 0 <= slotCount <= |TVNode(tv, addr).slots|
+    requires SaneNodeInTreeView(tv, addr)
+    decreases HeightAt(tv, addr), 1, slotCount
+{
+    if slotCount==0
+    then CrashableMap.EmptyMap()
+    else ImapUnionPreferB(      // We don't prefer B; the pieces had better be disjoint!
+        ISubtreePrefixView(tv, addr, slotCount - 1),
+        ISlotView(tv, addr, slotCount - 1))
+}
+
+function ISubtreeView(tv:TreeView, addr:TableAddress) : CrashableMap.View
+    requires WFTreeView(tv)
+    requires SaneNodeInTreeView(tv, addr)
+    decreases HeightAt(tv, addr), 1
+{
+    var slotCount := |TVNode(tv, addr).slots|;
+    ISubtreePrefixView(tv, addr, slotCount)
+}
+
+function ITreeView(tv:TreeView) : CrashableMap.View
+    requires WFTreeView(tv)
+    requires SaneNodeInTreeView(tv, ROOT_ADDR())
+{
+    ISubtreeView(tv, ROOT_ADDR())
+}
+
+function EphemeralGraph(k:Constants, s:Variables) : GraphView
+{
+    var table := s.ephemeralTable;
+    var view := ViewThroughCache(k, s);
+    GraphView(k, table, view)
+}
+
+function EphemeralTreeView(k:Constants, s:Variables) : (tv:TreeView)
+    requires SaneTableInView(EphemeralGraph(k, s))   // TODO belongs in Inv
+    ensures WFTreeView(tv)
+{
+    TreeView(EphemeralGraph(k, s))
+}
+
+function PersistentGraph(k:Constants, s:Variables) : GraphView
+{
+    var view := ViewOfDisk(k.disk, s.disk);
+    var table := PersistentTable(k, view);
+    GraphView(k, table, view)
+}
+
+function PersistentTreeView(k:Constants, s:Variables) : (tv:TreeView)
+    requires SaneTableInView(PersistentGraph(k, s))   // TODO belongs in Inv
+    ensures WFTreeView(tv)
+{
+    TreeView(PersistentGraph(k, s))
+}
+
+function IEphemeralView(k:Constants, s:Variables) : CrashableMap.View
+{
+    ITreeView(EphemeralTreeView(k, s))
+}
+
+function IPersistentView(k:Constants, s:Variables) : CrashableMap.View
+{
+    ITreeView(PersistentTreeView(k, s))
+}
+
+function IViews(k:Constants, s:Variables) : seq<CrashableMap.View>
+    requires Inv(k, s)
+{
+    if s.ready
+    then [IEphemeralView(k, s), IPersistentView(k, s)]
+    else [IPersistentView(k, s)]
+}
+
+function I(k:Constants, s:Variables) : CrashableMap.Variables
+    requires Inv(k, s)
+{
+    CrashableMap.Variables(IViews(k, s))
+}
+
+} // module
