@@ -169,6 +169,11 @@ function IViews(k:Constants, s:Variables) : seq<CrashableMap.View>
     else [IPersistentView(k, s)]
 }
 
+function Ik(k:Constants) : CrashableMap.Constants
+{
+    CrashableMap.Constants()
+}
+
 function I(k:Constants, s:Variables) : CrashableMap.Variables
     requires TreeInv(k, s)
 {
