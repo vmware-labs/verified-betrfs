@@ -20,10 +20,20 @@ function {:opaque} SingletonImap<K,V>(k:K, v:V) : (m:imap<K,V>)
     imap j | j == k :: v
 }
 
+function {:opaque} MapUnionPreferB<U,T>(mapa: map<U,T>, mapb: map<U,T>) : (mapc:map<U,T>)
+    ensures mapc.Keys == mapa.Keys + mapb.Keys;
+    ensures forall k :: k in mapb.Keys ==> mapc[k] == mapb[k];
+    ensures forall k :: k in mapb.Keys - mapa.Keys ==> mapc[k] == mapb[k];
+    ensures forall k :: k in mapa.Keys && !(k in mapb.Keys) ==> mapc[k] == mapa[k]; // no-set-op translation is easier for Dafny
+{
+    map x : U | (x in mapa.Keys + mapb.Keys) :: if x in mapb then mapb[x] else mapa[x]
+}
+
 function {:opaque} ImapUnionPreferB<U,T>(mapa: imap<U,T>, mapb: imap<U,T>) : (mapc:imap<U,T>)
     ensures mapc.Keys == mapa.Keys + mapb.Keys;
     ensures forall k :: k in mapb.Keys ==> mapc[k] == mapb[k];
     ensures forall k :: k in mapb.Keys - mapa.Keys ==> mapc[k] == mapb[k];
+    ensures forall k :: k in mapa.Keys && !(k in mapb.Keys) ==> mapc[k] == mapa[k]; // no-set-op translation is easier for Dafny
 {
     imap x : U | (x in mapa.Keys + mapb.Keys) :: if x in mapb then mapb[x] else mapa[x]
 }

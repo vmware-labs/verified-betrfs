@@ -70,34 +70,6 @@ function CombineHeights(h1:Height, h2:Height) : Height
     else None
 }
 
-function {:opaque} DefineHeightNonLeafPrefix(node:Node, heightMap:AddrHeightMap, slotCount:int) : (h:Height)
-    requires 0<=slotCount<=|node.slots|
-    ensures h.Some? ==> AllSlotHeightsAtMost(node, heightMap, slotCount, h.value)
-    ensures h.Some? ==> 0<=h.value
-    ensures h.Some? ==> forall slotIdx
-        :: ValidSlotIndex(node, slotIdx) && slotIdx < slotCount && node.slots[slotIdx].Pointer?
-        ==> node.slots[slotIdx].addr in heightMap
-{
-    if slotCount==0
-    then Some(1)
-    else
-        CombineHeights(
-            DefineHeightNonLeafPrefix(node, heightMap, slotCount-1),
-            HeightForSlot(node.slots[slotCount-1], heightMap))
-}
-
-function DefineHeightAddr(gv:GraphView, heightMap:AddrHeightMap, addr:TableAddress) : (h:Height)
-    requires SaneNodeInView(gv, addr)
-    ensures h.Some? ==> 0<=h.value
-{
-    if TableAt(gv.k, gv.table, addr).Unused?
-    then Some(0)
-    else
-        var node := NodeAt(gv, addr);
-        DefineHeightNonLeafPrefix(node, heightMap, |node.slots|)
-
-}
-
 predicate WFHeightMap(heightMap:AddrHeightMap)
 {
     forall addr :: addr in heightMap ==> 0 <= heightMap[addr]
@@ -126,115 +98,114 @@ predicate HeightMapDecreases(gv:GraphView, heightMap:AddrHeightMap)
         ) ==> heightMap[NodeAt(gv, addr).slots[idx].addr] < heightMap[addr]
 }
 
+function {:opaque} DefineHeightNonLeafPrefix(node:Node, heightMap:AddrHeightMap, slotCount:int) : (h:Height)
+    requires 0<=slotCount<=|node.slots|
+    ensures h.Some? ==> AllSlotHeightsAtMost(node, heightMap, slotCount, h.value)
+    ensures h.Some? ==> 0<=h.value
+    ensures h.Some? ==> forall slotIdx
+        :: ValidSlotIndex(node, slotIdx) && slotIdx < slotCount && node.slots[slotIdx].Pointer?
+        ==> node.slots[slotIdx].addr in heightMap
+{
+    if slotCount==0
+    then Some(1)
+    else
+        CombineHeights(
+            DefineHeightNonLeafPrefix(node, heightMap, slotCount-1),
+            HeightForSlot(node.slots[slotCount-1], heightMap))
+}
+
+function IncrementHeight(h:Height) : Height
+{
+    match h {
+        case None => None
+        case Some(n) => Some(n+1)
+    }
+}
+
+function DefineHeightAddr(gv:GraphView, heightMap:AddrHeightMap, addr:TableAddress) : (h:Height)
+    requires SaneNodeInView(gv, addr)
+    ensures h.Some? ==> 0<=h.value
+{
+    if TableAt(gv.k, gv.table, addr).Unused?
+    then Some(0)
+    else
+        var node := NodeAt(gv, addr);
+        IncrementHeight(DefineHeightNonLeafPrefix(node, heightMap, |node.slots|))
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+function {:opaque} NewHeights(gv:GraphView, subMap:AddrHeightMap) : (heightMap:AddrHeightMap)
+    requires SaneTableInView(gv)
+    ensures WFHeightMap(heightMap)
+{
+    // All the heights we can compute given the subMap below. Caller will
+    // discard the duplicates.
+    map addr | 
+        && addr in AllocatedAddresses(gv.k, gv.table)
+        && DefineHeightAddr(gv, subMap, addr).Some?
+        :: DefineHeightAddr(gv, subMap, addr).value
+}
+
+lemma NewHeightsProps(gv:GraphView, maxHeight:int, newMap:AddrHeightMap, subMap:AddrHeightMap, unionMap:AddrHeightMap)
+    requires 0<maxHeight
+    requires SaneTableInView(gv)
+    requires WFHeightMap(newMap)
+    requires WFHeightMap(subMap)
+    requires unionMap == MapUnionPreferB(newMap, subMap)
+    requires subMap == SlotHeightMapDef(gv, maxHeight-1) 
+    requires newMap == NewHeights(gv, subMap)
+    requires HeightMapNests(gv, unionMap)
+    requires HeightMapDecreases(gv, subMap)
+    ensures WFHeightMap(unionMap)
+    ensures HeightMapDecreases(gv, unionMap)
+{
+    reveal_NewHeights();
+    forall addr, idx |
+            && addr in AllocatedAddresses(gv.k, gv.table)
+            && addr in unionMap
+            && ValidSlotIndex(NodeAt(gv, addr), idx)
+            && NodeAt(gv, addr).slots[idx].Pointer?
+        ensures unionMap[NodeAt(gv, addr).slots[idx].addr] < unionMap[addr]
+    {
+        if addr in subMap {
+            assert unionMap[NodeAt(gv, addr).slots[idx].addr] < unionMap[addr];
+        } else {
+            assert unionMap[addr] == NewHeights(gv, subMap)[addr];
+            assert unionMap[addr] == DefineHeightAddr(gv, subMap, addr).value;
+            var node := NodeAt(gv, addr);
+            assert AllSlotHeightsAtMost(node, subMap, |node.slots|, unionMap[addr]);
+            if unionMap[NodeAt(gv, addr).slots[idx].addr] >= unionMap[addr] {
+                //assert HeightForSlot(node.slots[idx], subMap) >= unionMap[addr];
+            }
+
+            assert unionMap[NodeAt(gv, addr).slots[idx].addr] < unionMap[addr];
+        }
+    }
+}
+
 function {:opaque} SlotHeightMapDef(gv:GraphView, maxHeight:int) : (heightMap:AddrHeightMap)
     requires 0<=maxHeight
     requires SaneTableInView(gv)
     ensures WFHeightMap(heightMap)
+    ensures 0<maxHeight ==> SlotHeightMapDef(gv, maxHeight-1).Keys <= SlotHeightMapDef(gv, maxHeight).Keys
+    ensures HeightMapNests(gv, heightMap)
+    //TODO ensures HeightMapDecreases(gv, heightMap)
+    decreases maxHeight
 {
+    reveal_NewHeights();
     if maxHeight == 0
     then
         map addr | addr in ValidAddresses(gv.k) && TableAt(gv.k, gv.table, addr).Unused? :: 0
     else
-        map addr | 
-            && addr in AllocatedAddresses(gv.k, gv.table)
-            && DefineHeightAddr(gv, SlotHeightMapDef(gv, maxHeight-1), addr).Some?
-            :: DefineHeightAddr(gv, SlotHeightMapDef(gv, maxHeight-1), addr).value
-}
-
-lemma
-    DefineHeightAddr(gv, SlotHeightMapDef(gv, maxHeight-1), addr).Some?
-    ==> DefineHeightAddr(gv, SlotHeightMapDef(gv, maxHeight), addr).Some?
-
-Okay, brain.
-At maxheight 0, there's some stuff in the table (unused addrs).
-At maxheight 1, all those things are in the table (DefineHeightAddr defn), plus things defined by
-DefineHeightNonLeafPrefix.
-At maxheight 2, some new things are in the table, but everything that was in the table before is still
-in there for the same reason it was before.
-
-lemma HeightMapMonotonic(gv:GraphView, maxHeight:int)
-    requires SaneTableInView(gv)
-    requires 0 < maxHeight
-    ensures SlotHeightMapDef(gv, maxHeight-1).Keys <= SlotHeightMapDef(gv, maxHeight).Keys
-{
-    reveal_SlotHeightMapDef();
-    var lo := SlotHeightMapDef(gv, maxHeight-1);
-    var hi := SlotHeightMapDef(gv, maxHeight);
-    forall addr | addr in lo
-        ensures addr in hi
-    {
-        if (maxHeight == 1) {
-            assert addr in ValidAddresses(gv.k);
-            assert TableAt(gv.k, gv.table, addr).Unused?;
-            assert addr in hi;
-        } else {
-            assert addr in AllocatedAddresses(gv.k, gv.table)
-           assert DefineHeightAddr(gv, SlotHeightMapDef(gv, maxHeight-2), addr).Some?
-            HeightMapMonotonic(gv, lo-1, addr);
-            assert addr in hi;
-        }
-    }
-}
-
-lemma SlotHeightMapDefProperties(gv:GraphView, maxHeight:int, heightMap:AddrHeightMap)
-    requires 0<=maxHeight
-    requires SaneTableInView(gv)
-    requires SlotHeightMapDef(gv, maxHeight) == heightMap
-    ensures HeightMapNests(gv, heightMap)
-    ensures HeightMapDecreases(gv, heightMap)
-{
-    reveal_SlotHeightMapDef();
-    forall addr, idx | (
-            && addr in AllocatedAddresses(gv.k, gv.table)
-            && addr in heightMap
-            && ValidSlotIndex(NodeAt(gv, addr), idx)
-            && NodeAt(gv, addr).slots[idx].Pointer?
-        ) 
-        ensures NodeAt(gv, addr).slots[idx].addr in heightMap
-    {
-        assert addr in heightMap;
-        var node := NodeAt(gv, addr);
-        if (maxHeight == 0) {
-            assert node.slots[idx].addr in heightMap;
-        } else {
-            var subhm := SlotHeightMapDef(gv, maxHeight-1);
-            var dha := DefineHeightAddr(gv, subhm, addr);
-            assert dha.Some?;
-
-            assert dha == if TableAt(gv.k, gv.table, addr).Unused?
-                then Some(0)
-                else
-                    var node := NodeAt(gv, addr);
-                    DefineHeightNonLeafPrefix(node, subhm, |node.slots|);
-
-            if TableAt(gv.k, gv.table, addr).Unused? {
-                assert node.slots[idx].addr in heightMap;
-            } else {
-                assert dha == DefineHeightNonLeafPrefix(node, subhm, |node.slots|);
-                reveal_DefineHeightNonLeafPrefix();
-                assert dha == CombineHeights(
-                    DefineHeightNonLeafPrefix(node, subhm, |node.slots|-1),
-                    HeightForSlot(node.slots[|node.slots|-1], subhm));
-                assert node.slots[idx].addr in subhm;
-                var subaddr := node.slots[idx].addr;
-                SlotHeightMapDefProperties(gv, maxHeight-1, subhm);
-
-                assert subaddr in AllocatedAddresses(gv.k, gv.table);
-                assert subaddr in heightMap;
-                assert ValidSlotIndex(NodeAt(gv, subaddr), idx);
-                assert NodeAt(gv, subaddr).slots[idx].Pointer?;
-
-                assert node.slots[idx].addr in heightMap;
-            }
-        }
-    }
-    assert HeightMapDecreases(gv, heightMap);
+        var subMap := SlotHeightMapDef(gv, maxHeight-1);
+        var unionMap := MapUnionPreferB(NewHeights(gv, subMap), subMap);
+        unionMap
 }
 
 function SlotHeightMap(gv:GraphView) : AddrHeightMap
     requires SaneTableInView(gv)
 {
-    SlotHeightMapDefProperties(gv, gv.k.tableEntries, SlotHeightMapDef(gv, gv.k.tableEntries));
     SlotHeightMapDef(gv, gv.k.tableEntries)
 }
 
