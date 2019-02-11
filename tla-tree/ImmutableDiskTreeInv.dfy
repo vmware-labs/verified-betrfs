@@ -1,7 +1,7 @@
 include "ImmutableDiskTree.dfy"
 
 module ImmutableDiskTreeInv {
-import opened KVTypes
+import opened TreeTypes
 import opened ImmutableDiskTree
 
 predicate SuperblockTypeCorrect(k:Constants, view:View)
@@ -24,7 +24,7 @@ predicate TableBlocksTypeCorrect(k:Constants, view:View)
     requires FullView(k, view)
 {
     && SuperblockTypeCorrect(k, view)
-    && TreeDisk.WFTableIndex(PersistentTableIndex(k, view))
+    && WFTableIndex(PersistentTableIndex(k, view))
     && forall sectorIdx :: ValidTableSectorIndex(k, sectorIdx) ==>
         view[TableBegin(k, PersistentTableIndex(k, view)) + sectorIdx].TableSector?
 }
@@ -36,21 +36,21 @@ function PersistentTable(k:Constants, view:View) : Table
 {
     var super := view[SUPERBLOCK_LBA()];
     var ti := PersistentTableIndex(k, view);
-    var sectors := SubsequenceFromFullView(TableBegin(k, ti), k.tableSectors);
+    var sectors := SubsequenceFromFullView(k, view, TableBegin(k, ti), k.tableSectors);
     UnmarshallTable(k, sectors)
 }
 
-function {:opaque} AllocatedAddresses(k:Constants, table:Table) : (alloced:set<int>)
+function {:opaque} AllocatedAddresses(k:Constants, table:Table) : (alloced:set<TableAddress>)
     requires WFTable(k, table)
-    ensures forall addr :: addr in alloced <==> addr in ValidAddresses(k) && table[addr].Used?
+    ensures forall addr :: addr in alloced <==> addr in ValidAddresses(k) && TableAt(k, table, addr).Used?
 {
-    set addr | addr in ValidAddresses(k) && table[addr].Used?
+    set addr | addr in ValidAddresses(k) && TableAt(k, table, addr).Used?
 }
 
 predicate AllocatedNbasValid(k:Constants, table:Table)
     requires WFTable(k, table)
 {
-    forall addr :: addr in AllocatedAddresses(k, table) ==> ValidNba(k, table[addr])
+    forall addr :: addr in AllocatedAddresses(k, table) ==> ValidNba(k, TableAt(k, table, addr))
 }
 
 predicate AllocatedNodeBlocksTypeCorrect(k:Constants, view:View, table:Table)
@@ -60,7 +60,7 @@ predicate AllocatedNodeBlocksTypeCorrect(k:Constants, view:View, table:Table)
     requires WFTable(k, table)
     requires AllocatedNbasValid(k, table)
 {
-    forall addr :: addr in AllocatedAddresses(k, table) ==> view[LbaForNba(k, table[addr])].NodeSector?
+    forall addr :: addr in AllocatedAddresses(k, table) ==> view[LbaForNba(k, TableAt(k, table, addr))].NodeSector?
 }
 
 predicate PersistentAllocatedNodesTypeCorrect(k:Constants, view:View)
@@ -71,6 +71,5 @@ predicate PersistentAllocatedNodesTypeCorrect(k:Constants, view:View)
 {
     AllocatedNodeBlocksTypeCorrect(k, view, PersistentTable(k, view))
 }
-
 
 } // module

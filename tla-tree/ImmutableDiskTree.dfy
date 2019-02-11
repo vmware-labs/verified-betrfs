@@ -2,21 +2,31 @@ include "MissingLibrary.dfy"
 include "KVTypes.dfy"
 include "Disk.dfy"
 
-module TreeDisk refines Disk {
+module TreeTypes {
 import opened KVTypes
 
-type TableIndex = int
+datatype TableIndex = TableIndex(i:int)
+
 predicate WFTableIndex(ti:TableIndex)   // There are two tables.
 {
-    0 <= ti <= 1
-}
-function OppositeTableIndex(ti:TableIndex) : TableIndex
-{
-    1 - ti
+    0 <= ti.i <= 1
 }
 
-datatype Slot = Value(datum:Datum) | Pointer(idx:int) | Empty
+function OppositeTableIndex(ti:TableIndex) : TableIndex
+{
+    TableIndex(1 - ti.i)
+}
+
+datatype TableAddress = TableAddress(a:int)
+
+datatype Slot = Value(datum:Datum) | Pointer(addr:TableAddress) | Empty
 datatype Node = Node(pivots:seq<Key>, slots:seq<Slot>)
+
+}
+
+module TreeDisk refines Disk {
+import opened TreeTypes
+
 datatype Sector =
     | Superblock(liveTable:TableIndex)
     | TableSector
@@ -34,12 +44,10 @@ datatype Sector =
 module ImmutableDiskTree {
 import opened MissingLibrary
 import opened KVTypes
+import opened TreeTypes
 import TreeDisk
 
 type LBA = TreeDisk.LBA
-type TableIndex = TreeDisk.TableIndex
-type Slot = TreeDisk.Slot
-type Node = TreeDisk.Node
 type Sector = TreeDisk.Sector
 
 type View = map<LBA, Sector>    // A view of the disk, either through a cache or just by looking at the disk.
@@ -115,7 +123,7 @@ predicate WFVariables(k:Constants, s:Variables)
     WFTable(k, s.ephemeralTable)  // maintained as an invariant, so not unreasonable to conjoin to actions.
 }
 
-function ROOT_ADDR() : int { 0 }    // Address of the root node in either table
+function ROOT_ADDR() : TableAddress { TableAddress(0) }    // Address of the root node in either table
 
 // We assume marshalling and unmarshalling functions for Tables to sectors.
 function UnmarshallTable(k:Constants, sectors:seq<Sector>) : (tbl:Table)
@@ -143,9 +151,9 @@ predicate SectorInView(view:View, lba:LBA, sector:Sector)
 }
 
 function TableBegin(k:Constants, ti:TableIndex) : LBA
-    requires TreeDisk.WFTableIndex(ti)
+    requires WFTableIndex(ti)
 {
-    1 + k.tableSectors * ti
+    1 + k.tableSectors * ti.i
 }
 
 // Everything you need to look up the persistent table
@@ -153,13 +161,8 @@ datatype TableLookup = TableLookup(super:Sector, ti:TableIndex, table:Table, sec
 
 predicate WFTableLookup(k:Constants, tl:TableLookup)
 {
-    && TreeDisk.WFTableIndex(tl.ti)
+    && WFTableIndex(tl.ti)
     && WFTable(k, tl.table)
-}
-
-predicate ValidTableOffset(k:Constants, tableOffset:int)
-{
-    0 <= tableOffset < k.tableEntries
 }
 
 predicate ValidTableSectorIndex(k:Constants, tblSectorIdx:int)
@@ -168,14 +171,14 @@ predicate ValidTableSectorIndex(k:Constants, tblSectorIdx:int)
 }
 
 function LbaForTableOffset(k:Constants, ti:TableIndex, tblSectorIdx:int) : LBA
-    requires TreeDisk.WFTableIndex(ti)
+    requires WFTableIndex(ti)
     requires ValidTableSectorIndex(k, tblSectorIdx)
 {
     TableBegin(k, ti) + tblSectorIdx
 }
 
 predicate TableInView(k:Constants, view:View, tl:TableLookup)
-    requires TreeDisk.WFTableIndex(tl.ti)
+    requires WFTableIndex(tl.ti)
 {
     && |tl.sectors| == k.tableSectors
     && (forall sectorIdx :: ValidTableSectorIndex(k, sectorIdx) ==>
@@ -187,7 +190,7 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 {
     && SectorInView(view, SUPERBLOCK_LBA(), super)
     && super == TreeDisk.Superblock(ti)
-    && TreeDisk.WFTableIndex(ti)    // If you need to fsck, this spec stalls.
+    && WFTableIndex(ti)    // If you need to fsck, this spec stalls.
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -205,7 +208,7 @@ predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
 }
 
 predicate KnowTable(k:Constants, s:Variables, tl:TableLookup)
-    requires TreeDisk.WFTableIndex(tl.ti)
+    requires WFTableIndex(tl.ti)
 {
     TableInView(k, ViewOfCache(s.cache), tl)
 }
@@ -255,7 +258,7 @@ function RangeBoundForSlotIdx(node:Node, nodeRange:Range, idx:int) : (range:Rang
 //////////////////////////////////////////////////////////////////////////////
 // Lookup
 datatype Layer = Layer(
-    addr:int,
+    addr:TableAddress,
     node:Node,      // the node at the addr
     slot:int,       // the slot pointing to the next node below
     slotRange:Range     // the range that bounds this slot (and hence the node below)
@@ -283,17 +286,39 @@ predicate LookupHasValidSlotIndices(lookup:Lookup)
 // Dafny weakness: You can build ValidAddress from ValidAddresses, but going
 // the other way gives "Error: a set comprehension must produce a finite set,
 // but Dafny's heuristics can't figure out..."
-function {:opaque} ValidAddresses(k:Constants) : set<int>
-    ensures forall addr :: addr in ValidAddresses(k) <==> 0 <= addr < k.tableEntries
+function {:opaque} ValidAddressesDef(k:Constants) : (va:set<TableAddress>)
 {
-    set addr | 0 <= addr < k.tableEntries
+    set a | 0 <= a < k.tableEntries :: TableAddress(a)
 }
 
-predicate ValidAddress(k:Constants, addr:int)
-    ensures ValidAddress(k, addr) <==> 0 <= addr < k.tableEntries
+lemma ValidAddressesProp(k:Constants, va:set<TableAddress>)
+    requires ValidAddressesDef(k) == va
+    ensures forall addr :: addr in va <==> 0 <= addr.a < k.tableEntries
 {
-    reveal_ValidAddresses();
+    reveal_ValidAddressesDef();
+    forall addr:TableAddress | 0 <= addr.a < k.tableEntries ensures addr in va 
+    {
+    }
+}
+
+function ValidAddresses(k:Constants) : (va:set<TableAddress>)
+    ensures forall addr :: addr in va <==> 0 <= addr.a < k.tableEntries
+{
+    ValidAddressesProp(k, ValidAddressesDef(k));
+    ValidAddressesDef(k)
+}
+
+predicate ValidAddress(k:Constants, addr:TableAddress)
+    ensures ValidAddress(k, addr) <==> 0 <= addr.a < k.tableEntries
+{
     addr in ValidAddresses(k)
+}
+
+function TableAt(k:Constants, table:Table, addr:TableAddress) : NBA
+    requires WFTable(k, table)
+    requires ValidAddress(k, addr)
+{
+    table[addr.a]
 }
 
 predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
@@ -310,7 +335,7 @@ predicate LookupHonorsPointerLinks(lookup:Lookup)
         then layer.addr == ROOT_ADDR()
         else
             var uplayer := lookup.layers[i-1];
-            uplayer.node.slots[uplayer.slot] == TreeDisk.Pointer(layer.addr)
+            uplayer.node.slots[uplayer.slot] == Pointer(layer.addr)
 }
 
 function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
@@ -335,7 +360,7 @@ predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==> (
         && var layer := lookup.layers[i];
-        && var nba := s.ephemeralTable[layer.addr];
+        && var nba := TableAt(k, s.ephemeralTable, layer.addr);
         && ValidNba(k, nba)
         && CachedNodeRead(k, s, nba, layer.node)
     )
@@ -390,7 +415,7 @@ function NodeReplaceSlot(node:Node, i:int, slot:Slot) : Node
     requires WFNode(node)
     requires 0<=i<|node.slots|
 {
-    TreeDisk.Node(node.pivots,
+    Node(node.pivots,
         node.slots[..i] + [slot] + node.slots[i+1..])
 }
 
@@ -400,35 +425,34 @@ function NodeInsertSlots(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<S
     requires 0<=slot<|node.slots|
     requires |newSlots| == |newPivots| + 1
 {
-    TreeDisk.Node(
+    Node(
         node.pivots[..slot] + newPivots + node.pivots[slot..],
         node.slots[..slot] + newSlots + node.slots[slot+1..])
 }
 
 
-function ReplaceSlotForInsert(node:Node, idx:int, newDatum:Datum) : Node
+function ReplaceSlotForInsert(node:Node, slotIdx:int, newDatum:Datum) : Node
     requires WFNode(node)
-    requires ValidSlotIndex(node, idx)
-    requires !node.slots[idx].Pointer?
+    requires ValidSlotIndex(node, slotIdx)
+    requires !node.slots[slotIdx].Pointer?
 {
-    var slot := node.slots[idx];
+    var slot := node.slots[slotIdx];
 
     if slot.Empty? || newDatum.key == slot.datum.key
         // Replace an empty or same-key datum in place
-    then NodeReplaceSlot(node, idx, TreeDisk.Value(newDatum))
+    then NodeReplaceSlot(node, slotIdx, Value(newDatum))
     else if KeyLe(newDatum.key, slot.datum.key)
         // New datum goes to the left, so we'll split a pivot to the right with the old key
-    then NodeInsertSlots(node, idx, [slot.datum.key], [TreeDisk.Value(newDatum), slot])
+    then NodeInsertSlots(node, slotIdx, [slot.datum.key], [Value(newDatum), slot])
         // New datum goes to the right, so we'll split a pivot with the new key
-    else NodeInsertSlots(node, idx, [newDatum.key], [slot, TreeDisk.Value(newDatum)])
+    else NodeInsertSlots(node, slotIdx, [newDatum.key], [slot, Value(newDatum)])
 }
 
 function {:opaque} AllocatedNodeBlocks(k:Constants, table:Table) : (alloc:set<NBA>)
     requires WFTable(k, table)
     ensures forall nba :: nba in alloc ==> nba.Used?
 {
-    reveal_ValidAddresses();
-    set addr | addr in ValidAddresses(k) && table[addr].Used? :: table[addr]
+    set addr:TableAddress | addr in ValidAddresses(k) && TableAt(k, table, addr).Used? :: TableAt(k, table, addr)
 }
 
 predicate NBAUnusedInTable(k:Constants, table:Table, nba:NBA)
@@ -448,11 +472,11 @@ predicate AllocateNBA(k:Constants, s:Variables, nba:NBA, persistentTl:TableLooku
     && NBAUnusedInTable(k, persistentTl.table, nba)
 }
 
-predicate AllocateAddr(k:Constants, s:Variables, childAddr:int)
+predicate AllocateAddr(k:Constants, s:Variables, childAddr:TableAddress)
     requires WFTable(k, s.ephemeralTable)
 {
-    && 0 <= childAddr < k.tableEntries
-    && s.ephemeralTable[childAddr].Unused?
+    && ValidAddress(k, childAddr)
+    && TableAt(k, s.ephemeralTable, childAddr).Unused?
 }
 
 function WriteSectorToCache(k:Constants, cache:Cache, lba:LBA, sector:Sector) : Cache
@@ -492,7 +516,7 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
     && s'.cache == WriteNodeToCache(k, s.cache, edit.replacementNba, edit.replacementNode)
     // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
-    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr := edit.replacementNba]
+    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr.a := edit.replacementNba]
     && s'.ready
 }
 
@@ -503,16 +527,16 @@ predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, da
 }
 
 // Delete is un-insert.
-predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, idx:int, deletedDatum:Datum)
+predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, slotIdx:int, deletedDatum:Datum)
 {
     // Caller is 'existing' a newNode into being; we need to force it to satisfy the preconditions
     // for ChildEquivalentToSlotGroup.
     // (TODO We could just reduce things to this version, and accept the fact
     // that this check will duplicate what the invariant already does.)
     && WFNode(newNode)
-    && ValidSlotIndex(newNode, idx)
-    && !newNode.slots[idx].Pointer?
-    && oldNode == ReplaceSlotForInsert(newNode, idx, deletedDatum)
+    && ValidSlotIndex(newNode, slotIdx)
+    && !newNode.slots[slotIdx].Pointer?
+    && oldNode == ReplaceSlotForInsert(newNode, slotIdx, deletedDatum)
 }
 
 predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
@@ -521,16 +545,16 @@ predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, da
     && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, datum)
 }
 
-predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:int, childNode:Node)
+predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
     requires WFNode(indirectNode)
     requires 0<=replacedSlot<|indirectNode.slots|
     requires |childNode.slots| == |childNode.pivots| + 1
 {
     && directNode == NodeInsertSlots(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
-    && indirectNode.slots[replacedSlot] == TreeDisk.Pointer(childAddr)
+    && indirectNode.slots[replacedSlot] == Pointer(childAddr)
 }
 
-predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:int, childNode:Node)
+predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
 {
     // Caller is 'existing' an indirectNode into being; we need to force it to satisfy the preconditions
     // for ChildEquivalentToSlotGroup.
@@ -544,7 +568,7 @@ predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int,
 
 datatype Janitorial = Janitorial(
     edit:NodeEdit,              // The Lookup and edit info for the parent node being modified
-    childAddr:int,              // table index where child is coming from or allocated to
+    childAddr:TableAddress,     // table index where child is coming from or allocated to
     childNba:NBA,               // node address where child is coming from or allocated to
     childNode:Node,             // child node exchanging places with subrange of parent slots
     childNba':NBA               // the table reference for childAddr after the action
@@ -571,7 +595,7 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     // Through the magic of table indirection, lastLayer.node's parent is
     // suddenly switched to point to replacementNode.
     && s'.ephemeralTable ==
-        s.ephemeralTable[EditLast(j.edit).addr := j.edit.replacementNba][j.childAddr := j.childNba']
+        s.ephemeralTable[EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childNba']
     && s'.ready
 }
 
@@ -589,10 +613,10 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
 {
     && WFVariables(k, s)
     && ValidAddress(k, j.childAddr)
-    && s.ephemeralTable[j.childAddr].Used?
-    && j.childNba == s.ephemeralTable[j.childAddr]
+    && TableAt(k, s.ephemeralTable, j.childAddr).Used?
+    && j.childNba == TableAt(k, s.ephemeralTable, j.childAddr)
     && JanitorialAction(k, s, s', j)
-    && TreeDisk.Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
+    && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
     && CachedNodeRead(k, s, j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childNba' == Unused  // free the child reference
@@ -623,10 +647,10 @@ predicate EmitTableAction(k:Constants, s:Variables, s':Variables, persistentTi:T
     && s.ready
     && WFVariables(k, s)
     && KnowPersistentTableIndex(k, s, persistentTi, super)
-    && var ephemeralTi := TreeDisk.OppositeTableIndex(persistentTi);
+    && var ephemeralTi := OppositeTableIndex(persistentTi);
     && ValidTableSectorIndex(k, tblSectorIdx)
     && var lba := LbaForTableOffset(k, ephemeralTi, tblSectorIdx);
-    // Actually, once we've constrained ti and ValidTableOffset, we've got an
+    // Actually, once we've constrained ti and ValidTableSectorIndex, we've got an
     // lba in the ephemeral table region; we can write whatever we want there.
     // The next line is just good advice about what might help to write. :v) 
     && var sector := MarshallTable(k, s.ephemeralTable)[tblSectorIdx];
@@ -650,7 +674,7 @@ predicate CommitAction(k:Constants, s:Variables, s':Variables, persistentTi:Tabl
 {
     && s.ready
     && KnowPersistentTableIndex(k, s, persistentTi, super)
-    && var ephemeralTi := TreeDisk.OppositeTableIndex(persistentTi);
+    && var ephemeralTi := OppositeTableIndex(persistentTi);
     && var super := TreeDisk.Superblock(ephemeralTi);
     && CacheIsClean(s.cache)
 
@@ -672,7 +696,7 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, pe
 {
     && !s.ready
     && KnowPersistentTableIndex(k, s, persistentTl.ti, super)
-    && TreeDisk.WFTableIndex(persistentTl.ti)
+    && WFTableIndex(persistentTl.ti)
     && KnowTable(k, s, persistentTl)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
@@ -702,12 +726,13 @@ predicate CacheEvictAction(k:Constants, s:Variables, s':Variables, lba:LBA)
     && s'.ready == s.ready
 }
 
-predicate InitTable(table:Table, rootNba:NBA)
+predicate InitTable(k:Constants, table:Table, rootNba:NBA)
 {
     && 0 < |table|
-    && table[ROOT_ADDR()] == rootNba
-    && (forall addr :: 0 <= addr < |table| && addr != ROOT_ADDR()
-        ==> table[addr].Unused?)
+    && WFTable(k, table)
+    && TableAt(k, table, ROOT_ADDR()) == rootNba
+    && (forall addr:TableAddress :: 0 <= addr.a < |table| && addr != ROOT_ADDR()
+        ==> TableAt(k, table, addr).Unused?)
 }
 
 function {:opaque} EmptyView() : (view:View)
@@ -786,12 +811,12 @@ predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
     && 0 < k.tableEntries
 
     // Empty persistent table
-    && TreeDisk.WFTableIndex(mkfs.tl.ti)
+    && WFTableIndex(mkfs.tl.ti)
     && PersistentTableIndexInView(ViewOfDisk(k.disk, s.disk), mkfs.tl.ti, mkfs.super)
     && TableInView(k, ViewOfDisk(k.disk, s.disk), mkfs.tl)
     // I arbitrarily demand that the root block be stored in node data sector 0.
-    && InitTable(mkfs.tl.table, Used(0))
-    && s.disk.sectors[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(TreeDisk.Node([], [TreeDisk.Empty]))
+    && InitTable(k, mkfs.tl.table, Used(0))
+    && s.disk.sectors[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node([], [Empty]))
 }
 
 predicate Init(k:Constants, s:Variables)
