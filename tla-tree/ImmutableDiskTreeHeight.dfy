@@ -157,7 +157,7 @@ function {:opaque} GraphAddrHeightMapDef(gv:GraphView, maxHeight:int) : (heightM
     reveal_NewHeights();
     if maxHeight == 0
     then
-        EmptyMap<TableAddress,int>(0)
+        EmptyMap<TableAddress,int>()
     else
         var subMap := GraphAddrHeightMapDef(gv, maxHeight-1);
         var unionMap := MapUnionPreferB(NewHeights(gv, subMap), subMap);

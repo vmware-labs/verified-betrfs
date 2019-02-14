@@ -8,9 +8,9 @@ import opened CrashSafeLogInv
 import CrashableMap
 
 // Interpret a log sequence of Datums as a map
-function {:opaque} ILog(log:seq<Datum>) : (m:imap<Key, Value>)
-    ensures CrashableMap.completeMap(m)
-    ensures forall k :: m[k] == EvalLog(log, k).value;
+function {:opaque} ILog(log:seq<Datum>) : (iv:CrashableMap.View)
+    ensures CrashableMap.ViewComplete(iv)
+    ensures forall k :: iv[k] == EvalLog(log, k).value;
 {
     imap k | CrashableMap.InDomain(k) :: EvalLog(log, k).value
 }
@@ -174,33 +174,33 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
             assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.SpontaneousCrashStep());
         }
         case ReadSuperblock => {
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
         case ScanDiskLog => {
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
         case TerminateScanStep => {
             assert s'.memlog[..s'.diskCommittedSize] == DiskLog(k.disk, s.disk); // OBSERVE
             assert IViewsDef(k, s', s'.diskCommittedSize, 1) == [INotRunningView(k, s)];    // OBSERVE
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter()); // OBSERVE witness (Step)
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep); // OBSERVE witness (Step)
         }
         case AppendStep(datum) => {
             AppendRefinement(k, s, s', datum);
         }
         case Query(datum) => {
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Query(datum)); // OBSERVE
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.QueryStep(datum)); // OBSERVE
         }
         case PushLogDataStep => {
             assert IViewsDef(k, s', s'.diskCommittedSize, INumRunningViews(k, s'))
                 == IViewsDef(k, s, s.diskCommittedSize, INumRunningViews(k, s)); // OBSERVE
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter); // OBSERVE witness (Step)
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep); // OBSERVE witness (Step)
         }
         case PushLogMetadataStep(persistentCount) => {
             var writesRetired := persistentCount - s.diskCommittedSize;
             assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.PersistWritesStep(writesRetired)); // OBSERVE witness (Step)
         }
         case CompleteSync => {
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.Stutter());
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
     }
 } 

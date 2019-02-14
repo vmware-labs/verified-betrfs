@@ -2,6 +2,7 @@ include "ImmutableDiskTreeHeight.dfy"
 include "CrashableMap.dfy"
 
 module ImmutableDiskTreeInterpretation {
+import opened KVTypes
 import opened TreeTypes
 import opened ImmutableDiskTree
 import opened ImmutableDiskTreeInv
@@ -80,7 +81,7 @@ function {:opaque} ISlotView(tv:TreeView, addr:TableAddress, slotIdx:int) : Cras
 {
     var slot := TVNode(tv, addr).slots[slotIdx];
     match slot {
-        case Empty => CrashableMap.EmptyMap()
+        case Empty => EmptyImap()
         case Value(datum) => SingletonImap(datum.key, datum.value)
         case Pointer(addr) => ISubtreeView(tv, addr)
     }
@@ -94,7 +95,7 @@ function {:opaque} ISubtreePrefixView(tv:TreeView, addr:TableAddress, slotCount:
     decreases HeightAt(tv, addr), 1, slotCount
 {
     if slotCount==0
-    then CrashableMap.EmptyMap()
+    then EmptyImap<Key,Value>()
     else ImapUnionPreferB(      // We don't prefer B; the pieces had better be disjoint!
         ISubtreePrefixView(tv, addr, slotCount - 1),
         ISlotView(tv, addr, slotCount - 1))
@@ -109,11 +110,23 @@ function ISubtreeView(tv:TreeView, addr:TableAddress) : CrashableMap.View
     ISubtreePrefixView(tv, addr, slotCount)
 }
 
-function ITreeView(tv:TreeView) : CrashableMap.View
+// The definitions above manipulate incomplete views; this definition fills in
+// all the gaps in the keyspace to match the CrashableMap model.
+// (TODO maybe CrashableMap should model missing keys explicitly?)
+function {:opaque} CompletifyView(iv:CrashableMap.View) : (ov:CrashableMap.View)
+    ensures CrashableMap.ViewComplete(ov)
+    ensures forall k :: k in iv ==> ov[k] == iv[k]
+    ensures forall k :: !(k in iv) ==> ov[k] == EmptyValue()
+{
+    imap k | true :: if k in iv then iv[k] else EmptyValue()
+}
+
+function ITreeView(tv:TreeView) : (iview:CrashableMap.View)
     requires WFTreeView(tv)
     requires SaneNodeInTreeView(tv, ROOT_ADDR())
+    ensures CrashableMap.ViewComplete(iview)
 {
-    ISubtreeView(tv, ROOT_ADDR())
+    CompletifyView(ISubtreeView(tv, ROOT_ADDR()))
 }
 
 function EphemeralTreeView(k:Constants, s:Variables) : (tv:TreeView)
@@ -145,24 +158,27 @@ function PersistentTreeView(k:Constants, s:Variables) : (tv:TreeView)
     TreeView(PersistentGraph(k, s))
 }
 
-function IEphemeralView(k:Constants, s:Variables) : CrashableMap.View
+function IEphemeralView(k:Constants, s:Variables) : (iview:CrashableMap.View)
     requires TreeDisk.WF(k.disk, s.disk)
     requires TreeShapedGraph(EphemeralGraph(k, s))   // TODO belongs in Inv
     requires SaneNodeInView(EphemeralGraph(k, s),  ROOT_ADDR()) // TODO Inv
+    ensures CrashableMap.ViewComplete(iview)
 {
     ITreeView(EphemeralTreeView(k, s))
 }
 
-function IPersistentView(k:Constants, s:Variables) : CrashableMap.View
+function IPersistentView(k:Constants, s:Variables) : (iview:CrashableMap.View)
     requires PersistentGraphSane(k, s)
     requires TreeShapedGraph(PersistentGraph(k, s))   // TODO belongs in Inv
     requires SaneNodeInView(PersistentGraph(k, s),  ROOT_ADDR()) // TODO Inv
+    ensures CrashableMap.ViewComplete(iview)
 {
     ITreeView(PersistentTreeView(k, s))
 }
 
-function IViews(k:Constants, s:Variables) : seq<CrashableMap.View>
+function IViews(k:Constants, s:Variables) : (iviews:seq<CrashableMap.View>)
     requires TreeInv(k, s)
+    ensures CrashableMap.AllViewsComplete(iviews)
 {
     if s.ready
     then [IEphemeralView(k, s), IPersistentView(k, s)]

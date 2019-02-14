@@ -69,6 +69,11 @@ datatype Constants = Constants(
     tableSectors:int     // How many sectors to set aside for each indirection table
     )
 
+predicate WFConstants(k:Constants)
+{
+    && 0 < k.tableSectors
+}
+
 type Table = seq<NBA>   // An indirection table mapping addresses (indices into the table) to NBAs
 
 predicate WFTable(k:Constants, table:Table)
@@ -177,12 +182,37 @@ function LbaForTableOffset(k:Constants, ti:TableIndex, tblSectorIdx:int) : LBA
     TableBegin(k, ti) + tblSectorIdx
 }
 
+predicate ViewContains(view:View, start:LBA, count:int)
+{
+    forall lba :: start <= lba < start+count ==> lba in view
+}
+
+predicate PlausibleViewRange(k:Constants, start:LBA, count:int)
+{
+    && TreeDisk.ValidLBA(k.disk, start)
+    && TreeDisk.ValidLBA(k.disk, start+count-1)
+}
+
+function {:opaque} SubsequenceFromFullView(k:Constants, view:View, start:LBA, count:int) : (s:seq<Sector>)
+    requires ViewContains(view, start, count)
+    requires 0<count
+    requires PlausibleViewRange(k, start, count)
+    ensures |s| == count
+    ensures forall i :: 0<=i<count ==> view[start + i] == s[i]
+{
+    if count == 1
+    then [view[start]]
+    else SubsequenceFromFullView(k, view, start, count-1) + [view[start+count-1]]
+}
+
 predicate TableInView(k:Constants, view:View, tl:TableLookup)
+    requires WFConstants(k)
     requires WFTableIndex(tl.ti)
 {
     && |tl.sectors| == k.tableSectors
-    && (forall sectorIdx :: ValidTableSectorIndex(k, sectorIdx) ==>
-            SectorInView(view, LbaForTableOffset(k, tl.ti, sectorIdx), tl.sectors[sectorIdx]))
+    && PlausibleViewRange(k, TableBegin(k, tl.ti), k.tableSectors)
+    && ViewContains(view, TableBegin(k, tl.ti), k.tableSectors)
+    && tl.sectors == SubsequenceFromFullView(k, view, TableBegin(k, tl.ti), k.tableSectors)
     && tl.table == UnmarshallTable(k, tl.sectors)
 }
 
@@ -208,6 +238,7 @@ predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
 }
 
 predicate KnowTable(k:Constants, s:Variables, tl:TableLookup)
+    requires WFConstants(k)
     requires WFTableIndex(tl.ti)
 {
     TableInView(k, ViewOfCache(s.cache), tl)
@@ -219,6 +250,7 @@ predicate KnowPersistentTableIndex(k:Constants, s:Variables, ti:TableIndex, supe
 }
 
 predicate KnowPersistentTable(k:Constants, s:Variables, tl:TableLookup)
+    requires WFConstants(k)
 {
     && KnowPersistentTableIndex(k, s, tl.ti, tl.super)
     && KnowTable(k, s, tl)
@@ -420,7 +452,7 @@ function NodeReplaceSlot(node:Node, i:int, slot:Slot) : Node
 }
 
 // Replace slot (which starts at pivots[slot-1]) with newSlots, subdivided by newPivots.
-function NodeInsertSlots(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<Slot>) : Node
+function NodeReplaceSlotWithSlotSequence(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<Slot>) : Node
     requires WFNode(node)
     requires 0<=slot<|node.slots|
     requires |newSlots| == |newPivots| + 1
@@ -443,9 +475,9 @@ function ReplaceSlotForInsert(node:Node, slotIdx:int, newDatum:Datum) : Node
     then NodeReplaceSlot(node, slotIdx, Value(newDatum))
     else if KeyLe(newDatum.key, slot.datum.key)
         // New datum goes to the left, so we'll split a pivot to the right with the old key
-    then NodeInsertSlots(node, slotIdx, [slot.datum.key], [Value(newDatum), slot])
+    then NodeReplaceSlotWithSlotSequence(node, slotIdx, [slot.datum.key], [Value(newDatum), slot])
         // New datum goes to the right, so we'll split a pivot with the new key
-    else NodeInsertSlots(node, slotIdx, [newDatum.key], [slot, Value(newDatum)])
+    else NodeReplaceSlotWithSlotSequence(node, slotIdx, [newDatum.key], [slot, Value(newDatum)])
 }
 
 function {:opaque} AllocatedNodeBlocks(k:Constants, table:Table) : (alloc:set<NBA>)
@@ -462,6 +494,7 @@ predicate NBAUnusedInTable(k:Constants, table:Table, nba:NBA)
 }
 
 predicate AllocateNBA(k:Constants, s:Variables, nba:NBA, persistentTl:TableLookup)
+    requires WFConstants(k)
     requires WFTable(k, s.ephemeralTable)
 {
     && ValidNba(k, nba)
@@ -492,7 +525,7 @@ function WriteNodeToCache(k:Constants, cache:Cache, nba:NBA, node:Node) : Cache
 
 datatype NodeEdit = NodeEdit(   // What you need to know to edit a slot of a node in the tree:
     lookup:Lookup,              // Path to the adjusted node, to prove that it belongs to the tree
-    tableLookup:TableLookup,    // Requir
+    tableLookup:TableLookup,    // Required to allocate without stomping references from persistent table
     replacementNba:NBA,         // node address for the replacement node (with the changed slot)
     replacementNode:Node        // the new node that will replace the one being edited
     )
@@ -507,6 +540,7 @@ function EditLast(edit:NodeEdit) : Layer
 // relations.  The caller supplies an additional constraint that ensures the
 // 'edit' record does what its action needs.
 predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+    requires WFConstants(k)
 {
     && s.ready
     && WFVariables(k, s)
@@ -521,6 +555,7 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum
 }
 
 predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+    requires WFConstants(k)
 {
     && ApplyEdit(k, s, s', edit, datum)
     && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
@@ -536,10 +571,12 @@ predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, slotIdx:int, deleted
     && WFNode(newNode)
     && ValidSlotIndex(newNode, slotIdx)
     && !newNode.slots[slotIdx].Pointer?
+    // TODO this could make up an "old" value that got inserted-over.
     && oldNode == ReplaceSlotForInsert(newNode, slotIdx, deletedDatum)
 }
 
 predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+    requires WFConstants(k)
 {
     && ApplyEdit(k, s, s', edit, datum)
     && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, datum)
@@ -550,7 +587,7 @@ predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirect
     requires 0<=replacedSlot<|indirectNode.slots|
     requires |childNode.slots| == |childNode.pivots| + 1
 {
-    && directNode == NodeInsertSlots(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
+    && directNode == NodeReplaceSlotWithSlotSequence(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
     && indirectNode.slots[replacedSlot] == Pointer(childAddr)
 }
 
@@ -562,7 +599,7 @@ predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int,
     // that this check will duplicate what the invariant already does.)
     && WFNode(indirectNode)
     && 0<=replacedSlot<|indirectNode.slots|
-    && |childNode.slots| == |childNode.pivots| + 1
+    && WFNode(childNode)
     && ChildEquivalentToSlotGroup(directNode, replacedSlot, indirectNode, childAddr, childNode)
 }
 
@@ -571,10 +608,13 @@ datatype Janitorial = Janitorial(
     childAddr:TableAddress,     // table index where child is coming from or allocated to
     childNba:NBA,               // node address where child is coming from or allocated to
     childNode:Node,             // child node exchanging places with subrange of parent slots
-    childNba':NBA               // the table reference for childAddr after the action
+    childEntry':NBA             // what becomes of the table reference for childAddr after the action
     )
 
+// TODO consider breaking these weird abstract action-helpers into
+// enabling-condition & update parts to make caller read more imperatively.
 predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+    requires WFConstants(k)
     requires j.childNba.Used?
     requires ValidAddress(k, j.childAddr)
 {
@@ -595,21 +635,23 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     // Through the magic of table indirection, lastLayer.node's parent is
     // suddenly switched to point to replacementNode.
     && s'.ephemeralTable ==
-        s.ephemeralTable[EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childNba']
+        s.ephemeralTable[EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry']
     && s'.ready
 }
 
 predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+    requires WFConstants(k)
 {
-    && WFTable(k, s.ephemeralTable) // mai
+    && WFTable(k, s.ephemeralTable)
     && AllocateNBA(k, s, j.childNba, j.edit.tableLookup)
     && AllocateAddr(k, s, j.childAddr)
     && JanitorialAction(k, s, s', j)
     && ChildEquivalentToSlotGroupForExpand(EditLast(j.edit).node, EditLast(j.edit).slot, j.edit.replacementNode, j.childAddr, j.childNode)
-    && j.childNba' == j.childNba  // record the allocated reference
+    && j.childEntry' == j.childNba  // record the allocated reference
 }
 
 predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+    requires WFConstants(k)
 {
     && WFVariables(k, s)
     && ValidAddress(k, j.childAddr)
@@ -619,7 +661,7 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
     && CachedNodeRead(k, s, j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
-    && j.childNba' == Unused  // free the child reference
+    && j.childEntry' == Unused  // free the child reference
 }
 
 predicate WriteCore(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
@@ -638,6 +680,7 @@ predicate WriteBackAction(k:Constants, s:Variables, s':Variables, lba:LBA)
 {
     && 1 <= lba < DiskSize(k)
     && lba in s.cache
+    && s.cache[lba].state.Dirty?    // performance spec: don't write clean things back. :v)
     && WriteCore(k, s, s', lba, s.cache[lba].sector)
 }
 
@@ -661,6 +704,8 @@ predicate EmitTableAction(k:Constants, s:Variables, s':Variables, persistentTi:T
     && s'.ready == true
 }
 
+// TODO how about a writeback for node sectors?
+
 predicate CacheIsClean(cache:Cache)
 {
     forall lba :: lba in cache ==> cache[lba].state.Clean?
@@ -675,11 +720,13 @@ predicate CommitAction(k:Constants, s:Variables, s':Variables, persistentTi:Tabl
     && s.ready
     && KnowPersistentTableIndex(k, s, persistentTi, super)
     && var ephemeralTi := OppositeTableIndex(persistentTi);
-    && var super := TreeDisk.Superblock(ephemeralTi);
+    // TODO and need to Know the Ephemeral Table
+    && var newSuper := TreeDisk.Superblock(ephemeralTi);
     && CacheIsClean(s.cache)
 
     // Write the new superblock THROUGH the cache. Everything in the cache stays clean.
-    && WriteCore(k, s, s', SUPERBLOCK_LBA(), super)
+    && WriteCore(k, s, s', SUPERBLOCK_LBA(), newSuper)
+    // TODO unchanged everything else
 }
 
 // TODO trusted code
@@ -693,6 +740,7 @@ predicate CrashAction(k:Constants, s:Variables, s':Variables)
 
 // You can make an ephemeral table ready to write
 predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, persistentTl:TableLookup)
+    requires WFConstants(k)
 {
     && !s.ready
     && KnowPersistentTableIndex(k, s, persistentTl.ti, super)
@@ -802,19 +850,6 @@ function ViewThroughCache(k:Constants, s:Variables) : (view:View)
     ViewThroughCacheDef(k, s, k.disk.size)
 }
 
-function {:opaque} SubsequenceFromFullView(k:Constants, view:View, start:LBA, count:int) : (s:seq<Sector>)
-    requires FullView(k, view)
-    requires 0<count
-    requires TreeDisk.ValidLBA(k.disk, start)
-    requires TreeDisk.ValidLBA(k.disk, start+count-1)
-    ensures |s| == count
-    ensures forall i :: 0<=i<count ==> view[start + i] == s[i]
-{
-    if count == 1
-    then [view[start]]
-    else SubsequenceFromFullView(k, view, start, count-1) + [view[start+count-1]]
-}
-
 datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
 
 // Constraints on just the configuration (Constants)
@@ -871,6 +906,7 @@ datatype Step =
     | CacheEvictActionStep(lba:LBA)
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+    requires WFConstants(k)
 {
     match step {
         case  QueryActionStep(lookup, datum) => QueryAction(k, s, s', lookup, datum)
@@ -889,7 +925,8 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     }
 }
     
-predicate Next(k:Constants, s:Variables, s':Variables)
+predicate {:opaque} Next(k:Constants, s:Variables, s':Variables)
+    requires WFConstants(k)
 {
     exists step :: NextStep(k, s, s', step)
 }
