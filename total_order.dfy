@@ -16,6 +16,23 @@ abstract module Total_Order {
 	predicate method ltedef(a: Element, b: Element)
 }
 
+abstract module Bounded_Total_Order refines Total_Order {
+  import Base_Order : Total_Order
+  datatype Element = Min_Element | Element(e: Base_Order.Element) | Max_Element
+
+  predicate method lte(a: Element, b: Element) {
+      || a.Min_Element?
+      || b.Max_Element?
+      || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
+  }
+
+  predicate method ltedef(a: Element, b: Element) {
+      || a.Min_Element?
+      || b.Max_Element?
+      || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
+  }
+}
+
 module Integer_Order refines Total_Order {
   type Element = int
 
