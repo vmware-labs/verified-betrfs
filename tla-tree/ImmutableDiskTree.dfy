@@ -238,10 +238,10 @@ predicate PersistentTableIndexInView(view:View, ti:TableIndex, super:Sector)
 //////////////////////////////////////////////////////////////////////////////
 // These predicates are shorthands useful in the running case.
 
-predicate CachedNodeRead(k:Constants, s:Variables, nba:NBA, node:Node)
+predicate ViewNodeRead(k:Constants, view:View, nba:NBA, node:Node)
     requires ValidNba(k, nba)
 {
-    && SectorInView(ViewOfCache(s.cache), LbaForNba(k, nba), TreeDisk.NodeSector(node))
+    && SectorInView(view, LbaForNba(k, nba), TreeDisk.NodeSector(node))
     // We toss WFNode in here to keep other expressions tidy; as with any WF, this can
     // create a liveness problem (can't read that disk sector with a malformed node).
     // Even if we don't prove liveness, we can mitigate that concern by including a
@@ -310,7 +310,7 @@ datatype Layer = Layer(
 
 datatype Lookup = Lookup(layers:seq<Layer>)
 
-predicate WFLookup(k:Constants, lookup:Lookup)
+predicate WFLookup(lookup:Lookup)
 {
     0 < |lookup.layers|
 }
@@ -397,29 +397,34 @@ predicate LookupHonorsRanges(lookup:Lookup)
         && RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
 }
 
-predicate LookupMatchesCache(k:Constants, s:Variables, lookup:Lookup)
-    requires WFLookup(k, lookup)
-    requires WFTable(k, s.ephemeralTable)
+predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
+    requires WFLookup(lookup)
+    requires WFTable(k, table)
     requires LookupHasValidAddresses(k, lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==> (
         && var layer := lookup.layers[i];
-        && var nba := TableAt(k, s.ephemeralTable, layer.addr);
+        && var nba := TableAt(k, table, layer.addr);
         && ValidNba(k, nba)
-        && CachedNodeRead(k, s, nba, layer.node)
+        && ViewNodeRead(k, view, nba, layer.node)
     )
 }
 
-predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
+predicate ValidLookupInView(k:Constants, table:Table, view:View, lookup:Lookup)
 {
-    && WFLookup(k, lookup)
+    && WFLookup(lookup)
     && LookupHasValidNodes(lookup)
     && LookupHasValidSlotIndices(lookup)
     && LookupHasValidAddresses(k, lookup)
     && LookupHonorsPointerLinks(lookup)
     && LookupHonorsRanges(lookup)
-    && WFTable(k, s.ephemeralTable)
-    && LookupMatchesCache(k, s, lookup)
+    && WFTable(k, table)
+    && LookupMatchesView(k, table, view, lookup)
+}
+
+predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
+{
+    && ValidLookupInView(k, s.ephemeralTable, ViewOfCache(s.cache), lookup)
 }
 
 predicate SlotSatisfiesQuery(slot:Slot, datum:Datum)
@@ -430,8 +435,8 @@ predicate SlotSatisfiesQuery(slot:Slot, datum:Datum)
 }
 
 // The slot to which this lookup leads.
-function TerminalSlot(k:Constants, lookup:Lookup) : Slot
-    requires WFLookup(k, lookup)
+function TerminalSlot(lookup:Lookup) : Slot
+    requires WFLookup(lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
     var lastLayer := Last(lookup.layers);
@@ -441,7 +446,7 @@ function TerminalSlot(k:Constants, lookup:Lookup) : Slot
 predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, datum:Datum)
 {
     && ValidLookup(k, s, lookup)
-    && SlotSatisfiesQuery(TerminalSlot(k, lookup), datum)
+    && SlotSatisfiesQuery(TerminalSlot(lookup), datum)
 }
 
 predicate QueryAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lookup:Lookup, datum:Datum)
@@ -672,7 +677,7 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDi
     && j.childNba == TableAt(k, s.ephemeralTable, j.childAddr)
     && JanitorialAction(k, s, s', diskStep, j)
     && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
-    && CachedNodeRead(k, s, j.childNba, j.childNode)
+    && ViewNodeRead(k, ViewOfCache(s.cache), j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childEntry' == Unused  // free the child reference
 }

@@ -1,2 +1,2 @@
 #!/bin/bash
-dafny ImmutableDiskTree.dfy ImmutableDiskTreeInv.dfy ImmutableDiskTreeHeight.dfy ImmutableDiskTreeInterpretation.dfy ImmutableDiskTreeRefinement.dfy
+time dafny KVTypes.dfy Disk.dfy MissingLibrary.dfy ImmutableDiskTree.dfy ImmutableDiskTreeInv.dfy ImmutableDiskTreeHeight.dfy ImmutableDiskTreeInterpretation.dfy ImmutableDiskTreeRefinement.dfy

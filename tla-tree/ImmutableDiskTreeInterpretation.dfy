@@ -1,4 +1,4 @@
-include "ImmutableDiskTreeHeight.dfy"
+include "ImmutableDiskTreeContent.dfy"
 include "CrashableMap.dfy"
 
 module ImmutableDiskTreeInterpretation {
@@ -7,6 +7,7 @@ import opened TreeTypes
 import opened ImmutableDiskTreeImpl
 import opened ImmutableDiskTreeInv
 import opened ImmutableDiskTreeHeight
+import opened ImmutableDiskTreeContent
 import opened MissingLibrary
 import CrashableMap
 
@@ -154,20 +155,26 @@ function ITreeView(tv:TreeView) : (iview:CrashableMap.View)
     CompletifyView(ISubtreeView(tv, ROOT_ADDR()))
 }
 
-function EphemeralTreeView(k:Constants, s:Variables, diskView:View) : (tv:TreeView)
+//////////////////////////////////////////////////////////////////////////////
+
+function PersistentLookupView(k:Constants, diskView:View) : LookupView
+    requires PlausibleDiskSize(k)
     requires FullView(k, diskView)
-    requires TreeShapedGraph(EphemeralGraph(k, s, diskView))   // TODO belongs in Inv
-    ensures WFTreeView(tv)
+    requires TableBlocksTypeCorrect(k, diskView)
 {
-    TreeView(EphemeralGraph(k, s, diskView))
+    LookupView(k, PersistentTable(k, diskView), diskView)
 }
 
-function PersistentTreeView(k:Constants, diskView:View) : (tv:TreeView)
-    requires PersistentGraphSane(k, diskView)
-    requires TreeShapedGraph(PersistentGraph(k, diskView))   // TODO belongs in Inv
-    ensures WFTreeView(tv)
+function EphemeralLookupView(k:Constants, s:Variables, diskView:View) : LookupView
+    requires FullView(k, diskView)
 {
-    TreeView(PersistentGraph(k, diskView))
+    LookupView(k, s.ephemeralTable, ViewThroughCache(k, s, diskView))
+}
+
+function ILookupView(lv:LookupView) : (iview:CrashableMap.View)
+    ensures CrashableMap.ViewComplete(iview)
+{
+    CompletifyView(ReachableValues(lv))
 }
 
 function IEphemeralView(k:Constants, s:Variables, diskView:View) : (iview:CrashableMap.View)
@@ -176,7 +183,7 @@ function IEphemeralView(k:Constants, s:Variables, diskView:View) : (iview:Crasha
     requires SaneNodeInView(EphemeralGraph(k, s, diskView),  ROOT_ADDR()) // TODO Inv
     ensures CrashableMap.ViewComplete(iview)
 {
-    ITreeView(EphemeralTreeView(k, s, diskView))
+    ILookupView(EphemeralLookupView(k, s, diskView))
 }
 
 function IPersistentView(k:Constants, diskView:View) : (iview:CrashableMap.View)
@@ -185,7 +192,7 @@ function IPersistentView(k:Constants, diskView:View) : (iview:CrashableMap.View)
     requires SaneNodeInView(PersistentGraph(k, diskView),  ROOT_ADDR()) // TODO Inv
     ensures CrashableMap.ViewComplete(iview)
 {
-    ITreeView(PersistentTreeView(k, diskView))
+    ILookupView(PersistentLookupView(k, diskView))
 }
 
 function IViews(k:Constants, s:Variables, diskView:View) : (iviews:seq<CrashableMap.View>)
