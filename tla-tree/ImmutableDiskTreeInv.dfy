@@ -2,7 +2,12 @@ include "ImmutableDiskTree.dfy"
 
 module ImmutableDiskTreeInv {
 import opened TreeTypes
-import opened ImmutableDiskTree
+import opened ImmutableDiskTreeImpl
+
+predicate FullView(k:Constants, view:View)
+{
+    forall lba :: 0 <= lba < DiskSize(k) <==> lba in view
+}
 
 predicate SuperblockTypeCorrect(k:Constants, view:View)
     requires PlausibleDiskSize(k)

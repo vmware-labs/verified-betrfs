@@ -1,0 +1,2 @@
+#!/bin/bash
+dafny ImmutableDiskTree.dfy ImmutableDiskTreeInv.dfy ImmutableDiskTreeHeight.dfy ImmutableDiskTreeInterpretation.dfy ImmutableDiskTreeRefinement.dfy

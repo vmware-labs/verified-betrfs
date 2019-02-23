@@ -31,6 +31,21 @@ datatype Sector =
     | Superblock(liveTable:TableIndex)
     | TableSector
     | NodeSector(node:Node)
+
+datatype Step =
+    | ReadStep(lba:LBA, sector:Sector)
+    | WriteStep(lba:LBA, sector:Sector)
+    | IdleStep
+
+predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+{
+    match step {
+        case ReadStep(lba, sector) => Read(k, s, s', lba, sector)
+        case WriteStep(lba, sector) => Write(k, s, s', lba, sector)
+        case IdleStep => Idle(k, s, s')
+    }
+}
+
 } // module TreeDisk
 
 
@@ -41,7 +56,7 @@ datatype Sector =
 // parallel with ongoing activity. But I'm not sure it's worth frying that fish now, when we have
 // big data structure changes to make later.
 
-module ImmutableDiskTree {
+module ImmutableDiskTreeImpl {
 import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
@@ -64,7 +79,6 @@ function {:opaque} ViewOfCache(cache:Cache) : View
 datatype NBA = Unused | Used(nidx:int)  // A Node Block Address is an offset into the node-sectors region of the disk.
 
 datatype Constants = Constants(
-    disk:TreeDisk.Constants,
     tableEntries:int,    // How many entries in the table (allocatable data blocks on the disk)
     tableSectors:int     // How many sectors to set aside for each indirection table
     )
@@ -106,7 +120,6 @@ function LbaForNba(k:Constants, nba:NBA) : LBA
 }
 
 datatype Variables = Variables(
-    disk:TreeDisk.Variables,
     cache:Cache,
     ephemeralTable:Table,    // The ephemeral table, ready to write out on a commit
 
@@ -189,8 +202,7 @@ predicate ViewContains(view:View, start:LBA, count:int)
 
 predicate PlausibleViewRange(k:Constants, start:LBA, count:int)
 {
-    && TreeDisk.ValidLBA(k.disk, start)
-    && TreeDisk.ValidLBA(k.disk, start+count-1)
+    0 <= start <= start+count <= DiskSize(k)
 }
 
 function {:opaque} SubsequenceFromFullView(k:Constants, view:View, start:LBA, count:int) : (s:seq<Sector>)
@@ -432,11 +444,12 @@ predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, datum:Da
     && SlotSatisfiesQuery(TerminalSlot(k, lookup), datum)
 }
 
-predicate QueryAction(k:Constants, s:Variables, s':Variables, lookup:Lookup, datum:Datum)
+predicate QueryAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lookup:Lookup, datum:Datum)
 {
     && s.ready
     && LookupSatisfiesQuery(k, s, lookup, datum)
 
+    && diskStep == TreeDisk.IdleStep
     && s' == s
 }
 
@@ -539,7 +552,7 @@ function EditLast(edit:NodeEdit) : Layer
 // This is a prototype action -- it has both enabling conditions and transition
 // relations.  The caller supplies an additional constraint that ensures the
 // 'edit' record does what its action needs.
-predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+predicate ApplyEdit(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, datum:Datum)
     requires WFConstants(k)
 {
     && s.ready
@@ -547,17 +560,17 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum
     && LookupSatisfiesQuery(k, s, edit.lookup, datum)
     && AllocateNBA(k, s, edit.replacementNba, edit.tableLookup)
 
-    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && diskStep == TreeDisk.IdleStep
     && s'.cache == WriteNodeToCache(k, s.cache, edit.replacementNba, edit.replacementNode)
     // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
     && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr.a := edit.replacementNba]
     && s'.ready
 }
 
-predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+predicate InsertAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, datum:Datum)
     requires WFConstants(k)
 {
-    && ApplyEdit(k, s, s', edit, datum)
+    && ApplyEdit(k, s, s', diskStep, edit, datum)
     && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
 }
 
@@ -575,10 +588,10 @@ predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, slotIdx:int, deleted
     && oldNode == ReplaceSlotForInsert(newNode, slotIdx, deletedDatum)
 }
 
-predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+predicate DeleteAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, datum:Datum)
     requires WFConstants(k)
 {
-    && ApplyEdit(k, s, s', edit, datum)
+    && ApplyEdit(k, s, s', diskStep, edit, datum)
     && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, datum)
 }
 
@@ -613,7 +626,7 @@ datatype Janitorial = Janitorial(
 
 // TODO consider breaking these weird abstract action-helpers into
 // enabling-condition & update parts to make caller read more imperatively.
-predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+predicate JanitorialAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, j:Janitorial)
     requires WFConstants(k)
     requires j.childNba.Used?
     requires ValidAddress(k, j.childAddr)
@@ -624,7 +637,7 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && AllocateNBA(k, s, j.edit.replacementNba, j.edit.tableLookup)
     && ValidNba(k, j.childNba)
 
-    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && diskStep == TreeDisk.IdleStep
 
     // The second write (j.childNba) "writes" the child to memory in the expand
     // case, and is a no-op in the contract case.
@@ -639,36 +652,36 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && s'.ready
 }
 
-predicate ExpandAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+predicate ExpandAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, j:Janitorial)
     requires WFConstants(k)
 {
     && WFTable(k, s.ephemeralTable)
     && AllocateNBA(k, s, j.childNba, j.edit.tableLookup)
     && AllocateAddr(k, s, j.childAddr)
-    && JanitorialAction(k, s, s', j)
+    && JanitorialAction(k, s, s', diskStep, j)
     && ChildEquivalentToSlotGroupForExpand(EditLast(j.edit).node, EditLast(j.edit).slot, j.edit.replacementNode, j.childAddr, j.childNode)
     && j.childEntry' == j.childNba  // record the allocated reference
 }
 
-predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
+predicate ContractAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, j:Janitorial)
     requires WFConstants(k)
 {
     && WFVariables(k, s)
     && ValidAddress(k, j.childAddr)
     && TableAt(k, s.ephemeralTable, j.childAddr).Used?
     && j.childNba == TableAt(k, s.ephemeralTable, j.childAddr)
-    && JanitorialAction(k, s, s', j)
+    && JanitorialAction(k, s, s', diskStep, j)
     && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
     && CachedNodeRead(k, s, j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childEntry' == Unused  // free the child reference
 }
 
-predicate WriteCore(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
+predicate WriteCore(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA, sector:Sector)
 {
     && s.ready
 
-    && TreeDisk.Write(k.disk, s.disk, s'.disk, lba, sector)
+    && diskStep == TreeDisk.WriteStep(lba, sector)
     && s'.cache == s.cache[lba := CacheLine(sector, Clean)]
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == true
@@ -676,16 +689,16 @@ predicate WriteCore(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sect
 
 // It's always okay to write back cached sectors, whenever we feel like it,
 // except: we can't write back the superblock pointer; that's a Commit.
-predicate WriteBackAction(k:Constants, s:Variables, s':Variables, lba:LBA)
+predicate WriteBackAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA)
 {
     && 1 <= lba < DiskSize(k)
     && lba in s.cache
     && s.cache[lba].state.Dirty?    // performance spec: don't write clean things back. :v)
-    && WriteCore(k, s, s', lba, s.cache[lba].sector)
+    && WriteCore(k, s, s', diskStep, lba, s.cache[lba].sector)
 }
 
 // Dirty a sector that stores the ephemeral table.
-predicate EmitTableAction(k:Constants, s:Variables, s':Variables, persistentTi:TableIndex, super:Sector, tblSectorIdx:int)
+predicate EmitTableAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, persistentTi:TableIndex, super:Sector, tblSectorIdx:int)
 {
     && s.ready
     && WFVariables(k, s)
@@ -698,7 +711,7 @@ predicate EmitTableAction(k:Constants, s:Variables, s':Variables, persistentTi:T
     // The next line is just good advice about what might help to write. :v) 
     && var sector := MarshallTable(k, s.ephemeralTable)[tblSectorIdx];
     
-    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && diskStep == TreeDisk.IdleStep
     && s'.cache == WriteSectorToCache(k, s'.cache, lba, sector)
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == true
@@ -715,7 +728,7 @@ predicate CacheIsClean(cache:Cache)
 // the flag.
 // TODO For this version, we'll be simple and just demand that every line of
 // the cache be Clean.
-predicate CommitAction(k:Constants, s:Variables, s':Variables, persistentTi:TableIndex, super:Sector)
+predicate CommitAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, persistentTi:TableIndex, super:Sector)
 {
     && s.ready
     && KnowPersistentTableIndex(k, s, persistentTi, super)
@@ -725,21 +738,21 @@ predicate CommitAction(k:Constants, s:Variables, s':Variables, persistentTi:Tabl
     && CacheIsClean(s.cache)
 
     // Write the new superblock THROUGH the cache. Everything in the cache stays clean.
-    && WriteCore(k, s, s', SUPERBLOCK_LBA(), newSuper)
+    && WriteCore(k, s, s', diskStep, SUPERBLOCK_LBA(), newSuper)
     // TODO unchanged everything else
 }
 
 // TODO trusted code
-predicate CrashAction(k:Constants, s:Variables, s':Variables)
+predicate CrashAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step)
 {
-    && s'.disk == s.disk
+    && diskStep == TreeDisk.IdleStep
     && s'.cache.Keys == {}
     // s'.ephemeralTable is unconstrained.
     && s'.ready == false
 }
 
 // You can make an ephemeral table ready to write
-predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, persistentTl:TableLookup)
+predicate RecoverAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, super:Sector, persistentTl:TableLookup)
     requires WFConstants(k)
 {
     && !s.ready
@@ -747,7 +760,7 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, pe
     && WFTableIndex(persistentTl.ti)
     && KnowTable(k, s, persistentTl)
 
-    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && diskStep == TreeDisk.IdleStep
     && s'.cache == s.cache
     // we need to know the whole persistent table: the root ensures the
     // ephemeral tree state matches; the rest of the entries avoid incorrectly
@@ -757,18 +770,18 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, super:Sector, pe
 }
 
 // Bring a sector into the cache
-predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
+predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA, sector:Sector)
 {
-    && TreeDisk.Read(k.disk, s.disk, s'.disk, lba, sector)
+    && diskStep == TreeDisk.ReadStep(lba, sector)
     && s'.cache == s.cache[lba := CacheLine(sector, Clean)]
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == s.ready
 }
 
 // It's okay to evict entries from the cache whenever.
-predicate CacheEvictAction(k:Constants, s:Variables, s':Variables, lba:LBA)
+predicate CacheEvictAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA)
 {
-    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+    && diskStep == TreeDisk.IdleStep
     && s'.cache == MapRemove(s.cache, lba)
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == s.ready
@@ -783,12 +796,13 @@ predicate InitTable(k:Constants, table:Table, rootNba:NBA)
         ==> TableAt(k, table, addr).Unused?)
 }
 
+/* XXX
+
 function {:opaque} EmptyView() : (view:View)
     ensures view.Keys == {}
 {
     map l:LBA | l in {} :: TreeDisk.TableSector
 }
-
 
 function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lbaLimit:LBA) : (view:View)
     requires TreeDisk.WF(k, s)  // to bind |s.sectors| to k.size
@@ -802,36 +816,24 @@ function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lba
     else ViewOfDiskDef(k, s, lbaLimit-1)[lbaLimit-1 := s.sectors[lbaLimit-1]]
 }
 
-function ViewLbaThroughCache(k:Constants, s:Variables, lba:LBA) : Sector
-    requires TreeDisk.WF(k.disk, s.disk)
-    requires TreeDisk.ValidLBA(k.disk, lba)
+function ViewLbaThroughCache(k:Constants, s:Variables, diskImage:seq<Sector>, lba:LBA) : Sector
+    requires 0 <= lba < |diskImage|
 {
     if lba in s.cache
     then s.cache[lba].sector
-    else s.disk.sectors[lba]
+    else diskImage[lba]
 }
 
-function {:opaque} ViewThroughCacheDef(k:Constants, s:Variables, lbaLimit:LBA) : (view:View)
-    requires TreeDisk.WF(k.disk, s.disk)  // to bind |s.disk.sectors| to k.size
-    requires 0 <= lbaLimit <= |s.disk.sectors|
-    ensures forall lba :: lba in view <==> (0 <= lba < lbaLimit && TreeDisk.ValidLBA(k.disk, lba))
-    ensures forall lba :: TreeDisk.ValidLBA(k.disk, lba) && 0 <= lba < lbaLimit ==> view[lba] == ViewLbaThroughCache(k, s, lba)
+function {:opaque} ViewThroughCacheDef(k:Constants, s:Variables, diskImage:seq<Sector>, lbaLimit:LBA) : (view:View)
+    requires 0 <= lbaLimit <= |diskImage|
+    ensures forall lba :: lba in view <==> (0 <= lba < lbaLimit)
+    ensures forall lba :: (0 <= lba < lbaLimit) ==> view[lba] == ViewLbaThroughCache(k, s, diskImage, lba)
     decreases lbaLimit
 {
     if lbaLimit == 0
     then EmptyView()
-    else ViewThroughCacheDef(k, s, lbaLimit-1)[lbaLimit-1 := ViewLbaThroughCache(k, s, lbaLimit-1)]
-}
-
-predicate FullViewDisk(k:TreeDisk.Constants, view:View)
-{
-    forall lba :: TreeDisk.ValidLBA(k, lba) <==> lba in view
-}
-
-predicate FullView(k:Constants, view:View) // more usable by adding DiskSize
-{
-    && k.disk.size == DiskSize(k)
-    && FullViewDisk(k.disk, view)
+    else ViewThroughCacheDef(k, s, diskImage, lbaLimit-1)
+        [lbaLimit-1 := ViewLbaThroughCache(k, s, diskImage, lbaLimit-1)]
 }
 
 function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
@@ -843,11 +845,18 @@ function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
 }
 
 function ViewThroughCache(k:Constants, s:Variables) : (view:View)
-    requires TreeDisk.WF(k.disk, s.disk)
     ensures FullViewDisk(k.disk, view)
     ensures forall lba :: TreeDisk.ValidLBA(k.disk, lba) ==> view[lba] == ViewLbaThroughCache(k, s, lba)
 {
     ViewThroughCacheDef(k, s, k.disk.size)
+}
+*/
+
+function {:opaque} ViewOfDisk(diskImage:seq<Sector>) : (view:View)
+    ensures forall lba :: 0<=lba<|diskImage| <==> lba in view.Keys
+    ensures forall lba :: 0<=lba<|diskImage| ==> view[lba] == diskImage[lba]
+{
+    map lba | 0 <= lba < |diskImage| :: diskImage[lba]
 }
 
 datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
@@ -855,37 +864,29 @@ datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
 // Constraints on just the configuration (Constants)
 predicate PlausibleDiskSize(k:Constants)
 {
-    && k.disk.size == DiskSize(k)
     && 0 < k.tableSectors
     && 0 < k.tableEntries
 }
 
-// Plausible, and the sectors map is correctly sized.
-predicate ValidDiskSize(k:Constants, s:Variables)
-{
-    && PlausibleDiskSize(k)
-    && TreeDisk.WF(k.disk, s.disk)
-}
-
-predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
+predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs, diskImage:seq<Sector>)
 {
     // right-sized disk
-    && TreeDisk.Init(k.disk, s.disk)
-    && ValidDiskSize(k, s)
+    && PlausibleDiskSize(k)
     && 0 < k.tableEntries
+    && |diskImage| == DiskSize(k)
 
     // Empty persistent table
     && WFTableIndex(mkfs.tl.ti)
-    && PersistentTableIndexInView(ViewOfDisk(k.disk, s.disk), mkfs.tl.ti, mkfs.super)
-    && TableInView(k, ViewOfDisk(k.disk, s.disk), mkfs.tl)
+    && PersistentTableIndexInView(ViewOfDisk(diskImage), mkfs.tl.ti, mkfs.super)
+    && TableInView(k, ViewOfDisk(diskImage), mkfs.tl)
     // I arbitrarily demand that the root block be stored in node data sector 0.
     && InitTable(k, mkfs.tl.table, Used(0))
-    && s.disk.sectors[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node([], [Empty]))
+    && diskImage[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node([], [Empty]))
 }
 
-predicate Init(k:Constants, s:Variables)
+predicate Init(k:Constants, s:Variables, diskImage:seq<Sector>)
 {
-    && (exists mkfs :: DiskInMkfsState(k, s, mkfs))
+    && (exists mkfs :: DiskInMkfsState(k, s, mkfs, diskImage))
     && s.cache.Keys == {}
     // No constraint on ephemeralTable, because we'll use !s.ready to force a RecoveryAction.
     && s.ready == false // We'll simply RecoverAction the initial disk.
@@ -905,30 +906,70 @@ datatype Step =
     | CacheFaultActionStep(lba:LBA, sector:Sector)
     | CacheEvictActionStep(lba:LBA)
 
-predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+predicate NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
     requires WFConstants(k)
 {
     match step {
-        case  QueryActionStep(lookup, datum) => QueryAction(k, s, s', lookup, datum)
-        case  InsertActionStep(edit, datum) => InsertAction(k, s, s', edit, datum)
-        case  DeleteActionStep(edit, datum) => DeleteAction(k, s, s', edit, datum)
-        case  ExpandActionStep(j) => ExpandAction(k, s, s', j)
-        case  ContractActionStep(j) => ContractAction(k, s, s', j)
-        case  WriteBackActionStep(lba) => WriteBackAction(k, s, s', lba)
+        case  QueryActionStep(lookup, datum) => QueryAction(k, s, s', diskStep, lookup, datum)
+        case  InsertActionStep(edit, datum) => InsertAction(k, s, s', diskStep, edit, datum)
+        case  DeleteActionStep(edit, datum) => DeleteAction(k, s, s', diskStep, edit, datum)
+        case  ExpandActionStep(j) => ExpandAction(k, s, s', diskStep, j)
+        case  ContractActionStep(j) => ContractAction(k, s, s', diskStep, j)
+        case  WriteBackActionStep(lba) => WriteBackAction(k, s, s', diskStep, lba)
         case  EmitTableActionStep(persistentTi, super, tblSectorIdx)
-                => EmitTableAction(k, s, s', persistentTi, super, tblSectorIdx)
-        case  CommitActionStep(persistentTi, super) => CommitAction(k, s, s', persistentTi, super)
-        case  CrashActionStep => CrashAction(k, s, s')
-        case  RecoverActionStep(super, persistentTl) => RecoverAction(k, s, s', super, persistentTl)
-        case  CacheFaultActionStep(lba, sector) => CacheFaultAction(k, s, s', lba, sector)
-        case  CacheEvictActionStep(lba) => CacheEvictAction(k, s, s', lba)
+                => EmitTableAction(k, s, s', diskStep, persistentTi, super, tblSectorIdx)
+        case  CommitActionStep(persistentTi, super) => CommitAction(k, s, s', diskStep, persistentTi, super)
+        case  CrashActionStep => CrashAction(k, s, s', diskStep)
+        case  RecoverActionStep(super, persistentTl) => RecoverAction(k, s, s', diskStep, super, persistentTl)
+        case  CacheFaultActionStep(lba, sector) => CacheFaultAction(k, s, s', diskStep, lba, sector)
+        case  CacheEvictActionStep(lba) => CacheEvictAction(k, s, s', diskStep, lba)
     }
 }
-    
+
+/*XXX
 predicate {:opaque} Next(k:Constants, s:Variables, s':Variables)
     requires WFConstants(k)
 {
     exists step :: NextStep(k, s, s', step)
 }
+*/
 
 } // module
+
+module ImmutableDiskTree {
+import opened MissingLibrary
+import opened KVTypes
+import opened TreeTypes
+import TreeDisk
+import ImmutableDiskTreeImpl
+
+datatype Constants = Constants(
+    disk:TreeDisk.Constants,
+    impl:ImmutableDiskTreeImpl.Constants)
+
+datatype Variables = Variables(
+    disk:TreeDisk.Variables,
+    impl:ImmutableDiskTreeImpl.Variables)
+
+datatype Step = Step(impl:ImmutableDiskTreeImpl.Step, disk:TreeDisk.Step)
+
+predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+{
+    && ImmutableDiskTreeImpl.WFConstants(k.impl)
+    && ImmutableDiskTreeImpl.NextStep(k.impl, s.impl, s'.impl, step.disk, step.impl)
+    && TreeDisk.NextStep(k.disk, s.disk, s'.disk, step.disk)
+    && (step.impl.CrashActionStep? ==> step.disk.IdleStep?)
+}
+
+predicate Init(k:Constants, s:Variables)
+{
+    && TreeDisk.Init(k.disk, s.disk)
+    && ImmutableDiskTreeImpl.Init(k.impl, s.impl, s.disk.sectors)
+}
+
+predicate {:opaque} Next(k:Constants, s:Variables, s':Variables)
+{
+    exists step :: NextStep(k, s, s', step)
+}
+
+}
