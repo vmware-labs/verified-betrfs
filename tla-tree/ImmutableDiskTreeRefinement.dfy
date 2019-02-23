@@ -22,12 +22,16 @@ predicate WFDiskState(k:Constants, s:Variables)
     && k.disk.size == DiskSize(k)
 }
 
-function {:opaque} DiskView(k:Constants, s:Variables) : (diskView:View)
+function DiskView(k:Constants, s:Variables) : (diskView:View)
     requires WFDiskState(k, s)
-    ensures FullView(k.impl, diskView)
-    ensures forall lba :: 0 <= lba < DiskSize(k) ==> diskView[lba] == s.disk.sectors[lba]
 {
-    map lba | 0 <= lba < DiskSize(k) :: s.disk.sectors[lba]
+    ImmutableDiskTreeImpl.ViewOfDisk(s.disk.sectors)
+}
+
+predicate SysInv(k:Constants, s:Variables)
+{
+    && WFDiskState(k, s)
+    && TreeInv(k.impl, s.impl, DiskView(k, s))
 }
 
 // I rewritten from ImmutableDiskTree namespace.
@@ -37,20 +41,20 @@ function Jk(k:Constants) : CrashableMap.Constants
 }
 
 function J(k:Constants, s:Variables) : CrashableMap.Variables
-    requires WFDiskState(k, s)
-    requires TreeInv(k.impl, s.impl, DiskView(k, s))
+    requires SysInv(k, s)
 {
     I(k.impl, s.impl, DiskView(k, s))
 }
 
 lemma InvImpliesRefinementInit(k:Constants, s:Variables)
     requires Init(k, s)
-    requires TreeInv(k.impl, s.impl, DiskView(k, s))
+    requires SysInv(k, s)
     ensures CrashableMap.Init(Jk(k), J(k, s))
 {
     reveal_ISubtreePrefixView();
     reveal_ISlotView();
     var tv := PersistentTreeView(k.impl, DiskView(k, s));
+
     assert ISubtreeView(tv, ROOT_ADDR()) == ISubtreePrefixView(tv, ROOT_ADDR(), /*slotCount*/ 1); // OBSERVE
     assert IPersistentView(k.impl, DiskView(k, s)) == CrashableMap.EmptyMap(); // OBSERVE
 }
@@ -66,8 +70,8 @@ function FetchStep(k:Constants, s:Variables, s':Variables) : (step:Step)
 
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
-    requires TreeInv(k.impl, s.impl, DiskView(k, s))
-    requires TreeInv(k.impl, s'.impl, DiskView(k, s'))
+    requires SysInv(k, s)
+    requires SysInv(k, s')
     ensures CrashableMap.WF(J(k, s))
     ensures CrashableMap.WF(J(k, s))
     ensures CrashableMap.Next(Jk(k), J(k, s), J(k, s'))
@@ -79,13 +83,18 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
 
     match step.impl {
         case QueryActionStep(lookup, datum) => {
+            assert datum.value == IEphemeralView(k.impl, s.impl, DiskView(k, s))[datum.key];
             assert CrashableMap.Query(Ik, Is, Is', datum);
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.QueryStep(datum));
         }
         case InsertActionStep(edit, datum) => {
             assert CrashableMap.Write(Ik, Is, Is', datum);
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(datum));
         }
         case DeleteActionStep(edit, datum) => {
-            assert CrashableMap.Write(Ik, Is, Is', Datum(datum.key, EmptyValue()));
+            var emptyWrite := Datum(datum.key, EmptyValue());
+            assert CrashableMap.Write(Ik, Is, Is', emptyWrite);
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(emptyWrite));
         }
         case ExpandActionStep(j) => {
             assert CrashableMap.Stutter(Ik, Is, Is');
@@ -95,9 +104,11 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
         }
         case WriteBackActionStep(lba) => {
             assert CrashableMap.Stutter(Ik, Is, Is');
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
         case EmitTableActionStep(persistentTi, super, tblSectorIdx) => {
             assert CrashableMap.Stutter(Ik, Is, Is');
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
         case CommitActionStep(persistentTi, super) => {
             assert CrashableMap.PersistWrites(Ik, Is, Is', 1);

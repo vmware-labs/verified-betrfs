@@ -130,7 +130,7 @@ datatype Step =
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s)
 {
-    && match step {
+    match step {
         case QueryStep(datum) => Query(k, s, s', datum)
         case WriteStep(datum) => Write(k, s, s', datum)
         case CompleteSyncStep() => CompleteSync(k, s, s')

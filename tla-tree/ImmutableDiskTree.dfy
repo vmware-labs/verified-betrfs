@@ -796,61 +796,48 @@ predicate InitTable(k:Constants, table:Table, rootNba:NBA)
         ==> TableAt(k, table, addr).Unused?)
 }
 
-/* XXX
-
-function {:opaque} EmptyView() : (view:View)
-    ensures view.Keys == {}
+// Constraints on just the configuration (Constants)
+predicate PlausibleDiskSize(k:Constants)
 {
-    map l:LBA | l in {} :: TreeDisk.TableSector
+    && 0 < k.tableSectors
+    && 0 < k.tableEntries
 }
 
-function {:opaque} ViewOfDiskDef(k:TreeDisk.Constants, s:TreeDisk.Variables, lbaLimit:LBA) : (view:View)
-    requires TreeDisk.WF(k, s)  // to bind |s.sectors| to k.size
-    requires 0 <= lbaLimit <= |s.sectors|
-    ensures forall lba :: lba in view <==> (0 <= lba < lbaLimit && TreeDisk.ValidLBA(k, lba))
-    ensures forall lba :: TreeDisk.ValidLBA(k, lba) && 0 <= lba < lbaLimit ==> view[lba] == s.sectors[lba]
-    decreases lbaLimit
+predicate FullView(k:Constants, view:View)
 {
-    if lbaLimit == 0
-    then EmptyView()
-    else ViewOfDiskDef(k, s, lbaLimit-1)[lbaLimit-1 := s.sectors[lbaLimit-1]]
+    forall lba :: 0 <= lba < DiskSize(k) <==> lba in view
 }
 
-function ViewLbaThroughCache(k:Constants, s:Variables, diskImage:seq<Sector>, lba:LBA) : Sector
-    requires 0 <= lba < |diskImage|
+datatype Mkfs = Mkfs(tl:TableLookup)
+
+predicate DiskInMkfsState(k:Constants, mkfs:Mkfs, diskView:View)
+    requires FullView(k, diskView)
 {
-    if lba in s.cache
-    then s.cache[lba].sector
-    else diskImage[lba]
+    // right-sized disk
+    && PlausibleDiskSize(k)
+    && 0 < k.tableEntries
+
+    // Empty persistent table
+    && WFTableIndex(mkfs.tl.ti)
+    && PersistentTableIndexInView(diskView, mkfs.tl.ti, mkfs.tl.super)
+    && TableInView(k, diskView, mkfs.tl)
+    // I arbitrarily demand that the root block be stored in node data sector 0.
+    && InitTable(k, mkfs.tl.table, Used(0))
+    && diskView[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node([], [Empty]))
 }
 
-function {:opaque} ViewThroughCacheDef(k:Constants, s:Variables, diskImage:seq<Sector>, lbaLimit:LBA) : (view:View)
-    requires 0 <= lbaLimit <= |diskImage|
-    ensures forall lba :: lba in view <==> (0 <= lba < lbaLimit)
-    ensures forall lba :: (0 <= lba < lbaLimit) ==> view[lba] == ViewLbaThroughCache(k, s, diskImage, lba)
-    decreases lbaLimit
+// Supply a concrete mkfs image to (a) demonstrate that it is actually possible to initialize the disk
+// and (b) avoid an exists so Dafny can see the Init properties easily.
+function mkfs(k:Constants) : Mkfs
+    requires PlausibleDiskSize(k)
 {
-    if lbaLimit == 0
-    then EmptyView()
-    else ViewThroughCacheDef(k, s, diskImage, lbaLimit-1)
-        [lbaLimit-1 := ViewLbaThroughCache(k, s, diskImage, lbaLimit-1)]
+    var ti := TableIndex(0);
+    var super := TreeDisk.Superblock(ti);
+    var table := [Used(0)] + MemsetSeq(Unused, k.tableEntries-1);
+    var sectors := MarshallTable(k, table);
+    var mkfs := Mkfs(TableLookup(super, ti, table, sectors));
+    mkfs
 }
-
-function ViewOfDisk(k:TreeDisk.Constants, s:TreeDisk.Variables) : (view:View)
-    requires TreeDisk.WF(k, s)
-    ensures FullViewDisk(k, view)
-    ensures forall lba :: TreeDisk.ValidLBA(k, lba) ==> view[lba] == s.sectors[lba]
-{
-    ViewOfDiskDef(k, s, k.size)
-}
-
-function ViewThroughCache(k:Constants, s:Variables) : (view:View)
-    ensures FullViewDisk(k.disk, view)
-    ensures forall lba :: TreeDisk.ValidLBA(k.disk, lba) ==> view[lba] == ViewLbaThroughCache(k, s, lba)
-{
-    ViewThroughCacheDef(k, s, k.disk.size)
-}
-*/
 
 function {:opaque} ViewOfDisk(diskImage:seq<Sector>) : (view:View)
     ensures forall lba :: 0<=lba<|diskImage| <==> lba in view.Keys
@@ -859,34 +846,11 @@ function {:opaque} ViewOfDisk(diskImage:seq<Sector>) : (view:View)
     map lba | 0 <= lba < |diskImage| :: diskImage[lba]
 }
 
-datatype Mkfs = Mkfs(super:Sector, tl:TableLookup)
-
-// Constraints on just the configuration (Constants)
-predicate PlausibleDiskSize(k:Constants)
-{
-    && 0 < k.tableSectors
-    && 0 < k.tableEntries
-}
-
-predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs, diskImage:seq<Sector>)
-{
-    // right-sized disk
-    && PlausibleDiskSize(k)
-    && 0 < k.tableEntries
-    && |diskImage| == DiskSize(k)
-
-    // Empty persistent table
-    && WFTableIndex(mkfs.tl.ti)
-    && PersistentTableIndexInView(ViewOfDisk(diskImage), mkfs.tl.ti, mkfs.super)
-    && TableInView(k, ViewOfDisk(diskImage), mkfs.tl)
-    // I arbitrarily demand that the root block be stored in node data sector 0.
-    && InitTable(k, mkfs.tl.table, Used(0))
-    && diskImage[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node([], [Empty]))
-}
-
 predicate Init(k:Constants, s:Variables, diskImage:seq<Sector>)
 {
-    && (exists mkfs :: DiskInMkfsState(k, s, mkfs, diskImage))
+    && PlausibleDiskSize(k)
+    && |diskImage| == DiskSize(k)
+    && DiskInMkfsState(k, mkfs(k), ViewOfDisk(diskImage))
     && s.cache.Keys == {}
     // No constraint on ephemeralTable, because we'll use !s.ready to force a RecoveryAction.
     && s.ready == false // We'll simply RecoverAction the initial disk.
