@@ -32,20 +32,6 @@ datatype Sector =
     | TableSector
     | NodeSector(node:Node)
 
-datatype Step =
-    | ReadStep(lba:LBA, sector:Sector)
-    | WriteStep(lba:LBA, sector:Sector)
-    | IdleStep
-
-predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
-{
-    match step {
-        case ReadStep(lba, sector) => Read(k, s, s', lba, sector)
-        case WriteStep(lba, sector) => Write(k, s, s', lba, sector)
-        case IdleStep => Idle(k, s, s')
-    }
-}
-
 } // module TreeDisk
 
 
@@ -717,7 +703,7 @@ predicate EmitTableAction(k:Constants, s:Variables, s':Variables, diskStep:TreeD
     && var sector := MarshallTable(k, s.ephemeralTable)[tblSectorIdx];
     
     && diskStep == TreeDisk.IdleStep
-    && s'.cache == WriteSectorToCache(k, s'.cache, lba, sector)
+    && s'.cache == WriteSectorToCache(k, s.cache, lba, sector)
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == true
 }

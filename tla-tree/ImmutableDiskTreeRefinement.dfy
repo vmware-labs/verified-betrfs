@@ -100,6 +100,72 @@ lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
     reveal_ReachableValues();
 }
 
+lemma InvInduction(k:Constants, s:Variables, s':Variables)
+    requires Next(k, s, s')
+    requires SysInv(k, s)
+    ensures SysInv(k, s')
+{
+    var step := FetchStep(k, s, s');    // OBSERVE this witness is enough to get dafny to do the case analysis for TreeDisk.WF
+    assert WFDiskState(k, s');
+
+    match step.impl {
+        case QueryActionStep(lookup, datum) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case InsertActionStep(edit, datum) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case DeleteActionStep(edit, datum) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case ExpandActionStep(j) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case ContractActionStep(j) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case WriteBackActionStep(lba) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case EmitTableActionStep(persistentTi, super, tblSectorIdx) => {
+            var ephemeralTi := OppositeTableIndex(persistentTi);
+            var lba := ImmutableDiskTreeImpl.LbaForTableOffset(k.impl, ephemeralTi, tblSectorIdx);
+            var sector := ImmutableDiskTreeImpl.MarshallTable(k.impl, s.impl.ephemeralTable)[tblSectorIdx];
+            assert s'.impl.cache == ImmutableDiskTreeImpl.WriteSectorToCache(k.impl, s.impl.cache, lba, sector);
+            forall l | l in s'.impl.cache ensures 0 <= l < DiskSize(k)
+            {
+                if l == lba {
+                    assert 0 <= lba < DiskSize(k);
+                } else {
+                    assert l in s.impl.cache;
+                    assert 0 <= lba < DiskSize(k);
+                    assert 0 <= l < DiskSize(k);
+                }
+            }
+            assume false;
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case CommitActionStep(persistentTi, super) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case CrashActionStep => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case RecoverActionStep(super, persistentTl) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case CacheFaultActionStep(lba, sector) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+        case CacheEvictActionStep(lba) => {
+            assert CacheLbasFitOnDisk(k.impl, s'.impl);
+        }
+    }
+    assume TreeInv(k.impl, s'.impl, DiskView(k, s'));
+    assume false;
+    assert OneDatumPerKeyInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))));
+}
+
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
     requires SysInv(k, s)
