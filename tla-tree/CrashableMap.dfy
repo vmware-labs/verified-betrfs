@@ -1,12 +1,14 @@
-include "KVTypes.dfy"
+include "MissingLibrary.dfy"
 
 // A Map that can crash and revert to prior states, but only in
 // controlled ways, limited by a sync operation.
-module CrashableMap {
-import opened KVTypes
-
+abstract module CrashableMap {
+import opened MissingLibrary
+type Key(!new,==)
+type Value(!new,==)
+  
 datatype Constants = Constants()
-type View = imap<Key, Value>
+type View = imap<Key, Option<Value> >
 datatype Variables = Variables(views:seq<View>)
 // A bit of philosophy: Note that, even here in the abstract spec, we maintain
 // a list of views that haven't yet been committed to disk. Why? Becuase in the
@@ -40,10 +42,10 @@ predicate InDomain(k:Key)
     true
 }
 
-function EmptyMap() : (zmap : imap<Key,Value>)
+function EmptyMap() : (zmap : imap<Key,Option<Value> >)
     ensures ViewComplete(zmap)
 {
-    imap k | InDomain(k) :: EmptyValue()
+    imap k | InDomain(k) :: None
 }
 
 predicate Init(k:Constants, s:Variables)
@@ -64,20 +66,20 @@ function PersistentView(k:Constants, s:Variables) : View
     s.views[|s.views|-1]
 }
 
-predicate Query(k:Constants, s:Variables, s':Variables, datum:Datum)
+predicate Query(k:Constants, s:Variables, s':Variables, key:Key, result:Option<Value>)
     requires WF(s)
 {
-    && datum.value == EphemeralView(k, s)[datum.key]
+    && result == EphemeralView(k, s)[key]
     && s' == s
 }
 
-predicate Write(k:Constants, s:Variables, s':Variables, datum:Datum)
+predicate Write(k:Constants, s:Variables, s':Variables, key:Key, new_value:Option<Value>)
     requires WF(s)
-    ensures Write(k, s, s', datum) ==> WF(s')
+    ensures Write(k, s, s', key, new_value) ==> WF(s')
 {
     // Prepend a new ephemeral view, and preserve the committed persistent view.
     && WF(s')
-    && EphemeralView(k, s') == EphemeralView(k, s)[datum.key := datum.value]
+    && EphemeralView(k, s') == EphemeralView(k, s)[key := new_value]
     && PersistentView(k, s') == PersistentView(k, s)
 
     // You're allowed to drop intermediate views, but if you keep them, they
@@ -120,8 +122,8 @@ predicate Stutter(k:Constants, s:Variables, s':Variables)
 }
 
 datatype Step =
-    | QueryStep(datum:Datum)
-    | WriteStep(datum:Datum)
+    | QueryStep(key:Key, result:Option<Value>)
+    | WriteStep(key:Key, new_value:Option<Value>)
     | CompleteSyncStep
     | PersistWritesStep(writesRetired:int)
     | SpontaneousCrashStep
@@ -131,8 +133,8 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s)
 {
     && match step {
-        case QueryStep(datum) => Query(k, s, s', datum)
-        case WriteStep(datum) => Write(k, s, s', datum)
+        case QueryStep(key, result) => Query(k, s, s', key, result)
+        case WriteStep(key, new_value) => Write(k, s, s', key, new_value)
         case CompleteSyncStep() => CompleteSync(k, s, s')
         case PersistWritesStep(writesRetired) => PersistWrites(k, s, s', writesRetired)
         case SpontaneousCrashStep() => SpontaneousCrash(k, s, s')
