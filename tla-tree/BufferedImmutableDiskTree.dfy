@@ -19,8 +19,8 @@ function OppositeTableIndex(ti:TableIndex) : TableIndex
 
 datatype TableAddress = TableAddress(a:int)
 
-datatype Message = Insert(datum:Datum) | Delete(key:Key)
-type Buffer = seq<Message>
+datatype Message = Insert(value:Value) | Delete
+type Buffer = map<Key, Message>
 datatype Slot = Pointer(addr:TableAddress) | Empty
 datatype Header = Header(pivots:seq<Key>, slots:seq<Slot>)
 datatype Node = Node(header:Header, buffers:seq<Buffer>)
@@ -297,8 +297,7 @@ datatype Layer = Layer(
     addr:TableAddress,
     node:Node,          // the node at the addr
     slot:int,           // the slot pointing to the next node below
-    slotRange:Range,    // the range that bounds this slot (and hence the node below)
-    bufferPos:int       // the largest integer such that node[slot][bufferPos] <= k 
+    slotRange:Range     // the range that bounds this slot (and hence the node below)
     )
 
 datatype Lookup = Lookup(layers:seq<Layer>)
@@ -318,19 +317,6 @@ predicate LookupHasValidSlotIndices(lookup:Lookup)
     forall i :: 0<=i<|lookup.layers| ==>
         && var layer := lookup.layers[i];
         && ValidSlotIndex(layer.node, layer.slot)
-}
-
-predicate ValidBufferIndex(buffer:Buffer, pos:int)
-{
-  0 <= pos < |buffer|
-}
-
-predicate LookupHasValidBufferPoses(lookup:Lookup)
-{
-    forall i :: 0<=i<|lookup.layers| ==>
-        && var layer := lookup.layers[i];
-        && ValidSlotIndex(layer.node, layer.slot)
-        && ValidBufferIndex(layer.node.buffers[layer.slot], layer.bufferPos)
 }
 
 // Dafny weakness: You can build ValidAddress from ValidAddresses, but going
@@ -428,23 +414,24 @@ predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
     && LookupMatchesCache(k, s, lookup)
 }
 
-predicate BufferSatisfiesQuery(buffer:Buffer, index:int, datum:Datum)
+predicate BufferSatisfiesQuery(buffer:Buffer, datum:Datum)
 {
-  || (buffer[index].Insert? && buffer[index].datum == datum)
-  || (buffer[index].Delete? && buffer[index].key == datum.key)
+  datum.key in buffer && 
+    match buffer[datum.key] {
+      case Delete => datum.value == EmptyValue()
+        // XXX we should enforce that you can't have an insert of EmptyValue().
+        // Or get rid of EmptyValue() altogether.
+      case Insert(v) => v == datum.value
+    }
 }
 
-predicate BufferDoesntDefineKey(buffer:Buffer, key:Key)
+predicate BufferDoesNotDefineKey(buffer:Buffer, key:Key)
 {
-  forall i :: 0 <= i < |buffer| ==>
-    (
-      (buffer[i].Insert? && buffer[i].key != key)
-      ||
-      (buffer[i].Delete? && buffer[i].key != key)
-    )
+  key !in buffer
 }
 
-predicate LookupReachesDeadEnd(lookup:Lookup)
+predicate LookupReachesDeadEnd(k:Constants, lookup:Lookup)
+  requires WFLookup(k, lookup)
 {
   var lastlevel := Last(lookup.layers);
   && ValidSlotIndex(lastlevel.node, lastlevel.slot)
@@ -467,17 +454,32 @@ predicate LookupReachesDeadEnd(lookup:Lookup)
 //     lastLayer.node.slots[lastLayer.slot]
 // }
 
+predicate LookupFollowsQueryPath(k:Constants, s:Variables, lookup:Lookup, key:Key)
+{
+    && ValidLookup(k, s, lookup)
+      // && SlotSatisfiesQuery(TerminalSlot(k, lookup), datum)
+    && RangeContains(Last(lookup.layers).slotRange, key)
+}
+
+predicate LookupDoesNotPassKey(k:Constants, s:Variables, lookup:Lookup, key:Key)
+{
+    && ValidLookup(k, s, lookup)
+    && (forall i :: 0 <= i < |lookup.layers| - 1 ==>
+       BufferDoesNotDefineKey(lookup.layers[i].node.buffers[lookup.layers[i].slot], key))  
+}
+
 predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, datum:Datum)
 {
     && ValidLookup(k, s, lookup)
       // && SlotSatisfiesQuery(TerminalSlot(k, lookup), datum)
-    && (forall i :: 0 <= i < |lookup.layers| - 1 ==>
-       BufferDoesntDefineKey(lookup.layers[i].node.buffers[lookup.layers[i].slot], datum.key))
+    && LookupFollowsQueryPath(k, s, lookup, datum.key)
+    && LookupDoesNotPassKey(k, s, lookup, datum.key)
     && (var last := Last(lookup.layers);
-       || BufferSatisfiesQuery(last.node.buffers[last.slot], last.bufferPos, datum)
+       || BufferSatisfiesQuery(last.node.buffers[last.slot], datum)
        || (
-          && BufferDoesntDefineKey(last.node.buffers[last.slot], datum.key)
-          && LookupReachesDeadEnd(lookup)
+          && BufferDoesNotDefineKey(last.node.buffers[last.slot], datum.key)
+          && LookupReachesDeadEnd(k, lookup)
+          && datum.value == EmptyValue()
          )
       ) 
 }
@@ -493,42 +495,61 @@ predicate QueryAction(k:Constants, s:Variables, s':Variables, lookup:Lookup, dat
 //////////////////////////////////////////////////////////////////////////////
 // Mutations
 
+function BufferAddMessage(buffer:Buffer, key:Key, msg:Message) : Buffer
+{
+  buffer[key := msg]
+}
+
+function NodeAddMessage(node:Node, slotIndex:int, key:Key, msg:Message) : Node
+  requires WFNode(node)
+  requires ValidSlotIndex(node, slotIndex)
+{
+  Node(node.header, node.buffers[slotIndex := BufferAddMessage(node.buffers[slotIndex], key, msg)])
+}
+
 function NodeReplaceSlot(node:Node, i:int, slot:Slot) : Node
     requires WFNode(node)
-    requires 0<=i<|node.slots|
+    requires 0<=i<|node.header.slots|
 {
-    Node(node.pivots,
-        node.slots[..i] + [slot] + node.slots[i+1..])
+  Node(
+    Header(
+      node.header.pivots,
+      node.header.slots[..i] + [slot] + node.header.slots[i+1..]),
+    node.buffers)
 }
 
 // Replace slot (which starts at pivots[slot-1]) with newSlots, subdivided by newPivots.
-function NodeReplaceSlotWithSlotSequence(node:Node, slot:int, newPivots:seq<Key>, newSlots:seq<Slot>) : Node
+function NodeReplaceSlotWithSlotSequence(node:Node, slot:int,
+  newPivots:seq<Key>, newSlots:seq<Slot>, newBuffers:seq<Buffer>) : Node
     requires WFNode(node)
-    requires 0<=slot<|node.slots|
+    requires 0<=slot<|node.header.slots|
     requires |newSlots| == |newPivots| + 1
+    requires |newBuffers| == |newSlots|
 {
-    Node(
-        node.pivots[..slot] + newPivots + node.pivots[slot..],
-        node.slots[..slot] + newSlots + node.slots[slot+1..])
+  Node(
+    Header(
+      node.header.pivots[..slot] + newPivots + node.header.pivots[slot..],
+      node.header.slots[..slot] + newSlots + node.header.slots[slot+1..]),
+    node.buffers[..slot] + newBuffers + node.buffers[slot+1..])
 }
 
 
-function ReplaceSlotForInsert(node:Node, slotIdx:int, newDatum:Datum) : Node
-    requires WFNode(node)
-    requires ValidSlotIndex(node, slotIdx)
-    requires !node.slots[slotIdx].Pointer?
-{
-    var slot := node.slots[slotIdx];
+// function ReplaceSlotForInsert(node:Node, slotIdx:int, newDatum:Datum) : Node
+//     requires WFNode(node)
+//     requires ValidSlotIndex(node, slotIdx)
+//     requires !node.slots[slotIdx].Pointer?
+// {
+//     var slot := node.slots[slotIdx];
 
-    if slot.Empty? || newDatum.key == slot.datum.key
-        // Replace an empty or same-key datum in place
-    then NodeReplaceSlot(node, slotIdx, Value(newDatum))
-    else if KeyLe(newDatum.key, slot.datum.key)
-        // New datum goes to the left, so we'll split a pivot to the right with the old key
-    then NodeReplaceSlotWithSlotSequence(node, slotIdx, [slot.datum.key], [Value(newDatum), slot])
-        // New datum goes to the right, so we'll split a pivot with the new key
-    else NodeReplaceSlotWithSlotSequence(node, slotIdx, [newDatum.key], [slot, Value(newDatum)])
-}
+//     if slot.Empty? || newDatum.key == slot.datum.key
+//         // Replace an empty or same-key datum in place
+//     then NodeReplaceSlot(node, slotIdx, Value(newDatum))
+//     else if KeyLe(newDatum.key, slot.datum.key)
+//         // New datum goes to the left, so we'll split a pivot to the right with the old key
+//     then NodeReplaceSlotWithSlotSequence(node, slotIdx, [slot.datum.key], [Value(newDatum), slot])
+//         // New datum goes to the right, so we'll split a pivot with the new key
+//     else NodeReplaceSlotWithSlotSequence(node, slotIdx, [newDatum.key], [slot, Value(newDatum)])
+// }
 
 function {:opaque} AllocatedNodeBlocks(k:Constants, table:Table) : (alloc:set<NBA>)
     requires WFTable(k, table)
@@ -589,12 +610,13 @@ function EditLast(edit:NodeEdit) : Layer
 // This is a prototype action -- it has both enabling conditions and transition
 // relations.  The caller supplies an additional constraint that ensures the
 // 'edit' record does what its action needs.
-predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
+predicate AddMessage(k:Constants, s:Variables, s':Variables, edit:NodeEdit, key:Key, msg:Message)
     requires WFConstants(k)
 {
     && s.ready
     && WFVariables(k, s)
-    && LookupSatisfiesQuery(k, s, edit.lookup, datum)
+    && LookupFollowsQueryPath(k, s, edit.lookup, key)
+    && LookupDoesNotPassKey(k, s, edit.lookup, key)
     && AllocateNBA(k, s, edit.replacementNba, edit.tableLookup)
 
     && TreeDisk.Idle(k.disk, s.disk, s'.disk)
@@ -607,50 +629,30 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum
 predicate InsertAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
     requires WFConstants(k)
 {
-    && ApplyEdit(k, s, s', edit, datum)
-    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
+    && AddMessage(k, s, s', edit, datum.key, Insert(datum.value))
+    && edit.replacementNode == NodeAddMessage(EditLast(edit).node, EditLast(edit).slot, datum.key, Insert(datum.value))
+    // ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
 }
 
-// Delete is un-insert.
-predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, slotIdx:int, deletedDatum:Datum)
-{
-    // Caller is 'existing' a newNode into being; we need to force it to satisfy the preconditions
-    // for ChildEquivalentToSlotGroup.
-    // (TODO We could just reduce things to this version, and accept the fact
-    // that this check will duplicate what the invariant already does.)
-    && WFNode(newNode)
-    && ValidSlotIndex(newNode, slotIdx)
-    && !newNode.slots[slotIdx].Pointer?
-    // TODO this could make up an "old" value that got inserted-over.
-    && oldNode == ReplaceSlotForInsert(newNode, slotIdx, deletedDatum)
-}
+// // Delete is un-insert.
+// predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, slotIdx:int, deletedDatum:Datum)
+// {
+//     // Caller is 'existing' a newNode into being; we need to force it to satisfy the preconditions
+//     // for ChildEquivalentToSlotGroup.
+//     // (TODO We could just reduce things to this version, and accept the fact
+//     // that this check will duplicate what the invariant already does.)
+//     && WFNode(newNode)
+//     && ValidSlotIndex(newNode, slotIdx)
+//     && !newNode.slots[slotIdx].Pointer?
+//     // TODO this could make up an "old" value that got inserted-over.
+//     && oldNode == ReplaceSlotForInsert(newNode, slotIdx, deletedDatum)
+// }
 
 predicate DeleteAction(k:Constants, s:Variables, s':Variables, edit:NodeEdit, datum:Datum)
     requires WFConstants(k)
 {
-    && ApplyEdit(k, s, s', edit, datum)
-    && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, datum)
-}
-
-predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
-    requires WFNode(indirectNode)
-    requires 0<=replacedSlot<|indirectNode.slots|
-    requires |childNode.slots| == |childNode.pivots| + 1
-{
-    && directNode == NodeReplaceSlotWithSlotSequence(indirectNode, replacedSlot, childNode.pivots, childNode.slots)
-    && indirectNode.slots[replacedSlot] == Pointer(childAddr)
-}
-
-predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
-{
-    // Caller is 'existing' an indirectNode into being; we need to force it to satisfy the preconditions
-    // for ChildEquivalentToSlotGroup.
-    // (TODO We could just reduce things to this version, and accept the fact
-    // that this check will duplicate what the invariant already does.)
-    && WFNode(indirectNode)
-    && 0<=replacedSlot<|indirectNode.slots|
-    && WFNode(childNode)
-    && ChildEquivalentToSlotGroup(directNode, replacedSlot, indirectNode, childAddr, childNode)
+    && AddMessage(k, s, s', edit, datum.key, Delete)
+    && edit.replacementNode == NodeAddMessage(EditLast(edit).node, EditLast(edit).slot, datum.key, Delete)
 }
 
 datatype Janitorial = Janitorial(
@@ -660,6 +662,28 @@ datatype Janitorial = Janitorial(
     childNode:Node,             // child node exchanging places with subrange of parent slots
     childEntry':NBA             // what becomes of the table reference for childAddr after the action
     )
+
+predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
+    requires WFNode(indirectNode)
+    requires 0<=replacedSlot<|indirectNode.header.slots|
+    requires |childNode.header.slots| == |childNode.header.pivots| + 1
+    requires |childNode.buffers| == |childNode.header.slots|
+{
+    && directNode == NodeReplaceSlotWithSlotSequence(indirectNode, replacedSlot, childNode.header.pivots, childNode.header.slots, childNode.buffers)
+    && indirectNode.header.slots[replacedSlot] == Pointer(childAddr)
+}
+
+predicate ChildEquivalentToSlotGroupForExpand(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
+{
+    // Caller is 'existing' an indirectNode into being; we need to force it to satisfy the preconditions
+    // for ChildEquivalentToSlotGroup.
+    // (TODO We could just reduce things to this version, and accept the fact
+    // that this check will duplicate what the invariant already does.)
+    && WFNode(indirectNode)
+    && 0<=replacedSlot<|indirectNode.header.slots|
+    && WFNode(childNode)
+    && ChildEquivalentToSlotGroup(directNode, replacedSlot, indirectNode, childAddr, childNode)
+}
 
 // TODO consider breaking these weird abstract action-helpers into
 // enabling-condition & update parts to make caller read more imperatively.
@@ -708,7 +732,7 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && TableAt(k, s.ephemeralTable, j.childAddr).Used?
     && j.childNba == TableAt(k, s.ephemeralTable, j.childAddr)
     && JanitorialAction(k, s, s', j)
-    && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
+    && Pointer(j.childAddr) == EditLast(j.edit).node.header.slots[EditLast(j.edit).slot]
     && CachedNodeRead(k, s, j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childEntry' == Unused  // free the child reference
@@ -930,7 +954,7 @@ predicate DiskInMkfsState(k:Constants, s:Variables, mkfs:Mkfs)
     && TableInView(k, ViewOfDisk(k.disk, s.disk), mkfs.tl)
     // I arbitrarily demand that the root block be stored in node data sector 0.
     && InitTable(k, mkfs.tl.table, Used(0))
-    && s.disk.sectors[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node([], [Empty]))
+    && s.disk.sectors[LbaForNba(k, Used(0))] == TreeDisk.NodeSector(Node(Header([], [Empty]), [map[]]))
 }
 
 predicate Init(k:Constants, s:Variables)
