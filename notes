@@ -44,3 +44,23 @@ comprehension function definitions.
 Bug report:
 cf51b15 dafny ttbenchmark fails verifying something in an upstream file,
     which feels bonkers.
+
+------------------------------------------------------------------------------
+Try #2 February 24, 2019
+
+dafny /print:test.boogie ImmutableDiskTreeRefinement.dfy
+ImmutableDiskTreeRefinement.dfy(139,6): Verification inconclusive (Impl$$_53_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction)
+
+grep OneDatumPerKeyInvInduction test.bpl
+
+mono ~/dafny-base/boogie/Binaries/Boogie.exe  /z3exe:/home/jonh/dafny-base/dafny/Binaries/z3/bin/z3  /proc:'Impl$$_53_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction' test.bpl /z3opt:TRACE=true
+
+I hit ^C when z3.log got to 500MB.
+
+mono ~/dafny-base/axiom-profiler/bin/Release/AxiomProfiler.exe  z3.log
+(top says mono is chewing hard) Wow that took like 5 minutes.
+...but everything is zero.
+
+Next steps:
+1. grep on the z3.log?
+2. try it in Windows?

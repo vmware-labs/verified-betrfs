@@ -413,11 +413,11 @@ predicate ValidLookup(k:Constants, s:Variables, lookup:Lookup)
     && ValidLookupInView(k, s.ephemeralTable, ViewOfCache(s.cache), lookup)
 }
 
-predicate SlotSatisfiesQuery(slot:Slot, datum:Datum)
+predicate SlotSatisfiesQuery(slot:Slot, key:Key, value:Option<Value>)
 {
-    || (slot.Value? && slot.datum == datum)
-    || (slot.Value? && slot.datum.key != datum.key && datum.value == EmptyValue())
-    || (slot.Empty? && datum.value == EmptyValue())
+    || (slot.Value? && slot.datum.key == key && value.Some? && slot.datum.value == value.value)
+    || (slot.Value? && slot.datum.key != key && value.None?)
+    || (slot.Empty? && value.None?)
 }
 
 // The slot to which this lookup leads.
@@ -429,16 +429,16 @@ function TerminalSlot(lookup:Lookup) : Slot
     lastLayer.node.slots[lastLayer.slot]
 }
 
-predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, datum:Datum)
+predicate LookupSatisfiesQuery(k:Constants, s:Variables, lookup:Lookup, key:Key, value:Option<Value>)
 {
     && ValidLookup(k, s, lookup)
-    && SlotSatisfiesQuery(TerminalSlot(lookup), datum)
+    && SlotSatisfiesQuery(TerminalSlot(lookup), key, value)
 }
 
-predicate QueryAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lookup:Lookup, datum:Datum)
+predicate QueryAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lookup:Lookup, key:Key, value:Option<Value>)
 {
     && s.ready
-    && LookupSatisfiesQuery(k, s, lookup, datum)
+    && LookupSatisfiesQuery(k, s, lookup, key, value)
 
     && diskStep == TreeDisk.IdleStep
     && s' == s
@@ -543,12 +543,12 @@ function EditLast(edit:NodeEdit) : Layer
 // This is a prototype action -- it has both enabling conditions and transition
 // relations.  The caller supplies an additional constraint that ensures the
 // 'edit' record does what its action needs.
-predicate ApplyEdit(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, datum:Datum)
+predicate ApplyEdit(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, key:Key, oldValue:Option<Value>)
     requires WFConstants(k)
 {
     && s.ready
     && WFVariables(k, s)
-    && LookupSatisfiesQuery(k, s, edit.lookup, datum)
+    && LookupSatisfiesQuery(k, s, edit.lookup, key, oldValue)
     && AllocateNBA(k, s, edit.replacementNba, edit.tableLookup)
 
     && diskStep == TreeDisk.IdleStep
@@ -558,11 +558,11 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.St
     && s'.ready
 }
 
-predicate InsertAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, datum:Datum)
+predicate InsertAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, key:Key, oldValue:Option<Value>, newValue:Value)
     requires WFConstants(k)
 {
-    && ApplyEdit(k, s, s', diskStep, edit, datum)
-    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, datum)
+    && ApplyEdit(k, s, s', diskStep, edit, key, oldValue)
+    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, Datum(key, newValue))
 }
 
 // Delete is un-insert.
@@ -579,11 +579,11 @@ predicate ReplacesSlotForDelete(oldNode:Node, newNode:Node, slotIdx:int, deleted
     && oldNode == ReplaceSlotForInsert(newNode, slotIdx, deletedDatum)
 }
 
-predicate DeleteAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, datum:Datum)
+predicate DeleteAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, edit:NodeEdit, key:Key, deletedValue:Value)
     requires WFConstants(k)
 {
-    && ApplyEdit(k, s, s', diskStep, edit, datum)
-    && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, datum)
+    && ApplyEdit(k, s, s', diskStep, edit, key, Some(deletedValue))
+    && ReplacesSlotForDelete(EditLast(edit).node, edit.replacementNode, EditLast(edit).slot, Datum(key, deletedValue))
 }
 
 predicate ChildEquivalentToSlotGroup(directNode:Node, replacedSlot:int, indirectNode:Node, childAddr:TableAddress, childNode:Node)
@@ -848,9 +848,9 @@ predicate Init(k:Constants, s:Variables, diskImage:seq<Sector>)
 }
 
 datatype Step =
-    | QueryActionStep(lookup:Lookup, datum:Datum)
-    | InsertActionStep(edit:NodeEdit, datum:Datum)
-    | DeleteActionStep(edit:NodeEdit, datum:Datum)
+    | QueryActionStep(lookup:Lookup, key:Key, value:Option<Value>)
+    | InsertActionStep(edit:NodeEdit, key:Key, oldValue:Option<Value>, newValue:Value)
+    | DeleteActionStep(edit:NodeEdit, key:Key, deletedValue:Value)
     | ExpandActionStep(j:Janitorial)
     | ContractActionStep(j:Janitorial)
     | WriteBackActionStep(lba:LBA)
@@ -865,9 +865,9 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Ste
     requires WFConstants(k)
 {
     match step {
-        case  QueryActionStep(lookup, datum) => QueryAction(k, s, s', diskStep, lookup, datum)
-        case  InsertActionStep(edit, datum) => InsertAction(k, s, s', diskStep, edit, datum)
-        case  DeleteActionStep(edit, datum) => DeleteAction(k, s, s', diskStep, edit, datum)
+        case  QueryActionStep(lookup, key, value) => QueryAction(k, s, s', diskStep, lookup, key, value)
+        case  InsertActionStep(edit, key, oldValue, newValue) => InsertAction(k, s, s', diskStep, edit, key, oldValue, newValue)
+        case  DeleteActionStep(edit, key, deletedValue) => DeleteAction(k, s, s', diskStep, edit, key, deletedValue)
         case  ExpandActionStep(j) => ExpandAction(k, s, s', diskStep, j)
         case  ContractActionStep(j) => ContractAction(k, s, s', diskStep, j)
         case  WriteBackActionStep(lba) => WriteBackAction(k, s, s', diskStep, lba)

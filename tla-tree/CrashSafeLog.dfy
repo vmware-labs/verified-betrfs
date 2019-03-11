@@ -1,8 +1,10 @@
+include "MissingLibrary.dfy"
 include "KVTypes.dfy"
 include "Disk.dfy"
 
 module DatumDisk refines Disk {
 import opened KVTypes
+import opened MissingLibrary
 datatype Sector = Superblock(logSize:int) | Datablock(datum:Datum)
 }
 
@@ -132,8 +134,6 @@ predicate Append(k:Constants, s:Variables, s':Variables, datum:Datum)
     && s'.diskPersistedSize == s.diskPersistedSize
     && s'.memlog == s.memlog + [datum]
 }
-
-datatype Option<T> = Some(t:T) | None
 
 function {:opaque} FindIndexInLog(log:seq<Datum>, key:Key) : (index:Option<int>)
     ensures index.Some? ==>

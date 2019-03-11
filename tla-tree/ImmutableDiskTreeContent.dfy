@@ -26,14 +26,14 @@ function {:opaque} AllKeys(lv:LookupView) : (keys:iset<Key>)
     iset datum | datum in AllValueLookups(lv) :: datum.key
 }
 
-function ValueFor(lv:LookupView, key:Key) : Value
+function ValueFor(lv:LookupView, key:Key) : Option<Value>
     requires key in AllKeys(lv)
 {
     var datum :| datum in AllValueLookups(lv) && datum.key == key;
-    datum.value
+    Some(datum.value)
 }
 
-function {:opaque} ReachableValues(lv:LookupView) : (m:imap<Key, Value>)
+function {:opaque} ReachableValues(lv:LookupView) : (m:imap<Key, Option<Value>>)
     ensures m.Keys == AllKeys(lv)
 {
     imap key | key in AllKeys(lv) :: ValueFor(lv, key)
@@ -63,19 +63,39 @@ predicate OneDatumPerKeyInv(lv:LookupView)
         ==> datum1 == datum2
 }
 
-//XXX
-//lemma UniqueKeysPredictsReachableValues(lv:LookupView, datum:Datum)
-//    requires OneDatumPerKeyInv(lv)
-//    requires datum in AllValueLookups(lv)
-//    requires datum.key in AllKeys(lv)
-//    ensures ReachableValues(lv)[datum.key] == datum.value
-//{
-//    reveal_ReachableValues();
-//    var reachableValue := ReachableValues(lv)[datum.key];
-//    assert reachableValue == ValueFor(lv, datum.key);
-//    var reachableDatum := Datum(datum.key, reachableValue);
-//    assert reachableDatum in AllValueLookups(lv);
-//    assert reachableDatum == datum;
-//}
+// l1 and l2 agree out to len,
+// and either they disagree on the next element, or one or the other is only len long.
+// (If both are len long, then l1==l2==greatest prefix.)
+predicate IsGreatestCommonPrefix(l1:Lookup, l2:Lookup, len:nat)
+{
+    && len <= |l1.layers|
+    && len <= |l2.layers|
+    && (forall i :: 0<=i<len ==> l1.layers[i] == l2.layers[i])
+    && (len<|l1.layers| && len<|l2.layers| ==> l1.layers[len]!=l2.layers[len])
+}
+
+function {:opaque} CommonPrefixOfLookups(l1:Lookup, l2:Lookup) : (len:nat)
+    ensures IsGreatestCommonPrefix(l1, l2, len)
+    decreases |l1.layers|
+{
+    if |l1.layers| == |l2.layers| == 0
+    then 0
+    else if |l1.layers| == 0 || |l2.layers| == 0
+    then 0
+    else if l1.layers[0] != l2.layers[0]
+    then 0
+    else
+        CommonPrefixOfLookups(Lookup(l1.layers[1..]), Lookup(l2.layers[1..])) + 1
+
+}
+
+/*
+lemma LookupsHonorRanges(lv:LookupView, lookup:Lookup)
+    requires ValidValueLookup(lv.k, lv.table, lv.view, lookup)
+    ensures 
+    TerminalSlot
+    ensures RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
+    LEFT OFF HERE
+*/
 
 } // module

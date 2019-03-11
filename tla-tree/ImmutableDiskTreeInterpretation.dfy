@@ -108,7 +108,7 @@ function {:opaque} ISlotView(tv:TreeView, addr:TableAddress, slotIdx:int) : Cras
     var slot := TVNode(tv, addr).slots[slotIdx];
     match slot {
         case Empty => EmptyImap()
-        case Value(datum) => SingletonImap(datum.key, datum.value)
+        case Value(datum) => SingletonImap(datum.key, Some(datum.value))
         case Pointer(addr) => ISubtreeView(tv, addr)
     }
 }
@@ -121,7 +121,7 @@ function {:opaque} ISubtreePrefixView(tv:TreeView, addr:TableAddress, slotCount:
     decreases HeightAt(tv, addr), 1, slotCount
 {
     if slotCount==0
-    then EmptyImap<Key,Value>()
+    then EmptyImap<Key,Option<Value>>()
     else ImapUnionPreferB(      // We don't prefer B; the pieces had better be disjoint!
         ISubtreePrefixView(tv, addr, slotCount - 1),
         ISlotView(tv, addr, slotCount - 1))
@@ -142,9 +142,9 @@ function ISubtreeView(tv:TreeView, addr:TableAddress) : CrashableMap.View
 function {:opaque} CompletifyView(iv:CrashableMap.View) : (ov:CrashableMap.View)
     ensures CrashableMap.ViewComplete(ov)
     ensures forall k :: k in iv ==> ov[k] == iv[k]
-    ensures forall k :: !(k in iv) ==> ov[k] == EmptyValue()
+    ensures forall k :: !(k in iv) ==> ov[k] == None
 {
-    imap k | true :: if k in iv then iv[k] else EmptyValue()
+    imap k | true :: if k in iv then iv[k] else None
 }
 
 function ITreeView(tv:TreeView) : (iview:CrashableMap.View)

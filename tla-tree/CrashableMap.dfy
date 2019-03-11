@@ -2,10 +2,9 @@ include "MissingLibrary.dfy"
 
 // A Map that can crash and revert to prior states, but only in
 // controlled ways, limited by a sync operation.
-abstract module CrashableMap {
+module CrashableMap {
+import opened KVTypes
 import opened MissingLibrary
-type Key(!new,==)
-type Value(!new,==)
   
 datatype Constants = Constants()
 type View = imap<Key, Option<Value> >

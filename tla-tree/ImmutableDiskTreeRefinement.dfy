@@ -91,8 +91,8 @@ lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
     requires SysInv(k, s')
     requires NextStep(k, s, s', step)
     requires step.impl.QueryActionStep?
-    requires step.impl.datum.value != EmptyValue();
-    ensures CrashableMap.NextStep(Jk(k), J(k, s), J(k, s'), CrashableMap.QueryStep(step.impl.datum))
+    requires step.impl.value.Some?
+    ensures CrashableMap.NextStep(Jk(k), J(k, s), J(k, s'), CrashableMap.QueryStep(step.impl.key, step.impl.value))
 {
     reveal_AllValueLookups();
     ViewOfCacheNestsInViewThroughCache(k, s);
@@ -100,70 +100,103 @@ lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
     reveal_ReachableValues();
 }
 
-lemma InvInduction(k:Constants, s:Variables, s':Variables)
-    requires Next(k, s, s')
+lemma WFDiskStateInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+{
+    match step.disk {
+        case ReadStep(lba, sector) => {
+            assert WFDiskState(k, s');
+        }
+        case WriteStep(lba, sector) => {
+            assert WFDiskState(k, s');
+        }
+        case IdleStep => {
+            assert WFDiskState(k, s');
+        }
+    }
+}
+
+lemma TreeInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+    ensures TreeInv(k.impl, s'.impl, DiskView(k, s'))
+{
+    assume false;    // TODO I think we're going to end up deleting TreeInv anyway.
+}
+
+function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeImpl.Lookup)
+    requires datum in AllValueLookups(lv)
+    ensures ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum
+{
+    reveal_AllValueLookups();
+    var lookup :| ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum;
+    lookup
+}
+
+lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+    ensures OneDatumPerKeyInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+{
+    WFDiskStateInduction(k, s, s', step);
+    var lv := EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'));
+    assert LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s')))
+        == lv;
+    forall datum1, datum2 | datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key
+        ensures datum1 == datum2 {
+        var lookup1 := LookupForDatum(lv, datum1);
+        var lookup2 := LookupForDatum(lv, datum2);
+        var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
+        if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
+            assert lookup1 == lookup2;
+            calc {
+                datum1;
+                ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
+                ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
+                datum2;
+            }
+        } else {
+            //assert LookupHonorsRanges(lookup1);
+            //assert LookupHonorsRanges(lookup2);
+            assert datum1 == ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
+            assert datum2 == ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
+//            if (commonPrefixLength == |lookup1.layers|) {
+//                //var termLayer1 := lookup1.layers[commonPrefixLength - 1];
+//                //assert termLayer1.node.slots[termLayer1.slot].Pointer?;
+//                assert false;
+//            }
+//            assert commonPrefixLength < |lookup1.layers|;
+            if (commonPrefixLength == |lookup2.layers|) {
+                var termLayer2 := lookup2.layers[commonPrefixLength - 1];
+                assert termLayer2.node.slots[termLayer2.slot].Pointer?;
+                assert false;
+            }
+            assert commonPrefixLength < |lookup2.layers|;
+            assume false;
+            assert commonPrefixLength < |lookup2.layers|;   // Else commonPrefixLength slot isn't a Value.
+
+            assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
+            assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
+            assert lookup1.layers[commonPrefixLength].slotRange != lookup2.layers[commonPrefixLength].slotRange;
+            // They're going to have different ranges.
+            //assume false;
+        }
+    }
+}
+
+lemma InvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
     requires SysInv(k, s)
     ensures SysInv(k, s')
 {
-    var step := FetchStep(k, s, s');    // OBSERVE this witness is enough to get dafny to do the case analysis for TreeDisk.WF
     assert WFDiskState(k, s');
-
-    match step.impl {
-        case QueryActionStep(lookup, datum) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case InsertActionStep(edit, datum) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case DeleteActionStep(edit, datum) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case ExpandActionStep(j) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case ContractActionStep(j) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case WriteBackActionStep(lba) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case EmitTableActionStep(persistentTi, super, tblSectorIdx) => {
-            var ephemeralTi := OppositeTableIndex(persistentTi);
-            var lba := ImmutableDiskTreeImpl.LbaForTableOffset(k.impl, ephemeralTi, tblSectorIdx);
-            var sector := ImmutableDiskTreeImpl.MarshallTable(k.impl, s.impl.ephemeralTable)[tblSectorIdx];
-            assert s'.impl.cache == ImmutableDiskTreeImpl.WriteSectorToCache(k.impl, s.impl.cache, lba, sector);
-            forall l | l in s'.impl.cache ensures 0 <= l < DiskSize(k)
-            {
-                if l == lba {
-                    assert 0 <= lba < DiskSize(k);
-                } else {
-                    assert l in s.impl.cache;
-                    assert 0 <= lba < DiskSize(k);
-                    assert 0 <= l < DiskSize(k);
-                }
-            }
-            assume false;
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case CommitActionStep(persistentTi, super) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case CrashActionStep => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case RecoverActionStep(super, persistentTl) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case CacheFaultActionStep(lba, sector) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-        case CacheEvictActionStep(lba) => {
-            assert CacheLbasFitOnDisk(k.impl, s'.impl);
-        }
-    }
-    assume TreeInv(k.impl, s'.impl, DiskView(k, s'));
-    assume false;
-    assert OneDatumPerKeyInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))));
+    assert CacheLbasFitOnDisk(k.impl, s'.impl);
+    TreeInvInduction(k, s, s', step);
+    OneDatumPerKeyInvInduction(k, s, s', step);
 }
 
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
@@ -180,23 +213,22 @@ lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     var step := FetchStep(k, s, s');
 
     match step.impl {
-        case QueryActionStep(lookup, datum) => {
-            if (datum.value != EmptyValue()) {
+        case QueryActionStep(lookup, key, value) => {
+            if (value.Some?) {
                 LemmaQueryNext(k, s, s', step);
             } else {
                 assume false;
             }
         }
-        case InsertActionStep(edit, datum) => {
+        case InsertActionStep(edit, key, oldValue, newValue) => {
             assume false;
-            assert CrashableMap.Write(Ik, Is, Is', datum);
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(datum));
+            assert CrashableMap.Write(Ik, Is, Is', key, Some(newValue));
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(key, Some(newValue)));
         }
-        case DeleteActionStep(edit, datum) => {
+        case DeleteActionStep(edit, key, oldValue) => {
             assume false;
-            var emptyWrite := Datum(datum.key, EmptyValue());
-            assert CrashableMap.Write(Ik, Is, Is', emptyWrite);
-            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(emptyWrite));
+            assert CrashableMap.Write(Ik, Is, Is', key, None);
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(key, None));
         }
         case ExpandActionStep(j) => {
             assume false;
