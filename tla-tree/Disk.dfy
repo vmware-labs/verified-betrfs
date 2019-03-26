@@ -54,4 +54,18 @@ predicate Idle(k:Constants, s:Variables, s':Variables)
     && s' == s
 }
 
+datatype Step =
+    | ReadStep(lba:LBA, sector:Sector)
+    | WriteStep(lba:LBA, sector:Sector)
+    | IdleStep
+
+predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+{
+    match step {
+        case ReadStep(lba, sector) => Read(k, s, s', lba, sector)
+        case WriteStep(lba, sector) => Write(k, s, s', lba, sector)
+        case IdleStep => Idle(k, s, s')
+    }
+}
+
 } // module Disk

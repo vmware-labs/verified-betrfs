@@ -1,30 +1,56 @@
-include "ImmutableDiskTreeHeight.dfy"
+include "ImmutableDiskTreeContent.dfy"
 include "CrashableMap.dfy"
 
 module ImmutableDiskTreeInterpretation {
 import opened KVTypes
 import opened TreeTypes
-import opened ImmutableDiskTree
+import opened ImmutableDiskTreeImpl
 import opened ImmutableDiskTreeInv
 import opened ImmutableDiskTreeHeight
+import opened ImmutableDiskTreeContent
 import opened MissingLibrary
 import CrashableMap
 
 
-function PersistentGraph(k:Constants, s:Variables) : (gv:GraphView)
-    requires PersistentGraphSane(k, s)
-    ensures SaneTableInView(gv)
+predicate PersistentGraphSane(k:Constants, diskView:View) // TODO belongs in Inv
 {
-    var view := ViewOfDisk(k.disk, s.disk);
-    var table := PersistentTable(k, view);
-    GraphView(k, table, view)
+    && FullView(k, diskView)
+    && PlausibleDiskSize(k)
+    && TableBlocksTypeCorrect(k, diskView)
+    && var table := PersistentTable(k, diskView);
+    && WFTable(k, table)
+    && AllocatedNbasValid(k, table)
+    && AllocatedNodeBlocksTypeCorrect(k, diskView, table)
 }
 
-function EphemeralGraph(k:Constants, s:Variables) : GraphView
-    requires TreeDisk.WF(k.disk, s.disk)
+function PersistentGraph(k:Constants, diskView:View) : (gv:GraphView)
+    requires PersistentGraphSane(k, diskView)
+    ensures SaneTableInView(gv)
+{
+    var table := PersistentTable(k, diskView);
+    GraphView(k, table, diskView)
+}
+
+function ViewLbaThroughCache(k:Constants, s:Variables, diskView:View, lba:LBA) : Sector
+    requires FullView(k, diskView)
+    requires 0 <= lba < DiskSize(k)
+{
+    if lba in s.cache then s.cache[lba].sector else diskView[lba]
+}
+
+function {:opaque} ViewThroughCache(k:Constants, s:Variables, diskView:View) : (cacheView:View)
+    requires FullView(k, diskView)
+    ensures FullView(k, cacheView)
+    ensures forall lba :: (0 <= lba < DiskSize(k)) ==> cacheView[lba] == ViewLbaThroughCache(k, s, diskView, lba)
+{
+    map lba | lba in diskView :: ViewLbaThroughCache(k, s, diskView, lba)
+}
+
+function EphemeralGraph(k:Constants, s:Variables, diskView:View) : GraphView
+    requires FullView(k, diskView)
 {
     var table := s.ephemeralTable;
-    var view := ViewThroughCache(k, s);
+    var view := ViewThroughCache(k, s, diskView);
     GraphView(k, table, view)
 }
 
@@ -34,15 +60,15 @@ predicate TreeShapedGraph(gv:GraphView)
     && CycleFree(gv, GraphAddrHeightMap(gv))
 }
 
-predicate TreeInv(k:Constants, s:Variables)
+predicate TreeInv(k:Constants, s:Variables, diskView:View)
 {
-    && PersistentGraphSane(k, s)
-    && TreeShapedGraph(PersistentGraph(k, s))
-    && SaneNodeInView(PersistentGraph(k, s),  ROOT_ADDR())
+    && PersistentGraphSane(k, diskView)
+    && TreeShapedGraph(PersistentGraph(k, diskView))
+    && SaneNodeInView(PersistentGraph(k, diskView),  ROOT_ADDR())
 
-    && TreeDisk.WF(k.disk, s.disk)
-    && TreeShapedGraph(EphemeralGraph(k, s))
-    && SaneNodeInView(EphemeralGraph(k, s),  ROOT_ADDR())
+    && FullView(k, diskView)
+    && TreeShapedGraph(EphemeralGraph(k, s, diskView))
+    && SaneNodeInView(EphemeralGraph(k, s, diskView),  ROOT_ADDR())
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -82,7 +108,7 @@ function {:opaque} ISlotView(tv:TreeView, addr:TableAddress, slotIdx:int) : Cras
     var slot := TVNode(tv, addr).slots[slotIdx];
     match slot {
         case Empty => EmptyImap()
-        case Value(datum) => SingletonImap(datum.key, datum.value)
+        case Value(datum) => SingletonImap(datum.key, Some(datum.value))
         case Pointer(addr) => ISubtreeView(tv, addr)
     }
 }
@@ -95,7 +121,7 @@ function {:opaque} ISubtreePrefixView(tv:TreeView, addr:TableAddress, slotCount:
     decreases HeightAt(tv, addr), 1, slotCount
 {
     if slotCount==0
-    then EmptyImap<Key,Value>()
+    then EmptyImap<Key,Option<Value>>()
     else ImapUnionPreferB(      // We don't prefer B; the pieces had better be disjoint!
         ISubtreePrefixView(tv, addr, slotCount - 1),
         ISlotView(tv, addr, slotCount - 1))
@@ -116,9 +142,9 @@ function ISubtreeView(tv:TreeView, addr:TableAddress) : CrashableMap.View
 function {:opaque} CompletifyView(iv:CrashableMap.View) : (ov:CrashableMap.View)
     ensures CrashableMap.ViewComplete(ov)
     ensures forall k :: k in iv ==> ov[k] == iv[k]
-    ensures forall k :: !(k in iv) ==> ov[k] == EmptyValue()
+    ensures forall k :: !(k in iv) ==> ov[k] == None
 {
-    imap k | true :: if k in iv then iv[k] else EmptyValue()
+    imap k | true :: if k in iv then iv[k] else None
 }
 
 function ITreeView(tv:TreeView) : (iview:CrashableMap.View)
@@ -129,60 +155,53 @@ function ITreeView(tv:TreeView) : (iview:CrashableMap.View)
     CompletifyView(ISubtreeView(tv, ROOT_ADDR()))
 }
 
-function EphemeralTreeView(k:Constants, s:Variables) : (tv:TreeView)
-    requires TreeDisk.WF(k.disk, s.disk)
-    requires TreeShapedGraph(EphemeralGraph(k, s))   // TODO belongs in Inv
-    ensures WFTreeView(tv)
+//////////////////////////////////////////////////////////////////////////////
+
+function PersistentLookupView(k:Constants, diskView:View) : LookupView
+    requires PlausibleDiskSize(k)
+    requires FullView(k, diskView)
+    requires TableBlocksTypeCorrect(k, diskView)
 {
-    TreeView(EphemeralGraph(k, s))
+    LookupView(k, PersistentTable(k, diskView), diskView)
 }
 
-predicate PersistentGraphSane(k:Constants, s:Variables) // TODO belongs in Inv
+function EphemeralLookupView(k:Constants, s:Variables, diskView:View) : LookupView
+    requires FullView(k, diskView)
 {
-    && TreeDisk.WF(k.disk, s.disk)
-    && PlausibleDiskSize(k)
-    && var view := ViewOfDisk(k.disk, s.disk);
-    && TableBlocksTypeCorrect(k, view)
-    && var table := PersistentTable(k, view);
-    && WFTable(k, table)
-    && AllocatedNbasValid(k, table)
-    && FullView(k, view)
-    && AllocatedNodeBlocksTypeCorrect(k, view, table)
+    LookupView(k, s.ephemeralTable, ViewThroughCache(k, s, diskView))
 }
 
-function PersistentTreeView(k:Constants, s:Variables) : (tv:TreeView)
-    requires PersistentGraphSane(k, s)
-    requires TreeShapedGraph(PersistentGraph(k, s))   // TODO belongs in Inv
-    ensures WFTreeView(tv)
-{
-    TreeView(PersistentGraph(k, s))
-}
-
-function IEphemeralView(k:Constants, s:Variables) : (iview:CrashableMap.View)
-    requires TreeDisk.WF(k.disk, s.disk)
-    requires TreeShapedGraph(EphemeralGraph(k, s))   // TODO belongs in Inv
-    requires SaneNodeInView(EphemeralGraph(k, s),  ROOT_ADDR()) // TODO Inv
+function ILookupView(lv:LookupView) : (iview:CrashableMap.View)
     ensures CrashableMap.ViewComplete(iview)
 {
-    ITreeView(EphemeralTreeView(k, s))
+    CompletifyView(ReachableValues(lv))
 }
 
-function IPersistentView(k:Constants, s:Variables) : (iview:CrashableMap.View)
-    requires PersistentGraphSane(k, s)
-    requires TreeShapedGraph(PersistentGraph(k, s))   // TODO belongs in Inv
-    requires SaneNodeInView(PersistentGraph(k, s),  ROOT_ADDR()) // TODO Inv
+function IEphemeralView(k:Constants, s:Variables, diskView:View) : (iview:CrashableMap.View)
+    requires FullView(k, diskView)
+    requires TreeShapedGraph(EphemeralGraph(k, s, diskView))   // TODO belongs in Inv
+    requires SaneNodeInView(EphemeralGraph(k, s, diskView),  ROOT_ADDR()) // TODO Inv
     ensures CrashableMap.ViewComplete(iview)
 {
-    ITreeView(PersistentTreeView(k, s))
+    ILookupView(EphemeralLookupView(k, s, diskView))
 }
 
-function IViews(k:Constants, s:Variables) : (iviews:seq<CrashableMap.View>)
-    requires TreeInv(k, s)
+function IPersistentView(k:Constants, diskView:View) : (iview:CrashableMap.View)
+    requires PersistentGraphSane(k, diskView)
+    requires TreeShapedGraph(PersistentGraph(k, diskView))   // TODO belongs in Inv
+    requires SaneNodeInView(PersistentGraph(k, diskView),  ROOT_ADDR()) // TODO Inv
+    ensures CrashableMap.ViewComplete(iview)
+{
+    ILookupView(PersistentLookupView(k, diskView))
+}
+
+function IViews(k:Constants, s:Variables, diskView:View) : (iviews:seq<CrashableMap.View>)
+    requires TreeInv(k, s, diskView)
     ensures CrashableMap.AllViewsComplete(iviews)
 {
     if s.ready
-    then [IEphemeralView(k, s), IPersistentView(k, s)]
-    else [IPersistentView(k, s)]
+    then [IEphemeralView(k, s, diskView), IPersistentView(k, diskView)]
+    else [IPersistentView(k, diskView)]
 }
 
 function Ik(k:Constants) : CrashableMap.Constants
@@ -190,10 +209,10 @@ function Ik(k:Constants) : CrashableMap.Constants
     CrashableMap.Constants()
 }
 
-function I(k:Constants, s:Variables) : CrashableMap.Variables
-    requires TreeInv(k, s)
+function I(k:Constants, s:Variables, diskView:View) : CrashableMap.Variables
+    requires TreeInv(k, s, diskView)
 {
-    CrashableMap.Variables(IViews(k, s))
+    CrashableMap.Variables(IViews(k, s, diskView))
 }
 
 } // module

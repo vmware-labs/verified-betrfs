@@ -4,24 +4,62 @@ include "ImmutableDiskTreeInterpretation.dfy"
 module ImmutableDiskTreeRefinement {
 import opened KVTypes
 import opened TreeTypes
+import ImmutableDiskTreeImpl
 import opened ImmutableDiskTree
 import opened ImmutableDiskTreeInv
 import opened ImmutableDiskTreeHeight
+import opened ImmutableDiskTreeContent
 import opened ImmutableDiskTreeInterpretation
 import opened MissingLibrary
 import CrashableMap
 
+type View = ImmutableDiskTreeImpl.View
+function DiskSize(k:Constants) : int { ImmutableDiskTreeImpl.DiskSize(k.impl) }
+function ROOT_ADDR() : TableAddress { ImmutableDiskTreeImpl.ROOT_ADDR() }
+
+predicate WFDiskState(k:Constants, s:Variables)
+{
+    && TreeDisk.WF(k.disk, s.disk)
+    && k.disk.size == DiskSize(k)
+}
+
+function DiskView(k:Constants, s:Variables) : (diskView:View)
+    requires WFDiskState(k, s)
+    ensures ImmutableDiskTreeImpl.FullView(k.impl, diskView)
+{
+    ImmutableDiskTreeImpl.ViewOfDisk(s.disk.sectors)
+}
+
+predicate SysInv(k:Constants, s:Variables)
+{
+    && WFDiskState(k, s)
+    && TreeInv(k.impl, s.impl, DiskView(k, s))  // TODO remove this dependency until GC time
+    && CacheLbasFitOnDisk(k.impl, s.impl)
+    && OneDatumPerKeyInv(LookupView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s))))
+}
+
+// I rewritten from ImmutableDiskTree namespace.
+function Jk(k:Constants) : CrashableMap.Constants
+{
+    Ik(k.impl)
+}
+
+function J(k:Constants, s:Variables) : CrashableMap.Variables
+    requires SysInv(k, s)
+{
+    I(k.impl, s.impl, DiskView(k, s))
+}
+
 lemma InvImpliesRefinementInit(k:Constants, s:Variables)
     requires Init(k, s)
-    requires TreeInv(k, s)
-    ensures CrashableMap.Init(Ik(k), I(k, s))
+    requires SysInv(k, s)
+    ensures CrashableMap.Init(Jk(k), J(k, s))
 {
-    reveal_ISubtreePrefixView();
-    reveal_ISlotView();
-    var tv := PersistentTreeView(k, s);
-    assert ISubtreeView(tv, ROOT_ADDR()) == ISubtreePrefixView(tv, ROOT_ADDR(), /*slotCount*/ 1); // OBSERVE
-    assert IPersistentView(k, s) == CrashableMap.EmptyMap(); // OBSERVE
-} 
+    reveal_AllValueLookups();
+    reveal_AllKeys();
+    reveal_ReachableValues();
+    assert ILookupView(PersistentLookupView(k.impl, DiskView(k, s))) == CrashableMap.EmptyMap();    // OBSERVE
+}
 
 function FetchStep(k:Constants, s:Variables, s':Variables) : (step:Step)
     requires Next(k, s, s')
@@ -32,54 +70,202 @@ function FetchStep(k:Constants, s:Variables, s':Variables) : (step:Step)
     step
 }
 
+//lemma ViewOfCacheImpliesInCache()
+    //requires 
+
+lemma ViewOfCacheNestsInViewThroughCache(k:Constants, s:Variables)
+    requires WFDiskState(k, s)
+    requires CacheLbasFitOnDisk(k.impl, s.impl)
+    ensures ViewsNest(k.impl,
+        ImmutableDiskTreeImpl.ViewOfCache(s.impl.cache),
+        ViewThroughCache(k.impl, s.impl, DiskView(k, s)))
+{
+    ImmutableDiskTreeImpl.reveal_ViewOfCache();
+    reveal_ViewThroughCache();
+    var cacheView := ImmutableDiskTreeImpl.ViewOfCache(s.impl.cache);   // OBSERVE trigger
+}
+
+lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
+    requires Next(k, s, s')
+    requires SysInv(k, s)
+    requires SysInv(k, s')
+    requires NextStep(k, s, s', step)
+    requires step.impl.QueryActionStep?
+    requires step.impl.value.Some?
+    ensures CrashableMap.NextStep(Jk(k), J(k, s), J(k, s'), CrashableMap.QueryStep(step.impl.key, step.impl.value))
+{
+    reveal_AllValueLookups();
+    ViewOfCacheNestsInViewThroughCache(k, s);
+    reveal_AllKeys();
+    reveal_ReachableValues();
+}
+
+lemma WFDiskStateInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+{
+    match step.disk {
+        case ReadStep(lba, sector) => {
+            assert WFDiskState(k, s');
+        }
+        case WriteStep(lba, sector) => {
+            assert WFDiskState(k, s');
+        }
+        case IdleStep => {
+            assert WFDiskState(k, s');
+        }
+    }
+}
+
+lemma TreeInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+    ensures TreeInv(k.impl, s'.impl, DiskView(k, s'))
+{
+    assume false;    // TODO I think we're going to end up deleting TreeInv anyway.
+}
+
+function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeImpl.Lookup)
+    requires datum in AllValueLookups(lv)
+    ensures ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum
+{
+    reveal_AllValueLookups();
+    var lookup :| ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum;
+    lookup
+}
+
+lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+    ensures OneDatumPerKeyInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+{
+    WFDiskStateInduction(k, s, s', step);
+    var lv := EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'));
+    assert LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s')))
+        == lv;
+    forall datum1, datum2 | datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key
+        ensures datum1 == datum2 {
+        var lookup1 := LookupForDatum(lv, datum1);
+        var lookup2 := LookupForDatum(lv, datum2);
+        var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
+        if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
+            assert lookup1 == lookup2;
+            calc {
+                datum1;
+                ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
+                ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
+                datum2;
+            }
+        } else {
+            //assert LookupHonorsRanges(lookup1);
+            //assert LookupHonorsRanges(lookup2);
+            assert datum1 == ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
+            assert datum2 == ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
+//            if (commonPrefixLength == |lookup1.layers|) {
+//                //var termLayer1 := lookup1.layers[commonPrefixLength - 1];
+//                //assert termLayer1.node.slots[termLayer1.slot].Pointer?;
+//                assert false;
+//            }
+//            assert commonPrefixLength < |lookup1.layers|;
+            if (commonPrefixLength == |lookup2.layers|) {
+                var termLayer2 := lookup2.layers[commonPrefixLength - 1];
+                assert termLayer2.node.slots[termLayer2.slot].Pointer?;
+                assert false;
+            }
+            assert commonPrefixLength < |lookup2.layers|;
+            assume false;
+            assert commonPrefixLength < |lookup2.layers|;   // Else commonPrefixLength slot isn't a Value.
+
+            assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
+            assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
+            assert lookup1.layers[commonPrefixLength].slotRange != lookup2.layers[commonPrefixLength].slotRange;
+            // They're going to have different ranges.
+            //assume false;
+        }
+    }
+}
+
+lemma InvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures SysInv(k, s')
+{
+    assert WFDiskState(k, s');
+    assert CacheLbasFitOnDisk(k.impl, s'.impl);
+    TreeInvInduction(k, s, s', step);
+    OneDatumPerKeyInvInduction(k, s, s', step);
+}
+
 lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
     requires Next(k, s, s')
-    requires TreeInv(k, s)
-    requires TreeInv(k, s')
-    ensures CrashableMap.WF(I(k, s))
-    ensures CrashableMap.WF(I(k, s'))
-    ensures CrashableMap.Next(Ik(k), I(k, s), I(k, s'))
+    requires SysInv(k, s)
+    requires SysInv(k, s')
+    ensures CrashableMap.WF(J(k, s))
+    ensures CrashableMap.WF(J(k, s))
+    ensures CrashableMap.Next(Jk(k), J(k, s), J(k, s'))
 {
-    var Ik := Ik(k);
-    var Is := I(k, s);
-    var Is' := I(k, s');
+    var Ik := Jk(k);
+    var Is := J(k, s);
+    var Is' := J(k, s');
     var step := FetchStep(k, s, s');
 
-    match step {
-        case QueryActionStep(lookup, datum) => {
-            assert CrashableMap.Query(Ik, Is, Is', datum);
+    match step.impl {
+        case QueryActionStep(lookup, key, value) => {
+            if (value.Some?) {
+                LemmaQueryNext(k, s, s', step);
+            } else {
+                assume false;
+            }
         }
-        case InsertActionStep(edit, datum) => {
-            assert CrashableMap.Write(Ik, Is, Is', datum);
+        case InsertActionStep(edit, key, oldValue, newValue) => {
+            assume false;
+            assert CrashableMap.Write(Ik, Is, Is', key, Some(newValue));
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(key, Some(newValue)));
         }
-        case DeleteActionStep(edit, datum) => {
-            assert CrashableMap.Write(Ik, Is, Is', Datum(datum.key, EmptyValue()));
+        case DeleteActionStep(edit, key, oldValue) => {
+            assume false;
+            assert CrashableMap.Write(Ik, Is, Is', key, None);
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.WriteStep(key, None));
         }
         case ExpandActionStep(j) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
         }
         case ContractActionStep(j) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
         }
         case WriteBackActionStep(lba) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
         case EmitTableActionStep(persistentTi, super, tblSectorIdx) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
+            assert CrashableMap.NextStep(Ik, Is, Is', CrashableMap.StutterStep);
         }
         case CommitActionStep(persistentTi, super) => {
+            assume false;
             assert CrashableMap.PersistWrites(Ik, Is, Is', 1);
         }
         case CrashActionStep => {
+            assume false;
             assert CrashableMap.SpontaneousCrash(Ik, Is, Is');
         }
         case RecoverActionStep(super, persistentTl) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
         }
         case CacheFaultActionStep(lba, sector) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
         }
         case CacheEvictActionStep(lba) => {
+            assume false;
             assert CrashableMap.Stutter(Ik, Is, Is');
         }
     }

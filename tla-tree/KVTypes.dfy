@@ -18,6 +18,6 @@ function MAX_KEY() : Key
 type Value(!new,==)
 datatype Datum = Datum(key:Key, value:Value)
 
-function EmptyValue() : Value
+// function EmptyValue() : Value
 
 }

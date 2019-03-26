@@ -2,7 +2,7 @@ include "ImmutableDiskTreeInv.dfy"
 
 module ImmutableDiskTreeHeight {
 import opened TreeTypes
-import opened ImmutableDiskTree
+import opened ImmutableDiskTreeImpl
 import opened ImmutableDiskTreeInv
 import opened MissingLibrary
 

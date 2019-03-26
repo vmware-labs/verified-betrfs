@@ -2,7 +2,7 @@ include "ImmutableDiskTree.dfy"
 
 module ImmutableDiskTreeInv {
 import opened TreeTypes
-import opened ImmutableDiskTree
+import opened ImmutableDiskTreeImpl
 
 predicate SuperblockTypeCorrect(k:Constants, view:View)
     requires PlausibleDiskSize(k)

@@ -2,10 +2,9 @@ include "MissingLibrary.dfy"
 
 // A Map that can crash and revert to prior states, but only in
 // controlled ways, limited by a sync operation.
-abstract module CrashableMap {
+module CrashableMap {
+import opened KVTypes
 import opened MissingLibrary
-type Key(!new,==)
-type Value(!new,==)
   
 datatype Constants = Constants()
 type View = imap<Key, Option<Value> >
@@ -132,7 +131,7 @@ datatype Step =
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     requires WF(s)
 {
-    && match step {
+    match step {
         case QueryStep(key, result) => Query(k, s, s', key, result)
         case WriteStep(key, new_value) => Write(k, s, s', key, new_value)
         case CompleteSyncStep() => CompleteSync(k, s, s')
