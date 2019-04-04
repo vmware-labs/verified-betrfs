@@ -356,16 +356,23 @@ predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
     forall i :: 0<=i<|lookup.layers| ==> ValidAddress(k, lookup.layers[i].addr)
 }
 
+predicate LookupHonorsPointerLinksAtLayer(lookup:Lookup, i:int)
+    requires LookupHasValidSlotIndices(lookup)
+    requires 0 <= i < |lookup.layers|
+{
+    var layer := lookup.layers[i];
+    if i==0
+    then layer.addr == ROOT_ADDR()
+    else
+        var uplayer := lookup.layers[i-1];
+        uplayer.node.slots[uplayer.slot] == Pointer(layer.addr)
+}
+
 predicate LookupHonorsPointerLinks(lookup:Lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
-        var layer := lookup.layers[i];
-        if i==0
-        then layer.addr == ROOT_ADDR()
-        else
-            var uplayer := lookup.layers[i-1];
-            uplayer.node.slots[uplayer.slot] == Pointer(layer.addr)
+        LookupHonorsPointerLinksAtLayer(lookup, i)
 }
 
 function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
@@ -861,7 +868,7 @@ datatype Step =
     | CacheFaultActionStep(lba:LBA, sector:Sector)
     | CacheEvictActionStep(lba:LBA)
 
-predicate NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
+predicate {:opaque} /*XXX*/ NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
     requires WFConstants(k)
 {
     match step {

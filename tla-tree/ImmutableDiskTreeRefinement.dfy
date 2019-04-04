@@ -30,7 +30,7 @@ function DiskView(k:Constants, s:Variables) : (diskView:View)
     ImmutableDiskTreeImpl.ViewOfDisk(s.disk.sectors)
 }
 
-predicate SysInv(k:Constants, s:Variables)
+predicate {:opaque} /*XXX*/ SysInv(k:Constants, s:Variables)
 {
     && WFDiskState(k, s)
     && TreeInv(k.impl, s.impl, DiskView(k, s))  // TODO remove this dependency until GC time
@@ -127,9 +127,10 @@ lemma TreeInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     assume false;    // TODO I think we're going to end up deleting TreeInv anyway.
 }
 
-function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeImpl.Lookup)
+function {:opaque} /*XXX*/ LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeImpl.Lookup)
     requires datum in AllValueLookups(lv)
-    ensures ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum
+    ensures ValidValueLookup(lv, lookup)
+    ensures ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum
 {
     reveal_AllValueLookups();
     var lookup :| ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum;
@@ -152,6 +153,7 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
         var lookup2 := LookupForDatum(lv, datum2);
         var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
         if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
+            assert lookup1.layers == lookup2.layers;    // OBSERVE
             assert lookup1 == lookup2;
             calc {
                 datum1;
@@ -171,12 +173,26 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
 //            }
 //            assert commonPrefixLength < |lookup1.layers|;
             if (commonPrefixLength == |lookup2.layers|) {
+                var termLayer1 := lookup1.layers[commonPrefixLength - 1];
+                //assert 0<=commonPrefixLength<|lookup1.layers|;
+                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup1, commonPrefixLength);  // OBSERVE
+                assert commonPrefixLength - 1 != 0; // this line causes timeouts by itself!
+                assert termLayer1.node.slots[termLayer1.slot].Pointer?;
+
                 var termLayer2 := lookup2.layers[commonPrefixLength - 1];
+                assert termLayer2.node.slots[termLayer2.slot].Value?;
+                /*
+                assert ValidValueLookup(lv, lookup2);
+                assert ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2);
+                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinks(lookup2);
+                assert 0<=commonPrefixLength<|lookup2.layers|;
+                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, commonPrefixLength);
                 assert termLayer2.node.slots[termLayer2.slot].Pointer?;
+                */
                 assert false;
             }
             assert commonPrefixLength < |lookup2.layers|;
-            assume false;
+            assert false;
             assert commonPrefixLength < |lookup2.layers|;   // Else commonPrefixLength slot isn't a Value.
 
             assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
