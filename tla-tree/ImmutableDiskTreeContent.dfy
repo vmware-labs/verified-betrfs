@@ -63,6 +63,14 @@ predicate OneDatumPerKeyInv(lv:LookupView)
         ==> datum1 == datum2
 }
 
+// Hidden because the triggers suck and I don't know how to make them better.
+predicate {:opaque} LookupsAgreeToLen(l1:Lookup, l2:Lookup, len:nat)
+    requires len <= |l1.layers|
+    requires len <= |l2.layers|
+{
+    forall i :: 0<=i<len ==> l1.layers[i] == l2.layers[i]
+}
+
 // l1 and l2 agree out to len,
 // and either they disagree on the next element, or one or the other is only len long.
 // (If both are len long, then l1==l2==greatest prefix.)
@@ -70,7 +78,7 @@ predicate IsGreatestCommonPrefix(l1:Lookup, l2:Lookup, len:nat)
 {
     && len <= |l1.layers|
     && len <= |l2.layers|
-    && (forall i :: 0<=i<len ==> l1.layers[i] == l2.layers[i])
+    && LookupsAgreeToLen(l1, l2, len)
     && (len<|l1.layers| && len<|l2.layers| ==> l1.layers[len]!=l2.layers[len])
 }
 
