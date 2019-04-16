@@ -57,10 +57,15 @@ predicate CacheLbasFitOnDisk(k:Constants, s:Variables)
     forall lba :: lba in s.cache ==> 0 <= lba < DiskSize(k)
 }
 
+predicate DatumsUniqueInView(lv:LookupView, datum1:Datum, datum2:Datum)
+{
+    datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key
+        ==> datum1 == datum2
+}
+
 predicate OneDatumPerKeyInv(lv:LookupView)
 {
-    forall datum1, datum2 :: datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key
-        ==> datum1 == datum2
+    forall datum1, datum2 :: DatumsUniqueInView(lv, datum1, datum2)
 }
 
 // Hidden because the triggers suck and I don't know how to make them better.
@@ -69,6 +74,16 @@ predicate {:opaque} LookupsAgreeToLen(l1:Lookup, l2:Lookup, len:nat)
     requires len <= |l2.layers|
 {
     forall i :: 0<=i<len ==> l1.layers[i] == l2.layers[i]
+}
+
+lemma ExploitLookupsAgree(l1:Lookup, l2:Lookup, len:nat, i:nat)
+    requires len <= |l1.layers|
+    requires len <= |l2.layers|
+    requires LookupsAgreeToLen(l1, l2, len)
+    requires i < len
+    ensures l1.layers[i] == l2.layers[i]
+{
+    reveal_LookupsAgreeToLen();
 }
 
 // l1 and l2 agree out to len,
@@ -82,10 +97,19 @@ predicate IsGreatestCommonPrefix(l1:Lookup, l2:Lookup, len:nat)
     && (len<|l1.layers| && len<|l2.layers| ==> l1.layers[len]!=l2.layers[len])
 }
 
+lemma IsGreatestCommonPrefixIsSymmetric(l1:Lookup, l2:Lookup, len:nat)
+    requires IsGreatestCommonPrefix(l1, l2, len)
+    ensures IsGreatestCommonPrefix(l2, l1, len)
+{
+    reveal_LookupsAgreeToLen();
+}
+
 function {:opaque} CommonPrefixOfLookups(l1:Lookup, l2:Lookup) : (len:nat)
     ensures IsGreatestCommonPrefix(l1, l2, len)
     decreases |l1.layers|
 {
+    reveal_LookupsAgreeToLen();
+    
     if |l1.layers| == |l2.layers| == 0
     then 0
     else if |l1.layers| == 0 || |l2.layers| == 0

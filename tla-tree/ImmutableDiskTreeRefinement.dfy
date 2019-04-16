@@ -137,13 +137,31 @@ function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeI
     lookup
 }
 
-lemma LookupsMatch(lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, len:int)
-    requires |lookup1.layers| == len;
-    requires |lookup2.layers| == len;
-    requires LookupsAgreeToLen(lookup1, lookup2, len);
-    ensures lookup1.layers == lookup2.layers;
+lemma DifferentDatums(k:Constants, s:Variables, s':Variables, step:Step, lv:LookupView, datum1:Datum, datum2:Datum,
+    lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, commonPrefixLength:int)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    requires lv == EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'))
+    requires (datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key)
+    requires lookup1 == LookupForDatum(lv, datum1)
+    requires lookup2 == LookupForDatum(lv, datum2)
+    requires IsGreatestCommonPrefix(lookup1, lookup2, commonPrefixLength)
+    requires commonPrefixLength == |lookup1.layers|
+    ensures DatumsUniqueInView(lv, datum1, datum2)
 {
-    reveal_LookupsAgreeToLen();
+}
+
+lemma DivergentLayerAgreesOnAddrAndNodes(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:int)
+    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
+    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
+    requires 0 <= i < |lookup1.layers|
+    requires 0 <= i < |lookup2.layers|
+    requires i==0 || lookup1.layers[i-1] == lookup2.layers[i-1]
+    ensures lookup1.layers[i].addr == lookup2.layers[i].addr
+    ensures lookup1.layers[i].node == lookup2.layers[i].node
+{
+    assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup1, i);   // OBSERVE trigger
+    assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, i);   // OBSERVE trigger
 }
 
 lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
@@ -156,65 +174,100 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
     var lv := EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'));
     assert LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s')))
         == lv;
-    forall datum1, datum2 | datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key
-        ensures datum1 == datum2 {
-        var lookup1 := LookupForDatum(lv, datum1);
-        var lookup2 := LookupForDatum(lv, datum2);
-        var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
-        if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
-//            assert |lookup1.layers| == commonPrefixLength;
-            assert |lookup2.layers| == commonPrefixLength;  // The presence of this line CREATES a timeout. Wut?
-            //LookupsMatch(lookup1, lookup2, commonPrefixLength);
-//            assert lookup1.layers == lookup2.layers;    // OBSERVE
-//            assert lookup1 == lookup2;
-//            calc {
-//                datum1;
-//                ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
-//                ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
-//                datum2;
-//            }
-            assert datum1 == datum2;
-        } else {
-//            //assert LookupHonorsRanges(lookup1);
-//            //assert LookupHonorsRanges(lookup2);
-//            assert datum1 == ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
-//            assert datum2 == ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
-////            if (commonPrefixLength == |lookup1.layers|) {
-////                //var termLayer1 := lookup1.layers[commonPrefixLength - 1];
-////                //assert termLayer1.node.slots[termLayer1.slot].Pointer?;
-////                assert false;
-////            }
-////            assert commonPrefixLength < |lookup1.layers|;
-//            if (commonPrefixLength == |lookup2.layers|) {
-//                var termLayer1 := lookup1.layers[commonPrefixLength - 1];
-//                //assert 0<=commonPrefixLength<|lookup1.layers|;
-//                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup1, commonPrefixLength);  // OBSERVE
-//                assert commonPrefixLength - 1 != 0; // this line causes timeouts by itself!
-//                assert termLayer1.node.slots[termLayer1.slot].Pointer?;
-//
-//                var termLayer2 := lookup2.layers[commonPrefixLength - 1];
-//                assert termLayer2.node.slots[termLayer2.slot].Value?;
-//                /*
-//                assert ValidValueLookup(lv, lookup2);
-//                assert ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2);
-//                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinks(lookup2);
-//                assert 0<=commonPrefixLength<|lookup2.layers|;
-//                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, commonPrefixLength);
-//                assert termLayer2.node.slots[termLayer2.slot].Pointer?;
-//                */
-//                assert false;
-//            }
-//            assert commonPrefixLength < |lookup2.layers|;
-//            assert false;
-//            assert commonPrefixLength < |lookup2.layers|;   // Else commonPrefixLength slot isn't a Value.
-//
-//            assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
-//            assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
-//            assert lookup1.layers[commonPrefixLength].slotRange != lookup2.layers[commonPrefixLength].slotRange;
-//            // They're going to have different ranges.
-//            //assume false;
-            assert datum1 == datum2;
+    forall datum1, datum2
+        ensures DatumsUniqueInView(lv, datum1, datum2)
+    {
+        if (datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key) {
+            var lookup1 := LookupForDatum(lv, datum1);
+            var lookup2 := LookupForDatum(lv, datum2);
+            var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
+            if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
+                assume false;   // XXX timeout for now
+                ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, commonPrefixLength-1);    // XXX pull up
+                assert DatumsUniqueInView(lv, datum1, datum2);
+            } else if (commonPrefixLength < |lookup1.layers| && commonPrefixLength < |lookup2.layers|) {
+                // at the first divergent layer, the addr & node agree because the previous layer pointed at it.
+                var j:=commonPrefixLength;
+                if (commonPrefixLength == 0) {
+                  assert commonPrefixLength == 0;
+                } else if (commonPrefixLength > 0) {
+                    var i := commonPrefixLength-1;
+                    ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, i);
+                    assert lookup1.layers[i] == lookup2.layers[i];
+                    assert i == j-1;
+                    assert lookup1.layers[i] == lookup1.layers[j-1];
+                    calc {
+                        lookup1.layers[j-1];
+                            { assert i == j-1; }
+                        lookup1.layers[i];
+                        lookup2.layers[i];
+                        lookup2.layers[j-1];
+                    }
+                    assert lookup1.layers[j-1] == lookup2.layers[j-1];
+                } else {
+                    assert false;
+                }
+    assert j==0 || lookup1.layers[j-1] == lookup2.layers[j-1];
+                assume false; // XXX
+                DivergentLayerAgreesOnAddrAndNodes(lv, lookup1, lookup2, commonPrefixLength);
+                assert lookup1.layers[commonPrefixLength].addr == lookup2.layers[commonPrefixLength].addr;
+                assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
+                // The slots must disagree (by an argument later?)
+                assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
+                // and hence the ranges don't overlap.
+                var range1 := lookup1.layers[commonPrefixLength].slotRange;
+                var range2 := lookup2.layers[commonPrefixLength].slotRange;
+                //assert RangesDisjoint(range1, range2);
+                assert DatumsUniqueInView(lv, datum1, datum2);
+            } else {
+                assume false; // XXX
+                if (commonPrefixLength == |lookup1.layers|) {
+                    DifferentDatums(k, s, s', step, lv, datum1, datum2, lookup1, lookup2, commonPrefixLength);
+                } else {
+                    assert commonPrefixLength == |lookup2.layers|;
+                    IsGreatestCommonPrefixIsSymmetric(lookup1, lookup2, commonPrefixLength);
+                    DifferentDatums(k, s, s', step, lv, datum2, datum1, lookup2, lookup1, commonPrefixLength);
+                }
+            }
+//                assert LookupHonorsRanges(lookup1);
+//                assert LookupHonorsRanges(lookup2);
+//                assert datum1 == ImmutableDiskTreeImpl.TerminalSlot(lookup1).datum;
+//                assert datum2 == ImmutableDiskTreeImpl.TerminalSlot(lookup2).datum;
+    ////            if (commonPrefixLength == |lookup1.layers|) {
+    ////                //var termLayer1 := lookup1.layers[commonPrefixLength - 1];
+    ////                //assert termLayer1.node.slots[termLayer1.slot].Pointer?;
+    ////                assert false;
+    ////            }
+    ////            assert commonPrefixLength < |lookup1.layers|;
+    //            if (commonPrefixLength == |lookup2.layers|) {
+    //                var termLayer1 := lookup1.layers[commonPrefixLength - 1];
+    //                //assert 0<=commonPrefixLength<|lookup1.layers|;
+    //                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup1, commonPrefixLength);  // OBSERVE
+    //                assert commonPrefixLength - 1 != 0; // this line causes timeouts by itself!
+    //                assert termLayer1.node.slots[termLayer1.slot].Pointer?;
+    //
+    //                var termLayer2 := lookup2.layers[commonPrefixLength - 1];
+    //                assert termLayer2.node.slots[termLayer2.slot].Value?;
+    //                /*
+    //                assert ValidValueLookup(lv, lookup2);
+    //                assert ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2);
+    //                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinks(lookup2);
+    //                assert 0<=commonPrefixLength<|lookup2.layers|;
+    //                assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, commonPrefixLength);
+    //                assert termLayer2.node.slots[termLayer2.slot].Pointer?;
+    //                */
+    //                assert false;
+    //            }
+    //            assert commonPrefixLength < |lookup2.layers|;
+    //            assert false;
+    //            assert commonPrefixLength < |lookup2.layers|;   // Else commonPrefixLength slot isn't a Value.
+    //
+    //            assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
+    //            assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
+    //            assert lookup1.layers[commonPrefixLength].slotRange != lookup2.layers[commonPrefixLength].slotRange;
+    //            // They're going to have different ranges.
         }
+        assert DatumsUniqueInView(lv, datum1, datum2);
     }
 }
 

@@ -301,14 +301,20 @@ predicate WFLookup(lookup:Lookup)
     0 < |lookup.layers|
 }
 
+// Naming a term to encourage triggering on it.
+predicate ValidLayerIndex(lookup:Lookup, i:int)
+{
+    0<=i<|lookup.layers|
+}
+
 predicate LookupHasValidNodes(lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==> WFNode(lookup.layers[i].node)
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==> WFNode(lookup.layers[i].node)
 }
 
 predicate LookupHasValidSlotIndices(lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==>
         && var layer := lookup.layers[i];
         && ValidSlotIndex(layer.node, layer.slot)
 }
@@ -353,7 +359,8 @@ function TableAt(k:Constants, table:Table, addr:TableAddress) : NBA
 
 predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==> ValidAddress(k, lookup.layers[i].addr)
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
+        ==> ValidAddress(k, lookup.layers[i].addr)
 }
 
 predicate LookupHonorsPointerLinksAtLayer(lookup:Lookup, i:int)
@@ -385,7 +392,7 @@ predicate LookupHonorsRanges(lookup:Lookup)
     requires LookupHasValidNodes(lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==>
         && var layer := lookup.layers[i];
         && RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
 }
@@ -395,7 +402,7 @@ predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
     requires WFTable(k, table)
     requires LookupHasValidAddresses(k, lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==> (
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==> (
         && var layer := lookup.layers[i];
         && var nba := TableAt(k, table, layer.addr);
         && ValidNba(k, nba)
