@@ -164,6 +164,77 @@ lemma DivergentLayerAgreesOnAddrAndNodes(lv:LookupView, lookup1:ImmutableDiskTre
     assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, i);   // OBSERVE trigger
 }
 
+lemma DisjointRanges(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:int,
+    datum1:Datum, datum2:Datum)
+    ensures datum1.key != datum2.key
+{
+/*
+LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
+    ensures RangeContains(ImmutableDiskTreeImpl.TerminalSlot(lookup).slotRange, datum.key)
+    */
+}
+
+
+lemma KeyLeqTransitive()
+    ensures forall a, b, c :: KeyLe(a,b) && KeyLe(b,c) ==> KeyLe(a,c)
+    ensures forall a, b, c :: KeyLe(a,b) && KeyLeq(b,c) ==> KeyLe(a,c)
+    ensures forall a, b, c :: KeyLeq(a,b) && KeyLe(b,c) ==> KeyLe(a,c)
+    ensures forall a, b, c :: KeyLeq(a,b) && KeyLeq(b,c) ==> KeyLeq(a,c)
+{
+    KeyLeTransitive();
+}
+
+lemma LookupRangesNest(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, i:int, k:int, key:Key)
+    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+    requires 0 <= i <= k < |lookup.layers|
+    requires ImmutableDiskTreeImpl.RangeContains(lookup.layers[k].slotRange, key)
+    ensures ImmutableDiskTreeImpl.RangeContains(lookup.layers[i].slotRange, key)
+{
+    if (i<k) {
+        var j:=k-1;
+
+        var jrange := lookup.layers[j].slotRange;
+        var krange := lookup.layers[k].slotRange;
+        
+        assume PivotsHonorRangesInv(lv);
+        var lslot := lookup.layers[k].slot;
+
+        assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup, k);  // trigger help after jonh weakened them
+        assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup, j);  // trigger help after jonh weakened them
+        //assert ImmutableDiskTreeImpl.ValidSlotIndex(lookup.layers[k].node, slot);
+        if (0 < lslot) {
+            assert PivotsHonorRangesRequirements(lv, lookup, k, lslot);
+            assert PivotsHonorRanges(lv, lookup, k, lslot);
+            assert RangeContainsExcludingLo(ImmutableDiskTreeImpl.NodeRangeAtLayer(lookup, k), lookup.layers[k].node.pivots[lslot-1]);
+            assert KeyLeq(jrange.loinc, krange.loinc);
+            assert KeyLeq(krange.loinc, key);
+        }
+        KeyLeqTransitive();
+        assert KeyLeq(jrange.loinc, key);
+
+        var rslot := lookup.layers[k].slot + 1;
+        if (rslot < |lookup.layers[k].node.slots|-1) {
+            assert PivotsHonorRangesRequirements(lv, lookup, k, rslot);
+            assert PivotsHonorRanges(lv, lookup, k, rslot);
+            assert RangeContainsExcludingLo(ImmutableDiskTreeImpl.NodeRangeAtLayer(lookup, k), lookup.layers[k].node.pivots[rslot-1]);
+            assert lookup.layers[k].slotRange.hiexc == lookup.layers[k].node.pivots[rslot-1];
+        } else {
+            assert ImmutableDiskTreeImpl.LookupHonorsRanges(lookup);
+
+            assert ImmutableDiskTreeImpl.RangeBoundForSlotIdx(lookup.layers[j].node, ImmutableDiskTreeImpl.NodeRangeAtLayer(lookup, j), lookup.layers[j].slot) == lookup.layers[j].slotRange;
+            assert lookup.layers[k].slotRange.hiexc == lookup.layers[j].slotRange.hiexc;
+        }
+        assert KeyLeq(krange.hiexc, jrange.hiexc);
+        assert KeyLe(key, krange.hiexc);
+        assert KeyLe(key, jrange.hiexc);
+        LookupRangesNest(lv, lookup, i, j, key);
+        assert ImmutableDiskTreeImpl.RangeContains(lookup.layers[i].slotRange, key);
+    } else {
+        assert i==k;
+        assert ImmutableDiskTreeImpl.RangeContains(lookup.layers[i].slotRange, key);
+    }
+}
+
 lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     requires NextStep(k, s, s', step)
     requires SysInv(k, s)
@@ -182,45 +253,45 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
             var lookup2 := LookupForDatum(lv, datum2);
             var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
             if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
-                assume false;   // XXX timeout for now
                 ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, commonPrefixLength-1);    // XXX pull up
                 assert DatumsUniqueInView(lv, datum1, datum2);
             } else if (commonPrefixLength < |lookup1.layers| && commonPrefixLength < |lookup2.layers|) {
                 // at the first divergent layer, the addr & node agree because the previous layer pointed at it.
                 var j:=commonPrefixLength;
-                if (commonPrefixLength == 0) {
-                  assert commonPrefixLength == 0;
-                } else if (commonPrefixLength > 0) {
-                    var i := commonPrefixLength-1;
-                    ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, i);
-                    assert lookup1.layers[i] == lookup2.layers[i];
-                    assert i == j-1;
-                    assert lookup1.layers[i] == lookup1.layers[j-1];
-                    calc {
-                        lookup1.layers[j-1];
-                            { assert i == j-1; }
-                        lookup1.layers[i];
-                        lookup2.layers[i];
-                        lookup2.layers[j-1];
-                    }
-                    assert lookup1.layers[j-1] == lookup2.layers[j-1];
-                } else {
-                    assert false;
+                if (commonPrefixLength > 0) {
+                    ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, commonPrefixLength-1);
                 }
-    assert j==0 || lookup1.layers[j-1] == lookup2.layers[j-1];
-                assume false; // XXX
                 DivergentLayerAgreesOnAddrAndNodes(lv, lookup1, lookup2, commonPrefixLength);
                 assert lookup1.layers[commonPrefixLength].addr == lookup2.layers[commonPrefixLength].addr;
                 assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
-                // The slots must disagree (by an argument later?)
+                // The slots must disagree (by contradiction)
+                if (lookup1.layers[commonPrefixLength].slot == lookup2.layers[commonPrefixLength].slot) {
+//                    assert lookup1.layers[commonPrefixLength].slotRange != lookup2.layers[commonPrefixLength].slotRange;
+                    // These triggers enable the proof that the slotRanges are equal.
+                    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, commonPrefixLength);  // OBSERVE trigger
+                    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, commonPrefixLength);  // OBSERVE trigger
+                    assert false;
+                }
                 assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
                 // and hence the ranges don't overlap.
                 var range1 := lookup1.layers[commonPrefixLength].slotRange;
                 var range2 := lookup2.layers[commonPrefixLength].slotRange;
-                //assert RangesDisjoint(range1, range2);
-                assert DatumsUniqueInView(lv, datum1, datum2);
+                assume DatumsAreInTheRightPlaceInv(lv);
+                //assert ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1);
+                assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup1), datum1.key, Some(datum1.value));   // Trigger DatumsAreInTheRightPlaceInv
+                assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup2), datum2.key, Some(datum2.value));   // Trigger DatumsAreInTheRightPlaceInv
+//        ) ==> RangeContains(Last(lookup.layers).slotRange, key)
+//                assert ImmutableDiskTreeImpl.RangeContains(Last(lookup1.layers).slotRange, datum1.key);
+//                assert ImmutableDiskTreeImpl.RangeContains(Last(lookup2.layers).slotRange, datum2.key);
+                LookupRangesNest(lv, lookup1, commonPrefixLength, |lookup1.layers|-1, datum1.key);
+                LookupRangesNest(lv, lookup2, commonPrefixLength, |lookup2.layers|-1, datum2.key);
+ //               assert ImmutableDiskTreeImpl.RangeContains(range1, datum1.key);
+//                assert ImmutableDiskTreeImpl.RangeContains(range2, datum2.key);
+                DisjointRanges(lv, lookup1, lookup2, commonPrefixLength, datum1, datum2);
+                assert datum1.key != datum2.key;
+                assert false;
+                //assert DatumsUniqueInView(lv, datum1, datum2);
             } else {
-                assume false; // XXX
                 if (commonPrefixLength == |lookup1.layers|) {
                     DifferentDatums(k, s, s', step, lv, datum1, datum2, lookup1, lookup2, commonPrefixLength);
                 } else {

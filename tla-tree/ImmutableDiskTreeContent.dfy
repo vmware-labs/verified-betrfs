@@ -121,13 +121,51 @@ function {:opaque} CommonPrefixOfLookups(l1:Lookup, l2:Lookup) : (len:nat)
 
 }
 
-/*
-lemma LookupsHonorRanges(lv:LookupView, lookup:Lookup)
+// Useful because slot pivots should not duplicate the loinc of the enclosing slot,
+// lest they leave an empty slot range.
+predicate RangeContainsExcludingLo(range:Range, key:Key)
+{
+    && RangeContains(range, key)
+    && key != range.loinc
+}
+
+predicate PivotsHonorRangesRequirements(lv:LookupView, lookup:Lookup, i:int, slot:int)
+{
+    && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+    && ValidLayerIndex(lookup, i)
+    && ValidSlotIndex(lookup.layers[i].node, slot)
+    && 0<slot
+}
+
+predicate PivotsHonorRanges(lv:LookupView, lookup:Lookup, i:int, slot:int)
+    requires PivotsHonorRangesRequirements(lv, lookup, i, slot)
+{
+    RangeContainsExcludingLo(NodeRangeAtLayer(lookup, i), lookup.layers[i].node.pivots[slot-1])
+}
+
+predicate PivotsHonorRangesInv(lv:LookupView)
+{
+    forall lookup, i, slot :: PivotsHonorRangesRequirements(lv, lookup, i, slot)
+        ==> PivotsHonorRanges(lv, lookup, i, slot)
+}
+
+predicate DatumsAreInTheRightPlaceInv(lv:LookupView)
+{
+    forall lookup, key, value ::
+        (
+            && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+            && SlotSatisfiesQuery(TerminalSlot(lookup), key, value)
+        ) ==> RangeContains(Last(lookup.layers).slotRange, key)
+}
+
+/* unneeded, I think
+lemma LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
     requires ValidValueLookup(lv.k, lv.table, lv.view, lookup)
-    ensures 
-    TerminalSlot
-    ensures RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
-    LEFT OFF HERE
+    requires ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum;
+    ensures RangeContains(ImmutableDiskTreeImpl.TerminalSlot(lookup).slotRange, datum.key)
+{
+    // XXX todo
+}
 */
 
 } // module
