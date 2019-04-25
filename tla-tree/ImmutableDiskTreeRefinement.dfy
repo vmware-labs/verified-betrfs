@@ -1,5 +1,5 @@
 include "CrashableMap.dfy"
-include "ImmutableDiskTreeInterpretation.dfy"
+include "ImmutableDiskTreeCacheInv.dfy"
 
 module ImmutableDiskTreeRefinement {
 import opened KVTypes
@@ -10,6 +10,7 @@ import opened ImmutableDiskTreeInv
 import opened ImmutableDiskTreeHeight
 import opened ImmutableDiskTreeContent
 import opened ImmutableDiskTreeInterpretation
+import opened ImmutableDiskTreeCacheInv 
 import opened MissingLibrary
 import CrashableMap
 
@@ -40,6 +41,10 @@ predicate SysInv(k:Constants, s:Variables)
 {
     && WFDiskState(k, s)
     && TreeInv(k.impl, s.impl, DiskView(k, s))  // TODO remove this dependency until GC time
+
+    && ValidCacheIndicesInv(k, s)
+    && CleanCacheSectorsMatchDiskInv(k, s)
+
     && CacheLbasFitOnDisk(k.impl, s.impl)
     && PivotsOrderedInv(LV(k, s))
     && PivotsHonorRangesInv(LV(k, s))
@@ -418,58 +423,7 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
             }
             var vtc := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
             var vtc' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
-            forall lba | (0 <= lba < DiskSize(k)) ensures vtc'[lba] == ViewLbaThroughCache(k.impl, s'.impl, DiskView(k, s'), lba)
-            {
-            }
-            forall lba | (0 <= lba < DiskSize(k)) ensures vtc[lba] == ViewLbaThroughCache(k.impl, s.impl, DiskView(k, s), lba)
-            {
-            }
-            assert vtc.Keys == vtc'.Keys;
-            forall lba | lba in vtc.Keys ensures vtc[lba] == vtc'[lba]
-            {
-                if (lba == step.impl.lba) {
-                    assert !(lba in s.impl.cache);
-                    calc {
-                        vtc'[lba];
-                        step.impl.sector;
-                        DiskView(k, s)[lba];
-                        vtc[lba];
-                    }
-                } else {
-                    assert vtc[lba] == vtc'[lba];
-                }
-                
-                /*
-                if (lba in s.impl.cache) {
-                    calc {
-                        vtc[lba];
-                        ViewLbaThroughCache(k.impl, s.impl, DiskView(k, s), lba);
-                        s.impl.cache[lba].sector;
-                        s'.impl.cache[lba].sector;
-                        ViewLbaThroughCache(k.impl, s'.impl, DiskView(k, s'), lba);
-                        vtc'[lba];
-                    }
-                } else {
-                    calc {
-                        vtc[lba];
-                        ViewLbaThroughCache(k.impl, s.impl, DiskView(k, s), lba);
-                        ViewLbaThroughCache(k.impl, s'.impl, DiskView(k, s'), lba);
-                        vtc'[lba];
-                    }
-                }
-                */
-            }
-            assert vtc == vtc';
-            calc {
-                LV(k, s');
-                LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s')));
-                LookupView(k.impl, s'.impl.ephemeralTable, vtc');
-                LookupView(k.impl, s'.impl.ephemeralTable, vtc);
-                LookupView(k.impl, s.impl.ephemeralTable, vtc);
-                LookupView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s)));
-                LV(k, s);
-            }
-            assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            assert vtc == vtc'; // instantiate. (XXX James: Weird!)
             assert LV(k, s') == LV(k, s);
             assert PivotsOrderedInv(LV(k, s'));
         }
@@ -478,6 +432,21 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
             {
                 ImmutableDiskTreeImpl.reveal_NextStep();
             }
+            var vtc := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
+            var vtc' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            forall lba | (0 <= lba < DiskSize(k))
+                ensures vtc[lba] == vtc'[lba]
+            {
+                if lba == step.impl.lba {
+                    assert lba in s.impl.cache && s.impl.cache[lba].state.Clean?;
+                    assert s.impl.cache[lba].sector == s.disk.sectors[lba];
+                    assert vtc[lba] == vtc'[lba];
+                } else {
+                    assert vtc[lba] == vtc'[lba];
+                }
+            }
+            assert vtc == vtc';
+            // Gonna need an invariant here that the Clean stuff in the cache always matches the disk.
             assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert LV(k, s') == LV(k, s);
             assert PivotsOrderedInv(LV(k, s'));

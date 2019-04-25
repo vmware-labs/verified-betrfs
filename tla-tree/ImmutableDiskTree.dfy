@@ -932,6 +932,11 @@ datatype Constants = Constants(
     disk:TreeDisk.Constants,
     impl:ImmutableDiskTreeImpl.Constants)
 
+predicate WFConstants(k:Constants)
+{
+    k.disk.size == ImmutableDiskTreeImpl.DiskSize(k.impl)
+}
+
 datatype Variables = Variables(
     disk:TreeDisk.Variables,
     impl:ImmutableDiskTreeImpl.Variables)
