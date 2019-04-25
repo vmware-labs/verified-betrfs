@@ -799,9 +799,11 @@ predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, diskStep:Tree
     && s'.ready == s.ready
 }
 
-// It's okay to evict entries from the cache whenever.
+// It's okay to evict clean entries from the cache whenever.
 predicate CacheEvictAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA)
 {
+    && lba in s.cache
+    && s.cache[lba].state.Clean?
     && diskStep == TreeDisk.IdleStep
     && s'.cache == MapRemove(s.cache, lba)
     && s'.ephemeralTable == s.ephemeralTable
