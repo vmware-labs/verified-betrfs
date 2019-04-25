@@ -272,6 +272,7 @@ LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
     */
 }
 
+// Keys in disjoint ranges aren't equal.
 lemma DisjointRanges(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:nat,
     datum1:Datum, datum2:Datum)
     requires PivotsOrderedInv(lv)
@@ -392,48 +393,42 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
             var lookup2 := LookupForDatum(lv, datum2);
             var commonPrefixLength := CommonPrefixOfLookups(lookup1, lookup2);
             if (commonPrefixLength == |lookup1.layers| == |lookup2.layers|) {
-                ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, commonPrefixLength-1);    // XXX pull up
+                // Hey, these are the same lookups! So they end at the same datum.
+                ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, commonPrefixLength-1);
                 assert DatumsUniqueInView(lv, datum1, datum2);
-            } else if (commonPrefixLength < |lookup1.layers| && commonPrefixLength < |lookup2.layers|) {
+            } else if (commonPrefixLength == |lookup1.layers|) {
+                LookupsAtDifferentDepthsContradiction(k, s, s', step, lv, datum1, datum2, lookup1, lookup2, commonPrefixLength);
+            } else if (commonPrefixLength == |lookup2.layers|) {
+                IsGreatestCommonPrefixSymmetry(lookup1, lookup2, commonPrefixLength);
+                LookupsAtDifferentDepthsContradiction(k, s, s', step, lv, datum2, datum1, lookup2, lookup1, commonPrefixLength);
+            } else {
                 // at the first divergent layer, the addr & node agree because the previous layer pointed at it.
-                var j:=commonPrefixLength;
                 if (commonPrefixLength > 0) {
                     ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, commonPrefixLength-1);
                 }
                 DivergentLayerAgreesOnAddrAndNodes(lv, lookup1, lookup2, commonPrefixLength);
-                assert lookup1.layers[commonPrefixLength].addr == lookup2.layers[commonPrefixLength].addr;
-                assert lookup1.layers[commonPrefixLength].node == lookup2.layers[commonPrefixLength].node;
+
                 // The slots must disagree (by contradiction)
                 if (lookup1.layers[commonPrefixLength].slot == lookup2.layers[commonPrefixLength].slot) {
-//                    assert lookup1.layers[commonPrefixLength].slotRange != lookup2.layers[commonPrefixLength].slotRange;
                     // These triggers enable the proof that the slotRanges are equal.
                     assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, commonPrefixLength);  // OBSERVE trigger
                     assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, commonPrefixLength);  // OBSERVE trigger
                     assert false;
                 }
-                assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
+                // assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
+
                 // and hence the ranges don't overlap.
                 var range1 := lookup1.layers[commonPrefixLength].slotRange;
                 var range2 := lookup2.layers[commonPrefixLength].slotRange;
-                //assert ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1);
                 assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup1), datum1.key, Some(datum1.value));   // Trigger DatumsAreInTheRightPlaceInv
                 assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup2), datum2.key, Some(datum2.value));   // Trigger DatumsAreInTheRightPlaceInv
+                // Pull that non-overlapping observation down to the bottom of the lookup stacks
                 LookupRangesNest(lv, lookup1, commonPrefixLength, |lookup1.layers|-1, datum1.key);
                 LookupRangesNest(lv, lookup2, commonPrefixLength, |lookup2.layers|-1, datum2.key);
-                assert lv == EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'));
-                assert PivotsOrderedInv(lv);
+                // If the ranges don't overlap, the keys aren't equal, which contradicts the assumption
+                // in the if above.
                 DisjointRanges(lv, lookup1, lookup2, commonPrefixLength, datum1, datum2);
-                assert datum1.key != datum2.key;
                 assert false;
-                //assert DatumsUniqueInView(lv, datum1, datum2);
-            } else {
-                if (commonPrefixLength == |lookup1.layers|) {
-                    LookupsAtDifferentDepthsContradiction(k, s, s', step, lv, datum1, datum2, lookup1, lookup2, commonPrefixLength);
-                } else {
-                    assert commonPrefixLength == |lookup2.layers|;
-                    IsGreatestCommonPrefixSymmetry(lookup1, lookup2, commonPrefixLength);
-                    LookupsAtDifferentDepthsContradiction(k, s, s', step, lv, datum2, datum1, lookup2, lookup1, commonPrefixLength);
-                }
             }
         }
         assert DatumsUniqueInView(lv, datum1, datum2);
