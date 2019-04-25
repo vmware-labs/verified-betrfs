@@ -42,6 +42,8 @@ predicate SysInv(k:Constants, s:Variables)
     && TreeInv(k.impl, s.impl, DiskView(k, s))  // TODO remove this dependency until GC time
     && CacheLbasFitOnDisk(k.impl, s.impl)
     && PivotsOrderedInv(LV(k, s))
+    && PivotsHonorRangesInv(LV(k, s))
+    && DatumsAreInTheRightPlaceInv(LV(k, s))
     && OneDatumPerKeyInv(LV(k, s))
 }
 
@@ -333,9 +335,9 @@ lemma LookupRangesNest(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, i:int
     requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
     requires 0 <= i <= k < |lookup.layers|
     requires ImmutableDiskTreeImpl.RangeContains(lookup.layers[k].slotRange, key)
+    requires PivotsHonorRangesInv(lv);
     ensures ImmutableDiskTreeImpl.RangeContains(lookup.layers[i].slotRange, key)
 {
-    assume PivotsHonorRangesInv(lv);    // XXX
 
     if (i<k) {
         var j:=k-1;
@@ -352,10 +354,29 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
 {
 }
 
+lemma PivotsHonorRangesInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+    ensures PivotsHonorRangesInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+{
+}
+
+lemma DatumsAreInTheRightPlaceInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    ensures WFDiskState(k, s');
+    ensures DatumsAreInTheRightPlaceInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+{
+}
+
 lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     requires NextStep(k, s, s', step)
     requires SysInv(k, s)
-    requires PivotsOrderedInv(LV(k, s')); // caller dispatches PivotsOrdered' before getting here.
+    // caller dispatches these invs before getting here
+    requires PivotsOrderedInv(LV(k, s'));
+    requires PivotsHonorRangesInv(LV(k, s'));
+    requires DatumsAreInTheRightPlaceInv(LV(k, s'));
     ensures WFDiskState(k, s');
     ensures OneDatumPerKeyInv(LV(k, s'))
 {
@@ -394,7 +415,6 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
                 // and hence the ranges don't overlap.
                 var range1 := lookup1.layers[commonPrefixLength].slotRange;
                 var range2 := lookup2.layers[commonPrefixLength].slotRange;
-                assume DatumsAreInTheRightPlaceInv(lv);
                 //assert ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1);
                 assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup1), datum1.key, Some(datum1.value));   // Trigger DatumsAreInTheRightPlaceInv
                 assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup2), datum2.key, Some(datum2.value));   // Trigger DatumsAreInTheRightPlaceInv
@@ -429,6 +449,8 @@ lemma InvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     assert CacheLbasFitOnDisk(k.impl, s'.impl);
     TreeInvInduction(k, s, s', step);
     PivotsOrderedInvInduction(k, s, s', step);
+    PivotsHonorRangesInvInduction(k, s, s', step);
+    DatumsAreInTheRightPlaceInvInduction(k, s, s', step);
     OneDatumPerKeyInvInduction(k, s, s', step);
 }
 
