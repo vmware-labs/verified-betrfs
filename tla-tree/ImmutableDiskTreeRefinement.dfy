@@ -168,22 +168,6 @@ function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeI
     lookup
 }
 
-lemma DifferentDatums(k:Constants, s:Variables, s':Variables, step:Step, lv:LookupView, datum1:Datum, datum2:Datum,
-    lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, commonPrefixLength:nat)
-    requires NextStep(k, s, s', step)
-    requires SysInv(k, s)
-    requires lv == EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'))
-    requires (datum1 in AllValueLookups(lv) && datum2 in AllValueLookups(lv) && datum1.key == datum2.key)
-    requires lookup1 == LookupForDatum(lv, datum1)
-    requires lookup2 == LookupForDatum(lv, datum2)
-    requires ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, commonPrefixLength);
-    requires IsGreatestCommonPrefix(lookup1, lookup2, commonPrefixLength)
-    requires commonPrefixLength == |lookup1.layers|
-    requires commonPrefixLength < |lookup2.layers|
-    ensures false;
-{
-}
-
 lemma DivergentLayerAgreesOnAddrAndNodes(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:int)
     requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
     requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
@@ -209,6 +193,37 @@ lemma PivotsOrderedTransitive(node:Node, i1:nat, i2:nat)
         assert PivotsOrderedAtIdx(node, i2-1);  // instantiate
         KeyLeqTransitive();
     }
+}
+
+// If two lookups agree to depth cPL, but one stops there and the other
+// continues, that's just straight up nonsense: the short one must terminate in
+// a Value?, and the other must have a Pointer? in the same (matching!?) slot.
+lemma LookupsAtDifferentDepthsContradiction(
+    k:Constants, s:Variables, s':Variables, step:Step, lv:LookupView, datum1:Datum, datum2:Datum,
+    lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, commonPrefixLength:nat)
+    requires WFDiskState(k, s)
+    requires WFDiskState(k, s')
+    requires lv == EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'))
+    requires datum1 in AllValueLookups(lv)
+    requires datum2 in AllValueLookups(lv)
+    requires lookup1 == LookupForDatum(lv, datum1)
+    requires lookup2 == LookupForDatum(lv, datum2)
+    requires IsGreatestCommonPrefix(lookup1, lookup2, commonPrefixLength)
+    requires commonPrefixLength == |lookup1.layers|
+    requires commonPrefixLength < |lookup2.layers|
+    ensures false;
+{
+    var i := commonPrefixLength-1;
+    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, i);   // instantiate
+    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, i);   // instantiate
+    var slot1 := lookup1.layers[i].slot;
+    var slot2 := lookup2.layers[i].slot;
+    //assert lookup1.layers[i].node.slots[slot1].Value?;
+    assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, commonPrefixLength);  // instantiate
+    //assert lookup2.layers[i].node.slots[slot2].Pointer?;
+    ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, i);   // instantiate
+    //assert lookup1.layers[i].node == lookup2.layers[i].node;
+    //assert slot1 != slot2;
 }
 
 lemma DisjointRangesAsym(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:nat,
@@ -393,11 +408,11 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
                 //assert DatumsUniqueInView(lv, datum1, datum2);
             } else {
                 if (commonPrefixLength == |lookup1.layers|) {
-                    DifferentDatums(k, s, s', step, lv, datum1, datum2, lookup1, lookup2, commonPrefixLength);
+                    LookupsAtDifferentDepthsContradiction(k, s, s', step, lv, datum1, datum2, lookup1, lookup2, commonPrefixLength);
                 } else {
                     assert commonPrefixLength == |lookup2.layers|;
                     IsGreatestCommonPrefixSymmetry(lookup1, lookup2, commonPrefixLength);
-                    DifferentDatums(k, s, s', step, lv, datum2, datum1, lookup2, lookup1, commonPrefixLength);
+                    LookupsAtDifferentDepthsContradiction(k, s, s', step, lv, datum2, datum1, lookup2, lookup1, commonPrefixLength);
                 }
             }
         }
