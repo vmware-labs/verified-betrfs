@@ -3,6 +3,7 @@ module KVTypes {
 type Key(!new,==)
 
 predicate KeyLe(a:Key, b:Key)
+    ensures KeyLe(a, b) ==> a!=b
 
 predicate KeyLeq(a:Key, b:Key) {
     KeyLe(a, b) || a==b

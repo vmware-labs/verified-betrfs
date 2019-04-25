@@ -76,6 +76,15 @@ predicate {:opaque} LookupsAgreeToLen(l1:Lookup, l2:Lookup, len:nat)
     forall i :: 0<=i<len ==> l1.layers[i] == l2.layers[i]
 }
 
+lemma LookupsAgreeToLenSymmetry(l1:Lookup, l2:Lookup, len:nat)
+    requires len <= |l1.layers|
+    requires len <= |l2.layers|
+    requires LookupsAgreeToLen(l1, l2, len)
+    ensures LookupsAgreeToLen(l2, l1, len)
+{
+    reveal_LookupsAgreeToLen();
+}
+
 lemma ExploitLookupsAgree(l1:Lookup, l2:Lookup, len:nat, i:nat)
     requires len <= |l1.layers|
     requires len <= |l2.layers|
@@ -97,7 +106,7 @@ predicate IsGreatestCommonPrefix(l1:Lookup, l2:Lookup, len:nat)
     && (len<|l1.layers| && len<|l2.layers| ==> l1.layers[len]!=l2.layers[len])
 }
 
-lemma IsGreatestCommonPrefixIsSymmetric(l1:Lookup, l2:Lookup, len:nat)
+lemma IsGreatestCommonPrefixSymmetry(l1:Lookup, l2:Lookup, len:nat)
     requires IsGreatestCommonPrefix(l1, l2, len)
     ensures IsGreatestCommonPrefix(l2, l1, len)
 {
@@ -147,6 +156,25 @@ predicate PivotsHonorRangesInv(lv:LookupView)
 {
     forall lookup, i, slot :: PivotsHonorRangesRequirements(lv, lookup, i, slot)
         ==> PivotsHonorRanges(lv, lookup, i, slot)
+}
+
+predicate PivotsOrderedAtIdx(node:Node, idx:int)
+    requires 0<=idx<|node.pivots|-1
+{
+    KeyLe(node.pivots[idx], node.pivots[idx+1])
+}
+
+predicate PivotsOrdered(node:Node)
+{
+    forall idx :: 0<=idx<|node.pivots|-1 ==> PivotsOrderedAtIdx(node, idx)
+}
+
+predicate PivotsOrderedInv(lv:LookupView)
+{
+    forall lookup, i :: (
+        && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+        && ValidLayerIndex(lookup, i)
+    ) ==> PivotsOrdered(lookup.layers[i].node)
 }
 
 predicate DatumsAreInTheRightPlaceInv(lv:LookupView)

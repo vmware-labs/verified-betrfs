@@ -388,13 +388,32 @@ function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
     if i==0 then FULL_RANGE() else lookup.layers[i-1].slotRange
 }
 
+predicate LookupHonorsRangesAt(lookup:Lookup, i:int)
+    requires LookupHasValidNodes(lookup)
+    requires LookupHasValidSlotIndices(lookup)
+    requires ValidLayerIndex(lookup, i)
+{
+    var layer := lookup.layers[i];
+    RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
+}
+
 predicate LookupHonorsRanges(lookup:Lookup)
     requires LookupHasValidNodes(lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
-    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==>
-        && var layer := lookup.layers[i];
-        && RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
+    forall i :: ValidLayerIndex(lookup, i) ==> LookupHonorsRangesAt(lookup, i)
+}
+
+predicate LookupMatchesViewAtLayer(k:Constants, table:Table, view:View, lookup:Lookup, i:int)
+    requires WFLookup(lookup)
+    requires WFTable(k, table)
+    requires LookupHasValidAddresses(k, lookup)
+    requires ValidLayerIndex(lookup, i)
+{
+    && var layer := lookup.layers[i];
+    && var nba := TableAt(k, table, layer.addr);
+    && ValidNba(k, nba)
+    && ViewNodeRead(k, view, nba, layer.node)
 }
 
 predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
@@ -402,12 +421,8 @@ predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
     requires WFTable(k, table)
     requires LookupHasValidAddresses(k, lookup)
 {
-    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==> (
-        && var layer := lookup.layers[i];
-        && var nba := TableAt(k, table, layer.addr);
-        && ValidNba(k, nba)
-        && ViewNodeRead(k, view, nba, layer.node)
-    )
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
+        ==> LookupMatchesViewAtLayer(k, table, view, lookup, i)
 }
 
 predicate ValidLookupInView(k:Constants, table:Table, view:View, lookup:Lookup)
@@ -875,7 +890,7 @@ datatype Step =
     | CacheFaultActionStep(lba:LBA, sector:Sector)
     | CacheEvictActionStep(lba:LBA)
 
-predicate {:opaque} /*XXX*/ NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
+predicate NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
     requires WFConstants(k)
 {
     match step {
