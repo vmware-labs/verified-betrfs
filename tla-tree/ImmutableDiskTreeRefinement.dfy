@@ -432,21 +432,6 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
             {
                 ImmutableDiskTreeImpl.reveal_NextStep();
             }
-            var vtc := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
-            var vtc' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
-            forall lba | (0 <= lba < DiskSize(k))
-                ensures vtc[lba] == vtc'[lba]
-            {
-                if lba == step.impl.lba {
-                    assert lba in s.impl.cache && s.impl.cache[lba].state.Clean?;
-                    assert s.impl.cache[lba].sector == s.disk.sectors[lba];
-                    assert vtc[lba] == vtc'[lba];
-                } else {
-                    assert vtc[lba] == vtc'[lba];
-                }
-            }
-            assert vtc == vtc';
-            // Gonna need an invariant here that the Clean stuff in the cache always matches the disk.
             assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert LV(k, s') == LV(k, s);
             assert PivotsOrderedInv(LV(k, s'));
