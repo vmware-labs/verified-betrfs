@@ -100,7 +100,7 @@ lemma ViewOfCacheNestsInViewThroughCache(k:Constants, s:Variables)
         ViewThroughCache(k.impl, s.impl, DiskView(k, s)))
 {
     ImmutableDiskTreeImpl.reveal_ViewOfCache();
-    reveal_ViewThroughCache();
+    //reveal_ViewThroughCache();
     var cacheView := ImmutableDiskTreeImpl.ViewOfCache(s.impl.cache);   // OBSERVE trigger
 }
 
@@ -113,6 +113,7 @@ lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
     requires step.impl.value.Some?
     ensures CrashableMap.NextStep(Jk(k), J(k, s), J(k, s'), CrashableMap.QueryStep(step.impl.key, step.impl.value))
 {
+    ImmutableDiskTreeImpl.reveal_NextStep();
     reveal_AllValueLookups();
     ViewOfCacheNestsInViewThroughCache(k, s);
     reveal_AllKeys();
@@ -351,8 +352,137 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
     requires NextStep(k, s, s', step)
     requires SysInv(k, s)
     ensures WFDiskState(k, s');
-    ensures PivotsOrderedInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+    ensures PivotsOrderedInv(LV(k, s'));
 {
+    match step.impl {
+        case QueryActionStep(lookup, key, value) => {
+            forall ensures ImmutableDiskTreeImpl.QueryAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lookup, step.impl.key, step.impl.value)
+            {
+                ImmutableDiskTreeImpl.reveal_NextStep();
+            }
+            assert LV(k, s') == LV(k, s);
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case InsertActionStep(edit, key, oldValue, newValue) => {
+            assume false;
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case DeleteActionStep(edit, key, oldValue) => {
+            assume false;
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case ExpandActionStep(j) => {
+            assume false;
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case ContractActionStep(j) => {
+            assume false;
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case WriteBackActionStep(lba) => {
+            forall ensures ImmutableDiskTreeImpl.WriteBackAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lba)
+            {
+                ImmutableDiskTreeImpl.reveal_NextStep();
+            }
+            assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            assert LV(k, s') == LV(k, s);
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case EmitTableActionStep(persistentTi, super, tblSectorIdx) => {
+            forall ensures ImmutableDiskTreeImpl.EmitTableAction(k.impl, s.impl, s'.impl, step.disk, step.impl.persistentTi, step.impl.super, step.impl.tblSectorIdx)
+            {
+                ImmutableDiskTreeImpl.reveal_NextStep();
+            }
+            // This proof will hinge on the fact that, when we wrote into the cache, we didn't touch sectors
+            // that store node (and hence pivot) information.
+            assume false;
+            assert LV(k, s') == LV(k, s);
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case CommitActionStep(persistentTi, super) => {
+            assume false;
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case CrashActionStep => {
+            assume false;   // gonna need an invariant here: PivotsOrdered holds on persistent table.
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case RecoverActionStep(super, persistentTl) => {
+            assume false;   // gonna need an invariant here: PivotsOrdered holds on persistent table.
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case CacheFaultActionStep(lba, sector) => {
+            forall ensures ImmutableDiskTreeImpl.CacheFaultAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lba, step.impl.sector)
+            {
+                ImmutableDiskTreeImpl.reveal_NextStep();
+            }
+            var vtc := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
+            var vtc' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            forall lba | (0 <= lba < DiskSize(k)) ensures vtc'[lba] == ViewLbaThroughCache(k.impl, s'.impl, DiskView(k, s'), lba)
+            {
+            }
+            forall lba | (0 <= lba < DiskSize(k)) ensures vtc[lba] == ViewLbaThroughCache(k.impl, s.impl, DiskView(k, s), lba)
+            {
+            }
+            assert vtc.Keys == vtc'.Keys;
+            forall lba | lba in vtc.Keys ensures vtc[lba] == vtc'[lba]
+            {
+                if (lba == step.impl.lba) {
+                    assert !(lba in s.impl.cache);
+                    calc {
+                        vtc'[lba];
+                        step.impl.sector;
+                        DiskView(k, s)[lba];
+                        vtc[lba];
+                    }
+                } else {
+                    assert vtc[lba] == vtc'[lba];
+                }
+                
+                /*
+                if (lba in s.impl.cache) {
+                    calc {
+                        vtc[lba];
+                        ViewLbaThroughCache(k.impl, s.impl, DiskView(k, s), lba);
+                        s.impl.cache[lba].sector;
+                        s'.impl.cache[lba].sector;
+                        ViewLbaThroughCache(k.impl, s'.impl, DiskView(k, s'), lba);
+                        vtc'[lba];
+                    }
+                } else {
+                    calc {
+                        vtc[lba];
+                        ViewLbaThroughCache(k.impl, s.impl, DiskView(k, s), lba);
+                        ViewLbaThroughCache(k.impl, s'.impl, DiskView(k, s'), lba);
+                        vtc'[lba];
+                    }
+                }
+                */
+            }
+            assert vtc == vtc';
+            calc {
+                LV(k, s');
+                LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s')));
+                LookupView(k.impl, s'.impl.ephemeralTable, vtc');
+                LookupView(k.impl, s'.impl.ephemeralTable, vtc);
+                LookupView(k.impl, s.impl.ephemeralTable, vtc);
+                LookupView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s)));
+                LV(k, s);
+            }
+            assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            assert LV(k, s') == LV(k, s);
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+        case CacheEvictActionStep(lba) => {
+            forall ensures ImmutableDiskTreeImpl.CacheEvictAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lba)
+            {
+                ImmutableDiskTreeImpl.reveal_NextStep();
+            }
+            assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            assert LV(k, s') == LV(k, s);
+            assert PivotsOrderedInv(LV(k, s'));
+        }
+    }
 }
 
 lemma PivotsHonorRangesInvInduction(k:Constants, s:Variables, s':Variables, step:Step)

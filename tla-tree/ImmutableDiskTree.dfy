@@ -890,7 +890,7 @@ datatype Step =
     | CacheFaultActionStep(lba:LBA, sector:Sector)
     | CacheEvictActionStep(lba:LBA)
 
-predicate NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
+predicate {:opaque} NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
     requires WFConstants(k)
 {
     match step {
