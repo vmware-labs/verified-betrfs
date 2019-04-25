@@ -30,13 +30,19 @@ function DiskView(k:Constants, s:Variables) : (diskView:View)
     ImmutableDiskTreeImpl.ViewOfDisk(s.disk.sectors)
 }
 
+function LV(k:Constants, s:Variables) : LookupView
+    requires WFDiskState(k, s)
+{
+    LookupView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s)))
+}
+
 predicate SysInv(k:Constants, s:Variables)
 {
     && WFDiskState(k, s)
     && TreeInv(k.impl, s.impl, DiskView(k, s))  // TODO remove this dependency until GC time
     && CacheLbasFitOnDisk(k.impl, s.impl)
-    && OneDatumPerKeyInv(LookupView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s))))
-    && PivotsOrderedInv(LookupView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s))))
+    && PivotsOrderedInv(LV(k, s))
+    && OneDatumPerKeyInv(LV(k, s))
 }
 
 // I rewritten from ImmutableDiskTree namespace.
@@ -173,7 +179,7 @@ lemma DifferentDatums(k:Constants, s:Variables, s':Variables, step:Step, lv:Look
     requires ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, commonPrefixLength);
     requires IsGreatestCommonPrefix(lookup1, lookup2, commonPrefixLength)
     requires commonPrefixLength == |lookup1.layers|
-    requires commonPrefixLength < |lookup1.layers|
+    requires commonPrefixLength < |lookup2.layers|
     ensures false;
 {
 }
@@ -323,11 +329,20 @@ lemma LookupRangesNest(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, i:int
     }
 }
 
-lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     requires NextStep(k, s, s', step)
     requires SysInv(k, s)
     ensures WFDiskState(k, s');
-    ensures OneDatumPerKeyInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+    ensures PivotsOrderedInv(LookupView(k.impl, s'.impl.ephemeralTable, ViewThroughCache(k.impl, s'.impl, DiskView(k, s'))))
+{
+}
+
+lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    requires PivotsOrderedInv(LV(k, s')); // caller dispatches PivotsOrdered' before getting here.
+    ensures WFDiskState(k, s');
+    ensures OneDatumPerKeyInv(LV(k, s'))
 {
     WFDiskStateInduction(k, s, s', step);
     var lv := EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'));
@@ -398,6 +413,7 @@ lemma InvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     assert WFDiskState(k, s');
     assert CacheLbasFitOnDisk(k.impl, s'.impl);
     TreeInvInduction(k, s, s', step);
+    PivotsOrderedInvInduction(k, s, s', step);
     OneDatumPerKeyInvInduction(k, s, s', step);
 }
 
