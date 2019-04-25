@@ -792,6 +792,7 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDis
 // Bring a sector into the cache
 predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA, sector:Sector)
 {
+    && !(lba in s.cache)    // Don't read a sector that's already cached ... if it's dirty, we'll lose data!
     && diskStep == TreeDisk.ReadStep(lba, sector)
     && s'.cache == s.cache[lba := CacheLine(sector, Clean)]
     && s'.ephemeralTable == s.ephemeralTable
