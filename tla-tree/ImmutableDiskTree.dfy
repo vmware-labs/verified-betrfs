@@ -372,6 +372,7 @@ predicate LookupHonorsPointerLinksAtLayer(lookup:Lookup, i:int)
     then layer.addr == ROOT_ADDR()
     else
         var uplayer := lookup.layers[i-1];
+        assert ValidLayerIndex(lookup, i-1);
         uplayer.node.slots[uplayer.slot] == Pointer(layer.addr)
 }
 
@@ -405,6 +406,8 @@ predicate LookupHonorsRanges(lookup:Lookup)
 }
 
 predicate AddressResolvesToNode(k:Constants, table:Table, view:View, addr:TableAddress, node:Node)
+    requires WFTable(k, table)
+    requires ValidAddress(k, addr)
 {
     && var nba := TableAt(k, table, addr);
     && ValidNba(k, nba)
@@ -460,6 +463,7 @@ function TerminalSlot(lookup:Lookup) : Slot
     requires LookupHasValidSlotIndices(lookup)
 {
     var lastLayer := Last(lookup.layers);
+    assert ValidLayerIndex(lookup, |lookup.layers|-1);  // TODO ugh-ly!
     lastLayer.node.slots[lastLayer.slot]
 }
 
@@ -588,7 +592,9 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.St
     && diskStep == TreeDisk.IdleStep
     && s'.cache == WriteNodeToCache(k, s.cache, edit.replacementNba, edit.replacementNode)
     // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
-    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr.a := edit.replacementNba]
+    &&
+        assert ValidLayerIndex(edit.lookup, |edit.lookup.layers|-1);    // TODO ugh-ly
+        s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr.a := edit.replacementNba]
     && s'.ready
 }
 
@@ -596,7 +602,9 @@ predicate InsertAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk
     requires WFConstants(k)
 {
     && ApplyEdit(k, s, s', diskStep, edit, key, oldValue)
-    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, Datum(key, newValue))
+    &&
+        assert ValidLayerIndex(edit.lookup, |edit.lookup.layers|-1);    // TODO ugh-ly
+        edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, Datum(key, newValue))
 }
 
 // Delete is un-insert.
@@ -672,7 +680,9 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, diskStep:Tree
 
     // Through the magic of table indirection, lastLayer.node's parent is
     // suddenly switched to point to replacementNode.
-    && s'.ephemeralTable ==
+    &&
+       assert ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);    // TODO ugh-ly
+       s'.ephemeralTable ==
         s.ephemeralTable[EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry']
     && s'.ready
 }
@@ -696,7 +706,8 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDi
     && TableAt(k, s.ephemeralTable, j.childAddr).Used?
     && j.childNba == TableAt(k, s.ephemeralTable, j.childAddr)
     && JanitorialAction(k, s, s', diskStep, j)
-    && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
+    && assert ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);    // TODO ugh-ly
+       Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
     && ViewNodeRead(k, ViewOfCache(s.cache), j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childEntry' == Unused  // free the child reference
@@ -933,27 +944,27 @@ import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
 import TreeDisk
-import ImmutableDiskTreeImpl
+import Impl = ImmutableDiskTreeImpl
 
 datatype Constants = Constants(
     disk:TreeDisk.Constants,
-    impl:ImmutableDiskTreeImpl.Constants)
+    impl:Impl.Constants)
 
 predicate WFConstants(k:Constants)
 {
-    k.disk.size == ImmutableDiskTreeImpl.DiskSize(k.impl)
+    k.disk.size == Impl.DiskSize(k.impl)
 }
 
 datatype Variables = Variables(
     disk:TreeDisk.Variables,
-    impl:ImmutableDiskTreeImpl.Variables)
+    impl:Impl.Variables)
 
-datatype Step = Step(impl:ImmutableDiskTreeImpl.Step, disk:TreeDisk.Step)
+datatype Step = Step(impl:Impl.Step, disk:TreeDisk.Step)
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 {
-    && ImmutableDiskTreeImpl.WFConstants(k.impl)
-    && ImmutableDiskTreeImpl.NextStep(k.impl, s.impl, s'.impl, step.disk, step.impl)
+    && Impl.WFConstants(k.impl)
+    && Impl.NextStep(k.impl, s.impl, s'.impl, step.disk, step.impl)
     && TreeDisk.NextStep(k.disk, s.disk, s'.disk, step.disk)
     && (step.impl.CrashActionStep? ==> step.disk.IdleStep?)
 }
@@ -961,7 +972,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 predicate Init(k:Constants, s:Variables)
 {
     && TreeDisk.Init(k.disk, s.disk)
-    && ImmutableDiskTreeImpl.Init(k.impl, s.impl, s.disk.sectors)
+    && Impl.Init(k.impl, s.impl, s.disk.sectors)
 }
 
 predicate {:opaque} Next(k:Constants, s:Variables, s':Variables)
