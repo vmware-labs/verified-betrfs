@@ -189,8 +189,8 @@ predicate DatumsAreInTheRightPlaceInv(lv:LookupView)
 /* unneeded, I think
 lemma LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
     requires ValidValueLookup(lv.k, lv.table, lv.view, lookup)
-    requires ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum;
-    ensures RangeContains(ImmutableDiskTreeImpl.TerminalSlot(lookup).slotRange, datum.key)
+    requires Impl.TerminalSlot(lookup).datum == datum;
+    ensures RangeContains(Impl.TerminalSlot(lookup).slotRange, datum.key)
 {
     // XXX todo
 }

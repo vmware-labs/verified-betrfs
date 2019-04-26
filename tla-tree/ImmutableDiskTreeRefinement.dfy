@@ -14,9 +14,9 @@ import opened ImmutableDiskTreeCacheInv
 import opened MissingLibrary
 import CrashableMap
 
-type View = ImmutableDiskTreeImpl.View
-function DiskSize(k:Constants) : int { ImmutableDiskTreeImpl.DiskSize(k.impl) }
-function ROOT_ADDR() : TableAddress { ImmutableDiskTreeImpl.ROOT_ADDR() }
+type View = Impl.View
+function DiskSize(k:Constants) : int { Impl.DiskSize(k.impl) }
+function ROOT_ADDR() : TableAddress { Impl.ROOT_ADDR() }
 
 predicate WFDiskState(k:Constants, s:Variables)
 {
@@ -26,9 +26,9 @@ predicate WFDiskState(k:Constants, s:Variables)
 
 function DiskView(k:Constants, s:Variables) : (diskView:View)
     requires WFDiskState(k, s)
-    ensures ImmutableDiskTreeImpl.FullView(k.impl, diskView)
+    ensures Impl.FullView(k.impl, diskView)
 {
-    ImmutableDiskTreeImpl.ViewOfDisk(s.disk.sectors)
+    Impl.ViewOfDisk(s.disk.sectors)
 }
 
 function LV(k:Constants, s:Variables) : LookupView
@@ -75,10 +75,10 @@ lemma InvImpliesRefinementInit(k:Constants, s:Variables)
     forall lookup | ValidValueLookup(PersistentLookupView(k.impl, DiskView(k, s)), lookup)
         ensures false
     {
-        if (ImmutableDiskTreeImpl.ValidLayerIndex(lookup, 0)
-            && ImmutableDiskTreeImpl.LookupHasValidAddresses(k.impl, lookup)
+        if (Impl.ValidLayerIndex(lookup, 0)
+            && Impl.LookupHasValidAddresses(k.impl, lookup)
             && |lookup.layers|>1) {
-            assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup, 1);    // instantiate
+            assert Impl.LookupHonorsPointerLinksAtLayer(lookup, 1);    // instantiate
             assert false;
         }
     }
@@ -101,12 +101,12 @@ lemma ViewOfCacheNestsInViewThroughCache(k:Constants, s:Variables)
     requires WFDiskState(k, s)
     requires CacheLbasFitOnDisk(k.impl, s.impl)
     ensures ViewsNest(k.impl,
-        ImmutableDiskTreeImpl.ViewOfCache(s.impl.cache),
+        Impl.ViewOfCache(s.impl.cache),
         ViewThroughCache(k.impl, s.impl, DiskView(k, s)))
 {
-    ImmutableDiskTreeImpl.reveal_ViewOfCache();
+    Impl.reveal_ViewOfCache();
     //reveal_ViewThroughCache();
-    var cacheView := ImmutableDiskTreeImpl.ViewOfCache(s.impl.cache);   // OBSERVE trigger
+    var cacheView := Impl.ViewOfCache(s.impl.cache);   // OBSERVE trigger
 }
 
 lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
@@ -118,7 +118,7 @@ lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
     requires step.impl.value.Some?
     ensures CrashableMap.NextStep(Jk(k), J(k, s), J(k, s'), CrashableMap.QueryStep(step.impl.key, step.impl.value))
 {
-    ImmutableDiskTreeImpl.reveal_NextStep();
+    Impl.reveal_NextStep();
     reveal_AllValueLookups();
     ViewOfCacheNestsInViewThroughCache(k, s);
     reveal_AllKeys();
@@ -166,29 +166,29 @@ lemma TreeInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     assume false;    // TODO I think we're going to end up deleting TreeInv anyway.
 }
 
-function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:ImmutableDiskTreeImpl.Lookup)
+function LookupForDatum(lv:LookupView, datum:Datum) : (lookup:Impl.Lookup)
     requires datum in AllValueLookups(lv)
     ensures ValidValueLookup(lv, lookup)
-    ensures ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum
+    ensures Impl.TerminalSlot(lookup).datum == datum
 {
     reveal_AllValueLookups();
-    var lookup :| ValidValueLookup(lv, lookup) && ImmutableDiskTreeImpl.TerminalSlot(lookup).datum == datum;
+    var lookup :| ValidValueLookup(lv, lookup) && Impl.TerminalSlot(lookup).datum == datum;
     lookup
 }
 
-lemma DivergentLayerAgreesOnAddrAndNodes(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:int)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
+lemma DivergentLayerAgreesOnAddrAndNodes(lv:LookupView, lookup1:Impl.Lookup, lookup2:Impl.Lookup, i:int)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
     requires 0 <= i < |lookup1.layers|
     requires 0 <= i < |lookup2.layers|
     requires i==0 || lookup1.layers[i-1] == lookup2.layers[i-1]
     ensures lookup1.layers[i].addr == lookup2.layers[i].addr
     ensures lookup1.layers[i].node == lookup2.layers[i].node
 {
-    assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup1, i);   // OBSERVE trigger
-    assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, i);   // OBSERVE trigger
-    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, i);
-    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, i);
+    assert Impl.LookupHonorsPointerLinksAtLayer(lookup1, i);   // OBSERVE trigger
+    assert Impl.LookupHonorsPointerLinksAtLayer(lookup2, i);   // OBSERVE trigger
+    assert Impl.ValidLayerIndex(lookup1, i);
+    assert Impl.ValidLayerIndex(lookup2, i);
 }
 
 lemma PivotsOrderedTransitive(node:Node, i1:nat, i2:nat)
@@ -208,7 +208,7 @@ lemma PivotsOrderedTransitive(node:Node, i1:nat, i2:nat)
 // a Value?, and the other must have a Pointer? in the same (matching!?) slot.
 lemma LookupsAtDifferentDepthsContradiction(
     k:Constants, s:Variables, s':Variables, step:Step, lv:LookupView, datum1:Datum, datum2:Datum,
-    lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, commonPrefixLength:nat)
+    lookup1:Impl.Lookup, lookup2:Impl.Lookup, commonPrefixLength:nat)
     requires WFDiskState(k, s)
     requires WFDiskState(k, s')
     requires lv == EphemeralLookupView(k.impl, s'.impl, DiskView(k, s'))
@@ -222,30 +222,30 @@ lemma LookupsAtDifferentDepthsContradiction(
     ensures false;
 {
     var i := commonPrefixLength-1;
-    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, i);   // instantiate
-    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, i);   // instantiate
+    assert Impl.ValidLayerIndex(lookup1, i);   // instantiate
+    assert Impl.ValidLayerIndex(lookup2, i);   // instantiate
     var slot1 := lookup1.layers[i].slot;
     var slot2 := lookup2.layers[i].slot;
     //assert lookup1.layers[i].node.slots[slot1].Value?;
-    assert ImmutableDiskTreeImpl.LookupHonorsPointerLinksAtLayer(lookup2, commonPrefixLength);  // instantiate
+    assert Impl.LookupHonorsPointerLinksAtLayer(lookup2, commonPrefixLength);  // instantiate
     //assert lookup2.layers[i].node.slots[slot2].Pointer?;
     ExploitLookupsAgree(lookup1, lookup2, commonPrefixLength, i);   // instantiate
     //assert lookup1.layers[i].node == lookup2.layers[i].node;
     //assert slot1 != slot2;
 }
 
-lemma DisjointRangesAsym(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:nat,
+lemma DisjointRangesAsym(lv:LookupView, lookup1:Impl.Lookup, lookup2:Impl.Lookup, i:nat,
     datum1:Datum, datum2:Datum)
     requires PivotsOrderedInv(lv)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
     requires i < |lookup1.layers|
     requires i < |lookup2.layers|
     requires LookupsAgreeToLen(lookup1, lookup2, i)
     requires lookup1.layers[i].node == lookup2.layers[i].node;
     requires lookup1.layers[i].slot < lookup2.layers[i].slot;
-    requires ImmutableDiskTreeImpl.RangeContains(lookup1.layers[i].slotRange, datum1.key)
-    requires ImmutableDiskTreeImpl.RangeContains(lookup2.layers[i].slotRange, datum2.key)
+    requires Impl.RangeContains(lookup1.layers[i].slotRange, datum1.key)
+    requires Impl.RangeContains(lookup2.layers[i].slotRange, datum2.key)
     ensures datum1.key != datum2.key
 {
     KeyLeqTransitive();
@@ -254,15 +254,15 @@ lemma DisjointRangesAsym(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lo
     var slot2 := lookup2.layers[i].slot;
 
     assert KeyLeq(lookup2.layers[i].slotRange.loinc, datum2.key);
-//    assert ImmutableDiskTreeImpl.LookupHasValidSlotIndices(lookup1);
-    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, i);
-    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, i);
-    assert ImmutableDiskTreeImpl.WFNode(node);
-    assert ImmutableDiskTreeImpl.ValidSlotIndex(node, slot1);
+//    assert Impl.LookupHasValidSlotIndices(lookup1);
+    assert Impl.ValidLayerIndex(lookup1, i);
+    assert Impl.ValidLayerIndex(lookup2, i);
+    assert Impl.WFNode(node);
+    assert Impl.ValidSlotIndex(node, slot1);
     assert slot1 < slot2 < |node.pivots|+1;
     assert 0 <= slot1 < |node.pivots|;
     assert lookup1.layers[i].slotRange.hiexc == node.pivots[slot1];
-    assert ImmutableDiskTreeImpl.ValidSlotIndex(node, slot2);
+    assert Impl.ValidSlotIndex(node, slot2);
     assert 0 <= slot2-1 < |node.pivots|;
     assert lookup2.layers[i].slotRange.loinc == node.pivots[slot2-1];
 
@@ -274,23 +274,23 @@ lemma DisjointRangesAsym(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lo
     assert datum1.key != datum2.key;
 /*
 LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
-    ensures RangeContains(ImmutableDiskTreeImpl.TerminalSlot(lookup).slotRange, datum.key)
+    ensures RangeContains(Impl.TerminalSlot(lookup).slotRange, datum.key)
     */
 }
 
 // Keys in disjoint ranges aren't equal.
-lemma DisjointRanges(lv:LookupView, lookup1:ImmutableDiskTreeImpl.Lookup, lookup2:ImmutableDiskTreeImpl.Lookup, i:nat,
+lemma DisjointRanges(lv:LookupView, lookup1:Impl.Lookup, lookup2:Impl.Lookup, i:nat,
     datum1:Datum, datum2:Datum)
     requires PivotsOrderedInv(lv)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup1)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup2)
     requires i < |lookup1.layers|
     requires i < |lookup2.layers|
     requires LookupsAgreeToLen(lookup1, lookup2, i)
     requires lookup1.layers[i].node == lookup2.layers[i].node;
     requires lookup1.layers[i].slot != lookup2.layers[i].slot;
-    requires ImmutableDiskTreeImpl.RangeContains(lookup1.layers[i].slotRange, datum1.key)
-    requires ImmutableDiskTreeImpl.RangeContains(lookup2.layers[i].slotRange, datum2.key)
+    requires Impl.RangeContains(lookup1.layers[i].slotRange, datum1.key)
+    requires Impl.RangeContains(lookup2.layers[i].slotRange, datum2.key)
     ensures datum1.key != datum2.key
 {
     if (lookup1.layers[i].slot < lookup2.layers[i].slot) {
@@ -314,14 +314,14 @@ lemma KeyLeqTransitive()
     KeyLeTransitive();
 }
 
-lemma LookupRangesNestStep(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, j:int, k:int, key:Key)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+lemma LookupRangesNestStep(lv:LookupView, lookup:Impl.Lookup, j:int, k:int, key:Key)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
     requires PivotsHonorRangesInv(lv);
     requires j+1==k
-    requires ImmutableDiskTreeImpl.ValidLayerIndex(lookup, j);
-    requires ImmutableDiskTreeImpl.ValidLayerIndex(lookup, k);
-    requires ImmutableDiskTreeImpl.RangeContains(lookup.layers[k].slotRange, key)
-    ensures ImmutableDiskTreeImpl.RangeContains(lookup.layers[j].slotRange, key)
+    requires Impl.ValidLayerIndex(lookup, j);
+    requires Impl.ValidLayerIndex(lookup, k);
+    requires Impl.RangeContains(lookup.layers[k].slotRange, key)
+    ensures Impl.RangeContains(lookup.layers[j].slotRange, key)
 {
     // Left side
     var lslot := lookup.layers[k].slot;
@@ -338,12 +338,12 @@ lemma LookupRangesNestStep(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, j
     KeyLeqTransitive();
 }
 
-lemma LookupRangesNest(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, i:int, k:int, key:Key)
-    requires ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+lemma LookupRangesNest(lv:LookupView, lookup:Impl.Lookup, i:int, k:int, key:Key)
+    requires Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
     requires 0 <= i <= k < |lookup.layers|
-    requires ImmutableDiskTreeImpl.RangeContains(lookup.layers[k].slotRange, key)
+    requires Impl.RangeContains(lookup.layers[k].slotRange, key)
     requires PivotsHonorRangesInv(lv);
-    ensures ImmutableDiskTreeImpl.RangeContains(lookup.layers[i].slotRange, key)
+    ensures Impl.RangeContains(lookup.layers[i].slotRange, key)
 {
 
     if (i<k) {
@@ -355,20 +355,20 @@ lemma LookupRangesNest(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, i:int
 
 // TODO (jwilcox): right now I have to opaque NextStep. Maybe instantiating it
 // with a single k,s,s' will be tolerable? Messy, though.
-lemma CautiouslyRevealNextStep(k:ImmutableDiskTreeImpl.Constants, s:ImmutableDiskTreeImpl.Variables, s':ImmutableDiskTreeImpl.Variables, diskStep:TreeDisk.Step, step:ImmutableDiskTreeImpl.Step)
-    ensures step.QueryActionStep? ==> ImmutableDiskTreeImpl.QueryAction(k, s, s', diskStep, step.lookup, step.key, step.value)
-    ensures step.InsertActionStep? ==> ImmutableDiskTreeImpl.InsertAction(k, s, s', diskStep, step.edit, step.key, step.oldValue, step.newValue)
-    ensures step.DeleteActionStep? ==> ImmutableDiskTreeImpl.DeleteAction(k, s, s', diskStep, step.edit, step.key, step.deletedValue)
-    ensures step.ExpandActionStep? ==> ImmutableDiskTreeImpl.ExpandAction(k, s, s', diskStep, step.j)
-    ensures step.ContractActionStep? ==> ImmutableDiskTreeImpl.ContractAction(k, s, s', diskStep, step.j)
-    ensures step.WriteBackActionStep? ==> ImmutableDiskTreeImpl.WriteBackAction(k, s, s', diskStep, step.lba)
+lemma CautiouslyRevealNextStep(k:Impl.Constants, s:Impl.Variables, s':Impl.Variables, diskStep:TreeDisk.Step, step:Impl.Step)
+    ensures step.QueryActionStep? ==> Impl.QueryAction(k, s, s', diskStep, step.lookup, step.key, step.value)
+    ensures step.InsertActionStep? ==> Impl.InsertAction(k, s, s', diskStep, step.edit, step.key, step.oldValue, step.newValue)
+    ensures step.DeleteActionStep? ==> Impl.DeleteAction(k, s, s', diskStep, step.edit, step.key, step.deletedValue)
+    ensures step.ExpandActionStep? ==> Impl.ExpandAction(k, s, s', diskStep, step.j)
+    ensures step.ContractActionStep? ==> Impl.ContractAction(k, s, s', diskStep, step.j)
+    ensures step.WriteBackActionStep? ==> Impl.WriteBackAction(k, s, s', diskStep, step.lba)
     ensures step.EmitTableActionStep?
-                ==> ImmutableDiskTreeImpl.EmitTableAction(k, s, s', diskStep, step.persistentTi, step.super, step.tblSectorIdx)
-    ensures step.CommitActionStep? ==> ImmutableDiskTreeImpl.CommitAction(k, s, s', diskStep, step.persistentTi, step.super)
-    ensures step.CrashActionStep? ==> ImmutableDiskTreeImpl.CrashAction(k, s, s', diskStep)
-    ensures step.RecoverActionStep? ==> ImmutableDiskTreeImpl.RecoverAction(k, s, s', diskStep, step.super, step.persistentTl)
-    ensures step.CacheFaultActionStep? ==> ImmutableDiskTreeImpl.CacheFaultAction(k, s, s', diskStep, step.lba, step.sector)
-    ensures step.CacheEvictActionStep? ==> ImmutableDiskTreeImpl.CacheEvictAction(k, s, s', diskStep, step.lba)
+                ==> Impl.EmitTableAction(k, s, s', diskStep, step.persistentTi, step.super, step.tblSectorIdx)
+    ensures step.CommitActionStep? ==> Impl.CommitAction(k, s, s', diskStep, step.persistentTi, step.super)
+    ensures step.CrashActionStep? ==> Impl.CrashAction(k, s, s', diskStep)
+    ensures step.RecoverActionStep? ==> Impl.RecoverAction(k, s, s', diskStep, step.super, step.persistentTl)
+    ensures step.CacheFaultActionStep? ==> Impl.CacheFaultAction(k, s, s', diskStep, step.lba, step.sector)
+    ensures step.CacheEvictActionStep? ==> Impl.CacheEvictAction(k, s, s', diskStep, step.lba)
 {}
 
 // TODO I'm doing a lot of tedious fully qualified naming to preserve my
@@ -376,7 +376,7 @@ lemma CautiouslyRevealNextStep(k:ImmutableDiskTreeImpl.Constants, s:ImmutableDis
 // a hackaround to enable import opened.
 
 // ApplyEdit only affects lookups that touch the edited node.
-lemma EditStability(k:Constants, s:Variables, s':Variables, step:Step, edit:ImmutableDiskTreeImpl.NodeEdit, key:Key, oldValue:Option<Value>)
+lemma EditStability(k:Constants, s:Variables, s':Variables, step:Step, edit:Impl.NodeEdit, key:Key, oldValue:Option<Value>)
     requires ApplyEdit(k.impl, s.impl, s'.impl, step.disk, edit, key, oldValue)
     //requires NextStep(k, s, s', step)
     requires SysInv(k, s)
@@ -402,8 +402,8 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
         case InsertActionStep(edit, key, oldValue, newValue) => {
             var lv := LV(k, s');
             forall lookup, i |
-                && ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
-                && ImmutableDiskTreeImpl.ValidLayerIndex(lookup, i)
+                && Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+                && Impl.ValidLayerIndex(lookup, i)
             ensures PivotsOrdered(lookup.layers[i].node)
             {
                 if (lookup.layers[i].addr == step.impl.addr) {
@@ -522,8 +522,8 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
                 // The slots must disagree (by contradiction)
                 if (lookup1.layers[commonPrefixLength].slot == lookup2.layers[commonPrefixLength].slot) {
                     // These triggers enable the proof that the slotRanges are equal.
-                    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup1, commonPrefixLength);  // OBSERVE trigger
-                    assert ImmutableDiskTreeImpl.ValidLayerIndex(lookup2, commonPrefixLength);  // OBSERVE trigger
+                    assert Impl.ValidLayerIndex(lookup1, commonPrefixLength);  // OBSERVE trigger
+                    assert Impl.ValidLayerIndex(lookup2, commonPrefixLength);  // OBSERVE trigger
                     assert false;
                 }
                 // assert lookup1.layers[commonPrefixLength].slot != lookup2.layers[commonPrefixLength].slot;
@@ -531,8 +531,8 @@ lemma OneDatumPerKeyInvInduction(k:Constants, s:Variables, s':Variables, step:St
                 // and hence the ranges don't overlap.
                 var range1 := lookup1.layers[commonPrefixLength].slotRange;
                 var range2 := lookup2.layers[commonPrefixLength].slotRange;
-                assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup1), datum1.key, Some(datum1.value));   // Trigger DatumsAreInTheRightPlaceInv
-                assert ImmutableDiskTreeImpl.SlotSatisfiesQuery(ImmutableDiskTreeImpl.TerminalSlot(lookup2), datum2.key, Some(datum2.value));   // Trigger DatumsAreInTheRightPlaceInv
+                assert Impl.SlotSatisfiesQuery(Impl.TerminalSlot(lookup1), datum1.key, Some(datum1.value));   // Trigger DatumsAreInTheRightPlaceInv
+                assert Impl.SlotSatisfiesQuery(Impl.TerminalSlot(lookup2), datum2.key, Some(datum2.value));   // Trigger DatumsAreInTheRightPlaceInv
                 // Pull that non-overlapping observation down to the bottom of the lookup stacks
                 LookupRangesNest(lv, lookup1, commonPrefixLength, |lookup1.layers|-1, datum1.key);
                 LookupRangesNest(lv, lookup2, commonPrefixLength, |lookup2.layers|-1, datum2.key);
