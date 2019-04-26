@@ -353,23 +353,66 @@ lemma LookupRangesNest(lv:LookupView, lookup:ImmutableDiskTreeImpl.Lookup, i:int
     }
 }
 
+// TODO (jwilcox): right now I have to opaque NextStep. Maybe instantiating it
+// with a single k,s,s' will be tolerable? Messy, though.
+lemma CautiouslyRevealNextStep(k:ImmutableDiskTreeImpl.Constants, s:ImmutableDiskTreeImpl.Variables, s':ImmutableDiskTreeImpl.Variables, diskStep:TreeDisk.Step, step:ImmutableDiskTreeImpl.Step)
+    ensures step.QueryActionStep? ==> ImmutableDiskTreeImpl.QueryAction(k, s, s', diskStep, step.lookup, step.key, step.value)
+    ensures step.InsertActionStep? ==> ImmutableDiskTreeImpl.InsertAction(k, s, s', diskStep, step.edit, step.key, step.oldValue, step.newValue)
+    ensures step.DeleteActionStep? ==> ImmutableDiskTreeImpl.DeleteAction(k, s, s', diskStep, step.edit, step.key, step.deletedValue)
+    ensures step.ExpandActionStep? ==> ImmutableDiskTreeImpl.ExpandAction(k, s, s', diskStep, step.j)
+    ensures step.ContractActionStep? ==> ImmutableDiskTreeImpl.ContractAction(k, s, s', diskStep, step.j)
+    ensures step.WriteBackActionStep? ==> ImmutableDiskTreeImpl.WriteBackAction(k, s, s', diskStep, step.lba)
+    ensures step.EmitTableActionStep?
+                ==> ImmutableDiskTreeImpl.EmitTableAction(k, s, s', diskStep, step.persistentTi, step.super, step.tblSectorIdx)
+    ensures step.CommitActionStep? ==> ImmutableDiskTreeImpl.CommitAction(k, s, s', diskStep, step.persistentTi, step.super)
+    ensures step.CrashActionStep? ==> ImmutableDiskTreeImpl.CrashAction(k, s, s', diskStep)
+    ensures step.RecoverActionStep? ==> ImmutableDiskTreeImpl.RecoverAction(k, s, s', diskStep, step.super, step.persistentTl)
+    ensures step.CacheFaultActionStep? ==> ImmutableDiskTreeImpl.CacheFaultAction(k, s, s', diskStep, step.lba, step.sector)
+    ensures step.CacheEvictActionStep? ==> ImmutableDiskTreeImpl.CacheEvictAction(k, s, s', diskStep, step.lba)
+{}
+
+// TODO I'm doing a lot of tedious fully qualified naming to preserve my
+// ability to give every module a Constants, Variables, Init and Next. Consider
+// a hackaround to enable import opened.
+
+// ApplyEdit only affects lookups that touch the edited node.
+lemma EditStability(k:Constants, s:Variables, s':Variables, step:Step, edit:ImmutableDiskTreeImpl.NodeEdit, key:Key, oldValue:Option<Value>)
+    requires ApplyEdit(k.impl, s.impl, s'.impl, step.disk, edit, key, oldValue)
+    //requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    //ensures WFDiskState(k, s');
+    ensures forall addr, node :: addr != edit.replacementNba ==>
+        AddressResolvesToNode(k, LV(k, s).table, LV(k, s).view, addr, node)
+        <==> AddressResolvesToNode(k, LV(k, s').table, LV(k, s').view, addr, node);
+{
+}
+
 lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
     requires NextStep(k, s, s', step)
     requires SysInv(k, s)
     ensures WFDiskState(k, s');
     ensures PivotsOrderedInv(LV(k, s'));
 {
+    CautiouslyRevealNextStep(k.impl, s.impl, s'.impl, step.disk, step.impl);
     match step.impl {
         case QueryActionStep(lookup, key, value) => {
-            forall ensures ImmutableDiskTreeImpl.QueryAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lookup, step.impl.key, step.impl.value)
-            {
-                ImmutableDiskTreeImpl.reveal_NextStep();
-            }
             assert LV(k, s') == LV(k, s);
             assert PivotsOrderedInv(LV(k, s'));
         }
         case InsertActionStep(edit, key, oldValue, newValue) => {
-            assume false;
+            var lv := LV(k, s');
+            forall lookup, i |
+                && ImmutableDiskTreeImpl.ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+                && ImmutableDiskTreeImpl.ValidLayerIndex(lookup, i)
+            ensures PivotsOrdered(lookup.layers[i].node)
+            {
+                if (lookup.layers[i].addr == step.impl.addr) {
+                    assert PivotsOrdered(lookup.layers[i].node);
+                } else {
+                    EditStability(k, s, s', step, step.edit, step.key, step.oldValue);
+                    assert PivotsOrdered(lookup.layers[i].node);
+                }
+            }
             assert PivotsOrderedInv(LV(k, s'));
         }
         case DeleteActionStep(edit, key, oldValue) => {
@@ -385,19 +428,11 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
             assert PivotsOrderedInv(LV(k, s'));
         }
         case WriteBackActionStep(lba) => {
-            forall ensures ImmutableDiskTreeImpl.WriteBackAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lba)
-            {
-                ImmutableDiskTreeImpl.reveal_NextStep();
-            }
             assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert LV(k, s') == LV(k, s);
             assert PivotsOrderedInv(LV(k, s'));
         }
         case EmitTableActionStep(persistentTi, super, tblSectorIdx) => {
-            forall ensures ImmutableDiskTreeImpl.EmitTableAction(k.impl, s.impl, s'.impl, step.disk, step.impl.persistentTi, step.impl.super, step.impl.tblSectorIdx)
-            {
-                ImmutableDiskTreeImpl.reveal_NextStep();
-            }
             // This proof will hinge on the fact that, when we wrote into the cache, we didn't touch sectors
             // that store node (and hence pivot) information.
             assume false;
@@ -417,10 +452,6 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
             assert PivotsOrderedInv(LV(k, s'));
         }
         case CacheFaultActionStep(lba, sector) => {
-            forall ensures ImmutableDiskTreeImpl.CacheFaultAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lba, step.impl.sector)
-            {
-                ImmutableDiskTreeImpl.reveal_NextStep();
-            }
             var vtc := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
             var vtc' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert vtc == vtc'; // instantiate. (XXX James: Weird!)
@@ -428,10 +459,6 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
             assert PivotsOrderedInv(LV(k, s'));
         }
         case CacheEvictActionStep(lba) => {
-            forall ensures ImmutableDiskTreeImpl.CacheEvictAction(k.impl, s.impl, s'.impl, step.disk, step.impl.lba)
-            {
-                ImmutableDiskTreeImpl.reveal_NextStep();
-            }
             assert ViewThroughCache(k.impl, s.impl, DiskView(k, s)) == ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert LV(k, s') == LV(k, s);
             assert PivotsOrderedInv(LV(k, s'));

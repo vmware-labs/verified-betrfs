@@ -404,6 +404,13 @@ predicate LookupHonorsRanges(lookup:Lookup)
     forall i :: ValidLayerIndex(lookup, i) ==> LookupHonorsRangesAt(lookup, i)
 }
 
+predicate AddressResolvesToNode(k:Constants, table:Table, view:View, addr:TableAddress, node:Node)
+{
+    && var nba := TableAt(k, table, addr);
+    && ValidNba(k, nba)
+    && ViewNodeRead(k, view, nba, node)
+}
+
 predicate LookupMatchesViewAtLayer(k:Constants, table:Table, view:View, lookup:Lookup, i:int)
     requires WFLookup(lookup)
     requires WFTable(k, table)
@@ -411,9 +418,7 @@ predicate LookupMatchesViewAtLayer(k:Constants, table:Table, view:View, lookup:L
     requires ValidLayerIndex(lookup, i)
 {
     && var layer := lookup.layers[i];
-    && var nba := TableAt(k, table, layer.addr);
-    && ValidNba(k, nba)
-    && ViewNodeRead(k, view, nba, layer.node)
+    && AddressResolvesToNode(k, table, view, layer.addr, layer.node)
 }
 
 predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
