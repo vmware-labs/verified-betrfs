@@ -1,6 +1,6 @@
 module MissingLibrary {
 
-function Last<T>(s:seq<T>) : T  // TODO move to library
+function /*{:opaque} XXX*/ Last<T>(s:seq<T>) : T
     requires 0<|s|
 {
     s[|s|-1]

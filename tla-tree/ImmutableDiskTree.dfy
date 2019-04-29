@@ -301,14 +301,20 @@ predicate WFLookup(lookup:Lookup)
     0 < |lookup.layers|
 }
 
+// Naming a term to encourage triggering on it.
+predicate ValidLayerIndex(lookup:Lookup, i:int)
+{
+    0<=i<|lookup.layers|
+}
+
 predicate LookupHasValidNodes(lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==> WFNode(lookup.layers[i].node)
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==> WFNode(lookup.layers[i].node)
 }
 
 predicate LookupHasValidSlotIndices(lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==>
         && var layer := lookup.layers[i];
         && ValidSlotIndex(layer.node, layer.slot)
 }
@@ -353,19 +359,28 @@ function TableAt(k:Constants, table:Table, addr:TableAddress) : NBA
 
 predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==> ValidAddress(k, lookup.layers[i].addr)
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
+        ==> ValidAddress(k, lookup.layers[i].addr)
+}
+
+predicate LookupHonorsPointerLinksAtLayer(lookup:Lookup, i:int)
+    requires LookupHasValidSlotIndices(lookup)
+    requires 0 <= i < |lookup.layers|
+{
+    var layer := lookup.layers[i];
+    if i==0
+    then layer.addr == ROOT_ADDR()
+    else
+        var uplayer := lookup.layers[i-1];
+        assert ValidLayerIndex(lookup, i-1);
+        uplayer.node.slots[uplayer.slot] == Pointer(layer.addr)
 }
 
 predicate LookupHonorsPointerLinks(lookup:Lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
     forall i :: 0<=i<|lookup.layers| ==>
-        var layer := lookup.layers[i];
-        if i==0
-        then layer.addr == ROOT_ADDR()
-        else
-            var uplayer := lookup.layers[i-1];
-            uplayer.node.slots[uplayer.slot] == Pointer(layer.addr)
+        LookupHonorsPointerLinksAtLayer(lookup, i)
 }
 
 function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
@@ -374,13 +389,39 @@ function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
     if i==0 then FULL_RANGE() else lookup.layers[i-1].slotRange
 }
 
+predicate LookupHonorsRangesAt(lookup:Lookup, i:int)
+    requires LookupHasValidNodes(lookup)
+    requires LookupHasValidSlotIndices(lookup)
+    requires ValidLayerIndex(lookup, i)
+{
+    var layer := lookup.layers[i];
+    RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
+}
+
 predicate LookupHonorsRanges(lookup:Lookup)
     requires LookupHasValidNodes(lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
-        && var layer := lookup.layers[i];
-        && RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
+    forall i :: ValidLayerIndex(lookup, i) ==> LookupHonorsRangesAt(lookup, i)
+}
+
+predicate AddressResolvesToNode(k:Constants, table:Table, view:View, addr:TableAddress, node:Node)
+    requires WFTable(k, table)
+    requires ValidAddress(k, addr)
+{
+    && var nba := TableAt(k, table, addr);
+    && ValidNba(k, nba)
+    && ViewNodeRead(k, view, nba, node)
+}
+
+predicate LookupMatchesViewAtLayer(k:Constants, table:Table, view:View, lookup:Lookup, i:int)
+    requires WFLookup(lookup)
+    requires WFTable(k, table)
+    requires LookupHasValidAddresses(k, lookup)
+    requires ValidLayerIndex(lookup, i)
+{
+    && var layer := lookup.layers[i];
+    && AddressResolvesToNode(k, table, view, layer.addr, layer.node)
 }
 
 predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
@@ -388,12 +429,8 @@ predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
     requires WFTable(k, table)
     requires LookupHasValidAddresses(k, lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==> (
-        && var layer := lookup.layers[i];
-        && var nba := TableAt(k, table, layer.addr);
-        && ValidNba(k, nba)
-        && ViewNodeRead(k, view, nba, layer.node)
-    )
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
+        ==> LookupMatchesViewAtLayer(k, table, view, lookup, i)
 }
 
 predicate ValidLookupInView(k:Constants, table:Table, view:View, lookup:Lookup)
@@ -426,6 +463,7 @@ function TerminalSlot(lookup:Lookup) : Slot
     requires LookupHasValidSlotIndices(lookup)
 {
     var lastLayer := Last(lookup.layers);
+    assert ValidLayerIndex(lookup, |lookup.layers|-1);  // TODO ugh-ly!
     lastLayer.node.slots[lastLayer.slot]
 }
 
@@ -554,7 +592,9 @@ predicate ApplyEdit(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.St
     && diskStep == TreeDisk.IdleStep
     && s'.cache == WriteNodeToCache(k, s.cache, edit.replacementNba, edit.replacementNode)
     // Through the magic of table indirection, lastLayer.node's child is suddenly switched to point to replacementNode.
-    && s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr.a := edit.replacementNba]
+    &&
+        assert ValidLayerIndex(edit.lookup, |edit.lookup.layers|-1);    // TODO ugh-ly
+        s'.ephemeralTable == s.ephemeralTable[EditLast(edit).addr.a := edit.replacementNba]
     && s'.ready
 }
 
@@ -562,7 +602,9 @@ predicate InsertAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk
     requires WFConstants(k)
 {
     && ApplyEdit(k, s, s', diskStep, edit, key, oldValue)
-    && edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, Datum(key, newValue))
+    &&
+        assert ValidLayerIndex(edit.lookup, |edit.lookup.layers|-1);    // TODO ugh-ly
+        edit.replacementNode == ReplaceSlotForInsert(EditLast(edit).node, EditLast(edit).slot, Datum(key, newValue))
 }
 
 // Delete is un-insert.
@@ -638,7 +680,9 @@ predicate JanitorialAction(k:Constants, s:Variables, s':Variables, diskStep:Tree
 
     // Through the magic of table indirection, lastLayer.node's parent is
     // suddenly switched to point to replacementNode.
-    && s'.ephemeralTable ==
+    &&
+       assert ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);    // TODO ugh-ly
+       s'.ephemeralTable ==
         s.ephemeralTable[EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry']
     && s'.ready
 }
@@ -662,7 +706,8 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDi
     && TableAt(k, s.ephemeralTable, j.childAddr).Used?
     && j.childNba == TableAt(k, s.ephemeralTable, j.childAddr)
     && JanitorialAction(k, s, s', diskStep, j)
-    && Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
+    && assert ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);    // TODO ugh-ly
+       Pointer(j.childAddr) == EditLast(j.edit).node.slots[EditLast(j.edit).slot]
     && ViewNodeRead(k, ViewOfCache(s.cache), j.childNba, j.childNode)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childEntry' == Unused  // free the child reference
@@ -763,15 +808,18 @@ predicate RecoverAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDis
 // Bring a sector into the cache
 predicate CacheFaultAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA, sector:Sector)
 {
+    && !(lba in s.cache)    // Don't read a sector that's already cached ... if it's dirty, we'll lose data!
     && diskStep == TreeDisk.ReadStep(lba, sector)
     && s'.cache == s.cache[lba := CacheLine(sector, Clean)]
     && s'.ephemeralTable == s.ephemeralTable
     && s'.ready == s.ready
 }
 
-// It's okay to evict entries from the cache whenever.
+// It's okay to evict clean entries from the cache whenever.
 predicate CacheEvictAction(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, lba:LBA)
 {
+    && lba in s.cache
+    && s.cache[lba].state.Clean?
     && diskStep == TreeDisk.IdleStep
     && s'.cache == MapRemove(s.cache, lba)
     && s'.ephemeralTable == s.ephemeralTable
@@ -861,7 +909,7 @@ datatype Step =
     | CacheFaultActionStep(lba:LBA, sector:Sector)
     | CacheEvictActionStep(lba:LBA)
 
-predicate NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
+predicate {:opaque} NextStep(k:Constants, s:Variables, s':Variables, diskStep:TreeDisk.Step, step:Step)
     requires WFConstants(k)
 {
     match step {
@@ -896,22 +944,27 @@ import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
 import TreeDisk
-import ImmutableDiskTreeImpl
+import Impl = ImmutableDiskTreeImpl
 
 datatype Constants = Constants(
     disk:TreeDisk.Constants,
-    impl:ImmutableDiskTreeImpl.Constants)
+    impl:Impl.Constants)
+
+predicate WFConstants(k:Constants)
+{
+    k.disk.size == Impl.DiskSize(k.impl)
+}
 
 datatype Variables = Variables(
     disk:TreeDisk.Variables,
-    impl:ImmutableDiskTreeImpl.Variables)
+    impl:Impl.Variables)
 
-datatype Step = Step(impl:ImmutableDiskTreeImpl.Step, disk:TreeDisk.Step)
+datatype Step = Step(impl:Impl.Step, disk:TreeDisk.Step)
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 {
-    && ImmutableDiskTreeImpl.WFConstants(k.impl)
-    && ImmutableDiskTreeImpl.NextStep(k.impl, s.impl, s'.impl, step.disk, step.impl)
+    && Impl.WFConstants(k.impl)
+    && Impl.NextStep(k.impl, s.impl, s'.impl, step.disk, step.impl)
     && TreeDisk.NextStep(k.disk, s.disk, s'.disk, step.disk)
     && (step.impl.CrashActionStep? ==> step.disk.IdleStep?)
 }
@@ -919,7 +972,7 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 predicate Init(k:Constants, s:Variables)
 {
     && TreeDisk.Init(k.disk, s.disk)
-    && ImmutableDiskTreeImpl.Init(k.impl, s.impl, s.disk.sectors)
+    && Impl.Init(k.impl, s.impl, s.disk.sectors)
 }
 
 predicate {:opaque} Next(k:Constants, s:Variables, s':Variables)

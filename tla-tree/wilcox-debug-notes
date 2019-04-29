@@ -1,0 +1,37 @@
+Repro the hang:
+
+jonh@howell-thinkpad:~/laurelfs/tla-tree$ dafny ImmutableDiskTreeRefinement.dfy Dafny 2.2.0.10923
+MissingLibrary.dfy(13,4): Warning: /!\ No terms found to trigger on.
+MissingLibrary.dfy(20,4): Warning: /!\ No terms found to trigger on.
+MissingLibrary.dfy(34,4): Warning: /!\ No terms found to trigger on.
+Advisory: Impl$$_54_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction SKIPPED because of internal error: unexpected prover output: Cannot write to a closed TextWriter.
+ImmutableDiskTreeRefinement.dfy(139,6): Verification inconclusive (Impl$$_54_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction)
+
+Isolate the hang and make it fail fast. (quotes important to avoid shell
+expansion)
+
+jonh@howell-thinkpad:~/laurelfs/tla-tree$ dafny ImmutableDiskTreeRefinement.dfy  /proc:'Impl$$_54_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction' /timeLimit:2
+Dafny 2.2.0.10923
+MissingLibrary.dfy(13,4): Warning: /!\ No terms found to trigger on.
+MissingLibrary.dfy(20,4): Warning: /!\ No terms found to trigger on.
+MissingLibrary.dfy(34,4): Warning: /!\ No terms found to trigger on.
+ImmutableDiskTreeRefinement.dfy(139,6): Verification of 'Impl$$_54_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction' timed out after 2 seconds
+ImmutableDiskTreeRefinement.dfy(175,62): Timed out on: assertion violation
+
+
+Comment out a requires to make it fail fast.
+//    requires NextStep(k, s, s', step)
+ImmutableDiskTreeRefinement.dfy(145,24): Error BP5002: A precondition for this call might not hold.
+
+Expand the test to include the CheckWellFormed:
+
+jonh@howell-thinkpad:~/laurelfs/tla-tree$ dafny ImmutableDiskTreeRefinement.dfy  /proc:'*ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction' /timeLimit:2
+
+Presently opaqued:
+    NextStep
+    SysInv
+    LookupForDatum.ensures ImmutableDiskTreeImpl.TerminalSlot seems to be trouble.
+    ...TerminalSlot mentions a WFLookup
+    which has no foralls. :v(
+
+To find out about triggers: /printToolTips

@@ -38,7 +38,7 @@ function ViewLbaThroughCache(k:Constants, s:Variables, diskView:View, lba:LBA) :
     if lba in s.cache then s.cache[lba].sector else diskView[lba]
 }
 
-function {:opaque} ViewThroughCache(k:Constants, s:Variables, diskView:View) : (cacheView:View)
+function ViewThroughCache(k:Constants, s:Variables, diskView:View) : (cacheView:View)
     requires FullView(k, diskView)
     ensures FullView(k, cacheView)
     ensures forall lba :: (0 <= lba < DiskSize(k)) ==> cacheView[lba] == ViewLbaThroughCache(k, s, diskView, lba)

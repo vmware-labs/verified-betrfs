@@ -62,5 +62,120 @@ mono ~/dafny-base/axiom-profiler/bin/Release/AxiomProfiler.exe  z3.log
 ...but everything is zero.
 
 Next steps:
-1. grep on the z3.log?
+1. grep on the z3.log? -- failure.
 2. try it in Windows?
+
+------------------------------------------------------------------------------
+March 11, 2019
+
+On windows (SJC-HZ-GEN):
+./dafny /print:test.boogie ImmutableDiskTreeRefinement.dfy
+^C
+
+Okay, f'n horizon. Installed Visual Studio, rebooted -- machine is wiped clean.
+
+Tried installing Windows twice more from MSFT image, into VMware workstation. No network connection
+("plug in an ethernet cable").
+
+Tried installing Windows 10 a third time on virt-manager. Seems to be working?
+Installing chrome, gvim, visual studio code, cygwin{openssh,git,vim,mercurial}.
+
+Installed visual studio code extensions: Dafny, dafny-vscode
+Dear goodness, dafny extension didn't install.
+
+Installed visual studio (to build Boogie)
+Okay, I've finally generated a z3.log. Parno indicates that the z3.log from linux may have been
+just fine, thank you.
+
+Last step: install axiom profiler!
+
+Okay, so I got zeros -- but was missing /z3opt:PROOF=true (as documented on the bitbucket axiom
+profiler site).
+
+Now I'm getting a zillion 'wrong line' errors, probably because I'm running the wrong z3.
+I suspect using the right z3 and right flag might even work on Linux. Sigh.
+
+Yeah, still all zeros.
+
+Building recommended z3.
+git clone https://github.com/Nils-Becker/z3.git
+INstall python.
+From a VS dev window,
+c:\python27\python scripts/mk_make.py -x
+Try again without the -x. Apparently I don't have VS 64 bit!?
+No, I needed 'nmake'. To get that, I needed to install the C++ component of Visual Studio.
+
+Okay, I finally got the whole thread "working". I'm thinking that if I use the correct z3 on linux,
+I can probably eliminate the Windows path.
+I added /timeLimit:8 to Boogie, so I wouldn't be hitting ^C.
+
+Unfortunately, "working" isn't, really:
+* Axiom profiler says "An exception occured while parsing the log: Stack empty" during the parsing phase, and
+* the worst offender has 16 hits. That seems awfully suspicious. Nothing looks glaringly expensive.
+I'm wondering if the parse failure is hiding the actual failureness.
+
+The axiom profiler graph is entirely flat, too. which is suspicious.
+There are thousands of quantifiers with zero instantiations. Maybe that's okay.
+
+Next steps:
+1. Move to linux, if we can!
+    DONE
+2. Post a question somewheres?
+3. Try debugging the axiom profiler's Stack Empty error.
+4. Try Bryan's differencer suggestion.
+5. Try a z3 from a date similar to the axiom profiler.
+
+------------------------------------------------------------------------------
+On Linux:
+
+Neils' z3:
+git clone https://github.com/Nils-Becker/z3.git
+cd z3
+python scripts/mk_make.py
+cd build
+make -j8
+BINARY: ~/axiom-profiler/z3/build/z3
+
+
+viper axiom profiler:
+hg clone https://bitbucket.org/viperproject/axiom-profiler
+cd axiom-profiler/
+wget https://nuget.org/nuget.exe
+mono ./nuget.exe install Microsoft.Net.Compilers
+xbuild /p:Configuration=Release source/AxiomProfiler.sln
+BINARY: mono ~/axiom-profiler/axiom-profiler/bin/Release/AxiomProfiler.exe
+
+mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/axiom-profiler/z3/build/z3 /proc:'Impl$$_53_ImmutableDiskTreeRefinement.__default.OneDatumPerKeyInvInduction' /timeLimit:8 /z3opt:TRACE=true /z3opt:PROOF=true test.bpl
+
+mono ~/axiom-profiler/axiom-profiler/bin/Release/AxiomProfiler.exe /l:z3.log
+
+-- same Stack Empty exception. Boy, it's taking a loooong time to produce the
+UI. Yeah, it's 8 minutes in now. Is something slower in the Mono implementation in Linux? Or is
+it stuck in a loop? I can't wait to debug Mono code! (This is an 8s run, 217MB log.) On the other
+hand, maybe it's actually doing something! Counting something! Nope -- killed it after 15 minutes.
+
+Tried a 3s run, and mono crashed. :v( Well, that might have been an X interaction.
+Yep, and now it's 38 minutes in on the 3s run. Aaargh.
+
+------------------------------------------------------------------------------
+Same problem on a smaller system (raft):
+
+dafny /timeLimit:2 /print:test.bpl raftInvariants.dfy  
+mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/axiom-profiler/z3/build/z3 /proc:'Impl$$_5_raftInvariants.__default.ElectionSafetyInduction' /timeLimit:8 /z3opt:TRACE=true /z3opt:PROOF=true /vcsCores:1 test.bpl
+mono ~/axiom-profiler/axiom-profiler/bin/Release/AxiomProfiler.exe /l:z3.log
+
+...no stack empty error for Raft log.
+...but axiom profiler is still hanging
+- yeah, try an older Z3? -- nope, z3 and axiom-profiler are both late february.
+
+------------------------------------------------------------------------------
+I got axiomprofiler results in windows (see github issue 229), but couldn't interpret
+them.
+
+Bryan had success with 4.5.1 on MacOS.
+I had dafny run for minutes with both z3 4.7.3 (came with dafny) and z3 4.8.0 (a recent nils build).
+I build z3-4.5.0 from https://github.com/Z3Prover/z3/releases/tag/z3-4.5.0 (not Nils), and...
+
+mono ~/dafny-base/boogie/Binaries/Boogie.exe /z3exe:/home/jonh/axiom-profiler/z3/build/z3 /proc:'Impl$$_5_raftInvariants.__default.ElectionSafetyInduction' /timeLimit:30 /z3opt:TRACE=true /z3opt:PROOF=true /vcsCores:1 test.bpl
+
+mono ~/axiom-profiler/axiom-profiler-mar20/bin/Release/AxiomProfiler.exe /l:z3.log
