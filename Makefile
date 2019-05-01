@@ -1,5 +1,5 @@
-TARGETDLLS=a.dll b.dll
-#TARGETEXES=tttree.exe
+#TARGETDLLS=a.dll b.dll
+TARGETEXES=tttree.exe
 
 all: $(TARGETDLLS) $(TARGETEXES)
 
