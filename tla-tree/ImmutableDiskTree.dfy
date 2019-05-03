@@ -312,11 +312,15 @@ predicate LookupHasValidNodes(lookup:Lookup)
     forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==> WFNode(lookup.layers[i].node)
 }
 
+predicate LayerHasValidSlotIndex(layer:Layer)
+{
+    ValidSlotIndex(layer.node, layer.slot)
+}
+
 predicate LookupHasValidSlotIndices(lookup:Lookup)
 {
-    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i) ==>
-        && var layer := lookup.layers[i];
-        && ValidSlotIndex(layer.node, layer.slot)
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
+        ==> LayerHasValidSlotIndex(lookup.layers[i])
 }
 
 // Dafny weakness: You can build ValidAddress from ValidAddresses, but going
@@ -364,8 +368,8 @@ predicate LookupHasValidAddresses(k:Constants, lookup:Lookup)
 }
 
 predicate LookupHonorsPointerLinksAtLayer(lookup:Lookup, i:int)
+    requires ValidLayerIndex(lookup, i)
     requires LookupHasValidSlotIndices(lookup)
-    requires 0 <= i < |lookup.layers|
 {
     var layer := lookup.layers[i];
     if i==0
@@ -405,11 +409,9 @@ predicate LookupHonorsRanges(lookup:Lookup)
     forall i :: ValidLayerIndex(lookup, i) ==> LookupHonorsRangesAt(lookup, i)
 }
 
-predicate AddressResolvesToNode(k:Constants, table:Table, view:View, addr:TableAddress, node:Node)
+predicate NbaResolvesToNode(k:Constants, table:Table, view:View, nba:NBA, node:Node)
     requires WFTable(k, table)
-    requires ValidAddress(k, addr)
 {
-    && var nba := TableAt(k, table, addr);
     && ValidNba(k, nba)
     && ViewNodeRead(k, view, nba, node)
 }
@@ -421,7 +423,8 @@ predicate LookupMatchesViewAtLayer(k:Constants, table:Table, view:View, lookup:L
     requires ValidLayerIndex(lookup, i)
 {
     && var layer := lookup.layers[i];
-    && AddressResolvesToNode(k, table, view, layer.addr, layer.node)
+    && var nba := TableAt(k, table, layer.addr);
+    && NbaResolvesToNode(k, table, view, nba, layer.node)
 }
 
 predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)

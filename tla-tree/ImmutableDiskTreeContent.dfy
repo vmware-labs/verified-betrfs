@@ -9,9 +9,14 @@ import opened MissingLibrary
 
 datatype LookupView = LookupView(k:Constants, table:Table, view:View)
 
+predicate ValidLookupInLV(lv:LookupView, lookup:Lookup)
+{
+    ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+}
+
 predicate ValidValueLookup(lv:LookupView, lookup:Lookup)
 {
-    && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+    && ValidLookupInLV(lv, lookup)
     && TerminalSlot(lookup).Value?
 }
 
@@ -43,13 +48,6 @@ predicate ViewsNest(k:Constants, cacheView:View, throughView:View)
 {
     && cacheView.Keys <= throughView.Keys
     && (forall key :: key in cacheView ==> cacheView[key] == throughView[key])
-}
-
-lemma ValidLookupInNestedView(k:Constants, table:Table, cacheView:View, diskView:View, lookup:Lookup)
-    requires ViewsNest(k, cacheView, diskView)
-    requires ValidLookupInView(k, table, cacheView, lookup)
-    ensures ValidLookupInView(k, table, diskView, lookup)
-{
 }
 
 predicate CacheLbasFitOnDisk(k:Constants, s:Variables)
@@ -140,7 +138,7 @@ predicate RangeContainsExcludingLo(range:Range, key:Key)
 
 predicate PivotsHonorRangesRequirements(lv:LookupView, lookup:Lookup, i:int, slot:int)
 {
-    && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+    && ValidLookupInLV(lv, lookup)
     && ValidLayerIndex(lookup, i)
     && ValidSlotIndex(lookup.layers[i].node, slot)
     && 0<slot
@@ -172,7 +170,7 @@ predicate PivotsOrdered(node:Node)
 predicate PivotsOrderedInv(lv:LookupView)
 {
     forall lookup, i :: (
-        && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+        && ValidLookupInLV(lv, lookup)
         && ValidLayerIndex(lookup, i)
     ) ==> PivotsOrdered(lookup.layers[i].node)
 }
@@ -181,7 +179,7 @@ predicate DatumsAreInTheRightPlaceInv(lv:LookupView)
 {
     forall lookup, key, value ::
         (
-            && ValidLookupInView(lv.k, lv.table, lv.view, lookup)
+            && ValidLookupInLV(lv, lookup)
             && SlotSatisfiesQuery(TerminalSlot(lookup), key, value)
         ) ==> RangeContains(Last(lookup.layers).slotRange, key)
 }
