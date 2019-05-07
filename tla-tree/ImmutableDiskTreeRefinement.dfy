@@ -395,18 +395,8 @@ lemma ValidLookupNests(lv:LookupView, lookup:Impl.Lookup, prefix:Impl.Lookup)
     requires prefix == Impl.Lookup(lookup.layers[..|lookup.layers|-1]);
     ensures |prefix.layers|>0 ==> ValidLookupInLV(lv, prefix)
 {
-    if |prefix.layers|>0 {
-        // Restore lots of automation that was hidden behind ValidLayerIndex triggers.
-        assert forall i :: Impl.ValidLayerIndex(prefix, i) ==> Impl.ValidLayerIndex(lookup, i);
-
-        forall i | Impl.ValidLayerIndex(prefix, i)
-            ensures LookupHonorsPointerLinksAtLayer(lookup, i)
-        {
-        }
-        assert Impl.LookupHonorsPointerLinks(prefix);
-        //assert Impl.LookupHasValidAddresses(lv.k, lookup);
-        assert Impl.ValidLookupInView(lv.k, lv.table, lv.view, prefix);
-    }
+    // Restore lots of automation that was hidden behind ValidLayerIndex triggers.
+    assert forall i :: Impl.ValidLayerIndex(prefix, i) ==> Impl.ValidLayerIndex(lookup, i);
 }
 
 function LookupPrefix(lv:LookupView, lookup:Impl.Lookup) : (prefix:Impl.Lookup)

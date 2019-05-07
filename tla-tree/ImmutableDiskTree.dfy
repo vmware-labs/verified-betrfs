@@ -384,8 +384,8 @@ predicate LookupHonorsPointerLinksAtLayer(lookup:Lookup, i:int)
 predicate LookupHonorsPointerLinks(lookup:Lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
-    forall i :: 0<=i<|lookup.layers| ==>
-        LookupHonorsPointerLinksAtLayer(lookup, i)
+    forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
+        ==> LookupHonorsPointerLinksAtLayer(lookup, i)
 }
 
 predicate LookupNodeRangesValidAt(lookup:Lookup, i:int)
