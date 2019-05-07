@@ -396,26 +396,15 @@ lemma ValidLookupNests(lv:LookupView, lookup:Impl.Lookup, prefix:Impl.Lookup)
     ensures |prefix.layers|>0 ==> ValidLookupInLV(lv, prefix)
 {
     if |prefix.layers|>0 {
-        forall i | 0<=i<|lookup.layers|-1
-            ensures Impl.ValidLayerIndex(prefix, i)
-            ensures Impl.WFNode(prefix.layers[i].node)
+        // Restore lots of automation that was hidden behind ValidLayerIndex triggers.
+        assert forall i :: Impl.ValidLayerIndex(prefix, i) ==> Impl.ValidLayerIndex(lookup, i);
+
+        forall i | Impl.ValidLayerIndex(prefix, i)
+            ensures LookupHonorsPointerLinksAtLayer(lookup, i)
         {
-            assert Impl.ValidLayerIndex(lookup, i);
-            assert Impl.ValidLayerIndex(prefix, i);
-            var layer := lookup.layers[i];
-            var player := prefix.layers[i];
-            assert Impl.LayerHasValidSlotIndex(layer);
-            assert Impl.LayerHasValidSlotIndex(player);
-            assert Impl.ValidAddress(lv.k, player.addr);
         }
-        forall i | 0<=i<|lookup.layers|-1
-            ensures Impl.ValidLayerIndex(prefix, i)
-            ensures Impl.WFNode(prefix.layers[i].node)
-         {
-            assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
-            assert Impl.LookupHonorsPointerLinksAtLayer(prefix, i);
-            //assert Impl.LookupHonorsRangesAt(prefix, i);
-        }
+        assert Impl.LookupHonorsPointerLinks(prefix);
+        //assert Impl.LookupHasValidAddresses(lv.k, lookup);
         assert Impl.ValidLookupInView(lv.k, lv.table, lv.view, prefix);
     }
 }
