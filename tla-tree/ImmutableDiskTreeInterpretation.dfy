@@ -54,12 +54,14 @@ function EphemeralGraph(k:Constants, s:Variables, diskView:View) : GraphView
     GraphView(k, table, view)
 }
 
+//  XXX jon thinks this is dead
 predicate TreeShapedGraph(gv:GraphView)
 {
     && SaneTableInView(gv)
     && CycleFree(gv, GraphAddrHeightMap(gv))
 }
 
+//  XXX jon thinks this is dead
 predicate TreeInv(k:Constants, s:Variables, diskView:View)
 {
     && PersistentGraphSane(k, diskView)

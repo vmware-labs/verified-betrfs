@@ -147,7 +147,7 @@ predicate PivotsHonorRangesRequirements(lv:LookupView, lookup:Lookup, i:int, slo
 predicate PivotsHonorRanges(lv:LookupView, lookup:Lookup, i:int, slot:int)
     requires PivotsHonorRangesRequirements(lv, lookup, i, slot)
 {
-    RangeContainsExcludingLo(NodeRangeAtLayer(lookup, i), lookup.layers[i].node.pivots[slot-1])
+    RangeContainsExcludingLo(lookup.layers[i].nodeRange, lookup.layers[i].node.pivots[slot-1])
 }
 
 predicate PivotsHonorRangesInv(lv:LookupView)
@@ -182,6 +182,19 @@ predicate DatumsAreInTheRightPlaceInv(lv:LookupView)
             && ValidLookupInLV(lv, lookup)
             && SlotSatisfiesQuery(TerminalSlot(lookup), key, value)
         ) ==> RangeContains(Last(lookup.layers).slotRange, key)
+}
+
+predicate LookupBasedTreeInv(lv:LookupView)
+{
+    forall lk1, i1, lk2, i2 :: (
+        && ValidLookupInLV(lv, lk1)
+        && ValidLayerIndex(lk1, i1)
+        && ValidLookupInLV(lv, lk2)
+        && ValidLayerIndex(lk2, i2)
+        && lk1.layers[i1].addr == lk2.layers[i2].addr
+        ) ==>
+        && i1==i2
+        && LookupsAgreeToLen(lk1, lk2, i1)
 }
 
 /* unneeded, I think

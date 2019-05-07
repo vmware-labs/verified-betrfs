@@ -289,8 +289,9 @@ function RangeBoundForSlotIdx(node:Node, nodeRange:Range, idx:int) : (range:Rang
 // Lookup
 datatype Layer = Layer(
     addr:TableAddress,
-    node:Node,      // the node at the addr
-    slot:int,       // the slot pointing to the next node below
+    node:Node,          // the node at the addr
+    nodeRange:Range,    // the range that bounds this node's keys
+    slot:int,           // the slot pointing to the next node below
     slotRange:Range     // the range that bounds this slot (and hence the node below)
     )
 
@@ -387,44 +388,44 @@ predicate LookupHonorsPointerLinks(lookup:Lookup)
         LookupHonorsPointerLinksAtLayer(lookup, i)
 }
 
-function NodeRangeAtLayer(lookup:Lookup, i:int) : Range
-    requires 0<=i<|lookup.layers|
+predicate LookupNodeRangesValidAt(lookup:Lookup, i:int)
+    requires LookupHasValidNodes(lookup)
+    requires LookupHasValidSlotIndices(lookup)
+    requires ValidLayerIndex(lookup, i)
 {
+    lookup.layers[i].nodeRange ==
     if i==0 then FULL_RANGE() else lookup.layers[i-1].slotRange
 }
 
-predicate LookupHonorsRangesAt(lookup:Lookup, i:int)
+predicate LookupSlotRangesValidAt(lookup:Lookup, i:int)
     requires LookupHasValidNodes(lookup)
     requires LookupHasValidSlotIndices(lookup)
     requires ValidLayerIndex(lookup, i)
 {
     var layer := lookup.layers[i];
-    RangeBoundForSlotIdx(layer.node, NodeRangeAtLayer(lookup, i), layer.slot) == layer.slotRange
+    RangeBoundForSlotIdx(layer.node, layer.nodeRange, layer.slot) == layer.slotRange
 }
 
 predicate LookupHonorsRanges(lookup:Lookup)
     requires LookupHasValidNodes(lookup)
     requires LookupHasValidSlotIndices(lookup)
 {
-    forall i :: ValidLayerIndex(lookup, i) ==> LookupHonorsRangesAt(lookup, i)
+    forall i :: ValidLayerIndex(lookup, i) ==>
+        LookupSlotRangesValidAt(lookup, i) && LookupNodeRangesValidAt(lookup, i)
 }
 
-predicate NbaResolvesToNode(k:Constants, table:Table, view:View, nba:NBA, node:Node)
-    requires WFTable(k, table)
+predicate NbaResolvesToNode(k:Constants, view:View, nba:NBA, node:Node)
 {
     && ValidNba(k, nba)
     && ViewNodeRead(k, view, nba, node)
 }
 
-predicate LookupMatchesViewAtLayer(k:Constants, table:Table, view:View, lookup:Lookup, i:int)
-    requires WFLookup(lookup)
+predicate LayerMatchesView(k:Constants, table:Table, view:View, layer:Layer)
     requires WFTable(k, table)
-    requires LookupHasValidAddresses(k, lookup)
-    requires ValidLayerIndex(lookup, i)
+    requires ValidAddress(k, layer.addr)
 {
-    && var layer := lookup.layers[i];
     && var nba := TableAt(k, table, layer.addr);
-    && NbaResolvesToNode(k, table, view, nba, layer.node)
+    && NbaResolvesToNode(k, view, nba, layer.node)
 }
 
 predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
@@ -433,7 +434,7 @@ predicate LookupMatchesView(k:Constants, table:Table, view:View, lookup:Lookup)
     requires LookupHasValidAddresses(k, lookup)
 {
     forall i {:trigger ValidLayerIndex(lookup, i)} :: ValidLayerIndex(lookup, i)
-        ==> LookupMatchesViewAtLayer(k, table, view, lookup, i)
+        ==> LayerMatchesView(k, table, view, lookup.layers[i])
 }
 
 predicate ValidLookupInView(k:Constants, table:Table, view:View, lookup:Lookup)

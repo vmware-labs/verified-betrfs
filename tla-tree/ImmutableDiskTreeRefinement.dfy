@@ -41,11 +41,13 @@ predicate SysInv(k:Constants, s:Variables)
 {
     && WFDiskState(k, s)
     && TreeInv(k.impl, s.impl, DiskView(k, s))  // TODO remove this dependency until GC time
+    // TODO or maybe it's dead code anyway.
 
     && ValidCacheIndicesInv(k, s)
     && CleanCacheSectorsMatchDiskInv(k, s)
 
     && CacheLbasFitOnDisk(k.impl, s.impl)
+    && LookupBasedTreeInv(LV(k, s))
     && PivotsOrderedInv(LV(k, s))
     && PivotsHonorRangesInv(LV(k, s))
     && DatumsAreInTheRightPlaceInv(LV(k, s))
@@ -356,6 +358,7 @@ lemma LookupRangesNest(lv:LookupView, lookup:Impl.Lookup, i:int, k:int, key:Key)
 // TODO (jwilcox): right now I have to opaque NextStep. Maybe instantiating it
 // with a single k,s,s' will be tolerable? Messy, though.
 lemma CautiouslyRevealNextStep(k:Impl.Constants, s:Impl.Variables, s':Impl.Variables, diskStep:TreeDisk.Step, step:Impl.Step)
+    requires Impl.WFConstants(k)
     ensures step.QueryActionStep? ==> Impl.QueryAction(k, s, s', diskStep, step.lookup, step.key, step.value)
     ensures step.InsertActionStep? ==> Impl.InsertAction(k, s, s', diskStep, step.edit, step.key, step.oldValue, step.newValue)
     ensures step.DeleteActionStep? ==> Impl.DeleteAction(k, s, s', diskStep, step.edit, step.key, step.deletedValue)
@@ -382,8 +385,8 @@ lemma EditStability(k:Constants, s:Variables, s':Variables, step:Step, edit:Impl
     requires SysInv(k, s)
     //ensures WFDiskState(k, s');
     ensures forall nba, node :: nba != edit.replacementNba ==>
-        Impl.NbaResolvesToNode(k.impl, LV(k, s).table, LV(k, s).view, nba, node)
-        <==> Impl.NbaResolvesToNode(k.impl, LV(k, s').table, LV(k, s').view, nba, node);
+        Impl.NbaResolvesToNode(k.impl, LV(k, s).view, nba, node)
+        <==> Impl.NbaResolvesToNode(k.impl, LV(k, s').view, nba, node);
 {
 }
 
@@ -411,7 +414,7 @@ lemma ValidLookupNests(lv:LookupView, lookup:Impl.Lookup, prefix:Impl.Lookup)
          {
             assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
             assert Impl.LookupHonorsPointerLinksAtLayer(prefix, i);
-            assert Impl.LookupHonorsRangesAt(prefix, i);
+            //assert Impl.LookupHonorsRangesAt(prefix, i);
         }
         assert Impl.ValidLookupInView(lv.k, lv.table, lv.view, prefix);
     }
@@ -420,6 +423,7 @@ lemma ValidLookupNests(lv:LookupView, lookup:Impl.Lookup, prefix:Impl.Lookup)
 function LookupPrefix(lv:LookupView, lookup:Impl.Lookup) : (prefix:Impl.Lookup)
     requires ValidLookupInLV(lv, lookup)
     ensures |prefix.layers|>0 ==> ValidLookupInLV(lv, prefix)
+    ensures |prefix.layers| == |lookup.layers| - 1
 {
     var prefix := Impl.Lookup(lookup.layers[..|lookup.layers|-1]);
     ValidLookupNests(lv, lookup, prefix);
@@ -431,7 +435,7 @@ function TranslateLookupAcrossEdit(k:Constants, s:Variables, s':Variables, step:
     requires SysInv(k, s)
     requires ValidLookupInLV(LV(k, s'), lookup')
     // more requireses that you're not looking up something that just got Insert-ed.
-    ensures ValidLookupInLV(LV(k, s), lookup)
+//    ensures ValidLookupInLV(LV(k, s), lookup)
     decreases |lookup'.layers|
 {
     var last' := Last(lookup'.layers);
@@ -441,20 +445,193 @@ function TranslateLookupAcrossEdit(k:Constants, s:Variables, s':Variables, step:
     var prefix' := LookupPrefix(LV(k, s'), lookup');
     var prefix :=
         if |prefix'.layers|==0
-        then []
-        else TranslateLookupAcrossEdit(k, s, s', step, prefix').layers;
+        then Impl.Lookup([])
+        else TranslateLookupAcrossEdit(k, s, s', step, prefix');
 
     if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?)
         && step.impl.edit.replacementNba == nba' then
-        step.impl.edit.lookup
+        step.impl.edit.lookup // except the slots are in the wrong place
     else if step.impl.ExpandActionStep?
         && step.impl.j.edit.replacementNba == nba' then
-        Impl.Lookup(prefix)
+        step.impl.j.edit.lookup  // except the slots are in the wrong place
+    else if step.impl.ExpandActionStep?
+        && last'.addr == step.impl.j.childAddr then
+        prefix  // except remap the slot
     else if step.impl.ContractActionStep?
         && step.impl.j.edit.replacementNba == nba' then
-        step.impl.j.edit.lookup
+        step.impl.j.edit.lookup  // except the slots are in the wrong place
     else
-        Impl.Lookup(prefix + [Last(lookup'.layers)])
+        Impl.Lookup(prefix.layers + [Last(lookup'.layers)])
+}
+
+predicate TablesAgreeOverAddrs(table1:Impl.Table, table2:Impl.Table, addrSet:set<TableAddress>)
+{
+    forall addr :: addr in addrSet ==> table1[addr.a] == table2[addr.a]
+}
+
+predicate ViewsAgreeOverNBAs(k:Impl.Constants, view1:View, view2:View, nbaSet:set<Impl.NBA>)
+{
+    forall nba :: nba in nbaSet ==>
+        var lba := Impl.LbaForNba(k, nba);
+        && lba in view1
+        && lba in view2
+        && view1[lba] == view2[lba]
+}
+
+lemma LookupMatchesViewAtLayerStability(lv1:LookupView, lv2:LookupView, layer:Impl.Layer)
+    requires Impl.WFTable(lv1.k, lv1.table)
+    requires Impl.WFTable(lv2.k, lv2.table)
+    requires Impl.ValidAddress(lv1.k, layer.addr)
+    requires Impl.LayerMatchesView(lv1.k, lv1.table, lv1.view, layer)
+    requires lv1.k == lv2.k
+    requires TablesAgreeOverAddrs(lv1.table, lv2.table, {layer.addr})
+    requires ViewsAgreeOverNBAs(lv1.k, lv1.view, lv2.view, {Impl.TableAt(lv1.k, lv1.table, layer.addr)})
+    ensures Impl.LayerMatchesView(lv2.k, lv2.table, lv2.view, layer)
+{
+}
+
+lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, step:Step, lookup':Impl.Lookup, lookup:Impl.Lookup)
+    requires NextStep(k, s, s', step)
+    requires SysInv(k, s)
+    requires ValidLookupInLV(LV(k, s'), lookup')
+    requires TranslateLookupAcrossEdit(k, s, s', step, lookup') == lookup
+    // more requireses that you're not looking up something that just got Insert-ed.
+    ensures ValidLookupInLV(LV(k, s), lookup)
+    ensures Impl.TerminalSlot(lookup').Pointer? ==> Impl.TerminalSlot(lookup) == Impl.TerminalSlot(lookup')
+    ensures Last(lookup.layers).slotRange == Last(lookup'.layers).slotRange
+    decreases |lookup'.layers|
+{
+    var last' := Last(lookup'.layers);
+    assert Impl.ValidLayerIndex(lookup', |lookup'.layers|-1);
+    var nba' := Impl.TableAt(k.impl, LV(k, s').table, last'.addr);
+
+    var prefix' := LookupPrefix(LV(k, s'), lookup');
+    var prefix :=
+        if |prefix'.layers|==0
+        then Impl.Lookup([])
+        else TranslateLookupAcrossEdit(k, s, s', step, prefix');
+
+    if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?)
+        && step.impl.edit.replacementNba == nba' {
+        assume false;
+        assert ValidLookupInLV(LV(k, s), lookup);
+    } else if step.impl.ExpandActionStep?
+        && step.impl.j.edit.replacementNba == nba' {
+        assume false;
+        assert ValidLookupInLV(LV(k, s), lookup);
+    } else if step.impl.ContractActionStep?
+        && step.impl.j.edit.replacementNba == nba' {
+        assume false;
+        assert ValidLookupInLV(LV(k, s), lookup);
+    } else {
+        if (|prefix.layers|>0) {
+            TranslateLookupAcrossEditWorks(k, s, s', step, prefix', prefix);
+            assert ValidLookupInLV(LV(k, s), prefix);
+            forall i | Impl.ValidLayerIndex(lookup, i) ensures Impl.WFNode(lookup.layers[i].node) {
+                if i < |lookup.layers|-1 {
+                    assert Impl.ValidLayerIndex(prefix, i);
+                }
+                /*
+                if i == |lookup.layers|-1 {
+                    assert Impl.WFNode(lookup.layers[i].node);
+                } else {
+                    assert ValidLookupInLV(LV(k, s), prefix);
+                    assert Impl.ValidLayerIndex(prefix, i);
+                    assert Impl.WFNode(prefix.layers[i].node);  // validlookupinlv
+                    assert lookup.layers[i] == prefix.layers[i];
+                    assert Impl.WFNode(lookup.layers[i].node);
+                }
+                */
+            }
+            assert Impl.LookupHasValidNodes(lookup);
+            forall i | Impl.ValidLayerIndex(lookup, i) ensures Impl.LayerHasValidSlotIndex(lookup.layers[i]) {
+                if i < |lookup.layers|-1 {
+                    assert Impl.ValidLayerIndex(prefix, i);
+                }
+            }
+            assert Impl.LookupHasValidSlotIndices(lookup);
+            forall i | Impl.ValidLayerIndex(lookup, i) ensures Impl.ValidAddress(k.impl, lookup.layers[i].addr) {
+                if i < |lookup.layers|-1 {
+                    assert Impl.ValidLayerIndex(prefix, i);
+                }
+            }
+            assert Impl.LookupHasValidAddresses(k.impl, lookup);
+            forall i | 0<=i<|lookup.layers| ensures Impl.LookupHonorsPointerLinksAtLayer(lookup, i) {
+                if i < |lookup.layers|-1 {
+                    assert Impl.ValidLayerIndex(prefix, i);
+                    assert Impl.LookupHonorsPointerLinksAtLayer(prefix, i); // instantiation?
+                    assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
+                } else {
+                    assert prefix.layers[i-1].node == lookup.layers[i-1].node;
+                    var layer := lookup.layers[i];
+                    var uplayer := lookup.layers[i-1];
+                    assert uplayer == Last(prefix.layers);
+                    assert uplayer.node.slots[uplayer.slot] == Impl.TerminalSlot(prefix);
+                    var lasti' := |lookup'.layers|-1;
+//                    assert Impl.ValidLayerIndex(lookup', lasti');
+                    assert Impl.LookupHonorsPointerLinksAtLayer(lookup', lasti');   // instantiates something
+//                    assert Impl.TerminalSlot(prefix') == Pointer(Last(lookup'.layers).addr);
+//                    assert Impl.TerminalSlot(prefix) == Pointer(layer.addr);
+//                    assert uplayer.node.slots[uplayer.slot] == Pointer(layer.addr);
+                    assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
+                }
+            }
+            forall i | Impl.ValidLayerIndex(lookup, i)
+                ensures Impl.LookupSlotRangesValidAt(lookup, i) && Impl.LookupNodeRangesValidAt(lookup, i) {
+                if i < |lookup.layers|-1 {
+                    assert Impl.ValidLayerIndex(prefix, i);
+                    assert Impl.LookupSlotRangesValidAt(lookup, i);
+                    assert Impl.LookupNodeRangesValidAt(lookup, i);
+                } else {
+                    var lasti' := |lookup'.layers|-1;
+                    if (|prefix.layers|==0) {
+                        calc {
+                            lookup.layers[i].nodeRange;
+                            lookup'.layers[i].nodeRange;
+                        }
+                    } else {
+                        //assert |prefix'.layers| > 0;
+                        //assert |lookup'.layers| > 1;
+                        calc {
+                            lookup.layers[i].nodeRange;
+                            lookup.layers[i-1].slotRange;
+                            Last(prefix.layers).slotRange;
+                            Last(prefix'.layers).slotRange;
+                            lookup'.layers[lasti'-1].slotRange;
+                            lookup'.layers[lasti'].nodeRange;
+                        }
+                    }
+                    assert Impl.LookupNodeRangesValidAt(lookup, i);
+                }
+            }
+            // TODO jon clean up mess above (minimize)
+            var lvtable := s.impl.ephemeralTable;
+            var lvview := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
+            var lvtable' := s'.impl.ephemeralTable;
+            var lvview' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
+            assert Impl.LookupMatchesView(k.impl, lvtable', lvview', lookup');
+            forall i | Impl.ValidLayerIndex(lookup, i)
+                ensures Impl.LayerMatchesView(k.impl, lvtable, lvview, lookup.layers[i]) {
+                if i < |lookup.layers|-1 {
+                    assert Impl.ValidLayerIndex(prefix, i);
+                    assert Impl.LayerMatchesView(k.impl, lvtable, lvview, lookup.layers[i]);
+                } else {
+                    var layer := lookup.layers[i];
+                    //assert layer.addr != 
+                    assert TablesAgreeOverAddrs(lvtable', lvtable, {layer.addr});
+                    var nba := Impl.TableAt(k.impl, lvtable', layer.addr);
+                    assert ViewsAgreeOverNBAs(k.impl, lvview', lvview, {nba});
+                    LookupMatchesViewAtLayerStability(LV(k, s'), LV(k, s), lookup.layers[i]);
+                    assert Impl.LayerMatchesView(k.impl, lvtable, lvview, lookup.layers[i]);
+                }
+            }
+            assert Impl.LookupMatchesView(k.impl, lvtable, lvview, lookup);
+            assert ValidLookupInLV(LV(k, s), lookup);
+        } else {
+            assert ValidLookupInLV(LV(k, s), prefix);
+            assert ValidLookupInLV(LV(k, s), lookup);
+        }
+    }
 }
 
 lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Step)
@@ -485,10 +662,11 @@ lemma PivotsOrderedInvInduction(k:Constants, s:Variables, s':Variables, step:Ste
                 if (nba == step.impl.edit.replacementNba) {
                     assert PivotsOrdered(lookup.layers[i].node);
                 } else {
-                    EditStability(k, s, s', step, step.impl.edit, step.impl.key, step.impl.oldValue);
+                    //EditStability(k, s, s', step, step.impl.edit, step.impl.key, step.impl.oldValue);
+    // EditStability has a trigger loop!
                     //assert Impl.LookupMatchesViewAtLayer(k.impl, lv'.table, lv'.view, lookup, i);
-                    assert Impl.NbaResolvesToNode(k.impl, lv'.table, lv'.view, nba, node);
-                    assert Impl.NbaResolvesToNode(k.impl, lv.table, lv.view, nba, node);
+                    assert Impl.NbaResolvesToNode(k.impl, lv'.view, nba, node);
+                    assert Impl.NbaResolvesToNode(k.impl, lv.view, nba, node);
 
                     // This is going to require demonstrating that all the rest of the nodes
                     // (and table translations) in the lookup didn't change, AND that the
