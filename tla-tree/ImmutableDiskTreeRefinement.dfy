@@ -111,6 +111,17 @@ lemma ViewOfCacheNestsInViewThroughCache(k:Constants, s:Variables)
     var cacheView := Impl.ViewOfCache(s.impl.cache);   // OBSERVE trigger
 }
 
+/*
+lemma ViewsNestPropagatesLookups(k:Constants, s:Variables, lookup:Impl.Lookup)
+    requires ViewsNest(k.impl,
+        Impl.ViewOfCache(s.impl.cache),
+        ViewThroughCache(k.impl, s.impl, DiskView(k, s)))
+    requires Impl.LookupMatchesView(k.impl, s.impl.ephemeralTable, Impl.ViewOfCache(s.impl.cache), lookup)
+    ensures Impl.LookupMatchesView(k.impl, s.impl.ephemeralTable, ViewThroughCache(k.impl, s.impl, DiskView(k, s)), lookup)
+{
+}
+*/
+
 lemma LemmaQueryNext(k:Constants, s:Variables, s':Variables, step:Step)
     requires Next(k, s, s')
     requires SysInv(k, s)
@@ -471,6 +482,8 @@ lemma LookupMatchesViewAtLayerStability(lv1:LookupView, lv2:LookupView, layer:Im
 
 lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, step:Step, lookup':Impl.Lookup, lookup:Impl.Lookup)
     requires NextStep(k, s, s', step)
+    requires !step.impl.CrashActionStep?;
+    requires !step.impl.RecoverActionStep?;
     requires SysInv(k, s)
     requires ValidLookupInLV(LV(k, s'), lookup')
     requires TranslateLookupAcrossEdit(k, s, s', step, lookup') == lookup
@@ -478,6 +491,7 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
     ensures ValidLookupInLV(LV(k, s), lookup)
     ensures Impl.TerminalSlot(lookup').Pointer? ==> Impl.TerminalSlot(lookup) == Impl.TerminalSlot(lookup')
     ensures Last(lookup.layers).slotRange == Last(lookup'.layers).slotRange
+    ensures |lookup.layers|==0 <==> |lookup'.layers|==0
     decreases |lookup'.layers|
 {
     var last' := Last(lookup'.layers);
@@ -492,103 +506,38 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
 
     if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?)
         && step.impl.edit.replacementNba == nba' {
+        assert lookup == step.impl.edit.lookup;
         assume false;
         assert ValidLookupInLV(LV(k, s), lookup);
     } else if step.impl.ExpandActionStep?
         && step.impl.j.edit.replacementNba == nba' {
+        assert lookup == step.impl.j.edit.lookup;
+        assume false;
+        assert ValidLookupInLV(LV(k, s), lookup);
+    } else if step.impl.ExpandActionStep?
+        && last'.addr == step.impl.j.childAddr {
+        assert lookup == prefix;
         assume false;
         assert ValidLookupInLV(LV(k, s), lookup);
     } else if step.impl.ContractActionStep?
         && step.impl.j.edit.replacementNba == nba' {
+        assert lookup == step.impl.j.edit.lookup;
         assume false;
         assert ValidLookupInLV(LV(k, s), lookup);
     } else {
+        assert lookup == Impl.Lookup(prefix.layers + [Last(lookup'.layers)]);
         if (|prefix.layers|>0) {
             TranslateLookupAcrossEditWorks(k, s, s', step, prefix', prefix);
-            assert ValidLookupInLV(LV(k, s), prefix);
-            forall i | Impl.ValidLayerIndex(lookup, i) ensures Impl.WFNode(lookup.layers[i].node) {
-                if i < |lookup.layers|-1 {
-                    assert Impl.ValidLayerIndex(prefix, i);
-                }
-                /*
-                if i == |lookup.layers|-1 {
-                    assert Impl.WFNode(lookup.layers[i].node);
-                } else {
-                    assert ValidLookupInLV(LV(k, s), prefix);
-                    assert Impl.ValidLayerIndex(prefix, i);
-                    assert Impl.WFNode(prefix.layers[i].node);  // validlookupinlv
-                    assert lookup.layers[i] == prefix.layers[i];
-                    assert Impl.WFNode(lookup.layers[i].node);
-                }
-                */
-            }
-            assert Impl.LookupHasValidNodes(lookup);
-            forall i | Impl.ValidLayerIndex(lookup, i) ensures Impl.LayerHasValidSlotIndex(lookup.layers[i]) {
-                if i < |lookup.layers|-1 {
-                    assert Impl.ValidLayerIndex(prefix, i);
-                }
-            }
-            assert Impl.LookupHasValidSlotIndices(lookup);
-            forall i | Impl.ValidLayerIndex(lookup, i) ensures Impl.ValidAddress(k.impl, lookup.layers[i].addr) {
-                if i < |lookup.layers|-1 {
-                    assert Impl.ValidLayerIndex(prefix, i);
-                }
-            }
-            assert Impl.LookupHasValidAddresses(k.impl, lookup);
-            forall i | 0<=i<|lookup.layers| ensures Impl.LookupHonorsPointerLinksAtLayer(lookup, i) {
-                if i < |lookup.layers|-1 {
-                    assert Impl.ValidLayerIndex(prefix, i);
-                    assert Impl.LookupHonorsPointerLinksAtLayer(prefix, i); // instantiation?
-                    assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
-                } else {
-                    assert prefix.layers[i-1].node == lookup.layers[i-1].node;
-                    var layer := lookup.layers[i];
-                    var uplayer := lookup.layers[i-1];
-                    assert uplayer == Last(prefix.layers);
-                    assert uplayer.node.slots[uplayer.slot] == Impl.TerminalSlot(prefix);
-                    var lasti' := |lookup'.layers|-1;
-//                    assert Impl.ValidLayerIndex(lookup', lasti');
-                    assert Impl.LookupHonorsPointerLinksAtLayer(lookup', lasti');   // instantiates something
-//                    assert Impl.TerminalSlot(prefix') == Pointer(Last(lookup'.layers).addr);
-//                    assert Impl.TerminalSlot(prefix) == Pointer(layer.addr);
-//                    assert uplayer.node.slots[uplayer.slot] == Pointer(layer.addr);
-                    assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
-                }
-            }
-            forall i | Impl.ValidLayerIndex(lookup, i)
-                ensures Impl.LookupSlotRangesValidAt(lookup, i) && Impl.LookupNodeRangesValidAt(lookup, i) {
-                if i < |lookup.layers|-1 {
-                    assert Impl.ValidLayerIndex(prefix, i);
-                    assert Impl.LookupSlotRangesValidAt(lookup, i);
-                    assert Impl.LookupNodeRangesValidAt(lookup, i);
-                } else {
-                    var lasti' := |lookup'.layers|-1;
-                    if (|prefix.layers|==0) {
-                        calc {
-                            lookup.layers[i].nodeRange;
-                            lookup'.layers[i].nodeRange;
-                        }
-                    } else {
-                        //assert |prefix'.layers| > 0;
-                        //assert |lookup'.layers| > 1;
-                        calc {
-                            lookup.layers[i].nodeRange;
-                            lookup.layers[i-1].slotRange;
-                            Last(prefix.layers).slotRange;
-                            Last(prefix'.layers).slotRange;
-                            lookup'.layers[lasti'-1].slotRange;
-                            lookup'.layers[lasti'].nodeRange;
-                        }
-                    }
-                    assert Impl.LookupNodeRangesValidAt(lookup, i);
-                }
-            }
-            // TODO jon clean up mess above (minimize)
+            // Enable some automation that cleans up some easy cases.
+            assert forall i :: Impl.ValidLayerIndex(lookup, i) && i < |lookup.layers|-1
+                ==> Impl.ValidLayerIndex(prefix, i);
+
             var lvtable := s.impl.ephemeralTable;
             var lvview := ViewThroughCache(k.impl, s.impl, DiskView(k, s));
             var lvtable' := s'.impl.ephemeralTable;
             var lvview' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert Impl.LookupMatchesView(k.impl, lvtable', lvview', lookup');
+            assume false;
             forall i | Impl.ValidLayerIndex(lookup, i)
                 ensures Impl.LayerMatchesView(k.impl, lvtable, lvview, lookup.layers[i]) {
                 if i < |lookup.layers|-1 {
@@ -597,9 +546,9 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 } else {
                     var layer := lookup.layers[i];
                     //assert layer.addr != 
-                    assert TablesAgreeOverAddrs(lvtable', lvtable, {layer.addr});
+                    assert TablesAgreeOverAddrs(lvtable', lvtable, {layer.addr});   //HERE
                     var nba := Impl.TableAt(k.impl, lvtable', layer.addr);
-                    assert ViewsAgreeOverNBAs(k.impl, lvview', lvview, {nba});
+                    assert ViewsAgreeOverNBAs(k.impl, lvview', lvview, {nba});  // HERE
                     LookupMatchesViewAtLayerStability(LV(k, s'), LV(k, s), lookup.layers[i]);
                     assert Impl.LayerMatchesView(k.impl, lvtable, lvview, lookup.layers[i]);
                 }
@@ -607,7 +556,65 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
             assert Impl.LookupMatchesView(k.impl, lvtable, lvview, lookup);
             assert ValidLookupInLV(LV(k, s), lookup);
         } else {
-            assert ValidLookupInLV(LV(k, s), prefix);
+            if (|prefix'.layers| > 0) {
+                TranslateLookupAcrossEditWorks(k, s, s', step, prefix', prefix);
+                assert false;
+            }
+            //assert |prefix'.layers| == 0;
+            assert |lookup'.layers| == 1;
+            //assert ValidLookupInLV(LV(k, s), prefix);   // HERE
+            var lv' := LV(k, s');
+            var lv := LV(k, s);
+            var i := 0;
+            assert Impl.ValidAddress(lv.k, lookup.layers[i].addr);
+            assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
+            assert Impl.LayerMatchesView(lv'.k, lv'.table, lv'.view, lookup'.layers[i]);
+            var layer := lookup.layers[i];
+            var nba' := Impl.TableAt(lv.k, lv'.table, layer.addr);
+            var nba := Impl.TableAt(lv.k, lv.table, layer.addr);
+            CautiouslyRevealNextStep(k.impl, s.impl, s'.impl, step.disk, step.impl);
+            if step.impl.ExpandActionStep? {
+//                assert layer.addr != Impl.EditLast(step.impl.j.edit).addr;
+                assert layer.addr != step.impl.j.childAddr; // INTERESTING?
+                var j := step.impl.j;
+                assert Impl.ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);
+                /*
+                assert s'.impl.ephemeralTable ==
+                    s.impl.ephemeralTable[Impl.EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry'];
+                    */
+                assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+            } else if step.impl.ContractActionStep? {
+//                assert layer.addr != Impl.EditLast(step.impl.j.edit).addr;
+                if layer.addr == step.impl.j.childAddr {
+                    var lk1 := step.impl.j.edit.lookup;
+                    var i1 := |lk1.layers|-1;
+                    assert Impl.ValidLayerIndex(lk1, i1);
+
+                    ViewOfCacheNestsInViewThroughCache(k, s);   // To get from ValidLookup (in cache) to ValidLookupInView(LV)
+                    // Tickle LookupBasedTreeInv
+
+//                    assert i1==i;  // HERE
+
+                    assert step.impl.j.edit.replacementNba == nba'; // HERE
+                    assert false;
+                }
+                var j := step.impl.j;
+                assert Impl.ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);
+                assert s'.impl.ephemeralTable ==
+                    s.impl.ephemeralTable[Impl.EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry'];
+                assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+            } else if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?) {
+                assert layer.addr != Impl.EditLast(step.impl.edit).addr;
+                assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+            } else {
+                assert lv'.table == lv.table;
+            }
+            assert nba == nba';
+            assert Impl.NbaResolvesToNode(lv.k, lv'.view, nba, layer.node);
+            assert Impl.NbaResolvesToNode(lv.k, lv.view, nba, layer.node);  // OKAY
+            assert Impl.LayerMatchesView(lv.k, lv.table, lv.view, lookup'.layers[i]);
+            assert Impl.LayerMatchesView(lv.k, lv.table, lv.view, lookup.layers[i]);
+            assert Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup);
             assert ValidLookupInLV(LV(k, s), lookup);
         }
     }
