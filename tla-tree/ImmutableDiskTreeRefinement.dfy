@@ -583,6 +583,14 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                     s.impl.ephemeralTable[Impl.EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry'];
                     */
                 assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+
+                assert j.edit.replacementNba != nba;
+                assert Impl.AllocateNBA(k.impl, s.impl, j.childNba, j.edit.tableLookup);
+                assert Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, j.childNba);
+                Impl.reveal_AllocatedNodeBlocks();
+                assert !Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, nba);
+                assert j.childNba != nba;
+                assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
             } else if step.impl.ContractActionStep? {
 //                assert layer.addr != Impl.EditLast(step.impl.j.edit).addr;
                 if layer.addr == step.impl.j.childAddr {
@@ -603,15 +611,26 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 assert s'.impl.ephemeralTable ==
                     s.impl.ephemeralTable[Impl.EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry'];
                 assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+
+                assert j.edit.replacementNba != nba;
+                assert Impl.AllocateNBA(k.impl, s.impl, j.childNba, j.edit.tableLookup);
+                assert Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, j.childNba);
+                assert !Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, nba);
+                assert j.childNba != nba;
+                assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
             } else if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?) {
                 assert layer.addr != Impl.EditLast(step.impl.edit).addr;
                 assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+
+                assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
             } else {
                 assert lv'.table == lv.table;
+
+                assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
             }
             assert nba == nba';
             assert Impl.NbaResolvesToNode(lv.k, lv'.view, nba, layer.node);
-            assert Impl.NbaResolvesToNode(lv.k, lv.view, nba, layer.node);  // OKAY
+            assert Impl.NbaResolvesToNode(lv.k, lv.view, nba, layer.node);
             assert Impl.LayerMatchesView(lv.k, lv.table, lv.view, lookup'.layers[i]);
             assert Impl.LayerMatchesView(lv.k, lv.table, lv.view, lookup.layers[i]);
             assert Impl.ValidLookupInView(lv.k, lv.table, lv.view, lookup);
