@@ -6,10 +6,16 @@ module Circular_List {
     var next: Node<T>
     ghost var nodes: seq<Node<T> >;
 
-    constructor(x: T) {
+    constructor(x: T)
+      ensures Valid(this);
+      ensures this == this.nodes[0];
+      ensures Singleton(this);
+      ensures this.value == x;
+    {
       value := x;
       prev := this;
       next := this;
+      nodes := [ this ];
     }
   }
 
@@ -43,6 +49,12 @@ module Circular_List {
     exists i :: 0 <= i < |b| && a == (b[i..] + b[..i])
   }
 
+  predicate ClosedUnderNextsAndPrevs<T>(s: seq<Node<T> >)
+    reads s;
+  {
+    forall n :: n in s ==> n.prev in s && n.next in s
+  }
+  
   predicate Valid(node: Node)
     reads node;
     reads node.nodes;
@@ -61,6 +73,25 @@ module Circular_List {
     nodes[0].prev == nodes[|nodes|-1]
   }
 
+  lemma ValidImpliesClosed(l: Node)
+    requires Valid(l);
+    ensures ClosedUnderNextsAndPrevs(l.nodes);
+  {
+    forall n | n in l.nodes
+      ensures n.next in l.nodes && n.prev in l.nodes;
+      {
+        var idx := IndexOf(n.nodes, n);
+        assert idx < |n.nodes|-1  ==> n.next == n.nodes[idx+1];
+        assert idx == |n.nodes|-1 ==> n.next == n.nodes[0];
+        assert n.next in n.nodes;
+
+        assert idx > 0  ==> n.prev == n.nodes[idx-1];
+        assert idx == 0 ==> n.prev == n.nodes[|n.nodes|-1];
+        assert n.prev in n.nodes;
+      }
+
+  }
+  
   lemma NextIsValid(node: Node)
     requires Valid(node);
     ensures Valid(node.next);
@@ -100,6 +131,7 @@ module Circular_List {
     requires Valid(a);
     ensures Valid(a);
     ensures a.nodes == old(a.nodes[IndexOf(a.nodes, a)..]) + old(a.nodes[..IndexOf(a.nodes, a)]);
+    ensures forall n :: n in a.nodes ==> n.value == old(n.value);
     modifies a, a.nodes;
   {
     ghost var i := IndexOf(a.nodes, a);
@@ -132,13 +164,18 @@ module Circular_List {
     requires a.nodes != b.nodes ==> b == b.nodes[0];
     ensures Valid(a);
     ensures Valid(b);
-    ensures old(a.nodes) == old(b.nodes) ==>
-      (multiset(a.nodes) !! multiset(b.nodes) &&
-      a.nodes == old(a.nodes[..IndexOf(a.nodes, b)]) &&
-      b.nodes == old(b.nodes[IndexOf(b.nodes, b)..]));
-    ensures multiset(old(a.nodes)) !! multiset(old(b.nodes)) ==>
-      (a.nodes == old(a.nodes) + old(b.nodes) &&
-      a.nodes == b.nodes);
+    ensures forall n :: n in old(a.nodes) ==> n.value == old(n.value);
+    ensures forall n :: n in old(b.nodes) ==> n.value == old(n.value);
+    ensures old(a.nodes) == old(b.nodes) ==> (
+      && old(a.nodes) == old(b.nodes) == a.nodes + b.nodes
+      && multiset(a.nodes) !! multiset(b.nodes)
+      );
+    ensures multiset(old(a.nodes)) !! multiset(old(b.nodes)) ==> (
+      && a.nodes == old(a.nodes) + old(b.nodes)
+      && a.nodes == b.nodes
+      && |old(a.nodes)| > 1 ==> a.next == old(a.next)
+      // && forall i :: 0 <= i < |old(a.nodes)|-1 ==> a.nodes[i].next == old(a.nodes[i].next)
+      );
     modifies a, b, a.nodes, b.nodes;
   {
     var a_last := a.prev;
@@ -172,7 +209,7 @@ module Circular_List {
     }
   }
 
-  predicate Singleton(n: Node)
+  predicate method Singleton(n: Node)
     requires Valid(n);
     reads n, n.nodes;
   {
@@ -188,25 +225,6 @@ module Circular_List {
     if idx > 0 {
       assert n.nodes[idx-1] == n;
     }
-  }
-
-  method InsertAfter(a: Node, b: Node)
-    requires Valid(a);
-    requires Valid(b);
-    requires a != b;
-    requires Singleton(b);
-    ensures Valid(a);
-    ensures Valid(b);
-    ensures a.next == b;
-    ensures a.nodes == old(a.nodes[IndexOf(a.nodes, a)+1..]) + old(a.nodes[..IndexOf(a.nodes, a)+1]) + [b];
-    modifies a, a.nodes, a.next, a.next.nodes, b, b.nodes;
-  {
-    SingletonFacts(b);
-    NextIsValid(a);
-    PrevNextCancel(a);
-    BringToFront(a.next);
-    BringToFront(b);
-    Splice(a.next, b);
   }
 
   lemma NonSingletonFacts(n: Node)
@@ -229,19 +247,114 @@ module Circular_List {
     }
   }
 
-  method Remove(n: Node) returns (other: Node)
-    requires Valid(n);
-    requires !Singleton(n);
-    ensures Valid(n);
-    ensures Valid(other);
-    ensures Singleton(n);
-    ensures other.nodes == old(n.nodes[IndexOf(n.nodes,n)+1..]) + old(n.nodes[..IndexOf(n.nodes,n)]);
-    modifies n, n.next, n.nodes, n.next.nodes;
-  {
-    BringToFront(n);
-    NonSingletonFacts(n);
-    assert n.nodes[1] == n.next; // Observe
-    other := n.next;
-    Splice(n, other);
-  }
+  // method Remove(n: Node) returns (other: Node)
+  //   requires Valid(n);
+  //   requires !Singleton(n);
+  //   ensures Valid(n);
+  //   ensures Valid(other);
+  //   ensures Singleton(n);
+  //   ensures other.nodes == old(n.nodes[IndexOf(n.nodes,n)+1..]) + old(n.nodes[..IndexOf(n.nodes,n)]);
+  //   ensures forall i :: 0 <= i < |other.nodes| ==> other.nodes[i] in old(n.nodes);
+  //   ensures forall x :: x in old(n.nodes) ==> x.value == old(x.value);
+  //   modifies n, n.next, n.nodes, n.next.nodes;
+  // {
+  //   BringToFront(n);
+  //   NonSingletonFacts(n);
+  //   assert n.nodes[1] == n.next; // Observe
+  //   other := n.next;
+  //   Splice(n, other);
+  // }
+
+  // The convention for a dll is that head == head.nodes[0]
+  // predicate IsHead(n: Node)
+  //   requires Valid(n);
+  //   reads n, n.nodes;
+  // {
+  //   n == n.nodes[0]
+  // }
+  
+  // function ReverseSeq<T>(s: seq<T>) : seq<T> {
+  //   if |s| <= 1 then s
+  //   else ReverseSeq(s[1..]) + [s[0]]
+  // }
+
+  // lemma ListsAreDisjointOrEqual(l1: Node, l2: Node)
+  //   requires Valid(l1);
+  //   requires Valid(l2);
+  //   ensures l1.nodes == l2.nodes || multiset(l1.nodes) !! multiset(l2.nodes);
+  // {
+  //   if ! (multiset(l1.nodes) !! multiset(l2.nodes)) {
+  //     var n :| n in l1.nodes && n in l2.nodes; // OBSERVE
+  //   }
+  // }
+
+  // method FlipTail(reversed: Node, head: Node)
+  //   requires Valid(reversed);
+  //   requires IsHead(reversed);
+  //   requires Valid(head);
+  //   requires IsHead(head);
+  //   requires reversed != head;
+  //   ensures forall n :: n in old(reversed.nodes) ==> n.value == old(n.value);
+  //   ensures forall n :: n in old(head.nodes) ==> n.value == old(n.value);
+  //   modifies set n : Node | n in reversed.nodes;
+  //   modifies set n : Node | n in head.nodes;
+  //   decreases |head.nodes|;
+  // {
+  //   ValidImpliesClosed(head); // OBSERVE
+    
+  //   if Singleton(head) {
+  //     Splice(head, reversed);
+  //   } else {
+  //     var tail := Remove(head);
+
+  //     SingletonFacts(head); // OBSERVE
+  //     BringToFront(tail); // OBSERVE
+      
+  //     Splice(head, reversed);
+  //     FlipTail(head, tail);
+  //   }
+  // }
+
+  // method Reverse(head: Node)
+  //   requires Valid(head);
+  //   requires IsHead(head);
+  //   ensures head.nodes == ReverseSeq(old(head.nodes));
+  //   modifies set n : Node | n in head.nodes;
+  // {
+  //   ValidImpliesClosed(head); // OBSERVE
+  //   if ! Singleton(head) {
+  //     var tail := Remove(head);
+  //     SingletonFacts(head); // OBSERVE
+  //     BringToFront(tail); // OBSERVE
+  //     FlipTail(head, tail);
+  //   }
+  // }
+}
+
+method Main()
+{
+  var n1 := new Circular_List.Node(7);
+  var n2 := new Circular_List.Node(8);
+  var n3 := new Circular_List.Node(9);
+  //var n4 := new Circular_List.Node(10);
+
+
+  Circular_List.Splice(n1, n2);
+
+  assert n1.value == 7;
+  assert n2.value == 8;
+  assert n3.value == 9;
+
+  assert n1.next.value == 8;
+  assert n1.next.next.value == 7;
+  
+  Circular_List.Splice(n1, n3);
+
+  assert n1.value == 7;
+  assert n2.value == 8;
+  assert n3.value == 9;
+  
+  assert n1.next.value == 8;
+  assert n1.next.next.value == 9;
+  assert n1.next.next.next.value == 7;
 }

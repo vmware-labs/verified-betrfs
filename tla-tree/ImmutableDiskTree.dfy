@@ -297,15 +297,16 @@ datatype Layer = Layer(
 
 datatype Lookup = Lookup(layers:seq<Layer>)
 
-predicate WFLookup(lookup:Lookup)
-{
-    0 < |lookup.layers|
-}
-
 // Naming a term to encourage triggering on it.
 predicate ValidLayerIndex(lookup:Lookup, i:int)
 {
     0<=i<|lookup.layers|
+}
+
+predicate WFLookup(lookup:Lookup)
+  ensures WFLookup(lookup) ==> ValidLayerIndex(lookup, |lookup.layers| - 1)
+{
+    0 < |lookup.layers|
 }
 
 predicate LookupHasValidNodes(lookup:Lookup)

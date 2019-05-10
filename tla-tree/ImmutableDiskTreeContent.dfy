@@ -197,6 +197,68 @@ predicate LookupBasedTreeInv(lv:LookupView)
         && LookupsAgreeToLen(lk1, lk2, i1)
 }
 
+function LookedUpSlot(lk:Lookup) : Slot
+  requires WFLookup(lk)
+  requires LayerHasValidSlotIndex(Last(lk.layers))
+{
+  Last(lk.layers).node.slots[Last(lk.layers).slot]
+}
+
+predicate TableAddressPointsToWFNode(lv:LookupView, addr:TableAddress)
+  requires WFTable(lv.k, lv.table)
+{
+  && ValidAddress(lv.k, addr)
+  && TableAt(lv.k, lv.table, addr).Used?
+  && ValidNba(lv.k, TableAt(lv.k, lv.table, addr))
+  && LbaForNba(lv.k, TableAt(lv.k, lv.table, addr)) in lv.view
+  && lv.view[LbaForNba(lv.k, TableAt(lv.k, lv.table, addr))].NodeSector?
+  && WFNode(lv.view[LbaForNba(lv.k, TableAt(lv.k, lv.table, addr))].node)
+}
+
+function TargetNodeOfTableAddress(lv:LookupView, addr:TableAddress) : Node
+  requires WFTable(lv.k, lv.table)
+  requires TableAddressPointsToWFNode(lv, addr)
+{
+  lv.view[LbaForNba(lv.k, TableAt(lv.k, lv.table, addr))].node
+}
+
+function childLookup(lv:LookupView, lk:Lookup, childSlot:int) : Lookup
+  requires ValidLookupInLV(lv, lk)
+  requires LookedUpSlot(lk).Pointer?
+  requires TableAddressPointsToWFNode(lv, LookedUpSlot(lk).addr)
+  requires 0 <= childSlot < |TargetNodeOfTableAddress(lv, LookedUpSlot(lk).addr).slots|
+{
+  var parentLayer    := Last(lk.layers);
+  var childAddr      := parentLayer.node.slots[parentLayer.slot].addr.a;
+  var childNode      := TargetNodeOfTableAddress(lv, LookedUpSlot(lk).addr);
+  var childRange     := parentLayer.slotRange;
+  var childSlotRange := RangeBoundForSlotIdx(childNode, childRange, childSlot);
+  var childLayer     := Layer(TableAddress(childAddr), childNode, childRange, childSlot, childSlotRange);
+  var childLookup    := Lookup(lk.layers + [childLayer]);
+  childLookup
+}
+
+predicate ReachableNodesPointToWFNodes(lv:LookupView)
+{
+  forall lk :: (
+    && ValidLookupInLV(lv, lk)
+    && LookedUpSlot(lk).Pointer?
+    ) ==>
+    TableAddressPointsToWFNode(lv, LookedUpSlot(lk).addr)
+}
+
+predicate ValidLookupsCanBeExtended(lv:LookupView)
+  requires ReachableNodesPointToWFNodes(lv)
+{
+  forall lk :: (
+    && ValidLookupInLV(lv, lk)
+    && Last(lk.layers).node.slots[Last(lk.layers).slot].Pointer?
+    ) ==> (
+    ValidLookupInLV(lv, childLookup(lv, lk, 0)))
+}
+
+
+
 /* unneeded, I think
 lemma LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
     requires ValidValueLookup(lv.k, lv.table, lv.view, lookup)

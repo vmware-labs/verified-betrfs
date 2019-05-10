@@ -44,7 +44,7 @@ datatype Sector =
 // parallel with ongoing activity. But I'm not sure it's worth frying that fish now, when we have
 // big data structure changes to make later.
 
-module ImmutableDiskTree {
+module BufferedImmutableDiskTree {
 import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
@@ -737,6 +737,64 @@ predicate ContractAction(k:Constants, s:Variables, s':Variables, j:Janitorial)
     && ChildEquivalentToSlotGroup(j.edit.replacementNode, EditLast(j.edit).slot, EditLast(j.edit).node, j.childAddr, j.childNode)
     && j.childEntry' == Unused  // free the child reference
 }
+
+datatype MergeSpec = MergeSpec(
+    edit:NodeEdit,              // The Lookup and edit info for the parent node being modified
+    mergedAddr:TableAddress,
+    mergedNba:NBA,
+    mergedNode:Node,
+    leftAddr:TableAddress,     // table index where child is coming from or allocated to
+    leftNba:NBA,               // node address where child is coming from or allocated to
+    leftNode:Node,             // child node exchanging places with subrange of parent slots
+    rightAddr:TableAddress,     // table index where child is coming from or allocated to
+    rightNba:NBA,               // node address where child is coming from or allocated to
+    rightNode:Node             // child node exchanging places with subrange of parent slots
+    )
+
+function MergeNodes(a:Node, pivot:Key, b:Node) : Node
+{
+  Node(
+    Header(a.header.pivots + [ pivot ] + b.header.pivots,
+           a.header.slots + b.header.slots),
+    a.buffers + b.buffers)
+}
+  
+// TODO consider breaking these weird abstract action-helpers into
+// enabling-condition & update parts to make caller read more imperatively.
+predicate MergAction(k:Constants, s:Variables, s':Variables, merge:MergeSpec)
+    requires WFConstants(k)
+    requires ValidAddress(k, merge.mergedAddr)
+    requires ValidAddress(k, merge.leftAddr)
+    requires ValidAddress(k, merge.rightAddr)
+{
+    && s.ready
+    && WFVariables(k, s)
+    && ValidLookup(k, s, merge.edit.lookup)
+    && AllocateNBA(k, s, merge.edit.replacementNba, merge.edit.tableLookup)
+    && AllocateNBA(k, s, merge.mergedNba, merge.edit.tableLookup)
+    && ValidNba(k, merge.mergedNba)
+    && ValidNba(k, merge.leftNba)
+    && ValidNba(k, merge.rightNba)
+
+    && TreeDisk.Idle(k.disk, s.disk, s'.disk)
+
+    // Write the parent and the merged node to the cache
+    && s'.cache == WriteNodeToCache(k,
+                  WriteNodeToCache(k, s.cache, merge.edit.replacementNba, merge.edit.replacementNode),
+                                               merge.mergedNba,           merge.mergedNode)
+                                               
+    // Through the magic of table indirection, lastLayer.node's parent is
+    // suddenly switched to point to replacementNode.
+    && s'.ephemeralTable ==
+      s.ephemeralTable[EditLast(merge.edit).addr.a := merge.edit.replacementNba]
+                      [merge.mergedAddr.a := merge.mergedNba]
+                      [merge.leftAddr.a := Unused]
+                      [merge.rightAddr.a := Unused]
+    && s'.ready
+}
+
+
+
 
 predicate WriteCore(k:Constants, s:Variables, s':Variables, lba:LBA, sector:Sector)
 {

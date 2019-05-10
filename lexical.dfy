@@ -1,5 +1,5 @@
 include "total_order.dfy"
-	
+ 
 abstract module Lexical_Order refines Total_Order {
 
     import Entry : Total_Order

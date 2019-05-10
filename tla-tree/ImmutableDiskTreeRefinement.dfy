@@ -48,6 +48,8 @@ predicate SysInv(k:Constants, s:Variables)
 
     && CacheLbasFitOnDisk(k.impl, s.impl)
     && LookupBasedTreeInv(LV(k, s))
+    && ReachableNodesPointToWFNodes(LV(k,s))
+    && ValidLookupsCanBeExtended(LV(k,s))
     && PivotsOrderedInv(LV(k, s))
     && PivotsHonorRangesInv(LV(k, s))
     && DatumsAreInTheRightPlaceInv(LV(k, s))
@@ -613,10 +615,12 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
 
                 assert j.edit.replacementNba != nba;
-                assert Impl.AllocateNBA(k.impl, s.impl, j.childNba, j.edit.tableLookup);
-                assert Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, j.childNba);
-                assert !Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, nba);
-                assert j.childNba != nba;
+                assert lv'.table[j.childAddr.a] == Impl.Unused;
+                assert nba' != Impl.Unused;
+                assert j.childAddr != last'.addr;
+                assume forall x, y :: 0 <= x < |lv'.table| && 0 <= y < |lv'.table| && x != y ==> lv'.table[x] != lv'.table[y];
+                assert j.childNba != j.edit.replacementNba;
+                assert j.childNba != nba';
                 assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
             } else if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?) {
                 assert layer.addr != Impl.EditLast(step.impl.edit).addr;
