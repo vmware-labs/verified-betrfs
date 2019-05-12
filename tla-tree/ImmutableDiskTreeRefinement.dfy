@@ -626,13 +626,14 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 }
                 assert Impl.JanitorialAction(k.impl, s.impl, s'.impl, step.disk, j);
                 assert Impl.ValidLookup(k.impl, s.impl, j.edit.lookup);
+                ViewOfCacheNestsInViewThroughCache(k, s);
                 assert ValidLookupInLV(lv, j.edit.lookup);
-                assert LookedUpSlot(j.edit.lookup).Pointer?;
-                assert TableAddressPointsToWFNode(lv, LookedUpSlot(j.edit.lookup).addr);
-                assert 0 < |TargetNodeOfTableAddress(lv, LookedUpSlot(j.edit.lookup).addr).slots|;
+                assert Impl.TerminalSlot(j.edit.lookup).Pointer?;
+                assert TableAddressPointsToWFNode(lv, Impl.TerminalSlot(j.edit.lookup).addr);
+                assert 0 < |TargetNodeOfTableAddress(lv, Impl.TerminalSlot(j.edit.lookup).addr).slots|;
                 var cLookup := childLookup(lv, j.edit.lookup, 0);
-                assert j.childNba != j.edit.replacementNba;
-                assert j.childNba != nba';
+                assert ValidLookupInLV(lv, cLookup);
+                assert j.childNba == lv.table[Last(cLookup.layers).addr.a];
                 assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
             } else if (step.impl.InsertActionStep? || step.impl.DeleteActionStep?) {
                 assert layer.addr != Impl.EditLast(step.impl.edit).addr;
