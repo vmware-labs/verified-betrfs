@@ -619,6 +619,18 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 assert nba' != Impl.Unused;
                 assert j.childAddr != last'.addr;
                 assume forall x, y :: 0 <= x < |lv'.table| && 0 <= y < |lv'.table| && x != y ==> lv'.table[x] != lv'.table[y];
+                if (0 < |prefix.layers|) {
+                  TranslateLookupAcrossEditWorks(k, s, s', step, prefix', prefix);
+                  assert ValidLookupInLV(lv, prefix);
+                  assert ValidLookupInLV(lv, lookup);
+                }
+                assert Impl.JanitorialAction(k.impl, s.impl, s'.impl, step.disk, j);
+                assert Impl.ValidLookup(k.impl, s.impl, j.edit.lookup);
+                assert ValidLookupInLV(lv, j.edit.lookup);
+                assert LookedUpSlot(j.edit.lookup).Pointer?;
+                assert TableAddressPointsToWFNode(lv, LookedUpSlot(j.edit.lookup).addr);
+                assert 0 < |TargetNodeOfTableAddress(lv, LookedUpSlot(j.edit.lookup).addr).slots|;
+                var cLookup := childLookup(lv, j.edit.lookup, 0);
                 assert j.childNba != j.edit.replacementNba;
                 assert j.childNba != nba';
                 assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
