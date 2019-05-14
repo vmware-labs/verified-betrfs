@@ -215,22 +215,6 @@ function TargetNodeOfTableAddress(lv:LookupView, addr:TableAddress) : Node
   lv.view[LbaForNba(lv.k, TableAt(lv.k, lv.table, addr))].node
 }
 
-function childLookup(lv:LookupView, lk:Lookup, childSlot:int) : Lookup
-  requires ValidLookupInLV(lv, lk)
-  requires TerminalSlot(lk).Pointer?
-  requires TableAddressPointsToWFNode(lv, TerminalSlot(lk).addr)
-  requires 0 <= childSlot < |TargetNodeOfTableAddress(lv, TerminalSlot(lk).addr).slots|
-{
-  var parentLayer    := Last(lk.layers);
-  var childAddr      := parentLayer.node.slots[parentLayer.slot].addr.a;
-  var childNode      := TargetNodeOfTableAddress(lv, TerminalSlot(lk).addr);
-  var childRange     := parentLayer.slotRange;
-  var childSlotRange := RangeBoundForSlotIdx(childNode, childRange, childSlot);
-  var childLayer     := Layer(TableAddress(childAddr), childNode, childRange, childSlot, childSlotRange);
-  var childLookup    := Lookup(lk.layers + [childLayer]);
-  childLookup
-}
-
 predicate ReachableNodesPointToWFNodes(lv:LookupView)
 {
   forall lk :: (
@@ -238,16 +222,6 @@ predicate ReachableNodesPointToWFNodes(lv:LookupView)
     && TerminalSlot(lk).Pointer?
     ) ==>
     TableAddressPointsToWFNode(lv, TerminalSlot(lk).addr)
-}
-
-predicate ValidLookupsCanBeExtended(lv:LookupView)
-  requires ReachableNodesPointToWFNodes(lv)
-{
-  forall lk :: (
-    && ValidLookupInLV(lv, lk)
-    && Last(lk.layers).node.slots[Last(lk.layers).slot].Pointer?
-    ) ==> (
-    ValidLookupInLV(lv, childLookup(lv, lk, 0)))
 }
 
 
