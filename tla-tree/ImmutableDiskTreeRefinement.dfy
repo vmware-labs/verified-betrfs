@@ -589,17 +589,9 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 TranslateLookupAcrossEditWorks(k, s, s', step, prefix', prefix);
                 assert false;
             }
-            //assert |prefix'.layers| == 0;
-            assert |lookup'.layers| == 1;
-            //assert ValidLookupInLV(LV(k, s), prefix);   // HERE
             var lv' := LV(k, s');
             var lv := LV(k, s);
-            var i := 0;
-            assert Impl.ValidAddress(lv.k, lookup.layers[i].addr); 
-            assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
-            assert Impl.LayerMatchesView(lv'.k, lv'.table, lv'.view, lookup'.layers[i]);
-            var layer := lookup.layers[i];
-            var nba' := Impl.TableAt(lv.k, lv'.table, layer.addr);
+            var layer := lookup.layers[0];
             var nba := Impl.TableAt(lv.k, lv.table, layer.addr);
             CautiouslyRevealNextStep(k.impl, s.impl, s'.impl, step.disk, step.impl);
             if step.impl.ExpandActionStep? {
