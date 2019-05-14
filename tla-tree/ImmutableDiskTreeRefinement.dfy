@@ -506,7 +506,7 @@ lemma ValidLookupsCanBeExtended(lv:LookupView, lk:Impl.Lookup)
   var cLookup := ChildLookup(lv, lk, 0);
   // Restore lots of automation that was hidden behind ValidLayerIndex triggers.
   assert forall i :: Impl.ValidLayerIndex(cLookup, i) && i<|cLookup.layers|-1 ==> Impl.ValidLayerIndex(lk, i);
-  //assert forall i :: Impl.ValidLayerIndex(lk, i) ==> Impl.ValidLayerIndex(cLookup, i);  // this didn't work, yet had the same triggers. Ask James?
+  //assert forall i :: Impl.ValidLayerIndex(lk, i) ==> Impl.ValidLayerIndex(cLookup, i);  // this didn't work, yet had the same triggers. James mystery
 }
 
 lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, step:Step, lookup':Impl.Lookup, lookup:Impl.Lookup)
@@ -603,23 +603,15 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
             var nba := Impl.TableAt(lv.k, lv.table, layer.addr);
             CautiouslyRevealNextStep(k.impl, s.impl, s'.impl, step.disk, step.impl);
             if step.impl.ExpandActionStep? {
-//                assert layer.addr != Impl.EditLast(step.impl.j.edit).addr;
                 assert layer.addr != step.impl.j.childAddr; // INTERESTING?
-                var j := step.impl.j;
-                assert Impl.ValidLayerIndex(j.edit.lookup, |j.edit.lookup.layers|-1);
-                /*
-                assert s'.impl.ephemeralTable ==
-                    s.impl.ephemeralTable[Impl.EditLast(j.edit).addr.a := j.edit.replacementNba][j.childAddr.a := j.childEntry'];
-                    */
-                assert lv'.table[layer.addr.a] == lv.table[layer.addr.a];
+                var j := step.impl.j; // WUT!!? How can a var be a trigger!? James mystery
 
-                assert j.edit.replacementNba != nba;
-                assert Impl.AllocateNBA(k.impl, s.impl, j.childNba, j.edit.tableLookup);
-                assert Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, j.childNba);
                 Impl.reveal_AllocatedNodeBlocks();
-                assert !Impl.NBAUnusedInTable(k.impl, s.impl.ephemeralTable, nba);
-                assert j.childNba != nba;
                 assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
+                // Jon angry that he can't replace above line WITH EQUIVALENT LINES below. James mystery
+                // Fight this battle after correcting timeout.
+                //var lba := Impl.LbaForNba(k.impl, nba);
+                //assert lv'.view[lba] == lv.view[lba]; // trigger
             } else if step.impl.ContractActionStep? {
                 if layer.addr == step.impl.j.childAddr {
                     var lk1 := step.impl.j.edit.lookup;
