@@ -566,7 +566,6 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
             var lvtable' := s'.impl.ephemeralTable;
             var lvview' := ViewThroughCache(k.impl, s'.impl, DiskView(k, s'));
             assert Impl.LookupMatchesView(k.impl, lvtable', lvview', lookup');
-            assume false;
             forall i | Impl.ValidLayerIndex(lookup, i)
                 ensures Impl.LayerMatchesView(k.impl, lvtable, lvview, lookup.layers[i]) {
                 if i < |lookup.layers|-1 {
