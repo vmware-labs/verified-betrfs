@@ -1,0 +1,66 @@
+# To install:
+#   copy this file to ~/.ctags.d/dafny.ctags
+
+--langdef=dafny
+--langmap=dafny:.dfy
+
+--_tabledef-dafny=toplevel
+--_tabledef-dafny=block_comment
+--_tabledef-dafny=generic_decl
+--_tabledef-dafny=datatype_decl
+--_tabledef-dafny=constructor_list
+--_tabledef-dafny=formals_list
+--_tabledef-dafny=template_formals_list
+--_tabledef-dafny=comment_catcher
+--_tabledef-dafny=block
+
+# Currently unhandled keywords:
+# - import.  Due to limitations of ctags-universal, it's hard
+#            (impossible?) to handle alias-creating imports in
+#            a fully general multi-line way.
+# - var. Just need to get around to it.
+
+### Sort of the base class of all tables
+--_mtable-regex-dafny=comment_catcher,/\*,,{tenter=block_comment}
+--_mtable-regex-dafny=comment_catcher,//[^\n]*,,
+--_mtable-regex-dafny=comment_catcher,"((\\.)|[^\"])*",,
+--_mtable-regex-dafny=comment_catcher,\(,,{tenter=formals_list}
+--_mtable-regex-dafny=comment_catcher,.,,
+
+### Top level
+--_mtable-regex-dafny=toplevel,(function|predicate|copredicate|method|iterator|lemma|colemma|constructor|type|newtype|class|trait|module|label)[^a-zA-Z0-9_],,{_advanceTo=1end}{tenter=generic_decl}
+--_mtable-regex-dafny=toplevel,(datatype|codatatype)[^a-zA-Z0-9_],,{_advanceTo=1end}{tenter=datatype_decl}
+--_mtable-regex-dafny=toplevel,import[ \t]*(opened)*[ \t]([a-zA-Z0-9_]*)[ \t]*(:|=),\2,f,
+--_mtable-extend-dafny=toplevel+comment_catcher
+
+### Generic function/predicate/method/lemma/constuctor declaration
+--_mtable-regex-dafny=generic_decl,method,,
+--_mtable-regex-dafny=generic_decl,([a-zA-Z0-9_]+),\1,f,{tleave}
+--_mtable-regex-dafny=generic_decl,\{,,{tenter=block}
+--_mtable-extend-dafny=generic_decl+comment_catcher
+
+### datatype decl
+--_mtable-regex-dafny=datatype_decl,([a-zA-Z0-9_]+),\1,f,{tjump=constructor_list}
+--_mtable-extend-dafny=datatype_decl+comment_catcher
+
+### constructor lists are terminated by a keyword, AFAIKT
+--_mtable-regex-dafny=constructor_list,(abstract|array|as|assert|assume|bool|break|calc|case|char|class|codatatype|colemma|constructor|copredicate|datatype|decreases|default|else|ensures|exists|extends|false|forall|free|fresh|function|ghost|if|imap|import|in|include|inductive|int|invariant|iset|iterator|label|lemma|map|match|method|modifies|modify|module|multiset|nat|new|newtype|null|object|old|opened|predicate|print|protected|reads|real|refines|requires|return|returns|seq|set|static|string|then|this|trait|true|type|var|where|while|yield|yields),,{_advanceTo=1start}{tleave}
+--_mtable-regex-dafny=constructor_list,([a-zA-Z0-9_]+),\1,f,
+--_mtable-regex-dafny=constructor_list,[<],,{tenter=template_formals_list}
+--_mtable-extend-dafny=constructor_list+comment_catcher
+
+### A list of formal arguments
+--_mtable-regex-dafny=formals_list,\),,{tleave}
+--_mtable-extend-dafny=formals_list+comment_catcher
+
+### A list of formal template arguments
+--_mtable-regex-dafny=template_formals_list,[>],,{tleave}
+--_mtable-extend-dafny=template_formals_list+comment_catcher
+
+### Block comment
+--_mtable-regex-dafny=block_comment,\*/,,{tleave}
+--_mtable-regex-dafny=block_comment,.,,
+
+### Block
+--_mtable-regex-dafny=block,\},,{tleave}
+--_mtable-regex-dafny=block,.,,
