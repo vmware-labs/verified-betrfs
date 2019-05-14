@@ -215,7 +215,7 @@ function TargetNodeOfTableAddress(lv:LookupView, addr:TableAddress) : Node
   lv.view[LbaForNba(lv.k, TableAt(lv.k, lv.table, addr))].node
 }
 
-function childLookup(lv:LookupView, lk:Lookup, childSlot:int) : Lookup
+function ChildLookup(lv:LookupView, lk:Lookup, childSlot:int) : Lookup
   requires ValidLookupInLV(lv, lk)
   requires TerminalSlot(lk).Pointer?
   requires TableAddressPointsToWFNode(lv, TerminalSlot(lk).addr)
@@ -245,9 +245,10 @@ predicate ValidLookupsCanBeExtended(lv:LookupView)
 {
   forall lk :: (
     && ValidLookupInLV(lv, lk)
-    && Last(lk.layers).node.slots[Last(lk.layers).slot].Pointer?
+    && TerminalSlot(lk).Pointer?
     ) ==> (
-    ValidLookupInLV(lv, childLookup(lv, lk, 0)))
+    && TableAddressPointsToWFNode(lv, TerminalSlot(lk).addr)
+    && ValidLookupInLV(lv, ChildLookup(lv, lk, 0)))
 }
 
 

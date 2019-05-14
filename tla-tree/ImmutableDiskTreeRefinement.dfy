@@ -568,7 +568,7 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
             var lv' := LV(k, s');
             var lv := LV(k, s);
             var i := 0;
-            assert Impl.ValidAddress(lv.k, lookup.layers[i].addr);
+            assert Impl.ValidAddress(lv.k, lookup.layers[i].addr); 
             assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
             assert Impl.LayerMatchesView(lv'.k, lv'.table, lv'.view, lookup'.layers[i]);
             var layer := lookup.layers[i];
@@ -618,7 +618,7 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 assert lv'.table[j.childAddr.a] == Impl.Unused;
                 assert nba' != Impl.Unused;
                 assert j.childAddr != last'.addr;
-                assume forall x, y :: 0 <= x < |lv'.table| && 0 <= y < |lv'.table| && x != y ==> lv'.table[x] != lv'.table[y];
+                //assume forall x, y :: 0 <= x < |lv'.table| && 0 <= y < |lv'.table| && x != y ==> lv'.table[x] != lv'.table[y];
                 if (0 < |prefix.layers|) {
                   TranslateLookupAcrossEditWorks(k, s, s', step, prefix', prefix);
                   assert ValidLookupInLV(lv, prefix);
@@ -631,7 +631,7 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
                 assert Impl.TerminalSlot(j.edit.lookup).Pointer?;
                 assert TableAddressPointsToWFNode(lv, Impl.TerminalSlot(j.edit.lookup).addr);
                 assert 0 < |TargetNodeOfTableAddress(lv, Impl.TerminalSlot(j.edit.lookup).addr).slots|;
-                var cLookup := childLookup(lv, j.edit.lookup, 0);
+                var cLookup := ChildLookup(lv, j.edit.lookup, 0);
                 assert ValidLookupInLV(lv, cLookup);
                 assert j.childNba == lv.table[Last(cLookup.layers).addr.a];
                 assert lv'.view[Impl.LbaForNba(k.impl, nba)] == lv.view[Impl.LbaForNba(k.impl, nba)];
