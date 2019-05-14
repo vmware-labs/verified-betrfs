@@ -225,7 +225,6 @@ predicate ReachableNodesPointToWFNodes(lv:LookupView)
 }
 
 
-
 /* unneeded, I think
 lemma LookupsHonorRanges(lv:LookupView, lookup:Lookup, datum:Datum)
     requires ValidValueLookup(lv.k, lv.table, lv.view, lookup)

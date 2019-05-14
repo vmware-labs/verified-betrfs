@@ -595,7 +595,7 @@ lemma TranslateLookupAcrossEditWorks(k:Constants, s:Variables, s':Variables, ste
             var lv' := LV(k, s');
             var lv := LV(k, s);
             var i := 0;
-            assert Impl.ValidAddress(lv.k, lookup.layers[i].addr);
+            assert Impl.ValidAddress(lv.k, lookup.layers[i].addr); 
             assert Impl.LookupHonorsPointerLinksAtLayer(lookup, i);
             assert Impl.LayerMatchesView(lv'.k, lv'.table, lv'.view, lookup'.layers[i]);
             var layer := lookup.layers[i];
