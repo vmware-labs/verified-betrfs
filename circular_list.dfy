@@ -2,21 +2,21 @@ module Circular_List {
   
   class Node<T> {
     var value: T
-    var prev: Node<T>
-    var next: Node<T>
-    ghost var nodes: seq<Node<T> >;
+      var prev: Node<T>
+      var next: Node<T>
+      ghost var nodes: seq<Node<T> >;
 
-    constructor(x: T)
-      ensures Valid(this);
-      ensures this == this.nodes[0];
-      ensures Singleton(this);
-      ensures this.value == x;
-    {
-      value := x;
-      prev := this;
-      next := this;
-      nodes := [ this ];
-    }
+      constructor(x: T)
+        ensures Valid(this);
+        ensures this == this.nodes[0];
+        ensures Singleton(this);
+        ensures this.value == x;
+      {
+        value := x;
+        prev := this;
+        next := this;
+        nodes := [ this ];
+      }
   }
 
   predicate NoDupes<T>(a: seq<T>) {
@@ -45,100 +45,22 @@ module Circular_List {
     i
   }
 
-  predicate RotationallyEquivalent<T>(a: seq<T>, b: seq<T>) {
-    exists i :: 0 <= i < |b| && a == (b[i..] + b[..i])
-  }
-
-  predicate ClosedUnderNextsAndPrevs<T>(s: seq<Node<T> >)
-    reads s;
-  {
-    forall n :: n in s ==> n.prev in s && n.next in s
-  }
-  
   predicate Valid(node: Node)
     reads node;
     reads node.nodes;
   {
     var nodes := node.nodes;
     // We're in the list
-    (node in nodes) &&
+    && (node in multiset(nodes))
     // Everybody in the list agrees on the list
-    (forall node' :: node' in nodes ==> node'.nodes == nodes) &&
+    && (forall node' :: node' in nodes ==> node'.nodes == nodes)
     // There's no duplicates in the list (technically redundant but helpful)
-    NoDupes(nodes) &&
+    && NoDupes(nodes)
     // nexts and prevs point right and left in the list, respectively
-    (forall i :: 0 <= i < |nodes|-1 ==> nodes[i].next == nodes[i+1]) &&
-    nodes[|nodes|-1].next == nodes[0] &&
-    (forall i :: 1 <= i < |nodes| ==> nodes[i].prev == nodes[i-1]) &&
-    nodes[0].prev == nodes[|nodes|-1]
-  }
-
-  lemma ValidImpliesClosed(l: Node)
-    requires Valid(l);
-    ensures ClosedUnderNextsAndPrevs(l.nodes);
-  {
-    forall n | n in l.nodes
-      ensures n.next in l.nodes && n.prev in l.nodes;
-      {
-        var idx := IndexOf(n.nodes, n);
-        assert idx < |n.nodes|-1  ==> n.next == n.nodes[idx+1];
-        assert idx == |n.nodes|-1 ==> n.next == n.nodes[0];
-        assert n.next in n.nodes;
-
-        assert idx > 0  ==> n.prev == n.nodes[idx-1];
-        assert idx == 0 ==> n.prev == n.nodes[|n.nodes|-1];
-        assert n.prev in n.nodes;
-      }
-
-  }
-  
-  lemma NextIsValid(node: Node)
-    requires Valid(node);
-    ensures Valid(node.next);
-    ensures node.next in node.nodes;
-    ensures node.next.nodes == node.nodes;
-  {
-    var idx := IndexOf(node.nodes, node);
-    if idx < |node.nodes|-1 {
-      assert node.next == node.nodes[idx + 1];
-    }
-  }
-
-  lemma PrevIsValid(node: Node)
-    requires Valid(node);
-    ensures Valid(node.prev);
-    ensures node.prev in node.nodes;
-    ensures node.prev.nodes == node.nodes;
-  {
-    var idx := IndexOf(node.nodes, node);
-    if idx > 0 {
-      assert node.prev == node.nodes[idx - 1];
-    }
-  }
-
-  lemma PrevNextCancel(n: Node)
-    requires Valid(n);
-    ensures n.next.prev == n;
-  {
-    NextIsValid(n);
-    var idx := IndexOf(n.nodes, n);
-    if idx < |n.nodes|-1 {
-      assert n.next == n.nodes[idx+1];
-    }
-  }
-
-  ghost method BringToFront(a: Node)
-    requires Valid(a);
-    ensures Valid(a);
-    ensures a.nodes == old(a.nodes[IndexOf(a.nodes, a)..]) + old(a.nodes[..IndexOf(a.nodes, a)]);
-    ensures forall n :: n in a.nodes ==> n.value == old(n.value);
-    modifies a, a.nodes;
-  {
-    ghost var i := IndexOf(a.nodes, a);
-    ghost var newnodes := a.nodes[i..] + a.nodes[..i];
-    forall a' | a' in a.nodes {
-      a'.nodes := newnodes;
-    }
+    && (forall i :: 0 <= i < |nodes| - 1 ==> nodes[i].next == nodes[i+1])
+    && nodes[|nodes|-1].next == nodes[0]
+    && (forall i :: 1 <= i < |nodes| ==> nodes[i].prev == nodes[i-1])
+    && nodes[0].prev == nodes[|nodes|-1]
   }
 
   // The veg-o-matic of circular lists.
@@ -167,16 +89,14 @@ module Circular_List {
     ensures forall n :: n in old(a.nodes) ==> n.value == old(n.value);
     ensures forall n :: n in old(b.nodes) ==> n.value == old(n.value);
     ensures old(a.nodes) == old(b.nodes) ==> (
-      && old(a.nodes) == old(b.nodes) == a.nodes + b.nodes
-      && multiset(a.nodes) !! multiset(b.nodes)
+      && a.nodes == old(a.nodes[0..IndexOf(a.nodes, b)])
+      && b.nodes == old(a.nodes[IndexOf(a.nodes, b)..])
       );
     ensures multiset(old(a.nodes)) !! multiset(old(b.nodes)) ==> (
-      && a.nodes == old(a.nodes) + old(b.nodes)
-      && a.nodes == b.nodes
-      && |old(a.nodes)| > 1 ==> a.next == old(a.next)
-      // && forall i :: 0 <= i < |old(a.nodes)|-1 ==> a.nodes[i].next == old(a.nodes[i].next)
-      );
-    modifies a, b, a.nodes, b.nodes;
+        && a.nodes == old(a.nodes) + old(b.nodes)
+        && a.nodes == b.nodes
+        );
+    modifies a, b, multiset(a.nodes), multiset(b.nodes);
   {
     var a_last := a.prev;
     var b_last := b.prev;
@@ -211,124 +131,75 @@ module Circular_List {
 
   predicate method Singleton(n: Node)
     requires Valid(n);
+    ensures Singleton(n) ==> n.nodes == [ n ];
     reads n, n.nodes;
   {
+    ghost var i := IndexOf(n.nodes, n);
+    assert n.next == n.nodes[(i + 1) % |n.nodes|];
     n.prev == n.next == n
   }
 
-  lemma SingletonFacts(n: Node)
-    requires Valid(n);
-    requires Singleton(n);
-    ensures n.nodes == [n];
-  {
-    var idx := IndexOf(n.nodes, n);
-    if idx > 0 {
-      assert n.nodes[idx-1] == n;
-    }
-  }
-
-  lemma NonSingletonFacts(n: Node)
+  method Remove(n: Node) returns (other: Node)
     requires Valid(n);
     requires !Singleton(n);
-    ensures Valid(n.next);
-    ensures Valid(n.prev);
-    ensures n.next != n;
-    ensures n.prev != n;
-    ensures |n.nodes| > 1;
+    requires n == n.nodes[0];
+    ensures Valid(n);
+    ensures Valid(other);
+    ensures Singleton(n);
+    ensures other.nodes == old(n.nodes[1..]);
+    ensures other == other.nodes[0];
+    ensures forall x :: x in old(n.nodes) ==> x.value == old(x.value);
+    modifies n, multiset(n.nodes);
   {
-    NextIsValid(n);
-    PrevIsValid(n);
-    var idx := IndexOf(n.nodes, n);
-    if idx < |n.nodes|-1 {
-      assert n.next == n.nodes[idx+1];
-    }
-    if idx > 0 {
-      assert n.prev == n.nodes[idx-1];
+    assert n.nodes[1] == n.next; // Observe
+    other := n.next;
+    Splice(n, other);
+  }
+  
+  function {:opaque} ReverseSeq<T>(s: seq<T>) : seq<T>
+    ensures |ReverseSeq(s)| == |s|;
+    ensures forall i :: 0 <= i < |s| ==> ReverseSeq(s)[i] == s[|s|-1-i];
+  {
+    if |s| <= 1 then s
+    else ReverseSeq(s[1..]) + [s[0]]
+  }
+  
+  method ReverseTail(reversed: Node, head: Node)
+    requires Valid(reversed);
+    requires Valid(head);
+    requires reversed == reversed.nodes[0];
+    requires head == head.nodes[0];
+    requires multiset(reversed.nodes) !! multiset(head.nodes);
+    ensures Valid(reversed);
+    ensures forall n :: n in old(reversed.nodes) ==> n.value == old(n.value);
+    ensures forall n :: n in old(head.nodes) ==> n.value == old(n.value);
+    ensures reversed.nodes == ReverseSeq(old(head.nodes)) + old(reversed.nodes);
+    modifies multiset(reversed.nodes);
+    modifies head, multiset(head.nodes);
+    decreases |head.nodes|;
+  {
+    if Singleton(head) {
+      Splice(head, reversed);
+    } else {
+      var tail := Remove(head);
+      Splice(head, reversed);
+      ReverseTail(head, tail);
     }
   }
 
-  // method Remove(n: Node) returns (other: Node)
-  //   requires Valid(n);
-  //   requires !Singleton(n);
-  //   ensures Valid(n);
-  //   ensures Valid(other);
-  //   ensures Singleton(n);
-  //   ensures other.nodes == old(n.nodes[IndexOf(n.nodes,n)+1..]) + old(n.nodes[..IndexOf(n.nodes,n)]);
-  //   ensures forall i :: 0 <= i < |other.nodes| ==> other.nodes[i] in old(n.nodes);
-  //   ensures forall x :: x in old(n.nodes) ==> x.value == old(x.value);
-  //   modifies n, n.next, n.nodes, n.next.nodes;
-  // {
-  //   BringToFront(n);
-  //   NonSingletonFacts(n);
-  //   assert n.nodes[1] == n.next; // Observe
-  //   other := n.next;
-  //   Splice(n, other);
-  // }
-
-  // The convention for a dll is that head == head.nodes[0]
-  // predicate IsHead(n: Node)
-  //   requires Valid(n);
-  //   reads n, n.nodes;
-  // {
-  //   n == n.nodes[0]
-  // }
-  
-  // function ReverseSeq<T>(s: seq<T>) : seq<T> {
-  //   if |s| <= 1 then s
-  //   else ReverseSeq(s[1..]) + [s[0]]
-  // }
-
-  // lemma ListsAreDisjointOrEqual(l1: Node, l2: Node)
-  //   requires Valid(l1);
-  //   requires Valid(l2);
-  //   ensures l1.nodes == l2.nodes || multiset(l1.nodes) !! multiset(l2.nodes);
-  // {
-  //   if ! (multiset(l1.nodes) !! multiset(l2.nodes)) {
-  //     var n :| n in l1.nodes && n in l2.nodes; // OBSERVE
-  //   }
-  // }
-
-  // method FlipTail(reversed: Node, head: Node)
-  //   requires Valid(reversed);
-  //   requires IsHead(reversed);
-  //   requires Valid(head);
-  //   requires IsHead(head);
-  //   requires reversed != head;
-  //   ensures forall n :: n in old(reversed.nodes) ==> n.value == old(n.value);
-  //   ensures forall n :: n in old(head.nodes) ==> n.value == old(n.value);
-  //   modifies set n : Node | n in reversed.nodes;
-  //   modifies set n : Node | n in head.nodes;
-  //   decreases |head.nodes|;
-  // {
-  //   ValidImpliesClosed(head); // OBSERVE
-    
-  //   if Singleton(head) {
-  //     Splice(head, reversed);
-  //   } else {
-  //     var tail := Remove(head);
-
-  //     SingletonFacts(head); // OBSERVE
-  //     BringToFront(tail); // OBSERVE
-      
-  //     Splice(head, reversed);
-  //     FlipTail(head, tail);
-  //   }
-  // }
-
-  // method Reverse(head: Node)
-  //   requires Valid(head);
-  //   requires IsHead(head);
-  //   ensures head.nodes == ReverseSeq(old(head.nodes));
-  //   modifies set n : Node | n in head.nodes;
-  // {
-  //   ValidImpliesClosed(head); // OBSERVE
-  //   if ! Singleton(head) {
-  //     var tail := Remove(head);
-  //     SingletonFacts(head); // OBSERVE
-  //     BringToFront(tail); // OBSERVE
-  //     FlipTail(head, tail);
-  //   }
-  // }
+  method Reverse(head: Node)
+    requires Valid(head);
+    requires head == head.nodes[0];
+    ensures Valid(head);
+    ensures forall n :: n in old(head.nodes) ==> n.value == old(n.value);
+    ensures head.nodes == ReverseSeq(old(head.nodes));
+    modifies multiset(head.nodes);
+  {
+    if ! Singleton(head) {
+      var tail := Remove(head);
+      ReverseTail(head, tail);
+    }
+  }
 }
 
 method Main()
@@ -336,7 +207,7 @@ method Main()
   var n1 := new Circular_List.Node(7);
   var n2 := new Circular_List.Node(8);
   var n3 := new Circular_List.Node(9);
-  //var n4 := new Circular_List.Node(10);
+  var n4 := new Circular_List.Node(10);
 
 
   Circular_List.Splice(n1, n2);
@@ -345,16 +216,38 @@ method Main()
   assert n2.value == 8;
   assert n3.value == 9;
 
+  assert n1.next == n2;
   assert n1.next.value == 8;
   assert n1.next.next.value == 7;
+
+  assert n1.nodes == [ n1, n2 ];
   
   Circular_List.Splice(n1, n3);
+
+  assert n1.nodes == [ n1, n2, n3 ];
+  assert n1.next == n1.nodes[1];
+  assert n1.next == n2;
 
   assert n1.value == 7;
   assert n2.value == 8;
   assert n3.value == 9;
-  
+
+  assert n1.prev == n3;
+  assert n3.next == n1;
+  assert n1.next == n2;
+  assert n2.next == n3;
   assert n1.next.value == 8;
   assert n1.next.next.value == 9;
   assert n1.next.next.next.value == 7;
+
+  Circular_List.Splice(n1, n4);
+  assert n1.nodes == [ n1, n2, n3, n4 ]; // observe
+  assert n1.next == n1.nodes[1];
+  assert n1.next.next == n1.nodes[2];
+  assert n1.next.next.next == n1.nodes[3];
+  assert n1.next.next.next.value == 10;
+
+  Circular_List.Reverse(n1);
+  assert n1.nodes == [ n4, n3, n2, n1 ]; // observe
+  assert [ n1.value, n1.next.value, n1.next.next.value, n1.next.next.next.value ] == [7, 10, 9, 8];
 }
