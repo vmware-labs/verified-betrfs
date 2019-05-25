@@ -1,7 +1,9 @@
 include "mathematics.dfy"
+include "sequences.dfy"
   
 abstract module Total_Order {
   import Mathematics
+  import Seq = Sequences
     
 	type Element(!new,==)
 
@@ -26,7 +28,7 @@ abstract module Total_Order {
   method SeqMinIndex(run: seq<Element>) returns (pos: int)
     requires 0 < |run|;
     ensures 0 <= pos < |run|;
-    ensures forall i :: 0 <= i < |run| ==> lte(run[pos], run[i]);
+    ensures forall i {:trigger lte(run[pos], run[i]) } :: 0 <= i < |run| ==> lte(run[pos], run[i]);
   {
     pos := 0;
     var i := 1;
@@ -45,7 +47,7 @@ abstract module Total_Order {
   method SeqMin(run: seq<Element>) returns (elt: Element)
     requires 0 < |run|;
     ensures elt in run;
-    ensures forall elt':: elt' in run ==> lte(elt, elt');
+    ensures forall elt' {:trigger lte(elt, elt') } :: elt' in run ==> lte(elt, elt');
   {
     var index := SeqMinIndex(run);
     elt := run[index];
@@ -54,7 +56,7 @@ abstract module Total_Order {
   method SeqMaxIndex(run: seq<Element>) returns (pos: int)
     requires 0 < |run|;
     ensures 0 <= pos < |run|;
-    ensures forall i :: 0 <= i < |run| ==> lte(run[i], run[pos]);
+    ensures forall i {:trigger lte(run[i], run[pos]) } :: 0 <= i < |run| ==> lte(run[i], run[pos]);
   {
     pos := 0;
     var i := 1;
@@ -73,7 +75,7 @@ abstract module Total_Order {
   method SeqMax(run: seq<Element>) returns (elt: Element)
     requires 0 < |run|;
     ensures elt in run;
-    ensures forall elt':: elt' in run ==> lte(elt', elt);
+    ensures forall elt' {:trigger lte(elt, elt') } :: elt' in run ==> lte(elt', elt);
   {
     var index := SeqMaxIndex(run);
     elt := run[index];
@@ -92,8 +94,9 @@ abstract module Total_Order {
     requires IsSorted(run);
     requires 0 < |run|;
     ensures -1 <= pos < |run|;
-    ensures forall i :: 0 <= i <= pos ==> lte(run[i], needle);
-    ensures forall i :: pos < i < |run| ==> lt(needle, run[i]);
+    ensures forall i {:trigger lte(run[i], needle) } :: 0 <= i <= pos ==> lte(run[i], needle);
+    ensures forall i {:trigger lt(needle, run[i]) } :: pos < i < |run| ==> lt(needle, run[i]);
+    ensures needle in run ==> 0 <= pos && run[pos] == needle;
   {
     pos := -1;
     while pos < |run|-1 && lte(run[pos + 1], needle)
