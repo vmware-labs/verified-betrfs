@@ -1,4 +1,7 @@
+include "sequences.dfy"
+  
 module Circular_List {
+  import opened Sequences
   
   class Node<T> {
     var value: T
@@ -17,32 +20,6 @@ module Circular_List {
         next := this;
         nodes := [ this ];
       }
-  }
-
-  predicate NoDupes<T>(a: seq<T>) {
-    (forall i, j :: 0 <= i < |a| && 0 <= j < |a| && i != j ==> a[i] != a[j])
-  }
-
-  lemma DisjointConcatenation<T>(a: seq<T>, b: seq<T>)
-    requires NoDupes(a);
-    requires NoDupes(b);
-    requires multiset(a) !! multiset(b);
-    ensures NoDupes(a + b);
-  {
-    var c := a + b;
-    if |c| > 1 {
-      assert forall i, j :: i != j && 0 <= i < |a| && |a| <= j < |c| ==>
-        c[i] in multiset(a) && c[j] in multiset(b) && c[i] != c[j]; // Observe
-    }
-  }
-
-  function IndexOf<T>(s: seq<T>, e: T) : int
-    requires e in s;
-    ensures 0 <= IndexOf(s,e) < |s|;
-    ensures s[IndexOf(s,e)] == e;
-  {
-    var i :| 0 <= i < |s| && s[i] == e;
-    i
   }
 
   predicate Valid(node: Node)
