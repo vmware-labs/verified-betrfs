@@ -233,8 +233,10 @@ abstract module ImmutableBTree {
       if pos >= 0 && tree.keys[pos] == key {
         new_tree := Leaf(tree.keys, tree.values[pos := value]);
       } else {
+        assert forall i :: 0 <= i < pos+1 ==> Keyspace.lte(tree.keys[i], key);
+        assert forall i :: pos + 1 <= i < |tree.keys| ==> Keyspace.lt(key, tree.keys[i]);
         new_tree := Leaf(tree.keys[..pos+1]   + [key]   + tree.keys[pos+1..],
-          tree.values[..pos+1] + [value] + tree.values[pos+1..]);
+                        tree.values[..pos+1] + [value] + tree.values[pos+1..]);
           assert WFTree(new_tree); // TRIGGER
       } 
     } else {
@@ -243,6 +245,7 @@ abstract module ImmutableBTree {
       var new_subtree := Define(tree.children[pos+1], key, value);
       var new_children := tree.children[..pos+1] + [new_subtree] + tree.children[pos+2..];
 
+      ///////////// Le proof for AllKeys //////////////////////////
       forall key' | key' in TreeAllKeysSeq(tree.children) + {key}
         ensures key' in TreeAllKeysSeq(new_children);
       {
@@ -282,9 +285,53 @@ abstract module ImmutableBTree {
       }
       assert TreeAllKeysSeq(tree.children) + {key} >= TreeAllKeysSeq(new_children);
       assert TreeAllKeysSeq(tree.children) + {key} == TreeAllKeysSeq(new_children);
-          
+
+      ///////////// Le proof for DefinedKeys //////////////////////////
+      forall key' | key' in TreeDefinedKeysSeq(tree.children) + {key}
+        ensures key' in TreeDefinedKeysSeq(new_children);
+      {
+        if key' == key {
+          assert key' in TreeDefinedKeys(new_subtree);
+          assert key' in TreeDefinedKeys(new_children[pos+1]);
+          TreeDefinedKeysSeqExistentialForm(new_children, key');
+        } else {
+          TreeDefinedKeysSeqExistentialForm(tree.children, key');
+          var i :| 0 <= i < |tree.children| && key' in TreeDefinedKeys(tree.children[i]);
+          if i < pos + 1 {
+            assert key' in TreeDefinedKeys(new_children[i]);
+          } else if i == pos + 1 {
+            assert key' in TreeDefinedKeys(new_children[i]);
+          } else {
+            assert key' in TreeDefinedKeys(new_children[i]);
+          }
+          TreeDefinedKeysSeqExistentialForm(new_children, key');
+        }
+      }
+      assert TreeDefinedKeysSeq(tree.children) <= TreeDefinedKeysSeq(new_children);
+      assert key in TreeDefinedKeysSeq(new_children);
+      
+      forall key' | key' in TreeDefinedKeysSeq(new_children)
+        ensures key' in TreeDefinedKeysSeq(tree.children) + {key};
+      {
+        TreeDefinedKeysSeqExistentialForm(new_children, key');
+        var i :| 0 <= i < |new_children| && key' in TreeDefinedKeys(new_children[i]);
+        if i < pos + 1 {
+          assert key' in TreeDefinedKeys(tree.children[i]);
+        } else if i == pos + 1 {
+          assert key' in TreeDefinedKeys(tree.children[i]) + {key};
+        } else {
+          assert key' in TreeDefinedKeys(tree.children[i]);
+        }
+        TreeDefinedKeysSeqExistentialForm(tree.children, key');
+      }
+      assert TreeDefinedKeysSeq(tree.children) + {key} >= TreeDefinedKeysSeq(new_children);
+      assert TreeDefinedKeysSeq(tree.children) + {key} == TreeDefinedKeysSeq(new_children);
+
       new_tree := Index(tree.pivots, new_children);
-          
+
+      assert TreeAllKeys(new_tree) == TreeAllKeys(tree) + {key};
+      assert TreeDefinedKeys(new_tree) == TreeDefinedKeys(tree) + {key};
+      
       forall i | 0 <= i < |new_tree.pivots|
         ensures SubtreeLtNextPivot(new_tree, i);
         ensures PivotLteNextSubtree(new_tree, i);
@@ -312,6 +359,27 @@ abstract module ImmutableBTree {
           assert SubtreeIsOrdered(tree, i);
         }
       }
+
+      TreeContentsSeqExistentialForm(new_children, key);
+      assert key in TreeDefinedKeys(new_tree);
+      assert key in TreeContentsSeq(new_children);
+      forall i | 0 <= i < |new_children| && i != pos+1
+        ensures key !in TreeContents(new_children[i]);
+      {
+        if i < pos+1 {
+          assert SubtreeLtNextPivot(new_tree, i);
+          assert Keyspace.lte(new_tree.pivots[i], new_tree.pivots[pos]);
+          Keyspace.SetLtLteTransitivity(TreeDefinedKeys(new_children[i]), {new_tree.pivots[pos]}, {key});
+        } else {
+          assert i > pos + 1;
+          assert Keyspace.lte(new_tree.pivots[pos+1], new_tree.pivots[i-1]);
+          assert PivotLteNextSubtree(new_tree, i-1);
+          Keyspace.SetLtLteTransitivity({key}, {new_tree.pivots[pos+1]}, TreeDefinedKeys(new_children[i]));
+        }
+      }
+      assert forall i :: 0 <= i < |new_children| && i != pos+1 ==> key !in TreeContents(new_children[i]);
+      assert TreeContents(new_tree.children[pos+1])[key] == value;
+      assert TreeContents(new_tree)[key] == value;
     }
   }
 }
