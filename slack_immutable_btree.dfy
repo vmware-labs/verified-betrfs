@@ -79,7 +79,7 @@ abstract module ImmutableBTree {
       && Keyspace.lt(Last(lookup).node.keys[Last(lookup).slot], Last(lookup).ub)
   }
 
-  predicate IsSatisfyingLookup(lb: Key, tree: Node, ub: Key, query: Key, lookup: Lookup)
+  predicate IsSatisfyingLookup<Value>(lb: Key, tree: Node, ub: Key, query: Key, value: Value, lookup: Lookup)
   {
     && ValidLookup(lookup)
     && |lookup| > 0
@@ -87,21 +87,22 @@ abstract module ImmutableBTree {
     && lookup[0].ub == ub
     && lookup[0].node == tree
     && Last(lookup).node.keys[Last(lookup).slot] == query
+    && Last(lookup).node.values[Last(lookup).slot] == value
   }
 
-  lemma SatisfyingLookupsNest(lb: Key, tree: Node, ub: Key, query: Key, lookup: Lookup)
-    requires IsSatisfyingLookup(lb, tree, ub, query, lookup);
+  lemma SatisfyingLookupsNest<Value>(lb: Key, tree: Node, ub: Key, query: Key, value: Value, lookup: Lookup)
+    requires IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
     requires tree.Index?;
     ensures IsSatisfyingLookup(LeftBound(lb, tree.pivots, tree.children, lookup[0].slot),
                                tree.children[lookup[0].slot],
                                RightBound(tree.pivots, tree.children, ub, lookup[0].slot),
-                               query,
+                               query, value,
                                lookup[1..]);
   {
   }
 
-  lemma SatisfyingLookupsAllBoundsContainQuery(lb: Key, tree: Node, ub: Key, query: Key, lookup: Lookup)
-    requires IsSatisfyingLookup(lb, tree, ub, query, lookup);
+  lemma SatisfyingLookupsAllBoundsContainQuery<Value>(lb: Key, tree: Node, ub: Key, query: Key, value: Value, lookup: Lookup)
+    requires IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
     ensures Keyspace.lte(lookup[0].lb, query);
     ensures Keyspace.lt(query, lookup[0].ub);
     decreases tree;
@@ -109,59 +110,59 @@ abstract module ImmutableBTree {
     if tree.Leaf? {
       assert |lookup| == 1;
     } else {
-      SatisfyingLookupsNest(lb, tree, ub, query, lookup);
-      SatisfyingLookupsAllBoundsContainQuery(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, lookup[1..]);
+      SatisfyingLookupsNest(lb, tree, ub, query, value, lookup);
+      SatisfyingLookupsAllBoundsContainQuery(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, value, lookup[1..]);
     }
   }
   
-  datatype LookupCreationResult<Value> = NoLookup | LookupExists(lookup: Lookup<Value>)
+  datatype QueryResult<Value> = NotDefined | Defined(value: Value, ghost lookup: Lookup<Value>)
     
-  method CreateLookup(lb: Key, tree: Node, ub: Key, query: Key) returns (result: LookupCreationResult)
+  method Query<Value>(lb: Key, tree: Node, ub: Key, query: Key) returns (result: QueryResult)
     requires WFTree(tree);
-    ensures result.NoLookup? ==> !exists lookup :: IsSatisfyingLookup(lb, tree, ub, query, lookup);
-    ensures result.LookupExists? ==> IsSatisfyingLookup(lb, tree, ub, query, result.lookup);
+    ensures result.NotDefined? ==> !exists lookup, value :: IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
+    ensures result.Defined? ==> IsSatisfyingLookup(lb, tree, ub, query, result.value, result.lookup);
     decreases tree;
   {
     if tree.Leaf? {
       var pos := Keyspace.LargestLte(tree.keys, query);
       if pos >= 0 && tree.keys[pos] == query && Keyspace.lte(lb, query) && Keyspace.lt(query, ub) {
-        result := LookupExists([Layer(lb, ub, tree, pos)]);
-        assert IsSatisfyingLookup(lb, tree, ub, query, result.lookup);
+        result := Defined(tree.values[pos], [Layer(lb, ub, tree, pos)]);
+        assert IsSatisfyingLookup(lb, tree, ub, query, result.value, result.lookup);
       } else {
-        result := NoLookup;
+        result := NotDefined;
       }
     } else {
       var pos := Keyspace.LargestLte(tree.pivots, query) + 1;
       var sublb := LeftBound(lb, tree.pivots, tree.children, pos);
       var subub := RightBound(tree.pivots, tree.children, ub, pos);
-      var subresult := CreateLookup(sublb, tree.children[pos], subub, query);
-      if subresult.NoLookup? {
-        result := NoLookup;
-        forall lookup: Lookup | IsSatisfyingLookup(lb, tree, ub, query, lookup)
-          ensures !IsSatisfyingLookup(lb, tree, ub, query, lookup);
+      var subresult := Query(sublb, tree.children[pos], subub, query);
+      if subresult.NotDefined? {
+        result := NotDefined;
+        forall lookup: Lookup, value: Value | IsSatisfyingLookup(lb, tree, ub, query, value, lookup)
+          ensures !IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
         {
-          SatisfyingLookupsNest(lb, tree, ub, query, lookup);
+          SatisfyingLookupsNest(lb, tree, ub, query, value, lookup);
           assert lookup[0].slot != pos;
           if lookup[0].slot < pos {
             assert Keyspace.lte(lookup[1].ub, tree.pivots[lookup[0].slot]);
             assert Keyspace.lte(tree.pivots[lookup[0].slot], tree.pivots[pos-1]);
             assert Keyspace.lte(tree.pivots[pos-1], query);
             assert Keyspace.lte(lookup[1].ub, query);
-            SatisfyingLookupsAllBoundsContainQuery(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, lookup[1..]);
-            assert !IsSatisfyingLookup(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, lookup[1..]);
-            assert !IsSatisfyingLookup(lb, tree, ub, query, lookup);
+            SatisfyingLookupsAllBoundsContainQuery(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, value, lookup[1..]);
+            assert !IsSatisfyingLookup(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, value, lookup[1..]);
+            assert !IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
           } else {
             assert Keyspace.lt(query, tree.pivots[pos]);
             assert Keyspace.lte(tree.pivots[pos], tree.pivots[lookup[0].slot-1]);
             assert Keyspace.lte(tree.pivots[lookup[0].slot-1], lookup[1].lb);
             assert Keyspace.lt(query, lookup[1].lb);
-            SatisfyingLookupsAllBoundsContainQuery(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, lookup[1..]);
-            assert !IsSatisfyingLookup(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, lookup[1..]);
-            assert !IsSatisfyingLookup(lb, tree, ub, query, lookup);
+            SatisfyingLookupsAllBoundsContainQuery(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, value, lookup[1..]);
+            assert !IsSatisfyingLookup(lookup[1].lb, tree.children[lookup[0].slot], lookup[1].ub, query, value, lookup[1..]);
+            assert !IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
           }
         }
       } else {
-        result := LookupExists([Layer(lb, ub, tree, pos)] + subresult.lookup);
+        result := Defined(subresult.value, [Layer(lb, ub, tree, pos)] + subresult.lookup);
       }
     }
   }
