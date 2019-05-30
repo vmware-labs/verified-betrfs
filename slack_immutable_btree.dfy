@@ -24,6 +24,7 @@ abstract module ImmutableBTree {
   predicate WFTree(tree: Node) {
     if tree.Leaf? then
       && |tree.keys| > 0
+      && NoDupes(tree.keys)
       && Keyspace.IsSorted(tree.keys)
       && |tree.keys| == |tree.values|
     else
@@ -115,19 +116,19 @@ abstract module ImmutableBTree {
     }
   }
   
-  datatype QueryResult<Value> = NotDefined | Defined(value: Value, ghost lookup: Lookup<Value>)
+  datatype QueryResult<Value> = NotDefined | Defined(value: Value) //, ghost lookup: Lookup<Value>)
     
   method Query<Value>(lb: Key, tree: Node, ub: Key, query: Key) returns (result: QueryResult)
     requires WFTree(tree);
     ensures result.NotDefined? ==> !exists lookup, value :: IsSatisfyingLookup(lb, tree, ub, query, value, lookup);
-    ensures result.Defined? ==> IsSatisfyingLookup(lb, tree, ub, query, result.value, result.lookup);
+    ensures result.Defined? ==> exists lookup: Lookup :: IsSatisfyingLookup(lb, tree, ub, query, result.value, lookup);
     decreases tree;
   {
     if tree.Leaf? {
       var pos := Keyspace.LargestLte(tree.keys, query);
       if pos >= 0 && tree.keys[pos] == query && Keyspace.lte(lb, query) && Keyspace.lt(query, ub) {
-        result := Defined(tree.values[pos], [Layer(lb, ub, tree, pos)]);
-        assert IsSatisfyingLookup(lb, tree, ub, query, result.value, result.lookup);
+        result := Defined(tree.values[pos]); //, [Layer(lb, ub, tree, pos)]);
+        assert IsSatisfyingLookup(lb, tree, ub, query, result.value, [Layer(lb, ub, tree, pos)]); //result.lookup);
       } else {
         result := NotDefined;
       }
@@ -162,11 +163,60 @@ abstract module ImmutableBTree {
           }
         }
       } else {
-        result := Defined(subresult.value, [Layer(lb, ub, tree, pos)] + subresult.lookup);
+        result := Defined(subresult.value); //, [Layer(lb, ub, tree, pos)] + subresult.lookup);
+        ghost var sublookup :| IsSatisfyingLookup(sublb, tree.children[pos], subub, query, result.value, sublookup);
+        assert IsSatisfyingLookup(lb, tree, ub, query, result.value, [Layer(lb, ub, tree, pos)] + sublookup);
       }
     }
   }
 
+  method Define<Value>(lb: Key, tree: Node, ub: Key, query: Key, value: Value) returns (newtree: Node)
+    requires WFTree(tree);
+    requires forall query, value, value', lookup, lookup' ::
+      && IsSatisfyingLookup(lb, tree, ub, query, value, lookup)
+      && IsSatisfyingLookup(lb, tree, ub, query, value', lookup') ==>
+      value == value';
+    requires Keyspace.lte(lb, query);
+    requires Keyspace.lt(query, ub);
+    ensures
+      forall lookup, query', value' :: query' != query && IsSatisfyingLookup(lb, tree, ub, query', value', lookup) ==>
+      exists lookup' :: IsSatisfyingLookup(lb, newtree, ub, query', value', lookup');
+    ensures
+      forall lookup', query', value' :: query' != query && IsSatisfyingLookup(lb, newtree, ub, query', value', lookup') ==>
+      exists lookup :: IsSatisfyingLookup(lb, tree, ub, query', value', lookup);
+    ensures exists lookup :: IsSatisfyingLookup(lb, newtree, ub, query, value, lookup);
+    ensures forall query, value, value', lookup, lookup' ::
+      && IsSatisfyingLookup(lb, newtree, ub, query, value, lookup)
+      && IsSatisfyingLookup(lb, newtree, ub, query, value', lookup') ==>
+      value == value';
+  {
+    if tree.Leaf? {
+      var pos := Keyspace.LargestLte(tree.keys, query);
+      if pos >= 0 && query == tree.keys[pos] {
+        newtree := Leaf(tree.keys, tree.values[pos := value]);
+        
+        forall lookup: Lookup, query', value' | query' != query && IsSatisfyingLookup(lb, tree, ub, query', value', lookup)
+          ensures exists lookup' :: IsSatisfyingLookup(lb, newtree, ub, query', value', lookup');
+        {
+          var lookup' := [Layer(lookup[0].lb, lookup[0].ub, newtree, lookup[0].slot)];
+          assert IsSatisfyingLookup(lb, newtree, ub, query', value', lookup');
+        }
+        forall lookup': Lookup, query', value' | query' != query && IsSatisfyingLookup(lb, newtree, ub, query', value', lookup')
+          ensures exists lookup :: IsSatisfyingLookup(lb, tree, ub, query', value', lookup);
+        {
+          var lookup := [Layer(lookup'[0].lb, lookup'[0].ub, tree, lookup'[0].slot)];
+          assert IsSatisfyingLookup(lb, tree, ub, query', value', lookup);
+        }
+
+        assert IsSatisfyingLookup(lb, newtree, ub, query, value, [Layer(lb, ub, newtree, pos)]);
+
+      } else {
+        assume false;
+      }
+    } else {
+      assume false;
+    }
+  }
   
   // function TreeContentsSeq<Value>(lb: Key, pivots: seq<Key>, trees: seq<Node<Value>>, ub: Key)
   //   : map<Key, Value>
