@@ -3,24 +3,24 @@
 // This abstract module doesn't define a constructor, since the
 // input to construct a Readonly_Map will naturally be
 // implementation-specific.
-abstract module Readonly_Map {
+abstract module ReadonlyMap {
   type Key(!new,==)
   type Value
   type Map
 
-  datatype Query_Result = DNE | Query_Result(value: Value)
+  datatype QueryResult = NotDefined | Defined(value: Value)
 
   function Interpretation(m: Map) : map<Key, Value>
 
-  method Is_Empty(m: Map) returns (result: bool)
+  method IsEmpty(m: Map) returns (result: bool)
     ensures result <==> Interpretation(m) == map[];
 
   method Defines(m: Map, key: Key) returns (result: bool)
     ensures result == (key in Interpretation(m));
       
-  method Query(m: Map, key: Key) returns (result: Query_Result)
-    ensures key in Interpretation(m) ==> result == Query_Result(Interpretation(m)[key]);
-    ensures key !in Interpretation(m) ==> result == DNE;
+  method Query(m: Map, key: Key) returns (result: QueryResult)
+    ensures key in Interpretation(m) ==> result == Defined(Interpretation(m)[key]);
+    ensures key !in Interpretation(m) ==> result == NotDefined;
 
   method Evaluate(m: Map, key: Key) returns (value: Value)
     requires key in Interpretation(m);
@@ -28,9 +28,9 @@ abstract module Readonly_Map {
 }
 
 // Just add methods for creating modified versions of the given Map
-abstract module Map refines Readonly_Map {
+abstract module Map refines ReadonlyMap {
 
-  method Empty_Map() returns (empty_map: Map)
+  method EmptyMap() returns (empty_map: Map)
     ensures Interpretation(empty_map) == map[];
     
   method Define(m: Map, key: Key, value: Value) returns (new_map: Map)
@@ -43,24 +43,24 @@ abstract module Map refines Readonly_Map {
 }
 
 // An iterator is a Readonly_Map from [0, 1, ...] to kvpairs of its underlying map
-abstract module Iterator refines Readonly_Map {
-  import Underlying_Map : Readonly_Map
-  datatype KVPair = KVPair(key: Underlying_Map.Key, value: Underlying_Map.Value)
+abstract module Iterator refines ReadonlyMap {
+  import UnderlyingMap : ReadonlyMap
+  datatype KVPair = KVPair(key: UnderlyingMap.Key, value: UnderlyingMap.Value)
 
   type Key = int
   type Value = KVPair
   type Iterator = Map
 
-  method Construct(m: Underlying_Map.Map) returns (iter: Iterator)
-    ensures forall i :: i in Interpretation(iter).Keys <==> 0 <= i < |Underlying_Map.Interpretation(m)|;
-    ensures forall k, v :: k in Underlying_Map.Interpretation(m) && Underlying_Map.Interpretation(m)[k] == v ==>
+  method Construct(m: UnderlyingMap.Map) returns (iter: Iterator)
+    ensures forall i :: i in Interpretation(iter).Keys <==> 0 <= i < |UnderlyingMap.Interpretation(m)|;
+    ensures forall k, v :: k in UnderlyingMap.Interpretation(m) && UnderlyingMap.Interpretation(m)[k] == v ==>
             exists i :: i in Interpretation(iter).Keys && Interpretation(iter)[i] == KVPair(k, v);
 }
 
 
 // Let's see if we can build one of these mofos from the builtin map
 
-abstract module Builtin_Map refines Map {
+abstract module BuiltinMap refines Map {
   type Map = map<Key, Value>
 
   function Interpretation(m: Map) : map<Key, Value> {
@@ -75,11 +75,11 @@ abstract module Builtin_Map refines Map {
     result := key in m;
   }
 
-  method Query(m: Map, key: Key) returns (result: Query_Result) {
+  method Query(m: Map, key: Key) returns (result: QueryResult) {
     if key in m {
-      result := Query_Result(m[key]);
+      result := Defined(m[key]);
     } else {
-      result := DNE;
+      result := NotDefined;
     }
   }
 
@@ -102,14 +102,14 @@ abstract module Builtin_Map refines Map {
 }
 
 abstract module Builtin_Map_Sequence_Iterator refines Iterator {
-  import Underlying_Map = Builtin_Map
+  import UnderlyingMap = BuiltinMap
   type Map = seq<KVPair>
 
   function Interpretation(m: Map) : map<Key, Value> {
     map i: int | 0 <= i < |m| :: m[i]
   }
 
-  method Is_Empty(m: Map) returns (result: bool) {
+  method IsEmpty(m: Map) returns (result: bool) {
     assert |m| > 0 ==> 0 in Interpretation(m).Keys; // Observe
     result := |m| == 0;
   }
@@ -118,11 +118,11 @@ abstract module Builtin_Map_Sequence_Iterator refines Iterator {
     result := 0 <= key < |m|;
   }
 
-  method Query(m: Map, key: Key) returns (result: Query_Result) {
+  method Query(m: Map, key: Key) returns (result: QueryResult) {
     if 0 <= key < |m| {
-      result := Query_Result(m[key]);
+      result := Defined(m[key]);
     } else {
-      result := DNE;
+      result := NotDefined;
     }
   }
 
@@ -133,7 +133,7 @@ abstract module Builtin_Map_Sequence_Iterator refines Iterator {
   function method id(x: int) : int
   { x }
   
-  method Construct(m: Underlying_Map.Map) returns (iter: Iterator)
+  method Construct(m: UnderlyingMap.Map) returns (iter: Iterator)
     ensures |iter| == |m|;
     // ensures forall k, v :: k in m && m[k] == v ==> exists i :: 0 <= i < |iter| && iter[i] == KVPair(k, v);
   {
@@ -146,12 +146,12 @@ abstract module Builtin_Map_Sequence_Iterator refines Iterator {
       var tail := Construct(m_without_key);
       iter := tail + [KVPair(key, value)];
 
-      forall k | k in Underlying_Map.Interpretation(m)
-        ensures forall k, v :: k in Underlying_Map.Interpretation(m) && Underlying_Map.Interpretation(m)[k] == v ==>
+      forall k | k in UnderlyingMap.Interpretation(m)
+        ensures forall k, v :: k in UnderlyingMap.Interpretation(m) && UnderlyingMap.Interpretation(m)[k] == v ==>
         exists i :: i in Interpretation(iter).Keys && Interpretation(iter)[i] == KVPair(k, v);
 
       {
-        var v := Underlying_Map.Interpretation(m);
+        var v := UnderlyingMap.Interpretation(m);
       }
       
       // assert m == Underlying_Map.Interpretation(m);

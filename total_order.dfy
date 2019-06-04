@@ -25,6 +25,11 @@ abstract module Total_Order {
     if lte(a, b) then a else b
   }
     
+  function method Max(a: Element, b: Element) : Element
+  {
+    if lte(a, b) then b else a
+  }
+    
   method SeqMinIndex(run: seq<Element>) returns (pos: int)
     requires 0 < |run|;
     ensures 0 <= pos < |run|;
@@ -81,32 +86,21 @@ abstract module Total_Order {
     elt := run[index];
   }
   
-  function method Max(a: Element, b: Element) : Element
-  {
-    if lte(a, b) then b else a
-  }
-    
   predicate method IsSorted(run: seq<Element>) {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  method FindLargestLTE(run: seq<Element>, needle: Element) returns (pos: int)
+  function method LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
-    requires 0 < |run|;
-    ensures -1 <= pos < |run|;
-    ensures forall i {:trigger lte(run[i], needle) } :: 0 <= i <= pos ==> lte(run[i], needle);
-    ensures forall i {:trigger lt(needle, run[i]) } :: pos < i < |run| ==> lt(needle, run[i]);
-    ensures needle in run ==> 0 <= pos && run[pos] == needle;
+    ensures -1 <= LargestLte(run, needle) < |run|;
+    ensures forall i :: 0 <= i <= LargestLte(run, needle) ==> lte(run[i], needle);
+    ensures forall i :: LargestLte(run, needle) < i < |run| ==> lt(needle, run[i]);
+    ensures needle in run ==> 0 <= LargestLte(run, needle) && run[LargestLte(run, needle)] == needle;
   {
-    pos := -1;
-    while pos < |run|-1 && lte(run[pos + 1], needle)
-      invariant -1 <= pos < |run|;
-      invariant forall i :: 0 <= i <= pos ==> lte(run[i], needle);
-    {
-      pos := pos + 1;
-    }
+    if |run| == 0 || lt(needle, run[0]) then -1
+    else 1 + LargestLte(run[1..], needle)
   }
-
+  
   method Merge(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
     requires 0 < |run1|;
     requires IsSorted(run1);
