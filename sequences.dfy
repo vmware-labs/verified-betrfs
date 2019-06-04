@@ -13,7 +13,7 @@ module Sequences {
     iset x : T | x in multiset(run)
   }
   
-  predicate NoDupes<T>(a: seq<T>) {
+  predicate {:opaque} NoDupes<T>(a: seq<T>) {
     (forall i, j :: 0 <= i < |a| && 0 <= j < |a| && i != j ==> a[i] != a[j])
   }
 
