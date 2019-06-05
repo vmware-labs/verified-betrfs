@@ -23,8 +23,7 @@ abstract module BtreeSpec {
   predicate WFTree(tree: Node) {
     if tree.Leaf? then
       && |tree.keys| > 0
-      && NoDupes(tree.keys)
-      && Keyspace.IsSorted(tree.keys)
+      && Keyspace.IsStrictlySorted(tree.keys)
       && |tree.keys| == |tree.values|
       && (forall i :: 0 <= i < |tree.keys| ==>
           && Keyspace.lte(tree.lb, tree.keys[i])

@@ -29,6 +29,13 @@ abstract module Total_Order {
   {
     if lte(a, b) then b else a
   }
+
+  lemma transitivity_le_le(a: Element, b: Element, c: Element)
+    requires lte(a,b)
+    requires lte(b,c)
+    ensures lte(a,c)
+  {
+  }
     
   method SeqMinIndex(run: seq<Element>) returns (pos: int)
     requires 0 < |run|;
@@ -86,12 +93,20 @@ abstract module Total_Order {
     elt := run[index];
   }
   
-  predicate method IsSorted(run: seq<Element>) {
+  predicate method {:opaque} IsSorted(run: seq<Element>) {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  predicate method IsStrictlySorted(run: seq<Element>) {
-    forall i, j :: 0 <= i <= j < |run| ==> lt(run[i], run[j])
+  predicate method {:opaque} IsStrictlySorted(run: seq<Element>) {
+    forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
+  }
+
+  lemma IsStrictlySortedImpliesIsSorted(run: seq<Element>)
+  requires IsStrictlySorted(run);
+  ensures IsSorted(run);
+  {
+    reveal_IsSorted();
+    reveal_IsStrictlySorted();
   }
 
   function method LargestLte(run: seq<Element>, needle: Element) : int
