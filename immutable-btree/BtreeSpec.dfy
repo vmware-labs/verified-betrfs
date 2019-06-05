@@ -87,7 +87,7 @@ abstract module BtreeSpec {
     requires WFTree(tree)
     decreases tree;
   {
-    && Keyspace.lte(tree.lb, key)
+    && Keyspace.lte(tree.lb, key) // TODO enabling condition?
     && Keyspace.lt(key, tree.ub)
     && tree.lb == newtree.lb
     && tree.ub == newtree.ub
@@ -117,19 +117,82 @@ abstract module BtreeSpec {
     && PutTransform(s.root, s'.root, key, value)
   }
 
+  predicate GrowLeaf(tree:Node, newtree:Node, childrenToLeft:int)
+  requires WFTree(tree)
+  requires tree.Leaf?
+  {
+    && 1 < childrenToLeft < |tree.keys| - 1
+    && newtree == Index(
+        [tree.keys[childrenToLeft]],
+        [
+          Leaf(
+            tree.keys[ .. childrenToLeft],
+            tree.values[ .. childrenToLeft],
+            tree.lb,
+            tree.keys[childrenToLeft] // ub
+          ),
+          Leaf(
+            tree.keys[childrenToLeft .. ],
+            tree.values[childrenToLeft .. ],
+            tree.keys[childrenToLeft], // lb
+            tree.ub
+          )
+        ],
+        tree.lb,
+        tree.ub
+      )
+  }
+
+  predicate GrowIndex(tree:Node, newtree:Node, childrenToLeft:int)
+  requires WFTree(tree)
+  requires tree.Index?
+  {
+    && 1 < childrenToLeft < |tree.children| - 1
+    && newtree == Index(
+        [tree.pivots[childrenToLeft - 1]],
+        [
+          Index(
+            tree.pivots[ .. childrenToLeft - 1],
+            tree.children[ .. childrenToLeft],
+            tree.lb,
+            tree.pivots[childrenToLeft - 1] // ub
+          ),
+          Index(
+            tree.pivots[childrenToLeft .. ],
+            tree.children[childrenToLeft .. ],
+            tree.pivots[childrenToLeft - 1], // lb
+            tree.ub
+          )
+        ],
+        tree.lb,
+        tree.ub
+      )
+  }
+
+  predicate Grow<Value>(k: Constants, s: Variables, s': Variables, childrenToLeft: int)
+  {
+    && WFTree(s.root)
+    && (
+      if s.root.Leaf? then
+        GrowLeaf(s.root, s'.root, childrenToLeft)
+      else
+        GrowIndex(s.root, s'.root, childrenToLeft)
+    )
+  }
+
   datatype Step<Value(!new)> =
     | GetStep(key: Key, value: Value, lookup: Lookup)
     | PutStep(key: Key, value: Value)
     //| SplitStep()
-    //| GrowStep()
+    | GrowStep(childrenToLeft: int)
     /*| ContractStep()*/
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, step:Step) {
     match step {
       case GetStep(key, value, lookup) => Get(k, s, s', key, value, lookup)
       case PutStep(key, value) => Put(k, s, s', key, value)
-      /*case SplitStep() => Split(k, s, s')
-      case GrowStep() => GrowStep(k, s, s')*/
+      //case SplitStep() => Split(k, s, s')
+      case GrowStep(childrenToLeft) => Grow(k, s, s', childrenToLeft)
     }
   }
 
