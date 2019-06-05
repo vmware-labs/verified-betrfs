@@ -10,8 +10,8 @@ abstract module BtreeSpec {
   type Key = Keyspace.Element
 
   datatype Node<Value> =
-    Leaf(keys: seq<Key>, values: seq<Value>, lb: Key, ub: Key) |
-    Index(pivots: seq<Key>, children: seq<Node>, lb: Key, ub: Key)
+    Leaf(keys: seq<Key>, values: seq<Value>, ghost lb: Key, ghost ub: Key) |
+    Index(pivots: seq<Key>, children: seq<Node>, ghost lb: Key, ghost ub: Key)
 
   datatype Constants = Constants()
   datatype Variables<Value> = Variables(root: Node<Value>)
@@ -184,7 +184,7 @@ abstract module BtreeSpec {
     | GetStep(key: Key, value: Value, lookup: Lookup)
     | PutStep(key: Key, value: Value)
     //| SplitStep()
-    | GrowStep(childrenToLeft: int)
+    //| GrowStep(childrenToLeft: int)
     /*| ContractStep()*/
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, step:Step) {
@@ -192,7 +192,7 @@ abstract module BtreeSpec {
       case GetStep(key, value, lookup) => Get(k, s, s', key, value, lookup)
       case PutStep(key, value) => Put(k, s, s', key, value)
       //case SplitStep() => Split(k, s, s')
-      case GrowStep(childrenToLeft) => Grow(k, s, s', childrenToLeft)
+      //case GrowStep(childrenToLeft) => Grow(k, s, s', childrenToLeft)
     }
   }
 

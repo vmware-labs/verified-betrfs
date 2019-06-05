@@ -221,4 +221,35 @@ abstract module BtreeInv {
       assert CantEquivocate(newtree);
     }
   }
+
+  lemma PutPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
+  requires Invariant(k, s)
+  requires Put(k, s, s', key, value)
+  ensures Invariant(k, s')
+  {
+    PutIsCorrect(s.root, s'.root, key, value);
+  }
+
+  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
+  requires Invariant(k, s)
+  requires NextStep(k, s, s', step)
+  ensures Invariant(k, s')
+  {
+    match step {
+      case GetStep(key, value, lookup) => {
+      }
+      case PutStep(key, value) => {
+        PutPreservesInvariant(k, s, s', key, value);
+      }
+    }
+  }
+
+  lemma NextPreservesInvariant(k: Constants, s: Variables, s': Variables)
+  requires Invariant(k, s)
+  requires Next(k, s, s')
+  ensures Invariant(k, s')
+  {
+    var step :| NextStep(k, s, s', step);
+    NextStepPreservesInvariant(k, s, s', step);
+  }
 }

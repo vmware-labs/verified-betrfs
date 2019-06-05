@@ -1,15 +1,17 @@
-include "MissingLibrary.dfy"
-include "KVTypes.dfy"
+include "../tla-tree/MissingLibrary.dfy"
+include "../lib/total_order.dfy"
 
 // A Map that can crash and revert to prior states, but only in
 // controlled ways, limited by a sync operation.
 abstract module CrashableMap {
-import opened KVTypes
 import opened MissingLibrary
+
+import Keyspace = Bounded_Total_Order
+type Key = Keyspace.Element
   
 datatype Constants = Constants()
-type View = imap<Key, Option<Value> >
-datatype Variables = Variables(views:seq<View>)
+type View<Value> = imap<Key, Option<Value> >
+datatype Variables<Value> = Variables(views:seq<View<Value>>)
 // A bit of philosophy: Note that, even here in the abstract spec, we maintain
 // a list of views that haven't yet been committed to disk. Why? Becuase in the
 // future, we may commit some prefix of that view. If we've done 10 alternating
@@ -42,7 +44,7 @@ predicate InDomain(k:Key)
     true
 }
 
-function EmptyMap() : (zmap : imap<Key,Option<Value> >)
+function EmptyMap<Value>() : (zmap : imap<Key,Option<Value> >)
     ensures ViewComplete(zmap)
 {
     imap k | InDomain(k) :: None
@@ -66,14 +68,14 @@ function PersistentView(k:Constants, s:Variables) : View
     s.views[|s.views|-1]
 }
 
-predicate Query(k:Constants, s:Variables, s':Variables, key:Key, result:Option<Value>)
+predicate Query<Value>(k:Constants, s:Variables, s':Variables, key:Key, result:Option<Value>)
     requires WF(s)
 {
     && result == EphemeralView(k, s)[key]
     && s' == s
 }
 
-predicate Write(k:Constants, s:Variables, s':Variables, key:Key, new_value:Option<Value>)
+predicate Write<Value>(k:Constants, s:Variables, s':Variables, key:Key, new_value:Option<Value>)
     requires WF(s)
     ensures Write(k, s, s', key, new_value) ==> WF(s')
 {
@@ -121,7 +123,7 @@ predicate Stutter(k:Constants, s:Variables, s':Variables)
     s' == s
 }
 
-datatype Step =
+datatype Step<Value> =
     | QueryStep(key:Key, result:Option<Value>)
     | WriteStep(key:Key, new_value:Option<Value>)
     | CompleteSyncStep
@@ -142,11 +144,11 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
     }
 }
 
-predicate Next(k:Constants, s:Variables, s':Variables)
+predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables)
     requires WF(s)
     ensures Next(k, s, s') ==> WF(s')
 {
-    exists step :: NextStep(k, s, s', step)
+    exists step :: NextStep<Value>(k, s, s', step)
 }
 
 }
