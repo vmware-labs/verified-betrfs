@@ -45,7 +45,26 @@ abstract module BtreeInv {
   {
   }
 
+  lemma SatisfyingLookupsAllBoundsContainQuery<Value>(tree: Node, key: Key, value: Value, lookup: Lookup)
+    requires WFTree(tree)
+    requires IsSatisfyingLookup(tree, key, value, lookup);
+    ensures Keyspace.lte(lookup[0].node.lb, key);
+    ensures Keyspace.lt(key, lookup[0].node.ub);
+    decreases tree;
+  {
+    if tree.Leaf? {
+      assert |lookup| == 1;
+    } else {
+      SatisfyingLookupsNest(tree, key, value, lookup);
+      SatisfyingLookupsAllBoundsContainQuery(tree.children[lookup[0].slot], key, value, lookup[1..]);
+      var child := tree.children[lookup[0].slot];
+      assert Keyspace.lte(tree.lb, child.lb);
+      assert Keyspace.lte(child.lb,  
+    }
+  }
+
   lemma SatisfyingLookupSlotIsLargestLte<Value>(tree: Node, key: Key, value: Value, lookup: Lookup)
+    requires WFTree(tree)
     requires IsSatisfyingLookup(tree, key, value, lookup);
     requires tree.Index?;
     ensures lookup[0].slot == Keyspace.LargestLte(tree.pivots, key) + 1;
@@ -53,12 +72,14 @@ abstract module BtreeInv {
     var pos := Keyspace.LargestLte(tree.pivots, key) + 1;
     if lookup[0].slot < pos {
       SatisfyingLookupsNest(tree, key, value, lookup);
+      SatisfyingLookupsAllBoundsContainQuery(lookup[1].node, key, value, lookup[1..]);
       assert Keyspace.lt(key, lookup[1].node.ub);
       assert Keyspace.lte(lookup[1].node.ub, tree.pivots[lookup[0].slot]);
       assert Keyspace.lte(tree.pivots[lookup[0].slot], tree.pivots[pos-1]);
       assert Keyspace.lte(tree.pivots[pos-1], key);
       assert false;
     } else if lookup[0].slot > pos {
+      SatisfyingLookupsAllBoundsContainQuery(lookup[1].node, key, value, lookup[1..]);
       SatisfyingLookupsNest(tree, key, value, lookup);
       assert Keyspace.lt(key, tree.pivots[pos]);
       assert Keyspace.lte(tree.pivots[pos], tree.pivots[lookup[0].slot-1]);
