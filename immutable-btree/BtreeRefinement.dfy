@@ -1,0 +1,79 @@
+include "../lib/total_order.dfy"
+include "../lib/map_utils.dfy"
+include "../lib/mathematics.dfy"
+include "../lib/sequences.dfy"
+include "CrashableMap.dfy"
+include "../tla-tree/MissingLibrary.dfy"
+include "BtreeSpec.dfy"
+include "BtreeInv.dfy"
+
+abstract module BtreeRefinement {
+  import Keyspace = Bounded_Total_Order
+  import opened Sequences
+  import opened BtreeSpec
+  import opened BtreeInv
+  import CrashableMap
+  import opened MissingLibrary
+
+  function Ik(k: Constants) : CrashableMap.Constants
+  {
+    CrashableMap.Constants()
+  }
+
+  function INode<Value(!new)>(tree: Node) : imap<Key, Option<Value>>
+  {
+    imap k:Key ::
+        if (exists lookup: Lookup, v: Value :: IsSatisfyingLookup(tree, k, v, lookup)) then
+        (var lookup: Lookup, v: Value :| IsSatisfyingLookup(tree, k, v, lookup);
+         Some(v))
+        else
+         None
+  }
+
+
+  function I<Value(!new)>(k: Constants, s: Variables) : CrashableMap.Variables
+  {
+    CrashableMap.Variables([ INode(s.root) ])
+  }
+
+  lemma InvImpliesRefinementInv(k:Constants, s:Variables)
+  requires Invariant(k, s);
+  ensures CrashableMap.WF(I(k, s));
+  {
+    
+  }
+
+  lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
+  requires Next(k, s, s');
+  requires Invariant(k, s);
+  requires Invariant(k, s');
+  ensures CrashableMap.WF(I(k, s));
+  ensures CrashableMap.WF(I(k, s));
+  ensures CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+  {
+    var step:Step :| NextStep(k, s, s', step);
+    match step {
+      case GetStep(key, value, lookup) => {
+        assert CrashableMap.WF(I(k, s));
+        assert CrashableMap.WF(I(k, s));
+        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
+        assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+      }
+      case PutStep(key, value) => {
+        assert CrashableMap.WF(I(k, s));
+        assert CrashableMap.WF(I(k, s));
+
+        var intermediate := CrashableMap.Variables([I(k,s').views[0], I(k,s).views[0]]);
+
+        PutIsCorrect(s.root, s'.root, key, value);
+
+        assert CrashableMap.NextStep(Ik(k), I(k,s), intermediate, CrashableMap.WriteStep(key, Some(value)));
+        assert CrashableMap.NextStep(Ik(k), intermediate, I(k,s'), CrashableMap.PersistWritesStep(1));
+
+        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [ I(k,s), intermediate, I(k,s') ]);
+
+        assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+      }
+    }
+  }
+}

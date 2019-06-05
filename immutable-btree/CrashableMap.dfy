@@ -151,4 +151,19 @@ predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables)
     exists step :: NextStep<Value>(k, s, s', step)
 }
 
+predicate IsPath<Value(!new)>(k: Constants, s:Variables, s':Variables, path: seq<Variables>)
+    requires WF(s)
+{
+    && |path| >= 1
+    && path[0] == s
+    && path[|path| - 1] == s'
+    && (forall i :: 0 <= i < |path| - 1 ==> WF(path[i]) && Next(k, path[i], path[i+1]))
+}
+
+predicate Reachable<Value(!new)>(k: Constants, s:Variables, s':Variables)
+    requires WF(s)
+{
+    exists path : seq<Variables> :: IsPath(k, s, s', path)
+}
+
 }
