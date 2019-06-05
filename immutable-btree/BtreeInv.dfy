@@ -127,7 +127,10 @@ abstract module BtreeInv {
         var newvals := tree.values[..pos+1] + [value] + tree.values[pos+1..];
         assert newtree == Leaf(newkeys, newvals, tree.lb, tree.ub);
         //assert Keyspace.IsSorted(newtree.keys);
-        assert IsSatisfyingLookup(newtree, key, value, [Layer(newtree, pos + 1)]);
+        var lookup := [Layer(newtree, pos + 1)];
+
+        assert WFTree(newtree);
+        assert IsSatisfyingLookup(newtree, key, value, lookup);
         
         forall lookup: Lookup, key', value'
           | key' != key && IsSatisfyingLookup(tree, key', value', lookup)

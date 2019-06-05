@@ -26,7 +26,10 @@ abstract module BtreeSpec {
       && NoDupes(tree.keys)
       && Keyspace.IsSorted(tree.keys)
       && |tree.keys| == |tree.values|
-      && (forall i :: 0 <= i < |tree.keys| ==> Keyspace.lte(tree.lb, tree.keys[i]) && Keyspace.lt(tree.keys[i], tree.ub))
+      && (forall i :: 0 <= i < |tree.keys| ==>
+          && Keyspace.lte(tree.lb, tree.keys[i])
+          && Keyspace.lt(tree.keys[i], tree.ub)
+         )
     else
       && |tree.pivots| > 0
       && Keyspace.IsSorted(tree.pivots)
@@ -84,6 +87,8 @@ abstract module BtreeSpec {
     requires WFTree(tree)
     decreases tree;
   {
+    && Keyspace.lte(tree.lb, key)
+    && Keyspace.lt(key, tree.ub)
     && tree.lb == newtree.lb
     && tree.ub == newtree.ub
     && (if tree.Leaf? then (
