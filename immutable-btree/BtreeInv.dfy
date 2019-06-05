@@ -99,7 +99,6 @@ abstract module BtreeInv {
   ensures CantEquivocate(newtree)
   decreases tree
   {
-    reveal_NoDupes();
     if tree.Leaf? {
       var pos := Keyspace.LargestLte(tree.keys, key);
       if pos >= 0 && key == tree.keys[pos] {
@@ -232,6 +231,26 @@ abstract module BtreeInv {
   ensures CantEquivocate(newtree);
   decreases tree;
   {
+    Keyspace.reveal_IsSorted();
+    Keyspace.reveal_IsStrictlySorted();
+  }
+
+  // TODO move these to total_order.dfy
+  lemma strictlySortedImplLt(l: seq<Key>, a: int, b: int)
+  requires 0 <= a < b < |l|;
+  requires Keyspace.IsStrictlySorted(l);
+  ensures Keyspace.lt(l[a], l[b]);
+  {
+    Keyspace.reveal_IsStrictlySorted();
+  }
+
+  lemma strictlySortedSplit(l: seq<Key>, p: int)
+  requires 0 <= p <= |l|
+  requires Keyspace.IsStrictlySorted(l);
+  ensures Keyspace.IsStrictlySorted(l[..p]);
+  ensures Keyspace.IsStrictlySorted(l[p..]);
+  {
+    Keyspace.reveal_IsStrictlySorted();
   }
 
   lemma GrowIndexIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
@@ -247,6 +266,40 @@ abstract module BtreeInv {
     var left_child := newtree.children[0];
     var right_child := newtree.children[1];
 
+    forall i | 0 <= i < |left_child.pivots|
+      ensures
+      && Keyspace.lt(left_child.lb, left_child.pivots[i])
+      && Keyspace.lt(left_child.pivots[i], left_child.ub)
+    {
+      assert left_child.pivots[i] == tree.pivots[i];
+      assert left_child.ub == tree.pivots[childrenToLeft - 1];
+      assert i < childrenToLeft - 1;
+      strictlySortedImplLt(tree.pivots, i, childrenToLeft - 1);
+    }
+
+    forall i | 0 <= i < |right_child.pivots|
+      ensures
+      && Keyspace.lt(right_child.lb, right_child.pivots[i])
+      && Keyspace.lt(right_child.pivots[i], right_child.ub)
+      && right_child.pivots[i] == right_child.children[i].ub
+      && right_child.pivots[i] == right_child.children[i+1].lb
+    {
+      assert right_child.pivots[i] == tree.pivots[i + childrenToLeft];
+      assert right_child.lb == tree.pivots[childrenToLeft - 1];
+      assert childrenToLeft - 1 < i + childrenToLeft;
+      strictlySortedImplLt(tree.pivots, childrenToLeft - 1, i + childrenToLeft);
+    }
+
+    strictlySortedSplit(tree.pivots, childrenToLeft - 1);
+    strictlySortedSplit(tree.pivots, childrenToLeft);
+
+    assert WFTree(left_child);
+
+    assert right_child.lb == right_child.children[0].lb;
+    assert WFTree(right_child);
+
+    assert newtree.children == [left_child, right_child];
+
     forall lookup:Lookup<Value>, key, value' | IsSatisfyingLookup(tree, key, value', lookup)
     ensures exists lookup' :: IsSatisfyingLookup(newtree, key, value', lookup')
     {
@@ -255,10 +308,15 @@ abstract module BtreeInv {
         var layer1 := Layer(newtree, 0);
         var layer2 := Layer(left_child, original_top_layer.slot);
         var lookup' := [layer1, layer2] + lookup[1 .. ];
+        assert WFTree(layer1.node);
+        assert WFTree(layer2.node);
+        assert IsSatisfyingLookup(newtree, key, value', lookup');
       } else {
         var layer1 := Layer(newtree, 1);
         var layer2 := Layer(right_child, original_top_layer.slot - childrenToLeft);
         var lookup' := [layer1, layer2] + lookup[1 .. ];
+        assert WFTree(layer1.node);
+        assert WFTree(layer2.node);
         assert IsSatisfyingLookup(newtree, key, value', lookup');
       }
     }

@@ -1,4 +1,3 @@
-include "mathematics.dfy"
 include "sequences.dfy"
   
 abstract module Total_Order {
@@ -97,7 +96,12 @@ abstract module Total_Order {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  predicate method {:opaque} IsStrictlySorted(run: seq<Element>) {
+  predicate method {:opaque} IsStrictlySorted(run: seq<Element>)
+  ensures IsStrictlySorted(run) ==> IsSorted(run)
+  ensures |run| == 0 ==> IsStrictlySorted(run)
+  ensures |run| == 1 ==> IsStrictlySorted(run)
+  {
+    reveal_IsSorted();
     forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
   }
 
@@ -116,6 +120,7 @@ abstract module Total_Order {
     ensures forall i :: LargestLte(run, needle) < i < |run| ==> lt(needle, run[i]);
     ensures needle in run ==> 0 <= LargestLte(run, needle) && run[LargestLte(run, needle)] == needle;
   {
+    reveal_IsSorted();
     if |run| == 0 || lt(needle, run[0]) then -1
     else 1 + LargestLte(run[1..], needle)
   }
@@ -127,6 +132,7 @@ abstract module Total_Order {
     ensures multiset(result[..]) == multiset(run1) + multiset(run2);
     ensures IsSorted(result[..]);
   {
+    reveal_IsSorted();
     result := new Element[|run1| + |run2|](_ => run1[0]);
     var i1 := 0;
     var i2 := 0;
@@ -169,6 +175,7 @@ abstract module Total_Order {
     ensures multiset(result[..]) == multiset(run);
     ensures IsSorted(result[..]);
   {
+    reveal_IsSorted();
     if |run| == 0 {
       result := new Element[|run|];
     } else if |run| <= 1 {
