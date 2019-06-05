@@ -56,7 +56,10 @@ abstract module BtreeRefinement {
       case GetStep(key, value, lookup) => {
         assert CrashableMap.WF(I(k, s));
         assert CrashableMap.WF(I(k, s));
-        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
+
+        assert CrashableMap.NextStep(Ik(k), I(k,s), I(k,s'), CrashableMap.QueryStep(key, Some(value)));
+
+        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s), I(k,s')]);
         assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
       case PutStep(key, value) => {
