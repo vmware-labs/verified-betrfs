@@ -1,4 +1,4 @@
-include "sequences.dfy"
+include "../lib/sequences.dfy"
   
 module Circular_List {
   import opened Sequences
@@ -15,6 +15,7 @@ module Circular_List {
         ensures Singleton(this);
         ensures this.value == x;
       {
+        reveal_NoDupes();
         value := x;
         prev := this;
         next := this;
@@ -88,12 +89,14 @@ module Circular_List {
 
     // Le proof
     if a.nodes != b.nodes {
+      reveal_NoDupes();
       DisjointConcatenation(a.nodes, b.nodes);
       ghost var newnodes := a.nodes + b.nodes;
       forall a' | a' in newnodes {
         a'.nodes := newnodes;
       }
     } else {
+      reveal_NoDupes();
       assert |multiset(a.nodes)| > 0; // Observe
       ghost var newanodes := a.nodes[..IndexOf(a.nodes, b)];
       ghost var newbnodes := b.nodes[IndexOf(b.nodes, b)..];
@@ -111,6 +114,7 @@ module Circular_List {
     ensures Singleton(n) ==> n.nodes == [ n ];
     reads n, n.nodes;
   {
+    reveal_NoDupes();
     ghost var i := IndexOf(n.nodes, n);
     assert n.next == n.nodes[(i + 1) % |n.nodes|];
     n.prev == n.next == n
