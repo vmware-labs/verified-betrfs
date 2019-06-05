@@ -184,7 +184,6 @@ abstract module BtreeInv {
         | key' != key && IsSatisfyingLookup(tree, key', value', lookup)
         ensures exists lookup' :: IsSatisfyingLookup(newtree, key', value', lookup');
       {
-        SatisfyingLookupsNest(tree, key', value', lookup);
         var clookup := lookup[1..];
         assert IsSatisfyingLookup(tree.children[lookup[0].slot], key', value', clookup);
         var clookup' :| IsSatisfyingLookup(newtree.children[lookup[0].slot], key', value', clookup');
@@ -195,7 +194,6 @@ abstract module BtreeInv {
         | key' != key && IsSatisfyingLookup(newtree, key', value', lookup')
         ensures exists lookup :: IsSatisfyingLookup(tree, key', value', lookup);
       {
-        SatisfyingLookupsNest(newtree, key', value', lookup');
         var clookup' := lookup'[1..];
         assert IsSatisfyingLookup(newtree.children[lookup'[0].slot], key', value', clookup');
         var clookup: Lookup<Value> :| IsSatisfyingLookup(tree.children[lookup'[0].slot], key', value', clookup);
