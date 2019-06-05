@@ -222,24 +222,98 @@ abstract module BtreeInv {
     }
   }
 
+  lemma GrowLeafIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
+  requires WFTree(tree);
+  requires CantEquivocate(tree);
+  requires tree.Leaf?
+  requires GrowLeaf(tree, newtree, childrenToLeft);
+  ensures PreservesLookups(tree, newtree);
+  ensures PreservesLookups(newtree, tree);
+  ensures CantEquivocate(newtree);
+  decreases tree;
+  {
+  }
+
+  lemma GrowIndexIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
+  requires WFTree(tree);
+  requires CantEquivocate(tree);
+  requires tree.Index?
+  requires GrowIndex(tree, newtree, childrenToLeft);
+  ensures PreservesLookups(tree, newtree);
+  ensures PreservesLookups(newtree, tree);
+  ensures CantEquivocate(newtree);
+  decreases tree;
+  {
+    var left_child := newtree.children[0];
+    var right_child := newtree.children[1];
+
+    forall lookup:Lookup<Value>, key, value' | IsSatisfyingLookup(tree, key, value', lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(newtree, key, value', lookup')
+    {
+      var original_top_layer := lookup[0];
+      if (original_top_layer.slot < childrenToLeft) {
+        var layer1 := Layer(newtree, 0);
+        var layer2 := Layer(left_child, original_top_layer.slot);
+        var lookup' := [layer1, layer2] + lookup[1 .. ];
+      } else {
+        var layer1 := Layer(newtree, 1);
+        var layer2 := Layer(right_child, original_top_layer.slot - childrenToLeft);
+        var lookup' := [layer1, layer2] + lookup[1 .. ];
+        assert IsSatisfyingLookup(newtree, key, value', lookup');
+      }
+    }
+
+    forall lookup:Lookup<Value>, key, value' | IsSatisfyingLookup(newtree, key, value', lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(tree, key, value', lookup')
+    {
+      var layer1 := lookup[0];
+      var layer2 := lookup[1];
+      if (layer1.slot == 0) {
+        var layer := Layer(tree, layer2.slot);
+        var lookup' := [layer] + lookup[2 .. ];
+        assert IsSatisfyingLookup(tree, key, value', lookup');
+      } else {
+        assert layer1.slot == 1;
+        var layer := Layer(tree, layer2.slot + childrenToLeft);
+        var lookup' := [layer] + lookup[2 .. ];
+        assert IsSatisfyingLookup(tree, key, value', lookup');
+      }
+    }
+  }
+
   lemma PutPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
-  requires Invariant(k, s)
-  requires Put(k, s, s', key, value)
-  ensures Invariant(k, s')
+  requires Invariant(k, s);
+  requires Put(k, s, s', key, value);
+  ensures Invariant(k, s');
   {
     PutIsCorrect(s.root, s'.root, key, value);
   }
 
+  lemma GrowPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, childrenToLeft: int)
+  requires Invariant(k, s);
+  requires Grow(k, s, s', childrenToLeft);
+  ensures Invariant(k, s');
+  {
+    if (s.root.Leaf?) {
+      GrowLeafIsCorrect(s.root, s'.root, childrenToLeft);
+    } else {
+      GrowIndexIsCorrect(s.root, s'.root, childrenToLeft);
+    }
+  }
+
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
-  requires Invariant(k, s)
-  requires NextStep(k, s, s', step)
-  ensures Invariant(k, s')
+  requires Invariant(k, s);
+  requires NextStep(k, s, s', step);
+  ensures Invariant(k, s');
   {
     match step {
       case GetStep(key, value, lookup) => {
       }
       case PutStep(key, value) => {
         PutPreservesInvariant(k, s, s', key, value);
+      }
+      case GrowStep(childrenToLeft) => {
+        GrowPreservesInvariant(k, s, s', childrenToLeft);
       }
     }
   }

@@ -32,7 +32,7 @@ abstract module BtreeSpec {
          )
     else
       && |tree.pivots| > 0
-      && Keyspace.IsSorted(tree.pivots)
+      && Keyspace.IsStrictlySorted(tree.pivots)
       && (forall i :: 0 <= i < |tree.pivots| ==> Keyspace.lt(tree.lb, tree.pivots[i]) && Keyspace.lt(tree.pivots[i], tree.ub))
       && |tree.children| == |tree.pivots| + 1
       && (forall i {:trigger WFTree(tree.children[i]) } :: 0 <= i < |tree.children| ==> WFTree(tree.children[i]))
@@ -184,7 +184,7 @@ abstract module BtreeSpec {
     | GetStep(key: Key, value: Value, lookup: Lookup)
     | PutStep(key: Key, value: Value)
     //| SplitStep()
-    //| GrowStep(childrenToLeft: int)
+    | GrowStep(childrenToLeft: int)
     /*| ContractStep()*/
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, step:Step) {
@@ -192,7 +192,7 @@ abstract module BtreeSpec {
       case GetStep(key, value, lookup) => Get(k, s, s', key, value, lookup)
       case PutStep(key, value) => Put(k, s, s', key, value)
       //case SplitStep() => Split(k, s, s')
-      //case GrowStep(childrenToLeft) => Grow(k, s, s', childrenToLeft)
+      case GrowStep(childrenToLeft) => Grow(k, s, s', childrenToLeft)
     }
   }
 

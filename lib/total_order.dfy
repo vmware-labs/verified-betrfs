@@ -90,6 +90,10 @@ abstract module Total_Order {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
+  predicate method IsStrictlySorted(run: seq<Element>) {
+    forall i, j :: 0 <= i <= j < |run| ==> lt(run[i], run[j])
+  }
+
   function method LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLte(run, needle) < |run|;
