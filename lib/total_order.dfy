@@ -35,7 +35,14 @@ abstract module Total_Order {
     ensures lte(a,c)
   {
   }
-    
+
+  lemma transitivity_le_lt(a: Element, b: Element, c: Element)
+    requires lte(a,b)
+    requires lt(b,c)
+    ensures lt(a,c)
+  {
+  }
+
   method SeqMinIndex(run: seq<Element>) returns (pos: int)
     requires 0 < |run|;
     ensures 0 <= pos < |run|;

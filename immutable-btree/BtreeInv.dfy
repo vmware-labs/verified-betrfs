@@ -221,23 +221,11 @@ abstract module BtreeInv {
     }
   }
 
-  lemma GrowLeafIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
-  requires WFTree(tree);
-  requires CantEquivocate(tree);
-  requires tree.Leaf?
-  requires GrowLeaf(tree, newtree, childrenToLeft);
-  ensures PreservesLookups(tree, newtree);
-  ensures PreservesLookups(newtree, tree);
-  ensures CantEquivocate(newtree);
-  decreases tree;
-  {
-    Keyspace.reveal_IsSorted();
-    Keyspace.reveal_IsStrictlySorted();
-  }
-
   // TODO move these to total_order.dfy
   lemma strictlySortedImplLt(l: seq<Key>, a: int, b: int)
-  requires 0 <= a < b < |l|;
+  requires 0 <= a;
+  requires a < b;
+  requires b < |l|;
   requires Keyspace.IsStrictlySorted(l);
   ensures Keyspace.lt(l[a], l[b]);
   {
@@ -251,6 +239,94 @@ abstract module BtreeInv {
   ensures Keyspace.IsStrictlySorted(l[p..]);
   {
     Keyspace.reveal_IsStrictlySorted();
+  }
+
+  lemma GrowLeafIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
+  requires WFTree(tree);
+  requires CantEquivocate(tree);
+  requires tree.Leaf?
+  requires GrowLeaf(tree, newtree, childrenToLeft);
+  ensures PreservesLookups(tree, newtree);
+  ensures PreservesLookups(newtree, tree);
+  ensures CantEquivocate(newtree);
+  decreases tree;
+  {
+    var left_child := newtree.children[0];
+    var right_child := newtree.children[1];
+
+    strictlySortedSplit(tree.keys, childrenToLeft);
+
+    forall i | 0 <= i < |left_child.keys|
+      ensures
+      && Keyspace.lte(left_child.lb, left_child.keys[i])
+      && Keyspace.lt(left_child.keys[i], left_child.ub)
+    {
+      assert left_child.keys[i] == tree.keys[i];
+      assert left_child.ub == tree.keys[childrenToLeft];
+      assert i < childrenToLeft;
+      strictlySortedImplLt(tree.keys, i, childrenToLeft);
+    }
+
+    forall i | 0 <= i < |right_child.keys|
+      ensures
+      && Keyspace.lte(right_child.lb, right_child.keys[i])
+      && Keyspace.lt(right_child.keys[i], right_child.ub)
+    {
+      if (i == 0) {
+      } else {
+        assert right_child.keys[i] == tree.keys[i + childrenToLeft];
+        assert right_child.lb == tree.keys[childrenToLeft];
+        strictlySortedImplLt(tree.keys, childrenToLeft, i + childrenToLeft);
+      }
+    }
+
+    assert WFTree(left_child);
+    assert WFTree(right_child);
+
+    Keyspace.transitivity_le_lt(newtree.lb, tree.keys[0], newtree.pivots[0]);
+
+    assert Keyspace.lt(newtree.lb, newtree.pivots[0]);
+    assert Keyspace.lt(newtree.pivots[0], newtree.ub);
+
+    assert WFTree(newtree);
+
+    forall lookup:Lookup<Value>, key, value' | IsSatisfyingLookup(tree, key, value', lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(newtree, key, value', lookup')
+    {
+      var original_top_layer := lookup[0];
+      if (original_top_layer.slot < childrenToLeft) {
+        var layer1 := Layer(newtree, 0);
+        var layer2 := Layer(left_child, original_top_layer.slot);
+        var lookup' := [layer1, layer2];
+        assert WFTree(layer1.node);
+        assert WFTree(layer2.node);
+        assert IsSatisfyingLookup(newtree, key, value', lookup');
+      } else {
+        var layer1 := Layer(newtree, 1);
+        var layer2 := Layer(right_child, original_top_layer.slot - childrenToLeft);
+        var lookup' := [layer1, layer2] + lookup[1 .. ];
+        assert WFTree(layer1.node);
+        assert WFTree(layer2.node);
+        assert IsSatisfyingLookup(newtree, key, value', lookup');
+      }
+    }
+
+    forall lookup:Lookup<Value>, key, value' | IsSatisfyingLookup(newtree, key, value', lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(tree, key, value', lookup')
+    {
+      var layer1 := lookup[0];
+      var layer2 := lookup[1];
+      if (layer1.slot == 0) {
+        var layer := Layer(tree, layer2.slot);
+        var lookup' := [layer] + lookup[2 .. ];
+        assert IsSatisfyingLookup(tree, key, value', lookup');
+      } else {
+        assert layer1.slot == 1;
+        var layer := Layer(tree, layer2.slot + childrenToLeft);
+        var lookup' := [layer] + lookup[2 .. ];
+        assert IsSatisfyingLookup(tree, key, value', lookup');
+      }
+    }
   }
 
   lemma GrowIndexIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
