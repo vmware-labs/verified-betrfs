@@ -92,6 +92,7 @@ abstract module BtreeInv {
   lemma valueEqValue<Value>(tree:Node, k: Key, value: Value, value': Value, lookup: Lookup<Value>, lookup': Lookup<Value>)
   requires IsSatisfyingLookup(tree, k, value, lookup);
   requires IsSatisfyingLookup(tree, k, value', lookup');
+  requires tree.Leaf?
   requires Keyspace.IsStrictlySorted(tree.keys);
   ensures value == value'
   {
@@ -146,8 +147,8 @@ abstract module BtreeInv {
           */
 
           //assume lookup[0].slot == lookup'[0].slot;
-          assume Keyspace.IsStrictlySorted(newtree.keys);
-          assume Keyspace.IsSorted(newtree.keys);
+          assert Keyspace.IsStrictlySorted(newtree.keys);
+          assert Keyspace.IsSorted(newtree.keys);
           valueEqValue(newtree, k, value, value', lookup, lookup');
         }
         assert CantEquivocate(newtree);
