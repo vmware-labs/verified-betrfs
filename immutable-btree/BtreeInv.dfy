@@ -118,18 +118,6 @@ abstract module BtreeInv {
       && IsSatisfyingLookup(newtree, k, value', lookup')
       ensures value == value'
     {
-      /*
-      assume Keyspace.IsStrictlySorted(newtree.keys);
-      assume newtree.keys[lookup[0].slot] == k;
-      assume newtree.keys[lookup'[0].slot] == k;
-      Keyspace.PosEqLargestLte(newtree.keys, k, lookup[0].slot);
-      Keyspace.PosEqLargestLte(newtree.keys, k, lookup'[0].slot);
-      assume value == newtree.values[lookup[0].slot]
-        == newtree.values[lookup'[0].slot]
-        == value';
-      */
-
-      //assume lookup[0].slot == lookup'[0].slot;
       assert Keyspace.IsStrictlySorted(newtree.keys);
       assert Keyspace.IsSorted(newtree.keys);
       valueEqValue(newtree, k, value, value', lookup, lookup');

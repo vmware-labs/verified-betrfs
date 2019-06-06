@@ -51,4 +51,16 @@ module Sequences {
     if |run| == 0 then init
     else FoldLeft(f, f(init, run[0]), run[1..])
   }
+
+  /*
+  function method insert<A>(s: seq<A>, a: A, pos: int)
+  requires 0 <= pos <= |s|
+  ensures |insert(s,a,pos)| == |a| + 1
+  ensures forall i :: 0 <= i < pos ==> insert(s, a, pos)[i] == s[i]
+  ensures forall i :: pos < i < |s| ==> insert(s, a, pos)[i+1] == s[i]
+  ensures insert(s, a, pos)[pos] == a
+  {
+    return s[..pos] + [a] + s[pos..];
+  }
+  */
 }
