@@ -23,6 +23,7 @@ module Sequences {
     requires multiset(a) !! multiset(b);
     ensures NoDupes(a + b);
   {
+    reveal_NoDupes();
     var c := a + b;
     if |c| > 1 {
       assert forall i, j :: i != j && 0 <= i < |a| && |a| <= j < |c| ==>
