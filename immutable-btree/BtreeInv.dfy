@@ -96,6 +96,7 @@ abstract module BtreeInv {
   requires Keyspace.IsStrictlySorted(tree.keys);
   ensures value == value'
   {
+    Keyspace.reveal_IsStrictlySorted();
   }
 
   lemma PutIsCorrect<Value>(tree: Node, newtree: Node, key: Key, value: Value)
@@ -279,6 +280,7 @@ abstract module BtreeInv {
   requires CantEquivocate(tree);
   requires tree.Leaf?
   requires GrowLeaf(tree, newtree, childrenToLeft);
+  ensures WFTree(newtree);
   ensures PreservesLookups(tree, newtree);
   ensures PreservesLookups(newtree, tree);
   ensures CantEquivocate(newtree);
@@ -367,6 +369,7 @@ abstract module BtreeInv {
   requires CantEquivocate(tree);
   requires tree.Index?
   requires GrowIndex(tree, newtree, childrenToLeft);
+  ensures WFTree(newtree);
   ensures PreservesLookups(tree, newtree);
   ensures PreservesLookups(newtree, tree);
   ensures CantEquivocate(newtree);
