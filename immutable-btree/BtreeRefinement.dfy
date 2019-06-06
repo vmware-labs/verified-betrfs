@@ -43,6 +43,14 @@ abstract module BtreeRefinement {
     
   }
 
+  lemma InterpretationsAreIdentical(k: Constants, s:Variables, s':Variables)
+  requires PreservesLookups(s.root, s'.root);
+  requires PreservesLookups(s'.root, s.root);
+  ensures I(k, s) == I(k, s')
+  {
+    assert INode(s.root) == INode(s'.root);
+  }
+
   lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
   requires Next(k, s, s');
   requires Invariant(k, s);
@@ -80,6 +88,16 @@ abstract module BtreeRefinement {
       case GrowStep(childrenToLeft) => {
         assert CrashableMap.WF(I(k, s));
         assert CrashableMap.WF(I(k, s));
+
+        if (s.root.Leaf?) {
+          GrowLeafIsCorrect(s.root, s'.root, childrenToLeft);
+          InterpretationsAreIdentical(k, s, s');
+          assert I(k, s') == I(k, s);
+        } else {
+          GrowIndexIsCorrect(s.root, s'.root, childrenToLeft);
+          InterpretationsAreIdentical(k, s, s');
+          assert I(k, s') == I(k, s);
+        }
 
         assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
         assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
