@@ -4,9 +4,8 @@ include "../lib/mathematics.dfy"
 include "../lib/sequences.dfy"
 include "BtreeSpec.dfy"
 
-abstract module BtreeInv {
-  import opened Spec : BtreeSpec
-  //import Keyspace = Bounded_Total_Order
+module BtreeInv {
+  import opened Spec = BtreeSpec
   import opened Sequences
 
   predicate CantEquivocate<Value(!new)>(tree: Node<Value>)

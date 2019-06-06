@@ -3,8 +3,8 @@ include "../lib/map_utils.dfy"
 include "../lib/mathematics.dfy"
 include "../lib/sequences.dfy"
 
-abstract module BtreeSpec {
-  import Keyspace : Bounded_Total_Order
+module BtreeSpec {
+  import Keyspace = Bounded_Integer_Order
   import opened Sequences
 
   type Key = Keyspace.Element

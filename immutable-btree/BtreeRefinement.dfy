@@ -7,9 +7,9 @@ include "../tla-tree/MissingLibrary.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
-abstract module BtreeRefinement {
-  import opened Spec : BtreeSpec
-  import opened Inv : BtreeInv
+module BtreeRefinement {
+  import opened Spec = BtreeSpec
+  import opened Inv = BtreeInv
   //import Keyspace = Bounded_Total_Order
   import opened Sequences
   import CrashableMap

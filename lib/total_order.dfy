@@ -285,6 +285,9 @@ module Char_Order refines Total_Order {
   }
 }
 
+module Bounded_Integer_Order refines Bounded_Total_Order {
+  import Base_Order = Integer_Order
+}
 
 // method Main() {
 //   print Integer_Order.lt(10, 11);

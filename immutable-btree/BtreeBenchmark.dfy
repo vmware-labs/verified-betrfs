@@ -3,10 +3,6 @@ include "BtreeSpec.dfy"
 include "BtreeInv.dfy"  
 //include "BtreeImpl.dfy"
 
-module Bounded_Integer_Order refines Bounded_Total_Order {
-  import Base_Order = Integer_Order
-}
-
 module Integer_BtreeSpec refines BtreeSpec {
   import Keyspace = Bounded_Integer_Order
 }
