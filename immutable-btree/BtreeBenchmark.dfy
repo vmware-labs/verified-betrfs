@@ -7,7 +7,7 @@ include "BtreeImpl.dfy"
 method Main() {
     var tree := BtreeImpl.empty();
 
-    var nInsertions := 1000 * 1000 * 10;
+    var nInsertions := 10;
     var i := 0;
     while i < nInsertions
     invariant BtreeInv.Invariant(
