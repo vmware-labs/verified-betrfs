@@ -128,6 +128,17 @@ abstract module BtreeInv {
     assert CantEquivocate(newtree);
   }
 
+  function method {:opaque} seqInsert<Element>(elts: seq<Element>, elt: Element, pos: int) : seq<Element>
+    requires 0 <= pos <= |elts|
+    ensures |seqInsert(elts, elt, pos)| == |elts| + 1
+    ensures forall i :: 0 <= i < pos ==> seqInsert(elts, elt, pos)[i] == elts[i]
+    ensures seqInsert(elts, elt, pos)[pos] == elt
+    ensures forall i :: pos < i < |seqInsert(elts, elt, pos)| ==> seqInsert(elts, elt, pos)[i] == elts[i-1]
+  {
+    elts[..pos] + [elt] + elts[pos..]
+  }
+    
+  
   lemma leafPreservesLookupsExcept<Value>(tree:Node, newtree:Node, key:Key, value:Value, pos:int)
   requires WFTree(tree);
   requires WFTree(newtree);
@@ -147,7 +158,6 @@ abstract module BtreeInv {
         var lookup' := [Layer(newtree, lookup[0].slot)];
         assert IsSatisfyingLookup(newtree, key', value', lookup');
       } else {
-        assert lookup[0].slot > pos + 1;
         var lookup' := [Layer(newtree, lookup[0].slot + 1)];
         assert IsSatisfyingLookup(newtree, key', value', lookup');
       }
