@@ -45,7 +45,7 @@ module BtreeSpec {
 
   predicate WFRoot(tree: Node) {
     if tree.Leaf? then
-      && Keyspace.IsSorted(tree.keys)
+      && Keyspace.IsStrictlySorted(tree.keys)
       && |tree.keys| == |tree.values|
     else 
       WFTree(tree)
