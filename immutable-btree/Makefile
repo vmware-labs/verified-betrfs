@@ -1,4 +1,4 @@
-TARGETDLLS=BtreeRefinement.dll
+TARGETDLLS=BtreeImpl.dll
 #TARGETEXES=
 
 all: $(TARGETDLLS) $(TARGETEXES)
