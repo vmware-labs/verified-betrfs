@@ -53,9 +53,17 @@ abstract module BtreeInv {
     ensures Keyspace.lte(tree.children[child].ub, tree.ub);
   {
     if child == 0 {
-    } else if child < |tree.children| {
-      assert Keyspace.lte(tree.lb, tree.pivots[child-1]);
+      assert Keyspace.lte(tree.lb, tree.children[child].lb);
     } else {
+      assert Keyspace.lte(tree.lb, tree.pivots[child-1]);
+      assert Keyspace.lte(tree.lb, tree.children[child].lb);
+    }
+
+    if child == |tree.children| - 1 {
+      assert Keyspace.lte(tree.children[child].ub, tree.ub);
+    } else {
+      assert Keyspace.lte(tree.pivots[child], tree.ub);
+      assert Keyspace.lte(tree.children[child].ub, tree.ub);
     }
   }
   
@@ -521,5 +529,4 @@ abstract module BtreeInv {
     var step :| NextStep(k, s, s', step);
     NextStepPreservesInvariant(k, s, s', step);
   }
-
 }

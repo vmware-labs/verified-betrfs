@@ -38,9 +38,9 @@ abstract module BtreeSpec {
       && tree.lb == tree.children[0].lb
       && tree.ub == tree.children[|tree.children| - 1].ub
       && (forall i :: 0 <= i < |tree.pivots| ==>
-          && tree.pivots[i] == tree.children[i].ub
-          && tree.pivots[i] == tree.children[i+1].lb
-         )
+          tree.pivots[i] == tree.children[i].ub)
+      && (forall i :: 0 <= i < |tree.pivots| ==>
+          tree.pivots[i] == tree.children[i+1].lb)
   }
 
   predicate WFRoot(tree: Node) {
