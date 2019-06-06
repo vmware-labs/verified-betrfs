@@ -17,26 +17,28 @@ module BtreeImpl {
   requires Keyspace.IsSorted(l);
   requires pos == Keyspace.LargestLte(l, k);
   requires pos < 0 || k != l[pos]
-  ensures Keyspace.IsStrictlySorted(l[..pos+1] + [k] + l[pos+1..]);
+  ensures Keyspace.IsStrictlySorted(insert(l,k,pos+1));
   {
-    var l' := l[..pos+1] + [k] + l[pos+1..];
+    var l' := insert(l,k,pos+1);
     Keyspace.reveal_IsStrictlySorted();
 
     forall i, j | 0 <= i < j < |l'|
     ensures Keyspace.lt(l'[i], l'[j])
     {
+      reveal_insert();
     }
   }
 
   method empty<Value>()
   returns (newtree: Node)
   ensures WFRoot(newtree)
+  ensures CantEquivocate(newtree)
   {
     Keyspace.reveal_IsStrictlySorted();
     return Leaf([], [], Keyspace.Min_Element, Keyspace.Max_Element);
   }
 
-  method put<Value>(tree: Node, key: Key, value: Value)
+  method putInner<Value>(tree: Node, key: Key, value: Value)
   returns (newtree: Node)
   requires WFTree(tree)
   requires Keyspace.lte(tree.lb, key);
@@ -67,10 +69,25 @@ module BtreeImpl {
         assert Keyspace.lte(tree.pivots[pos-1], key);
       }
 
-      var new_child := put(tree.children[pos], key, value);
+      var new_child := putInner(tree.children[pos], key, value);
       var new_children := tree.children[pos := new_child];
       return Index(tree.pivots, new_children, tree.lb, tree.ub);
     }
   }
 
+  method put<Value>(tree: Node, key: Key, value: Value)
+  returns (newtree: Node)
+  requires WFRoot(tree)
+  requires Keyspace.lte(tree.lb, key);
+  requires Keyspace.lt(key, tree.ub);
+  ensures Put(Constants(), Variables(tree), Variables(newtree), key, value)
+  decreases tree
+  {
+    if (tree.Leaf? && tree.keys == []) {
+      return Leaf([key], [value], tree.lb, tree.ub);
+    } else {
+      newtree := putInner(tree, key, value);
+      return newtree;
+    }
+  }
 }
