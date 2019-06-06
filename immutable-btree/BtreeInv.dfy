@@ -92,9 +92,11 @@ abstract module BtreeInv {
   lemma valueEqValue<Value>(tree:Node, k: Key, value: Value, value': Value, lookup: Lookup<Value>, lookup': Lookup<Value>)
   requires IsSatisfyingLookup(tree, k, value, lookup);
   requires IsSatisfyingLookup(tree, k, value', lookup');
+  requires tree.Leaf?
   requires Keyspace.IsStrictlySorted(tree.keys);
   ensures value == value'
   {
+    Keyspace.reveal_IsStrictlySorted();
   }
 
   lemma PutIsCorrect<Value>(tree: Node, newtree: Node, key: Key, value: Value)
@@ -146,8 +148,8 @@ abstract module BtreeInv {
           */
 
           //assume lookup[0].slot == lookup'[0].slot;
-          assume Keyspace.IsStrictlySorted(newtree.keys);
-          assume Keyspace.IsSorted(newtree.keys);
+          assert Keyspace.IsStrictlySorted(newtree.keys);
+          assert Keyspace.IsSorted(newtree.keys);
           valueEqValue(newtree, k, value, value', lookup, lookup');
         }
         assert CantEquivocate(newtree);
@@ -278,6 +280,7 @@ abstract module BtreeInv {
   requires CantEquivocate(tree);
   requires tree.Leaf?
   requires GrowLeaf(tree, newtree, childrenToLeft);
+  ensures WFTree(newtree);
   ensures PreservesLookups(tree, newtree);
   ensures PreservesLookups(newtree, tree);
   ensures CantEquivocate(newtree);
@@ -366,6 +369,7 @@ abstract module BtreeInv {
   requires CantEquivocate(tree);
   requires tree.Index?
   requires GrowIndex(tree, newtree, childrenToLeft);
+  ensures WFTree(newtree);
   ensures PreservesLookups(tree, newtree);
   ensures PreservesLookups(newtree, tree);
   ensures CantEquivocate(newtree);
