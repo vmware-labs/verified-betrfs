@@ -231,9 +231,10 @@ abstract module Total_Order {
   requires IsStrictlySorted(l);
   requires IsSorted(l);
   requires pos == LargestLte(l, k);
-  requires pos < 0 || k != l[pos]
-  ensures IsStrictlySorted(l[..pos+1] + [k] + l[pos+1..]);
+  requires pos < 0 || k != l[pos];
+  ensures IsStrictlySorted(Seq.insert(l, k, pos+1));
   {
+    Seq.reveal_insert();
     var l' := l[..pos+1] + [k] + l[pos+1..];
     reveal_IsStrictlySorted();
 

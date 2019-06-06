@@ -94,8 +94,8 @@ module BtreeSpec {
       if pos >= 0 && key == tree.keys[pos] then (
         newtree == Leaf(tree.keys, tree.values[pos := value], tree.lb, tree.ub)
       ) else (
-        var newkeys := tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
-        var newvals := tree.values[..pos+1] + [value] + tree.values[pos+1..];
+        var newkeys := insert(tree.keys, key, pos+1);
+        var newvals := insert(tree.values, value, pos+1);
         newtree == Leaf(newkeys, newvals, tree.lb, tree.ub)
       )
     ) else (

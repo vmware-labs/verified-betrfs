@@ -131,19 +131,22 @@ module BtreeInv {
   requires newtree.Leaf?
   requires pos == Keyspace.LargestLte(tree.keys, key);
   requires pos < 0 || key != tree.keys[pos];
-  requires newtree.keys == tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
-  requires newtree.values == tree.values[..pos+1] + [value] + tree.values[pos+1..];
+  requires newtree.keys == insert(tree.keys, key, pos+1);
+  requires newtree.values == insert(tree.values, value, pos+1);
   ensures PreservesLookupsExcept(tree, newtree, key);
   {
     forall lookup: Lookup, key', value'
       | key' != key && IsSatisfyingLookup(tree, key', value', lookup)
       ensures exists lookup' :: IsSatisfyingLookup(newtree, key', value', lookup');
     {
-      if lookup[0].slot <= pos {
+      if lookup[0].slot < pos+1 {
         var lookup' := [Layer(newtree, lookup[0].slot)];
         assert IsSatisfyingLookup(newtree, key', value', lookup');
       } else {
         var lookup' := [Layer(newtree, lookup[0].slot + 1)];
+        assert newtree.keys[lookup[0].slot + 1]
+            == tree.keys[lookup[0].slot]
+            == key';
         assert IsSatisfyingLookup(newtree, key', value', lookup');
       }
     }
@@ -183,8 +186,8 @@ module BtreeInv {
         leafCantEquivocate(newtree);
 
       } else {
-        var newkeys := tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
-        var newvals := tree.values[..pos+1] + [value] + tree.values[pos+1..];
+        var newkeys := insert(tree.keys, key, pos+1);
+        var newvals := insert(tree.values, value, pos+1);
         assert newtree == Leaf(newkeys, newvals, tree.lb, tree.ub);
         //assert Keyspace.IsSorted(newtree.keys);
         var lookup := [Layer(newtree, pos + 1)];
