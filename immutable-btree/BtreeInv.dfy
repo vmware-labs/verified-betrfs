@@ -99,6 +99,61 @@ abstract module BtreeInv {
     Keyspace.reveal_IsStrictlySorted();
   }
 
+  lemma leafCantEquivocate<Value>(newtree: Node)
+  requires newtree.Leaf?
+  requires Keyspace.IsStrictlySorted(newtree.keys)
+  ensures CantEquivocate(newtree);
+  {
+    forall k, value, value', lookup: Lookup<Value>, lookup': Lookup<Value> |
+      && IsSatisfyingLookup(newtree, k, value, lookup)
+      && IsSatisfyingLookup(newtree, k, value', lookup')
+      ensures value == value'
+    {
+      /*
+      assume Keyspace.IsStrictlySorted(newtree.keys);
+      assume newtree.keys[lookup[0].slot] == k;
+      assume newtree.keys[lookup'[0].slot] == k;
+      Keyspace.PosEqLargestLte(newtree.keys, k, lookup[0].slot);
+      Keyspace.PosEqLargestLte(newtree.keys, k, lookup'[0].slot);
+      assume value == newtree.values[lookup[0].slot]
+        == newtree.values[lookup'[0].slot]
+        == value';
+      */
+
+      //assume lookup[0].slot == lookup'[0].slot;
+      assert Keyspace.IsStrictlySorted(newtree.keys);
+      assert Keyspace.IsSorted(newtree.keys);
+      valueEqValue(newtree, k, value, value', lookup, lookup');
+    }
+    assert CantEquivocate(newtree);
+  }
+
+  lemma leafPreservesLookupsExcept<Value>(tree:Node, newtree:Node, key:Key, value:Value, pos:int)
+  requires WFTree(tree);
+  requires WFTree(newtree);
+  requires tree.Leaf?
+  requires newtree.Leaf?
+  requires pos == Keyspace.LargestLte(tree.keys, key);
+  requires pos < 0 || key != tree.keys[pos];
+  requires newtree.keys == tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
+  requires newtree.values == tree.values[..pos+1] + [value] + tree.values[pos+1..];
+  ensures PreservesLookupsExcept(tree, newtree, key);
+  {
+    forall lookup: Lookup, key', value'
+      | key' != key && IsSatisfyingLookup(tree, key', value', lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(newtree, key', value', lookup');
+    {
+      if lookup[0].slot <= pos {
+        var lookup' := [Layer(newtree, lookup[0].slot)];
+        assert IsSatisfyingLookup(newtree, key', value', lookup');
+      } else {
+        assert lookup[0].slot > pos + 1;
+        var lookup' := [Layer(newtree, lookup[0].slot + 1)];
+        assert IsSatisfyingLookup(newtree, key', value', lookup');
+      }
+    }
+  }
+
   lemma PutIsCorrect<Value>(tree: Node, newtree: Node, key: Key, value: Value)
   requires WFTree(tree)
   requires CantEquivocate(tree)
@@ -130,29 +185,7 @@ abstract module BtreeInv {
         }
 
         assert IsSatisfyingLookup(newtree, key, value, [Layer(newtree, pos)]);
-
-        forall k, value, value', lookup: Lookup<Value>, lookup': Lookup<Value> |
-          && IsSatisfyingLookup(newtree, k, value, lookup)
-          && IsSatisfyingLookup(newtree, k, value', lookup')
-          ensures value == value'
-        {
-          /*
-          assume Keyspace.IsStrictlySorted(newtree.keys);
-          assume newtree.keys[lookup[0].slot] == k;
-          assume newtree.keys[lookup'[0].slot] == k;
-          Keyspace.PosEqLargestLte(newtree.keys, k, lookup[0].slot);
-          Keyspace.PosEqLargestLte(newtree.keys, k, lookup'[0].slot);
-          assume value == newtree.values[lookup[0].slot]
-            == newtree.values[lookup'[0].slot]
-            == value';
-          */
-
-          //assume lookup[0].slot == lookup'[0].slot;
-          assert Keyspace.IsStrictlySorted(newtree.keys);
-          assert Keyspace.IsSorted(newtree.keys);
-          valueEqValue(newtree, k, value, value', lookup, lookup');
-        }
-        assert CantEquivocate(newtree);
+        leafCantEquivocate(newtree);
 
       } else {
         var newkeys := tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
@@ -164,19 +197,9 @@ abstract module BtreeInv {
         Keyspace.strictlySortedInsert(tree.keys, key, pos);
         assert WFTree(newtree);
         assert IsSatisfyingLookup(newtree, key, value, lookup);
-        
-        forall lookup: Lookup, key', value'
-          | key' != key && IsSatisfyingLookup(tree, key', value', lookup)
-          ensures exists lookup' :: IsSatisfyingLookup(newtree, key', value', lookup');
-        {
-          if lookup[0].slot <= pos {
-            var lookup' := [Layer(newtree, lookup[0].slot)];
-            assert IsSatisfyingLookup(newtree, key', value', lookup');
-          } else {
-            var lookup' := [Layer(newtree, lookup[0].slot + 1)];
-            assert IsSatisfyingLookup(newtree, key', value', lookup');
-          }
-        }
+
+        leafPreservesLookupsExcept(tree, newtree, key, value, pos);
+
         forall lookup': Lookup, key', value'
           | key' != key && IsSatisfyingLookup(newtree, key', value', lookup')
           ensures exists lookup :: IsSatisfyingLookup(tree, key', value', lookup);
@@ -190,6 +213,8 @@ abstract module BtreeInv {
             assert IsSatisfyingLookup(tree, key', value', lookup);
           }
         }
+
+        leafCantEquivocate(newtree);
 
       }
     } else {
