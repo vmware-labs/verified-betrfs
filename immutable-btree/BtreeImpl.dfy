@@ -6,7 +6,7 @@ include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
 abstract module BtreeImpl {
-  import Keyspace = Bounded_Total_Order
+  //import Keyspace : Bounded_Total_Order
   import opened BtreeSpec
   import opened BtreeInv
 
@@ -43,6 +43,7 @@ abstract module BtreeImpl {
       } else {
         var newkeys := tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
         var newvals := tree.values[..pos+1] + [value] + tree.values[pos+1..];
+        strictlySortedInsert(tree.keys, key, pos);
         return Leaf(newkeys, newvals, tree.lb, tree.ub);
       }
     } else {

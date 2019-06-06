@@ -8,7 +8,7 @@ include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
 abstract module BtreeRefinement {
-  import Keyspace = Bounded_Total_Order
+  //import Keyspace = Bounded_Total_Order
   import opened Sequences
   import opened BtreeSpec
   import opened BtreeInv

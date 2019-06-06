@@ -5,9 +5,9 @@ include "../lib/sequences.dfy"
 include "BtreeSpec.dfy"
 
 abstract module BtreeInv {
-  import Keyspace = Bounded_Total_Order
+  import opened Spec : BtreeSpec
+  //import Keyspace = Bounded_Total_Order
   import opened Sequences
-  import opened BtreeSpec
 
   predicate CantEquivocate<Value(!new)>(tree: Node<Value>)
   {
@@ -520,4 +520,5 @@ abstract module BtreeInv {
     var step :| NextStep(k, s, s', step);
     NextStepPreservesInvariant(k, s, s', step);
   }
+
 }

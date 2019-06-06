@@ -1,8 +1,18 @@
 include "../lib/total_order.dfy"
-include "BtreeImple.dfy"
+include "BtreeSpec.dfy"
+include "BtreeInv.dfy"  
+//include "BtreeImpl.dfy"
 
-module Integer_BTree refines BtreeImpl {
-    import Keyspace = Integer_Order
+module Bounded_Integer_Order refines Bounded_Total_Order {
+  import Base_Order = Integer_Order
+}
+
+module Integer_BtreeSpec refines BtreeSpec {
+  import Keyspace = Bounded_Integer_Order
+}
+
+module Integer_BtreeInv refines BtreeInv {
+  import opened Spec = Integer_BtreeSpec
 }
 
 method Main() {

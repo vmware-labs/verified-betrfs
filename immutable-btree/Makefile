@@ -1,5 +1,5 @@
-TARGETDLLS=BtreeImpl.dll
-#TARGETEXES=
+TARGETDLLS=
+TARGETEXES=BtreeBenchmark.exe
 
 all: $(TARGETDLLS) $(TARGETEXES)
 
@@ -36,8 +36,8 @@ endif
 include $(TARGETDLLS:.dll=.deps) $(TARGETEXES:.exe=.deps)
 
 %.deps: %.dfy
-	$(DAFNY) /printIncludes:Transitive $< | grep ";" | grep -v "^roots;" | grep -v ": Warning: " | sed "s/\(^[^;]*\);/\1: /" | sed "s/;/ /g" | sed "s/.dfy/.dll/g" | sed "s,$(PWD)/,,g" > $@
-	$(DAFNY) /printIncludes:Transitive $< | grep -v ";" | grep -v ": Warning: " | sed "s,$(PWD)/,,g" | sed "s,^,$@: ," >> $@
+	$(DAFNY) /printIncludes:Transitive $< | grep ";" | grep -v "^roots;" | grep -v ": Warning: " | grep -v ": Warning " | sed "s/\(^[^;]*\);/\1: /" | sed "s/;/ /g" | sed "s/.dfy/.dll/g" | sed "s,$(PWD)/,,g" > $@
+	$(DAFNY) /printIncludes:Transitive $< | grep -v ";" | grep -v ": Warning: " | grep -v ": Error " | sed "s,$(PWD)/,,g" | sed "s,^,$@: ," >> $@
 	$(call record_build, $@)
 
 ############################################
