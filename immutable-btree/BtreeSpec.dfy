@@ -44,10 +44,9 @@ module BtreeSpec {
   }
 
   predicate WFRoot(tree: Node) {
-    if tree.Leaf? then
-      && Keyspace.IsStrictlySorted(tree.keys)
-      && |tree.keys| == |tree.values|
-    else 
+    if (tree.Leaf? && tree.keys == []) then
+      tree.values == []
+    else
       WFTree(tree)
   }
 
@@ -112,12 +111,18 @@ module BtreeSpec {
 
   predicate Put<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
   {
-    && WFTree(s.root)
-    && PutTransform(s.root, s'.root, key, value)
+    if (s.root.Leaf? && |s.root.keys| == 0) then (
+      && Keyspace.lte(s.root.lb, key)
+      && Keyspace.lt(key, s.root.ub)
+      && s' == Variables(Leaf([key], [value], s.root.lb, s.root.ub))
+    ) else (
+      && WFTree(s.root)
+      && PutTransform(s.root, s'.root, key, value)
+    )
   }
 
   predicate GrowLeaf(tree:Node, newtree:Node, childrenToLeft:int)
-  requires WFTree(tree)
+  requires WFRoot(tree)
   requires tree.Leaf?
   {
     && 1 < childrenToLeft < |tree.keys| - 1

@@ -18,7 +18,7 @@ module BtreeInv {
 
 
   predicate Invariant(k: Constants, s: Variables) {
-    && WFTree(s.root)
+    && WFRoot(s.root)
     && CantEquivocate(s.root)
   }
 
@@ -296,7 +296,7 @@ module BtreeInv {
   }
 
   lemma GrowLeafIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
-  requires WFTree(tree);
+  requires WFRoot(tree);
   requires CantEquivocate(tree);
   requires tree.Leaf?
   requires GrowLeaf(tree, newtree, childrenToLeft);
@@ -476,7 +476,13 @@ module BtreeInv {
   requires Put(k, s, s', key, value);
   ensures Invariant(k, s');
   {
-    PutIsCorrect(s.root, s'.root, key, value);
+    if (s.root.Leaf? && |s.root.keys| == 0) {
+      assert WFTree(s'.root);
+      assert Invariant(k, s');
+    } else {
+      assert WFTree(s.root);
+      PutIsCorrect(s.root, s'.root, key, value);
+    }
   }
 
   lemma GrowPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, childrenToLeft: int)
