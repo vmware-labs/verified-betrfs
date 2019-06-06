@@ -53,8 +53,9 @@ abstract module BtreeInv {
     ensures Keyspace.lte(tree.children[child].ub, tree.ub);
   {
     if child == 0 {
-    } else {
+    } else if child < |tree.children| {
       assert Keyspace.lte(tree.lb, tree.pivots[child-1]);
+    } else {
     }
   }
   
@@ -78,9 +79,15 @@ abstract module BtreeInv {
     requires tree.Index?;
     ensures lookup[0].slot == Keyspace.LargestLte(tree.pivots, key) + 1;
   {
+    Keyspace.reveal_IsStrictlySorted();
     var pos := Keyspace.LargestLte(tree.pivots, key) + 1;
     if lookup[0].slot < pos {
+      var slot := lookup[0].slot;
       SatisfyingLookupsAllBoundsContainQuery(lookup[1].node, key, value, lookup[1..]);
+      assert Keyspace.lt(key, lookup[1].node.ub);
+      assert lookup[1].node == tree.children[slot];
+      assert 0 <= slot < |tree.pivots|;
+      assert tree.children[slot].ub == tree.pivots[slot];
       assert false;
     } else if lookup[0].slot > pos {
       SatisfyingLookupsAllBoundsContainQuery(lookup[1].node, key, value, lookup[1..]);

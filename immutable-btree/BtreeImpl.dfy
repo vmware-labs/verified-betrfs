@@ -7,8 +7,8 @@ include "BtreeInv.dfy"
 
 abstract module BtreeImpl {
   //import Keyspace : Bounded_Total_Order
-  import opened BtreeSpec
-  import opened BtreeInv
+  import opened Spec : BtreeSpec
+  import opened Inv : BtreeInv
 
   lemma strictlySortedInsert(l: seq<Key>, k: Key, pos: int)
   requires -1 <= pos < |l|;
