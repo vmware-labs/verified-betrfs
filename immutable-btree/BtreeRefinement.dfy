@@ -44,9 +44,11 @@ abstract module BtreeRefinement {
   }
 
   lemma InterpretationsAreIdentical(k: Constants, s:Variables, s':Variables)
-  requires PreservesLookups(s.root, s'.root);
-  requires PreservesLookups(s'.root, s.root);
-  ensures I(k, s) == I(k, s')
+    requires PreservesLookups(s.root, s'.root);
+    requires CantEquivocate(s.root)
+    requires PreservesLookups(s'.root, s.root);
+    requires CantEquivocate(s'.root)
+    ensures I(k, s) == I(k, s')
   {
     assert INode(s.root) == INode(s'.root);
   }
