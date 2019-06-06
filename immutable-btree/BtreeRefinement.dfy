@@ -77,6 +77,13 @@ abstract module BtreeRefinement {
 
         assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
+      case GrowStep(childrenToLeft) => {
+        assert CrashableMap.WF(I(k, s));
+        assert CrashableMap.WF(I(k, s));
+
+        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
+        assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+      }
     }
   }
 }

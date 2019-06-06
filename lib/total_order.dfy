@@ -1,7 +1,6 @@
 include "sequences.dfy"
   
 abstract module Total_Order {
-  import Mathematics
   import Seq = Sequences
     
 	type Element(!new,==)
@@ -131,6 +130,15 @@ abstract module Total_Order {
     if |run| == 0 || lt(needle, run[0]) then -1
     else 1 + LargestLte(run[1..], needle)
   }
+
+  lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
+  requires IsStrictlySorted(run);
+  requires 0 <= pos < |run|
+  requires run[pos] == key;
+  ensures pos == LargestLte(run, key);
+  {
+    reveal_IsStrictlySorted();
+  }
   
   method Merge(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
     requires 0 < |run1|;
@@ -217,6 +225,23 @@ abstract module Total_Order {
     requires SetAllLt(a, b);
     ensures a !! b;
   {}
+
+  lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
+  requires -1 <= pos < |l|;
+  requires IsStrictlySorted(l);
+  requires IsSorted(l);
+  requires pos == LargestLte(l, k);
+  requires pos < 0 || k != l[pos]
+  ensures IsStrictlySorted(l[..pos+1] + [k] + l[pos+1..]);
+  {
+    var l' := l[..pos+1] + [k] + l[pos+1..];
+    reveal_IsStrictlySorted();
+
+    forall i, j | 0 <= i < j < |l'|
+    ensures lt(l'[i], l'[j])
+    {
+    }
+  }
 }
 
 abstract module Bounded_Total_Order refines Total_Order {

@@ -89,6 +89,14 @@ abstract module BtreeInv {
     }
   }
 
+  lemma valueEqValue<Value>(tree:Node, k: Key, value: Value, value': Value, lookup: Lookup<Value>, lookup': Lookup<Value>)
+  requires IsSatisfyingLookup(tree, k, value, lookup);
+  requires IsSatisfyingLookup(tree, k, value', lookup');
+  requires Keyspace.IsStrictlySorted(tree.keys);
+  ensures value == value'
+  {
+  }
+
   lemma PutIsCorrect<Value>(tree: Node, newtree: Node, key: Key, value: Value)
   requires WFTree(tree)
   requires CantEquivocate(tree)
@@ -121,6 +129,29 @@ abstract module BtreeInv {
 
         assert IsSatisfyingLookup(newtree, key, value, [Layer(newtree, pos)]);
 
+        forall k, value, value', lookup: Lookup<Value>, lookup': Lookup<Value> |
+          && IsSatisfyingLookup(newtree, k, value, lookup)
+          && IsSatisfyingLookup(newtree, k, value', lookup')
+          ensures value == value'
+        {
+          /*
+          assume Keyspace.IsStrictlySorted(newtree.keys);
+          assume newtree.keys[lookup[0].slot] == k;
+          assume newtree.keys[lookup'[0].slot] == k;
+          Keyspace.PosEqLargestLte(newtree.keys, k, lookup[0].slot);
+          Keyspace.PosEqLargestLte(newtree.keys, k, lookup'[0].slot);
+          assume value == newtree.values[lookup[0].slot]
+            == newtree.values[lookup'[0].slot]
+            == value';
+          */
+
+          //assume lookup[0].slot == lookup'[0].slot;
+          assume Keyspace.IsStrictlySorted(newtree.keys);
+          assume Keyspace.IsSorted(newtree.keys);
+          valueEqValue(newtree, k, value, value', lookup, lookup');
+        }
+        assert CantEquivocate(newtree);
+
       } else {
         var newkeys := tree.keys[..pos+1] + [key] + tree.keys[pos+1..];
         var newvals := tree.values[..pos+1] + [value] + tree.values[pos+1..];
@@ -128,6 +159,7 @@ abstract module BtreeInv {
         //assert Keyspace.IsSorted(newtree.keys);
         var lookup := [Layer(newtree, pos + 1)];
 
+        Keyspace.strictlySortedInsert(tree.keys, key, pos);
         assert WFTree(newtree);
         assert IsSatisfyingLookup(newtree, key, value, lookup);
         
