@@ -152,6 +152,21 @@ module BtreeInv {
     }
   }
 
+  lemma keysRemainBetweenLbAndUb(newkeys: seq<Key>, lb: Key, ub: Key, keys: seq<Key>, key: Key, pos: int)
+  requires 0 <= pos <= |keys|
+  requires newkeys == insert(keys, key, pos);
+  requires Keyspace.lte(lb, key);
+  requires Keyspace.lt(key, ub);
+  requires && (forall i :: 0 <= i < |keys| ==>
+           && Keyspace.lte(lb, keys[i])
+           && Keyspace.lt(keys[i], ub));
+  ensures && (forall i :: 0 <= i < |newkeys| ==>
+          && Keyspace.lte(lb, newkeys[i])
+          && Keyspace.lt(newkeys[i], ub));
+  {
+    reveal_insert();
+  }
+
   lemma PutIsCorrect<Value>(tree: Node, newtree: Node, key: Key, value: Value)
   requires WFTree(tree)
   requires CantEquivocate(tree)
@@ -193,6 +208,7 @@ module BtreeInv {
         var lookup := [Layer(newtree, pos + 1)];
 
         Keyspace.strictlySortedInsert(tree.keys, key, pos);
+        keysRemainBetweenLbAndUb(newkeys, newtree.lb, newtree.ub, tree.keys, key, pos+1);
         assert WFTree(newtree);
         assert IsSatisfyingLookup(newtree, key, value, lookup);
 

@@ -44,10 +44,14 @@ module BtreeSpec {
   }
 
   predicate WFRoot(tree: Node) {
-    if (tree.Leaf? && tree.keys == []) then
-      tree.values == []
-    else
-      WFTree(tree)
+    && tree.lb == Keyspace.Min_Element
+    && tree.ub == Keyspace.Max_Element
+    && (
+      if (tree.Leaf? && tree.keys == []) then
+        tree.values == []
+      else
+        WFTree(tree)
+    )
   }
 
   datatype Layer<Value(!new)> = Layer(node: Node<Value>, slot: int)
@@ -175,7 +179,7 @@ module BtreeSpec {
 
   predicate Grow<Value>(k: Constants, s: Variables, s': Variables, childrenToLeft: int)
   {
-    && WFTree(s.root)
+    && WFRoot(s.root)
     && (
       if s.root.Leaf? then
         GrowLeaf(s.root, s'.root, childrenToLeft)
