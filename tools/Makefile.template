@@ -1,5 +1,10 @@
+# List the DLLs and EXEs you want to build
 TARGETDLLS=
 TARGETEXES=BtreeBenchmark.exe
+
+#
+# Shouldn't have to modify anything below here.
+#
 
 all: $(TARGETDLLS) $(TARGETEXES)
 
