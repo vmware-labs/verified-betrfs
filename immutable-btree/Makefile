@@ -37,9 +37,9 @@ include $(TARGETDLLS:.dll=.deps) $(TARGETEXES:.exe=.deps)
 
 %.deps: %.dfy
 	@echo Generating dependencies for $<
-	@$(DAFNY) /printIncludes:Transitive $< > ${@:.deps=.includes} || ($(DAFNY) $<; exit 1) # If dafny fails, then run it again to show error to user, and then force failure.
+	@$(DAFNY) /printIncludes:Transitive $< > ${@:.deps=.includes} || ($(DAFNY) /compile:0 $<; exit 1) # If dafny fails, then run it again to show error to user, and then force failure.
 	$(call record_build, ${@:.deps=.includes})
-	@if (grep " " ${@:.deps=.includes}); then $(DAFNY) $<; exit 1; else exit 0; fi # If there are any spaces in the dafny output, show the user dafny's output and abort
+	@if (grep " " ${@:.deps=.includes}); then $(DAFNY) /compile:0 $<; exit 1; else exit 0; fi # If there are any spaces in the dafny output, show the user dafny's output and abort
 	@cat ${@:.deps=.includes} | grep ";" | grep -v "^roots;" | sed "s/\(^[^;]*\).dfy;/\1.dll \1.exe: /" | sed "s/\.dfy;*/.dll /g" | sed "s,$(PWD)/,,g" > $@
 	$(call record_build, $@)
 	@cat ${@:.deps=.includes} | grep -v ";" | sed "s,$(PWD)/,,g" | sed "s,^,$@: ," >> $@
