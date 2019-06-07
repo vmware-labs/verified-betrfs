@@ -517,6 +517,76 @@ abstract module BtreeInv {
     }
   }
 
+  lemma SplitIsCorrect<Value>(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int)
+  requires WFTree(tree);
+  requires CantEquivocate(tree);
+  requires SplitTransform(tree, newtree, l, u, childrenToLeft);
+  ensures PreservesLookups(tree, newtree);
+  ensures PreservesLookups(newtree, tree);
+  ensures WFTree(newtree)
+  ensures CantEquivocate(newtree)
+  decreases tree
+  {
+    var pos := Keyspace.LargestLte(tree.pivots, l) + 1;
+    var child := tree.children[pos];
+    if (child.lb == l && child.ub == u) {
+    } else {
+      // Before we can call Define recursively, we must prove that the child CantEquivocate.
+      forall key', valueA, valueB, lookup, lookup'
+      |
+      && IsSatisfyingLookup(tree.children[pos], key', valueA, lookup)
+      && IsSatisfyingLookup(tree.children[pos], key', valueB, lookup')
+      ensures valueA == valueB;
+      {
+        var plookup  := [Layer(tree, pos)] + lookup;
+        var plookup' := [Layer(tree, pos)] + lookup';
+        assert IsSatisfyingLookup(tree, key', valueA, plookup);
+        assert IsSatisfyingLookup(tree, key', valueB, plookup');
+      }
+      var newchild := newtree.children[pos];
+
+      SplitIsCorrect(tree.children[pos], newchild, l, u, childrenToLeft);
+
+      assert newtree == Index(tree.pivots, tree.children[pos := newchild], tree.lb, tree.ub);
+
+      // Proof that PreservesLookups
+      forall lookup:Lookup, key:Key, value:Value | IsSatisfyingLookup(tree, key, value, lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(newtree, key, value, lookup')
+      {
+        var clookup := lookup[1..];
+        assert IsSatisfyingLookup(tree.children[lookup[0].slot], key, value, clookup);
+        var clookup' :| IsSatisfyingLookup(newtree.children[lookup[0].slot], key, value, clookup');
+        var lookup' := [Layer(newtree, lookup[0].slot)] + clookup';
+        assert IsSatisfyingLookup(newtree, key, value, lookup');
+      }
+
+      forall lookup':Lookup, key:Key, value:Value | IsSatisfyingLookup(newtree, key, value, lookup')
+      ensures exists lookup' :: IsSatisfyingLookup(tree, key, value, lookup')
+      {
+        var clookup' := lookup'[1..];
+        assert IsSatisfyingLookup(newtree.children[lookup'[0].slot], key, value, clookup');
+        var clookup: Lookup<Value> :| IsSatisfyingLookup(tree.children[lookup'[0].slot], key, value, clookup);
+        var lookup := [Layer(tree, lookup'[0].slot)] + clookup;
+        assert IsSatisfyingLookup(tree, key, value, lookup);
+      }
+
+      // Proof that we CantEquivocate
+      forall key', valueA, valueB, lookupA: Lookup, lookupB: Lookup
+      |
+      && IsSatisfyingLookup(newtree, key', valueA, lookupA)
+      && IsSatisfyingLookup(newtree, key', valueB, lookupB)
+      ensures valueA == valueB;
+      {
+        SatisfyingLookupSlotIsLargestLte(newtree, key', valueA, lookupA);
+        SatisfyingLookupSlotIsLargestLte(newtree, key', valueB, lookupB);
+        SatisfyingLookupsNest(newtree, key', valueA, lookupA);
+        SatisfyingLookupsNest(newtree, key', valueB, lookupB);
+      }
+      assert CantEquivocate(newtree);
+
+    }
+  }
+
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
   requires Invariant(k, s);
   requires NextStep(k, s, s', step);
