@@ -1,6 +1,6 @@
 # List the DLLs and EXEs you want to build
-TARGETDLLS=
-TARGETEXES=BtreeBenchmark.exe
+#TARGETDLLS=
+#TARGETEXES=BtreeBenchmark.exe
 
 #
 # Shouldn't have to modify anything below here.
@@ -8,7 +8,7 @@ TARGETEXES=BtreeBenchmark.exe
 
 all: $(TARGETDLLS) $(TARGETEXES)
 
-DAFNY=dafny
+DAFNY=time dafny
 
 #####################################
 ######## Automatic cleanups #########
