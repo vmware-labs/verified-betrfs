@@ -61,4 +61,15 @@ module Sequences {
   {
     s[..pos] + [a] + s[pos..]
   }
+
+  function method {:opaque} replace1with2<A>(s: seq<A>, a: A, b: A, pos: int) : seq<A>
+  requires 0 <= pos < |s|;
+  ensures |replace1with2(s,a,b,pos)| == |s| + 1;
+  ensures forall i :: 0 <= i < pos ==> replace1with2(s, a, b, pos)[i] == s[i];
+  ensures forall i :: pos < i < |s| ==> replace1with2(s, a, b, pos)[i+1] == s[i];
+  ensures replace1with2(s, a, b, pos)[pos] == a;
+  ensures replace1with2(s, a, b, pos)[pos + 1] == b;
+  {
+    s[..pos] + [a, b] + s[pos+1..]
+  }
 }

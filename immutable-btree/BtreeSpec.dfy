@@ -188,6 +188,79 @@ module BtreeSpec {
     )
   }
 
+  predicate IsSplit(node: Node, left_node: Node, pivot: Key, right_node: Node, childrenToLeft: int)
+  {
+    && node.lb == left_node.lb
+    && left_node.ub == pivot
+    && pivot == right_node.ub
+    && right_node.ub == node.ub
+    && (if node.Leaf? then (
+      && left_node.Leaf?
+      && right_node.Leaf?
+      && |left_node.keys| == childrenToLeft
+      && |left_node.values| == childrenToLeft
+      && |left_node.keys| > 0
+      && |right_node.keys| > 0
+      && node.keys == left_node.keys + right_node.keys
+      && node.values == left_node.values + right_node.values
+      && pivot == right_node.keys[0]
+    ) else (
+      && left_node.Index?
+      && right_node.Index?
+      && |left_node.children| == childrenToLeft
+      && |left_node.pivots| == childrenToLeft - 1
+      && |left_node.children| >= 2
+      && |right_node.children| >= 2
+      && node.children == left_node.children + right_node.children
+      && node.pivots == left_node.pivots + [pivot] + right_node.pivots
+    ))
+  }
+
+  // Suppose one of tree's children `child` satisfies
+  // has (lb, ub) equal to (l, u). Then we are going to split
+  // `child` and augment the pivot-list of `tree` by 1,
+  // and splice out `child` and add the two new nodes.
+  predicate SplitTransform(tree: Node, newtree: Node, l: Key, u: Key,
+      childrenToLeft: int)
+  requires WFTree(tree)
+  decreases tree
+  {
+    && tree.Index?
+    && newtree.Index?
+    && newtree.lb == tree.lb
+    && newtree.ub == tree.ub
+    && var child_pos := Keyspace.LargestLte(tree.pivots, l) + 1;
+    && var child := tree.children[child_pos];
+    && (if child.lb == l && child.ub == u then (
+      // location of the newly inserted pivot is child_pos
+      // child at child_pos gets replaced by two nodes
+      && |newtree.children| == |tree.children| + 1
+      && |newtree.pivots| == |tree.pivots| + 1
+      && IsSplit(child, newtree.children[child_pos], newtree.pivots[child_pos], newtree.children[child_pos + 1], childrenToLeft)
+      && newtree.pivots == insert(tree.pivots, newtree.pivots[child_pos], child_pos)
+      && newtree.children == replace1with2(
+          tree.children,
+          newtree.children[child_pos],
+          newtree.children[child_pos + 1],
+          child_pos)
+    ) else (
+      && newtree.pivots == tree.pivots
+      && |newtree.children| == |tree.children|
+      && newtree.children == tree.children[child_pos := newtree.children[child_pos]]
+      && SplitTransform(tree.children[child_pos], newtree.children[child_pos], l, u, childrenToLeft)
+    ))
+  }
+
+  // Split the (non-root) node bound by l...u into two nodes
+  // with `childrenToLeft` of its children going on the left.
+  predicate Split(k: Constants, s: Variables, s': Variables,
+      l: Key, u: Key, childrenToLeft: int)
+  {
+    && s.root.Index?
+    && WFTree(s.root)
+    && SplitTransform(s.root, s'.root, l, u, childrenToLeft)
+  }
+
   datatype Step<Value(!new)> =
     | GetStep(key: Key, value: Value, lookup: Lookup)
     | PutStep(key: Key, value: Value)
