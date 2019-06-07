@@ -2,7 +2,11 @@ include "../lib/total_order.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"  
 include "BtreeImpl.dfy"  
-//include "BtreeImpl.dfy"
+include "CrashableMap.dfy"
+
+module IntegerCrashableMap refines CrashableMap {
+  import Keyspace = Bounded_Integer_Order
+}
 
 method Main() {
     var tree := BtreeImpl.empty();

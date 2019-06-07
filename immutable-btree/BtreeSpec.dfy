@@ -2,12 +2,14 @@ include "../lib/total_order.dfy"
 include "../lib/map_utils.dfy"
 include "../lib/mathematics.dfy"
 include "../lib/sequences.dfy"
+include "CrashableMap.dfy"
 
-module BtreeSpec {
-  import Keyspace = Bounded_Integer_Order
+abstract module BtreeSpec {
+  import CrashableMap
+  import Keyspace = CrashableMap.Keyspace
   import opened Sequences
 
-  type Key = Keyspace.Element
+  type Key = CrashableMap.Keyspace.Element
 
   datatype Node<Value> =
     Leaf(keys: seq<Key>, values: seq<Value>, ghost lb: Key, ghost ub: Key) |

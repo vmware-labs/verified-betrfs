@@ -7,12 +7,11 @@ include "../tla-tree/MissingLibrary.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
-module BtreeRefinement {
+abstract module BtreeRefinement {
+  import CrashableMap
   import opened Spec = BtreeSpec
   import opened Inv = BtreeInv
-  //import Keyspace = Bounded_Total_Order
   import opened Sequences
-  import CrashableMap
   import opened MissingLibrary
 
   function Ik(k: Constants) : CrashableMap.Constants
