@@ -76,7 +76,16 @@ abstract module BtreeRefinement {
 
         var intermediate := CrashableMap.Variables([I(k,s').views[0], I(k,s).views[0]]);
 
-        PutIsCorrect(s.root, s'.root, key, value);
+        if s.root.Leaf? {
+          var tree := s.root;
+          var newtree := s'.root;
+          assert PreservesLookupsExcept(tree, newtree, key);
+          assert PreservesLookupsExcept(newtree, tree, key);
+          assert exists lookup :: IsSatisfyingLookup(newtree, key, value, lookup);
+          assert CantEquivocate(newtree);
+        } else {
+          PutIsCorrect(s.root, s'.root, key, value);
+        }
 
         assert CrashableMap.NextStep(Ik(k), I(k,s), intermediate, CrashableMap.WriteStep(key, Some(value)));
         assert CrashableMap.NextStep(Ik(k), intermediate, I(k,s'), CrashableMap.PersistWritesStep(1));
