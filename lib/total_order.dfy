@@ -243,6 +243,16 @@ abstract module Total_Order {
     {
     }
   }
+
+  lemma strictlySortedInsert2(l: seq<Element>, k: Element, pos: int)
+  requires 0 <= pos <= |l|;
+  requires 0 < pos ==> lt(l[pos-1], k);
+  requires pos < |l| ==> lt(k, l[pos]);
+  ensures IsStrictlySorted(Seq.insert(l, k, pos));
+  {
+    Seq.reveal_insert();
+    reveal_IsStrictlySorted();
+  }
 }
 
 abstract module Bounded_Total_Order refines Total_Order {

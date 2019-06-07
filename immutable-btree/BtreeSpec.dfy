@@ -27,9 +27,9 @@ abstract module BtreeSpec {
       && CSMap.Keyspace.IsStrictlySorted(tree.keys)
       && |tree.keys| == |tree.values|
       && (forall i :: 0 <= i < |tree.keys| ==>
-          && CSMap.Keyspace.lte(tree.lb, tree.keys[i])
-          && CSMap.Keyspace.lt(tree.keys[i], tree.ub)
-         )
+          && CSMap.Keyspace.lte(tree.lb, tree.keys[i]))
+      && (forall i :: 0 <= i < |tree.keys| ==>
+          && CSMap.Keyspace.lt(tree.keys[i], tree.ub))
     else
       && |tree.pivots| > 0
       && CSMap.Keyspace.IsStrictlySorted(tree.pivots)
@@ -193,7 +193,7 @@ abstract module BtreeSpec {
   {
     && node.lb == left_node.lb
     && left_node.ub == pivot
-    && pivot == right_node.ub
+    && pivot == right_node.lb
     && right_node.ub == node.ub
     && (if node.Leaf? then (
       && left_node.Leaf?

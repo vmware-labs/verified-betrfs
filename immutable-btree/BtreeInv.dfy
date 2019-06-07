@@ -517,20 +517,71 @@ abstract module BtreeInv {
     }
   }
 
+  lemma pivotsAreCorrectAfterSplit(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int, pos: int)
+  requires WFTree(tree);
+  requires SplitTransform(tree, newtree, l, u, childrenToLeft);
+  requires pos == Keyspace.LargestLte(tree.pivots, l) + 1;
+  requires 0 <= pos < |tree.children|;
+  requires tree.children[pos].lb == l;
+  requires tree.children[pos].ub == u;
+  ensures Keyspace.IsStrictlySorted(newtree.pivots);
+  {
+    var child := tree.children[pos];
+    assert |newtree.children| == |tree.children| + 1;
+    var left_child := newtree.children[pos];
+    var right_child := newtree.children[pos+1];
+    assert WFTree(child);
+    if (pos < |tree.pivots|) {
+      if (child.Leaf?) {
+        assert newtree.pivots[pos]
+            == right_child.keys[0]
+            == child.keys[childrenToLeft];
+        assert Keyspace.lt(child.keys[childrenToLeft], child.ub);
+      } else {
+        assert newtree.pivots[pos] == child.pivots[childrenToLeft-1];
+        assert Keyspace.lt(child.pivots[childrenToLeft-1], child.ub);
+      }
+      assert child.ub == tree.pivots[pos];
+      assert Keyspace.lt(newtree.pivots[pos], tree.pivots[pos]);
+    }
+    if (pos > 0) {
+      if (child.Leaf?) {
+        assert Keyspace.lte(child.lb, child.keys[0]);
+        Keyspace.reveal_IsStrictlySorted();
+        assert Keyspace.lt(child.keys[0], child.keys[childrenToLeft]);
+        assert Keyspace.lt(child.lb, child.keys[childrenToLeft]);
+      } else {
+        assert Keyspace.lt(child.lb, child.pivots[childrenToLeft-1]);
+      }
+      assert child.lb == tree.pivots[pos-1];
+      assert Keyspace.lt(tree.pivots[pos-1], newtree.pivots[pos]);
+    }
+    Keyspace.strictlySortedInsert2(tree.pivots, newtree.pivots[pos], pos);
+  }
+
   lemma SplitIsCorrect<Value>(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int)
   requires WFTree(tree);
   requires CantEquivocate(tree);
   requires SplitTransform(tree, newtree, l, u, childrenToLeft);
+  ensures WFTree(newtree);
   ensures PreservesLookups(tree, newtree);
   ensures PreservesLookups(newtree, tree);
-  ensures WFTree(newtree)
-  ensures CantEquivocate(newtree)
-  decreases tree
+  ensures CantEquivocate(newtree);
+  decreases tree;
   {
     var pos := Keyspace.LargestLte(tree.pivots, l) + 1;
     var child := tree.children[pos];
     if (child.lb == l && child.ub == u) {
+      var left_child := newtree.children[pos];
+      var right_child := newtree.children[pos+1];
+      pivotsAreCorrectAfterSplit(tree, newtree, l, u, childrenToLeft, pos);
+      assert WFTree(newtree);
+      assume false;
+      assert PreservesLookups(tree, newtree);
+      assert PreservesLookups(newtree, tree);
+      assert CantEquivocate(newtree);
     } else {
+      assume false;
       // Before we can call Define recursively, we must prove that the child CantEquivocate.
       forall key', valueA, valueB, lookup, lookup'
       |
