@@ -9,7 +9,7 @@ abstract module BtreeSpec {
   import Keyspace = CrashableMap.Keyspace
   import opened Sequences
 
-  type Key = CrashableMap.Keyspace.Element
+  type Key = CrashableMap.Key
 
   datatype Node<Value> =
     Leaf(keys: seq<Key>, values: seq<Value>, ghost lb: Key, ghost ub: Key) |

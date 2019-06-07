@@ -6,8 +6,9 @@ include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
 abstract module BtreeImpl {
-  import opened Spec : BtreeSpec
+  //import opened Spec : BtreeSpec
   import opened Inv : BtreeInv
+  import opened Spec : Inv.Spec
   import opened Sequences
 
   lemma strictlySortedInsert(l: seq<Key>, k: Key, pos: int)
@@ -29,9 +30,9 @@ abstract module BtreeImpl {
   }
 
   method empty<Value>()
-  returns (newtree: Node<Value>)
+  returns (newtree: Node)
   ensures WFRoot(newtree)
-  ensures CantEquivocate<Value>(newtree)
+  ensures CantEquivocate(newtree)
   {
     Keyspace.reveal_IsStrictlySorted();
     return Leaf([], [], Keyspace.Min_Element, Keyspace.Max_Element);

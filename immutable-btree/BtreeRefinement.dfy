@@ -8,9 +8,8 @@ include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
 abstract module BtreeRefinement {
-  import CrashableMap
-  import opened Spec = BtreeSpec
-  import opened Inv = BtreeInv
+  import opened BtreeSpec
+  import opened BtreeInv
   import opened Sequences
   import opened MissingLibrary
 

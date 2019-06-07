@@ -5,7 +5,7 @@ include "../lib/sequences.dfy"
 include "BtreeSpec.dfy"
 
 abstract module BtreeInv {
-  import opened Spec : BtreeSpec
+  import opened BtreeSpec
   import opened Sequences
 
   predicate CantEquivocate<Value(!new)>(tree: Node<Value>)
