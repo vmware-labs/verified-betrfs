@@ -119,6 +119,35 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
+  requires -1 <= pos < |l|;
+  requires IsStrictlySorted(l);
+  requires IsSorted(l);
+  requires pos == LargestLte(l, k);
+  requires pos < 0 || k != l[pos];
+  ensures IsStrictlySorted(Seq.insert(l, k, pos+1));
+  {
+    Seq.reveal_insert();
+    var l' := l[..pos+1] + [k] + l[pos+1..];
+    reveal_IsStrictlySorted();
+
+    forall i, j | 0 <= i < j < |l'|
+    ensures lt(l'[i], l'[j])
+    {
+    }
+  }
+
+  lemma strictlySortedInsert2(l: seq<Element>, k: Element, pos: int)
+    requires IsStrictlySorted(l);
+    requires 0 <= pos <= |l|;
+    requires 0 < pos ==> lt(l[pos-1], k);
+    requires pos < |l| ==> lt(k, l[pos]);
+    ensures IsStrictlySorted(Seq.insert(l, k, pos));
+  {
+    Seq.reveal_insert();
+    reveal_IsStrictlySorted();
+  }
+
   function method LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLte(run, needle) < |run|;
@@ -226,33 +255,6 @@ abstract module Total_Order {
     ensures a !! b;
   {}
 
-  lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
-  requires -1 <= pos < |l|;
-  requires IsStrictlySorted(l);
-  requires IsSorted(l);
-  requires pos == LargestLte(l, k);
-  requires pos < 0 || k != l[pos];
-  ensures IsStrictlySorted(Seq.insert(l, k, pos+1));
-  {
-    Seq.reveal_insert();
-    var l' := l[..pos+1] + [k] + l[pos+1..];
-    reveal_IsStrictlySorted();
-
-    forall i, j | 0 <= i < j < |l'|
-    ensures lt(l'[i], l'[j])
-    {
-    }
-  }
-
-  lemma strictlySortedInsert2(l: seq<Element>, k: Element, pos: int)
-  requires 0 <= pos <= |l|;
-  requires 0 < pos ==> lt(l[pos-1], k);
-  requires pos < |l| ==> lt(k, l[pos]);
-  ensures IsStrictlySorted(Seq.insert(l, k, pos));
-  {
-    Seq.reveal_insert();
-    reveal_IsStrictlySorted();
-  }
 }
 
 abstract module Bounded_Total_Order refines Total_Order {

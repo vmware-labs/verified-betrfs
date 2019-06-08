@@ -520,11 +520,11 @@ abstract module BtreeInv {
   lemma pivotsAreCorrectAfterSplit(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int, pos: int)
   requires WFTree(tree);
   requires SplitTransform(tree, newtree, l, u, childrenToLeft);
-  requires pos == Keyspace.LargestLte(tree.pivots, l) + 1;
+  requires pos == CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
   requires 0 <= pos < |tree.children|;
   requires tree.children[pos].lb == l;
   requires tree.children[pos].ub == u;
-  ensures Keyspace.IsStrictlySorted(newtree.pivots);
+  ensures CSMap.Keyspace.IsStrictlySorted(newtree.pivots);
   {
     var child := tree.children[pos];
     assert |newtree.children| == |tree.children| + 1;
@@ -536,88 +536,88 @@ abstract module BtreeInv {
         assert newtree.pivots[pos]
             == right_child.keys[0]
             == child.keys[childrenToLeft];
-        assert Keyspace.lt(child.keys[childrenToLeft], child.ub);
+        assert CSMap.Keyspace.lt(child.keys[childrenToLeft], child.ub);
       } else {
         assert newtree.pivots[pos] == child.pivots[childrenToLeft-1];
-        assert Keyspace.lt(child.pivots[childrenToLeft-1], child.ub);
+        assert CSMap.Keyspace.lt(child.pivots[childrenToLeft-1], child.ub);
       }
       assert child.ub == tree.pivots[pos];
-      assert Keyspace.lt(newtree.pivots[pos], tree.pivots[pos]);
+      assert CSMap.Keyspace.lt(newtree.pivots[pos], tree.pivots[pos]);
     }
     if (pos > 0) {
       if (child.Leaf?) {
-        assert Keyspace.lte(child.lb, child.keys[0]);
-        Keyspace.reveal_IsStrictlySorted();
-        assert Keyspace.lt(child.keys[0], child.keys[childrenToLeft]);
-        assert Keyspace.lt(child.lb, child.keys[childrenToLeft]);
+        assert CSMap.Keyspace.lte(child.lb, child.keys[0]);
+        CSMap.Keyspace.reveal_IsStrictlySorted();
+        assert CSMap.Keyspace.lt(child.keys[0], child.keys[childrenToLeft]);
+        assert CSMap.Keyspace.lt(child.lb, child.keys[childrenToLeft]);
       } else {
-        assert Keyspace.lt(child.lb, child.pivots[childrenToLeft-1]);
+        assert CSMap.Keyspace.lt(child.lb, child.pivots[childrenToLeft-1]);
       }
       assert child.lb == tree.pivots[pos-1];
-      assert Keyspace.lt(tree.pivots[pos-1], newtree.pivots[pos]);
+      assert CSMap.Keyspace.lt(tree.pivots[pos-1], newtree.pivots[pos]);
     }
-    Keyspace.strictlySortedInsert2(tree.pivots, newtree.pivots[pos], pos);
+    CSMap.Keyspace.strictlySortedInsert2(tree.pivots, newtree.pivots[pos], pos);
   }
 
   lemma pivotsAreBoundedAfterSplit(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int, pos: int)
   requires WFTree(tree);
   requires SplitTransform(tree, newtree, l, u, childrenToLeft);
-  requires pos == Keyspace.LargestLte(tree.pivots, l) + 1;
+  requires pos == CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
   requires 0 <= pos < |tree.children|;
   requires tree.children[pos].lb == l;
   requires tree.children[pos].ub == u;
-  requires Keyspace.IsStrictlySorted(newtree.pivots);
+  requires CSMap.Keyspace.IsStrictlySorted(newtree.pivots);
   ensures (forall i :: 0 <= i < |newtree.pivots| ==>
-      && Keyspace.lt(newtree.lb, newtree.pivots[i])
-      && Keyspace.lt(newtree.pivots[i], newtree.ub))
+      && CSMap.Keyspace.lt(newtree.lb, newtree.pivots[i])
+      && CSMap.Keyspace.lt(newtree.pivots[i], newtree.ub))
   {
     forall i | 0 <= i < |newtree.pivots|
-    ensures Keyspace.lt(newtree.lb, newtree.pivots[i])
-    ensures Keyspace.lt(newtree.pivots[i], newtree.ub)
+    ensures CSMap.Keyspace.lt(newtree.lb, newtree.pivots[i])
+    ensures CSMap.Keyspace.lt(newtree.pivots[i], newtree.ub)
     {
       if (i < pos) {
         assert newtree.pivots[i] == tree.pivots[i];
-        assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
-        assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+        assert CSMap.Keyspace.lt(newtree.lb, newtree.pivots[i]);
+        assert CSMap.Keyspace.lt(newtree.pivots[i], newtree.ub);
       } else if (i == pos) {
         var child := tree.children[pos];
         var left_child := newtree.children[pos];
         var right_child := newtree.children[pos+1];
         if (tree.children[pos].Leaf?) {
-          assert Keyspace.lte(newtree.lb, child.lb);
+          assert CSMap.Keyspace.lte(newtree.lb, child.lb);
           assert WFTree(child);
-          assert Keyspace.lte(child.lb, child.keys[0]);
-          Keyspace.reveal_IsStrictlySorted();
+          assert CSMap.Keyspace.lte(child.lb, child.keys[0]);
+          CSMap.Keyspace.reveal_IsStrictlySorted();
           assert 0 < |left_child.keys|;
-          assert Keyspace.lt(child.keys[0], child.keys[|left_child.keys|]);
+          assert CSMap.Keyspace.lt(child.keys[0], child.keys[|left_child.keys|]);
           assert child.keys[|left_child.keys|] == right_child.keys[0];
           assert right_child.keys[0] == newtree.pivots[i];
 
-          assert Keyspace.lt(right_child.keys[0], newtree.ub);
+          assert CSMap.Keyspace.lt(right_child.keys[0], newtree.ub);
 
-          assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
-          assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+          assert CSMap.Keyspace.lt(newtree.lb, newtree.pivots[i]);
+          assert CSMap.Keyspace.lt(newtree.pivots[i], newtree.ub);
         } else {
-          assert Keyspace.lte(newtree.lb, child.lb);
+          assert CSMap.Keyspace.lte(newtree.lb, child.lb);
           assert WFTree(child);
-          assert Keyspace.lte(child.lb, child.pivots[0]);
+          assert CSMap.Keyspace.lte(child.lb, child.pivots[0]);
           assert 0 < childrenToLeft;
-          Keyspace.reveal_IsStrictlySorted();
-          assert Keyspace.lt(child.pivots[0], child.pivots[childrenToLeft]);
+          CSMap.Keyspace.reveal_IsStrictlySorted();
+          assert CSMap.Keyspace.lt(child.pivots[0], child.pivots[childrenToLeft]);
 
-          assert Keyspace.lt(child.pivots[childrenToLeft], child.ub);
-          assert Keyspace.lte(child.ub, newtree.ub);
+          assert CSMap.Keyspace.lt(child.pivots[childrenToLeft], child.ub);
+          assert CSMap.Keyspace.lte(child.ub, newtree.ub);
 
-          assert Keyspace.lt(newtree.lb, child.pivots[childrenToLeft]);
-          assert Keyspace.lt(child.pivots[childrenToLeft], newtree.ub);
+          assert CSMap.Keyspace.lt(newtree.lb, child.pivots[childrenToLeft]);
+          assert CSMap.Keyspace.lt(child.pivots[childrenToLeft], newtree.ub);
 
-          assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
-          assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+          assert CSMap.Keyspace.lt(newtree.lb, newtree.pivots[i]);
+          assert CSMap.Keyspace.lt(newtree.pivots[i], newtree.ub);
         }
       } else {
         assert newtree.pivots[i] == tree.pivots[i - 1];
-        assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
-        assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+        assert CSMap.Keyspace.lt(newtree.lb, newtree.pivots[i]);
+        assert CSMap.Keyspace.lt(newtree.pivots[i], newtree.ub);
       }
     }
   }
@@ -626,39 +626,39 @@ abstract module BtreeInv {
   requires WFTree(tree);
   requires tree.Leaf?;
   requires IsSplit(tree, tree_left, pivot, tree_right, childrenToLeft);
-  ensures Keyspace.IsStrictlySorted(tree_left.keys);
-  ensures Keyspace.IsStrictlySorted(tree_right.keys);
-  ensures (forall i :: 0 <= i < |tree_left.keys| ==> && Keyspace.lte(tree_left.lb, tree_left.keys[i]))
-  ensures (forall i :: 0 <= i < |tree_left.keys| ==> && Keyspace.lt(tree_left.keys[i], tree_left.ub))
-  ensures (forall i :: 0 <= i < |tree_right.keys| ==> && Keyspace.lte(tree_right.lb, tree_right.keys[i]))
-  ensures (forall i :: 0 <= i < |tree_right.keys| ==> && Keyspace.lt(tree_right.keys[i], tree_right.ub))
+  ensures CSMap.Keyspace.IsStrictlySorted(tree_left.keys);
+  ensures CSMap.Keyspace.IsStrictlySorted(tree_right.keys);
+  ensures (forall i :: 0 <= i < |tree_left.keys| ==> && CSMap.Keyspace.lte(tree_left.lb, tree_left.keys[i]))
+  ensures (forall i :: 0 <= i < |tree_left.keys| ==> && CSMap.Keyspace.lt(tree_left.keys[i], tree_left.ub))
+  ensures (forall i :: 0 <= i < |tree_right.keys| ==> && CSMap.Keyspace.lte(tree_right.lb, tree_right.keys[i]))
+  ensures (forall i :: 0 <= i < |tree_right.keys| ==> && CSMap.Keyspace.lt(tree_right.keys[i], tree_right.ub))
   {
-    Keyspace.reveal_IsStrictlySorted();
+    CSMap.Keyspace.reveal_IsStrictlySorted();
     forall i, j | 0 <= i < j < |tree_left.keys|
-    ensures Keyspace.lt(tree_left.keys[i], tree_left.keys[j])
+    ensures CSMap.Keyspace.lt(tree_left.keys[i], tree_left.keys[j])
     {
       assert tree_left.keys[i] == tree.keys[i];
       assert tree_left.keys[j] == tree.keys[j];
     }
     forall i, j | 0 <= i < j < |tree_right.keys|
-    ensures Keyspace.lt(tree_right.keys[i], tree_right.keys[j])
+    ensures CSMap.Keyspace.lt(tree_right.keys[i], tree_right.keys[j])
     {
       assert tree_right.keys[i] == tree.keys[i + |tree_left.keys|];
       assert tree_right.keys[j] == tree.keys[j + |tree_left.keys|];
     }
 
     forall i | 0 <= i < |tree_left.keys|
-    ensures Keyspace.lte(tree_left.lb, tree_left.keys[i])
-    ensures Keyspace.lt(tree_left.keys[i], tree_left.ub)
+    ensures CSMap.Keyspace.lte(tree_left.lb, tree_left.keys[i])
+    ensures CSMap.Keyspace.lt(tree_left.keys[i], tree_left.ub)
     {
       assert tree_left.keys[i] == tree.keys[i];
-      assert Keyspace.lt(tree.keys[i], tree.keys[|tree_left.keys|]);
+      assert CSMap.Keyspace.lt(tree.keys[i], tree.keys[|tree_left.keys|]);
       assert tree_left.ub == tree.keys[|tree_left.keys|];
     }
 
     forall i | 0 <= i < |tree_right.keys|
-    ensures Keyspace.lte(tree_right.lb, tree_right.keys[i])
-    ensures Keyspace.lt(tree_right.keys[i], tree_right.ub)
+    ensures CSMap.Keyspace.lte(tree_right.lb, tree_right.keys[i])
+    ensures CSMap.Keyspace.lt(tree_right.keys[i], tree_right.ub)
     {
       assert tree_right.keys[i] == tree.keys[i + |tree_left.keys|];
     }
@@ -668,37 +668,37 @@ abstract module BtreeInv {
   requires WFTree(tree);
   requires tree.Index?;
   requires IsSplit(tree, tree_left, pivot, tree_right, childrenToLeft);
-  ensures Keyspace.IsStrictlySorted(tree_left.pivots);
-  ensures Keyspace.IsStrictlySorted(tree_right.pivots);
-  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lt(tree_left.lb, tree_left.pivots[i]))
-  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lt(tree_left.pivots[i], tree_left.ub))
-  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lt(tree_right.lb, tree_right.pivots[i]))
-  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lt(tree_right.pivots[i], tree_right.ub))
+  ensures CSMap.Keyspace.IsStrictlySorted(tree_left.pivots);
+  ensures CSMap.Keyspace.IsStrictlySorted(tree_right.pivots);
+  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && CSMap.Keyspace.lt(tree_left.lb, tree_left.pivots[i]))
+  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && CSMap.Keyspace.lt(tree_left.pivots[i], tree_left.ub))
+  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && CSMap.Keyspace.lt(tree_right.lb, tree_right.pivots[i]))
+  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && CSMap.Keyspace.lt(tree_right.pivots[i], tree_right.ub))
   {
-    Keyspace.reveal_IsStrictlySorted();
+    CSMap.Keyspace.reveal_IsStrictlySorted();
     forall i, j | 0 <= i < j < |tree_left.pivots|
-    ensures Keyspace.lt(tree_left.pivots[i], tree_left.pivots[j])
+    ensures CSMap.Keyspace.lt(tree_left.pivots[i], tree_left.pivots[j])
     {
       assert tree_left.pivots[i] == tree.pivots[i];
       assert tree_left.pivots[j] == tree.pivots[j];
     }
     forall i, j | 0 <= i < j < |tree_right.pivots|
-    ensures Keyspace.lt(tree_right.pivots[i], tree_right.pivots[j])
+    ensures CSMap.Keyspace.lt(tree_right.pivots[i], tree_right.pivots[j])
     {
       assert tree_right.pivots[i] == tree.pivots[i + |tree_left.pivots| + 1];
       assert tree_right.pivots[j] == tree.pivots[j + |tree_left.pivots| + 1];
     }
 
     forall i | 0 <= i < |tree_left.pivots|
-    ensures Keyspace.lt(tree_left.lb, tree_left.pivots[i])
-    ensures Keyspace.lt(tree_left.pivots[i], tree_left.ub)
+    ensures CSMap.Keyspace.lt(tree_left.lb, tree_left.pivots[i])
+    ensures CSMap.Keyspace.lt(tree_left.pivots[i], tree_left.ub)
     {
       assert tree_left.pivots[i] == tree.pivots[i];
     }
 
     forall i | 0 <= i < |tree_right.pivots|
-    ensures Keyspace.lt(tree_right.lb, tree_right.pivots[i])
-    ensures Keyspace.lt(tree_right.pivots[i], tree_right.ub)
+    ensures CSMap.Keyspace.lt(tree_right.lb, tree_right.pivots[i])
+    ensures CSMap.Keyspace.lt(tree_right.pivots[i], tree_right.ub)
     {
       assert tree_right.pivots[i] == tree.pivots[i + |tree_left.pivots| + 1];
     }
@@ -715,7 +715,7 @@ abstract module BtreeInv {
   ensures CantEquivocate(newtree);
   decreases tree;
   {
-    var pos := Keyspace.LargestLte(tree.pivots, l) + 1;
+    var pos := CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
     var child := tree.children[pos];
     if (child.lb == l && child.ub == u) {
       var left_child := newtree.children[pos];
