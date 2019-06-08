@@ -559,6 +559,69 @@ abstract module BtreeInv {
     Keyspace.strictlySortedInsert2(tree.pivots, newtree.pivots[pos], pos);
   }
 
+  lemma pivotsAreBoundedAfterSplit(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int, pos: int)
+  requires WFTree(tree);
+  requires SplitTransform(tree, newtree, l, u, childrenToLeft);
+  requires pos == Keyspace.LargestLte(tree.pivots, l) + 1;
+  requires 0 <= pos < |tree.children|;
+  requires tree.children[pos].lb == l;
+  requires tree.children[pos].ub == u;
+  requires Keyspace.IsStrictlySorted(newtree.pivots);
+  ensures (forall i :: 0 <= i < |newtree.pivots| ==>
+      && Keyspace.lt(newtree.lb, newtree.pivots[i])
+      && Keyspace.lt(newtree.pivots[i], newtree.ub))
+  {
+    forall i | 0 <= i < |newtree.pivots|
+    ensures Keyspace.lt(newtree.lb, newtree.pivots[i])
+    ensures Keyspace.lt(newtree.pivots[i], newtree.ub)
+    {
+      if (i < pos) {
+        assert newtree.pivots[i] == tree.pivots[i];
+        assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
+        assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+      } else if (i == pos) {
+        var child := tree.children[pos];
+        var left_child := newtree.children[pos];
+        var right_child := newtree.children[pos+1];
+        if (tree.children[pos].Leaf?) {
+          assert Keyspace.lte(newtree.lb, child.lb);
+          assert WFTree(child);
+          assert Keyspace.lte(child.lb, child.keys[0]);
+          Keyspace.reveal_IsStrictlySorted();
+          assert 0 < |left_child.keys|;
+          assert Keyspace.lt(child.keys[0], child.keys[|left_child.keys|]);
+          assert child.keys[|left_child.keys|] == right_child.keys[0];
+          assert right_child.keys[0] == newtree.pivots[i];
+
+          assert Keyspace.lt(right_child.keys[0], newtree.ub);
+
+          assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
+          assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+        } else {
+          assert Keyspace.lte(newtree.lb, child.lb);
+          assert WFTree(child);
+          assert Keyspace.lte(child.lb, child.pivots[0]);
+          assert 0 < childrenToLeft;
+          Keyspace.reveal_IsStrictlySorted();
+          assert Keyspace.lt(child.pivots[0], child.pivots[childrenToLeft]);
+
+          assert Keyspace.lt(child.pivots[childrenToLeft], child.ub);
+          assert Keyspace.lte(child.ub, newtree.ub);
+
+          assert Keyspace.lt(newtree.lb, child.pivots[childrenToLeft]);
+          assert Keyspace.lt(child.pivots[childrenToLeft], newtree.ub);
+
+          assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
+          assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+        }
+      } else {
+        assert newtree.pivots[i] == tree.pivots[i - 1];
+        assert Keyspace.lt(newtree.lb, newtree.pivots[i]);
+        assert Keyspace.lt(newtree.pivots[i], newtree.ub);
+      }
+    }
+  }
+
   lemma keysSortedOfSplitChildren(tree: Node, tree_left: Node, pivot: Key, tree_right: Node, childrenToLeft: int)
   requires WFTree(tree);
   requires tree.Leaf?;
@@ -667,9 +730,57 @@ abstract module BtreeInv {
       assert WFTree(left_child);
       assert WFTree(right_child);
 
-      assume false;
       pivotsAreCorrectAfterSplit(tree, newtree, l, u, childrenToLeft, pos);
+      pivotsAreBoundedAfterSplit(tree, newtree, l, u, childrenToLeft, pos);
+
+      forall i | 0 <= i < |newtree.children|
+      ensures WFTree(newtree.children[i])
+      {
+        if (i < pos) {
+          assert newtree.children[i] == tree.children[i];
+          assert WFTree(tree.children[i]);
+        } else if (i == pos) {
+          assert newtree.children[i] == left_child;
+        } else if (i == pos + 1) {
+          assert newtree.children[i] == right_child;
+        } else {
+          assert 0 <= i-1 < |tree.children| ==> WFTree(tree.children[i-1]);
+          assert 0 <= i-1 < |tree.children|; // this seems to help proof time a ton
+          assert WFTree(tree.children[i-1]);
+          assert newtree.children[i] == tree.children[i-1];
+        }
+      }
+
+      assume false;
+
+      forall i | 0 <= i < |newtree.pivots|
+      ensures
+           && newtree.pivots[i] == newtree.children[i].ub
+           && newtree.pivots[i] == newtree.children[i+1].lb
+      {
+        if (i < pos-1) {
+          assert newtree.pivots[i] == tree.pivots[i];
+          assert newtree.children[i] == tree.children[i];
+          assert newtree.children[i+1] == left_child;
+        }
+        else if (i == pos) {
+          assert newtree.children[i] == left_child;
+          assert newtree.children[i+1] == right_child;
+        }
+        else if (i == pos+1) {
+          assert newtree.pivots[i] == tree.pivots[i-1];
+          assert newtree.children[i] == right_child;
+          assert newtree.children[i+1] == tree.children[i];
+        }
+        else {
+          assert newtree.pivots[i] == tree.pivots[i-1];
+          assert newtree.children[i] == tree.children[i-1];
+          assert newtree.children[i+1] == tree.children[i];
+        }
+      }
+
       assert WFTree(newtree);
+
       assume false;
       assert PreservesLookups(tree, newtree);
       assert PreservesLookups(newtree, tree);
