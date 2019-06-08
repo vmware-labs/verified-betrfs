@@ -607,9 +607,9 @@ abstract module BtreeInv {
   requires IsSplit(tree, tree_left, pivot, tree_right, childrenToLeft);
   ensures Keyspace.IsStrictlySorted(tree_left.pivots);
   ensures Keyspace.IsStrictlySorted(tree_right.pivots);
-  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lte(tree_left.lb, tree_left.pivots[i]))
+  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lt(tree_left.lb, tree_left.pivots[i]))
   ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lt(tree_left.pivots[i], tree_left.ub))
-  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lte(tree_right.lb, tree_right.pivots[i]))
+  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lt(tree_right.lb, tree_right.pivots[i]))
   ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lt(tree_right.pivots[i], tree_right.ub))
   {
     Keyspace.reveal_IsStrictlySorted();
@@ -627,14 +627,14 @@ abstract module BtreeInv {
     }
 
     forall i | 0 <= i < |tree_left.pivots|
-    ensures Keyspace.lte(tree_left.lb, tree_left.pivots[i])
+    ensures Keyspace.lt(tree_left.lb, tree_left.pivots[i])
     ensures Keyspace.lt(tree_left.pivots[i], tree_left.ub)
     {
       assert tree_left.pivots[i] == tree.pivots[i];
     }
 
     forall i | 0 <= i < |tree_right.pivots|
-    ensures Keyspace.lte(tree_right.lb, tree_right.pivots[i])
+    ensures Keyspace.lt(tree_right.lb, tree_right.pivots[i])
     ensures Keyspace.lt(tree_right.pivots[i], tree_right.ub)
     {
       assert tree_right.pivots[i] == tree.pivots[i + |tree_left.pivots| + 1];
