@@ -8,6 +8,11 @@ module IntegerCrashableMap refines CrashableMap {
   import Keyspace = Bounded_Integer_Order
 }
 
+module IntegerBtreeSpec refines BtreeSpec {
+  import CrashableMap = IntegerCrashableMap
+  //import CrashableMap.Keyspace = Bounded_Integer_Order
+}
+
 method Main() {
     var tree := BtreeImpl.empty();
 

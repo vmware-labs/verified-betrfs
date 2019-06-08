@@ -6,9 +6,8 @@ include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
 abstract module BtreeImpl {
-  //import opened Spec : BtreeSpec
-  import opened Inv : BtreeInv
-  import opened Spec : Inv.Spec
+  import opened BtreeSpec
+  import opened BtreeInv
   import opened Sequences
 
   lemma strictlySortedInsert(l: seq<Key>, k: Key, pos: int)
