@@ -704,6 +704,110 @@ abstract module BtreeInv {
     }
   }
 
+  lemma SplitImpliesPreservesLookups(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int, pos: int)
+  requires WFTree(tree)
+  requires WFTree(newtree)
+  requires SplitTransform(tree, newtree, l, u, childrenToLeft);
+  requires pos == CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
+  requires tree.children[pos].lb == l && tree.children[pos].ub == u
+  ensures PreservesLookups(tree, newtree)
+  {
+    var pos := CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
+    forall lookup:Lookup, key:Key, value | IsSatisfyingLookup(tree, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(newtree, key, value, lookup')
+    {
+      var slot := lookup[0].slot;
+      if (slot < pos) {
+        var lookup' := [Layer(newtree, slot)] + lookup[1..];
+        assert IsSatisfyingLookup(newtree, key, value, lookup');
+      }
+      else if (slot == pos) {
+        var slot2 := lookup[1].slot;
+        if (slot2 < childrenToLeft) {
+          var lookup' := [
+              Layer(newtree, slot),
+              Layer(newtree.children[slot], slot2)] +
+              lookup[2..];
+          assert IsSatisfyingLookup(newtree, key, value, lookup');
+        } else {
+          var lookup' := [
+              Layer(newtree, slot+1),
+              Layer(newtree.children[slot+1], slot2 - childrenToLeft)] +
+              lookup[2..];
+          assert IsSatisfyingLookup(newtree, key, value, lookup');
+        }
+      }
+      else {
+        var lookup' := [Layer(newtree, slot+1)] + lookup[1..];
+        assert slot < |tree.children|;
+        assert slot+1 < |newtree.children|;
+        assert 0 <= lookup'[0].slot < |lookup'[0].node.children|;
+        assert IsSatisfyingLookup(newtree, key, value, lookup');
+      }
+    }
+  }
+
+  lemma SplitImpliesPreservesLookupsRev(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int, pos: int)
+  requires WFTree(tree)
+  requires WFTree(newtree)
+  requires SplitTransform(tree, newtree, l, u, childrenToLeft);
+  requires pos == CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
+  requires tree.children[pos].lb == l && tree.children[pos].ub == u
+  ensures PreservesLookups(newtree, tree)
+  {
+    var pos := CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
+    forall lookup:Lookup, key:Key, value | IsSatisfyingLookup(newtree, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(tree, key, value, lookup')
+    {
+      var slot := lookup[0].slot;
+      if (slot < pos) {
+        var lookup' := [Layer(tree, slot)] + lookup[1..];
+        assert IsSatisfyingLookup(tree, key, value, lookup');
+      }
+      else if (slot == pos) {
+        var slot2 := lookup[1].slot;
+        var lookup' := [
+            Layer(tree, slot),
+            Layer(tree.children[slot], slot2)] +
+            lookup[2..];
+        assert IsSatisfyingLookup(tree, key, value, lookup');
+      } else if (slot == pos + 1) {
+        var slot2 := lookup[1].slot;
+        var lookup' := [
+            Layer(tree, pos),
+            Layer(tree.children[pos], slot2 + childrenToLeft)] +
+            lookup[2..];
+        assert IsSatisfyingLookup(tree, key, value, lookup');
+      } else {
+        var lookup' := [Layer(tree, slot-1)] + lookup[1..];
+        assert lookup'[1].node
+            == newtree.children[slot]
+            == tree.children[slot-1];
+        assert lookup'[0].node.children[lookup'[0].slot] == tree.children[slot-1];
+        assert lookup'[1].node == lookup'[0].node.children[lookup'[0].slot];
+        assert IsSatisfyingLookup(tree, key, value, lookup');
+      }
+    }
+  }
+
+  lemma PreservesLookupsImplCantEquivocate<Value>(tree: Node, newtree: Node)
+  requires WFTree(tree)
+  requires WFTree(newtree)
+  requires CantEquivocate(tree)
+  requires PreservesLookups(newtree, tree)
+  ensures CantEquivocate(newtree)
+  {
+    forall key, value, value', lookup: Lookup<Value>, lookup': Lookup<Value> |
+      && IsSatisfyingLookup(newtree, key, value, lookup)
+      && IsSatisfyingLookup(newtree, key, value', lookup')
+    ensures
+      value == value'
+    {
+      var plookup :| IsSatisfyingLookup(tree, key, value, plookup); // from PreservesLookup
+      var plookup' :| IsSatisfyingLookup(tree, key, value', plookup'); // from PreservesLookup
+      assert value == value'; // comes from CantEquivocate(tree)
+    }
+  }
 
   lemma SplitIsCorrect<Value>(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int)
   requires WFTree(tree);
@@ -801,12 +905,13 @@ abstract module BtreeInv {
 
       assert WFTree(newtree);
 
-      assume false;
-      assert PreservesLookups(tree, newtree);
+      /*assert PreservesLookups(tree, newtree);
       assert PreservesLookups(newtree, tree);
-      assert CantEquivocate(newtree);
+      assert CantEquivocate(newtree);*/
+      SplitImpliesPreservesLookups(tree, newtree, l, u, childrenToLeft, pos);
+      SplitImpliesPreservesLookupsRev(tree, newtree, l, u, childrenToLeft, pos);
+      PreservesLookupsImplCantEquivocate(tree, newtree);
     } else {
-      assume false;
       // Before we can call Define recursively, we must prove that the child CantEquivocate.
       forall key', valueA, valueB, lookup, lookup'
       |
