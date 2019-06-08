@@ -751,31 +751,51 @@ abstract module BtreeInv {
         }
       }
 
-      assume false;
+      forall i | 0 <= i < |newtree.pivots|
+      ensures newtree.pivots[i] == newtree.children[i].ub
+      {
+        if (i < pos) {
+          assert newtree.children[i] == tree.children[i];
+          assert WFTree(tree.children[i]);
+          assert tree.pivots[i] == tree.children[i].ub;
+        } else if (i == pos) {
+          assert newtree.children[i] == left_child;
+          assert left_child.ub == newtree.pivots[i];
+        } else if (i == pos+1) {
+          assert newtree.children[i] == right_child;
+          assert right_child.ub == newtree.pivots[i];
+        } else {
+          assert 0 <= i-1 < |tree.children| ==> WFTree(tree.children[i-1]);
+          assert 0 <= i-1 < |tree.children|; // this seems to help proof time a ton
+          assert WFTree(tree.children[i-1]);
+          assert newtree.children[i] == tree.children[i-1];
+          assert tree.pivots[i-1] == tree.children[i-1].ub;
+        }
+      }
 
       forall i | 0 <= i < |newtree.pivots|
-      ensures
-           && newtree.pivots[i] == newtree.children[i].ub
-           && newtree.pivots[i] == newtree.children[i+1].lb
+      ensures newtree.pivots[i] == newtree.children[i+1].lb
       {
         if (i < pos-1) {
+          assert 0 <= i+1 < |tree.children| ==> WFTree(tree.children[i+1]);
+          assert 0 <= i+1 < |tree.children|; // this seems to help proof time a ton
+          assert WFTree(tree.children[i+1]);
+          assert newtree.children[i+1] == tree.children[i+1];
+          assert tree.pivots[i] == tree.children[i+1].lb;
+          assert 0 <= i < |tree.pivots|;
           assert newtree.pivots[i] == tree.pivots[i];
-          assert newtree.children[i] == tree.children[i];
+        } else if (i == pos-1) {
           assert newtree.children[i+1] == left_child;
-        }
-        else if (i == pos) {
-          assert newtree.children[i] == left_child;
+          assert left_child.lb == newtree.pivots[i];
+        } else if (i == pos) {
           assert newtree.children[i+1] == right_child;
-        }
-        else if (i == pos+1) {
-          assert newtree.pivots[i] == tree.pivots[i-1];
-          assert newtree.children[i] == right_child;
+          assert right_child.lb == newtree.pivots[i];
+        } else {
+          assert WFTree(tree.children[i]);
           assert newtree.children[i+1] == tree.children[i];
-        }
-        else {
-          assert newtree.pivots[i] == tree.pivots[i-1];
-          assert newtree.children[i] == tree.children[i-1];
-          assert newtree.children[i+1] == tree.children[i];
+          assert newtree.children[i+1].lb == tree.children[i].lb
+              == tree.pivots[i-1]
+              == newtree.pivots[i];
         }
       }
 
