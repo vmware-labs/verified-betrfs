@@ -2,14 +2,13 @@ include "../lib/total_order.dfy"
 include "../lib/map_utils.dfy"
 include "../lib/mathematics.dfy"
 include "../lib/sequences.dfy"
-include "CrashableMap.dfy"
+include "CrashSafeMap.dfy"
 
 abstract module BtreeSpec {
-  import CMap : CrashableMap
-  import Keyspace = CrashableMap.Keyspace
+  import CSMap : CrashSafeMap
   import opened Sequences
 
-  type Key = CrashableMap.Key
+  type Key = CSMap.Key
 
   datatype Node<Value> =
     Leaf(keys: seq<Key>, values: seq<Value>, ghost lb: Key, ghost ub: Key) |
@@ -19,22 +18,22 @@ abstract module BtreeSpec {
   datatype Variables<Value> = Variables(root: Node<Value>)
 
   predicate Init(k: Constants, s: Variables) {
-    s.root == Leaf([], [], Keyspace.Min_Element, Keyspace.Max_Element)
+    s.root == Leaf([], [], CSMap.Keyspace.Min_Element, CSMap.Keyspace.Max_Element)
   }
 
   predicate WFTree(tree: Node) {
     if tree.Leaf? then
       && |tree.keys| > 0
-      && Keyspace.IsStrictlySorted(tree.keys)
+      && CSMap.Keyspace.IsStrictlySorted(tree.keys)
       && |tree.keys| == |tree.values|
       && (forall i :: 0 <= i < |tree.keys| ==>
-          && Keyspace.lte(tree.lb, tree.keys[i])
-          && Keyspace.lt(tree.keys[i], tree.ub)
+          && CSMap.Keyspace.lte(tree.lb, tree.keys[i])
+          && CSMap.Keyspace.lt(tree.keys[i], tree.ub)
          )
     else
       && |tree.pivots| > 0
-      && Keyspace.IsStrictlySorted(tree.pivots)
-      && (forall i :: 0 <= i < |tree.pivots| ==> Keyspace.lt(tree.lb, tree.pivots[i]) && Keyspace.lt(tree.pivots[i], tree.ub))
+      && CSMap.Keyspace.IsStrictlySorted(tree.pivots)
+      && (forall i :: 0 <= i < |tree.pivots| ==> CSMap.Keyspace.lt(tree.lb, tree.pivots[i]) && CSMap.Keyspace.lt(tree.pivots[i], tree.ub))
       && |tree.children| == |tree.pivots| + 1
       && (forall i {:trigger WFTree(tree.children[i]) } :: 0 <= i < |tree.children| ==> WFTree(tree.children[i]))
       && tree.lb == tree.children[0].lb
@@ -46,8 +45,8 @@ abstract module BtreeSpec {
   }
 
   predicate WFRoot(tree: Node) {
-    && tree.lb == Keyspace.Min_Element
-    && tree.ub == Keyspace.Max_Element
+    && tree.lb == CSMap.Keyspace.Min_Element
+    && tree.ub == CSMap.Keyspace.Max_Element
     && (
       if (tree.Leaf? && tree.keys == []) then
         tree.values == []
@@ -91,12 +90,12 @@ abstract module BtreeSpec {
     requires WFTree(tree)
     decreases tree;
   {
-    && Keyspace.lte(tree.lb, key) // TODO enabling condition?
-    && Keyspace.lt(key, tree.ub)
+    && CSMap.Keyspace.lte(tree.lb, key) // TODO enabling condition?
+    && CSMap.Keyspace.lt(key, tree.ub)
     && tree.lb == newtree.lb
     && tree.ub == newtree.ub
     && (if tree.Leaf? then (
-      var pos := Keyspace.LargestLte(tree.keys, key);
+      var pos := CSMap.Keyspace.LargestLte(tree.keys, key);
       if pos >= 0 && key == tree.keys[pos] then (
         newtree == Leaf(tree.keys, tree.values[pos := value], tree.lb, tree.ub)
       ) else (
@@ -105,7 +104,7 @@ abstract module BtreeSpec {
         newtree == Leaf(newkeys, newvals, tree.lb, tree.ub)
       )
     ) else (
-      && var pos := Keyspace.LargestLte(tree.pivots, key) + 1;
+      && var pos := CSMap.Keyspace.LargestLte(tree.pivots, key) + 1;
 
       && newtree.Index?
       && newtree.pivots == tree.pivots
@@ -118,8 +117,8 @@ abstract module BtreeSpec {
   predicate Put<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
   {
     if (s.root.Leaf? && |s.root.keys| == 0) then (
-      && Keyspace.lte(s.root.lb, key)
-      && Keyspace.lt(key, s.root.ub)
+      && CSMap.Keyspace.lte(s.root.lb, key)
+      && CSMap.Keyspace.lt(key, s.root.ub)
       && s' == Variables(Leaf([key], [value], s.root.lb, s.root.ub))
     ) else (
       && WFTree(s.root)
@@ -231,7 +230,7 @@ abstract module BtreeSpec {
     && newtree.Index?
     && newtree.lb == tree.lb
     && newtree.ub == tree.ub
-    && var child_pos := Keyspace.LargestLte(tree.pivots, l) + 1;
+    && var child_pos := CSMap.Keyspace.LargestLte(tree.pivots, l) + 1;
     && var child := tree.children[child_pos];
     && (if child.lb == l && child.ub == u then (
       // location of the newly inserted pivot is child_pos

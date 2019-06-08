@@ -2,46 +2,44 @@ include "../lib/total_order.dfy"
 include "../lib/map_utils.dfy"
 include "../lib/mathematics.dfy"
 include "../lib/sequences.dfy"
-include "CrashableMap.dfy"
 include "../tla-tree/MissingLibrary.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
 abstract module BtreeRefinement {
-  import opened BtreeSpec
   import opened BtreeInv
   import opened Sequences
   import opened MissingLibrary
 
-  function Ik(k: Constants) : CrashableMap.Constants
+  function Ik(k: Spec.Constants) : Spec.CSMap.Constants
   {
-    CrashableMap.Constants()
+    Spec.CSMap.Constants()
   }
 
-  function INode<Value(!new)>(tree: Node) : imap<Key, Option<Value>>
+  function INode<Value(!new)>(tree: Spec.Node) : imap<Spec.Key, Option<Value>>
   {
-    imap k:Key ::
-        if (exists lookup: Lookup, v: Value :: IsSatisfyingLookup(tree, k, v, lookup)) then
-        (var lookup: Lookup, v: Value :| IsSatisfyingLookup(tree, k, v, lookup);
+    imap k:Spec.Key ::
+        if (exists lookup: Spec.Lookup, v: Value :: Spec.IsSatisfyingLookup(tree, k, v, lookup)) then
+        (var lookup: Spec.Lookup, v: Value :| Spec.IsSatisfyingLookup(tree, k, v, lookup);
          Some(v))
         else
          None
   }
 
 
-  function I<Value(!new)>(k: Constants, s: Variables) : CrashableMap.Variables
+  function I<Value(!new)>(k: Spec.Constants, s: Spec.Variables) : Spec.CSMap.Variables
   {
-    CrashableMap.Variables([ INode(s.root) ])
+    Spec.CSMap.Variables([ INode(s.root) ])
   }
 
-  lemma InvImpliesRefinementInv(k:Constants, s:Variables)
+  lemma InvImpliesRefinementInv(k:Spec.Constants, s:Spec.Variables)
   requires Invariant(k, s);
-  ensures CrashableMap.WF(I(k, s));
+  ensures Spec.CSMap.WF(I(k, s));
   {
     
   }
 
-  lemma InterpretationsAreIdentical(k: Constants, s:Variables, s':Variables)
+  lemma InterpretationsAreIdentical(k: Spec.Constants, s:Spec.Variables, s':Spec.Variables)
     requires PreservesLookups(s.root, s'.root);
     requires CantEquivocate(s.root)
     requires PreservesLookups(s'.root, s.root);
@@ -51,52 +49,43 @@ abstract module BtreeRefinement {
     assert INode(s.root) == INode(s'.root);
   }
 
-  lemma InvImpliesRefinementNext(k:Constants, s:Variables, s':Variables)
-  requires Next(k, s, s');
+  lemma InvImpliesRefinementNext(k:Spec.Constants, s:Spec.Variables, s':Spec.Variables)
+  requires Spec.Next(k, s, s');
   requires Invariant(k, s);
   requires Invariant(k, s');
-  ensures CrashableMap.WF(I(k, s));
-  ensures CrashableMap.WF(I(k, s));
-  ensures CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+  ensures Spec.CSMap.WF(I(k, s));
+  ensures Spec.CSMap.WF(I(k, s));
+  ensures Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
   {
-    var step:Step :| NextStep(k, s, s', step);
+    var step:Spec.Step :| Spec.NextStep(k, s, s', step);
     match step {
       case GetStep(key, value, lookup) => {
-        assert CrashableMap.WF(I(k, s));
-        assert CrashableMap.WF(I(k, s));
+        assert Spec.CSMap.WF(I(k, s));
+        assert Spec.CSMap.WF(I(k, s));
 
-        assert CrashableMap.NextStep(Ik(k), I(k,s), I(k,s'), CrashableMap.QueryStep(key, Some(value)));
+        assert Spec.CSMap.NextStep(Ik(k), I(k,s), I(k,s'), Spec.CSMap.QueryStep(key, Some(value)));
 
-        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s), I(k,s')]);
-        assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+        assert Spec.CSMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s), I(k,s')]);
+        assert Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
       case PutStep(key, value) => {
-        assert CrashableMap.WF(I(k, s));
-        assert CrashableMap.WF(I(k, s));
+        assert Spec.CSMap.WF(I(k, s));
+        assert Spec.CSMap.WF(I(k, s));
 
-        var intermediate := CrashableMap.Variables([I(k,s').views[0], I(k,s).views[0]]);
+        var intermediate := Spec.CSMap.Variables([I(k,s').views[0], I(k,s).views[0]]);
 
-        if s.root.Leaf? {
-          var tree := s.root;
-          var newtree := s'.root;
-          assert PreservesLookupsExcept(tree, newtree, key);
-          assert PreservesLookupsExcept(newtree, tree, key);
-          assert exists lookup :: IsSatisfyingLookup(newtree, key, value, lookup);
-          assert CantEquivocate(newtree);
-        } else {
-          PutIsCorrect(s.root, s'.root, key, value);
-        }
+        PutIsCorrect(s.root, s'.root, key, value);
 
-        assert CrashableMap.NextStep(Ik(k), I(k,s), intermediate, CrashableMap.WriteStep(key, Some(value)));
-        assert CrashableMap.NextStep(Ik(k), intermediate, I(k,s'), CrashableMap.PersistWritesStep(1));
+        assert Spec.CSMap.NextStep(Ik(k), I(k,s), intermediate, Spec.CSMap.WriteStep(key, Some(value)));
+        assert Spec.CSMap.NextStep(Ik(k), intermediate, I(k,s'), Spec.CSMap.PersistWritesStep(1));
 
-        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [ I(k,s), intermediate, I(k,s') ]);
+        assert Spec.CSMap.IsPath(Ik(k), I(k, s), I(k, s'), [ I(k,s), intermediate, I(k,s') ]);
 
-        assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+        assert Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
       case GrowStep(childrenToLeft) => {
-        assert CrashableMap.WF(I(k, s));
-        assert CrashableMap.WF(I(k, s));
+        assert Spec.CSMap.WF(I(k, s));
+        assert Spec.CSMap.WF(I(k, s));
 
         if (s.root.Leaf?) {
           GrowLeafIsCorrect(s.root, s'.root, childrenToLeft);
@@ -108,8 +97,8 @@ abstract module BtreeRefinement {
           assert I(k, s') == I(k, s);
         }
 
-        assert CrashableMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
-        assert CrashableMap.Reachable(Ik(k), I(k, s), I(k, s'));
+        assert Spec.CSMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
+        assert Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
     }
   }

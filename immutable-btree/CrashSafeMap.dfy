@@ -3,7 +3,7 @@ include "../lib/total_order.dfy"
 
 // A Map that can crash and revert to prior states, but only in
 // controlled ways, limited by a sync operation.
-abstract module CrashableMap {
+abstract module CrashSafeMap {
 import opened MissingLibrary
 
 import Keyspace : Bounded_Total_Order

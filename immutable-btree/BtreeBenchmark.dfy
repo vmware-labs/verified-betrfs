@@ -1,27 +1,34 @@
 include "../lib/total_order.dfy"
+include "CrashSafeMap.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"  
 include "BtreeImpl.dfy"  
-include "CrashableMap.dfy"
 
-module IntegerCrashableMap refines CrashableMap {
+module IntegerCrashSafeMap refines CrashSafeMap {
   import Keyspace = Bounded_Integer_Order
 }
 
 module IntegerBtreeSpec refines BtreeSpec {
-  import CrashableMap = IntegerCrashableMap
-  //import CrashableMap.Keyspace = Bounded_Integer_Order
+  import CSMap = IntegerCrashSafeMap
+}
+
+module IntegerBtreeInv refines BtreeInv {
+  import opened Spec = IntegerBtreeSpec
+}
+
+module IntegerBtreeImpl refines BtreeImpl {
+  import opened Inv = IntegerBtreeInv
 }
 
 method Main() {
-    var tree := BtreeImpl.empty();
+    var tree := IntegerBtreeImpl.empty();
 
-    var nInsertions := 10;
+    var nInsertions := 1000;
     var i := 0;
     while i < nInsertions
-    invariant BtreeInv.Invariant(
-        BtreeSpec.Constants(),
-        BtreeSpec.Variables(tree));
+    invariant IntegerBtreeInv.Invariant(
+        IntegerBtreeSpec.Constants(),
+        IntegerBtreeSpec.Variables(tree));
     {
         var v := (i * 1073741827) % nInsertions;
         var w := (i * 1234141827) % nInsertions;
@@ -30,12 +37,12 @@ method Main() {
         var k := Bounded_Integer_Order.Element(v);
 
         ghost var oldtree := tree;
-        tree := BtreeImpl.put(tree, k, w);
+        tree := IntegerBtreeImpl.put(tree, k, w);
 
-        BtreeInv.PutPreservesInvariant(
-          BtreeSpec.Constants(),
-          BtreeSpec.Variables(oldtree),
-          BtreeSpec.Variables(tree), k, w);
+        IntegerBtreeInv.PutPreservesInvariant(
+          IntegerBtreeSpec.Constants(),
+          IntegerBtreeSpec.Variables(oldtree),
+          IntegerBtreeSpec.Variables(tree), k, w);
     }
 }
 

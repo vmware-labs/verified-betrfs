@@ -5,7 +5,7 @@ include "../lib/sequences.dfy"
 include "BtreeSpec.dfy"
 
 abstract module BtreeInv {
-  import opened BtreeSpec
+  import opened Spec : BtreeSpec
   import opened Sequences
 
   predicate CantEquivocate<Value(!new)>(tree: Node<Value>)
@@ -48,29 +48,29 @@ abstract module BtreeInv {
     requires WFTree(tree);
     requires tree.Index?;
     requires 0 <= child < |tree.children|;
-    ensures Keyspace.lte(tree.lb, tree.children[child].lb);
-    ensures Keyspace.lte(tree.children[child].ub, tree.ub);
+    ensures CSMap.Keyspace.lte(tree.lb, tree.children[child].lb);
+    ensures CSMap.Keyspace.lte(tree.children[child].ub, tree.ub);
   {
     if child == 0 {
-      assert Keyspace.lte(tree.lb, tree.children[child].lb);
+      assert CSMap.Keyspace.lte(tree.lb, tree.children[child].lb);
     } else {
-      assert Keyspace.lte(tree.lb, tree.pivots[child-1]);
-      assert Keyspace.lte(tree.lb, tree.children[child].lb);
+      assert CSMap.Keyspace.lte(tree.lb, tree.pivots[child-1]);
+      assert CSMap.Keyspace.lte(tree.lb, tree.children[child].lb);
     }
 
     if child == |tree.children| - 1 {
-      assert Keyspace.lte(tree.children[child].ub, tree.ub);
+      assert CSMap.Keyspace.lte(tree.children[child].ub, tree.ub);
     } else {
-      assert Keyspace.lte(tree.pivots[child], tree.ub);
-      assert Keyspace.lte(tree.children[child].ub, tree.ub);
+      assert CSMap.Keyspace.lte(tree.pivots[child], tree.ub);
+      assert CSMap.Keyspace.lte(tree.children[child].ub, tree.ub);
     }
   }
   
   lemma SatisfyingLookupsAllBoundsContainQuery<Value>(tree: Node, key: Key, value: Value, lookup: Lookup)
     requires WFTree(tree)
     requires IsSatisfyingLookup(tree, key, value, lookup);
-    ensures Keyspace.lte(lookup[0].node.lb, key);
-    ensures Keyspace.lt(key, lookup[0].node.ub);
+    ensures CSMap.Keyspace.lte(lookup[0].node.lb, key);
+    ensures CSMap.Keyspace.lt(key, lookup[0].node.ub);
     decreases tree;
   {
     if tree.Leaf? {
@@ -84,15 +84,16 @@ abstract module BtreeInv {
     requires WFTree(tree)
     requires IsSatisfyingLookup(tree, key, value, lookup);
     requires tree.Index?;
-    ensures lookup[0].slot == Keyspace.LargestLte(tree.pivots, key) + 1;
+    ensures lookup[0].slot == CSMap.Keyspace.LargestLte(tree.pivots, key) + 1;
   {
-    var pos := Keyspace.LargestLte(tree.pivots, key) + 1;
+    var pos := CSMap.Keyspace.LargestLte(tree.pivots, key) + 1;
     if lookup[0].slot < pos {
       SatisfyingLookupsAllBoundsContainQuery(lookup[1].node, key, value, lookup[1..]);
       assert false;
     } else if lookup[0].slot > pos {
+      SatisfyingLookupsNest(tree, key, value, lookup);
       SatisfyingLookupsAllBoundsContainQuery(lookup[1].node, key, value, lookup[1..]);
-      assert Keyspace.lte(tree.pivots[lookup[0].slot-1], lookup[1].node.lb);
+      assert CSMap.Keyspace.lte(tree.pivots[lookup[0].slot-1], lookup[1].node.lb);
       assert false;
     }
   }
@@ -101,15 +102,15 @@ abstract module BtreeInv {
   requires IsSatisfyingLookup(tree, k, value, lookup);
   requires IsSatisfyingLookup(tree, k, value', lookup');
   requires tree.Leaf?
-  requires Keyspace.IsStrictlySorted(tree.keys);
+  requires CSMap.Keyspace.IsStrictlySorted(tree.keys);
   ensures value == value'
   {
-    Keyspace.reveal_IsStrictlySorted();
+    CSMap.Keyspace.reveal_IsStrictlySorted();
   }
 
   lemma leafCantEquivocate<Value>(newtree: Node)
   requires newtree.Leaf?
-  requires Keyspace.IsStrictlySorted(newtree.keys)
+  requires CSMap.Keyspace.IsStrictlySorted(newtree.keys)
   ensures CantEquivocate(newtree);
   {
     forall k, value, value', lookup: Lookup<Value>, lookup': Lookup<Value> |
@@ -117,8 +118,8 @@ abstract module BtreeInv {
       && IsSatisfyingLookup(newtree, k, value', lookup')
       ensures value == value'
     {
-      assert Keyspace.IsStrictlySorted(newtree.keys);
-      assert Keyspace.IsSorted(newtree.keys);
+      assert CSMap.Keyspace.IsStrictlySorted(newtree.keys);
+      assert CSMap.Keyspace.IsSorted(newtree.keys);
       valueEqValue(newtree, k, value, value', lookup, lookup');
     }
     assert CantEquivocate(newtree);
@@ -129,7 +130,7 @@ abstract module BtreeInv {
   requires WFTree(newtree);
   requires tree.Leaf?
   requires newtree.Leaf?
-  requires pos == Keyspace.LargestLte(tree.keys, key);
+  requires pos == CSMap.Keyspace.LargestLte(tree.keys, key);
   requires pos < 0 || key != tree.keys[pos];
   requires newtree.keys == insert(tree.keys, key, pos+1);
   requires newtree.values == insert(tree.values, value, pos+1);
@@ -155,14 +156,14 @@ abstract module BtreeInv {
   lemma keysRemainBetweenLbAndUb(newkeys: seq<Key>, lb: Key, ub: Key, keys: seq<Key>, key: Key, pos: int)
   requires 0 <= pos <= |keys|
   requires newkeys == insert(keys, key, pos);
-  requires Keyspace.lte(lb, key);
-  requires Keyspace.lt(key, ub);
+  requires CSMap.Keyspace.lte(lb, key);
+  requires CSMap.Keyspace.lt(key, ub);
   requires && (forall i :: 0 <= i < |keys| ==>
-           && Keyspace.lte(lb, keys[i])
-           && Keyspace.lt(keys[i], ub));
+           && CSMap.Keyspace.lte(lb, keys[i])
+           && CSMap.Keyspace.lt(keys[i], ub));
   ensures && (forall i :: 0 <= i < |newkeys| ==>
-          && Keyspace.lte(lb, newkeys[i])
-          && Keyspace.lt(newkeys[i], ub));
+          && CSMap.Keyspace.lte(lb, newkeys[i])
+          && CSMap.Keyspace.lt(newkeys[i], ub));
   {
     reveal_insert();
   }
@@ -178,7 +179,7 @@ abstract module BtreeInv {
   decreases tree
   {
     if tree.Leaf? {
-      var pos := Keyspace.LargestLte(tree.keys, key);
+      var pos := CSMap.Keyspace.LargestLte(tree.keys, key);
       if pos >= 0 && key == tree.keys[pos] {
         assert newtree == Leaf(tree.keys, tree.values[pos := value], tree.lb, tree.ub);
         
@@ -204,10 +205,10 @@ abstract module BtreeInv {
         var newkeys := insert(tree.keys, key, pos+1);
         var newvals := insert(tree.values, value, pos+1);
         assert newtree == Leaf(newkeys, newvals, tree.lb, tree.ub);
-        //assert Keyspace.IsSorted(newtree.keys);
+        //assert CSMap.Keyspace.IsSorted(newtree.keys);
         var lookup := [Layer(newtree, pos + 1)];
 
-        Keyspace.strictlySortedInsert(tree.keys, key, pos);
+        CSMap.Keyspace.strictlySortedInsert(tree.keys, key, pos);
         keysRemainBetweenLbAndUb(newkeys, newtree.lb, newtree.ub, tree.keys, key, pos+1);
         assert WFTree(newtree);
         assert IsSatisfyingLookup(newtree, key, value, lookup);
@@ -232,7 +233,7 @@ abstract module BtreeInv {
 
       }
     } else {
-      var pos := Keyspace.LargestLte(tree.pivots, key) + 1;
+      var pos := CSMap.Keyspace.LargestLte(tree.pivots, key) + 1;
 
       // Before we can call Define recursively, we must prove that the child CantEquivocate.
       forall key', valueA, valueB, lookup, lookup'
@@ -299,19 +300,19 @@ abstract module BtreeInv {
   requires 0 <= a;
   requires a < b;
   requires b < |l|;
-  requires Keyspace.IsStrictlySorted(l);
-  ensures Keyspace.lt(l[a], l[b]);
+  requires CSMap.Keyspace.IsStrictlySorted(l);
+  ensures CSMap.Keyspace.lt(l[a], l[b]);
   {
-    Keyspace.reveal_IsStrictlySorted();
+    CSMap.Keyspace.reveal_IsStrictlySorted();
   }
 
   lemma strictlySortedSplit(l: seq<Key>, p: int)
   requires 0 <= p <= |l|
-  requires Keyspace.IsStrictlySorted(l);
-  ensures Keyspace.IsStrictlySorted(l[..p]);
-  ensures Keyspace.IsStrictlySorted(l[p..]);
+  requires CSMap.Keyspace.IsStrictlySorted(l);
+  ensures CSMap.Keyspace.IsStrictlySorted(l[..p]);
+  ensures CSMap.Keyspace.IsStrictlySorted(l[p..]);
   {
-    Keyspace.reveal_IsStrictlySorted();
+    CSMap.Keyspace.reveal_IsStrictlySorted();
   }
 
   lemma GrowLeafIsCorrect<Value>(tree: Node, newtree: Node, childrenToLeft: int)
@@ -332,8 +333,8 @@ abstract module BtreeInv {
 
     forall i | 0 <= i < |left_child.keys|
       ensures
-      && Keyspace.lte(left_child.lb, left_child.keys[i])
-      && Keyspace.lt(left_child.keys[i], left_child.ub)
+      && CSMap.Keyspace.lte(left_child.lb, left_child.keys[i])
+      && CSMap.Keyspace.lt(left_child.keys[i], left_child.ub)
     {
       assert left_child.keys[i] == tree.keys[i];
       assert left_child.ub == tree.keys[childrenToLeft];
@@ -343,8 +344,8 @@ abstract module BtreeInv {
 
     forall i | 0 <= i < |right_child.keys|
       ensures
-      && Keyspace.lte(right_child.lb, right_child.keys[i])
-      && Keyspace.lt(right_child.keys[i], right_child.ub)
+      && CSMap.Keyspace.lte(right_child.lb, right_child.keys[i])
+      && CSMap.Keyspace.lt(right_child.keys[i], right_child.ub)
     {
       if (i == 0) {
       } else {
@@ -357,10 +358,10 @@ abstract module BtreeInv {
     assert WFTree(left_child);
     assert WFTree(right_child);
 
-    Keyspace.transitivity_le_lt(newtree.lb, tree.keys[0], newtree.pivots[0]);
+    CSMap.Keyspace.transitivity_le_lt(newtree.lb, tree.keys[0], newtree.pivots[0]);
 
-    assert Keyspace.lt(newtree.lb, newtree.pivots[0]);
-    assert Keyspace.lt(newtree.pivots[0], newtree.ub);
+    assert CSMap.Keyspace.lt(newtree.lb, newtree.pivots[0]);
+    assert CSMap.Keyspace.lt(newtree.pivots[0], newtree.ub);
 
     assert WFTree(newtree);
 
@@ -419,8 +420,8 @@ abstract module BtreeInv {
 
     forall i | 0 <= i < |left_child.pivots|
       ensures
-      && Keyspace.lt(left_child.lb, left_child.pivots[i])
-      && Keyspace.lt(left_child.pivots[i], left_child.ub)
+      && CSMap.Keyspace.lt(left_child.lb, left_child.pivots[i])
+      && CSMap.Keyspace.lt(left_child.pivots[i], left_child.ub)
     {
       assert left_child.pivots[i] == tree.pivots[i];
       assert left_child.ub == tree.pivots[childrenToLeft - 1];
@@ -430,8 +431,8 @@ abstract module BtreeInv {
 
     forall i | 0 <= i < |right_child.pivots|
       ensures
-      && Keyspace.lt(right_child.lb, right_child.pivots[i])
-      && Keyspace.lt(right_child.pivots[i], right_child.ub)
+      && CSMap.Keyspace.lt(right_child.lb, right_child.pivots[i])
+      && CSMap.Keyspace.lt(right_child.pivots[i], right_child.ub)
       && right_child.pivots[i] == right_child.children[i].ub
       && right_child.pivots[i] == right_child.children[i+1].lb
     {
