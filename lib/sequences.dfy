@@ -72,4 +72,21 @@ module Sequences {
   {
     s[..pos] + [a, b] + s[pos+1..]
   }
+
+  function method {:opaque} concat<A>(a: seq<A>, b: seq<A>) : seq<A>
+  ensures |concat(a,b)| == |a| + |b|
+  ensures forall i :: 0 <= i < |a| ==> a[i] == concat(a,b)[i];
+  ensures forall i :: 0 <= i < |b| ==> b[i] == concat(a,b)[|a| + i];
+  {
+    a + b
+  }
+
+  function method {:opaque} concat3<A>(a: seq<A>, b: A, c: seq<A>) : seq<A>
+  ensures |concat3(a,b,c)| == |a| + |c| + 1
+  ensures forall i :: 0 <= i < |a| ==> a[i] == concat3(a,b,c)[i];
+  ensures concat3(a,b,c)[|a|] == b;
+  ensures forall i :: 0 <= i < |c| ==> c[i] == concat3(a,b,c)[|a| + 1 + i];
+  {
+    a + [b] + c
+  }
 }

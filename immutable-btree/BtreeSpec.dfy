@@ -202,8 +202,8 @@ abstract module BtreeSpec {
       && |left_node.values| == childrenToLeft
       && |left_node.keys| > 0
       && |right_node.keys| > 0
-      && node.keys == left_node.keys + right_node.keys
-      && node.values == left_node.values + right_node.values
+      && node.keys == concat(left_node.keys, right_node.keys)
+      && node.values == concat(left_node.values, right_node.values)
       && pivot == right_node.keys[0]
     ) else (
       && left_node.Index?
@@ -212,8 +212,8 @@ abstract module BtreeSpec {
       && |left_node.pivots| == childrenToLeft - 1
       && |left_node.children| >= 2
       && |right_node.children| >= 2
-      && node.children == left_node.children + right_node.children
-      && node.pivots == left_node.pivots + [pivot] + right_node.pivots
+      && node.children == concat(left_node.children, right_node.children)
+      && node.pivots == concat3(left_node.pivots, pivot, right_node.pivots)
     ))
   }
 

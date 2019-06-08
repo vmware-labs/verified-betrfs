@@ -559,6 +559,89 @@ abstract module BtreeInv {
     Keyspace.strictlySortedInsert2(tree.pivots, newtree.pivots[pos], pos);
   }
 
+  lemma keysSortedOfSplitChildren(tree: Node, tree_left: Node, pivot: Key, tree_right: Node, childrenToLeft: int)
+  requires WFTree(tree);
+  requires tree.Leaf?;
+  requires IsSplit(tree, tree_left, pivot, tree_right, childrenToLeft);
+  ensures Keyspace.IsStrictlySorted(tree_left.keys);
+  ensures Keyspace.IsStrictlySorted(tree_right.keys);
+  ensures (forall i :: 0 <= i < |tree_left.keys| ==> && Keyspace.lte(tree_left.lb, tree_left.keys[i]))
+  ensures (forall i :: 0 <= i < |tree_left.keys| ==> && Keyspace.lt(tree_left.keys[i], tree_left.ub))
+  ensures (forall i :: 0 <= i < |tree_right.keys| ==> && Keyspace.lte(tree_right.lb, tree_right.keys[i]))
+  ensures (forall i :: 0 <= i < |tree_right.keys| ==> && Keyspace.lt(tree_right.keys[i], tree_right.ub))
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    forall i, j | 0 <= i < j < |tree_left.keys|
+    ensures Keyspace.lt(tree_left.keys[i], tree_left.keys[j])
+    {
+      assert tree_left.keys[i] == tree.keys[i];
+      assert tree_left.keys[j] == tree.keys[j];
+    }
+    forall i, j | 0 <= i < j < |tree_right.keys|
+    ensures Keyspace.lt(tree_right.keys[i], tree_right.keys[j])
+    {
+      assert tree_right.keys[i] == tree.keys[i + |tree_left.keys|];
+      assert tree_right.keys[j] == tree.keys[j + |tree_left.keys|];
+    }
+
+    forall i | 0 <= i < |tree_left.keys|
+    ensures Keyspace.lte(tree_left.lb, tree_left.keys[i])
+    ensures Keyspace.lt(tree_left.keys[i], tree_left.ub)
+    {
+      assert tree_left.keys[i] == tree.keys[i];
+      assert Keyspace.lt(tree.keys[i], tree.keys[|tree_left.keys|]);
+      assert tree_left.ub == tree.keys[|tree_left.keys|];
+    }
+
+    forall i | 0 <= i < |tree_right.keys|
+    ensures Keyspace.lte(tree_right.lb, tree_right.keys[i])
+    ensures Keyspace.lt(tree_right.keys[i], tree_right.ub)
+    {
+      assert tree_right.keys[i] == tree.keys[i + |tree_left.keys|];
+    }
+  }
+
+  lemma pivotsSortedOfSplitChildren(tree: Node, tree_left: Node, pivot: Key, tree_right: Node, childrenToLeft: int)
+  requires WFTree(tree);
+  requires tree.Index?;
+  requires IsSplit(tree, tree_left, pivot, tree_right, childrenToLeft);
+  ensures Keyspace.IsStrictlySorted(tree_left.pivots);
+  ensures Keyspace.IsStrictlySorted(tree_right.pivots);
+  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lte(tree_left.lb, tree_left.pivots[i]))
+  ensures (forall i :: 0 <= i < |tree_left.pivots| ==> && Keyspace.lt(tree_left.pivots[i], tree_left.ub))
+  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lte(tree_right.lb, tree_right.pivots[i]))
+  ensures (forall i :: 0 <= i < |tree_right.pivots| ==> && Keyspace.lt(tree_right.pivots[i], tree_right.ub))
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    forall i, j | 0 <= i < j < |tree_left.pivots|
+    ensures Keyspace.lt(tree_left.pivots[i], tree_left.pivots[j])
+    {
+      assert tree_left.pivots[i] == tree.pivots[i];
+      assert tree_left.pivots[j] == tree.pivots[j];
+    }
+    forall i, j | 0 <= i < j < |tree_right.pivots|
+    ensures Keyspace.lt(tree_right.pivots[i], tree_right.pivots[j])
+    {
+      assert tree_right.pivots[i] == tree.pivots[i + |tree_left.pivots| + 1];
+      assert tree_right.pivots[j] == tree.pivots[j + |tree_left.pivots| + 1];
+    }
+
+    forall i | 0 <= i < |tree_left.pivots|
+    ensures Keyspace.lte(tree_left.lb, tree_left.pivots[i])
+    ensures Keyspace.lt(tree_left.pivots[i], tree_left.ub)
+    {
+      assert tree_left.pivots[i] == tree.pivots[i];
+    }
+
+    forall i | 0 <= i < |tree_right.pivots|
+    ensures Keyspace.lte(tree_right.lb, tree_right.pivots[i])
+    ensures Keyspace.lt(tree_right.pivots[i], tree_right.ub)
+    {
+      assert tree_right.pivots[i] == tree.pivots[i + |tree_left.pivots| + 1];
+    }
+  }
+
+
   lemma SplitIsCorrect<Value>(tree: Node, newtree: Node, l: Key, u: Key, childrenToLeft: int)
   requires WFTree(tree);
   requires CantEquivocate(tree);
@@ -574,6 +657,17 @@ abstract module BtreeInv {
     if (child.lb == l && child.ub == u) {
       var left_child := newtree.children[pos];
       var right_child := newtree.children[pos+1];
+
+      if (child.Leaf?) {
+        keysSortedOfSplitChildren(child, left_child, newtree.pivots[pos], right_child, childrenToLeft);
+      } else {
+        pivotsSortedOfSplitChildren(child, left_child, newtree.pivots[pos], right_child, childrenToLeft);
+      }
+
+      assert WFTree(left_child);
+      assert WFTree(right_child);
+
+      assume false;
       pivotsAreCorrectAfterSplit(tree, newtree, l, u, childrenToLeft, pos);
       assert WFTree(newtree);
       assume false;
