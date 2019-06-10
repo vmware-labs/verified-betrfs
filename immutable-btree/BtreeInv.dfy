@@ -505,6 +505,14 @@ abstract module BtreeInv {
     }
   }
 
+  lemma SplitPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, l: Key, u: Key, childrenToLeft: int)
+  requires Invariant(k, s);
+  requires Split(k, s, s', l, u, childrenToLeft);
+  ensures Invariant(k, s');
+  {
+    SplitIsCorrect(s.root, s'.root, l, u, childrenToLeft);
+  }
+
   lemma GrowPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, childrenToLeft: int)
   requires Invariant(k, s);
   requires Grow(k, s, s', childrenToLeft);
@@ -978,6 +986,9 @@ abstract module BtreeInv {
       }
       case PutStep(key, value) => {
         PutPreservesInvariant(k, s, s', key, value);
+      }
+      case SplitStep(l, u, childrenToLeft) => {
+        SplitPreservesInvariant(k, s, s', l, u, childrenToLeft);
       }
       case GrowStep(childrenToLeft) => {
         GrowPreservesInvariant(k, s, s', childrenToLeft);

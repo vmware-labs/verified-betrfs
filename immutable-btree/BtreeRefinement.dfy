@@ -57,10 +57,11 @@ abstract module BtreeRefinement {
   ensures Spec.CSMap.WF(I(k, s));
   ensures Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
   {
+    assert Invariant(k, s);
+    assert Spec.WFTree(s.root); // assertion violation wtf?
     var step:Spec.Step :| Spec.NextStep(k, s, s', step);
     match step {
       case GetStep(key, value, lookup) => {
-        assert Spec.CSMap.WF(I(k, s));
         assert Spec.CSMap.WF(I(k, s));
 
         assert Spec.CSMap.NextStep(Ik(k), I(k,s), I(k,s'), Spec.CSMap.QueryStep(key, Some(value)));
@@ -69,7 +70,6 @@ abstract module BtreeRefinement {
         assert Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
       case PutStep(key, value) => {
-        assert Spec.CSMap.WF(I(k, s));
         assert Spec.CSMap.WF(I(k, s));
 
         var intermediate := Spec.CSMap.Variables([I(k,s').views[0], I(k,s).views[0]]);
@@ -83,8 +83,14 @@ abstract module BtreeRefinement {
 
         assert Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
       }
-      case GrowStep(childrenToLeft) => {
+      case SplitStep(l, u, childrenToLeft) => {
         assert Spec.CSMap.WF(I(k, s));
+        SplitIsCorrect(s.root, s'.root, l, u, childrenToLeft);
+        InterpretationsAreIdentical(k, s, s');
+        assert Spec.CSMap.IsPath(Ik(k), I(k, s), I(k, s'), [I(k,s)]);
+        assert Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
+      }
+      case GrowStep(childrenToLeft) => {
         assert Spec.CSMap.WF(I(k, s));
 
         if (s.root.Leaf?) {

@@ -265,7 +265,7 @@ abstract module BtreeSpec {
   datatype Step<Value(!new)> =
     | GetStep(key: Key, value: Value, lookup: Lookup)
     | PutStep(key: Key, value: Value)
-    //| SplitStep()
+    | SplitStep(l: Key, u: Key, childrenToLeft: int)
     | GrowStep(childrenToLeft: int)
     /*| ContractStep()*/
 
@@ -273,7 +273,7 @@ abstract module BtreeSpec {
     match step {
       case GetStep(key, value, lookup) => Get(k, s, s', key, value, lookup)
       case PutStep(key, value) => Put(k, s, s', key, value)
-      //case SplitStep() => Split(k, s, s')
+      case SplitStep(l, u, childrenToLeft) => Split(k, s, s', l, u, childrenToLeft)
       case GrowStep(childrenToLeft) => Grow(k, s, s', childrenToLeft)
     }
   }
