@@ -58,7 +58,6 @@ abstract module BtreeRefinement {
   ensures Spec.CSMap.Reachable(Ik(k), I(k, s), I(k, s'));
   {
     assert Invariant(k, s);
-    assert Spec.WFTree(s.root); // assertion violation wtf?
     var step:Spec.Step :| Spec.NextStep(k, s, s', step);
     match step {
       case GetStep(key, value, lookup) => {
@@ -74,9 +73,15 @@ abstract module BtreeRefinement {
 
         var intermediate := Spec.CSMap.Variables([I(k,s').views[0], I(k,s).views[0]]);
 
-        PutIsCorrect(s.root, s'.root, key, value);
+        if (s.root.Leaf? && |s.root.keys| == 0) {
+          PutIsCorrectEmptyRoot(s.root, s'.root, key, value);
+          assert Spec.CSMap.NextStep(Ik(k), I(k,s), intermediate, Spec.CSMap.WriteStep(key, Some(value)));
+        } else {
+          assert Spec.WFTree(s.root);
+          PutIsCorrect(s.root, s'.root, key, value);
+          assert Spec.CSMap.NextStep(Ik(k), I(k,s), intermediate, Spec.CSMap.WriteStep(key, Some(value)));
+        }
 
-        assert Spec.CSMap.NextStep(Ik(k), I(k,s), intermediate, Spec.CSMap.WriteStep(key, Some(value)));
         assert Spec.CSMap.NextStep(Ik(k), intermediate, I(k,s'), Spec.CSMap.PersistWritesStep(1));
 
         assert Spec.CSMap.IsPath(Ik(k), I(k, s), I(k, s'), [ I(k,s), intermediate, I(k,s') ]);

@@ -295,6 +295,23 @@ abstract module BtreeInv {
     }
   }
 
+  lemma PutIsCorrectEmptyRoot<Value>(tree: Node, newtree: Node, key: Key, value: Value)
+  requires WFRoot(tree)
+  requires tree.Leaf?
+  requires |tree.keys| == 0
+  requires CantEquivocate(tree)
+  requires CSMap.Keyspace.lte(tree.lb, key)
+  requires CSMap.Keyspace.lt(key, tree.ub)
+  requires newtree == Spec.Leaf([key], [value], tree.lb, tree.ub)
+  ensures PreservesLookupsExcept(tree, newtree, key);
+  ensures PreservesLookupsExcept(newtree, tree, key);
+  ensures exists lookup :: IsSatisfyingLookup(newtree, key, value, lookup);
+  ensures CantEquivocate(newtree)
+  {
+    var lookup := [Layer(newtree, 0)];
+    assert IsSatisfyingLookup(newtree, key, value, lookup);
+  }
+
   // TODO move these to total_order.dfy
   lemma strictlySortedImplLt(l: seq<Key>, a: int, b: int)
   requires 0 <= a;
