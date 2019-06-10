@@ -1,12 +1,22 @@
 abstract module BlockCache {
-  type Reference;
+  type Reference(==)
 
-  type Constants;
-  type Variables<T>;
+  type Constants
+  type Variables(!new)<T>
 
   predicate Read<T>(k: Constants, s: Variables, ref: Reference, block: T)
-  predicate Alloc<T>(k: Constants, s: Variables, s': Variables, block: T, successors: set<Reference>, new_ref: Reference)
-  predicate Write<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: set<Reference>)
 
-  function Root<T>(k: Constants) : Reference
+  datatype
+    CacheOp<T> = AllocOp(block: T, successors: iset<Reference>, new_ref: Reference)
+    | WriteOp(ref: Reference, block: T, successors: iset<Reference>)
+    
+  predicate Apply(k: Constants, s: Variables, s': Variables, op: CacheOp)
+      
+  predicate Apply2(k: Constants, s: Variables, s': Variables, op1: CacheOp, op2: CacheOp) {
+    exists sint :: 
+      && Apply(k, s, sint, op1)
+      && Apply(k, sint, s', op2)
+  }
+    
+  function Root(k: Constants) : Reference
 }
