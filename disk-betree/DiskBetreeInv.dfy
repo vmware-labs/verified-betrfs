@@ -1,8 +1,10 @@
+include "../lib/map_utils.dfy"
 include "MapSpec.dfy"
 include "DiskBetree.dfy"
   
 abstract module DiskBetreeInv {
   import opened DB : DiskBetree
+  import opened Map_Utils
 
   predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, s: Variables, key: Key)
   {
@@ -58,6 +60,13 @@ abstract module DiskBetreeInv {
 
   // Preservation proofs
 
+  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
+    requires Inv(k, s)
+    ensures Acyclic(k, s')
+  {
+    
+  }
+  
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
   requires Inv(k, s)
   requires Grow(k, s, s', oldroot, newchildref)
@@ -123,12 +132,22 @@ abstract module DiskBetreeInv {
       assert IsSatisfyingLookup(k, s', key, value, lookup');
     }
 
-    forall lookup, key, value | IsSatisfyingLookup(k, s', key, value, lookup)
-    ensures exists lookup' :: IsSatisfyingLookup(k, s, key, value, lookup')
+    GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
+    
+    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s', key, value, lookup')
+    ensures exists lookup :: IsSatisfyingLookup(k, s, key, value, lookup)
     {
       // Remove one for the root
-      var lookup' := lookup[1..];
-      assert IsSatisfyingLookup(k, s, key, value, lookup');
+      var lookup := lookup'[1..][0 := Layer(BC.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
+      // forall i | 0 <= i < | lookup|
+      //   ensures IMapsTo(BC.ViewOf(k.bck, s.bcv), lookup[i].ref, lookup[i].node)
+      //   {
+      //     if i == 0 {
+      //     } else {
+      //       assert lookup[i].ref != lookup[0].ref;
+      //     }
+      //   }
+      assert IsSatisfyingLookup(k, s, key, value, lookup);
     }
   }
 

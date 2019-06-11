@@ -40,7 +40,7 @@ abstract module DiskBetree {
   }
   
   predicate LookupRespectsDisk(k: Constants, s: Variables, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> lookup[i].ref in BC.ViewOf(k.bck, s.bcv) && BC.ViewOf(k.bck, s.bcv)[lookup[i].ref] == lookup[i].node
+    forall i :: 0 <= i < |lookup| ==> IMapsTo(BC.ViewOf(k.bck, s.bcv), lookup[i].ref, lookup[i].node)
   }
 
   predicate LookupVisitsWFNodes(k: Constants, s: Variables, lookup: Lookup) {
