@@ -1,4 +1,4 @@
-module Map_Utils {
+module Maps {
 
   predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
     k in m && m[k] == v
