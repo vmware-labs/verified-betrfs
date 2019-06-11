@@ -8,10 +8,21 @@ abstract module DiskBetreeInv {
   {
     exists lookup, value :: IsSatisfyingLookup(k, s, key, value, lookup)
   }
+
+  predicate LookupIsAcyclic(lookup: Lookup) {
+    forall i, j :: 0 <= i < |lookup| && 0 <= j < |lookup| && i != j ==> lookup[i].ref != lookup[j].ref
+  }
+  
+  predicate Acyclic<Value(!new)>(k: Constants, s: Variables) {
+    forall key, value, lookup ::
+      IsSatisfyingLookup(k, s, key, value, lookup) ==>
+      LookupIsAcyclic(lookup)
+  }
   
   predicate Inv(k: Constants, s: Variables)
   {
-    forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s, key)
+    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s, key))
+    && Acyclic(k, s)
   }
 
   //// Definitions for lookup preservation
@@ -48,6 +59,7 @@ abstract module DiskBetreeInv {
   // Preservation proofs
 
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
+  requires Inv(k, s)
   requires Grow(k, s, s', oldroot, newchildref)
   ensures EquivalentLookups(k, s, s')
   {

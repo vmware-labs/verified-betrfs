@@ -53,7 +53,7 @@ abstract module DiskBetree {
     && lookup[0].accumulatedBuffer == lookup[0].node.buffer[key]
     && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
   }
-  
+
   predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == BC.Root(k.bck)
