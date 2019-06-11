@@ -14,6 +14,114 @@ abstract module DiskBetreeInv {
     forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s, key)
   }
 
+  //// Definitions for lookup preservation
+
+  // One-way preservation
+
+  predicate PreservesLookups<Value(!new)>(k: Constants, s: Variables, s': Variables)
+  {
+    forall lookup, key, value :: IsSatisfyingLookup(k, s, key, value, lookup) ==>
+      exists lookup' :: IsSatisfyingLookup(k, s', key, value, lookup')
+  }
+
+  predicate PreservesLookupsExcept<Value(!new)>(k: Constants, s: Variables, s': Variables, exceptQuery: Key)
+  {
+    forall lookup, key, value :: key != exceptQuery && IsSatisfyingLookup(k, s, key, value, lookup) ==>
+      exists lookup' :: IsSatisfyingLookup(k, s', key, value, lookup')
+  }
+
+  // Two-way preservation
+
+  predicate EquivalentLookups<Value(!new)>(k: Constants, s: Variables, s': Variables)
+  {
+    && PreservesLookups(k, s, s')
+    && PreservesLookups(k, s', s)
+  }
+
+  predicate EquivalentLookupsWithPut<Value(!new)>(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
+  {
+    && PreservesLookupsExcept(k, s, s', key)
+    && PreservesLookupsExcept(k, s', s, key)
+    && exists lookup :: IsSatisfyingLookup(k, s', key, value, lookup)
+  }
+
+  // Preservation proofs
+
+  lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
+  requires Grow(k, s, s', oldroot, newchildref)
+  ensures EquivalentLookups(k, s, s')
+  {
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(k, s', key, value, lookup')
+    {
+      // Add one for the new root
+      var rootref := BC.Root(k.bcc);
+
+      // TODO need to have contract that read matches the write
+      var newroot := BC.Read(k.bcc, s'.bcv, rootref);
+      assert newroot == Node(imap key | MS.InDomain(key) :: newchildref, imap key | MS.InDomain(key) :: []);
+
+      var lookup' := [
+        Layer(rootref, newroot, []),
+        Layer(newchildref, oldroot, lookup[0].accumulatedBuffer)
+      ] + lookup[1..];
+
+      forall i | 0 <= i < |lookup'|
+      ensures BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node
+      ensures WFNode(lookup'[i].node)
+      {
+        if (i == 0) {
+          assert BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node;
+
+          forall k ensures k in newroot.buffer
+          {
+            assert MS.InDomain(k);
+          }
+          assert WFNode(lookup'[i].node);
+        } else if (i == 1) {
+          // TODO need a contract from alloc here:
+          assert BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node;
+
+          assert WFNode(lookup'[i].node);
+        } else {
+          // TODO need to have contract that allows this to be preserved:
+          assert BC.Read(k.bcc, s.bcv, lookup'[i].ref) == lookup'[i].node;
+          assert BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node;
+
+          assert WFNode(lookup'[i].node);
+        }
+      }
+
+      forall i | 0 <= i < |lookup'| - 1
+      ensures key in lookup'[i].node.children
+      ensures lookup'[i].node.children[key] == lookup'[i+1].ref
+      {
+        if (i == 0) {
+          assert key in lookup'[i].node.children;
+          assert lookup'[i].node.children[key] == lookup'[i+1].ref;
+        } else if (i == 1) {
+          assert key in lookup'[i].node.children;
+          assert lookup'[i].node.children[key] == lookup'[i+1].ref;
+        } else {
+          assert key in lookup'[i].node.children;
+          assert lookup'[i].node.children[key] == lookup'[i+1].ref;
+        }
+      }
+
+      assert IsSatisfyingLookup(k, s', key, value, lookup');
+    }
+
+    forall lookup, key, value | IsSatisfyingLookup(k, s', key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(k, s, key, value, lookup')
+    {
+      // Remove one for the root
+      var lookup' := lookup[1..];
+      assert IsSatisfyingLookup(k, s, key, value, lookup');
+    }
+  }
+
+  // Invariant proofs
+
   lemma InitImpliesInv(k: Constants, s: Variables)
     requires Init(k, s)
     ensures Inv(k, s)
