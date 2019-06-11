@@ -13,19 +13,16 @@ abstract module BlockCache {
   //   ensures Read(k, s, ref) == ViewOf(k, s)[ref];
     
   datatype CacheOp<T> =
-    | AllocOp(block: T, successors: iset<Reference>, new_ref: Reference)
+    | AllocOp(block: T, successors: iset<Reference>, ref: Reference)
     | WriteOp(ref: Reference, block: T, successors: iset<Reference>)
     
   function ApplyToView(view: View, op: CacheOp) : View {
-    match op {
-      case AllocOp(block, successors, new_ref) => view[op.new_ref := op.block]
-      case WriteOp(ref, block, successors) => view[op.ref := op.block]
-    }
+    view[op.ref := op.block]
   }
     
   predicate Apply(k: Constants, s: Variables, s': Variables, op: CacheOp)
     ensures Apply(k, s, s', op) ==> ViewOf(k, s') == ApplyToView(ViewOf(k, s), op)
-    ensures op.AllocOp? && Apply(k, s, s', op) ==> op.new_ref !in ViewOf(k, s)
+    ensures op.AllocOp? && Apply(k, s, s', op) ==> op.ref !in ViewOf(k, s)
     ensures op.WriteOp? && Apply(k, s, s', op) ==> op.ref in ViewOf(k, s)
     
   predicate Apply2(k: Constants, s: Variables, s': Variables, op1: CacheOp, op2: CacheOp)
