@@ -62,9 +62,21 @@ abstract module DiskBetreeInv {
 
   lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
     requires Inv(k, s)
+    requires Grow(k, s, s', oldroot, newchildref)
     ensures Acyclic(k, s')
   {
-    
+    forall key, value, lookup' | IsSatisfyingLookup(k, s, key, value, lookup')
+    ensures LookupIsAcyclic(lookup')
+    {
+      forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
+      ensures lookup'[i].ref != lookup'[j].ref
+      {
+        if (i == 1) {
+          assert lookup'[i].ref == newchildref;
+          assert lookup'[j].ref == 
+        }
+      }
+    }
   }
   
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
