@@ -47,7 +47,6 @@ abstract module DiskBetreeRefinement {
     ensures Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
     
-    
   lemma BetreeRefinesMapNext(k: DB.Constants, s: DB.Variables, s':DB.Variables)
     requires Inv(k, s)
     requires DB.Next(k, s, s')
