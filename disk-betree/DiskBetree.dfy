@@ -118,7 +118,9 @@ abstract module DiskBetree {
   predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference) {
     && BC.Read(k.bcc, s.bcv, BC.Root(k.bcc)) == oldroot
     && var newchild := oldroot;
-    && var newroot := Node(imap key | MS.InDomain(key) :: newchildref, imap[]);
+    && var newroot := Node(
+        imap key | MS.InDomain(key) :: newchildref,
+        imap key | MS.InDomain(key) :: []);
     && var allocop := BC.AllocOp(newchild, Successors(newchild), newchildref);
     && var writeop := BC.WriteOp(BC.Root(k.bcc), newroot, Successors(newroot));
     && BC.Apply2(k.bcc, s.bcv, s'.bcv, allocop, writeop)
