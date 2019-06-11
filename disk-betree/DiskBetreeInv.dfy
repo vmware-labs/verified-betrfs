@@ -78,56 +78,12 @@ abstract module DiskBetreeInv {
       // Add one for the new root
       var rootref := BC.Root(k.bck);
 
-      // TODO need to have contract that read matches the write
       var newroot := BC.ViewOf(k.bck, s'.bcv)[rootref];
-      assert newroot == Node(imap key | MS.InDomain(key) :: newchildref, imap key | MS.InDomain(key) :: []);
 
       var lookup' := [
         Layer(rootref, newroot, []),
         Layer(newchildref, oldroot, lookup[0].accumulatedBuffer)
       ] + lookup[1..];
-
-      forall i | 0 <= i < |lookup'|
-      ensures BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node
-      ensures WFNode(lookup'[i].node)
-      {
-        if (i == 0) {
-          assert BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node;
-
-          forall k ensures k in newroot.buffer
-          {
-            assert MS.InDomain(k);
-          }
-          assert WFNode(lookup'[i].node);
-        } else if (i == 1) {
-          // TODO need a contract from alloc here:
-          assert BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node;
-
-          assert WFNode(lookup'[i].node);
-        } else {
-          // TODO need to have contract that allows this to be preserved:
-          assert BC.ViewOf(k.bck, s.bcv)[lookup'[i].ref] == lookup'[i].node;
-          assert BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node;
-
-          assert WFNode(lookup'[i].node);
-        }
-      }
-
-      forall i | 0 <= i < |lookup'| - 1
-      ensures key in lookup'[i].node.children
-      ensures lookup'[i].node.children[key] == lookup'[i+1].ref
-      {
-        if (i == 0) {
-          assert key in lookup'[i].node.children;
-          assert lookup'[i].node.children[key] == lookup'[i+1].ref;
-        } else if (i == 1) {
-          assert key in lookup'[i].node.children;
-          assert lookup'[i].node.children[key] == lookup'[i+1].ref;
-        } else {
-          assert key in lookup'[i].node.children;
-          assert lookup'[i].node.children[key] == lookup'[i+1].ref;
-        }
-      }
 
       assert IsSatisfyingLookup(k, s', key, value, lookup');
     }
@@ -139,14 +95,6 @@ abstract module DiskBetreeInv {
     {
       // Remove one for the root
       var lookup := lookup'[1..][0 := Layer(BC.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
-      // forall i | 0 <= i < | lookup|
-      //   ensures IMapsTo(BC.ViewOf(k.bck, s.bcv), lookup[i].ref, lookup[i].node)
-      //   {
-      //     if i == 0 {
-      //     } else {
-      //       assert lookup[i].ref != lookup[0].ref;
-      //     }
-      //   }
       assert IsSatisfyingLookup(k, s, key, value, lookup);
     }
   }
