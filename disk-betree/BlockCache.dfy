@@ -4,7 +4,7 @@ abstract module BlockCache {
   type Constants
   type Variables(!new)<T>
 
-  predicate Read<T>(k: Constants, s: Variables, ref: Reference, block: T)
+  function Read<T>(k: Constants, s: Variables, ref: Reference) : T
 
   datatype
     CacheOp<T> = AllocOp(block: T, successors: iset<Reference>, new_ref: Reference)
@@ -19,4 +19,6 @@ abstract module BlockCache {
   }
     
   function Root(k: Constants) : Reference
+
+  predicate Init(k: Constants, s: Variables)
 }
