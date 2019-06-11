@@ -22,7 +22,21 @@ abstract module DiskBetreeRefinement {
   {
     assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s, key, MS.EmptyValue(), [Layer(BC.Root(k.bcc), EmptyNode(), [Insertion(MS.EmptyValue())])]);
   }
-  
+
+  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
+    requires Inv(k, s)
+    requires NextStep(k, s, s', step)
+    ensures Inv(k, s')
+    
+  lemma NextPreservesInvariant(k: Constants, s: Variables, s': Variables)
+    requires Inv(k, s)
+    requires Next(k, s, s')
+    ensures Inv(k, s')
+  {
+    var step :| NextStep(k, s, s', step);
+    NextStepPreservesInvariant(k, s, s', step);
+  }
+    
   // Refinement proof
 
   datatype Pair<S,T> = Pair(first: S, second: T)
@@ -58,10 +72,20 @@ abstract module DiskBetreeRefinement {
     InitImpliesInv(k, s);
   }
 
+  lemma BetreeRefinesMapNextStep(k: Constants, s: Variables, s':Variables, step: Step)
+    requires Inv(k, s)
+    requires NextStep(k, s, s', step)
+    ensures MS.Next(Ik(k), I(k, s), I(k, s'))
+    
+    
   lemma BetreeRefinesMapNext(k: Constants, s: Variables, s':Variables)
     requires Inv(k, s)
     requires Next(k, s, s')
+    ensures Inv(k, s')
     ensures MS.Next(Ik(k), I(k, s), I(k, s'))
   {
+    NextPreservesInvariant(k, s, s');
+    var step :| NextStep(k, s, s', step);
+    BetreeRefinesMapNextStep(k, s, s', step);
   }
 }
