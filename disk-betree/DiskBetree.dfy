@@ -54,11 +54,15 @@ abstract module DiskBetree {
     && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
   }
 
-  predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
+  predicate IsPathFromRootLookup(k: Constants, s: Variables, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == BC.Root(k.bck)
     && LookupRespectsDisk(k, s, lookup)
     && LookupFollowsChildRefs(k, s, key, lookup)
+  }
+
+  predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
+    && IsPathFromRootLookup(k, s, key, lookup)
     && LookupVisitsWFNodes(k, s, lookup)
     && LookupAccumulatesMessages(k, s, key, lookup)
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)

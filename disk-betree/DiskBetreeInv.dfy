@@ -16,8 +16,8 @@ abstract module DiskBetreeInv {
   }
   
   predicate Acyclic<Value(!new)>(k: Constants, s: Variables) {
-    forall key, value, lookup ::
-      IsSatisfyingLookup(k, s, key, value, lookup) ==>
+    forall key, lookup ::
+      IsPathFromRootLookup(k, s, key, lookup) ==>
       LookupIsAcyclic(lookup)
   }
   
@@ -60,14 +60,73 @@ abstract module DiskBetreeInv {
 
   // Preservation proofs
 
+  lemma GrowPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference, key: Key, lookup': Lookup)
+    requires Inv(k, s)
+    requires Grow(k, s, s', oldroot, newchildref)
+    requires IsPathFromRootLookup(k, s', key, lookup')
+    ensures LookupIsAcyclic(lookup')
+    decreases lookup'
+  {
+    if (|lookup'| <= 2) {
+    } else {
+      var sublookup' := lookup'[ .. |lookup'| - 1];
+      GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, sublookup');
+      var sublookup := sublookup'[1..][0 := Layer(BC.Root(k.bck), sublookup'[1].node, sublookup'[1].accumulatedBuffer)];
+      assert IsPathFromRootLookup(k, s, key, sublookup);
+      var lastLayer := lookup'[|lookup'| - 1];
+
+      // TODO: need to have invariant that all refs in s are valid in order to show this:
+      assert lastLayer.ref != newchildref;
+      assert lastLayer.ref in BC.ViewOf(k.bck, s.bcv);
+
+      var lookup := sublookup + [Layer(lastLayer.ref, BC.ViewOf(k.bck, s.bcv)[lastLayer.ref], [])];
+
+      assert IMapsTo(BC.ViewOf(k.bck, s.bcv), lookup[|lookup|-1].ref, lookup[|lookup|-1].node);
+
+      assert IsPathFromRootLookup(k, s, key, lookup);
+      assert LookupIsAcyclic(lookup);
+
+      forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
+      ensures lookup'[i].ref != lookup'[j].ref
+      {
+        if (i == 0) {
+          if (j == 1) {
+            assert lookup'[i].ref != lookup'[j].ref;
+          } else {
+            assert lookup'[i].ref != lookup'[j].ref;
+          }
+        } else if (i == 1) {
+          if (j == 0) {
+            assert lookup'[i].ref != lookup'[j].ref;
+          } else {
+            assert lookup'[i].ref != lookup'[j].ref;
+          }
+        } else {
+          if (j == 0) {
+            assert lookup'[i].ref != lookup'[j].ref;
+          } else if (j == 1) {
+            assert lookup'[i].ref != lookup'[j].ref;
+          } else {
+            assert lookup[i-1].ref != lookup[j-1].ref;
+            assert lookup'[i].ref != lookup'[j].ref;
+          }
+        }
+      }
+
+      assert LookupIsAcyclic(lookup');
+    }
+  }
+
   lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
     requires Inv(k, s)
     requires Grow(k, s, s', oldroot, newchildref)
     ensures Acyclic(k, s')
   {
-    forall key, value, lookup' | IsSatisfyingLookup(k, s, key, value, lookup')
+    forall key, lookup' | IsPathFromRootLookup(k, s', key, lookup')
     ensures LookupIsAcyclic(lookup')
     {
+      GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, lookup');
+      /*
       forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
       ensures lookup'[i].ref != lookup'[j].ref
       {
@@ -76,6 +135,7 @@ abstract module DiskBetreeInv {
           assert lookup'[j].ref == 
         }
       }
+      */
     }
   }
   
