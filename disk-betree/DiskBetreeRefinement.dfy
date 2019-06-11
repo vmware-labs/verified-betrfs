@@ -8,19 +8,19 @@ abstract module DiskBetreeRefinement {
   type Key = DB.Key
   type Lookup<Value> = DB.Lookup<Value>
     
-  datatype Pair<S,T> = Pair(first: S, second: T)
+  datatype LookupResult<Value> = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup<Value>(k: DB.Constants, s: DB.Variables, key: Key) : Pair<Lookup, Value>
+  function GetLookup<Value>(k: DB.Constants, s: DB.Variables, key: Key) : LookupResult
     requires DB.KeyHasSatisfyingLookup(k, s, key);
   {
     var lookup, value :| DB.IsSatisfyingLookup(k, s, key, value, lookup);
-    Pair(lookup, value)
+    LookupResult(lookup, value)
   }
 
   function GetValue<Value>(k: DB.Constants, s: DB.Variables, key: Key) : Value
     requires DB.KeyHasSatisfyingLookup(k, s, key);
   {
-    GetLookup(k, s, key).second
+    GetLookup(k, s, key).result
   }
   
   function Ik(k: DB.Constants) : DB.MS.Constants {
@@ -39,6 +39,10 @@ abstract module DiskBetreeRefinement {
     ensures DB.MS.Init(Ik(k), I(k, s))
   {
     InitImpliesInv(k, s);
+    forall key | DB.MS.InDomain(key)
+      ensures I(k, s).view[key] == DB.MS.EmptyValue()
+    {
+    }
   }
 
   lemma BetreeRefinesMapNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, step: DB.Step)
