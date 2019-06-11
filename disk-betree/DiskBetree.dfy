@@ -32,14 +32,33 @@ abstract module DiskBetree {
     && (forall k :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
+  predicate LookupFollowsChildRefs(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+    && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
+    && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
+  }
+  
+  predicate LookupRespectsDisk(k: Constants, s: Variables, lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> BC.Read(k.bcc, s.bcv, lookup[i].ref) == lookup[i].node
+  }
+
+  predicate LookupVisitsWFNodes(k: Constants, s: Variables, lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  predicate LookupAccumulatesMessages(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+    && |lookup| > 0
+    && LookupVisitsWFNodes(k, s, lookup)
+    && lookup[0].accumulatedBuffer == lookup[0].node.buffer[key]
+    && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
+  }
+  
   predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == BC.Root(k.bcc)
-    && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children && lookup[i].node.children[key] == lookup[i+1].ref)
-    && (forall i :: 0 <= i < |lookup| ==> BC.Read(k.bcc, s.bcv, lookup[i].ref) == lookup[i].node)
-    && (forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node))
-    && lookup[0].accumulatedBuffer == lookup[0].node.buffer[key]
-    && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
+    && LookupRespectsDisk(k, s, lookup)
+    && LookupFollowsChildRefs(k, s, key, lookup)
+    && LookupVisitsWFNodes(k, s, lookup)
+    && LookupAccumulatesMessages(k, s, key, lookup)
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
   }
 

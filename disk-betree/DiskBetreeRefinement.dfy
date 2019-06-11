@@ -39,10 +39,6 @@ abstract module DiskBetreeRefinement {
     ensures DB.MS.Init(Ik(k), I(k, s))
   {
     InitImpliesInv(k, s);
-    forall key | DB.MS.InDomain(key)
-      ensures I(k, s).view[key] == DB.MS.EmptyValue()
-    {
-    }
   }
 
   lemma BetreeRefinesMapNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, step: DB.Step)
