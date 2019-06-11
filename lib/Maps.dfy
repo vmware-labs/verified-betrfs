@@ -15,6 +15,13 @@ module Maps {
     map j | j in m && j != k :: m[j]
   }
   
+  function {:opaque} IMapRemove<K,V>(m:imap<K,V>, k:K) : (m':imap<K,V>)
+    ensures m'.Keys == m.Keys - iset{k}
+    ensures forall j :: j in m' ==> m'[j] == m[j]
+  {
+    imap j | j in m && j != k :: m[j]
+  }
+  
 	// Requires disjoint domains and delivers predictable result.
 	function method {:opaque} MapDisjointUnion<U,T>(mapa: map<U,T>, mapb: map<U,T>) : (mapc: map<U,T>)
 		requires mapa.Keys !! mapb.Keys;

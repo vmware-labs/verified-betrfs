@@ -1,10 +1,10 @@
-include "../lib/map_utils.dfy"
+include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 include "DiskBetree.dfy"
   
 abstract module DiskBetreeInv {
   import opened DB : DiskBetree
-  import opened Map_Utils
+  import opened Maps
 
   predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, s: Variables, key: Key)
   {

@@ -1,13 +1,13 @@
 include "BlockCache.dfy"  
 include "../lib/sequences.dfy"
-include "../lib/map_utils.dfy"
+include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 
 abstract module DiskBetree {
   import MS: MapSpec
   import BC : BlockCache
   import opened Sequences
-  import opened Map_Utils
+  import opened Maps
   
   type Key = MS.Key
     

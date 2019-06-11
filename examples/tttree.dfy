@@ -1,11 +1,11 @@
 include "../lib/total_order.dfy"
 include "../lib/lexical.dfy"
-include "../lib/map_utils.dfy"
+include "../lib/Maps.dfy"
 include "../lib/mathematics.dfy"
 
 abstract module TwoThreeTree {
     import Keyspace : Total_Order
-    import Maps = Map_Utils
+    import Maps = Maps
     import Math = Mathematics
 
     datatype Node<Value> =

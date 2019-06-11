@@ -1,5 +1,5 @@
 include "../lib/total_order.dfy"
-include "../lib/map_utils.dfy"
+include "../lib/Maps.dfy"
 include "../lib/mathematics.dfy"
 include "../lib/sequences.dfy"
 include "BtreeSpec.dfy"

@@ -1,12 +1,12 @@
 include "total_order.dfy"
 //include "lexical.dfy"
-include "map_utils.dfy"
+include "Maps.dfy"
 include "mathematics.dfy"
 include "sequences.dfy"
 
 abstract module ImmutableBTree {
   import Keyspace : Total_Order
-  import Maps = Map_Utils
+  import Maps = Maps
   import Math = Mathematics
   import opened Sequences
     

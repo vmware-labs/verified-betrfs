@@ -1,5 +1,9 @@
+include "../lib/Maps.dfy"
+include "../lib/sequences.dfy"
+  
 abstract module BlockCache {
-  import MissingLibrary
+  import opened Sequences
+  import opened Maps
     
   type Reference(!new,==)
 
@@ -60,7 +64,7 @@ abstract module BlockCache {
   predicate GC(k: Constants, s: Variables, s': Variables, ref: Reference) {
     && ref !in LiveReferences(k, s)
     && ref in ViewOf(k, s)
-    && s'.view == MapRemove(s, ref)
+    && s'.view == IMapRemove(s.view, ref)
     && s'.reftree == s.reftree
   }
   

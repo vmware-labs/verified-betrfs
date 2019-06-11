@@ -1,7 +1,7 @@
-include "map_utils.dfy"
+include "Maps.dfy"
   
 module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
-  import Map_Utils
+  import Maps
 
   type LBA = int
   type Datum = (int, int)
@@ -70,7 +70,7 @@ module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
   {
     var diskmap: StructureInterpretation := PostCrashInterpretation(disk);
     var memmap: StructureInterpretation := TailSeqInterpretation(mem);
-    Map_Utils.union_preferA(memmap, diskmap)
+    Maps.union_preferA(memmap, diskmap)
   }
 
   lemma CommittingUpdatesInterpretation(disk: Disk, mem: InMemoryState)

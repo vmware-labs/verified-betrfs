@@ -1,4 +1,4 @@
-include "map_utils.dfy"
+include "Maps.dfy"
 
   // Problems with this model:
   // - non-atomic write-back not modeled (fix by improving model)
@@ -6,7 +6,7 @@ include "map_utils.dfy"
   // - does not enforce that every step preserves consistency (???)
   // - Synchronous (ok with me for now)
 abstract module Buffered_Storage {
-  import Maps = Map_Utils
+  import Maps = Maps
 
   type LBA(==)
   type Datum
