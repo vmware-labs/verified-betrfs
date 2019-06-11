@@ -1,11 +1,13 @@
 include "BlockCache.dfy"  
 include "../lib/sequences.dfy"
+include "../lib/map_utils.dfy"
 include "MapSpec.dfy"
 
 abstract module DiskBetree {
   import MS: MapSpec
   import BC : BlockCache
   import opened Sequences
+  import opened Map_Utils
   
   type Key = MS.Key
     
@@ -38,7 +40,7 @@ abstract module DiskBetree {
   }
   
   predicate LookupRespectsDisk(k: Constants, s: Variables, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> BC.Read(k.bcc, s.bcv, lookup[i].ref) == lookup[i].node
+    forall i :: 0 <= i < |lookup| ==> lookup[i].ref in BC.ViewOf(k.bck, s.bcv) && BC.ViewOf(k.bck, s.bcv)[lookup[i].ref] == lookup[i].node
   }
 
   predicate LookupVisitsWFNodes(k: Constants, s: Variables, lookup: Lookup) {
@@ -54,7 +56,7 @@ abstract module DiskBetree {
   
   predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
     && |lookup| > 0
-    && lookup[0].ref == BC.Root(k.bcc)
+    && lookup[0].ref == BC.Root(k.bck)
     && LookupRespectsDisk(k, s, lookup)
     && LookupFollowsChildRefs(k, s, key, lookup)
     && LookupVisitsWFNodes(k, s, lookup)
@@ -69,7 +71,7 @@ abstract module DiskBetree {
   
   // Now we define the state machine
   
-  datatype Constants = Constants(bcc: BC.Constants)
+  datatype Constants = Constants(bck: BC.Constants)
   datatype Variables<Value> = Variables(bcv: BC.Variables<Node<Value>>)
 
   function EmptyNode<Value>() : Node {
@@ -78,8 +80,8 @@ abstract module DiskBetree {
   }
     
   predicate Init(k: Constants, s: Variables) {
-    && BC.Init(k.bcc, s.bcv)
-    && BC.Read(k.bcc, s.bcv, BC.Root(k.bcc)) == EmptyNode()
+    && BC.Init(k.bck, s.bcv)
+    && IMapsTo(BC.ViewOf(k.bck, s.bcv), BC.Root(k.bck), EmptyNode())
   }
     
   predicate Query<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
@@ -100,16 +102,16 @@ abstract module DiskBetree {
   }
   
   predicate InsertMessage<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node) {
-    && BC.Read(k.bcc, s.bcv, BC.Root(k.bcc)) == oldroot
+    && IMapsTo(BC.ViewOf(k.bck, s.bcv), BC.Root(k.bck), oldroot)
     && WFNode(oldroot)
     && var newroot := AddMessageToNode(oldroot, key, msg);
-    && BC.Apply(k.bcc, s.bcv, s'.bcv, BC.WriteOp(BC.Root(k.bcc), newroot, Successors(newroot)))
+    && BC.Apply(k.bck, s.bcv, s'.bcv, BC.WriteOp(BC.Root(k.bck), newroot, Successors(newroot)))
   }
 
   predicate Flush<Value>(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference) {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    && BC.Read(k.bcc, s.bcv, parentref) == parent
-    && BC.Read(k.bcc, s.bcv, childref) == child
+    && IMapsTo(BC.ViewOf(k.bck, s.bcv), parentref, parent)
+    && IMapsTo(BC.ViewOf(k.bck, s.bcv), childref, child)
     && WFNode(parent)
     && WFNode(child)
     && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
@@ -118,18 +120,18 @@ abstract module DiskBetree {
     && var newparent := Node(parent.children, newparentbuffer);
     && var allocop := BC.AllocOp(newchild, Successors(newchild), newchildref);
     && var writeop := BC.WriteOp(parentref, newparent, Successors(newparent));
-    && BC.Apply2(k.bcc, s.bcv, s'.bcv, allocop, writeop)
+    && BC.Apply2(k.bck, s.bcv, s'.bcv, allocop, writeop)
   }
 
   predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference) {
-    && BC.Read(k.bcc, s.bcv, BC.Root(k.bcc)) == oldroot
+    && IMapsTo(BC.ViewOf(k.bck, s.bcv), BC.Root(k.bck), oldroot)
     && var newchild := oldroot;
     && var newroot := Node(
         imap key | MS.InDomain(key) :: newchildref,
         imap key | MS.InDomain(key) :: []);
     && var allocop := BC.AllocOp(newchild, Successors(newchild), newchildref);
-    && var writeop := BC.WriteOp(BC.Root(k.bcc), newroot, Successors(newroot));
-    && BC.Apply2(k.bcc, s.bcv, s'.bcv, allocop, writeop)
+    && var writeop := BC.WriteOp(BC.Root(k.bck), newroot, Successors(newroot));
+    && BC.Apply2(k.bck, s.bcv, s'.bcv, allocop, writeop)
   }
 
   datatype Step<Value(!new)> =

@@ -52,4 +52,8 @@ module Map_Utils {
 		union_preferA(mapa, mapb)
 	}
 
+  predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
+    k in m && m[k] == v
+  }
+  
 }

@@ -55,10 +55,10 @@ abstract module DiskBetreeInv {
     ensures exists lookup' :: IsSatisfyingLookup(k, s', key, value, lookup')
     {
       // Add one for the new root
-      var rootref := BC.Root(k.bcc);
+      var rootref := BC.Root(k.bck);
 
       // TODO need to have contract that read matches the write
-      var newroot := BC.Read(k.bcc, s'.bcv, rootref);
+      var newroot := BC.ViewOf(k.bck, s'.bcv)[rootref];
       assert newroot == Node(imap key | MS.InDomain(key) :: newchildref, imap key | MS.InDomain(key) :: []);
 
       var lookup' := [
@@ -67,11 +67,11 @@ abstract module DiskBetreeInv {
       ] + lookup[1..];
 
       forall i | 0 <= i < |lookup'|
-      ensures BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node
+      ensures BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node
       ensures WFNode(lookup'[i].node)
       {
         if (i == 0) {
-          assert BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node;
+          assert BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node;
 
           forall k ensures k in newroot.buffer
           {
@@ -80,13 +80,13 @@ abstract module DiskBetreeInv {
           assert WFNode(lookup'[i].node);
         } else if (i == 1) {
           // TODO need a contract from alloc here:
-          assert BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node;
+          assert BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node;
 
           assert WFNode(lookup'[i].node);
         } else {
           // TODO need to have contract that allows this to be preserved:
-          assert BC.Read(k.bcc, s.bcv, lookup'[i].ref) == lookup'[i].node;
-          assert BC.Read(k.bcc, s'.bcv, lookup'[i].ref) == lookup'[i].node;
+          assert BC.ViewOf(k.bck, s.bcv)[lookup'[i].ref] == lookup'[i].node;
+          assert BC.ViewOf(k.bck, s'.bcv)[lookup'[i].ref] == lookup'[i].node;
 
           assert WFNode(lookup'[i].node);
         }
@@ -126,7 +126,7 @@ abstract module DiskBetreeInv {
     requires Init(k, s)
     ensures Inv(k, s)
   {
-    assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s, key, MS.EmptyValue(), [Layer(BC.Root(k.bcc), EmptyNode(), [Insertion(MS.EmptyValue())])]);
+    assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s, key, MS.EmptyValue(), [Layer(BC.Root(k.bck), EmptyNode(), [Insertion(MS.EmptyValue())])]);
   }
 
   lemma QueryStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)
@@ -149,7 +149,7 @@ abstract module DiskBetreeInv {
   //       assume false;
   //     } else {
   //       var newroot := AddMessageToNode(oldroot, key, msg);
-  //       var newlookup := [Layer(BC.Root(k.bcc), newroot, newroot.buffer[key1])] + lookup[1..];
+  //       var newlookup := [Layer(BC.Root(k.bck), newroot, newroot.buffer[key1])] + lookup[1..];
   //       assert IsSatisfyingLookup(k, s', key, value, newlookup);
   //     }
   //   }
