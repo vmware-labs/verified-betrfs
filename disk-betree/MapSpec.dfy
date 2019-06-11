@@ -1,12 +1,9 @@
 include "../tla-tree/MissingLibrary.dfy"
-include "../lib/total_order.dfy"
 
 abstract module MapSpec {
 import opened MissingLibrary
 
-import Keyspace : Total_Order
-type Key = Keyspace.Element
-
+type Key(!new,==)
 
 // Users must provide a definition of EmptyValue
 function EmptyValue<Value>() : Value
@@ -17,7 +14,7 @@ datatype Variables<Value> = Variables(view:View<Value>)
 
 predicate ViewComplete(view:View)
 {
-    forall k :: k in view
+  forall k :: k in view
 }
 
 predicate WF(s:Variables)

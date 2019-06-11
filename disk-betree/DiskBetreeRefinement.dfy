@@ -11,14 +11,14 @@ abstract module DiskBetreeRefinement {
   datatype LookupResult<Value> = LookupResult(lookup: Lookup, result: Value)
   
   function GetLookup<Value>(k: DB.Constants, s: DB.Variables, key: Key) : LookupResult
-    requires DB.KeyHasSatisfyingLookup(k, s, key);
+    requires KeyHasSatisfyingLookup(k, s, key);
   {
     var lookup, value :| DB.IsSatisfyingLookup(k, s, key, value, lookup);
     LookupResult(lookup, value)
   }
 
   function GetValue<Value>(k: DB.Constants, s: DB.Variables, key: Key) : Value
-    requires DB.KeyHasSatisfyingLookup(k, s, key);
+    requires KeyHasSatisfyingLookup(k, s, key);
   {
     GetLookup(k, s, key).result
   }

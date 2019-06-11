@@ -62,11 +62,6 @@ abstract module DiskBetree {
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
   }
 
-  predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, s: Variables, key: Key)
-  {
-    exists lookup, value :: IsSatisfyingLookup(k, s, key, value, lookup)
-  }
-
   function Successors(node: Node) : iset<BC.Reference>
   {
     iset k | k in node.children :: node.children[k]
@@ -92,11 +87,22 @@ abstract module DiskBetree {
     && IsSatisfyingLookup(k, s, key, value, lookup)
   }
 
-  predicate InsertMessage<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, oldroot: Node) {
+  function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
+    requires key in buffer
+  {
+    buffer[key := [msg] + buffer[key]]
+  }
+  
+  function AddMessageToNode(node: Node, key: Key, msg: BufferEntry) : Node
+    requires WFNode(node)
+  {
+    Node(node.children, AddMessageToBuffer(node.buffer, key, msg))
+  }
+  
+  predicate InsertMessage<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node) {
     && BC.Read(k.bcc, s.bcv, BC.Root(k.bcc)) == oldroot
     && WFNode(oldroot)
-    && var newroot := Node(oldroot.children, oldroot.buffer[key := [Insertion(value)] + oldroot.buffer[key]]);
-    && WFNode(oldroot)
+    && var newroot := AddMessageToNode(oldroot, key, msg);
     && BC.Apply(k.bcc, s.bcv, s'.bcv, BC.WriteOp(BC.Root(k.bcc), newroot, Successors(newroot)))
   }
 
@@ -126,14 +132,14 @@ abstract module DiskBetree {
 
   datatype Step<Value(!new)> =
     | QueryStep(key: Key, value: Value, lookup: Lookup)
-    | InsertMessageStep(key: Key, value: Value, oldroot: Node)
+    | InsertMessageStep(key: Key, msg: BufferEntry, oldroot: Node)
     | FlushStep(parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
     | GrowStep(oldroot: Node, newchildref: BC.Reference)
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
     match step {
       case QueryStep(key, value, lookup) => Query(k, s, s', key, value, lookup)
-      case InsertMessageStep(key, value, oldroot) => InsertMessage(k, s, s', key, value, oldroot)
+      case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
       case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
       case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
     }

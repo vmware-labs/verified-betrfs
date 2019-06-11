@@ -4,7 +4,10 @@ include "DiskBetree.dfy"
 abstract module DiskBetreeInv {
   import opened DB : DiskBetree
 
-  /// Invariants
+  predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, s: Variables, key: Key)
+  {
+    exists lookup, value :: IsSatisfyingLookup(k, s, key, value, lookup)
+  }
   
   predicate Inv(k: Constants, s: Variables)
   {
@@ -25,27 +28,39 @@ abstract module DiskBetreeInv {
   {
   }
   
-  lemma InsertMessageStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, oldroot: Node)
+  lemma InsertMessageStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
-    requires InsertMessage(k, s, s', key, value, oldroot)
+    requires InsertMessage(k, s, s', key, msg, oldroot)
     ensures Inv(k, s')
-  {
-  }
+  // {
+  //   forall key1 | MS.InDomain(key1)
+  //     ensures KeyHasSatisfyingLookup(k, s', key1)
+  //   {
+  //     var lookup: Lookup, value: Value :| IsSatisfyingLookup(k, s, key1, value, lookup);
+  //     if key1 == key {
+  //       assume false;
+  //     } else {
+  //       var newroot := AddMessageToNode(oldroot, key, msg);
+  //       var newlookup := [Layer(BC.Root(k.bcc), newroot, newroot.buffer[key1])] + lookup[1..];
+  //       assert IsSatisfyingLookup(k, s', key, value, newlookup);
+  //     }
+  //   }
+  // }
 
   lemma FlushStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables,
                                            parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
     requires Inv(k, s)
     requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
     ensures Inv(k, s')
-  {
-  }
+  // {
+  // }
   
   lemma GrowStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
     requires Inv(k, s)
     requires Grow(k, s, s', oldroot, newchildref)
     ensures Inv(k, s')
-  {
-  }
+  // {
+  // }
 
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
     requires Inv(k, s)
