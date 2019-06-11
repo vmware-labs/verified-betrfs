@@ -20,11 +20,18 @@ abstract module DiskBetreeInv {
       IsPathFromRootLookup(k, s, key, lookup) ==>
       LookupIsAcyclic(lookup)
   }
+
+  predicate ReachablePointersValid<Value(!new)>(k: Constants, s: Variables) {
+    forall key, lookup: Lookup<Value> ::
+      IsPathFromRootLookup(k, s, key, lookup) && key in lookup[|lookup|-1].node.children ==>
+      lookup[|lookup|-1].node.children[key] in BC.ViewOf(k.bck, s.bcv)
+  }
   
   predicate Inv(k: Constants, s: Variables)
   {
     && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s, key))
     && Acyclic(k, s)
+    && ReachablePointersValid(k, s)
   }
 
   //// Definitions for lookup preservation
@@ -75,8 +82,6 @@ abstract module DiskBetreeInv {
       assert IsPathFromRootLookup(k, s, key, sublookup);
       var lastLayer := lookup'[|lookup'| - 1];
 
-      // TODO: need to have invariant that all refs in s are valid in order to show this:
-      assert lastLayer.ref != newchildref;
       assert lastLayer.ref in BC.ViewOf(k.bck, s.bcv);
 
       var lookup := sublookup + [Layer(lastLayer.ref, BC.ViewOf(k.bck, s.bcv)[lastLayer.ref], [])];
