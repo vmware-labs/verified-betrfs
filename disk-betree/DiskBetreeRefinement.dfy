@@ -23,13 +23,6 @@ abstract module DiskBetreeRefinement {
     assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s, key, MS.EmptyValue(), [Layer(BC.Root(k.bcc), EmptyNode(), [Insertion(MS.EmptyValue())])]);
   }
   
-  lemma CantEquivocate<Value>(k: Constants, s: Variables, key: Key, value1: Value, value2: Value)
-    requires exists lookup :: IsSatisfyingLookup(k, s, key, value1, lookup)
-    requires exists lookup :: IsSatisfyingLookup(k, s, key, value2, lookup)
-    ensures value1 == value2
-  {
-  }
-
   // Refinement proof
 
   datatype Pair<S,T> = Pair(first: S, second: T)
