@@ -43,6 +43,11 @@ abstract module DiskBetree {
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
   }
 
+  predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, s: Variables, key: Key)
+  {
+    exists lookup, value :: IsSatisfyingLookup(k, s, key, value, lookup)
+  }
+
   function Successors(node: Node) : iset<BC.Reference>
   {
     iset k | k in node.children :: node.children[k]
