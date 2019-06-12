@@ -168,6 +168,11 @@ abstract module DiskBetreeInv {
           }
         } else {
           if (j == 0) {
+            assert lookup'[j].ref == BC.Root(k.bck);
+            assert lookup'[i].ref == lookup[i-1].ref;
+            assert lookup[i-1].ref != lookup[0].ref;
+            assert lookup'[i].ref != BC.Root(k.bck);
+
             assert lookup'[i].ref != lookup'[j].ref;
           } else if (j == 1) {
             assert lookup'[i].ref != lookup'[j].ref;
@@ -243,8 +248,9 @@ abstract module DiskBetreeInv {
   requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup')
   requires lookup == flushTransformLookupRev(lookup', parentref, parent, childref, child, newchildref);
   ensures IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
-  ensures LookupIsAcyclic(lookup);
-  ensures key in Last(lookup).node.children ==> Last(lookup).node.children[key] in BC.ViewOf(k.bck, s.bcv);
+  // These follow immediately from IsPathFromRootLookup:
+  //ensures LookupIsAcyclic(lookup);
+  //ensures key in Last(lookup).node.children ==> Last(lookup).node.children[key] in BC.ViewOf(k.bck, s.bcv);
   decreases lookup'
   {
     if (|lookup'| == 0) {
