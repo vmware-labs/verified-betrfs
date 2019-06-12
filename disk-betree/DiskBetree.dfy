@@ -84,13 +84,12 @@ abstract module DiskBetree {
   }
     
   predicate Init(k: Constants, s: Variables) {
-    && BI.Init(k.bck, s.bcv)
-    && IMapsTo(BI.ViewOf(k.bck, s.bcv), BI.Root(k.bck), EmptyNode())
+    && BI.Init(k.bck, s.bcv, EmptyNode())
   }
     
   predicate Query<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
     && s == s'
-    && IsSatisfyingLookup(k, BI.ViewOf(k.bck, s.bcv), key, value, lookup)
+    && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
   }
 
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
@@ -106,16 +105,16 @@ abstract module DiskBetree {
   }
   
   predicate InsertMessage<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node) {
-    && IMapsTo(BI.ViewOf(k.bck, s.bcv), BI.Root(k.bck), oldroot)
+    && IMapsTo(s.bcv.view, BI.Root(k.bck), oldroot)
     && WFNode(oldroot)
     && var newroot := AddMessageToNode(oldroot, key, msg);
-    && BI.Apply(k.bck, s.bcv, s'.bcv, BI.WriteOp(BI.Root(k.bck), newroot, Successors(newroot)))
+    && BI.Write(k.bck, s.bcv, s'.bcv, BI.Root(k.bck), newroot, Successors(newroot))
   }
 
   predicate Flush<Value>(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference) {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    && IMapsTo(BI.ViewOf(k.bck, s.bcv), parentref, parent)
-    && IMapsTo(BI.ViewOf(k.bck, s.bcv), childref, child)
+    && IMapsTo(s.bcv.view, parentref, parent)
+    && IMapsTo(s.bcv.view, childref, child)
     && WFNode(parent)
     && WFNode(child)
     && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
@@ -123,20 +122,20 @@ abstract module DiskBetree {
     && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
     && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     && var newparent := Node(newparentchildren, newparentbuffer);
-    && var allocop := BI.AllocOp(newchild, Successors(newchild), newchildref);
-    && var writeop := BI.WriteOp(parentref, newparent, Successors(newparent));
-    && BI.Apply2(k.bck, s.bcv, s'.bcv, allocop, writeop)
+    && var allocop := BI.AllocStep(newchild, Successors(newchild), newchildref);
+    && var writeop := BI.WriteStep(parentref, newparent, Successors(newparent));
+    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
   predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference) {
-    && IMapsTo(BI.ViewOf(k.bck, s.bcv), BI.Root(k.bck), oldroot)
+    && IMapsTo(s.bcv.view, BI.Root(k.bck), oldroot)
     && var newchild := oldroot;
     && var newroot := Node(
         imap key | MS.InDomain(key) :: newchildref,
         imap key | MS.InDomain(key) :: []);
-    && var allocop := BI.AllocOp(newchild, Successors(newchild), newchildref);
-    && var writeop := BI.WriteOp(BI.Root(k.bck), newroot, Successors(newroot));
-    && BI.Apply2(k.bck, s.bcv, s'.bcv, allocop, writeop)
+    && var allocop := BI.AllocStep(newchild, Successors(newchild), newchildref);
+    && var writeop := BI.WriteStep(BI.Root(k.bck), newroot, Successors(newroot));
+    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
   datatype Step<Value(!new)> =

@@ -1,4 +1,4 @@
-TARGETDLLS=BlockInterface.dll #DiskBetreeRefinement.dll
+TARGETDLLS=DiskBetreeRefinement.dll
 TARGETEXES=
 
 include ../tools/Makefile.template
