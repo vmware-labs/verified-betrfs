@@ -137,7 +137,7 @@ abstract module DiskBetreeInv {
   {
     if (|lookup'| <= 2) {
     } else {
-      //var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
+      // var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
       // assert s'.bcv.view.Keys == s'.bcv.view.Keys + iset{newchildref};
       // assert forall i :: 0 <= i < |lookup| ==> lookup[i].ref in s.bcv.view;
       // assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
@@ -145,6 +145,9 @@ abstract module DiskBetreeInv {
       var sublookup' := lookup'[ .. |lookup'| - 1];
       GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, sublookup');
       var sublookup := sublookup'[1..][0 := Layer(BI.Root(k.bck), sublookup'[1].node, sublookup'[1].accumulatedBuffer)];
+      assert s'.bcv.view[newchildref] == oldroot;
+      assert sublookup'[1].node == oldroot;
+      assert IMapsTo(s.bcv.view, BI.Root(k.bck), sublookup'[1].node);
       assert IsPathFromRootLookup(k, s.bcv.view, key, sublookup);
       var lastLayer := lookup'[|lookup'| - 1];
 
