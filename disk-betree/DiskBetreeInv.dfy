@@ -1,10 +1,12 @@
 include "../lib/map_utils.dfy"
+include "../lib/sequences.dfy"
 include "MapSpec.dfy"
 include "DiskBetree.dfy"
   
 abstract module DiskBetreeInv {
   import opened DB : DiskBetree
   import opened Map_Utils
+  import opened Sequences
 
   predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, view: BC.View<Node>, key: Key)
   {
@@ -231,10 +233,23 @@ abstract module DiskBetreeInv {
   requires Inv(k, s)
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup')
-  requires LookupIsAcyclic(lookup')
+  // TODO clean up these obnoxious expressions, factor out the transform(transform(...)) stuff:
   ensures IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, [])))
+  ensures LookupIsAcyclic(transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, [])))
+  ensures key in Last(transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []))).node.children ==> Last(transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []))).node.children[key] in BC.ViewOf(k.bck, s.bcv)
+  decreases lookup'
   {
-    assert newchildref != BC.Root(k.bck);
+    var lookup := transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
+
+    if (|lookup'| == 0) {
+    } else if (|lookup'| == 1) {
+      assert BC.Root(k.bck) in BC.ViewOf(k.bck, s.bcv); // TODO
+      assert lookup[0].node == BC.ViewOf(k.bck, s.bcv)[BC.Root(k.bck)];
+      assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
+    } else {
+      assume false;
+      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup'[.. |lookup'| - 1], key);
+    }
   }
 
   lemma FlushPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference, lookup': Lookup, key: Key)
@@ -242,7 +257,6 @@ abstract module DiskBetreeInv {
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup')
   ensures LookupIsAcyclic(lookup')
-  decreases lookup'
   {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
     var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
@@ -252,43 +266,8 @@ abstract module DiskBetreeInv {
 
     if (|lookup'| <= 1) {
     } else {
-      var sublookup' := lookup'[ .. |lookup'| - 1];
-      FlushPreservesAcyclicLookup(k,s, s', parentref, parent, childref, child, newchildref, sublookup', key);
-      var sublookup := transformLookup(transformLookup(sublookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
-
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, sublookup', key);
-      assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, sublookup);
-
-      assert LookupIsAcyclic(sublookup);
       var lookup := transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
-
-      forall i | 0 <= i < |lookup| - 1
-      ensures key in lookup[i].node.children
-      ensures lookup[i].node.children[key] == lookup[i+1].ref
-      {
-        if (lookup'[i].ref == newchildref) {
-          assert key in lookup[i].node.children;
-          assert lookup[i].node.children[key] == lookup[i+1].ref;
-        } else if (lookup'[i].ref == parentref) {
-          /*assert key in lookup'[i].node.children;
-          assert lookup[i].node == parent;
-          assert lookup'[i].node == newparent;
-          assert key in parent.children;
-          assert key in lookup[i].node.children;*/
-          assert lookup[i].node.children[key] == lookup[i+1].ref;
-        } else {
-          assert key in lookup[i].node.children;
-          assert lookup[i].node.children[key] == lookup[i+1].ref;
-        }
-      }
-
-      assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
-
-      forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
-      ensures lookup'[i].ref != lookup'[j].ref
-      {
-        assert lookup[i].ref != lookup[j].ref;
-      }
+      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup', key);
     }
   }
 
