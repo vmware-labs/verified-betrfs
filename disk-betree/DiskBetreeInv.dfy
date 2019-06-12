@@ -29,6 +29,7 @@ abstract module DiskBetreeInv {
   
   predicate Inv(k: Constants, s: Variables)
   {
+    && BI.Inv(k.bck, s.bcv)
     && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
     && Acyclic(k, s)
     && ReachablePointersValid(k, s)
