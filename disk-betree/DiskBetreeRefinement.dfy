@@ -3,24 +3,33 @@ include "MapSpec.dfy"
 include "DiskBetreeInv.dfy"
 
 abstract module DiskBetreeRefinement {
-  import opened DiskBetreeInv
+  import opened DBI : DiskBetreeInv
 
+  import BC = DBI.DB.BC
+
+  type Node<Value> = DB.Node<Value>
   type Key = DB.Key
   type Lookup<Value> = DB.Lookup<Value>
     
   datatype LookupResult<Value> = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup<Value>(k: DB.Constants, s: DB.Variables, key: Key) : LookupResult
-    requires KeyHasSatisfyingLookup(k, s, key);
+  function GetLookup<Value>(k: DB.Constants, view: BC.View<Node>, key: Key) : LookupResult
+    requires KeyHasSatisfyingLookup(k, view, key);
   {
-    var lookup, value :| DB.IsSatisfyingLookup(k, s, key, value, lookup);
+    var lookup, value :| DB.IsSatisfyingLookup(k, view, key, value, lookup);
     LookupResult(lookup, value)
   }
 
-  function GetValue<Value>(k: DB.Constants, s: DB.Variables, key: Key) : Value
-    requires KeyHasSatisfyingLookup(k, s, key);
+  function GetValue<Value>(k: DB.Constants, view: BC.View<Node>, key: Key) : Value
+    requires KeyHasSatisfyingLookup(k, view, key);
   {
-    GetLookup(k, s, key).result
+    GetLookup(k, view, key).result
+  }
+
+  function IView<Value>(k: DB.Constants, view: BC.View<Node>) : imap<Key, Value>
+    requires forall key :: KeyHasSatisfyingLookup(k, view, key);
+  {
+    imap key | DB.MS.InDomain(key) :: GetValue(k, view, key)
   }
   
   function Ik(k: DB.Constants) : DB.MS.Constants {
@@ -30,7 +39,7 @@ abstract module DiskBetreeRefinement {
   function I(k: DB.Constants, s: DB.Variables) : DB.MS.Variables
     requires Inv(k, s)
   {
-    DB.MS.Variables(imap key | DB.MS.InDomain(key) :: GetValue(k, s, key))
+    DB.MS.Variables(IView(k, BC.ViewOf(k.bck, s.bcv)))
   }
 
   lemma BetreeRefinesMapInit(k: DB.Constants, s: DB.Variables)

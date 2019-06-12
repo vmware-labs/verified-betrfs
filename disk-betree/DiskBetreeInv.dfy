@@ -6,9 +6,9 @@ abstract module DiskBetreeInv {
   import opened DB : DiskBetree
   import opened Map_Utils
 
-  predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, s: Variables, key: Key)
+  predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, view: BC.View<Node>, key: Key)
   {
-    exists lookup, value :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
+    exists lookup, value :: IsSatisfyingLookup(k, view, key, value, lookup)
   }
 
   predicate LookupIsAcyclic(lookup: Lookup) {
@@ -29,7 +29,7 @@ abstract module DiskBetreeInv {
   
   predicate Inv(k: Constants, s: Variables)
   {
-    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s, key))
+    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key))
     && Acyclic(k, s)
     && ReachablePointersValid(k, s)
   }
