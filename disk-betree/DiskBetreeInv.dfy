@@ -159,6 +159,97 @@ abstract module DiskBetreeInv {
     }
   }
 
+  function transformLookup<Value>(lookup: Lookup<Value>, oldref: BC.Reference, newLayer: Layer<Value>) : Lookup<Value>
+  ensures |transformLookup(lookup, oldref, newLayer)| == |lookup|
+  ensures forall i :: 0 <= i < |lookup| ==>
+      transformLookup(lookup, oldref, newLayer)[i] ==
+        (if lookup[i].ref == oldref then newLayer else lookup[i])
+  decreases lookup
+  {
+    if |lookup| == 0 then
+      []
+    else
+      transformLookup(lookup[.. |lookup| - 1], oldref, newLayer) + 
+        [if lookup[|lookup| - 1].ref == oldref then newLayer else lookup[|lookup| - 1]]
+  }
+
+  lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference, lookup': Lookup, key: Key)
+  requires Inv(k, s)
+  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires IsPathFromRootLookup(k, s', key, lookup')
+  requires LookupIsAcyclic(lookup')
+  ensures IsPathFromRootLookup(k, s, key, transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, [])))
+  {
+    assert newchildref != BC.Root(k.bck);
+  }
+
+  lemma FlushPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference, lookup': Lookup, key: Key)
+  requires Inv(k, s)
+  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires IsPathFromRootLookup(k, s', key, lookup')
+  ensures LookupIsAcyclic(lookup')
+  decreases lookup'
+  {
+    var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
+    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    var newparent := Node(newparentchildren, newparentbuffer);
+
+    if (|lookup'| <= 1) {
+    } else {
+      var sublookup' := lookup'[ .. |lookup'| - 1];
+      FlushPreservesAcyclicLookup(k,s, s', parentref, parent, childref, child, newchildref, sublookup', key);
+      var sublookup := transformLookup(transformLookup(sublookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
+
+      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, sublookup', key);
+      assert IsPathFromRootLookup(k, s, key, sublookup);
+
+      assert LookupIsAcyclic(sublookup);
+      var lookup := transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
+
+      forall i | 0 <= i < |lookup| - 1
+      ensures key in lookup[i].node.children
+      ensures lookup[i].node.children[key] == lookup[i+1].ref
+      {
+        if (lookup'[i].ref == newchildref) {
+          assert key in lookup[i].node.children;
+          assert lookup[i].node.children[key] == lookup[i+1].ref;
+        } else if (lookup'[i].ref == parentref) {
+          /*assert key in lookup'[i].node.children;
+          assert lookup[i].node == parent;
+          assert lookup'[i].node == newparent;
+          assert key in parent.children;
+          assert key in lookup[i].node.children;*/
+          assert lookup[i].node.children[key] == lookup[i+1].ref;
+        } else {
+          assert key in lookup[i].node.children;
+          assert lookup[i].node.children[key] == lookup[i+1].ref;
+        }
+      }
+
+      assert IsPathFromRootLookup(k, s, key, lookup);
+
+      forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
+      ensures lookup'[i].ref != lookup'[j].ref
+      {
+        assert lookup[i].ref != lookup[j].ref;
+      }
+    }
+  }
+
+  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
+    requires Inv(k, s)
+    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    ensures Acyclic(k, s')
+  {
+    forall key, lookup':Lookup | IsPathFromRootLookup(k, s', key, lookup')
+    ensures LookupIsAcyclic(lookup')
+    {
+      FlushPreservesAcyclicLookup(k, s, s', parentref, parent, childref, child, newchildref, lookup', key);
+    }
+  }
+
   // Preservation proofs
   
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)

@@ -121,7 +121,8 @@ abstract module DiskBetree {
     && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
     && var newchild := Node(child.children, newbuffer);
     && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
-    && var newparent := Node(parent.children, newparentbuffer);
+    && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    && var newparent := Node(newparentchildren, newparentbuffer);
     && var allocop := BC.AllocOp(newchild, Successors(newchild), newchildref);
     && var writeop := BC.WriteOp(parentref, newparent, Successors(newparent));
     && BC.Apply2(k.bck, s.bcv, s'.bcv, allocop, writeop)
