@@ -229,26 +229,31 @@ abstract module DiskBetreeInv {
         [if lookup[|lookup| - 1].ref == oldref then newLayer else lookup[|lookup| - 1]]
   }
 
-  lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference, lookup': Lookup, key: Key)
+  function flushTransformLookupRev<Value>(lookup': Lookup, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference) : Lookup
+  {
+    transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []))
+  }
+
+  lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s)
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup')
-  // TODO clean up these obnoxious expressions, factor out the transform(transform(...)) stuff:
-  ensures IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, [])))
-  ensures LookupIsAcyclic(transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, [])))
-  ensures key in Last(transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []))).node.children ==> Last(transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []))).node.children[key] in BC.ViewOf(k.bck, s.bcv)
+  requires lookup == flushTransformLookupRev(lookup', parentref, parent, childref, child, newchildref);
+  ensures IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
+  ensures LookupIsAcyclic(lookup);
+  ensures key in Last(lookup).node.children ==> Last(lookup).node.children[key] in BC.ViewOf(k.bck, s.bcv);
   decreases lookup'
   {
-    var lookup := transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
-
     if (|lookup'| == 0) {
     } else if (|lookup'| == 1) {
-      assert BC.Root(k.bck) in BC.ViewOf(k.bck, s.bcv); // TODO
+      assert BC.Root(k.bck) in BC.ViewOf(k.bck, s.bcv);
       assert lookup[0].node == BC.ViewOf(k.bck, s.bcv)[BC.Root(k.bck)];
       assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
     } else {
       assume false;
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup'[.. |lookup'| - 1], key);
+      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref,
+        flushTransformLookupRev(lookup'[.. |lookup'| - 1], parentref, parent, childref, child, newchildref),
+        lookup'[.. |lookup'| - 1], key);
     }
   }
 
@@ -267,7 +272,7 @@ abstract module DiskBetreeInv {
     if (|lookup'| <= 1) {
     } else {
       var lookup := transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup', key);
+      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
     }
   }
 

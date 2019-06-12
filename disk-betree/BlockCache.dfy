@@ -7,6 +7,7 @@ abstract module BlockCache {
   type View<T> = imap<Reference, T>
     
   function ViewOf<T>(k: Constants, s: Variables) : View
+  ensures Root(k) in ViewOf(k, s)
   
   // function Read<T>(k: Constants, s: Variables, ref: Reference) : T
   //   requires ref in ViewOf(k, s)
