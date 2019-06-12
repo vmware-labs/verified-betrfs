@@ -54,28 +54,18 @@ abstract module DiskBetree {
     && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
   }
 
-  predicate IsPathFromRootLookupForView<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, lookup: Lookup) {
+  predicate IsPathFromRootLookup<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == BC.Root(k.bck)
     && LookupRespectsDisk(view, lookup)
     && LookupFollowsChildRefs(key, lookup)
   }
 
-  predicate IsSatisfyingLookupForView<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookupForView(k, view, key, lookup)
+  predicate IsSatisfyingLookup<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, value: Value, lookup: Lookup) {
+    && IsPathFromRootLookup(k, view, key, lookup)
     && LookupVisitsWFNodes(lookup)
     && LookupAccumulatesMessages(key, lookup)
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
-  }
-
-  predicate IsPathFromRootLookup<Value>(k: Constants, s: Variables, key: Key, lookup: Lookup) {
-    IsPathFromRootLookupForView(k, BC.ViewOf(k.bck, s.bcv), key, lookup)
-  }
-
-  predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup)
-  ensures IsPathFromRootLookup(k, s, key, lookup);
-  {
-    IsSatisfyingLookupForView(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
   }
 
   function Successors(node: Node) : iset<BC.Reference>
@@ -100,7 +90,7 @@ abstract module DiskBetree {
     
   predicate Query<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
     && s == s'
-    && IsSatisfyingLookup(k, s, key, value, lookup)
+    && IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
   }
 
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
