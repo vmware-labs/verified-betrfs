@@ -13,22 +13,16 @@ abstract module BlockInterface {
   function Root(k: Constants) : Reference
 
   type Constants
-  datatype Variables<T> = Variables(view: View, reftree: ReferenceTree)
+  datatype Variables<T> = Variables(view: View, refGraph: ReferenceTree)
     
   type Lookup = seq<Reference>
 
-  predicate IsLookupStart(k: Constants, s: Variables, ref: Reference)
-  {
-    && ref in s.reftree
-    && !exists ref2 :: ref2 in s.reftree && ref in s.reftree[ref2]
-  }
-    
   predicate LookupIsValid(k: Constants, s: Variables, lookup: Lookup)
   {
     && |lookup| > 0
-    && IsLookupStart(k, s, lookup[0])
-    && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.reftree)
-    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in s.reftree[lookup[i]])
+    && lookup[0] == Root(k)
+    && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.refGraph)
+    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in s.refGraph[lookup[i]])
   }
 
   predicate ReachableReference(k: Constants, s: Variables, ref: Reference)
@@ -44,40 +38,35 @@ abstract module BlockInterface {
     LiveReferences(k, s) <= s.view.Keys
   }
 
-  predicate OneRoot(k: Constants, s: Variables) {
-    && IsLookupStart(k, s, Root(k))
-    && forall ref :: IsLookupStart(k, s, ref) ==> ref == Root(k)
-  }
-  
   function Read<T>(k: Constants, s: Variables, ref: Reference) : T
     requires LiveDataAvailable(k, s)
-    requires ReachableReference(k, s, ref)
+    requires ref in s.view
   {
     s.view[ref]
   }
     
   predicate Init<T>(k: Constants, s: Variables, block: T) {
     && s.view == imap[Root(k) := block]
-    && s.reftree == imap[Root(k) := iset{}]
+    && s.refGraph == imap[Root(k) := iset{}]
   }
 
   predicate Alloc<T>(k: Constants, s: Variables, s': Variables, block: T, successors: iset<Reference>, ref: Reference) {
-    && successors <= LiveReferences(k, s)
-    && ref !in LiveReferences(k, s)
+    && successors <= s.view.Keys
+    && ref !in s.view
 
-    && s'.reftree == s.reftree[ref := successors]
+    && s'.refGraph == s.refGraph[ref := successors]
     && s'.view == s.view[ref := block]
   }
     
   predicate Write<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: iset<Reference>) {
-    && successors <= LiveReferences(k, s)
-    && ref in LiveReferences(k, s)
+    && successors <= s.view.Keys
+    && ref in s.view
 
-    && s'.reftree == s.reftree[ref := successors]
+    && s'.refGraph == s.refGraph[ref := successors]
     && s'.view == s.view[ref := block]
   }
 
-  predicate IsPath(k: Constants, s: Variables, s': Variables, steps: seq<Step>, path: seq<Variables>)
+  predicate IsStatePath(k: Constants, s: Variables, s': Variables, steps: seq<Step>, path: seq<Variables>)
     decreases steps, 0
   {
     && |path| == |steps| + 1
@@ -91,14 +80,14 @@ abstract module BlockInterface {
   {
     && 0 < |steps|
     && (forall i :: 0 <= i < |steps| ==> steps[i].AllocStep? || steps[i].WriteStep?)
-    && (exists path: seq<Variables> :: IsPath(k, s, s', steps, path))
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
    }
   
   predicate GC(k: Constants, s: Variables, s': Variables, ref: Reference) {
     && ref !in LiveReferences(k, s)
     && ref in s.view
     && s'.view == IMapRemove(s.view, ref)
-    && s'.reftree == s.reftree
+    && s'.refGraph == s.refGraph
   }
   
   datatype Step<T> =
@@ -128,18 +117,20 @@ abstract module BlockInterface {
     && LiveDataAvailable(k, s)
   }
 
-  lemma AllocPreservesInvariant<T>(k: Constants, s: Variables, s': Variables, block: T, successors: iset<Reference>, ref: Reference)
+  lemma AllocPreservesInv<T>(k: Constants, s: Variables, s': Variables, block: T, successors: iset<Reference>, ref: Reference)
     requires Inv(k, s)
     requires Alloc(k, s, s', block, successors, ref)
     ensures Inv(k, s')
   {
     forall ref1 | ref1 in LiveReferences(k, s')
       ensures ref1 in LiveReferences(k, s) + iset{ref}
-    { // OBSERVE?
+    {
+      var lookup :| LookupIsValid(k, s', lookup) && Last(lookup) == ref1;
+      
     }
   }
   
-  lemma WritePreservesInvariant<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: iset<Reference>)
+  lemma WritePreservesInv<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: iset<Reference>)
     requires Inv(k, s)
     requires Write(k, s, s', ref, block, successors)
     ensures Inv(k, s')
@@ -150,41 +141,50 @@ abstract module BlockInterface {
     }
   }
 
-  lemma TransactionPreservesInvariant(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
+  lemma TransactionPreservesInv(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
     requires Inv(k, s)
     requires Transaction(k, s, s', steps)
     ensures Inv(k, s')
     decreases steps
   {
-    var path :| IsPath(k, s, s', steps, path);
+    var path :| IsStatePath(k, s, s', steps, path);
     var i := 0;
     while i < |steps|
       invariant 0 <= i <= |steps|
       invariant forall j :: 0 <= j <= i ==> Inv(k, path[j])
     {
-      NextStepPreservesInvariant(k, path[i], path[i+1], steps[i]);
+      NextStepPreservesInv(k, path[i], path[i+1], steps[i]);
       i := i + 1;
     }
   }
 
-  lemma GCPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference)
+  lemma GCPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference)
     requires Inv(k, s)
     requires GC(k, s, s', ref)
     ensures Inv(k, s')
   {
   }
 
-  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
+  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', step)
     ensures Inv(k, s')
     decreases step
   {
     match step {
-      case AllocStep(block, successors, ref) => AllocPreservesInvariant(k, s, s', block, successors, ref);
-      case WriteStep(ref, block, successors) => WritePreservesInvariant(k, s, s', ref, block, successors);
-      case TransactionStep(steps) => TransactionPreservesInvariant(k, s, s', steps);
-      case GCStep(ref) => GCPreservesInvariant(k, s, s', ref);
+      case AllocStep(block, successors, ref) => AllocPreservesInv(k, s, s', block, successors, ref);
+      case WriteStep(ref, block, successors) => WritePreservesInv(k, s, s', ref, block, successors);
+      case TransactionStep(steps) => TransactionPreservesInv(k, s, s', steps);
+      case GCStep(ref) => GCPreservesInv(k, s, s', ref);
     }
+  }
+
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+    requires Inv(k, s)
+    requires Next(k, s, s')
+    ensures Inv(k, s')
+  {
+    var step :| NextStep(k, s, s', step);
+    NextStepPreservesInv(k, s, s', step);
   }
 }

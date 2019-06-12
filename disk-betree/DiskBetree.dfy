@@ -138,18 +138,24 @@ abstract module DiskBetree {
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
+  predicate GC(k: Constants, s: Variables, s': Variables, ref: BI.Reference) {
+    BI.GC(k.bck, s.bcv, s'.bcv, ref)
+  }
+  
   datatype Step<Value(!new)> =
     | QueryStep(key: Key, value: Value, lookup: Lookup)
     | InsertMessageStep(key: Key, msg: BufferEntry, oldroot: Node)
     | FlushStep(parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
     | GrowStep(oldroot: Node, newchildref: BI.Reference)
-
+    | GCStep(ref: BI.Reference)
+    
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
     match step {
       case QueryStep(key, value, lookup) => Query(k, s, s', key, value, lookup)
       case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
       case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
       case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
+      case GCStep(ref) => GC(k, s, s', ref)
     }
   }
 

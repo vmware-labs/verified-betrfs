@@ -5,7 +5,7 @@ include "DiskBetreeInv.dfy"
 abstract module DiskBetreeRefinement {
   import opened DBI : DiskBetreeInv
 
-  import BC = DBI.DB.BC
+  import BI = DBI.DB.BI
 
   type Node<Value> = DB.Node<Value>
   type Key = DB.Key
@@ -13,20 +13,20 @@ abstract module DiskBetreeRefinement {
     
   datatype LookupResult<Value> = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup<Value>(k: DB.Constants, view: BC.View<Node>, key: Key) : LookupResult
+  function GetLookup<Value>(k: DB.Constants, view: BI.View<Node>, key: Key) : LookupResult
     requires KeyHasSatisfyingLookup(k, view, key);
   {
     var lookup, value :| DB.IsSatisfyingLookup(k, view, key, value, lookup);
     LookupResult(lookup, value)
   }
 
-  function GetValue<Value>(k: DB.Constants, view: BC.View<Node>, key: Key) : Value
+  function GetValue<Value>(k: DB.Constants, view: BI.View<Node>, key: Key) : Value
     requires KeyHasSatisfyingLookup(k, view, key);
   {
     GetLookup(k, view, key).result
   }
 
-  function IView<Value>(k: DB.Constants, view: BC.View<Node>) : imap<Key, Value>
+  function IView<Value>(k: DB.Constants, view: BI.View<Node>) : imap<Key, Value>
     requires forall key :: KeyHasSatisfyingLookup(k, view, key);
   {
     imap key | DB.MS.InDomain(key) :: GetValue(k, view, key)
@@ -39,7 +39,7 @@ abstract module DiskBetreeRefinement {
   function I(k: DB.Constants, s: DB.Variables) : DB.MS.Variables
     requires Inv(k, s)
   {
-    DB.MS.Variables(IView(k, BC.ViewOf(k.bck, s.bcv)))
+    DB.MS.Variables(IView(k, s.bcv.view))
   }
 
   lemma BetreeRefinesMapInit(k: DB.Constants, s: DB.Variables)
@@ -63,13 +63,13 @@ abstract module DiskBetreeRefinement {
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
 
   lemma FlushStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables,
-                                           parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
+                                           parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
     requires Inv(k, s)
     requires DB.Flush(k, s, s', parentref, parent, childref, child, newchildref)
     ensures Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
 
-  lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: BC.Reference)
+  lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: BI.Reference)
     requires Inv(k, s)
     requires DB.Grow(k, s, s', oldroot, newchildref)
     ensures Inv(k, s')
