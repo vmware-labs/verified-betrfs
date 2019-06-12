@@ -131,58 +131,63 @@ abstract module DiskBetreeInv {
     ensures LookupIsAcyclic(lookup')
     decreases lookup'
   {
-    if (|lookup'| <= 2) {
+    if (|lookup'| <= 1) {
     } else {
-      var sublookup' := lookup'[ .. |lookup'| - 1];
-      GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, sublookup');
-      var sublookup := sublookup'[1..][0 := Layer(BI.Root(k.bck), sublookup'[1].node, sublookup'[1].accumulatedBuffer)];
-      assert IsPathFromRootLookup(k, s.bcv.view, key, sublookup);
-      var lastLayer := lookup'[|lookup'| - 1];
-
-      assert lastLayer.ref in s.bcv.view;
-
-      var lookup := sublookup + [Layer(lastLayer.ref, s.bcv.view[lastLayer.ref], [])];
-
-      assert IMapsTo(s.bcv.view, lookup[|lookup|-1].ref, lookup[|lookup|-1].node);
-
+      var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
+      assert s'.bcv.view.Keys == s'.bcv.view.Keys + iset{newchildref};
+      assert forall i :: 0 <= i < |lookup| ==> lookup[i].ref in s.bcv.view;
       assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-      assert LookupIsAcyclic(lookup);
+      
+      // var sublookup' := lookup'[ .. |lookup'| - 1];
+      // GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, sublookup');
+      // var sublookup := sublookup'[1..][0 := Layer(BI.Root(k.bck), sublookup'[1].node, sublookup'[1].accumulatedBuffer)];
+      // assert IsPathFromRootLookup(k, s.bcv.view, key, sublookup);
+      // var lastLayer := lookup'[|lookup'| - 1];
 
-      forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
-      ensures lookup'[i].ref != lookup'[j].ref
-      {
-        if (i == 0) {
-          if (j == 1) {
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else {
-            assert lookup'[i].ref == BI.Root(k.bck);
-            assert lookup'[j].ref == lookup[j-1].ref;
-            assert lookup[j-1].ref != lookup[0].ref;
-            assert lookup'[j].ref != BI.Root(k.bck);
-            assert lookup'[i].ref != lookup'[j].ref;
-          }
-        } else if (i == 1) {
-          if (j == 0) {
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else {
-            assert lookup'[i].ref != lookup'[j].ref;
-          }
-        } else {
-          if (j == 0) {
-            assert lookup'[j].ref == BI.Root(k.bck);
-            assert lookup'[i].ref == lookup[i-1].ref;
-            assert lookup[i-1].ref != lookup[0].ref;
-            assert lookup'[i].ref != BI.Root(k.bck);
+      // assert lastLayer.ref in s.bcv.view;
 
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else if (j == 1) {
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else {
-            assert lookup[i-1].ref != lookup[j-1].ref;
-            assert lookup'[i].ref != lookup'[j].ref;
-          }
-        }
-      }
+      // var lookup := sublookup + [Layer(lastLayer.ref, s.bcv.view[lastLayer.ref], [])];
+
+      // assert IMapsTo(s.bcv.view, lookup[|lookup|-1].ref, lookup[|lookup|-1].node);
+
+      // assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+      // assert LookupIsAcyclic(lookup);
+
+      // forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
+      // ensures lookup'[i].ref != lookup'[j].ref
+      // {
+      //   if (i == 0) {
+      //     if (j == 1) {
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     } else {
+      //       assert lookup'[i].ref == BI.Root(k.bck);
+      //       assert lookup'[j].ref == lookup[j-1].ref;
+      //       assert lookup[j-1].ref != lookup[0].ref;
+      //       assert lookup'[j].ref != BI.Root(k.bck);
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     }
+      //   } else if (i == 1) {
+      //     if (j == 0) {
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     } else {
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     }
+      //   } else {
+      //     if (j == 0) {
+      //       assert lookup'[j].ref == BI.Root(k.bck);
+      //       assert lookup'[i].ref == lookup[i-1].ref;
+      //       assert lookup[i-1].ref != lookup[0].ref;
+      //       assert lookup'[i].ref != BI.Root(k.bck);
+
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     } else if (j == 1) {
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     } else {
+      //       assert lookup[i-1].ref != lookup[j-1].ref;
+      //       assert lookup'[i].ref != lookup'[j].ref;
+      //     }
+      //   }
+      //}
 
       assert LookupIsAcyclic(lookup');
     }

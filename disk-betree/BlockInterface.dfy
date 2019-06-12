@@ -82,12 +82,17 @@ abstract module BlockInterface {
     && Last(path) == s'
     && (forall i :: 0 <= i < |steps| ==> NextStep(k, path[i], path[i+1], steps[i]))
   }
+
+  predicate ValidTransaction(steps: seq<Step>)
+  {
+    && (forall i :: 0 <= i < |steps| ==> steps[i].AllocStep? || steps[i].WriteStep?)
+  }
   
   predicate Transaction<T(!new)>(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
     decreases steps, 1
   {
     && 0 < |steps|
-    && (forall i :: 0 <= i < |steps| ==> steps[i].AllocStep? || steps[i].WriteStep?)
+    && ValidTransaction(steps)
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
   }
 
@@ -128,7 +133,36 @@ abstract module BlockInterface {
   predicate Next<T(!new)>(k: Constants, s: Variables, s': Variables) {
     exists step :: NextStep(k, s, s', step)
   }
+
+  /////////// Some helper facts
+
+  // function AllocatedReferences(steps: seq<Step>) : iset<Reference>
+  //   requires ValidTransaction(steps)
+  // {
+  //   //iset ref | (exists i :: 0 <= i < |steps| && steps[i].AllocStep? && steps[i].ref == ref)
+  //   if |steps| == 0 then iset{}
+  //   else
+  //     (if steps[0].AllocStep? then iset{steps[0].ref} else iset{}) + AllocatedReferences(steps[1..])
+  // }
+  
+  // lemma PostTransactionView(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
+  //   requires NextStep(k, s, s', TransactionStep(steps))
+  //   requires ValidTransaction(steps)
+  //   ensures s'.view.Keys == s.view.Keys + AllocatedReferences(steps)
+  // {
+  //   if |steps| == 0 {
+  //   } else {
+  //     var path: seq<Variables> :| IsStatePath(k, s, s', steps, path);
+  //     if steps[0].WriteStep? {
+  //       assert steps[0].ref in path[0].view;
+  //       assert path[1].view.Keys == path[0].view.Keys;
+  //     } else {
+  //       assert path[1].view.Keys == s.view.Keys + AllocatedReferences([steps[0]]);
+  //     }
+  //   }
+  // }
     
+  
   /////////// Invariants
 
   predicate Inv(k: Constants, s: Variables) {
