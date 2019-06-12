@@ -34,37 +34,37 @@ abstract module DiskBetree {
     && (forall k :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  predicate LookupFollowsChildRefs(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
     && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
     && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
   }
   
-  predicate LookupRespectsDisk(k: Constants, s: Variables, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> IMapsTo(BC.ViewOf(k.bck, s.bcv), lookup[i].ref, lookup[i].node)
+  predicate LookupRespectsDisk<Value>(view: BC.View<Node<Value>>, lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
   }
 
-  predicate LookupVisitsWFNodes(k: Constants, s: Variables, lookup: Lookup) {
+  predicate LookupVisitsWFNodes(lookup: Lookup) {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
   }
 
-  predicate LookupAccumulatesMessages(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+  predicate LookupAccumulatesMessages(key: Key, lookup: Lookup) {
     && |lookup| > 0
-    && LookupVisitsWFNodes(k, s, lookup)
+    && LookupVisitsWFNodes(lookup)
     && lookup[0].accumulatedBuffer == lookup[0].node.buffer[key]
     && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
   }
 
-  predicate IsPathFromRootLookup(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+  predicate IsPathFromRootLookup<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == BC.Root(k.bck)
-    && LookupRespectsDisk(k, s, lookup)
-    && LookupFollowsChildRefs(k, s, key, lookup)
+    && LookupRespectsDisk(view, lookup)
+    && LookupFollowsChildRefs(key, lookup)
   }
 
-  predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookup(k, s, key, lookup)
-    && LookupVisitsWFNodes(k, s, lookup)
-    && LookupAccumulatesMessages(k, s, key, lookup)
+  predicate IsSatisfyingLookup<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, value: Value, lookup: Lookup) {
+    && IsPathFromRootLookup(k, view, key, lookup)
+    && LookupVisitsWFNodes(lookup)
+    && LookupAccumulatesMessages(key, lookup)
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
   }
 
@@ -90,7 +90,7 @@ abstract module DiskBetree {
     
   predicate Query<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
     && s == s'
-    && IsSatisfyingLookup(k, s, key, value, lookup)
+    && IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
   }
 
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
@@ -121,7 +121,8 @@ abstract module DiskBetree {
     && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
     && var newchild := Node(child.children, newbuffer);
     && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
-    && var newparent := Node(parent.children, newparentbuffer);
+    && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    && var newparent := Node(newparentchildren, newparentbuffer);
     && var allocop := BC.AllocOp(newchild, Successors(newchild), newchildref);
     && var writeop := BC.WriteOp(parentref, newparent, Successors(newparent));
     && BC.Apply2(k.bck, s.bcv, s'.bcv, allocop, writeop)
