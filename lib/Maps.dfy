@@ -8,18 +8,18 @@ module Maps {
     k in m && m[k] == v
   }
 
-  function {:opaque} MapRemove<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
-    ensures m'.Keys == m.Keys - {k}
+  function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
+    ensures m'.Keys == m.Keys - ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
   {
-    map j | j in m && j != k :: m[j]
+    map j | j in m && j !in ks :: m[j]
   }
   
-  function {:opaque} IMapRemove<K,V>(m:imap<K,V>, k:K) : (m':imap<K,V>)
-    ensures m'.Keys == m.Keys - iset{k}
+  function {:opaque} IMapRemove<K,V>(m:imap<K,V>, ks:iset<K>) : (m':imap<K,V>)
+    ensures m'.Keys == m.Keys - ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
   {
-    imap j | j in m && j != k :: m[j]
+    imap j | j in m && j !in ks :: m[j]
   }
   
 	// Requires disjoint domains and delivers predictable result.

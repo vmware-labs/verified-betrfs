@@ -8,13 +8,21 @@ abstract module BlockInterface {
   type Reference(!new,==) // LBA
 
   type View<T> = imap<Reference, T>
-  type ReferenceTree = imap<Reference, iset<Reference>>
+  type ReferenceGraph = imap<Reference, iset<Reference>>
 
   function Root(k: Constants) : Reference
 
   type Constants
-  datatype Variables<T> = Variables(view: View, refGraph: ReferenceTree)
-    
+  datatype Variables<T> = Variables(view: imap<Reference, T>, refGraph: ReferenceGraph)
+
+  predicate RefGraphIsClosed(k: Constants, s: Variables) {
+    forall key :: key in s.refGraph ==> s.refGraph[key] <= s.refGraph.Keys
+  }
+
+  predicate ViewAndRefGraphAreConsistent(k: Constants, s: Variables) {
+    s.view.Keys == s.refGraph.Keys
+  }
+  
   type Lookup = seq<Reference>
 
   predicate LookupIsValid(k: Constants, s: Variables, lookup: Lookup)
@@ -81,20 +89,30 @@ abstract module BlockInterface {
     && 0 < |steps|
     && (forall i :: 0 <= i < |steps| ==> steps[i].AllocStep? || steps[i].WriteStep?)
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
-   }
+  }
+
+  function Predecessors(refGraph: ReferenceGraph, ref: Reference) : iset<Reference> {
+    iset ref1 | ref1 in refGraph && ref in refGraph[ref1]
+  }
   
-  predicate GC(k: Constants, s: Variables, s': Variables, ref: Reference) {
-    && ref !in LiveReferences(k, s)
-    && ref in s.view
-    && s'.view == IMapRemove(s.view, ref)
-    && s'.refGraph == s.refGraph
+  predicate ClosedUnderPredecessor(refGraph: ReferenceGraph, refs: iset<Reference>) {
+    forall ref :: ref in refs ==> Predecessors(refGraph, ref) <= refs
+  }
+   
+  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
+    && refs !! LiveReferences(k, s)
+    && refs <= s.view.Keys
+    && ClosedUnderPredecessor(s.refGraph, refs)
+    
+    && s'.view == IMapRemove(s.view, refs)
+    && s'.refGraph == IMapRemove(s.refGraph, refs)
   }
   
   datatype Step<T> =
     | AllocStep(block: T, successors: iset<Reference>, ref: Reference)
     | WriteStep(ref: Reference, block: T, successors: iset<Reference>)
     | TransactionStep(steps: seq<Step>)
-    | GCStep(ref: Reference)
+    | GCStep(refs: iset<Reference>)
     
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
     decreases step
@@ -103,7 +121,7 @@ abstract module BlockInterface {
       case AllocStep(block, successors, ref) => Alloc(k, s, s', block, successors, ref)
       case WriteStep(ref, block, successors) => Write(k, s, s', ref, block, successors)
       case TransactionStep(steps) => Transaction(k, s, s', steps)
-      case GCStep(ref) => GC(k, s, s', ref)
+      case GCStep(refs) => GC(k, s, s', refs)
     }
   }
     
@@ -114,6 +132,8 @@ abstract module BlockInterface {
   /////////// Invariants
 
   predicate Inv(k: Constants, s: Variables) {
+    && ViewAndRefGraphAreConsistent(k, s)
+    && RefGraphIsClosed(k, s)
     && LiveDataAvailable(k, s)
   }
 
@@ -122,12 +142,6 @@ abstract module BlockInterface {
     requires Alloc(k, s, s', block, successors, ref)
     ensures Inv(k, s')
   {
-    forall ref1 | ref1 in LiveReferences(k, s')
-      ensures ref1 in LiveReferences(k, s) + iset{ref}
-    {
-      var lookup :| LookupIsValid(k, s', lookup) && Last(lookup) == ref1;
-      
-    }
   }
   
   lemma WritePreservesInv<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: iset<Reference>)
@@ -135,10 +149,6 @@ abstract module BlockInterface {
     requires Write(k, s, s', ref, block, successors)
     ensures Inv(k, s')
   {
-    forall ref1 | ref1 in LiveReferences(k, s')
-      ensures ref1 in LiveReferences(k, s) + iset{ref}
-    { // OBSERVE?
-    }
   }
 
   lemma TransactionPreservesInv(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
@@ -158,9 +168,9 @@ abstract module BlockInterface {
     }
   }
 
-  lemma GCPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference)
+  lemma GCPreservesInv(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)
-    requires GC(k, s, s', ref)
+    requires GC(k, s, s', refs)
     ensures Inv(k, s')
   {
   }

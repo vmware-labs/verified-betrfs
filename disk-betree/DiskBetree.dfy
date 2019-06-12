@@ -138,8 +138,8 @@ abstract module DiskBetree {
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
-  predicate GC(k: Constants, s: Variables, s': Variables, ref: BI.Reference) {
-    BI.GC(k.bck, s.bcv, s'.bcv, ref)
+  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<BI.Reference>) {
+    BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
   
   datatype Step<Value(!new)> =
@@ -147,7 +147,7 @@ abstract module DiskBetree {
     | InsertMessageStep(key: Key, msg: BufferEntry, oldroot: Node)
     | FlushStep(parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
     | GrowStep(oldroot: Node, newchildref: BI.Reference)
-    | GCStep(ref: BI.Reference)
+    | GCStep(refs: iset<BI.Reference>)
     
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
     match step {
@@ -155,7 +155,7 @@ abstract module DiskBetree {
       case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
       case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
       case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
-      case GCStep(ref) => GC(k, s, s', ref)
+      case GCStep(refs) => GC(k, s, s', refs)
     }
   }
 
