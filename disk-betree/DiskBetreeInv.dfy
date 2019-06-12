@@ -689,6 +689,20 @@ abstract module DiskBetreeInv {
     }
   }
 
+  lemma FlushPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
+  requires Inv(k, s)
+  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  ensures ReachablePointersValid(k, s')
+  {
+    forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup') && key in lookup'[|lookup'|-1].node.children
+    ensures 
+      lookup'[|lookup'|-1].node.children[key] in BC.ViewOf(k.bck, s'.bcv)
+    {
+      var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
+      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
+    }
+  }
+
   // Invariant proofs
 
   lemma InitImpliesInv(k: Constants, s: Variables)
@@ -729,8 +743,11 @@ abstract module DiskBetreeInv {
     requires Inv(k, s)
     requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
     ensures Inv(k, s')
-  // {
-  // }
+  {
+    FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref);
+    FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref);
+    FlushPreservesReachablePointersValid(k, s, s', parentref, parent, childref, child, newchildref);
+  }
   
   lemma GrowStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
     requires Inv(k, s)

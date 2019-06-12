@@ -97,7 +97,12 @@ abstract module DiskBetreeRefinement {
     requires Inv(k, s)
     requires DB.Flush(k, s, s', parentref, parent, childref, child, newchildref)
     requires Inv(k, s')
-    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+    ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.StutterStep)
+  {
+    FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref);
+    EquivalentLookupsImplInterpsEqual(k, s, s');
+    assert I(k, s) == I(k, s');
+  }
 
   lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: BC.Reference)
     requires Inv(k, s)
