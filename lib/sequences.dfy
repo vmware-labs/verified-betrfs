@@ -90,14 +90,20 @@ module Sequences {
     a + [b] + c
   }
 
-  predicate method IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
+  predicate method {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
     && |a| <= |b|
     && a == b[..|a|]
   }
 
-  predicate method IsSuffix<A(==)>(a: seq<A>, b: seq<A>) {
+  predicate method {:opaque} IsSuffix<A(==)>(a: seq<A>, b: seq<A>) {
     && |a| <= |b|
     && a == b[|b|-|a|..]
+  }
+
+  lemma SelfIsPrefix<A>(a: seq<A>)
+  ensures IsPrefix(a, a);
+  {
+    reveal_IsPrefix();
   }
 
   lemma IsPrefixFromEqSums<A>(a: seq<A>, b: seq<A>, c: seq<A>, d: seq<A>)
@@ -105,6 +111,8 @@ module Sequences {
   requires IsSuffix(b, d);
   ensures IsPrefix(c, a);
   {
+    reveal_IsPrefix();
+    reveal_IsSuffix();
     assert |c| <= |a|;
     assert c
         == (c + d)[..|c|]

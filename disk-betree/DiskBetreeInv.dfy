@@ -121,6 +121,10 @@ abstract module DiskBetreeInv {
     }
   }
 
+  ////////
+  //////// Grow
+  ////////
+
   // Acyclicity proofs
 
   lemma GrowPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference, key: Key, lookup': Lookup)
@@ -219,6 +223,48 @@ abstract module DiskBetreeInv {
       }
     }
   }
+
+  // Preservation proofs
+  
+  lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
+  requires Inv(k, s)
+  requires Grow(k, s, s', oldroot, newchildref)
+  ensures EquivalentLookups(k, s, s')
+  {
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup')
+    {
+      // Add one for the new root
+      var rootref := BC.Root(k.bck);
+
+      var newroot := BC.ViewOf(k.bck, s'.bcv)[rootref];
+
+      //assert LookupIsAcyclic(lookup);
+
+      var lookup' := [
+        Layer(rootref, newroot, []),
+        Layer(newchildref, oldroot, lookup[0].accumulatedBuffer)
+      ] + lookup[1..];
+
+      assert IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup');
+    }
+
+    GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
+    
+    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup')
+    ensures exists lookup :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
+    {
+      // Remove one for the root
+      var lookup := lookup'[1..][0 := Layer(BC.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
+      assert IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
+    }
+  }
+
+  ////////
+  //////// Flush
+  ////////
+
+  // Definitions of Flush lookup transformations:
 
   function transformLookup<Value>(lookup: Lookup<Value>, key: Key, oldref: BC.Reference, newref: BC.Reference, newnode: Node) : Lookup<Value>
   ensures |transformLookup(lookup, key, oldref, newref, newnode)| == |lookup|;
@@ -470,41 +516,6 @@ abstract module DiskBetreeInv {
     }
   }
 
-  // Preservation proofs
-  
-  lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference)
-  requires Inv(k, s)
-  requires Grow(k, s, s', oldroot, newchildref)
-  ensures EquivalentLookups(k, s, s')
-  {
-    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
-    ensures exists lookup' :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup')
-    {
-      // Add one for the new root
-      var rootref := BC.Root(k.bck);
-
-      var newroot := BC.ViewOf(k.bck, s'.bcv)[rootref];
-
-      //assert LookupIsAcyclic(lookup);
-
-      var lookup' := [
-        Layer(rootref, newroot, []),
-        Layer(newchildref, oldroot, lookup[0].accumulatedBuffer)
-      ] + lookup[1..];
-
-      assert IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup');
-    }
-
-    GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
-    
-    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup')
-    ensures exists lookup :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
-    {
-      // Remove one for the root
-      var lookup := lookup'[1..][0 := Layer(BC.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
-      assert IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
-    }
-  }
 
   lemma transformLookupParentAndChildPreservesAccumulatedLogRev<Value>(
     k: Constants,
@@ -595,15 +606,23 @@ abstract module DiskBetreeInv {
 
       var lookup1 := lookup + [Layer(childref, child, Last(lookup).accumulatedBuffer + child.buffer[key])];
       var lookup1' := lookup' + [Layer(newchildref, newchild, Last(lookup').accumulatedBuffer + newchild.buffer[key])];
+
+      assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup1);
+      assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup1');
+
       transformLookupParentAndChildPreservesAccumulatedLogRev(
           k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup1, lookup1', key);
 
+
       assert Last(lookup).accumulatedBuffer + child.buffer[key] == Last(lookup').accumulatedBuffer + newchild.buffer[key];
+
+      reveal_IsSuffix();
       assert IsSuffix(child.buffer[key], newchild.buffer[key]);
       IsPrefixFromEqSums(Last(lookup).accumulatedBuffer, child.buffer[key], Last(lookup').accumulatedBuffer, newchild.buffer[key]);
     } else {
       transformLookupParentAndChildPreservesAccumulatedLogRev(
           k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
+      SelfIsPrefix(Last(lookup').accumulatedBuffer);
     }
   }
 
@@ -664,6 +683,7 @@ abstract module DiskBetreeInv {
       transformLookupAccumulatesMessages(transformLookup(lookup', key, newchildref, childref, child), key, parentref, parentref, parent);
 
       transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
+      reveal_IsPrefix();
 
       assert IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
     }
