@@ -34,38 +34,48 @@ abstract module DiskBetree {
     && (forall k :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  predicate LookupFollowsChildRefs(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
     && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
     && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
   }
   
-  predicate LookupRespectsDisk(k: Constants, s: Variables, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> IMapsTo(BC.ViewOf(k.bck, s.bcv), lookup[i].ref, lookup[i].node)
+  predicate LookupRespectsDisk<Value>(view: BC.View<Node<Value>>, lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
   }
 
-  predicate LookupVisitsWFNodes(k: Constants, s: Variables, lookup: Lookup) {
+  predicate LookupVisitsWFNodes(lookup: Lookup) {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
   }
 
-  predicate LookupAccumulatesMessages(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+  predicate LookupAccumulatesMessages(key: Key, lookup: Lookup) {
     && |lookup| > 0
-    && LookupVisitsWFNodes(k, s, lookup)
+    && LookupVisitsWFNodes(lookup)
     && lookup[0].accumulatedBuffer == lookup[0].node.buffer[key]
     && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
   }
 
-  predicate IsPathFromRootLookup(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+  predicate IsPathFromRootLookupForView<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == BC.Root(k.bck)
-    && LookupRespectsDisk(k, s, lookup)
-    && LookupFollowsChildRefs(k, s, key, lookup)
+    && LookupRespectsDisk(view, lookup)
+    && LookupFollowsChildRefs(key, lookup)
   }
 
-  predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookup(k, s, key, lookup)
-    && LookupVisitsWFNodes(k, s, lookup)
-    && LookupAccumulatesMessages(k, s, key, lookup)
+  predicate IsSatisfyingLookupForView<Value>(k: Constants, view: BC.View<Node<Value>>, key: Key, value: Value, lookup: Lookup) {
+    && IsPathFromRootLookupForView(k, view, key, lookup)
+    && LookupVisitsWFNodes(lookup)
+    && LookupAccumulatesMessages(key, lookup)
     && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
+  }
+
+  predicate IsPathFromRootLookup<Value>(k: Constants, s: Variables, key: Key, lookup: Lookup) {
+    IsPathFromRootLookupForView(k, BC.ViewOf(k.bck, s.bcv), key, lookup)
+  }
+
+  predicate IsSatisfyingLookup<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup)
+  ensures IsPathFromRootLookup(k, s, key, lookup);
+  {
+    IsSatisfyingLookupForView(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
   }
 
   function Successors(node: Node) : iset<BC.Reference>

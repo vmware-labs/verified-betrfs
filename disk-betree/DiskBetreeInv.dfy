@@ -265,6 +265,8 @@ abstract module DiskBetreeInv {
 
       var newroot := BC.ViewOf(k.bck, s'.bcv)[rootref];
 
+      //assert LookupIsAcyclic(lookup);
+
       var lookup' := [
         Layer(rootref, newroot, []),
         Layer(newchildref, oldroot, lookup[0].accumulatedBuffer)
