@@ -506,20 +506,122 @@ abstract module DiskBetreeInv {
     }
   }
 
+  lemma transformLookupParentAndChildPreservesAccumulatedLogRev<Value>(
+    k: Constants,
+    s: Variables,
+    s': Variables,
+    parentref: BC.Reference,
+    parent: Node,
+    childref: BC.Reference,
+    child: Node,
+    newchildref: BC.Reference,
+    movedKeys: iset<Key>,
+    lookup: Lookup<Value>,
+    lookup': Lookup<Value>,
+    key: Key
+  )
+  requires Inv(k, s)
+  requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
+  requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup');
+  requires LookupAccumulatesMessages(key, lookup);
+  requires LookupAccumulatesMessages(key, lookup');
+  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
+  requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
+  requires key in movedKeys ==> Last(lookup').ref != parentref
+  ensures Last(lookup').accumulatedBuffer == Last(lookup).accumulatedBuffer
+  {
+    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newchild := Node(child.children, newbuffer);
+    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    var newparent := Node(newparentchildren, newparentbuffer);
+
+    if (|lookup| == 1) {
+      assert Last(lookup').accumulatedBuffer == Last(lookup).accumulatedBuffer;
+    } else {
+      if (key in movedKeys && Last(lookup').ref == newchildref) {
+        if (|lookup| == 2) {
+          assert lookup'[1].node == newchild;
+          assert lookup'[0].ref == parentref;
+          assert lookup'[0].node == newparent;
+          assert Last(lookup').accumulatedBuffer
+              == lookup[0].node.buffer[key] + lookup[1].node.buffer[key]
+              == Last(lookup).accumulatedBuffer;
+        } else {
+          assert lookup'[..|lookup|-1][..|lookup|-2] == lookup'[..|lookup|-2];
+          assert lookup[..|lookup|-2]
+              == flushTransformLookupRev(lookup'[..|lookup|-1], key, parentref, parent, childref, child, newchildref)[..|lookup|-2]
+              == flushTransformLookupRev(lookup'[..|lookup|-1][..|lookup|-2], key, parentref, parent, childref, child, newchildref)
+              == flushTransformLookupRev(lookup'[..|lookup|-2], key, parentref, parent, childref, child, newchildref);
+
+          transformLookupParentAndChildPreservesAccumulatedLogRev(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup[..|lookup|-2], lookup'[..|lookup|-2], key);
+          assert Last(lookup').accumulatedBuffer == Last(lookup).accumulatedBuffer;
+        }
+      } else {
+        transformLookupParentAndChildPreservesAccumulatedLogRev(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup[..|lookup|-1], lookup'[..|lookup|-1], key);
+        assert Last(lookup').accumulatedBuffer == Last(lookup).accumulatedBuffer;
+      }
+    }
+  }
+
+  lemma transformLookupParentAndChildPreservesAccumulatedLogRevPrefix<Value>(
+    k: Constants,
+    s: Variables,
+    s': Variables,
+    parentref: BC.Reference,
+    parent: Node,
+    childref: BC.Reference,
+    child: Node,
+    newchildref: BC.Reference,
+    movedKeys: iset<Key>,
+    lookup: Lookup<Value>,
+    lookup': Lookup<Value>,
+    key: Key
+  )
+  requires Inv(k, s)
+  requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
+  requires IsPathFromRootLookup(k, BC.ViewOf(k.bck, s'.bcv), key, lookup');
+  requires LookupAccumulatesMessages(key, lookup);
+  requires LookupAccumulatesMessages(key, lookup');
+  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
+  requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
+  ensures IsPrefix(Last(lookup').accumulatedBuffer, Last(lookup).accumulatedBuffer);
+  {
+    if (key in movedKeys && Last(lookup').ref == parentref) {
+      var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+      var newchild := Node(child.children, newbuffer);
+
+      var lookup1 := lookup + [Layer(childref, child, Last(lookup).accumulatedBuffer + child.buffer[key])];
+      var lookup1' := lookup' + [Layer(newchildref, newchild, Last(lookup').accumulatedBuffer + newchild.buffer[key])];
+      transformLookupParentAndChildPreservesAccumulatedLogRev(
+          k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup1, lookup1', key);
+
+      assert Last(lookup).accumulatedBuffer + child.buffer[key] == Last(lookup').accumulatedBuffer + newchild.buffer[key];
+      assert IsSuffix(child.buffer[key], newchild.buffer[key]);
+      IsPrefixFromEqSums(Last(lookup).accumulatedBuffer, child.buffer[key], Last(lookup').accumulatedBuffer, newchild.buffer[key]);
+    } else {
+      transformLookupParentAndChildPreservesAccumulatedLogRev(
+          k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
+    }
+  }
+
   lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
   requires Inv(k, s)
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   ensures EquivalentLookups(k, s, s')
   {
+    var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
+    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newchild := Node(child.children, newbuffer);
+    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    var newparent := Node(newparentchildren, newparentbuffer);
+
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup)
     ensures exists lookup' :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup')
     {
-      var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-      var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
-      var newchild := Node(child.children, newbuffer);
-      var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
-      var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
-      var newparent := Node(newparentchildren, newparentbuffer);
       var lookup1 := if Last(lookup).ref == parentref && key in movedKeys then lookup + [Layer(childref, child, Last(lookup).accumulatedBuffer + child.buffer[key])] else lookup;
 
       assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup1);
@@ -560,6 +662,9 @@ abstract module DiskBetreeInv {
       var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
       FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
       transformLookupAccumulatesMessages(transformLookup(lookup', key, newchildref, childref, child), key, parentref, parentref, parent);
+
+      transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
+
       assert IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
     }
   }
