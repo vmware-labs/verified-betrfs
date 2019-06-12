@@ -215,23 +215,26 @@ abstract module DiskBetreeInv {
     }
   }
 
-  function transformLookup<Value>(lookup: Lookup<Value>, oldref: BC.Reference, newLayer: Layer<Value>) : Lookup<Value>
-  ensures |transformLookup(lookup, oldref, newLayer)| == |lookup|
+  function transformLookup<Value>(lookup: Lookup<Value>, oldref: BC.Reference, newref: BC.Reference, newnode: Node) : Lookup<Value>
+  ensures |transformLookup(lookup, oldref, newref, newnode)| == |lookup|
   ensures forall i :: 0 <= i < |lookup| ==>
-      transformLookup(lookup, oldref, newLayer)[i] ==
-        (if lookup[i].ref == oldref then newLayer else lookup[i])
+      transformLookup(lookup, oldref, newref, newnode)[i].ref ==
+        (if lookup[i].ref == oldref then newref else lookup[i].ref)
+  ensures forall i :: 0 <= i < |lookup| ==>
+      transformLookup(lookup, oldref, newref, newnode)[i].node ==
+        (if lookup[i].ref == oldref then newnode else lookup[i].node)
   decreases lookup
   {
     if |lookup| == 0 then
       []
     else
-      transformLookup(lookup[.. |lookup| - 1], oldref, newLayer) + 
-        [if lookup[|lookup| - 1].ref == oldref then newLayer else lookup[|lookup| - 1]]
+      transformLookup(lookup[.. |lookup| - 1], oldref, newref, newnode) + 
+        [if lookup[|lookup| - 1].ref == oldref then Layer(newref, newnode, lookup[|lookup|-1].accumulatedBuffer) else lookup[|lookup| - 1]]
   }
 
   function flushTransformLookupRev<Value>(lookup': Lookup, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference) : Lookup
   {
-    transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []))
+    transformLookup(transformLookup(lookup', newchildref, childref, child), parentref, parentref, parent)
   }
 
   lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference, lookup: Lookup, lookup': Lookup, key: Key)
@@ -250,10 +253,11 @@ abstract module DiskBetreeInv {
       assert lookup[0].node == BC.ViewOf(k.bck, s.bcv)[BC.Root(k.bck)];
       assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
     } else {
-      assume false;
       FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref,
         flushTransformLookupRev(lookup'[.. |lookup'| - 1], parentref, parent, childref, child, newchildref),
         lookup'[.. |lookup'| - 1], key);
+
+      assert IsPathFromRootLookup(k, BC.ViewOf(k.bck, s.bcv), key, lookup);
     }
   }
 
@@ -271,7 +275,7 @@ abstract module DiskBetreeInv {
 
     if (|lookup'| <= 1) {
     } else {
-      var lookup := transformLookup(transformLookup(lookup', newchildref, Layer(childref, child, [])), parentref, Layer(parentref, parent, []));
+      var lookup := flushTransformLookupRev(lookup', parentref, parent, childref, child, newchildref);
       FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
     }
   }
