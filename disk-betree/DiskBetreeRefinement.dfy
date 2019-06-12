@@ -50,11 +50,44 @@ abstract module DiskBetreeRefinement {
     InitImpliesInv(k, s);
   }
 
+  lemma QueryStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value, lookup: Lookup)
+    requires Inv(k, s)
+    requires DB.Query(k, s, s', key, value, lookup)
+    ensures Inv(k, s')
+    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+  
+  lemma InsertMessageStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, msg: DB.BufferEntry, oldroot: Node)
+    requires Inv(k, s)
+    requires DB.InsertMessage(k, s, s', key, msg, oldroot)
+    ensures Inv(k, s')
+    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+
+  lemma FlushStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables,
+                                           parentref: BC.Reference, parent: Node, childref: BC.Reference, child: Node, newchildref: BC.Reference)
+    requires Inv(k, s)
+    requires DB.Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    ensures Inv(k, s')
+    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+
+  lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: BC.Reference)
+    requires Inv(k, s)
+    requires DB.Grow(k, s, s', oldroot, newchildref)
+    ensures Inv(k, s')
+    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+
   lemma BetreeRefinesMapNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, step: DB.Step)
     requires Inv(k, s)
     requires DB.NextStep(k, s, s', step)
     ensures Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    match step {
+      case QueryStep(key, value, lookup) => QueryStepRefinesMap(k, s, s', key, value, lookup);
+      case InsertMessageStep(key, value, oldroot) => InsertMessageStepRefinesMap(k, s, s', key, value, oldroot);
+      case FlushStep(parentref, parent, childref, child, newchildref) => FlushStepRefinesMap(k, s, s', parentref, parent, childref, child, newchildref);
+      case GrowStep(oldroot, newchildref) => GrowStepRefinesMap(k, s, s', oldroot, newchildref);
+    }
+  }
     
   lemma BetreeRefinesMapNext(k: DB.Constants, s: DB.Variables, s':DB.Variables)
     requires Inv(k, s)
