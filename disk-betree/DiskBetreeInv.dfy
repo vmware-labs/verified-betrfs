@@ -65,6 +65,60 @@ abstract module DiskBetreeInv {
     && exists lookup :: IsSatisfyingLookup(k, BC.ViewOf(k.bck, s'.bcv), key, value, lookup)
   }
 
+  // CantEquivocate
+  // It's a lemma here (follows from structure of Lookups) - not an invariant!
+
+  lemma SatisfyingLookupsForKeyAgree<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value', lookup');
+  requires 0 <= idx < |lookup|;
+  requires 0 <= idx < |lookup'|;
+  ensures lookup[idx] == lookup'[idx];
+  {
+    if (idx == 0) {
+    } else {
+      SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx - 1);
+    }
+  }
+
+  lemma LongerLookupDefinesSameValue<Value>(k: Constants, s: Variables, key: Key, value: Value, lookup: Lookup, idx1: int, idx2: int, value': Value)
+  requires 0 <= idx1 <= idx2 < |lookup|;
+  requires BufferDefinesValue(lookup[idx1].accumulatedBuffer, value);
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value', lookup);
+  ensures BufferDefinesValue(lookup[idx2].accumulatedBuffer, value);
+  decreases idx2;
+  {
+    if (idx1 == idx2) {
+    } else {
+      LongerLookupDefinesSameValue(k, s, key, value, lookup, idx1, idx2 - 1, value');
+    }
+  }
+
+  lemma CantEquivocateWlog<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value', lookup');
+  requires |lookup| <= |lookup'|
+  ensures value == value';
+  {
+    var idx := |lookup| - 1;
+    SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx);
+    assert BufferDefinesValue(lookup[idx].accumulatedBuffer, value);
+    assert BufferDefinesValue(lookup'[idx].accumulatedBuffer, value);
+    LongerLookupDefinesSameValue(k, s, key, value, lookup', idx, |lookup'| - 1, value');
+  }
+
+  lemma CantEquivocate<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value, lookup);
+  requires IsSatisfyingLookup(k, BC.ViewOf(k.bck, s.bcv), key, value', lookup');
+  ensures value == value';
+  {
+    if (|lookup| <= |lookup'|) {
+      CantEquivocateWlog(k, s, key, value, value', lookup, lookup');
+    } else {
+      CantEquivocateWlog(k, s, key, value', value, lookup', lookup);
+    }
+  }
+
   // Acyclicity proofs
 
   lemma GrowPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BC.Reference, key: Key, lookup': Lookup)
