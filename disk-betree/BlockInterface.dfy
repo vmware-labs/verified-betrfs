@@ -87,10 +87,39 @@ abstract module BlockInterface {
   {
     && (forall i :: 0 <= i < |steps| ==> steps[i].AllocStep? || steps[i].WriteStep?)
   }
+
+  lemma Transaction2Steps(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
+  decreases steps, 1
+  ensures (
+    && 0 < |steps|
+    && ValidTransaction(steps)
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
+    &&|steps| == 2
+  ) ==>
+      exists sint ::
+      && NextStep(k, s, sint, steps[0])
+      && NextStep(k, sint, s', steps[1])
+  {
+    if (
+        && 0 < |steps|
+        && ValidTransaction(steps)
+        && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
+        &&|steps| == 2)
+    {
+      var path :| IsStatePath(k, s, s', steps, path);
+      var sint := path[1];
+      assert NextStep(k, s, sint, steps[0]);
+      assert NextStep(k, sint, s', steps[1]);
+    }
+  }
   
   predicate Transaction<T(!new)>(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
-    decreases steps, 1
+    decreases steps, 2
+    ensures Transaction(k, s, s', steps) && |steps| == 2 ==> exists sint ::
+      && NextStep(k, s, sint, steps[0])
+      && NextStep(k, sint, s', steps[1])
   {
+    Transaction2Steps(k, s, s', steps);
     && 0 < |steps|
     && ValidTransaction(steps)
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
@@ -145,6 +174,7 @@ abstract module BlockInterface {
       (if steps[0].AllocStep? then iset{steps[0].ref} else iset{}) + AllocatedReferences(steps[1..])
   }
   
+  /*
   lemma PostTransactionView(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
     requires NextStep(k, s, s', TransactionStep(steps))
     requires ValidTransaction(steps)
@@ -162,6 +192,7 @@ abstract module BlockInterface {
       }
     }
   }
+  */
     
   
   /////////// Invariants
