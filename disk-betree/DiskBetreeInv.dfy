@@ -146,13 +146,9 @@ abstract module DiskBetreeInv {
           invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
         {
           assert lookup'[i].node == lookup[i-1].node;
-          if lookup'[i+1].ref == BI.Root(k.bck) {
-            assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
-            assert false;
-          }
-          assert lookup'[i+1].ref != BI.Root(k.bck);
-          assert s.bcv.view[lookup[i].ref] == s'.bcv.view[lookup[i].ref];
           assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
+          assert lookup'[i+1].ref != BI.Root(k.bck);
+          assert lookup'[i+1].node == lookup[i].node;
           i := i + 1;
         }
       }
@@ -1075,20 +1071,20 @@ abstract module DiskBetreeInv {
     }
   }
 
-  lemma SplitPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-  requires Inv(k, s)
-  requires Split(k, s, s', fusion)
-  ensures ReachablePointersValid(k, s')
-  {
-    forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
-    ensures 
-      lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
-    {
-      var lookup := mergeLookup(fusion, lookup', key);
-      mergeLookupProperties(fusion, lookup, lookup', key);
-      SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
-    }
-  }
+  // lemma SplitPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  // requires Inv(k, s)
+  // requires Split(k, s, s', fusion)
+  // ensures ReachablePointersValid(k, s')
+  // {
+  //   forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
+  //   ensures 
+  //     lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
+  //   {
+  //     var lookup := mergeLookup(fusion, lookup', key);
+  //     mergeLookupProperties(fusion, lookup, lookup', key);
+  //     SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
+  //   }
+  // }
 
   ////////
   //////// Invariant proofs
@@ -1177,7 +1173,7 @@ abstract module DiskBetreeInv {
   {
     SplitPreservesAcyclic(k, s, s', fusion);
     SplitEquivalentLookups(k, s, s', fusion);
-    SplitPreservesReachablePointersValid(k, s, s', fusion);
+    //SplitPreservesReachablePointersValid(k, s, s', fusion);
   }
 
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
