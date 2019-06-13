@@ -112,14 +112,48 @@ abstract module BlockInterface {
       assert NextStep(k, sint, s', steps[1]);
     }
   }
+
+  lemma Transaction3Steps(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
+  decreases steps, 1
+  ensures (
+    && 0 < |steps|
+    && ValidTransaction(steps)
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
+    &&|steps| == 3
+  ) ==>
+      exists sint, sint' ::
+      && NextStep(k, s, sint, steps[0])
+      && NextStep(k, sint, sint', steps[1])
+      && NextStep(k, sint', s', steps[2])
+  {
+    if (
+        && 0 < |steps|
+        && ValidTransaction(steps)
+        && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
+        &&|steps| == 3)
+    {
+      var path :| IsStatePath(k, s, s', steps, path);
+      var sint := path[1];
+      var sint' := path[2];
+      assert NextStep(k, s, sint, steps[0]);
+      assert NextStep(k, sint, sint', steps[1]);
+      assert NextStep(k, sint', s', steps[2]);
+    }
+  }
+
   
   predicate Transaction<T(!new)>(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
     decreases steps, 2
     ensures Transaction(k, s, s', steps) && |steps| == 2 ==> exists sint ::
       && NextStep(k, s, sint, steps[0])
       && NextStep(k, sint, s', steps[1])
+    ensures Transaction(k, s, s', steps) && |steps| == 3 ==> exists sint, sint' ::
+      && NextStep(k, s, sint, steps[0])
+      && NextStep(k, sint, sint', steps[1])
+      && NextStep(k, sint', s', steps[2])
   {
     Transaction2Steps(k, s, s', steps);
+    Transaction3Steps(k, s, s', steps);
     && 0 < |steps|
     && ValidTransaction(steps)
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))

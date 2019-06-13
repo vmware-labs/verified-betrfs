@@ -138,6 +138,64 @@ abstract module DiskBetree {
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
+  datatype NodeFusion<Value> = NodeFusion(
+    parentref: BI.Reference,
+    fused_childref: BI.Reference,
+    left_childref: BI.Reference,
+    right_childref: BI.Reference,
+    fused_parent: Node,
+    split_parent: Node,
+    fused_child: Node,
+    left_child: Node,
+    right_child: Node,
+    
+    left_keys: iset<Key>,
+    right_keys: iset<Key>
+  )
+
+  predicate ValidFusion<Value>(fusion: NodeFusion<Value>)
+  {
+    && fusion.left_keys !! fusion.right_keys
+    && (forall key :: key in fusion.left_keys ==> IMapsTo(fusion.fused_parent.children, key, fusion.fused_childref))
+    && (forall key :: key in fusion.left_keys ==> IMapsTo(fusion.split_parent.children, key, fusion.left_childref))
+
+    && (forall key :: key in fusion.right_keys ==> IMapsTo(fusion.fused_parent.children, key, fusion.fused_childref))
+    && (forall key :: key in fusion.right_keys ==> IMapsTo(fusion.split_parent.children, key, fusion.right_childref))
+
+    && (forall key :: (key !in fusion.left_keys) && (key !in fusion.right_keys) ==>
+      IMapsAgreeOnKey(fusion.split_parent.children, fusion.fused_parent.children, key))
+
+    && fusion.fused_parent.buffer == fusion.split_parent.buffer
+
+    && (forall key :: key in fusion.left_keys ==> IMapsAgreeOnKey(fusion.fused_child.children, fusion.left_child.children, key))
+    && (forall key :: key in fusion.left_keys ==> IMapsAgreeOnKey(fusion.fused_child.buffer, fusion.left_child.buffer, key))
+
+    && (forall key :: key in fusion.right_keys ==> IMapsAgreeOnKey(fusion.fused_child.children, fusion.right_child.children, key))
+    && (forall key :: key in fusion.right_keys ==> IMapsAgreeOnKey(fusion.fused_child.buffer, fusion.right_child.buffer, key))
+  }
+
+  predicate Split(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  {
+    && IMapsTo(s.bcv.view, fusion.parentref, fusion.fused_parent)
+    && IMapsTo(s.bcv.view, fusion.fused_childref, fusion.fused_child)
+    && ValidFusion(fusion)
+    && var allocop_left := BI.AllocStep(fusion.left_child, Successors(fusion.left_child), fusion.left_childref);
+    && var allocop_right := BI.AllocStep(fusion.right_child, Successors(fusion.right_child), fusion.right_childref);
+    && var writeop := BI.WriteStep(fusion.parentref, fusion.split_parent, Successors(fusion.split_parent));
+    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop_left, allocop_right, writeop])
+  }
+
+  predicate Merge(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  {
+    && IMapsTo(s.bcv.view, fusion.parentref, fusion.split_parent)
+    && IMapsTo(s.bcv.view, fusion.left_childref, fusion.left_child)
+    && IMapsTo(s.bcv.view, fusion.right_childref, fusion.right_child)
+    && ValidFusion(fusion)
+    && var allocop := BI.AllocStep(fusion.fused_child, Successors(fusion.fused_child), fusion.fused_childref);
+    && var writeop := BI.WriteStep(fusion.parentref, fusion.fused_parent, Successors(fusion.fused_parent));
+    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
+  }
+
   predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<BI.Reference>) {
     BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }

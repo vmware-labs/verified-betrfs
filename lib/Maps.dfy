@@ -8,6 +8,10 @@ module Maps {
     k in m && m[k] == v
   }
 
+  predicate IMapsAgreeOnKey<K,V>(m: imap<K,V>, m': imap<K,V>, k: K) {
+    (k !in m && k !in m') || (k in m && k in m' && m[k] == m'[k])
+  }
+
   function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
