@@ -23,18 +23,18 @@ abstract module DiskBetreeInv {
       LookupIsAcyclic(lookup)
   }
 
-  predicate ReachablePointersValid<Value(!new)>(k: Constants, s: Variables) {
-    forall key, lookup: Lookup<Value> ::
-      IsPathFromRootLookup(k, s.bcv.view, key, lookup) && key in lookup[|lookup|-1].node.children ==>
-      lookup[|lookup|-1].node.children[key] in s.bcv.view
+  predicate ReferenceGraphReflectsChildren<Value(!new)>(k: Constants, s: Variables)
+    requires BI.Inv(k.bck, s.bcv)
+  {
+    forall ref :: ref in s.bcv.view ==> s.bcv.view[ref].children.Values == s.bcv.refGraph[ref]
   }
   
   predicate Inv(k: Constants, s: Variables)
   {
     && BI.Inv(k.bck, s.bcv)
-    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
+    && ReferenceGraphReflectsChildren(k, s)
     && Acyclic(k, s)
-    && ReachablePointersValid(k, s)
+    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
   }
 
   //// Definitions for lookup preservation
@@ -128,110 +128,57 @@ abstract module DiskBetreeInv {
 
   // Acyclicity proofs
 
-  lemma GrowPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference, key: Key, lookup': Lookup)
-    requires Inv(k, s)
-    requires Grow(k, s, s', oldroot, newchildref)
-    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-    ensures LookupIsAcyclic(lookup')
-    decreases lookup'
-  {
-    if (|lookup'| <= 2) {
-    } else {
-      // var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
-      // assert s'.bcv.view.Keys == s'.bcv.view.Keys + iset{newchildref};
-      // assert forall i :: 0 <= i < |lookup| ==> lookup[i].ref in s.bcv.view;
-      // assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-      
-      var sublookup' := lookup'[ .. |lookup'| - 1];
-      GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, sublookup');
-      var sublookup := sublookup'[1..][0 := Layer(BI.Root(k.bck), sublookup'[1].node, sublookup'[1].accumulatedBuffer)];
-      assert s'.bcv.view[newchildref] == oldroot;
-      assert sublookup'[1].node == oldroot;
-      assert IMapsTo(s.bcv.view, BI.Root(k.bck), sublookup'[1].node);
-      assert IsPathFromRootLookup(k, s.bcv.view, key, sublookup);
-      var lastLayer := lookup'[|lookup'| - 1];
-
-      assert lastLayer.ref in s.bcv.view;
-
-      var lookup := sublookup + [Layer(lastLayer.ref, s.bcv.view[lastLayer.ref], [])];
-
-      assert IMapsTo(s.bcv.view, lookup[|lookup|-1].ref, lookup[|lookup|-1].node);
-
-      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-      assert LookupIsAcyclic(lookup);
-
-      forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
-      ensures lookup'[i].ref != lookup'[j].ref
-      {
-        if (i == 0) {
-          if (j == 1) {
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else {
-            assert lookup'[i].ref == BI.Root(k.bck);
-            assert lookup'[j].ref == lookup[j-1].ref;
-            assert lookup[j-1].ref != lookup[0].ref;
-            assert lookup'[j].ref != BI.Root(k.bck);
-            assert lookup'[i].ref != lookup'[j].ref;
-          }
-        } else if (i == 1) {
-          if (j == 0) {
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else {
-            assert lookup'[i].ref != lookup'[j].ref;
-          }
-        } else {
-          if (j == 0) {
-            assert lookup'[j].ref == BI.Root(k.bck);
-            assert lookup'[i].ref == lookup[i-1].ref;
-            assert lookup[i-1].ref != lookup[0].ref;
-            assert lookup'[i].ref != BI.Root(k.bck);
-
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else if (j == 1) {
-            assert lookup'[i].ref != lookup'[j].ref;
-          } else {
-            assert lookup[i-1].ref != lookup[j-1].ref;
-            assert lookup'[i].ref != lookup'[j].ref;
-          }
-        }
-      }
-
-      assert LookupIsAcyclic(lookup');
-    }
-  }
-
   lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
     requires Inv(k, s)
     requires Grow(k, s, s', oldroot, newchildref)
     ensures Acyclic(k, s')
   {
-    forall key, lookup' | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-    ensures LookupIsAcyclic(lookup')
+    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
+      ensures LookupIsAcyclic(lookup')
     {
-      GrowPreservesAcyclicLookup(k, s, s', oldroot, newchildref, key, lookup');
-    }
-  }
-
-  lemma GrowPreservesReachablePointersValid(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
-    requires Inv(k, s)
-    requires Grow(k, s, s', oldroot, newchildref)
-    ensures ReachablePointersValid(k, s')
-  {
-    forall key, lookup':Lookup | 
-      IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
-    ensures lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
-    {
-      if (|lookup'| == 1) {
-        assert lookup'[|lookup'|-1].node.children[key] in s'.bcv.view;
-      } else {
-        var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
-        GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
-        assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-        assert lookup[|lookup|-1].node.children[key] in s.bcv.view;
-        assert lookup'[|lookup'|-1].node.children[key] in s'.bcv.view;
+      if |lookup'| > 1 {
+        var tmplookup := Apply((x: Layer) => x.(ref := if x.ref == newchildref then BI.Root(k.bck) else x.ref), lookup'[1..]);
+        var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), tmplookup);
+        var i := 1;
+        while i < |lookup|
+          invariant 1 <= i <= |lookup|
+          invariant LookupIsAcyclic(lookup'[..i+1])
+          invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
+        {
+          assert lookup'[i].node == lookup[i-1].node;
+          if lookup'[i+1].ref == BI.Root(k.bck) {
+            assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
+            assert false;
+          }
+          assert lookup'[i+1].ref != BI.Root(k.bck);
+          assert s.bcv.view[lookup[i].ref] == s'.bcv.view[lookup[i].ref];
+          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
+          i := i + 1;
+        }
       }
     }
   }
+
+  // lemma GrowPreservesReachablePointersValid(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
+  //   requires Inv(k, s)
+  //   requires Grow(k, s, s', oldroot, newchildref)
+  //   ensures ReachablePointersValid(k, s')
+  // {
+  //   forall key, lookup':Lookup | 
+  //     IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
+  //   ensures lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
+  //   {
+  //     if (|lookup'| == 1) {
+  //       assert lookup'[|lookup'|-1].node.children[key] in s'.bcv.view;
+  //     } else {
+  //       var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
+  //       GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
+  //       assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+  //       assert lookup[|lookup|-1].node.children[key] in s.bcv.view;
+  //       assert lookup'[|lookup'|-1].node.children[key] in s'.bcv.view;
+  //     }
+  //   }
+  // }
 
   // Preservation proofs
   
@@ -698,19 +645,19 @@ abstract module DiskBetreeInv {
     }
   }
 
-  lemma FlushPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
-  requires Inv(k, s)
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
-  ensures ReachablePointersValid(k, s')
-  {
-    forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
-    ensures 
-      lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
-    {
-      var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
-    }
-  }
+  // lemma FlushPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  // requires Inv(k, s)
+  // requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  // ensures ReachablePointersValid(k, s')
+  // {
+  //   forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
+  //   ensures 
+  //     lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
+  //   {
+  //     var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
+  //     FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
+  //   }
+  // }
 
   ////////
   //////// Split
@@ -862,7 +809,7 @@ abstract module DiskBetreeInv {
     requires Inv(k, s)
     requires InsertMessage(k, s, s', key, msg, oldroot)
     ensures Acyclic(k, s')
-    ensures ReachablePointersValid(k, s')
+    //ensures ReachablePointersValid(k, s')
   {
     forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
       ensures LookupIsAcyclic(lookup')
@@ -910,7 +857,7 @@ abstract module DiskBetreeInv {
   {
     FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref);
     FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref);
-    FlushPreservesReachablePointersValid(k, s, s', parentref, parent, childref, child, newchildref);
+    //FlushPreservesReachablePointersValid(k, s, s', parentref, parent, childref, child, newchildref);
   }
   
   lemma GrowStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
@@ -920,7 +867,7 @@ abstract module DiskBetreeInv {
   {
     GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
     GrowEquivalentLookups(k, s, s', oldroot, newchildref);
-    GrowPreservesReachablePointersValid(k, s, s', oldroot, newchildref);
+    //GrowPreservesReachablePointersValid(k, s, s', oldroot, newchildref);
   }
 
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
