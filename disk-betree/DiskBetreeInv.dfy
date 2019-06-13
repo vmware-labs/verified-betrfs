@@ -893,7 +893,7 @@ abstract module DiskBetreeInv {
     ))
 
     && lookup[0].ref == lookup'[0].ref
-    && (lookup'[0].ref != fusion.parentref ==> lookup[0].node == lookup[0].node)
+    && (lookup'[0].ref != fusion.parentref ==> lookup[0].node == lookup'[0].node)
     && (lookup'[0].ref == fusion.parentref ==> lookup[0].node == fusion.fused_parent)
 
     && (forall i :: 0 < i < |lookup'| && lookup'[i-1].ref != fusion.parentref ==> lookup[i].ref == lookup'[i].ref)
@@ -984,11 +984,64 @@ abstract module DiskBetreeInv {
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
   ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   {
+    var view := s.bcv.view;
+
     if (|lookup'| == 0) {
-    } else if (|lookup'| == 0) {
+    } else if (|lookup'| == 1) {
+      if (lookup'[0].ref == fusion.parentref) {
+        assert IMapsTo(view, lookup[0].ref, lookup[0].node);
+      } else {
+        assert lookup[0].ref == BI.Root(k.bck);
+        assert lookup[0].node == lookup'[0].node;
+        assert IMapsTo(view, lookup[0].ref, lookup[0].node);
+      }
+
       assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     } else {
       SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup[..|lookup|-1], lookup'[..|lookup|-1], key);
+
+      forall i | 0 <= i < |lookup|
+      ensures IMapsTo(view, lookup[i].ref, lookup[i].node)
+      {
+        if (i == |lookup| - 1) {
+          if (lookup'[i-1].ref == fusion.parentref && key in fusion.left_keys) {
+            assert IMapsTo(view, lookup[i].ref, lookup[i].node);
+          }
+          else if (lookup'[i-1].ref == fusion.parentref && key in fusion.right_keys) {
+            assert IMapsTo(view, lookup[i].ref, lookup[i].node);
+          }
+          else if (lookup'[i].ref == fusion.parentref) {
+            assert IMapsTo(view, lookup[i].ref, lookup[i].node);
+          }
+          else {
+            assert IMapsTo(view, lookup[i].ref, lookup[i].node);
+          }
+        } else {
+          assert IMapsTo(view, lookup[i].ref, lookup[i].node);
+        }
+      }
+
+      forall i | 0 <= i < |lookup| - 1
+      ensures lookup[i].node.children[key] == lookup[i+1].ref
+      {
+        if (i == |lookup| - 2) {
+          if (i > 0 && lookup'[i-1].ref == fusion.parentref && key in fusion.left_keys) {
+            assert lookup[i].node.children[key] == lookup[i+1].ref;
+          }
+          else if (i > 0 && lookup'[i-1].ref == fusion.parentref && key in fusion.right_keys) {
+            assert lookup[i].node.children[key] == lookup[i+1].ref;
+          }
+          else if (lookup'[i].ref == fusion.parentref) {
+            assert lookup[i].node.children[key] == lookup[i+1].ref;
+          }
+          else {
+            assert lookup[i].node.children[key] == lookup[i+1].ref;
+          }
+        } else {
+          assert lookup[i].node.children[key] == lookup[i+1].ref;
+        }
+      }
+
       assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     }
   }
@@ -1036,7 +1089,7 @@ abstract module DiskBetreeInv {
     }
   }
 
-  lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
+  lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   requires Inv(k, s);
   requires Split(k, s, s', fusion);
   ensures Acyclic(k, s');
@@ -1090,7 +1143,7 @@ abstract module DiskBetreeInv {
     MergeLookupPreservesAccumulatedBuffer(k, s, s', fusion, key, lookup, lookup');
   }
 
-  lemma SplitEquivalentLookups(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
+  lemma SplitEquivalentLookups(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   requires Inv(k, s)
   requires Split(k, s, s', fusion);
   ensures EquivalentLookups(k, s, s');
@@ -1207,6 +1260,16 @@ abstract module DiskBetreeInv {
     GrowEquivalentLookups(k, s, s', oldroot, newchildref);
     GrowPreservesReachablePointersValid(k, s, s', oldroot, newchildref);
   }
+ 
+  lemma SplitStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+    requires Inv(k, s)
+    requires Split(k, s, s', fusion)
+    ensures Inv(k, s')
+  {
+    SplitPreservesAcyclic(k, s, s', fusion);
+    SplitEquivalentLookups(k, s, s', fusion);
+    SplitPreservesReachablePointersValid(k, s, s', fusion);
+  }
 
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
     requires Inv(k, s)
@@ -1218,6 +1281,7 @@ abstract module DiskBetreeInv {
       case InsertMessageStep(key, value, oldroot) => InsertMessageStepPreservesInvariant(k, s, s', key, value, oldroot);
       case FlushStep(parentref, parent, childref, child, newchildref) => FlushStepPreservesInvariant(k, s, s', parentref, parent, childref, child, newchildref);
       case GrowStep(oldroot, newchildref) => GrowStepPreservesInvariant(k, s, s', oldroot, newchildref);
+      case SplitStep(fusion) => SplitStepPreservesInvariant(k, s, s', fusion);
     }
   }
   

@@ -209,6 +209,7 @@ abstract module DiskBetree {
     | InsertMessageStep(key: Key, msg: BufferEntry, oldroot: Node)
     | FlushStep(parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
     | GrowStep(oldroot: Node, newchildref: BI.Reference)
+    | SplitStep(fusion: NodeFusion)
     | GCStep(refs: iset<BI.Reference>)
     
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
@@ -217,6 +218,7 @@ abstract module DiskBetree {
       case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
       case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
       case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
+      case SplitStep(fusion) => Split(k, s, s', fusion)
       case GCStep(refs) => GC(k, s, s', refs)
     }
   }
