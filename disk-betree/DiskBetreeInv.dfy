@@ -122,6 +122,10 @@ abstract module DiskBetreeInv {
     }
   }
 
+  function RemapLookupNodes(view: BI.View<Node>, lookup: Lookup) : Lookup {
+    Apply((x: Layer) => x.(node := if x.ref in view then view[x.ref] else EmptyNode()), lookup)
+  }
+  
   ////////
   //////// Grow
   ////////
@@ -138,7 +142,7 @@ abstract module DiskBetreeInv {
     {
       if |lookup'| > 1 {
         var tmplookup := Apply((x: Layer) => x.(ref := if x.ref == newchildref then BI.Root(k.bck) else x.ref), lookup'[1..]);
-        var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), tmplookup);
+        var lookup := RemapLookupNodes(s.bcv.view, tmplookup);
         var i := 1;
         while i < |lookup|
           invariant 1 <= i <= |lookup|
@@ -445,6 +449,17 @@ abstract module DiskBetreeInv {
     ensures LookupIsAcyclic(lookup')
     {
       FlushPreservesAcyclicLookup(k, s, s', parentref, parent, childref, child, newchildref, lookup', key);
+    }
+  }
+
+  lemma FlushPreservesAcyclic2(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+    requires Inv(k, s)
+    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    ensures Acyclic(k, s')
+  {
+    forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+      ensures LookupIsAcyclic(lookup')
+    {
     }
   }
 
