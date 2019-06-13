@@ -712,7 +712,57 @@ abstract module DiskBetreeInv {
     }
   }
 
-  // Invariant proofs
+  ////////
+  //////// Split
+  ////////
+
+  // Define the transformations for splits:
+
+  // These are the relations we should get out between lookup and lookup' if we obtain lookup'
+  // by taking lookup and doing the following:
+  //  - replace each instance of parentref/fused_parent with parentref/split_parent
+  //  - replace each instance of fused_child with left_child (for left keys only, and only when directly after the parent in the lookup)
+  //  - replace each instance of fused_child with left_child (for left keys only, and only when directly after the parent in the lookup)
+  //  - leave everything else the same
+  predicate SplitLookups(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  {
+    && |lookup| == |lookup'|
+
+    && (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].ref == fusion.parentref)
+    && (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].node == fusion.split_parent)
+
+    //&& (forall i :: 0 <= i < |lookup| && lookup'[i].ref == fusion.parentref ==> lookup[i].ref == fusion.parentref)
+    //&& (forall i :: 0 <= i < |lookup| && lookup'[i].ref == fusion.parentref ==> lookup[i].node == fusion.fused_parent)
+
+    && (key in fusion.left_keys ==> (
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+          lookup'[i].ref == fusion.left_childref)
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+          lookup'[i].node == fusion.left_child)
+    ))
+
+    && (key in fusion.right_keys ==> (
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+          lookup'[i].ref == fusion.right_childref)
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+          lookup'[i].node == fusion.right_child)
+    ))
+
+    && lookup'[0].ref == lookup[0].ref
+    && (lookup[0].ref != fusion.parentref ==> lookup'[0].node == lookup[0].node)
+
+    && (forall i :: 0 < i < |lookup| && lookup[i].ref != fusion.parentref && lookup[i-1].ref != fusion.parentref ==> lookup'[i].ref == lookup[i].ref)
+    && (forall i :: 0 < i < |lookup| && lookup[i].ref != fusion.parentref && lookup[i-1].ref != fusion.parentref ==> lookup'[i].node == lookup[i].node)
+
+    && ((key !in fusion.left_keys && key !in fusion.right_keys) ==> (
+      && (forall i :: 0 <= i < |lookup| ==> lookup'[i].ref == lookup[i].ref)
+      && (forall i :: 0 <= i < |lookup| ==> lookup'[i].ref != fusion.parentref ==> lookup'[i].node == lookup[i].node)
+    ))
+  }
+
+  ////////
+  //////// Invariant proofs
+  ////////
 
   lemma InitImpliesInv(k: Constants, s: Variables)
     requires Init(k, s)
