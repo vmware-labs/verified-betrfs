@@ -817,7 +817,7 @@ abstract module DiskBetreeInv {
   requires Split(k, s, s', fusion);
   requires ValidFusion(fusion);
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-  requires IsPathFromRootLookup(k, s.bcv.view, key, lookup');
+  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
   requires LookupAccumulatesMessages(key, lookup);
   requires LookupAccumulatesMessages(key, lookup');
   ensures Last(lookup).accumulatedBuffer == Last(lookup').accumulatedBuffer
@@ -964,7 +964,7 @@ abstract module DiskBetreeInv {
     requires MergeLookups(fusion, lookup, lookup', key);
     requires Split(k, s, s', fusion);
     requires ValidFusion(fusion);
-    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
     requires LookupAccumulatesMessages(key, lookup);
     requires LookupAccumulatesMessages(key, lookup');
@@ -1051,10 +1051,14 @@ abstract module DiskBetreeInv {
   lemma SplitPreservesIsSatisfyingLookup<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s);
   requires Split(k, s, s', fusion);
-  requires SplitLookups(fusion, lookup, lookup', key)
+  requires |lookup| > 0;
+  requires lookup' == splitLookup(fusion, lookup, key)
   requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
   ensures IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
   {
+    splitLookupProperties(fusion, lookup, lookup', key);
+    SplitPreservesIsPathFromRootLookup(k, s, s', fusion, lookup, lookup', key);
+
     forall k | k !in fusion.split_parent.children
     ensures BufferIsDefining(fusion.split_parent.buffer[k])
     {
@@ -1066,6 +1070,24 @@ abstract module DiskBetreeInv {
 
     assert WFNode(fusion.left_child);
     assert WFNode(fusion.right_child);
+    
+    splitLookupAccumulatesMessages(fusion, key, lookup, lookup');
+    SplitLookupPreservesAccumulatedBuffer(k, s, s', fusion, key, lookup, lookup');
+  }
+
+  lemma SplitPreservesIsSatisfyingLookupRev<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
+  requires Inv(k, s);
+  requires Split(k, s, s', fusion);
+  requires |lookup'| > 0;
+  requires lookup == mergeLookup(fusion, lookup', key)
+  requires IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+  ensures IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+  {
+    mergeLookupProperties(fusion, lookup, lookup', key);
+    SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
+
+    mergeLookupAccumulatesMessages(fusion, key, lookup, lookup');
+    MergeLookupPreservesAccumulatedBuffer(k, s, s', fusion, key, lookup, lookup');
   }
 
   lemma SplitEquivalentLookups(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
@@ -1073,6 +1095,34 @@ abstract module DiskBetreeInv {
   requires Split(k, s, s', fusion);
   ensures EquivalentLookups(k, s, s');
   {
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    {
+      var lookup' := splitLookup(fusion, lookup, key);
+      SplitPreservesIsSatisfyingLookup(k, s, s', fusion, lookup, lookup', key, value);
+    }
+
+    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    {
+      var lookup := mergeLookup(fusion, lookup', key);
+      SplitPreservesIsSatisfyingLookupRev(k, s, s', fusion, lookup, lookup', key, value);
+    }
+  }
+
+  lemma SplitPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  requires Inv(k, s)
+  requires Split(k, s, s', fusion)
+  ensures ReachablePointersValid(k, s')
+  {
+    forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
+    ensures 
+      lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
+    {
+      var lookup := mergeLookup(fusion, lookup', key);
+      mergeLookupProperties(fusion, lookup, lookup', key);
+      SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
+    }
   }
 
   ////////
