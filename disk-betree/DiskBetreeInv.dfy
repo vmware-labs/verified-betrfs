@@ -729,24 +729,18 @@ abstract module DiskBetreeInv {
     && |lookup| == |lookup'|
     && |lookup| > 0
 
-    //&& (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].ref == fusion.parentref)
-    //&& (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].node == fusion.split_parent)
-
-    //&& (forall i :: 0 <= i < |lookup| && lookup'[i].ref == fusion.parentref ==> lookup[i].ref == fusion.parentref)
-    //&& (forall i :: 0 <= i < |lookup| && lookup'[i].ref == fusion.parentref ==> lookup[i].node == fusion.fused_parent)
-
     // the lookup[i].ref == fusion.fused_childref condition is redundant for well-formed lookups
     && (key in fusion.left_keys ==> (
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> // && lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==>
           lookup'[i].ref == fusion.left_childref)
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> //&& lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==>
           lookup'[i].node == fusion.left_child)
     ))
 
     && (key in fusion.right_keys ==> (
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> //&& lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==>
           lookup'[i].ref == fusion.right_childref)
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> //&& lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==>
           lookup'[i].node == fusion.right_child)
     ))
 
@@ -838,6 +832,146 @@ abstract module DiskBetreeInv {
       }
     }
     */
+  }
+
+  // Define the transformations for merges (reverse splits):
+
+  // These are the relations we should get out between lookup and lookup' if we obtain lookup'
+  // by taking lookup' and doing the following:
+  //  - replace each instance of parentref/split_parent with parentref/fused_parent
+  //  - replace each instance of left_child with fused_child (for left keys only, and only when directly after the parent in the lookup)
+  //  - replace each instance of right_child with fused_child (for right keys only, and only when directly after the parent in the lookup)
+  //  - leave everything else the same
+  predicate MergeLookups(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  {
+    && |lookup| == |lookup'|
+    && |lookup'| > 0
+
+    && (key in fusion.left_keys ==> (
+      && (forall i :: 0 < i < |lookup'| && lookup'[i-1].ref == fusion.parentref ==>
+          lookup[i].ref == fusion.fused_childref)
+      && (forall i :: 0 < i < |lookup'| && lookup'[i-1].ref == fusion.parentref ==>
+          lookup[i].node == fusion.fused_child)
+    ))
+
+    && (key in fusion.right_keys ==> (
+      && (forall i :: 0 < i < |lookup'| && lookup'[i-1].ref == fusion.parentref ==>
+          lookup[i].ref == fusion.fused_childref)
+      && (forall i :: 0 < i < |lookup'| && lookup'[i-1].ref == fusion.parentref ==>
+          lookup[i].node == fusion.fused_child)
+    ))
+
+    && lookup[0].ref == lookup'[0].ref
+    && (lookup'[0].ref != fusion.parentref ==> lookup[0].node == lookup[0].node)
+    && (lookup'[0].ref == fusion.parentref ==> lookup[0].node == fusion.fused_parent)
+
+    && (forall i :: 0 < i < |lookup'| && lookup'[i-1].ref != fusion.parentref ==> lookup[i].ref == lookup'[i].ref)
+    && (forall i :: 0 < i < |lookup'| && lookup'[i].ref != fusion.parentref && lookup'[i-1].ref != fusion.parentref ==> lookup[i].node == lookup'[i].node)
+    && (forall i :: 0 < i < |lookup'| && lookup'[i].ref == fusion.parentref && lookup'[i-1].ref != fusion.parentref ==> lookup[i].node == fusion.fused_parent)
+
+    && ((key !in fusion.left_keys && key !in fusion.right_keys) ==> (
+      && (forall i :: 0 <= i < |lookup'| ==> lookup[i].ref == lookup'[i].ref)
+      && (forall i :: 0 <= i < |lookup'| ==> lookup[i].ref != fusion.parentref ==> lookup[i].node == lookup'[i].node)
+      && (forall i :: 0 <= i < |lookup'| ==> lookup[i].ref == fusion.parentref ==> lookup[i].node == fusion.fused_parent)
+    ))
+  }
+
+  function {:opaque} mergeLookup(fusion: NodeFusion, lookup': Lookup, key: Key) : Lookup
+  requires |lookup'| > 0
+  ensures |mergeLookup(fusion, lookup', key)| == |lookup'|
+  {
+    if (|lookup'| == 1) then (
+      var node := if lookup'[0].ref == fusion.parentref then fusion.fused_parent else lookup'[0].node;
+      [Layer(lookup'[0].ref, node, (if key in node.buffer then node.buffer[key] else []))]
+    ) else (
+      var pref := mergeLookup(fusion, lookup'[..|lookup'|-1], key);
+      var prevRef := lookup'[|lookup'| - 2].ref;
+      var curRef := lookup'[|lookup'| - 1].ref;
+      var curNode := lookup'[|lookup'| - 1].node;
+      var ref := (if key in fusion.left_keys && prevRef == fusion.parentref then fusion.fused_childref else
+                 (if key in fusion.right_keys && prevRef == fusion.parentref then fusion.fused_childref else
+                 curRef));
+      var node := (if key in fusion.left_keys && prevRef == fusion.parentref then fusion.fused_child else
+                 (if key in fusion.right_keys && prevRef == fusion.parentref then fusion.fused_child else
+                 (if ref == fusion.parentref then fusion.fused_parent else
+                 curNode)));
+      pref + [Layer(ref, node, pref[|pref|-1].accumulatedBuffer + (if key in node.buffer then node.buffer[key] else []))]
+    )
+  }
+
+  lemma mergeLookupProperties<Value>(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  requires |lookup'| > 0
+  requires ValidFusion(fusion);
+  requires lookup == mergeLookup(fusion, lookup', key);
+  ensures MergeLookups(fusion, lookup, lookup', key);
+  {
+    reveal_mergeLookup();
+    if (|lookup'| == 1) {
+      assert MergeLookups(fusion, lookup, lookup', key);
+    } else {
+      assert lookup[..|lookup|-1] == mergeLookup(fusion, lookup'[..|lookup|-1], key);
+      mergeLookupProperties(fusion, lookup[..|lookup|-1], lookup'[..|lookup|-1], key);
+      assert MergeLookups(fusion, lookup, lookup', key);
+    }
+  }
+
+  lemma SplitPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  requires Inv(k, s);
+  requires Split(k, s, s', fusion);
+  requires MergeLookups(fusion, lookup, lookup', key)
+  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+  ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+  {
+    if (|lookup'| == 0) {
+    } else if (|lookup'| == 0) {
+      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+    } else {
+      SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup[..|lookup|-1], lookup'[..|lookup|-1], key);
+      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+    }
+  }
+
+  lemma SplitPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
+  requires Inv(k, s)
+  requires Split(k, s, s', fusion);
+  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  ensures LookupIsAcyclic(lookup')
+  {
+    var lookup := mergeLookup(fusion, lookup', key);
+    mergeLookupProperties(fusion, lookup, lookup', key);
+    SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
+    assert LookupIsAcyclic(lookup);
+    forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
+    ensures lookup'[i].ref != lookup'[j].ref
+    {
+      if (lookup'[i].ref == lookup'[j].ref) {
+        if (lookup'[i].ref == fusion.left_childref && key in fusion.left_keys) {
+          assert i > 0;
+          assert lookup'[i-1].ref == fusion.parentref;
+
+          assert j > 0;
+          assert lookup'[j-1].ref == fusion.parentref;
+
+          assert lookup[i].ref == fusion.fused_childref;
+          assert lookup[j].ref == fusion.fused_childref;
+          assert false;
+        } else if (lookup'[i].ref == fusion.right_childref && key in fusion.right_keys) {
+          assert i > 0;
+          assert lookup'[i-1].ref == fusion.parentref;
+
+          assert j > 0;
+          assert lookup'[j-1].ref == fusion.parentref;
+
+          assert lookup[i].ref == fusion.fused_childref;
+          assert lookup[j].ref == fusion.fused_childref;
+          assert false;
+        } else {
+          assert lookup[i].ref == lookup'[i].ref;
+          assert lookup[j].ref == lookup'[j].ref;
+          assert false;
+        }
+      }
+    }
   }
 
   ////////
