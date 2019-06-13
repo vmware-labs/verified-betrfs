@@ -1111,14 +1111,10 @@ abstract module DiskBetreeInv {
     requires Init(k, s)
     ensures Inv(k, s)
   {
-<<<<<<< HEAD
-    assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(Root(k), EmptyNode(), [Insertion(MS.EmptyValue())])]);
-=======
     forall key | MS.InDomain(key)
-    ensures IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(BI.Root(k.bck), EmptyNode())]);
+    ensures IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(Root(k), EmptyNode())]);
     {
     }
->>>>>>> origin/master
   }
 
   lemma QueryStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)
