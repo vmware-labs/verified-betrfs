@@ -730,6 +730,8 @@ abstract module DiskBetreeInv {
   requires ValidFusion(fusion);
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+  requires LookupVisitsWFNodes(lookup);
+  requires LookupVisitsWFNodes(lookup');
   ensures TotalLog(lookup, key) == TotalLog(lookup', key);
   {
     if (|lookup| == 1) {
@@ -863,6 +865,8 @@ abstract module DiskBetreeInv {
     requires ValidFusion(fusion);
     requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+    requires LookupVisitsWFNodes(lookup);
+    requires LookupVisitsWFNodes(lookup');
     ensures TotalLog(lookup, key) == TotalLog(lookup', key);
     {
       if (|lookup'| == 1) {
@@ -1080,7 +1084,10 @@ abstract module DiskBetreeInv {
     requires Init(k, s)
     ensures Inv(k, s)
   {
-    assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(BI.Root(k.bck), EmptyNode())]);
+    forall key | MS.InDomain(key)
+    ensures IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(BI.Root(k.bck), EmptyNode())]);
+    {
+    }
   }
 
   lemma QueryStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)
@@ -1116,8 +1123,36 @@ abstract module DiskBetreeInv {
       var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()),
                            lookup);
       if key1 != key {
+        var i := 1;
+        while i < |lookup|
+        invariant i <= |lookup|
+        invariant TotalLog(lookup'[..i], key1) == TotalLog(lookup[..i], key1);
+        {
+          assert lookup[..i] == lookup[..i+1][..i];
+          assert lookup'[..i] == lookup'[..i+1][..i];
+          i := i + 1;
+        }
+        assert lookup == lookup[..i];
+        assert lookup' == lookup'[..i];
+        assert TotalLog(lookup', key1) == TotalLog(lookup, key1);
+
+        assert BufferDefinesValue(TotalLog(lookup', key1), value);
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
       } else {
+        reveal_IsPrefix();
+
+        var i := 1;
+        while i < |lookup|
+        invariant i <= |lookup|
+        invariant IsPrefix([msg], TotalLog(lookup'[..i], key1))
+        {
+          assert lookup'[..i] == lookup'[..i+1][..i];
+          i := i + 1;
+        }
+        assert lookup' == lookup'[..i];
+        assert IsPrefix([msg], TotalLog(lookup', key1));
+
+        assert BufferDefinesValue(TotalLog(lookup', key1), msg.value);
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, msg.value, lookup');
       }
     }
