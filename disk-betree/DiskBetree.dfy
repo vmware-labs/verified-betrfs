@@ -21,7 +21,7 @@ abstract module DiskBetree {
     BI.Root(k.bck)
   }
 
-  datatype Layer<Value> = Layer(ref: BI.Reference, node: Node<Value>, accumulatedBuffer: seq<BufferEntry>)
+  datatype Layer<Value> = Layer(ref: BI.Reference, node: Node<Value>)
   type Lookup<Value> = seq<Layer>
 
   predicate BufferIsDefining(log: seq<BufferEntry>) {
@@ -58,13 +58,6 @@ abstract module DiskBetree {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
   }
 
-  predicate LookupAccumulatesMessages(key: Key, lookup: Lookup) {
-    && |lookup| > 0
-    && LookupVisitsWFNodes(lookup)
-    && lookup[0].accumulatedBuffer == lookup[0].node.buffer[key]
-    && (forall i :: 0 < i < |lookup| ==> lookup[i].accumulatedBuffer == lookup[i-1].accumulatedBuffer + lookup[i].node.buffer[key])
-  }
-
   predicate IsPathFromRootLookup<Value>(k: Constants, view: BI.View<Node<Value>>, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == Root(k)
@@ -72,11 +65,16 @@ abstract module DiskBetree {
     && LookupFollowsChildRefs(key, lookup)
   }
 
+  function TotalLog<Value>(lookup: Lookup<Value>, key: Key) : seq<BufferEntry<Value>>
+  requires LookupVisitsWFNodes(lookup);
+  {
+    if |lookup| == 0 then [] else TotalLog(lookup[..|lookup|-1], key) + lookup[|lookup|-1].node.buffer[key]
+  }
+
   predicate IsSatisfyingLookup<Value>(k: Constants, view: BI.View<Node<Value>>, key: Key, value: Value, lookup: Lookup) {
     && IsPathFromRootLookup(k, view, key, lookup)
     && LookupVisitsWFNodes(lookup)
-    && LookupAccumulatesMessages(key, lookup)
-    && BufferDefinesValue(Last(lookup).accumulatedBuffer, value)
+    && BufferDefinesValue(TotalLog(lookup, key), value)
   }
 
   function Successors(node: Node) : iset<BI.Reference>
