@@ -329,6 +329,8 @@ abstract module DiskBetreeInv {
     newparentchildren: imap<Key, BI.Reference>)
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires LookupVisitsWFNodes(lookup)
+  requires LookupVisitsWFNodes(lookup')
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
   requires newbuffer == imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
   requires newchild == Node(child.children, newbuffer);
@@ -483,6 +485,8 @@ abstract module DiskBetreeInv {
   requires Inv(k, s)
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+  requires LookupVisitsWFNodes(lookup);
+  requires LookupVisitsWFNodes(lookup');
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
@@ -540,6 +544,8 @@ abstract module DiskBetreeInv {
   requires Inv(k, s)
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+  requires LookupVisitsWFNodes(lookup);
+  requires LookupVisitsWFNodes(lookup');
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
