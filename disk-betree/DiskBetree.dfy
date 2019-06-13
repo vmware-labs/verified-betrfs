@@ -17,6 +17,10 @@ abstract module DiskBetree {
   //datatype Slot = Slot(child: BI.Reference, buffer: Buffer);
   datatype Node<Value> = Node(children: imap<Key, BI.Reference>, buffer: Buffer<Value>)
 
+  function Root(k: Constants) : BI.Reference {
+    BI.Root(k.bck)
+  }
+
   datatype Layer<Value> = Layer(ref: BI.Reference, node: Node<Value>, accumulatedBuffer: seq<BufferEntry>)
   type Lookup<Value> = seq<Layer>
 
@@ -56,7 +60,7 @@ abstract module DiskBetree {
 
   predicate IsPathFromRootLookup<Value>(k: Constants, view: BI.View<Node<Value>>, key: Key, lookup: Lookup) {
     && |lookup| > 0
-    && lookup[0].ref == BI.Root(k.bck)
+    && lookup[0].ref == Root(k)
     && LookupRespectsDisk(view, lookup)
     && LookupFollowsChildRefs(key, lookup)
   }
@@ -105,10 +109,10 @@ abstract module DiskBetree {
   }
   
   predicate InsertMessage<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node) {
-    && IMapsTo(s.bcv.view, BI.Root(k.bck), oldroot)
+    && IMapsTo(s.bcv.view, Root(k), oldroot)
     && WFNode(oldroot)
     && var newroot := AddMessageToNode(oldroot, key, msg);
-    && BI.Write(k.bck, s.bcv, s'.bcv, BI.Root(k.bck), newroot, Successors(newroot))
+    && BI.Write(k.bck, s.bcv, s'.bcv, Root(k), newroot, Successors(newroot))
   }
 
   predicate Flush<Value>(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference) {
@@ -128,13 +132,13 @@ abstract module DiskBetree {
   }
 
   predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference) {
-    && IMapsTo(s.bcv.view, BI.Root(k.bck), oldroot)
+    && IMapsTo(s.bcv.view, Root(k), oldroot)
     && var newchild := oldroot;
     && var newroot := Node(
         imap key | MS.InDomain(key) :: newchildref,
         imap key | MS.InDomain(key) :: []);
     && var allocop := BI.AllocStep(newchild, Successors(newchild), newchildref);
-    && var writeop := BI.WriteStep(BI.Root(k.bck), newroot, Successors(newroot));
+    && var writeop := BI.WriteStep(Root(k), newroot, Successors(newroot));
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 

@@ -122,8 +122,8 @@ abstract module DiskBetreeInv {
     }
   }
 
-  function RemapLookupNodes(view: BI.View<Node>, lookup: Lookup) : Lookup {
-    Apply((x: Layer) => x.(node := if x.ref in view then view[x.ref] else EmptyNode()), lookup)
+  function LookupFromRefs(view: BI.View<Node>, refs: seq<BI.Reference>) : Lookup {
+    Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode(), []), refs)
   }
   
   ////////
@@ -141,8 +141,8 @@ abstract module DiskBetreeInv {
       ensures LookupIsAcyclic(lookup')
     {
       if |lookup'| > 1 {
-        var tmplookup := Apply((x: Layer) => x.(ref := if x.ref == newchildref then BI.Root(k.bck) else x.ref), lookup'[1..]);
-        var lookup := RemapLookupNodes(s.bcv.view, tmplookup);
+        var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
+        var lookup := LookupFromRefs(s.bcv.view, refs);
         var i := 1;
         while i < |lookup|
           invariant 1 <= i <= |lookup|
@@ -152,7 +152,7 @@ abstract module DiskBetreeInv {
           assert lookup'[i].node == lookup[i-1].node;
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
           assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
-          assert lookup'[i+1].ref != BI.Root(k.bck);
+          assert lookup'[i+1].ref != Root(k);
           assert lookup'[i+1].node == lookup[i].node;
           i := i + 1;
         }
@@ -171,7 +171,7 @@ abstract module DiskBetreeInv {
     ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     {
       // Add one for the new root
-      var rootref := BI.Root(k.bck);
+      var rootref := Root(k);
 
       var newroot := s'.bcv.view[rootref];
 
@@ -191,7 +191,7 @@ abstract module DiskBetreeInv {
     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
       // Remove one for the root
-      var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node, lookup'[1].accumulatedBuffer)];
+      var lookup := lookup'[1..][0 := Layer(Root(k), lookup'[1].node, lookup'[1].accumulatedBuffer)];
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
   }
@@ -409,8 +409,8 @@ abstract module DiskBetreeInv {
   {
     if (|lookup'| == 0) {
     } else if (|lookup'| == 1) {
-      assert BI.Root(k.bck) in s.bcv.view;
-      assert lookup[0].node == s.bcv.view[BI.Root(k.bck)];
+      assert Root(k) in s.bcv.view;
+      assert lookup[0].node == s.bcv.view[Root(k)];
       assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     } else {
       FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref,
@@ -460,6 +460,10 @@ abstract module DiskBetreeInv {
     forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
       ensures LookupIsAcyclic(lookup')
     {
+      //var indexes := Arithmetic(0, 1, |lookup'|);
+      var refs := Apply((x: Layer) => if x.ref == newchildref then childref else x.ref, lookup');
+      var lookup := LookupFromRefs(s.bcv.view, refs);
+      
     }
   }
 
@@ -596,7 +600,7 @@ abstract module DiskBetreeInv {
 
       transformLookupParentAndChildLemma(lookup1, lookup', key, parentref, newparent, movedKeys, childref, newchildref, newchild, 0);
 
-      assert lookup'[0].ref == BI.Root(k.bck);
+      assert lookup'[0].ref == Root(k);
 
       forall i | 0 <= i < |lookup'|
       ensures IMapsTo(s'.bcv.view, lookup'[i].ref, lookup'[i].node)
@@ -915,7 +919,7 @@ abstract module DiskBetreeInv {
       if (lookup'[0].ref == fusion.parentref) {
         assert IMapsTo(view, lookup[0].ref, lookup[0].node);
       } else {
-        assert lookup[0].ref == BI.Root(k.bck);
+        assert lookup[0].ref == Root(k);
         assert lookup[0].node == lookup'[0].node;
         assert IMapsTo(view, lookup[0].ref, lookup[0].node);
       }
@@ -1111,7 +1115,7 @@ abstract module DiskBetreeInv {
     requires Init(k, s)
     ensures Inv(k, s)
   {
-    assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(BI.Root(k.bck), EmptyNode(), [Insertion(MS.EmptyValue())])]);
+    assert forall key :: MS.InDomain(key) ==> IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(Root(k), EmptyNode(), [Insertion(MS.EmptyValue())])]);
   }
 
   lemma QueryStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)

@@ -122,4 +122,15 @@ module Sequences {
         == (a + b)[..|c|]
         == a[..|c|];
   }
+
+  function method Arithmetic(start: int, inc: int, len: int) : (result: seq<int>)
+    requires len >= 0
+    ensures |result| == len
+    ensures forall i :: 0 <= i < |result| ==> result[i] == start + i * inc
+    decreases len
+  {
+    if len == 0 then []
+    else [start] + Arithmetic(start + inc, inc, len - 1)
+  }
+    
 }
