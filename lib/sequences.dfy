@@ -40,7 +40,10 @@ module Sequences {
     i
   }
   
-  function method Apply<E,R>(f: (E -> R), run: seq<E>) : seq<R>
+  function method Apply<E,R>(f: (E -> R), run: seq<E>) : (result: seq<R>)
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    ensures |result| == |run|
+    ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
   {
     if |run| == 0 then []
     else  [f(run[0])] + Apply(f, run[1..])

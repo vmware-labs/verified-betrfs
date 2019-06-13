@@ -727,25 +727,122 @@ abstract module DiskBetreeInv {
     ensures Inv(k, s')
   {
   }
+
+  // function AddMessageIfRelevant(insertKey: Key, msg: BufferEntry, lookupKey: Key, accumulatedBuffer: seq<BufferEntry>) : seq<BufferEntry>
+  // {
+  //   if insertKey == lookupKey then [msg] + accumulatedBuffer
+  //   else accumulatedBuffer
+  // }
   
+  // function ApplyInsertMessageToLookup(k: Constants, s: Variables, key: Key, msg: BufferEntry, oldroot: Node, lookupKey: Key, lookup: Lookup) : (lookup': Lookup)
+  //   requires WFNode(oldroot)
+  // {
+  //   if |lookup| == 0 then lookup
+  //   else if |lookup| == 1 then [Layer(BI.Root(k.bck), AddMessageToNode(oldroot, key, msg), AddMessageIfRelevant(key, msg, lookupKey, lookup[0].accumulatedBuffer))]
+  //   else 
+  //     var prefix' := ApplyInsertMessageToLookup(k, s, key, msg, oldroot, lookupKey, lookup[..|lookup|-1]);
+  //     prefix' + [Last(lookup).(accumulatedBuffer := AddMessageIfRelevant(key, msg, lookupKey, Last(lookup).accumulatedBuffer))]
+  // }
+
+  // lemma ApplyInsertMesageToLookupPreservesPathFromRoot(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node, lookupKey: Key, lookup: Lookup, lookup': Lookup)
+  //   requires Inv(k, s)
+  //   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+  //   requires InsertMessage(k, s, s', key, msg, oldroot)
+  //   requires lookup' == ApplyInsertMessageToLookup(k, s, key, msg, oldroot, lookupKey, lookup)
+  //   ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  // {
+  //   if |lookup| > 1 {
+  //     var prefix := lookup[..|lookup|-1];
+  //     var prefix' := lookup'[..|lookup'|-1];
+  //     ApplyInsertMesageToLookupPreservesPathFromRoot(k, s, s', key, msg, oldroot, lookupKey, prefix, prefix');
+  //     assert IsPathFromRootLookup(k, s'.bcv.view, key, prefix' + [Last(lookup')]);
+  //   }
+  // }
+  
+  // function RemoveFirstMessageIfRelevant(insertKey: Key, lookupKey: Key, accumulatedBuffer: seq<BufferEntry>) : seq<BufferEntry>
+  //   requires insertKey == lookupKey ==> |accumulatedBuffer| > 0
+  // {
+  //   if insertKey == lookupKey then accumulatedBuffer[1..]
+  //   else accumulatedBuffer
+  // }
+
+  // lemma InsertedMessageIsInAccumulatedBuffersOfRelevantLookup(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node, lookupKey: Key, lookup': Lookup)
+  //   requires InsertMessage(k, s, s', key, msg, oldroot)
+  //   requires IsPathFromRootLookup(k, s'.bcv.view, lookupKey, lookup')
+  //   ensures lookupKey == key ==> |lookup'[0].accumulatedBuffer| > 0 && msg == lookup'[0].accumulatedBuffer[0]
+  // {
+  //   var newroot := AddMessageToNode(oldroot, key, msg);
+  //   assert lookup'[0].node == newroot;
+  //   assert |newroot.buffer[key]| > 0 && newroot.buffer[key][0] == msg;
+  // }
+  
+  // function DeapplyInsertMessageToLookup(k: Constants, s: Variables, s': Variables, key: Key, oldroot: Node, lookupKey: Key, lookup': Lookup) : Lookup
+  // {
+  //   if |lookup'| == 0 then lookup'
+  //   else if |lookup'| == 1 then [Layer(BI.Root(k.bck), oldroot, RemoveFirstMessageIfRelevant(key, lookupKey, lookup'[0].accumulatedBuffer))]
+  //   else
+  //     var prefix := DeapplyInsertMessageToLookup(k, s, s', key, oldroot, lookupKey, lookup'[..|lookup'|-1]);
+  //     prefix + [Last(lookup').(accumulatedBuffer := RemoveFirstMessageIfRelevant(key, lookupKey, lookup'[0].accumulatedBuffer))]
+  // }
+
+  // lemma DeapplyInsertMesageToLookupPreservesPathFromRoot(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node, lookupKey: Key, lookup: Lookup, lookup': Lookup)
+  //   requires Inv(k, s)
+  //   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  //   requires InsertMessage(k, s, s', key, msg, oldroot)
+  //   requires lookup' == ApplyInsertMessageToLookup(k, s, key, msg, oldroot, lookupKey, lookup)
+  //   ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+  // {
+  //   if |lookup| > 1 {
+  //     var prefix := lookup[..|lookup|-1];
+  //     var prefix' := lookup'[..|lookup'|-1];
+  //     DeapplyInsertMesageToLookupPreservesPathFromRoot(k, s, s', key, msg, oldroot, lookupKey, prefix, prefix');
+  //     assert IsPathFromRootLookup(k, s'.bcv.view, key, prefix' + [Last(lookup')]);
+  //   }
+  // }
+
+  lemma InsertMessagePreservesAcyclicAndReachablePointersValid(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+    requires Inv(k, s)
+    requires InsertMessage(k, s, s', key, msg, oldroot)
+    ensures Acyclic(k, s')
+    ensures ReachablePointersValid(k, s')
+  {
+    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
+      ensures LookupIsAcyclic(lookup')
+      ensures key1 in Last(lookup').node.children ==> Last(lookup').node.children[key1] in s'.bcv.view
+    {
+      var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), lookup');
+      assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup);
+    }
+  }
+
+  lemma InsertMessagePreservesTotality(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+    requires Inv(k, s)
+    requires InsertMessage(k, s, s', key, msg, oldroot)
+    ensures forall key1 | MS.InDomain(key1) :: KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
+  {
+    forall key1 | MS.InDomain(key1)
+      ensures KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
+    {
+      var value, lookup :| IsSatisfyingLookup(k, s.bcv.view, key1, value, lookup);
+      var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode(),
+                                          accumulatedBuffer := (if key1 == key then [msg] else []) + x.accumulatedBuffer),
+                           lookup);
+      if key1 != key {
+        assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
+      } else {
+        assert IsSatisfyingLookup(k, s'.bcv.view, key1, msg.value, lookup');
+      }
+    }
+  }
+    
   lemma InsertMessageStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
     requires InsertMessage(k, s, s', key, msg, oldroot)
     ensures Inv(k, s')
-  // {
-  //   forall key1 | MS.InDomain(key1)
-  //     ensures KeyHasSatisfyingLookup(k, s', key1)
-  //   {
-  //     var lookup: Lookup, value: Value :| IsSatisfyingLookup(k, s.bcv.view, key1, value, lookup);
-  //     if key1 == key {
-  //       assume false;
-  //     } else {
-  //       var newroot := AddMessageToNode(oldroot, key, msg);
-  //       var newlookup := [Layer(BI.Root(k.bck), newroot, newroot.buffer[key1])] + lookup[1..];
-  //       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, newlookup);
-  //     }
-  //   }
-  // }
+  {
+    InsertMessagePreservesAcyclicAndReachablePointersValid(k, s, s', key, msg, oldroot);
+    InsertMessagePreservesTotality(k, s, s', key, msg, oldroot);
+  }
 
   lemma FlushStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables,
                                            parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
