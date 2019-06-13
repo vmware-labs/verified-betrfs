@@ -124,7 +124,8 @@ abstract module DiskBetreeInv {
     }
   }
 
-  function LookupFromRefs(view: BI.View<Node>, refs: seq<BI.Reference>) : Lookup {
+  function LookupFromRefs(view: BI.View<Node>, refs: seq<BI.Reference>) : Lookup
+  {
     Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode(), []), refs)
   }
   
@@ -143,16 +144,21 @@ abstract module DiskBetreeInv {
       ensures LookupIsAcyclic(lookup')
     {
       if |lookup'| > 1 {
+        LookupFollowsChildRefsAtLayer(key1, lookup', 0);
         var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
         var lookup := LookupFromRefs(s.bcv.view, refs);
+        assert lookup[0].node == lookup'[1].node;
+        assert |lookup| > 1 ==> IMapsTo(lookup[0].node.children, key1, lookup[1].ref);
         var i := 1;
         while i < |lookup|
           invariant 1 <= i <= |lookup|
           invariant LookupIsAcyclic(lookup'[..i+1])
           invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
         {
+          LookupFollowsChildRefsAtLayer(key1, lookup', i);
           assert lookup'[i].node == lookup[i-1].node;
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+          LookupFollowsChildRefsAtLayer(key1, lookup, i);
           assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
           assert lookup'[i+1].ref != Root(k);
           assert lookup'[i+1].node == lookup[i].node;
