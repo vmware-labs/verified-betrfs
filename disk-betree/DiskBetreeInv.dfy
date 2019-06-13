@@ -146,6 +146,7 @@ abstract module DiskBetreeInv {
           invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
         {
           assert lookup'[i].node == lookup[i-1].node;
+          assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
           assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
           assert lookup'[i+1].ref != BI.Root(k.bck);
           assert lookup'[i+1].node == lookup[i].node;
@@ -930,6 +931,7 @@ abstract module DiskBetreeInv {
       }
 
       forall i | 0 <= i < |lookup| - 1
+      ensures key in lookup[i].node.children
       ensures lookup[i].node.children[key] == lookup[i+1].ref
       {
         if (i == |lookup| - 2) {
