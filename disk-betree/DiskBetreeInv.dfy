@@ -81,6 +81,8 @@ abstract module DiskBetreeInv {
     if (idx == 0) {
     } else {
       SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx - 1);
+      LookupFollowsChildRefsAtLayer(key, lookup, idx-1);
+      LookupFollowsChildRefsAtLayer(key, lookup', idx-1);
     }
   }
 
@@ -452,20 +454,20 @@ abstract module DiskBetreeInv {
     }
   }
 
-  lemma FlushPreservesAcyclic2(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
-    requires Inv(k, s)
-    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
-    ensures Acyclic(k, s')
-  {
-    forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-      ensures LookupIsAcyclic(lookup')
-    {
-      //var indexes := Arithmetic(0, 1, |lookup'|);
-      var refs := Apply((x: Layer) => if x.ref == newchildref then childref else x.ref, lookup');
-      var lookup := LookupFromRefs(s.bcv.view, refs);
+  // lemma FlushPreservesAcyclic2(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  //   requires Inv(k, s)
+  //   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  //   ensures Acyclic(k, s')
+  // {
+  //   forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  //     ensures LookupIsAcyclic(lookup')
+  //   {
+  //     //var indexes := Arithmetic(0, 1, |lookup'|);
+  //     var refs := Apply((x: Layer) => if x.ref == newchildref then childref else x.ref, lookup');
+  //     var lookup := LookupFromRefs(s.bcv.view, refs);
       
-    }
-  }
+  //   }
+  // }
 
 
   lemma transformLookupParentAndChildPreservesAccumulatedLogRev<Value>(

@@ -38,9 +38,16 @@ abstract module DiskBetree {
     && (forall k :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
-    && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
-    && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
+  predicate {:opaque} LookupFollowsChildRefs(key: Key, lookup: Lookup) {
+    && (forall i :: 0 <= i < |lookup| - 1 ==> IMapsTo(lookup[i].node.children, key, lookup[i+1].ref))
+  }
+  
+  lemma LookupFollowsChildRefsAtLayer(key: Key, lookup: Lookup, i: int)
+    requires LookupFollowsChildRefs(key, lookup)
+    requires 0 <= i < |lookup| - 1
+    ensures IMapsTo(lookup[i].node.children, key, lookup[i+1].ref)
+  {
+    reveal_LookupFollowsChildRefs();
   }
   
   predicate LookupRespectsDisk<Value>(view: BI.View<Node<Value>>, lookup: Lookup) {
