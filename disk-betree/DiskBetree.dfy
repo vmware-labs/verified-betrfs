@@ -179,6 +179,10 @@ abstract module DiskBetree {
     && IMapsTo(s.bcv.view, fusion.parentref, fusion.fused_parent)
     && IMapsTo(s.bcv.view, fusion.fused_childref, fusion.fused_child)
     && ValidFusion(fusion)
+    && WFNode(fusion.fused_parent)
+    && WFNode(fusion.fused_child)
+    && WFNode(fusion.left_child)
+    && WFNode(fusion.right_child)
     && var allocop_left := BI.AllocStep(fusion.left_child, Successors(fusion.left_child), fusion.left_childref);
     && var allocop_right := BI.AllocStep(fusion.right_child, Successors(fusion.right_child), fusion.right_childref);
     && var writeop := BI.WriteStep(fusion.parentref, fusion.split_parent, Successors(fusion.split_parent));
@@ -205,6 +209,7 @@ abstract module DiskBetree {
     | InsertMessageStep(key: Key, msg: BufferEntry, oldroot: Node)
     | FlushStep(parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
     | GrowStep(oldroot: Node, newchildref: BI.Reference)
+    | SplitStep(fusion: NodeFusion)
     | GCStep(refs: iset<BI.Reference>)
     
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
@@ -213,6 +218,7 @@ abstract module DiskBetree {
       case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
       case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
       case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
+      case SplitStep(fusion) => Split(k, s, s', fusion)
       case GCStep(refs) => GC(k, s, s', refs)
     }
   }
