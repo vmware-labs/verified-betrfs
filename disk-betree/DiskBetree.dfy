@@ -179,6 +179,10 @@ abstract module DiskBetree {
     && IMapsTo(s.bcv.view, fusion.parentref, fusion.fused_parent)
     && IMapsTo(s.bcv.view, fusion.fused_childref, fusion.fused_child)
     && ValidFusion(fusion)
+    && WFNode(fusion.fused_parent)
+    && WFNode(fusion.fused_child)
+    && WFNode(fusion.left_child)
+    && WFNode(fusion.right_child)
     && var allocop_left := BI.AllocStep(fusion.left_child, Successors(fusion.left_child), fusion.left_childref);
     && var allocop_right := BI.AllocStep(fusion.right_child, Successors(fusion.right_child), fusion.right_childref);
     && var writeop := BI.WriteStep(fusion.parentref, fusion.split_parent, Successors(fusion.split_parent));

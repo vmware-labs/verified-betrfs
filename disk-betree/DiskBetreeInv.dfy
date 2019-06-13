@@ -798,6 +798,37 @@ abstract module DiskBetreeInv {
     }
   }
 
+  lemma splitLookupAccumulatesMessages(fusion: NodeFusion, key: Key, lookup: Lookup, lookup': Lookup)
+  requires |lookup| > 0;
+  requires lookup' == splitLookup(fusion, lookup, key);
+  requires LookupVisitsWFNodes(lookup');
+  ensures LookupAccumulatesMessages(key, lookup')
+  {
+    reveal_splitLookup();
+    if (|lookup| == 1) {
+    } else {
+      splitLookupAccumulatesMessages(fusion, key, lookup[..|lookup|-1], lookup'[..|lookup|-1]);
+    }
+  }
+
+  lemma SplitLookupPreservesAccumulatedBuffer(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, key: Key, lookup: Lookup, lookup': Lookup)
+  requires |lookup| > 0;
+  requires SplitLookups(fusion, lookup, lookup', key);
+  requires Split(k, s, s', fusion);
+  requires ValidFusion(fusion);
+  requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+  requires IsPathFromRootLookup(k, s.bcv.view, key, lookup');
+  requires LookupAccumulatesMessages(key, lookup);
+  requires LookupAccumulatesMessages(key, lookup');
+  ensures Last(lookup).accumulatedBuffer == Last(lookup').accumulatedBuffer
+  {
+    if (|lookup| == 1) {
+    } else {
+      SplitLookupPreservesAccumulatedBuffer(k, s, s', fusion, key, lookup[..|lookup|-1], lookup'[..|lookup|-1]);
+      assert Last(lookup).node.buffer[key] == Last(lookup').node.buffer[key];
+    }
+  }
+
   lemma SplitPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s);
   requires Split(k, s, s', fusion);
@@ -915,6 +946,37 @@ abstract module DiskBetreeInv {
     }
   }
 
+  lemma mergeLookupAccumulatesMessages(fusion: NodeFusion, key: Key, lookup: Lookup, lookup': Lookup)
+  requires |lookup'| > 0;
+  requires lookup == mergeLookup(fusion, lookup', key);
+  requires LookupVisitsWFNodes(lookup);
+  ensures LookupAccumulatesMessages(key, lookup)
+  {
+    reveal_mergeLookup();
+    if (|lookup| == 1) {
+    } else {
+      mergeLookupAccumulatesMessages(fusion, key, lookup[..|lookup|-1], lookup'[..|lookup|-1]);
+    }
+  }
+
+  lemma MergeLookupPreservesAccumulatedBuffer(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, key: Key, lookup: Lookup, lookup': Lookup)
+    requires |lookup'| > 0;
+    requires MergeLookups(fusion, lookup, lookup', key);
+    requires Split(k, s, s', fusion);
+    requires ValidFusion(fusion);
+    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
+    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+    requires LookupAccumulatesMessages(key, lookup);
+    requires LookupAccumulatesMessages(key, lookup');
+    ensures Last(lookup).accumulatedBuffer == Last(lookup').accumulatedBuffer
+    {
+      if (|lookup'| == 1) {
+      } else {
+        MergeLookupPreservesAccumulatedBuffer(k, s, s', fusion, key, lookup[..|lookup|-1], lookup'[..|lookup|-1]);
+        assert Last(lookup).node.buffer[key] == Last(lookup').node.buffer[key];
+      }
+    }
+
   lemma SplitPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s);
   requires Split(k, s, s', fusion);
@@ -972,6 +1034,45 @@ abstract module DiskBetreeInv {
         }
       }
     }
+  }
+
+  lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
+  requires Inv(k, s);
+  requires Split(k, s, s', fusion);
+  ensures Acyclic(k, s');
+  {
+    forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+    ensures LookupIsAcyclic(lookup')
+    {
+      SplitPreservesAcyclicLookup(k, s, s', fusion, lookup', key);
+    }
+  }
+
+  lemma SplitPreservesIsSatisfyingLookup<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
+  requires Inv(k, s);
+  requires Split(k, s, s', fusion);
+  requires SplitLookups(fusion, lookup, lookup', key)
+  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+  ensures IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+  {
+    forall k | k !in fusion.split_parent.children
+    ensures BufferIsDefining(fusion.split_parent.buffer[k])
+    {
+      assert k !in fusion.left_keys;
+      assert k !in fusion.right_keys;
+      assert k !in fusion.fused_parent.children;
+    }
+    assert WFNode(fusion.split_parent);
+
+    assert WFNode(fusion.left_child);
+    assert WFNode(fusion.right_child);
+  }
+
+  lemma SplitEquivalentLookups(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
+  requires Inv(k, s)
+  requires Split(k, s, s', fusion);
+  ensures EquivalentLookups(k, s, s');
+  {
   }
 
   ////////
