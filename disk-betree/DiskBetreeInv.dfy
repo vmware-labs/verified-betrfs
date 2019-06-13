@@ -136,7 +136,7 @@ abstract module DiskBetreeInv {
 
   function LookupFromRefs(view: BI.View<Node>, refs: seq<BI.Reference>) : Lookup
   {
-    Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode(), []), refs)
+    Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode()), refs)
   }
   
   ////////
