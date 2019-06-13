@@ -167,6 +167,25 @@ abstract module DiskBetreeInv {
   }
 
   // Preservation proofs
+
+  lemma TotalLogAdditive(a: Lookup, b: Lookup, key: Key)
+  requires LookupVisitsWFNodes(a);
+  requires LookupVisitsWFNodes(b);
+  ensures TotalLog(a + b, key) == TotalLog(a, key) + TotalLog(b, key);
+  {
+    if (|b| == 0) {
+      assert a + b == a;
+    } else {
+      TotalLogAdditive(a, b[..|b|-1], key);
+      assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
+      assert (a + b)[|a+b|-1] == b[|b|-1];
+      assert TotalLog(a + b, key)
+          == TotalLog((a + b)[..|a+b|-1], key) + (a+b)[|a+b|-1].node.buffer[key]
+          == TotalLog(a + b[..|b|-1], key) + b[|b|-1].node.buffer[key]
+          == TotalLog(a, key) + TotalLog(b[..|b|-1], key) + b[|b|-1].node.buffer[key]
+          == TotalLog(a, key) + TotalLog(b, key);
+    }
+  }
   
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
   requires Inv(k, s)
@@ -188,6 +207,10 @@ abstract module DiskBetreeInv {
         Layer(newchildref, oldroot)
       ] + lookup[1..];
 
+      TotalLogAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
+      TotalLogAdditive([lookup[0]], lookup[1..], key);
+      assert [lookup[0]] + lookup[1..] == lookup;
+
       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
     }
 
@@ -196,8 +219,19 @@ abstract module DiskBetreeInv {
     forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
+      if (|lookup'| == 1) {
+        assert TotalLog(lookup', key) == [];
+        assert false;
+      }
+
       // Remove one for the root
-      var lookup := lookup'[1..][0 := Layer(BI.Root(k.bck), lookup'[1].node)];
+      assert |lookup'| >= 2;
+      var lookup := [Layer(BI.Root(k.bck), lookup'[1].node)] + lookup'[2..];
+
+      TotalLogAdditive([Layer(BI.Root(k.bck), lookup'[1].node)], lookup'[2..], key);
+      TotalLogAdditive(lookup'[..2], lookup'[2..], key);
+      assert lookup'[..2] + lookup'[2..] == lookup';
+
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
   }
