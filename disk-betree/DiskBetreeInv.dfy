@@ -727,37 +727,117 @@ abstract module DiskBetreeInv {
   predicate SplitLookups(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   {
     && |lookup| == |lookup'|
+    && |lookup| > 0
 
-    && (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].ref == fusion.parentref)
-    && (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].node == fusion.split_parent)
+    //&& (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].ref == fusion.parentref)
+    //&& (forall i :: 0 <= i < |lookup| && lookup[i].ref == fusion.parentref ==> lookup'[i].node == fusion.split_parent)
 
     //&& (forall i :: 0 <= i < |lookup| && lookup'[i].ref == fusion.parentref ==> lookup[i].ref == fusion.parentref)
     //&& (forall i :: 0 <= i < |lookup| && lookup'[i].ref == fusion.parentref ==> lookup[i].node == fusion.fused_parent)
 
+    // the lookup[i].ref == fusion.fused_childref condition is redundant for well-formed lookups
     && (key in fusion.left_keys ==> (
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> // && lookup[i].ref == fusion.fused_childref ==>
           lookup'[i].ref == fusion.left_childref)
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> //&& lookup[i].ref == fusion.fused_childref ==>
           lookup'[i].node == fusion.left_child)
     ))
 
     && (key in fusion.right_keys ==> (
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> //&& lookup[i].ref == fusion.fused_childref ==>
           lookup'[i].ref == fusion.right_childref)
-      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref && lookup[i].ref == fusion.fused_childref ==>
+      && (forall i :: 0 < i < |lookup| && lookup[i-1].ref == fusion.parentref ==> //&& lookup[i].ref == fusion.fused_childref ==>
           lookup'[i].node == fusion.right_child)
     ))
 
     && lookup'[0].ref == lookup[0].ref
     && (lookup[0].ref != fusion.parentref ==> lookup'[0].node == lookup[0].node)
+    && (lookup[0].ref == fusion.parentref ==> lookup'[0].node == fusion.split_parent)
 
-    && (forall i :: 0 < i < |lookup| && lookup[i].ref != fusion.parentref && lookup[i-1].ref != fusion.parentref ==> lookup'[i].ref == lookup[i].ref)
+    && (forall i :: 0 < i < |lookup| && lookup[i-1].ref != fusion.parentref ==> lookup'[i].ref == lookup[i].ref)
     && (forall i :: 0 < i < |lookup| && lookup[i].ref != fusion.parentref && lookup[i-1].ref != fusion.parentref ==> lookup'[i].node == lookup[i].node)
+    && (forall i :: 0 < i < |lookup| && lookup[i].ref == fusion.parentref && lookup[i-1].ref != fusion.parentref ==> lookup'[i].node == fusion.split_parent)
 
     && ((key !in fusion.left_keys && key !in fusion.right_keys) ==> (
       && (forall i :: 0 <= i < |lookup| ==> lookup'[i].ref == lookup[i].ref)
       && (forall i :: 0 <= i < |lookup| ==> lookup'[i].ref != fusion.parentref ==> lookup'[i].node == lookup[i].node)
+      && (forall i :: 0 <= i < |lookup| ==> lookup'[i].ref == fusion.parentref ==> lookup'[i].node == fusion.split_parent)
     ))
+  }
+
+  function {:opaque} splitLookup(fusion: NodeFusion, lookup: Lookup, key: Key) : Lookup
+  requires |lookup| > 0
+  ensures |splitLookup(fusion, lookup, key)| == |lookup|
+  {
+    if (|lookup| == 1) then (
+      var node := if lookup[0].ref == fusion.parentref then fusion.split_parent else lookup[0].node;
+      [Layer(lookup[0].ref, node, (if key in node.buffer then node.buffer[key] else []))]
+    ) else (
+      var pref := splitLookup(fusion, lookup[..|lookup|-1], key);
+      var prevRef := lookup[|lookup| - 2].ref;
+      var curRef := lookup[|lookup| - 1].ref;
+      var curNode := lookup[|lookup| - 1].node;
+      var ref := (if key in fusion.left_keys && prevRef == fusion.parentref then fusion.left_childref else
+                 (if key in fusion.right_keys && prevRef == fusion.parentref then fusion.right_childref else
+                 curRef));
+      var node := (if key in fusion.left_keys && prevRef == fusion.parentref then fusion.left_child else
+                 (if key in fusion.right_keys && prevRef == fusion.parentref then fusion.right_child else
+                 (if ref == fusion.parentref then fusion.split_parent else
+                 curNode)));
+      pref + [Layer(ref, node, pref[|pref|-1].accumulatedBuffer + (if key in node.buffer then node.buffer[key] else []))]
+    )
+  }
+
+  lemma splitLookupProperties<Value>(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  requires |lookup| > 0
+  requires ValidFusion(fusion);
+  requires lookup' == splitLookup(fusion, lookup, key);
+  ensures SplitLookups(fusion, lookup, lookup', key);
+  {
+    reveal_splitLookup();
+    if (|lookup| == 1) {
+      assert SplitLookups(fusion, lookup, lookup', key);
+    } else {
+      assert lookup'[..|lookup|-1] == splitLookup(fusion, lookup[..|lookup|-1], key);
+      splitLookupProperties(fusion, lookup[..|lookup|-1], lookup'[..|lookup|-1], key);
+      assert SplitLookups(fusion, lookup, lookup', key);
+    }
+  }
+
+  lemma SplitPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  requires Inv(k, s);
+  requires Split(k, s, s', fusion);
+  requires SplitLookups(fusion, lookup, lookup', key)
+  requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+  ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+  {
+    /*
+    var view' := s'.bcv.view;
+    forall i | 0 <= i < |lookup'|
+    ensures IMapsTo(view', lookup'[i].ref, lookup'[i].node)
+    {
+      if (i == 0) {
+        if (lookup[i].ref == fusion.parentref) {
+          assert IMapsTo(view', lookup'[i].ref, lookup'[i].node);
+        } else {
+          assert IMapsTo(view', lookup'[i].ref, lookup'[i].node);
+        }
+      } else {
+        if (lookup[i-1].ref == fusion.parentref && key in fusion.left_keys) {
+          assert IMapsTo(view', lookup'[i].ref, lookup'[i].node);
+        }
+        else if (lookup[i-1].ref == fusion.parentref && key in fusion.right_keys) {
+          assert IMapsTo(view', lookup'[i].ref, lookup'[i].node);
+        }
+        else if (lookup[i].ref == fusion.parentref) {
+          assert IMapsTo(view', lookup'[i].ref, lookup'[i].node);
+        }
+        else {
+          assert IMapsTo(view', lookup'[i].ref, lookup'[i].node);
+        }
+      }
+    }
+    */
   }
 
   ////////
