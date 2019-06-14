@@ -165,7 +165,7 @@ abstract module DiskBetreeInv {
       ensures LookupIsAcyclic(lookup')
     {
       if |lookup'| > 1 {
-        assert LookupFollowsChildRefsAtLayer(key1, lookup', 0);
+        assert LookupFollowsChildRefsAtLayer(key1, lookup', 0); // OBSERVE
         var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
         var lookup := LookupFromRefs(s.bcv.view, refs);
         var i := 1;
@@ -174,21 +174,17 @@ abstract module DiskBetreeInv {
           invariant LookupIsAcyclic(lookup'[..i+1])
           invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key1, lookup, j)
         {
-          // assert lookup'[i].node == lookup[i-1].node;
-          // assert LookupFollowsChildRefsAtLayer(key1, lookup', i);
-          // assert lookup'[i+1].ref != newchildref;
-          assert LookupFollowsChildRefsAtLayer(key1, lookup, i-1);
-          assert forall j :: 0 <= j < i ==> LookupFollowsChildRefsAtLayer(key1, lookup, j);
+          assert lookup'[i].node == lookup[i-1].node; // OBSERVE
+          assert LookupFollowsChildRefsAtLayer(key1, lookup', i); // OBSERVE
+          assert lookup'[i+1].ref != newchildref; // OBSERVE
+          // assert LookupFollowsChildRefsAtLayer(key1, lookup, i-1);
           forall j | 0 <= j < i
             ensures LookupFollowsChildRefsAtLayer(key1, lookup[..i+1], j)
           {
-            assert LookupFollowsChildRefsAtLayer(key1, lookup, j);
-            assert lookup[..i+1][j] == lookup[j];
-            assert LookupFollowsChildRefsAtLayer(key1, lookup[..i+1], j);
+            assert LookupFollowsChildRefsAtLayer(key1, lookup, j); // OBSERVE
           }
-          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
-          assert lookup[i].ref != Root(k);
-          assert lookup'[i+1].ref != Root(k);
+          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]); // OBSERVE
+          assert lookup'[i+1].ref != Root(k); // OBSERVE
           i := i + 1;
         }
       }
