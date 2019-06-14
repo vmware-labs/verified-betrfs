@@ -137,29 +137,54 @@ module CrashSafeMap {
 }
 
 module CrashSafeBetreeMapRefinement {
-  import CSM = CrashSafeMap
-  import CSDB = CrashSafeDiskBetree
-
+  import A = CrashSafeDiskBetree
+  import B = CrashSafeMap
   import Ref = DiskBetreeRefinement
 
-  function Ik(k: CSDB.Constants) : CSM.Constants
+  function Ik(k: A.Constants) : B.Constants
   {
     Ref.Ik(k)
   }
 
-  /*
-  lemma CrashSafeBetreeRefinesCrashSafeMapNext(k: CSDB.Constants, s: CSDB.Variables, s':CSDB.Variables)
-    requires CSDB.Inv(k, s)
-    requires CSDB.Next(k, s, s')
-    ensures CSDB.Inv(k, s')
-    ensures CSM.Next(Ik(k), I(k, s), I(k, s'))
+  function I(k: A.Constants, s: A.Variables) : B.Variables
+  requires A.Inv(k, s)
   {
-    /*
-    NextPreservesInvariant(k, s, s');
-    var step :| CSDB.NextStep(k, s, s', step);
-    BetreeRefinesMapNextStep(k, s, s', step);
-    */
+    B.Variables(Ref.I(k, s.persistent), Ref.I(k, s.ephemeral))
   }
-  */
 
+  lemma CrashSafeBetreeRefinesCrashSafeMapNextStep(
+      k: A.Constants, s: A.Variables, s':A.Variables, step: A.Step)
+  requires A.Inv(k, s)
+  requires A.NextStep(k, s, s', step)
+  ensures A.Inv(k, s')
+  ensures B.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    A.NextPreservesInv(k, s, s');
+    match step {
+      case EphemeralMoveStep => {
+        Ref.BetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral);
+        assert B.NextStep(Ik(k), I(k, s), I(k, s'), B.EphemeralMoveStep);
+        assert B.Next(Ik(k), I(k, s), I(k, s'));
+      }
+      case SyncStep => {
+        assert B.NextStep(Ik(k), I(k, s), I(k, s'), B.SyncStep);
+        assert B.Next(Ik(k), I(k, s), I(k, s'));
+      }
+      case CrashStep => {
+        assert B.NextStep(Ik(k), I(k, s), I(k, s'), B.CrashStep);
+        assert B.Next(Ik(k), I(k, s), I(k, s'));
+      }
+    }
+  }
+
+  lemma CrashSafeBetreeRefinesCrashSafeMapNext(k: A.Constants, s: A.Variables, s':A.Variables)
+  requires A.Inv(k, s)
+  requires A.Next(k, s, s')
+  ensures A.Inv(k, s')
+  ensures B.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    A.NextPreservesInv(k, s, s');
+    var step :| A.NextStep(k, s, s', step);
+    CrashSafeBetreeRefinesCrashSafeMapNextStep(k, s, s', step);
+  }
 }
