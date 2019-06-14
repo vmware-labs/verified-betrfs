@@ -84,4 +84,13 @@ predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables)
     exists step :: NextStep<Value>(k, s, s', step)
 }
 
+predicate Inv(k:Constants, s:Variables) { WF(s) }
+
+lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  requires Inv(k, s)
+  requires Next(k, s, s')
+  ensures Inv(k, s')
+{
+}
+
 }

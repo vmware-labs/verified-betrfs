@@ -1210,7 +1210,7 @@ abstract module DiskBetreeInv {
     }
   }
   
-  lemma NextPreservesInvariant(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
     requires Next(k, s, s')
     ensures Inv(k, s')
