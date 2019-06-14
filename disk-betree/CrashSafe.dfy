@@ -1,15 +1,19 @@
 include "DiskBetreeInv.dfy"
 include "MapSpec.dfy"
+include "DiskBetree.dfy"
+include "DiskBetreeInv.dfy"
+include "DiskBetreeRefinement.dfy"
 
-abstract module CrashSafeDiskBetree {
-  import DB : DiskBetreeInv
+module CrashSafeDiskBetree {
+  import DB = DiskBetree
+  import DBI = DiskBetreeInv
 
-  type Constants = DB.DB.Constants
-  datatype Variables<T> = Variables(persistent: DB.DB.Variables<T>, ephemeral: DB.DB.Variables<T>)
+  type Constants = DB.Constants
+  datatype Variables<T> = Variables(persistent: DB.Variables<T>, ephemeral: DB.Variables<T>)
 
   predicate Init(k: Constants, s: Variables)
   {
-    && DB.DB.Init(k, s.persistent)
+    && DB.Init(k, s.persistent)
     && s.ephemeral == s.persistent
   }
 
@@ -21,7 +25,7 @@ abstract module CrashSafeDiskBetree {
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables)
   {
     && s.persistent == s'.persistent
-    && DB.DB.Next(k, s.ephemeral, s'.ephemeral)
+    && DB.Next(k, s.ephemeral, s'.ephemeral)
   }
 
   predicate Sync(k: Constants, s: Variables, s': Variables)
@@ -50,8 +54,8 @@ abstract module CrashSafeDiskBetree {
   }
 
   predicate Inv(k: Constants, s: Variables) {
-    && DB.Inv(k, s.persistent)
-    && DB.Inv(k, s.ephemeral)
+    && DBI.Inv(k, s.persistent)
+    && DBI.Inv(k, s.ephemeral)
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
@@ -61,13 +65,13 @@ abstract module CrashSafeDiskBetree {
   {
     var step :| NextStep(k, s, s', step);
     if (step.EphemeralMoveStep?) {
-      DB.NextPreservesInv(k, s.ephemeral, s'.ephemeral);
+      DBI.NextPreservesInv(k, s.ephemeral, s'.ephemeral);
     }
   }
 }
 
-abstract module CrashSafeMap {
-  import MS : MapSpec
+module CrashSafeMap {
+  import MS = MapSpec
 
   type Constants = MS.Constants
   datatype Variables<T> = Variables(persistent: MS.Variables<T>, ephemeral: MS.Variables<T>)
@@ -130,4 +134,32 @@ abstract module CrashSafeMap {
       MS.NextPreservesInv(k, s.ephemeral, s'.ephemeral);
     }
   }
+}
+
+module CrashSafeBetreeMapRefinement {
+  import CSM = CrashSafeMap
+  import CSDB = CrashSafeDiskBetree
+
+  import Ref = DiskBetreeRefinement
+
+  function Ik(k: CSDB.Constants) : CSM.Constants
+  {
+    Ref.Ik(k)
+  }
+
+  /*
+  lemma CrashSafeBetreeRefinesCrashSafeMapNext(k: CSDB.Constants, s: CSDB.Variables, s':CSDB.Variables)
+    requires CSDB.Inv(k, s)
+    requires CSDB.Next(k, s, s')
+    ensures CSDB.Inv(k, s')
+    ensures CSM.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    /*
+    NextPreservesInvariant(k, s, s');
+    var step :| CSDB.NextStep(k, s, s', step);
+    BetreeRefinesMapNextStep(k, s, s', step);
+    */
+  }
+  */
+
 }

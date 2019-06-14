@@ -1,6 +1,6 @@
 include "../tla-tree/MissingLibrary.dfy"
 
-abstract module MapSpec {
+module MapSpec {
 import opened MissingLibrary
 
 type Key(!new,==)

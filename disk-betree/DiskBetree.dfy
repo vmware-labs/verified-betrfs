@@ -3,9 +3,9 @@ include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 
-abstract module DiskBetree {
-  import MS: MapSpec
-  import BI : BlockInterface
+module DiskBetree {
+  import MS = MapSpec
+  import BI = BlockInterface
   import opened Sequences
   import opened Maps
   

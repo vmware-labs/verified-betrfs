@@ -1,7 +1,7 @@
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
   
-abstract module BlockInterface {
+module BlockInterface {
   import opened Sequences
   import opened Maps
     

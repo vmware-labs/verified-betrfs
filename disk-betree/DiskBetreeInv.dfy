@@ -3,8 +3,8 @@ include "../lib/sequences.dfy"
 include "MapSpec.dfy"
 include "DiskBetree.dfy"
   
-abstract module DiskBetreeInv {
-  import opened DB : DiskBetree
+module DiskBetreeInv {
+  import opened DB = DiskBetree
   import opened Maps
   import opened Sequences
 

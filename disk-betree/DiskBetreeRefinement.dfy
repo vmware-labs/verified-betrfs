@@ -2,10 +2,8 @@ include "DiskBetree.dfy"
 include "MapSpec.dfy"
 include "DiskBetreeInv.dfy"
 
-abstract module DiskBetreeRefinement {
-  import opened DBI : DiskBetreeInv
-
-  import BI = DBI.DB.BI
+module DiskBetreeRefinement {
+  import opened DBI = DiskBetreeInv
 
   type Node<Value> = DB.Node<Value>
   type Key = DB.Key
@@ -13,20 +11,20 @@ abstract module DiskBetreeRefinement {
     
   datatype LookupResult<Value> = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup<Value>(k: DB.Constants, view: BI.View<Node>, key: Key) : LookupResult
+  function GetLookup<Value>(k: DB.Constants, view: DB.BI.View<Node>, key: Key) : LookupResult
     requires KeyHasSatisfyingLookup(k, view, key);
   {
     var lookup, value :| DB.IsSatisfyingLookup(k, view, key, value, lookup);
     LookupResult(lookup, value)
   }
 
-  function GetValue<Value>(k: DB.Constants, view: BI.View<Node>, key: Key) : Value
+  function GetValue<Value>(k: DB.Constants, view: DB.BI.View<Node>, key: Key) : Value
     requires KeyHasSatisfyingLookup(k, view, key);
   {
     GetLookup(k, view, key).result
   }
 
-  function IView<Value>(k: DB.Constants, view: BI.View<Node>) : imap<Key, Value>
+  function IView<Value>(k: DB.Constants, view: DB.BI.View<Node>) : imap<Key, Value>
     requires forall key :: KeyHasSatisfyingLookup(k, view, key);
   {
     imap key | DB.MS.InDomain(key) :: GetValue(k, view, key)
@@ -93,7 +91,7 @@ abstract module DiskBetreeRefinement {
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
 
   lemma FlushStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables,
-                                           parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+                                           parentref: DB.BI.Reference, parent: Node, childref: DB.BI.Reference, child: Node, newchildref: DB.BI.Reference)
     requires Inv(k, s)
     requires DB.Flush(k, s, s', parentref, parent, childref, child, newchildref)
     requires Inv(k, s')
@@ -104,7 +102,7 @@ abstract module DiskBetreeRefinement {
     assert I(k, s) == I(k, s');
   }
 
-  lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: BI.Reference)
+  lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: DB.BI.Reference)
     requires Inv(k, s)
     requires DB.Grow(k, s, s', oldroot, newchildref)
     requires Inv(k, s')
@@ -132,7 +130,7 @@ abstract module DiskBetreeRefinement {
     ensures Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
   {
-    NextPreservesInvariant(k, s, s');
+    NextPreservesInv(k, s, s');
     match step {
       case QueryStep(key, value, lookup) => QueryStepRefinesMap(k, s, s', key, value, lookup);
       case InsertMessageStep(key, value, oldroot) => InsertMessageStepRefinesMap(k, s, s', key, value, oldroot);
@@ -148,7 +146,7 @@ abstract module DiskBetreeRefinement {
     ensures Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
   {
-    NextPreservesInvariant(k, s, s');
+    NextPreservesInv(k, s, s');
     var step :| DB.NextStep(k, s, s', step);
     BetreeRefinesMapNextStep(k, s, s', step);
   }
