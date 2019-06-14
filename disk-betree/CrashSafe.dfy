@@ -1,15 +1,15 @@
-include "BlockInterface.dfy"
+include "DiskBetreeInv.dfy"
 include "MapSpec.dfy"
 
-abstract module CrashableBlockInterface {
-  import BI : BlockInterface
+abstract module CrashableDiskBetree {
+  import DB : DiskBetreeInv
 
-  type Constants = BI.Constants
-  datatype Variables<T> = Variables(persistent: BI.Variables<T>, ephemeral: BI.Variables<T>)
+  type Constants = DB.DB.Constants
+  datatype Variables<T> = Variables(persistent: DB.DB.Variables<T>, ephemeral: DB.DB.Variables<T>)
 
-  predicate Init<T>(k: Constants, s: Variables, block: T)
+  predicate Init(k: Constants, s: Variables)
   {
-    && BI.Init(k, s.persistent, block)
+    && DB.DB.Init(k, s.persistent)
     && s.ephemeral == s.persistent
   }
 
@@ -21,7 +21,7 @@ abstract module CrashableBlockInterface {
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables)
   {
     && s.persistent == s'.persistent
-    && BI.Next(k, s.ephemeral, s'.ephemeral)
+    && DB.DB.Next(k, s.ephemeral, s'.ephemeral)
   }
 
   predicate Sync(k: Constants, s: Variables, s': Variables)
@@ -50,8 +50,8 @@ abstract module CrashableBlockInterface {
   }
 
   predicate Inv(k: Constants, s: Variables) {
-    && BI.Inv(k, s.persistent)
-    && BI.Inv(k, s.ephemeral)
+    && DB.Inv(k, s.persistent)
+    && DB.Inv(k, s.ephemeral)
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
@@ -61,7 +61,7 @@ abstract module CrashableBlockInterface {
   {
     var step :| NextStep(k, s, s', step);
     if (step.EphemeralMoveStep?) {
-      BI.NextPreservesInv(k, s.ephemeral, s'.ephemeral);
+      DB.NextPreservesInvariant(k, s.ephemeral, s'.ephemeral);
     }
   }
 }
