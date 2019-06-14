@@ -213,7 +213,15 @@ abstract module DiskBetreeInv {
         Layer(newchildref, oldroot)
       ] + lookup[1..];
 
-      assert 1 < |lookup| ==> LookupFollowsChildRefsAtLayer(key, lookup, 0);
+      forall i | 0 <= i < |lookup'|-1
+        ensures LookupFollowsChildRefsAtLayer(key, lookup', i);
+      {
+        if i == 0 { // Dafny needs to be told to do case analysis on 0 and 1
+        } else if i == 1 {
+        } else {
+          assert LookupFollowsChildRefsAtLayer(key, lookup, i-1);
+        }
+      }
       
       TotalLogAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
       TotalLogAdditive([lookup[0]], lookup[1..], key);
@@ -235,6 +243,14 @@ abstract module DiskBetreeInv {
       // Remove one for the root
       assert |lookup'| >= 2;
       var lookup := [Layer(Root(k), lookup'[1].node)] + lookup'[2..];
+
+      forall i | 0 <= i < |lookup|-1
+        ensures LookupFollowsChildRefsAtLayer(key, lookup, i);
+      {
+          assert LookupFollowsChildRefsAtLayer(key, lookup', i+1);
+      }
+
+      assert LookupFollowsChildRefsAtLayer(key, lookup', 0);
 
       TotalLogAdditive([Layer(Root(k), lookup'[1].node)], lookup'[2..], key);
       TotalLogAdditive(lookup'[..2], lookup'[2..], key);
