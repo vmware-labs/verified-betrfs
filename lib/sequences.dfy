@@ -5,6 +5,12 @@ module Sequences {
     run[|run|-1]
   }
 
+  function method DropLast<E>(run: seq<E>) : seq<E>
+    requires 0 < |run|
+  {
+    run[..|run|-1]
+  }
+  
   function method Set<T>(run: seq<T>) : set<T> {
     set x : T | x in multiset(run)
   }
@@ -123,6 +129,12 @@ module Sequences {
         == a[..|c|];
   }
 
+  lemma IsSumOfParts(a: seq, len: int)
+    requires 0 <= len <= |a|
+    ensures a == a[..len] + a[len..]
+  {
+  }
+  
   function method Arithmetic(start: int, inc: int, len: int) : (result: seq<int>)
     requires len >= 0
     ensures |result| == len
@@ -132,5 +144,5 @@ module Sequences {
     if len == 0 then []
     else [start] + Arithmetic(start + inc, inc, len - 1)
   }
-    
+
 }

@@ -71,114 +71,23 @@ abstract module DiskBetreeInv {
   // CantEquivocate
   // It's a lemma here (follows from structure of Lookups) - not an invariant!
 
-  lemma SatisfyingLookupsForKeyAgree<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
-  requires 0 <= idx < |lookup|;
-  requires 0 <= idx < |lookup'|;
-  ensures lookup[idx] == lookup'[idx];
+  lemma PathsFromRootArePrefixes(k: Constants, s: Variables, key: Key, lookup: Lookup, lookup': Lookup)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup')
+    requires |lookup| <= |lookup'|
+    ensures IsPrefix(lookup, lookup')
   {
-    if (idx == 0) {
-    } else {
-      SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx - 1);
-      LookupFollowsChildRefsAtLayer(key, lookup, idx-1);
-      LookupFollowsChildRefsAtLayer(key, lookup', idx-1);
-    }
-  }
-
-  lemma CantEquivocateWlog<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
-  requires |lookup| <= |lookup'|
-  ensures value == value';
-  {
-    var i := 0;
-
+    var i := 1;
     while i < |lookup|
-    invariant i <= |lookup|
-    invariant LookupVisitsWFNodes(lookup[..i]);
-    invariant LookupVisitsWFNodes(lookup'[..i]);
-    invariant TotalLog(lookup[..i], key) == TotalLog(lookup'[..i], key)
+      invariant 0 <= i <= |lookup|
+      invariant lookup[..i] == lookup'[..i]
     {
-      SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', i);
-      assert lookup[..i] == lookup[..i+1][..i];
-      assert lookup'[..i] == lookup'[..i+1][..i];
+      assert LookupFollowsChildRefsAtLayer(key, lookup, i-1);
+      assert LookupFollowsChildRefsAtLayer(key, lookup', i-1);
       i := i + 1;
     }
-
     reveal_IsPrefix();
-    assert lookup == lookup[..i];
-
-    var j := i;
-    while j < |lookup'|
-    invariant j <= |lookup'|
-    invariant IsPrefix(TotalLog(lookup, key), TotalLog(lookup'[..j], key))
-    {
-      assert lookup'[..j] == lookup'[..j+1][..j];
-      j := j + 1;
-    }
-
-    assert lookup' == lookup'[..j];
-    assert IsPrefix(TotalLog(lookup, key), TotalLog(lookup', key));
   }
-
-  lemma CantEquivocate<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
-  ensures value == value';
-  {
-    if (|lookup| <= |lookup'|) {
-      CantEquivocateWlog(k, s, key, value, value', lookup, lookup');
-    } else {
-      CantEquivocateWlog(k, s, key, value', value, lookup', lookup);
-    }
-  }
-
-  function LookupFromRefs(view: BI.View<Node>, refs: seq<BI.Reference>) : Lookup
-  {
-    Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode()), refs)
-  }
-  
-  ////////
-  //////// Grow
-  ////////
-
-  // Acyclicity proofs
-
-  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
-    requires Inv(k, s)
-    requires Grow(k, s, s', oldroot, newchildref)
-    ensures Acyclic(k, s')
-  {
-    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
-      ensures LookupIsAcyclic(lookup')
-    {
-      if |lookup'| > 1 {
-        LookupFollowsChildRefsAtLayer(key1, lookup', 0);
-        var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
-        var lookup := LookupFromRefs(s.bcv.view, refs);
-        assert lookup[0].node == lookup'[1].node;
-        assert |lookup| > 1 ==> IMapsTo(lookup[0].node.children, key1, lookup[1].ref);
-        var i := 1;
-        while i < |lookup|
-          invariant 1 <= i <= |lookup|
-          invariant LookupIsAcyclic(lookup'[..i+1])
-          invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
-        {
-          LookupFollowsChildRefsAtLayer(key1, lookup', i);
-          assert lookup'[i].node == lookup[i-1].node;
-          assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
-          LookupFollowsChildRefsAtLayer(key1, lookup, i);
-          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
-          assert lookup'[i+1].ref != Root(k);
-          assert lookup'[i+1].node == lookup[i].node;
-          i := i + 1;
-        }
-      }
-    }
-  }
-
-  // Preservation proofs
 
   lemma TotalLogAdditive(a: Lookup, b: Lookup, key: Key)
   requires LookupVisitsWFNodes(a);
@@ -198,7 +107,96 @@ abstract module DiskBetreeInv {
           == TotalLog(a, key) + TotalLog(b, key);
     }
   }
+
+  lemma LookupPrefixesHavePrefixLogs(k: Constants, s: Variables, key: Key, lookup: Lookup, lookup': Lookup)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup')
+    requires LookupVisitsWFNodes(lookup)
+    requires LookupVisitsWFNodes(lookup')
+    requires |lookup| <= |lookup'|
+    ensures IsPrefix(TotalLog(lookup, key), TotalLog(lookup', key))
+  {
+    reveal_IsPrefix();
+    PathsFromRootArePrefixes(k, s, key, lookup, lookup');
+    TotalLogAdditive(lookup'[..|lookup|], lookup'[|lookup|..], key);
+    IsSumOfParts(lookup', |lookup|);
+  }
+
+  lemma DefiningPrefixDefinesValue<Value>(log1: seq<BufferEntry>, log2: seq<BufferEntry>, value1: Value, value2: Value)
+    requires IsPrefix(log1, log2);
+    requires BufferDefinesValue(log1, value1)
+    requires BufferDefinesValue(log2, value2)      
+    ensures value1 == value2
+  {
+    reveal_IsPrefix();
+  }
+    
+  lemma CantEquivocate<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+    requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+    requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
+    ensures value == value';
+    decreases |lookup'| <= |lookup|
+  {
+    if |lookup| <= |lookup'| {
+      LookupPrefixesHavePrefixLogs(k, s, key, lookup, lookup');
+      DefiningPrefixDefinesValue(TotalLog(lookup, key), TotalLog(lookup', key), value, value');
+    } else {
+      CantEquivocate(k, s, key, value', value, lookup', lookup);
+    }
+  }
+
+  ////////
+  //////// Grow
+  ////////
+
+  // Acyclicity proofs
+
+  function LookupFromRefs(view: BI.View<Node>, refs: seq<BI.Reference>) : Lookup
+  {
+    Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode()), refs)
+  }
   
+  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
+    requires Inv(k, s)
+    requires Grow(k, s, s', oldroot, newchildref)
+    ensures Acyclic(k, s')
+  {
+    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
+      ensures LookupIsAcyclic(lookup')
+    {
+      if |lookup'| > 1 {
+        assert LookupFollowsChildRefsAtLayer(key1, lookup', 0);
+        var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
+        var lookup := LookupFromRefs(s.bcv.view, refs);
+        var i := 1;
+        while i < |lookup|
+          invariant 1 <= i <= |lookup|
+          invariant LookupIsAcyclic(lookup'[..i+1])
+          invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key1, lookup, j) //IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
+        {
+          assert lookup'[i].node == lookup[i-1].node;
+          assert LookupFollowsChildRefsAtLayer(key1, lookup', i);
+          assert lookup'[i+1].ref != newchildref;
+          assert LookupFollowsChildRefsAtLayer(key1, lookup, i-1);
+          assert forall j :: 0 <= j < i ==> LookupFollowsChildRefsAtLayer(key1, lookup, j);
+          forall j | 0 <= j < i
+            ensures LookupFollowsChildRefsAtLayer(key1, lookup[..i+1], j)
+          {
+            assert LookupFollowsChildRefsAtLayer(key1, lookup, j);
+            assert lookup[..i+1][j] == lookup[j];
+            assert LookupFollowsChildRefsAtLayer(key1, lookup[..i+1], j);
+          }
+          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
+          assert lookup[i].ref != Root(k);
+          assert lookup'[i+1].ref != Root(k);
+          i := i + 1;
+        }
+      }
+    }
+  }
+
+  // Preservation proofs
+
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
   requires Inv(k, s)
   requires Grow(k, s, s', oldroot, newchildref)
