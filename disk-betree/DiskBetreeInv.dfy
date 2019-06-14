@@ -172,11 +172,11 @@ abstract module DiskBetreeInv {
         while i < |lookup|
           invariant 1 <= i <= |lookup|
           invariant LookupIsAcyclic(lookup'[..i+1])
-          invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key1, lookup, j) //IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
+          invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key1, lookup, j)
         {
-          assert lookup'[i].node == lookup[i-1].node;
-          assert LookupFollowsChildRefsAtLayer(key1, lookup', i);
-          assert lookup'[i+1].ref != newchildref;
+          // assert lookup'[i].node == lookup[i-1].node;
+          // assert LookupFollowsChildRefsAtLayer(key1, lookup', i);
+          // assert lookup'[i+1].ref != newchildref;
           assert LookupFollowsChildRefsAtLayer(key1, lookup, i-1);
           assert forall j :: 0 <= j < i ==> LookupFollowsChildRefsAtLayer(key1, lookup, j);
           forall j | 0 <= j < i
