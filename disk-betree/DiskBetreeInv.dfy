@@ -213,6 +213,8 @@ abstract module DiskBetreeInv {
         Layer(newchildref, oldroot)
       ] + lookup[1..];
 
+      assert 1 < |lookup| ==> LookupFollowsChildRefsAtLayer(key, lookup, 0);
+      
       TotalLogAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
       TotalLogAdditive([lookup[0]], lookup[1..], key);
       assert [lookup[0]] + lookup[1..] == lookup;
