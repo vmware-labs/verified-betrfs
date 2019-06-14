@@ -90,7 +90,6 @@ module CrashSafeMap {
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables)
   {
     && s.persistent == s'.persistent
-    && MS.Inv(k, s.ephemeral)
     && MS.Next(k, s.ephemeral, s'.ephemeral)
   }
 

@@ -42,22 +42,21 @@ predicate Init(k:Constants, s:Variables)
 }
 
 predicate Query<Value>(k:Constants, s:Variables, s':Variables, key:Key, result:Value)
-    requires WF(s)
 {
+    && WF(s)
     && result == s.view[key]
     && s' == s
 }
 
 predicate Write<Value>(k:Constants, s:Variables, s':Variables, key:Key, new_value:Value)
-    requires WF(s)
     ensures Write(k, s, s', key, new_value) ==> WF(s')
 {
+    && WF(s)
     && WF(s')
     && s'.view == s.view[key := new_value]
 }
 
 predicate Stutter(k:Constants, s:Variables, s':Variables)
-    requires WF(s)
 {
     s' == s
 }
@@ -68,7 +67,6 @@ datatype Step<Value> =
     | StutterStep
 
 predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
-    requires WF(s)
 {
     match step {
         case QueryStep(key, result) => Query(k, s, s', key, result)
@@ -78,8 +76,6 @@ predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
 }
 
 predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables)
-    requires WF(s)
-    ensures Next(k, s, s') ==> WF(s')
 {
     exists step :: NextStep<Value>(k, s, s', step)
 }
