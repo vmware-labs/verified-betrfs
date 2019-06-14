@@ -29,25 +29,27 @@ module BlockCache {
   datatype Variables = Variables(
       persistentSuperblock: SuperBlock,
       ephemeralSuperblock: SuperBlock,
-      cache: map<LBA, CacheLine>);
+      cache: map<Reference, CacheLine>);
 
   datatype Step =
-    | WriteBackStep
+    | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
-    | DirtyStep(Reference, T)
-    | AllocStep(Reference, T, LBA)
+    | DirtyStep(ref: Reference, block: T)
     | PageInStep
-    | EvictStep(lba: LBA)
+    | EvictStep(ref: Reference)
     // TODO unalloc
     // TODO page in superblock
 
-  predicate WriteBack(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate WriteBack(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
-    // TODO allocate new lba
     && dop.Write?
-    && dop.lba in s.cache
+    && ref in s.cache
+    && dop.lba !in persistentSuperblock.Values
+    && dop.lba !in ephemeralSuperblock.Values
     && dop.sector == SectorBlock(s.cache[dop.lba].block)
-    && s' == s[cache := s.cache[dop.lba := s.cache[dop.lba][status := Clean]]]
+    && s'.persistentSuperblock == s.persistentSuperblock
+    && s'.ephemeralSuperblock == s.ephemeralSuperblock[ref := dop.lba]
+    && s'.cache == s.cache[ref := s.cache[ref][status := Clean]]
   }
 
   predicate WriteBackSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -55,42 +57,33 @@ module BlockCache {
     && dop.Write?
     && dop.lba == SuperblockLBA(k)
     && dop.sector == SectorSuperblock(s.ephemeralSuperblock)
-    && (forall cacheLine :: cacheLine in s.cache.Values ==> cacheLine.stauts == Clean)
+    && (forall cacheLine :: cacheLine in s.cache.Values ==> cacheLine.status == Clean)
     && s' == s[persistentSuperblock := s.ephemeralSuperblock]
   }
 
   predicate Dirty(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: T)
   {
+    // Possibly allocs ref, possibly overwrites it.
     && dop.NoDiskOp
-    && ref in s.ephemeralSuperblock
-    && var lba := s.ephemeralSuperblock[ref]
-    && s' == s[cache := s.cache[lba := CacheLine(block, Dirty)]]
+    && s' == s[cache := s.cache[ref := CacheLine(block, Dirty)]]
   }
 
-  predicate Alloc(k: Constants, s: Variables: s': Variables, dop: DiskOp, ref: Reference, block: T, lba: LBA)
-  {
-    && dop.NoDiskOp
-    && lba !in s.ephemeralSuperblock.Values
-    && lba !in s.persistentSuperblock.Values
-    && ref !in s.ephemeralSuperblock
-    && s'.
-  }
-
-  predicate PageIn(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate PageIn(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.Read
-    && dop.lba in s.cache ==> s.cache[dop.lba].status == Clean
-    && dop.lba in s.ephemeralSuperblock.Values
+    && ref in s.cache ==> s.cache[ref].status == Clean
+    && ref in s.ephemeralSuperblock
+    && s.ephemeralSuperblock[ref] == dop.lba
     && dop.sector.SectorBlock?
-    && s' == s[cache := s.cache[dop.lba := CacheLine(dop.sector.block, Clean)]]
+    && s' == s[cache := s.cache[ref := CacheLine(dop.sector.block, Clean)]]
   }
 
-  predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, lba: LBA)
+  predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.NoDiskOp
-    && lba in s.cache
-    && s.cache[lba].status == Clean
-    && s' == s[cache := RemoveFromMap(s.cache, lba)]
+    && ref in s.cache
+    && s.cache[ref].status == Clean
+    && s' == s[cache := RemoveFromMap(s.cache, ref)]
   }
 
   predicate WFSuperblock(superblock: Superblock)
@@ -102,6 +95,6 @@ module BlockCache {
   {
     && WFSuperblock(s.persistentSuperblock)
     && WFSuperblock(s.ephemeralSuperblock)
-    && (s.cache.keys <= s.ephemeralSuperblock.Values)
+    && (forall ref in s.cache.keys :: s.cache.keys[ref].status == Clean ==> ref in s.ephemeralSuperblock)
   }
 }
