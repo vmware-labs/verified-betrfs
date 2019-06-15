@@ -82,6 +82,12 @@ predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables)
 
 predicate Inv(k:Constants, s:Variables) { WF(s) }
 
+lemma InitImpliesInv(k: Constants, s: Variables)
+  requires Init(k, s)
+  ensures Inv(k, s)
+{
+}
+
 lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
   requires Inv(k, s)
   requires Next(k, s, s')

@@ -58,6 +58,13 @@ module CrashSafeDiskBetree {
     && DBI.Inv(k, s.ephemeral)
   }
 
+  lemma InitImpliesInv(k: Constants, s: Variables)
+  requires Init(k, s)
+  ensures Inv(k, s)
+  {
+    DBI.InitImpliesInv(k, s.ephemeral);
+  }
+
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
   requires Inv(k, s)
   requires Next(k, s, s')
@@ -123,6 +130,13 @@ module CrashSafeMap {
     && MS.Inv(k, s.ephemeral)
   }
 
+  lemma InitImpliesInv(k: Constants, s: Variables)
+  requires Init(k, s)
+  ensures Inv(k, s)
+  {
+    MS.InitImpliesInv(k, s.ephemeral);
+  }
+
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
   requires Inv(k, s)
   requires Next(k, s, s')
@@ -151,8 +165,17 @@ module CrashSafeBetreeMapRefinement {
     B.Variables(Ref.I(k, s.persistent), Ref.I(k, s.ephemeral))
   }
 
-  lemma CrashSafeBetreeRefinesCrashSafeMapNextStep(
-      k: A.Constants, s: A.Variables, s':A.Variables, step: A.Step)
+  lemma RefinesInit(k: A.Constants, s: A.Variables)
+  requires A.Init(k, s)
+  ensures A.Inv(k, s)
+  ensures B.Init(Ik(k), I(k, s))
+  {
+    A.InitImpliesInv(k, s);
+    Ref.BetreeRefinesMapInit(k, s.ephemeral);
+  }
+
+  lemma RefinesNextStep(
+      k: A.Constants, s: A.Variables, s': A.Variables, step: A.Step)
   requires A.Inv(k, s)
   requires A.NextStep(k, s, s', step)
   ensures A.Inv(k, s')
@@ -176,7 +199,7 @@ module CrashSafeBetreeMapRefinement {
     }
   }
 
-  lemma CrashSafeBetreeRefinesCrashSafeMapNext(k: A.Constants, s: A.Variables, s':A.Variables)
+  lemma RefinesNext(k: A.Constants, s: A.Variables, s':A.Variables)
   requires A.Inv(k, s)
   requires A.Next(k, s, s')
   ensures A.Inv(k, s')
@@ -184,6 +207,6 @@ module CrashSafeBetreeMapRefinement {
   {
     A.NextPreservesInv(k, s, s');
     var step :| A.NextStep(k, s, s', step);
-    CrashSafeBetreeRefinesCrashSafeMapNextStep(k, s, s', step);
+    RefinesNextStep(k, s, s', step);
   }
 }
