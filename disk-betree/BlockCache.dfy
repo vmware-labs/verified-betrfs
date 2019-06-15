@@ -62,8 +62,8 @@ module BlockCache {
     | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
     | DirtyStep(ref: Reference, block: Node<Value>)
-    | Alloc(ref: Reference, block: Node<Value>)
-    | Unalloc(ref: Reference)
+    | AllocStep(ref: Reference, block: Node<Value>)
+    | UnallocStep(ref: Reference)
     | PageInStep(ref: Reference)
     | PageInSuperblockStep
     | EvictStep(ref: Reference)
@@ -178,7 +178,7 @@ module BlockCache {
     && s' == s.(cache := s.cache[ref := CacheLine(dop.sector.block)])
   }
 
-  predicate PageInSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  predicate PageInSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Unready?
     && dop.Read?
@@ -207,6 +207,23 @@ module BlockCache {
     s == Unready
   }
 
+  predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step) {
+    match step  {
+      case WriteBackStep(ref) => WriteBack(k, s, s', dop, ref)
+      case WriteBackSuperblockStep => WriteBackSuperblock(k, s, s', dop)
+      case DirtyStep(ref, block) => Dirty(k, s, s', dop, ref, block)
+      case AllocStep(ref, block) => Alloc(k, s, s', dop, ref, block)
+      case UnallocStep(ref) => Unalloc(k, s, s', dop, ref)
+      case PageInStep(ref) => PageIn(k, s, s', dop, ref)
+      case PageInSuperblockStep => PageInSuperblock(k, s, s', dop)
+      case EvictStep(ref) => Evict(k, s, s', dop, ref)
+    }
+  }
+
+  predicate Next<Value(!new)>(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
+    exists step: Step :: NextStep(k, s, s', dop, step)
+  }
+
   predicate Inv(k: Constants, s: Variables)
   {
     match s {
@@ -221,4 +238,27 @@ module BlockCache {
       )
     }
   }
+
+  lemma InitImpliesInv(k: Constants, s: Variables)
+    requires Init(k, s)
+    ensures Inv(k, s)
+  {
+  }
+
+  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
+    requires Inv(k, s)
+    requires NextStep(k, s, s', dop, step)
+    ensures Inv(k, s')
+  {
+  }
+
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires Next(k, s, s', dop)
+    ensures Inv(k, s')
+  {
+    var step :| NextStep(k, s, s', dop, step);
+    NextStepPreservesInvariant(k, s, s', dop, step);
+  }
+
 }
