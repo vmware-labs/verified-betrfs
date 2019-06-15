@@ -25,7 +25,7 @@ module DiskBetreeRefinement {
   }
 
   function IView<Value>(k: DB.Constants, view: DB.BI.View<Node>) : imap<Key, Value>
-    requires forall key :: KeyHasSatisfyingLookup(k, view, key);
+    requires forall key | DB.MS.InDomain(key) :: KeyHasSatisfyingLookup(k, view, key);
   {
     imap key | DB.MS.InDomain(key) :: GetValue(k, view, key)
   }
@@ -46,6 +46,26 @@ module DiskBetreeRefinement {
     ensures DB.MS.Init(Ik(k), I(k, s))
   {
     InitImpliesInv(k, s);
+
+    forall key | DB.MS.InDomain(key)
+    ensures KeyHasSatisfyingLookup(k, s.bcv.view, key)
+    ensures key in IView(k, s.bcv.view)
+    ensures IView(k, s.bcv.view)[key] == DB.MS.EmptyValue()
+    {
+      /*
+      assert (forall key | DB.MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key));
+      assert KeyHasSatisfyingLookup(k, s.bcv.view, key);
+      assert key in (imap key | DB.MS.InDomain(key) :: GetValue(k, s.bcv.view, key));
+      assert IView(k, s.bcv.view) == (imap key | DB.MS.InDomain(key) :: GetValue(k, s.bcv.view, key));
+      */
+      var lookupResult := GetLookup(k, s.bcv.view, key);
+      var lookup := lookupResult.lookup;
+      var value := lookupResult.result;
+      //assert DB.IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+      assert DB.TotalLog(lookup, key) == [DB.Insertion(DB.MS.EmptyValue())];
+      //assert value == DB.MS.EmptyValue();
+      //assert GetValue(k, s.bcv.view, key) == DB.MS.EmptyValue();
+    }
   }
 
   lemma EquivalentLookupsImplInterpsEqual(k: DB.Constants, s: DB.Variables, s': DB.Variables)
