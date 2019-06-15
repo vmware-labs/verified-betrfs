@@ -275,6 +275,7 @@ module BlockCache {
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
+      /*
       forall ref
       ensures ref in s'.persistentSuperblock.lbas.Keys
          ==> ref in s'.persistentSuperblock.refcounts.Keys
@@ -283,6 +284,7 @@ module BlockCache {
       {
       }
       assert s'.persistentSuperblock.lbas.Keys == s'.persistentSuperblock.refcounts.Keys;
+      */
       assert InvReady(k, s');
     }
   }
@@ -293,6 +295,7 @@ module BlockCache {
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
+      /*
       forall r | r in s'.ephemeralSuperblock.refcounts.Keys
       ensures r in s'.cache.Keys + s'.ephemeralSuperblock.lbas.Keys
       {
@@ -309,6 +312,7 @@ module BlockCache {
           assert r in s'.ephemeralSuperblock.lbas.Keys;
         }
       }
+      */
       assert InvReady(k, s');
     }
   }
