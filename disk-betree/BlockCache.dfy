@@ -245,11 +245,61 @@ module BlockCache {
   {
   }
 
+  lemma WriteBackStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires WriteBack(k, s, s', dop, ref)
+    ensures Inv(k, s')
+
+  lemma WriteBackSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires WriteBackSuperblock(k, s, s', dop)
+    ensures Inv(k, s')
+
+  lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+    requires Inv(k, s)
+    requires Dirty(k, s, s', dop, ref, block)
+    ensures Inv(k, s')
+
+  lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+    requires Inv(k, s)
+    requires Alloc(k, s, s', dop, ref, block)
+    ensures Inv(k, s')
+
+  lemma UnallocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires Unalloc(k, s, s', dop, ref)
+    ensures Inv(k, s')
+
+  lemma PageInStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires PageIn(k, s, s', dop, ref)
+    ensures Inv(k, s')
+
+  lemma PageInSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires PageInSuperblock(k, s, s', dop)
+    ensures Inv(k, s')
+
+  lemma EvictStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires Evict(k, s, s', dop, ref)
+    ensures Inv(k, s')
+
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', dop, step)
     ensures Inv(k, s')
   {
+    match step  {
+      case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
+      case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInvariant(k, s, s', dop);
+      case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
+      case AllocStep(ref, block) => AllocStepPreservesInvariant(k, s, s', dop, ref, block);
+      case UnallocStep(ref) => UnallocStepPreservesInvariant(k, s, s', dop, ref);
+      case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
+      case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
+      case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
+    }
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
