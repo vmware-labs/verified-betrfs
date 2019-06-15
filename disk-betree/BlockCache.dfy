@@ -57,6 +57,10 @@ module BlockCache {
   {
     ref in s.ephemeralSuperblock.refcounts
   }
+  predicate ValidLBAForNode(k: Constants, lba: LBA)
+  {
+    lba != SuperblockLBA(k)
+  }
 
   datatype Step<Value> =
     | WriteBackStep(ref: Reference)
@@ -68,6 +72,12 @@ module BlockCache {
     | PageInSuperblockStep
     | EvictStep(ref: Reference)
     // TODO page in superblock
+
+  predicate WFSuperblock(k: Constants, superblock: Superblock)
+  {
+    && SuperblockLBA(k) !in superblock.lbas.Values
+    && superblock.lbas.Keys <= superblock.refcounts.Keys
+  }
 
   predicate refCountsChangeConsistently(
       refcounts: map<Reference, int>,
@@ -97,6 +107,7 @@ module BlockCache {
     && s.Ready?
     && dop.Write?
     && ref in s.cache
+    && ValidLBAForNode(k, dop.lba)
     && dop.lba !in s.persistentSuperblock.lbas.Values
     && dop.lba !in s.ephemeralSuperblock.lbas.Values
     && dop.sector == SectorBlock(s.cache[ref].block)
@@ -130,6 +141,7 @@ module BlockCache {
     && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
 
     && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
+    && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
@@ -146,6 +158,7 @@ module BlockCache {
     && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas
 
     && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
+    && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys + {ref}
     && MapsTo(s'.ephemeralSuperblock.refcounts, ref, 0)
   }
 
@@ -165,6 +178,7 @@ module BlockCache {
     && s'.cache == MapRemove(s.cache, {ref})
     && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
     && ref !in s'.ephemeralSuperblock.refcounts
+    && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys - {ref}
   }
 
   predicate PageIn(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -184,6 +198,8 @@ module BlockCache {
     && dop.Read?
     && dop.lba == SuperblockLBA(k)
     && dop.sector.SectorSuperblock?
+    && WFSuperblock(k, dop.sector.superblock)
+    && dop.sector.superblock.lbas.Keys == dop.sector.superblock.refcounts.Keys
     && s' == Ready(dop.sector.superblock, dop.sector.superblock, map[])
   }
 
@@ -194,12 +210,6 @@ module BlockCache {
     && ref in s.cache
     && IsNotDirty(s, ref)
     && s' == s.(cache := MapRemove(s.cache, {ref}))
-  }
-
-  predicate WFSuperblock(k: Constants, superblock: Superblock)
-  {
-    && SuperblockLBA(k) !in superblock.lbas.Values
-    && superblock.lbas.Keys <= superblock.refcounts.Keys
   }
 
   predicate Init(k: Constants, s: Variables)
@@ -224,18 +234,22 @@ module BlockCache {
     exists step: Step :: NextStep(k, s, s', dop, step)
   }
 
+  predicate InvReady(k: Constants, s: Variables)
+  requires s.Ready?
+  {
+    && WFSuperblock(k, s.persistentSuperblock)
+    && WFSuperblock(k, s.ephemeralSuperblock)
+    && s.persistentSuperblock.lbas.Keys == s.persistentSuperblock.refcounts.Keys
+    && s.cache.Keys <= s.ephemeralSuperblock.refcounts.Keys
+    && s.ephemeralSuperblock.refcounts.Keys <= s.cache.Keys + s.ephemeralSuperblock.lbas.Keys
+  }
+
+
   predicate Inv(k: Constants, s: Variables)
   {
     match s {
-      case Ready(persistentSuperblock, ephemeralSuperblock, cache) => (
-        && WFSuperblock(k, s.persistentSuperblock)
-        && WFSuperblock(k, s.ephemeralSuperblock)
-        && s.persistentSuperblock.lbas.Keys == s.persistentSuperblock.refcounts.Keys
-        && s.cache.Keys <= s.ephemeralSuperblock.refcounts.Keys
-      )
-      case Unready => (
-        true
-      )
+      case Ready(persistentSuperblock, ephemeralSuperblock, cache) => InvReady(k, s)
+      case Unready => true
     }
   }
 
@@ -249,41 +263,105 @@ module BlockCache {
     requires Inv(k, s)
     requires WriteBack(k, s, s', dop, ref)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
 
   lemma WriteBackSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires WriteBackSuperblock(k, s, s', dop)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      forall ref
+      ensures ref in s'.persistentSuperblock.lbas.Keys
+         ==> ref in s'.persistentSuperblock.refcounts.Keys
+      ensures ref in s'.persistentSuperblock.refcounts.Keys
+         ==> ref in s'.persistentSuperblock.lbas.Keys
+      {
+      }
+      assert s'.persistentSuperblock.lbas.Keys == s'.persistentSuperblock.refcounts.Keys;
+      assert InvReady(k, s');
+    }
+  }
 
   lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
     requires Inv(k, s)
     requires Dirty(k, s, s', dop, ref, block)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      forall r | r in s'.ephemeralSuperblock.refcounts.Keys
+      ensures r in s'.cache.Keys + s'.ephemeralSuperblock.lbas.Keys
+      {
+        if (r == ref) {
+          assert r in s'.cache.Keys;
+        } else if (r in s.cache.Keys) {
+          assert r in s'.cache.Keys;
+        } else {
+          assert s.ephemeralSuperblock.refcounts.Keys
+              == s'.ephemeralSuperblock.refcounts.Keys;
+          assert r in s.ephemeralSuperblock.refcounts.Keys;
+          assert r in s.cache.Keys + s.ephemeralSuperblock.lbas.Keys;
+          assert r in s.ephemeralSuperblock.lbas.Keys;
+          assert r in s'.ephemeralSuperblock.lbas.Keys;
+        }
+      }
+      assert InvReady(k, s');
+    }
+  }
 
   lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
     requires Inv(k, s)
     requires Alloc(k, s, s', dop, ref, block)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
 
   lemma UnallocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires Unalloc(k, s, s', dop, ref)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
 
   lemma PageInStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires PageIn(k, s, s', dop, ref)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
 
   lemma PageInSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires PageInSuperblock(k, s, s', dop)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
 
   lemma EvictStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires Evict(k, s, s', dop, ref)
     ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
 
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
     requires Inv(k, s)
