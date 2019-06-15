@@ -98,6 +98,43 @@ module DiskBetreeRefinement {
         == IView(k, s'.bcv.view);
   }
 
+  lemma EquivalentLookupsWithPutImplInterpsPut<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value)
+  requires Inv(k, s);
+  requires Inv(k, s');
+  requires EquivalentLookupsWithPut(k, s, s', key, value);
+  ensures IView(k, s'.bcv.view) == IView(k, s.bcv.view)[key := value];
+  {
+    var view := s.bcv.view;
+    var view' := s'.bcv.view;
+
+    forall key' | DB.MS.InDomain(key')
+    ensures IView(k, s'.bcv.view)[key'] == IView(k, s.bcv.view)[key := value][key'];
+    {
+      if (key' == key) {
+        var res := GetLookup(k, view', key);
+        var value' := res.result;
+        var lookup' := res.lookup;
+        assert DB.IsSatisfyingLookup(k, view', key, value', lookup');
+        var lookup :| DB.IsSatisfyingLookup(k, view', key, value, lookup);
+        CantEquivocate(k, s', key, value, value', lookup, lookup');
+        assert IView(k, view')[key] == value;
+      } else {
+        var res := GetLookup(k, view, key');
+        var res' := GetLookup(k, view', key');
+        var value := res.result;
+        var lookup := res.lookup;
+        var value' := res'.result;
+        var lookup' := res'.lookup;
+
+        assert DB.IsSatisfyingLookup(k, view, key', value, lookup);
+        // Follows from EquivalentLookupWithPut:
+        var lookup'' :| DB.IsSatisfyingLookup(k, view, key', value', lookup'');
+        CantEquivocate(k, s, key', value, value', lookup, lookup'');
+        assert value == value';
+      }
+    }
+  }
+
   lemma QueryStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value, lookup: Lookup)
     requires Inv(k, s)
     requires DB.Query(k, s, s', key, value, lookup)
@@ -109,6 +146,16 @@ module DiskBetreeRefinement {
     requires DB.InsertMessage(k, s, s', key, msg, oldroot)
     requires Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    var value := msg.value;
+
+    // TODO show this:
+    // (InsertMessageStepRefinesMap does half of it)
+    assert EquivalentLookupsWithPut(k, s, s', key, value);
+    
+    EquivalentLookupsWithPutImplInterpsPut(k, s, s', key, value);
+    assert DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.WriteStep(key, value));
+  }
 
   lemma FlushStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables,
                                            parentref: DB.BI.Reference, parent: Node, childref: DB.BI.Reference, child: Node, newchildref: DB.BI.Reference)
