@@ -35,6 +35,13 @@ module BlockCache {
         cache: map<Reference, CacheLine>)
     | Unready
 
+  predicate IsNotDirty(s: Variables, ref: Reference) {
+    ref in s.ephemeralSuperblock.lbas
+  }
+  predicate IsAllocated(s: Variables, ref: Reference) {
+    ref in s.ephemeralSuperblock.refcounts
+  }
+
   datatype Step =
     | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
@@ -97,7 +104,7 @@ module BlockCache {
     && s.Ready?
     && dop.NoDiskOp
     && ref !in s.cache
-    && ref !in s.ephemeralSuperblock.refcounts
+    && !IsAllocated(s, ref)
     && s'.Ready?
     && s'.cache == s.cache[ref := CacheLine(block)]
     && s'.persistentSuperblock == s.persistenSuperblock
@@ -112,7 +119,7 @@ module BlockCache {
   {
     && s.Ready?
     && dop.NoDiskOp
-    && ref in s.ephemeralSuperblock.refcounts
+    && IsAllocated(s, ref)
     && s'.Ready?
     && s'.persistentSuperblock == s.persistentSuperblock
     && s'.ephemeralSuperblock.lbas == RemoveFromMap(s.ephemeralSuperblock.lbas, ref)
@@ -125,8 +132,8 @@ module BlockCache {
   {
     && s.Ready?
     && dop.Read
-    && ref in s.ephemeralSuperblock.refcounts
-    && ref in s.ephemeralSuperblock.lbas
+    && IsAllocated(s, ref)
+    && IsNotDirty(s, ref)
     && s.ephemeralSuperblock[ref].lba == dop.lba
     && dop.sector.SectorBlock?
     && s' == s[cache := s.cache[ref := CacheLine(dop.sector.block)]]
@@ -146,7 +153,7 @@ module BlockCache {
     && s.Ready?
     && dop.NoDiskOp
     && ref in s.cache
-    && ref in s.ephemeralSuperblock.lbas
+    && IsNotDirty(s, ref)
     && s' == s[cache := RemoveFromMap(s.cache, ref)]
   }
 
