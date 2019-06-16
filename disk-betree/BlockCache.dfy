@@ -8,13 +8,14 @@ module BlockCache {
 
   datatype Constants = Constants()
 
-  // psssst Node = DiskBetree.Node but dodn't tell anybody
+  // psssst Node = DiskBetree.Node but don't tell anybody
   import DiskBetree
   type Node<Value> = DiskBetree.Node<Value>
   function Successors(node: Node): iset<Reference> { node.children.Values }
 
   import BlockInterface
   type Reference = BlockInterface.Reference
+  function RootReference() : Reference
 
   // Stuff for communicating with Disk (probably move to another file?)
 
@@ -22,6 +23,7 @@ module BlockCache {
 
   function SuperblockLBA(k: Constants) : LBA
 
+  // TODO make superblock take up more than one block (it's not really a superblock)
   datatype Superblock = Superblock(
       lbas: map<Reference, LBA>,
       refcounts: map<Reference, int>)
@@ -169,8 +171,12 @@ module BlockCache {
 
     // This kind of sucks. It needs to be in cache so we know it's successors we can decrement
     // refcounts. TODO There is an optimization to be made such that we can unalloc leaves
-    // which are not in cache (becasue they have no outgoing pointers)
+    // which are not in cache (because they have no outgoing pointers)
     && ref in s.cache 
+
+    // We can only dealloc this if nothing is pointing to it.
+    && ref != RootReference()
+    && MapsTo(s.ephemeralSuperblock.refcounts, ref, 0)
 
     && s'.Ready?
     && s'.persistentSuperblock == s.persistentSuperblock
