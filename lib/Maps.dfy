@@ -8,6 +8,10 @@ module Maps {
     k in m && m[k] == v
   }
 
+  predicate MapsAgreeOnKey<K,V>(m: map<K,V>, m': map<K,V>, k: K) {
+    (k !in m && k !in m') || (k in m && k in m' && m[k] == m'[k])
+  }
+
   predicate IMapsAgreeOnKey<K,V>(m: imap<K,V>, m': imap<K,V>, k: K) {
     (k !in m && k !in m') || (k in m && k in m' && m[k] == m'[k])
   }

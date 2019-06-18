@@ -19,7 +19,7 @@ module BlockCache {
 
   // Stuff for communicating with Disk (probably move to another file?)
 
-  type LBA
+  type LBA(==)
 
   function SuperblockLBA(k: Constants) : LBA
 
@@ -130,6 +130,11 @@ module BlockCache {
     && s' == s.(persistentSuperblock := s.ephemeralSuperblock)
   }
 
+  predicate BlockPointsToValidReferences(block: Node, refcounts: map<Reference, int>)
+  {
+    forall ref | ref in Successors(block) :: ref in refcounts
+  }
+
   predicate Dirty(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
   {
     // Possibly allocs ref, possibly overwrites it.
@@ -144,6 +149,7 @@ module BlockCache {
 
     && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
     && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys
+    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
@@ -162,6 +168,7 @@ module BlockCache {
     && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
     && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys + {ref}
     && MapsTo(s'.ephemeralSuperblock.refcounts, ref, 0)
+    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
   }
 
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -378,7 +385,7 @@ module BlockCache {
     requires NextStep(k, s, s', dop, step)
     ensures Inv(k, s')
   {
-    match step  {
+    match step {
       case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
       case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInvariant(k, s, s', dop);
       case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
