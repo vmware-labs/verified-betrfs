@@ -116,4 +116,8 @@ module Maps {
 			else if x in mapb then mapb[x]
 			else mapc[x]
 	}
+
+	function MapToImap<K,V>(m: map<K,V>) : imap<K,V> {
+	  imap k | k in m :: m[k]
+	}
 }

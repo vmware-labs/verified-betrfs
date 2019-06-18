@@ -6,16 +6,17 @@ module BlockCache {
   import opened Sequences
   import opened Maps
 
-  datatype Constants = Constants(constants: BI.Constants)
+  import DiskBetree
+  import BlockInterface
+
+  datatype Constants = Constants(constants: BlockInterface.Constants)
 
   // psssst Node = DiskBetree.Node but don't tell anybody
-  import DiskBetree
   type Node<Value> = DiskBetree.Node<Value>
   function Successors(node: Node): iset<Reference> { node.children.Values }
 
-  import BlockInterface
   type Reference = BlockInterface.Reference
-  function RootReference(k: Constants) : Reference { BI.Root(k.constants) }
+  function RootReference(k: Constants) : Reference { BlockInterface.Root(k.constants) }
 
   // Stuff for communicating with Disk (probably move to another file?)
 
@@ -231,7 +232,7 @@ module BlockCache {
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step) {
-    match step  {
+    match step {
       case WriteBackStep(ref) => WriteBack(k, s, s', dop, ref)
       case WriteBackSuperblockStep => WriteBackSuperblock(k, s, s', dop)
       case DirtyStep(ref, block) => Dirty(k, s, s', dop, ref, block)
