@@ -25,12 +25,32 @@ abstract module BlockInterface {
   
   type Lookup = seq<Reference>
 
+  predicate IsPath(k: Constants, s: Variables, lookup: Lookup)
+  {
+    && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.refGraph)
+    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in s.refGraph[lookup[i]])
+  }
+
+  predicate IsCycle(k: Constants, s: Variables, lookup: Lookup) {
+    && 0 < |lookup|
+    && IsPath(k, s, lookup)
+    && lookup[0] in s.refGraph[Last(lookup)]
+  }
+
+  // We don't maintain this as an invariant, but some refinements
+  // might want to add this invariant so that they can use a
+  // reference-counting garbage collection algorithm.  For that, we
+  // require that no cycle exists anywhere, even in unreachable (from
+  // the root) components of the graph.
+  predicate Acyclic(k: Constants, s: Variables) {
+    forall lookup :: IsPath(k, s, lookup) ==> !IsCycle(k, s, lookup)
+  }
+  
   predicate LookupIsValid(k: Constants, s: Variables, lookup: Lookup)
   {
     && |lookup| > 0
     && lookup[0] == Root(k)
-    && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.refGraph)
-    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in s.refGraph[lookup[i]])
+    && IsPath(k, s, lookup)
   }
 
   predicate ReachableReference(k: Constants, s: Variables, ref: Reference)
@@ -207,27 +227,104 @@ abstract module BlockInterface {
     else
       (if steps[0].AllocStep? then iset{steps[0].ref} else iset{}) + AllocatedReferences(steps[1..])
   }
-  
-  /*
-  lemma PostTransactionView(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
-    requires NextStep(k, s, s', TransactionStep(steps))
-    requires ValidTransaction(steps)
-    ensures s'.view.Keys == s.view.Keys + AllocatedReferences(steps)
+
+  function LocallyReachableReferences(k: Constants, s: Variables, p: Reference) : iset<Reference>
   {
-    if |steps| == 0 {
-    } else {
-      var path: seq<Variables> :| IsStatePath(k, s, s', steps, path);
-      if steps[0].WriteStep? {
-        assert steps[0].ref in path[0].view;
-        assert path[1].view.Keys == path[0].view.Keys;
-      } else {
-        assert steps[0].ref !in path[0].view;
-        assert path[1].view.Keys == s.view.Keys + AllocatedReferences([steps[0]]);
-      }
+    // p, it's children, and it's grandchildren
+    iset path |
+    && IsPath(k, s, path)
+    && 1 < |path| <= 3
+    && path[0] == p
+    :: Last(path)
+  }
+
+  function NewlyReachableReferences(k: Constants, s: Variables, s': Variables, p: Reference) : iset<Reference>
+  {
+    iset path |
+      && IsPath(k, s', path)
+      && 0 < |path|
+      && path[0] == p
+      && (forall i :: 0 < i < |path| - 1 ==> path[i] in s'.view.Keys - s.view.Keys)
+      && Last(path) in s.view
+      :: Last(path)
+  }
+
+  predicate EditIsLocal(k: Constants, s: Variables, s': Variables, p: Reference)
+    requires ViewAndRefGraphAreConsistent(k, s)
+    requires ViewAndRefGraphAreConsistent(k, s')
+  {
+    && (forall ref :: ref in s.view.Keys * s'.view.Keys - iset{p} ==> s.refGraph[ref] == s'.refGraph[ref])
+    && NewlyReachableReferences(k, s, s', p) <= LocallyReachableReferences(k, s, p)
+  }
+
+  predicate NewNodesAreCycleFree(k: Constants, s: Variables, s': Variables)
+  {
+    forall path ::
+      && IsPath(k, s', path)
+      && (forall i :: 0 <= i < |path| ==> path[i] in s'.view.Keys - s.view.Keys)
+      ==> !IsCycle(k, s', path)
+  }
+
+  function FirstInView(path: Lookup, view: View) : (pos: int)
+    requires exists i :: 0 <= i < |path| && path[i] in view
+    ensures 0 <= pos < |path|
+    ensures path[pos] in view
+    ensures forall i :: 0 <= i < pos ==> path[i] !in view
+  {
+    if path[0] in view then 0
+    else 1 + FirstInView(path[1..], view)
+  }
+
+function UndoLocalEdit(k: Constants, s: Variables, s': Variables, p: Reference, path: Lookup) : (result: Lookup)
+    requires ViewAndRefGraphAreConsistent(k, s)
+    requires ViewAndRefGraphAreConsistent(k, s')
+    requires RefGraphIsClosed(k, s)
+    requires 1 < |path|
+    requires path[0] in s.view.Keys
+    requires Last(path) in s.view.Keys
+    requires EditIsLocal(k, s, s', p)
+    requires NewNodesAreCycleFree(k, s, s')
+    requires IsPath(k, s', path)
+    ensures 0 < |result| 
+    ensures IsPath(k, s, result)
+    ensures result[0] == path[0]
+    ensures Last(result) == Last(path)
+  {
+    if path[0] == p then
+      var len := 1 + FirstInView(path[1..], s.view);
+      var prefix := path[..len];
+      var successor := path[len];
+      var wit := prefix + [successor];
+      assert Last(wit) in s.view;
+      assert successor in NewlyReachableReferences(k, s, s', p);
+      var replacement :|
+        && 1 < |replacement|
+        && IsPath(k, s, replacement)
+        && replacement[0] == path[0]
+        && successor == Last(replacement);
+      if len < |path| - 1 then DropLast(replacement) + UndoLocalEdit(k, s, s', p, path[len..]) else replacement
+    else if |path| == 2 then path
+    else path[..1] + UndoLocalEdit(k, s, s', p, path[1..])
+  }
+  
+  lemma LocalEditPreservesAcyclic(k: Constants, s: Variables, s': Variables, p: Reference)
+    requires ViewAndRefGraphAreConsistent(k, s)
+    requires ViewAndRefGraphAreConsistent(k, s')
+    requires RefGraphIsClosed(k, s)
+    requires Acyclic(k, s)
+    requires EditIsLocal(k, s, s', p)
+    requires NewNodesAreCycleFree(k, s, s')
+    ensures Acyclic(k, s')
+  {
+    if cycle :| IsCycle(k, s', cycle) {
+      var i :| 0 <= i < |cycle| && cycle[i] in s.view;
+      var rcycle := cycle[i..] + cycle[..i];
+      assert IsCycle(k, s', rcycle)  && rcycle[0] in s.view;
+      var path := rcycle + [rcycle[0]];
+      var rpath := UndoLocalEdit(k, s, s', p, path);
+      assert IsCycle(k, s, DropLast(rpath));
     }
   }
-  */
-    
   
   /////////// Invariants
 

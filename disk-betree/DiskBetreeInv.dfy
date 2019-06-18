@@ -1,5 +1,6 @@
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
+include "../tla-tree/MissingLibrary.dfy"
 include "MapSpec.dfy"
 include "DiskBetree.dfy"
   
@@ -7,20 +8,11 @@ abstract module DiskBetreeInv {
   import opened DB : DiskBetree
   import opened Maps
   import opened Sequences
-
+  import opened MissingLibrary
+  
   predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, view: BI.View<Node>, key: Key)
   {
     exists lookup, value :: IsSatisfyingLookup(k, view, key, value, lookup)
-  }
-
-  predicate LookupIsAcyclic(lookup: Lookup) {
-    forall i, j :: 0 <= i < |lookup| && 0 <= j < |lookup| && i != j ==> lookup[i].ref != lookup[j].ref
-  }
-  
-  predicate Acyclic<Value(!new)>(k: Constants, s: Variables) {
-    forall key, lookup ::
-      IsPathFromRootLookup(k, s.bcv.view, key, lookup) ==>
-      LookupIsAcyclic(lookup)
   }
 
   predicate ReferenceGraphReflectsChildren<Value(!new)>(k: Constants, s: Variables)
@@ -33,7 +25,7 @@ abstract module DiskBetreeInv {
   {
     && BI.Inv(k.bck, s.bcv)
     && ReferenceGraphReflectsChildren(k, s)
-    && Acyclic(k, s)
+    && BI.Acyclic(k.bck, s.bcv)
     && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
   }
 
@@ -156,40 +148,40 @@ abstract module DiskBetreeInv {
     Apply((ref: BI.Reference) => Layer(ref, if ref in view then view[ref] else EmptyNode()), refs)
   }
   
-  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
-    requires Inv(k, s)
-    requires Grow(k, s, s', oldroot, newchildref)
-    ensures Acyclic(k, s')
-  {
-    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
-      ensures LookupIsAcyclic(lookup')
-    {
-      if |lookup'| > 1 {
-        assert LookupFollowsChildRefsAtLayer(key1, lookup', 0); // OBSERVE
-        var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
-        var lookup := LookupFromRefs(s.bcv.view, refs);
-        var i := 1;
-        while i < |lookup|
-          invariant 1 <= i <= |lookup|
-          invariant LookupIsAcyclic(lookup'[..i+1])
-          invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key1, lookup, j)
-        {
-          assert lookup'[i].node == lookup[i-1].node; // OBSERVE
-          assert LookupFollowsChildRefsAtLayer(key1, lookup', i); // OBSERVE
-          assert lookup'[i+1].ref != newchildref; // OBSERVE
-          // assert LookupFollowsChildRefsAtLayer(key1, lookup, i-1);
-          forall j | 0 <= j < i
-            ensures LookupFollowsChildRefsAtLayer(key1, lookup[..i+1], j)
-          {
-            assert LookupFollowsChildRefsAtLayer(key1, lookup, j); // OBSERVE
-          }
-          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]); // OBSERVE
-          assert lookup'[i+1].ref != Root(k); // OBSERVE
-          i := i + 1;
-        }
-      }
-    }
-  }
+  // lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
+  //   requires Inv(k, s)
+  //   requires Grow(k, s, s', oldroot, newchildref)
+  //   ensures BI.Acyclic(k.bck, s'.bcv)
+  // {
+  //   forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
+  //     ensures LookupIsAcyclic(lookup')
+  //   {
+  //     if |lookup'| > 1 {
+  //       assert LookupFollowsChildRefsAtLayer(key1, lookup', 0); // OBSERVE
+  //       var refs := Apply((layer: Layer) => if layer.ref == newchildref then Root(k) else layer.ref, lookup'[1..]);
+  //       var lookup := LookupFromRefs(s.bcv.view, refs);
+  //       var i := 1;
+  //       while i < |lookup|
+  //         invariant 1 <= i <= |lookup|
+  //         invariant LookupIsAcyclic(lookup'[..i+1])
+  //         invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key1, lookup, j)
+  //       {
+  //         assert lookup'[i].node == lookup[i-1].node; // OBSERVE
+  //         assert LookupFollowsChildRefsAtLayer(key1, lookup', i); // OBSERVE
+  //         assert lookup'[i+1].ref != newchildref; // OBSERVE
+  //         // assert LookupFollowsChildRefsAtLayer(key1, lookup, i-1);
+  //         forall j | 0 <= j < i
+  //           ensures LookupFollowsChildRefsAtLayer(key1, lookup[..i+1], j)
+  //         {
+  //           assert LookupFollowsChildRefsAtLayer(key1, lookup, j); // OBSERVE
+  //         }
+  //         assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]); // OBSERVE
+  //         assert lookup'[i+1].ref != Root(k); // OBSERVE
+  //         i := i + 1;
+  //       }
+  //     }
+  //   }
+  // }
 
   // Preservation proofs
 
@@ -230,7 +222,7 @@ abstract module DiskBetreeInv {
       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
     }
 
-    GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
+    //GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
     
     forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
@@ -264,28 +256,250 @@ abstract module DiskBetreeInv {
   //////// Flush
   ////////
 
+  // function Child(view: BI.View<Node>, node: Node, key: Key) : Node
+  //   requires key in node.children
+  //   requires node.children.Values <= view.Keys
+  // {
+  //   view[node.children[key]]
+  // }
+
+  // predicate EditLogsAreEquivalent<Value(!new)>(k: Constants, s1: Variables, s2: Variables, parentref: BI.Reference, key: Key, value: Value, prefix: seq<BufferEntry>, suffix: seq<BufferEntry>)
+  //   requires parentref in s1.bcv.view
+  //   requires parentref in s2.bcv.view
+  //   requires WFNode(s1.bcv.view[parentref])
+  //   requires WFNode(s2.bcv.view[parentref])
+  //   requires BI.Inv(k.bck, s1.bcv)
+  //   requires BI.Inv(k.bck, s2.bcv)
+  //   requires ReferenceGraphReflectsChildren(k, s1)
+  //   requires ReferenceGraphReflectsChildren(k, s2)
+  //   requires forall childref :: childref in s1.bcv.view[parentref].children.Values ==> WFNode(s1.bcv.view[childref])
+  //   requires forall childref :: childref in s2.bcv.view[parentref].children.Values ==> WFNode(s2.bcv.view[childref])
+  // {
+  //   var parent1 := s1.bcv.view[parentref];
+  //   var parent2 := s2.bcv.view[parentref];
+    
+  //   BufferDefinesValue(prefix + parent1.buffer[key] + (if key in parent1.children then s1.bcv.view[parent1.children[key]].buffer[key] + suffix else []), value)
+  //   <==>
+  //   BufferDefinesValue(prefix + parent2.buffer[key] + (if key in parent2.children then s2.bcv.view[parent2.children[key]].buffer[key] + suffix else []), value)
+  // }
+  
+  // predicate EditPreservesLookupsThatVisitParent<Value(!new)>(k: Constants, s1: Variables, s2: Variables, parentref: BI.Reference)
+  //   requires BI.Inv(k.bck, s1.bcv)
+  //   requires BI.Inv(k.bck, s2.bcv)
+  //   requires ReferenceGraphReflectsChildren(k, s1)
+  //   requires ReferenceGraphReflectsChildren(k, s2)
+  //   requires parentref in s1.bcv.view
+  //   requires parentref in s2.bcv.view
+  //   requires WFNode(s1.bcv.view[parentref])
+  //   requires WFNode(s2.bcv.view[parentref])
+  //   requires forall childref :: childref in s1.bcv.view[parentref].children.Values ==> WFNode(s1.bcv.view[childref])
+  //   requires forall childref :: childref in s2.bcv.view[parentref].children.Values ==> WFNode(s2.bcv.view[childref])
+  // {
+  //   forall key, value, prefix, suffix :: EditLogsAreEquivalent(k, s1, s2, parentref, key, value, prefix, suffix)
+  // }
+
+  // lemma LocalEditPreservesLookups<Value(!new)>(k: Constants, s1: Variables, s2: Variables, parentref: BI.Reference)
+  //   requires BI.Inv(k.bck, s1.bcv)
+  //   requires BI.Inv(k.bck, s2.bcv)
+  //   requires ReferenceGraphReflectsChildren(k, s1)
+  //   requires ReferenceGraphReflectsChildren(k, s2)
+  //   requires Acyclic(k, s1)
+  //   requires Acyclic(k, s2)
+  //   requires parentref in s1.bcv.view
+  //   requires parentref in s2.bcv.view
+  //   requires WFNode(s1.bcv.view[parentref])
+  //   requires WFNode(s2.bcv.view[parentref])
+  //   requires forall childref :: childref in s1.bcv.view[parentref].children.Values ==> WFNode(s1.bcv.view[childref])
+  //   requires forall childref :: childref in s2.bcv.view[parentref].children.Values ==> WFNode(s2.bcv.view[childref])
+  //   requires EditIsLocalToParent(k, s1, s2, parentref)
+  //   requires EditPreservesLookupsThatVisitParent(k, s1, s2, parentref)
+  //   ensures PreservesLookups(k, s1, s2)
+  // {
+  //   forall lookup1: Lookup, key, value | IsSatisfyingLookup(k, s1.bcv.view, key, value, lookup1)
+  //     ensures exists lookup2 :: IsSatisfyingLookup(k, s2.bcv.view, key, value, lookup2)
+  //     {
+  //       if pindex :| 0 <= pindex < |lookup1| && lookup1[pindex].ref == parentref {
+  //         if |lookup1| == pindex+1 {
+  //           var lookup2 := lookup1[pindex := lookup1[pindex].(node :=  s2.bcv.view[parentref])];
+
+  //           var i := 1;
+  //           while i < |lookup1|
+  //             invariant 0 <= i <= |lookup1|
+  //             invariant forall j :: 0 <= j < i ==> lookup1[j].ref in s1.bcv.view.Keys * s2.bcv.view.Keys
+  //             invariant forall j :: 0 <= j < i-1 ==> LookupFollowsChildRefsAtLayer(key, lookup2, j)
+  //           {
+  //             assert LookupFollowsChildRefsAtLayer(key, lookup1, i-1);
+  //             i := i + 1;
+  //           }
+
+  //           var prefix := TotalLog(lookup1[..pindex], key);
+  //           var plog1 := TotalLog(lookup1[pindex..], key);
+  //           var plog2 := TotalLog(lookup2[pindex..], key);
+  //           TotalLogAdditive(lookup2[..pindex], lookup2[pindex..], key);
+  //           // assert prefix == TotalLog(lookup2[..pindex], key);
+  //           // assert BufferDefinesValue(prefix + plog1, value);
+  //           assert BufferDefinesValue(prefix + plog2, value);
+  //           assert IsSatisfyingLookup(k, s2.bcv.view, key, value, lookup2);
+  //         } else {
+  //           assume false;
+  //         }
+  //       } else {
+  //         var i := 1;
+  //         while i < |lookup1|
+  //           invariant 0 <= i <= |lookup1|
+  //           invariant forall j :: 0 <= j < i ==> lookup1[j].ref in s1.bcv.view.Keys * s2.bcv.view.Keys;
+  //         {
+  //           assert LookupFollowsChildRefsAtLayer(key, lookup1, i-1);
+  //           i := i + 1;
+  //         }
+  //         assert IsSatisfyingLookup(k, s2.bcv.view, key, value, lookup1);
+  //       }
+  //     }
+  // }
+
+  // lemma FlushPreservesLookups<Value(!new)>(k: Constants, s: Variables, s': Variables,
+  //   parentref: BI.Reference, parent: Node, 
+  //   childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  //   requires Inv(k, s)
+  //   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  //   requires Acyclic(k, s')
+  //   requires forall childref :: childref in s.bcv.view[parentref].children.Values ==> WFNode(s.bcv.view[childref])
+  //   requires forall childref :: childref in s'.bcv.view[parentref].children.Values ==> WFNode(s'.bcv.view[childref])
+  //   ensures EquivalentLookups(k, s, s')
+  // {
+  //   LocalEditPreservesLookups(k, s, s', parentref);
+  //   LocalEditPreservesLookups(k, s', s, parentref);
+  // }
+  
+  // lemma SplitPreservesLookups<Value(!new)>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  //   requires Inv(k, s)
+  //   requires Split(k, s, s', fusion)
+  //   requires Acyclic(k, s')
+  //   requires forall childref :: childref in s.bcv.view[fusion.parentref].children.Values ==> WFNode(s.bcv.view[childref])
+  //   requires forall childref :: childref in s'.bcv.view[fusion.parentref].children.Values ==> WFNode(s'.bcv.view[childref])
+  //   ensures EquivalentLookups(k, s, s')
+  // {
+  //   LocalEditPreservesLookups(k, s, s', fusion.parentref);
+  //   LocalEditPreservesLookups(k, s', s, fusion.parentref);
+  // }
+  
+  // lemma MergePreservesLookups<Value(!new)>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  //   requires Inv(k, s)
+  //   requires Merge(k, s, s', fusion)
+  //   requires Acyclic(k, s')
+  //   requires forall childref :: childref in s.bcv.view[fusion.parentref].children.Values ==> WFNode(s.bcv.view[childref])
+  //   requires forall childref :: childref in s'.bcv.view[fusion.parentref].children.Values ==> WFNode(s'.bcv.view[childref])
+  //   ensures EquivalentLookups(k, s, s')
+  // {
+  //   LocalEditPreservesLookups(k, s, s', fusion.parentref);
+  //   LocalEditPreservesLookups(k, s', s, fusion.parentref);
+  // }
+  
+  // lemma LocalTreeEditPreservesRelevantLookups<Value>(k: Constants, s: Variables, s': Variables, treeEdit: LocalTreeEdit)
+  //   requires s'.bcv.view == s.bcv.view[treeEdit.parentref := treeEdit.parent'][treeEdit.childref' := treeEdit]
+  //   requires LocalTreeEditPreservesSatisfyingLookup<Value>
+  //   ensures
+  //   forall key, value, lookup ::
+  //   && treeEdit.parent.children[key] == treeEdit.childref
+  //   && treeEdit.parent'.children[key] == treeEdit.childref'
+  //   && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+  //   ==>
+  //   exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+  
+    
   // Definitions of Flush lookup transformations:
 
+  function FlushLookupReverse(view: BI.View<Node>, childref: BI.Reference, newchildref: BI.Reference, lookup': Lookup) : Lookup
+  {
+    var refs := Apply((layer: Layer) => if layer.ref == newchildref then childref else layer.ref, lookup');
+    LookupFromRefs(view, refs)
+  }
+
+  function FlushLayerIndexMapForward(k: Constants, parentref: BI.Reference, childref: BI.Reference, newchildref: BI.Reference, lookup: Lookup, index: int) : BI.Reference
+  {
+    if 0 < index < |lookup| && lookup[index-1].ref == parentref && lookup[index].ref == childref
+      then newchildref 
+    else if 0 <= index < |lookup| 
+      then lookup[index].ref 
+    else Root(k)
+  }
+  
+  function FlushLookupForward(k: Constants, view: BI.View<Node>, parentref: BI.Reference, childref: BI.Reference, newchildref: BI.Reference, lookup: Lookup) : (lookup': Lookup)
+  {
+    var indexes := Arithmetic(0, 1, |lookup|);
+    var refs := Apply(index => FlushLayerIndexMapForward(k, parentref, childref, newchildref, lookup, index), indexes);
+    LookupFromRefs(view, refs)
+  }
+  
+  lemma FlushPathFromRootForward<Value>(k: Constants, s: Variables, s': Variables,
+                                        parentref: BI.Reference, parent: Node, 
+                                        childref: BI.Reference, child: Node, newchildref: BI.Reference,
+                                        key: Key, lookup: Lookup) returns (lookup': Lookup)
+    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    requires BI.Acyclic(k.bck, s.bcv)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+    ensures lookup' == FlushLookupForward(k, s'.bcv.view, parentref, childref, newchildref, lookup)
+    ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  {
+    lookup' := FlushLookupForward(k, s'.bcv.view, parentref, childref, newchildref, lookup);
+    forall i | 0 <= i < |lookup'|-1
+      ensures LookupFollowsChildRefsAtLayer(key, lookup', i)
+    {
+      assert LookupFollowsChildRefsAtLayer(key, lookup, i);
+    }
+  }
+  
+  lemma FlushSatisfyingLookupForward<Value>(k: Constants, s: Variables, s': Variables,
+                                            parentref: BI.Reference, parent: Node, 
+                                            childref: BI.Reference, child: Node, newchildref: BI.Reference,
+                                            key: Key, value: Value, lookup: Lookup) returns (lookup': Lookup)
+    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    requires BI.Acyclic(k.bck, s.bcv)
+    requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    ensures lookup' == FlushLookupForward(k, s'.bcv.view, parentref, childref, newchildref, lookup)
+    ensures IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+  {
+    lookup' := FlushPathFromRootForward(k, s, s', parentref, parent, childref, child, newchildref, key, lookup);
+  }
+  
   lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables,
                               parentref: BI.Reference, parent: Node,
                               childref: BI.Reference, child: Node, newchildref: BI.Reference)
     requires Inv(k, s)
     requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
-    ensures Acyclic(k, s')
+    ensures BI.Acyclic(k.bck, s'.bcv)
   {
-    forall key, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-      ensures LookupIsAcyclic(lookup')
-    {
-      var refs := Apply((layer: Layer) => if layer.ref == newchildref then childref else layer.ref, lookup');
-      var lookup := LookupFromRefs(s.bcv.view, refs);
-      forall i | 0 <= i < |lookup|-1
-        ensures LookupFollowsChildRefsAtLayer(key, lookup, i)
-      {
-        assert LookupFollowsChildRefsAtLayer(key, lookup', i);
-      }
-      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-    }
+    BI.LocalEditPreservesAcyclic(k.bck, s.bcv, s'.bcv, parentref);
   }
+
+  // lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables,
+  //                             parentref: BI.Reference, parent: Node,
+  //                             childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  //   requires Inv(k, s)
+  //   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  //   ensures EquivalentLookups(k, s, s')
+  // {
+  //   forall lookup: Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+  //     ensures exists lookup': Lookup :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+  //   {
+  //     var lookup' := FlushLookupForward(k, s'.bcv.view, parentref, childref, newchildref, lookup);
+  //     forall i | 0 <= i < |lookup'|-1
+  //       ensures LookupFollowsChildRefsAtLayer(key, lookup', i)
+  //     {
+  //       assert LookupFollowsChildRefsAtLayer(key, lookup, i);
+  //     }
+  //     assert IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+      
+
+  //     assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+  //   }
+    
+  //   forall lookup', key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+  //     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+  //   {
+  //     assume false;
+  //   }
+  // }
   
   // function transformLookup<Value>(lookup: Lookup<Value>, key: Key, oldref: BI.Reference, newref: BI.Reference, newnode: Node) : Lookup<Value>
   // ensures |transformLookup(lookup, key, oldref, newref, newnode)| == |lookup|;
@@ -990,60 +1204,60 @@ abstract module DiskBetreeInv {
     }
   }
 
-  lemma SplitPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
-  requires Inv(k, s)
-  requires Split(k, s, s', fusion);
-  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-  ensures LookupIsAcyclic(lookup')
-  {
-    var lookup := mergeLookup(fusion, lookup', key);
-    mergeLookupProperties(fusion, lookup, lookup', key);
-    SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
-    assert LookupIsAcyclic(lookup);
-    forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
-    ensures lookup'[i].ref != lookup'[j].ref
-    {
-      if (lookup'[i].ref == lookup'[j].ref) {
-        if (lookup'[i].ref == fusion.left_childref && key in fusion.left_keys) {
-          assert i > 0;
-          assert lookup'[i-1].ref == fusion.parentref;
+  // lemma SplitPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
+  // requires Inv(k, s)
+  // requires Split(k, s, s', fusion);
+  // requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  //   //ensures LookupIsAcyclic(lookup')
+  // {
+  //   var lookup := mergeLookup(fusion, lookup', key);
+  //   mergeLookupProperties(fusion, lookup, lookup', key);
+  //   SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
+  //   //assert LookupIsAcyclic(lookup);
+  //   forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
+  //   ensures lookup'[i].ref != lookup'[j].ref
+  //   {
+  //     if (lookup'[i].ref == lookup'[j].ref) {
+  //       if (lookup'[i].ref == fusion.left_childref && key in fusion.left_keys) {
+  //         assert i > 0;
+  //         assert lookup'[i-1].ref == fusion.parentref;
 
-          assert j > 0;
-          assert lookup'[j-1].ref == fusion.parentref;
+  //         assert j > 0;
+  //         assert lookup'[j-1].ref == fusion.parentref;
 
-          assert lookup[i].ref == fusion.fused_childref;
-          assert lookup[j].ref == fusion.fused_childref;
-          assert false;
-        } else if (lookup'[i].ref == fusion.right_childref && key in fusion.right_keys) {
-          assert i > 0;
-          assert lookup'[i-1].ref == fusion.parentref;
+  //         assert lookup[i].ref == fusion.fused_childref;
+  //         assert lookup[j].ref == fusion.fused_childref;
+  //         assert false;
+  //       } else if (lookup'[i].ref == fusion.right_childref && key in fusion.right_keys) {
+  //         assert i > 0;
+  //         assert lookup'[i-1].ref == fusion.parentref;
 
-          assert j > 0;
-          assert lookup'[j-1].ref == fusion.parentref;
+  //         assert j > 0;
+  //         assert lookup'[j-1].ref == fusion.parentref;
 
-          assert lookup[i].ref == fusion.fused_childref;
-          assert lookup[j].ref == fusion.fused_childref;
-          assert false;
-        } else {
-          assert lookup[i].ref == lookup'[i].ref;
-          assert lookup[j].ref == lookup'[j].ref;
-          assert false;
-        }
-      }
-    }
-  }
+  //         assert lookup[i].ref == fusion.fused_childref;
+  //         assert lookup[j].ref == fusion.fused_childref;
+  //         assert false;
+  //       } else {
+  //         assert lookup[i].ref == lookup'[i].ref;
+  //         assert lookup[j].ref == lookup'[j].ref;
+  //         assert false;
+  //       }
+  //     }
+  //   }
+  // }
 
-  lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-  requires Inv(k, s);
-  requires Split(k, s, s', fusion);
-  ensures Acyclic(k, s');
-  {
-    forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-    ensures LookupIsAcyclic(lookup')
-    {
-      SplitPreservesAcyclicLookup(k, s, s', fusion, lookup', key);
-    }
-  }
+  // lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  // requires Inv(k, s);
+  // requires Split(k, s, s', fusion);
+  // ensures Acyclic(k, s');
+  // {
+  //   forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
+  //   ensures LookupIsAcyclic(lookup')
+  //   {
+  //     SplitPreservesAcyclicLookup(k, s, s', fusion, lookup', key);
+  //   }
+  // }
 
   lemma SplitPreservesIsSatisfyingLookup<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s);
@@ -1141,19 +1355,19 @@ abstract module DiskBetreeInv {
   {
   }
 
-  lemma InsertMessagePreservesAcyclicAndReachablePointersValid(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
-    requires Inv(k, s)
-    requires InsertMessage(k, s, s', key, msg, oldroot)
-    ensures Acyclic(k, s')
-  {
-    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
-      ensures LookupIsAcyclic(lookup')
-      ensures key1 in Last(lookup').node.children ==> Last(lookup').node.children[key1] in s'.bcv.view
-    {
-      var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), lookup');
-      assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup);
-    }
-  }
+  // lemma InsertMessagePreservesAcyclicAndReachablePointersValid(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  //   requires Inv(k, s)
+  //   requires InsertMessage(k, s, s', key, msg, oldroot)
+  //   ensures Acyclic(k, s')
+  // {
+  //   forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
+  //     ensures LookupIsAcyclic(lookup')
+  //     ensures key1 in Last(lookup').node.children ==> Last(lookup').node.children[key1] in s'.bcv.view
+  //   {
+  //     var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), lookup');
+  //     assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup);
+  //   }
+  // }
 
   lemma InsertMessagePreservesTotality(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
@@ -1207,7 +1421,7 @@ abstract module DiskBetreeInv {
     requires InsertMessage(k, s, s', key, msg, oldroot)
     ensures Inv(k, s')
   {
-    InsertMessagePreservesAcyclicAndReachablePointersValid(k, s, s', key, msg, oldroot);
+    //InsertMessagePreservesAcyclicAndReachablePointersValid(k, s, s', key, msg, oldroot);
     InsertMessagePreservesTotality(k, s, s', key, msg, oldroot);
   }
 
@@ -1226,7 +1440,7 @@ abstract module DiskBetreeInv {
     requires Grow(k, s, s', oldroot, newchildref)
     ensures Inv(k, s')
   {
-    GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
+    //GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
     GrowEquivalentLookups(k, s, s', oldroot, newchildref);
   }
  
@@ -1235,7 +1449,7 @@ abstract module DiskBetreeInv {
     requires Split(k, s, s', fusion)
     ensures Inv(k, s')
   {
-    SplitPreservesAcyclic(k, s, s', fusion);
+    //SplitPreservesAcyclic(k, s, s', fusion);
     SplitEquivalentLookups(k, s, s', fusion);
     //SplitPreservesReachablePointersValid(k, s, s', fusion);
   }
