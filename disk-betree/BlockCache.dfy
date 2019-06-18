@@ -6,7 +6,7 @@ module BlockCache {
   import opened Sequences
   import opened Maps
 
-  datatype Constants = Constants()
+  datatype Constants = Constants(constants: BI.Constants)
 
   // psssst Node = DiskBetree.Node but don't tell anybody
   import DiskBetree
@@ -15,7 +15,7 @@ module BlockCache {
 
   import BlockInterface
   type Reference = BlockInterface.Reference
-  function RootReference() : Reference
+  function RootReference(k: Constants) : Reference { BI.Root(k.constants) }
 
   // Stuff for communicating with Disk (probably move to another file?)
 
@@ -182,7 +182,7 @@ module BlockCache {
     && ref in s.cache 
 
     // We can only dealloc this if nothing is pointing to it.
-    && ref != RootReference()
+    && ref != RootReference(k)
     && MapsTo(s.ephemeralSuperblock.refcounts, ref, 0)
 
     && s'.Ready?
