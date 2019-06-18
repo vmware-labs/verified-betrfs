@@ -181,6 +181,7 @@ module BlockInterface {
     | WriteStep(ref: Reference, block: T, successors: iset<Reference>)
     | TransactionStep(steps: seq<Step>)
     | GCStep(refs: iset<Reference>)
+    | StutterStep
     
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
     decreases step
@@ -189,6 +190,7 @@ module BlockInterface {
       case AllocStep(block, successors, ref) => Alloc(k, s, s', block, successors, ref)
       case WriteStep(ref, block, successors) => Write(k, s, s', ref, block, successors)
       case TransactionStep(steps) => Transaction(k, s, s', steps)
+      case StutterStep => s == s'
       case GCStep(refs) => GC(k, s, s', refs)
     }
   }
@@ -288,6 +290,7 @@ module BlockInterface {
       case WriteStep(ref, block, successors) => WritePreservesInv(k, s, s', ref, block, successors);
       case TransactionStep(steps) => TransactionPreservesInv(k, s, s', steps);
       case GCStep(ref) => GCPreservesInv(k, s, s', ref);
+      case StutterStep => { }
     }
   }
 
