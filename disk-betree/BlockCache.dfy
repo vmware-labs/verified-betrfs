@@ -2,23 +2,21 @@ include "DiskBetree.dfy"
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "Graph.dfy"
+include "Disk.dfy"
 
 module BlockCache {
-  // BlockCache is parameterized by the graph type
-  // (but right now it's instantiated to BetreeGraph)
+  // Ideally BlockCache would be parameterized by the graph type,
+  // but right now it's instantiated to BetreeGraph.
   import opened G = BetreeGraph 
 
   import opened Sequences
   import opened Maps
 
-  import DiskBetree
+  import Disk = Disk
+
+  type LBA = Disk.LBA
 
   datatype Constants = Constants()
-
-  // Stuff for communicating with Disk (probably move to another file?)
-
-  type LBA(==)
-
   function SuperblockLBA(k: Constants) : LBA
 
   // TODO make superblock take up more than one block (it's not really a superblock)
@@ -26,25 +24,21 @@ module BlockCache {
       lbas: map<Reference, LBA>,
       refcounts: map<Reference, int>)
 
-  datatype Sector<Value> =
+  datatype Sector =
     | SectorBlock(block: Node)
     | SectorSuperblock(superblock: Superblock)
 
-  // TODO make async
-  datatype DiskOp<Value> =
-    | Write(lba: LBA, sector: Sector<Value>)
-    | Read(lba: LBA, sector: Sector<Value>)
-    | NoDiskOp
+  type DiskOp = Disk.DiskOp<Sector>
 
   // BlockCache stuff
 
-  datatype CacheLine<Value> = CacheLine(block: Node)
+  datatype CacheLine = CacheLine(block: Node)
 
-  datatype Variables<Value> =
+  datatype Variables =
     | Ready(
         persistentSuperblock: Superblock,
         ephemeralSuperblock: Superblock,
-        cache: map<Reference, CacheLine<Value>>)
+        cache: map<Reference, CacheLine>)
     | Unready
 
   predicate IsNotDirty(s: Variables, ref: Reference)
@@ -62,7 +56,7 @@ module BlockCache {
     lba != SuperblockLBA(k)
   }
 
-  datatype Step<Value> =
+  datatype Step =
     | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
     | DirtyStep(ref: Reference, block: Node)
@@ -105,7 +99,7 @@ module BlockCache {
   predicate WriteBack(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && s.Ready?
-    && dop.Write?
+    && dop.WriteOp?
     && ref in s.cache
     && ValidLBAForNode(k, dop.lba)
     && dop.lba !in s.persistentSuperblock.lbas.Values
@@ -121,7 +115,7 @@ module BlockCache {
   predicate WriteBackSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Ready?
-    && dop.Write?
+    && dop.WriteOp?
     && dop.lba == SuperblockLBA(k)
     && dop.sector == SectorSuperblock(s.ephemeralSuperblock)
     && s.cache.Keys <= s.ephemeralSuperblock.lbas.Keys
@@ -195,7 +189,7 @@ module BlockCache {
   predicate PageIn(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && s.Ready?
-    && dop.Read?
+    && dop.ReadOp?
     && IsAllocated(s, ref)
     && IsNotDirty(s, ref)
     && s.ephemeralSuperblock.lbas[ref] == dop.lba
@@ -206,7 +200,7 @@ module BlockCache {
   predicate PageInSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Unready?
-    && dop.Read?
+    && dop.ReadOp?
     && dop.lba == SuperblockLBA(k)
     && dop.sector.SectorSuperblock?
     && WFSuperblock(k, dop.sector.superblock)
@@ -241,7 +235,7 @@ module BlockCache {
     }
   }
 
-  predicate Next<Value(!new)>(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
+  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
     exists step: Step :: NextStep(k, s, s', dop, step)
   }
 

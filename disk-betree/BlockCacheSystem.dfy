@@ -10,15 +10,15 @@ module BlockCacheSystem {
   import D = Disk
 
   type LBA = D.LBA
-  type Sector<T> = D.Sector<T>
-  type DiskOp<T> = D.DiskOp<T>
+  type Sector = M.Sector
+  type DiskOp = M.DiskOp
 
   datatype Constants = Constants(machine: M.Constants, disk: D.Constants)
   // TODO TTY
   // TODO disk message queue for async disk operations
-  datatype Variables<T> = Variables(
-    machine: M.Variables<T>,
-    disk: D.Variables<T>)
+  datatype Variables = Variables(
+    machine: M.Variables,
+    disk: D.Variables<Sector>)
 
   predicate Init(k: Constants, s: Variables)
   {
@@ -26,8 +26,8 @@ module BlockCacheSystem {
     && D.Init(k.disk, s.disk)
   }
 
-  datatype Step<T> =
-    | MachineStep(dop: DiskOp<T>)
+  datatype Step =
+    | MachineStep(dop: DiskOp)
     | CrashStep
 
   predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -50,7 +50,7 @@ module BlockCacheSystem {
     }
   }
 
-  predicate Next<T(!new)>(k: Constants, s: Variables, s': Variables) {
+  predicate Next(k: Constants, s: Variables, s': Variables) {
     exists step :: NextStep(k, s, s', step)
   }
 

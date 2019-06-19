@@ -15,14 +15,14 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import BI = BetreeBlockInterface
   import D = Disk
   import DiskBetree
-  type DiskOp<T> = BC.DiskOp<T>
+  type DiskOp = BC.DiskOp
 
   function Ik(k: BCS.Constants) : CSBI.Constants
   {
     BI.Constants()
   }
 
-  function I<Value>(k: BCS.Constants, s: BCS.Variables) : CSBI.Variables
+  function I(k: BCS.Constants, s: BCS.Variables) : CSBI.Variables
   requires BCS.Inv(k, s)
   {
     var persistentGraph := BCS.PersistentGraph(k, s);

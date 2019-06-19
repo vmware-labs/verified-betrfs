@@ -1,16 +1,18 @@
-include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 
 module Disk {
-  import BC = BlockCache
   import opened Maps
 
-  type LBA = BC.LBA
-  type Sector<T> = BC.Sector<T>
-  type DiskOp<T> = BC.DiskOp<T>
+  type LBA(==)
+
+  // TODO make async
+  datatype DiskOp<Sector> =
+    | WriteOp(lba: LBA, sector: Sector)
+    | ReadOp(lba: LBA, sector: Sector)
+    | NoDiskOp
 
   datatype Constants = Constants()
-  datatype Variables<T> = Variables(blocks: map<LBA, Sector<T>>)
+  datatype Variables<Sector> = Variables(blocks: map<LBA, Sector>)
 
   predicate Init(k: Constants, s: Variables)
   {
@@ -23,12 +25,12 @@ module Disk {
     | StutterStep
 
   predicate Write(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
-    && dop.Write?
+    && dop.WriteOp?
     && s'.blocks == s.blocks[dop.lba := dop.sector]
   }
 
   predicate Read(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
-    && dop.Write?
+    && dop.ReadOp?
     && s' == s
     && MapsTo(s.blocks, dop.lba, dop.sector)
   }
