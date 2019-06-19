@@ -35,13 +35,11 @@ abstract module BlockCache {
 
   // BlockCache stuff
 
-  datatype CacheLine = CacheLine(block: Node)
-
   datatype Variables =
     | Ready(
         persistentSuperblock: Superblock,
         ephemeralSuperblock: Superblock,
-        cache: map<Reference, CacheLine>)
+        cache: map<Reference, Node>)
     | Unready
 
   predicate IsNotDirty(s: Variables, ref: Reference)
@@ -78,22 +76,22 @@ abstract module BlockCache {
   predicate refCountsChangeConsistently(
       refcounts: map<Reference, int>,
       refcounts': map<Reference, int>,
-      cache: map<Reference, CacheLine>,
-      cache': map<Reference, CacheLine>,
+      cache: map<Reference, Node>,
+      cache': map<Reference, Node>,
       ref: Reference)
   {
     && (forall r :: r in refcounts && r != ref ==> (
       MapsTo(refcounts', r,
           refcounts[r] +
-          (if ref in cache' && r in G.Successors(cache'[ref].block) then 1 else 0) -
-          (if ref in cache && r in G.Successors(cache[ref].block) then 1 else 0)
+          (if ref in cache' && r in G.Successors(cache'[ref]) then 1 else 0) -
+          (if ref in cache && r in G.Successors(cache[ref]) then 1 else 0)
       )
     ))
     && (ref in refcounts && ref in refcounts' ==>
       MapsTo(refcounts', ref,
           refcounts[ref] +
-          (if ref in cache' && ref in G.Successors(cache'[ref].block) then 1 else 0) -
-          (if ref in cache && ref in G.Successors(cache[ref].block) then 1 else 0)
+          (if ref in cache' && ref in G.Successors(cache'[ref]) then 1 else 0) -
+          (if ref in cache && ref in G.Successors(cache[ref]) then 1 else 0)
       )
     )
   }
@@ -106,7 +104,7 @@ abstract module BlockCache {
     && ValidLBAForNode(k, dop.lba)
     && dop.lba !in s.persistentSuperblock.lbas.Values
     && dop.lba !in s.ephemeralSuperblock.lbas.Values
-    && dop.sector == SectorBlock(s.cache[ref].block)
+    && dop.sector == SectorBlock(s.cache[ref])
     && s'.Ready?
     && s'.persistentSuperblock == s.persistentSuperblock
     && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas[ref := dop.lba]
@@ -136,7 +134,7 @@ abstract module BlockCache {
     && dop.NoDiskOp?
     && ref in s.cache
     && s'.Ready?
-    && s'.cache == s.cache[ref := CacheLine(block)]
+    && s'.cache == s.cache[ref := block]
     && s'.persistentSuperblock == s.persistentSuperblock
 
     && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
@@ -154,7 +152,7 @@ abstract module BlockCache {
     && ref !in s.cache
     && !IsAllocated(s, ref)
     && s'.Ready?
-    && s'.cache == s.cache[ref := CacheLine(block)]
+    && s'.cache == s.cache[ref := block]
     && s'.persistentSuperblock == s.persistentSuperblock
 
     && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas
@@ -196,7 +194,7 @@ abstract module BlockCache {
     && IsNotDirty(s, ref)
     && s.ephemeralSuperblock.lbas[ref] == dop.lba
     && dop.sector.SectorBlock?
-    && s' == s.(cache := s.cache[ref := CacheLine(dop.sector.block)])
+    && s' == s.(cache := s.cache[ref := dop.sector.block])
   }
 
   predicate PageInSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)

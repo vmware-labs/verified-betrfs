@@ -127,11 +127,6 @@ abstract module BlockCacheSystem {
 
   // Invariant
 
-  function CacheMap(cache: map<Reference, M.CacheLine>) : map<Reference, Node>
-  {
-    map ref | ref in cache :: cache[ref].block
-  }
-
   function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires M.Inv(k.machine, s.machine)
   requires s.machine.Ready?
@@ -140,10 +135,10 @@ abstract module BlockCacheSystem {
   {
     /*assert s.machine.ephemeralSuperblock.refcounts.Keys
         <= s.machine.ephemeralSuperblock.lbas.Keys + s.machine.cache.Keys
-        == MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), CacheMap(s.machine.cache)).Keys;*/
+        == MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), s.machine.cache.Keys;*/
     Graph(
       s.machine.ephemeralSuperblock.refcounts.Keys,
-      MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), CacheMap(s.machine.cache))
+      MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), s.machine.cache)
     )
   }
 
@@ -155,7 +150,7 @@ abstract module BlockCacheSystem {
       MapsTo(
           s.disk.blocks,
           s.machine.ephemeralSuperblock.lbas[ref],
-          M.SectorBlock(s.machine.cache[ref].block))
+          M.SectorBlock(s.machine.cache[ref]))
   }
 
   predicate Inv(k: Constants, s: Variables) {
@@ -202,17 +197,17 @@ abstract module BlockCacheSystem {
     assert DiskSuperblock(k, s'.disk.blocks) == s.machine.ephemeralSuperblock;
 
     /*
-    forall ref | ref in CacheMap(s.machine.cache)
+    forall ref | ref in s.machine.cache
     ensures MapsTo(
           RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks),
-          ref, CacheMap(s.machine.cache)[ref])
+          ref, s.machine.cache)[ref]
     {
     }
     */
 
     assert RefMapOfDisk(k, DiskSuperblock(k, s'.disk.blocks), s'.disk.blocks)
         == RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)
-        == MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), CacheMap(s.machine.cache));
+        == MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), s.machine.cache);
     assert PersistentGraph(k, s') == EphemeralGraph(k, s);
 
     //assert RefcountsAgree(DiskSuperblock(k, s'.disk.blocks).refcounts, PersistentGraph(k, s'));
@@ -238,11 +233,11 @@ abstract module BlockCacheSystem {
   requires MapRemove(s.machine.cache, {ref}) == MapRemove(s'.machine.cache, {ref})
   requires MapRemove(s.machine.ephemeralSuperblock.lbas, {ref}) == MapRemove(s'.machine.ephemeralSuperblock.lbas, {ref})
 
-  ensures |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref].block) then 1 else 0)
-       == |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref].block) then 1 else 0)
+  ensures |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref]) then 1 else 0)
+       == |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref]) then 1 else 0)
   {
-    assert |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref].block) then 1 else 0) == |Predecessors(graph, r) - {ref}|;
-    assert |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref].block) then 1 else 0) == |Predecessors(graph', r) - {ref}|;
+    assert |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref]) then 1 else 0) == |Predecessors(graph, r) - {ref}|;
+    assert |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref]) then 1 else 0) == |Predecessors(graph', r) - {ref}|;
 
     forall r1 | r1 in Predecessors(graph, r) - {ref}
     ensures r1 in Predecessors(graph', r) - {ref}
@@ -272,8 +267,8 @@ abstract module BlockCacheSystem {
         assert r1 in (s.machine.cache.Keys - {ref});
         assert r1 in (s'.machine.cache.Keys - {ref});
         assert r1 in s'.machine.cache;
-        assert graph[r1] == s.machine.cache[r1].block
-            == s'.machine.cache[r1].block
+        assert graph[r1] == s.machine.cache[r1]
+            == s'.machine.cache[r1]
             == graph'[r1];
         assert MapsTo(graph', r1, graph[r1]);
       } else {
@@ -318,11 +313,11 @@ abstract module BlockCacheSystem {
       /*
       assert refcounts'[r]
           == refcounts[r] +
-            (if ref in cache' && r in M.Successors(cache'[ref].block) then 1 else 0) -
-            (if ref in cache && r in M.Successors(cache[ref].block) then 1 else 0)
+            (if ref in cache' && r in M.Successors(cache'[ref]) then 1 else 0) -
+            (if ref in cache && r in M.Successors(cache[ref]) then 1 else 0)
           == |Predecessors(graph, r)| +
-            (if ref in cache' && r in M.Successors(cache'[ref].block) then 1 else 0) -
-            (if ref in cache && r in M.Successors(cache[ref].block) then 1 else 0)
+            (if ref in cache' && r in M.Successors(cache'[ref]) then 1 else 0) -
+            (if ref in cache && r in M.Successors(cache[ref]) then 1 else 0)
           == |Predecessors(graph', r)|;
       */
     }
@@ -347,7 +342,7 @@ abstract module BlockCacheSystem {
       if (r == ref) {
         //assert ref !in M.Successors(block);
         //assert ref !in s.machine.cache;
-        //assert ref !in M.Successors(s'.machine.cache[ref].block);
+        //assert ref !in M.Successors(s'.machine.cache[ref]);
 
         RefcountConservation(k, s, s', graph, graph', ref, r);
         /*if (|Predecessors(graph, r)| != 0) {
