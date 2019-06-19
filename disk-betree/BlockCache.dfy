@@ -68,7 +68,6 @@ abstract module BlockCache {
     | PageInStep(ref: Reference)
     | PageInSuperblockStep
     | EvictStep(ref: Reference)
-    // TODO page in superblock
 
   predicate WFSuperblock(k: Constants, superblock: Superblock)
   {

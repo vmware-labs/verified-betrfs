@@ -5,7 +5,7 @@ include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
 // Ideally we would prove the refinement for an arbitrary graph,
-// but if we imported BlockCacheSystem and CrashSafeBlockInterface
+// but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
 // separately then we wouldn't know they were using the same graph.
 // So for now, we just prove the refinement specifically for BetreeGraph.
 module BetreeBlockCache refines BlockCache {
