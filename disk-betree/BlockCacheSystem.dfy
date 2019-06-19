@@ -402,6 +402,8 @@ module BlockCacheSystem {
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    assert PersistentGraph(k, s) == PersistentGraph(k, s');
+    assert EphemeralGraph(k, s) == EphemeralGraph(k, s');
   }
 
   lemma PageInSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -410,6 +412,8 @@ module BlockCacheSystem {
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    assert PersistentGraph(k, s) == PersistentGraph(k, s');
+    assert PersistentGraph(k, s) == EphemeralGraph(k, s');
   }
 
   lemma EvictStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
