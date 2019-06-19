@@ -16,7 +16,7 @@ module Disk {
 
   predicate Init(k: Constants, s: Variables)
   {
-    true // TODO
+    true
   }
 
   datatype Step =

@@ -19,42 +19,6 @@ abstract module BlockCacheSystem {
     machine: M.Variables,
     disk: D.Variables<Sector>)
 
-  predicate Init(k: Constants, s: Variables)
-  {
-    && M.Init(k.machine, s.machine)
-    && D.Init(k.disk, s.disk)
-  }
-
-  datatype Step =
-    | MachineStep(dop: DiskOp)
-    | CrashStep
-
-  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp)
-  {
-    && M.Next(k.machine, s.machine, s'.machine, dop)
-    && D.Next(k.disk, s.disk, s'.disk, dop)
-  }
-
-  predicate Crash(k: Constants, s: Variables, s': Variables)
-  {
-    && M.Init(k.machine, s'.machine)
-    && s'.disk == s.disk
-  }
-
-  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
-  {
-    match step {
-      case MachineStep(dop) => Machine(k, s, s', dop)
-      case CrashStep => Crash(k, s, s')
-    }
-  }
-
-  predicate Next(k: Constants, s: Variables, s': Variables) {
-    exists step :: NextStep(k, s, s', step)
-  }
-
-  // Invariant
-
   type Superblock = M.Superblock
   type Reference = M.G.Reference
   type Node = M.G.Node
@@ -106,6 +70,63 @@ abstract module BlockCacheSystem {
       RefMapOfDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks))
   }
 
+  function Predecessors(graph: map<Reference, Node>, ref: Reference) : set<Reference>
+  {
+    set r | r in graph && ref in M.G.Successors(graph[r])
+  }
+
+  predicate NoDanglingPointers(graph: map<Reference, Node>)
+  {
+    forall r1, r2 {:trigger r2 in M.G.Successors(graph[r1])}
+      | r1 in graph && r2 in M.G.Successors(graph[r1])
+      :: r2 in graph
+  }
+
+  predicate RefcountsAgree(refcounts: map<Reference, int>, graph: map<Reference, Node>)
+  {
+    forall ref | ref in refcounts :: refcounts[ref] == |Predecessors(graph, ref)|
+  }
+
+  predicate Init(k: Constants, s: Variables)
+  {
+    && M.Init(k.machine, s.machine)
+    && D.Init(k.disk, s.disk)
+    && WFDisk(k, s.disk.blocks)
+    && WFSuperblockWrtDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks)
+    && RefcountsAgree(DiskSuperblock(k, s.disk.blocks).refcounts, PersistentGraph(k, s))
+    && NoDanglingPointers(PersistentGraph(k, s))
+  }
+
+  datatype Step =
+    | MachineStep(dop: DiskOp)
+    | CrashStep
+
+  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && M.Next(k.machine, s.machine, s'.machine, dop)
+    && D.Next(k.disk, s.disk, s'.disk, dop)
+  }
+
+  predicate Crash(k: Constants, s: Variables, s': Variables)
+  {
+    && M.Init(k.machine, s'.machine)
+    && s'.disk == s.disk
+  }
+
+  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
+  {
+    match step {
+      case MachineStep(dop) => Machine(k, s, s', dop)
+      case CrashStep => Crash(k, s, s')
+    }
+  }
+
+  predicate Next(k: Constants, s: Variables, s': Variables) {
+    exists step :: NextStep(k, s, s', step)
+  }
+
+  // Invariant
+
   function CacheMap(cache: map<Reference, M.CacheLine>) : map<Reference, Node>
   {
     map ref | ref in cache :: cache[ref].block
@@ -137,23 +158,6 @@ abstract module BlockCacheSystem {
           M.SectorBlock(s.machine.cache[ref].block))
   }
 
-  function Predecessors(graph: map<Reference, Node>, ref: Reference) : set<Reference>
-  {
-    set r | r in graph && ref in M.G.Successors(graph[r])
-  }
-
-  predicate RefcountsAgree(refcounts: map<Reference, int>, graph: map<Reference, Node>)
-  {
-    forall ref | ref in refcounts :: refcounts[ref] == |Predecessors(graph, ref)|
-  }
-
-  predicate NoDanglingPointers(graph: map<Reference, Node>)
-  {
-    forall r1, r2 {:trigger r2 in M.G.Successors(graph[r1])}
-      | r1 in graph && r2 in M.G.Successors(graph[r1])
-      :: r2 in graph
-  }
-
   predicate Inv(k: Constants, s: Variables) {
     && M.Inv(k.machine, s.machine)
     && WFDisk(k, s.disk.blocks)
@@ -167,6 +171,12 @@ abstract module BlockCacheSystem {
       && NoDanglingPointers(EphemeralGraph(k, s))
       && CleanCacheEntriesAreCorrect(k, s)
     )
+  }
+
+  lemma InitImpliesInv(k: Constants, s: Variables)
+    requires Init(k, s)
+    ensures Inv(k, s)
+  {
   }
 
   lemma WriteBackStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
