@@ -2,11 +2,10 @@ include "Disk.dfy"
 include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 
-module BlockCacheSystem {
+abstract module BlockCacheSystem {
   import opened Maps
 
-  import G = BetreeGraph // in theory this ought to be parameterized by G
-  import M = BlockCache
+  import M : BlockCache
   import D = Disk
 
   type LBA = D.LBA
@@ -57,8 +56,8 @@ module BlockCacheSystem {
   // Invariant
 
   type Superblock = M.Superblock
-  type Reference = G.Reference
-  type Node = G.Node
+  type Reference = M.G.Reference
+  type Node = M.G.Node
 
   predicate WFDisk(k: Constants, blocks: map<LBA, Sector>)
   {
@@ -140,7 +139,7 @@ module BlockCacheSystem {
 
   function Predecessors(graph: map<Reference, Node>, ref: Reference) : set<Reference>
   {
-    set r | r in graph && ref in G.Successors(graph[r])
+    set r | r in graph && ref in M.G.Successors(graph[r])
   }
 
   predicate RefcountsAgree(refcounts: map<Reference, int>, graph: map<Reference, Node>)
@@ -150,8 +149,8 @@ module BlockCacheSystem {
 
   predicate NoDanglingPointers(graph: map<Reference, Node>)
   {
-    forall r1, r2 {:trigger r2 in G.Successors(graph[r1])}
-      | r1 in graph && r2 in G.Successors(graph[r1])
+    forall r1, r2 {:trigger r2 in M.G.Successors(graph[r1])}
+      | r1 in graph && r2 in M.G.Successors(graph[r1])
       :: r2 in graph
   }
 
@@ -229,11 +228,11 @@ module BlockCacheSystem {
   requires MapRemove(s.machine.cache, {ref}) == MapRemove(s'.machine.cache, {ref})
   requires MapRemove(s.machine.ephemeralSuperblock.lbas, {ref}) == MapRemove(s'.machine.ephemeralSuperblock.lbas, {ref})
 
-  ensures |Predecessors(graph, r)| - (if ref in s.machine.cache && r in G.Successors(s.machine.cache[ref].block) then 1 else 0)
-       == |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in G.Successors(s'.machine.cache[ref].block) then 1 else 0)
+  ensures |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref].block) then 1 else 0)
+       == |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref].block) then 1 else 0)
   {
-    assert |Predecessors(graph, r)| - (if ref in s.machine.cache && r in G.Successors(s.machine.cache[ref].block) then 1 else 0) == |Predecessors(graph, r) - {ref}|;
-    assert |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in G.Successors(s'.machine.cache[ref].block) then 1 else 0) == |Predecessors(graph', r) - {ref}|;
+    assert |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref].block) then 1 else 0) == |Predecessors(graph, r) - {ref}|;
+    assert |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref].block) then 1 else 0) == |Predecessors(graph', r) - {ref}|;
 
     forall r1 | r1 in Predecessors(graph, r) - {ref}
     ensures r1 in Predecessors(graph', r) - {ref}

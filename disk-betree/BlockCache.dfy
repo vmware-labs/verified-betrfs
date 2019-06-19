@@ -4,10 +4,10 @@ include "../lib/Maps.dfy"
 include "Graph.dfy"
 include "Disk.dfy"
 
-module BlockCache {
+abstract module BlockCache {
   // Ideally BlockCache would be parameterized by the graph type,
   // but right now it's instantiated to BetreeGraph.
-  import opened G = BetreeGraph 
+  import G : Graph 
 
   import opened Sequences
   import opened Maps
@@ -20,6 +20,9 @@ module BlockCache {
   function SuperblockLBA(k: Constants) : LBA
 
   // TODO make superblock take up more than one block (it's not really a superblock)
+  type Reference = G.Reference
+  type Node = G.Node
+
   datatype Superblock = Superblock(
       lbas: map<Reference, LBA>,
       refcounts: map<Reference, int>)
@@ -83,15 +86,15 @@ module BlockCache {
     && (forall r :: r in refcounts && r != ref ==> (
       MapsTo(refcounts', r,
           refcounts[r] +
-          (if ref in cache' && r in Successors(cache'[ref].block) then 1 else 0) -
-          (if ref in cache && r in Successors(cache[ref].block) then 1 else 0)
+          (if ref in cache' && r in G.Successors(cache'[ref].block) then 1 else 0) -
+          (if ref in cache && r in G.Successors(cache[ref].block) then 1 else 0)
       )
     ))
     && (ref in refcounts && ref in refcounts' ==>
       MapsTo(refcounts', ref,
           refcounts[ref] +
-          (if ref in cache' && ref in Successors(cache'[ref].block) then 1 else 0) -
-          (if ref in cache && ref in Successors(cache[ref].block) then 1 else 0)
+          (if ref in cache' && ref in G.Successors(cache'[ref].block) then 1 else 0) -
+          (if ref in cache && ref in G.Successors(cache[ref].block) then 1 else 0)
       )
     )
   }
@@ -124,7 +127,7 @@ module BlockCache {
 
   predicate BlockPointsToValidReferences(block: Node, refcounts: map<Reference, int>)
   {
-    forall ref | ref in Successors(block) :: ref in refcounts
+    forall ref | ref in G.Successors(block) :: ref in refcounts
   }
 
   predicate Dirty(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
@@ -174,7 +177,7 @@ module BlockCache {
     && ref in s.cache 
 
     // We can only dealloc this if nothing is pointing to it.
-    && ref != Root()
+    && ref != G.Root()
     && MapsTo(s.ephemeralSuperblock.refcounts, ref, 0)
 
     && s'.Ready?

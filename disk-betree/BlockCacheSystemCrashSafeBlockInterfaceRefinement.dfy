@@ -1,17 +1,30 @@
+include "BlockCache.dfy"
 include "BlockCacheSystem.dfy"
 include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
+// Ideally we would prove the refinement for an arbitrary graph,
+// but if we imported BlockCacheSystem and CrashSafeBlockInterface
+// separately then we wouldn't know they were using the same graph.
+// So for now, we just prove the refinement specifically for BetreeGraph.
+module BetreeBlockCache refines BlockCache {
+  import G = BetreeGraph
+}
+
+module BetreeBlockCacheSystem refines BlockCacheSystem {
+  import M = BetreeBlockCache
+}
+
 module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
-  import opened G = BetreeGraph // in theory this ought to be parameterized by G
-  import BCS = BlockCacheSystem
+  import opened G = BetreeGraph
+  import BCS = BetreeBlockCacheSystem
   import CSBI = CrashSafeBlockInterface
 
   import opened Maps
   import opened Sequences
 
-  import BC = BlockCache
+  import BC = BetreeBlockCache
   import BI = BetreeBlockInterface
   import D = Disk
   import DiskBetree
