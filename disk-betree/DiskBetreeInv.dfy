@@ -7,8 +7,9 @@ module DiskBetreeInv {
   import opened DB = DiskBetree
   import opened Maps
   import opened Sequences
+  import opened BetreeGraph
 
-  predicate KeyHasSatisfyingLookup<Value(!new)>(k: Constants, view: BI.View<Node>, key: Key)
+  predicate KeyHasSatisfyingLookup(k: Constants, view: BI.View, key: Key)
   {
     exists lookup, value :: IsSatisfyingLookup(k, view, key, value, lookup)
   }
@@ -17,22 +18,15 @@ module DiskBetreeInv {
     forall i, j :: 0 <= i < |lookup| && 0 <= j < |lookup| && i != j ==> lookup[i].ref != lookup[j].ref
   }
   
-  predicate Acyclic<Value(!new)>(k: Constants, s: Variables) {
+  predicate Acyclic(k: Constants, s: Variables) {
     forall key, lookup ::
       IsPathFromRootLookup(k, s.bcv.view, key, lookup) ==>
       LookupIsAcyclic(lookup)
   }
 
-  predicate ReferenceGraphReflectsChildren<Value(!new)>(k: Constants, s: Variables)
-    requires BI.Inv(k.bck, s.bcv)
-  {
-    forall ref :: ref in s.bcv.view ==> s.bcv.view[ref].children.Values == s.bcv.refGraph[ref]
-  }
-  
   predicate Inv(k: Constants, s: Variables)
   {
     && BI.Inv(k.bck, s.bcv)
-    && ReferenceGraphReflectsChildren(k, s)
     && Acyclic(k, s)
     && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
   }
@@ -41,13 +35,13 @@ module DiskBetreeInv {
 
   // One-way preservation
 
-  predicate PreservesLookups<Value(!new)>(k: Constants, s: Variables, s': Variables)
+  predicate PreservesLookups(k: Constants, s: Variables, s': Variables)
   {
     forall lookup, key, value :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup) ==>
       exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
   }
 
-  predicate PreservesLookupsExcept<Value(!new)>(k: Constants, s: Variables, s': Variables, exceptQuery: Key)
+  predicate PreservesLookupsExcept(k: Constants, s: Variables, s': Variables, exceptQuery: Key)
   {
     forall lookup, key, value :: key != exceptQuery && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup) ==>
       exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
@@ -55,13 +49,13 @@ module DiskBetreeInv {
 
   // Two-way preservation
 
-  predicate EquivalentLookups<Value(!new)>(k: Constants, s: Variables, s': Variables)
+  predicate EquivalentLookups(k: Constants, s: Variables, s': Variables)
   {
     && PreservesLookups(k, s, s')
     && PreservesLookups(k, s', s)
   }
 
-  predicate EquivalentLookupsWithPut<Value(!new)>(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
+  predicate EquivalentLookupsWithPut(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
   {
     && PreservesLookupsExcept(k, s, s', key)
     && PreservesLookupsExcept(k, s', s, key)
@@ -71,7 +65,7 @@ module DiskBetreeInv {
   // CantEquivocate
   // It's a lemma here (follows from structure of Lookups) - not an invariant!
 
-  lemma SatisfyingLookupsForKeyAgree<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
+  lemma SatisfyingLookupsForKeyAgree(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
   requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
   requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
   requires 0 <= idx < |lookup|;
@@ -84,7 +78,7 @@ module DiskBetreeInv {
     }
   }
 
-  lemma CantEquivocateWlog<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  lemma CantEquivocateWlog(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
   requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
   requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
   requires |lookup| <= |lookup'|
@@ -120,7 +114,7 @@ module DiskBetreeInv {
     assert IsPrefix(TotalLog(lookup, key), TotalLog(lookup', key));
   }
 
-  lemma CantEquivocate<Value>(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  lemma CantEquivocate(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
   requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
   requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
   ensures value == value';
@@ -138,7 +132,7 @@ module DiskBetreeInv {
 
   // Acyclicity proofs
 
-  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
+  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
     requires Grow(k, s, s', oldroot, newchildref)
     ensures Acyclic(k, s')
@@ -147,7 +141,7 @@ module DiskBetreeInv {
       ensures LookupIsAcyclic(lookup')
     {
       if |lookup'| > 1 {
-        var tmplookup := Apply((x: Layer) => x.(ref := if x.ref == newchildref then BI.Root(k.bck) else x.ref), lookup'[1..]);
+        var tmplookup := Apply((x: Layer) => x.(ref := if x.ref == newchildref then Root() else x.ref), lookup'[1..]);
         var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), tmplookup);
         var i := 1;
         while i < |lookup|
@@ -158,7 +152,7 @@ module DiskBetreeInv {
           assert lookup'[i].node == lookup[i-1].node;
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
           assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
-          assert lookup'[i+1].ref != BI.Root(k.bck);
+          assert lookup'[i+1].ref != Root();
           assert lookup'[i+1].node == lookup[i].node;
           i := i + 1;
         }
@@ -187,7 +181,7 @@ module DiskBetreeInv {
     }
   }
   
-  lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
+  lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
   requires Inv(k, s)
   requires Grow(k, s, s', oldroot, newchildref)
   ensures EquivalentLookups(k, s, s')
@@ -196,7 +190,7 @@ module DiskBetreeInv {
     ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     {
       // Add one for the new root
-      var rootref := BI.Root(k.bck);
+      var rootref := Root();
 
       var newroot := s'.bcv.view[rootref];
 
@@ -226,9 +220,9 @@ module DiskBetreeInv {
 
       // Remove one for the root
       assert |lookup'| >= 2;
-      var lookup := [Layer(BI.Root(k.bck), lookup'[1].node)] + lookup'[2..];
+      var lookup := [Layer(Root(), lookup'[1].node)] + lookup'[2..];
 
-      TotalLogAdditive([Layer(BI.Root(k.bck), lookup'[1].node)], lookup'[2..], key);
+      TotalLogAdditive([Layer(Root(), lookup'[1].node)], lookup'[2..], key);
       TotalLogAdditive(lookup'[..2], lookup'[2..], key);
       assert lookup'[..2] + lookup'[2..] == lookup';
 
@@ -242,7 +236,7 @@ module DiskBetreeInv {
 
   // Definitions of Flush lookup transformations:
 
-  function transformLookup<Value>(lookup: Lookup<Value>, key: Key, oldref: BI.Reference, newref: BI.Reference, newnode: Node) : Lookup<Value>
+  function transformLookup(lookup: Lookup, key: Key, oldref: Reference, newref: Reference, newnode: Node) : Lookup
   ensures |transformLookup(lookup, key, oldref, newref, newnode)| == |lookup|;
   ensures forall i :: 0 <= i < |lookup| ==>
       transformLookup(lookup, key, oldref, newref, newnode)[i].ref ==
@@ -267,7 +261,7 @@ module DiskBetreeInv {
   // Change every parentref in lookup to the newparent, and likewise for the child.
   // However, when changing the child, we check first that it actually came from the parent
   // (since there might be other pointers to child)
-  function transformLookupParentAndChild<Value>(lookup: Lookup<Value>, key: Key, parentref: BI.Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: BI.Reference, newchildref: BI.Reference, newchild: Node) : Lookup<Value>
+  function transformLookupParentAndChild(lookup: Lookup, key: Key, parentref: Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: Reference, newchildref: Reference, newchild: Node) : Lookup
   requires |lookup| > 0
   ensures |transformLookupParentAndChild(lookup, key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild)| == |lookup|;
   decreases lookup
@@ -287,7 +281,7 @@ module DiskBetreeInv {
     pref + [Layer(ref, node)]
   }
 
-  lemma transformLookupParentAndChildLemma<Value>(lookup: Lookup<Value>, lookup': Lookup<Value>, key: Key, parentref: BI.Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: BI.Reference, newchildref: BI.Reference, newchild: Node, i: int)
+  lemma transformLookupParentAndChildLemma(lookup: Lookup, lookup': Lookup, key: Key, parentref: Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: Reference, newchildref: Reference, newchild: Node, i: int)
   requires 0 <= i < |lookup|
   requires lookup' == transformLookupParentAndChild(lookup, key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild)
   ensures
@@ -304,29 +298,29 @@ module DiskBetreeInv {
   {
     if (i == |lookup| - 1) {
     } else {
-      transformLookupParentAndChildLemma<Value>(lookup[..|lookup|-1], lookup'[..|lookup|-1],
+      transformLookupParentAndChildLemma(lookup[..|lookup|-1], lookup'[..|lookup|-1],
           key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild, i);
     }
   }
 
-  lemma transformLookupParentAndChildPreservesAccumulatedLog<Value>(
+  lemma transformLookupParentAndChildPreservesAccumulatedLog(
     k: Constants,
     s: Variables,
     s': Variables,
-    lookup: Lookup<Value>,
-    lookup': Lookup<Value>,
+    lookup: Lookup,
+    lookup': Lookup,
     key: Key,
     parent: Node,
     child: Node,
-    parentref: BI.Reference,
+    parentref: Reference,
     newparent: Node,
     movedKeys: iset<Key>,
-    childref: BI.Reference,
-    newchildref: BI.Reference,
+    childref: Reference,
+    newchildref: Reference,
     newchild: Node,
     newbuffer: Buffer,
     newparentbuffer: Buffer,
-    newparentchildren: imap<Key, BI.Reference>)
+    newparentchildren: imap<Key, Reference>)
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires LookupVisitsWFNodes(lookup)
@@ -387,7 +381,7 @@ module DiskBetreeInv {
     }
   }
 
-  function flushTransformLookup<Value>(lookup: Lookup, key: Key, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference) : Lookup
+  function flushTransformLookup(lookup: Lookup, key: Key, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) : Lookup
   requires |lookup| > 0
   requires WFNode(parent)
   requires WFNode(child)
@@ -402,7 +396,7 @@ module DiskBetreeInv {
     transformLookupParentAndChild(lookup1, key, parentref, newparent, movedKeys, childref, newchildref, newchild)
   }
 
-  function flushTransformLookupRev<Value>(lookup': Lookup, key: Key, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference) : Lookup
+  function flushTransformLookupRev(lookup': Lookup, key: Key, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) : Lookup
   {
     // TODO Use transformLookupParentAndChild instead?
     // This works fine, but only because newchildref is fresh.
@@ -411,7 +405,7 @@ module DiskBetreeInv {
     transformLookup(transformLookup(lookup', key, newchildref, childref, child), key, parentref, parentref, parent)
   }
 
-  lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference, lookup: Lookup, lookup': Lookup, key: Key)
+  lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s)
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
@@ -424,8 +418,8 @@ module DiskBetreeInv {
   {
     if (|lookup'| == 0) {
     } else if (|lookup'| == 1) {
-      assert BI.Root(k.bck) in s.bcv.view;
-      assert lookup[0].node == s.bcv.view[BI.Root(k.bck)];
+      assert Root() in s.bcv.view;
+      assert lookup[0].node == s.bcv.view[Root()];
       assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     } else {
       FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref,
@@ -436,7 +430,7 @@ module DiskBetreeInv {
     }
   }
 
-  lemma FlushPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference, lookup': Lookup, key: Key)
+  lemma FlushPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, lookup': Lookup, key: Key)
   requires Inv(k, s)
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
@@ -455,7 +449,7 @@ module DiskBetreeInv {
     }
   }
 
-  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
     requires Inv(k, s)
     requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
     ensures Acyclic(k, s')
@@ -468,18 +462,18 @@ module DiskBetreeInv {
   }
 
 
-  lemma transformLookupParentAndChildPreservesAccumulatedLogRev<Value>(
+  lemma transformLookupParentAndChildPreservesAccumulatedLogRev(
     k: Constants,
     s: Variables,
     s': Variables,
-    parentref: BI.Reference,
+    parentref: Reference,
     parent: Node,
-    childref: BI.Reference,
+    childref: Reference,
     child: Node,
-    newchildref: BI.Reference,
+    newchildref: Reference,
     movedKeys: iset<Key>,
-    lookup: Lookup<Value>,
-    lookup': Lookup<Value>,
+    lookup: Lookup,
+    lookup': Lookup,
     key: Key
   )
   requires Inv(k, s)
@@ -527,18 +521,18 @@ module DiskBetreeInv {
     }
   }
 
-  lemma transformLookupParentAndChildPreservesAccumulatedLogRevPrefix<Value>(
+  lemma transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(
     k: Constants,
     s: Variables,
     s': Variables,
-    parentref: BI.Reference,
+    parentref: Reference,
     parent: Node,
-    childref: BI.Reference,
+    childref: Reference,
     child: Node,
-    newchildref: BI.Reference,
+    newchildref: Reference,
     movedKeys: iset<Key>,
-    lookup: Lookup<Value>,
-    lookup': Lookup<Value>,
+    lookup: Lookup,
+    lookup': Lookup,
     key: Key
   )
   requires Inv(k, s)
@@ -577,7 +571,7 @@ module DiskBetreeInv {
     }
   }
 
-  lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables, parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
   requires Inv(k, s)
   requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
   ensures EquivalentLookups(k, s, s')
@@ -600,7 +594,7 @@ module DiskBetreeInv {
 
       transformLookupParentAndChildLemma(lookup1, lookup', key, parentref, newparent, movedKeys, childref, newchildref, newchild, 0);
 
-      assert lookup'[0].ref == BI.Root(k.bck);
+      assert lookup'[0].ref == Root();
 
       forall i | 0 <= i < |lookup'|
       ensures IMapsTo(s'.bcv.view, lookup'[i].ref, lookup'[i].node)
@@ -707,7 +701,7 @@ module DiskBetreeInv {
     )
   }
 
-  lemma splitLookupProperties<Value>(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  lemma splitLookupProperties(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   requires |lookup| > 0
   requires ValidFusion(fusion);
   requires lookup' == splitLookup(fusion, lookup, key);
@@ -842,7 +836,7 @@ module DiskBetreeInv {
     )
   }
 
-  lemma mergeLookupProperties<Value>(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
+  lemma mergeLookupProperties(fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   requires |lookup'| > 0
   requires ValidFusion(fusion);
   requires lookup == mergeLookup(fusion, lookup', key);
@@ -890,7 +884,7 @@ module DiskBetreeInv {
       if (lookup'[0].ref == fusion.parentref) {
         assert IMapsTo(view, lookup[0].ref, lookup[0].node);
       } else {
-        assert lookup[0].ref == BI.Root(k.bck);
+        assert lookup[0].ref == Root();
         assert lookup[0].node == lookup'[0].node;
         assert IMapsTo(view, lookup[0].ref, lookup[0].node);
       }
@@ -1001,7 +995,7 @@ module DiskBetreeInv {
     }
   }
 
-  lemma SplitPreservesIsSatisfyingLookup<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
+  lemma SplitPreservesIsSatisfyingLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s);
   requires Split(k, s, s', fusion);
   requires |lookup| > 0;
@@ -1027,7 +1021,7 @@ module DiskBetreeInv {
     SplitLookupPreservesAccumulatedBuffer(k, s, s', fusion, key, lookup, lookup');
   }
 
-  lemma SplitPreservesIsSatisfyingLookupRev<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
+  lemma SplitPreservesIsSatisfyingLookupRev(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s);
   requires Split(k, s, s', fusion);
   requires |lookup'| > 0;
@@ -1061,12 +1055,12 @@ module DiskBetreeInv {
     }
   }
 
-  // lemma SplitPreservesReachablePointersValid<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  // lemma SplitPreservesReachablePointersValid(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   // requires Inv(k, s)
   // requires Split(k, s, s', fusion)
   // ensures ReachablePointersValid(k, s')
   // {
-  //   forall key, lookup': Lookup<Value> | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
+  //   forall key, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
   //   ensures 
   //     lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
   //   {
@@ -1085,12 +1079,12 @@ module DiskBetreeInv {
     ensures Inv(k, s)
   {
     forall key | MS.InDomain(key)
-    ensures IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(BI.Root(k.bck), EmptyNode())]);
+    ensures IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(Root(), EmptyNode())]);
     {
     }
   }
 
-  lemma QueryStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)
+  lemma QueryStepPreservesInvariant(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)
     requires Inv(k, s)
     requires Query(k, s, s', key, value, lookup)
     ensures Inv(k, s')
@@ -1158,7 +1152,7 @@ module DiskBetreeInv {
     }
   }
     
-  lemma InsertMessageStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessageStepPreservesInvariant(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
     requires InsertMessage(k, s, s', key, msg, oldroot)
     ensures Inv(k, s')
@@ -1167,8 +1161,8 @@ module DiskBetreeInv {
     InsertMessagePreservesTotality(k, s, s', key, msg, oldroot);
   }
 
-  lemma FlushStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables,
-                                           parentref: BI.Reference, parent: Node, childref: BI.Reference, child: Node, newchildref: BI.Reference)
+  lemma FlushStepPreservesInvariant(k: Constants, s: Variables, s': Variables,
+                                           parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
     requires Inv(k, s)
     requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
     ensures Inv(k, s')
@@ -1177,7 +1171,7 @@ module DiskBetreeInv {
     FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref);
   }
   
-  lemma GrowStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: BI.Reference)
+  lemma GrowStepPreservesInvariant(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
     requires Grow(k, s, s', oldroot, newchildref)
     ensures Inv(k, s')
@@ -1186,7 +1180,7 @@ module DiskBetreeInv {
     GrowEquivalentLookups(k, s, s', oldroot, newchildref);
   }
  
-  lemma SplitStepPreservesInvariant<Value>(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  lemma SplitStepPreservesInvariant(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
     requires Inv(k, s)
     requires Split(k, s, s', fusion)
     ensures Inv(k, s')

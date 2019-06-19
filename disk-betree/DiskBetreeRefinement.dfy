@@ -4,27 +4,26 @@ include "DiskBetreeInv.dfy"
 
 module DiskBetreeRefinement {
   import opened DBI = DiskBetreeInv
+  import opened G = BetreeGraph
 
-  type Node<Value> = DB.Node<Value>
-  type Key = DB.Key
-  type Lookup<Value> = DB.Lookup<Value>
+  type Lookup = DB.Lookup
     
-  datatype LookupResult<Value> = LookupResult(lookup: Lookup, result: Value)
+  datatype LookupResult = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup<Value>(k: DB.Constants, view: DB.BI.View<Node>, key: Key) : LookupResult
+  function GetLookup(k: DB.Constants, view: DB.BI.View, key: Key) : LookupResult
     requires KeyHasSatisfyingLookup(k, view, key);
   {
     var lookup, value :| DB.IsSatisfyingLookup(k, view, key, value, lookup);
     LookupResult(lookup, value)
   }
 
-  function GetValue<Value>(k: DB.Constants, view: DB.BI.View<Node>, key: Key) : Value
+  function GetValue(k: DB.Constants, view: DB.BI.View, key: Key) : Value
     requires KeyHasSatisfyingLookup(k, view, key);
   {
     GetLookup(k, view, key).result
   }
 
-  function IView<Value>(k: DB.Constants, view: DB.BI.View<Node>) : imap<Key, Value>
+  function IView(k: DB.Constants, view: DB.BI.View) : imap<Key, Value>
     requires forall key | DB.MS.InDomain(key) :: KeyHasSatisfyingLookup(k, view, key);
   {
     imap key | DB.MS.InDomain(key) :: GetValue(k, view, key)
@@ -34,7 +33,7 @@ module DiskBetreeRefinement {
     DB.MS.Constants()
   }
   
-  function I(k: DB.Constants, s: DB.Variables) : DB.MS.Variables
+  function I(k: DB.Constants, s: DB.Variables) : DB.MS.Variables<Value>
     requires Inv(k, s)
   {
     DB.MS.Variables(IView(k, s.bcv.view))
@@ -62,7 +61,7 @@ module DiskBetreeRefinement {
       var lookup := lookupResult.lookup;
       var value := lookupResult.result;
       //assert DB.IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-      assert DB.TotalLog(lookup, key) == [DB.Insertion(DB.MS.EmptyValue())];
+      assert DB.TotalLog(lookup, key) == [Insertion(DB.MS.EmptyValue())];
       //assert value == DB.MS.EmptyValue();
       //assert GetValue(k, s.bcv.view, key) == DB.MS.EmptyValue();
     }
@@ -98,7 +97,7 @@ module DiskBetreeRefinement {
         == IView(k, s'.bcv.view);
   }
 
-  lemma EquivalentLookupsWithPutImplInterpsPut<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value)
+  lemma EquivalentLookupsWithPutImplInterpsPut(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value)
   requires Inv(k, s);
   requires Inv(k, s');
   requires EquivalentLookupsWithPut(k, s, s', key, value);
@@ -135,13 +134,13 @@ module DiskBetreeRefinement {
     }
   }
 
-  lemma QueryStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value, lookup: Lookup)
+  lemma QueryStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value, lookup: Lookup)
     requires Inv(k, s)
     requires DB.Query(k, s, s', key, value, lookup)
     requires Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
   
-  lemma InsertMessageStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, msg: DB.BufferEntry, oldroot: Node)
+  lemma InsertMessageStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
     requires DB.InsertMessage(k, s, s', key, msg, oldroot)
     requires Inv(k, s')
@@ -157,8 +156,8 @@ module DiskBetreeRefinement {
     assert DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.WriteStep(key, value));
   }
 
-  lemma FlushStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables,
-                                           parentref: DB.BI.Reference, parent: Node, childref: DB.BI.Reference, child: Node, newchildref: DB.BI.Reference)
+  lemma FlushStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables,
+                                           parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
     requires Inv(k, s)
     requires DB.Flush(k, s, s', parentref, parent, childref, child, newchildref)
     requires Inv(k, s')
@@ -169,7 +168,7 @@ module DiskBetreeRefinement {
     assert I(k, s) == I(k, s');
   }
 
-  lemma GrowStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: DB.BI.Reference)
+  lemma GrowStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
     requires DB.Grow(k, s, s', oldroot, newchildref)
     requires Inv(k, s')
@@ -180,7 +179,7 @@ module DiskBetreeRefinement {
     assert I(k, s) == I(k, s');
   }
 
-  lemma SplitStepRefinesMap<Value>(k: DB.Constants, s: DB.Variables, s': DB.Variables, fusion: DB.NodeFusion)
+  lemma SplitStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, fusion: DB.NodeFusion)
     requires Inv(k, s)
     requires DB.Split(k, s, s', fusion)
     requires Inv(k, s')

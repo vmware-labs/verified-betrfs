@@ -1,22 +1,19 @@
 include "DiskBetree.dfy"
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
+include "Graph.dfy"
 
 module BlockCache {
+  // BlockCache is parameterized by the graph type
+  // (but right now it's instantiated to BetreeGraph)
+  import opened G = BetreeGraph 
+
   import opened Sequences
   import opened Maps
 
   import DiskBetree
-  import BlockInterface
 
-  datatype Constants = Constants(constants: BlockInterface.Constants)
-
-  // psssst Node = DiskBetree.Node but don't tell anybody
-  type Node<Value> = DiskBetree.Node<Value>
-  function Successors(node: Node): iset<Reference> { node.children.Values }
-
-  type Reference = BlockInterface.Reference
-  function RootReference(k: Constants) : Reference { BlockInterface.Root(k.constants) }
+  datatype Constants = Constants()
 
   // Stuff for communicating with Disk (probably move to another file?)
 
@@ -30,7 +27,7 @@ module BlockCache {
       refcounts: map<Reference, int>)
 
   datatype Sector<Value> =
-    | SectorBlock(block: Node<Value>)
+    | SectorBlock(block: Node)
     | SectorSuperblock(superblock: Superblock)
 
   // TODO make async
@@ -41,7 +38,7 @@ module BlockCache {
 
   // BlockCache stuff
 
-  datatype CacheLine<Value> = CacheLine(block: Node<Value>)
+  datatype CacheLine<Value> = CacheLine(block: Node)
 
   datatype Variables<Value> =
     | Ready(
@@ -68,8 +65,8 @@ module BlockCache {
   datatype Step<Value> =
     | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
-    | DirtyStep(ref: Reference, block: Node<Value>)
-    | AllocStep(ref: Reference, block: Node<Value>)
+    | DirtyStep(ref: Reference, block: Node)
+    | AllocStep(ref: Reference, block: Node)
     | UnallocStep(ref: Reference)
     | PageInStep(ref: Reference)
     | PageInSuperblockStep
@@ -183,7 +180,7 @@ module BlockCache {
     && ref in s.cache 
 
     // We can only dealloc this if nothing is pointing to it.
-    && ref != RootReference(k)
+    && ref != Root()
     && MapsTo(s.ephemeralSuperblock.refcounts, ref, 0)
 
     && s'.Ready?

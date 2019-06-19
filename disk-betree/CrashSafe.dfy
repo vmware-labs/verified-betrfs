@@ -5,18 +5,18 @@ include "DiskBetreeInv.dfy"
 include "DiskBetreeRefinement.dfy"
 
 module CrashSafeBlockInterface {
-  import BI = BlockInterface
+  import BI = BetreeBlockInterface
 
   type Constants = BI.Constants
-  datatype Variables<T> = Variables(persistent: BI.Variables<T>, ephemeral: BI.Variables<T>)
+  datatype Variables = Variables(persistent: BI.Variables, ephemeral: BI.Variables)
 
-  predicate Init<T(!new)>(k: Constants, s: Variables)
+  predicate Init(k: Constants, s: Variables)
   {
     && (exists block :: BI.Init(k, s.persistent, block))
     && s.ephemeral == s.persistent
   }
 
-  datatype Step<T> =
+  datatype Step =
     | EphemeralMoveStep
     | SyncStep
     | CrashStep
@@ -48,7 +48,7 @@ module CrashSafeBlockInterface {
     }
   }
 
-  predicate Next<T(!new)>(k: Constants, s: Variables, s': Variables) {
+  predicate Next(k: Constants, s: Variables, s': Variables) {
     exists step :: NextStep(k, s, s', step)
   }
 
@@ -81,7 +81,7 @@ module CrashSafeDiskBetree {
   import DBI = DiskBetreeInv
 
   type Constants = DB.Constants
-  datatype Variables<T> = Variables(persistent: DB.Variables<T>, ephemeral: DB.Variables<T>)
+  datatype Variables = Variables(persistent: DB.Variables, ephemeral: DB.Variables)
 
   predicate Init(k: Constants, s: Variables)
   {
@@ -89,7 +89,7 @@ module CrashSafeDiskBetree {
     && s.ephemeral == s.persistent
   }
 
-  datatype Step<T> =
+  datatype Step =
     | EphemeralMoveStep
     | SyncStep
     | CrashStep
@@ -121,7 +121,7 @@ module CrashSafeDiskBetree {
     }
   }
 
-  predicate Next<T(!new)>(k: Constants, s: Variables, s': Variables) {
+  predicate Next(k: Constants, s: Variables, s': Variables) {
     exists step :: NextStep(k, s, s', step)
   }
 
@@ -153,15 +153,15 @@ module CrashSafeMap {
   import MS = MapSpec
 
   type Constants = MS.Constants
-  datatype Variables<T> = Variables(persistent: MS.Variables<T>, ephemeral: MS.Variables<T>)
+  datatype Variables<Value> = Variables(persistent: MS.Variables<Value>, ephemeral: MS.Variables<Value>)
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init<Value>(k: Constants, s: Variables<Value>)
   {
     && MS.Init(k, s.persistent)
     && s.ephemeral == s.persistent
   }
 
-  datatype Step<T> =
+  datatype Step =
     | EphemeralMoveStep
     | SyncStep
     | CrashStep
@@ -193,7 +193,7 @@ module CrashSafeMap {
     }
   }
 
-  predicate Next<T(!new)>(k: Constants, s: Variables, s': Variables) {
+  predicate Next(k: Constants, s: Variables, s': Variables) {
     && exists step :: NextStep(k, s, s', step)
   }
 
@@ -231,7 +231,7 @@ module CrashSafeBetreeMapRefinement {
     Ref.Ik(k)
   }
 
-  function I(k: A.Constants, s: A.Variables) : B.Variables
+  function I(k: A.Constants, s: A.Variables) : B.Variables<A.DB.G.Value>
   requires A.Inv(k, s)
   {
     B.Variables(Ref.I(k, s.persistent), Ref.I(k, s.ephemeral))

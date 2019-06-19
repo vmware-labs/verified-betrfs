@@ -1,36 +1,31 @@
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
+include "Graph.dfy"
   
-module BlockInterface {
+abstract module BlockInterface {
+  // BlockInterface is parameterized by the graph type
+  import opened G : Graph 
+
   import opened Sequences
   import opened Maps
     
-  type Reference(!new,==) // LBA
+  type View = Graph
 
-  type View<T> = imap<Reference, T>
-  type ReferenceGraph = imap<Reference, iset<Reference>>
-
-  function Root(k: Constants) : Reference
-
-  type Constants
-  datatype Variables<T> = Variables(view: imap<Reference, T>, refGraph: ReferenceGraph)
+  datatype Constants = Constants()
+  datatype Variables = Variables(view: View)
 
   predicate RefGraphIsClosed(k: Constants, s: Variables) {
-    forall key :: key in s.refGraph ==> s.refGraph[key] <= s.refGraph.Keys
+    forall key :: key in s.view ==> Successors(s.view[key]) <= s.view.Keys
   }
 
-  predicate ViewAndRefGraphAreConsistent(k: Constants, s: Variables) {
-    s.view.Keys == s.refGraph.Keys
-  }
-  
   type Lookup = seq<Reference>
 
   predicate LookupIsValid(k: Constants, s: Variables, lookup: Lookup)
   {
     && |lookup| > 0
-    && lookup[0] == Root(k)
-    && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.refGraph)
-    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in s.refGraph[lookup[i]])
+    && lookup[0] == Root()
+    && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.view)
+    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in Successors(s.view[lookup[i]]))
   }
 
   predicate ReachableReference(k: Constants, s: Variables, ref: Reference)
@@ -46,31 +41,28 @@ module BlockInterface {
     LiveReferences(k, s) <= s.view.Keys
   }
 
-  function Read<T>(k: Constants, s: Variables, ref: Reference) : T
+  function Read(k: Constants, s: Variables, ref: Reference) : Node
     requires LiveDataAvailable(k, s)
     requires ref in s.view
   {
     s.view[ref]
   }
     
-  predicate Init<T>(k: Constants, s: Variables, block: T) {
-    && s.view == imap[Root(k) := block]
-    && s.refGraph == imap[Root(k) := iset{}]
+  predicate Init(k: Constants, s: Variables, block: Node) {
+    && s.view == imap[Root() := block]
   }
 
-  predicate Alloc<T>(k: Constants, s: Variables, s': Variables, block: T, successors: iset<Reference>, ref: Reference) {
-    && successors <= s.view.Keys
+  predicate Alloc(k: Constants, s: Variables, s': Variables, block: Node, ref: Reference) {
+    && Successors(block) <= s.view.Keys
     && ref !in s.view
 
-    && s'.refGraph == s.refGraph[ref := successors]
     && s'.view == s.view[ref := block]
   }
     
-  predicate Write<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: iset<Reference>) {
-    && successors <= s.view.Keys
+  predicate Write(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node) {
+    && Successors(block) <= s.view.Keys
     && ref in s.view
 
-    && s'.refGraph == s.refGraph[ref := successors]
     && s'.view == s.view[ref := block]
   }
 
@@ -142,7 +134,7 @@ module BlockInterface {
   }
 
   
-  predicate Transaction<T(!new)>(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
+  predicate Transaction(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
     decreases steps, 2
     ensures Transaction(k, s, s', steps) && |steps| == 2 ==> exists sint ::
       && NextStep(k, s, sint, steps[0])
@@ -159,26 +151,25 @@ module BlockInterface {
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
   }
 
-  function Predecessors(refGraph: ReferenceGraph, ref: Reference) : iset<Reference> {
-    iset ref1 | ref1 in refGraph && ref in refGraph[ref1]
+  function Predecessors(view: View, ref: Reference) : iset<Reference> {
+    iset ref1 | ref1 in view && ref in Successors(view[ref1])
   }
   
-  predicate ClosedUnderPredecessor(refGraph: ReferenceGraph, refs: iset<Reference>) {
-    forall ref :: ref in refs ==> Predecessors(refGraph, ref) <= refs
+  predicate ClosedUnderPredecessor(view: View, refs: iset<Reference>) {
+    forall ref :: ref in refs ==> Predecessors(view, ref) <= refs
   }
    
   predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
     && refs !! LiveReferences(k, s)
     && refs <= s.view.Keys
-    && ClosedUnderPredecessor(s.refGraph, refs)
+    && ClosedUnderPredecessor(s.view, refs)
     
     && s'.view == IMapRemove(s.view, refs)
-    && s'.refGraph == IMapRemove(s.refGraph, refs)
   }
   
-  datatype Step<T> =
-    | AllocStep(block: T, successors: iset<Reference>, ref: Reference)
-    | WriteStep(ref: Reference, block: T, successors: iset<Reference>)
+  datatype Step =
+    | AllocStep(block: Node, ref: Reference)
+    | WriteStep(ref: Reference, block: Node)
     | TransactionStep(steps: seq<Step>)
     | GCStep(refs: iset<Reference>)
     | StutterStep
@@ -187,15 +178,15 @@ module BlockInterface {
     decreases step
   {
     match step {
-      case AllocStep(block, successors, ref) => Alloc(k, s, s', block, successors, ref)
-      case WriteStep(ref, block, successors) => Write(k, s, s', ref, block, successors)
+      case AllocStep(block, ref) => Alloc(k, s, s', block, ref)
+      case WriteStep(ref, block) => Write(k, s, s', ref, block)
       case TransactionStep(steps) => Transaction(k, s, s', steps)
       case StutterStep => s == s'
       case GCStep(refs) => GC(k, s, s', refs)
     }
   }
     
-  predicate Next<T(!new)>(k: Constants, s: Variables, s': Variables) {
+  predicate Next(k: Constants, s: Variables, s': Variables) {
     exists step :: NextStep(k, s, s', step)
   }
 
@@ -234,22 +225,21 @@ module BlockInterface {
   /////////// Invariants
 
   predicate Inv(k: Constants, s: Variables) {
-    && Root(k) in s.view // Redundant? (yes, but can we delete it?)
-    && ViewAndRefGraphAreConsistent(k, s)
+    && Root() in s.view // Redundant? (yes, but can we delete it?)
     && RefGraphIsClosed(k, s)
     && LiveDataAvailable(k, s)
   }
 
-  lemma AllocPreservesInv<T>(k: Constants, s: Variables, s': Variables, block: T, successors: iset<Reference>, ref: Reference)
+  lemma AllocPreservesInv(k: Constants, s: Variables, s': Variables, block: Node, ref: Reference)
     requires Inv(k, s)
-    requires Alloc(k, s, s', block, successors, ref)
+    requires Alloc(k, s, s', block, ref)
     ensures Inv(k, s')
   {
   }
   
-  lemma WritePreservesInv<T>(k: Constants, s: Variables, s': Variables, ref: Reference, block: T, successors: iset<Reference>)
+  lemma WritePreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
-    requires Write(k, s, s', ref, block, successors)
+    requires Write(k, s, s', ref, block)
     ensures Inv(k, s')
   {
   }
@@ -276,7 +266,7 @@ module BlockInterface {
     requires GC(k, s, s', refs)
     ensures Inv(k, s')
   {
-    assert LookupIsValid(k, s, [Root(k)]);
+    assert LookupIsValid(k, s, [Root()]);
   }
 
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, step: Step)
@@ -286,8 +276,8 @@ module BlockInterface {
     decreases step
   {
     match step {
-      case AllocStep(block, successors, ref) => AllocPreservesInv(k, s, s', block, successors, ref);
-      case WriteStep(ref, block, successors) => WritePreservesInv(k, s, s', ref, block, successors);
+      case AllocStep(block, ref) => AllocPreservesInv(k, s, s', block, ref);
+      case WriteStep(ref, block) => WritePreservesInv(k, s, s', ref, block);
       case TransactionStep(steps) => TransactionPreservesInv(k, s, s', steps);
       case GCStep(ref) => GCPreservesInv(k, s, s', ref);
       case StutterStep => { }

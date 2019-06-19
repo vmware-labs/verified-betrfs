@@ -4,6 +4,7 @@ include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
 module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
+  import opened G = BetreeGraph // in theory this ought to be parameterized by G
   import BCS = BlockCacheSystem
   import CSBI = CrashSafeBlockInterface
 
@@ -11,37 +12,24 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import opened Sequences
 
   import BC = BlockCache
-  import BI = BlockInterface
+  import BI = BetreeBlockInterface
   import D = Disk
   import DiskBetree
-  type Node<Value> = DiskBetree.Node<Value>
-  type Reference = BI.Reference
   type DiskOp<T> = BC.DiskOp<T>
 
   function Ik(k: BCS.Constants) : CSBI.Constants
   {
-    k.machine.constants
+    BI.Constants()
   }
 
-  function RefGraph(m: map<Reference, Node>) : imap<Reference, iset<Reference>>
-  {
-    imap ref | ref in m :: BC.Successors(m[ref])
-  }
-
-  function I<Value>(k: BCS.Constants, s: BCS.Variables) : CSBI.Variables<Node<Value>>
+  function I<Value>(k: BCS.Constants, s: BCS.Variables) : CSBI.Variables
   requires BCS.Inv(k, s)
   {
     var persistentGraph := BCS.PersistentGraph(k, s);
     var ephemeralGraph := if s.machine.Ready? then BCS.EphemeralGraph(k, s) else persistentGraph;
     CSBI.Variables(
-      BI.Variables(
-        MapToImap(persistentGraph),
-        RefGraph(persistentGraph)
-      ),
-      BI.Variables(
-        MapToImap(ephemeralGraph),
-        RefGraph(ephemeralGraph)
-      )
+      BI.Variables(MapToImap(persistentGraph)),
+      BI.Variables(MapToImap(ephemeralGraph))
     )
   }
 
@@ -81,7 +69,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires D.Stutter(k.disk, s.disk, s'.disk, dop)
   ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
   {
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.WriteStep(ref, block, BC.Successors(block)));
+    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.WriteStep(ref, block));
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
@@ -92,7 +80,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires D.Stutter(k.disk, s.disk, s'.disk, dop)
   ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
   {
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.AllocStep(block, BC.Successors(block), ref));
+    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.AllocStep(block, ref));
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
@@ -109,13 +97,12 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
       assert BI.ReachableReference(Ik(k), I(k, s).ephemeral, ref);
       var lookup :| BI.LookupIsValid(Ik(k), I(k, s).ephemeral, lookup) && Last(lookup) == ref;
       if (|lookup| == 1) {
-        assert ref == BI.Root(Ik(k));
+        assert ref == Root();
         assert false;
       } else {
         var graph := BCS.EphemeralGraph(k, s);
-        var refGraph := RefGraph(graph);
-        assert lookup[|lookup|-1] in refGraph[lookup[|lookup|-2]];
-        assert ref in refGraph[lookup[|lookup|-2]];
+        assert lookup[|lookup|-1] in Successors(graph[lookup[|lookup|-2]]);
+        assert ref in Successors(graph[lookup[|lookup|-2]]);
         assert lookup[|lookup|-2] in BCS.Predecessors(graph, ref);
         assert s.machine.ephemeralSuperblock.refcounts[ref] >= 1;
         assert false;
@@ -125,9 +112,8 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
 
     assert refs !! BI.LiveReferences(Ik(k), I(k, s).ephemeral);
     assert refs <= I(k, s).ephemeral.view.Keys;
-    assert BI.ClosedUnderPredecessor(I(k, s).ephemeral.refGraph, refs);
+    assert BI.ClosedUnderPredecessor(I(k, s).ephemeral.view, refs);
     assert I(k, s').ephemeral.view == IMapRemove(I(k, s).ephemeral.view, refs);
-    assert I(k, s').ephemeral.refGraph == IMapRemove(I(k, s).ephemeral.refGraph, refs);
 
     assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.GCStep(iset{ref}));
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
