@@ -1,6 +1,0 @@
-- How do we program generically over algebraic datatypes? Would like to
-    have a datatype with an associated < method. We see the (==) trait,
-    but ... how do we write our own?
-
-- prove that even an adversarial disk won't cause bad behavior.
-    ("USB stick on the sidewalk")
