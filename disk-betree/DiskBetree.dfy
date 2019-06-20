@@ -13,6 +13,11 @@ module BetreeGraph refines Graph {
   datatype BufferEntry = Insertion(value: Value)
   type Buffer = imap<Key, seq<BufferEntry>>
   datatype Node = Node(children: imap<Key, Reference>, buffer: Buffer)
+
+  function Successors(node: Node) : iset<Reference>
+  {
+    iset k | k in node.children :: node.children[k]
+  }
 }
 
 module BetreeBlockInterface refines BlockInterface {
