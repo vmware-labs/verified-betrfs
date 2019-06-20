@@ -372,7 +372,7 @@ abstract module BlockCache {
     }
   }
 
-  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
+  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', dop, step)
     ensures Inv(k, s')
@@ -395,7 +395,7 @@ abstract module BlockCache {
     ensures Inv(k, s')
   {
     var step :| NextStep(k, s, s', dop, step);
-    NextStepPreservesInvariant(k, s, s', dop, step);
+    NextStepPreservesInv(k, s, s', dop, step);
   }
 
 }
