@@ -57,15 +57,20 @@ abstract module BlockCache {
     lba != SuperblockLBA(k)
   }
 
+  datatype Op =
+    | WriteOp(ref: Reference, block: Node)
+    | AllocOp(ref: Reference, block: Node)
+
   datatype Step =
     | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
-    | DirtyStep(ref: Reference, block: Node)
-    | AllocStep(ref: Reference, block: Node)
+    //| DirtyStep(ref: Reference, block: Node)
+    //| AllocStep(ref: Reference, block: Node)
     | UnallocStep(ref: Reference)
     | PageInStep(ref: Reference)
     | PageInSuperblockStep
     | EvictStep(ref: Reference)
+    | TransactionStep(ops: seq<Op>)
 
   predicate WFSuperblock(k: Constants, superblock: Superblock)
   {
@@ -127,11 +132,10 @@ abstract module BlockCache {
     forall ref | ref in G.Successors(block) :: ref in refcounts
   }
 
-  predicate Dirty(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+  predicate Dirty(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
   {
     // Possibly allocs ref, possibly overwrites it.
     && s.Ready?
-    && dop.NoDiskOp?
     && ref in s.cache
     && s'.Ready?
     && s'.cache == s.cache[ref := block]
@@ -144,11 +148,10 @@ abstract module BlockCache {
     && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
   }
 
-  predicate Alloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+  predicate Alloc(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
   {
     // Possibly allocs ref, possibly overwrites it.
     && s.Ready?
-    && dop.NoDiskOp?
     && ref !in s.cache
     && !IsAllocated(s, ref)
     && s'.Ready?
@@ -161,6 +164,29 @@ abstract module BlockCache {
     && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys + {ref}
     && MapsTo(s'.ephemeralSuperblock.refcounts, ref, 0)
     && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
+  }
+
+  predicate NextStepByOp(k: Constants, s: Variables, s': Variables, op: Op)
+  {
+    match op {
+      case WriteOp(ref, block) => Dirty(k, s, s', ref, block)
+      case AllocOp(ref, block) => Alloc(k, s, s', ref, block)
+    }
+  }
+
+  predicate IsStatePath(k: Constants, s: Variables, s': Variables, ops: seq<Op>, path: seq<Variables>)
+  {
+    && |path| == |ops| + 1
+    && path[0] == s
+    && Last(path) == s'
+    && (forall i :: 0 <= i < |ops| ==> NextStepByOp(k, path[i], path[i+1], ops[i]))
+  }
+
+  predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+  {
+    && dop.NoDiskOp?
+    && |ops| > 0
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
   }
 
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -226,12 +252,14 @@ abstract module BlockCache {
     match step {
       case WriteBackStep(ref) => WriteBack(k, s, s', dop, ref)
       case WriteBackSuperblockStep => WriteBackSuperblock(k, s, s', dop)
-      case DirtyStep(ref, block) => Dirty(k, s, s', dop, ref, block)
-      case AllocStep(ref, block) => Alloc(k, s, s', dop, ref, block)
       case UnallocStep(ref) => Unalloc(k, s, s', dop, ref)
       case PageInStep(ref) => PageIn(k, s, s', dop, ref)
       case PageInSuperblockStep => PageInSuperblock(k, s, s', dop)
       case EvictStep(ref) => Evict(k, s, s', dop, ref)
+
+      //case DirtyStep(ref, block) => Dirty(k, s, s', dop, ref, block)
+      //case AllocStep(ref, block) => Alloc(k, s, s', dop, ref, block)
+      case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
     }
   }
 
@@ -294,9 +322,9 @@ abstract module BlockCache {
     }
   }
 
-  lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+  lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
-    requires Dirty(k, s, s', dop, ref, block)
+    requires Dirty(k, s, s', ref, block)
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
@@ -322,13 +350,41 @@ abstract module BlockCache {
     }
   }
 
-  lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+  lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
-    requires Alloc(k, s, s', dop, ref, block)
+    requires Alloc(k, s, s', ref, block)
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
       assert InvReady(k, s');
+    }
+  }
+
+  lemma OpPreservesInvariant(k: Constants, s: Variables, s': Variables, op: Op)
+    requires Inv(k, s)
+    requires NextStepByOp(k, s, s', op)
+    ensures Inv(k, s')
+  {
+    match op {
+      case WriteOp(ref, block) => DirtyStepPreservesInvariant(k, s, s', ref, block);
+      case AllocOp(ref, block) => AllocStepPreservesInvariant(k, s, s', ref, block);
+    }
+  }
+
+  lemma TransactionStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+    requires Inv(k, s)
+    requires Transaction(k, s, s', dop, ops)
+    ensures Inv(k, s')
+  {
+    var path :| IsStatePath(k, s, s', ops, path);
+
+    var i := 0;
+    while i < |path| - 1
+    invariant i <= |path| - 1
+    invariant Inv(k, path[i])
+    {
+      OpPreservesInvariant(k, path[i], path[i+1], ops[i]);
+      i := i + 1;
     }
   }
 
@@ -380,12 +436,14 @@ abstract module BlockCache {
     match step {
       case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
       case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInvariant(k, s, s', dop);
-      case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
-      case AllocStep(ref, block) => AllocStepPreservesInvariant(k, s, s', dop, ref, block);
       case UnallocStep(ref) => UnallocStepPreservesInvariant(k, s, s', dop, ref);
       case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
       case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
+
+      //case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
+      //case AllocStep(ref, block) => AllocStepPreservesInvariant(k, s, s', dop, ref, block);
+      case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);
     }
   }
 

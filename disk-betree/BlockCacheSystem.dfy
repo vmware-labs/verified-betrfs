@@ -1,9 +1,11 @@
 include "Disk.dfy"
 include "BlockCache.dfy"
 include "../lib/Maps.dfy"
+include "../lib/sequences.dfy"
 
 abstract module BlockCacheSystem {
   import opened Maps
+  import opened Sequences
 
   import M : BlockCache
   import D = Disk
@@ -22,6 +24,7 @@ abstract module BlockCacheSystem {
   type Superblock = M.Superblock
   type Reference = M.G.Reference
   type Node = M.G.Node
+  type Op = M.Op
 
   predicate WFDisk(k: Constants, blocks: map<LBA, Sector>)
   {
@@ -292,10 +295,10 @@ abstract module BlockCacheSystem {
     assert Predecessors(graph, r) - {ref} == Predecessors(graph', r) - {ref};
   }
 
-  lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+  lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
-    requires M.Dirty(k.machine, s.machine, s'.machine, dop, ref, block)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
+    requires s.disk == s'.disk
     ensures Inv(k, s')
   {
     var refcounts := s.machine.ephemeralSuperblock.refcounts;
@@ -323,10 +326,10 @@ abstract module BlockCacheSystem {
     }
   }
 
-  lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, block: Node)
+  lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
-    requires M.Alloc(k.machine, s.machine, s'.machine, dop, ref, block)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    requires M.Alloc(k.machine, s.machine, s'.machine, ref, block)
+    requires s.disk == s'.disk
     ensures Inv(k, s')
   {
     var refcounts := s.machine.ephemeralSuperblock.refcounts;
@@ -377,6 +380,45 @@ abstract module BlockCacheSystem {
       }
       */
     }*/
+  }
+
+  lemma OpPreservesInvariant(k: Constants, s: Variables, s': Variables, op: Op)
+    requires Inv(k, s)
+    requires M.NextStepByOp(k.machine, s.machine, s'.machine, op)
+    requires s.disk == s'.disk
+    ensures Inv(k, s')
+  {
+    match op {
+      case WriteOp(ref, block) => DirtyStepPreservesInvariant(k, s, s', ref, block);
+      case AllocOp(ref, block) => AllocStepPreservesInvariant(k, s, s', ref, block);
+    }
+  }
+
+  lemma TransactionStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+    requires Inv(k, s)
+    requires M.Transaction(k.machine, s.machine, s'.machine, dop, ops)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    var path :| M.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
+
+    //assert Inv(k, Variables(path[0], s.disk));
+
+    var i := 0;
+    while i < |path| - 1
+    invariant i <= |path| - 1
+    invariant Inv(k, Variables(path[i], s.disk))
+    {
+      OpPreservesInvariant(k, Variables(path[i], s.disk), Variables(path[i+1], s.disk), ops[i]);
+      //assert Inv(k, Variables(path[i+1], s.disk));
+      i := i + 1;
+    }
+
+    //assert Inv(k, Variables(Last(path), s.disk));
+    //assert s'.machine == Last(path);
+    //assert s'.disk == s.disk;
+    //assert s' == Variables(Last(path), s.disk);
+    //assert Inv(k, s');
   }
 
   lemma UnallocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -438,12 +480,14 @@ abstract module BlockCacheSystem {
     match step {
       case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
       case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInvariant(k, s, s', dop);
-      case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
-      case AllocStep(ref, block) => AllocStepPreservesInvariant(k, s, s', dop, ref, block);
       case UnallocStep(ref) => UnallocStepPreservesInvariant(k, s, s', dop, ref);
       case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
       case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
+
+      //case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
+      //case AllocStep(ref, block) => AllocStepPreservesInvariant(k, s, s', dop, ref, block);
+      case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);
     }
   }
 

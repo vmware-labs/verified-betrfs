@@ -29,6 +29,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import D = Disk
   import DiskBetree
   type DiskOp = BC.DiskOp
+  type Op = BC.Op
 
   function Ik(k: BCS.Constants) : CSBI.Constants
   {
@@ -75,27 +76,104 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.SyncStep);
   }
 
-  lemma RefinesDirty(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ref: Reference, block: Node)
+  lemma RefinesDirty(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, ref: Reference, block: Node)
   requires BCS.Inv(k, s)
   requires BCS.Inv(k, s')
-  requires BC.Dirty(k.machine, s.machine, s'.machine, dop, ref, block)
-  requires D.Stutter(k.disk, s.disk, s'.disk, dop)
-  ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
+  requires BC.Dirty(k.machine, s.machine, s'.machine, ref, block)
+  requires s.disk == s'.disk
+  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.WriteStep(ref, block))
   {
     assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.WriteStep(ref, block));
-    assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
+    //assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
-  lemma RefinesAlloc(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ref: Reference, block: Node)
+  lemma RefinesAlloc(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, ref: Reference, block: Node)
   requires BCS.Inv(k, s)
   requires BCS.Inv(k, s')
-  requires BC.Alloc(k.machine, s.machine, s'.machine, dop, ref, block)
-  requires D.Stutter(k.disk, s.disk, s'.disk, dop)
-  ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
+  requires BC.Alloc(k.machine, s.machine, s'.machine, ref, block)
+  requires s.disk == s'.disk
+  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.AllocStep(block, ref))
   {
     assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.AllocStep(block, ref));
+    //assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
+  }
+
+  function OpToBIStep(op: Op) : BI.Step {
+    match op {
+      case WriteOp(ref, block) => BI.WriteStep(ref, block)
+      case AllocOp(ref, block) => BI.AllocStep(block, ref)
+    }
+  }
+
+  function OpsToBITransaction(ops: seq<Op>) : BI.Step {
+    BI.TransactionStep(Apply((op) => OpToBIStep(op), ops))
+  }
+
+  lemma RefinesOp(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, op: Op)
+  requires BCS.Inv(k, s)
+  requires BCS.Inv(k, s')
+  requires BC.NextStepByOp(k.machine, s.machine, s'.machine, op)
+  requires s.disk == s'.disk
+  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, OpToBIStep(op))
+  {
+    match op {
+      case WriteOp(ref, block) => RefinesDirty(k, s, s', ref, block);
+      case AllocOp(ref, block) => RefinesAlloc(k, s, s', ref, block);
+    }
+  }
+
+  lemma RefinesTransaction(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ops: seq<Op>)
+  requires BCS.Inv(k, s)
+  requires BCS.Inv(k, s')
+  requires BC.Transaction(k.machine, s.machine, s'.machine, dop, ops)
+  requires D.Stutter(k.disk, s.disk, s'.disk, dop)
+  ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
+  // TODO this is annoying
+  /*
+  {
+    var path: seq<BC.Variables> :| BC.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
+    //var path' := Apply((s1: BC.Variables) => I(k, BCS.Variables(s1, s.disk)).ephemeral, path);
+
+    BCS.OpPreservesInvariant(k, BCS.Variables(path[0], s.disk), BCS.Variables(path[1], s.disk), ops[0]);
+    RefinesOp(k, BCS.Variables(path[0], s.disk), BCS.Variables(path[1], s.disk), ops[0]);
+
+    var path' := [I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral];
+    assert BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, [OpToBIStep(ops[0])], path');
+    assert BI.Transaction(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, [OpToBIStep(ops[0])]);
+    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, BI.TransactionStep([OpToBIStep(ops[0])]));
+    assert BI.TransactionStep([OpToBIStep(ops[0])]) == OpsToBITransaction([ops[0]]);
+    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, OpsToBITransaction([ops[0]]));
+
+    var i := 1;
+    while i < |ops|
+    invariant i <= |ops|
+    invariant BCS.Inv(k, BCS.Variables(path[i], s.disk));
+    invariant BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i], s.disk)).ephemeral, OpsToBITransaction(ops[..i]).steps, path');
+    invariant BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i], s.disk)).ephemeral, OpsToBITransaction(ops[..i]))
+    {
+      BCS.OpPreservesInvariant(k, BCS.Variables(path[i], s.disk), BCS.Variables(path[i+1], s.disk), ops[i]);
+      RefinesOp(k, BCS.Variables(path[i], s.disk), BCS.Variables(path[i+1], s.disk), ops[i]);
+
+      assert ops[..i+1][..i] == ops[..i];
+      var steps := OpsToBITransaction(ops[..i+1]).steps;
+      var path'' := path' + [I(k, BCS.Variables(path[i+1], s.disk)).ephemeral];
+      forall i | 0 <= i < |steps| ensures BI.NextStep(Ik(k), path''[i], path''[i+1], steps[i]) {
+      }
+      assert BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i+1], s.disk)).ephemeral, OpsToBITransaction(ops[..i+1]).steps, path'');
+      assert BI.Transaction(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i+1], s.disk)).ephemeral, OpsToBITransaction(ops[..i+1]).steps);
+      assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i+1], s.disk)).ephemeral, OpsToBITransaction(ops[..i+1]));
+
+      i := i + 1;
+      path' := path'';
+    }
+
+    assert i == |ops|;
+    assert ops[..i] == ops;
+    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, OpsToBITransaction(ops));
+    assert BI.Next(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral);
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
+  */
 
   lemma RefinesUnalloc(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ref: Reference)
   requires BCS.Inv(k, s)
@@ -193,12 +271,14 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
         match mstep {
           case WriteBackStep(ref) => RefinesWriteBack(k, s, s', dop, ref);
           case WriteBackSuperblockStep => RefinesWriteBackSuperblock(k, s, s', dop);
-          case DirtyStep(ref, block) => RefinesDirty(k, s, s', dop, ref, block);
-          case AllocStep(ref, block) => RefinesAlloc(k, s, s', dop, ref, block);
           case UnallocStep(ref) => RefinesUnalloc(k, s, s', dop, ref);
           case PageInStep(ref) => RefinesPageIn(k, s, s', dop, ref);
           case PageInSuperblockStep => RefinesPageInSuperblock(k, s, s', dop);
           case EvictStep(ref) => RefinesEvict(k, s, s', dop, ref);
+
+          //case DirtyStep(ref, block) => RefinesDirty(k, s, s', dop, ref, block);
+          //case AllocStep(ref, block) => RefinesAlloc(k, s, s', dop, ref, block);
+          case TransactionStep(ops) => RefinesTransaction(k, s, s', dop, ops);
         }
       }
       case CrashStep => {
