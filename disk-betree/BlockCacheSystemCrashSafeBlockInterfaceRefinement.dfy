@@ -82,7 +82,6 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires s.disk == s'.disk
   ensures BI.OpStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, WriteOp(ref, block))
   {
-    //assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
   lemma RefinesAlloc(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, ref: Reference, block: Node)
@@ -92,8 +91,63 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires s.disk == s'.disk
   ensures BI.OpStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, AllocOp(ref, block))
   {
-    //assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
+
+
+
+  lemma RefinesOp(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, op: Op)
+  requires BCS.Inv(k, s)
+  requires BCS.Inv(k, s')
+  requires BC.OpStep(k.machine, s.machine, s'.machine, op)
+  requires s.disk == s'.disk
+  ensures BI.OpStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, op)
+  {
+    match op {
+      case WriteOp(ref, block) => RefinesDirty(k, s, s', ref, block);
+      case AllocOp(ref, block) => RefinesAlloc(k, s, s', ref, block);
+    }
+  }
+
+  // TODO could be general lemma on Transactable
+  lemma OpTransactionAugment(k: BI.Constants, s: BI.Variables, s': BI.Variables, s'': BI.Variables, ops: seq<Op>, op: Op)
+  requires BI.OpTransaction(k, s, s', ops)
+  requires BI.OpStep(k, s', s'', op)
+  ensures BI.OpTransaction(k, s, s'', ops + [op])
+  {
+    var path :| BI.IsStatePath(k, s, s', ops, path);
+    var path1 := path + [s''];
+    assert BI.IsStatePath(k, s, s'', ops + [op], path1);
+  }
+
+  lemma RefinesOpTransaction(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, ops: seq<Op>)
+  requires BCS.Inv(k, s)
+  requires BCS.Inv(k, s')
+  requires BC.OpTransaction(k.machine, s.machine, s'.machine, ops)
+  requires s.disk == s'.disk
+  ensures BI.OpTransaction(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, ops)
+  decreases ops
+  {
+    if (|ops| == 1) {
+      assert BC.OpStep(k.machine, s.machine, s'.machine, ops[0]);
+      RefinesOp(k, s, s', ops[0]);
+      assert BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, ops, [I(k, s).ephemeral, I(k, s').ephemeral]);
+      assert BI.OpTransaction(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, ops);
+    } else {
+      var path :| BC.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
+      var subpath := path[..|path| - 1];
+      var subops := ops[..|ops| - 1];
+      var penultimateMachine := Last(subpath);
+      assert BC.IsStatePath(k.machine, s.machine, penultimateMachine, subops, subpath);
+      BCS.TransactionStepPreservesInvariant(k, s, BCS.Variables(penultimateMachine, s.disk), D.NoDiskOp, subops);
+      assert BCS.Inv(k, BCS.Variables(penultimateMachine, s.disk));
+      RefinesOpTransaction(k, s, BCS.Variables(penultimateMachine, s.disk), subops);
+      RefinesOp(k, BCS.Variables(penultimateMachine, s.disk), s', Last(ops));
+      OpTransactionAugment(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(penultimateMachine, s.disk)).ephemeral, I(k, s').ephemeral, subops, Last(ops));
+      assert subops + [Last(ops)] == ops;
+    }
+  }
+
+
 
   lemma RefinesTransaction(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ops: seq<Op>)
   requires BCS.Inv(k, s)
