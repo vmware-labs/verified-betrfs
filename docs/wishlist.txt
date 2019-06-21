@@ -1,0 +1,13 @@
+ - Better module abstraction.
+    - This works as long as you keep your chain of abstract modules
+      linear, although it's a bit of a pain.
+    - If you try to have a diamond
+      of abstract module inclusions, everything falls apart because you have
+      no way to specify that the two inclusions of the same abstract module
+      are the same.
+
+- Better state machine abstraction.
+    - State machine refinement is not the same as Dafny module refinement.
+      If I build state machine X using state machine Y as a subcomponent,
+      and then I create refinement Y' of Y, I can't automatically get an X'
+      which has Y replaced with Y'. Instead I have to write a lot of boilerplate.
