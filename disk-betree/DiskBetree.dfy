@@ -21,7 +21,7 @@ module BetreeGraph refines Graph {
 }
 
 module BetreeBlockInterface refines BlockInterface {
-  import opened G = BetreeGraph
+  import G = BetreeGraph
 }
 
 module DiskBetree {
@@ -115,7 +115,7 @@ module DiskBetree {
     && IMapsTo(s.bcv.view, Root(), oldroot)
     && WFNode(oldroot)
     && var newroot := AddMessageToNode(oldroot, key, msg);
-    && var writeop := BI.WriteOp(Root(), newroot);
+    && var writeop := G.WriteOp(Root(), newroot);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [writeop])
   }
 
@@ -130,8 +130,8 @@ module DiskBetree {
     && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
     && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     && var newparent := Node(newparentchildren, newparentbuffer);
-    && var allocop := BI.AllocOp(newchildref, newchild);
-    && var writeop := BI.WriteOp(parentref, newparent);
+    && var allocop := G.AllocOp(newchildref, newchild);
+    && var writeop := G.WriteOp(parentref, newparent);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
@@ -141,8 +141,8 @@ module DiskBetree {
     && var newroot := Node(
         imap key | MS.InDomain(key) :: newchildref,
         imap key | MS.InDomain(key) :: []);
-    && var allocop := BI.AllocOp(newchildref, newchild);
-    && var writeop := BI.WriteOp(Root(), newroot);
+    && var allocop := G.AllocOp(newchildref, newchild);
+    && var writeop := G.WriteOp(Root(), newroot);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
@@ -191,9 +191,9 @@ module DiskBetree {
     && WFNode(fusion.fused_child)
     && WFNode(fusion.left_child)
     && WFNode(fusion.right_child)
-    && var allocop_left := BI.AllocOp(fusion.left_childref, fusion.left_child);
-    && var allocop_right := BI.AllocOp(fusion.right_childref, fusion.right_child);
-    && var writeop := BI.WriteOp(fusion.parentref, fusion.split_parent);
+    && var allocop_left := G.AllocOp(fusion.left_childref, fusion.left_child);
+    && var allocop_right := G.AllocOp(fusion.right_childref, fusion.right_child);
+    && var writeop := G.WriteOp(fusion.parentref, fusion.split_parent);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop_left, allocop_right, writeop])
   }
 
@@ -203,8 +203,8 @@ module DiskBetree {
     && IMapsTo(s.bcv.view, fusion.left_childref, fusion.left_child)
     && IMapsTo(s.bcv.view, fusion.right_childref, fusion.right_child)
     && ValidFusion(fusion)
-    && var allocop := BI.AllocOp(fusion.fused_childref, fusion.fused_child);
-    && var writeop := BI.WriteOp(fusion.parentref, fusion.fused_parent);
+    && var allocop := G.AllocOp(fusion.fused_childref, fusion.fused_child);
+    && var writeop := G.WriteOp(fusion.parentref, fusion.fused_parent);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 

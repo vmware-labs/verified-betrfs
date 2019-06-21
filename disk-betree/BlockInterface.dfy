@@ -1,21 +1,22 @@
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "Graph.dfy"
+include "Transactable.dfy"
   
-abstract module BlockInterface {
+abstract module BlockInterface refines Transactable {
   // BlockInterface is parameterized by the graph type
-  import opened G : Graph 
+  // (this line was moved to Transactable)
+  // import G : Graph 
 
-  import opened Sequences
   import opened Maps
     
-  type View = Graph
+  type View = G.Graph
 
   datatype Constants = Constants()
   datatype Variables = Variables(view: View)
 
   predicate RefGraphIsClosed(k: Constants, s: Variables) {
-    forall key :: key in s.view ==> Successors(s.view[key]) <= s.view.Keys
+    forall key :: key in s.view ==> G.Successors(s.view[key]) <= s.view.Keys
   }
 
   type Lookup = seq<Reference>
@@ -23,9 +24,9 @@ abstract module BlockInterface {
   predicate LookupIsValid(k: Constants, s: Variables, lookup: Lookup)
   {
     && |lookup| > 0
-    && lookup[0] == Root()
+    && lookup[0] == G.Root()
     && (forall i :: 0 <= i < |lookup| ==> lookup[i] in s.view)
-    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in Successors(s.view[lookup[i]]))
+    && (forall i :: 0 <= i < |lookup|-1 ==> lookup[i+1] in G.Successors(s.view[lookup[i]]))
   }
 
   predicate ReachableReference(k: Constants, s: Variables, ref: Reference)
@@ -49,18 +50,18 @@ abstract module BlockInterface {
   }
     
   predicate Init(k: Constants, s: Variables, block: Node) {
-    && s.view == imap[Root() := block]
+    && s.view == imap[G.Root() := block]
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, block: Node, ref: Reference) {
-    && Successors(block) <= s.view.Keys
+    && G.Successors(block) <= s.view.Keys
     && ref !in s.view
 
     && s'.view == s.view[ref := block]
   }
     
   predicate Write(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node) {
-    && Successors(block) <= s.view.Keys
+    && G.Successors(block) <= s.view.Keys
     && ref in s.view
 
     && s'.view == s.view[ref := block]
@@ -74,101 +75,8 @@ abstract module BlockInterface {
     }
   }
 
-  predicate IsStatePath(k: Constants, s: Variables, s': Variables, ops: seq<Op>, path: seq<Variables>)
-  {
-    && |path| == |ops| + 1
-    && path[0] == s
-    && Last(path) == s'
-    && (forall i :: 0 <= i < |ops| ==> OpStep(k, path[i], path[i+1], ops[i]))
-  }
-
-  lemma Transaction1Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-  ensures (
-    && 0 < |ops|
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-    && |ops| == 1
-  ) ==>
-      && OpStep(k, s, s', ops[0])
-  {
-    if (
-        && 0 < |ops|
-        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-        && |ops| == 1)
-    {
-      var path :| IsStatePath(k, s, s', ops, path);
-      assert OpStep(k, s, s', ops[0]);
-    }
-  }
-
-
-  lemma Transaction2Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-  ensures (
-    && 0 < |ops|
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-    && |ops| == 2
-  ) ==>
-      exists sint ::
-      && OpStep(k, s, sint, ops[0])
-      && OpStep(k, sint, s', ops[1])
-  {
-    if (
-        && 0 < |ops|
-        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-        &&| ops| == 2)
-    {
-      var path :| IsStatePath(k, s, s', ops, path);
-      var sint := path[1];
-      assert OpStep(k, s, sint, ops[0]);
-      assert OpStep(k, sint, s', ops[1]);
-    }
-  }
-
-  lemma Transaction3Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-  ensures (
-    && 0 < |ops|
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-    && |ops| == 3
-  ) ==>
-      exists sint, sint' ::
-      && OpStep(k, s, sint, ops[0])
-      && OpStep(k, sint, sint', ops[1])
-      && OpStep(k, sint', s', ops[2])
-  {
-    if (
-        && 0 < |ops|
-        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-        && |ops| == 3)
-    {
-      var path :| IsStatePath(k, s, s', ops, path);
-      var sint := path[1];
-      var sint' := path[2];
-      assert OpStep(k, s, sint, ops[0]);
-      assert OpStep(k, sint, sint', ops[1]);
-      assert OpStep(k, sint', s', ops[2]);
-    }
-  }
-
-  
-  predicate Transaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-    ensures Transaction(k, s, s', ops) && |ops| == 1 ==>
-      && OpStep(k, s, s', ops[0])
-    ensures Transaction(k, s, s', ops) && |ops| == 2 ==> exists sint ::
-      && OpStep(k, s, sint, ops[0])
-      && OpStep(k, sint, s', ops[1])
-    ensures Transaction(k, s, s', ops) && |ops| == 3 ==> exists sint, sint' ::
-      && OpStep(k, s, sint, ops[0])
-      && OpStep(k, sint, sint', ops[1])
-      && OpStep(k, sint', s', ops[2])
-  {
-    Transaction1Steps(k, s, s', ops);
-    Transaction2Steps(k, s, s', ops);
-    Transaction3Steps(k, s, s', ops);
-    && 0 < |ops|
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
-  }
-
   function Predecessors(view: View, ref: Reference) : iset<Reference> {
-    iset ref1 | ref1 in view && ref in Successors(view[ref1])
+    iset ref1 | ref1 in view && ref in G.Successors(view[ref1])
   }
   
   predicate ClosedUnderPredecessor(view: View, refs: iset<Reference>) {
@@ -183,10 +91,6 @@ abstract module BlockInterface {
     && s'.view == IMapRemove(s.view, refs)
   }
 
-  datatype Op =
-    | AllocOp(ref: Reference, block: Node)
-    | WriteOp(ref: Reference, block: Node)
-  
   datatype Step =
     //| AllocStep(block: Node, ref: Reference)
     //| WriteStep(ref: Reference, block: Node)
@@ -245,7 +149,7 @@ abstract module BlockInterface {
   /////////// Invariants
 
   predicate Inv(k: Constants, s: Variables) {
-    && Root() in s.view // Redundant? (yes, but can we delete it?)
+    && G.Root() in s.view // Redundant? (yes, but can we delete it?)
     && RefGraphIsClosed(k, s)
     && LiveDataAvailable(k, s)
   }
@@ -296,7 +200,7 @@ abstract module BlockInterface {
     requires GC(k, s, s', refs)
     ensures Inv(k, s')
   {
-    assert LookupIsValid(k, s, [Root()]);
+    assert LookupIsValid(k, s, [G.Root()]);
   }
 
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, step: Step)
