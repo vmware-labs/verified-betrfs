@@ -66,89 +66,105 @@ abstract module BlockInterface {
     && s'.view == s.view[ref := block]
   }
 
-  predicate IsStatePath(k: Constants, s: Variables, s': Variables, steps: seq<Step>, path: seq<Variables>)
-    decreases steps, 0
+  predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
   {
-    && |path| == |steps| + 1
-    && path[0] == s
-    && Last(path) == s'
-    && (forall i :: 0 <= i < |steps| ==> NextStep(k, path[i], path[i+1], steps[i]))
-  }
-
-  predicate ValidTransaction(steps: seq<Step>)
-  {
-    && (forall i :: 0 <= i < |steps| ==> steps[i].AllocStep? || steps[i].WriteStep?)
-  }
-
-  lemma Transaction2Steps(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
-  decreases steps, 1
-  ensures (
-    && 0 < |steps|
-    && ValidTransaction(steps)
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
-    &&|steps| == 2
-  ) ==>
-      exists sint ::
-      && NextStep(k, s, sint, steps[0])
-      && NextStep(k, sint, s', steps[1])
-  {
-    if (
-        && 0 < |steps|
-        && ValidTransaction(steps)
-        && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
-        &&|steps| == 2)
-    {
-      var path :| IsStatePath(k, s, s', steps, path);
-      var sint := path[1];
-      assert NextStep(k, s, sint, steps[0]);
-      assert NextStep(k, sint, s', steps[1]);
+    match op {
+      case AllocOp(ref, block) => Alloc(k, s, s', block, ref)
+      case WriteOp(ref, block) => Write(k, s, s', ref, block)
     }
   }
 
-  lemma Transaction3Steps(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
-  decreases steps, 1
+  predicate IsStatePath(k: Constants, s: Variables, s': Variables, ops: seq<Op>, path: seq<Variables>)
+  {
+    && |path| == |ops| + 1
+    && path[0] == s
+    && Last(path) == s'
+    && (forall i :: 0 <= i < |ops| ==> OpStep(k, path[i], path[i+1], ops[i]))
+  }
+
+  lemma Transaction1Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
   ensures (
-    && 0 < |steps|
-    && ValidTransaction(steps)
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
-    &&|steps| == 3
+    && 0 < |ops|
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+    && |ops| == 1
   ) ==>
-      exists sint, sint' ::
-      && NextStep(k, s, sint, steps[0])
-      && NextStep(k, sint, sint', steps[1])
-      && NextStep(k, sint', s', steps[2])
+      && OpStep(k, s, s', ops[0])
   {
     if (
-        && 0 < |steps|
-        && ValidTransaction(steps)
-        && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
-        &&|steps| == 3)
+        && 0 < |ops|
+        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+        && |ops| == 1)
     {
-      var path :| IsStatePath(k, s, s', steps, path);
+      var path :| IsStatePath(k, s, s', ops, path);
+      assert OpStep(k, s, s', ops[0]);
+    }
+  }
+
+
+  lemma Transaction2Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  ensures (
+    && 0 < |ops|
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+    && |ops| == 2
+  ) ==>
+      exists sint ::
+      && OpStep(k, s, sint, ops[0])
+      && OpStep(k, sint, s', ops[1])
+  {
+    if (
+        && 0 < |ops|
+        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+        &&| ops| == 2)
+    {
+      var path :| IsStatePath(k, s, s', ops, path);
+      var sint := path[1];
+      assert OpStep(k, s, sint, ops[0]);
+      assert OpStep(k, sint, s', ops[1]);
+    }
+  }
+
+  lemma Transaction3Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  ensures (
+    && 0 < |ops|
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+    && |ops| == 3
+  ) ==>
+      exists sint, sint' ::
+      && OpStep(k, s, sint, ops[0])
+      && OpStep(k, sint, sint', ops[1])
+      && OpStep(k, sint', s', ops[2])
+  {
+    if (
+        && 0 < |ops|
+        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+        && |ops| == 3)
+    {
+      var path :| IsStatePath(k, s, s', ops, path);
       var sint := path[1];
       var sint' := path[2];
-      assert NextStep(k, s, sint, steps[0]);
-      assert NextStep(k, sint, sint', steps[1]);
-      assert NextStep(k, sint', s', steps[2]);
+      assert OpStep(k, s, sint, ops[0]);
+      assert OpStep(k, sint, sint', ops[1]);
+      assert OpStep(k, sint', s', ops[2]);
     }
   }
 
   
-  predicate Transaction(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
-    decreases steps, 2
-    ensures Transaction(k, s, s', steps) && |steps| == 2 ==> exists sint ::
-      && NextStep(k, s, sint, steps[0])
-      && NextStep(k, sint, s', steps[1])
-    ensures Transaction(k, s, s', steps) && |steps| == 3 ==> exists sint, sint' ::
-      && NextStep(k, s, sint, steps[0])
-      && NextStep(k, sint, sint', steps[1])
-      && NextStep(k, sint', s', steps[2])
+  predicate Transaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+    ensures Transaction(k, s, s', ops) && |ops| == 1 ==>
+      && OpStep(k, s, s', ops[0])
+    ensures Transaction(k, s, s', ops) && |ops| == 2 ==> exists sint ::
+      && OpStep(k, s, sint, ops[0])
+      && OpStep(k, sint, s', ops[1])
+    ensures Transaction(k, s, s', ops) && |ops| == 3 ==> exists sint, sint' ::
+      && OpStep(k, s, sint, ops[0])
+      && OpStep(k, sint, sint', ops[1])
+      && OpStep(k, sint', s', ops[2])
   {
-    Transaction2Steps(k, s, s', steps);
-    Transaction3Steps(k, s, s', steps);
-    && 0 < |steps|
-    && ValidTransaction(steps)
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', steps, path))
+    Transaction1Steps(k, s, s', ops);
+    Transaction2Steps(k, s, s', ops);
+    Transaction3Steps(k, s, s', ops);
+    && 0 < |ops|
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
   }
 
   function Predecessors(view: View, ref: Reference) : iset<Reference> {
@@ -166,21 +182,24 @@ abstract module BlockInterface {
     
     && s'.view == IMapRemove(s.view, refs)
   }
+
+  datatype Op =
+    | AllocOp(ref: Reference, block: Node)
+    | WriteOp(ref: Reference, block: Node)
   
   datatype Step =
-    | AllocStep(block: Node, ref: Reference)
-    | WriteStep(ref: Reference, block: Node)
-    | TransactionStep(steps: seq<Step>)
+    //| AllocStep(block: Node, ref: Reference)
+    //| WriteStep(ref: Reference, block: Node)
+    | TransactionStep(ops: seq<Op>)
     | GCStep(refs: iset<Reference>)
     | StutterStep
     
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
-    decreases step
   {
     match step {
-      case AllocStep(block, ref) => Alloc(k, s, s', block, ref)
-      case WriteStep(ref, block) => Write(k, s, s', ref, block)
-      case TransactionStep(steps) => Transaction(k, s, s', steps)
+      //case AllocStep(block, ref) => Alloc(k, s, s', block, ref)
+      //case WriteStep(ref, block) => Write(k, s, s', ref, block)
+      case TransactionStep(ops) => Transaction(k, s, s', ops)
       case StutterStep => s == s'
       case GCStep(refs) => GC(k, s, s', refs)
     }
@@ -192,14 +211,15 @@ abstract module BlockInterface {
 
   /////////// Some helper facts
 
-  function AllocatedReferences(steps: seq<Step>) : iset<Reference>
-    requires ValidTransaction(steps)
+  /*
+  function AllocatedReferences(ops: seq<Op>) : iset<Reference>
   {
     //iset ref | (exists i :: 0 <= i < |steps| && steps[i].AllocStep? && steps[i].ref == ref)
     if |steps| == 0 then iset{}
     else
       (if steps[0].AllocStep? then iset{steps[0].ref} else iset{}) + AllocatedReferences(steps[1..])
   }
+  */
   
   /*
   lemma PostTransactionView(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
@@ -244,19 +264,29 @@ abstract module BlockInterface {
   {
   }
 
-  lemma TransactionPreservesInv(k: Constants, s: Variables, s': Variables, steps: seq<Step>)
+  lemma OpStepPreservesInv(k: Constants, s: Variables, s': Variables, op: Op)
     requires Inv(k, s)
-    requires Transaction(k, s, s', steps)
+    requires OpStep(k, s, s', op)
     ensures Inv(k, s')
-    decreases steps
   {
-    var path :| IsStatePath(k, s, s', steps, path);
+    match op {
+      case AllocOp(ref, block) => AllocPreservesInv(k, s, s', block, ref);
+      case WriteOp(ref, block) => WritePreservesInv(k, s, s', ref, block);
+    }
+  }
+
+  lemma TransactionPreservesInv(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+    requires Inv(k, s)
+    requires Transaction(k, s, s', ops)
+    ensures Inv(k, s')
+  {
+    var path :| IsStatePath(k, s, s', ops, path);
     var i := 0;
-    while i < |steps|
-      invariant 0 <= i <= |steps|
+    while i < |ops|
+      invariant 0 <= i <= |ops|
       invariant forall j :: 0 <= j <= i ==> Inv(k, path[j])
     {
-      NextStepPreservesInv(k, path[i], path[i+1], steps[i]);
+      OpStepPreservesInv(k, path[i], path[i+1], ops[i]);
       i := i + 1;
     }
   }
@@ -273,11 +303,10 @@ abstract module BlockInterface {
     requires Inv(k, s)
     requires NextStep(k, s, s', step)
     ensures Inv(k, s')
-    decreases step
   {
     match step {
-      case AllocStep(block, ref) => AllocPreservesInv(k, s, s', block, ref);
-      case WriteStep(ref, block) => WritePreservesInv(k, s, s', ref, block);
+      //case AllocStep(block, ref) => AllocPreservesInv(k, s, s', block, ref);
+      //case WriteStep(ref, block) => WritePreservesInv(k, s, s', ref, block);
       case TransactionStep(steps) => TransactionPreservesInv(k, s, s', steps);
       case GCStep(ref) => GCPreservesInv(k, s, s', ref);
       case StutterStep => { }

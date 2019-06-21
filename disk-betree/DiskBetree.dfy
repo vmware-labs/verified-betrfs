@@ -115,7 +115,8 @@ module DiskBetree {
     && IMapsTo(s.bcv.view, Root(), oldroot)
     && WFNode(oldroot)
     && var newroot := AddMessageToNode(oldroot, key, msg);
-    && BI.Write(k.bck, s.bcv, s'.bcv, Root(), newroot)
+    && var writeop := BI.WriteOp(Root(), newroot);
+    && BI.Transaction(k.bck, s.bcv, s'.bcv, [writeop])
   }
 
   predicate Flush(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) {
@@ -129,8 +130,8 @@ module DiskBetree {
     && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
     && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     && var newparent := Node(newparentchildren, newparentbuffer);
-    && var allocop := BI.AllocStep(newchild, newchildref);
-    && var writeop := BI.WriteStep(parentref, newparent);
+    && var allocop := BI.AllocOp(newchildref, newchild);
+    && var writeop := BI.WriteOp(parentref, newparent);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
@@ -140,8 +141,8 @@ module DiskBetree {
     && var newroot := Node(
         imap key | MS.InDomain(key) :: newchildref,
         imap key | MS.InDomain(key) :: []);
-    && var allocop := BI.AllocStep(newchild, newchildref);
-    && var writeop := BI.WriteStep(Root(), newroot);
+    && var allocop := BI.AllocOp(newchildref, newchild);
+    && var writeop := BI.WriteOp(Root(), newroot);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
@@ -190,9 +191,9 @@ module DiskBetree {
     && WFNode(fusion.fused_child)
     && WFNode(fusion.left_child)
     && WFNode(fusion.right_child)
-    && var allocop_left := BI.AllocStep(fusion.left_child, fusion.left_childref);
-    && var allocop_right := BI.AllocStep(fusion.right_child, fusion.right_childref);
-    && var writeop := BI.WriteStep(fusion.parentref, fusion.split_parent);
+    && var allocop_left := BI.AllocOp(fusion.left_childref, fusion.left_child);
+    && var allocop_right := BI.AllocOp(fusion.right_childref, fusion.right_child);
+    && var writeop := BI.WriteOp(fusion.parentref, fusion.split_parent);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop_left, allocop_right, writeop])
   }
 
@@ -202,8 +203,8 @@ module DiskBetree {
     && IMapsTo(s.bcv.view, fusion.left_childref, fusion.left_child)
     && IMapsTo(s.bcv.view, fusion.right_childref, fusion.right_child)
     && ValidFusion(fusion)
-    && var allocop := BI.AllocStep(fusion.fused_child, fusion.fused_childref);
-    && var writeop := BI.WriteStep(fusion.parentref, fusion.fused_parent);
+    && var allocop := BI.AllocOp(fusion.fused_childref, fusion.fused_child);
+    && var writeop := BI.WriteOp(fusion.parentref, fusion.fused_parent);
     && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
   }
 
