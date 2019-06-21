@@ -7,7 +7,8 @@ module DiskBetreeInv {
   import opened DB = DiskBetree
   import opened Maps
   import opened Sequences
-  import opened BetreeGraph
+  import opened BetreeSpec
+  import opened G = BetreeSpec.G
 
   predicate KeyHasSatisfyingLookup(k: Constants, view: BI.View, key: Key)
   {
@@ -134,7 +135,7 @@ module DiskBetreeInv {
 
   lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
-    requires Grow(k, s, s', oldroot, newchildref)
+    requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
     ensures Acyclic(k, s')
   {
     forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
@@ -183,7 +184,7 @@ module DiskBetreeInv {
   
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
   requires Inv(k, s)
-  requires Grow(k, s, s', oldroot, newchildref)
+  requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
   ensures EquivalentLookups(k, s, s')
   {
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
@@ -322,7 +323,7 @@ module DiskBetreeInv {
     newparentbuffer: Buffer,
     newparentchildren: imap<Key, Reference>)
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
   requires LookupVisitsWFNodes(lookup)
   requires LookupVisitsWFNodes(lookup')
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
@@ -407,7 +408,7 @@ module DiskBetreeInv {
 
   lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s)
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
   requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
   ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
@@ -432,7 +433,7 @@ module DiskBetreeInv {
 
   lemma FlushPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, lookup': Lookup, key: Key)
   requires Inv(k, s)
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
   ensures LookupIsAcyclic(lookup')
   {
@@ -451,7 +452,7 @@ module DiskBetreeInv {
 
   lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
     requires Inv(k, s)
-    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
     ensures Acyclic(k, s')
   {
     forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
@@ -481,7 +482,7 @@ module DiskBetreeInv {
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
   requires LookupVisitsWFNodes(lookup);
   requires LookupVisitsWFNodes(lookup');
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
   requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
   requires key in movedKeys ==> Last(lookup').ref != parentref
@@ -540,7 +541,7 @@ module DiskBetreeInv {
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
   requires LookupVisitsWFNodes(lookup);
   requires LookupVisitsWFNodes(lookup');
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
   requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
   ensures IsPrefix(TotalLog(lookup', key), TotalLog(lookup, key));
@@ -573,7 +574,7 @@ module DiskBetreeInv {
 
   lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
   requires Inv(k, s)
-  requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
   ensures EquivalentLookups(k, s, s')
   {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
@@ -720,7 +721,7 @@ module DiskBetreeInv {
   lemma SplitLookupPreservesAccumulatedBuffer(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, key: Key, lookup: Lookup, lookup': Lookup)
   requires |lookup| > 0;
   requires SplitLookups(fusion, lookup, lookup', key);
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   requires ValidFusion(fusion);
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
@@ -737,7 +738,7 @@ module DiskBetreeInv {
 
   lemma SplitPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s);
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   requires SplitLookups(fusion, lookup, lookup', key)
   requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
@@ -855,7 +856,7 @@ module DiskBetreeInv {
   lemma MergeLookupPreservesAccumulatedBuffer(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, key: Key, lookup: Lookup, lookup': Lookup)
     requires |lookup'| > 0;
     requires MergeLookups(fusion, lookup, lookup', key);
-    requires Split(k, s, s', fusion);
+    requires Split(k.bck, s.bcv, s'.bcv, fusion);
     requires ValidFusion(fusion);
     requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
@@ -872,7 +873,7 @@ module DiskBetreeInv {
 
   lemma SplitPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key)
   requires Inv(k, s);
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   requires MergeLookups(fusion, lookup, lookup', key)
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
   ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
@@ -942,7 +943,7 @@ module DiskBetreeInv {
 
   lemma SplitPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
   requires Inv(k, s)
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
   ensures LookupIsAcyclic(lookup')
   {
@@ -985,7 +986,7 @@ module DiskBetreeInv {
 
   lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   requires Inv(k, s);
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   ensures Acyclic(k, s');
   {
     forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
@@ -997,7 +998,7 @@ module DiskBetreeInv {
 
   lemma SplitPreservesIsSatisfyingLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s);
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   requires |lookup| > 0;
   requires lookup' == splitLookup(fusion, lookup, key)
   requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
@@ -1023,7 +1024,7 @@ module DiskBetreeInv {
 
   lemma SplitPreservesIsSatisfyingLookupRev(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s);
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   requires |lookup'| > 0;
   requires lookup == mergeLookup(fusion, lookup', key)
   requires IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
@@ -1037,7 +1038,7 @@ module DiskBetreeInv {
 
   lemma SplitEquivalentLookups(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   requires Inv(k, s)
-  requires Split(k, s, s', fusion);
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
   ensures EquivalentLookups(k, s, s');
   {
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
@@ -1057,7 +1058,7 @@ module DiskBetreeInv {
 
   // lemma SplitPreservesReachablePointersValid(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   // requires Inv(k, s)
-  // requires Split(k, s, s', fusion)
+  // requires Split(k.bck, s.bcv, s'.bcv, fusion)
   // ensures ReachablePointersValid(k, s')
   // {
   //   forall key, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
@@ -1093,7 +1094,7 @@ module DiskBetreeInv {
 
   lemma InsertMessagePreservesAcyclicAndReachablePointersValid(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
-    requires InsertMessage(k, s, s', key, msg, oldroot)
+    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
     ensures Acyclic(k, s')
   {
     forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
@@ -1107,7 +1108,7 @@ module DiskBetreeInv {
 
   lemma InsertMessagePreservesTotality(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
-    requires InsertMessage(k, s, s', key, msg, oldroot)
+    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
     ensures forall key1 | MS.InDomain(key1) :: KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
   {
     forall key1 | MS.InDomain(key1)
@@ -1154,7 +1155,7 @@ module DiskBetreeInv {
     
   lemma InsertMessageStepPreservesInvariant(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
-    requires InsertMessage(k, s, s', key, msg, oldroot)
+    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
     ensures Inv(k, s')
   {
     InsertMessagePreservesAcyclicAndReachablePointersValid(k, s, s', key, msg, oldroot);
@@ -1164,7 +1165,7 @@ module DiskBetreeInv {
   lemma FlushStepPreservesInvariant(k: Constants, s: Variables, s': Variables,
                                            parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
     requires Inv(k, s)
-    requires Flush(k, s, s', parentref, parent, childref, child, newchildref)
+    requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
     ensures Inv(k, s')
   {
     FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref);
@@ -1173,7 +1174,7 @@ module DiskBetreeInv {
   
   lemma GrowStepPreservesInvariant(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
-    requires Grow(k, s, s', oldroot, newchildref)
+    requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
     ensures Inv(k, s')
   {
     GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
@@ -1182,7 +1183,7 @@ module DiskBetreeInv {
  
   lemma SplitStepPreservesInvariant(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
     requires Inv(k, s)
-    requires Split(k, s, s', fusion)
+    requires Split(k.bck, s.bcv, s'.bcv, fusion)
     ensures Inv(k, s')
   {
     SplitPreservesAcyclic(k, s, s', fusion);

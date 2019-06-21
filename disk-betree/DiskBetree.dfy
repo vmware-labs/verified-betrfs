@@ -24,15 +24,15 @@ module BetreeBlockInterface refines BlockInterface {
   import G = BetreeGraph
 }
 
-module DiskBetree {
+module BetreeSpec {
+  // Ideally this would work for any Transactable which uses the BetreeGraph
+  // but we can't express that constraint.
+  import Tr = BetreeBlockInterface
+
   import MS = MapSpec
-  import BI = BetreeBlockInterface
   import opened G = BetreeGraph
   import opened Sequences
   import opened Maps
-  
-  datatype Layer = Layer(ref: Reference, node: Node)
-  type Lookup = seq<Layer>
 
   predicate BufferIsDefining(log: seq<BufferEntry>) {
     && |log| > 0
@@ -48,57 +48,14 @@ module DiskBetree {
     && (forall k :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
-    && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
-    && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
-  }
-  
-  predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
-  }
-
-  predicate LookupVisitsWFNodes(lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
-  }
-
-  predicate IsPathFromRootLookup(k: Constants, view: BI.View, key: Key, lookup: Lookup) {
-    && |lookup| > 0
-    && lookup[0].ref == Root()
-    && LookupRespectsDisk(view, lookup)
-    && LookupFollowsChildRefs(key, lookup)
-  }
-
-  function TotalLog(lookup: Lookup, key: Key) : seq<BufferEntry>
-  requires LookupVisitsWFNodes(lookup);
-  {
-    if |lookup| == 0 then [] else TotalLog(lookup[..|lookup|-1], key) + lookup[|lookup|-1].node.buffer[key]
-  }
-
-  predicate IsSatisfyingLookup(k: Constants, view: BI.View, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookup(k, view, key, lookup)
-    && LookupVisitsWFNodes(lookup)
-    && BufferDefinesValue(TotalLog(lookup, key), value)
-  }
-
   // Now we define the state machine
   
-  datatype Constants = Constants(bck: BI.Constants)
-  datatype Variables = Variables(bcv: BI.Variables)
 
   function EmptyNode() : Node {
     var buffer := imap key | MS.InDomain(key) :: [Insertion(MS.EmptyValue())];
     Node(imap[], buffer)
   }
     
-  predicate Init(k: Constants, s: Variables) {
-    && BI.Init(k.bck, s.bcv, EmptyNode())
-  }
-    
-  predicate Query(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
-    && s == s'
-    && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-  }
-
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
     requires key in buffer
   {
@@ -111,18 +68,18 @@ module DiskBetree {
     Node(node.children, AddMessageToBuffer(node.buffer, key, msg))
   }
   
-  predicate InsertMessage(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node) {
-    && IMapsTo(s.bcv.view, Root(), oldroot)
+  predicate InsertMessage(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, key: Key, msg: BufferEntry, oldroot: Node) {
+    && IMapsTo(s.view, Root(), oldroot)
     && WFNode(oldroot)
     && var newroot := AddMessageToNode(oldroot, key, msg);
     && var writeop := G.WriteOp(Root(), newroot);
-    && BI.Transaction(k.bck, s.bcv, s'.bcv, [writeop])
+    && Tr.Transaction(k, s, s', [writeop])
   }
 
-  predicate Flush(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) {
+  predicate Flush(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    && IMapsTo(s.bcv.view, parentref, parent)
-    && IMapsTo(s.bcv.view, childref, child)
+    && IMapsTo(s.view, parentref, parent)
+    && IMapsTo(s.view, childref, child)
     && WFNode(parent)
     && WFNode(child)
     && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
@@ -132,18 +89,18 @@ module DiskBetree {
     && var newparent := Node(newparentchildren, newparentbuffer);
     && var allocop := G.AllocOp(newchildref, newchild);
     && var writeop := G.WriteOp(parentref, newparent);
-    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
+    && Tr.Transaction(k, s, s', [allocop, writeop])
   }
 
-  predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference) {
-    && IMapsTo(s.bcv.view, Root(), oldroot)
+  predicate Grow(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, oldroot: Node, newchildref: Reference) {
+    && IMapsTo(s.view, Root(), oldroot)
     && var newchild := oldroot;
     && var newroot := Node(
         imap key | MS.InDomain(key) :: newchildref,
         imap key | MS.InDomain(key) :: []);
     && var allocop := G.AllocOp(newchildref, newchild);
     && var writeop := G.WriteOp(Root(), newroot);
-    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
+    && Tr.Transaction(k, s, s', [allocop, writeop])
   }
 
   datatype NodeFusion = NodeFusion(
@@ -182,10 +139,10 @@ module DiskBetree {
     && (forall key :: key in fusion.right_keys ==> IMapsAgreeOnKey(fusion.fused_child.buffer, fusion.right_child.buffer, key))
   }
 
-  predicate Split(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  predicate Split(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, fusion: NodeFusion)
   {
-    && IMapsTo(s.bcv.view, fusion.parentref, fusion.fused_parent)
-    && IMapsTo(s.bcv.view, fusion.fused_childref, fusion.fused_child)
+    && IMapsTo(s.view, fusion.parentref, fusion.fused_parent)
+    && IMapsTo(s.view, fusion.fused_childref, fusion.fused_child)
     && ValidFusion(fusion)
     && WFNode(fusion.fused_parent)
     && WFNode(fusion.fused_child)
@@ -194,23 +151,101 @@ module DiskBetree {
     && var allocop_left := G.AllocOp(fusion.left_childref, fusion.left_child);
     && var allocop_right := G.AllocOp(fusion.right_childref, fusion.right_child);
     && var writeop := G.WriteOp(fusion.parentref, fusion.split_parent);
-    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop_left, allocop_right, writeop])
+    && Tr.Transaction(k, s, s', [allocop_left, allocop_right, writeop])
   }
 
-  predicate Merge(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  predicate Merge(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, fusion: NodeFusion)
   {
-    && IMapsTo(s.bcv.view, fusion.parentref, fusion.split_parent)
-    && IMapsTo(s.bcv.view, fusion.left_childref, fusion.left_child)
-    && IMapsTo(s.bcv.view, fusion.right_childref, fusion.right_child)
+    && IMapsTo(s.view, fusion.parentref, fusion.split_parent)
+    && IMapsTo(s.view, fusion.left_childref, fusion.left_child)
+    && IMapsTo(s.view, fusion.right_childref, fusion.right_child)
     && ValidFusion(fusion)
     && var allocop := G.AllocOp(fusion.fused_childref, fusion.fused_child);
     && var writeop := G.WriteOp(fusion.parentref, fusion.fused_parent);
-    && BI.Transaction(k.bck, s.bcv, s'.bcv, [allocop, writeop])
+    && Tr.Transaction(k, s, s', [allocop, writeop])
+  }
+}
+
+module DiskBetree {
+  import opened BetreeSpec
+  import BI = BetreeBlockInterface
+  import MS = MapSpec
+  import opened Maps
+
+  import opened G = BetreeGraph
+
+  datatype Constants = Constants(bck: BI.Constants)
+  datatype Variables = Variables(bcv: BI.Variables)
+
+  datatype Layer = Layer(ref: Reference, node: Node)
+  type Lookup = seq<Layer>
+
+  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
+    && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
+    && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
+  }
+  
+  predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
+  }
+
+  predicate LookupVisitsWFNodes(lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  predicate IsPathFromRootLookup(k: Constants, view: BI.View, key: Key, lookup: Lookup) {
+    && |lookup| > 0
+    && lookup[0].ref == Root()
+    && LookupRespectsDisk(view, lookup)
+    && LookupFollowsChildRefs(key, lookup)
+  }
+
+  function TotalLog(lookup: Lookup, key: Key) : seq<BufferEntry>
+  requires LookupVisitsWFNodes(lookup);
+  {
+    if |lookup| == 0 then [] else TotalLog(lookup[..|lookup|-1], key) + lookup[|lookup|-1].node.buffer[key]
+  }
+
+  predicate IsSatisfyingLookup(k: Constants, view: BI.View, key: Key, value: Value, lookup: Lookup) {
+    && IsPathFromRootLookup(k, view, key, lookup)
+    && LookupVisitsWFNodes(lookup)
+    && BufferDefinesValue(TotalLog(lookup, key), value)
+  }
+
+  predicate Query(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
+    && s == s'
+    && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+  }
+
+  predicate Init(k: Constants, s: Variables) {
+    && BI.Init(k.bck, s.bcv, EmptyNode())
   }
 
   predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
     BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
+
+  /*
+  predicate InsertMessage(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  {
+    BetreeSpec.InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+  }
+
+  predicate Flush(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
+  {
+    BetreeSpec.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
+  }
+
+  predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
+  {
+    BetreeSpec.Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+  }
+
+  predicate Split(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  {
+    BetreeSpec.Split(k.bck, s.bcv, s'.bcv, fusion)
+  }
+  */
   
   datatype Step =
     | QueryStep(key: Key, value: Value, lookup: Lookup)
@@ -223,10 +258,10 @@ module DiskBetree {
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
     match step {
       case QueryStep(key, value, lookup) => Query(k, s, s', key, value, lookup)
-      case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
-      case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
-      case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
-      case SplitStep(fusion) => Split(k, s, s', fusion)
+      case InsertMessageStep(key, msg, oldroot) => InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+      case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
+      case GrowStep(oldroot, newchildref) => Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+      case SplitStep(fusion) => Split(k.bck, s.bcv, s'.bcv, fusion)
       case GCStep(refs) => GC(k, s, s', refs)
     }
   }

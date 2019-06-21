@@ -8,10 +8,10 @@ abstract module Transactable {
 
   type Reference = G.Reference
   type Node = G.Node
-  type Op = G.Op
 
   type Constants(!new)
   type Variables(!new)
+  type Op = G.Op
 
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
 
