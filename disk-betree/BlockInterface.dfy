@@ -82,6 +82,11 @@ abstract module BlockInterface refines Transactable {
   predicate ClosedUnderPredecessor(view: View, refs: iset<Reference>) {
     forall ref :: ref in refs ==> Predecessors(view, ref) <= refs
   }
+
+  predicate Transaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  {
+    OpTransaction(k, s, s', ops)
+  }
    
   predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
     && refs !! LiveReferences(k, s)

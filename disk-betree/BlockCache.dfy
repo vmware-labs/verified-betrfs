@@ -4,12 +4,7 @@ include "../lib/Maps.dfy"
 include "Graph.dfy"
 include "Disk.dfy"
 
-abstract module BlockCache {
-  // Ideally BlockCache would be parameterized by the graph type,
-  // but right now it's instantiated to BetreeGraph.
-  import G : Graph 
-
-  import opened Sequences
+abstract module BlockCache refines Transactable {
   import opened Maps
 
   import Disk = Disk
@@ -20,9 +15,6 @@ abstract module BlockCache {
   function SuperblockLBA(k: Constants) : LBA
 
   // TODO make superblock take up more than one block (it's not really a superblock)
-  type Reference = G.Reference
-  type Node = G.Node
-
   datatype Superblock = Superblock(
       lbas: map<Reference, LBA>,
       refcounts: map<Reference, int>)
@@ -42,6 +34,7 @@ abstract module BlockCache {
         cache: map<Reference, Node>)
     | Unready
 
+
   predicate IsNotDirty(s: Variables, ref: Reference)
   requires s.Ready?
   {
@@ -57,10 +50,6 @@ abstract module BlockCache {
     lba != SuperblockLBA(k)
   }
 
-  datatype Op =
-    | WriteOp(ref: Reference, block: Node)
-    | AllocOp(ref: Reference, block: Node)
-
   datatype Step =
     | WriteBackStep(ref: Reference)
     | WriteBackSuperblockStep
@@ -71,6 +60,7 @@ abstract module BlockCache {
     | PageInSuperblockStep
     | EvictStep(ref: Reference)
     | TransactionStep(ops: seq<Op>)
+
 
   predicate WFSuperblock(k: Constants, superblock: Superblock)
   {
@@ -166,7 +156,7 @@ abstract module BlockCache {
     && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
   }
 
-  predicate NextStepByOp(k: Constants, s: Variables, s': Variables, op: Op)
+  predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
   {
     match op {
       case WriteOp(ref, block) => Dirty(k, s, s', ref, block)
@@ -174,19 +164,10 @@ abstract module BlockCache {
     }
   }
 
-  predicate IsStatePath(k: Constants, s: Variables, s': Variables, ops: seq<Op>, path: seq<Variables>)
-  {
-    && |path| == |ops| + 1
-    && path[0] == s
-    && Last(path) == s'
-    && (forall i :: 0 <= i < |ops| ==> NextStepByOp(k, path[i], path[i+1], ops[i]))
-  }
-
   predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
   {
     && dop.NoDiskOp?
-    && |ops| > 0
-    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+    && OpTransaction(k, s, s', ops)
   }
 
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -362,7 +343,7 @@ abstract module BlockCache {
 
   lemma OpPreservesInvariant(k: Constants, s: Variables, s': Variables, op: Op)
     requires Inv(k, s)
-    requires NextStepByOp(k, s, s', op)
+    requires OpStep(k, s, s', op)
     ensures Inv(k, s')
   {
     match op {
@@ -455,5 +436,4 @@ abstract module BlockCache {
     var step :| NextStep(k, s, s', dop, step);
     NextStepPreservesInv(k, s, s', dop, step);
   }
-
 }

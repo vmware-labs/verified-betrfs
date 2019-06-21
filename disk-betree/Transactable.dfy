@@ -89,13 +89,13 @@ abstract module Transactable {
     }
   }
   
-  predicate Transaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-    ensures Transaction(k, s, s', ops) && |ops| == 1 ==>
+  predicate OpTransaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+    ensures OpTransaction(k, s, s', ops) && |ops| == 1 ==>
       && OpStep(k, s, s', ops[0])
-    ensures Transaction(k, s, s', ops) && |ops| == 2 ==> exists sint ::
+    ensures OpTransaction(k, s, s', ops) && |ops| == 2 ==> exists sint ::
       && OpStep(k, s, sint, ops[0])
       && OpStep(k, sint, s', ops[1])
-    ensures Transaction(k, s, s', ops) && |ops| == 3 ==> exists sint, sint' ::
+    ensures OpTransaction(k, s, s', ops) && |ops| == 3 ==> exists sint, sint' ::
       && OpStep(k, s, sint, ops[0])
       && OpStep(k, sint, sint', ops[1])
       && OpStep(k, sint', s', ops[2])
