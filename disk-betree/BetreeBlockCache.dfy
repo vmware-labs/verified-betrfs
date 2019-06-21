@@ -1,23 +1,28 @@
 include "BlockCache.dfy"
 include "DiskBetree.dfy"
+include "DiskBetree.dfy"
 include "../lib/Maps.dfy"
+include "../lib/sequences.dfy"
 
 module BetreeGraphBlockCache refines BlockCache {
   import G = BetreeGraph
 }
 
-module BtreeBlockCache {
+module BetreeBlockCache {
   import opened Maps
+  import opened Sequences
 
   import G = BetreeGraph
   import BC = BetreeGraphBlockCache
   import DB = DiskBetree
+  import BI = BetreeBlockInterface
   import D = Disk
 
   type Variables = BC.Variables
   type Constants = BC.Constants
 
   type DiskOp = BC.DiskOp
+  type Op = BC.Op
 
   predicate Init(k: Constants, s: Variables) {
     BC.Init(k, s)
@@ -79,12 +84,18 @@ module BtreeBlockCache {
     BC.InitImpliesInv(k, s);
   }
 
+  function BIStepsToOps(step: seq<BI.Step>) : seq<Op>
+
   lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: DB.Step)
   requires Inv(k, s)
   requires BetreeMove(k, s, s', dop, step)
   ensures Inv(k, s')
   {
-    
+    var steps :| BI.Transaction(
+        DB.BI.Constants(), DB.BI.Variables(MapToImap(s.cache)), DB.BI.Variables(MapToImap(s'.cache)), steps);
+    var ops := BIStepsToOps(steps); 
+    assert BC.Transaction(k, s, s', D.NoDiskOp, ops); // TODO
+    BC.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops); 
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)
