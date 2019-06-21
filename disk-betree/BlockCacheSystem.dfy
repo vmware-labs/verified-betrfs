@@ -384,7 +384,7 @@ abstract module BlockCacheSystem {
 
   lemma OpPreservesInvariant(k: Constants, s: Variables, s': Variables, op: Op)
     requires Inv(k, s)
-    requires M.NextStepByOp(k.machine, s.machine, s'.machine, op)
+    requires M.OpStep(k.machine, s.machine, s'.machine, op)
     requires s.disk == s'.disk
     ensures Inv(k, s')
   {
