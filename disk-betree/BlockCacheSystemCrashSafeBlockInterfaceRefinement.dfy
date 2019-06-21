@@ -29,7 +29,6 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import D = Disk
   import DiskBetree
   type DiskOp = BC.DiskOp
-  type Op = BC.Op
 
   function Ik(k: BCS.Constants) : CSBI.Constants
   {
@@ -81,9 +80,8 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires BCS.Inv(k, s')
   requires BC.Dirty(k.machine, s.machine, s'.machine, ref, block)
   requires s.disk == s'.disk
-  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.WriteStep(ref, block))
+  ensures BI.OpStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, WriteOp(ref, block))
   {
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.WriteStep(ref, block));
     //assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
@@ -92,34 +90,9 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires BCS.Inv(k, s')
   requires BC.Alloc(k.machine, s.machine, s'.machine, ref, block)
   requires s.disk == s'.disk
-  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.AllocStep(block, ref))
+  ensures BI.OpStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, AllocOp(ref, block))
   {
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.AllocStep(block, ref));
     //assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
-  }
-
-  function OpToBIStep(op: Op) : BI.Step {
-    match op {
-      case WriteOp(ref, block) => BI.WriteStep(ref, block)
-      case AllocOp(ref, block) => BI.AllocStep(block, ref)
-    }
-  }
-
-  function OpsToBITransaction(ops: seq<Op>) : BI.Step {
-    BI.TransactionStep(Apply((op) => OpToBIStep(op), ops))
-  }
-
-  lemma RefinesOp(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, op: Op)
-  requires BCS.Inv(k, s)
-  requires BCS.Inv(k, s')
-  requires BC.NextStepByOp(k.machine, s.machine, s'.machine, op)
-  requires s.disk == s'.disk
-  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, OpToBIStep(op))
-  {
-    match op {
-      case WriteOp(ref, block) => RefinesDirty(k, s, s', ref, block);
-      case AllocOp(ref, block) => RefinesAlloc(k, s, s', ref, block);
-    }
   }
 
   lemma RefinesTransaction(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ops: seq<Op>)
