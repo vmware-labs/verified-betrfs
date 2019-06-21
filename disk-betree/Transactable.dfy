@@ -90,6 +90,7 @@ abstract module Transactable {
   }
   
   predicate OpTransaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+    // These postconditions help automation a lot.
     ensures OpTransaction(k, s, s', ops) && |ops| == 1 ==>
       && OpStep(k, s, s', ops[0])
     ensures OpTransaction(k, s, s', ops) && |ops| == 2 ==> exists sint ::
@@ -105,5 +106,16 @@ abstract module Transactable {
     Transaction3Steps(k, s, s', ops);
     && 0 < |ops|
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+  }
+
+  // Helper lemmas
+  lemma OpTransactionAugment(k: Constants, s: Variables, s': Variables, s'': Variables, ops: seq<Op>, op: Op)
+  requires OpTransaction(k, s, s', ops)
+  requires OpStep(k, s', s'', op)
+  ensures OpTransaction(k, s, s'', ops + [op])
+  {
+    var path :| IsStatePath(k, s, s', ops, path);
+    var path1 := path + [s''];
+    assert IsStatePath(k, s, s'', ops + [op], path1);
   }
 }

@@ -108,16 +108,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     }
   }
 
-  // TODO could be general lemma on Transactable
-  lemma OpTransactionAugment(k: BI.Constants, s: BI.Variables, s': BI.Variables, s'': BI.Variables, ops: seq<Op>, op: Op)
-  requires BI.OpTransaction(k, s, s', ops)
-  requires BI.OpStep(k, s', s'', op)
-  ensures BI.OpTransaction(k, s, s'', ops + [op])
-  {
-    var path :| BI.IsStatePath(k, s, s', ops, path);
-    var path1 := path + [s''];
-    assert BI.IsStatePath(k, s, s'', ops + [op], path1);
-  }
+  
 
   lemma RefinesOpTransaction(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, ops: seq<Op>)
   requires BCS.Inv(k, s)
@@ -127,6 +118,9 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   ensures BI.OpTransaction(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, ops)
   decreases ops
   {
+    // TODO this is a conceptually simple induction but rather annoying anyway.
+    // Idea: Have a helper function which splits an OpTransaction s .. s' into two OpTransactions s .. s'' .. s'
+    // Recurse, then have a helper function glues them back together.
     if (|ops| == 1) {
       assert BC.OpStep(k.machine, s.machine, s'.machine, ops[0]);
       RefinesOp(k, s, s', ops[0]);
@@ -142,7 +136,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
       assert BCS.Inv(k, BCS.Variables(penultimateMachine, s.disk));
       RefinesOpTransaction(k, s, BCS.Variables(penultimateMachine, s.disk), subops);
       RefinesOp(k, BCS.Variables(penultimateMachine, s.disk), s', Last(ops));
-      OpTransactionAugment(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(penultimateMachine, s.disk)).ephemeral, I(k, s').ephemeral, subops, Last(ops));
+      BI.OpTransactionAugment(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(penultimateMachine, s.disk)).ephemeral, I(k, s').ephemeral, subops, Last(ops));
       assert subops + [Last(ops)] == ops;
     }
   }
