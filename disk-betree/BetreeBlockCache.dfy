@@ -4,12 +4,13 @@ include "DiskBetree.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "BetreeSpec.dfy"
+include "BlockCacheSystemCrashSafeBlockInterfaceRefinement.dfy"
 
 module BetreeBlockCache {
   import opened Maps
   import opened Sequences
 
-  import opened BetreeSpecForBlockCache
+  import opened BetreeSpec`Spec
   import G = BetreeGraph
   import BC = BetreeGraphBlockCache
   import DB = DiskBetree
@@ -31,20 +32,15 @@ module BetreeBlockCache {
   }
 
   datatype Step =
-    | BetreeMoveStep(betreeStep: DB.Step)
+    | BetreeMoveStep(betreeStep: BetreeStep)
     | BlockCacheMoveStep(blockCacheStep: BC.Step)
 
-  predicate BetreeMove(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: DB.Step) {
+  predicate BetreeMove(k: Constants, s: Variables, s': Variables, dop: DiskOp, betreeStep: BetreeStep)
+  {
     && dop.NoDiskOp?
-    // TODO this is ugly
-    && (match step {
-      case QueryStep(key, value, lookup) => false
-      case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
-      case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
-      case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
-      case SplitStep(fusion) => Split(k, s, s', BetreeSpecForBlockCache.NodeFusion(fusion.parentref, fusion.fused_childref, fusion.left_childref, fusion.right_childref, fusion.fused_parent, fusion.split_parent, fusion.fused_child, fusion.left_child, fusion.right_child, fusion.left_keys, fusion.right_keys))
-      case GCStep(refs) => false
-    })
+    && ValidBetreeStep(betreeStep)
+    && BC.Reads(k, s, BetreeStepReads(betreeStep))
+    && BC.OpTransaction(k, s, s', BetreeStepOps(betreeStep))
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step) {
@@ -79,9 +75,9 @@ module BetreeBlockCache {
 
   function BIStepsToOps(step: seq<BI.Step>) : seq<Op>
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: DB.Step)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, betreeStep: BetreeStep)
   requires Inv(k, s)
-  requires BetreeMove(k, s, s', dop, step)
+  requires BetreeMove(k, s, s', dop, betreeStep)
   ensures Inv(k, s')
   {
     var ops :| BC.OpTransaction(k, s, s', ops);

@@ -11,6 +11,7 @@ module BetreeBlockCacheSystem {
   import opened Maps
   import opened Sequences
 
+  import opened BetreeSpec`Spec
   import BC = BetreeGraphBlockCache
   import BCS = BetreeGraphBlockCacheSystem
   import DB = DiskBetree
@@ -98,68 +99,17 @@ module BetreeBlockCacheSystem {
     requires BCS.Inv(k, s')
     ensures PersistentBetree(k, s) == PersistentBetree(k, s')
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: DB.Step)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, betreeStep: BetreeStep)
     requires Inv(k, s)
-    requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, step)
+    requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, betreeStep)
     requires s.disk == s'.disk
     ensures Inv(k, s')
+    /*
   {
-    //var ops :| BC.OpTransaction(k.machine, s.machine, s'.machine, ops);
-    var ops := (match step
-      case QueryStep(key, value, lookup) => []
-      case InsertMessageStep(key, msg, oldroot) => (
-        [G.WriteOp(Root(), AddMessageToNode(oldroot, key, msg))]
-      }
-      case FlushStep(parentref, parent, childref, child, newchildref) => (
-        var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-        var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
-        var newchild := Node(child.children, newbuffer);
-        var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
-        var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
-        var newparent := Node(newparentchildren, newparentbuffer);
-        var allocop := G.AllocOp(newchildref, newchild);
-        var writeop := G.WriteOp(parentref, newparent);
-      )
-      case GrowStep(oldroot, newchildref) => (
-      )
-      case SplitStep(fusion) => (
-      )
-      case GCStep(refs) => []
-    );
-    assert BC.OpTransaction(k.machine, s.machine, s'.machine, ops);
-
     BCS.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
-
     PersistentGraphEqAcrossOps(k, s, s', ops); 
-
-    if (s.machine.Ready?) {
-      Ref.RefinesOpTransaction(k, s, s', ops);
-      match step {
-        case QueryStep(key, value, lookup) => {}
-        case InsertMessageStep(key, msg, oldroot) => {
-          assert DB.BetreeSpec.InsertMessage(DBConst(k).bck, EphemeralBetree(k, s).bcv, EphemeralBetree(k, s').bcv, key, msg, oldroot);
-          assume false;
-          assert DB.NextStep(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), step);
-          assert DB.Next(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'));
-        }
-        case FlushStep(parentref, parent, childref, child, newchildref) => {
-          assume false;
-          assert DB.Next(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'));
-        }
-        case GrowStep(oldroot, newchildref) => {
-          assume false;
-          assert DB.Next(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'));
-        }
-        case SplitStep(fusion) => {
-          assume false;
-          assert DB.Next(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'));
-        }
-        case GCStep(refs) => { }
-      }
-      assume false;
-      DBI.NextPreservesInv(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'));
-    }
   }
+  */
 
   lemma BlockCacheStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)
     requires Inv(k, s)

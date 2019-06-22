@@ -4,6 +4,10 @@ include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
+module BetreeGraphBlockCache refines BlockCache {
+  import G = BetreeGraph
+}
+
 module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
   import M = BetreeGraphBlockCache
 }
