@@ -1237,6 +1237,15 @@ module DiskBetreeInv {
   {
   }
 
+  // GC Step
+
+  lemma GCStepPreservesInvariant(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
+    requires Inv(k, s)
+    requires GC(k, s, s', refs)
+    ensures Inv(k, s')
+  {
+  }
+
   // Putting it all together
 
   lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
@@ -1260,12 +1269,7 @@ module DiskBetreeInv {
   {
     match step {
       case QueryStep(key, value, lookup) => QueryStepPreservesInvariant(k, s, s', key, value, lookup);
-      /*
-      case InsertMessageStep(key, value, oldroot) => InsertMessageStepPreservesInvariant(k, s, s', key, value, oldroot);
-      case FlushStep(parentref, parent, childref, child, newchildref) => FlushStepPreservesInvariant(k, s, s', parentref, parent, childref, child, newchildref);
-      case GrowStep(oldroot, newchildref) => GrowStepPreservesInvariant(k, s, s', oldroot, newchildref);
-      case SplitStep(fusion) => SplitStepPreservesInvariant(k, s, s', fusion);
-      */
+      case GCStep(refs) => GCStepPreservesInvariant(k, s, s', refs);
       case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(k, s, s', betreeStep);
     }
   }

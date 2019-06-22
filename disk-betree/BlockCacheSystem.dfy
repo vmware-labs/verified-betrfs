@@ -439,6 +439,14 @@ abstract module BlockCacheSystem {
     //assert Inv(k, s');
   }
 
+  lemma UnallocStepPreservesPersistentGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+  {
+  }
+
   lemma UnallocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
