@@ -66,6 +66,81 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
   }
 
+  lemma RefinesWriteBackStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, ref: Reference)
+  requires BBCS.Inv(k, s)
+  requires BBCS.Inv(k, s')
+  requires BC.WriteBack(k.machine, s.machine, s'.machine, dop, ref)
+  requires D.Write(k.disk, s.disk, s'.disk, dop);
+  ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    BCS.WriteBackStepPreservesGraphs(k, s, s', dop, ref);
+    assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BT.StutterStep);
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
+  }
+
+  lemma RefinesWriteBackSuperblockStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp)
+  requires BBCS.Inv(k, s)
+  requires BBCS.Inv(k, s')
+  requires BC.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+  requires D.Write(k.disk, s.disk, s'.disk, dop);
+  ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    BCS.WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.SyncStep);
+  }
+
+  lemma RefinesUnallocStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, ref: Reference)
+  requires BBCS.Inv(k, s)
+  requires BBCS.Inv(k, s')
+  requires BC.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
+  requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    BCS.UnallocStepPreservesPersistentGraph(k, s, s', dop, ref);
+
+    Ref.RefinesUnalloc(k, s, s', dop, ref);
+    DBI.GCStepPreservesInvariant(Ik(k), BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), iset{ref});
+
+    assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BT.GCStep(iset{ref}));
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
+  }
+
+  lemma RefinesPageInStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, ref: Reference)
+  requires BBCS.Inv(k, s)
+  requires BBCS.Inv(k, s')
+  requires BC.PageIn(k.machine, s.machine, s'.machine, dop, ref)
+  requires D.Read(k.disk, s.disk, s'.disk, dop);
+  ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    BCS.PageInStepPreservesGraphs(k, s, s', dop, ref);
+    assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BT.StutterStep);
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
+  }
+
+  lemma RefinesPageInSuperblockStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp)
+  requires BBCS.Inv(k, s)
+  requires BBCS.Inv(k, s')
+  requires BC.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+  requires D.Read(k.disk, s.disk, s'.disk, dop);
+  ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    BCS.PageInSuperblockStepPreservesGraphs(k, s, s', dop);
+    assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BT.StutterStep);
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
+  }
+
+  lemma RefinesEvictStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, ref: Reference)
+  requires BBCS.Inv(k, s)
+  requires BBCS.Inv(k, s')
+  requires BC.Evict(k.machine, s.machine, s'.machine, dop, ref)
+  requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    BCS.EvictStepPreservesGraphs(k, s, s', dop, ref);
+    assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BT.StutterStep);
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
+  }
+
   lemma RefinesBlockCacheMoveStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, step: BC.Step)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
@@ -74,7 +149,15 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
   {
     match step {
+      case WriteBackStep(ref) => RefinesWriteBackStep(k, s, s', dop, ref);
+      case WriteBackSuperblockStep => RefinesWriteBackSuperblockStep(k, s, s', dop);
+      case UnallocStep(ref) => RefinesUnallocStep(k, s, s', dop, ref);
+      case PageInStep(ref) => RefinesPageInStep(k, s, s', dop, ref);
+      case PageInSuperblockStep => RefinesPageInSuperblockStep(k, s, s', dop);
+      case EvictStep(ref) => RefinesEvictStep(k, s, s', dop, ref);
+      case TransactionStep(ops) => { assert false; }
     }
+
   }
 
   lemma RefinesMachineStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, step: M.Step)

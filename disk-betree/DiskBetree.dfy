@@ -75,12 +75,14 @@ module DiskBetree {
     | QueryStep(key: Key, value: Value, lookup: Lookup)
     | BetreeStep(step: BetreeStep)
     | GCStep(refs: iset<Reference>)
+    | StutterStep
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
     match step {
       case QueryStep(key, value, lookup) => Query(k, s, s', key, value, lookup)
       case BetreeStep(betreeStep) => Betree(k, s, s', betreeStep)
       case GCStep(refs) => GC(k, s, s', refs)
+      case StutterStep => s == s'
     }
   }
 
