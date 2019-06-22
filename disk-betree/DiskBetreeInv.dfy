@@ -7,7 +7,7 @@ module DiskBetreeInv {
   import opened DB = DiskBetree
   import opened Maps
   import opened Sequences
-  import opened BetreeSpec
+  import opened BetreeSpec`Internal
   import opened G = BetreeSpec.G
 
   predicate KeyHasSatisfyingLookup(k: Constants, view: BI.View, key: Key)
