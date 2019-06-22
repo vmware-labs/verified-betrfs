@@ -150,17 +150,6 @@ module BetreeBlockCacheSystem {
     BCS.WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
   }
 
-  lemma UnallocImpliesGCStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
-    requires Inv(k, s)
-    requires BCS.Inv(k, s')
-    requires BC.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures DB.GC(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), iset{ref})
-    /*
-  {
-  }
-  */
-
   lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
     requires Inv(k, s)
     requires BCS.Inv(k, s')
@@ -170,7 +159,8 @@ module BetreeBlockCacheSystem {
   {
     BCS.UnallocStepPreservesPersistentGraph(k, s, s', dop, ref);
 
-    // TODO call Ref.RefinesUnalloc
+    Ref.RefinesUnalloc(k, s, s', dop, ref);
+    DBI.GCStepPreservesInvariant(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), iset{ref});
   }
 
   lemma PageInStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
