@@ -3,15 +3,13 @@ include "DiskBetree.dfy"
 include "DiskBetree.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
-
-module BetreeGraphBlockCache refines BlockCache {
-  import G = BetreeGraph
-}
+include "BetreeSpec.dfy"
 
 module BetreeBlockCache {
   import opened Maps
   import opened Sequences
 
+  import opened BetreeSpecForBlockCache
   import G = BetreeGraph
   import BC = BetreeGraphBlockCache
   import DB = DiskBetree
@@ -38,20 +36,15 @@ module BetreeBlockCache {
 
   predicate BetreeMove(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: DB.Step) {
     && dop.NoDiskOp?
-    && (
-      || step.InsertMessageStep?
-      || step.FlushStep?
-      || step.GrowStep?
-      || step.SplitStep?
-    )
-    && s.Ready?
-    && s'.Ready?
-    && s' == s.(cache := s'.cache)
-    && DB.NextStep(
-        DB.Constants(DB.BI.Constants()),
-        DB.Variables(DB.BI.Variables(MapToImap(s.cache))),
-        DB.Variables(DB.BI.Variables(MapToImap(s'.cache))),
-        step)
+    // TODO this is ugly
+    && (match step {
+      case QueryStep(key, value, lookup) => false
+      case InsertMessageStep(key, msg, oldroot) => InsertMessage(k, s, s', key, msg, oldroot)
+      case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k, s, s', parentref, parent, childref, child, newchildref)
+      case GrowStep(oldroot, newchildref) => Grow(k, s, s', oldroot, newchildref)
+      case SplitStep(fusion) => Split(k, s, s', BetreeSpecForBlockCache.NodeFusion(fusion.parentref, fusion.fused_childref, fusion.left_childref, fusion.right_childref, fusion.fused_parent, fusion.split_parent, fusion.fused_child, fusion.left_child, fusion.right_child, fusion.left_keys, fusion.right_keys))
+      case GCStep(refs) => false
+    })
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step) {
@@ -91,11 +84,8 @@ module BetreeBlockCache {
   requires BetreeMove(k, s, s', dop, step)
   ensures Inv(k, s')
   {
-    var steps :| BI.Transaction(
-        DB.BI.Constants(), DB.BI.Variables(MapToImap(s.cache)), DB.BI.Variables(MapToImap(s'.cache)), steps);
-    var ops := BIStepsToOps(steps); 
-    assert BC.Transaction(k, s, s', D.NoDiskOp, ops); // TODO
-    BC.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops); 
+    var ops :| BC.OpTransaction(k, s, s', ops);
+    BC.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)

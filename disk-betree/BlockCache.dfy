@@ -156,6 +156,11 @@ abstract module BlockCache refines Transactable {
     && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
   }
 
+  predicate Reads(k: Constants, s: Variables, ref: Reference, block: Node)
+  {
+    s.Ready? && MapsTo(s.cache, ref, block)
+  }
+
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
   {
     match op {
