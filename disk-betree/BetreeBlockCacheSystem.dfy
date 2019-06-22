@@ -77,6 +77,10 @@ module BetreeBlockCacheSystem {
     requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, step)
     requires s.disk == s'.disk
     ensures Inv(k, s')
+  {
+    var ops :| BC.OpTransaction(k.machine, s.machine, s'.machine, ops);
+    BCS.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
+  }
 
   lemma BlockCacheStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)
     requires Inv(k, s)
