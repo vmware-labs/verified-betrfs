@@ -131,6 +131,62 @@ module BetreeBlockCacheSystem {
     }
   }
 
+  lemma WriteBackStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
+    requires Inv(k, s)
+    requires BC.WriteBack(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Write(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    BCS.WriteBackStepPreservesGraphs(k, s, s', dop, ref);
+  }
+
+  lemma WriteBackSuperblockStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires BCS.Inv(k, s')
+    requires BC.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires D.Write(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    BCS.WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
+  }
+
+  lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
+    requires Inv(k, s)
+    requires BCS.Inv(k, s')
+    requires BC.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+
+  lemma PageInStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
+    requires Inv(k, s)
+    requires BCS.Inv(k, s')
+    requires BC.PageIn(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    BCS.PageInStepPreservesGraphs(k, s, s', dop, ref);
+  }
+
+  lemma PageInSuperblockStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires BCS.Inv(k, s')
+    requires BC.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    BCS.PageInSuperblockStepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma EvictStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
+    requires Inv(k, s)
+    requires BCS.Inv(k, s')
+    requires BC.Evict(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    BCS.EvictStepPreservesGraphs(k, s, s', dop, ref);
+  }
+
   lemma BlockCacheStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)
     requires Inv(k, s)
     requires M.BlockCacheMove(k.machine, s.machine, s'.machine, dop, step)
@@ -141,16 +197,15 @@ module BetreeBlockCacheSystem {
     assert BCS.NextStep(k, s, s', BCS.MachineStep(dop));
     BCS.NextPreservesInv(k, s, s');
 
-    assert PersistentBetree(k, s') == PersistentBetree(k, s);
-    assume false;
-    /*
-    if (step.WriteBackStep?) {
-    } else if (step.WriteBackSuperblockStep?) {
-    } else if (step.UnallocStep?) {
-    } else if (step.PageInStep?) {
-    } else if (step.PageInSuperblockStep?) {
-    } else if (step.EvictStep?) 
-    */
+    match step {
+      case WriteBackStep(ref) => WriteBackStepPreservesInv(k, s, s', dop, ref);
+      case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInv(k, s, s', dop);
+      case UnallocStep(ref) => UnallocStepPreservesInv(k, s, s', dop, ref);
+      case PageInStep(ref) => PageInStepPreservesInv(k, s, s', dop, ref);
+      case PageInSuperblockStep => PageInSuperblockStepPreservesInv(k, s, s', dop);
+      case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
+      case TransactionStep(ops) => { assert false; }
+    }
   }
 
   lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)

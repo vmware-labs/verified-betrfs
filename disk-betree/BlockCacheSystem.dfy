@@ -177,21 +177,30 @@ abstract module BlockCacheSystem {
   {
   }
 
+  lemma WriteBackStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.WriteBack(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Write(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+  {
+  }
+
   lemma WriteBackStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.WriteBack(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Write(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    assert PersistentGraph(k, s) == PersistentGraph(k, s');
-    assert EphemeralGraph(k, s) == EphemeralGraph(k, s');
+    WriteBackStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma WriteBackSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackSuperblockStepSyncsGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
     requires D.Write(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+    ensures PersistentGraph(k, s') == EphemeralGraph(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     //assert M.Inv(k.machine, s'.machine);
     //assert WFDisk(k, s'.disk.blocks);
@@ -218,6 +227,15 @@ abstract module BlockCacheSystem {
     //assert s'.machine.persistentSuperblock == DiskSuperblock(k, s'.disk.blocks);
     //assert WFSuperblockWrtDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks);
     //assert RefcountsAgree(s'.machine.ephemeralSuperblock.refcounts, EphemeralGraph(k, s'));
+  }
+
+  lemma WriteBackSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires D.Write(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
   }
 
   lemma RefcountConservation(k: Constants, s: Variables, s': Variables, graph: map<Reference, Node>, graph': map<Reference, Node>, ref: Reference, r: Reference)
@@ -442,14 +460,31 @@ abstract module BlockCacheSystem {
     }
   }
 
+  lemma PageInStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.PageIn(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+  {
+  }
+
   lemma PageInStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.PageIn(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    assert PersistentGraph(k, s) == PersistentGraph(k, s');
-    assert EphemeralGraph(k, s) == EphemeralGraph(k, s');
+    PageInStepPreservesGraphs(k, s, s', dop, ref);
+  }
+
+  lemma PageInSuperblockStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures PersistentGraph(k, s) == EphemeralGraph(k, s');
+  {
   }
 
   lemma PageInSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -458,8 +493,16 @@ abstract module BlockCacheSystem {
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    assert PersistentGraph(k, s) == PersistentGraph(k, s');
-    assert PersistentGraph(k, s) == EphemeralGraph(k, s');
+    PageInSuperblockStepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma EvictStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.Evict(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+  {
   }
 
   lemma EvictStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -468,7 +511,7 @@ abstract module BlockCacheSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    assert EphemeralGraph(k, s) == EphemeralGraph(k, s');
+    EvictStepPreservesGraphs(k, s, s', dop, ref);
   }
 
   lemma MachineStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
