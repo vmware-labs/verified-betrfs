@@ -66,6 +66,10 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
   }
 
+  // TODO I suspect a lot of the below handling of BlockCache operations
+  // can be reduced to stuff in the general
+  // BlockCacheSystem -> CrashSafeBlockInterface proof.
+
   lemma RefinesWriteBackStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, ref: Reference)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
