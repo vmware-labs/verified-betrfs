@@ -24,10 +24,7 @@ module BetreeBlockInterface refines BlockInterface {
   import G = BetreeGraph
 }
 
-module BetreeSpec {
-  // Ideally this would work for any Transactable which uses the BetreeGraph
-  // but we can't express that constraint.
-  import Tr = BetreeBlockInterface
+module BetreeSpecCommon {
 
   import MS = MapSpec
   import opened G = BetreeGraph
@@ -67,41 +64,6 @@ module BetreeSpec {
   {
     Node(node.children, AddMessageToBuffer(node.buffer, key, msg))
   }
-  
-  predicate InsertMessage(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, key: Key, msg: BufferEntry, oldroot: Node) {
-    && IMapsTo(s.view, Root(), oldroot)
-    && WFNode(oldroot)
-    && var newroot := AddMessageToNode(oldroot, key, msg);
-    && var writeop := G.WriteOp(Root(), newroot);
-    && Tr.Transaction(k, s, s', [writeop])
-  }
-
-  predicate Flush(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) {
-    var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    && IMapsTo(s.view, parentref, parent)
-    && IMapsTo(s.view, childref, child)
-    && WFNode(parent)
-    && WFNode(child)
-    && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
-    && var newchild := Node(child.children, newbuffer);
-    && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
-    && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
-    && var newparent := Node(newparentchildren, newparentbuffer);
-    && var allocop := G.AllocOp(newchildref, newchild);
-    && var writeop := G.WriteOp(parentref, newparent);
-    && Tr.Transaction(k, s, s', [allocop, writeop])
-  }
-
-  predicate Grow(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, oldroot: Node, newchildref: Reference) {
-    && IMapsTo(s.view, Root(), oldroot)
-    && var newchild := oldroot;
-    && var newroot := Node(
-        imap key | MS.InDomain(key) :: newchildref,
-        imap key | MS.InDomain(key) :: []);
-    && var allocop := G.AllocOp(newchildref, newchild);
-    && var writeop := G.WriteOp(Root(), newroot);
-    && Tr.Transaction(k, s, s', [allocop, writeop])
-  }
 
   datatype NodeFusion = NodeFusion(
     parentref: Reference,
@@ -117,6 +79,45 @@ module BetreeSpec {
     left_keys: iset<Key>,
     right_keys: iset<Key>
   )
+}
+
+module BetreeSpec refines BetreeSpecCommon {
+  import Tr = BetreeBlockInterface
+
+  predicate InsertMessage(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, key: Key, msg: BufferEntry, oldroot: Node) {
+    && Tr.Reads(k, s, Root(), oldroot)
+    && WFNode(oldroot)
+    && var newroot := AddMessageToNode(oldroot, key, msg);
+    && var writeop := G.WriteOp(Root(), newroot);
+    && Tr.Transaction(k, s, s', [writeop])
+  }
+
+  predicate Flush(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) {
+    var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
+    && Tr.Reads(k, s, parentref, parent)
+    && Tr.Reads(k, s, childref, child)
+    && WFNode(parent)
+    && WFNode(child)
+    && var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    && var newchild := Node(child.children, newbuffer);
+    && var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    && var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    && var newparent := Node(newparentchildren, newparentbuffer);
+    && var allocop := G.AllocOp(newchildref, newchild);
+    && var writeop := G.WriteOp(parentref, newparent);
+    && Tr.Transaction(k, s, s', [allocop, writeop])
+  }
+
+  predicate Grow(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, oldroot: Node, newchildref: Reference) {
+    && Tr.Reads(k, s, Root(), oldroot)
+    && var newchild := oldroot;
+    && var newroot := Node(
+        imap key | MS.InDomain(key) :: newchildref,
+        imap key | MS.InDomain(key) :: []);
+    && var allocop := G.AllocOp(newchildref, newchild);
+    && var writeop := G.WriteOp(Root(), newroot);
+    && Tr.Transaction(k, s, s', [allocop, writeop])
+  }
 
   predicate ValidFusion(fusion: NodeFusion)
   {
@@ -141,8 +142,8 @@ module BetreeSpec {
 
   predicate Split(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, fusion: NodeFusion)
   {
-    && IMapsTo(s.view, fusion.parentref, fusion.fused_parent)
-    && IMapsTo(s.view, fusion.fused_childref, fusion.fused_child)
+    && Tr.Reads(k, s, fusion.parentref, fusion.fused_parent)
+    && Tr.Reads(k, s, fusion.fused_childref, fusion.fused_child)
     && ValidFusion(fusion)
     && WFNode(fusion.fused_parent)
     && WFNode(fusion.fused_child)
@@ -156,9 +157,9 @@ module BetreeSpec {
 
   predicate Merge(k: Tr.Constants, s: Tr.Variables, s': Tr.Variables, fusion: NodeFusion)
   {
-    && IMapsTo(s.view, fusion.parentref, fusion.split_parent)
-    && IMapsTo(s.view, fusion.left_childref, fusion.left_child)
-    && IMapsTo(s.view, fusion.right_childref, fusion.right_child)
+    && Tr.Reads(k, s, fusion.parentref, fusion.split_parent)
+    && Tr.Reads(k, s, fusion.left_childref, fusion.left_child)
+    && Tr.Reads(k, s, fusion.right_childref, fusion.right_child)
     && ValidFusion(fusion)
     && var allocop := G.AllocOp(fusion.fused_childref, fusion.fused_child);
     && var writeop := G.WriteOp(fusion.parentref, fusion.fused_parent);

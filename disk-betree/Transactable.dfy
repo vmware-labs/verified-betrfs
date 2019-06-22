@@ -13,6 +13,7 @@ abstract module Transactable {
   type Variables(!new)
   type Op = G.Op
 
+  predicate Reads(k: Constants, s: Variables, ref: Reference, block: Node)
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
 
   predicate IsStatePath(k: Constants, s: Variables, s': Variables, ops: seq<Op>, path: seq<Variables>)
