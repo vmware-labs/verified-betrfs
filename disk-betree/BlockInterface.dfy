@@ -67,9 +67,9 @@ abstract module BlockInterface refines Transactable {
     && s'.view == s.view[ref := block]
   }
 
-  predicate Reads(k: Constants, s: Variables, ref: Reference, block: Node)
+  predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
   {
-    IMapsTo(s.view, ref, block)
+    IMapsTo(s.view, op.ref, op.block)
   }
 
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)

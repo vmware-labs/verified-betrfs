@@ -12,9 +12,19 @@ abstract module Transactable {
   type Constants(!new)
   type Variables(!new)
   type Op = G.Op
+  type ReadOp = G.ReadOp
 
-  predicate Reads(k: Constants, s: Variables, ref: Reference, block: Node)
+  predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
+
+  predicate Reads(k: Constants, s: Variables, ops: seq<ReadOp>)
+  // TODO prove these:
+  ensures |ops| == 1 ==> ReadStep(k, s, ops[0])
+  ensures |ops| == 2 ==> ReadStep(k, s, ops[0]) && ReadStep(k, s, ops[1])
+  ensures |ops| == 3 ==> ReadStep(k, s, ops[0]) && ReadStep(k, s, ops[1]) && ReadStep(k, s, ops[2])
+  {
+    forall op :: op in ops ==> ReadStep(k, s, op)
+  }
 
   predicate IsStatePath(k: Constants, s: Variables, s': Variables, ops: seq<Op>, path: seq<Variables>)
   {

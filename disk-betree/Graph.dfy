@@ -11,4 +11,7 @@ abstract module Graph {
   datatype Op =
     | AllocOp(ref: Reference, block: Node)
     | WriteOp(ref: Reference, block: Node)
+
+  datatype ReadOp =
+    | ReadOp(ref: Reference, block: Node)
 }

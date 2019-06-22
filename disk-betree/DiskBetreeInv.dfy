@@ -127,6 +127,45 @@ module DiskBetreeInv {
     }
   }
 
+  // Old definitions
+  // TODO clean these up; remove them or change them to use BetreeStep objects instead
+
+  predicate Grow(k: BI.Constants, s: BI.Variables, s': BI.Variables, oldroot: Node, newchildref: Reference)
+  {
+    && ValidGrow(RootGrowth(oldroot, newchildref))
+    && BI.Reads(k, s, GrowReads(RootGrowth(oldroot, newchildref)))
+    && BI.OpTransaction(k, s, s', GrowOps(RootGrowth(oldroot, newchildref)))
+  }
+
+  predicate Flush(k: BI.Constants, s: BI.Variables, s': BI.Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
+  {
+    && ValidFlush(NodeFlush(parentref, parent, childref, child, newchildref))
+    && BI.Reads(k, s, FlushReads(NodeFlush(parentref, parent, childref, child, newchildref)))
+    && BI.OpTransaction(k, s, s', FlushOps(NodeFlush(parentref, parent, childref, child, newchildref)))
+  }
+
+  predicate Split(k: BI.Constants, s: BI.Variables, s': BI.Variables, fusion: NodeFusion)
+  {
+    && ValidSplit(fusion)
+    && BI.Reads(k, s, SplitReads(fusion))
+    && BI.OpTransaction(k, s, s', SplitOps(fusion))
+  }
+
+  predicate Merge(k: BI.Constants, s: BI.Variables, s': BI.Variables, fusion: NodeFusion)
+  {
+    && ValidMerge(fusion)
+    && BI.Reads(k, s, MergeReads(fusion))
+    && BI.OpTransaction(k, s, s', MergeOps(fusion))
+  }
+
+  predicate InsertMessage(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  {
+    && ValidInsertion(MessageInsertion(key, msg, oldroot))
+    && BI.Reads(k, s, InsertionReads(MessageInsertion(key, msg, oldroot)))
+    && BI.OpTransaction(k, s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
+  }
+
+
   ////////
   //////// Grow
   ////////
@@ -1191,6 +1230,29 @@ module DiskBetreeInv {
     //SplitPreservesReachablePointersValid(k, s, s', fusion);
   }
 
+  lemma MergeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+    requires Inv(k, s)
+    requires Merge(k.bck, s.bcv, s'.bcv, fusion)
+    ensures Inv(k, s')
+  {
+  }
+
+  // Putting it all together
+
+  lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
+    requires Inv(k, s)
+    requires Betree(k, s, s', betreeStep)
+    ensures Inv(k, s')
+  {
+    match betreeStep {
+      case BetreeInsert(ins) => InsertMessageStepPreservesInvariant(k, s, s', ins.key, ins.msg, ins.oldroot);
+      case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref);
+      case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);
+      case BetreeSplit(fusion) => SplitStepPreservesInvariant(k, s, s', fusion);
+      case BetreeMerge(fusion) => MergeStepPreservesInvariant(k, s, s', fusion);
+    }
+  }
+
   lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', step)
@@ -1198,10 +1260,13 @@ module DiskBetreeInv {
   {
     match step {
       case QueryStep(key, value, lookup) => QueryStepPreservesInvariant(k, s, s', key, value, lookup);
+      /*
       case InsertMessageStep(key, value, oldroot) => InsertMessageStepPreservesInvariant(k, s, s', key, value, oldroot);
       case FlushStep(parentref, parent, childref, child, newchildref) => FlushStepPreservesInvariant(k, s, s', parentref, parent, childref, child, newchildref);
       case GrowStep(oldroot, newchildref) => GrowStepPreservesInvariant(k, s, s', oldroot, newchildref);
       case SplitStep(fusion) => SplitStepPreservesInvariant(k, s, s', fusion);
+      */
+      case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(k, s, s', betreeStep);
     }
   }
   

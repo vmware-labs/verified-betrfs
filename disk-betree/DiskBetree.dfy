@@ -64,43 +64,22 @@ module DiskBetree {
     BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
 
-  /*
-  predicate InsertMessage(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  predicate Betree(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
   {
-    BetreeSpec.InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+    && ValidBetreeStep(betreeStep)
+    && BI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
+    && BI.OpTransaction(k.bck, s.bcv, s'.bcv, BetreeStepOps(betreeStep))
   }
-
-  predicate Flush(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
-  {
-    BetreeSpec.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
-  }
-
-  predicate Grow(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
-  {
-    BetreeSpec.Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
-  }
-
-  predicate Split(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-  {
-    BetreeSpec.Split(k.bck, s.bcv, s'.bcv, fusion)
-  }
-  */
   
   datatype Step =
     | QueryStep(key: Key, value: Value, lookup: Lookup)
-    | InsertMessageStep(key: Key, msg: BufferEntry, oldroot: Node)
-    | FlushStep(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
-    | GrowStep(oldroot: Node, newchildref: Reference)
-    | SplitStep(fusion: NodeFusion)
+    | BetreeStep(step: BetreeStep)
     | GCStep(refs: iset<Reference>)
-    
+
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
     match step {
       case QueryStep(key, value, lookup) => Query(k, s, s', key, value, lookup)
-      case InsertMessageStep(key, msg, oldroot) => InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
-      case FlushStep(parentref, parent, childref, child, newchildref) => Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
-      case GrowStep(oldroot, newchildref) => Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
-      case SplitStep(fusion) => Split(k.bck, s.bcv, s'.bcv, fusion)
+      case BetreeStep(betreeStep) => Betree(k, s, s', betreeStep)
       case GCStep(refs) => GC(k, s, s', refs)
     }
   }

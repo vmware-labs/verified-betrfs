@@ -142,7 +142,7 @@ module DiskBetreeRefinement {
   
   lemma InsertMessageStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
-    requires DB.BetreeSpec.InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+    requires DBI.InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
     requires Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
   {
@@ -159,7 +159,7 @@ module DiskBetreeRefinement {
   lemma FlushStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables,
                                            parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
     requires Inv(k, s)
-    requires DB.BetreeSpec.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
+    requires DBI.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.StutterStep)
   {
@@ -170,7 +170,7 @@ module DiskBetreeRefinement {
 
   lemma GrowStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
-    requires DB.BetreeSpec.Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+    requires DBI.Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.StutterStep)
   {
@@ -181,13 +181,28 @@ module DiskBetreeRefinement {
 
   lemma SplitStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, fusion: DB.BetreeSpec.NodeFusion)
     requires Inv(k, s)
-    requires DB.BetreeSpec.Split(k.bck, s.bcv, s'.bcv, fusion)
+    requires DBI.Split(k.bck, s.bcv, s'.bcv, fusion)
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.StutterStep)
   {
     SplitEquivalentLookups(k, s, s', fusion);
     EquivalentLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
+  }
+
+  lemma BetreeStepRefinesMap(k: DB.Constants, s: DB.Variables, s':DB.Variables, betreeStep: DBI.BetreeSpec.BetreeStep)
+    requires Inv(k, s)
+    requires DB.NextStep(k, s, s', DB.BetreeStep(betreeStep))
+    ensures Inv(k, s')
+    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    NextPreservesInv(k, s, s');
+    match betreeStep {
+      case BetreeInsert(ins) => InsertMessageStepRefinesMap(k, s, s', ins.key, ins.msg, ins.oldroot);
+      case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref);
+      case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', growth.oldroot, growth.newchildref);
+      case BetreeSplit(fusion) => SplitStepRefinesMap(k, s, s', fusion);
+    }
   }
 
   lemma BetreeRefinesMapNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, step: DB.Step)
@@ -199,10 +214,7 @@ module DiskBetreeRefinement {
     NextPreservesInv(k, s, s');
     match step {
       case QueryStep(key, value, lookup) => QueryStepRefinesMap(k, s, s', key, value, lookup);
-      case InsertMessageStep(key, value, oldroot) => InsertMessageStepRefinesMap(k, s, s', key, value, oldroot);
-      case FlushStep(parentref, parent, childref, child, newchildref) => FlushStepRefinesMap(k, s, s', parentref, parent, childref, child, newchildref);
-      case GrowStep(oldroot, newchildref) => GrowStepRefinesMap(k, s, s', oldroot, newchildref);
-      case SplitStep(fusion) => SplitStepRefinesMap(k, s, s', fusion);
+      case BetreeStep(betreeStep) => BetreeStepRefinesMap(k, s, s', betreeStep);
     }
   }
     
