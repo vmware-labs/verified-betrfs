@@ -97,7 +97,24 @@ module BetreeBlockCacheSystem {
     requires BC.OpTransaction(k.machine, s.machine, s'.machine, ops);
     requires BCS.Inv(k, s)
     requires BCS.Inv(k, s')
+    requires s.disk == s'.disk
     ensures PersistentBetree(k, s) == PersistentBetree(k, s')
+// TODO this verifies but takes about a minute for some reason?
+    /*
+  {
+    var path: seq<BC.Variables> :| BC.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
+    var i := 0;
+    while i < |path| - 1
+    invariant i <= |path| - 1
+    invariant BCS.Inv(k, BCS.Variables(path[i], s.disk))
+    invariant PersistentBetree(k, BCS.Variables(path[i], s.disk))
+           == PersistentBetree(k, s)
+    {
+      BCS.OpPreservesInvariant(k, BCS.Variables(path[i], s.disk), BCS.Variables(path[i+1], s.disk), ops[i]);
+      i := i + 1;
+    }
+  }
+  */
 
   lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, betreeStep: BetreeStep)
     requires Inv(k, s)
@@ -122,8 +139,18 @@ module BetreeBlockCacheSystem {
   {
     assert BCS.Machine(k, s, s', dop);
     assert BCS.NextStep(k, s, s', BCS.MachineStep(dop));
-    assume false;
     BCS.NextPreservesInv(k, s, s');
+
+    assert PersistentBetree(k, s') == PersistentBetree(k, s);
+    assume false;
+    /*
+    if (step.WriteBackStep?) {
+    } else if (step.WriteBackSuperblockStep?) {
+    } else if (step.UnallocStep?) {
+    } else if (step.PageInStep?) {
+    } else if (step.PageInSuperblockStep?) {
+    } else if (step.EvictStep?) 
+    */
   }
 
   lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
