@@ -11,12 +11,15 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
 
   import opened G = BetreeGraph
   import BBCS = BetreeBlockCacheSystem
+  import BCS = BetreeGraphBlockCacheSystem
   import M = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import D = Disk
   import CSBT = CrashSafeDiskBetree
   import BT = DiskBetree
   import BI = BetreeBlockInterface
+  import DBI = DiskBetreeInv
+  import Ref = BlockCacheSystemCrashSafeBlockInterfaceRefinement
 
   type DiskOp = M.DiskOp
 
@@ -47,6 +50,21 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, betreeStep)
   requires D.Next(k.disk, s.disk, s'.disk, dop)
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    assert s.machine.Ready?;
+
+    // TODO duplication with BetreeMoveStepPreservesInv
+
+    var ops := BetreeStepOps(betreeStep);
+    BCS.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
+    BBCS.PersistentGraphEqAcrossOps(k, s, s', ops); 
+    Ref.RefinesOpTransaction(k, s, s', ops);
+    DBI.BetreeStepPreservesInvariant(Ik(k), BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), betreeStep);
+
+    assert I(k, s).persistent == I(k, s').persistent;
+    assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BT.BetreeStep(betreeStep));
+    assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CSBT.EphemeralMoveStep);
+  }
 
   lemma RefinesBlockCacheMoveStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, step: BC.Step)
   requires BBCS.Inv(k, s)
@@ -54,6 +72,10 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   requires M.BlockCacheMove(k.machine, s.machine, s'.machine, dop, step)
   requires D.Next(k.disk, s.disk, s'.disk, dop)
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    match step {
+    }
+  }
 
   lemma RefinesMachineStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, dop: DiskOp, step: M.Step)
   requires BBCS.Inv(k, s)

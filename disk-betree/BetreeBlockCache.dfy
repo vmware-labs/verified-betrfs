@@ -38,6 +38,7 @@ module BetreeBlockCache {
   predicate BetreeMove(k: Constants, s: Variables, s': Variables, dop: DiskOp, betreeStep: BetreeStep)
   {
     && dop.NoDiskOp?
+    && s.Ready?
     && ValidBetreeStep(betreeStep)
     && BC.Reads(k, s, BetreeStepReads(betreeStep))
     && BC.OpTransaction(k, s, s', BetreeStepOps(betreeStep))
