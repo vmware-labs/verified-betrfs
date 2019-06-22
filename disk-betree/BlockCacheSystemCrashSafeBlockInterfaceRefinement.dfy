@@ -155,6 +155,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires BCS.Inv(k, s')
   requires BC.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
   requires D.Stutter(k.disk, s.disk, s'.disk, dop)
+  ensures BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.GCStep(iset{ref}));
   ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
   {
     var refs := iset{ref};
