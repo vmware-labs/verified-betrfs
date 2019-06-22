@@ -104,12 +104,15 @@ module BetreeBlockCacheSystem {
     requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, betreeStep)
     requires s.disk == s'.disk
     ensures Inv(k, s')
-    /*
   {
+    var ops := BetreeStepOps(betreeStep);
     BCS.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
     PersistentGraphEqAcrossOps(k, s, s', ops); 
+    if (s.machine.Ready?) {
+      Ref.RefinesOpTransaction(k, s, s', ops);
+      DBI.BetreeStepPreservesInvariant(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), betreeStep);
+    }
   }
-  */
 
   lemma BlockCacheStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)
     requires Inv(k, s)
@@ -119,6 +122,7 @@ module BetreeBlockCacheSystem {
   {
     assert BCS.Machine(k, s, s', dop);
     assert BCS.NextStep(k, s, s', BCS.MachineStep(dop));
+    assume false;
     BCS.NextPreservesInv(k, s, s');
   }
 
