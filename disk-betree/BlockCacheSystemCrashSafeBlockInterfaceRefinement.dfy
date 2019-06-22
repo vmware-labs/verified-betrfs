@@ -4,27 +4,23 @@ include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
-// Ideally we would prove the refinement for an arbitrary graph,
-// but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
-// separately then we wouldn't know they were using the same graph.
-// So for now, we just prove the refinement specifically for BetreeGraph.
-module BetreeBlockCache refines BlockCache {
-  import G = BetreeGraph
-}
-
-module BetreeBlockCacheSystem refines BlockCacheSystem {
-  import M = BetreeBlockCache
+module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
+  import M = BetreeGraphBlockCache
 }
 
 module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
+  // Ideally we would prove the refinement for an arbitrary graph,
+  // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
+  // separately then we wouldn't know they were using the same graph.
+  // So for now, we just prove the refinement specifically for BetreeGraph.
   import opened G = BetreeGraph
-  import BCS = BetreeBlockCacheSystem
+  import BCS = BetreeGraphBlockCacheSystem
   import CSBI = CrashSafeBlockInterface
 
   import opened Maps
   import opened Sequences
 
-  import BC = BetreeBlockCache
+  import BC = BetreeGraphBlockCache
   import BI = BetreeBlockInterface
   import D = Disk
   import DiskBetree
@@ -149,52 +145,6 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires BC.Transaction(k.machine, s.machine, s'.machine, dop, ops)
   requires D.Stutter(k.disk, s.disk, s'.disk, dop)
   ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
-  // TODO this is annoying
-  /*
-  {
-    var path: seq<BC.Variables> :| BC.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
-    //var path' := Apply((s1: BC.Variables) => I(k, BCS.Variables(s1, s.disk)).ephemeral, path);
-
-    BCS.OpPreservesInvariant(k, BCS.Variables(path[0], s.disk), BCS.Variables(path[1], s.disk), ops[0]);
-    RefinesOp(k, BCS.Variables(path[0], s.disk), BCS.Variables(path[1], s.disk), ops[0]);
-
-    var path' := [I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral];
-    assert BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, [OpToBIStep(ops[0])], path');
-    assert BI.Transaction(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, [OpToBIStep(ops[0])]);
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, BI.TransactionStep([OpToBIStep(ops[0])]));
-    assert BI.TransactionStep([OpToBIStep(ops[0])]) == OpsToBITransaction([ops[0]]);
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[1], s.disk)).ephemeral, OpsToBITransaction([ops[0]]));
-
-    var i := 1;
-    while i < |ops|
-    invariant i <= |ops|
-    invariant BCS.Inv(k, BCS.Variables(path[i], s.disk));
-    invariant BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i], s.disk)).ephemeral, OpsToBITransaction(ops[..i]).steps, path');
-    invariant BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i], s.disk)).ephemeral, OpsToBITransaction(ops[..i]))
-    {
-      BCS.OpPreservesInvariant(k, BCS.Variables(path[i], s.disk), BCS.Variables(path[i+1], s.disk), ops[i]);
-      RefinesOp(k, BCS.Variables(path[i], s.disk), BCS.Variables(path[i+1], s.disk), ops[i]);
-
-      assert ops[..i+1][..i] == ops[..i];
-      var steps := OpsToBITransaction(ops[..i+1]).steps;
-      var path'' := path' + [I(k, BCS.Variables(path[i+1], s.disk)).ephemeral];
-      forall i | 0 <= i < |steps| ensures BI.NextStep(Ik(k), path''[i], path''[i+1], steps[i]) {
-      }
-      assert BI.IsStatePath(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i+1], s.disk)).ephemeral, OpsToBITransaction(ops[..i+1]).steps, path'');
-      assert BI.Transaction(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i+1], s.disk)).ephemeral, OpsToBITransaction(ops[..i+1]).steps);
-      assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, BCS.Variables(path[i+1], s.disk)).ephemeral, OpsToBITransaction(ops[..i+1]));
-
-      i := i + 1;
-      path' := path'';
-    }
-
-    assert i == |ops|;
-    assert ops[..i] == ops;
-    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, OpsToBITransaction(ops));
-    assert BI.Next(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral);
-    assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
-  }
-  */
 
   lemma RefinesUnalloc(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ref: Reference)
   requires BCS.Inv(k, s)
