@@ -99,8 +99,20 @@ module BetreeBlockCacheSystem {
     requires BCS.Inv(k, s')
     requires s.disk == s'.disk
     ensures PersistentBetree(k, s) == PersistentBetree(k, s')
-// TODO this verifies but takes about a minute for some reason?
+    decreases |ops|
+  {
+    if |ops| == 1 {
+      BCS.OpPreservesInvariant(k, s, s', ops[0]);
+    } else {
+      var ops1, mid, ops2 := BC.SplitTransaction(k.machine, s.machine, s'.machine, ops);
+      var smid := BCS.Variables(mid, s.disk);
+      BCS.TransactionStepPreservesInvariant(k, s, smid, D.NoDiskOp, ops1);
+      PersistentGraphEqAcrossOps(k, s, smid, ops1);
+      PersistentGraphEqAcrossOps(k, smid, s', ops2);
+    }
+  }
     /*
+// TODO this verifies but takes about a minute for some reason?
   {
     var path: seq<BC.Variables> :| BC.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
     var i := 0;
