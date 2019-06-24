@@ -361,16 +361,14 @@ abstract module BlockCache refines Transactable {
     requires Inv(k, s)
     requires Transaction(k, s, s', dop, ops)
     ensures Inv(k, s')
+    decreases |ops|
   {
-    var path :| IsStatePath(k, s, s', ops, path);
-
-    var i := 0;
-    while i < |path| - 1
-    invariant i <= |path| - 1
-    invariant Inv(k, path[i])
-    {
-      OpPreservesInvariant(k, path[i], path[i+1], ops[i]);
-      i := i + 1;
+    if (|ops| == 1) {
+      OpPreservesInvariant(k, s, s', ops[0]);
+    } else {
+      var ops1, smid, ops2 := SplitTransaction(k, s, s', ops);
+      TransactionStepPreservesInvariant(k, s, smid, dop, ops1);
+      TransactionStepPreservesInvariant(k, smid, s', dop, ops2);
     }
   }
 

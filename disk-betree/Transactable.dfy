@@ -40,6 +40,7 @@ abstract module Transactable {
     && |ops| == 1
   ) ==>
       && OpStep(k, s, s', ops[0])
+  ensures |ops| == 1 && OpStep(k, s, s', ops[0]) ==> IsStatePath(k, s, s', ops, [s, s'])
   {
     if (
         && 0 < |ops|
@@ -99,7 +100,7 @@ abstract module Transactable {
     }
   }
   
-  predicate OpTransaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  predicate {:opaque} OpTransaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
     // These postconditions help automation a lot.
     ensures OpTransaction(k, s, s', ops) && |ops| == 1 ==>
       && OpStep(k, s, s', ops[0])
@@ -110,6 +111,9 @@ abstract module Transactable {
       && OpStep(k, s, sint, ops[0])
       && OpStep(k, sint, sint', ops[1])
       && OpStep(k, sint', s', ops[2])
+    ensures |ops| == 1 && OpStep(k, s, s', ops[0]) ==> OpTransaction(k, s, s', ops)
+    // This is only necessary because the function is opaque:
+    ensures OpTransaction(k, s, s', ops) ==> 0 < |ops|
   {
     Transaction1Steps(k, s, s', ops);
     Transaction2Steps(k, s, s', ops);
@@ -119,11 +123,47 @@ abstract module Transactable {
   }
 
   // Helper lemmas
+  // Dealing with paths and the IsStatePath existential is annoying.
+  // Thus we make OpTransaction opaque and use its postconditions
+  // as well as the below lemmas to make it easy to write inductive proofs
+  // on transactions.
+
+  lemma SplitTransaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>) returns (ops1: seq<Op>, smid: Variables, ops2: seq<Op>)
+  requires OpTransaction(k, s, s', ops)
+  requires |ops| >= 2
+  ensures OpTransaction(k, s, smid, ops1)
+  ensures OpTransaction(k, smid, s', ops2)
+  ensures ops1 + ops2 == ops
+  ensures |ops1| < |ops|
+  ensures |ops2| < |ops|
+  {
+    reveal_OpTransaction();
+    var path: seq<Variables> :| IsStatePath(k, s, s', ops, path);
+    ops1 := ops[..|ops|-1];
+    ops2 := [ops[|ops|-1]];
+    smid := path[|path| - 2];
+    assert IsStatePath(k, s, smid, ops1, path[..|path|-1]);
+    assert IsStatePath(k, smid, s', ops2, [smid, s']);
+  }
+
+  lemma JoinTransactions(k: Constants, s: Variables, smid: Variables, s': Variables, ops1: seq<Op>, ops2: seq<Op>)
+  requires OpTransaction(k, s, smid, ops1)
+  requires OpTransaction(k, smid, s', ops2)
+  ensures OpTransaction(k, s, s', ops1 + ops2)
+  {
+    reveal_OpTransaction();
+    var path1 :| IsStatePath(k, s, smid, ops1, path1);
+    var path2 :| IsStatePath(k, smid, s', ops2, path2);
+    var path := path1 + path2[1..];
+    assert IsStatePath(k, s, s', ops1 + ops2, path);
+  }
+
   lemma OpTransactionAugment(k: Constants, s: Variables, s': Variables, s'': Variables, ops: seq<Op>, op: Op)
   requires OpTransaction(k, s, s', ops)
   requires OpStep(k, s', s'', op)
   ensures OpTransaction(k, s, s'', ops + [op])
   {
+    reveal_OpTransaction();
     var path :| IsStatePath(k, s, s', ops, path);
     var path1 := path + [s''];
     assert IsStatePath(k, s, s'', ops + [op], path1);

@@ -417,26 +417,15 @@ abstract module BlockCacheSystem {
     requires M.Transaction(k.machine, s.machine, s'.machine, dop, ops)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
+    decreases |ops|
   {
-    var path :| M.IsStatePath(k.machine, s.machine, s'.machine, ops, path);
-
-    //assert Inv(k, Variables(path[0], s.disk));
-
-    var i := 0;
-    while i < |path| - 1
-    invariant i <= |path| - 1
-    invariant Inv(k, Variables(path[i], s.disk))
-    {
-      OpPreservesInvariant(k, Variables(path[i], s.disk), Variables(path[i+1], s.disk), ops[i]);
-      //assert Inv(k, Variables(path[i+1], s.disk));
-      i := i + 1;
+    if |ops| == 1 {
+      OpPreservesInvariant(k, s, s', ops[0]);
+    } else {
+      var ops1, smid, ops2 := M.SplitTransaction(k.machine, s.machine, s'.machine, ops);
+      TransactionStepPreservesInvariant(k, s, Variables(smid, s.disk), dop, ops1);
+      TransactionStepPreservesInvariant(k, Variables(smid, s.disk), s', dop, ops2);
     }
-
-    //assert Inv(k, Variables(Last(path), s.disk));
-    //assert s'.machine == Last(path);
-    //assert s'.disk == s.disk;
-    //assert s' == Variables(Last(path), s.disk);
-    //assert Inv(k, s');
   }
 
   lemma UnallocStepPreservesPersistentGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
