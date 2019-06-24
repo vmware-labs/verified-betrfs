@@ -1239,11 +1239,78 @@ module DiskBetreeInv {
 
   // GC Step
 
+  lemma IsPathFromRootLookupImpliesReachable(k: Constants, s: Variables, key: Key, lookup: Lookup, i: int)
+    requires Inv(k, s)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+    requires 0 <= i < |lookup|
+    ensures BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
+  {
+  }
+
+  lemma GCStepPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
+    requires Inv(k, s)
+    requires GC(k, s, s', refs)
+    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+    ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
+  {
+    forall i | 0 <= i < |lookup|
+    ensures IMapsTo(s'.bcv.view, lookup[i].ref, lookup[i].node)
+    {
+      assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+      IsPathFromRootLookupImpliesReachable(k, s, key, lookup, i);
+      assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
+      assert lookup[i].ref !in refs;
+    }
+  }
+
+  lemma GCStepPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
+    requires Inv(k, s)
+    requires GC(k, s, s', refs)
+    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
+    ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+  {
+  }
+
+  lemma GCStepPreservesAcyclicity(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
+    requires Inv(k, s)
+    requires GC(k, s, s', refs)
+    ensures Acyclic(k, s')
+  {
+    forall key, lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup)
+    ensures LookupIsAcyclic(lookup)
+    {
+      GCStepPreservesIsPathFromRootLookupRev(k, s, s', refs, lookup, key);
+    }
+  }
+
+  lemma GCStepEquivalentLookups(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
+    requires Inv(k, s)
+    requires GC(k, s, s', refs)
+    ensures EquivalentLookups(k, s, s')
+  {
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    {
+      GCStepPreservesIsPathFromRootLookup(k, s, s', refs, lookup, key);
+      assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
+    }
+
+    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    {
+      GCStepPreservesIsPathFromRootLookupRev(k, s, s', refs, lookup', key);
+      assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
+    }
+  }
+
   lemma GCStepPreservesInvariant(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)
     requires GC(k, s, s', refs)
     ensures Inv(k, s')
   {
+    BI.GCPreservesInv(k.bck, s.bcv, s'.bcv, refs);
+    GCStepPreservesAcyclicity(k, s, s', refs);
+    GCStepEquivalentLookups(k, s, s', refs);
   }
 
   // Putting it all together
