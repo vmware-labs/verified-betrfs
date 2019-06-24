@@ -205,6 +205,17 @@ module DiskBetreeRefinement {
     }
   }
 
+  lemma GCStepRefinesMap(k: DB.Constants, s: DB.Variables, s':DB.Variables, refs: iset<DB.BI.Reference>)
+    requires Inv(k, s)
+    requires DB.NextStep(k, s, s', DB.GCStep(refs))
+    requires Inv(k, s')
+    ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.StutterStep)
+  {
+    GCStepEquivalentLookups(k, s, s', refs);
+    EquivalentLookupsImplInterpsEqual(k, s, s');
+    assert I(k, s) == I(k, s');
+  }
+
   lemma BetreeRefinesMapNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, step: DB.Step)
     requires Inv(k, s)
     requires DB.NextStep(k, s, s', step)
@@ -215,6 +226,7 @@ module DiskBetreeRefinement {
     match step {
       case QueryStep(key, value, lookup) => QueryStepRefinesMap(k, s, s', key, value, lookup);
       case BetreeStep(betreeStep) => BetreeStepRefinesMap(k, s, s', betreeStep);
+      case GCStep(refs) => GCStepRefinesMap(k, s, s', refs);
     }
   }
     
