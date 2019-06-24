@@ -1245,6 +1245,17 @@ module DiskBetreeInv {
     requires 0 <= i < |lookup|
     ensures BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
   {
+    if (i == 0) {
+      var l := [lookup[0].ref];
+      assert BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[0].ref;
+      assert BI.ReachableReference(k.bck, s.bcv, lookup[0].ref);
+    } else {
+      IsPathFromRootLookupImpliesReachable(k, s, key, lookup, i-1);
+      var l: BI.Lookup :| BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[i-1].ref;
+      var l' := l + [lookup[i].ref];
+      assert BI.LookupIsValid(k.bck, s.bcv, l') && Last(l') == lookup[i].ref;
+      assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
+    }
   }
 
   lemma GCStepPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
