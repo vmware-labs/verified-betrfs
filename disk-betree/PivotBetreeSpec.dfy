@@ -4,18 +4,18 @@ include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 include "Graph.dfy"
 include "../tla-tree/MissingLibrary.dfy"
+include "Message.dfy"
 
 module PivotBetreeGraph refines Graph {
   import MS = MapSpec
   import opened MissingLibrary
-
-  type Message
-  function DefaultMessage() : Message
-  function Merge(a: Message, b: Message) : Message
+  import M = Message
 
   import Keyspace = MS.Keyspace
   type Key = Keyspace.Element
-  type Value(!new)
+  type Value = M.Value
+
+  type Message = M.Message
 
   type PivotTable = seq<Key>
 
@@ -74,11 +74,11 @@ module PivotBetreeSpec {
   // Adding messages to buffers
 
   function BucketLookup(bucket: Bucket, key: Key) : Message {
-    if key in bucket then bucket[key] else DefaultMessage()
+    if key in bucket then bucket[key] else M.IdentityMessage()
   }
 
   function AddMessageToBucket(bucket: Bucket, key: Key, msg: Message) : Bucket {
-    bucket[key := Merge(msg, BucketLookup(bucket, key))]
+    bucket[key := M.Merge(msg, BucketLookup(bucket, key))]
   }
 
   function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
@@ -98,8 +98,8 @@ module PivotBetreeSpec {
     map key
     | && (key in (childBucket.Keys + parentBucket.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
       && Route(pivotTable, key) == i
-      && Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key)) != DefaultMessage()
-    :: Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key))
+      && M.Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key)) != M.IdentityMessage()
+    :: M.Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key))
   }
 
   function AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>

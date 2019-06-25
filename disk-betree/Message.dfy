@@ -21,6 +21,10 @@ module Message {
 		}
 	}
 
+	function IdentityMessage() : Message {
+	  Update(NopDelta())
+  }
+
 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
 		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
 
