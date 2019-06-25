@@ -39,6 +39,14 @@ module Sequences {
     var i :| 0 <= i < |s| && s[i] == e;
     i
   }
+
+  function method {:opaque} Range(n: int) : seq<int>
+    requires n >= 0
+    ensures |Range(n)| == n
+    ensures forall i | 0 <= i < n :: Range(n)[i] == i
+  {
+    if n == 0 then [] else Range(n-1) + [n-1]
+  }
   
   function method Apply<E,R>(f: (E -> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])

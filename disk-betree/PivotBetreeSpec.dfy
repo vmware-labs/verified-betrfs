@@ -9,26 +9,30 @@ module PivotBetreeGraph refines Graph {
   import MS = MapSpec
   import opened MissingLibrary
 
+  type Message
+  function DefaultMessage() : Message
+  function Merge(a: Message, b: Message) : Message
+
   import Keyspace = MS.Keyspace
   type Key = Keyspace.Element
   type Value(!new)
 
-  datatype BufferEntry = Insertion(value: Value) // TODO duplication
+  type PivotTable = seq<Key>
 
-  datatype PivotTable = PivotTable(pivots: seq<Key>)
-  datatype BufferPair = BufferPair(key: Key, entry: BufferEntry)
-
-  datatype Bucket = Bucket(
-      child: Option<Reference>,
-      buffer: seq<BufferPair>)
+  type Bucket = map<Key, Message>
 
   datatype Node = Node(
       pivotTable: PivotTable,
+      children: Option<seq<Reference>>,
       buckets: seq<Bucket>)
 
   function Successors(node: Node) : iset<Reference>
   {
-    iset i | 0 <= i < |node.buckets| && node.buckets[i].child.Some? :: node.buckets[i].child.value
+    if node.children.Some? then (
+      iset i | 0 <= i < |node.children.value| :: node.children.value[i]
+    ) else (
+      iset{}
+    )
   }
 }
 
@@ -46,56 +50,80 @@ module PivotBetreeSpec {
 
   function PivotTableSize(pivotTable: PivotTable) : int
   {
-    |pivotTable.pivots| + 1
+    |pivotTable| + 1
   }
 
   predicate WFPivotTable(pivotTable: PivotTable)
   {
-    Keyspace.IsStrictlySorted(pivotTable.pivots)
+    Keyspace.IsStrictlySorted(pivotTable)
   }
 
   function Route(pivotTable: PivotTable, key: Key) : int
   requires WFPivotTable(pivotTable)
   {
-    Keyspace.LargestLte(pivotTable.pivots, key) + 1
+    Keyspace.LargestLte(pivotTable, key) + 1
   }
 
   predicate WFNode(node: Node)
   {
     && PivotTableSize(node.pivotTable) == |node.buckets|
+    && (node.children.Some? ==> PivotTableSize(node.pivotTable) == |node.children.value|)
     && WFPivotTable(node.pivotTable)
-    && (|node.buckets| > 1 ==> forall i | 0 <= i < |node.buckets| :: node.buckets[i].child.Some?)
   }
 
   // Adding messages to buffers
 
-  function AddMessageToNode(node: Node, key: Key, msg: BufferEntry) : Node
+  function BucketLookup(bucket: Bucket, key: Key) : Message {
+    if key in bucket then bucket[key] else DefaultMessage()
+  }
+
+  function AddMessageToBucket(bucket: Bucket, key: Key, msg: Message) : Bucket {
+    bucket[key := Merge(msg, BucketLookup(bucket, key))]
+  }
+
+  function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
   ensures WFNode(AddMessageToNode(node, key, msg))
   {
     node.(
       buckets := node.buckets[
-        Route(node.pivotTable, key) := Bucket(
-          node.buckets[Route(node.pivotTable, key)].child,
-          [BufferPair(key, msg)] + node.buckets[Route(node.pivotTable, key)].buffer
-        )
+        Route(node.pivotTable, key) := AddMessageToBucket(node.buckets[Route(node.pivotTable, key)], key, msg)
       ]
     )
   }
 
-  function AddMessagesToNode(node: Node, pairs: seq<BufferPair>) : Node
+  function AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
+  requires WFPivotTable(pivotTable)
+  {
+    map key
+    | && (key in (childBucket.Keys + parentBucket.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
+      && Route(pivotTable, key) == i
+      && Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key)) != DefaultMessage()
+    :: Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key))
+  }
+
+  function AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
+  requires WFPivotTable(pivotTable)
+  requires 0 <= i <= |buckets|;
+  {
+    if i == 0 then [] else (
+      AddMessagesToBuckets(pivotTable, i-1, buckets, parentBucket) + [AddMessagesToBucket(pivotTable, i-1, buckets[i-1], parentBucket)]
+    )
+  }
+
+  function AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
   requires WFNode(node)
   {
-    if |pairs| == 0 then (
-      node
-    ) else (
-      AddMessageToNode(AddMessagesToNode(node, pairs[1..]), pairs[0].key, pairs[0].entry)
+    Node(
+      node.pivotTable,
+      node.children,
+      AddMessagesToBuckets(node.pivotTable, |node.buckets|, node.buckets, buffer)
     )
   }
 
   //// Insert
 
-  datatype MessageInsertion = MessageInsertion(key: Key, msg: BufferEntry, oldroot: Node)
+  datatype MessageInsertion = MessageInsertion(key: Key, msg: Message, oldroot: Node)
 
   predicate ValidInsertion(ins: MessageInsertion) {
     && WFNode(ins.oldroot)
@@ -117,14 +145,15 @@ module PivotBetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, slotIndex: int)
+  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, newchild: Node, slotIndex: int)
 
   predicate ValidFlush(flush: NodeFlush)
   {
     && WFNode(flush.parent)
     && WFNode(flush.child)
     && 0 <= flush.slotIndex < |flush.parent.buckets|
-    && flush.parent.buckets[flush.slotIndex].child == Some(flush.childref)
+    && flush.parent.children.Some?
+    && flush.parent.children.value[flush.slotIndex] == flush.childref
   }
 
   function FlushReads(flush: NodeFlush) : seq<ReadOp>
@@ -139,8 +168,8 @@ module PivotBetreeSpec {
   function FlushOps(flush: NodeFlush) : seq<Op>
   requires ValidFlush(flush)
   {
-    var newparent := flush.parent.(buckets := flush.parent.buckets[flush.slotIndex := Bucket(Some(flush.newchildref), [])]);
-    var newchild := AddMessagesToNode(flush.child, flush.parent.buckets[flush.slotIndex].buffer);
+    var newparent := flush.parent.(buckets := flush.parent.buckets[flush.slotIndex := map[]]);
+    var newchild := AddMessagesToNode(flush.child, flush.parent.buckets[flush.slotIndex]);
     var allocop := G.AllocOp(flush.newchildref, newchild);
     var writeop := G.WriteOp(flush.parentref, newparent);
     [allocop, writeop]
@@ -164,7 +193,7 @@ module PivotBetreeSpec {
   function GrowOps(growth: RootGrowth) : seq<Op>
   requires ValidGrow(growth)
   {
-    var newroot := Node(PivotTable([]), [Bucket(Some(growth.newchildref), [])]);
+    var newroot := Node([], Some([growth.newchildref]), [map[]]);
     var allocop := G.AllocOp(growth.newchildref, growth.oldroot);
     var writeop := G.WriteOp(Root(), newroot);
     [allocop, writeop]
@@ -186,31 +215,19 @@ module PivotBetreeSpec {
     slot_idx: int
   )
 
-  predicate BufferFusion(
-      fusedBuffer: seq<BufferPair>,
-      leftBuffer: seq<BufferPair>,
-      rightBuffer: seq<BufferPair>,
+  predicate BucketFusion(
+      fusedBucket: Bucket,
+      leftBucket: Bucket,
+      rightBucket: Bucket,
       pivot: Key)
   {
-    if |fusedBuffer| == 0 then
-      |leftBuffer| == 0 && |rightBuffer| == 0
-    else (
-      var key := fusedBuffer[0].key;
-      if Keyspace.lt(key, pivot) then (
-        && |leftBuffer| > 0
-        && leftBuffer[0] == fusedBuffer[0]
-        && BufferFusion(fusedBuffer[1..], leftBuffer[1..], rightBuffer, pivot)
-      ) else (
-        && |rightBuffer| > 0
-        && rightBuffer[0] == rightBuffer[0]
-        && BufferFusion(fusedBuffer[1..], leftBuffer, rightBuffer[1..], pivot)
-      )
-    )
+    && (forall key | Keyspace.lt(key, pivot) :: MapsAgreeOnKey(fusedBucket, leftBucket, key))
+    && (forall key | Keyspace.lte(pivot, key) :: MapsAgreeOnKey(fusedBucket, rightBucket, key))
   }
 
   predicate PivotTableFusion(table: PivotTable, left: PivotTable, right: PivotTable, pivot: Key)
   {
-    && table.pivots == concat3(left.pivots, pivot, right.pivots)
+    && table == concat3(left, pivot, right)
   }
 
   predicate ChildFusion(child: Node, left: Node, right: Node, pivot: Key)
@@ -227,28 +244,31 @@ module PivotBetreeSpec {
     && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
     && |fusion.split_parent.buckets| == |fusion.fused_parent.buckets| + 1
 
-    && fusion.fused_parent.buckets[fusion.slot_idx].child == Some(fusion.fused_childref)
-    && fusion.split_parent.buckets[fusion.slot_idx].child == Some(fusion.left_childref)
-    && fusion.split_parent.buckets[fusion.slot_idx + 1].child == Some(fusion.right_childref)
-    && BufferFusion(
-        fusion.fused_parent.buckets[fusion.slot_idx].buffer,
-        fusion.split_parent.buckets[fusion.slot_idx].buffer,
-        fusion.split_parent.buckets[fusion.slot_idx + 1].buffer,
-        fusion.split_parent.pivotTable.pivots[fusion.slot_idx])
+    && fusion.fused_parent.children.Some?
+    && fusion.split_parent.children.Some?
+
+    && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
+    && fusion.split_parent.children.value[fusion.slot_idx] == fusion.left_childref
+    && fusion.split_parent.children.value[fusion.slot_idx + 1] == fusion.right_childref
+    && BucketFusion(
+        fusion.fused_parent.buckets[fusion.slot_idx],
+        fusion.split_parent.buckets[fusion.slot_idx],
+        fusion.split_parent.buckets[fusion.slot_idx + 1],
+        fusion.split_parent.pivotTable[fusion.slot_idx])
 
     && (forall i | 0 < i < fusion.slot_idx :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i])
     && (forall i | fusion.slot_idx < i < |fusion.fused_parent.buckets| :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i+1])
 
     && (forall i | 0 < i < fusion.slot_idx ::
-        fusion.fused_parent.pivotTable.pivots[i] == fusion.split_parent.pivotTable.pivots[i])
-    && (forall i | fusion.slot_idx < i < |fusion.fused_parent.pivotTable.pivots| ::
-        fusion.fused_parent.pivotTable.pivots[i] == fusion.split_parent.pivotTable.pivots[i+1])
+        fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i])
+    && (forall i | fusion.slot_idx < i < |fusion.fused_parent.pivotTable| ::
+        fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i+1])
 
     && ChildFusion(
         fusion.fused_child,
         fusion.left_child,
         fusion.right_child,
-        fusion.split_parent.pivotTable.pivots[fusion.slot_idx])
+        fusion.split_parent.pivotTable[fusion.slot_idx])
   }
 
   predicate ValidSplit(fusion: NodeFusion)
