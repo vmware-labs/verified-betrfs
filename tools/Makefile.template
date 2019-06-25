@@ -10,7 +10,7 @@ TARGETDEPS=$(TARGETDLLS:.dll=.deps) $(TARGETEXES:.exe=.deps)
 
 all: $(TARGETDEPS) $(TARGETDLLS) $(TARGETEXES)
 
-DAFNY=dafny
+DAFNY=dafny $(DAFNYOPTS)
 #INTERACTIVE_DAFNY=time -f "User time: %U seconds" unbuffer $(DAFNY)
 INTERACTIVE_DAFNY=$(DAFNY)
 
