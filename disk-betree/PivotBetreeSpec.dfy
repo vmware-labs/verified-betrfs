@@ -184,7 +184,7 @@ module PivotBetreeSpec {
 
   predicate ValidGrow(growth: RootGrowth)
   {
-    true
+    WFNode(growth.oldroot)
   }
 
   function GrowReads(growth: RootGrowth) : seq<ReadOp>
@@ -243,6 +243,9 @@ module PivotBetreeSpec {
   {
     && WFNode(fusion.split_parent)
     && WFNode(fusion.fused_parent)
+    && WFNode(fusion.fused_child)
+    && WFNode(fusion.left_child)
+    && WFNode(fusion.right_child)
 
     && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
     && |fusion.split_parent.buckets| == |fusion.fused_parent.buckets| + 1
@@ -378,6 +381,8 @@ module PivotBetreeRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
   import opened Message
+  import MS = MapSpec
+  import Keyspace = MS.Keyspace
 
   type Node = B.G.Node
   type PNode = P.G.Node
@@ -425,5 +430,105 @@ module PivotBetreeRefinement {
   requires P.WFNode(node);
   {
     B.G.Node(IChildren(node), IBuffer(node))
+  }
+
+  lemma WFNodeRefinesWFNode(node: PNode)
+  requires P.WFNode(node)
+  ensures B.WFNode(INode(node))
+  {
+  }
+
+  function IInsertion(ins: P.MessageInsertion) : B.MessageInsertion
+  requires P.ValidInsertion(ins)
+  {
+    B.MessageInsertion(ins.key, ins.msg, INode(ins.oldroot))
+  }
+
+  function IFlush(flush: P.NodeFlush) : B.NodeFlush
+  requires P.ValidFlush(flush)
+  {
+    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref)
+  }
+
+  function IGrow(growth: P.RootGrowth) : B.RootGrowth
+  requires P.ValidGrow(growth)
+  {
+    B.RootGrowth(INode(growth.oldroot), growth.newchildref)
+  }
+
+  function leftKeys(fusion: P.NodeFusion) : iset<Key>
+  requires P.ValidFusion(fusion)
+  {
+    iset key |
+      && Keyspace.lt(key, fusion.split_parent.pivotTable[fusion.slot_idx])
+      && (fusion.slot_idx == 0 || Keyspace.lte(fusion.split_parent.pivotTable[fusion.slot_idx - 1], key))
+  }
+
+  function rightKeys(fusion: P.NodeFusion) : iset<Key>
+  requires P.ValidFusion(fusion)
+  {
+    iset key |
+      && Keyspace.lte(fusion.split_parent.pivotTable[fusion.slot_idx], key)
+      && (fusion.slot_idx == |fusion.split_parent.pivotTable| - 1 ||
+          Keyspace.lt(key, fusion.split_parent.pivotTable[fusion.slot_idx + 1]))
+  }
+
+  function IFusion(fusion: P.NodeFusion) : B.NodeFusion
+  requires P.ValidFusion(fusion)
+  {
+    B.NodeFusion(
+      fusion.parentref,
+      fusion.fused_childref,
+      fusion.left_childref,
+      fusion.right_childref,
+      INode(fusion.fused_parent),
+      INode(fusion.split_parent),
+      INode(fusion.fused_child),
+      INode(fusion.left_child),
+      INode(fusion.right_child),
+      leftKeys(fusion),
+      rightKeys(fusion)
+    )
+  }
+
+  function IStep(betreeStep: P.BetreeStep) : B.BetreeStep
+  requires P.ValidBetreeStep(betreeStep)
+  {
+    match betreeStep {
+      case BetreeInsert(ins) => B.BetreeInsert(IInsertion(ins))
+      case BetreeFlush(flush) => B.BetreeFlush(IFlush(flush))
+      case BetreeGrow(growth) => B.BetreeGrow(IGrow(growth))
+      case BetreeSplit(fusion) => B.BetreeSplit(IFusion(fusion))
+      case BetreeMerge(fusion) => B.BetreeMerge(IFusion(fusion))
+    }
+  }
+
+  lemma RefinesValidInsertion(ins: P.MessageInsertion)
+  requires P.ValidInsertion(ins)
+  ensures B.ValidInsertion(IInsertion(ins))
+
+  lemma RefinesValidFlush(flush: P.NodeFlush)
+  requires P.ValidFlush(flush)
+  ensures B.ValidFlush(IFlush(flush))
+
+  lemma RefinesValidGrow(growth: P.RootGrowth)
+  requires P.ValidGrow(growth)
+  ensures B.ValidGrow(IGrow(growth))
+
+  lemma RefinesValidFusion(fusion: P.NodeFusion)
+  requires P.ValidFusion(fusion)
+  ensures B.ValidFusion(IFusion(fusion))
+
+  lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
+  requires P.ValidBetreeStep(betreeStep)
+  ensures B.ValidBetreeStep(IStep(betreeStep))
+  {
+    match betreeStep {
+      case BetreeInsert(ins) => RefinesValidInsertion(ins);
+      case BetreeFlush(flush) => RefinesValidFlush(flush);
+      case BetreeGrow(growth) => RefinesValidGrow(growth);
+      case BetreeSplit(fusion) => RefinesValidFusion(fusion);
+      case BetreeMerge(fusion) => RefinesValidFusion(fusion);
+    }
   }
 }
