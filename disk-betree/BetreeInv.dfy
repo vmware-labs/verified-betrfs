@@ -63,6 +63,53 @@ module BetreeInv {
     && exists lookup :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup)
   }
 
+  //
+
+  lemma InterpretLookupAdditive(a: Lookup, b: Lookup, key: Key)
+  requires LookupVisitsWFNodes(a);
+  requires LookupVisitsWFNodes(b);
+  ensures InterpretLookup(a + b, key) == G.M.Merge(InterpretLookup(a, key), InterpretLookup(b, key))
+  {
+	if |b| == 0 {
+	  assert a + b == a;
+	} else {
+	  var b' := DropLast(b);
+	  var b'' := Last(b);
+	  var Ia := InterpretLookup(a, key);
+	  var Ib := InterpretLookup(b, key);
+	  var Ib' := InterpretLookup(DropLast(b), key);
+	  var Ib'' := InterpretLookup([b''], key);
+
+	  assert a + b == a + b' + [b'']; // observe
+	  assert InterpretLookup(a + b, key) == InterpretLookup(a + b' + [b''], key);
+	  assert a + b' == DropLast(a + b' + [b'']); // observe?
+	  assert b'' == Last(a + b' + [b'']); // observe?
+	  assert InterpretLookup(a + b' + [b''], key) == G.M.Merge(InterpretLookup(DropLast(a + b' + [b'']), key), Last(a + b' + [b'']).node.buffer[key]); // observe?
+	  assert InterpretLookup(a + b' + [b''], key) == G.M.Merge(InterpretLookup(a + b', key), b''.node.buffer[key]); // observe?
+	  InterpretLookupAdditive(a, b', key);
+	  assert InterpretLookup(a + b', key) == G.M.Merge(Ia, Ib');
+	  assert forall l: Lookup :: |l| == 1 && LookupVisitsWFNodes(l) ==> InterpretLookup(l, key) == l[0].node.buffer[key]; // observe!!
+	  assert Ib'' == b''.node.buffer[key];
+	  assert InterpretLookup(a + b' + [b''], key) == G.M.Merge(G.M.Merge(Ia, Ib'), Ib''); // observe?
+	  G.M.MergeIsAssociative(Ia, Ib', Ib'');
+	  assert G.M.Merge(G.M.Merge(Ia, Ib'), Ib'') == G.M.Merge(Ia, G.M.Merge(Ib', Ib''));
+	  assert G.M.Merge(Ib', Ib'') == Ib; // observe
+
+
+
+	  // assert DropLast(a) + [Last(a)] + b == a + b;
+	  // assert DropLast(a) + [Last(a)] == a;
+	  // InterpretLookupAdditive(DropLast(a), [Last(a)] + b, key);
+	  // assert InterpretLookup(DropLast(a) + [Last(a)] + b, key) == G.M.Merge(InterpretLookup(DropLast(a), key), InterpretLookup([Last(a)] + b, key));
+	  // InterpretLookupAdditive([Last(a)], b, key);
+	  // assert InterpretLookup([Last(a)] + b, key) == G.M.Merge(InterpretLookup([Last(a)], key), InterpretLookup(b, key));
+	  // G.M.MergeIsAssociative(InterpretLookup(DropLast(a), key), InterpretLookup([Last(a)], key), InterpretLookup(b, key));
+	  // assert G.M.Merge(G.M.Merge(InterpretLookup(DropLast(a), key), InterpretLookup([Last(a)], key)), InterpretLookup(b, key)) == G.M.Merge(InterpretLookup(DropLast(a), key), G.M.Merge(InterpretLookup([Last(a)], key), InterpretLookup(b, key)));
+	  // InterpretLookupAdditive(a, [Last(a)], key);
+	  // assert G.M.Merge(InterpretLookup([Last(a)], key), InterpretLookup(b, key)) == InterpretLookup([Last(a)] + b, key);
+	}
+  }
+
   // CantEquivocate
   // It's a lemma here (follows from structure of Lookups) - not an invariant!
 
@@ -91,7 +138,7 @@ module BetreeInv {
     invariant i <= |lookup|
     invariant LookupVisitsWFNodes(lookup[..i]);
     invariant LookupVisitsWFNodes(lookup'[..i]);
-    invariant TotalLog(lookup[..i], key) == TotalLog(lookup'[..i], key)
+    invariant InterpretLookup(lookup[..i], key) == InterpretLookup(lookup'[..i], key)
     {
       SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', i);
       assert lookup[..i] == lookup[..i+1][..i];
@@ -105,14 +152,14 @@ module BetreeInv {
     var j := i;
     while j < |lookup'|
     invariant j <= |lookup'|
-    invariant IsPrefix(TotalLog(lookup, key), TotalLog(lookup'[..j], key))
+    //FIXME invariant IsPrefix(TotalLog(lookup, key), TotalLog(lookup'[..j], key))
     {
       assert lookup'[..j] == lookup'[..j+1][..j];
       j := j + 1;
     }
 
     assert lookup' == lookup'[..j];
-    assert IsPrefix(TotalLog(lookup, key), TotalLog(lookup', key));
+    //FIXME assert IsPrefix(TotalLog(lookup, key), TotalLog(lookup', key));
   }
 
   lemma CantEquivocate(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
@@ -206,25 +253,6 @@ module BetreeInv {
 
   // Preservation proofs
 
-  lemma TotalLogAdditive(a: Lookup, b: Lookup, key: Key)
-  requires LookupVisitsWFNodes(a);
-  requires LookupVisitsWFNodes(b);
-  ensures TotalLog(a + b, key) == TotalLog(a, key) + TotalLog(b, key);
-  {
-    if (|b| == 0) {
-      assert a + b == a;
-    } else {
-      TotalLogAdditive(a, b[..|b|-1], key);
-      assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
-      assert (a + b)[|a+b|-1] == b[|b|-1];
-      assert TotalLog(a + b, key)
-          == TotalLog((a + b)[..|a+b|-1], key) + (a+b)[|a+b|-1].node.buffer[key]
-          == TotalLog(a + b[..|b|-1], key) + b[|b|-1].node.buffer[key]
-          == TotalLog(a, key) + TotalLog(b[..|b|-1], key) + b[|b|-1].node.buffer[key]
-          == TotalLog(a, key) + TotalLog(b, key);
-    }
-  }
-  
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
   requires Inv(k, s)
   requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
@@ -245,8 +273,8 @@ module BetreeInv {
         Layer(newchildref, oldroot)
       ] + lookup[1..];
 
-      TotalLogAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
-      TotalLogAdditive([lookup[0]], lookup[1..], key);
+      //FIXME TotalLogAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
+      //FIXME TotalLogAdditive([lookup[0]], lookup[1..], key);
       assert [lookup[0]] + lookup[1..] == lookup;
 
       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
@@ -258,7 +286,7 @@ module BetreeInv {
     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
       if (|lookup'| == 1) {
-        assert TotalLog(lookup', key) == [];
+        //FIXME assert TotalLog(lookup', key) == [];
         assert false;
       }
 
@@ -266,8 +294,8 @@ module BetreeInv {
       assert |lookup'| >= 2;
       var lookup := [Layer(Root(), lookup'[1].node)] + lookup'[2..];
 
-      TotalLogAdditive([Layer(Root(), lookup'[1].node)], lookup'[2..], key);
-      TotalLogAdditive(lookup'[..2], lookup'[2..], key);
+      //FIXME TotalLogAdditive([Layer(Root(), lookup'[1].node)], lookup'[2..], key);
+      //FIXME TotalLogAdditive(lookup'[..2], lookup'[2..], key);
       assert lookup'[..2] + lookup'[2..] == lookup';
 
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
@@ -370,9 +398,9 @@ module BetreeInv {
   requires LookupVisitsWFNodes(lookup)
   requires LookupVisitsWFNodes(lookup')
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
-  requires newbuffer == imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+  requires newbuffer == imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
   requires newchild == Node(child.children, newbuffer);
-  requires newparentbuffer == imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+  requires newparentbuffer == imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
   requires newparentchildren == imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
   requires newparent == Node(newparentchildren, newparentbuffer);
 
@@ -382,7 +410,7 @@ module BetreeInv {
 
   requires lookup' == transformLookupParentAndChild(lookup, key, parentref, newparent, movedKeys, childref, newchildref, newchild)
 
-  ensures TotalLog(lookup', key) == TotalLog(lookup, key);
+  //FIXME ensures TotalLog(lookup', key) == TotalLog(lookup, key);
   {
     if (|lookup| == 1) {
       if (lookup[0].ref == parentref) {
@@ -431,9 +459,9 @@ module BetreeInv {
   requires WFNode(child)
   {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
     var lookup1 := if Last(lookup).ref == parentref && key in movedKeys then lookup + [Layer(newchildref, newchild)] else lookup;
@@ -481,8 +509,8 @@ module BetreeInv {
   ensures LookupIsAcyclic(lookup')
   {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
-    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
+    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
 
@@ -529,11 +557,11 @@ module BetreeInv {
   requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
   requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
   requires key in movedKeys ==> Last(lookup').ref != parentref
-  ensures TotalLog(lookup', key) == TotalLog(lookup, key);
+  ensures InterpretLookup(lookup', key) == InterpretLookup(lookup, key);
   {
-    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
 
@@ -565,55 +593,55 @@ module BetreeInv {
     }
   }
 
-  lemma transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(
-    k: Constants,
-    s: Variables,
-    s': Variables,
-    parentref: Reference,
-    parent: Node,
-    childref: Reference,
-    child: Node,
-    newchildref: Reference,
-    movedKeys: iset<Key>,
-    lookup: Lookup,
-    lookup': Lookup,
-    key: Key
-  )
-  requires Inv(k, s)
-  requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
-  requires LookupVisitsWFNodes(lookup);
-  requires LookupVisitsWFNodes(lookup');
-  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
-  requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
-  requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
-  ensures IsPrefix(TotalLog(lookup', key), TotalLog(lookup, key));
-  {
-    if (key in movedKeys && Last(lookup').ref == parentref) {
-      var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
-      var newchild := Node(child.children, newbuffer);
+  //FIXME? lemma transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(
+  //   k: Constants,
+  //   s: Variables,
+  //   s': Variables,
+  //   parentref: Reference,
+  //   parent: Node,
+  //   childref: Reference,
+  //   child: Node,
+  //   newchildref: Reference,
+  //   movedKeys: iset<Key>,
+  //   lookup: Lookup,
+  //   lookup': Lookup,
+  //   key: Key
+  // )
+  // requires Inv(k, s)
+  // requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+  // requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
+  // requires LookupVisitsWFNodes(lookup);
+  // requires LookupVisitsWFNodes(lookup');
+  // requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
+  // requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref)
+  // requires movedKeys == iset k | k in parent.children && parent.children[k] == childref;
+  // ensures IsPrefix(TotalLog(lookup', key), TotalLog(lookup, key));
+  // {
+  //   if (key in movedKeys && Last(lookup').ref == parentref) {
+  //     var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
+  //     var newchild := Node(child.children, newbuffer);
 
-      var lookup1 := lookup + [Layer(childref, child)];
-      var lookup1' := lookup' + [Layer(newchildref, newchild)];
+  //     var lookup1 := lookup + [Layer(childref, child)];
+  //     var lookup1' := lookup' + [Layer(newchildref, newchild)];
 
-      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup1);
-      assert IsPathFromRootLookup(k, s'.bcv.view, key, lookup1');
+  //     assert IsPathFromRootLookup(k, s.bcv.view, key, lookup1);
+  //     assert IsPathFromRootLookup(k, s'.bcv.view, key, lookup1');
 
-      transformLookupParentAndChildPreservesAccumulatedLogRev(
-          k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup1, lookup1', key);
+  //     transformLookupParentAndChildPreservesAccumulatedLogRev(
+  //         k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup1, lookup1', key);
 
 
-      //assert Last(lookup).accumulatedBuffer + child.buffer[key] == Last(lookup').accumulatedBuffer + newchild.buffer[key];
+  //     //assert Last(lookup).accumulatedBuffer + child.buffer[key] == Last(lookup').accumulatedBuffer + newchild.buffer[key];
 
-      reveal_IsSuffix();
-      assert IsSuffix(child.buffer[key], newchild.buffer[key]);
-      IsPrefixFromEqSums(TotalLog(lookup, key), child.buffer[key], TotalLog(lookup', key), newchild.buffer[key]);
-    } else {
-      transformLookupParentAndChildPreservesAccumulatedLogRev(
-          k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
-      SelfIsPrefix(TotalLog(lookup', key));
-    }
-  }
+  //     //reveal_IsSuffix();
+  //     //FIXME assert IsSuffix(child.buffer[key], newchild.buffer[key]);
+  //     //FIXME IsPrefixFromEqSums(TotalLog(lookup, key), child.buffer[key], TotalLog(lookup', key), newchild.buffer[key]);
+  //   } else {
+  //     transformLookupParentAndChildPreservesAccumulatedLogRev(
+  //         k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
+  //     //FIXME SelfIsPrefix(TotalLog(lookup', key));
+  //   }
+  // }
 
   lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
   requires Inv(k, s)
@@ -621,9 +649,9 @@ module BetreeInv {
   ensures EquivalentLookups(k, s, s')
   {
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
 
@@ -668,8 +696,8 @@ module BetreeInv {
       var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
       FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
 
-      transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
-      reveal_IsPrefix();
+      //FIXME transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
+      //FIXME reveal_IsPrefix();
 
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
@@ -770,7 +798,7 @@ module BetreeInv {
   requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
   requires LookupVisitsWFNodes(lookup);
   requires LookupVisitsWFNodes(lookup');
-  ensures TotalLog(lookup, key) == TotalLog(lookup', key);
+  ensures InterpretLookup(lookup, key) == InterpretLookup(lookup', key);
   {
     if (|lookup| == 1) {
     } else {
@@ -905,7 +933,7 @@ module BetreeInv {
     requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup');
     requires LookupVisitsWFNodes(lookup);
     requires LookupVisitsWFNodes(lookup');
-    ensures TotalLog(lookup, key) == TotalLog(lookup', key);
+    ensures InterpretLookup(lookup, key) == InterpretLookup(lookup', key);
     {
       if (|lookup'| == 1) {
       } else {
@@ -1164,7 +1192,7 @@ module BetreeInv {
         var i := 1;
         while i < |lookup|
         invariant i <= |lookup|
-        invariant TotalLog(lookup'[..i], key1) == TotalLog(lookup[..i], key1);
+        invariant InterpretLookup(lookup'[..i], key1) == InterpretLookup(lookup[..i], key1);
         {
           assert lookup[..i] == lookup[..i+1][..i];
           assert lookup'[..i] == lookup'[..i+1][..i];
@@ -1172,9 +1200,9 @@ module BetreeInv {
         }
         assert lookup == lookup[..i];
         assert lookup' == lookup'[..i];
-        assert TotalLog(lookup', key1) == TotalLog(lookup, key1);
+        assert InterpretLookup(lookup', key1) == InterpretLookup(lookup, key1);
 
-        assert BufferDefinesValue(TotalLog(lookup', key1), value);
+        assert BufferDefinesValue(InterpretLookup(lookup', key1), value);
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
       } else {
         reveal_IsPrefix();
@@ -1182,15 +1210,15 @@ module BetreeInv {
         var i := 1;
         while i < |lookup|
         invariant i <= |lookup|
-        invariant IsPrefix([msg], TotalLog(lookup'[..i], key1))
+        //FIXME invariant IsPrefix([msg], TotalLog(lookup'[..i], key1))
         {
           assert lookup'[..i] == lookup'[..i+1][..i];
           i := i + 1;
         }
         assert lookup' == lookup'[..i];
-        assert IsPrefix([msg], TotalLog(lookup', key1));
+        //FIXME assert IsPrefix([msg], TotalLog(lookup', key1));
 
-        assert BufferDefinesValue(TotalLog(lookup', key1), msg.value);
+        assert BufferDefinesValue(InterpretLookup(lookup', key1), msg.value);
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, msg.value, lookup');
       }
     }
