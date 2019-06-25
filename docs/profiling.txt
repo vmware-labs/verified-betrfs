@@ -1,0 +1,22 @@
+To generate a log of quantifier instantiations:
+  dafny <source.dfy> /proc:*ProcedureName* /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000 > /tmp/qi.log
+
+Then you can sort them using the following command:
+  sort -k 4,4 -k6nr,6 /tmp/qi.log | sort -su -k 4,4 | sort -k6nr,6 | less
+
+- The first sort sorts by source locations (e.g. "source.dfny.16:4"),
+  then reverse by instantiation count.  The result is that all entrys
+  for a given source location are grouped together, with the highest
+  instantiation count for that source location on the first line of that group.
+
+- The second sort stably sorts by source location and outputs only the
+  first entry for each group of lines with the same source location.
+  Since this is a stable sort on source location, it outputs lines in
+  the same order as they were output from the previous sort.  So all
+  we're really doing here is the uniqueness operation, i.e. grabbing
+  the first line from each group.  So the output from this sort is one
+  line per source location, with that source location's highest
+  instantiation count.
+
+- The third sort reverse sorts by instantiation count, so the highest
+  instantiation counts are at the top of the file.
