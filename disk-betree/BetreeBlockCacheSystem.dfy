@@ -1,5 +1,5 @@
 include "Disk.dfy"
-include "DiskBetreeInv.dfy"
+include "BetreeInv.dfy"
 include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
@@ -14,8 +14,8 @@ module BetreeBlockCacheSystem {
   import opened BetreeSpec`Spec
   import BC = BetreeGraphBlockCache
   import BCS = BetreeGraphBlockCacheSystem
-  import DB = DiskBetree
-  import DBI = DiskBetreeInv
+  import DB = Betree
+  import DBI = BetreeInv
   import BI = BetreeBlockInterface
   import Ref = BlockCacheSystemCrashSafeBlockInterfaceRefinement
   import M = BetreeBlockCache

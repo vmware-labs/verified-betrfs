@@ -1,10 +1,10 @@
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "MapSpec.dfy"
-include "DiskBetree.dfy"
+include "Betree.dfy"
   
-module DiskBetreeInv {
-  import opened DB = DiskBetree
+module BetreeInv {
+  import opened DB = Betree
   import opened Maps
   import opened Sequences
   import opened BetreeSpec`Internal

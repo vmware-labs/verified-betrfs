@@ -5,7 +5,7 @@ include "MapSpec.dfy"
 include "Graph.dfy"
 include "BetreeSpec.dfy"
 
-module DiskBetree {
+module Betree {
   import opened BetreeSpec`Internal
   import BI = BetreeBlockInterface
   import MS = MapSpec

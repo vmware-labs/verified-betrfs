@@ -1,8 +1,8 @@
-include "DiskBetreeInv.dfy"
+include "BetreeInv.dfy"
 include "MapSpec.dfy"
-include "DiskBetree.dfy"
-include "DiskBetreeInv.dfy"
-include "DiskBetreeRefinement.dfy"
+include "Betree.dfy"
+include "BetreeInv.dfy"
+include "BetreeRefinement.dfy"
 
 module CrashSafeBlockInterface {
   import BI = BetreeBlockInterface
@@ -76,9 +76,9 @@ module CrashSafeBlockInterface {
   }
 }
 
-module CrashSafeDiskBetree {
-  import DB = DiskBetree
-  import DBI = DiskBetreeInv
+module CrashSafeBetree {
+  import DB = Betree
+  import DBI = BetreeInv
 
   type Constants = DB.Constants
   datatype Variables = Variables(persistent: DB.Variables, ephemeral: DB.Variables)
@@ -222,9 +222,9 @@ module CrashSafeMap {
 }
 
 module CrashSafeBetreeMapRefinement {
-  import A = CrashSafeDiskBetree
+  import A = CrashSafeBetree
   import B = CrashSafeMap
-  import Ref = DiskBetreeRefinement
+  import Ref = BetreeRefinement
 
   function Ik(k: A.Constants) : B.Constants
   {

@@ -1,9 +1,9 @@
-include "DiskBetree.dfy"
+include "Betree.dfy"
 include "MapSpec.dfy"
-include "DiskBetreeInv.dfy"
+include "BetreeInv.dfy"
 
-module DiskBetreeRefinement {
-  import opened DBI = DiskBetreeInv
+module BetreeRefinement {
+  import opened DBI = BetreeInv
   import opened G = BetreeGraph
 
   type Lookup = DB.Lookup

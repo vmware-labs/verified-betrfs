@@ -1,6 +1,6 @@
 include "BlockCache.dfy"
-include "DiskBetree.dfy"
-include "DiskBetree.dfy"
+include "Betree.dfy"
+include "Betree.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "BetreeSpec.dfy"
@@ -13,7 +13,7 @@ module BetreeBlockCache {
   import opened BetreeSpec`Spec
   import G = BetreeGraph
   import BC = BetreeGraphBlockCache
-  import DB = DiskBetree
+  import DB = Betree
   import BI = BetreeBlockInterface
   import D = Disk
 

@@ -2,7 +2,7 @@ include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "BetreeBlockCacheSystem.dfy"
 include "CrashSafe.dfy"
-include "DiskBetree.dfy"
+include "Betree.dfy"
 
 module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   import opened Maps
@@ -15,10 +15,10 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   import M = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import D = Disk
-  import CSBT = CrashSafeDiskBetree
-  import BT = DiskBetree
+  import CSBT = CrashSafeBetree
+  import BT = Betree
   import BI = BetreeBlockInterface
-  import DBI = DiskBetreeInv
+  import DBI = BetreeInv
   import Ref = BlockCacheSystemCrashSafeBlockInterfaceRefinement
 
   type DiskOp = M.DiskOp

@@ -1,4 +1,4 @@
-include "DiskBetree.dfy"
+include "Betree.dfy"
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "Graph.dfy"

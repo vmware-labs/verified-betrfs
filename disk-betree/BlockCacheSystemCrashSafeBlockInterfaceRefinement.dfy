@@ -27,7 +27,7 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import BC = BetreeGraphBlockCache
   import BI = BetreeBlockInterface
   import D = Disk
-  import DiskBetree
+  import Betree
   type DiskOp = BC.DiskOp
 
   function Ik(k: BCS.Constants) : CSBI.Constants
