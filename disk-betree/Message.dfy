@@ -1,4 +1,6 @@
 
+// Delta forms a monoid with a monoid-action on the values
+// (https://en.wikipedia.org/wiki/Monoid_action)
 
 module Message {
 	type Value

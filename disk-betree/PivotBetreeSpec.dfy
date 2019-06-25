@@ -5,22 +5,24 @@ include "MapSpec.dfy"
 include "Graph.dfy"
 include "../tla-tree/MissingLibrary.dfy"
 include "Message.dfy"
+include "BetreeSpec.dfy"
 
 module PivotBetreeGraph refines Graph {
+  import BG = BetreeGraph
+
   import MS = MapSpec
   import opened MissingLibrary
   import M = Message
 
   import Keyspace = MS.Keyspace
   type Key = Keyspace.Element
-  type Value = M.Value
+  type Value = BG.Value
 
+  type Reference = BG.Reference
   type Message = M.Message
 
   type PivotTable = seq<Key>
-
   type Bucket = map<Key, Message>
-
   datatype Node = Node(
       pivotTable: PivotTable,
       children: Option<seq<Reference>>,
@@ -60,6 +62,7 @@ module PivotBetreeSpec {
 
   function Route(pivotTable: PivotTable, key: Key) : int
   requires WFPivotTable(pivotTable)
+  ensures 0 <= Route(pivotTable, key) < PivotTableSize(pivotTable)
   {
     Keyspace.LargestLte(pivotTable, key) + 1
   }
@@ -369,5 +372,58 @@ module PivotBetreeSpec {
       case BetreeMerge(fusion) => MergeOps(fusion)
     }
   }
+}
 
+module PivotBetreeRefinement {
+  import B = BetreeSpec`Internal
+  import P = PivotBetreeSpec`Internal
+  import opened Message
+
+  type Node = B.G.Node
+  type PNode = P.G.Node
+
+  type Key = B.G.Key
+  type Value = B.G.Value
+  type Reference = B.G.Reference
+  type Buffer = B.G.Buffer
+
+  function IChildren(node: PNode) : imap<Key, Reference>
+  requires P.WFNode(node);
+  {
+    if node.children.Some? then (
+      imap key :: node.children.value[P.Route(node.pivotTable, key)]
+    ) else (
+      imap[]
+    )
+  }
+
+  function IBufferInternal(node: PNode) : Buffer
+  requires P.WFNode(node);
+  {
+    imap key :: P.BucketLookup(node.buckets[P.Route(node.pivotTable, key)], key)
+  }
+
+  function IBufferLeaf(node: PNode) : Buffer
+  requires P.WFNode(node);
+  {
+    imap key :: Merge(
+      P.BucketLookup(node.buckets[P.Route(node.pivotTable, key)], key),
+      Define(DefaultValue())
+    )
+  }
+
+  function IBuffer(node: PNode) : Buffer
+  requires P.WFNode(node);
+  {
+    if node.children.Some? then
+      IBufferInternal(node)
+    else
+      IBufferLeaf(node)
+  }
+
+  function INode(node: PNode) : Node
+  requires P.WFNode(node);
+  {
+    B.G.Node(IChildren(node), IBuffer(node))
+  }
 }
