@@ -10,6 +10,7 @@ module Betree {
   import BI = BetreeBlockInterface
   import MS = MapSpec
   import opened Maps
+  import opened Sequences
 
   import opened G = BetreeGraph
 
@@ -39,16 +40,16 @@ module Betree {
     && LookupFollowsChildRefs(key, lookup)
   }
 
-  function TotalLog(lookup: Lookup, key: Key) : seq<BufferEntry>
+  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
   requires LookupVisitsWFNodes(lookup);
   {
-    if |lookup| == 0 then [] else TotalLog(lookup[..|lookup|-1], key) + lookup[|lookup|-1].node.buffer[key]
+	if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
   }
 
   predicate IsSatisfyingLookup(k: Constants, view: BI.View, key: Key, value: Value, lookup: Lookup) {
     && IsPathFromRootLookup(k, view, key, lookup)
     && LookupVisitsWFNodes(lookup)
-    && BufferDefinesValue(TotalLog(lookup, key), value)
+    && BufferDefinesValue(InterpretLookup(lookup, key), value)
   }
 
   predicate Query(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {

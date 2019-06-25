@@ -5,6 +5,12 @@ module Sequences {
     run[|run|-1]
   }
 
+  function method DropLast<E>(run: seq<E>) : seq<E>
+    requires |run| > 0;
+  {
+	run[..|run|-1]
+  }
+
   function method Set<T>(run: seq<T>) : set<T> {
     set x : T | x in multiset(run)
   }
