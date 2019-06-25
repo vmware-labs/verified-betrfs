@@ -11,3 +11,5 @@
       If I build state machine X using state machine Y as a subcomponent,
       and then I create refinement Y' of Y, I can't automatically get an X'
       which has Y replaced with Y'. Instead I have to write a lot of boilerplate.
+
+- Better way to specify implemenation vs spec files with including files.

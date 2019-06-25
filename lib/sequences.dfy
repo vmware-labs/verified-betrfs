@@ -48,11 +48,25 @@ module Sequences {
     if |run| == 0 then []
     else  [f(run[0])] + Apply(f, run[1..])
   }
+
+  function method Filter<E>(f : (E -> bool), run: seq<E>) : (result: seq<E>)
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    ensures |result| <= |run|
+  {
+    if |run| == 0 then []
+    else ((if f(run[0]) then [run[0]] else []) + Filter(f, run[1..]))
+  }
   
   function method FoldLeft<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
   {
     if |run| == 0 then init
     else FoldLeft(f, f(init, run[0]), run[1..])
+  }
+
+  function method FoldRight<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
+  {
+    if |run| == 0 then init
+    else f(FoldRight(f, init, run[1..]), run[0])
   }
 
   function method {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>

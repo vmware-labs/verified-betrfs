@@ -1,6 +1,6 @@
 include "sequences.dfy"
   
-abstract module Total_Order {
+module Total_Order {
   import Seq = Sequences
     
 	type Element(!new,==)
