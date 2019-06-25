@@ -73,40 +73,9 @@ module BetreeInv {
 	if |b| == 0 {
 	  assert a + b == a;
 	} else {
-	  var b' := DropLast(b);
-	  var b'' := Last(b);
-	  var Ia := InterpretLookup(a, key);
-	  var Ib := InterpretLookup(b, key);
-	  var Ib' := InterpretLookup(DropLast(b), key);
-	  var Ib'' := InterpretLookup([b''], key);
-
-	  assert a + b == a + b' + [b'']; // observe
-	  assert InterpretLookup(a + b, key) == InterpretLookup(a + b' + [b''], key);
-	  assert a + b' == DropLast(a + b' + [b'']); // observe?
-	  assert b'' == Last(a + b' + [b'']); // observe?
-	  assert InterpretLookup(a + b' + [b''], key) == G.M.Merge(InterpretLookup(DropLast(a + b' + [b'']), key), Last(a + b' + [b'']).node.buffer[key]); // observe?
-	  assert InterpretLookup(a + b' + [b''], key) == G.M.Merge(InterpretLookup(a + b', key), b''.node.buffer[key]); // observe?
-	  InterpretLookupAdditive(a, b', key);
-	  assert InterpretLookup(a + b', key) == G.M.Merge(Ia, Ib');
-	  assert forall l: Lookup :: |l| == 1 && LookupVisitsWFNodes(l) ==> InterpretLookup(l, key) == l[0].node.buffer[key]; // observe!!
-	  assert Ib'' == b''.node.buffer[key];
-	  assert InterpretLookup(a + b' + [b''], key) == G.M.Merge(G.M.Merge(Ia, Ib'), Ib''); // observe?
-	  G.M.MergeIsAssociative(Ia, Ib', Ib'');
-	  assert G.M.Merge(G.M.Merge(Ia, Ib'), Ib'') == G.M.Merge(Ia, G.M.Merge(Ib', Ib''));
-	  assert G.M.Merge(Ib', Ib'') == Ib; // observe
-
-
-
-	  // assert DropLast(a) + [Last(a)] + b == a + b;
-	  // assert DropLast(a) + [Last(a)] == a;
-	  // InterpretLookupAdditive(DropLast(a), [Last(a)] + b, key);
-	  // assert InterpretLookup(DropLast(a) + [Last(a)] + b, key) == G.M.Merge(InterpretLookup(DropLast(a), key), InterpretLookup([Last(a)] + b, key));
-	  // InterpretLookupAdditive([Last(a)], b, key);
-	  // assert InterpretLookup([Last(a)] + b, key) == G.M.Merge(InterpretLookup([Last(a)], key), InterpretLookup(b, key));
-	  // G.M.MergeIsAssociative(InterpretLookup(DropLast(a), key), InterpretLookup([Last(a)], key), InterpretLookup(b, key));
-	  // assert G.M.Merge(G.M.Merge(InterpretLookup(DropLast(a), key), InterpretLookup([Last(a)], key)), InterpretLookup(b, key)) == G.M.Merge(InterpretLookup(DropLast(a), key), G.M.Merge(InterpretLookup([Last(a)], key), InterpretLookup(b, key)));
-	  // InterpretLookupAdditive(a, [Last(a)], key);
-	  // assert G.M.Merge(InterpretLookup([Last(a)], key), InterpretLookup(b, key)) == InterpretLookup([Last(a)] + b, key);
+	  assert a + b == a + DropLast(b) + [Last(b)]; // observe
+	  assert forall l: Lookup :: |l| == 1 && LookupVisitsWFNodes(l) ==> InterpretLookup(l, key) == l[0].node.buffer[key]; // observe
+	  G.M.MergeIsAssociative(InterpretLookup(a, key), InterpretLookup(DropLast(b), key), InterpretLookup([Last(b)], key));
 	}
   }
 
