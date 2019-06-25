@@ -3,15 +3,17 @@ include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 include "Graph.dfy"
+include "Message.dfy"
 
 module BetreeGraph refines Graph {
   import MS = MapSpec
+  import M = Message
 
-  type Value(!new)
+  type Value = M.Value
 
   type Key = MS.Key
-  datatype BufferEntry = Insertion(value: Value)
-  type Buffer = imap<Key, seq<BufferEntry>>
+  type BufferEntry = M.Message
+  type Buffer = imap<Key, BufferEntry>
   datatype Node = Node(children: imap<Key, Reference>, buffer: Buffer)
 
   function Successors(node: Node) : iset<Reference>
@@ -35,13 +37,13 @@ module BetreeSpec {
 
   export extends Spec // Default export-style is Spec
 
-  predicate BufferIsDefining(log: seq<BufferEntry>) {
-    && |log| > 0
+  predicate BufferIsDefining(entry: BufferEntry) {
+    && entry.Define?
   }
 
-  predicate BufferDefinesValue(log: seq<BufferEntry>, value: Value) {
+  predicate BufferDefinesValue(log: BufferEntry, value: Value) {
     && BufferIsDefining(log)
-    && log[0].value == value
+    && log.value == value
   }
   
   predicate WFNode(node: Node) {
@@ -54,14 +56,14 @@ module BetreeSpec {
   //// Insert
 
   function EmptyNode() : Node {
-    var buffer := imap key | MS.InDomain(key) :: [Insertion(MS.EmptyValue())];
+    var buffer := imap key | MS.InDomain(key) :: G.M.Define(G.M.DefaultValue());
     Node(imap[], buffer)
   }
     
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
     requires key in buffer
   {
-    buffer[key := [msg] + buffer[key]]
+    buffer[key := G.M.Merge(msg, buffer[key])]
   }
   
   function AddMessageToNode(node: Node, key: Key, msg: BufferEntry) : Node
@@ -119,9 +121,9 @@ module BetreeSpec {
     var child := flush.child;
     var newchildref := flush.newchildref;
     var movedKeys := iset k | k in parent.children && parent.children[k] == childref;
-    var newbuffer := imap k :: (if k in movedKeys then parent.buffer[k] + child.buffer[k] else child.buffer[k]);
+    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in movedKeys then [] else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
     var allocop := G.AllocOp(newchildref, newchild);
@@ -149,7 +151,7 @@ module BetreeSpec {
   {
     var newroot := Node(
         imap key | MS.InDomain(key) :: growth.newchildref,
-        imap key | MS.InDomain(key) :: []);
+        imap key | MS.InDomain(key) :: G.M.Update(G.M.NopDelta()));
     var allocop := G.AllocOp(growth.newchildref, growth.oldroot);
     var writeop := G.WriteOp(Root(), newroot);
     [allocop, writeop]

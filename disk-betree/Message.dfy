@@ -1,6 +1,6 @@
 
 
-abstract module Message {
+module Message {
 	type Value
 	type Delta
 
@@ -43,35 +43,32 @@ abstract module Message {
 		}
 }
 
-module IntMessage refines Message {
-	type Value = int
-	type Delta = int	
-
-	function NopDelta() : Delta {
-		0
-	}
-
-	function DefaultValue() : Value {
-		0
-	}
-
-	function CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta {
-		newdelta + olddelta
-	}
-
-	function ApplyDelta(delta: Delta, value: Value) : Value {
-		value + delta
-	}
-
-	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
-		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
-		{ }
-
-	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
-		ensures ApplyDelta(CombineDeltas(a, b), value) == ApplyDelta(a, ApplyDelta(b, value))
-		{ }
-}
-
-
-
+// module IntMessage refines Message {
+// 	type Value = int
+// 	type Delta = int	
+// 
+// 	function NopDelta() : Delta {
+// 		0
+// 	}
+// 
+// 	function DefaultValue() : Value {
+// 		0
+// 	}
+// 
+// 	function CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta {
+// 		newdelta + olddelta
+// 	}
+// 
+// 	function ApplyDelta(delta: Delta, value: Value) : Value {
+// 		value + delta
+// 	}
+// 
+// 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
+// 		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
+// 		{ }
+// 
+// 	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
+// 		ensures ApplyDelta(CombineDeltas(a, b), value) == ApplyDelta(a, ApplyDelta(b, value))
+// 		{ }
+// }
 
