@@ -1,8 +1,8 @@
 
 
 module Message {
-	type Value
-	type Delta
+	type Value(!new)
+	type Delta(!new)
 
 	function NopDelta() : Delta
 	function DefaultValue() : Value 
@@ -10,8 +10,12 @@ module Message {
 	datatype Message = | Define(value: Value)
 				       | Update(delta: Delta)
 
-	function CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta
-	function ApplyDelta(delta: Delta, value: Value) : Value
+	function CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
+	ensures newdelta == NopDelta() ==> result == olddelta
+	ensures olddelta == NopDelta() ==> result == newdelta
+
+	function ApplyDelta(delta: Delta, value: Value) : (result: Value)
+	ensures delta == NopDelta() ==> result == value
 
 	function Merge(newmessage: Message, oldmessage: Message) : Message {
 		match (newmessage, oldmessage) {
