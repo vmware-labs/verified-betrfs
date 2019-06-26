@@ -6,6 +6,8 @@ include "Graph.dfy"
 include "../tla-tree/MissingLibrary.dfy"
 include "Message.dfy"
 include "BetreeSpec.dfy"
+include "Betree.dfy"
+include "BetreeInv.dfy"
 
 module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph
@@ -827,8 +829,6 @@ module PivotBetree {
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
 
-  import PivotBetreeSpecRefinement
-
   predicate Init(k: Constants, s: Variables) {
     && BI.Init(k.bck, s.bcv, Node([], None, [map[]]))
   }
@@ -863,20 +863,30 @@ module PivotBetree {
 }
 
 module PivotBetreeInvAndRefinement {
-  import opened PivotBetreeSpec`Spec
-  import opened PivotBetree
-  import opened BI = BetreeBlockInterface
-  import opened PBI = PivotBetreeBlockInterface
+  import opened PivotBetreeSpec`Internal
+  import PB = PivotBetree
+  import PBI = PivotBetreeBlockInterface
   import B = Betree
+  import BInv = BetreeInv
+  import BG = BetreeGraph
+  import PG = PivotBetreeGraph
+  import BI = BetreeBlockInterface
+  import SpecRef = PivotBetreeSpecRefinement
+
+  type Constants = PB.Constants
+  type Variables = PB.Variables
+  type Reference = BG.Reference
+  type PNode = PG.Node
+  type Node = BG.Node
 
   function Ik(k: Constants) : B.Constants
   {
     B.Constants(BI.Constants())
   }
 
-  function IView(view: imap<Reference, Node>) : imap<Reference, B.Node>
+  function IView(view: imap<Reference, PNode>) : imap<Reference, Node>
   {
-    imap ref | ref in view :: INode(view[ref])
+    imap ref | ref in view :: SpecRef.INode(view[ref])
   }
   
   function I(k: Constants, s: Variables) : B.Variables
@@ -886,37 +896,37 @@ module PivotBetreeInvAndRefinement {
 
   predicate Inv(k: Constants, s: Variables)
   {
-    && B.Inv(Ik(k), I(k, s))
+    && BInv.Inv(Ik(k), I(k, s))
     && (forall ref | ref in s.bcv.view :: WFNode(s.bcv.view[ref]))
   }
 
   lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
   requires Inv(k, s)
-  requires NextStep(k, s, s', BetreeStep(betreeStep))
+  requires PB.NextStep(k, s, s', PB.BetreeStep(betreeStep))
   ensures Inv(k, s')
-  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.BetreeStep(IStep(betreeStep)))
+  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.BetreeStep(SpecRef.IStep(betreeStep)))
   {
   }
 
   lemma GCStepRefines(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
   requires Inv(k, s)
-  requires NextStep(k, s, s', GCStep(refs))
+  requires PB.NextStep(k, s, s', PB.GCStep(refs))
   ensures Inv(k, s')
-  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.GCStep(IRefs(refs)))
+  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.GCStep(refs))
   {
   }
 
   lemma StutterStepRefines(k: Constants, s: Variables, s': Variables)
   requires Inv(k, s)
-  requires NextStep(k, s, s', StutterStep)
+  requires PB.NextStep(k, s, s', PB.StutterStep)
   ensures Inv(k, s')
   ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.StutterStep)
   {
   }
 
-  lemma PivotBetreeRefinesBetreeNextStep(k: Constants, s: Variable, s': Variables, step: B.Step)
+  lemma PivotBetreeRefinesBetreeNextStep(k: Constants, s: Variables, s': Variables, step: PB.Step)
     requires Inv(k, s)
-    requires Next(k, s, s')
+    requires PB.NextStep(k, s, s', step)
     ensures Inv(k, s')
     ensures B.Next(Ik(k), I(k, s), I(k, s'))
   {
@@ -928,27 +938,27 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
+    requires PB.Init(k, s)
     ensures Inv(k, s)
   {
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
-    requires Next(k, s, s')
+    requires PB.Next(k, s, s')
     ensures Inv(k, s')
   {
-    var step :| NextStep(k, s, s', step);
+    var step :| PB.NextStep(k, s, s', step);
     PivotBetreeRefinesBetreeNextStep(k, s, s', step);
   }
 
-  lemma PivotBetreeRefinesBetreeNext(k: Constants, s: Variable, s': Variables)
+  lemma PivotBetreeRefinesBetreeNext(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
-    requires Next(k, s, s')
+    requires PB.Next(k, s, s')
     ensures Inv(k, s')
     ensures B.Next(Ik(k), I(k, s), I(k, s'))
   {
-    var step :| NextStep(k, s, s', step);
+    var step :| PB.NextStep(k, s, s', step);
     PivotBetreeRefinesBetreeNextStep(k, s, s', step);
   }
 }
