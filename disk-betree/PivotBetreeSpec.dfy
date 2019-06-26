@@ -402,6 +402,7 @@ module PivotBetreeSpecRefinement {
   import Keyspace = MS.Keyspace
   import opened Maps
   import opened Sequences
+  import opened MissingLibrary
 
   type Node = B.G.Node
   type PNode = P.G.Node
@@ -784,6 +785,36 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.InsertionOps(ins)[i].block)
   ensures IOps(P.InsertionOps(ins)) == B.InsertionOps(IInsertion(ins))
   {
+    var newroot := P.AddMessageToNode(ins.oldroot, ins.key, ins.msg);
+    var newroot' := B.AddMessageToNode(INode(ins.oldroot), ins.key, ins.msg);
+
+    forall key
+    ensures INode(newroot).buffer[key] == newroot'.buffer[key]
+    {
+      if (key == ins.key) {
+        var oldroot := ins.oldroot;
+        var oldroot' := IInsertion(ins).oldroot;
+        // IBuffer splits into cases based on whether a node is a leaf
+        // so we have to split into cases here.
+        if (oldroot.children.Some?) {
+          assert INode(newroot).buffer[key] == newroot'.buffer[key];
+        } else {
+          MergeIsAssociative(
+            ins.msg,
+            P.BucketLookup(oldroot.buckets[P.Route(oldroot.pivotTable, ins.key)], ins.key),
+            Define(DefaultValue())
+          );
+          assert INode(newroot).buffer[key] == newroot'.buffer[key];
+        }
+      } else {
+        assert INode(newroot).buffer[key] == newroot'.buffer[key];
+      }
+    }
+
+    assert INode(newroot).children == newroot'.children;
+    assert INode(newroot).buffer == newroot'.buffer;
+
+    assert INode(newroot) == newroot';
   }
 
   lemma FlushRefinesOps(flush: P.NodeFlush)
@@ -795,15 +826,35 @@ module PivotBetreeSpecRefinement {
   {
   }
 
-  lemma GrowRefinesOps(growth: P.RootGrowth)
+  lemma {:fuel IOps,3} GrowRefinesOps(growth: P.RootGrowth)
   requires P.ValidGrow(growth)
   requires B.ValidGrow(IGrow(growth))
   ensures forall i | 0 <= i < |P.GrowOps(growth)| ::
       P.WFNode(P.GrowOps(growth)[i].block)
   ensures IOps(P.GrowOps(growth)) == B.GrowOps(IGrow(growth))
   {
-  }
+    var newroot := P.G.Node([], Some([growth.newchildref]), [map[]]);
+    var newroot' := B.G.Node(
+        imap key | MS.InDomain(key) :: IGrow(growth).newchildref,
+        imap key | MS.InDomain(key) :: B.G.M.Update(B.G.M.NopDelta()));
+    assert INode(newroot) == newroot';
+    //assert INode(growth.oldroot) == IGrow(growth).oldroot;
 
+    //assert B.GrowOps(IGrow(growth))[0] 
+    //    == B.G.AllocOp(IGrow(growth).newchildref, IGrow(growth).oldroot);
+
+    // observe: (I don't know really know why this is necessary)
+    assert B.GrowOps(IGrow(growth))[1] 
+        == B.G.WriteOp(B.G.Root(), newroot');
+
+    /*
+    assert IOps(P.GrowOps(growth))
+        == IOps([P.G.AllocOp(growth.newchildref, growth.oldroot), P.G.WriteOp(P.G.Root(), newroot)])
+        == [B.G.AllocOp(growth.newchildref, INode(growth.oldroot)), B.G.WriteOp(B.G.Root(), INode(newroot))]
+        == [B.G.AllocOp(IGrow(growth).newchildref, IGrow(growth).oldroot), B.G.WriteOp(B.G.Root(), newroot')]
+        == B.GrowOps(IGrow(growth));
+    */
+  }
 
   lemma {:fuel IOps,3} RefinesOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
