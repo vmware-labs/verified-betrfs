@@ -184,33 +184,62 @@ module BetreeInv {
     requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
     ensures Acyclic(k, s')
   {
-    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
+    var newchild := s'.bcv.view[newchildref];
+    
+    forall key, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
       ensures LookupIsAcyclic(lookup')
     {
-      if |lookup'| > 1 {
-        var tmplookup := Apply((x: Layer) => x.(ref := if x.ref == newchildref then Root() else x.ref), lookup'[1..]);
-        var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), tmplookup);
+      if |lookup'| > 2 {
+        var lookup := [Layer(Root(), oldroot)] + lookup'[2..];
         var i := 1;
         while i < |lookup|
           invariant 1 <= i <= |lookup|
           invariant LookupIsAcyclic(lookup'[..i+1])
-          invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
+          invariant IsPathFromRootLookup(k, s.bcv.view, key, lookup[..i])
         {
-          assert lookup'[i].node == lookup[i-1].node;
-          if i == 0 {
-            assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+          if i == 1 {
+            if Root() in oldroot.children.Values {
+              var badkey :| badkey in oldroot.children && oldroot.children[badkey] == Root();
+              var cycle := [Layer(Root(), oldroot), Layer(Root(), oldroot)];
+              assert IsPathFromRootLookup(k, s.bcv.view, badkey, cycle);
+              assert cycle[0].ref == cycle[1].ref;
+              assert false;
+            }
+            assert lookup'[1].ref == newchildref;
+            assert lookup'[2].ref != Root();
+            assert lookup'[2].ref != newchildref;
+            assert LookupIsAcyclic(lookup'[..3]);
+            assert IsPathFromRootLookup(k, s.bcv.view, key, lookup[..i+1]);
           } else {
-            assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+            assert lookup[i-1].ref != Root();
+            assert lookup[i-1].ref != newchildref;
+
+            assert lookup[i-1].ref == lookup'[i].ref;
+            assert s.bcv.view[lookup[i-1].ref] == s'.bcv.view[lookup[i-1].ref];
+            assert lookup[i].ref == lookup'[i+1].ref;
+            assert lookup[i].ref == lookup[i-1].node.children[key];
+
+            var tmplookup := lookup[..i+1][i := Layer(lookup[i].ref, s.bcv.view[lookup[i].ref])];
+            assert IsPathFromRootLookup(k, s.bcv.view, key, tmplookup);
+            assert LookupIsAcyclic(tmplookup);
+            assert tmplookup[i].ref != Root();
+            assert tmplookup[i].ref == tmplookup[i-1].node.children[key];
+            
+            assert lookup[i].ref != Root();
+            assert lookup[i].ref != newchildref;
+            assert lookup[i].node == s.bcv.view[lookup[i].ref];
+
+            
+            assert IsPathFromRootLookup(k, s.bcv.view, key, lookup[..i+1]);
+
+            assert lookup'[i+1].ref == lookup[i].ref;
+            forall j | 0 <= j < i + 1
+              ensures lookup'[j].ref != lookup'[i+1].ref
+              {
+              }
+            assert LookupIsAcyclic(lookup'[..i+2]);
           }
-          assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
-          assert lookup'[i+1].ref != Root();
-          assert lookup'[i+1].node == lookup[i].node;
           i := i + 1;
-		  forall j, k | j != k && 0 <= j < i + 1 && 0 <= k < i + 1
-		  ensures lookup'[j].ref != lookup'[k].ref {
-			assume false; //FIXME
-		  }
-          assert LookupIsAcyclic(lookup'[..i+1]);
         }
       }
     }
