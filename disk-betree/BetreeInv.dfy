@@ -1222,7 +1222,7 @@ module BetreeInv {
     ensures Inv(k, s)
   {
     forall key | MS.InDomain(key)
-    ensures IsSatisfyingLookup(k, s.bcv.view, key, MS.EmptyValue(), [Layer(Root(), EmptyNode())]);
+    ensures IsSatisfyingLookup(k, s.bcv.view, key, G.M.DefaultValue(), [Layer(Root(), EmptyNode())]);
     {
     }
   }
