@@ -111,6 +111,14 @@ module Total_Order {
     forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
   }
 
+  lemma IsStrictlySortedImpliesLt(run: seq<Element>, i: int, j: int)
+  requires IsStrictlySorted(run)
+  requires 0 <= i < j < |run|
+  ensures lt(run[i], run[j])
+  {
+    reveal_IsStrictlySorted();
+  }
+
   lemma IsStrictlySortedImpliesIsSorted(run: seq<Element>)
   requires IsStrictlySorted(run);
   ensures IsSorted(run);

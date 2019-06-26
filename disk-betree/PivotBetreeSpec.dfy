@@ -236,6 +236,15 @@ module PivotBetreeSpec {
   predicate ChildFusion(child: Node, left: Node, right: Node, pivot: Key)
   {
     && left.buckets + right.buckets == child.buckets
+    && (child.children.Some? ==>
+      && left.children.Some?
+      && right.children.Some?
+      && child.children.value == left.children.value + right.children.value
+     )
+    && (child.children.None? ==>
+      && left.children.None?
+      && right.children.None?
+     )
     && PivotTableFusion(child.pivotTable, left.pivotTable, right.pivotTable, pivot)
   }
 
@@ -262,13 +271,14 @@ module PivotBetreeSpec {
         fusion.split_parent.buckets[fusion.slot_idx + 1],
         fusion.split_parent.pivotTable[fusion.slot_idx])
 
-    && (forall i | 0 < i < fusion.slot_idx :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i])
+    && (forall i | 0 <= i < fusion.slot_idx :: fusion.fused_parent.children.value[i] == fusion.split_parent.children.value[i])
+    && (forall i | fusion.slot_idx < i < |fusion.fused_parent.children.value| :: fusion.fused_parent.children.value[i] == fusion.split_parent.children.value[i+1])
+
+    && (forall i | 0 <= i < fusion.slot_idx :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i])
     && (forall i | fusion.slot_idx < i < |fusion.fused_parent.buckets| :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i+1])
 
-    && (forall i | 0 < i < fusion.slot_idx ::
-        fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i])
-    && (forall i | fusion.slot_idx < i < |fusion.fused_parent.pivotTable| ::
-        fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i+1])
+    && (forall i | 0 <= i < fusion.slot_idx :: fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i])
+    && (forall i | fusion.slot_idx <= i < |fusion.fused_parent.pivotTable| :: fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i+1])
 
     && ChildFusion(
         fusion.fused_child,
@@ -383,6 +393,8 @@ module PivotBetreeRefinement {
   import opened Message
   import MS = MapSpec
   import Keyspace = MS.Keyspace
+  import opened Maps
+  import opened Sequences
 
   type Node = B.G.Node
   type PNode = P.G.Node
@@ -391,6 +403,7 @@ module PivotBetreeRefinement {
   type Value = B.G.Value
   type Reference = B.G.Reference
   type Buffer = B.G.Buffer
+  type PivotTable = P.G.PivotTable
 
   function IChildren(node: PNode) : imap<Key, Reference>
   requires P.WFNode(node);
@@ -506,18 +519,184 @@ module PivotBetreeRefinement {
   lemma RefinesValidInsertion(ins: P.MessageInsertion)
   requires P.ValidInsertion(ins)
   ensures B.ValidInsertion(IInsertion(ins))
+  {
+  }
 
   lemma RefinesValidFlush(flush: P.NodeFlush)
   requires P.ValidFlush(flush)
   ensures B.ValidFlush(IFlush(flush))
+  {
+  }
 
   lemma RefinesValidGrow(growth: P.RootGrowth)
   requires P.ValidGrow(growth)
   ensures B.ValidGrow(IGrow(growth))
+  {
+  }
+
+  lemma RouteIs(pivots: PivotTable, key: Key, idx: int)
+  requires P.WFPivotTable(pivots)
+  requires 0 <= idx <= |pivots|
+  requires idx > 0 ==> Keyspace.lte(pivots[idx-1], key);
+  requires idx < |pivots| ==> Keyspace.lt(key, pivots[idx]);
+  ensures P.Route(pivots, key) == idx;
+  {
+  }
 
   lemma RefinesValidFusion(fusion: P.NodeFusion)
   requires P.ValidFusion(fusion)
   ensures B.ValidFusion(IFusion(fusion))
+  {
+    forall key | key in IFusion(fusion).left_keys
+    ensures IMapsTo(IFusion(fusion).fused_parent.children, key, IFusion(fusion).fused_childref)
+    {
+      //assert Keyspace.lt(key, fusion.split_parent.pivotTable[fusion.slot_idx]);
+      //assert (fusion.slot_idx == 0 || Keyspace.lte(fusion.split_parent.pivotTable[fusion.slot_idx - 1], key));
+
+      /*
+      if (fusion.slot_idx > 0) {
+        assert fusion.split_parent.pivotTable[fusion.slot_idx - 1]
+            == fusion.fused_parent.pivotTable[fusion.slot_idx - 1];
+      }
+      */
+      if (fusion.slot_idx < |fusion.fused_parent.pivotTable|) {
+        //assert fusion.fused_parent.pivotTable[fusion.slot_idx] == fusion.split_parent.pivotTable[fusion.slot_idx + 1];
+        Keyspace.IsStrictlySortedImpliesLt(fusion.split_parent.pivotTable, fusion.slot_idx, fusion.slot_idx + 1);
+        /*
+        assert Keyspace.lt(
+                fusion.split_parent.pivotTable[fusion.slot_idx],
+                fusion.split_parent.pivotTable[fusion.slot_idx + 1]);
+        assert Keyspace.lt(
+                fusion.split_parent.pivotTable[fusion.slot_idx],
+                fusion.fused_parent.pivotTable[fusion.slot_idx]);
+        */
+      }
+
+      /*
+      assert fusion.slot_idx > 0 ==> Keyspace.lte(fusion.fused_parent.pivotTable[fusion.slot_idx-1], key);
+      assert fusion.slot_idx < |fusion.fused_parent.pivotTable| ==> Keyspace.lt(key, fusion.fused_parent.pivotTable[fusion.slot_idx]);
+      */
+
+      RouteIs(fusion.fused_parent.pivotTable, key, fusion.slot_idx);
+      /*
+      assert P.Route(fusion.fused_parent.pivotTable, key) == fusion.slot_idx;
+      assert fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref;
+      assert fusion.fused_parent.children.value[P.Route(fusion.fused_parent.pivotTable, key)] == fusion.fused_childref;
+      assert IMapsTo(IChildren(fusion.fused_parent), key, fusion.fused_childref);
+      */
+    }
+
+    forall key | key in IFusion(fusion).right_keys
+    ensures IMapsTo(IFusion(fusion).fused_parent.children, key, IFusion(fusion).fused_childref)
+    {
+      if (fusion.slot_idx > 0) {
+        Keyspace.IsStrictlySortedImpliesLt(fusion.split_parent.pivotTable, fusion.slot_idx - 1, fusion.slot_idx);
+      }
+      RouteIs(fusion.fused_parent.pivotTable, key, fusion.slot_idx);
+    }
+
+    /*
+    forall key | (key !in IFusion(fusion).left_keys) && (key !in IFusion(fusion).right_keys)
+    ensures IMapsAgreeOnKey(IFusion(fusion).split_parent.children, IFusion(fusion).fused_parent.children, key)
+    {
+      var r := P.Route(fusion.fused_parent.pivotTable, key);
+      if (r < fusion.slot_idx) {
+        //assert fusion.split_parent.children.Some?;
+        RouteIs(fusion.split_parent.pivotTable, key, r);
+        /*
+        assert r == P.Route(fusion.split_parent.pivotTable, key);
+        assert IChildren(fusion.split_parent)[key] == fusion.split_parent.children.value[r];
+        assert IChildren(fusion.split_parent)[key] == fusion.split_parent.children.value[r];
+        assert IChildren(fusion.fused_parent)[key] == fusion.fused_parent.children.value[r];
+        assert fusion.split_parent.children.value[r] == fusion.fused_parent.children.value[r];
+        */
+
+        assert IMapsAgreeOnKey(IFusion(fusion).split_parent.children, IFusion(fusion).fused_parent.children, key);
+      } else if (r == fusion.slot_idx) {
+        var pivot := fusion.split_parent.pivotTable[fusion.slot_idx];
+        if (Keyspace.lte(pivot, key)) {
+          if (fusion.slot_idx + 1 < |fusion.split_parent.pivotTable|) {
+            assert fusion.split_parent.pivotTable[r + 1] == fusion.fused_parent.pivotTable[r];
+            //assert Keyspace.lt(key, fusion.split_parent.pivotTable[r + 1]);
+            //assert Keyspace.lt(key, fusion.split_parent.pivotTable[fusion.slot_idx + 1]);
+          }
+          assert key in IFusion(fusion).right_keys;
+        } else {
+          //assert Keyspace.lt(key, pivot);
+          assert key in IFusion(fusion).left_keys;
+        }
+      } else {
+        assert fusion.fused_parent.pivotTable[r-1] == fusion.split_parent.pivotTable[r];
+        //assert Keyspace.lte(fusion.fused_parent.pivotTable[r-1], key);
+        //assert Keyspace.lte(fusion.split_parent.pivotTable[r], key);
+
+        if (r+1 < |fusion.split_parent.pivotTable|) {
+          assert fusion.fused_parent.pivotTable[r] == fusion.split_parent.pivotTable[r + 1];
+          //assert Keyspace.lt(key, fusion.fused_parent.pivotTable[r]);
+          //assert Keyspace.lt(key, fusion.split_parent.pivotTable[r + 1]);
+        }
+
+        RouteIs(fusion.split_parent.pivotTable, key, r + 1);
+        assert IMapsAgreeOnKey(IFusion(fusion).split_parent.children, IFusion(fusion).fused_parent.children, key);
+      }
+    }
+    */
+
+    forall key
+    ensures P.BucketLookup(fusion.split_parent.buckets[P.Route(fusion.split_parent.pivotTable, key)], key)
+         == P.BucketLookup(fusion.fused_parent.buckets[P.Route(fusion.fused_parent.pivotTable, key)], key)
+    ensures (key !in IFusion(fusion).left_keys) && (key !in IFusion(fusion).right_keys) ==> IMapsAgreeOnKey(IFusion(fusion).split_parent.children, IFusion(fusion).fused_parent.children, key)
+    {
+      var r := P.Route(fusion.fused_parent.pivotTable, key);
+      if (r < fusion.slot_idx) {
+        RouteIs(fusion.split_parent.pivotTable, key, r);
+      } else if (r == fusion.slot_idx) {
+        var pivot := fusion.split_parent.pivotTable[fusion.slot_idx];
+        if (Keyspace.lte(pivot, key)) {
+          if (fusion.slot_idx + 1 < |fusion.split_parent.pivotTable|) {
+            assert fusion.split_parent.pivotTable[r + 1] == fusion.fused_parent.pivotTable[r];
+          }
+          assert key in IFusion(fusion).right_keys;
+        } else {
+          assert key in IFusion(fusion).left_keys;
+        }
+      } else {
+        assert fusion.fused_parent.pivotTable[r-1] == fusion.split_parent.pivotTable[r];
+
+        if (r+1 < |fusion.split_parent.pivotTable|) {
+          assert fusion.fused_parent.pivotTable[r] == fusion.split_parent.pivotTable[r + 1];
+        }
+
+        RouteIs(fusion.split_parent.pivotTable, key, r + 1);
+      }
+    }
+
+    var child := fusion.fused_child;
+    var left := fusion.left_child;
+    var right := fusion.right_child;
+
+    forall key | key in IFusion(fusion).left_keys
+    ensures IMapsAgreeOnKey(IFusion(fusion).fused_child.children, IFusion(fusion).left_child.children, key)
+    ensures IMapsAgreeOnKey(IFusion(fusion).fused_child.buffer, IFusion(fusion).left_child.buffer, key)
+    {
+      var r := P.Route(left.pivotTable, key);
+      RouteIs(child.pivotTable, key, r);
+    }
+
+    forall key | key in IFusion(fusion).right_keys
+    ensures IMapsAgreeOnKey(IFusion(fusion).fused_child.children, IFusion(fusion).right_child.children, key)
+    ensures IMapsAgreeOnKey(IFusion(fusion).fused_child.buffer, IFusion(fusion).right_child.buffer, key)
+    {
+      var r := P.Route(right.pivotTable, key);
+      if (r > 0) {
+        assert right.pivotTable[r-1] == child.pivotTable[r + |left.buckets| - 1];
+      }
+      if (r < |right.pivotTable|) {
+        assert right.pivotTable[r] == child.pivotTable[r + |left.buckets|];
+      }
+      RouteIs(child.pivotTable, key, r + |left.buckets|);
+    }
+  }
 
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
