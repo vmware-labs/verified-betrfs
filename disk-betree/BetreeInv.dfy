@@ -224,8 +224,8 @@ module BetreeInv {
         Layer(newchildref, oldroot)
       ] + lookup[1..];
 
-      //FIXME TotalLogAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
-      //FIXME TotalLogAdditive([lookup[0]], lookup[1..], key);
+      InterpretLookupAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
+      InterpretLookupAdditive([lookup[0]], lookup[1..], key);
       assert [lookup[0]] + lookup[1..] == lookup;
 
       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
@@ -237,7 +237,7 @@ module BetreeInv {
     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
       if (|lookup'| == 1) {
-        //FIXME assert TotalLog(lookup', key) == [];
+		assert InterpretLookup(lookup', key) == G.M.Update(G.M.NopDelta());
         assert false;
       }
 
@@ -245,8 +245,8 @@ module BetreeInv {
       assert |lookup'| >= 2;
       var lookup := [Layer(Root(), lookup'[1].node)] + lookup'[2..];
 
-      //FIXME TotalLogAdditive([Layer(Root(), lookup'[1].node)], lookup'[2..], key);
-      //FIXME TotalLogAdditive(lookup'[..2], lookup'[2..], key);
+      InterpretLookupAdditive([Layer(Root(), lookup'[1].node)], lookup'[2..], key);
+      InterpretLookupAdditive(lookup'[..2], lookup'[2..], key);
       assert lookup'[..2] + lookup'[2..] == lookup';
 
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
