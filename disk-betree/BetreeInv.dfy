@@ -634,11 +634,32 @@ module BetreeInv {
 			InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
 			assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
 		} else {
-			var prefix := lookup[..i]; // before parent
 			if |lookup| - 1 == i { // we stopped at parent
-				var lookup' := prefix + [ Layer(parentref, newparent) , Layer(newchildref, newchild) ];
+				var lookup' := lookup[..i] + [ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ];
+				forall j | 0 <= j < |lookup'|
+				ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+				}
+				assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
 			} else {
+				var middle := [ lookup[i] ] + [ lookup[i+1] ];
+				var middle' := ([ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ]);
 
+				assert lookup == lookup[..i] + middle + lookup[i+2..];
+				var lookup' := lookup[..i] + middle' + lookup[i+2..];
+
+				forall j | 0 <= j < |lookup'|
+				ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+				}
+
+				assert lookup[..i] == lookup'[..i];
+				assert lookup[i+2..] == lookup'[i+2..];
+
+				assert InterpretLookup([lookup'[i]], key) == G.M.Update(G.M.NopDelta());
+
+				InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+				InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
+
+				assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
 			}
 		}
 	  } else {
