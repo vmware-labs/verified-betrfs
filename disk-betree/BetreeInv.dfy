@@ -101,34 +101,15 @@ module BetreeInv {
   requires |lookup| <= |lookup'|
   ensures value == value';
   {
-    var i := 0;
 
-    while i < |lookup|
-    invariant i <= |lookup|
-    invariant LookupVisitsWFNodes(lookup[..i]);
-    invariant LookupVisitsWFNodes(lookup'[..i]);
-    invariant InterpretLookup(lookup[..i], key) == InterpretLookup(lookup'[..i], key)
-    {
-      SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', i);
-      assert lookup[..i] == lookup[..i+1][..i];
-      assert lookup'[..i] == lookup'[..i+1][..i];
-      i := i + 1;
-    }
-
-    reveal_IsPrefix();
-    assert lookup == lookup[..i];
-
-    var j := i;
-    while j < |lookup'|
-    invariant j <= |lookup'|
-    //FIXME invariant IsPrefix(TotalLog(lookup, key), TotalLog(lookup'[..j], key))
-    {
-      assert lookup'[..j] == lookup'[..j+1][..j];
-      j := j + 1;
-    }
-
-    assert lookup' == lookup'[..j];
-    //FIXME assert IsPrefix(TotalLog(lookup, key), TotalLog(lookup', key));
+	var junk := lookup'[|lookup|..];
+	forall idx | 0 <= idx < |lookup|
+	ensures lookup'[idx] == lookup[idx];
+	{
+		SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx);
+	}
+	assert lookup' == lookup + junk; // observe
+	InterpretLookupAdditive(lookup, junk, key);
   }
 
   lemma CantEquivocate(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
