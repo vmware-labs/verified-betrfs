@@ -777,6 +777,34 @@ module PivotBetreeSpecRefinement {
       IOps(ops[..|ops|-1]) + [IOp(ops[|ops|-1])]
   }
 
+  lemma InsertRefinesOps(ins: P.MessageInsertion)
+  requires P.ValidInsertion(ins)
+  requires B.ValidInsertion(IInsertion(ins))
+  ensures forall i | 0 <= i < |P.InsertionOps(ins)| ::
+      P.WFNode(P.InsertionOps(ins)[i].block)
+  ensures IOps(P.InsertionOps(ins)) == B.InsertionOps(IInsertion(ins))
+  {
+  }
+
+  lemma FlushRefinesOps(flush: P.NodeFlush)
+  requires P.ValidFlush(flush)
+  requires B.ValidFlush(IFlush(flush))
+  ensures forall i | 0 <= i < |P.FlushOps(flush)| ::
+      P.WFNode(P.FlushOps(flush)[i].block)
+  ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
+  {
+  }
+
+  lemma GrowRefinesOps(growth: P.RootGrowth)
+  requires P.ValidGrow(growth)
+  requires B.ValidGrow(IGrow(growth))
+  ensures forall i | 0 <= i < |P.GrowOps(growth)| ::
+      P.WFNode(P.GrowOps(growth)[i].block)
+  ensures IOps(P.GrowOps(growth)) == B.GrowOps(IGrow(growth))
+  {
+  }
+
+
   lemma {:fuel IOps,3} RefinesOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   ensures B.ValidBetreeStep(IStep(betreeStep))
@@ -788,19 +816,13 @@ module PivotBetreeSpecRefinement {
 
     match betreeStep {
       case BetreeInsert(ins) => {
-        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
-        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+        InsertRefinesOps(ins);
       }
       case BetreeFlush(flush) => {
-        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
-        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+        FlushRefinesOps(flush);
       }
       case BetreeGrow(growth) => {
-        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
-        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+        GrowRefinesOps(growth);
       }
       case BetreeSplit(fusion) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
