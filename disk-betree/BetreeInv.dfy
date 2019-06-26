@@ -196,6 +196,9 @@ module BetreeInv {
           assert lookup'[i+1].ref != Root();
           assert lookup'[i+1].node == lookup[i].node;
           i := i + 1;
+		  forall j, k | j != k && 0 <= j < i + 1 && 0 <= k < i + 1
+		  ensures lookup'[j].ref != lookup'[k].ref {
+		  }
           assert LookupIsAcyclic(lookup'[..i+1]);
         }
       }
