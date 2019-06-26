@@ -650,80 +650,120 @@ module BetreeInv {
     var newparent := Node(newparentchildren, newparentbuffer);
 
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-    ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+      ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     {
-	  if i :| 0 <= i < |lookup| && lookup[i].ref == parentref {
-		if key !in movedKeys {
-			var lookup' := lookup[i := Layer(parentref, newparent)];
-			forall j | 0 <= j < |lookup'|
-			ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
-			}
-			assert lookup[..i] + [lookup[i]] + lookup[i+1..] == lookup; // observe
-			assert lookup'[..i] + [lookup'[i]] + lookup'[i+1..] == lookup'; // observe
-			InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
-			InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
-			assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
-		} else {
-			if |lookup| - 1 == i { // we stopped at parent
-				var lookup' := lookup[..i] + [ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ];
-				forall j | 0 <= j < |lookup'|
-				ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
-				}
-				assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
-			} else {
-				var middle := [ lookup[i] ] + [ lookup[i+1] ];
-				var middle' := ([ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ]);
+	    if i :| 0 <= i < |lookup| && lookup[i].ref == parentref {
+		    if key !in movedKeys {
+			    var lookup' := lookup[i := Layer(parentref, newparent)];
+			    forall j | 0 <= j < |lookup'|
+			      ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+			      }
+			      assert lookup[..i] + [lookup[i]] + lookup[i+1..] == lookup; // observe
+			      assert lookup'[..i] + [lookup'[i]] + lookup'[i+1..] == lookup'; // observe
+			      InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
+			      InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
+			      assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
+		    } else {
+			    if |lookup| - 1 == i { // we stopped at parent
+				    var lookup' := lookup[..i] + [ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ];
+				    forall j | 0 <= j < |lookup'|
+				      ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+				      }
+				      assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
+			    } else {
+				    var middle := [ lookup[i] ] + [ lookup[i+1] ];
+				    var middle' := ([ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ]);
 
-				assert lookup == lookup[..i] + middle + lookup[i+2..];
-				var lookup' := lookup[..i] + middle' + lookup[i+2..];
+				    assert lookup == lookup[..i] + middle + lookup[i+2..];
+				    var lookup' := lookup[..i] + middle' + lookup[i+2..];
 
-				forall j | 0 <= j < |lookup'|
-				ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
-				}
+				    forall j | 0 <= j < |lookup'|
+				      ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+				      }
 
-				assert lookup[..i] == lookup'[..i];
-				assert lookup[i+2..] == lookup'[i+2..];
+				      assert lookup[..i] == lookup'[..i];
+				      assert lookup[i+2..] == lookup'[i+2..];
 
-				assert InterpretLookup([lookup'[i]], key) == G.M.Update(G.M.NopDelta());
+				      assert InterpretLookup([lookup'[i]], key) == G.M.Update(G.M.NopDelta());
 
-				InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
-				InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
+				      InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+				      InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
 
-				assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
-			}
-		}
-	  } else {
-		assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
-	  }
-    }
-
-	FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref);
-    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
-    ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-    {
-	  if i :| 0 <= i < |lookup'| && lookup'[i].ref == parentref {
-	    if i < |lookup'| - 1 && lookup'[i+1].ref == newchildref {
+				      assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
+			    }
+		    }
 	    } else {
-			var lookup := lookup'[i := Layer(parentref, parent)];
-			assert forall ref :: ref in s'.bcv.view && ref != parentref && ref != newchildref ==> s.bcv.view[ref] == s'.bcv.view[ref];
-			assert IMapsTo(s.bcv.view, parentref, parent);
-			if j :| 0 <= j < |lookup| && lookup[j].ref == newchildref {
-				assert j != 0;
-				assert lookup[j - 1].node.children[key] == newchildref;
-			}
-			// forall j | 0 <= j < |lookup|
-			// ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node) {
-			// }
-			assert LookupRespectsDisk(s.bcv.view, lookup);
-			assert lookup[..i] + [lookup[i]] + lookup[i+1..] == lookup; // observe
-			assert lookup'[..i] + [lookup'[i]] + lookup'[i+1..] == lookup'; // observe
-			InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
-			InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
-			assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup); // observe
+		    assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
 	    }
-	  } else {
-		assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
-	  }
+    }
+    
+	  FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref);
+    
+    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+      ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    {
+	    if i :| 0 <= i < |lookup'| && lookup'[i].ref == parentref {
+	      if i < |lookup'| - 1 && lookup'[i+1].ref == newchildref {
+          var middle' := [ lookup'[i] ] + [ lookup'[i+1] ];
+          var middle := [ Layer(parentref, parent) ] + [ Layer(childref, child) ];
+          var lookup := lookup'[..i] + middle + lookup'[i+2..];
+
+          assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
+          assert lookup == lookup[..i] + middle + lookup[i+2..];
+
+          forall idx | 0 <= idx < |lookup|
+            ensures IMapsTo(s.bcv.view, lookup[idx].ref, lookup[idx].node)
+            {
+              if idx == i {
+                //assume false;
+              } else if idx == i + 1 {
+                //assume false;
+              } else {
+                assert lookup[idx].ref == lookup'[idx].ref;
+                assert lookup'[idx].ref != parentref;
+                assert lookup'[idx].ref != newchildref;
+                assert s.bcv.view[lookup[idx].ref] == s'.bcv.view[lookup[idx].ref];
+                assume false;
+              }
+            }
+          assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+          assert LookupVisitsWFNodes(lookup);
+
+          assert InterpretLookup([lookup'[i]], key) == G.M.Update(G.M.NopDelta());
+          assert InterpretLookup(middle, key) == InterpretLookup(middle', key);
+
+          assert lookup[..i] == lookup'[..i];
+          assert lookup[i+2..] == lookup'[i+2..];
+          
+				  InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+				  InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
+
+          
+          assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup); // observe
+          
+	      } else {
+			    var lookup := lookup'[i := Layer(parentref, parent)];
+			    assert forall ref :: ref in s'.bcv.view && ref != parentref && ref != newchildref ==> s.bcv.view[ref] == s'.bcv.view[ref];
+			    assert IMapsTo(s.bcv.view, parentref, parent);
+			    if j :| 0 <= j < |lookup| && lookup[j].ref == newchildref {
+				    assert j != 0;
+				    assert lookup[j - 1].node.children[key] == newchildref;
+			    }
+			    assert LookupRespectsDisk(s.bcv.view, lookup);
+			    assert lookup[..i] + [lookup[i]] + lookup[i+1..] == lookup; // observe
+			    assert lookup'[..i] + [lookup'[i]] + lookup'[i+1..] == lookup'; // observe
+			    InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
+			    InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
+			    assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup); // observe
+	      }
+	    } else {
+        if i :| 0 <= i < |lookup'| && lookup'[i].ref == newchildref {
+          assert i != 0;
+          assert newchildref in lookup'[i-1].node.children.Values;
+          assert false;
+        }
+		    assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
+	    }
       // var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
       // FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
 
