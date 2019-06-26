@@ -190,7 +190,11 @@ module BetreeInv {
           invariant IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i])
         {
           assert lookup'[i].node == lookup[i-1].node;
-          assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+          if i == 0 {
+            assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+          } else {
+            assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+          }
           assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup[..i+1]);
           assert lookup'[i+1].ref != Root();
           assert lookup'[i+1].node == lookup[i].node;
