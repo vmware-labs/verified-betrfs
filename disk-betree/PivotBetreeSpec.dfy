@@ -52,7 +52,7 @@ module PivotBetreeSpec {
   import opened Maps
   import opened MissingLibrary
 
-  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, G
+  export Spec provides *
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
@@ -829,8 +829,13 @@ module PivotBetree {
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
 
+  function EmptyNode() : Node
+  {
+    Node([], None, [map[]])
+  }
+
   predicate Init(k: Constants, s: Variables) {
-    && BI.Init(k.bck, s.bcv, Node([], None, [map[]]))
+    && BI.Init(k.bck, s.bcv, EmptyNode())
   }
 
   predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
@@ -863,7 +868,7 @@ module PivotBetree {
 }
 
 module PivotBetreeInvAndRefinement {
-  import opened PivotBetreeSpec`Internal
+  import opened PivotBetreeSpec`Spec
   import PB = PivotBetree
   import PBI = PivotBetreeBlockInterface
   import B = Betree
@@ -884,20 +889,90 @@ module PivotBetreeInvAndRefinement {
     B.Constants(BI.Constants())
   }
 
+  predicate ViewHasWFNodes(view: imap<Reference, PNode>)
+  {
+    forall ref | ref in view :: WFNode(view[ref])
+  }
+
   function IView(view: imap<Reference, PNode>) : imap<Reference, Node>
+  requires ViewHasWFNodes(view)
   {
     imap ref | ref in view :: SpecRef.INode(view[ref])
   }
   
   function I(k: Constants, s: Variables) : B.Variables
+  requires ViewHasWFNodes(s.bcv.view)
   {
     B.Variables(BI.Variables(IView(s.bcv.view)))
   }
 
   predicate Inv(k: Constants, s: Variables)
   {
+    && ViewHasWFNodes(s.bcv.view)
     && BInv.Inv(Ik(k), I(k, s))
-    && (forall ref | ref in s.bcv.view :: WFNode(s.bcv.view[ref]))
+  }
+
+  lemma OpRefines(k: Constants, s: Variables, s': Variables, op: PG.Op)
+  requires WFNode(op.block)
+  requires ViewHasWFNodes(s.bcv.view)
+  requires PBI.OpStep(k.bck, s.bcv, s'.bcv, op)
+  ensures ViewHasWFNodes(s'.bcv.view)
+  ensures BI.OpStep(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOp(op))
+  {
+    //BI.OpStepPreservesInv(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOp(op));
+  }
+
+  lemma IOpsAdditive(ops1: seq<PG.Op>, ops2: seq<PG.Op>)
+  requires forall i | 0 <= i < |ops1| :: WFNode(ops1[i].block)
+  requires forall i | 0 <= i < |ops2| :: WFNode(ops2[i].block)
+  ensures SpecRef.IOps(ops1 + ops2) == SpecRef.IOps(ops1) + SpecRef.IOps(ops2)
+  {
+    if (|ops2| == 0) {
+      assert ops2 == [];
+      assert SpecRef.IOps(ops2) == [];
+      assert ops1 + ops2 == ops1;
+      assert SpecRef.IOps(ops1 + ops2) == SpecRef.IOps(ops1) + SpecRef.IOps(ops2);
+    } else {
+      IOpsAdditive(ops1, ops2[..|ops2|-1]);
+      assert (ops1 + ops2)[..|ops1 + ops2|-1] == ops1 + ops2[..|ops2|-1];
+      assert SpecRef.IOps(ops1 + ops2)
+          == SpecRef.IOps((ops1 + ops2)[..|ops1 + ops2|-1]) + [SpecRef.IOp((ops1 + ops2)[|ops1 + ops2| - 1])]
+          == SpecRef.IOps(ops1 + ops2[..|ops2|-1]) + [SpecRef.IOp((ops1 + ops2)[|ops1 + ops2| - 1])]
+          == SpecRef.IOps(ops1) + SpecRef.IOps(ops2[..|ops2|-1]) + [SpecRef.IOp((ops1 + ops2)[|ops1 + ops2| - 1])]
+          == SpecRef.IOps(ops1) + SpecRef.IOps(ops2[..|ops2|-1]) + [SpecRef.IOp(ops2[|ops2| - 1])]
+          == SpecRef.IOps(ops1) + SpecRef.IOps(ops2);
+    }
+  }
+
+  lemma TransactionRefines(k: Constants, s: Variables, s': Variables, ops: seq<PG.Op>)
+  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].block)
+  requires ViewHasWFNodes(s.bcv.view)
+  requires PBI.Transaction(k.bck, s.bcv, s'.bcv, ops)
+  ensures ViewHasWFNodes(s'.bcv.view)
+  ensures BI.Transaction(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOps(ops))
+  decreases |ops|
+  {
+    if (|ops| == 1) {
+      OpRefines(k, s, s', ops[0]);
+    } else {
+      var ops1, mid, ops2 := PBI.SplitTransaction(k.bck, s.bcv, s'.bcv, ops);
+      var smid := PB.Variables(mid);
+
+      forall i | 0 <= i < |ops1| ensures WFNode(ops1[i].block)
+      {
+        assert ops1[i].block == ops[i].block;
+      }
+      forall i | 0 <= i < |ops2| ensures WFNode(ops2[i].block)
+      {
+        assert ops2[i].block == ops[i + |ops1|].block;
+      }
+
+      TransactionRefines(k, s, smid, ops1);
+      TransactionRefines(k, smid, s', ops2);
+      BI.JoinTransactions(Ik(k).bck, I(k, s).bcv, I(k, smid).bcv, I(k, s').bcv, SpecRef.IOps(ops1), SpecRef.IOps(ops2));
+      IOpsAdditive(ops1, ops2);
+      //assert SpecRef.IOps(ops) == SpecRef.IOps(ops1) + SpecRef.IOps(ops2); // TODO
+    }
   }
 
   lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
@@ -906,6 +981,12 @@ module PivotBetreeInvAndRefinement {
   ensures Inv(k, s')
   ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.BetreeStep(SpecRef.IStep(betreeStep)))
   {
+    SpecRef.RefinesValidBetreeStep(betreeStep);
+    SpecRef.RefinesReadOps(betreeStep);
+    SpecRef.RefinesOps(betreeStep);
+    TransactionRefines(k, s, s', BetreeStepOps(betreeStep));
+    assert B.NextStep(Ik(k), I(k,s), I(k,s'), B.BetreeStep(SpecRef.IStep(betreeStep)));
+    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'));
   }
 
   lemma GCStepRefines(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
@@ -914,6 +995,8 @@ module PivotBetreeInvAndRefinement {
   ensures Inv(k, s')
   ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.GCStep(refs))
   {
+    assert B.NextStep(Ik(k), I(k,s), I(k,s'), B.GCStep(refs));
+    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'));
   }
 
   lemma StutterStepRefines(k: Constants, s: Variables, s': Variables)
@@ -941,6 +1024,7 @@ module PivotBetreeInvAndRefinement {
     requires PB.Init(k, s)
     ensures Inv(k, s)
   {
+    PivotBetreeRefinesBetreeInit(k, s);
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
@@ -950,6 +1034,15 @@ module PivotBetreeInvAndRefinement {
   {
     var step :| PB.NextStep(k, s, s', step);
     PivotBetreeRefinesBetreeNextStep(k, s, s', step);
+  }
+
+  lemma PivotBetreeRefinesBetreeInit(k: Constants, s: Variables)
+    requires PB.Init(k, s)
+    ensures Inv(k, s)
+    ensures B.Init(Ik(k), I(k, s))
+  {
+    assert SpecRef.INode(PB.EmptyNode()) == B.EmptyNode();
+    BInv.InitImpliesInv(Ik(k), I(k, s));
   }
 
   lemma PivotBetreeRefinesBetreeNext(k: Constants, s: Variables, s': Variables)

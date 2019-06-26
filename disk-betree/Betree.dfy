@@ -57,6 +57,11 @@ module Betree {
     && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
   }
 
+  function EmptyNode() : Node {
+    var buffer := imap key | MS.InDomain(key) :: G.M.Define(G.M.DefaultValue());
+    Node(imap[], buffer)
+  }
+
   predicate Init(k: Constants, s: Variables) {
     && BI.Init(k.bck, s.bcv, EmptyNode())
   }

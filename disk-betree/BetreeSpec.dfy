@@ -55,11 +55,6 @@ module BetreeSpec {
 
   //// Insert
 
-  function EmptyNode() : Node {
-    var buffer := imap key | MS.InDomain(key) :: G.M.Define(G.M.DefaultValue());
-    Node(imap[], buffer)
-  }
-    
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
     requires key in buffer
   {
