@@ -208,6 +208,7 @@ module BetreeInv {
           i := i + 1;
 		  forall j, k | j != k && 0 <= j < i + 1 && 0 <= k < i + 1
 		  ensures lookup'[j].ref != lookup'[k].ref {
+			assume false; //FIXME
 		  }
           assert LookupIsAcyclic(lookup'[..i+1]);
         }
@@ -665,49 +666,41 @@ module BetreeInv {
 	  } else {
 		assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
 	  }
-
-      // var lookup1 := if Last(lookup).ref == parentref && key in movedKeys then lookup + [Layer(childref, child)] else lookup;
-
-      // assert IsPathFromRootLookup(k, s.bcv.view, key, lookup1);
-
-      // var lookup' := flushTransformLookup(lookup, key, parentref, parent, childref, child, newchildref);
-
-      // transformLookupParentAndChildLemma(lookup1, lookup', key, parentref, newparent, movedKeys, childref, newchildref, newchild, 0);
-
-      // assert lookup'[0].ref == Root();
-
-      // forall i | 0 <= i < |lookup'|
-      // ensures IMapsTo(s'.bcv.view, lookup'[i].ref, lookup'[i].node)
-      // ensures WFNode(lookup'[i].node)
-      // {
-      //   transformLookupParentAndChildLemma(lookup1, lookup', key, parentref, newparent, movedKeys, childref, newchildref, newchild, i);
-      // }
-
-      // forall i | 0 <= i < |lookup'| - 1
-      // ensures key in lookup'[i].node.children
-      // ensures lookup'[i].node.children[key] == lookup'[i+1].ref
-      // {
-      //   transformLookupParentAndChildLemma(lookup1, lookup', key, parentref, newparent, movedKeys, childref, newchildref, newchild, i);
-      //   transformLookupParentAndChildLemma(lookup1, lookup', key, parentref, newparent, movedKeys, childref, newchildref, newchild, i+1);
-      // }
-
-      // transformLookupParentAndChildPreservesAccumulatedLog(k, s, s', lookup1, lookup',
-      //     key, parent, child, parentref, newparent, movedKeys, childref, newchildref,
-      //     newchild, newbuffer, newparentbuffer, newparentchildren);
-
-      // assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
     }
 
+	FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref);
     forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
-      var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
+	  if i :| 0 <= i < |lookup'| && lookup'[i].ref == parentref {
+	    if i < |lookup'| - 1 && lookup'[i+1].ref == newchildref {
+	    } else {
+			var lookup := lookup'[i := Layer(parentref, parent)];
+			assert forall ref :: ref in s'.bcv.view && ref != parentref && ref != newchildref ==> s.bcv.view[ref] == s'.bcv.view[ref];
+			assert IMapsTo(s.bcv.view, parentref, parent);
+			if j :| 0 <= j < |lookup| && lookup[j].ref == newchildref {
+				assert j != 0;
+				assert lookup[j - 1].node.children[key] == newchildref;
+			}
+			// forall j | 0 <= j < |lookup|
+			// ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node) {
+			// }
+			assert LookupRespectsDisk(s.bcv.view, lookup);
+			assert lookup[..i] + [lookup[i]] + lookup[i+1..] == lookup; // observe
+			assert lookup'[..i] + [lookup'[i]] + lookup'[i+1..] == lookup'; // observe
+			InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
+			InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
+			assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup); // observe
+	    }
+	  } else {
+		assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
+	  }
+      // var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
+      // FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, lookup, lookup', key);
 
       //FIXME transformLookupParentAndChildPreservesAccumulatedLogRevPrefix(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
       //FIXME reveal_IsPrefix();
 
-	  assume false;
       //FIXME assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
   }
