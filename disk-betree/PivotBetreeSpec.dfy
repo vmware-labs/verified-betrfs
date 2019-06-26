@@ -39,6 +39,10 @@ module PivotBetreeGraph refines Graph {
   }
 }
 
+module PivotBetreeBlockInterface refines BlockInterface {
+  import G = PivotBetreeGraph
+}
+
 module PivotBetreeSpec {
   import MS = MapSpec
   import opened G = PivotBetreeGraph
@@ -388,7 +392,7 @@ module PivotBetreeSpec {
   }
 }
 
-module PivotBetreeRefinement {
+module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
   import opened Message
@@ -753,5 +757,107 @@ module PivotBetreeRefinement {
       }
     }
     */
+  }
+
+  function IOp(op: P.G.Op) : B.G.Op
+  requires P.WFNode(op.block)
+  {
+    match op {
+      case AllocOp(ref, block) => B.G.AllocOp(ref, INode(block))
+      case WriteOp(ref, block) => B.G.WriteOp(ref, INode(block))
+    }
+  }
+
+  function IOps(ops: seq<P.G.Op>) : seq<B.G.Op>
+  requires forall i | 0 <= i < |ops| :: P.WFNode(ops[i].block)
+  {
+    if |ops| == 0 then [] else
+      IOps(ops[..|ops|-1]) + [IOp(ops[|ops|-1])]
+  }
+
+  lemma {:fuel IOps,3} RefinesOps(betreeStep: P.BetreeStep)
+  requires P.ValidBetreeStep(betreeStep)
+  ensures B.ValidBetreeStep(IStep(betreeStep))
+  ensures forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+      P.WFNode(P.BetreeStepOps(betreeStep)[i].block)
+  ensures IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep))
+  {
+    RefinesValidBetreeStep(betreeStep);
+
+    match betreeStep {
+      case BetreeInsert(ins) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+      case BetreeFlush(flush) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+      case BetreeGrow(growth) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+      case BetreeSplit(fusion) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+      case BetreeMerge(fusion) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+    }
+  }
+}
+
+module PivotBetree {
+  import opened PivotBetreeSpec`Internal
+
+  import BI = PivotBetreeBlockInterface
+  import MS = MapSpec
+  import opened Maps
+  import opened MissingLibrary
+
+  import opened G = PivotBetreeGraph
+
+  datatype Constants = Constants(bck: BI.Constants)
+  datatype Variables = Variables(bcv: BI.Variables)
+
+  import PivotBetreeSpecRefinement
+
+  predicate Init(k: Constants, s: Variables) {
+    && BI.Init(k.bck, s.bcv, Node([], None, [map[]]))
+  }
+
+  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
+    BI.GC(k.bck, s.bcv, s'.bcv, refs)
+  }
+
+  predicate Betree(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
+  {
+    && ValidBetreeStep(betreeStep)
+    && BI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
+    && BI.OpTransaction(k.bck, s.bcv, s'.bcv, BetreeStepOps(betreeStep))
+  }
+ 
+  datatype Step =
+    | BetreeStep(step: BetreeStep)
+    | GCStep(refs: iset<Reference>)
+    | StutterStep
+
+  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
+    match step {
+      case BetreeStep(betreeStep) => Betree(k, s, s', betreeStep)
+      case GCStep(refs) => GC(k, s, s', refs)
+      case StutterStep => s == s'
+    }
+  }
+
+  predicate Next(k: Constants, s: Variables, s': Variables) {
+    exists step: Step :: NextStep(k, s, s', step)
   }
 }
