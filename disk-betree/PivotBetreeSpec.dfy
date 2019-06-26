@@ -19,6 +19,7 @@ module PivotBetreeGraph refines Graph {
   type Value = BG.Value
 
   type Reference = BG.Reference
+  function Root() : Reference { BG.Root() }
   type Message = M.Message
 
   type PivotTable = seq<Key>
@@ -709,5 +710,48 @@ module PivotBetreeRefinement {
       case BetreeSplit(fusion) => RefinesValidFusion(fusion);
       case BetreeMerge(fusion) => RefinesValidFusion(fusion);
     }
+  }
+
+  function IReadOp(readOp: P.G.ReadOp) : B.G.ReadOp
+  requires P.WFNode(readOp.block)
+  {
+    B.G.ReadOp(readOp.ref, INode(readOp.block))
+  }
+
+  function IReadOps(readOps: seq<P.G.ReadOp>) : seq<B.G.ReadOp>
+  requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].block)
+  {
+    if |readOps| == 0 then [] else
+      IReadOps(readOps[..|readOps|-1]) + [IReadOp(readOps[|readOps|-1])]
+  }
+
+  lemma {:fuel IReadOps,3} RefinesReadOps(betreeStep: P.BetreeStep)
+  requires P.ValidBetreeStep(betreeStep)
+  ensures B.ValidBetreeStep(IStep(betreeStep))
+  ensures IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep))
+  {
+    RefinesValidBetreeStep(betreeStep);
+    /*
+    match betreeStep {
+      case BetreeInsert(ins) => {
+        assert IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep));
+      }
+      case BetreeFlush(flush) => {
+        assert IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep));
+      }
+      case BetreeGrow(growth) => {
+        assert IReadOps(P.BetreeStepReads(betreeStep))
+            == IReadOps([P.G.ReadOp(P.G.Root(), growth.oldroot)])
+            == [B.G.ReadOp(P.G.Root(), INode(growth.oldroot))]
+            == B.BetreeStepReads(IStep(betreeStep));
+      }
+      case BetreeSplit(fusion) => {
+        assert IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep));
+      }
+      case BetreeMerge(fusion) => {
+        assert IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep));
+      }
+    }
+    */
   }
 }
