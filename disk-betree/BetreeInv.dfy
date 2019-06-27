@@ -36,6 +36,7 @@ module BetreeInv {
   predicate Inv(k: Constants, s: Variables)
   {
     && BI.Inv(k.bck, s.bcv)
+    && G.IsAcyclic(s.bcv.view)
     && Acyclic(k, s)
     && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
   }
@@ -194,74 +195,103 @@ module BetreeInv {
 
   // Acyclicity proofs
 
+  lemma AcyclicGraphImpliesAcyclic(k: Constants, s: Variables)
+    requires IsAcyclic(s.bcv.view)
+    ensures Acyclic(k, s)
+  {
+    var g := s.bcv.view;
+    forall key, lookup: Lookup | IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+      ensures LookupIsAcyclic(lookup)
+    {
+      var path := PathOfLookup(lookup);
+      G.AcyclicGraphImpliesSimplePath(g, path);
+    }
+  }
+
   lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
     requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
     ensures Acyclic(k, s')
   {
-	//FIXME
-	assume false;
-    var newchild := s'.bcv.view[newchildref];
-    
-    forall key, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-      ensures LookupIsAcyclic(lookup')
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, Root())
+      ensures ref in G.ReachableReferences(s.bcv.view, Root())
     {
-      if |lookup'| > 2 {
-        var lookup := [ReadOp(Root(), oldroot)] + lookup'[2..];
-        var i := 1;
-        while i < |lookup|
-          invariant 1 <= i <= |lookup|
-          invariant LookupIsAcyclic(lookup'[..i+1])
-          invariant IsPathFromRootLookup(k, s.bcv.view, key, lookup[..i])
-        {
-          if i == 1 {
-            if Root() in oldroot.children.Values {
-              var badkey :| badkey in oldroot.children && oldroot.children[badkey] == Root();
-              var cycle := [ReadOp(Root(), oldroot), ReadOp(Root(), oldroot)];
-              assert IsPathFromRootLookup(k, s.bcv.view, badkey, cycle);
-              assert cycle[0].ref == cycle[1].ref;
-              assert false;
-            }
-            assert lookup'[1].ref == newchildref;
-            assert lookup'[2].ref != Root();
-            assert lookup'[2].ref != newchildref;
-            assert LookupIsAcyclic(lookup'[..3]);
-            assert IsPathFromRootLookup(k, s.bcv.view, key, lookup[..i+1]);
-          } else {
-            assert lookup[i-1].ref != Root();
-            assert lookup[i-1].ref != newchildref;
-
-            assert lookup[i-1].ref == lookup'[i].ref;
-            assert s.bcv.view[lookup[i-1].ref] == s'.bcv.view[lookup[i-1].ref];
-            assert lookup[i].ref == lookup'[i+1].ref;
-            assert lookup[i].ref == lookup[i-1].node.children[key];
-
-            var tmplookup := lookup[..i+1][i := ReadOp(lookup[i].ref, s.bcv.view[lookup[i].ref])];
-            assert IsPathFromRootLookup(k, s.bcv.view, key, tmplookup);
-            assert LookupIsAcyclic(tmplookup);
-            assert tmplookup[i].ref != Root();
-            assert tmplookup[i].ref == tmplookup[i-1].node.children[key];
-            
-            assert lookup[i].ref != Root();
-            assert lookup[i].ref != newchildref;
-            assert lookup[i].node == s.bcv.view[lookup[i].ref];
-
-            
-            assert IsPathFromRootLookup(k, s.bcv.view, key, lookup[..i+1]);
-
-            assert lookup'[i+1].ref == lookup[i].ref;
-            forall j | 0 <= j < i + 1
-              ensures lookup'[j].ref != lookup'[i+1].ref
-              {
-              }
-            assert LookupIsAcyclic(lookup'[..i+2]);
-          }
-          i := i + 1;
-        }
-      }
-    }
+      var path :| G.NewPath(s.bcv.view, s'.bcv.view, Root(), path) && Last(path) == ref;
+      assert path[|path|-2] == newchildref;
+      assert G.IsPath(s.bcv.view, [Root(), ref]);
+     }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
+    AcyclicGraphImpliesAcyclic(k, s');
   }
 
+  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables,
+                              parentref: BI.Reference, parent: Node,
+                              childref: BI.Reference, child: Node, newchildref: BI.Reference,
+                              movedKeys: iset<Key>)
+    requires Inv(k, s)
+    requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
+    ensures Acyclic(k, s')
+  {
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, parentref)
+      ensures ref in G.ReachableReferences(s.bcv.view, parentref)
+      {
+        var path :| G.NewPath(s.bcv.view, s'.bcv.view, parentref, path) && Last(path) == ref;
+        if path[1] == ref {
+          assert G.IsPath(s.bcv.view, [parentref, ref]);
+        } else {
+          assert path[|path|-2] == newchildref;
+          assert G.IsPath(s.bcv.view, [parentref, childref, ref]);
+        }
+      }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, parentref);
+    AcyclicGraphImpliesAcyclic(k, s');
+  }
+
+  lemma SplitPreservesAcyclic2(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+    requires Inv(k, s);
+    requires Split(k.bck, s.bcv, s'.bcv, fusion);
+    ensures Acyclic(k, s');
+  {
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, fusion.parentref)
+      ensures ref in G.ReachableReferences(s.bcv.view, fusion.parentref)
+      {
+        var path :| G.NewPath(s.bcv.view, s'.bcv.view, fusion.parentref, path) && Last(path) == ref;
+        if ref == path[1] {
+          forall childref | childref in fusion.split_parent.children.Values
+            ensures childref in fusion.fused_parent.children.Values + iset{fusion.left_childref, fusion.right_childref}
+          {
+            var key :| IMapsTo(fusion.split_parent.children, key, childref);
+            if key in fusion.left_keys || key in fusion.right_keys {
+            } else {
+            }
+          }
+          assert fusion.split_parent.children.Values <= fusion.fused_parent.children.Values + iset{fusion.left_childref, fusion.right_childref};
+          assert ref != fusion.left_childref;
+          assert ref != fusion.right_childref;
+          assert ref in fusion.fused_parent.children.Values;
+          assert G.IsPath(s.bcv.view, [fusion.parentref, ref]);
+        } else if path[|path|-2] == fusion.left_childref {
+          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]);
+        } else {
+          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]);
+        }
+      }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref);
+    AcyclicGraphImpliesAcyclic(k, s');
+  }
+
+  lemma InsertMessagePreservesAcyclic(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+    requires Inv(k, s)
+    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+    ensures Acyclic(k, s')
+  {
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
+    AcyclicGraphImpliesAcyclic(k, s');
+  }
+
+
+
+  
   // Preservation proofs
 
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
@@ -316,139 +346,6 @@ module BetreeInv {
   ////////
   //////// Flush
   ////////
-
-  // Definitions of Flush lookup transformations:
-
-  function transformLookup(lookup: Lookup, key: Key, oldref: Reference, newref: Reference, newnode: Node) : Lookup
-  ensures |transformLookup(lookup, key, oldref, newref, newnode)| == |lookup|;
-  ensures forall i :: 0 <= i < |lookup| ==>
-      transformLookup(lookup, key, oldref, newref, newnode)[i].ref ==
-        (if lookup[i].ref == oldref then newref else lookup[i].ref);
-  ensures forall i :: 0 <= i < |lookup| ==>
-      transformLookup(lookup, key, oldref, newref, newnode)[i].node ==
-        (if lookup[i].ref == oldref then newnode else lookup[i].node);
-  decreases lookup
-  {
-    if |lookup| == 0 then
-      []
-    else
-      var pref := transformLookup(lookup[.. |lookup| - 1], key, oldref, newref, newnode);
-      pref +
-        [if lookup[|lookup| - 1].ref == oldref then
-          ReadOp(newref, newnode)
-         else
-          ReadOp(lookup[|lookup| - 1].ref, lookup[|lookup| - 1].node)
-        ]
-  }
-
-  // Change every parentref in lookup to the newparent, and likewise for the child.
-  // However, when changing the child, we check first that it actually came from the parent
-  // (since there might be other pointers to child)
-  function transformLookupParentAndChild(lookup: Lookup, key: Key, parentref: Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: Reference, newchildref: Reference, newchild: Node) : Lookup
-  requires |lookup| > 0
-  ensures |transformLookupParentAndChild(lookup, key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild)| == |lookup|;
-  decreases lookup
-  {
-    var pref := if |lookup| > 1 then transformLookupParentAndChild(lookup[.. |lookup| - 1], key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild) else [];
-
-    var lastLayer := Last(lookup);
-    var ref := 
-      (if lastLayer.ref == parentref then parentref else
-       if lastLayer.ref == oldchildref && |lookup| > 1 && lookup[|lookup|-2].ref == parentref && key in movedKeys then newchildref else
-       lastLayer.ref);
-    var node :=
-      (if lastLayer.ref == parentref then newparent else
-       if lastLayer.ref == oldchildref && |lookup| > 1 && lookup[|lookup|-2].ref == parentref && key in movedKeys then newchild else
-
-       lastLayer.node);
-    pref + [ReadOp(ref, node)]
-  }
-
-  lemma transformLookupParentAndChildLemma(lookup: Lookup, lookup': Lookup, key: Key, parentref: Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: Reference, newchildref: Reference, newchild: Node, i: int)
-  requires 0 <= i < |lookup|
-  requires lookup' == transformLookupParentAndChild(lookup, key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild)
-  ensures
-    lookup'[i].ref ==
-        (if lookup[i].ref == parentref then parentref else
-         if lookup[i].ref == oldchildref && i > 0 && lookup[i-1].ref == parentref && key in movedKeys then newchildref else
-         lookup[i].ref)
-  ensures
-    lookup'[i].node ==
-        (if lookup[i].ref == parentref then newparent else
-         if lookup[i].ref == oldchildref && i > 0 && lookup[i-1].ref == parentref && key in movedKeys then newchild else
-         lookup[i].node)
-  decreases |lookup|
-  {
-    if (i == |lookup| - 1) {
-    } else {
-      transformLookupParentAndChildLemma(lookup[..|lookup|-1], lookup'[..|lookup|-1],
-          key, parentref, newparent, movedKeys, oldchildref, newchildref, newchild, i);
-    }
-  }
-
-  function flushTransformLookupRev(lookup': Lookup, key: Key, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference) : Lookup
-  {
-    // TODO Use transformLookupParentAndChild instead?
-    // This works fine, but only because newchildref is fresh.
-    // This pattern doesn't work going the other way, so might as well change this one too
-    // for more symmetry.
-    transformLookup(transformLookup(lookup', key, newchildref, childref, child), key, parentref, parentref, parent)
-  }
-
-  lemma FlushPreservesIsPathFromLookupRev(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>, lookup: Lookup, lookup': Lookup, key: Key)
-  requires Inv(k, s)
-  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
-  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-  requires lookup == flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
-  ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-  // These follow immediately from IsPathFromRootLookup:
-  //ensures LookupIsAcyclic(lookup);
-  //ensures key in Last(lookup).node.children ==> Last(lookup).node.children[key] in s.bcv.view;
-  decreases lookup'
-  {
-    if (|lookup'| == 0) {
-    } else if (|lookup'| == 1) {
-      assert Root() in s.bcv.view;
-      assert lookup[0].node == s.bcv.view[Root()];
-      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-    } else {
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, movedKeys,
-        flushTransformLookupRev(lookup'[.. |lookup'| - 1], key, parentref, parent, childref, child, newchildref),
-        lookup'[.. |lookup'| - 1], key);
-
-      assert IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-    }
-  }
-
-  lemma FlushPreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>, lookup': Lookup, key: Key)
-  requires Inv(k, s)
-  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
-  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-  ensures LookupIsAcyclic(lookup')
-  {
-    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
-    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
-    var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
-    var newparent := Node(newparentchildren, newparentbuffer);
-
-    if (|lookup'| <= 1) {
-    } else {
-      var lookup := flushTransformLookupRev(lookup', key, parentref, parent, childref, child, newchildref);
-      FlushPreservesIsPathFromLookupRev(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup, lookup', key);
-    }
-  }
-
-  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
-    requires Inv(k, s)
-    requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
-    ensures Acyclic(k, s')
-  {
-    forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-    ensures LookupIsAcyclic(lookup')
-    {
-      FlushPreservesAcyclicLookup(k, s, s', parentref, parent, childref, child, newchildref, movedKeys, lookup', key);
-    }
-  }
 
   lemma FlushEquivalentLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
   requires Inv(k, s)

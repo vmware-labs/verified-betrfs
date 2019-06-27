@@ -38,11 +38,28 @@ abstract module Graph {
     && Last(path) in g
     && path[0] in Successors(g[Last(path)])
   }
+
+  predicate IsSimple(g: Graph, path: Path) {
+    && IsPath(g, path)
+    && (forall i, j :: 0 <= i < |path| && 0 <= j < |path| && i != j ==> path[i] != path[j])
+  }
   
   predicate IsAcyclic(g: Graph) {
     forall path :: IsPath(g, path) ==> !IsCycle(g, path)
   }
 
+  lemma AcyclicGraphImpliesSimplePath(g: Graph, path: Path)
+    requires IsAcyclic(g)
+    requires IsPath(g, path)
+    ensures IsSimple(g, path)
+  {
+    if !IsSimple(g, path) {
+      var i, j :| 0 <= i < |path| && 0 <= j < |path| && i < j && path[i] == path[j];
+      var cycle := path[i..j];
+      assert IsCycle(g, cycle);
+    }
+  }
+  
   predicate IsPathFromTo(g: Graph, path: Path, start: Reference, end: Reference)
   {
     IsPath(g, path) && 1 < |path| && path[0] == start && Last(path) == end
