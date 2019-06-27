@@ -323,8 +323,6 @@ module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s'); // observe
   }
 
-  
-
   //
   // Preservation proofs
   //
@@ -353,6 +351,15 @@ module BetreeInv {
       InterpretLookupAdditive([lookup[0]], lookup[1..], key);
       assert [lookup[0]] + lookup[1..] == lookup;
 
+      forall i | 0 <= i < |lookup'|-1
+        ensures LookupFollowsChildRefAtLayer(key, lookup', i)
+      {
+        if i == 0 {
+        } else {
+          assert LookupFollowsChildRefAtLayer(key, lookup, i-1);
+        }
+      }
+      
       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
     }
 
