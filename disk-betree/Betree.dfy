@@ -13,6 +13,7 @@ module Betree {
   import opened Sequences
 
   import opened G = BetreeGraph
+  type UIOp = MS.UI.Op<Value>
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
@@ -63,7 +64,9 @@ module Betree {
     && BufferDefinesValue(InterpretLookup(lookup, key), value)
   }
 
-  predicate Query(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup) {
+  // TODO move this into BetreeSpec
+  predicate Query(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, value: Value, lookup: Lookup) {
+    && uiop == MS.UI.GetOp(key, value)
     && s == s'
     && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
   }
@@ -77,13 +80,15 @@ module Betree {
     && BI.Init(k.bck, s.bcv, EmptyNode())
   }
 
-  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
-    BI.GC(k.bck, s.bcv, s'.bcv, refs)
+  predicate GC(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>) {
+    && uiop.NoOp?
+    && BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
 
-  predicate Betree(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
+  predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
   {
     && ValidBetreeStep(betreeStep)
+    && BetreeStepUI(betreeStep, uiop)
     && BI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
     && BI.OpTransaction(k.bck, s.bcv, s'.bcv, BetreeStepOps(betreeStep))
   }
@@ -94,16 +99,16 @@ module Betree {
     | GCStep(refs: iset<Reference>)
     | StutterStep
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step) {
     match step {
-      case QueryStep(key, value, lookup) => Query(k, s, s', key, value, lookup)
-      case BetreeStep(betreeStep) => Betree(k, s, s', betreeStep)
-      case GCStep(refs) => GC(k, s, s', refs)
-      case StutterStep => s == s'
+      case QueryStep(key, value, lookup) => Query(k, s, s', uiop, key, value, lookup)
+      case BetreeStep(betreeStep) => Betree(k, s, s', uiop, betreeStep)
+      case GCStep(refs) => GC(k, s, s', uiop, refs)
+      case StutterStep => s == s' && uiop.NoOp?
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables) {
-    exists step: Step :: NextStep(k, s, s', step)
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+    exists step: Step :: NextStep(k, s, s', uiop, step)
   }
 }

@@ -1,10 +1,22 @@
 include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
 
+module UI {
+  import Keyspace = Total_Order
+  type Key = Keyspace.Element
+
+  datatype Op<Value> =
+    | NoOp
+    | GetOp(key: Key, value: Value)
+    | PutOp(key: Key, value: Value)
+    | CrashOp
+}
+
 module MapSpec {
   import opened MissingLibrary
 
-  import Keyspace = Total_Order
+  import UI = UI
+  import Keyspace = UI.Keyspace
   type Key = Keyspace.Element
 
   // Users must provide a definition of EmptyValue
@@ -43,24 +55,27 @@ module MapSpec {
       s == Variables(EmptyMap())
   }
 
-  predicate Query<Value>(k:Constants, s:Variables, s':Variables, key:Key, result:Value)
+  predicate Query<Value>(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, result:Value)
   {
+      && uiop == UI.GetOp(key, result)
       && WF(s)
       && result == s.view[key]
       && s' == s
   }
 
-  predicate Write<Value>(k:Constants, s:Variables, s':Variables, key:Key, new_value:Value)
-      ensures Write(k, s, s', key, new_value) ==> WF(s')
+  predicate Write<Value>(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, new_value:Value)
+      ensures Write(k, s, s', uiop, key, new_value) ==> WF(s')
   {
+      && uiop == UI.PutOp(key, new_value)
       && WF(s)
       && WF(s')
       && s'.view == s.view[key := new_value]
   }
 
-  predicate Stutter(k:Constants, s:Variables, s':Variables)
+  predicate Stutter(k:Constants, s:Variables, s':Variables, uiop: UI.Op)
   {
-      s' == s
+      && uiop.NoOp?
+      && s' == s
   }
 
   datatype Step<Value> =
@@ -68,18 +83,18 @@ module MapSpec {
       | WriteStep(key:Key, new_value:Value)
       | StutterStep
 
-  predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+  predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UI.Op, step:Step)
   {
       match step {
-          case QueryStep(key, result) => Query(k, s, s', key, result)
-          case WriteStep(key, new_value) => Write(k, s, s', key, new_value)
-          case StutterStep() => Stutter(k, s, s')
+          case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
+          case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
+          case StutterStep() => Stutter(k, s, s', uiop)
       }
   }
 
-  predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables)
+  predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables, uiop: UI.Op)
   {
-      exists step :: NextStep<Value>(k, s, s', step)
+      exists step :: NextStep<Value>(k, s, s', uiop, step)
   }
 
   predicate Inv(k:Constants, s:Variables) { WF(s) }
@@ -90,9 +105,9 @@ module MapSpec {
   {
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
     requires Inv(k, s)
-    requires Next(k, s, s')
+    requires Next(k, s, s', uiop)
     ensures Inv(k, s')
   {
   }

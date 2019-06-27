@@ -287,4 +287,14 @@ module BetreeSpec {
       case BetreeMerge(fusion) => MergeOps(fusion)
     }
   }
+
+  predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op<Value>) {
+    match step {
+      case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
+      case BetreeFlush(flush) => uiop.NoOp?
+      case BetreeGrow(growth) => uiop.NoOp?
+      case BetreeSplit(fusion) => uiop.NoOp?
+      case BetreeMerge(fusion) => uiop.NoOp?
+    }
+  }
 }

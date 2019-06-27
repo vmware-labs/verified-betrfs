@@ -82,6 +82,7 @@ module CrashSafeBetree {
 
   type Constants = DB.Constants
   datatype Variables = Variables(persistent: DB.Variables, ephemeral: DB.Variables)
+  type UIOp = DB.UIOp
 
   predicate Init(k: Constants, s: Variables)
   {
@@ -94,35 +95,37 @@ module CrashSafeBetree {
     | SyncStep
     | CrashStep
 
-  predicate EphemeralMove(k: Constants, s: Variables, s': Variables)
+  predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && s.persistent == s'.persistent
-    && DB.Next(k, s.ephemeral, s'.ephemeral)
+    && DB.Next(k, s.ephemeral, s'.ephemeral, uiop)
   }
 
-  predicate Sync(k: Constants, s: Variables, s': Variables)
+  predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
+    && uiop.NoOp?
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables)
+  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
+    && uiop.CrashOp?
     && s'.persistent == s.persistent
     && s'.ephemeral  == s.persistent
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
   {
     match step {
-      case EphemeralMoveStep => EphemeralMove(k, s, s')
-      case SyncStep => Sync(k, s, s')
-      case CrashStep => Crash(k, s, s')
+      case EphemeralMoveStep => EphemeralMove(k, s, s', uiop)
+      case SyncStep => Sync(k, s, s', uiop)
+      case CrashStep => Crash(k, s, s', uiop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables) {
-    exists step :: NextStep(k, s, s', step)
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+    exists step :: NextStep(k, s, s', uiop, step)
   }
 
   predicate Inv(k: Constants, s: Variables) {
@@ -137,14 +140,14 @@ module CrashSafeBetree {
     DBI.InitImpliesInv(k, s.ephemeral);
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   requires Inv(k, s)
-  requires Next(k, s, s')
+  requires Next(k, s, s', uiop)
   ensures Inv(k, s')
   {
-    var step :| NextStep(k, s, s', step);
+    var step :| NextStep(k, s, s', uiop, step);
     if (step.EphemeralMoveStep?) {
-      DBI.NextPreservesInv(k, s.ephemeral, s'.ephemeral);
+      DBI.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop);
     }
   }
 }
@@ -154,6 +157,7 @@ module CrashSafeMap {
 
   type Constants = MS.Constants
   datatype Variables<Value> = Variables(persistent: MS.Variables<Value>, ephemeral: MS.Variables<Value>)
+  type UIOp<Value> = MS.UI.Op<Value>
 
   predicate Init<Value>(k: Constants, s: Variables<Value>)
   {
@@ -166,35 +170,38 @@ module CrashSafeMap {
     | SyncStep
     | CrashStep
 
-  predicate EphemeralMove(k: Constants, s: Variables, s': Variables)
+  predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && s.persistent == s'.persistent
-    && MS.Next(k, s.ephemeral, s'.ephemeral)
+    && MS.Next(k, s.ephemeral, s'.ephemeral, uiop)
   }
 
-  predicate Sync(k: Constants, s: Variables, s': Variables)
+  predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
+    && uiop.NoOp?
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables)
+  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
+    && uiop.CrashOp?
     && s'.persistent == s.persistent
     && s'.ephemeral  == s.persistent
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
   {
     match step {
-      case EphemeralMoveStep => EphemeralMove(k, s, s')
-      case SyncStep => Sync(k, s, s')
-      case CrashStep => Crash(k, s, s')
+      case EphemeralMoveStep => EphemeralMove(k, s, s', uiop)
+      case SyncStep => Sync(k, s, s', uiop)
+      case CrashStep => Crash(k, s, s', uiop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables) {
-    && exists step :: NextStep(k, s, s', step)
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  {
+    && exists step :: NextStep(k, s, s', uiop, step)
   }
 
   predicate Inv(k: Constants, s: Variables) {
@@ -209,14 +216,14 @@ module CrashSafeMap {
     MS.InitImpliesInv(k, s.ephemeral);
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   requires Inv(k, s)
-  requires Next(k, s, s')
+  requires Next(k, s, s', uiop)
   ensures Inv(k, s')
   {
-    var step :| NextStep(k, s, s', step);
+    var step :| NextStep(k, s, s', uiop, step);
     if (step.EphemeralMoveStep?) {
-      MS.NextPreservesInv(k, s.ephemeral, s'.ephemeral);
+      MS.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop);
     }
   }
 }
@@ -225,6 +232,7 @@ module CrashSafeBetreeMapRefinement {
   import A = CrashSafeBetree
   import B = CrashSafeMap
   import Ref = BetreeRefinement
+  type UIOp = A.UIOp
 
   function Ik(k: A.Constants) : B.Constants
   {
@@ -246,39 +254,38 @@ module CrashSafeBetreeMapRefinement {
     Ref.BetreeRefinesMapInit(k, s.ephemeral);
   }
 
-  lemma RefinesNextStep(
-      k: A.Constants, s: A.Variables, s': A.Variables, step: A.Step)
+  lemma RefinesNextStep(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UIOp, step: A.Step)
   requires A.Inv(k, s)
-  requires A.NextStep(k, s, s', step)
+  requires A.NextStep(k, s, s', uiop, step)
   ensures A.Inv(k, s')
-  ensures B.Next(Ik(k), I(k, s), I(k, s'))
+  ensures B.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    A.NextPreservesInv(k, s, s');
+    A.NextPreservesInv(k, s, s', uiop);
     match step {
       case EphemeralMoveStep => {
-        Ref.BetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral);
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), B.EphemeralMoveStep);
-        assert B.Next(Ik(k), I(k, s), I(k, s'));
+        Ref.BetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral, uiop);
+        assert B.NextStep(Ik(k), I(k, s), I(k, s'), uiop, B.EphemeralMoveStep);
+        assert B.Next(Ik(k), I(k, s), I(k, s'), uiop);
       }
       case SyncStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), B.SyncStep);
-        assert B.Next(Ik(k), I(k, s), I(k, s'));
+        assert B.NextStep(Ik(k), I(k, s), I(k, s'), uiop, B.SyncStep);
+        assert B.Next(Ik(k), I(k, s), I(k, s'), uiop);
       }
       case CrashStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), B.CrashStep);
-        assert B.Next(Ik(k), I(k, s), I(k, s'));
+        assert B.NextStep(Ik(k), I(k, s), I(k, s'), uiop, B.CrashStep);
+        assert B.Next(Ik(k), I(k, s), I(k, s'), uiop);
       }
     }
   }
 
-  lemma RefinesNext(k: A.Constants, s: A.Variables, s':A.Variables)
+  lemma RefinesNext(k: A.Constants, s: A.Variables, s':A.Variables, uiop: UIOp)
   requires A.Inv(k, s)
-  requires A.Next(k, s, s')
+  requires A.Next(k, s, s', uiop)
   ensures A.Inv(k, s')
-  ensures B.Next(Ik(k), I(k, s), I(k, s'))
+  ensures B.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    A.NextPreservesInv(k, s, s');
-    var step :| A.NextStep(k, s, s', step);
-    RefinesNextStep(k, s, s', step);
+    A.NextPreservesInv(k, s, s', uiop);
+    var step :| A.NextStep(k, s, s', uiop, step);
+    RefinesNextStep(k, s, s', uiop, step);
   }
 }

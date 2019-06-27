@@ -1086,9 +1086,9 @@ module BetreeInv {
     }
   }
 
-  lemma QueryStepPreservesInvariant(k: Constants, s: Variables, s': Variables, key: Key, value: Value, lookup: Lookup)
+  lemma QueryStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, value: Value, lookup: Lookup)
     requires Inv(k, s)
-    requires Query(k, s, s', key, value, lookup)
+    requires Query(k, s, s', uiop, key, value, lookup)
     ensures Inv(k, s')
   {
   }
@@ -1216,7 +1216,7 @@ module BetreeInv {
 
   lemma GCStepPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
     requires Inv(k, s)
-    requires GC(k, s, s', refs)
+    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
     ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
   {
@@ -1232,7 +1232,7 @@ module BetreeInv {
 
   lemma GCStepPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
     requires Inv(k, s)
-    requires GC(k, s, s', refs)
+    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
     ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
   {
@@ -1240,7 +1240,7 @@ module BetreeInv {
 
   lemma GCStepPreservesAcyclicity(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)
-    requires GC(k, s, s', refs)
+    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     ensures Acyclic(k, s')
   {
     forall key, lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup)
@@ -1252,7 +1252,7 @@ module BetreeInv {
 
   lemma GCStepEquivalentLookups(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)
-    requires GC(k, s, s', refs)
+    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     ensures EquivalentLookups(k, s, s')
   {
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
@@ -1272,7 +1272,7 @@ module BetreeInv {
 
   lemma GCStepPreservesInvariant(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)
-    requires GC(k, s, s', refs)
+    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     ensures Inv(k, s')
   {
     BI.GCPreservesInv(k.bck, s.bcv, s'.bcv, refs);
@@ -1282,9 +1282,9 @@ module BetreeInv {
 
   // Putting it all together
 
-  lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
+  lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
     requires Inv(k, s)
-    requires Betree(k, s, s', betreeStep)
+    requires Betree(k, s, s', uiop, betreeStep)
     ensures Inv(k, s')
   {
     match betreeStep {
@@ -1296,25 +1296,25 @@ module BetreeInv {
     }
   }
 
-  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
+  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
     requires Inv(k, s)
-    requires NextStep(k, s, s', step)
+    requires NextStep(k, s, s', uiop, step)
     ensures Inv(k, s')
   {
     match step {
-      case QueryStep(key, value, lookup) => QueryStepPreservesInvariant(k, s, s', key, value, lookup);
+      case QueryStep(key, value, lookup) => QueryStepPreservesInvariant(k, s, s', uiop, key, value, lookup);
       case GCStep(refs) => GCStepPreservesInvariant(k, s, s', refs);
-      case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(k, s, s', betreeStep);
+      case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(k, s, s', uiop, betreeStep);
 	  case StutterStep => {}
     }
   }
   
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
-    requires Next(k, s, s')
+    requires Next(k, s, s', uiop)
     ensures Inv(k, s')
   {
-    var step :| NextStep(k, s, s', step);
-    NextStepPreservesInvariant(k, s, s', step);
+    var step :| NextStep(k, s, s', uiop, step);
+    NextStepPreservesInvariant(k, s, s', uiop, step);
   }
 }

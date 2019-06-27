@@ -9,8 +9,9 @@ module Message {
 	function NopDelta() : Delta
 	function DefaultValue() : Value 
 
-	datatype Message = | Define(value: Value)
-				       | Update(delta: Delta)
+	datatype Message =
+	  | Define(value: Value)
+	  | Update(delta: Delta)
 
 	function CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
 	ensures newdelta == NopDelta() ==> result == olddelta
