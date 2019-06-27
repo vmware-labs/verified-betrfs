@@ -6,6 +6,7 @@ module BetreeRefinement {
   import opened DBI = BetreeInv
   import opened G = BetreeGraph
   import opened BetreeSpec`Internal
+  import opened Maps
 
   type UIOp = DB.MS.UI.Op<Value>
     
@@ -131,7 +132,16 @@ module BetreeRefinement {
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.QueryStep(key, value))
   {
-    assert I(k, s).view[key] == value;
+    var lookupResult := GetLookup(k, s.bcv.view, key);
+    var lookup' := lookupResult.lookup;
+    var value' := lookupResult.result;
+
+    forall i | 0 <= i < |lookup|
+    ensures IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node)
+    {
+      assert DB.BI.ReadStep(k.bck, s.bcv, lookup[i]);
+    }
+    CantEquivocate(k, s, key, value, value', lookup, lookup');
   }
   
   lemma InsertMessageStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, key: Key, msg: BufferEntry, oldroot: Node)
