@@ -15,6 +15,14 @@ module BetreeInv {
     exists lookup, value :: IsSatisfyingLookup(k, view, key, value, lookup)
   }
 
+  function PathOfLookup(lookup: Lookup) : (path : G.Path)
+    ensures |path| == |lookup|
+    ensures forall i :: 0 <= i < |path| ==> path[i] == lookup[i].ref
+  {
+    if lookup == [] then []
+    else PathOfLookup(DropLast(lookup)) + [Last(lookup).ref]
+  }
+  
   predicate LookupIsAcyclic(lookup: Lookup) {
     forall i, j :: 0 <= i < |lookup| && 0 <= j < |lookup| && i != j ==> lookup[i].ref != lookup[j].ref
   }
