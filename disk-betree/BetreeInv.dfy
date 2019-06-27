@@ -208,18 +208,11 @@ module BetreeInv {
     }
   }
 
-  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
+  lemma InsertMessagePreservesAcyclic(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
-    requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
     ensures Acyclic(k, s')
   {
-    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, Root())
-      ensures ref in G.ReachableReferences(s.bcv.view, Root())
-    {
-      var path :| G.NewPath(s.bcv.view, s'.bcv.view, Root(), path) && Last(path) == ref;
-      assert path[|path|-2] == newchildref;
-      assert G.IsPath(s.bcv.view, [Root(), ref]);
-     }
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
     AcyclicGraphImpliesAcyclic(k, s');
   }
@@ -244,6 +237,22 @@ module BetreeInv {
         }
       }
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, parentref);
+    AcyclicGraphImpliesAcyclic(k, s');
+  }
+
+  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
+    requires Inv(k, s)
+    requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+    ensures Acyclic(k, s')
+  {
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, Root())
+      ensures ref in G.ReachableReferences(s.bcv.view, Root())
+    {
+      var path :| G.NewPath(s.bcv.view, s'.bcv.view, Root(), path) && Last(path) == ref;
+      assert path[|path|-2] == newchildref;
+      assert G.IsPath(s.bcv.view, [Root(), ref]);
+     }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
@@ -278,15 +287,6 @@ module BetreeInv {
       }
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref); // observe
     AcyclicGraphImpliesAcyclic(k, s'); // observe
-  }
-
-  lemma InsertMessagePreservesAcyclic(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
-    requires Inv(k, s)
-    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
-    ensures Acyclic(k, s')
-  {
-    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
-    AcyclicGraphImpliesAcyclic(k, s');
   }
 
 
