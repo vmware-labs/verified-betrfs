@@ -247,7 +247,7 @@ module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
-  lemma SplitPreservesAcyclic2(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
     requires Inv(k, s);
     requires Split(k.bck, s.bcv, s'.bcv, fusion);
     ensures Acyclic(k, s');
@@ -265,19 +265,19 @@ module BetreeInv {
             } else {
             }
           }
-          assert fusion.split_parent.children.Values <= fusion.fused_parent.children.Values + iset{fusion.left_childref, fusion.right_childref};
-          assert ref != fusion.left_childref;
-          assert ref != fusion.right_childref;
-          assert ref in fusion.fused_parent.children.Values;
-          assert G.IsPath(s.bcv.view, [fusion.parentref, ref]);
+          assert fusion.split_parent.children.Values <= fusion.fused_parent.children.Values + iset{fusion.left_childref, fusion.right_childref}; // observe
+          assert ref != fusion.left_childref; // observe
+          assert ref != fusion.right_childref; // observe
+          assert ref in fusion.fused_parent.children.Values; // observe
+          assert G.IsPath(s.bcv.view, [fusion.parentref, ref]); // observe
         } else if path[|path|-2] == fusion.left_childref {
-          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]);
+          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]); // observe
         } else {
-          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]);
+          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]); // observe
         }
       }
-    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref);
-    AcyclicGraphImpliesAcyclic(k, s');
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref); // observe
+    AcyclicGraphImpliesAcyclic(k, s'); // observe
   }
 
   lemma InsertMessagePreservesAcyclic(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
@@ -841,7 +841,7 @@ module BetreeInv {
     }
   }
 
-  lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  lemma SplitPreservesAcyclicOld(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
   requires Inv(k, s);
   requires Split(k.bck, s.bcv, s'.bcv, fusion);
   ensures Acyclic(k, s');

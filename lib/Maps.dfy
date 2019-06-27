@@ -29,6 +29,14 @@ module Maps {
   {
     imap j | j in m && j !in ks :: m[j]
   }
+
+  function MapRestrict<K,V>(m:map<K,V>, ks: set<K>) : (m':map<K,V>) {
+    map k | k in ks && k in m :: m[k]
+  }
+  
+  function IMapRestrict<K,V>(m:imap<K,V>, ks: iset<K>) : (m':imap<K,V>) {
+    imap k | k in ks && k in m :: m[k]
+  }
   
 	// Requires disjoint domains and delivers predictable result.
 	function method {:opaque} MapDisjointUnion<U,T>(mapa: map<U,T>, mapb: map<U,T>) : (mapc: map<U,T>)

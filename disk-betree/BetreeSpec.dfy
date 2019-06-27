@@ -227,6 +227,10 @@ module BetreeSpec {
     && WFNode(fusion.left_child)
     && WFNode(fusion.right_child)
     && ValidFusion(fusion)
+    && fusion.left_child.children  == IMapRestrict(fusion.fused_child.children, fusion.left_keys)
+    && fusion.right_child.children == IMapRestrict(fusion.fused_child.children, fusion.right_keys)
+    && fusion.left_child.buffer    == IMapRestrict(fusion.fused_child.buffer,   fusion.left_keys)
+    && fusion.right_child.buffer   == IMapRestrict(fusion.fused_child.buffer,   fusion.right_keys)
   }
 
   function SplitReads(fusion: NodeFusion) : seq<ReadOp>
@@ -253,6 +257,7 @@ module BetreeSpec {
   predicate ValidMerge(fusion: NodeFusion)
   {
     ValidFusion(fusion)
+    && fusion.fused_child.children.Values <= fusion.left_child.children.Values + fusion.right_child.children.Values
   }
 
   function MergeReads(fusion: NodeFusion) : seq<ReadOp>
