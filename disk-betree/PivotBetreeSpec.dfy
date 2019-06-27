@@ -131,6 +131,34 @@ module PivotBetreeSpec {
     )
   }
 
+  //// Query
+
+  type Layer = G.ReadOp
+  type Lookup = seq<Layer>
+
+  datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
+
+  predicate LookupVisitsWFNodes(lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  function NodeLookup(node: Node, key: Key)
+  requires WFNode(node)
+  {
+    BucketLookup(node.buckets[Route(node.pivotTable, key)], key)
+  }
+
+  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  requires LookupVisitsWFNodes(lookup)
+  {
+    if |lookup| == 0 then
+      G.M.Update(G.M.NopDelta())
+    else
+      G.M.Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
+  }
+
+
+
   //// Insert
 
   datatype MessageInsertion = MessageInsertion(key: Key, msg: Message, oldroot: Node)

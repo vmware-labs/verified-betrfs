@@ -129,7 +129,10 @@ module BetreeRefinement {
     requires BetreeStepUI(BetreeQuery(LookupQuery(key, value, lookup)), uiop)
     requires DBI.Query(k.bck, s.bcv, s'.bcv, key, value, lookup)
     requires Inv(k, s')
-    ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.QueryStep(key, value))
+  {
+    assert I(k, s).view[key] == value;
+  }
   
   lemma InsertMessageStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
