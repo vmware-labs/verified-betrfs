@@ -20,9 +20,20 @@ module Betree {
   datatype Layer = Layer(ref: Reference, node: Node)
   type Lookup = seq<Layer>
 
+  predicate ValidLayerIndex(lookup: Lookup, idx: int) {
+    && 0 <= idx < |lookup|
+  }
+
+  predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
+  requires ValidLayerIndex(lookup, idx) && idx < |lookup| - 1;
+  requires key in lookup[idx].node.children;
+  {
+	lookup[idx].node.children[key] == lookup[idx+1].ref
+  }
+
   predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
-    && (forall i :: 0 <= i < |lookup| - 1 ==> key in lookup[i].node.children)
-    && (forall i :: 0 <= i < |lookup| - 1 ==> lookup[i].node.children[key] == lookup[i+1].ref)
+    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> key in lookup[idx].node.children)
+    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
   
   predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
