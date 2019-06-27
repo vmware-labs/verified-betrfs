@@ -52,7 +52,7 @@ module PivotBetreeSpec {
   import opened Maps
   import opened MissingLibrary
 
-  export Spec provides *
+  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
@@ -138,11 +138,39 @@ module PivotBetreeSpec {
 
   datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
 
+  predicate BufferIsDefining(entry: M.Message) {
+    && entry.Define?
+  }
+
+  predicate BufferDefinesValue(log: M.Message, value: Value) {
+    && BufferIsDefining(log)
+    && log.value == value
+  }
+
+  predicate ValidLayerIndex(lookup: Lookup, idx: int) {
+    && 0 <= idx < |lookup|
+  }
+
   predicate LookupVisitsWFNodes(lookup: Lookup) {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
   }
 
-  function NodeLookup(node: Node, key: Key)
+  predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
+  requires ValidLayerIndex(lookup, idx)
+  requires idx < |lookup| - 1;
+  requires WFNode(lookup[idx].node)
+  {
+    && lookup[idx].node.children.Some?
+    && lookup[idx].node.children.value[Route(lookup[idx].node.pivotTable, key)] == lookup[idx+1].ref
+  }
+
+  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup)
+  requires LookupVisitsWFNodes(lookup)
+  {
+    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
+  }
+
+  function NodeLookup(node: Node, key: Key) : Message
   requires WFNode(node)
   {
     BucketLookup(node.buckets[Route(node.pivotTable, key)], key)
@@ -157,7 +185,21 @@ module PivotBetreeSpec {
       G.M.Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
   }
 
+  predicate ValidQuery(q: LookupQuery) {
+    && |q.lookup| > 0
+    && q.lookup[0].ref == Root()
+    && LookupVisitsWFNodes(q.lookup)
+    && LookupFollowsChildRefs(q.key, q.lookup)
+    && BufferDefinesValue(InterpretLookup(q.lookup, q.key), q.value)
+  }
 
+  function QueryReads(q: LookupQuery): seq<ReadOp> {
+    q.lookup
+  }
+
+  function QueryOps(q: LookupQuery): seq<Op> {
+    []
+  }
 
   //// Insert
 
@@ -380,6 +422,7 @@ module PivotBetreeSpec {
   //// Put it all together
 
   datatype BetreeStep =
+    | BetreeQuery(q: LookupQuery)
     | BetreeInsert(ins: MessageInsertion)
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
@@ -389,6 +432,7 @@ module PivotBetreeSpec {
   predicate ValidBetreeStep(step: BetreeStep)
   {
     match step {
+      case BetreeQuery(q) => ValidQuery(q)
       case BetreeInsert(ins) => ValidInsertion(ins)
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
@@ -401,6 +445,7 @@ module PivotBetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
+      case BetreeQuery(q) => QueryReads(q)
       case BetreeInsert(ins) => InsertionReads(ins)
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
@@ -413,6 +458,7 @@ module PivotBetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
+      case BetreeQuery(q) => QueryOps(q)
       case BetreeInsert(ins) => InsertionOps(ins)
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
@@ -423,6 +469,7 @@ module PivotBetreeSpec {
 
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op<Value>) {
     match step {
+      case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
@@ -497,6 +544,24 @@ module PivotBetreeSpecRefinement {
   {
   }
 
+  function IReadOp(readOp: P.G.ReadOp) : B.G.ReadOp
+  requires P.WFNode(readOp.node)
+  {
+    B.G.ReadOp(readOp.ref, INode(readOp.node))
+  }
+
+  function IReadOps(readOps: seq<P.G.ReadOp>) : seq<B.G.ReadOp>
+  requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].node)
+  {
+    if |readOps| == 0 then [] else
+      IReadOps(readOps[..|readOps|-1]) + [IReadOp(readOps[|readOps|-1])]
+  }
+
+  function IQuery(q: P.LookupQuery) : B.LookupQuery
+  {
+    B.LookupQuery(q.key, q.value, IReadOps(q.lookup))
+  }
+
   function IInsertion(ins: P.MessageInsertion) : B.MessageInsertion
   requires P.ValidInsertion(ins)
   {
@@ -560,12 +625,19 @@ module PivotBetreeSpecRefinement {
   requires P.ValidBetreeStep(betreeStep)
   {
     match betreeStep {
+      case BetreeQuery(q) => B.BetreeQuery(IQuery(q))
       case BetreeInsert(ins) => B.BetreeInsert(IInsertion(ins))
       case BetreeFlush(flush) => B.BetreeFlush(IFlush(flush))
       case BetreeGrow(growth) => B.BetreeGrow(IGrow(growth))
       case BetreeSplit(fusion) => B.BetreeSplit(IFusion(fusion))
       case BetreeMerge(fusion) => B.BetreeMerge(IFusion(fusion))
     }
+  }
+
+  lemma RefinesValidQuery(q: P.LookupQuery)
+  requires P.ValidQuery(q)
+  ensures B.ValidQuery(IQuery(q))
+  {
   }
 
   lemma RefinesValidInsertion(ins: P.MessageInsertion)
@@ -755,25 +827,13 @@ module PivotBetreeSpecRefinement {
   ensures B.ValidBetreeStep(IStep(betreeStep))
   {
     match betreeStep {
+      case BetreeQuery(q) => RefinesValidQuery(q);
       case BetreeInsert(ins) => RefinesValidInsertion(ins);
       case BetreeFlush(flush) => RefinesValidFlush(flush);
       case BetreeGrow(growth) => RefinesValidGrow(growth);
       case BetreeSplit(fusion) => RefinesValidFusion(fusion);
       case BetreeMerge(fusion) => RefinesValidFusion(fusion);
     }
-  }
-
-  function IReadOp(readOp: P.G.ReadOp) : B.G.ReadOp
-  requires P.WFNode(readOp.node)
-  {
-    B.G.ReadOp(readOp.ref, INode(readOp.node))
-  }
-
-  function IReadOps(readOps: seq<P.G.ReadOp>) : seq<B.G.ReadOp>
-  requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].node)
-  {
-    if |readOps| == 0 then [] else
-      IReadOps(readOps[..|readOps|-1]) + [IReadOp(readOps[|readOps|-1])]
   }
 
   lemma {:fuel IReadOps,3} RefinesReadOps(betreeStep: P.BetreeStep)
