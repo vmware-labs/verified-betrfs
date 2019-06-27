@@ -381,6 +381,12 @@ module BetreeInv {
       InterpretLookupAdditive(lookup'[..2], lookup'[2..], key);
       assert lookup'[..2] + lookup'[2..] == lookup';
 
+      forall i | 0 <= i < |lookup|-1
+        ensures LookupFollowsChildRefAtLayer(key, lookup, i)
+      {
+        assert LookupFollowsChildRefAtLayer(key, lookup', i+1);
+      }
+      
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
   }
