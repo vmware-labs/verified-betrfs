@@ -9,7 +9,7 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   import opened Sequences
   import opened BetreeSpec`Spec
 
-  import opened G = BetreeGraph
+  import G = BetreeGraph
   import BBCS = BetreeBlockCacheSystem
   import BCS = BetreeGraphBlockCacheSystem
   import M = BetreeBlockCache
@@ -22,6 +22,7 @@ module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   import Ref = BlockCacheSystemCrashSafeBlockInterfaceRefinement
 
   type DiskOp = M.DiskOp
+  type Reference = G.Reference
 
   function Ik(k: BBCS.Constants) : CSBT.Constants {
     BT.Constants(BI.Constants())
