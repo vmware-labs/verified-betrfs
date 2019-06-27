@@ -2,3 +2,8 @@
 *.mdb
 *.dll
 *.exe
+
+*.deps
+*.includes
+*.output
+.build_info
