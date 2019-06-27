@@ -257,7 +257,7 @@ module BetreeSpec {
   predicate ValidMerge(fusion: NodeFusion)
   {
     ValidFusion(fusion)
-    && fusion.fused_child.children.Values <= fusion.left_child.children.Values + fusion.right_child.children.Values
+    && fusion.fused_child.children == IMapUnion(IMapRestrict(fusion.left_child.children, fusion.left_keys), IMapRestrict(fusion.right_child.children, fusion.right_keys))
   }
 
   function MergeReads(fusion: NodeFusion) : seq<ReadOp>

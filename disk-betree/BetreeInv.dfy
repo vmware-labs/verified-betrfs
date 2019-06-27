@@ -189,12 +189,10 @@ module BetreeInv {
     && BI.OpTransaction(k, s, s', QueryOps(LookupQuery(key, value, lookup)))
   }
 
-  ////////
-  //////// Grow
-  ////////
-
+  //
   // Acyclicity proofs
-
+  //
+  
   lemma AcyclicGraphImpliesAcyclic(k: Constants, s: Variables)
     requires IsAcyclic(s.bcv.view)
     ensures Acyclic(k, s)
@@ -289,11 +287,46 @@ module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s'); // observe
   }
 
-
+  lemma MergePreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+    requires Inv(k, s);
+    requires Merge(k.bck, s.bcv, s'.bcv, fusion);
+    ensures Acyclic(k, s');
+  {
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, fusion.parentref)
+      ensures ref in G.ReachableReferences(s.bcv.view, fusion.parentref)
+    {
+      var path :| G.NewPath(s.bcv.view, s'.bcv.view, fusion.parentref, path) && Last(path) == ref;
+      if ref == path[1] {
+        forall childref | childref in fusion.fused_parent.children.Values
+          ensures childref in fusion.split_parent.children.Values + iset{fusion.fused_childref}
+        {
+          var key :| IMapsTo(fusion.fused_parent.children, key, childref);
+          if key in fusion.left_keys || key in fusion.right_keys {
+          } else {
+          }
+        }
+        assert fusion.fused_parent.children.Values <= fusion.split_parent.children.Values + iset{fusion.fused_childref};
+        assert ref != fusion.fused_childref;
+        assert ref in fusion.split_parent.children.Values;
+        assert G.IsPath(s.bcv.view, [fusion.parentref, ref]);
+      } else {
+        assert path[|path|-2] == fusion.fused_childref;
+        assert path[|path|-3] == fusion.parentref;
+        assert
+          || G.IsPath(s.bcv.view, [fusion.parentref, fusion.left_childref, ref])
+          || G.IsPath(s.bcv.view, [fusion.parentref, fusion.right_childref, ref]);
+      }
+    }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref); // observe
+    AcyclicGraphImpliesAcyclic(k, s'); // observe
+  }
 
   
-  // Preservation proofs
 
+  //
+  // Preservation proofs
+  //
+  
   lemma GrowEquivalentLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
   requires Inv(k, s)
   requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
@@ -911,76 +944,6 @@ module BetreeInv {
       var lookup := mergeLookup(fusion, lookup', key);
       SplitPreservesIsSatisfyingLookupRev(k, s, s', fusion, lookup, lookup', key, value);
     }
-  }
-
-  // lemma SplitPreservesReachablePointersValid(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-  // requires Inv(k, s)
-  // requires Split(k.bck, s.bcv, s'.bcv, fusion)
-  // ensures ReachablePointersValid(k, s')
-  // {
-  //   forall key, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup') && key in lookup'[|lookup'|-1].node.children
-  //   ensures 
-  //     lookup'[|lookup'|-1].node.children[key] in s'.bcv.view
-  //   {
-  //     var lookup := mergeLookup(fusion, lookup', key);
-  //     mergeLookupProperties(fusion, lookup, lookup', key);
-  //     SplitPreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
-  //   }
-  // }
-
-  lemma MergePreservesAcyclicLookup(k: Constants, s: Variables, s': Variables, fusion: NodeFusion, lookup': Lookup, key: Key)
-  requires Inv(k, s)
-  requires Merge(k.bck, s.bcv, s'.bcv, fusion);
-  requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-  ensures LookupIsAcyclic(lookup')
-  {
-    // var lookup := mergeLookup(fusion, lookup', key);
-    // mergeLookupProperties(fusion, lookup, lookup', key);
-    // MergePreservesIsPathFromRootLookupRev(k, s, s', fusion, lookup, lookup', key);
-    // assert LookupIsAcyclic(lookup);
-    // forall i, j | 0 <= i < |lookup'| && 0 <= j < |lookup'| && i != j
-    // ensures lookup'[i].ref != lookup'[j].ref
-    // {
-    //   if (lookup'[i].ref == lookup'[j].ref) {
-    //     if (lookup'[i].ref == fusion.left_childref && key in fusion.left_keys) {
-    //       assert i > 0;
-    //       assert lookup'[i-1].ref == fusion.parentref;
-
-    //       assert j > 0;
-    //       assert lookup'[j-1].ref == fusion.parentref;
-
-    //       assert lookup[i].ref == fusion.fused_childref;
-    //       assert lookup[j].ref == fusion.fused_childref;
-    //       assert false;
-    //     } else if (lookup'[i].ref == fusion.right_childref && key in fusion.right_keys) {
-    //       assert i > 0;
-    //       assert lookup'[i-1].ref == fusion.parentref;
-
-    //       assert j > 0;
-    //       assert lookup'[j-1].ref == fusion.parentref;
-
-    //       assert lookup[i].ref == fusion.fused_childref;
-    //       assert lookup[j].ref == fusion.fused_childref;
-    //       assert false;
-    //     } else {
-    //       assert lookup[i].ref == lookup'[i].ref;
-    //       assert lookup[j].ref == lookup'[j].ref;
-    //       assert false;
-    //     }
-    //   }
-    // }
-  }
-
-  lemma MergePreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-  requires Inv(k, s);
-  requires Merge(k.bck, s.bcv, s'.bcv, fusion);
-  ensures Acyclic(k, s');
-  {
-    // forall key, lookup':Lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup')
-    // ensures LookupIsAcyclic(lookup')
-    // {
-    //   MergePreservesAcyclicLookup(k, s, s', fusion, lookup', key);
-    // }
   }
 
   ////////
