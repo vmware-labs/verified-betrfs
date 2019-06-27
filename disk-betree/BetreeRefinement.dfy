@@ -49,21 +49,10 @@ module BetreeRefinement {
     forall key | DB.MS.InDomain(key)
     ensures KeyHasSatisfyingLookup(k, s.bcv.view, key)
     ensures key in IView(k, s.bcv.view)
-    ensures IView(k, s.bcv.view)[key] == DB.MS.EmptyValue()
+    ensures IView(k, s.bcv.view)[key] == G.M.DefaultValue()
     {
-      /*
-      assert (forall key | DB.MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key));
-      assert KeyHasSatisfyingLookup(k, s.bcv.view, key);
-      assert key in (imap key | DB.MS.InDomain(key) :: GetValue(k, s.bcv.view, key));
-      assert IView(k, s.bcv.view) == (imap key | DB.MS.InDomain(key) :: GetValue(k, s.bcv.view, key));
-      */
-      var lookupResult := GetLookup(k, s.bcv.view, key);
-      var lookup := lookupResult.lookup;
-      var value := lookupResult.result;
-      //assert DB.IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-      assert DB.TotalLog(lookup, key) == [Insertion(DB.MS.EmptyValue())];
-      //assert value == DB.MS.EmptyValue();
-      //assert GetValue(k, s.bcv.view, key) == DB.MS.EmptyValue();
+      var lookup := GetLookup(k, s.bcv.view, key).lookup;
+      assert DB.InterpretLookup(lookup, key) == G.M.Define(G.M.DefaultValue()); // observe
     }
   }
 
@@ -157,13 +146,13 @@ module BetreeRefinement {
   }
 
   lemma FlushStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables,
-                                           parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference)
+                                           parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
     requires Inv(k, s)
-    requires DBI.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref)
+    requires DBI.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), DB.MS.StutterStep)
   {
-    FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref);
+    FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref, movedKeys);
     EquivalentLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
@@ -199,7 +188,7 @@ module BetreeRefinement {
     NextPreservesInv(k, s, s');
     match betreeStep {
       case BetreeInsert(ins) => InsertMessageStepRefinesMap(k, s, s', ins.key, ins.msg, ins.oldroot);
-      case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref);
+      case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
       case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', growth.oldroot, growth.newchildref);
       case BetreeSplit(fusion) => SplitStepRefinesMap(k, s, s', fusion);
     }
