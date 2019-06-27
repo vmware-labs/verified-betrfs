@@ -111,6 +111,8 @@ module BetreeInv {
     if (idx == 0) {
     } else {
       SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx - 1);
+      assert LookupFollowsChildRefAtLayer(key, lookup, idx-1);
+      assert LookupFollowsChildRefAtLayer(key, lookup', idx-1);
     }
   }
 
