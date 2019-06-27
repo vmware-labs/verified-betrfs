@@ -24,6 +24,7 @@ module BetreeBlockCacheSystem {
   type Constants = BCS.Constants
   type Variables = BCS.Variables
   type DiskOp = M.DiskOp
+  type UIOp = DB.UIOp
 
   function DBConst(k: Constants) : DB.Constants {
     DB.Constants(BI.Constants())
@@ -52,28 +53,29 @@ module BetreeBlockCacheSystem {
     | MachineStep(dop: DiskOp)
     | CrashStep
 
-  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
   {
-    && M.Next(k.machine, s.machine, s'.machine, dop)
+    && M.Next(k.machine, s.machine, s'.machine, uiop, dop)
     && D.Next(k.disk, s.disk, s'.disk, dop)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables)
+  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
+    && uiop.CrashOp?
     && M.Init(k.machine, s'.machine)
     && s'.disk == s.disk
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', dop)
-      case CrashStep => Crash(k, s, s')
+      case MachineStep(dop) => Machine(k, s, s', uiop, dop)
+      case CrashStep => Crash(k, s, s', uiop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables) {
-    exists step :: NextStep(k, s, s', step)
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+    exists step :: NextStep(k, s, s', uiop, step)
   }
 
   // Invariant
@@ -128,9 +130,9 @@ module BetreeBlockCacheSystem {
   }
   */
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, betreeStep: BetreeStep)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep)
     requires Inv(k, s)
-    requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, betreeStep)
+    requires M.BetreeMove(k.machine, s.machine, s'.machine, uiop, dop, betreeStep)
     requires s.disk == s'.disk
     ensures Inv(k, s')
   {
@@ -139,7 +141,7 @@ module BetreeBlockCacheSystem {
     PersistentGraphEqAcrossOps(k, s, s', ops); 
     if (s.machine.Ready?) {
       Ref.RefinesOpTransaction(k, s, s', ops);
-      DBI.BetreeStepPreservesInvariant(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), betreeStep);
+      DBI.BetreeStepPreservesInvariant(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
     }
   }
 
@@ -205,10 +207,10 @@ module BetreeBlockCacheSystem {
     BCS.EvictStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma BlockCacheStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: BC.Step)
+  lemma BlockCacheStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step)
     requires Inv(k, s)
-    requires M.BlockCacheMove(k.machine, s.machine, s'.machine, dop, step)
-    requires Machine(k, s, s', dop)
+    requires M.BlockCacheMove(k.machine, s.machine, s'.machine, uiop, dop, step)
+    requires Machine(k, s, s', uiop, dop)
     ensures Inv(k, s')
   {
     assert BCS.Machine(k, s, s', dop);
@@ -226,43 +228,43 @@ module BetreeBlockCacheSystem {
     }
   }
 
-  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(k, s)
-    requires Machine(k, s, s', dop)
+    requires Machine(k, s, s', uiop, dop)
     ensures Inv(k, s')
   {
-    var step :| M.NextStep(k.machine, s.machine, s'.machine, dop, step);
+    var step :| M.NextStep(k.machine, s.machine, s'.machine, uiop, dop, step);
     match step {
-      case BetreeMoveStep(betreeStep) => BetreeMoveStepPreservesInv(k, s, s', dop, betreeStep);
-      case BlockCacheMoveStep(blockCacheStep) => BlockCacheStepPreservesInv(k, s, s',dop, blockCacheStep);
+      case BetreeMoveStep(betreeStep) => BetreeMoveStepPreservesInv(k, s, s', uiop, dop, betreeStep);
+      case BlockCacheMoveStep(blockCacheStep) => BlockCacheStepPreservesInv(k, s, s', uiop, dop, blockCacheStep);
     }
   }
 
-  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
-    requires Crash(k, s, s')
+    requires Crash(k, s, s', uiop)
     ensures Inv(k, s')
   {
     
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, step: Step)
+  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
     requires Inv(k, s)
-    requires NextStep(k, s, s', step)
+    requires NextStep(k, s, s', uiop, step)
     ensures Inv(k, s')
   {
     match step {
-      case MachineStep(dop: DiskOp) => MachineStepPreservesInv(k, s, s', dop);
-      case CrashStep => CrashStepPreservesInv(k, s, s');
+      case MachineStep(dop: DiskOp) => MachineStepPreservesInv(k, s, s', uiop, dop);
+      case CrashStep => CrashStepPreservesInv(k, s, s', uiop);
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
-    requires Next(k, s, s')
+    requires Next(k, s, s', uiop)
     ensures Inv(k, s')
   {
-    var step :| NextStep(k, s, s', step);
-    NextStepPreservesInv(k, s, s', step);
+    var step :| NextStep(k, s, s', uiop, step);
+    NextStepPreservesInv(k, s, s', uiop, step);
   }
 }

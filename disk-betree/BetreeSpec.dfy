@@ -32,7 +32,7 @@ module BetreeSpec {
   import opened Sequences
   import opened Maps
 
-  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, G
+  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
