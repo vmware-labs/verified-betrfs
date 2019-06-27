@@ -53,6 +53,36 @@ module BetreeSpec {
 
   // Now we define the state machine
 
+  //// Query
+
+  type Layer = G.ReadOp
+  type Lookup = seq<Layer>
+
+  datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
+
+  predicate LookupVisitsWFNodes(lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  requires LookupVisitsWFNodes(lookup)
+  {
+	if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
+  }
+
+  predicate ValidQuery(q: LookupQuery) {
+    && LookupVisitsWFNodes(q.lookup)
+    && BufferDefinesValue(InterpretLookup(q.lookup, q.key), q.value)
+  }
+
+  function QueryReads(q: LookupQuery): seq<ReadOp> {
+    q.lookup
+  }
+
+  function QueryOps(q: LookupQuery): seq<Op> {
+    []
+  }
+
   //// Insert
 
   function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
@@ -247,6 +277,7 @@ module BetreeSpec {
   //// All together
 
   datatype BetreeStep =
+    | BetreeQuery(q: LookupQuery)
     | BetreeInsert(ins: MessageInsertion)
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
@@ -256,6 +287,7 @@ module BetreeSpec {
   predicate ValidBetreeStep(step: BetreeStep)
   {
     match step {
+      case BetreeQuery(q) => ValidQuery(q)
       case BetreeInsert(ins) => ValidInsertion(ins)
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
@@ -268,6 +300,7 @@ module BetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
+      case BetreeQuery(q) => QueryReads(q)
       case BetreeInsert(ins) => InsertionReads(ins)
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
@@ -280,6 +313,7 @@ module BetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
+      case BetreeQuery(q) => QueryOps(q)
       case BetreeInsert(ins) => InsertionOps(ins)
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
@@ -290,6 +324,7 @@ module BetreeSpec {
 
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op<Value>) {
     match step {
+      case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?

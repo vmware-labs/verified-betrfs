@@ -18,9 +18,6 @@ module Betree {
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
 
-  type Lookup = seq<Layer>
-  type Layer = G.ReadOp
-
   predicate ValidLayerIndex(lookup: Lookup, idx: int) {
     && 0 <= idx < |lookup|
   }
@@ -29,7 +26,7 @@ module Betree {
   requires ValidLayerIndex(lookup, idx) && idx < |lookup| - 1;
   requires key in lookup[idx].node.children;
   {
-	lookup[idx].node.children[key] == lookup[idx+1].ref
+    lookup[idx].node.children[key] == lookup[idx+1].ref
   }
 
   predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
@@ -41,10 +38,6 @@ module Betree {
     forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
   }
 
-  predicate LookupVisitsWFNodes(lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
-  }
-
   predicate IsPathFromRootLookup(k: Constants, view: BI.View, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == Root()
@@ -52,23 +45,10 @@ module Betree {
     && LookupFollowsChildRefs(key, lookup)
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
-  requires LookupVisitsWFNodes(lookup);
-  {
-	if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
-  }
-
   predicate IsSatisfyingLookup(k: Constants, view: BI.View, key: Key, value: Value, lookup: Lookup) {
     && IsPathFromRootLookup(k, view, key, lookup)
     && LookupVisitsWFNodes(lookup)
     && BufferDefinesValue(InterpretLookup(lookup, key), value)
-  }
-
-  // TODO move this into BetreeSpec
-  predicate Query(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, value: Value, lookup: Lookup) {
-    && uiop == MS.UI.GetOp(key, value)
-    && s == s'
-    && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
   }
 
   function EmptyNode() : Node {
@@ -94,14 +74,12 @@ module Betree {
   }
   
   datatype Step =
-    | QueryStep(key: Key, value: Value, lookup: Lookup)
     | BetreeStep(step: BetreeStep)
     | GCStep(refs: iset<Reference>)
     | StutterStep
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step) {
     match step {
-      case QueryStep(key, value, lookup) => Query(k, s, s', uiop, key, value, lookup)
       case BetreeStep(betreeStep) => Betree(k, s, s', uiop, betreeStep)
       case GCStep(refs) => GC(k, s, s', uiop, refs)
       case StutterStep => s == s' && uiop.NoOp?

@@ -7,7 +7,6 @@ module BetreeRefinement {
   import opened G = BetreeGraph
   import opened BetreeSpec`Internal
 
-  type Lookup = DB.Lookup
   type UIOp = DB.MS.UI.Op<Value>
     
   datatype LookupResult = LookupResult(lookup: Lookup, result: Value)
@@ -54,7 +53,7 @@ module BetreeRefinement {
     ensures IView(k, s.bcv.view)[key] == G.M.DefaultValue()
     {
       var lookup := GetLookup(k, s.bcv.view, key).lookup;
-      assert DB.InterpretLookup(lookup, key) == G.M.Define(G.M.DefaultValue()); // observe
+      assert InterpretLookup(lookup, key) == G.M.Define(G.M.DefaultValue()); // observe
     }
   }
 
@@ -127,7 +126,8 @@ module BetreeRefinement {
 
   lemma QueryStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, key: Key, value: Value, lookup: Lookup)
     requires Inv(k, s)
-    requires DB.Query(k, s, s', uiop, key, value, lookup)
+    requires BetreeStepUI(BetreeQuery(LookupQuery(key, value, lookup)), uiop)
+    requires DBI.Query(k.bck, s.bcv, s'.bcv, key, value, lookup)
     requires Inv(k, s')
     ensures DB.MS.Next(Ik(k), I(k, s), I(k, s'), uiop)
   
@@ -194,6 +194,7 @@ module BetreeRefinement {
   {
     NextPreservesInv(k, s, s', uiop);
     match betreeStep {
+      case BetreeQuery(q) => QueryStepRefinesMap(k, s, s', uiop, q.key, q.value, q.lookup);
       case BetreeInsert(ins) => InsertMessageStepRefinesMap(k, s, s', uiop, ins.key, ins.msg, ins.oldroot);
       case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', uiop, flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
       case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', uiop, growth.oldroot, growth.newchildref);
@@ -220,7 +221,6 @@ module BetreeRefinement {
   {
     NextPreservesInv(k, s, s', uiop);
     match step {
-      case QueryStep(key, value, lookup) => QueryStepRefinesMap(k, s, s', uiop, key, value, lookup);
       case BetreeStep(betreeStep) => BetreeStepRefinesMap(k, s, s', uiop, betreeStep);
       case GCStep(refs) => GCStepRefinesMap(k, s, s', uiop, refs);
     }

@@ -173,6 +173,12 @@ module BetreeInv {
     && BI.OpTransaction(k, s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
   }
 
+  predicate Query(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, value: Value, lookup: Lookup)
+  {
+    && ValidQuery(LookupQuery(key, value, lookup))
+    && BI.Reads(k, s, QueryReads(LookupQuery(key, value, lookup)))
+    && BI.OpTransaction(k, s, s', QueryOps(LookupQuery(key, value, lookup)))
+  }
 
   ////////
   //////// Grow
@@ -1086,9 +1092,9 @@ module BetreeInv {
     }
   }
 
-  lemma QueryStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, value: Value, lookup: Lookup)
+  lemma QueryStepPreservesInvariant(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
-    requires Query(k, s, s', uiop, key, value, lookup)
+    requires BI.OpTransaction(k.bck, s.bcv, s'.bcv, [])
     ensures Inv(k, s')
   {
   }
@@ -1288,6 +1294,7 @@ module BetreeInv {
     ensures Inv(k, s')
   {
     match betreeStep {
+      case BetreeQuery(q) => QueryStepPreservesInvariant(k, s, s');
       case BetreeInsert(ins) => InsertMessageStepPreservesInvariant(k, s, s', ins.key, ins.msg, ins.oldroot);
       case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
       case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);
@@ -1302,7 +1309,6 @@ module BetreeInv {
     ensures Inv(k, s')
   {
     match step {
-      case QueryStep(key, value, lookup) => QueryStepPreservesInvariant(k, s, s', uiop, key, value, lookup);
       case GCStep(refs) => GCStepPreservesInvariant(k, s, s', refs);
       case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(k, s, s', uiop, betreeStep);
 	  case StutterStep => {}
