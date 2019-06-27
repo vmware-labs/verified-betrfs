@@ -193,7 +193,7 @@ module BetreeInv {
       ensures LookupIsAcyclic(lookup')
     {
       if |lookup'| > 2 {
-        var lookup := [Layer(Root(), oldroot)] + lookup'[2..];
+        var lookup := [ReadOp(Root(), oldroot)] + lookup'[2..];
         var i := 1;
         while i < |lookup|
           invariant 1 <= i <= |lookup|
@@ -203,7 +203,7 @@ module BetreeInv {
           if i == 1 {
             if Root() in oldroot.children.Values {
               var badkey :| badkey in oldroot.children && oldroot.children[badkey] == Root();
-              var cycle := [Layer(Root(), oldroot), Layer(Root(), oldroot)];
+              var cycle := [ReadOp(Root(), oldroot), ReadOp(Root(), oldroot)];
               assert IsPathFromRootLookup(k, s.bcv.view, badkey, cycle);
               assert cycle[0].ref == cycle[1].ref;
               assert false;
@@ -222,7 +222,7 @@ module BetreeInv {
             assert lookup[i].ref == lookup'[i+1].ref;
             assert lookup[i].ref == lookup[i-1].node.children[key];
 
-            var tmplookup := lookup[..i+1][i := Layer(lookup[i].ref, s.bcv.view[lookup[i].ref])];
+            var tmplookup := lookup[..i+1][i := ReadOp(lookup[i].ref, s.bcv.view[lookup[i].ref])];
             assert IsPathFromRootLookup(k, s.bcv.view, key, tmplookup);
             assert LookupIsAcyclic(tmplookup);
             assert tmplookup[i].ref != Root();
@@ -266,11 +266,11 @@ module BetreeInv {
       //assert LookupIsAcyclic(lookup);
 
       var lookup' := [
-        Layer(rootref, newroot),
-        Layer(newchildref, oldroot)
+        ReadOp(rootref, newroot),
+        ReadOp(newchildref, oldroot)
       ] + lookup[1..];
 
-      InterpretLookupAdditive([ Layer(rootref, newroot), Layer(newchildref, oldroot) ], lookup[1..], key);
+      InterpretLookupAdditive([ ReadOp(rootref, newroot), ReadOp(newchildref, oldroot) ], lookup[1..], key);
       InterpretLookupAdditive([lookup[0]], lookup[1..], key);
       assert [lookup[0]] + lookup[1..] == lookup;
 
@@ -289,9 +289,9 @@ module BetreeInv {
 
       // Remove one for the root
       assert |lookup'| >= 2;
-      var lookup := [Layer(Root(), lookup'[1].node)] + lookup'[2..];
+      var lookup := [ReadOp(Root(), lookup'[1].node)] + lookup'[2..];
 
-      InterpretLookupAdditive([Layer(Root(), lookup'[1].node)], lookup'[2..], key);
+      InterpretLookupAdditive([ReadOp(Root(), lookup'[1].node)], lookup'[2..], key);
       InterpretLookupAdditive(lookup'[..2], lookup'[2..], key);
       assert lookup'[..2] + lookup'[2..] == lookup';
 
@@ -321,9 +321,9 @@ module BetreeInv {
       var pref := transformLookup(lookup[.. |lookup| - 1], key, oldref, newref, newnode);
       pref +
         [if lookup[|lookup| - 1].ref == oldref then
-          Layer(newref, newnode)
+          ReadOp(newref, newnode)
          else
-          Layer(lookup[|lookup| - 1].ref, lookup[|lookup| - 1].node)
+          ReadOp(lookup[|lookup| - 1].ref, lookup[|lookup| - 1].node)
         ]
   }
 
@@ -347,7 +347,7 @@ module BetreeInv {
        if lastLayer.ref == oldchildref && |lookup| > 1 && lookup[|lookup|-2].ref == parentref && key in movedKeys then newchild else
 
        lastLayer.node);
-    pref + [Layer(ref, node)]
+    pref + [ReadOp(ref, node)]
   }
 
   lemma transformLookupParentAndChildLemma(lookup: Lookup, lookup': Lookup, key: Key, parentref: Reference, newparent: Node, movedKeys: iset<Key>, oldchildref: Reference, newchildref: Reference, newchild: Node, i: int)
@@ -455,7 +455,7 @@ module BetreeInv {
     {
 	    if i :| 0 <= i < |lookup| && lookup[i].ref == parentref {
 		    if key !in movedKeys {
-			    var lookup' := lookup[i := Layer(parentref, newparent)];
+			    var lookup' := lookup[i := ReadOp(parentref, newparent)];
 			    forall j | 0 <= j < |lookup'|
 			    ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
 			    }
@@ -466,14 +466,14 @@ module BetreeInv {
 			    assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
 		    } else {
 			    if |lookup| - 1 == i { // we stopped at parent
-				    var lookup' := lookup[..i] + [ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ];
+				    var lookup' := lookup[..i] + [ ReadOp(parentref, newparent) ] + [ ReadOp(newchildref, newchild) ];
 				    forall j | 0 <= j < |lookup'|
 				    ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
 				    }
 				    assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
 			    } else {
 				    var middle := [ lookup[i] ] + [ lookup[i+1] ];
-				    var middle' := ([ Layer(parentref, newparent) ] + [ Layer(newchildref, newchild) ]);
+				    var middle' := ([ ReadOp(parentref, newparent) ] + [ ReadOp(newchildref, newchild) ]);
 
 				    assert lookup == lookup[..i] + middle + lookup[i+2..];
 				    var lookup' := lookup[..i] + middle' + lookup[i+2..];
@@ -509,7 +509,7 @@ module BetreeInv {
 	    if i :| 0 <= i < |lookup'| && lookup'[i].ref == parentref {
 	      if i < |lookup'| - 1 && lookup'[i+1].ref == newchildref {
           var middle' := [ lookup'[i] ] + [ lookup'[i+1] ];
-          var middle := [ Layer(parentref, parent) ] + [ Layer(childref, child) ];
+          var middle := [ ReadOp(parentref, parent) ] + [ ReadOp(childref, child) ];
           var lookup := lookup'[..i] + middle + lookup'[i+2..];
 
           assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
@@ -546,7 +546,7 @@ module BetreeInv {
           assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup); // observe
           
 	      } else {
-			    var lookup := lookup'[i := Layer(parentref, parent)];
+			    var lookup := lookup'[i := ReadOp(parentref, parent)];
 			    assert forall ref :: ref in s'.bcv.view && ref != parentref && ref != newchildref ==> s.bcv.view[ref] == s'.bcv.view[ref];
 			    assert IMapsTo(s.bcv.view, parentref, parent);
 			    if j :| 0 <= j < |lookup| && lookup[j].ref == newchildref {
@@ -631,7 +631,7 @@ module BetreeInv {
   {
     if (|lookup| == 1) then (
       var node := if lookup[0].ref == fusion.parentref then fusion.split_parent else lookup[0].node;
-      [Layer(lookup[0].ref, node)]
+      [ReadOp(lookup[0].ref, node)]
     ) else (
       var pref := splitLookup(fusion, lookup[..|lookup|-1], key);
       var prevRef := lookup[|lookup| - 2].ref;
@@ -644,7 +644,7 @@ module BetreeInv {
                  (if key in fusion.right_keys && prevRef == fusion.parentref then fusion.right_child else
                  (if ref == fusion.parentref then fusion.split_parent else
                  curNode)));
-      pref + [Layer(ref, node)]
+      pref + [ReadOp(ref, node)]
     )
   }
 
@@ -766,7 +766,7 @@ module BetreeInv {
   {
     if (|lookup'| == 1) then (
       var node := if lookup'[0].ref == fusion.parentref then fusion.fused_parent else lookup'[0].node;
-      [Layer(lookup'[0].ref, node)]
+      [ReadOp(lookup'[0].ref, node)]
     ) else (
       var pref := mergeLookup(fusion, lookup'[..|lookup'|-1], key);
       var prevRef := lookup'[|lookup'| - 2].ref;
@@ -779,7 +779,7 @@ module BetreeInv {
                  (if key in fusion.right_keys && prevRef == fusion.parentref then fusion.fused_child else
                  (if ref == fusion.parentref then fusion.fused_parent else
                  curNode)));
-      pref + [Layer(ref, node)]
+      pref + [ReadOp(ref, node)]
     )
   }
 
@@ -1081,7 +1081,7 @@ module BetreeInv {
     ensures Inv(k, s)
   {
     forall key | MS.InDomain(key)
-    ensures IsSatisfyingLookup(k, s.bcv.view, key, G.M.DefaultValue(), [Layer(Root(), EmptyNode())]);
+    ensures IsSatisfyingLookup(k, s.bcv.view, key, G.M.DefaultValue(), [ReadOp(Root(), EmptyNode())]);
     {
     }
   }

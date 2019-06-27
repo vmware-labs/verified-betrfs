@@ -18,8 +18,8 @@ module Betree {
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
 
-  datatype Layer = Layer(ref: Reference, node: Node)
   type Lookup = seq<Layer>
+  type Layer = G.ReadOp
 
   predicate ValidLayerIndex(lookup: Lookup, idx: int) {
     && 0 <= idx < |lookup|
