@@ -392,6 +392,16 @@ module PivotBetreeSpec {
       case BetreeMerge(fusion) => MergeOps(fusion)
     }
   }
+
+  predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op<Value>) {
+    match step {
+      case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
+      case BetreeFlush(flush) => uiop.NoOp?
+      case BetreeGrow(growth) => uiop.NoOp?
+      case BetreeSplit(fusion) => uiop.NoOp?
+      case BetreeMerge(fusion) => uiop.NoOp?
+    }
+  }
 }
 
 module PivotBetreeSpecRefinement {
@@ -907,6 +917,7 @@ module PivotBetree {
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
+  type UIOp = MS.UI.Op<Value>
 
   function EmptyNode() : Node
   {
@@ -917,15 +928,17 @@ module PivotBetree {
     && BI.Init(k.bck, s.bcv, EmptyNode())
   }
 
-  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
-    BI.GC(k.bck, s.bcv, s'.bcv, refs)
+  predicate GC(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>) {
+    && uiop.NoOp? 
+    && BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
 
-  predicate Betree(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
+  predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
   {
     && ValidBetreeStep(betreeStep)
     && BI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
     && BI.OpTransaction(k.bck, s.bcv, s'.bcv, BetreeStepOps(betreeStep))
+    && BetreeStepUI(betreeStep, uiop)
   }
  
   datatype Step =
@@ -933,16 +946,16 @@ module PivotBetree {
     | GCStep(refs: iset<Reference>)
     | StutterStep
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step) {
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step) {
     match step {
-      case BetreeStep(betreeStep) => Betree(k, s, s', betreeStep)
-      case GCStep(refs) => GC(k, s, s', refs)
-      case StutterStep => s == s'
+      case BetreeStep(betreeStep) => Betree(k, s, s', uiop, betreeStep)
+      case GCStep(refs) => GC(k, s, s', uiop, refs)
+      case StutterStep => s == s' && uiop.NoOp?
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables) {
-    exists step: Step :: NextStep(k, s, s', step)
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+    exists step: Step :: NextStep(k, s, s', uiop, step)
   }
 }
 
@@ -962,6 +975,7 @@ module PivotBetreeInvAndRefinement {
   type Reference = BG.Reference
   type PNode = PG.Node
   type Node = BG.Node
+  type UIOp = B.UIOp
 
   function Ik(k: Constants) : B.Constants
   {
@@ -1054,48 +1068,48 @@ module PivotBetreeInvAndRefinement {
     }
   }
 
-  lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, betreeStep: BetreeStep)
+  lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
   requires Inv(k, s)
-  requires PB.NextStep(k, s, s', PB.BetreeStep(betreeStep))
+  requires PB.NextStep(k, s, s', uiop, PB.BetreeStep(betreeStep))
   ensures Inv(k, s')
-  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.BetreeStep(SpecRef.IStep(betreeStep)))
+  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)))
   {
     SpecRef.RefinesValidBetreeStep(betreeStep);
     SpecRef.RefinesReadOps(betreeStep);
     SpecRef.RefinesOps(betreeStep);
     TransactionRefines(k, s, s', BetreeStepOps(betreeStep));
-    assert B.NextStep(Ik(k), I(k,s), I(k,s'), B.BetreeStep(SpecRef.IStep(betreeStep)));
-    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'));
+    assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
-  lemma GCStepRefines(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
+  lemma GCStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>)
   requires Inv(k, s)
-  requires PB.NextStep(k, s, s', PB.GCStep(refs))
+  requires PB.NextStep(k, s, s', uiop, PB.GCStep(refs))
   ensures Inv(k, s')
-  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.GCStep(refs))
+  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.GCStep(refs))
   {
-    assert B.NextStep(Ik(k), I(k,s), I(k,s'), B.GCStep(refs));
-    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'));
+    assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.GCStep(refs));
+    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
-  lemma StutterStepRefines(k: Constants, s: Variables, s': Variables)
+  lemma StutterStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   requires Inv(k, s)
-  requires PB.NextStep(k, s, s', PB.StutterStep)
+  requires PB.NextStep(k, s, s', uiop, PB.StutterStep)
   ensures Inv(k, s')
-  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), B.StutterStep)
+  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.StutterStep)
   {
   }
 
-  lemma PivotBetreeRefinesBetreeNextStep(k: Constants, s: Variables, s': Variables, step: PB.Step)
+  lemma PivotBetreeRefinesBetreeNextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: PB.Step)
     requires Inv(k, s)
-    requires PB.NextStep(k, s, s', step)
+    requires PB.NextStep(k, s, s', uiop, step)
     ensures Inv(k, s')
-    ensures B.Next(Ik(k), I(k, s), I(k, s'))
+    ensures B.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     match step {
-      case BetreeStep(betreeStep) => BetreeStepRefines(k, s, s', betreeStep);
-      case GCStep(refs) => GCStepRefines(k, s, s', refs);
-      case StutterStep => StutterStepRefines(k, s, s');
+      case BetreeStep(betreeStep) => BetreeStepRefines(k, s, s', uiop, betreeStep);
+      case GCStep(refs) => GCStepRefines(k, s, s', uiop, refs);
+      case StutterStep => StutterStepRefines(k, s, s', uiop);
     }
   }
 
@@ -1106,13 +1120,13 @@ module PivotBetreeInvAndRefinement {
     PivotBetreeRefinesBetreeInit(k, s);
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
-    requires PB.Next(k, s, s')
+    requires PB.Next(k, s, s', uiop)
     ensures Inv(k, s')
   {
-    var step :| PB.NextStep(k, s, s', step);
-    PivotBetreeRefinesBetreeNextStep(k, s, s', step);
+    var step :| PB.NextStep(k, s, s', uiop, step);
+    PivotBetreeRefinesBetreeNextStep(k, s, s', uiop, step);
   }
 
   lemma PivotBetreeRefinesBetreeInit(k: Constants, s: Variables)
@@ -1124,13 +1138,13 @@ module PivotBetreeInvAndRefinement {
     BInv.InitImpliesInv(Ik(k), I(k, s));
   }
 
-  lemma PivotBetreeRefinesBetreeNext(k: Constants, s: Variables, s': Variables)
+  lemma PivotBetreeRefinesBetreeNext(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
-    requires PB.Next(k, s, s')
+    requires PB.Next(k, s, s', uiop)
     ensures Inv(k, s')
-    ensures B.Next(Ik(k), I(k, s), I(k, s'))
+    ensures B.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    var step :| PB.NextStep(k, s, s', step);
-    PivotBetreeRefinesBetreeNextStep(k, s, s', step);
+    var step :| PB.NextStep(k, s, s', uiop, step);
+    PivotBetreeRefinesBetreeNextStep(k, s, s', uiop, step);
   }
 }
