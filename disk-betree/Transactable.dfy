@@ -33,9 +33,24 @@ abstract module Transactable {
     && (forall i :: 0 <= i < |ops| ==> OpStep(k, path[i], path[i+1], ops[i]))
   }
 
+  lemma Transaction0Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  ensures (
+    && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+    && |ops| == 0
+  ) ==>
+      && s == s'
+  ensures s == s' ==> IsStatePath(k, s, s', [], [s])
+  {
+    if (
+        && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
+        && |ops| == 0)
+    {
+      var path :| IsStatePath(k, s, s', ops, path);
+    }
+  }
+
   lemma Transaction1Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
   ensures (
-    && 0 < |ops|
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
     && |ops| == 1
   ) ==>
@@ -55,7 +70,6 @@ abstract module Transactable {
 
   lemma Transaction2Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
   ensures (
-    && 0 < |ops|
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
     && |ops| == 2
   ) ==>
@@ -77,7 +91,6 @@ abstract module Transactable {
 
   lemma Transaction3Steps(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
   ensures (
-    && 0 < |ops|
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
     && |ops| == 3
   ) ==>
@@ -112,13 +125,13 @@ abstract module Transactable {
       && OpStep(k, sint, sint', ops[1])
       && OpStep(k, sint', s', ops[2])
     ensures |ops| == 1 && OpStep(k, s, s', ops[0]) ==> OpTransaction(k, s, s', ops)
-    // This is only necessary because the function is opaque:
-    ensures OpTransaction(k, s, s', ops) ==> 0 < |ops|
+    ensures OpTransaction(k, s, s', ops) && |ops| == 0 ==> s == s'
+    ensures |ops| == 0 && s == s' ==> OpTransaction(k, s, s', ops)
   {
+    Transaction0Steps(k, s, s', ops);
     Transaction1Steps(k, s, s', ops);
     Transaction2Steps(k, s, s', ops);
     Transaction3Steps(k, s, s', ops);
-    && 0 < |ops|
     && (exists path: seq<Variables> :: IsStatePath(k, s, s', ops, path))
   }
 

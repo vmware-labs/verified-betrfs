@@ -103,7 +103,8 @@ module BetreeBlockCacheSystem {
     ensures PersistentBetree(k, s) == PersistentBetree(k, s')
     decreases |ops|
   {
-    if |ops| == 1 {
+    if |ops| == 0 {
+    } else if |ops| == 1 {
       BCS.OpPreservesInvariant(k, s, s', ops[0]);
     } else {
       var ops1, mid, ops2 := BC.SplitTransaction(k.machine, s.machine, s'.machine, ops);

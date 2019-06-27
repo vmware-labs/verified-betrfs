@@ -1073,7 +1073,8 @@ module PivotBetreeInvAndRefinement {
   ensures BI.Transaction(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOps(ops))
   decreases |ops|
   {
-    if (|ops| == 1) {
+    if (|ops| == 0) {
+    } else if (|ops| == 1) {
       OpRefines(k, s, s', ops[0]);
     } else {
       var ops1, mid, ops2 := PBI.SplitTransaction(k.bck, s.bcv, s'.bcv, ops);

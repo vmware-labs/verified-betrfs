@@ -363,7 +363,8 @@ abstract module BlockCache refines Transactable {
     ensures Inv(k, s')
     decreases |ops|
   {
-    if (|ops| == 1) {
+    if (|ops| == 0) {
+    } else if (|ops| == 1) {
       OpPreservesInvariant(k, s, s', ops[0]);
     } else {
       var ops1, smid, ops2 := SplitTransaction(k, s, s', ops);
