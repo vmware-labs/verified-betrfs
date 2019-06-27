@@ -465,10 +465,16 @@ module PivotBetreeSpecRefinement {
     B.MessageInsertion(ins.key, ins.msg, INode(ins.oldroot))
   }
 
+  function KeysForSlot(node: PNode, slotIndex: int) : iset<Key>
+  requires P.WFPivotTable(node.pivotTable)
+  {
+    iset key | P.Route(node.pivotTable, key) == slotIndex
+  }
+
   function IFlush(flush: P.NodeFlush) : B.NodeFlush
   requires P.ValidFlush(flush)
   {
-    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref)
+    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref, KeysForSlot(flush.parent, flush.slotIndex))
   }
 
   function IGrow(growth: P.RootGrowth) : B.RootGrowth

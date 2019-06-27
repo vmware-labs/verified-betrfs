@@ -4,7 +4,8 @@ include "../lib/total_order.dfy"
 module MapSpec {
   import opened MissingLibrary
 
-  type Key(==,!new)
+  import Keyspace = Total_Order
+  type Key = Keyspace.Element
 
   // Users must provide a definition of EmptyValue
   function EmptyValue<Value>() : Value
