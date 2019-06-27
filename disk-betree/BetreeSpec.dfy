@@ -67,7 +67,7 @@ module BetreeSpec {
   function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
   requires LookupVisitsWFNodes(lookup)
   {
-	if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
+    if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
   }
 
   predicate ValidQuery(q: LookupQuery) {

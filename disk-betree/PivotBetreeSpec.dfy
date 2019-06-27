@@ -131,6 +131,34 @@ module PivotBetreeSpec {
     )
   }
 
+  //// Query
+
+  type Layer = G.ReadOp
+  type Lookup = seq<Layer>
+
+  datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
+
+  predicate LookupVisitsWFNodes(lookup: Lookup) {
+    forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  function NodeLookup(node: Node, key: Key)
+  requires WFNode(node)
+  {
+    BucketLookup(node.buckets[Route(node.pivotTable, key)], key)
+  }
+
+  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  requires LookupVisitsWFNodes(lookup)
+  {
+    if |lookup| == 0 then
+      G.M.Update(G.M.NopDelta())
+    else
+      G.M.Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
+  }
+
+
+
   //// Insert
 
   datatype MessageInsertion = MessageInsertion(key: Key, msg: Message, oldroot: Node)
@@ -1045,7 +1073,8 @@ module PivotBetreeInvAndRefinement {
   ensures BI.Transaction(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOps(ops))
   decreases |ops|
   {
-    if (|ops| == 1) {
+    if (|ops| == 0) {
+    } else if (|ops| == 1) {
       OpRefines(k, s, s', ops[0]);
     } else {
       var ops1, mid, ops2 := PBI.SplitTransaction(k.bck, s.bcv, s'.bcv, ops);
