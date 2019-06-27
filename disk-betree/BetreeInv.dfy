@@ -146,11 +146,11 @@ module BetreeInv {
   // Old definitions
   // TODO clean these up; remove them or change them to use BetreeStep objects instead
 
-  predicate Grow(k: BI.Constants, s: BI.Variables, s': BI.Variables, oldroot: Node, newchildref: Reference)
+  predicate InsertMessage(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, msg: BufferEntry, oldroot: Node)
   {
-    && ValidGrow(RootGrowth(oldroot, newchildref))
-    && BI.Reads(k, s, GrowReads(RootGrowth(oldroot, newchildref)))
-    && BI.OpTransaction(k, s, s', GrowOps(RootGrowth(oldroot, newchildref)))
+    && ValidInsertion(MessageInsertion(key, msg, oldroot))
+    && BI.Reads(k, s, InsertionReads(MessageInsertion(key, msg, oldroot)))
+    && BI.OpTransaction(k, s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
   }
 
   predicate Flush(k: BI.Constants, s: BI.Variables, s': BI.Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
@@ -159,6 +159,13 @@ module BetreeInv {
     && ValidFlush(flush)
     && BI.Reads(k, s, FlushReads(flush))
     && BI.OpTransaction(k, s, s', FlushOps(flush))
+  }
+
+  predicate Grow(k: BI.Constants, s: BI.Variables, s': BI.Variables, oldroot: Node, newchildref: Reference)
+  {
+    && ValidGrow(RootGrowth(oldroot, newchildref))
+    && BI.Reads(k, s, GrowReads(RootGrowth(oldroot, newchildref)))
+    && BI.OpTransaction(k, s, s', GrowOps(RootGrowth(oldroot, newchildref)))
   }
 
   predicate Split(k: BI.Constants, s: BI.Variables, s': BI.Variables, fusion: NodeFusion)
@@ -173,13 +180,6 @@ module BetreeInv {
     && ValidMerge(fusion)
     && BI.Reads(k, s, MergeReads(fusion))
     && BI.OpTransaction(k, s, s', MergeOps(fusion))
-  }
-
-  predicate InsertMessage(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, msg: BufferEntry, oldroot: Node)
-  {
-    && ValidInsertion(MessageInsertion(key, msg, oldroot))
-    && BI.Reads(k, s, InsertionReads(MessageInsertion(key, msg, oldroot)))
-    && BI.OpTransaction(k, s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
   }
 
   predicate Query(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, value: Value, lookup: Lookup)
