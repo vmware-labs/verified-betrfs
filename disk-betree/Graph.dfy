@@ -9,9 +9,9 @@ abstract module Graph {
 
   // TODO Transactable is a more natural place for this
   datatype Op =
-    | AllocOp(ref: Reference, block: Node)
-    | WriteOp(ref: Reference, block: Node)
+    | AllocOp(ref: Reference, node: Node)
+    | WriteOp(ref: Reference, node: Node)
 
   datatype ReadOp =
-    | ReadOp(ref: Reference, block: Node)
+    | ReadOp(ref: Reference, node: Node)
 }

@@ -158,7 +158,7 @@ abstract module BlockCache refines Transactable {
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
   {
-    s.Ready? && MapsTo(s.cache, op.ref, op.block)
+    s.Ready? && MapsTo(s.cache, op.ref, op.node)
   }
 
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)

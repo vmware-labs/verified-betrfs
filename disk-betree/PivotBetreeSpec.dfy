@@ -736,13 +736,13 @@ module PivotBetreeSpecRefinement {
   }
 
   function IReadOp(readOp: P.G.ReadOp) : B.G.ReadOp
-  requires P.WFNode(readOp.block)
+  requires P.WFNode(readOp.node)
   {
-    B.G.ReadOp(readOp.ref, INode(readOp.block))
+    B.G.ReadOp(readOp.ref, INode(readOp.node))
   }
 
   function IReadOps(readOps: seq<P.G.ReadOp>) : seq<B.G.ReadOp>
-  requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].block)
+  requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].node)
   {
     if |readOps| == 0 then [] else
       IReadOps(readOps[..|readOps|-1]) + [IReadOp(readOps[|readOps|-1])]
@@ -779,7 +779,7 @@ module PivotBetreeSpecRefinement {
   }
 
   function IOp(op: P.G.Op) : B.G.Op
-  requires P.WFNode(op.block)
+  requires P.WFNode(op.node)
   {
     match op {
       case AllocOp(ref, block) => B.G.AllocOp(ref, INode(block))
@@ -788,7 +788,7 @@ module PivotBetreeSpecRefinement {
   }
 
   function IOps(ops: seq<P.G.Op>) : seq<B.G.Op>
-  requires forall i | 0 <= i < |ops| :: P.WFNode(ops[i].block)
+  requires forall i | 0 <= i < |ops| :: P.WFNode(ops[i].node)
   {
     if |ops| == 0 then [] else
       IOps(ops[..|ops|-1]) + [IOp(ops[|ops|-1])]
@@ -798,7 +798,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidInsertion(ins)
   requires B.ValidInsertion(IInsertion(ins))
   ensures forall i | 0 <= i < |P.InsertionOps(ins)| ::
-      P.WFNode(P.InsertionOps(ins)[i].block)
+      P.WFNode(P.InsertionOps(ins)[i].node)
   ensures IOps(P.InsertionOps(ins)) == B.InsertionOps(IInsertion(ins))
   {
     var newroot := P.AddMessageToNode(ins.oldroot, ins.key, ins.msg);
@@ -837,7 +837,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidFlush(flush)
   requires B.ValidFlush(IFlush(flush))
   ensures forall i | 0 <= i < |P.FlushOps(flush)| ::
-      P.WFNode(P.FlushOps(flush)[i].block)
+      P.WFNode(P.FlushOps(flush)[i].node)
   ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
   {
   }
@@ -846,7 +846,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidGrow(growth)
   requires B.ValidGrow(IGrow(growth))
   ensures forall i | 0 <= i < |P.GrowOps(growth)| ::
-      P.WFNode(P.GrowOps(growth)[i].block)
+      P.WFNode(P.GrowOps(growth)[i].node)
   ensures IOps(P.GrowOps(growth)) == B.GrowOps(IGrow(growth))
   {
     var newroot := P.G.Node([], Some([growth.newchildref]), [map[]]);
@@ -876,7 +876,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidBetreeStep(betreeStep)
   ensures B.ValidBetreeStep(IStep(betreeStep))
   ensures forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-      P.WFNode(P.BetreeStepOps(betreeStep)[i].block)
+      P.WFNode(P.BetreeStepOps(betreeStep)[i].node)
   ensures IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep))
   {
     RefinesValidBetreeStep(betreeStep);
@@ -893,12 +893,12 @@ module PivotBetreeSpecRefinement {
       }
       case BetreeSplit(fusion) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
       }
       case BetreeMerge(fusion) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].block);
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
       }
     }
@@ -1006,7 +1006,7 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma OpRefines(k: Constants, s: Variables, s': Variables, op: PG.Op)
-  requires WFNode(op.block)
+  requires WFNode(op.node)
   requires ViewHasWFNodes(s.bcv.view)
   requires PBI.OpStep(k.bck, s.bcv, s'.bcv, op)
   ensures ViewHasWFNodes(s'.bcv.view)
@@ -1016,8 +1016,8 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma IOpsAdditive(ops1: seq<PG.Op>, ops2: seq<PG.Op>)
-  requires forall i | 0 <= i < |ops1| :: WFNode(ops1[i].block)
-  requires forall i | 0 <= i < |ops2| :: WFNode(ops2[i].block)
+  requires forall i | 0 <= i < |ops1| :: WFNode(ops1[i].node)
+  requires forall i | 0 <= i < |ops2| :: WFNode(ops2[i].node)
   ensures SpecRef.IOps(ops1 + ops2) == SpecRef.IOps(ops1) + SpecRef.IOps(ops2)
   {
     if (|ops2| == 0) {
@@ -1038,7 +1038,7 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma TransactionRefines(k: Constants, s: Variables, s': Variables, ops: seq<PG.Op>)
-  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].block)
+  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].node)
   requires ViewHasWFNodes(s.bcv.view)
   requires PBI.Transaction(k.bck, s.bcv, s'.bcv, ops)
   ensures ViewHasWFNodes(s'.bcv.view)
@@ -1051,13 +1051,13 @@ module PivotBetreeInvAndRefinement {
       var ops1, mid, ops2 := PBI.SplitTransaction(k.bck, s.bcv, s'.bcv, ops);
       var smid := PB.Variables(mid);
 
-      forall i | 0 <= i < |ops1| ensures WFNode(ops1[i].block)
+      forall i | 0 <= i < |ops1| ensures WFNode(ops1[i].node)
       {
-        assert ops1[i].block == ops[i].block;
+        assert ops1[i].node == ops[i].node;
       }
-      forall i | 0 <= i < |ops2| ensures WFNode(ops2[i].block)
+      forall i | 0 <= i < |ops2| ensures WFNode(ops2[i].node)
       {
-        assert ops2[i].block == ops[i + |ops1|].block;
+        assert ops2[i].node == ops[i + |ops1|].node;
       }
 
       TransactionRefines(k, s, smid, ops1);

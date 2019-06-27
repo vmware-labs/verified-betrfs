@@ -69,7 +69,7 @@ abstract module BlockInterface refines Transactable {
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
   {
-    IMapsTo(s.view, op.ref, op.block)
+    IMapsTo(s.view, op.ref, op.node)
   }
 
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
