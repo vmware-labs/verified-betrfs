@@ -32,6 +32,10 @@ module Message {
 	  Update(NopDelta())
   }
 
+	function DefineDefault() : Message {
+	  Define(DefaultValue())
+  }
+
 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
 		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
 

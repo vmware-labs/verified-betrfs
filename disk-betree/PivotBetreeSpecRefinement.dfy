@@ -13,7 +13,7 @@ include "PivotBetreeSpec.dfy"
 module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
-  import opened Message
+  import M = Message
   import MS = MapSpec
   import Keyspace = MS.Keyspace
   import opened Maps
@@ -48,9 +48,9 @@ module PivotBetreeSpecRefinement {
   function IBufferLeaf(node: PNode) : Buffer
   requires P.WFNode(node);
   {
-    imap key :: Merge(
+    imap key :: M.Merge(
       P.BucketLookup(node.buckets[P.Route(node.pivotTable, key)], key),
-      Define(DefaultValue())
+      M.DefineDefault()
     )
   }
 
@@ -83,12 +83,14 @@ module PivotBetreeSpecRefinement {
 
   function IReadOps(readOps: seq<P.G.ReadOp>) : seq<B.G.ReadOp>
   requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].node)
+  ensures |readOps| == |IReadOps(readOps)|
   {
     if |readOps| == 0 then [] else
       IReadOps(readOps[..|readOps|-1]) + [IReadOp(readOps[|readOps|-1])]
   }
 
   function IQuery(q: P.LookupQuery) : B.LookupQuery
+  requires P.ValidQuery(q)
   {
     B.LookupQuery(q.key, q.value, IReadOps(q.lookup))
   }
@@ -165,10 +167,125 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma RefinesLookup(lookup: P.Lookup, key: Key)
+  requires P.WFLookupForKey(lookup, key)
+  ensures B.WFLookupForKey(IReadOps(lookup), key)
+  {
+    if (|lookup| == 1) {
+    } else {
+      forall idx | P.ValidLayerIndex(DropLast(lookup), idx) && idx < |DropLast(lookup)| - 1
+      ensures P.LookupFollowsChildRefAtLayer(key, DropLast(lookup), idx)
+      {
+        assert P.LookupFollowsChildRefAtLayer(key, lookup, idx);
+        //assert DropLast(lookup)[idx] == lookup[idx];
+        //assert DropLast(lookup)[idx+1] == lookup[idx+1];
+      }
+      RefinesLookup(DropLast(lookup), key);
+      forall idx | B.ValidLayerIndex(IReadOps(lookup), idx) && idx < |IReadOps(lookup)| - 1
+      ensures key in IReadOps(lookup)[idx].node.children
+      ensures B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx)
+      {
+        if idx < |lookup| - 2 {
+          assert key in IReadOps(lookup)[idx].node.children;
+          //assert B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx);
+        } else {
+          assert P.LookupFollowsChildRefAtLayer(key, lookup, |lookup|-2);
+          /*
+          assert lookup[|lookup|-2].node.children.Some?;
+          assert key in IChildren(lookup[|lookup|-2].node);
+          assert key in INode(lookup[|lookup|-2].node).children;
+          assert key in IReadOp(lookup[|lookup|-2]).node.children;
+          assert key in IReadOps(lookup)[idx].node.children;
+          assert B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx);
+          */
+        }
+      }
+    }
+  }
+
+  lemma RefinesInterpretLookup(lookup: P.Lookup, key: Key)
+  requires P.WFLookupForKey(lookup, key)
+  requires Last(lookup).node.children.Some?
+  ensures B.WFLookupForKey(IReadOps(lookup), key)
+  ensures B.InterpretLookup(IReadOps(lookup), key) == P.InterpretLookup(lookup, key)
+  {
+    RefinesLookup(lookup, key);
+
+    if |lookup| == 1 {
+      /*
+      assert INode(lookup[0].node).buffer[key]
+          == P.NodeLookup(lookup[0].node, key);
+      assert B.InterpretLookup(IReadOps(lookup), key)
+          == B.InterpretLookup([IReadOp(lookup[0])], key)
+          == B.G.M.Merge(
+            B.G.M.Update(B.G.M.NopDelta()),
+            INode(lookup[0].node).buffer[key])
+          == P.InterpretLookup(lookup, key);
+      */
+    } else {
+      forall idx | P.ValidLayerIndex(DropLast(lookup), idx) && idx < |DropLast(lookup)| - 1
+      ensures P.LookupFollowsChildRefAtLayer(key, DropLast(lookup), idx)
+      {
+        assert P.LookupFollowsChildRefAtLayer(key, lookup, idx);
+      }
+
+      assert P.LookupFollowsChildRefAtLayer(key, lookup, |lookup|-2);
+      RefinesInterpretLookup(DropLast(lookup), key);
+      assert B.InterpretLookup(IReadOps(lookup), key) == P.InterpretLookup(lookup, key);
+    }
+  }
+
+  lemma RefinesInterpretLookupAccountingForLeaf(lookup: P.Lookup, key: Key, value: Value)
+  requires P.WFLookupForKey(lookup, key)
+  ensures B.WFLookupForKey(IReadOps(lookup), key)
+  ensures B.InterpretLookup(IReadOps(lookup), key) == P.InterpretLookupAccountingForLeaf(lookup, key)
+  {
+    RefinesLookup(lookup, key);
+
+    if (Last(lookup).node.children.Some?) {
+      RefinesInterpretLookup(lookup, key);
+    } else {
+      if |lookup| == 1 {
+        M.MergeIsAssociative(
+            M.Update(M.NopDelta()),
+            P.NodeLookup(lookup[0].node, key),
+            M.DefineDefault());
+        assert B.InterpretLookup(IReadOps(lookup), key)
+            //== M.Merge(M.Update(M.NopDelta()), M.Merge(P.NodeLookup(lookup[0].node, key), M.DefineDefault()))
+            //== M.Merge(M.Merge(M.Update(M.NopDelta()), P.NodeLookup(lookup[0].node, key)), M.DefineDefault())
+            == M.Merge(P.InterpretLookup(lookup, key), M.DefineDefault())
+            == P.InterpretLookupAccountingForLeaf(lookup, key);
+      } else {
+        forall idx | P.ValidLayerIndex(DropLast(lookup), idx) && idx < |DropLast(lookup)| - 1
+        ensures P.LookupFollowsChildRefAtLayer(key, DropLast(lookup), idx)
+        {
+          assert P.LookupFollowsChildRefAtLayer(key, lookup, idx);
+        }
+
+        assert P.LookupFollowsChildRefAtLayer(key, lookup, |lookup|-2);
+        RefinesInterpretLookup(DropLast(lookup), key);
+
+        M.MergeIsAssociative(
+            B.InterpretLookup(DropLast(IReadOps(lookup)), key),
+            P.NodeLookup(Last(lookup).node, key),
+            M.DefineDefault());
+            /*
+        assert B.InterpretLookup(IReadOps(lookup), key)
+            == M.Merge(B.InterpretLookup(DropLast(IReadOps(lookup)), key), Last(IReadOps(lookup)).node.buffer[key])
+            == M.Merge(B.InterpretLookup(DropLast(IReadOps(lookup)), key), M.Merge(P.NodeLookup(Last(lookup).node, key), M.DefineDefault()))
+            == M.Merge(M.Merge(B.InterpretLookup(DropLast(IReadOps(lookup)), key), P.NodeLookup(Last(lookup).node, key)), M.DefineDefault())
+            == P.InterpretLookupAccountingForLeaf(lookup, key);
+            */
+      }
+    }
+  }
+
   lemma RefinesValidQuery(q: P.LookupQuery)
   requires P.ValidQuery(q)
   ensures B.ValidQuery(IQuery(q))
   {
+    RefinesLookup(q.lookup, q.key);
+    RefinesInterpretLookupAccountingForLeaf(q.lookup, q.key, q.value);
   }
 
   lemma RefinesValidInsertion(ins: P.MessageInsertion)
@@ -434,10 +551,10 @@ module PivotBetreeSpecRefinement {
         if (oldroot.children.Some?) {
           assert INode(newroot).buffer[key] == newroot'.buffer[key];
         } else {
-          MergeIsAssociative(
+          M.MergeIsAssociative(
             ins.msg,
             P.BucketLookup(oldroot.buckets[P.Route(oldroot.pivotTable, ins.key)], ins.key),
-            Define(DefaultValue())
+            M.DefineDefault()
           );
           assert INode(newroot).buffer[key] == newroot'.buffer[key];
         }
@@ -501,6 +618,11 @@ module PivotBetreeSpecRefinement {
     RefinesValidBetreeStep(betreeStep);
 
     match betreeStep {
+      case BetreeQuery(q) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
       case BetreeInsert(ins) => {
         InsertRefinesOps(ins);
       }

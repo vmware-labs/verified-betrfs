@@ -86,11 +86,16 @@ module BetreeSpec {
     if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
   }
 
+  predicate WFLookupForKey(lookup: Lookup, key: Key)
+  {
+    && |lookup| > 0
+    && lookup[0].ref == Root()
+    && LookupFollowsChildRefs(key, lookup)
+    && LookupVisitsWFNodes(lookup)
+  }
+
   predicate ValidQuery(q: LookupQuery) {
-    && |q.lookup| > 0
-    && q.lookup[0].ref == Root()
-    && LookupFollowsChildRefs(q.key, q.lookup)
-    && LookupVisitsWFNodes(q.lookup)
+    && WFLookupForKey(q.lookup, q.key)
     && BufferDefinesValue(InterpretLookup(q.lookup, q.key), q.value)
   }
 
