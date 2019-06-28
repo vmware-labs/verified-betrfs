@@ -568,7 +568,7 @@ abstract module PivotBetreeSpec {
     }
   }
 
-  predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op<Value>) {
+  predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)

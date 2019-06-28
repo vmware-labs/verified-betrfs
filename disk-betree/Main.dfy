@@ -60,7 +60,7 @@ abstract module Machine refines DiskAccessMachine {
   type Variables
 
   type Value
-  type UIOp = UI.Op<Value>
+  type UIOp = UI.Op
 
   // TODO create a proof obligation for the refinement
   //lemma Refines(k: Constants, s: Variables, s': Variables, uiop, dop)

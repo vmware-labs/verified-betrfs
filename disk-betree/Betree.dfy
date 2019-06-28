@@ -13,7 +13,7 @@ abstract module Betree {
   import opened Sequences
 
   import opened G = BetreeGraph
-  type UIOp = MS.UI.Op<Value>
+  type UIOp = MS.UI.Op
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
