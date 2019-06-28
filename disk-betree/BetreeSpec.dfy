@@ -60,8 +60,24 @@ module BetreeSpec {
 
   datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
 
+  predicate ValidLayerIndex(lookup: Lookup, idx: int) {
+    && 0 <= idx < |lookup|
+  }
+
   predicate LookupVisitsWFNodes(lookup: Lookup) {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
+  requires ValidLayerIndex(lookup, idx) && idx < |lookup| - 1;
+  requires key in lookup[idx].node.children;
+  {
+    lookup[idx].node.children[key] == lookup[idx+1].ref
+  }
+
+  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
+    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> key in lookup[idx].node.children)
+    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
   function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
@@ -70,8 +86,16 @@ module BetreeSpec {
     if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
   }
 
+  predicate WFLookupForKey(lookup: Lookup, key: Key)
+  {
+    && |lookup| > 0
+    && lookup[0].ref == Root()
+    && LookupFollowsChildRefs(key, lookup)
+    && LookupVisitsWFNodes(lookup)
+  }
+
   predicate ValidQuery(q: LookupQuery) {
-    && LookupVisitsWFNodes(q.lookup)
+    && WFLookupForKey(q.lookup, q.key)
     && BufferDefinesValue(InterpretLookup(q.lookup, q.key), q.value)
   }
 
