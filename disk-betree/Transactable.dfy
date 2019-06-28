@@ -18,9 +18,9 @@ abstract module Transactable {
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
 
   predicate Reads(k: Constants, s: Variables, ops: seq<ReadOp>)
-  ensures Reads(k, s, ops) && |ops| == 1 ==> ReadStep(k, s, ops[0])
-  ensures Reads(k, s, ops) && |ops| == 2 ==> ReadStep(k, s, ops[0]) && ReadStep(k, s, ops[1])
-  ensures Reads(k, s, ops) && |ops| == 3 ==> ReadStep(k, s, ops[0]) && ReadStep(k, s, ops[1]) && ReadStep(k, s, ops[2])
+  ensures Reads(k, s, ops) && 0 < |ops|  ==> ReadStep(k, s, ops[0])
+  ensures Reads(k, s, ops) && 1 < |ops|  ==> ReadStep(k, s, ops[1])
+  ensures Reads(k, s, ops) && 2 < |ops|  ==> ReadStep(k, s, ops[2])
   {
     forall op :: op in ops ==> ReadStep(k, s, op)
   }
