@@ -3,6 +3,7 @@ include "MapSpec.dfy"
 include "Betree.dfy"
 include "BetreeInv.dfy"
 include "BetreeRefinement.dfy"
+include "CrashTypes.dfy"
 
 abstract module CrashSafeBlockInterface {
   import BI = BetreeBlockInterface
@@ -79,10 +80,11 @@ abstract module CrashSafeBlockInterface {
 abstract module CrashSafeBetree {
   import DB = Betree
   import DBI = BetreeInv
+  import CrashTypes
 
   type Constants = DB.Constants
   datatype Variables = Variables(persistent: DB.Variables, ephemeral: DB.Variables)
-  type UIOp = DB.UIOp
+  type UIOp = CrashTypes.CrashableUIOp<DB.UIOp>
 
   predicate Init(k: Constants, s: Variables)
   {
@@ -97,13 +99,15 @@ abstract module CrashSafeBetree {
 
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
+    && uiop.NormalOp?
     && s.persistent == s'.persistent
-    && DB.Next(k, s.ephemeral, s'.ephemeral, uiop)
+    && DB.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
   }
 
   predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
-    && uiop.NoOp?
+    && uiop.NormalOp?
+    && uiop.uiop.NoOp?
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }
@@ -147,17 +151,18 @@ abstract module CrashSafeBetree {
   {
     var step :| NextStep(k, s, s', uiop, step);
     if (step.EphemeralMoveStep?) {
-      DBI.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop);
+      DBI.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop.uiop);
     }
   }
 }
 
 abstract module CrashSafeMap {
   import MS = MapSpec
+  import CrashTypes
 
   type Constants = MS.Constants
   datatype Variables<Value> = Variables(persistent: MS.Variables<Value>, ephemeral: MS.Variables<Value>)
-  type UIOp<Value> = MS.UI.Op<Value>
+  type UIOp<Value> = CrashTypes.CrashableUIOp<MS.UI.Op<Value>>
 
   predicate Init<Value>(k: Constants, s: Variables<Value>)
   {
@@ -173,12 +178,14 @@ abstract module CrashSafeMap {
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && s.persistent == s'.persistent
-    && MS.Next(k, s.ephemeral, s'.ephemeral, uiop)
+    && uiop.NormalOp?
+    && MS.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
   }
 
   predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
-    && uiop.NoOp?
+    && uiop.NormalOp?
+    && uiop.uiop.NoOp?
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }
@@ -223,7 +230,7 @@ abstract module CrashSafeMap {
   {
     var step :| NextStep(k, s, s', uiop, step);
     if (step.EphemeralMoveStep?) {
-      MS.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop);
+      MS.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop.uiop);
     }
   }
 }
@@ -263,7 +270,7 @@ abstract module CrashSafeBetreeMapRefinement {
     A.NextPreservesInv(k, s, s', uiop);
     match step {
       case EphemeralMoveStep => {
-        Ref.BetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral, uiop);
+        Ref.BetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral, uiop.uiop);
         assert B.NextStep(Ik(k), I(k, s), I(k, s'), uiop, B.EphemeralMoveStep);
         assert B.Next(Ik(k), I(k, s), I(k, s'), uiop);
       }
