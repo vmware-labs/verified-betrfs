@@ -49,8 +49,9 @@ abstract module BlockInterface refines Transactable {
     s.view[ref]
   }
     
-  predicate Init(k: Constants, s: Variables, block: Node) {
-    && s.view == imap[G.Root() := block]
+  predicate Init(k: Constants, s: Variables) {
+    && s.view.Keys == iset{G.Root()}
+    && G.Successors(s.view[G.Root()]) == iset{}
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, block: Node, ref: Reference) {
@@ -235,5 +236,11 @@ abstract module BlockInterface refines Transactable {
   {
     var step :| NextStep(k, s, s', step);
     NextStepPreservesInv(k, s, s', step);
+  }
+
+  lemma InitImpliesInv(k: Constants, s: Variables)
+    requires Init(k, s)
+    ensures Inv(k, s)
+  {
   }
 }
