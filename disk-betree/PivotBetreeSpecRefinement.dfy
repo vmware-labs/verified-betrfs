@@ -495,8 +495,11 @@ abstract module PivotBetreeSpecRefinement {
 
   lemma RefinesValidSplit(fusion: P.NodeFusion)
   requires P.ValidSplit(fusion)
+  ensures P.ValidFusion(fusion)
   ensures B.ValidSplit(IFusion(fusion))
   {
+    assert P.ValidFusion(fusion); // TODO
+
     forall ref | ref in IChildren(fusion.left_child).Values
     ensures ref in IChildren(fusion.fused_child).Values
     {

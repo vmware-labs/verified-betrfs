@@ -326,7 +326,9 @@ abstract module PivotBetreeSpec {
     left_child: Node,
     right_child: Node,
     
-    slot_idx: int
+    slot_idx: int,
+    num_children_left: int,
+    pivot: Key
   )
 
   predicate BucketFusion(
@@ -398,13 +400,45 @@ abstract module PivotBetreeSpec {
         fusion.split_parent.pivotTable[fusion.slot_idx])
   }
 
+  function SplitBucketLeft(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
+  {
+    map key | key in bucket && Keyspace.lt(key, pivot) :: bucket[key]
+  }
+
+  function SplitBucketRight(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
+  {
+    map key | key in bucket && Keyspace.lte(pivot, key) :: bucket[key]
+  }
+
   predicate ValidSplit(fusion: NodeFusion)
   {
     && WFNode(fusion.fused_parent)
     && WFNode(fusion.fused_child)
-    && WFNode(fusion.left_child)
-    && WFNode(fusion.right_child)
-    && ValidFusion(fusion)
+    && fusion.fused_parent.children.Some?
+    && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
+    && 1 <= fusion.num_children_left < |fusion.fused_child.buckets|
+    && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
+    && fusion.fused_child.pivotTable[fusion.num_children_left - 1] == fusion.pivot
+
+    // TODO consider requiring that the bucket being split is simply empty already
+
+    && fusion.split_parent == Node(
+      insert(fusion.fused_parent.pivotTable, fusion.pivot, fusion.slot_idx),
+      Some(replace1with2(fusion.fused_parent.children.value, fusion.left_childref, fusion.right_childref, fusion.slot_idx)),
+      replace1with2(fusion.fused_parent.buckets, SplitBucketLeft(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot), SplitBucketRight(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot), fusion.slot_idx)
+    )
+
+    && fusion.left_child == Node(
+      fusion.fused_child.pivotTable[ .. fusion.num_children_left - 1 ],
+      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ .. fusion.num_children_left ]) else None,
+      fusion.fused_child.buckets[ .. fusion.num_children_left ]
+    )
+
+    && fusion.right_child == Node(
+      fusion.fused_child.pivotTable[ fusion.num_children_left .. ],
+      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ fusion.num_children_left .. ]) else None,
+      fusion.fused_child.buckets[ fusion.num_children_left .. ]
+    )
   }
 
   function SplitReads(fusion: NodeFusion) : seq<ReadOp>
@@ -430,6 +464,7 @@ abstract module PivotBetreeSpec {
 
   predicate ValidMerge(fusion: NodeFusion)
   {
+    // TODO write in imperative style like ValidSplit is
     ValidFusion(fusion)
   }
 
