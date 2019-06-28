@@ -435,6 +435,7 @@ abstract module BetreeInv {
         if i == 0 {
           assert GrowReads(RootGrowth(oldroot, newchildref))[0] == G.ReadOp(Root(), oldroot);
           assert s.bcv.view[Root()] == oldroot;
+          assert LookupFollowsChildRefAtLayer(key, lookup', 0);
           assert lookup'[1].node == oldroot;
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
         } else {
