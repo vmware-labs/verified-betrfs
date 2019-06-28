@@ -628,10 +628,12 @@ abstract module PivotBetreeSpecRefinement {
   }
 
   lemma AddMessagesToNodeResult(node: PNode, bucket: map<Key, M.Message>, node': PNode, key: Key)
+  requires P.WFNode(node)
   requires node' == P.AddMessagesToNode(node, bucket);
   ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
   ensures key in bucket ==> P.NodeLookup(node', key) == M.Merge(bucket[key], P.NodeLookup(node, key))
   {
+    // TODO
   }
 
   lemma {:fuel IOps,2} FlushRefinesOps(flush: P.NodeFlush)
