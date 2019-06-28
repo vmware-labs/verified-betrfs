@@ -10,7 +10,7 @@ include "Betree.dfy"
 include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
 
-module PivotBetree {
+abstract module PivotBetree {
   import opened PivotBetreeSpec`Internal
 
   import BI = PivotBetreeBlockInterface

@@ -1,6 +1,6 @@
 include "../lib/Maps.dfy"
 
-module Disk {
+abstract module Disk {
   import opened Maps
 
   type LBA(==)

@@ -5,7 +5,7 @@ include "MapSpec.dfy"
 include "Graph.dfy"
 include "Message.dfy"
 
-module BetreeGraph refines Graph {
+abstract module BetreeGraph refines Graph {
   import MS = MapSpec
   import M = Message
 
@@ -22,11 +22,11 @@ module BetreeGraph refines Graph {
   }
 }
 
-module BetreeBlockInterface refines BlockInterface {
+abstract module BetreeBlockInterface refines BlockInterface {
   import G = BetreeGraph
 }
 
-module BetreeSpec {
+abstract module BetreeSpec {
   import MS = MapSpec
   import opened G = BetreeGraph
   import opened Sequences

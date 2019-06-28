@@ -1,7 +1,7 @@
 include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
 
-module UI {
+abstract module UI {
   import Keyspace = Total_Order
   type Key = Keyspace.Element
 
@@ -12,7 +12,7 @@ module UI {
     | CrashOp
 }
 
-module MapSpec {
+abstract module MapSpec {
   import opened MissingLibrary
 
   import UI = UI

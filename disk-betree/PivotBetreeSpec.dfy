@@ -8,7 +8,7 @@ include "Message.dfy"
 include "BetreeSpec.dfy"
 include "Betree.dfy"
 
-module PivotBetreeGraph refines Graph {
+abstract module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph
 
   import MS = MapSpec
@@ -40,11 +40,11 @@ module PivotBetreeGraph refines Graph {
   }
 }
 
-module PivotBetreeBlockInterface refines BlockInterface {
+abstract module PivotBetreeBlockInterface refines BlockInterface {
   import G = PivotBetreeGraph
 }
 
-module PivotBetreeSpec {
+abstract module PivotBetreeSpec {
   import MS = MapSpec
   import opened G = PivotBetreeGraph
   import opened Sequences
@@ -63,7 +63,9 @@ module PivotBetreeSpec {
 
   predicate WFPivotTable(pivotTable: PivotTable)
   {
-    Keyspace.IsStrictlySorted(pivotTable)
+    // Conditions to ensure each bucket has a non-empty key range
+    && Keyspace.IsStrictlySorted(pivotTable)
+    && (|pivotTable| > 0 ==> Keyspace.NotMinimum(pivotTable[0]))
   }
 
   function Route(pivotTable: PivotTable, key: Key) : int

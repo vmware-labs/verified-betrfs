@@ -4,7 +4,7 @@ include "Betree.dfy"
 include "BetreeInv.dfy"
 include "BetreeRefinement.dfy"
 
-module CrashSafeBlockInterface {
+abstract module CrashSafeBlockInterface {
   import BI = BetreeBlockInterface
 
   type Constants = BI.Constants
@@ -76,7 +76,7 @@ module CrashSafeBlockInterface {
   }
 }
 
-module CrashSafeBetree {
+abstract module CrashSafeBetree {
   import DB = Betree
   import DBI = BetreeInv
 
@@ -152,7 +152,7 @@ module CrashSafeBetree {
   }
 }
 
-module CrashSafeMap {
+abstract module CrashSafeMap {
   import MS = MapSpec
 
   type Constants = MS.Constants
@@ -228,7 +228,7 @@ module CrashSafeMap {
   }
 }
 
-module CrashSafeBetreeMapRefinement {
+abstract module CrashSafeBetreeMapRefinement {
   import A = CrashSafeBetree
   import B = CrashSafeMap
   import Ref = BetreeRefinement

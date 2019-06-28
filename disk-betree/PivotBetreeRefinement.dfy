@@ -15,7 +15,7 @@ include "PivotBetree.dfy"
 // "boilerplate" for the refinement/invariant proof for PivotBetree.
 // Interesting logic is in PivotBetreeSpecRefinement.
 
-module PivotBetreeInvAndRefinement {
+abstract module PivotBetreeInvAndRefinement {
   import opened PivotBetreeSpec`Spec
   import PB = PivotBetree
   import PBI = PivotBetreeBlockInterface

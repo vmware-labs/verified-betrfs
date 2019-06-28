@@ -2,7 +2,7 @@
 // Delta forms a monoid with a monoid-action on the values
 // (https://en.wikipedia.org/wiki/Monoid_action)
 
-module Message {
+abstract module Message {
 	type Value(!new)
 	type Delta(!new)
 

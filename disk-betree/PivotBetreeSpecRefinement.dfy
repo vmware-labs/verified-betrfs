@@ -10,7 +10,7 @@ include "Betree.dfy"
 include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
 
-module PivotBetreeSpecRefinement {
+abstract module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
   import M = Message
@@ -470,10 +470,52 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma GetKeyInBucket(pivotTable: PivotTable, idx: int, anyKey: Key) returns (key: Key)
+  requires P.WFPivotTable(pivotTable)
+  requires 0 <= idx < P.PivotTableSize(pivotTable)
+  ensures P.Route(pivotTable, key) == idx
+  {
+    if (idx == 0) {
+      if (|pivotTable| > 0) {
+        var key := Keyspace.SmallerElement(pivotTable[0]);
+        RouteIs(pivotTable, key, 0);
+        return key;
+      } else {
+        RouteIs(pivotTable, anyKey, 0);
+        return anyKey;
+      }
+    } else {
+      if (idx < |pivotTable|) {
+        Keyspace.IsStrictlySortedImpliesLt(pivotTable, idx-1, idx);
+      }
+      RouteIs(pivotTable, pivotTable[idx-1], idx);
+      return pivotTable[idx-1];
+    }
+  }
+
   lemma RefinesValidSplit(fusion: P.NodeFusion)
   requires P.ValidSplit(fusion)
   ensures B.ValidSplit(IFusion(fusion))
   {
+    forall ref | ref in IChildren(fusion.left_child).Values
+    ensures ref in IChildren(fusion.fused_child).Values
+    {
+      var key :| IChildren(fusion.left_child)[key] == ref;
+      var i := P.Route(fusion.left_child.pivotTable, key);
+      //assert fusion.left_child.children.value[i] == ref;
+      //assert fusion.fused_child.children.value[i] == ref;
+      var key1 := GetKeyInBucket(fusion.fused_child.pivotTable, i, key);
+      assert IChildren(fusion.fused_child)[key1] == ref;
+    }
+    forall ref | ref in IChildren(fusion.right_child).Values
+    ensures ref in IChildren(fusion.fused_child).Values
+    {
+      var key :| IChildren(fusion.right_child)[key] == ref;
+      var i := P.Route(fusion.right_child.pivotTable, key);
+      var j := i + |fusion.left_child.buckets|;
+      var key1 := GetKeyInBucket(fusion.fused_child.pivotTable, j, key);
+      assert IChildren(fusion.fused_child)[key1] == ref;
+    }
     RefinesValidFusion(fusion);
   }
 
