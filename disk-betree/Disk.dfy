@@ -1,18 +1,16 @@
 include "../lib/Maps.dfy"
 
-abstract module Disk {
+module Disk {
   import opened Maps
 
-  type LBA(==)
-
   // TODO make async
-  datatype DiskOp<Sector> =
+  datatype DiskOp<LBA(==), Sector> =
     | WriteOp(lba: LBA, sector: Sector)
     | ReadOp(lba: LBA, sector: Sector)
     | NoDiskOp
 
   datatype Constants = Constants()
-  datatype Variables<Sector> = Variables(blocks: map<LBA, Sector>)
+  datatype Variables<LBA, Sector> = Variables(blocks: map<LBA, Sector>)
 
   predicate Init(k: Constants, s: Variables)
   {

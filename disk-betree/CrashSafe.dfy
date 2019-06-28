@@ -156,6 +156,7 @@ abstract module CrashSafeBetree {
   }
 }
 
+// TODO this is spec and so should get its own file
 abstract module CrashSafeMap {
   import MS = MapSpec
   import CrashTypes
