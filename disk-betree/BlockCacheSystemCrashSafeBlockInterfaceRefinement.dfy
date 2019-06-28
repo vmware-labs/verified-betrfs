@@ -20,6 +20,7 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import opened G = BetreeGraph
   import BCS = BetreeGraphBlockCacheSystem
   import CSBI = CrashSafeBlockInterface
+  import opened DAMTypes
 
   import opened Maps
   import opened Sequences
@@ -119,7 +120,7 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
       RefinesOp(k, s, s', ops[0]);
     } else {
       var ops1, mid, ops2 := BC.SplitTransaction(k.machine, s.machine, s'.machine, ops);
-      var smid := BCS.Variables(mid, s.disk);
+      var smid := DAMVariables(mid, s.disk);
       BCS.TransactionStepPreservesInvariant(k, s, smid, D.NoDiskOp, ops1);
       RefinesOpTransaction(k, s, smid, ops1);
       RefinesOpTransaction(k, smid, s', ops2);
