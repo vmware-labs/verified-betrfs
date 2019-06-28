@@ -524,6 +524,8 @@ abstract module PivotBetreeSpecRefinement {
   ensures B.ValidMerge(IFusion(fusion))
   {
     RefinesValidFusion(fusion);
+
+    // TODO
   }
 
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
@@ -625,13 +627,110 @@ abstract module PivotBetreeSpecRefinement {
     assert INode(newroot) == newroot';
   }
 
-  lemma FlushRefinesOps(flush: P.NodeFlush)
+  lemma AddMessagesToNodeResult(node: PNode, bucket: map<Key, M.Message>, node': PNode, key: Key)
+  requires node' == P.AddMessagesToNode(node, bucket);
+  ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
+  ensures key in bucket ==> P.NodeLookup(node', key) == M.Merge(bucket[key], P.NodeLookup(node, key))
+  {
+  }
+
+  lemma {:fuel IOps,2} FlushRefinesOps(flush: P.NodeFlush)
   requires P.ValidFlush(flush)
   requires B.ValidFlush(IFlush(flush))
   ensures forall i | 0 <= i < |P.FlushOps(flush)| ::
       P.WFNode(P.FlushOps(flush)[i].node)
   ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
   {
+    var newparent := P.G.Node(
+        flush.parent.pivotTable,
+        Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
+        flush.parent.buckets[flush.slotIndex := map[]]
+      );
+    var bucket := flush.parent.buckets[flush.slotIndex];
+    var newchild := P.AddMessagesToNode(flush.child, bucket);
+    var allocop := P.G.AllocOp(flush.newchildref, newchild);
+    var writeop := P.G.WriteOp(flush.parentref, newparent);
+
+    /*
+    assert |newchild.buckets| == |flush.child.buckets|;
+    assert |newchild.pivotTable| == |flush.child.pivotTable|;
+    assert P.WFNode(newchild);
+    assert P.WFNode(newparent);
+    */
+
+    var flush' := IFlush(flush);
+    var parentref := flush'.parentref;
+    var parent := flush'.parent;
+    var childref := flush'.childref;
+    var child := flush'.child;
+    var newchildref := flush'.newchildref;
+    var newbuffer := imap k :: (if k in flush'.movedKeys then B.G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
+    var newchild' := B.G.Node(child.children, newbuffer);
+    var newparentbuffer := imap k :: (if k in flush'.movedKeys then B.G.M.Update(B.G.M.NopDelta()) else parent.buffer[k]);
+    var newparentchildren := imap k | k in parent.children :: (if k in flush'.movedKeys then newchildref else parent.children[k]);
+    var newparent' := B.G.Node(newparentchildren, newparentbuffer);
+    var allocop' := B.G.AllocOp(newchildref, newchild');
+    var writeop' := B.G.WriteOp(parentref, newparent');
+
+    forall k: Key
+    ensures IBuffer(newchild)[k] == newbuffer[k]
+    {
+      AddMessagesToNodeResult(flush.child, bucket, newchild, k);
+      if (k in flush'.movedKeys) {
+        RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
+        if (newchild.children.Some?) {
+          assert IBuffer(newchild)[k] == newbuffer[k];
+        } else {
+          M.MergeIsAssociative(P.BucketLookup(bucket, k), P.NodeLookup(flush.child, k), M.DefineDefault());
+          assert IBuffer(newchild)[k]
+              == M.Merge(P.NodeLookup(newchild, k), M.DefineDefault())
+              == M.Merge(M.Merge(P.BucketLookup(bucket, k), P.NodeLookup(flush.child, k)), M.DefineDefault())
+              == M.Merge(P.BucketLookup(bucket, k), M.Merge(P.NodeLookup(flush.child, k), M.DefineDefault()))
+              == newbuffer[k];
+        }
+      } else {
+        assert P.WFBucket(flush.parent, flush.slotIndex);
+        assert k !in bucket;
+        if (newchild.children.Some?) {
+          assert flush.child.children.Some?;
+          assert IBuffer(newchild)[k] == IBuffer(flush.child)[k];
+        } else {
+          assert flush.child.children.None?;
+          assert IBuffer(newchild)[k] == IBuffer(flush.child)[k];
+        }
+        assert IBuffer(newchild)[k] == newbuffer[k];
+      }
+    }
+
+    forall i | 0 <= i < |newparent.buckets|
+    ensures P.WFBucket(newparent, i)
+    {
+      assert P.WFBucket(flush.parent, i);
+    }
+    assert P.WFNode(newparent);
+
+    assert IChildren(newchild) == newchild'.children;
+    assert IBuffer(newchild) == newbuffer;
+
+    forall k: Key
+    ensures IChildren(newparent)[k] == newparent'.children[k]
+    {
+      if (k in flush'.movedKeys) {
+        RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
+        assert IChildren(newparent)[k] == newparent'.children[k];
+      } else {
+        assert IChildren(newparent)[k] == newparent'.children[k];
+      }
+    }
+
+    assert IChildren(newparent) == newparent'.children;
+    assert IBuffer(newparent) == newparentbuffer;
+
+    assert INode(newchild) == newchild';
+    assert INode(newparent) == newparent';
+
+    assert IOp(allocop) == allocop';
+    assert IOp(writeop) == writeop';
   }
 
   lemma {:fuel IOps,3} GrowRefinesOps(growth: P.RootGrowth)
