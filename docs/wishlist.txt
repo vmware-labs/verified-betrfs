@@ -13,3 +13,5 @@
       which has Y replaced with Y'. Instead I have to write a lot of boilerplate.
 
 - Better way to specify implemenation vs spec files with including files.
+
+- {:namespace} metadata tag on modules so c# code can have reliable namespaces
