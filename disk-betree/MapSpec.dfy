@@ -1,11 +1,18 @@
 include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
 
+abstract module ValueWithDefault {
+  type Value(!new)
+	function DefaultValue() : Value 
+}
+
 abstract module UI {
   import Keyspace = Total_Order
+  import V = ValueWithDefault
   type Key = Keyspace.Element
+  type Value = V.Value
 
-  datatype Op<Value> =
+  datatype Op =
     | NoOp
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
@@ -13,17 +20,21 @@ abstract module UI {
 
 abstract module MapSpec {
   import opened MissingLibrary
+  import V = ValueWithDefault
 
   import UI = UI
   import Keyspace = UI.Keyspace
   type Key = Keyspace.Element
+  type Value = V.Value
 
   // Users must provide a definition of EmptyValue
-  function EmptyValue<Value>() : Value
+  function EmptyValue() : Value {
+    V.DefaultValue()
+  }
 
   datatype Constants = Constants()
-  type View<Value> = imap<Key, Value>
-  datatype Variables<Value> = Variables(view:View<Value>)
+  type View = imap<Key, Value>
+  datatype Variables = Variables(view:View)
 
   predicate ViewComplete(view:View)
   {
@@ -42,7 +53,7 @@ abstract module MapSpec {
       true
   }
 
-  function EmptyMap<Value>() : (zmap : imap<Key,Value>)
+  function EmptyMap() : (zmap : imap<Key,Value>)
       ensures ViewComplete(zmap)
   {
       imap k | InDomain(k) :: EmptyValue()
@@ -54,7 +65,7 @@ abstract module MapSpec {
       s == Variables(EmptyMap())
   }
 
-  predicate Query<Value>(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, result:Value)
+  predicate Query(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, result:Value)
   {
       && uiop == UI.GetOp(key, result)
       && WF(s)
@@ -62,7 +73,7 @@ abstract module MapSpec {
       && s' == s
   }
 
-  predicate Write<Value>(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, new_value:Value)
+  predicate Write(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, new_value:Value)
       ensures Write(k, s, s', uiop, key, new_value) ==> WF(s')
   {
       && uiop == UI.PutOp(key, new_value)
@@ -77,7 +88,7 @@ abstract module MapSpec {
       && s' == s
   }
 
-  datatype Step<Value> =
+  datatype Step =
       | QueryStep(key:Key, result:Value)
       | WriteStep(key:Key, new_value:Value)
       | StutterStep
@@ -91,9 +102,9 @@ abstract module MapSpec {
       }
   }
 
-  predicate Next<Value(!new)>(k:Constants, s:Variables, s':Variables, uiop: UI.Op)
+  predicate Next(k:Constants, s:Variables, s':Variables, uiop: UI.Op)
   {
-      exists step :: NextStep<Value>(k, s, s', uiop, step)
+      exists step :: NextStep(k, s, s', uiop, step)
   }
 
   predicate Inv(k:Constants, s:Variables) { WF(s) }

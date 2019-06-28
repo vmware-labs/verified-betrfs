@@ -162,10 +162,10 @@ abstract module CrashSafeMap {
   import CrashTypes
 
   type Constants = MS.Constants
-  datatype Variables<Value> = Variables(persistent: MS.Variables<Value>, ephemeral: MS.Variables<Value>)
-  type UIOp<Value> = CrashTypes.CrashableUIOp<MS.UI.Op<Value>>
+  datatype Variables = Variables(persistent: MS.Variables, ephemeral: MS.Variables)
+  type UIOp = CrashTypes.CrashableUIOp<MS.UI.Op>
 
-  predicate Init<Value>(k: Constants, s: Variables<Value>)
+  predicate Init(k: Constants, s: Variables)
   {
     && MS.Init(k, s.persistent)
     && s.ephemeral == s.persistent
@@ -247,7 +247,7 @@ abstract module CrashSafeBetreeMapRefinement {
     Ref.Ik(k)
   }
 
-  function I(k: A.Constants, s: A.Variables) : B.Variables<A.DB.G.Value>
+  function I(k: A.Constants, s: A.Variables) : B.Variables
   requires A.Inv(k, s)
   {
     B.Variables(Ref.I(k, s.persistent), Ref.I(k, s.ephemeral))
