@@ -470,6 +470,20 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma RefinesValidSplit(fusion: P.NodeFusion)
+  requires P.ValidSplit(fusion)
+  ensures B.ValidSplit(IFusion(fusion))
+  {
+    RefinesValidFusion(fusion);
+  }
+
+  lemma RefinesValidMerge(fusion: P.NodeFusion)
+  requires P.ValidMerge(fusion)
+  ensures B.ValidMerge(IFusion(fusion))
+  {
+    RefinesValidFusion(fusion);
+  }
+
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   ensures B.ValidBetreeStep(IStep(betreeStep))
@@ -479,8 +493,8 @@ module PivotBetreeSpecRefinement {
       case BetreeInsert(ins) => RefinesValidInsertion(ins);
       case BetreeFlush(flush) => RefinesValidFlush(flush);
       case BetreeGrow(growth) => RefinesValidGrow(growth);
-      case BetreeSplit(fusion) => RefinesValidFusion(fusion);
-      case BetreeMerge(fusion) => RefinesValidFusion(fusion);
+      case BetreeSplit(fusion) => RefinesValidSplit(fusion);
+      case BetreeMerge(fusion) => RefinesValidMerge(fusion);
     }
   }
 
