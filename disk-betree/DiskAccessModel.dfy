@@ -1,7 +1,13 @@
 include "Disk.dfy"
 include "MapSpec.dfy"
+include "CrashTypes.dfy"
 
 // Spec for the DiskAccessModel
+
+abstract module DAMTypes {
+  datatype DAMConstants<M,D> = DAMConstants(machine: M, disk: D)
+  datatype DAMVariables<M,D> = DAMVariables(machine: M, disk: D)
+}
 
 abstract module DiskAccessMachine {
   import D = Disk
@@ -21,11 +27,13 @@ abstract module DiskAccessMachine {
 abstract module DiskAccessModel {
   import D = Disk
   import M : DiskAccessMachine
+  import CrashTypes
+  import DAMTypes
 
   type DiskOp = M.DiskOp
-  datatype Constants = Constants(machine: M.Constants, disk: D.Constants)
-  datatype Variables = Variables(machine: M.Variables, disk: D.Variables<M.Sector>)
-  datatype UIOp = UICrash | UINormal(uiop: M.UIOp)
+  type Constants = DAMTypes.DAMConstants<M.Constants, D.Constants>
+  type Variables = DAMTypes.DAMVariables<M.Variables, D.Variables<M.Sector>>
+  type CrashableUIOp = CrashTypes.CrashableUIOp<M.UIOp>
   
   predicate Init(k: Constants, s: Variables)
   {
@@ -37,21 +45,21 @@ abstract module DiskAccessModel {
     | DamStep(dop: DiskOp)
     | CrashStep
 
-  predicate Dam(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  predicate Dam(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, dop: DiskOp)
   {
-    && uiop.UINormal?
+    && uiop.NormalOp?
     && M.Next(k.machine, s.machine, s'.machine, uiop.uiop, dop)
     && D.Next(k.disk, s.disk, s'.disk, dop)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp)
   {
-    && uiop.UICrash?
+    && uiop.CrashOp?
     && M.Init(k.machine, s'.machine)
     && s'.disk == s.disk
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: Step)
   {
     match step {
       case DamStep(dop) => Dam(k, s, s', uiop, dop)
@@ -59,7 +67,7 @@ abstract module DiskAccessModel {
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp) {
     exists step :: NextStep(k, s, s', uiop, step)
   }
 }

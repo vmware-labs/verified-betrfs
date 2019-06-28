@@ -2,10 +2,12 @@ include "Disk.dfy"
 include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
+include "DiskAccessModel.dfy"
 
 abstract module BlockCacheSystem {
   import opened Maps
   import opened Sequences
+  import opened DAMTypes
 
   import M : BlockCache
   import D = Disk
@@ -14,12 +16,8 @@ abstract module BlockCacheSystem {
   type Sector = M.Sector
   type DiskOp = M.DiskOp
 
-  datatype Constants = Constants(machine: M.Constants, disk: D.Constants)
-  // TODO TTY
-  // TODO disk message queue for async disk operations
-  datatype Variables = Variables(
-    machine: M.Variables,
-    disk: D.Variables<Sector>)
+  type Constants = DAMConstants<M.Constants, D.Constants>
+  type Variables = DAMVariables<M.Variables, D.Variables<Sector>>
 
   type Superblock = M.Superblock
   type Reference = M.G.Reference
@@ -424,8 +422,8 @@ abstract module BlockCacheSystem {
       OpPreservesInvariant(k, s, s', ops[0]);
     } else {
       var ops1, smid, ops2 := M.SplitTransaction(k.machine, s.machine, s'.machine, ops);
-      TransactionStepPreservesInvariant(k, s, Variables(smid, s.disk), dop, ops1);
-      TransactionStepPreservesInvariant(k, Variables(smid, s.disk), s', dop, ops2);
+      TransactionStepPreservesInvariant(k, s, DAMVariables(smid, s.disk), dop, ops1);
+      TransactionStepPreservesInvariant(k, DAMVariables(smid, s.disk), s', dop, ops2);
     }
   }
 

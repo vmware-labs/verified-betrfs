@@ -1,12 +1,12 @@
 include "BlockCache.dfy"
 include "Betree.dfy"
-include "Betree.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
-include "BetreeSpec.dfy"
 include "BlockCacheSystemCrashSafeBlockInterfaceRefinement.dfy"
+include "BetreeSpec.dfy"
+include "DiskAccessModel.dfy"
 
-abstract module BetreeBlockCache {
+abstract module BetreeBlockCache refines DiskAccessMachine {
   import opened Maps
   import opened Sequences
 
@@ -15,14 +15,13 @@ abstract module BetreeBlockCache {
   import BC = BetreeGraphBlockCache
   import DB = Betree
   import BI = BetreeBlockInterface
-  import D = Disk
 
   type Variables = BC.Variables
   type Constants = BC.Constants
-
-  type DiskOp = BC.DiskOp
-  type Op = BC.Op
+  type Sector = BC.Sector
   type UIOp = DB.UIOp
+
+  type Op = BC.Op
 
   predicate Init(k: Constants, s: Variables) {
     BC.Init(k, s)
