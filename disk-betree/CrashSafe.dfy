@@ -13,7 +13,7 @@ abstract module CrashSafeBlockInterface {
 
   predicate Init(k: Constants, s: Variables)
   {
-    && (exists block :: BI.Init(k, s.persistent, block))
+    && BI.Init(k, s.persistent)
     && s.ephemeral == s.persistent
   }
 
@@ -62,7 +62,7 @@ abstract module CrashSafeBlockInterface {
   requires Init(k, s)
   ensures Inv(k, s)
   {
-    //BI.InitImpliesInv(k, s.ephemeral);
+    BI.InitImpliesInv(k, s.ephemeral);
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)

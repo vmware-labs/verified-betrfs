@@ -41,7 +41,8 @@ abstract module Betree {
   }
 
   predicate Init(k: Constants, s: Variables) {
-    && BI.Init(k.bck, s.bcv, EmptyNode())
+    && BI.Init(k.bck, s.bcv)
+    && s.bcv.view[Root()] == EmptyNode()
   }
 
   predicate GC(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>) {
