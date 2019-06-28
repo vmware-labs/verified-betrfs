@@ -170,6 +170,13 @@ module BetreeInv {
     && BI.OpTransaction(k, s, s', GrowOps(RootGrowth(oldroot, newchildref)))
   }
 
+  predicate Redirect(k: BI.Constants, s: BI.Variables, s': BI.Variables, redirect: Redirect)
+  {
+    && ValidRedirect(redirect)
+    && BI.Reads(k, s, RedirectReads(redirect))
+    && BI.OpTransaction(k, s, s', RedirectOps(redirect))
+  }
+
   predicate Split(k: BI.Constants, s: BI.Variables, s': BI.Variables, fusion: NodeFusion)
   {
     && ValidSplit(fusion)
@@ -256,6 +263,33 @@ module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
+  lemma RedirectPreservesAcyclic(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(k, s);
+    requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
+    ensures Acyclic(k, s');
+  {
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, redirect.parentref)
+      ensures ref in G.ReachableReferences(s.bcv.view, redirect.parentref)
+    {
+      var path :| G.NewPath(s.bcv.view, s'.bcv.view, redirect.parentref, path) && Last(path) == ref;
+      if ref == path[1] {
+        var key :| IMapsTo(redirect.new_parent.children, key, ref);
+        assert key !in redirect.keys;
+        assert G.IsPath(s.bcv.view, [redirect.parentref, ref]);
+      } else {
+        assert path[|path|-2] == redirect.new_childref;
+        assert ref in IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values;
+        var key :| key in redirect.keys * redirect.old_parent.children.Keys * redirect.new_child.children.Keys && redirect.new_child.children[key] == ref;
+        var old_childref := redirect.old_parent.children[key];
+        var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
+        assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+        assert G.IsPath(s.bcv.view, [redirect.parentref, old_childref, ref]);
+      }
+    }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, redirect.parentref); // observe
+    AcyclicGraphImpliesAcyclic(k, s'); // observe
+  }
+
   lemma SplitPreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
     requires Inv(k, s);
     requires Split(k.bck, s.bcv, s'.bcv, fusion);
@@ -280,6 +314,14 @@ module BetreeInv {
           assert ref in fusion.fused_parent.children.Values; // observe
           assert G.IsPath(s.bcv.view, [fusion.parentref, ref]); // observe
         } else if path[|path|-2] == fusion.left_childref {
+          assert path[|path|-3] == fusion.parentref || path[|path|-3] == fusion.left_childref || path[|path|-3] == fusion.right_childref;
+          assert fusion.left_childref !in fusion.left_child.children.Values;
+          assert fusion.left_childref !in fusion.right_child.children.Values;
+          assert path[|path|-3] == fusion.parentref;
+          assert fusion.left_childref in fusion.split_parent.children.Values;
+          assert fusion.fused_childref in fusion.fused_parent.children.Values;
+          assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref]); // observe
+          assert G.IsPath(s.bcv.view, [fusion.fused_childref, ref]); // observe
           assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]); // observe
         } else {
           assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]); // observe
