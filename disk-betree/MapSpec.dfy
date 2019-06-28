@@ -9,7 +9,6 @@ abstract module UI {
     | NoOp
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
-    | CrashOp
 }
 
 abstract module MapSpec {
