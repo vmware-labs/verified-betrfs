@@ -677,20 +677,22 @@ abstract module PivotBetreeSpecRefinement {
     {
       AddMessagesToNodeResult(flush.child, bucket, newchild, k);
       if (k in flush'.movedKeys) {
-        RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
+        //RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
         if (newchild.children.Some?) {
           assert IBuffer(newchild)[k] == newbuffer[k];
         } else {
           M.MergeIsAssociative(P.BucketLookup(bucket, k), P.NodeLookup(flush.child, k), M.DefineDefault());
+          /*
           assert IBuffer(newchild)[k]
               == M.Merge(P.NodeLookup(newchild, k), M.DefineDefault())
               == M.Merge(M.Merge(P.BucketLookup(bucket, k), P.NodeLookup(flush.child, k)), M.DefineDefault())
               == M.Merge(P.BucketLookup(bucket, k), M.Merge(P.NodeLookup(flush.child, k), M.DefineDefault()))
-              == newbuffer[k];
+              == newbuffer[k];*/
         }
       } else {
         assert P.WFBucket(flush.parent, flush.slotIndex);
-        assert k !in bucket;
+        //assert k !in bucket;
+        /*
         if (newchild.children.Some?) {
           assert flush.child.children.Some?;
           assert IBuffer(newchild)[k] == IBuffer(flush.child)[k];
@@ -698,6 +700,7 @@ abstract module PivotBetreeSpecRefinement {
           assert flush.child.children.None?;
           assert IBuffer(newchild)[k] == IBuffer(flush.child)[k];
         }
+        */
         assert IBuffer(newchild)[k] == newbuffer[k];
       }
     }
@@ -707,11 +710,12 @@ abstract module PivotBetreeSpecRefinement {
     {
       assert P.WFBucket(flush.parent, i);
     }
-    assert P.WFNode(newparent);
+    //assert P.WFNode(newparent);
 
-    assert IChildren(newchild) == newchild'.children;
-    assert IBuffer(newchild) == newbuffer;
+    //assert IChildren(newchild) == newchild'.children;
+    //assert IBuffer(newchild) == newbuffer;
 
+    /*
     forall k: Key
     ensures IChildren(newparent)[k] == newparent'.children[k]
     {
@@ -722,12 +726,15 @@ abstract module PivotBetreeSpecRefinement {
         assert IChildren(newparent)[k] == newparent'.children[k];
       }
     }
+    */
 
+    /*
     assert IChildren(newparent) == newparent'.children;
     assert IBuffer(newparent) == newparentbuffer;
 
     assert INode(newchild) == newchild';
     assert INode(newparent) == newparent';
+    */
 
     assert IOp(allocop) == allocop';
     assert IOp(writeop) == writeop';
