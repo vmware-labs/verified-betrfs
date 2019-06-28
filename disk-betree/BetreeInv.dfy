@@ -541,6 +541,98 @@ module BetreeInv {
   //////// Split
   ////////
 
+  lemma SplitParentIsWFNode(fusion: NodeFusion)
+    requires WFNode(fusion.fused_parent)
+    requires ValidSplit(fusion)
+    ensures WFNode(fusion.split_parent)
+  {
+    forall key | key !in fusion.split_parent.children
+      ensures BufferIsDefining(fusion.split_parent.buffer[key])
+    {
+      if key in fusion.left_keys {
+      } else if key in fusion.right_keys {
+      } else {
+      }
+    }
+  }
+
+  lemma SplitEquivalentLookups2(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
+  requires Inv(k, s)
+  requires Split(k.bck, s.bcv, s'.bcv, fusion);
+  ensures EquivalentLookups(k, s, s');
+  {
+    SplitParentIsWFNode(fusion);
+    
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    {
+      if i :| 0 <= i < |lookup| && lookup[i].ref == fusion.parentref {
+        if key in fusion.left_keys + fusion.right_keys && i < |lookup| - 1 {
+          var childref' := if key in fusion.left_keys then fusion.left_childref else fusion.right_childref;
+          var child' := s'.bcv.view[childref'];
+          var lookup' := lookup[i := G.ReadOp(fusion.parentref, fusion.split_parent)][i + 1 := G.ReadOp(childref', child')];
+
+          forall j | 0 <= j < |lookup'|-1
+            ensures LookupFollowsChildRefAtLayer(key, lookup', j)
+          {
+            if j == i {
+            } else if j == i + 1 {
+              assert LookupFollowsChildRefAtLayer(key, lookup, i);
+              assert LookupFollowsChildRefAtLayer(key, lookup, j);
+            } else {
+              assert LookupFollowsChildRefAtLayer(key, lookup, j);
+            }
+          }
+
+          var middle :=  [lookup[i]]  + [lookup[i+1]];
+          var middle' := [lookup'[i]] + [lookup'[i+1]];
+
+          assert lookup[i].node.buffer == lookup'[i].node.buffer;
+
+          assert LookupFollowsChildRefAtLayer(key, lookup, i);
+          assert lookup[i+1].node == fusion.fused_child;
+          assert lookup[i+1].node.buffer[key] == lookup'[i+1].node.buffer[key];
+          
+          assert InterpretLookup(middle', key) == InterpretLookup(middle, key);          
+          
+          InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
+          assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
+          
+          InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+          assert lookup == lookup[..i] + middle + lookup[i+2..];
+
+          assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+
+        } else {
+          var lookup' := lookup[i := G.ReadOp(fusion.parentref, fusion.split_parent)];
+          
+          forall j | 0 <= j < |lookup'|-1
+            ensures LookupFollowsChildRefAtLayer(key, lookup', j)
+          {
+            assert LookupFollowsChildRefAtLayer(key, lookup, j);
+          }
+
+          InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
+          assert lookup' == lookup'[..i] + [lookup'[i]] + lookup'[i+1..];
+          
+          InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
+          assert lookup == lookup[..i] + [lookup[i]] + lookup[i+1..];
+          
+          assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+        }
+      } else {
+        assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
+      }
+    }
+
+    forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+      ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
+    {
+        assume false;
+    }
+
+  }
+  
   // Define the transformations for splits:
 
   // These are the relations we should get out between lookup and lookup' if we obtain lookup'
