@@ -18,6 +18,7 @@ abstract module BetreeBlockCache refines DiskAccessMachine {
 
   type Variables = BC.Variables
   type Constants = BC.Constants
+  type LBA = BC.LBA
   type Sector = BC.Sector
   type UIOp = DB.UIOp
 

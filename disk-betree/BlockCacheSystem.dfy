@@ -12,12 +12,12 @@ abstract module BlockCacheSystem {
   import M : BlockCache
   import D = Disk
 
-  type LBA = D.LBA
+  type LBA = M.LBA
   type Sector = M.Sector
   type DiskOp = M.DiskOp
 
   type Constants = DAMConstants<M.Constants, D.Constants>
-  type Variables = DAMVariables<M.Variables, D.Variables<Sector>>
+  type Variables = DAMVariables<M.Variables, D.Variables<LBA, Sector>>
 
   type Superblock = M.Superblock
   type Reference = M.G.Reference

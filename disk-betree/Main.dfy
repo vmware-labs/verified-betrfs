@@ -1,25 +1,21 @@
 include "MapSpec.dfy"
 include "Disk.dfy"
+include "DiskAccessModel.dfy"
 
-include "BetreeBlockCache.dfy"
-
-module RealDisk refines Disk {
-  newtype{:nativeType "uint"} uint32 = i:int | 0 <= i < 0x100000000
+module DiskTypes {
+  newtype {:nativeType "uint"} uint32 = i:int | 0 <= i < 0x100000000
+  newtype {:nativeType "byte"} byte = i:int | 0 <= i < 0x100
   type LBA = uint32
+  type ByteSector = seq<byte>
 }
 
 module DiskInterface {
-  import D = RealDisk
+  import DT = DiskTypes
+  import D = Disk
 
-  newtype{:nativeType "byte"} byte = i:int | 0 <= i < 0x100
-
-  method f() returns (b : byte) {
-    return 5;
-  }
-
-  type LBA = D.LBA
-  type ByteSector = seq<byte>
-  type DiskOp = D.DiskOp<ByteSector>
+  type LBA = DT.LBA
+  type Sector = DT.ByteSector
+  type DiskOp = D.DiskOp<LBA, Sector>
 
   const BLOCK_SIZE: int := 1024*1024
 
@@ -27,13 +23,13 @@ module DiskInterface {
     ghost var dop: DiskOp;
 
     // TODO make these take byte arrays instead for faster imperative code
-    method write(lba: LBA, sector: ByteSector)
+    method write(lba: LBA, sector: Sector)
     modifies this;
     requires dop == D.NoDiskOp;
     requires |sector| == BLOCK_SIZE
     ensures dop == D.WriteOp(lba, sector);
 
-    method read(lba: LBA) returns (sector: ByteSector)
+    method read(lba: LBA) returns (sector: Sector)
     modifies this
     requires dop == D.NoDiskOp
     ensures dop == D.ReadOp(lba, sector)
@@ -51,22 +47,20 @@ module DiskInterface {
 // and refine it to the BetreeBlockCache
 // either than or BetreeBlockCache itself will be the instantiation of this module?
 
-// TODO make an abstract MachineSystem that can take any machine
-
 // TODO how to create all the contracts without a dependency on the .i file that instantiates
 // the machine? Sounds like it would require parameterized modules?
 // IDEALLY we would be able to say: define a machine type M and also give me a proof
 // that MachineSystem<M> refines CrashSafeMap
 
-abstract module Machine {
-  import opened DiskInterface
+abstract module Machine refines DiskAccessMachine {
   import UI = UI
+  import DiskTypes
 
   type Constants
   type Variables
 
-  predicate Inv(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op, dop: DiskOp)
+  type Value
+  type UIOp = UI.Op<Value>
 
   // TODO create a proof obligation for the refinement
   //lemma Refines(k: Constants, s: Variables, s': Variables, uiop, dop)
@@ -75,28 +69,31 @@ abstract module Machine {
 }
 
 abstract module Main {
-  import UI = UI
   import M : Machine
 
-  import opened DiskInterface
+  import Disk
+  import DiskInterface
+  import UI
 
   type Value = int
 
   type Constants // impl defined
   type Variables // impl defined (heap state)
 
-  type UIOp = UI.Op<Value>
+  type UIOp = M.UIOp
 
   // impl defined stuff
   predicate Inv(k: Constants, s: Variables)
   function Ik(k: Constants): M.Constants
   function I(k: Constants, s: Variables): M.Variables
   function Constants() : M.Constants
+  function ILBA(lba: DiskInterface.LBA) : M.LBA
+  function ISector(sector: DiskInterface.Sector) : M.Sector
 
-  datatype FWorld = FWorld(s: M.Variables, dop: DiskOp)
+  datatype FWorld = FWorld(s: M.Variables, dop: DiskInterface.DiskOp)
 
   class World {
-    var diskIOHandler : DiskIOHandler
+    var diskIOHandler : DiskInterface.DiskIOHandler
     var s : Variables
 
     function interp(k: Constants) : FWorld
@@ -109,9 +106,17 @@ abstract module Main {
     constructor ()
   }
 
+  function IDiskOp(diskOp: DiskInterface.DiskOp) : M.DiskOp {
+    match diskOp {
+      case WriteOp(lba, sector) => Disk.WriteOp(ILBA(lba), ISector(sector))
+      case ReadOp(lba, sector) => Disk.WriteOp(ILBA(lba), ISector(sector))
+      case NoDiskOp => Disk.NoDiskOp
+    }
+  }
+
   predicate Next(k: Constants, fw: FWorld, fw': FWorld, uiop: UIOp)
   {
-    M.Next(Ik(k), fw.s, fw'.s, uiop, fw'.dop)
+    M.Next(Ik(k), fw.s, fw'.s, uiop, IDiskOp(fw'.dop))
   }
 
   method handle(k: Constants, world: World)
@@ -121,9 +126,4 @@ abstract module Main {
   ensures Inv(k, world.s)
   ensures Next(k, old(world.interp(k)), world.interp(k), UI.NoOp)
   // impl defined
-
-  lemma StateRefinesInv(k: Constants, s: Variables)
-  requires Inv(k, s)
-  ensures M.Inv(Ik(k), I(k, s))
-  // proved by impl
 }
