@@ -583,10 +583,10 @@ abstract module BetreeInv {
   //////// Redirect
   ////////
 
-  lemma RedirectEquivalentLookups(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+  lemma RedirectEquivalentLookupsFwd(k: Constants, s: Variables, s': Variables, redirect: Redirect)
     requires Inv(k, s)
     requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
-    ensures EquivalentLookups(k, s, s')
+    ensures PreservesLookups(k, s, s')
   {
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
       ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
@@ -654,12 +654,54 @@ abstract module BetreeInv {
         assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
       }
     }
+  }
+
+  lemma RedirectEquivalentLookupsRev(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(k, s)
+    requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
+    ensures PreservesLookups(k, s', s)
+  {
+    RedirectPreservesAcyclic(k, s, s', redirect);
     
     forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
       ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
-      assume false;
+      if i :| 0 <= i < |lookup'| && lookup'[i].ref == redirect.parentref {
+        var lookup := lookup'[i := G.ReadOp(redirect.parentref, redirect.old_parent)];
+        if i + 1 < |lookup'| && lookup'[i+1].ref == redirect.new_childref {
+          assert LookupFollowsChildRefAtLayer(key, lookup', i);
+          assert key in redirect.keys;
+          if key in redirect.old_parent.children {
+            lookup := lookup[i+1 := G.ReadOp(redirect.old_parent.children[key], redirect.old_children[redirect.old_parent.children[key]])];
+            assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+          } else {
+            lookup := lookup[..i+1];
+            forall j | 0 <= j < |lookup|-1
+              ensures LookupFollowsChildRefAtLayer(key, lookup, j)
+            {
+              assert LookupFollowsChildRefAtLayer(key, lookup', j);
+            }
+            
+            assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+          }
+        }
+      } else  if i :| 0 <= i < |lookup'| && lookup'[i].ref == redirect.new_childref {
+        assert LookupFollowsChildRefAtLayer(key, lookup', i-1);
+        assert false;
+      } else {
+        assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
+      }
+        
     }
+  }
+  
+  lemma RedirectEquivalentLookups(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(k, s)
+    requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
+    ensures PreservesLookups(k, s, s')
+  {
+    RedirectEquivalentLookupsFwd(k, s, s', redirect);
+    RedirectEquivalentLookupsRev(k, s, s', redirect);
   }
   
   ////////
