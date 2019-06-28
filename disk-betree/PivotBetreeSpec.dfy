@@ -8,7 +8,7 @@ include "Message.dfy"
 include "BetreeSpec.dfy"
 include "Betree.dfy"
 
-module PivotBetreeGraph refines Graph {
+abstract module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph
 
   import MS = MapSpec
@@ -40,11 +40,11 @@ module PivotBetreeGraph refines Graph {
   }
 }
 
-module PivotBetreeBlockInterface refines BlockInterface {
+abstract module PivotBetreeBlockInterface refines BlockInterface {
   import G = PivotBetreeGraph
 }
 
-module PivotBetreeSpec {
+abstract module PivotBetreeSpec {
   import MS = MapSpec
   import opened G = PivotBetreeGraph
   import opened Sequences

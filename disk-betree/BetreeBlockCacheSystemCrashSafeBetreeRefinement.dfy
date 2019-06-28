@@ -4,7 +4,7 @@ include "BetreeBlockCacheSystem.dfy"
 include "CrashSafe.dfy"
 include "Betree.dfy"
 
-module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
+abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   import opened Maps
   import opened Sequences
   import opened BetreeSpec`Spec

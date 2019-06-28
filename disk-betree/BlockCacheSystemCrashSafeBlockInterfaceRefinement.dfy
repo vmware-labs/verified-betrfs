@@ -4,15 +4,15 @@ include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
-module BetreeGraphBlockCache refines BlockCache {
+abstract module BetreeGraphBlockCache refines BlockCache {
   import G = BetreeGraph
 }
 
-module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
+abstract module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
   import M = BetreeGraphBlockCache
 }
 
-module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
+abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   // Ideally we would prove the refinement for an arbitrary graph,
   // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
   // separately then we wouldn't know they were using the same graph.

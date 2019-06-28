@@ -3,7 +3,7 @@ include "Disk.dfy"
 
 include "BetreeBlockCache.dfy"
 
-abstract module Main {
+module Main {
   import MS = MapSpec // spec
   import M = BetreeBlockCache // impl
   import D = Disk
@@ -13,35 +13,36 @@ abstract module Main {
   type ByteSector = M.BC.Sector // FIXME
   type DiskOp = D.DiskOp<ByteSector>
 
-  class DiskIOHandler {
+  trait DiskIOHandler {
     ghost var dop: DiskOp;
 
     method write(lba: LBA, sector: ByteSector)
     modifies this;
     requires dop == D.NoDiskOp;
     ensures dop == D.WriteOp(lba, sector);
+    /*
     {
       dop := D.WriteOp(lba, sector);
       // TODO call out to some API
     }
+    */
 
     method read(lba: LBA) returns (sector: ByteSector)
     modifies this
     requires dop == D.NoDiskOp
     ensures dop == D.ReadOp(lba, sector)
+    /*
     {
       assume false;
       // TODO call out to some API
     }
+    */
 
     predicate initialized()
     reads this
     {
       dop == D.NoDiskOp
     }
-
-    constructor ()
-    ensures dop == D.NoDiskOp
   }
 
   type Constants // impl defined

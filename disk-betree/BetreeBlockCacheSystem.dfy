@@ -7,7 +7,7 @@ include "BlockCacheSystem.dfy"
 include "BetreeBlockCache.dfy"
 include "BlockCacheSystemCrashSafeBlockInterfaceRefinement.dfy"
 
-module BetreeBlockCacheSystem {
+abstract module BetreeBlockCacheSystem {
   import opened Maps
   import opened Sequences
 
