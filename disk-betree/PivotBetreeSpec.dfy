@@ -184,12 +184,27 @@ module PivotBetreeSpec {
       G.M.Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
   }
 
+  function InterpretLookupAccountingForLeaf(lookup: Lookup, key: Key) : G.M.Message
+  requires |lookup| > 0
+  requires LookupVisitsWFNodes(lookup)
+  {
+    if Last(lookup).node.children.Some? then
+      InterpretLookup(lookup, key)
+    else
+      G.M.Merge(InterpretLookup(lookup, key), M.DefineDefault())
+  }
+
+  predicate WFLookupForKey(lookup: Lookup, key: Key)
+  {
+    && |lookup| > 0
+    && lookup[0].ref == Root()
+    && LookupVisitsWFNodes(lookup)
+    && LookupFollowsChildRefs(key, lookup)
+  }
+
   predicate ValidQuery(q: LookupQuery) {
-    && |q.lookup| > 0
-    && q.lookup[0].ref == Root()
-    && LookupVisitsWFNodes(q.lookup)
-    && LookupFollowsChildRefs(q.key, q.lookup)
-    && BufferDefinesValue(InterpretLookup(q.lookup, q.key), q.value)
+    && WFLookupForKey(q.lookup, q.key)
+    && BufferDefinesValue(InterpretLookupAccountingForLeaf(q.lookup, q.key), q.value)
   }
 
   function QueryReads(q: LookupQuery): seq<ReadOp> {
