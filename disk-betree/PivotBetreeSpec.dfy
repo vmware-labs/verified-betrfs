@@ -75,11 +75,19 @@ abstract module PivotBetreeSpec {
     Keyspace.LargestLte(pivotTable, key) + 1
   }
 
+  predicate WFBucket(node: Node, i: int)
+  requires WFPivotTable(node.pivotTable)
+  requires 0 <= i < |node.buckets|
+  {
+    forall key | key in node.buckets[i] :: Route(node.pivotTable, key) == i
+  }
+
   predicate WFNode(node: Node)
   {
     && PivotTableSize(node.pivotTable) == |node.buckets|
     && (node.children.Some? ==> PivotTableSize(node.pivotTable) == |node.children.value|)
     && WFPivotTable(node.pivotTable)
+    && (forall i | 0 <= i < |node.buckets| :: WFBucket(node, i))
   }
 
   // Adding messages to buffers
@@ -96,15 +104,18 @@ abstract module PivotBetreeSpec {
   requires WFNode(node)
   ensures WFNode(AddMessageToNode(node, key, msg))
   {
-    node.(
+    var newnode := node.(
       buckets := node.buckets[
         Route(node.pivotTable, key) := AddMessageToBucket(node.buckets[Route(node.pivotTable, key)], key, msg)
       ]
-    )
+    );
+    assert forall i | 0 <= i < |newnode.buckets| :: WFBucket(node, i) ==> WFBucket(newnode, i);
+    newnode
   }
 
   function AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
   requires WFPivotTable(pivotTable)
+  ensures forall key | key in AddMessagesToBucket(pivotTable, i, childBucket, parentBucket) :: Route(pivotTable, key) == i
   {
     map key
     | && (key in (childBucket.Keys + parentBucket.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
@@ -116,6 +127,8 @@ abstract module PivotBetreeSpec {
   function AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
   requires WFPivotTable(pivotTable)
   requires 0 <= i <= |buckets|;
+  ensures |AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)| == i
+  ensures forall j | 0 <= j < i :: forall key | key in AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[j] :: Route(pivotTable, key) == j
   {
     if i == 0 then [] else (
       AddMessagesToBuckets(pivotTable, i-1, buckets, parentBucket) + [AddMessagesToBucket(pivotTable, i-1, buckets[i-1], parentBucket)]
@@ -124,6 +137,7 @@ abstract module PivotBetreeSpec {
 
   function AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
   requires WFNode(node)
+  ensures WFNode(AddMessagesToNode(node, buffer))
   {
     Node(
       node.pivotTable,
@@ -264,7 +278,11 @@ abstract module PivotBetreeSpec {
   function FlushOps(flush: NodeFlush) : seq<Op>
   requires ValidFlush(flush)
   {
-    var newparent := flush.parent.(buckets := flush.parent.buckets[flush.slotIndex := map[]]);
+    var newparent := Node(
+        flush.parent.pivotTable,
+        Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
+        flush.parent.buckets[flush.slotIndex := map[]]
+      );
     var newchild := AddMessagesToNode(flush.child, flush.parent.buckets[flush.slotIndex]);
     var allocop := G.AllocOp(flush.newchildref, newchild);
     var writeop := G.WriteOp(flush.parentref, newparent);
