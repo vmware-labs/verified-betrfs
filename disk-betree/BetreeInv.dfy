@@ -628,7 +628,14 @@ module BetreeInv {
     forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
       ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
+      if i :| 0 <= i < |lookup'| && lookup'[i].ref == fusion.parentref {
         assume false;
+      } else {
+        // if j :| 0 <= j < |lookup'| && lookup'[j].ref == fusion.left_childref || lookup'[j].ref == fusion.right_childref {
+        //   assert false;
+        // }
+        assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
+      }
     }
 
   }

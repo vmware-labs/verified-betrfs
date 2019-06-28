@@ -16,6 +16,11 @@ module Maps {
     (k !in m && k !in m') || (k in m && k in m' && m[k] == m'[k])
   }
 
+  predicate IsSubIMap<K,V>(sub: imap<K,V>, sup: imap<K,V>) {
+    && sub.Keys <= sup.Keys
+    && (forall key :: key in sub.Keys ==> IMapsAgreeOnKey(sub, sup, key))
+  }
+  
   function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
