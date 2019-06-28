@@ -361,6 +361,7 @@ abstract module PivotBetreeSpec {
     && PivotTableFusion(child.pivotTable, left.pivotTable, right.pivotTable, pivot)
   }
 
+  // TODO get rid of this from the spec (or keep it around to use as proof tool?)
   predicate ValidFusion(fusion: NodeFusion)
   {
     && WFNode(fusion.split_parent)
@@ -419,6 +420,7 @@ abstract module PivotBetreeSpec {
     && 1 <= fusion.num_children_left < |fusion.fused_child.buckets|
     && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
     && fusion.fused_child.pivotTable[fusion.num_children_left - 1] == fusion.pivot
+    // TODO add condition that pivot fits in the slot_idx bucket
 
     // TODO consider requiring that the bucket being split is simply empty already
 
@@ -464,8 +466,38 @@ abstract module PivotBetreeSpec {
 
   predicate ValidMerge(fusion: NodeFusion)
   {
-    // TODO write in imperative style like ValidSplit is
-    ValidFusion(fusion)
+    && WFNode(fusion.split_parent)
+    && WFNode(fusion.left_child)
+    && WFNode(fusion.right_child)
+    && 0 <= fusion.slot_idx < |fusion.split_parent.buckets| - 1
+    && fusion.num_children_left == |fusion.left_child.buckets|
+    && fusion.split_parent.pivotTable[fusion.slot_idx] == fusion.pivot
+    && fusion.split_parent.children.Some?
+    && fusion.split_parent.children.value[fusion.slot_idx] == fusion.left_childref
+    && fusion.split_parent.children.value[fusion.slot_idx + 1] == fusion.right_childref
+
+    // TODO require bucket to be empty before merge?
+    /*
+    && fusion.fused_parent == Node(
+      remove(fusion.split_parent.pivotTable, fusion.slot_idx),
+      Some(replace2with1(fusion.split_parent.children.value, fusion.split_childref, fusion.slot_idx)),
+      replace2with1(fusion.split_parent.buckets, MergeBuckets(fusion.split_parent.buckets[fusion.slot_idx], fusion.split_parent.buckets[fusion.slot_idx + 1], fusion.pivot))
+    )
+    */
+
+    // this is actually an invariant which follows from fixed height of the tree,
+    // but we currently don't track that as an invariant... should we?
+    && (fusion.left_child.children.Some? ==> fusion.right_child.children.Some?)
+    && (fusion.left_child.children.None? ==> fusion.right_child.children.None?)
+
+    // TODO this isn't quite right:
+    // we need to cut out every key > pivot in leftChild
+    // and likewise cut out every key < pivot in rightChild
+    && fusion.fused_child == Node(
+      concat3(fusion.left_child.pivotTable, fusion.pivot, fusion.right_child.pivotTable),
+      if fusion.left_child.children.Some? then Some(fusion.left_child.children.value + fusion.right_child.children.value) else None,
+      fusion.left_child.buckets + fusion.right_child.buckets
+    )
   }
 
   function MergeReads(fusion: NodeFusion) : seq<ReadOp>
