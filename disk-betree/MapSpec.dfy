@@ -1,7 +1,7 @@
 include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
 
-abstract module UI {
+module UI {
   import Keyspace = Total_Order
   type Key = Keyspace.Element
 

@@ -3,14 +3,22 @@ include "Disk.dfy"
 
 include "BetreeBlockCache.dfy"
 
-module Main {
-  import MS = MapSpec // spec
-  import M = BetreeBlockCache // impl
-  import D = Disk
+module RealDisk refines Disk {
+  newtype{:nativeType "int"} int32 = i:int | -0x80000000 <= i < 0x80000000
+  type LBA = int32
+}
 
-  type Value = M.G.Value // FIXME
+module DiskInterface {
+  import D = RealDisk
+
+  newtype{:nativeType "byte"} byte = i:int | 0 <= i < 0x100
+
+  method f() returns (b : byte) {
+    return 5;
+  }
+
   type LBA = D.LBA
-  type ByteSector = M.BC.Sector // FIXME
+  type ByteSector = seq<byte>
   type DiskOp = D.DiskOp<ByteSector>
 
   trait DiskIOHandler {
@@ -20,23 +28,11 @@ module Main {
     modifies this;
     requires dop == D.NoDiskOp;
     ensures dop == D.WriteOp(lba, sector);
-    /*
-    {
-      dop := D.WriteOp(lba, sector);
-      // TODO call out to some API
-    }
-    */
 
     method read(lba: LBA) returns (sector: ByteSector)
     modifies this
     requires dop == D.NoDiskOp
     ensures dop == D.ReadOp(lba, sector)
-    /*
-    {
-      assume false;
-      // TODO call out to some API
-    }
-    */
 
     predicate initialized()
     reads this
@@ -44,11 +40,34 @@ module Main {
       dop == D.NoDiskOp
     }
   }
+}
+
+// Implementation has to instantiate this
+// and refine it to the BetreeBlockCacheSystem (or something...)
+// TODO create a proof obligation for said refinement
+abstract module Machine {
+  import opened DiskInterface
+  import UI = UI
+
+  type Constants
+  type Variables
+
+  predicate Inv(k: Constants, s: Variables)
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op, dop: DiskOp)
+}
+
+abstract module Main {
+  import UI = UI
+  import M : Machine
+
+  import opened DiskInterface
+
+  type Value = int
 
   type Constants // impl defined
   type Variables // impl defined (heap state)
 
-  type UIOp = MS.UI.Op<Value>
+  type UIOp = UI.Op<Value>
 
   // impl defined stuff
   predicate Inv(k: Constants, s: Variables)
@@ -82,7 +101,7 @@ module Main {
   requires world.diskIOHandler.initialized()
   requires Inv(k, world.s)
   ensures Inv(k, world.s)
-  ensures Next(k, old(world.interp(k)), world.interp(k), MS.UI.NoOp)
+  ensures Next(k, old(world.interp(k)), world.interp(k), UI.NoOp)
   // impl defined
 
   lemma StateRefinesInv(k: Constants, s: Variables)
