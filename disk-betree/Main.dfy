@@ -1,25 +1,21 @@
 include "MapSpec.dfy"
 include "Disk.dfy"
+include "DiskAccessModel.dfy"
 
-include "BetreeBlockCache.dfy"
-
-module RealDisk refines Disk {
-  newtype{:nativeType "uint"} uint32 = i:int | 0 <= i < 0x100000000
+module DiskTypes {
+  newtype {:nativeType "uint"} uint32 = i:int | 0 <= i < 0x100000000
+  newtype {:nativeType "byte"} byte = i:int | 0 <= i < 0x100
   type LBA = uint32
+  type ByteSector = seq<byte>
 }
 
 module DiskInterface {
-  import D = RealDisk
+  import DT = DiskTypes
+  import D = Disk
 
-  newtype{:nativeType "byte"} byte = i:int | 0 <= i < 0x100
-
-  method f() returns (b : byte) {
-    return 5;
-  }
-
-  type LBA = D.LBA
-  type ByteSector = seq<byte>
-  type DiskOp = D.DiskOp<ByteSector>
+  type LBA = DT.LBA
+  type ByteSector = DT.ByteSector
+  type DiskOp = D.DiskOp<LBA, ByteSector>
 
   const BLOCK_SIZE: int := 1024*1024
 
@@ -51,22 +47,21 @@ module DiskInterface {
 // and refine it to the BetreeBlockCache
 // either than or BetreeBlockCache itself will be the instantiation of this module?
 
-// TODO make an abstract MachineSystem that can take any machine
-
 // TODO how to create all the contracts without a dependency on the .i file that instantiates
 // the machine? Sounds like it would require parameterized modules?
 // IDEALLY we would be able to say: define a machine type M and also give me a proof
 // that MachineSystem<M> refines CrashSafeMap
 
-abstract module Machine {
-  import opened DiskInterface
+abstract module Machine refines DiskAccessMachine {
   import UI = UI
+  import DiskTypes
 
   type Constants
   type Variables
+  type Sector = DiskTypes.ByteSector
 
-  predicate Inv(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op, dop: DiskOp)
+  type Value
+  type UIOp = UI.Op<Value>
 
   // TODO create a proof obligation for the refinement
   //lemma Refines(k: Constants, s: Variables, s': Variables, uiop, dop)
@@ -75,7 +70,6 @@ abstract module Machine {
 }
 
 abstract module Main {
-  import UI = UI
   import M : Machine
 
   import opened DiskInterface
@@ -85,7 +79,7 @@ abstract module Main {
   type Constants // impl defined
   type Variables // impl defined (heap state)
 
-  type UIOp = UI.Op<Value>
+  type UIOp = M.UIOp
 
   // impl defined stuff
   predicate Inv(k: Constants, s: Variables)

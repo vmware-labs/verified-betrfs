@@ -11,14 +11,14 @@ abstract module DAMTypes {
 
 abstract module DiskAccessMachine {
   import D = Disk
-  import UI = UI
 
   type Variables
   type Constants
+  type LBA(==)
   type Sector
   type UIOp
 
-  type DiskOp = D.DiskOp<Sector>
+  type DiskOp = D.DiskOp<LBA, Sector>
 
   predicate Init(k: Constants, s: Variables)
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
@@ -32,7 +32,7 @@ abstract module DiskAccessModel {
 
   type DiskOp = M.DiskOp
   type Constants = DAMTypes.DAMConstants<M.Constants, D.Constants>
-  type Variables = DAMTypes.DAMVariables<M.Variables, D.Variables<M.Sector>>
+  type Variables = DAMTypes.DAMVariables<M.Variables, D.Variables<M.LBA, M.Sector>>
   type CrashableUIOp = CrashTypes.CrashableUIOp<M.UIOp>
   
   predicate Init(k: Constants, s: Variables)

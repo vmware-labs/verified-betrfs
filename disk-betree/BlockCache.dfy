@@ -9,7 +9,7 @@ abstract module BlockCache refines Transactable {
 
   import Disk = Disk
 
-  type LBA = Disk.LBA
+  type LBA(==)
 
   datatype Constants = Constants()
   function SuperblockLBA(k: Constants) : LBA
@@ -23,7 +23,7 @@ abstract module BlockCache refines Transactable {
     | SectorBlock(block: Node)
     | SectorSuperblock(superblock: Superblock)
 
-  type DiskOp = Disk.DiskOp<Sector>
+  type DiskOp = Disk.DiskOp<LBA, Sector>
 
   // BlockCache stuff
 
