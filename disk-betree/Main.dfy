@@ -4,8 +4,8 @@ include "Disk.dfy"
 include "BetreeBlockCache.dfy"
 
 module RealDisk refines Disk {
-  newtype{:nativeType "int"} int32 = i:int | -0x80000000 <= i < 0x80000000
-  type LBA = int32
+  newtype{:nativeType "uint"} uint32 = i:int | 0 <= i < 0x100000000
+  type LBA = uint32
 }
 
 module DiskInterface {
@@ -21,18 +21,23 @@ module DiskInterface {
   type ByteSector = seq<byte>
   type DiskOp = D.DiskOp<ByteSector>
 
+  const BLOCK_SIZE: int := 1024*1024
+
   trait DiskIOHandler {
     ghost var dop: DiskOp;
 
+    // TODO make these take byte arrays instead for faster imperative code
     method write(lba: LBA, sector: ByteSector)
     modifies this;
     requires dop == D.NoDiskOp;
+    requires |sector| == BLOCK_SIZE
     ensures dop == D.WriteOp(lba, sector);
 
     method read(lba: LBA) returns (sector: ByteSector)
     modifies this
     requires dop == D.NoDiskOp
     ensures dop == D.ReadOp(lba, sector)
+    ensures |sector| == BLOCK_SIZE
 
     predicate initialized()
     reads this
@@ -43,8 +48,16 @@ module DiskInterface {
 }
 
 // Implementation has to instantiate this
-// and refine it to the BetreeBlockCacheSystem (or something...)
-// TODO create a proof obligation for said refinement
+// and refine it to the BetreeBlockCache
+// either than or BetreeBlockCache itself will be the instantiation of this module?
+
+// TODO make an abstract MachineSystem that can take any machine
+
+// TODO how to create all the contracts without a dependency on the .i file that instantiates
+// the machine? Sounds like it would require parameterized modules?
+// IDEALLY we would be able to say: define a machine type M and also give me a proof
+// that MachineSystem<M> refines CrashSafeMap
+
 abstract module Machine {
   import opened DiskInterface
   import UI = UI
@@ -54,6 +67,11 @@ abstract module Machine {
 
   predicate Inv(k: Constants, s: Variables)
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op, dop: DiskOp)
+
+  // TODO create a proof obligation for the refinement
+  //lemma Refines(k: Constants, s: Variables, s': Variables, uiop, dop)
+  //requires Next(k, s, s', uiop, dop)
+  //ensures Next(Ik(k), I(k, s), I(k, s'), uiop, dop)
 }
 
 abstract module Main {
