@@ -222,6 +222,7 @@ module BetreeSpec {
   )
 
   predicate ValidRedirect(redirect: Redirect) {
+    && WFNode(redirect.old_parent)
     && WFNode(redirect.new_parent)
     && WFNode(redirect.new_child)
 
