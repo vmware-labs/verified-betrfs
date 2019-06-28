@@ -263,6 +263,17 @@ module Total_Order {
     ensures a !! b;
   {}
 
+  predicate {:opaque} NotMinimum(a: Element) {
+    exists b :: lt(b, a)
+  }
+
+  lemma SmallerElement(a: Element) returns (b: Element)
+  requires NotMinimum(a)
+  ensures lt(b, a)
+  {
+    reveal_NotMinimum();
+    b :| lt(b, a);
+  }
 }
 
 abstract module Bounded_Total_Order refines Total_Order {
