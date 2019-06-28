@@ -674,6 +674,8 @@ abstract module BetreeInv {
           if key in redirect.old_parent.children {
             lookup := lookup[i+1 := G.ReadOp(redirect.old_parent.children[key], redirect.old_children[redirect.old_parent.children[key]])];
             assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+            
+
           } else {
             lookup := lookup[..i+1];
             forall j | 0 <= j < |lookup|-1
@@ -681,7 +683,9 @@ abstract module BetreeInv {
             {
               assert LookupFollowsChildRefAtLayer(key, lookup', j);
             }
-            
+
+            assert lookup' == lookup'[..i] + [lookup'[i]] + lookup'[i+1..];
+            InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
             assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
           }
         }
