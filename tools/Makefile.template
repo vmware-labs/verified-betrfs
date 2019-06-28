@@ -7,9 +7,13 @@
 # Shouldn't have to modify anything below here.
 #
 
-all: build/BetreeRefinement.okay
-
 BUILD_DIR=build
+TARGETS=build/BetreeRefinement.okay
+TARGETDEPS=$(patsubst %.okay,%.deps,$(TARGETS))
+all: $(TARGETS)
+
+clean:
+	rm -rf $(BUILD_DIR)
 
 ###############################################
 #####  Build tree  ############################
@@ -25,55 +29,11 @@ $(BUILD_DIR)%/.:
 	mkdir -p $@
 
 .PRECIOUS: $(BUILD_DIR)/%.deps
-$(BUILD_DIR)/%.deps: %.dfy
-	echo > $@
+$(BUILD_DIR)/%.deps: %.dfy | $$(@D)/.
+	@../tools/deps-for-dfy.py $< > $@
+
+include $(TARGETDEPS)
 
 $(BUILD_DIR)/%.okay: %.dfy $(BUILD_DIR)/%.deps | $$(@D)/.
-	dafny /compile:0 $< && touch $@
-
-## TARGETDEPS=$(patsubst %,$(BUILD_DIR)/%,$(TARGETDLLS:.okay=.deps) $(TARGETDLLS:.dll=.deps) $(TARGETEXES:.exe=.deps))
-## 
-## all: $(TARGETDEPS) $(patsubst %,$(BUILD_DIR)/%,$(TARGETDLLS) $(TARGETEXES))
-#
-#DAFNY=dafny $(DAFNYOPTS)
-##INTERACTIVE_DAFNY=time -f "User time: %U seconds" unbuffer $(DAFNY)
-#INTERACTIVE_DAFNY=$(DAFNY)
-#
-#
-###############################################
-######## Automatic dafny dependencies #########
-###############################################
-
-##build/%.deps: %.dfy
-##	@echo Generating dependencies for $<
-##	@$(DAFNY) /printIncludes:Transitive $< > ${@:.deps=.output} || ($(INTERACTIVE_DAFNY) /compile:0 $<; exit 1) # If dafny fails, then run it again to show error to user, and then force failure.
-##	$(call record_build, ${@:.deps=.output})
-##	@grep -v ": Warning: " ${@:.deps=.output} > ${@:.deps=.includes}
-##	$(call record_build, ${@:.deps=.includes})
-##	@if (grep " " ${@:.deps=.includes}); then $(INTERACTIVE_DAFNY) /compile:0 $<; exit 1; else exit 0; fi # If there are any spaces in the dafny output, show the user dafny's output and abort
-##	@cat ${@:.deps=.includes} | grep ";" | grep -v "^roots;" | sed "s/\(^[^;]*\).dfy;/\1.dll \1.exe: /" | sed "s/\.dfy;*/.dll /g" | sed "s,$(PWD)/,,g" > $@
-##	$(call record_build, $@)
-##	@cat ${@:.deps=.includes} | grep -v ";" | sed "s,$(PWD)/,,g" | sed 's,^\(.*\)$$,$@: $$(wildcard \1),' >> $@
-##
-##include $(TARGETDEPS)
-#
-#
-#$(BUILD_DIR)/BetreeRefinement.deps: | $$(@D)/.
-#	echo hi mom
-#
-#$(BUILD_DIR)/%.deps: %.dfy | $$(@D)/.
-#	echo > $@
-#
-#############################################
-######### Generic dafny build rules #########
-#############################################
-#
-#$(BUILD_DIR)/%.exe: %.dfy
-#	$(INTERACTIVE_DAFNY) $<
-#
-#w(BUILD_DIR)/%.okay: %.dfy | $$(@D)/.
-#	rm -f $@
-#	$(INTERACTIVE_DAFNY) /compile:0 $< && touch $<
-#
-#$(BUILD_DIR)/%.dll: %.dfy 
-#	$(INTERACTIVE_DAFNY) $<
+	dafny /compile:0 $<
+	touch $@

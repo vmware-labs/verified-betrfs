@@ -23,4 +23,16 @@ def depsFromDfySource(path):
         needExplore.extend(visit(path))
     return visited
 
-print depsFromDfySource(sys.argv[1])
+def okay(path):
+    path = path.replace(".dfy", ".okay")
+    return "$(BUILD)/%s" % path
+
+def main():
+    target = sys.argv[1]
+    print "# deps from %s" % target
+    allDeps = depsFromDfySource(target)
+    allDeps.remove(target)
+    for dep in allDeps:
+        print "%s: %s" % (okay(target), okay(dep))
+
+main()
