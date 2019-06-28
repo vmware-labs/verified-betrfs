@@ -63,7 +63,9 @@ module PivotBetreeSpec {
 
   predicate WFPivotTable(pivotTable: PivotTable)
   {
-    Keyspace.IsStrictlySorted(pivotTable)
+    // Conditions to ensure each bucket has a non-empty key range
+    && Keyspace.IsStrictlySorted(pivotTable)
+    && (|pivotTable| > 0 ==> Keyspace.NotMinimum(pivotTable[0]))
   }
 
   function Route(pivotTable: PivotTable, key: Key) : int
