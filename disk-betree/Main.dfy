@@ -14,8 +14,8 @@ module DiskInterface {
   import D = Disk
 
   type LBA = DT.LBA
-  type ByteSector = DT.ByteSector
-  type DiskOp = D.DiskOp<LBA, ByteSector>
+  type Sector = DT.ByteSector
+  type DiskOp = D.DiskOp<LBA, Sector>
 
   const BLOCK_SIZE: int := 1024*1024
 
@@ -23,13 +23,13 @@ module DiskInterface {
     ghost var dop: DiskOp;
 
     // TODO make these take byte arrays instead for faster imperative code
-    method write(lba: LBA, sector: ByteSector)
+    method write(lba: LBA, sector: Sector)
     modifies this;
     requires dop == D.NoDiskOp;
     requires |sector| == BLOCK_SIZE
     ensures dop == D.WriteOp(lba, sector);
 
-    method read(lba: LBA) returns (sector: ByteSector)
+    method read(lba: LBA) returns (sector: Sector)
     modifies this
     requires dop == D.NoDiskOp
     ensures dop == D.ReadOp(lba, sector)
@@ -58,7 +58,6 @@ abstract module Machine refines DiskAccessMachine {
 
   type Constants
   type Variables
-  type Sector = DiskTypes.ByteSector
 
   type Value
   type UIOp = UI.Op<Value>
@@ -72,7 +71,9 @@ abstract module Machine refines DiskAccessMachine {
 abstract module Main {
   import M : Machine
 
-  import opened DiskInterface
+  import Disk
+  import DiskInterface
+  import UI
 
   type Value = int
 
@@ -86,11 +87,13 @@ abstract module Main {
   function Ik(k: Constants): M.Constants
   function I(k: Constants, s: Variables): M.Variables
   function Constants() : M.Constants
+  function ILBA(lba: DiskInterface.LBA) : M.LBA
+  function ISector(sector: DiskInterface.Sector) : M.Sector
 
-  datatype FWorld = FWorld(s: M.Variables, dop: DiskOp)
+  datatype FWorld = FWorld(s: M.Variables, dop: DiskInterface.DiskOp)
 
   class World {
-    var diskIOHandler : DiskIOHandler
+    var diskIOHandler : DiskInterface.DiskIOHandler
     var s : Variables
 
     function interp(k: Constants) : FWorld
@@ -103,9 +106,17 @@ abstract module Main {
     constructor ()
   }
 
+  function IDiskOp(diskOp: DiskInterface.DiskOp) : M.DiskOp {
+    match diskOp {
+      case WriteOp(lba, sector) => Disk.WriteOp(ILBA(lba), ISector(sector))
+      case ReadOp(lba, sector) => Disk.WriteOp(ILBA(lba), ISector(sector))
+      case NoDiskOp => Disk.NoDiskOp
+    }
+  }
+
   predicate Next(k: Constants, fw: FWorld, fw': FWorld, uiop: UIOp)
   {
-    M.Next(Ik(k), fw.s, fw'.s, uiop, fw'.dop)
+    M.Next(Ik(k), fw.s, fw'.s, uiop, IDiskOp(fw'.dop))
   }
 
   method handle(k: Constants, world: World)
@@ -115,9 +126,4 @@ abstract module Main {
   ensures Inv(k, world.s)
   ensures Next(k, old(world.interp(k)), world.interp(k), UI.NoOp)
   // impl defined
-
-  lemma StateRefinesInv(k: Constants, s: Variables)
-  requires Inv(k, s)
-  ensures M.Inv(Ik(k), I(k, s))
-  // proved by impl
 }
