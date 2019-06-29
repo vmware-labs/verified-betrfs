@@ -1,10 +1,10 @@
 include "BlockCache.dfy"
-include "Betree.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "BlockCacheSystemCrashSafeBlockInterfaceRefinement.dfy"
-include "BetreeSpec.dfy"
 include "DiskAccessModel.dfy"
+include "PivotBetreeSpec.dfy"
+include "PivotBetree.dfy"
 
 include "Main.dfy"
 
@@ -12,10 +12,10 @@ module BetreeBlockCache refines Machine {
   import opened Maps
   import opened Sequences
 
-  import opened BetreeSpec`Spec
-  import G = BetreeGraph
+  import opened PivotBetreeSpec`Spec
+  import G = PivotBetreeGraph
   import BC = BetreeGraphBlockCache
-  import DB = Betree
+  import DB = PivotBetree
   import BI = BetreeBlockInterface
 
   type Variables = BC.Variables
