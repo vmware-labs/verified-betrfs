@@ -198,6 +198,18 @@ abstract module BetreeRefinement {
     assert I(k, s) == I(k, s');
   }
 
+  lemma RedirectStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, redirect: DB.BetreeSpec.Redirect)
+    requires Inv(k, s)
+    requires uiop.NoOp?
+    requires DBI.Redirect(k.bck, s.bcv, s'.bcv, redirect)
+    requires Inv(k, s')
+    ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
+  {
+    RedirectEquivalentLookups(k, s, s', redirect);
+    EquivalentLookupsImplInterpsEqual(k, s, s');
+    assert I(k, s) == I(k, s');
+  }
+
   lemma SplitStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, fusion: DB.BetreeSpec.NodeFusion)
     requires Inv(k, s)
     requires uiop.NoOp?

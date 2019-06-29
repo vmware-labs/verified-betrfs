@@ -807,7 +807,7 @@ abstract module BetreeInv {
   lemma RedirectEquivalentLookups(k: Constants, s: Variables, s': Variables, redirect: Redirect)
     requires Inv(k, s)
     requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
-    ensures PreservesLookups(k, s, s')
+    ensures EquivalentLookups(k, s, s')
   {
     RedirectEquivalentLookupsFwd(k, s, s', redirect);
     RedirectEquivalentLookupsRev(k, s, s', redirect);
