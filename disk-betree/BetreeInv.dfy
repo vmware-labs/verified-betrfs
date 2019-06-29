@@ -685,7 +685,6 @@ abstract module BetreeInv {
         var lookup := lookup'[i := G.ReadOp(redirect.parentref, redirect.old_parent)];
         if i + 1 < |lookup'| && lookup'[i+1].ref == redirect.new_childref {
           assert LookupFollowsChildRefAtLayer(key, lookup', i);
-          assert key in redirect.keys;
           if key in redirect.old_parent.children {
             lookup := lookup[i+1 := G.ReadOp(redirect.old_parent.children[key], redirect.old_children[redirect.old_parent.children[key]])];
 
@@ -730,6 +729,7 @@ abstract module BetreeInv {
 
           } else {
             lookup := lookup[..i+1];
+
             forall j | 0 <= j < |lookup|-1
               ensures LookupFollowsChildRefAtLayer(key, lookup, j)
             {
@@ -742,22 +742,13 @@ abstract module BetreeInv {
             InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
             assert lookup' == lookup'[..i] + [lookup'[i]] + lookup'[i+1..];
 
-            assert lookup[i].node.buffer[key].Define?;
-            assert lookup'[i].node.buffer[key].Define?;
-
-            assert lookup'[i].node.buffer[key] == lookup[i].node.buffer[key];
             assert lookup[..i] == lookup'[..i];
             
             assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
           }
         } else {
-          assert forall j :: 0 <= j < |lookup'|-1 ==> LookupFollowsChildRefAtLayer(key, lookup', j);
           assert lookup[..i] == lookup'[..i];
           assert lookup[i+1..] == lookup'[i+1..];
-
-          // i :| 0 <= i < |lookup'| && lookup'[i].ref == redirect.parentref
-          // false == i + 1 < |lookup'| && lookup'[i+1].ref == redirect.new_childref
-          // var lookup := lookup'[i := G.ReadOp(redirect.parentref, redirect.old_parent)];
 
           forall j | ValidLayerIndex(lookup, j) && j < |lookup| - 1
           ensures LookupFollowsChildRefAtLayer(key, lookup, j);
@@ -766,20 +757,16 @@ abstract module BetreeInv {
               if key in redirect.keys {
                 if |lookup'| == i + 1 { // lookup stops at parent
                 } else {
-                  assert |lookup'| > i + 1;
                   assert LookupFollowsChildRefAtLayer(key, lookup', i);
                   assert false;
                 }
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
               } else { // key !in redirect.keys
                 assert LookupFollowsChildRefAtLayer(key, lookup', j);
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
               }
             } else {
               assert LookupFollowsChildRefAtLayer(key, lookup', j);
             }
           }
-          assert LookupFollowsChildRefs(key, lookup);
 
           assert lookup[..i] == lookup'[..i];
           assert lookup[i+1..] == lookup'[i+1..];
@@ -787,22 +774,14 @@ abstract module BetreeInv {
           forall j | 0 <= j < |lookup|
           ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node)
           {
-            if i == j {
-              assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
-            } else {
+            if i != j {
               assert IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node);
               if lookup'[j].ref == redirect.new_childref {
-                assert j != 0;
                 assert LookupFollowsChildRefAtLayer(key, lookup', j-1);
-                assert lookup'[j-1].ref == redirect.parentref;
                 assert false;
-              } else {
               }
-              assert lookup'[j].ref in s.bcv.view;
-              assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
             }
           }
-          assert LookupRespectsDisk(s.bcv.view, lookup);
 
           InterpretLookupAdditive3(lookup'[..i], [ lookup'[i] ], lookup'[i+1..], key);
           assert lookup' == lookup'[..i] + [ lookup'[i] ] + lookup'[i+1..];
@@ -822,7 +801,6 @@ abstract module BetreeInv {
       } else {
         assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
       }
-        
     }
   }
   
