@@ -9,10 +9,16 @@ module Impl refines Main {
   type Variables = M.Variables
   type Constants = M.Constants
 
+  function method InitConstants() : Constants { BC.Constants() }
+  function method InitVariables() : Variables { BC.Unready }
+
   method ReadSector(io: DiskInterface.DiskIOHandler, lba: M.LBA)
   returns (sector: M.Sector)
   requires io.initialized()
   ensures IDiskOp(io.dop) == D.ReadOp(lba, sector)
+  {
+    assume false;
+  }
 
   method PageInSuperblock(k: Constants, s: Variables, io: DiskInterface.DiskIOHandler)
   returns (s': Variables)

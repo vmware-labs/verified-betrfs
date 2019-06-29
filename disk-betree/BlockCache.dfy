@@ -4,15 +4,23 @@ include "../lib/Maps.dfy"
 include "Graph.dfy"
 include "Disk.dfy"
 
+module LBAType {
+  type LBA(==,!new) = int
+  function method SuperblockLBA() : LBA { 0 }
+
+  export S provides LBA, SuperblockLBA
+  export extends S
+}
+
 abstract module BlockCache refines Transactable {
   import opened Maps
+  import LBAType
 
   import Disk = Disk
 
-  type LBA(==)
-
+  type LBA = LBAType.LBA
   datatype Constants = Constants()
-  function method SuperblockLBA(k: Constants) : LBA
+  function method SuperblockLBA(k: Constants) : LBA { LBAType.SuperblockLBA() }
 
   // TODO make superblock take up more than one block (it's not really a superblock)
   datatype Superblock = Superblock(
