@@ -1,5 +1,5 @@
 include "Disk.dfy"
-include "BetreeInv.dfy"
+include "PivotBetreeRefinement.dfy"
 include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
@@ -11,12 +11,12 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
   import opened Maps
   import opened Sequences
 
-  import opened BetreeSpec`Spec
+  import opened PivotBetreeSpec`Spec
   import BC = BetreeGraphBlockCache
   import BCS = BetreeGraphBlockCacheSystem
-  import DB = Betree
-  import DBI = BetreeInv
-  import BI = BetreeBlockInterface
+  import DB = PivotBetree
+  import DBI = PivotBetreeInvAndRefinement
+  import BI = PivotBetreeBlockInterface
   import Ref = BlockCacheSystemCrashSafeBlockInterfaceRefinement
 
   import M = BetreeBlockCache
@@ -102,7 +102,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
     PersistentGraphEqAcrossOps(k, s, s', ops); 
     if (s.machine.Ready?) {
       Ref.RefinesOpTransaction(k, s, s', ops);
-      DBI.BetreeStepPreservesInvariant(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
+      DBI.BetreeStepRefines(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
     }
   }
 
@@ -135,7 +135,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
     BCS.UnallocStepPreservesPersistentGraph(k, s, s', dop, ref);
 
     Ref.RefinesUnalloc(k, s, s', dop, ref);
-    DBI.GCStepPreservesInvariant(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), iset{ref});
+    DBI.GCStepRefines(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), M.DB.MS.UI.NoOp, iset{ref});
   }
 
   lemma PageInStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)

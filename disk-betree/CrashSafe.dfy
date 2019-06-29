@@ -2,11 +2,14 @@ include "BetreeInv.dfy"
 include "MapSpec.dfy"
 include "Betree.dfy"
 include "BetreeInv.dfy"
+include "PivotBetreeSpec.dfy"
+include "PivotBetree.dfy"
+include "PivotBetreeRefinement.dfy"
 include "BetreeRefinement.dfy"
 include "CrashTypes.dfy"
 
 abstract module CrashSafeBlockInterface {
-  import BI = BetreeBlockInterface
+  import BI = PivotBetreeBlockInterface
 
   type Constants = BI.Constants
   datatype Variables = Variables(persistent: BI.Variables, ephemeral: BI.Variables)
@@ -80,6 +83,85 @@ abstract module CrashSafeBlockInterface {
 abstract module CrashSafeBetree {
   import DB = Betree
   import DBI = BetreeInv
+  import CrashTypes
+
+  type Constants = DB.Constants
+  datatype Variables = Variables(persistent: DB.Variables, ephemeral: DB.Variables)
+  type UIOp = CrashTypes.CrashableUIOp<DB.UIOp>
+
+  predicate Init(k: Constants, s: Variables)
+  {
+    && DB.Init(k, s.persistent)
+    && s.ephemeral == s.persistent
+  }
+
+  datatype Step =
+    | EphemeralMoveStep
+    | SyncStep
+    | CrashStep
+
+  predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  {
+    && uiop.NormalOp?
+    && s.persistent == s'.persistent
+    && DB.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
+  }
+
+  predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  {
+    && uiop.NormalOp?
+    && uiop.uiop.NoOp?
+    && s'.persistent == s.ephemeral
+    && s'.ephemeral  == s.ephemeral
+  }
+
+  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  {
+    && uiop.CrashOp?
+    && s'.persistent == s.persistent
+    && s'.ephemeral  == s.persistent
+  }
+
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
+  {
+    match step {
+      case EphemeralMoveStep => EphemeralMove(k, s, s', uiop)
+      case SyncStep => Sync(k, s, s', uiop)
+      case CrashStep => Crash(k, s, s', uiop)
+    }
+  }
+
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+    exists step :: NextStep(k, s, s', uiop, step)
+  }
+
+  predicate Inv(k: Constants, s: Variables) {
+    && DBI.Inv(k, s.persistent)
+    && DBI.Inv(k, s.ephemeral)
+  }
+
+  lemma InitImpliesInv(k: Constants, s: Variables)
+  requires Init(k, s)
+  ensures Inv(k, s)
+  {
+    DBI.InitImpliesInv(k, s.ephemeral);
+  }
+
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  requires Inv(k, s)
+  requires Next(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+    var step :| NextStep(k, s, s', uiop, step);
+    if (step.EphemeralMoveStep?) {
+      DBI.NextPreservesInv(k, s.ephemeral, s'.ephemeral, uiop.uiop);
+    }
+  }
+}
+
+abstract module CrashSafePivotBetree {
+  import DB = PivotBetree
+  import DBI = PivotBetreeInvAndRefinement
   import CrashTypes
 
   type Constants = DB.Constants

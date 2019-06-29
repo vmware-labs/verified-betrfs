@@ -7,19 +7,19 @@ include "Betree.dfy"
 abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   import opened Maps
   import opened Sequences
-  import opened BetreeSpec`Spec
+  import opened PivotBetreeSpec`Spec
   import CrashTypes
 
-  import G = BetreeGraph
+  import G = PivotBetreeGraph
   import BBCS = BetreeBlockCacheSystem
   import BCS = BetreeGraphBlockCacheSystem
   import M = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import D = Disk
-  import CSBT = CrashSafeBetree
-  import BT = Betree
-  import BI = BetreeBlockInterface
-  import DBI = BetreeInv
+  import CSBT = CrashSafePivotBetree
+  import BT = PivotBetree
+  import BI = PivotBetreeBlockInterface
+  import DBI = PivotBetreeInvAndRefinement
   import Ref = BlockCacheSystemCrashSafeBlockInterfaceRefinement
 
   type DiskOp = M.DiskOp
@@ -62,7 +62,7 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
     BCS.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
     BBCS.PersistentGraphEqAcrossOps(k, s, s', ops); 
     Ref.RefinesOpTransaction(k, s, s', ops);
-    DBI.BetreeStepPreservesInvariant(Ik(k), BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), uiop, betreeStep);
+    DBI.BetreeStepRefines(Ik(k), BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), uiop, betreeStep);
 
     assert I(k, s).persistent == I(k, s').persistent;
     assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, uiop, BT.BetreeStep(betreeStep));
@@ -109,7 +109,7 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
     BCS.UnallocStepPreservesPersistentGraph(k, s, s', dop, ref);
 
     Ref.RefinesUnalloc(k, s, s', dop, ref);
-    DBI.GCStepPreservesInvariant(Ik(k), BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), iset{ref});
+    DBI.GCStepRefines(Ik(k), BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), M.DB.MS.UI.NoOp, iset{ref});
 
     assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, uiop, BT.GCStep(iset{ref}));
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop), CSBT.EphemeralMoveStep);
