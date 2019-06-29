@@ -22,7 +22,7 @@ abstract module PivotBetree {
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
-  type UIOp = MS.UI.Op<Value>
+  type UIOp = MS.UI.Op
 
   function EmptyNode() : Node
   {
@@ -30,7 +30,8 @@ abstract module PivotBetree {
   }
 
   predicate Init(k: Constants, s: Variables) {
-    && BI.Init(k.bck, s.bcv, EmptyNode())
+    && BI.Init(k.bck, s.bcv)
+    && s.bcv.view[G.Root()] == EmptyNode()
   }
 
   predicate GC(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>) {

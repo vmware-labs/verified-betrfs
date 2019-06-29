@@ -429,6 +429,20 @@ abstract module BetreeInv {
         assert LookupFollowsChildRefAtLayer(key, lookup', i+1);
       }
       
+      forall i | 0 <= i < |lookup|-1
+        ensures IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node)
+      {
+        if i == 0 {
+          assert GrowReads(RootGrowth(oldroot, newchildref))[0] == G.ReadOp(Root(), oldroot);
+          assert s.bcv.view[Root()] == oldroot;
+          assert LookupFollowsChildRefAtLayer(key, lookup', 0);
+          assert lookup'[1].node == oldroot;
+          assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+        } else {
+          assert lookup[i] == lookup'[i+1];
+          assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
+        }
+      }
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
   }

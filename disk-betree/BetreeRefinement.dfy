@@ -8,7 +8,7 @@ abstract module BetreeRefinement {
   import opened BetreeSpec`Internal
   import opened Maps
 
-  type UIOp = DB.MS.UI.Op<Value>
+  type UIOp = DB.MS.UI.Op
     
   datatype LookupResult = LookupResult(lookup: Lookup, result: Value)
   
@@ -35,7 +35,7 @@ abstract module BetreeRefinement {
     DB.MS.Constants()
   }
   
-  function I(k: DB.Constants, s: DB.Variables) : DB.MS.Variables<Value>
+  function I(k: DB.Constants, s: DB.Variables) : DB.MS.Variables
     requires Inv(k, s)
   {
     DB.MS.Variables(IView(k, s.bcv.view))
@@ -51,11 +51,23 @@ abstract module BetreeRefinement {
     forall key | DB.MS.InDomain(key)
     ensures KeyHasSatisfyingLookup(k, s.bcv.view, key)
     ensures key in IView(k, s.bcv.view)
-    ensures IView(k, s.bcv.view)[key] == G.M.DefaultValue()
+    ensures IView(k, s.bcv.view)[key] == MS.EmptyMap()[key]
     {
-      var lookup := GetLookup(k, s.bcv.view, key).lookup;
+      var l := GetLookup(k, s.bcv.view, key);
+      var lookup := l.lookup;
+      var value := l.result;
       assert InterpretLookup(lookup, key) == G.M.Define(G.M.DefaultValue()); // observe
+      /*
+      assert value == G.M.DefaultValue();
+      assert GetValue(k, s.bcv.view, key)
+          == value
+          == MS.EmptyValue();
+      assert IView(k, s.bcv.view)[key] == MS.EmptyValue();
+      assert MS.EmptyMap()[key] == MS.EmptyValue();
+      */
     }
+    //assert IView(k, s.bcv.view) == MS.EmptyMap();
+    //assert I(k, s) == MS.Variables(MS.EmptyMap());
   }
 
   lemma EquivalentLookupsImplInterpsEqual(k: DB.Constants, s: DB.Variables, s': DB.Variables)

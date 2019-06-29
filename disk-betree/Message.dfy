@@ -1,13 +1,16 @@
+include "MapSpec.dfy"
 
 // Delta forms a monoid with a monoid-action on the values
 // (https://en.wikipedia.org/wiki/Monoid_action)
 
 abstract module Message {
-	type Value(!new)
+  import V = ValueWithDefault
+
+  type Value = V.Value
 	type Delta(!new)
 
 	function NopDelta() : Delta
-	function DefaultValue() : Value 
+	function DefaultValue() : Value { V.DefaultValue() }
 
 	datatype Message =
 	  | Define(value: Value)
@@ -33,7 +36,7 @@ abstract module Message {
   }
 
 	function DefineDefault() : Message {
-	  Define(DefaultValue())
+	  Define(V.DefaultValue())
   }
 
 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)

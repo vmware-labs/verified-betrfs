@@ -69,3 +69,5 @@ include $(TARGETDEPS)
 	$(call record_build, $@)
 	$(call record_build, $@.mdb)
 
+typecheck:
+	../tools/dafny-typecheck-dir.sh
