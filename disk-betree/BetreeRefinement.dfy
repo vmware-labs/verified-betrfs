@@ -210,18 +210,6 @@ abstract module BetreeRefinement {
     assert I(k, s) == I(k, s');
   }
 
-  lemma SplitStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, fusion: DB.BetreeSpec.NodeFusion)
-    requires Inv(k, s)
-    requires uiop.NoOp?
-    requires DBI.Split(k.bck, s.bcv, s'.bcv, fusion)
-    requires Inv(k, s')
-    ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
-  {
-    SplitEquivalentLookups(k, s, s', fusion);
-    EquivalentLookupsImplInterpsEqual(k, s, s');
-    assert I(k, s) == I(k, s');
-  }
-
   lemma BetreeStepRefinesMap(k: DB.Constants, s: DB.Variables, s':DB.Variables, uiop: UIOp, betreeStep: DBI.BetreeSpec.BetreeStep)
     requires Inv(k, s)
     requires BetreeStepUI(betreeStep, uiop)
@@ -235,7 +223,6 @@ abstract module BetreeRefinement {
       case BetreeInsert(ins) => InsertMessageStepRefinesMap(k, s, s', uiop, ins.key, ins.msg, ins.oldroot);
       case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', uiop, flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
       case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', uiop, growth.oldroot, growth.newchildref);
-      case BetreeSplit(fusion) => SplitStepRefinesMap(k, s, s', uiop, fusion);
     }
   }
 

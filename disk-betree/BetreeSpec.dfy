@@ -274,101 +274,6 @@ abstract module BetreeSpec {
     ]
   }
   
-  //// Split
-
-  datatype NodeFusion = NodeFusion(
-    parentref: Reference,
-    fused_childref: Reference,
-    left_childref: Reference,
-    right_childref: Reference,
-    fused_parent: Node,
-    split_parent: Node,
-    fused_child: Node,
-    left_child: Node,
-    right_child: Node,
-    
-    left_keys: iset<Key>,
-    right_keys: iset<Key>
-  )
-
-  predicate ValidFusion(fusion: NodeFusion)
-  {
-    && fusion.left_keys !! fusion.right_keys
-    && (forall key :: key in fusion.left_keys ==> IMapsTo(fusion.fused_parent.children, key, fusion.fused_childref))
-    && (forall key :: key in fusion.left_keys ==> IMapsTo(fusion.split_parent.children, key, fusion.left_childref))
-
-    && (forall key :: key in fusion.right_keys ==> IMapsTo(fusion.fused_parent.children, key, fusion.fused_childref))
-    && (forall key :: key in fusion.right_keys ==> IMapsTo(fusion.split_parent.children, key, fusion.right_childref))
-
-    && (forall key :: (key !in fusion.left_keys) && (key !in fusion.right_keys) ==>
-      IMapsAgreeOnKey(fusion.split_parent.children, fusion.fused_parent.children, key))
-
-    && fusion.fused_parent.buffer == fusion.split_parent.buffer
-
-    && (forall key :: key in fusion.left_keys ==> IMapsAgreeOnKey(fusion.fused_child.children, fusion.left_child.children, key))
-    && (forall key :: key in fusion.left_keys ==> IMapsAgreeOnKey(fusion.fused_child.buffer, fusion.left_child.buffer, key))
-
-    && (forall key :: key in fusion.right_keys ==> IMapsAgreeOnKey(fusion.fused_child.children, fusion.right_child.children, key))
-    && (forall key :: key in fusion.right_keys ==> IMapsAgreeOnKey(fusion.fused_child.buffer, fusion.right_child.buffer, key))
-  }
-
-  predicate ValidSplit(fusion: NodeFusion)
-  {
-    && WFNode(fusion.fused_parent)
-    && WFNode(fusion.fused_child)
-    && WFNode(fusion.left_child)
-    && WFNode(fusion.right_child)
-    && ValidFusion(fusion)
-    && fusion.left_child.children.Values <= fusion.fused_child.children.Values
-    && fusion.right_child.children.Values <= fusion.fused_child.children.Values
-  }
-
-  function SplitReads(fusion: NodeFusion) : seq<ReadOp>
-  requires ValidSplit(fusion)
-  {
-    [
-      ReadOp(fusion.parentref, fusion.fused_parent),
-      ReadOp(fusion.fused_childref, fusion.fused_child)
-    ]
-  }
-
-  function SplitOps(fusion: NodeFusion) : seq<Op>
-  requires ValidSplit(fusion)
-  {
-    [
-      G.AllocOp(fusion.left_childref, fusion.left_child),
-      G.AllocOp(fusion.right_childref, fusion.right_child),
-      G.WriteOp(fusion.parentref, fusion.split_parent)
-    ]
-  }
-
-  //// Merge
-
-  predicate ValidMerge(fusion: NodeFusion)
-  {
-    ValidFusion(fusion)
-    && fusion.fused_child.children == IMapUnion(IMapRestrict(fusion.left_child.children, fusion.left_keys), IMapRestrict(fusion.right_child.children, fusion.right_keys))
-  }
-
-  function MergeReads(fusion: NodeFusion) : seq<ReadOp>
-  requires ValidMerge(fusion)
-  {
-    [
-      ReadOp(fusion.parentref, fusion.split_parent),
-      ReadOp(fusion.left_childref, fusion.left_child),
-      ReadOp(fusion.right_childref, fusion.right_child)
-    ]
-  }
-
-  function MergeOps(fusion: NodeFusion) : seq<Op>
-  requires ValidMerge(fusion)
-  {
-    [
-      G.AllocOp(fusion.fused_childref, fusion.fused_child),
-      G.WriteOp(fusion.parentref, fusion.fused_parent)
-    ]
-  }
-
   //// All together
 
   datatype BetreeStep =
@@ -376,8 +281,7 @@ abstract module BetreeSpec {
     | BetreeInsert(ins: MessageInsertion)
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
-    | BetreeSplit(fusion: NodeFusion)
-    | BetreeMerge(fusion: NodeFusion)
+    | BetreeRedirect(redirect: Redirect)
 
   predicate ValidBetreeStep(step: BetreeStep)
   {
@@ -386,8 +290,7 @@ abstract module BetreeSpec {
       case BetreeInsert(ins) => ValidInsertion(ins)
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
-      case BetreeSplit(fusion) => ValidSplit(fusion)
-      case BetreeMerge(fusion) => ValidMerge(fusion)
+      case BetreeRedirect(redirect) => ValidRedirect(redirect)
     }
   }
 
@@ -399,8 +302,7 @@ abstract module BetreeSpec {
       case BetreeInsert(ins) => InsertionReads(ins)
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
-      case BetreeSplit(fusion) => SplitReads(fusion)
-      case BetreeMerge(fusion) => MergeReads(fusion)
+      case BetreeRedirect(redirect) => RedirectReads(redirect)
     }
   }
 
@@ -412,8 +314,7 @@ abstract module BetreeSpec {
       case BetreeInsert(ins) => InsertionOps(ins)
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
-      case BetreeSplit(fusion) => SplitOps(fusion)
-      case BetreeMerge(fusion) => MergeOps(fusion)
+      case BetreeRedirect(redirect) => RedirectOps(redirect)
     }
   }
 
@@ -423,8 +324,7 @@ abstract module BetreeSpec {
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
-      case BetreeSplit(fusion) => uiop.NoOp?
-      case BetreeMerge(fusion) => uiop.NoOp?
+      case BetreeRedirect(redirect) => uiop.NoOp?
     }
   }
 }
