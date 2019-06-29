@@ -70,9 +70,8 @@ abstract module BetreeSpec {
 
   predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
   requires ValidLayerIndex(lookup, idx) && idx < |lookup| - 1;
-  requires key in lookup[idx].node.children;
   {
-    lookup[idx].node.children[key] == lookup[idx+1].ref
+    IMapsTo(lookup[idx].node.children, key, lookup[idx+1].ref)
   }
 
   predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
@@ -223,6 +222,7 @@ abstract module BetreeSpec {
 
   predicate ValidRedirect(redirect: Redirect) {
     && WFNode(redirect.old_parent)
+    && (forall node :: node in redirect.old_children.Values ==> WFNode(node))
     && WFNode(redirect.new_parent)
     && WFNode(redirect.new_child)
 
