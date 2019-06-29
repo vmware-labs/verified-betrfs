@@ -1,6 +1,6 @@
 include "sequences.dfy"
   
-module Total_Order {
+abstract module Total_Order {
   import Seq = Sequences
     
 	type Element(!new,==)
@@ -296,11 +296,11 @@ abstract module Bounded_Total_Order refines Total_Order {
 module Integer_Order refines Total_Order {
   type Element = int
 
-  predicate method lte(a: Element, b: Element) {
+  predicate method {:opaque} lte(a: Element, b: Element) {
     a <= b
   }
 
-  predicate method ltedef(a: Element, b: Element) {
+  predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
 }

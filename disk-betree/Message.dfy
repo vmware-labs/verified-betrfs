@@ -3,14 +3,12 @@ include "MapSpec.dfy"
 // Delta forms a monoid with a monoid-action on the values
 // (https://en.wikipedia.org/wiki/Monoid_action)
 
-module Message {
-  import V = ValueWithDefault
-
-  type Value = V.Value
+abstract module Message {
+  type Value(!new)
 	type Delta(!new)
 
 	function NopDelta() : Delta
-	function DefaultValue() : Value { V.DefaultValue() }
+	function DefaultValue() : Value
 
 	datatype Message =
 	  | Define(value: Value)
@@ -36,7 +34,7 @@ module Message {
   }
 
 	function DefineDefault() : Message {
-	  Define(V.DefaultValue())
+	  Define(DefaultValue())
   }
 
 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
@@ -59,6 +57,30 @@ module Message {
 				}
 			}
 		}
+}
+
+module ValueMessage refines Message {
+  import V = ValueWithDefault
+
+  type Value = V.Value
+  datatype Delta = NoDelta
+
+  function NopDelta() : Delta { NoDelta }
+  function DefaultValue() : Value { V.DefaultValue() }
+
+  function CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta { NoDelta }
+  function ApplyDelta(delta: Delta, value: Value) : Value { value }
+
+	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
+	{
+	}
+
+	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
+	{
+	}
+
+	export S provides * reveals Message, Merge, IdentityMessage, DefineDefault, Value
+	export extends S
 }
 
 // module IntMessage refines Message {

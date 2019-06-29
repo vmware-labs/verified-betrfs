@@ -13,14 +13,14 @@ module PivotBetreeGraph refines Graph {
 
   import MS = MapSpec
   import opened MissingLibrary
-  import M = Message
+  import M = ValueMessage
 
   import Keyspace = MS.Keyspace
   type Key = Keyspace.Element
   type Value = BG.Value
 
-  type Reference = BG.Reference
-  function Root() : Reference { BG.Root() }
+  //type Reference = BG.Reference
+  //function Root() : Reference { BG.Root() }
   type Message = M.Message
 
   type PivotTable = seq<Key>

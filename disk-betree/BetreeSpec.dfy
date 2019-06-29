@@ -7,7 +7,7 @@ include "Message.dfy"
 
 module BetreeGraph refines Graph {
   import MS = MapSpec
-  import M = Message
+  import M = ValueMessage
 
   type Value = M.Value
 
