@@ -29,21 +29,17 @@ module Impl refines Main {
   method doStuff(k: Constants, s: Variables, io: DiskInterface.DiskIOHandler)
   returns (s': Variables)
   requires io.initialized()
-  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.dop))
+  ensures M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, IDiskOp(io.dop))
   {
     if (s.Unready?) {
       s' := PageInSuperblock(k, s, io);
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.dop), M.BlockCacheMoveStep(BC.PageInSuperblockStep));
+    } else {
+      assume false;
     }
   }
 
   method handle(k: Constants, world: World)
-  /*
-  modifies world
-  requires world.diskIOHandler.initialized()
-  requires Inv(k, world.s)
-  ensures Inv(k, world.s)
-  ensures Next(k, old(world.interp(k)), world.interp(k), UI.NoOp)
-  */
   {
     var s := world.s;
     var io := world.diskIOHandler;
