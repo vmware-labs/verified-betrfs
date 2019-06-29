@@ -162,8 +162,8 @@ abstract module PivotBetreeSpecRefinement {
       case BetreeInsert(ins) => B.BetreeInsert(IInsertion(ins))
       case BetreeFlush(flush) => B.BetreeFlush(IFlush(flush))
       case BetreeGrow(growth) => B.BetreeGrow(IGrow(growth))
-      case BetreeSplit(fusion) => B.BetreeSplit(IFusion(fusion))
-      case BetreeMerge(fusion) => B.BetreeMerge(IFusion(fusion))
+      //case BetreeSplit(fusion) => B.BetreeSplit(IFusion(fusion))
+      //case BetreeMerge(fusion) => B.BetreeMerge(IFusion(fusion))
     }
   }
 
@@ -630,13 +630,35 @@ abstract module PivotBetreeSpecRefinement {
     assert INode(newroot) == newroot';
   }
 
+  lemma AddMessagesToBucketsResult(
+      pivotTable: PivotTable,
+      i: int,
+      buckets: seq<map<Key, M.Message>>,
+      parentBucket: map<Key, M.Message>,
+      key: Key)
+  requires P.WFPivotTable(pivotTable)
+  requires 0 <= i <= |buckets|;
+  ensures key !in parentBucket && P.Route(pivotTable, key) < i ==>
+      P.BucketLookup(P.AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[P.Route(pivotTable, key)], key)
+   == P.BucketLookup(buckets[P.Route(pivotTable, key)], key)
+  ensures key in parentBucket && P.Route(pivotTable, key) < i ==>
+      P.BucketLookup(P.AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[P.Route(pivotTable, key)], key)
+   == M.Merge(parentBucket[key],
+      P.BucketLookup(buckets[P.Route(pivotTable, key)], key))
+  {
+    if (i == 0) {
+    } else {
+      AddMessagesToBucketsResult(pivotTable, i-1, buckets, parentBucket, key);
+    }
+  }
+
   lemma AddMessagesToNodeResult(node: PNode, bucket: map<Key, M.Message>, node': PNode, key: Key)
   requires P.WFNode(node)
   requires node' == P.AddMessagesToNode(node, bucket);
   ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
   ensures key in bucket ==> P.NodeLookup(node', key) == M.Merge(bucket[key], P.NodeLookup(node, key))
   {
-    // TODO
+    AddMessagesToBucketsResult(node.pivotTable, |node.buckets|, node.buckets, bucket, key);
   }
 
   lemma {:fuel IOps,2} FlushRefinesOps(flush: P.NodeFlush)
