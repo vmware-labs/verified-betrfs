@@ -6,7 +6,9 @@ include "BlockCacheSystemCrashSafeBlockInterfaceRefinement.dfy"
 include "BetreeSpec.dfy"
 include "DiskAccessModel.dfy"
 
-abstract module BetreeBlockCache refines DiskAccessMachine {
+include "Main.dfy"
+
+module BetreeBlockCache refines Machine {
   import opened Maps
   import opened Sequences
 
@@ -20,7 +22,7 @@ abstract module BetreeBlockCache refines DiskAccessMachine {
   type Constants = BC.Constants
   type LBA = BC.LBA
   type Sector = BC.Sector
-  type UIOp = DB.UIOp
+  //type UIOp = DB.UIOp
 
   type Op = BC.Op
 

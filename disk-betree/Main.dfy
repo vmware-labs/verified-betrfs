@@ -75,8 +75,6 @@ abstract module Main {
   import DiskInterface
   import UI
 
-  type Value = int
-
   type Constants // impl defined
   type Variables // impl defined (heap state)
 

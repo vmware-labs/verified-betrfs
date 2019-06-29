@@ -3,7 +3,7 @@ include "MapSpec.dfy"
 // Delta forms a monoid with a monoid-action on the values
 // (https://en.wikipedia.org/wiki/Monoid_action)
 
-abstract module Message {
+module Message {
   import V = ValueWithDefault
 
   type Value = V.Value

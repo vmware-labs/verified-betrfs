@@ -1,12 +1,12 @@
 include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
 
-abstract module ValueWithDefault {
+module ValueWithDefault {
   type Value(!new)
 	function DefaultValue() : Value 
 }
 
-abstract module UI {
+module UI {
   import Keyspace = Total_Order
   import V = ValueWithDefault
   type Key = Keyspace.Element
@@ -18,7 +18,7 @@ abstract module UI {
     | PutOp(key: Key, value: Value)
 }
 
-abstract module MapSpec {
+module MapSpec {
   import opened MissingLibrary
   import V = ValueWithDefault
 
