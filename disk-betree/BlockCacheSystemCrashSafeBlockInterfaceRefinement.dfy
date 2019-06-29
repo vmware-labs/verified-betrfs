@@ -3,9 +3,10 @@ include "BlockCacheSystem.dfy"
 include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
+include "PivotBetreeSpec.dfy"
 
-abstract module BetreeGraphBlockCache refines BlockCache {
-  import G = BetreeGraph
+module BetreeGraphBlockCache refines BlockCache {
+  import G = PivotBetreeGraph
 }
 
 abstract module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
@@ -17,7 +18,7 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
   // separately then we wouldn't know they were using the same graph.
   // So for now, we just prove the refinement specifically for BetreeGraph.
-  import opened G = BetreeGraph
+  import opened G = PivotBetreeGraph
   import BCS = BetreeGraphBlockCacheSystem
   import CSBI = CrashSafeBlockInterface
   import opened DAMTypes
@@ -26,9 +27,8 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   import opened Sequences
 
   import BC = BetreeGraphBlockCache
-  import BI = BetreeBlockInterface
+  import BI = PivotBetreeBlockInterface
   import D = Disk
-  import Betree
   type DiskOp = BC.DiskOp
 
   function Ik(k: BCS.Constants) : CSBI.Constants

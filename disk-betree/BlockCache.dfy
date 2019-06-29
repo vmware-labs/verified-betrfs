@@ -12,7 +12,7 @@ abstract module BlockCache refines Transactable {
   type LBA(==)
 
   datatype Constants = Constants()
-  function SuperblockLBA(k: Constants) : LBA
+  function method SuperblockLBA(k: Constants) : LBA
 
   // TODO make superblock take up more than one block (it's not really a superblock)
   datatype Superblock = Superblock(
