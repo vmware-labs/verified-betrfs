@@ -79,8 +79,6 @@ module BetreeBlockCache refines Machine {
     BC.InitImpliesInv(k, s);
   }
 
-  function BIStepsToOps(step: seq<BI.Step>) : seq<Op>
-
   lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep)
   requires Inv(k, s)
   requires BetreeMove(k, s, s', uiop, dop, betreeStep)

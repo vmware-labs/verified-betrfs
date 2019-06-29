@@ -59,7 +59,6 @@ abstract module Machine refines DiskAccessMachine {
   type Constants
   type Variables
 
-  type Value
   type UIOp = UI.Op
 
   // TODO create a proof obligation for the refinement
@@ -87,6 +86,8 @@ abstract module Main {
   function Constants() : M.Constants
   function ILBA(lba: DiskInterface.LBA) : M.LBA
   function ISector(sector: DiskInterface.Sector) : M.Sector
+  function method InitConstants() : Constants
+  function method InitVariables() : Variables
 
   datatype FWorld = FWorld(s: M.Variables, dop: DiskInterface.DiskOp)
 
