@@ -17,6 +17,7 @@ include "PivotBetree.dfy"
 
 abstract module PivotBetreeInvAndRefinement {
   import opened PivotBetreeSpec`Spec
+  import opened Sequences
   import PB = PivotBetree
   import PBI = PivotBetreeBlockInterface
   import B = Betree
@@ -125,6 +126,41 @@ abstract module PivotBetreeInvAndRefinement {
     }
   }
 
+  lemma ReadsRefines(k: Constants, s: Variables, ops: seq<PG.ReadOp>)
+  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].node)
+  requires ViewHasWFNodes(s.bcv.view)
+  requires PBI.Reads(k.bck, s.bcv, ops)
+  ensures BI.Reads(Ik(k).bck, I(k, s).bcv, SpecRef.IReadOps(ops))
+  decreases |ops|
+  {
+    if (|ops| == 0) {
+    } else {
+      ReadsRefines(k, s, DropLast(ops));
+      forall op' | op' in SpecRef.IReadOps(ops)
+      ensures BI.ReadStep(Ik(k).bck, I(k, s).bcv, op')
+      {
+        var i :| 0 <= i < |SpecRef.IReadOps(ops)| && SpecRef.IReadOps(ops)[i] == op';
+        if (i == |ops| - 1) {
+          var op := ops[i];
+          //assert op' == SpecRef.IReadOp(op);
+          assert PBI.ReadStep(k.bck, s.bcv, op);
+          /*
+          assert op.ref in s.bcv.view;
+          assert op'.ref == op.ref;
+          assert op'.ref in s.bcv.view;
+          assert op'.ref in I(k, s).bcv.view;
+          assert I(k, s).bcv.view[op'.ref]
+              == SpecRef.INode(s.bcv.view[op.ref])
+              == op'.node;
+          assert BI.ReadStep(Ik(k).bck, I(k, s).bcv, op');
+          */
+        } else {
+          //assert BI.ReadStep(Ik(k).bck, I(k, s).bcv, SpecRef.IReadOps(ops)[i]);
+        }
+      }
+    }
+  }
+
   lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
   requires Inv(k, s)
   requires PB.NextStep(k, s, s', uiop, PB.BetreeStep(betreeStep))
@@ -135,6 +171,26 @@ abstract module PivotBetreeInvAndRefinement {
     SpecRef.RefinesReadOps(betreeStep);
     SpecRef.RefinesOps(betreeStep);
     TransactionRefines(k, s, s', BetreeStepOps(betreeStep));
+    ReadsRefines(k, s, BetreeStepReads(betreeStep));
+
+    /*
+    match betreeStep {
+      case BetreeQuery(q) => {
+        assert B.Betree(Ik(k), I(k,s), I(k,s'), uiop, SpecRef.IStep(betreeStep));
+        assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+      }
+      case BetreeInsert(ins) => 
+      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+      case BetreeFlush(flush) => 
+      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+      case BetreeGrow(growth) => 
+      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+      case BetreeSplit(fusion) => 
+      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+      case BetreeMerge(fusion) => 
+      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+    }
+    */
     assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
     BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
