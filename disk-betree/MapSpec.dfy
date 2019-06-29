@@ -2,12 +2,19 @@ include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
 
 module ValueWithDefault {
-  type Value(!new)
-	function DefaultValue() : Value 
+  // TODO make these byte sequences or something
+
+  type Value(==,!new) = int
+	function DefaultValue() : Value { 0 }
+
+	export S provides Value, DefaultValue
+	export extends S
 }
 
 module UI {
-  import Keyspace = Total_Order
+  //import Keyspace = Total_Order
+  import Keyspace = Integer_Order
+
   import V = ValueWithDefault
   type Key = Keyspace.Element
   type Value = V.Value

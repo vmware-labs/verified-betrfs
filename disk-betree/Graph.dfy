@@ -1,12 +1,21 @@
 include "../lib/sequences.dfy"
+
+module ReferenceType {
+  type Reference(==,!new) = int
+  function Root() : Reference { 0 }
+
+  export S provides Reference, Root
+  export extends S
+}
   
 abstract module Graph {
   import opened Sequences
+  import ReferenceType
     
   // Abstract features
-  type Reference(!new,==)
+  type Reference = ReferenceType.Reference
   type Node(!new)
-  function Root() : Reference
+  function Root() : Reference { ReferenceType.Root() }
   function Successors(node: Node) : iset<Reference>
 
   type Graph = imap<Reference, Node>

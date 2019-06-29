@@ -13,7 +13,7 @@ include "PivotBetreeSpec.dfy"
 abstract module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
-  import M = Message
+  import M = ValueMessage
   import MS = MapSpec
   import Keyspace = MS.Keyspace
   import opened Maps
