@@ -21,7 +21,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
 
   import M = BetreeBlockCache
 
-  function DBConst(k: Constants) : DB.Constants {
+  function Ik(k: Constants) : DB.Constants {
     DB.Constants(BI.Constants())
   }
 
@@ -42,8 +42,8 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
 
   predicate Inv(k: Constants, s: Variables) {
     && BCS.Inv(k, s)
-    && DBI.Inv(DBConst(k), PersistentBetree(k, s))
-    && (s.machine.Ready? ==> DBI.Inv(DBConst(k), EphemeralBetree(k, s)))
+    && DBI.Inv(Ik(k), PersistentBetree(k, s))
+    && (s.machine.Ready? ==> DBI.Inv(Ik(k), EphemeralBetree(k, s)))
   }
 
   // Proofs
@@ -102,7 +102,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
     PersistentGraphEqAcrossOps(k, s, s', ops); 
     if (s.machine.Ready?) {
       Ref.RefinesOpTransaction(k, s, s', ops);
-      DBI.BetreeStepPreservesInvariant(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
+      DBI.BetreeStepPreservesInvariant(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
     }
   }
 
@@ -135,7 +135,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
     BCS.UnallocStepPreservesPersistentGraph(k, s, s', dop, ref);
 
     Ref.RefinesUnalloc(k, s, s', dop, ref);
-    DBI.GCStepPreservesInvariant(DBConst(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), iset{ref});
+    DBI.GCStepPreservesInvariant(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), iset{ref});
   }
 
   lemma PageInStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
