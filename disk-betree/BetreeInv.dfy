@@ -768,33 +768,23 @@ abstract module BetreeInv {
       ensures KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
     {
       var value, lookup: Lookup :| IsSatisfyingLookup(k, s.bcv.view, key1, value, lookup);
-      var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()),
-                           lookup);
+      var lookup' := lookup[0 := G.ReadOp(Root(), s'.bcv.view[Root()])];
+      forall i | 0 <= i < |lookup'|-1
+        ensures LookupFollowsChildRefAtLayer(key1, lookup', i)
+      {
+        assert LookupFollowsChildRefAtLayer(key1, lookup, i);
+      }
+      InterpretLookupAdditive(lookup[..1], lookup[1..], key1);
+      InterpretLookupAdditive(lookup'[..1], lookup'[1..], key1);
+      assert lookup == lookup[..1] + lookup[1..];
+      assert lookup' == lookup'[..1] + lookup'[1..];
       if key1 != key {
-        var i := 1;
-        while i < |lookup|
-        invariant i <= |lookup|
-        invariant InterpretLookup(lookup'[..i], key1) == InterpretLookup(lookup[..i], key1);
-        {
-          assert lookup[..i] == lookup[..i+1][..i];
-          assert lookup'[..i] == lookup'[..i+1][..i];
-          i := i + 1;
-        }
-        assert lookup == lookup[..i];
-        assert lookup' == lookup'[..i];
-        assert InterpretLookup(lookup', key1) == InterpretLookup(lookup, key1);
-
-        assert BufferDefinesValue(InterpretLookup(lookup', key1), value);
+        assert InterpretLookup(lookup[..1], key1) == InterpretLookup(lookup'[..1], key1);
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
       } else {
-		assert lookup' == [lookup'[0]] + lookup'[1..];
-		InterpretLookupAdditive([lookup'[0]], lookup'[1..], key);
-		assert lookup[1..] == lookup'[1..];
-		G.M.MergeIsAssociative(msg, InterpretLookup([lookup[0]], key), InterpretLookup(lookup[1..], key));
-		InterpretLookupAdditive([lookup[0]], lookup[1..], key);
-		assert lookup == [lookup[0]] + lookup[1..];
-		var message' := G.M.Merge(msg, InterpretLookup(lookup, key));
-        assert IsSatisfyingLookup(k, s'.bcv.view, key1, message'.value, lookup');
+        var msg' := G.M.Merge(msg, G.M.Define(value));
+        G.M.MergeIsAssociative(msg, InterpretLookup([lookup[0]], key), InterpretLookup(lookup[1..], key));
+        assert IsSatisfyingLookup(k, s'.bcv.view, key1, msg'.value, lookup');
       }
     }
   }
