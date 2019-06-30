@@ -303,7 +303,7 @@ abstract module BetreeInv {
         ReadOp(rootref, newroot),
         ReadOp(newchildref, oldroot)
       ] + lookup[1..];
-
+      
       InterpretLookupAdditive([ ReadOp(rootref, newroot), ReadOp(newchildref, oldroot) ], lookup[1..], key);
       InterpretLookupAdditive([lookup[0]], lookup[1..], key);
       assert [lookup[0]] + lookup[1..] == lookup;
@@ -343,6 +343,7 @@ abstract module BetreeInv {
       {
         assert LookupFollowsChildRefAtLayer(key, lookup', i+1);
       }
+      assert LookupFollowsChildRefs(key, lookup);
       
       forall i | 0 <= i < |lookup|-1
         ensures IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node)
