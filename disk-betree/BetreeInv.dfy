@@ -608,7 +608,8 @@ abstract module BetreeInv {
           {
             assert LookupFollowsChildRefAtLayer(key, lookup, j);
           }
-
+          assert LookupFollowsChildRefs(key, lookup);
+            
           InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
           assert lookup' == lookup'[..i] + [lookup'[i]] + lookup'[i+1..];
           
@@ -840,6 +841,7 @@ abstract module BetreeInv {
       IsPathFromRootLookupImpliesReachable(k, s, key, lookup, i-1);
       var l: BI.Lookup :| BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[i-1].ref;
       var l' := l + [lookup[i].ref];
+      assert LookupFollowsChildRefAtLayer(key, lookup, i-1);
       assert BI.LookupIsValid(k.bck, s.bcv, l') && Last(l') == lookup[i].ref;
       assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
     }
@@ -873,11 +875,17 @@ abstract module BetreeInv {
     requires Inv(k, s)
     requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     ensures Acyclic(k, s')
+    ensures G.IsAcyclic(s'.bcv.view)
   {
     forall key, lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup)
     ensures LookupIsAcyclic(lookup)
     {
       GCStepPreservesIsPathFromRootLookupRev(k, s, s', refs, lookup, key);
+    }
+    forall path | IsPath(s'.bcv.view, path)
+      ensures !IsCycle(s'.bcv.view, path)
+    {
+      assert IsPath(s.bcv.view, path);
     }
   }
 
