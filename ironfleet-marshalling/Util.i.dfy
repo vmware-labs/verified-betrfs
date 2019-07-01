@@ -1,9 +1,9 @@
-include "../../Common/Native/NativeTypes.i.dfy"
+include "../lib/NativeTypes.dfy"
 include "../../Common/Native/Io.s.dfy"
-include "../../../Libraries/Math/power2.i.dfy"
+include "./../Libraries/Math/power2.i.dfy"
 
 module Common__Util_i {
-import opened Native__NativeTypes_i
+import opened NativeTypes
 import opened Native__Io_s
 import opened Math__power2_i
 
