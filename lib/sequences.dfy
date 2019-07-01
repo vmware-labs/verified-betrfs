@@ -83,6 +83,15 @@ module Sequences {
     else f(FoldRight(f, init, run[1..]), run[0])
   }
 
+  function method {:opaque} remove<A>(s: seq<A>, pos: int) : seq<A>
+  requires 0 <= pos < |s|
+  ensures |remove(s, pos)| == |s| - 1
+  ensures forall i | 0 <= i < pos :: remove(s, pos)[i] == s[i]
+  ensures forall i | pos <= i < |s| - 1 :: remove(s, pos)[i] == s[i+1]
+  {
+    s[.. pos] + s[pos + 1 ..]
+  }
+
   function method {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>
   requires 0 <= pos <= |s|;
   ensures |insert(s,a,pos)| == |s| + 1;

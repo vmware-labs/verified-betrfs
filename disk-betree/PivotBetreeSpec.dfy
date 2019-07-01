@@ -7,6 +7,7 @@ include "../tla-tree/MissingLibrary.dfy"
 include "Message.dfy"
 include "BetreeSpec.dfy"
 include "Betree.dfy"
+include "PivotsLib.dfy"
 
 module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph
@@ -50,43 +51,25 @@ module PivotBetreeSpec {
   import opened Sequences
   import opened Maps
   import opened MissingLibrary
+  import Pivots = PivotsLib
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
 
-  function PivotTableSize(pivotTable: PivotTable) : int
-  {
-    |pivotTable| + 1
-  }
-
-  predicate WFPivotTable(pivotTable: PivotTable)
-  {
-    // Conditions to ensure each bucket has a non-empty key range
-    && Keyspace.IsStrictlySorted(pivotTable)
-    && (|pivotTable| > 0 ==> Keyspace.NotMinimum(pivotTable[0]))
-  }
-
-  function Route(pivotTable: PivotTable, key: Key) : int
-  requires WFPivotTable(pivotTable)
-  ensures 0 <= Route(pivotTable, key) < PivotTableSize(pivotTable)
-  {
-    Keyspace.LargestLte(pivotTable, key) + 1
-  }
-
   predicate WFBucket(node: Node, i: int)
-  requires WFPivotTable(node.pivotTable)
+  requires Pivots.WFPivots(node.pivotTable)
   requires 0 <= i < |node.buckets|
   {
-    forall key | key in node.buckets[i] :: Route(node.pivotTable, key) == i
+    forall key | key in node.buckets[i] :: Pivots.Route(node.pivotTable, key) == i
   }
 
   predicate WFNode(node: Node)
   {
-    && PivotTableSize(node.pivotTable) == |node.buckets|
-    && (node.children.Some? ==> PivotTableSize(node.pivotTable) == |node.children.value|)
-    && WFPivotTable(node.pivotTable)
+    && Pivots.NumBuckets(node.pivotTable) == |node.buckets|
+    && (node.children.Some? ==> |node.buckets| == |node.children.value|)
+    && Pivots.WFPivots(node.pivotTable)
     && (forall i | 0 <= i < |node.buckets| :: WFBucket(node, i))
   }
 
@@ -106,7 +89,7 @@ module PivotBetreeSpec {
   {
     var newnode := node.(
       buckets := node.buckets[
-        Route(node.pivotTable, key) := AddMessageToBucket(node.buckets[Route(node.pivotTable, key)], key, msg)
+        Pivots.Route(node.pivotTable, key) := AddMessageToBucket(node.buckets[Pivots.Route(node.pivotTable, key)], key, msg)
       ]
     );
     assert forall i | 0 <= i < |newnode.buckets| :: WFBucket(node, i) ==> WFBucket(newnode, i);
@@ -114,21 +97,21 @@ module PivotBetreeSpec {
   }
 
   function AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
-  requires WFPivotTable(pivotTable)
-  ensures forall key | key in AddMessagesToBucket(pivotTable, i, childBucket, parentBucket) :: Route(pivotTable, key) == i
+  requires Pivots.WFPivots(pivotTable)
+  ensures forall key | key in AddMessagesToBucket(pivotTable, i, childBucket, parentBucket) :: Pivots.Route(pivotTable, key) == i
   {
     map key
     | && (key in (childBucket.Keys + parentBucket.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
-      && Route(pivotTable, key) == i
+      && Pivots.Route(pivotTable, key) == i
       && M.Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key)) != M.IdentityMessage()
     :: M.Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key))
   }
 
   function AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
-  requires WFPivotTable(pivotTable)
+  requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |buckets|;
   ensures |AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)| == i
-  ensures forall j | 0 <= j < i :: forall key | key in AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[j] :: Route(pivotTable, key) == j
+  ensures forall j | 0 <= j < i :: forall key | key in AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[j] :: Pivots.Route(pivotTable, key) == j
   {
     if i == 0 then [] else (
       AddMessagesToBuckets(pivotTable, i-1, buckets, parentBucket) + [AddMessagesToBucket(pivotTable, i-1, buckets[i-1], parentBucket)]
@@ -176,7 +159,7 @@ module PivotBetreeSpec {
   requires WFNode(lookup[idx].node)
   {
     && lookup[idx].node.children.Some?
-    && lookup[idx].node.children.value[Route(lookup[idx].node.pivotTable, key)] == lookup[idx+1].ref
+    && lookup[idx].node.children.value[Pivots.Route(lookup[idx].node.pivotTable, key)] == lookup[idx+1].ref
   }
 
   predicate LookupFollowsChildRefs(key: Key, lookup: Lookup)
@@ -188,7 +171,7 @@ module PivotBetreeSpec {
   function NodeLookup(node: Node, key: Key) : Message
   requires WFNode(node)
   {
-    BucketLookup(node.buckets[Route(node.pivotTable, key)], key)
+    BucketLookup(node.buckets[Pivots.Route(node.pivotTable, key)], key)
   }
 
   function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
