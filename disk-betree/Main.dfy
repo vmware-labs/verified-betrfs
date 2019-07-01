@@ -9,7 +9,7 @@ module DiskTypes {
   type ByteSector = seq<byte>
 }
 
-module DiskInterface {
+module {:extern} DiskInterface {
   import DT = DiskTypes
   import D = Disk
 

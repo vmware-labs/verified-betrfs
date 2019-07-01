@@ -1,5 +1,5 @@
-using _23_DiskInterface_Compile; // TODO what to do about mangled namespaces?
-using _98_Impl_Compile;
+using DiskInterface_Compile; // TODO what to do about mangled namespaces?
+using Impl_Compile;
 
 using System;
 using System.IO;
@@ -27,8 +27,8 @@ class Framework {
   public static void Main(string[] args) {
     World w = new World();
     w.diskIOHandler = new DiskIOHandlerImpl();
-    w.s = _98_Impl_Compile.__default.InitVariables();
+    w.s = Impl_Compile.__default.InitVariables();
 
-    _98_Impl_Compile.__default.handle(_98_Impl_Compile.__default.InitConstants(), w);
+    Impl_Compile.__default.handle(Impl_Compile.__default.InitConstants(), w);
   }
 }
