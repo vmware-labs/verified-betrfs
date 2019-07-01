@@ -1,16 +1,16 @@
 include "../lib/NativeTypes.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
-include "../lib/MissingLibrary.dfy"
+include "../tla-tree/MissingLibrary.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 
 module Common__GenericMarshalling_i {
 //import opened Util__be_sequences_s
-import opened Native__NativeTypes_s
+import opened NativeTypes
 import opened Collections__Maps_i
 import opened Collections__Seqs_i 
-import opened Logic__Option_i
+import opened MissingLibrary
 import opened Common__Util_i
 import opened Common__MarshallInt_i
 
