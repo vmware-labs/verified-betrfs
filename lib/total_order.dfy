@@ -1,4 +1,5 @@
 include "sequences.dfy"
+include "NativeTypes.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
@@ -303,8 +304,9 @@ abstract module Bounded_Total_Order refines Total_Order {
 module Integer_Order refines Total_Order {
   type Element = int
 
-  predicate method {:opaque} lte(a: Element, b: Element) {
-    a <= b
+  predicate method lte(a: Element, b: Element) {
+    reveal_ltedef();
+    ltedef(a, b)
   }
 
   predicate method {:opaque} ltedef(a: Element, b: Element) {
@@ -338,3 +340,91 @@ module Bounded_Integer_Order refines Bounded_Total_Order {
 //   print Integer_Order.lte(11, 11);
 //   print "\n";
 // }
+
+module Byte_Order refines Total_Order {
+  import opened NativeTypes
+  type Element = byte
+
+  predicate method {:opaque} lte(a: Element, b: Element) {
+    reveal_ltedef();
+    a <= b
+  }
+
+  predicate method {:opaque} ltedef(a: Element, b: Element) {
+    a <= b
+  }
+}
+
+abstract module Lexicographic_Order refines Total_Order {
+  import Base_Order : Total_Order
+  type Element = seq<Base_Order.Element>
+
+  predicate method lte(a: Element, b: Element)
+  {
+    totality(a, b);
+    antisymm(a, b);
+    transitivity_forall();
+
+    seq_lte(a, b)
+  }
+
+  predicate method ltedef(a: Element, b: Element)
+  {
+    seq_lte(a, b)
+  }
+    
+  predicate method {:opaque} seq_lte(a: Element, b: Element)
+  decreases |a|
+  {
+    if |a| == 0 then (
+      true
+    ) else (
+      if |b| == 0 then (
+        false
+      ) else (
+        if Base_Order.lt(a[0], b[0]) then true
+        else if Base_Order.lt(b[0], a[0]) then false
+        else seq_lte(a[1..], b[1..])
+      )
+    )
+  }
+
+  lemma totality(a: Element, b: Element)
+  ensures seq_lte(a, b) || seq_lte(b, a);
+  {
+    reveal_seq_lte();
+  }
+
+  lemma antisymm(a: Element, b: Element)
+  ensures seq_lte(a, b) && seq_lte(b, a) ==> a == b;
+  {
+    reveal_seq_lte();
+    if |a| > 0 && |b| > 0 {
+      antisymm(a[1..], b[1..]);
+    }
+  }
+
+  // TODO why the fuck is this not verifying?
+  lemma transitivity_forall()
+  ensures forall a, b, c | (seq_lte(a, b) && seq_lte(b, c)) :: seq_lte(a, c);
+  {
+    forall a, b, c | seq_lte(a, b) && seq_lte(b, c)
+    ensures seq_lte(a, c)
+    {
+      transitivity(a, b, c);
+    }
+  }
+
+  lemma transitivity(a: Element, b: Element, c: Element)
+  ensures seq_lte(a, b) && seq_lte(b, c) ==> seq_lte(a, c);
+  {
+    reveal_seq_lte();
+    if (|a| > 0 && |b| > 0 && |c| > 0) {
+      transitivity(a[1..], b[1..], c[1..]);
+    }
+  }
+}
+
+module Lexicographic_Byte_Order refines Lexicographic_Order {
+  import Base_Order = Byte_Order
+}
