@@ -395,4 +395,20 @@ function method Uint16ToSeqByte(u:uint16) : seq<byte>
     s
 }
 
+// Leverage .NET's ability to perform copies faster than one element at a time
+class Arrays
+{
+    static method{:axiom} CopySeqIntoArray<A>(src:seq<A>, srcIndex:uint64, dst:array<A>, dstIndex:uint64, len:uint64)
+        requires dst != null;
+        requires int(srcIndex) + int(len) <= |src|;
+        requires int(dstIndex) + int(len) <= dst.Length;
+        modifies dst;
+        ensures  forall i :: 0 <= i < dst.Length ==> dst[i] == (
+                    if int(dstIndex) <= i < int(dstIndex) + int(len)
+                    then src[i - int(dstIndex) + int(srcIndex)]
+                    else old(dst[..])[i]);
+        ensures  forall i :: int(srcIndex) <= i < int(srcIndex) + int(len) ==>
+                    src[i] == dst[i - int(srcIndex) + int(dstIndex)];
+}
+
 } 
