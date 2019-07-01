@@ -267,6 +267,13 @@ abstract module Total_Order {
     exists b :: lt(b, a)
   }
 
+  lemma IsNotMinimum(a: Element, b: Element)
+  requires lt(a, b)
+  ensures NotMinimum(b)
+  {
+    reveal_NotMinimum();
+  }
+
   lemma SmallerElement(a: Element) returns (b: Element)
   requires NotMinimum(a)
   ensures lt(b, a)
