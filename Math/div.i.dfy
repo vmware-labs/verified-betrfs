@@ -7,6 +7,7 @@ include "div_auto.i.dfy"
 
 module Math__div_i {
 import opened Math__power_i
+import opened Math__power_s
 import opened Math__mul_i
 import opened Math__div_def_i
 import opened Math__div_boogie_i
