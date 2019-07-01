@@ -1,11 +1,12 @@
-include "../../Common/Native/NativeTypes.s.dfy"
+include "../lib/NativeTypes.dfy"
 //include "../../../Libraries/Util/seqs_transforms.i.dfy"
 include "Util.i.dfy"
 
 module Common__MarshallInt_i {
-import opened Native__NativeTypes_s
+import opened NativeTypes
 //import opened Util__seqs_transforms_i
 import opened Common__Util_i
+import opened Math__power2_i
 
 /*  Doesn't appear to be in use at present
 method MarshallUint32_guts(n:uint32, data:array<byte>, index:uint64)

@@ -1,13 +1,16 @@
 include "../lib/NativeTypes.dfy"
-include "../../Common/Native/Io.s.dfy"
-include "./../Libraries/Math/power2.i.dfy"
+//include "../../Common/Native/Io.s.dfy"
+include "../Math/power2.i.dfy"
 
 module Common__Util_i {
 import opened NativeTypes
-import opened Native__Io_s
+//import opened Native__Io_s
 import opened Math__power2_i
+import opened Math__power2_s
+import opened Math__div_i
 
 // Uses BigIntegers.  If you can, consider using the Opt versions below
+/*
 method seqToArray_slow<A>(s:seq<A>) returns(a:array<A>)
     ensures  a != null;
     ensures  a[..] == s;
@@ -23,6 +26,7 @@ method seqToArray_slow<A>(s:seq<A>) returns(a:array<A>)
         i := i + 1;
     }
 }
+*/
 
 // Uses BigIntegers.  If you can, consider using the Opt versions below
 /*
@@ -63,6 +67,7 @@ method seqIntoArrayOpt<A>(s:seq<A>, a:array<A>)
     }
 }
 
+/*
 method seqToArrayOpt<A>(s:seq<A>) returns(a:array<A>)
     requires |s| < 0x1_0000_0000_0000_0000;
     ensures  a != null;
@@ -72,6 +77,7 @@ method seqToArrayOpt<A>(s:seq<A>) returns(a:array<A>)
     a := new A[uint64(|s|)];
     seqIntoArrayOpt(s, a);
 }
+*/
 
 method seqIntoArrayChar(s:seq<char>, a:array<char>)
     requires a != null;
@@ -91,6 +97,7 @@ method seqIntoArrayChar(s:seq<char>, a:array<char>)
     }
 }
 
+/*
 method RecordTimingSeq(name:seq<char>, start:uint64, end:uint64)
     requires 0 < |name| < 0x1_0000_0000_0000_0000;
 {
@@ -107,6 +114,7 @@ method RecordTimingSeq(name:seq<char>, start:uint64, end:uint64)
 
     Time.RecordTiming(name_array, time);
 }
+*/
 
 function BEByteSeqToInt(bytes:seq<byte>) : int
     decreases |bytes|;
