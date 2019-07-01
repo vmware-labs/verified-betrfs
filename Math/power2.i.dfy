@@ -8,6 +8,9 @@ import opened Math__power2_s
 import opened Math__power_s
 import opened Math__power_i
 import opened Math__div_i
+import opened Math__div_nonlinear_i
+import opened Math__mul_auto_i
+import opened Math__mul_i
 
 /*
  * Real definition in spec directory (included above);
