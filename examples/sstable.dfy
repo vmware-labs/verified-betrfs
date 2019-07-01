@@ -42,11 +42,16 @@ abstract module SSTable {
     && 0 <= Last(sstable.starts) < |sstable.strings|
   }
 
-  function DropLastString(sstable: SSTable) : SSTable
+  function DropLastString(sstable: SSTable) : (result: SSTable)
     requires WFSSTable(sstable)
     requires 1 < |sstable.starts|
+    ensures WFSSTable(result)
   {
-    SSTable(DropLast(sstable.starts), sstable.strings[..Last(sstable.starts)])
+    IntOrder.reveal_IsStrictlySorted();
+    IntOrder.reveal_lte();
+    var newstarts := DropLast(sstable.starts);
+    var newstrings := sstable.strings[..Last(sstable.starts)];
+    SSTable(newstarts, newstrings)
   }
   
   function Interpretation(sstable: SSTable) : (result: seq<String>)
