@@ -1,7 +1,7 @@
-include "../lib/NativeTypes.dfy"
+include "../NativeTypes.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
-include "../tla-tree/MissingLibrary.dfy"
+include "../../tla-tree/MissingLibrary.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 
