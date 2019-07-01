@@ -1,4 +1,4 @@
-include "../lib/NativeTypes.dfy"
+include "../NativeTypes.dfy"
 //include "../../../Libraries/Util/seqs_transforms.i.dfy"
 include "Util.i.dfy"
 

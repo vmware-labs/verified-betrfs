@@ -1,4 +1,4 @@
-include "../lib/NativeTypes.dfy"
+include "../NativeTypes.dfy"
 //include "../../Common/Native/Io.s.dfy"
 include "../Math/power2.i.dfy"
 
