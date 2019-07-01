@@ -1,8 +1,9 @@
 include "../tla-tree/MissingLibrary.dfy"
 include "../lib/total_order.dfy"
+include "../lib/NativeTypes.dfy"
 
 module ValueWithDefault {
-  // TODO make these byte sequences or something
+  //import NativeTypes
 
   type Value(==,!new) = int
 	function DefaultValue() : Value { 0 }
@@ -13,7 +14,7 @@ module ValueWithDefault {
 
 module UI {
   //import Keyspace = Total_Order
-  import Keyspace = Integer_Order
+  import Keyspace = Lexicographic_Byte_Order
 
   import V = ValueWithDefault
   type Key = Keyspace.Element

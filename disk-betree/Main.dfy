@@ -1,10 +1,10 @@
 include "MapSpec.dfy"
 include "Disk.dfy"
 include "DiskAccessModel.dfy"
+include "../lib/NativeTypes.dfy"
 
 module DiskTypes {
-  newtype {:nativeType "uint"} uint32 = i:int | 0 <= i < 0x100000000
-  newtype {:nativeType "byte"} byte = i:int | 0 <= i < 0x100
+  import opened NativeTypes
   type LBA = uint32
   type ByteSector = seq<byte>
 }
