@@ -1,8 +1,7 @@
-//include "../../../Libraries/Util/be_sequences.s.dfy"
-include "../../Common/Native/NativeTypes.s.dfy"
-include "../../Common/Collections/Maps.i.dfy"
-include "../../Common/Collections/Seqs.i.dfy"
-include "../../Common/Logic/Option.i.dfy"
+include "../lib/NativeTypes.dfy"
+include "Maps.i.dfy"
+include "Seqs.i.dfy"
+include "../lib/MissingLibrary.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 
