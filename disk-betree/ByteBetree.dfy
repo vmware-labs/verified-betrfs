@@ -113,7 +113,7 @@ module Marshalling {
 
   function method valToSuperblock(v: V) : Option<BC.Superblock>
   requires ValInGrammar(v, SuperblockGrammar())
-  ensures var s := valToSuperblock(v) ; s.Some? ==> BC.WFSuperblock(BC.Constants(), s.value)
+  ensures var s := valToSuperblock(v) ; s.Some? ==> BC.WFPersistentSuperblock(s.value)
   {
     var res := valToLBAsAndRefcounts(v.a);
     match res {
@@ -257,7 +257,7 @@ module Marshalling {
   function method valToSector(v: V) : Option<Sector>
   requires ValInGrammar(v, SectorGrammar())
   ensures var s := valToSector(v);
-      s.Some? && s.value.SectorSuperblock? ==> BC.WFSuperblock(BC.Constants(), s.value.superblock)
+      s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
   ensures var s := valToSector(v);
       s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
   {
@@ -277,7 +277,7 @@ module Marshalling {
   function method {:opaque} parseSector(data: seq<byte>) : Option<Sector>
   requires |data| < 0x1_0000_0000_0000_0000;
   ensures var s := parseSector(data);
-      s.Some? && s.value.SectorSuperblock? ==> BC.WFSuperblock(BC.Constants(), s.value.superblock)
+      s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
   ensures var s := parseSector(data);
       s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
 
@@ -287,4 +287,19 @@ module Marshalling {
       case None => None
     }
   }
+
+  /////// Conversion from PivotNode to a val
+
+  /*
+  function method sectorToVal(sector: Sector) : Option<V>
+  requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(BC.Constants(), sector.superblock);
+  requires sector.SectorBlock? ==> BT.WFNode(sector.block);
+  ensures var v := sectorToVal(sector) ; v.Some? ==> ValInGrammar(v.value, SectorGrammar());
+  ensures var v := sectorToVal(sector) ; v.Some? ==> valToSector(
+  {
+    match sector {
+      case SectorSuperblock(lbas, refcounts) => 
+    }
+  }
+  */
 }
