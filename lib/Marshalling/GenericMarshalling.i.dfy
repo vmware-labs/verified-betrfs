@@ -5,7 +5,7 @@ include "../../tla-tree/MissingLibrary.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 
-module Common__GenericMarshalling_i {
+module GenericMarshalling {
 //import opened Util__be_sequences_s
 import opened NativeTypes
 import opened Collections__Maps_i

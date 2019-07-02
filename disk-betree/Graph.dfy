@@ -1,10 +1,16 @@
 include "../lib/sequences.dfy"
+include "../lib/NativeTypes.dfy"
 
 module ReferenceType {
-  type Reference(==,!new) = int
+  import NativeTypes
+
+  type Reference(==,!new) = NativeTypes.uint64
   function Root() : Reference { 0 }
 
-  export S provides Reference, Root
+  function method toRef(i: NativeTypes.uint64) : Reference { i }
+  function method toUint64(i: Reference) : NativeTypes.uint64 { i }
+
+  export S provides Reference, Root, toRef, toUint64, NativeTypes
   export extends S
 }
   
