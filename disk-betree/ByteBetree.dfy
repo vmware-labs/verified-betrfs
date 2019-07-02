@@ -9,6 +9,7 @@ module Marshalling {
   import opened MissingLibrary
   import opened NativeTypes
   import opened Sequences
+  import opened Maps
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
   import M = ValueMessage
@@ -290,16 +291,62 @@ module Marshalling {
 
   /////// Conversion from PivotNode to a val
 
-  /*
-  function method sectorToVal(sector: Sector) : Option<V>
-  requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(BC.Constants(), sector.superblock);
-  requires sector.SectorBlock? ==> BT.WFNode(sector.block);
-  ensures var v := sectorToVal(sector) ; v.Some? ==> ValInGrammar(v.value, SectorGrammar());
-  ensures var v := sectorToVal(sector) ; v.Some? ==> valToSector(
+  function method refToVal(ref: Reference) : V
   {
-    match sector {
-      case SectorSuperblock(lbas, refcounts) => 
+    VUint64(ref)
+  }
+
+  function method lbaToVal(lba: LBA) : V
+  {
+    VUint64(lba)
+  }
+
+  function method refcountToVal(refcount: int) : Option<V>
+  {
+    if (0 <= refcount < 0x1_0000_0000_0000_000) then (
+      Some(VUint64(refcount as uint64))
+    ) else (
+      None
+    )
+  }
+
+  method {:fuel ValInGrammar,2} lbasRefcountsToVal(lbas: map<Reference, LBA>, refcounts: map<Reference, int>) returns (v: Option<V>)
+  requires lbas.Keys == refcounts.Keys
+  ensures v.Some? ==> ValInGrammar(v.value, SuperblockGrammar());
+  {
+    if (|lbas| == 0) {
+      return Some(VArray([]));
+    } else {
+      var ref :| ref in lbas.Keys;
+      var vpref := lbasRefcountsToVal(MapRemove(lbas, {ref}), MapRemove(refcounts, {ref}));
+      match vpref {
+        case None => return None;
+        case Some(vpref) => {
+          var lba := lbas[ref];
+          var refcount := refcountToVal(refcounts[ref]);
+          if refcount.Some? {
+            return Some(VArray(vpref.a + [VTuple([refToVal(ref), lbaToVal(lba), refcount.value])]));
+          } else {
+            return None;
+          }
+        }
+      }
     }
   }
-  */
+
+  method sectorToVal(sector: Sector) returns (v : Option<V>)
+  requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
+  requires sector.SectorBlock? ==> BT.WFNode(sector.block);
+  ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
+  {
+    match sector {
+      case SectorSuperblock(Superblock(lbas, refcounts)) => {
+        var w := lbasRefcountsToVal(lbas, refcounts);
+        match w {
+          case Some(v) => return Some(VCase(0, v));
+          case None => return None;
+        }
+      }
+    }
+  }
 }
