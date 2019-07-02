@@ -5,7 +5,7 @@ include "../lib/mathematics.dfy"
 
 abstract module TwoThreeTree {
     import Keyspace : Total_Order
-    import Maps = Maps
+    import opened Maps
     import Math = Mathematics
 
     datatype Node<Value> =
@@ -77,13 +77,13 @@ abstract module TwoThreeTree {
         else if tree.TwoNode? then
             reveal_TreeIsOrdered();
             assert SubtreeContents(tree.left).Keys !! SubtreeContents(tree.right).Keys; // observe
-            Maps.disjoint_union(SubtreeContents(tree.left), SubtreeContents(tree.right))
+            MapDisjointUnion(SubtreeContents(tree.left), SubtreeContents(tree.right))
         else
             reveal_TreeIsOrdered();
             assert SubtreeContents(tree.left).Keys
                 !! SubtreeContents(tree.middle).Keys
                 !! SubtreeContents(tree.right).Keys; // observe
-            Maps.disjoint_union3(SubtreeContents(tree.left),
+            MapDisjointUnion3(SubtreeContents(tree.left),
                                  SubtreeContents(tree.middle), 
                                  SubtreeContents(tree.right))
     }
@@ -216,7 +216,7 @@ abstract module TwoThreeTree {
         ensures SubtreeAllKeys(mkTwoNode(t1, pivot, t2))
              == SubtreeAllKeys(t1) + { pivot } + SubtreeAllKeys(t2);
         ensures SubtreeContents(mkTwoNode(t1, pivot, t2)) ==
-            Maps.disjoint_union(SubtreeContents(t1), SubtreeContents(t2));
+            MapDisjointUnion(SubtreeContents(t1), SubtreeContents(t2));
         ensures Height(mkTwoNode(t1, pivot, t2)) == Height(t1) + 1;
     {
         reveal_minHeight();
@@ -241,7 +241,7 @@ abstract module TwoThreeTree {
         ensures SubtreeAllKeys(mkThreeNode(t1, pivota, t2, pivotb, t3)) ==
             SubtreeAllKeys(t1) + { pivota } + SubtreeAllKeys(t2) + { pivotb } + SubtreeAllKeys(t3);
         ensures SubtreeContents(mkThreeNode(t1, pivota, t2, pivotb, t3)) ==
-            Maps.disjoint_union3(SubtreeContents(t1), SubtreeContents(t2), SubtreeContents(t3));
+            MapDisjointUnion3(SubtreeContents(t1), SubtreeContents(t2), SubtreeContents(t3));
         ensures Height(mkThreeNode(t1, pivota, t2, pivotb, t3)) == Height(t1) + 1;
     {
         reveal_TreeIsOrdered();
@@ -705,7 +705,7 @@ abstract module TwoThreeTree {
     //       TTSubtree(result.tree)
     //     && SubtreeAllKeys(result.tree) == SubtreeAllKeys(root1) + SubtreeAllKeys(root2)
     //     && SubtreeContents(result.tree) ==
-    //       Maps.disjoint_union(SubtreeContents(root1), SubtreeContents(root2))
+    //       MapDisjointUnion(SubtreeContents(root1), SubtreeContents(root2))
     //     && (result.Split? ==> result.tree.TwoNode?)
     //     && (result.Split? ==> Height(result.tree) == Math.max(Height(root1), Height(root2)) + 1)
     //     && (result.DidntSplit? ==> Height(result.tree) == Math.max(Height(root1), Height(root2)))

@@ -48,7 +48,6 @@ abstract module SSTable {
     ensures WFSSTable(result)
   {
     IntOrder.reveal_IsStrictlySorted();
-    IntOrder.reveal_lte();
     var newstarts := DropLast(sstable.starts);
     var newstrings := sstable.strings[..Last(sstable.starts)];
     SSTable(newstarts, newstrings)
@@ -75,18 +74,29 @@ abstract module SSTable {
     if |sstable.starts| == 1 {
     } else if i == |sstable.starts|-1 {      
     } else {
-      LO.reveal_IsStrictlySorted();
+      IntOrder.reveal_IsStrictlySorted();
       TableEntryIsCorrect(SSTable(DropLast(sstable.starts), sstable.strings[..Last(sstable.starts)]), i);
     }
   }
-  
-  method Merge(sstable1: SSTable, sstable2: SSTable) returns (result: SSTable)
-    requires WFSSTable(sstable1)
-    requires WFSSTable(sstable2)
-    requires LO.IsSorted(Interpretation(sstable1))
-    requires LO.IsSorted(Interpretation(sstable2))
-    ensures WFSSTable(result)
-    ensures LO.IsSorted(Interpretation(result))
+
+  method IndexOfSmallestGTE(sstable: SSTable, key: String) returns (index: int)
+    requires WFSSTable(sstable)
+    requires LO.IsSorted(Interpretation(sstable))
+    ensures 0 <= index <= |sstable.starts|
+    ensures forall i :: 0 <= i < index ==> LO.lt(TableEntry(sstable, i), key)
+    ensures LO.lte(key, TableEntry(sstable, index))
+    ensures forall i :: index < i < |sstable.starts| ==> LO.lt(key, TableEntry(sstable, i))
   {
+    
   }
+  
+  // method Merge(sstable1: SSTable, sstable2: SSTable) returns (result: SSTable)
+  //   requires WFSSTable(sstable1)
+  //   requires WFSSTable(sstable2)
+  //   requires LO.IsSorted(Interpretation(sstable1))
+  //   requires LO.IsSorted(Interpretation(sstable2))
+  //   ensures WFSSTable(result)
+  //   ensures LO.IsSorted(Interpretation(result))
+  // {
+  // }
 }

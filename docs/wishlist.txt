@@ -5,6 +5,7 @@
       of abstract module inclusions, everything falls apart because you have
       no way to specify that the two inclusions of the same abstract module
       are the same.
+    - Ditto for types and names declared in the same module and imported via two paths.
 
 - Better state machine abstraction.
     - State machine refinement is not the same as Dafny module refinement.
