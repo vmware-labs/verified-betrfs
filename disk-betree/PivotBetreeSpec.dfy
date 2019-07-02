@@ -58,12 +58,26 @@ module PivotBetreeSpec {
 
   export extends Spec // Default export-style is Spec
 
-  predicate WFBucket(node: Node, i: int)
+  // We require that all keys in a bucket map actually fit into that bucket
+  // according to the pivot table.
+  predicate WFBucket(bucket: Bucket, pivotTable: Pivots.PivotTable, i: int)
+  requires Pivots.WFPivots(pivotTable)
+  {
+    && (forall key | key in bucket :: Pivots.Route(pivotTable, key) == i)
+    && (forall key | key in bucket :: bucket[key] != M.IdentityMessage())
+  }
+
+  predicate NodeHasWFBucketAt(node: Node, i: int)
   requires Pivots.WFPivots(node.pivotTable)
   requires 0 <= i < |node.buckets|
   {
-    && forall key | key in node.buckets[i] :: Pivots.Route(node.pivotTable, key) == i
-    && forall key | key in node.buckets[i] :: node.buckets[i][key] != M.IdentityMessage()
+    WFBucket(node.buckets[i], node.pivotTable, i)
+  }
+
+  predicate NodeHasWFBuckets(node: Node)
+  requires Pivots.WFPivots(node.pivotTable)
+  {
+    (forall i | 0 <= i < |node.buckets| :: NodeHasWFBucketAt(node, i))
   }
 
   // TODO it would be reasonable to impose additional constraints like:
@@ -74,7 +88,7 @@ module PivotBetreeSpec {
     && Pivots.NumBuckets(node.pivotTable) == |node.buckets|
     && (node.children.Some? ==> |node.buckets| == |node.children.value|)
     && Pivots.WFPivots(node.pivotTable)
-    && (forall i | 0 <= i < |node.buckets| :: WFBucket(node, i))
+    && NodeHasWFBuckets(node)
   }
 
   // Adding messages to buffers
@@ -105,7 +119,7 @@ module PivotBetreeSpec {
         Pivots.Route(node.pivotTable, key) := AddMessageToBucket(node.buckets[Pivots.Route(node.pivotTable, key)], key, msg)
       ]
     );
-    assert forall i | 0 <= i < |newnode.buckets| :: WFBucket(node, i) ==> WFBucket(newnode, i);
+    assert forall i | 0 <= i < |newnode.buckets| :: NodeHasWFBucketAt(node, i) ==> NodeHasWFBucketAt(newnode, i);
     newnode
   }
 

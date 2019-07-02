@@ -684,7 +684,7 @@ abstract module PivotBetreeSpecRefinement {
               == newbuffer[k];*/
         }
       } else {
-        assert P.WFBucket(flush.parent, flush.slotIndex);
+        assert P.NodeHasWFBucketAt(flush.parent, flush.slotIndex);
         //assert k !in bucket;
         /*
         if (newchild.children.Some?) {
@@ -700,9 +700,9 @@ abstract module PivotBetreeSpecRefinement {
     }
 
     forall i | 0 <= i < |newparent.buckets|
-    ensures P.WFBucket(newparent, i)
+    ensures P.NodeHasWFBucketAt(newparent, i)
     {
-      assert P.WFBucket(flush.parent, i);
+      assert P.NodeHasWFBucketAt(flush.parent, i);
     }
     //assert P.WFNode(newparent);
 
