@@ -62,9 +62,13 @@ module PivotBetreeSpec {
   requires Pivots.WFPivots(node.pivotTable)
   requires 0 <= i < |node.buckets|
   {
-    forall key | key in node.buckets[i] :: Pivots.Route(node.pivotTable, key) == i
+    && forall key | key in node.buckets[i] :: Pivots.Route(node.pivotTable, key) == i
+    && forall key | key in node.buckets[i] :: node.buckets[i][key] != M.IdentityMessage()
   }
 
+  // TODO it would be reasonable to impose additional constraints like:
+  //  - No deltas at leaves
+  //  - No default values at leaves
   predicate WFNode(node: Node)
   {
     && Pivots.NumBuckets(node.pivotTable) == |node.buckets|
@@ -75,12 +79,21 @@ module PivotBetreeSpec {
 
   // Adding messages to buffers
 
+  // TODO it might be a good idea to factor out the conept of "bucket" so that it has
+  // a more imap-like interface (while still being backed by a finite map) so that we don't
+  // have to deal with all the identity-message special cases in here.
+
   function BucketLookup(bucket: Bucket, key: Key) : Message {
     if key in bucket then bucket[key] else M.IdentityMessage()
   }
 
-  function AddMessageToBucket(bucket: Bucket, key: Key, msg: Message) : Bucket {
-    bucket[key := M.Merge(msg, BucketLookup(bucket, key))]
+  function AddMessageToBucket(bucket: Bucket, key: Key, msg: Message) : Bucket
+  {
+    var msg := M.Merge(msg, BucketLookup(bucket, key));
+    if msg == M.IdentityMessage() then
+      MapRemove(bucket, {key})
+    else
+      bucket[key := msg]
   }
 
   function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
@@ -112,6 +125,7 @@ module PivotBetreeSpec {
   requires 0 <= i <= |buckets|;
   ensures |AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)| == i
   ensures forall j | 0 <= j < i :: forall key | key in AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[j] :: Pivots.Route(pivotTable, key) == j
+  ensures forall j | 0 <= j < i :: forall key | key in AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[j] :: AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)[j][key] != M.IdentityMessage()
   {
     if i == 0 then [] else (
       AddMessagesToBuckets(pivotTable, i-1, buckets, parentBucket) + [AddMessagesToBucket(pivotTable, i-1, buckets[i-1], parentBucket)]
