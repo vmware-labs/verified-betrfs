@@ -1,9 +1,12 @@
 include "ByteBetree.dfy"
+include "Impl.dfy"
 
-module {:extern} Mkfs {
+// TODO make separate spec abstract module
+module {:extern} MkfsImpl {
   import Marshalling
   import opened MissingLibrary
   import opened NativeTypes
+  import opened Impl
 
   import BT = PivotBetreeSpec
   import BC = BetreeGraphBlockCache
@@ -11,10 +14,7 @@ module {:extern} Mkfs {
   import LBAType`Internal
   import ValueWithDefault`Internal
 
-  type LBA = BC.LBA
-  type Sector = BC.Sector
-
-  function method InitDisk() : map<LBA, Sector> {
+  function method InitDisk() : map<LBA, BC.Sector> {
     map[
       // Map ref 0 to lba 1
       0 := BC.SectorSuperblock(BC.Superblock(map[0 := 1], map[0 := 0])),
@@ -26,7 +26,9 @@ module {:extern} Mkfs {
   // TODO spec out that the data returned by this function
   // satisfies the initial conditions
   // TODO prove that this always returns an answer (that is, marshalling always succeeds)
-  method InitDiskBytes() returns (m :  map<LBA, array<byte>>) {
+  method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
+  ensures forall lba | lba in m :: ValidSector(m[lba][..])
+  {
     var d := InitDisk();
 
     var b0 := Marshalling.MarshallSector(d[0]);
