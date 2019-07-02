@@ -1,13 +1,14 @@
 method new_tree() returns (tree: Tree)
 ensures is_valid_tree(tree)
 ensures tree_set(tree) == {}
+ensures fresh(tree)
 {
   var t := new Tree;
   t.root := null;
   return t;
 }
 
-method contains(tree: Tree, value: int) returns (b: bool)
+method contains(tree: Tree, value: uint64) returns (b: bool)
 requires is_valid_tree(tree)
 ensures is_valid_tree(tree)
 ensures tree_set(tree) == old(tree_set(tree))

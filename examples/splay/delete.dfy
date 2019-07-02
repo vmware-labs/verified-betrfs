@@ -1,4 +1,4 @@
-method find_node(root: Node, value: int) returns (out: Node?)
+method find_node(root: Node, value: uint64) returns (out: Node?)
 requires is_valid_node(root)
 ensures value in value_set(root) ==> out != null
 ensures value in value_set(root) ==> out in node_set(root)
@@ -37,7 +37,7 @@ method get_max(root: Node) returns (out: Node)
 requires is_valid_node(root)
 ensures out in node_set(root)
 ensures out.value in value_set(root)
-ensures forall v:int :: v in value_set(root) ==> out.value >= v
+ensures forall v:uint64 :: v in value_set(root) ==> out.value >= v
 ensures is_valid_node(out)
 {
   var node := root;
@@ -48,47 +48,47 @@ ensures is_valid_node(out)
   invariant node in node_set(root)
   invariant node_set(node) <= node_set(root)
   invariant value_set(node) <= value_set(root)
-  invariant forall x:int :: x in {node.value} + value_set(node.r) ==>
-            forall y:int :: y in value_set(root) - ({node.value} + value_set(node.r)) ==>
+  invariant forall x:uint64 :: x in {node.value} + value_set(node.r) ==>
+            forall y:uint64 :: y in value_set(root) - ({node.value} + value_set(node.r)) ==>
             x > y
   decreases |node_set(node)|
   {
     node := node.r;
   }
 
-  assert forall x:int :: x in {node.value} + value_set(node.r) ==>
-         forall y:int :: y in value_set(root) - ({node.value} + value_set(node.r)) ==>
+  assert forall x:uint64 :: x in {node.value} + value_set(node.r) ==>
+         forall y:uint64 :: y in value_set(root) - ({node.value} + value_set(node.r)) ==>
          x > y;
   assert value_set(node.r) == {};
   assert {node.value} + value_set(node.r) == {node.value};
   assert value_set(root) - ({node.value} + value_set(node.r)) == value_set(root) - {node.value};
-  assert forall x:int :: x in {node.value} ==>
-         forall y:int :: y in value_set(root) - ({node.value} + value_set(node.r)) ==>
+  assert forall x:uint64 :: x in {node.value} ==>
+         forall y:uint64 :: y in value_set(root) - ({node.value} + value_set(node.r)) ==>
          x > y;
-  assert forall x:int :: x in {node.value} ==>
-         forall y:int :: y in value_set(root) - {node.value} ==>
+  assert forall x:uint64 :: x in {node.value} ==>
+         forall y:uint64 :: y in value_set(root) - {node.value} ==>
          x > y;
-  assert forall y:int :: y in value_set(root) - {node.value} ==> node.value > y;
-  assert forall y:int :: y in value_set(root) - {node.value} ==> node.value >= y;
-  assert forall y:int :: y in {node.value} ==> node.value >= y;
-  assert forall y:int :: y in value_set(root) ==> node.value >= y;
+  assert forall y:uint64 :: y in value_set(root) - {node.value} ==> node.value > y;
+  assert forall y:uint64 :: y in value_set(root) - {node.value} ==> node.value >= y;
+  assert forall y:uint64 :: y in {node.value} ==> node.value >= y;
+  assert forall y:uint64 :: y in value_set(root) ==> node.value >= y;
 
   return node;
 }
 
 lemma
-lemma_max_node_r_is_null(max_node: Node, vset: set<int>)
+lemma_max_node_r_is_null(max_node: Node, vset: set<uint64>)
 requires is_valid_node(max_node)
 requires value_set(max_node) == vset
-requires forall v:int :: v in vset ==> max_node.value >= v
+requires forall v:uint64 :: v in vset ==> max_node.value >= v
 ensures max_node.r == null
 ensures vset == {max_node.value} + value_set(max_node.l)
 {
 }
 
 lemma
-lemma_left_plus_right_is_correct(node: Node, left_vset: set<int>, right_vset: set<int>,
-    all_values: set<int>, value: int)
+lemma_left_plus_right_is_correct(node: Node, left_vset: set<uint64>, right_vset: set<uint64>,
+    all_values: set<uint64>, value: uint64)
 requires is_valid_node(node)
 requires node.value == value
 requires left_vset == value_set(node.l)
@@ -116,10 +116,10 @@ ensures is_structurally_valid(node)
 lemma
 lemma_max_node_has_correct_vset(
     max_node: Node,
-    left_vset: set<int>,
-    right_vset: set<int>,
-    all_values: set<int>,
-    value: int)
+    left_vset: set<uint64>,
+    right_vset: set<uint64>,
+    all_values: set<uint64>,
+    value: uint64)
 requires is_valid_node(max_node)
 requires left_vset == {max_node.value} + value_set(max_node.l)
 requires right_vset == value_set(max_node.r)
@@ -133,13 +133,13 @@ ensures value_set(max_node) == all_values - {value}
       == all_values - {value};
 }
 
-lemma lemma_node_r_not_in_max_node_l(node: Node, max_node: Node, left_vset: set<int>,
-    value: int)
+lemma lemma_node_r_not_in_max_node_l(node: Node, max_node: Node, left_vset: set<uint64>,
+    value: uint64)
 requires is_valid_node(max_node);
 requires node.r != null
 requires node.r.value > value
 requires max_node.value < value
-requires forall v:int :: v in left_vset ==> max_node.value >= v;
+requires forall v:uint64 :: v in left_vset ==> max_node.value >= v;
 ensures node.r !in node_set(max_node.l)
 {
   if (node.r in node_set(max_node.l)) {
@@ -153,9 +153,8 @@ ensures node.r !in node_set(max_node.l)
 
 method
 {:fuel is_structurally_valid,0,0} {:fuel value_set,0,0}
-delete(tree: Tree, value: int)
+delete(tree: Tree, value: uint64)
 modifies tree
-modifies node_set(tree.root)
 requires is_valid_tree(tree)
 ensures is_valid_tree(tree)
 ensures tree_set(tree) == old(tree_set(tree)) - {value}
@@ -260,7 +259,7 @@ ensures tree_set(tree) == old(tree_set(tree)) - {value}
 
           var max_node := get_max(node.l);
           assert left_vset == value_set(node.l);
-          assert forall v:int :: v in left_vset ==> max_node.value >= v;
+          assert forall v:uint64 :: v in left_vset ==> max_node.value >= v;
           assert node.r !in node_set(node.l);
 
           assert is_valid_node(node.l);
@@ -270,7 +269,7 @@ ensures tree_set(tree) == old(tree_set(tree)) - {value}
 
           assert is_valid_node(max_node);
           assert is_valid_node(node.r);
-          assert forall v:int :: v in left_vset ==> max_node.value >= v;
+          assert forall v:uint64 :: v in left_vset ==> max_node.value >= v;
 
           lemma_max_node_r_is_null(max_node, left_vset);
 
