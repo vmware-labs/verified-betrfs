@@ -1,4 +1,3 @@
-using DiskInterface_Compile; // TODO what to do about mangled namespaces?
 using Impl_Compile;
 
 using System;
@@ -27,14 +26,14 @@ class Framework {
   public static void Run() {
     World w = new World();
     w.diskIOHandler = new DiskIOHandlerImpl();
-    w.s = Impl_Compile.__default.InitVariables();
+    w.s = __default.InitVariables();
 
-    Impl_Compile.__default.handle(Impl_Compile.__default.InitConstants(), w);
+    __default.handle(__default.InitConstants(), w);
   }
 
   public static void Mkfs() {
     Dafny.Map<ulong, byte[]> m;
-    Mkfs_Compile.__default.InitDiskBytes(out m);
+    MkfsImpl_Compile.__default.InitDiskBytes(out m);
 
     if (m.Count == 0) {
       throw new Exception("InitDiskBytes failed.");
