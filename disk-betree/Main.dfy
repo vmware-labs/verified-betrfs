@@ -9,41 +9,6 @@ module DiskTypes {
   type ByteSector = seq<byte>
 }
 
-module {:extern} DiskInterface {
-  import opened NativeTypes
-  import DT = DiskTypes
-  import D = Disk
-
-  type LBA = DT.LBA
-  type Sector = DT.ByteSector
-  type DiskOp = D.DiskOp<LBA, Sector>
-
-  const BLOCK_SIZE: int := 1024*1024
-
-  trait DiskIOHandler {
-    ghost var dop: DiskOp;
-
-    // TODO make these take byte arrays instead for faster imperative code
-    method write(lba: LBA, sector: array<byte>)
-    modifies this;
-    requires dop == D.NoDiskOp;
-    requires sector.Length <= BLOCK_SIZE
-    ensures dop == D.WriteOp(lba, sector[..]);
-
-    method read(lba: LBA) returns (sector: array<byte>)
-    modifies this
-    requires dop == D.NoDiskOp
-    ensures dop == D.ReadOp(lba, sector[..])
-    ensures sector.Length == BLOCK_SIZE
-
-    predicate initialized()
-    reads this
-    {
-      dop == D.NoDiskOp
-    }
-  }
-}
-
 // Implementation has to instantiate this
 // and refine it to the BetreeBlockCache
 // either than or BetreeBlockCache itself will be the instantiation of this module?
@@ -70,30 +35,80 @@ abstract module Machine refines DiskAccessMachine {
 
 abstract module Main {
   import M : Machine
+  import D = Disk
 
-  import Disk
-  import DiskInterface
+  import opened NativeTypes
+  import DiskTypes
   import UI
-
-  type Constants // impl defined
-  type Variables // impl defined (heap state)
 
   type UIOp = M.UIOp
 
   // impl defined stuff
+
+  type Constants // impl defined
+  type Variables // impl defined (heap state)
+
   predicate Inv(k: Constants, s: Variables)
   function Ik(k: Constants): M.Constants
   function I(k: Constants, s: Variables): M.Variables
-  function Constants() : M.Constants
-  function ILBA(lba: DiskInterface.LBA) : M.LBA
-  function ISector(sector: DiskInterface.Sector) : M.Sector
+  function ILBA(lba: LBA) : M.LBA
+
+  predicate ValidSector(sector: Sector)
+
+  function ISector(sector: Sector) : M.Sector
+  requires ValidSector(sector)
+
   function method InitConstants() : Constants
   function method InitVariables() : Variables
 
-  datatype FWorld = FWorld(s: M.Variables, dop: DiskInterface.DiskOp)
+  // DiskInterface
+
+  function method BlockSize() : uint64 { 1024*1024 }
+
+  type LBA = DiskTypes.LBA
+  type Sector = DiskTypes.ByteSector
+  type DiskOp = D.DiskOp<LBA, Sector>
+
+  predicate ValidDiskOp(dop: DiskOp)
+  {
+    match dop {
+      case ReadOp(lba, sector) => ValidSector(sector)
+      case WriteOp(lba, sector) => ValidSector(sector)
+      case NoDiskOp => true
+    }
+  }
+
+  trait DiskIOHandler {
+    ghost var dop: DiskOp;
+
+    // TODO make these take byte arrays instead for faster imperative code
+    method write(lba: LBA, sector: array<byte>)
+    modifies this;
+    requires dop == D.NoDiskOp;
+    requires sector.Length <= BlockSize() as int
+    requires ValidSector(sector[..])
+    ensures dop == D.WriteOp(lba, sector[..]);
+
+    method read(lba: LBA) returns (sector: array<byte>)
+    modifies this
+    requires dop == D.NoDiskOp
+    ensures dop == D.ReadOp(lba, sector[..])
+    ensures sector.Length == BlockSize() as int
+    ensures ValidSector(sector[..])
+
+    predicate initialized()
+    reads this
+    {
+      dop == D.NoDiskOp
+    }
+  }
+
+  // State transitions
+
+  datatype FWorld = FWorld(s: M.Variables, dop: DiskOp)
 
   class World {
-    var diskIOHandler : DiskInterface.DiskIOHandler
+    var diskIOHandler : DiskIOHandler
     var s : Variables
 
     function interp(k: Constants) : FWorld
@@ -106,15 +121,18 @@ abstract module Main {
     constructor ()
   }
 
-  function IDiskOp(diskOp: DiskInterface.DiskOp) : M.DiskOp {
+  function IDiskOp(diskOp: DiskOp) : M.DiskOp
+  requires ValidDiskOp(diskOp)
+  {
     match diskOp {
-      case WriteOp(lba, sector) => Disk.WriteOp(ILBA(lba), ISector(sector))
-      case ReadOp(lba, sector) => Disk.WriteOp(ILBA(lba), ISector(sector))
-      case NoDiskOp => Disk.NoDiskOp
+      case WriteOp(lba, sector) => D.WriteOp(ILBA(lba), ISector(sector))
+      case ReadOp(lba, sector) => D.WriteOp(ILBA(lba), ISector(sector))
+      case NoDiskOp => D.NoDiskOp
     }
   }
 
   predicate Next(k: Constants, fw: FWorld, fw': FWorld, uiop: UIOp)
+  requires ValidDiskOp(fw'.dop)
   {
     M.Next(Ik(k), fw.s, fw'.s, uiop, IDiskOp(fw'.dop))
   }
@@ -124,6 +142,7 @@ abstract module Main {
   requires world.diskIOHandler.initialized()
   requires Inv(k, world.s)
   ensures Inv(k, world.s)
+  ensures ValidDiskOp(world.diskIOHandler.dop)
   ensures Next(k, old(world.interp(k)), world.interp(k), UI.NoOp)
   // impl defined
 }
