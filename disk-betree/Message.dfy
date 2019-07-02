@@ -89,6 +89,7 @@ module ValueMessage refines Message {
 
 	export S provides * reveals Message, Merge, IdentityMessage, DefineDefault, Value
 	export extends S
+	export Internal reveals *
 }
 
 // module IntMessage refines Message {
