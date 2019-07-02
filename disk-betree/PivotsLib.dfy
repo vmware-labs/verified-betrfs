@@ -29,7 +29,7 @@ module PivotsLib {
     |pt| + 1
   }
 
-  function Route(pt: PivotTable, key: Key) : int
+  function method Route(pt: PivotTable, key: Key) : int
   requires WFPivots(pt)
   ensures 0 <= Route(pt, key) < NumBuckets(pt)
   {
