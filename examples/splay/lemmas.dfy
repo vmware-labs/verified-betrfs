@@ -170,11 +170,11 @@ ensures is_structurally_valid(node)
   }
 }
 
-lemma lemma_left_and_right_are_distinct(l: Node, r: Node, x: int)
+lemma lemma_left_and_right_are_distinct(l: Node, r: Node, x: uint64)
 requires is_structurally_valid(l)
 requires is_structurally_valid(r)
-requires (forall t: int :: t in value_set(l) ==> t < x)
-requires (forall t: int :: t in value_set(r) ==> t > x)
+requires (forall t: uint64 :: t in value_set(l) ==> t < x)
+requires (forall t: uint64 :: t in value_set(r) ==> t > x)
 ensures l != r
 {
   assert l.value in value_set(l);
@@ -499,9 +499,9 @@ ensures b != c
     node_set_to_value_set(c, a.r);
     assert b.value in value_set(a.l);
     assert c.value in value_set(a.r);
-    assert (forall t: int :: t in value_set(a.l) ==> t < a.value);
+    assert (forall t: uint64 :: t in value_set(a.l) ==> t < a.value);
     assert b.value < a.value;
-    assert (forall t: int :: t in value_set(a.r) ==> t > a.value);
+    assert (forall t: uint64 :: t in value_set(a.r) ==> t > a.value);
     assert c.value > a.value;
     assert false;
   }
@@ -519,7 +519,7 @@ lemma lemma_value_set_matches_node_set(root: Node?)
 requires is_structurally_valid(root)
 decreases |node_set(root)|
 ensures forall v: Node :: v in node_set(root) ==> v.value in value_set(root)
-ensures forall val: int :: val in value_set(root) ==> exists v: Node :: v.value == val
+ensures forall val: uint64 :: val in value_set(root) ==> exists v: Node :: v.value == val
 {
   if (root != null) {
     lemma_value_set_matches_node_set(root.l);
@@ -529,8 +529,8 @@ ensures forall val: int :: val in value_set(root) ==> exists v: Node :: v.value 
 
 predicate
 {:fuel 0,0}
-is_valid_other_than_self(x: Node, value: int, l: Node?, r: Node?, ns: set<Node>,
-    ns1: set<Node>, vs: set<int>)
+is_valid_other_than_self(x: Node, value: uint64, l: Node?, r: Node?, ns: set<Node>,
+    ns1: set<Node>, vs: set<uint64>)
 reads ns1
 {
   (l == null || l in ns) &&
@@ -547,8 +547,8 @@ reads ns1
 
   (l == null || l.p == x) &&
   (r == null || r.p == x) &&
-  (forall t: int :: t in value_set(l) ==> t < value) &&
-  (forall t: int :: t in value_set(r) ==> t > value) &&
+  (forall t: uint64 :: t in value_set(l) ==> t < value) &&
+  (forall t: uint64 :: t in value_set(r) ==> t > value) &&
   is_valid_node(l) &&
   is_valid_node(r) &&
   vs == {value} + value_set(l) + value_set(r)
@@ -556,7 +556,7 @@ reads ns1
 
 lemma
 {:fuel is_valid_other_than_self,1,2}
-lemma_modify_p_doesnt_affect_validity1(x: Node, s: set<int>)
+lemma_modify_p_doesnt_affect_validity1(x: Node, s: set<uint64>)
 requires is_valid_node(x)
 requires s == value_set(x)
 ensures is_valid_other_than_self(x, x.value, x.l, x.r, x.node_set, x.node_set - {x}, s)
@@ -574,7 +574,7 @@ ensures is_valid_other_than_self(x, x.value, x.l, x.r, x.node_set, x.node_set - 
 
 lemma
 {:fuel is_valid_other_than_self,1,2}
-lemma_modify_p_doesnt_affect_validity2(x: Node, s: set<int>)
+lemma_modify_p_doesnt_affect_validity2(x: Node, s: set<uint64>)
 requires is_valid_other_than_self(x, x.value, x.l, x.r, x.node_set, x.node_set - {x}, s)
 ensures is_valid_node(x)
 ensures s == value_set(x)
@@ -821,10 +821,10 @@ requires is_valid_node(x)
 requires x.r != null
 requires ch == x.r.l || ch == x.r.r
 ensures is_structurally_valid(ch)
-ensures (forall t: int :: t in value_set(ch) ==> t > x.value)
+ensures (forall t: uint64 :: t in value_set(ch) ==> t > x.value)
 {
   assert value_set(ch) <= value_set(x.r);
-  assert (forall t: int :: t in value_set(x.r) ==> t > x.value);
+  assert (forall t: uint64 :: t in value_set(x.r) ==> t > x.value);
 }
 
 lemma left_grandchild_set_lt_self(x: Node, ch: Node?)
@@ -832,10 +832,10 @@ requires is_valid_node(x)
 requires x.l != null
 requires ch == x.l.l || ch == x.l.r
 ensures is_structurally_valid(ch)
-ensures (forall t: int :: t in value_set(ch) ==> t < x.value)
+ensures (forall t: uint64 :: t in value_set(ch) ==> t < x.value)
 {
   assert value_set(ch) <= value_set(x.l);
-  assert (forall t: int :: t in value_set(x.l) ==> t < x.value);
+  assert (forall t: uint64 :: t in value_set(x.l) ==> t < x.value);
 }
 
 lemma left_child_lt_self(x: Node)
@@ -858,8 +858,8 @@ lemma coalesce_right_subtree_all_gt(x: Node)
 requires x.r != null
 requires is_valid_node(x.r)
 requires x.r.value > x.value
-requires (forall t: int :: t in value_set(x.r.l) ==> t > x.value)
-ensures (forall t: int :: t in value_set(x.r) ==> t > x.value)
+requires (forall t: uint64 :: t in value_set(x.r.l) ==> t > x.value)
+ensures (forall t: uint64 :: t in value_set(x.r) ==> t > x.value)
 {
 }
 
@@ -867,8 +867,8 @@ lemma coalesce_left_subtree_all_lt(x: Node)
 requires x.l != null
 requires is_valid_node(x.l)
 requires x.l.value < x.value
-requires (forall t: int :: t in value_set(x.l.r) ==> t < x.value)
-ensures (forall t: int :: t in value_set(x.l) ==> t < x.value)
+requires (forall t: uint64 :: t in value_set(x.l.r) ==> t < x.value)
+ensures (forall t: uint64 :: t in value_set(x.l) ==> t < x.value)
 {
 }
 
@@ -1153,7 +1153,7 @@ is_structurally_valid_other_than_subtree(
     a: Node?,
     f: Node,
     fs: set<Node>,
-    fsv: set<int>,
+    fsv: set<uint64>,
     fp: Node?,
     other_nodes: set<Node>)
 reads other_nodes
@@ -1183,9 +1183,9 @@ value_set_other_than_subtree(
     a: Node?,
     f: Node,
     fs: set<Node>,
-    fsv: set<int>,
+    fsv: set<uint64>,
     fp: Node?,
-    other_nodes: set<Node>): set<int>
+    other_nodes: set<Node>): set<uint64>
 reads other_nodes
 requires is_structurally_valid_other_than_subtree(a, f, fs, fsv, fp, other_nodes)
 decreases |if a == f then fs else node_set(a)|
@@ -1207,7 +1207,7 @@ is_valid_node_other_than_subtree(
     a: Node?,
     f: Node,
     fs: set<Node>,
-    fsv: set<int>,
+    fsv: set<uint64>,
     fp: Node?,
     other_nodes: set<Node>)
 reads other_nodes
@@ -1219,9 +1219,9 @@ decreases |if a == f then fs else node_set(a)|
     else (
       (a.l == null || (if a.l == f then fp else a.l.p) == a) &&
       (a.r == null || (if a.r == f then fp else a.r.p) == a) &&
-      (forall t: int :: t in value_set_other_than_subtree(a.l,f,fs,fsv,fp,other_nodes) ==>
+      (forall t: uint64 :: t in value_set_other_than_subtree(a.l,f,fs,fsv,fp,other_nodes) ==>
           t < a.value) &&
-      (forall t: int :: t in value_set_other_than_subtree(a.r,f,fs,fsv,fp,other_nodes) ==>
+      (forall t: uint64 :: t in value_set_other_than_subtree(a.r,f,fs,fsv,fp,other_nodes) ==>
           t > a.value) &&
       is_valid_node_other_than_subtree(a.l,f,fs,fsv,fp,other_nodes) &&
       is_valid_node_other_than_subtree(a.r,f,fs,fsv,fp,other_nodes)
@@ -1236,11 +1236,11 @@ is_valid_and_matches(
     a: Node?,
     f: Node,
     fs: set<Node>,
-    fsv: set<int>,
+    fsv: set<uint64>,
     fp: Node?,
     other_nodes: set<Node>,
     all_nodes: set<Node>,
-    all_values: set<int>)
+    all_values: set<uint64>)
 reads other_nodes
 {
   is_valid_node_other_than_subtree(a,f,fs,fsv,fp,other_nodes) &&
@@ -1257,9 +1257,9 @@ change_subtree_preserves_validity1(
   root: Node,
   f: Node,
   full_node_set: set<Node>,
-  full_value_set: set<int>,
+  full_value_set: set<uint64>,
   fsn: set<Node>,
-  fsv: set<int>,
+  fsv: set<uint64>,
   fp: Node?,
   other_nodes: set<Node>)
 requires is_valid_node(root)
@@ -1290,9 +1290,9 @@ change_subtree_preserves_validity2(
   root: Node,
   f: Node,
   full_node_set: set<Node>,
-  full_value_set: set<int>,
+  full_value_set: set<uint64>,
   fsn: set<Node>,
-  fsv: set<int>,
+  fsv: set<uint64>,
   fp: Node?,
   other_nodes: set<Node>)
 requires is_valid_and_matches(root, f, fsn, fsv, fp, other_nodes, full_node_set, full_value_set)
@@ -1338,9 +1338,9 @@ change_subtree_preserves_validity1_(
   root: Node?,
   f: Node,
   full_node_set: set<Node>,
-  full_value_set: set<int>,
+  full_value_set: set<uint64>,
   fsn: set<Node>,
-  fsv: set<int>,
+  fsv: set<uint64>,
   fp: Node?,
   other_nodes: set<Node>)
 requires is_valid_node(root)

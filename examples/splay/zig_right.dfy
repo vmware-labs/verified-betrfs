@@ -1,7 +1,7 @@
 method
 {:fuel is_structurally_valid,0,0}
 {:fuel value_set,0,0}
-zig_right(x: Node, p: Node, ghost root: Node, ghost full_value_set: set<int>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg:Node?)
+zig_right(x: Node, p: Node, ghost root: Node, ghost full_value_set: set<uint64>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg:Node?)
 modifies x
 modifies p
 modifies x.l
@@ -266,7 +266,7 @@ ensures |node_set(x)| > |ns|
   set_ineq(ns, node_set(x), p);
 }
 
-lemma zig_right_value_set_is1(full_value_set: set<int>, root: Node, p: Node, x: Node, b: Node?)
+lemma zig_right_value_set_is1(full_value_set: set<uint64>, root: Node, p: Node, x: Node, b: Node?)
 requires is_valid_node(p)
 requires is_valid_node(x)
 requires root == p;
@@ -286,7 +286,7 @@ ensures full_value_set ==
       == {p.value} + ({x.value} + value_set(x.r) + value_set(b)) + value_set(p.l);
 }
 
-lemma zig_right_value_set_is2(full_value_set: set<int>, root: Node, p: Node, x: Node, b: Node?)
+lemma zig_right_value_set_is2(full_value_set: set<uint64>, root: Node, p: Node, x: Node, b: Node?)
 requires is_valid_node(b)
 requires is_valid_node(p.l)
 requires is_valid_node(x.r)

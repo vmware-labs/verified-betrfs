@@ -1,7 +1,7 @@
 method
 {:fuel is_structurally_valid,0,0}
 {:fuel value_set,0,0}
-zig_left(x: Node, p: Node, ghost root: Node, ghost full_value_set: set<int>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg:Node?)
+zig_left(x: Node, p: Node, ghost root: Node, ghost full_value_set: set<uint64>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg:Node?)
 modifies x
 modifies p
 modifies x.r
@@ -266,7 +266,7 @@ ensures |node_set(x)| > |ns|
   set_ineq(ns, node_set(x), p);
 }
 
-lemma zig_left_value_set_is1(full_value_set: set<int>, root: Node, p: Node, x: Node, b: Node?)
+lemma zig_left_value_set_is1(full_value_set: set<uint64>, root: Node, p: Node, x: Node, b: Node?)
 requires is_valid_node(p)
 requires is_valid_node(x)
 requires root == p;
@@ -286,7 +286,7 @@ ensures full_value_set ==
       == {p.value} + ({x.value} + value_set(x.l) + value_set(b)) + value_set(p.r);
 }
 
-lemma zig_left_value_set_is2(full_value_set: set<int>, root: Node, p: Node, x: Node, b: Node?)
+lemma zig_left_value_set_is2(full_value_set: set<uint64>, root: Node, p: Node, x: Node, b: Node?)
 requires is_valid_node(b)
 requires is_valid_node(p.r)
 requires is_valid_node(x.l)
@@ -365,21 +365,21 @@ ensures value_set(gg) == {gg.value} + value_set(x) + value_set(y)
 
 predicate
 {:fuel 0,0}
-gg_children_sets_are_good(gg: Node, which: bool, xset: set<int>, yset: set<int>)
+gg_children_sets_are_good(gg: Node, which: bool, xset: set<uint64>, yset: set<uint64>)
 reads gg
 {
   if (which) then (
-    (forall t: int :: t in xset ==> t < gg.value) &&
-    (forall t: int :: t in yset ==> t > gg.value)
+    (forall t: uint64 :: t in xset ==> t < gg.value) &&
+    (forall t: uint64 :: t in yset ==> t > gg.value)
   ) else (
-    (forall t: int :: t in yset ==> t < gg.value) &&
-    (forall t: int :: t in xset ==> t > gg.value)
+    (forall t: uint64 :: t in yset ==> t < gg.value) &&
+    (forall t: uint64 :: t in xset ==> t > gg.value)
   )
 }
 
 lemma
 {:fuel gg_children_sets_are_good,1,2}
-gg_sets_prop1(gg: Node, which: bool, x: Node, y: Node?, xset: set<int>, yset: set<int>)
+gg_sets_prop1(gg: Node, which: bool, x: Node, y: Node?, xset: set<uint64>, yset: set<uint64>)
 requires is_valid_node(gg)
 requires which ==> gg.l == x && gg.r == y
 requires !which ==> gg.l == y && gg.r == x
@@ -391,7 +391,7 @@ ensures gg_children_sets_are_good(gg, which, xset, yset)
 
 lemma
 {:fuel gg_children_sets_are_good,1,2}
-gg_sets_prop2(gg: Node, which: bool, x: Node, y: Node?, xset: set<int>, yset: set<int>)
+gg_sets_prop2(gg: Node, which: bool, x: Node, y: Node?, xset: set<uint64>, yset: set<uint64>)
 requires is_structurally_valid(gg)
 requires which ==> gg.l == x && gg.r == y
 requires !which ==> gg.l == y && gg.r == x

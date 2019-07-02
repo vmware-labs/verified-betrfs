@@ -2,8 +2,7 @@ method
 {:fuel is_structurally_valid,0,0} {:fuel value_set,0,0}
 splay(node: Node,
     ghost root: Node,
-    ghost full_value_set: set<int>)
-modifies node_set(root)
+    ghost full_value_set: set<uint64>)
 requires root.p == null
 requires is_valid_node(root)
 requires node in node_set(root)
@@ -112,7 +111,7 @@ ensures node.value == old(node.value)
 
 method 
 {:fuel is_structurally_valid,0,0} {:fuel value_set,0,0}
-zig_zig_left(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<int>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
+zig_zig_left(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<uint64>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
 modifies x
 modifies p
 modifies g
@@ -179,7 +178,7 @@ ensures |node_set(x)| > |ns|
   }
 }
 
-method zig_zag_left(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<int>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
+method zig_zag_left(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<uint64>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
 modifies x
 modifies p
 modifies g
@@ -239,7 +238,7 @@ ensures |node_set(x)| > |ns|
 
 method
 {:fuel is_structurally_valid,0,0} {:fuel value_set,0,0}
-zig_zig_right(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<int>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
+zig_zig_right(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<uint64>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
 modifies x
 modifies p
 modifies g
@@ -306,7 +305,7 @@ ensures |node_set(x)| > |ns|
   }
 }
 
-method zig_zag_right(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<int>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
+method zig_zag_right(x: Node, p: Node, g: Node, ghost root: Node, ghost full_value_set: set<uint64>, ghost ns: set<Node>, ghost nsr: set<Node>, ghost gg: Node?)
 modifies x
 modifies p
 modifies g

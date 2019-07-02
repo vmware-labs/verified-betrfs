@@ -4,7 +4,7 @@ class Node
   var r: Node?;
   var p: Node?; // parent
 
-  var value: int;
+  var value: uint64;
 
   ghost var node_set: set<Node>;
 }
@@ -33,7 +33,7 @@ decreases |node_set(a)|
   )
 }
 
-function value_set(a: Node?): set<int>
+function value_set(a: Node?): set<uint64>
 reads a
 reads node_set(a)
 requires is_structurally_valid(a)
@@ -56,8 +56,8 @@ decreases |node_set(a)|
     else (
       (a.l == null || a.l.p == a) &&
       (a.r == null || a.r.p == a) &&
-      (forall t: int :: t in value_set(a.l) ==> t < a.value) &&
-      (forall t: int :: t in value_set(a.r) ==> t > a.value) &&
+      (forall t: uint64 :: t in value_set(a.l) ==> t < a.value) &&
+      (forall t: uint64 :: t in value_set(a.r) ==> t > a.value) &&
       is_valid_node(a.l) &&
       is_valid_node(a.r)
     )
@@ -77,7 +77,7 @@ reads node_set(tree.root)
   tree.root == null || (tree.root.p == null && is_valid_node(tree.root))
 }
 
-function tree_set(tree: Tree): set<int>
+function tree_set(tree: Tree): set<uint64>
 requires is_valid_tree(tree)
 reads tree
 reads tree.root
@@ -86,7 +86,7 @@ reads node_set(tree.root)
   value_set(tree.root)
 }
 
-function values_of_nodes(s: set<Node>): set<int>
+function values_of_nodes(s: set<Node>): set<uint64>
 reads s
 {
   set node:Node | node in s :: node.value
