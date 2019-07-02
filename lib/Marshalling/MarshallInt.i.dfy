@@ -33,28 +33,27 @@ method MarshallUint32_guts(n:uint32, data:array<byte>, index:uint64)
 */
 
 method MarshallUint64_guts(n:uint64, data:array<byte>, index:uint64)
-    requires data != null;
-    requires int(index) + int(Uint64Size()) <= data.Length;
-    requires 0 <= int(index) + int(Uint64Size()) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow on the next line
+    requires (index as int) + (Uint64Size() as int) <= data.Length;
+    requires 0 <= (index as int) + (Uint64Size() as int) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow on the next line
     requires data.Length < 0x1_0000_0000_0000_0000;
     modifies data;
-    ensures  SeqByteToUint64(data[index..index+uint64(Uint64Size())]) == n;
+    ensures  SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == n;
     ensures  data[0..index] == old(data[0..index]);
-    ensures  data[index+uint64(Uint64Size())..] == old(data[index+uint64(Uint64Size())..]);
+    ensures  data[index+(Uint64Size() as uint64)..] == old(data[index+(Uint64Size() as uint64)..]);
 {
-    data[index  ] := byte( n/0x1000000_00000000);
-    data[index+1] := byte((n/  0x10000_00000000)%0x100);
-    data[index+2] := byte((n/    0x100_00000000)%0x100);
-    data[index+3] := byte((n/      0x1_00000000)%0x100);
-    data[index+4] := byte((n/         0x1000000)%0x100);
-    data[index+5] := byte((n/           0x10000)%0x100);
-    data[index+6] := byte((n/             0x100)%0x100);
-    data[index+7] := byte( n                    %0x100);
+    data[index  ] := ( n/0x1000000_00000000) as byte;
+    data[index+1] := ((n/  0x10000_00000000)%0x100) as byte;
+    data[index+2] := ((n/    0x100_00000000)%0x100) as byte;
+    data[index+3] := ((n/      0x1_00000000)%0x100) as byte;
+    data[index+4] := ((n/         0x1000000)%0x100) as byte;
+    data[index+5] := ((n/           0x10000)%0x100) as byte;
+    data[index+6] := ((n/             0x100)%0x100) as byte;
+    data[index+7] := ( n                    %0x100) as byte;
 
     lemma_2toX();
 
-    assert data[index..index+uint64(Uint64Size())] == Uint64ToSeqByte(n);
-    lemma_BEUintToSeqByte_invertability(data[index..index+uint64(Uint64Size())], int(n), 8);
+    assert data[index..index+(Uint64Size() as uint64)] == Uint64ToSeqByte(n);
+    lemma_BEUintToSeqByte_invertability(data[index..index+(Uint64Size() as uint64)], (n as int), 8);
 }
 
 
