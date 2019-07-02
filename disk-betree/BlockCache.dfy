@@ -15,6 +15,7 @@ module LBAType {
 
   export S provides LBA, SuperblockLBA, toLBA, toUint64, NativeTypes
   export extends S
+	export Internal reveals *
 }
 
 abstract module BlockCache refines Transactable {

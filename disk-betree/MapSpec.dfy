@@ -9,6 +9,7 @@ module ValueWithDefault {
 	function DefaultValue() : Value { [] }
 
 	export S provides Value, DefaultValue
+	export Internal reveals *
 	export extends S
 }
 
