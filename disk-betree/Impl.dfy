@@ -1,5 +1,6 @@
 include "Main.dfy"
 include "BetreeBlockCache.dfy"
+include "Mkfs.dfy"
 
 module {:extern} Impl refines Main {
   import BC = BetreeGraphBlockCache

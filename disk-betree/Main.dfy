@@ -5,11 +5,12 @@ include "../lib/NativeTypes.dfy"
 
 module DiskTypes {
   import opened NativeTypes
-  type LBA = uint32
+  type LBA = uint64
   type ByteSector = seq<byte>
 }
 
 module {:extern} DiskInterface {
+  import opened NativeTypes
   import DT = DiskTypes
   import D = Disk
 
@@ -23,17 +24,17 @@ module {:extern} DiskInterface {
     ghost var dop: DiskOp;
 
     // TODO make these take byte arrays instead for faster imperative code
-    method write(lba: LBA, sector: Sector)
+    method write(lba: LBA, sector: array<byte>)
     modifies this;
     requires dop == D.NoDiskOp;
-    requires |sector| == BLOCK_SIZE
-    ensures dop == D.WriteOp(lba, sector);
+    requires sector.Length <= BLOCK_SIZE
+    ensures dop == D.WriteOp(lba, sector[..]);
 
-    method read(lba: LBA) returns (sector: Sector)
+    method read(lba: LBA) returns (sector: array<byte>)
     modifies this
     requires dop == D.NoDiskOp
-    ensures dop == D.ReadOp(lba, sector)
-    ensures |sector| == BLOCK_SIZE
+    ensures dop == D.ReadOp(lba, sector[..])
+    ensures sector.Length == BLOCK_SIZE
 
     predicate initialized()
     reads this
