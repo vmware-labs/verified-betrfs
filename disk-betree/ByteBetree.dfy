@@ -132,6 +132,7 @@ module Marshalling {
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GByteArray, MessageGrammar()]))
   requires Pivots.WFPivots(pivotTable)
   ensures var s := valToKeyMessageMap(a, pivotTable, i) ; s.Some? ==> forall key | key in s.value :: Pivots.Route(pivotTable, key) == i
+  ensures var s := valToKeyMessageMap(a, pivotTable, i) ; s.Some? ==> forall key | key in s.value :: s.value[key] != M.IdentityMessage()
   {
     if |a| == 0 then
       Some(map[])
@@ -157,6 +158,7 @@ module Marshalling {
   function method valToBucket(v: V, pivotTable: seq<Key>, i: int) : Option<Bucket>
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
+  ensures var s := valToBucket(v, pivotTable, i) ; s.Some? ==> forall key | key in s.value :: s.value[key] != M.IdentityMessage()
   {
     valToKeyMessageMap(v.a, pivotTable, i)
   }
@@ -209,6 +211,7 @@ module Marshalling {
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> |s.value| == |a|
   ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> forall i | 0 <= i < |s.value| :: forall key | key in s.value[i] :: Pivots.Route(pivotTable, key) == i
+  ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> forall i | 0 <= i < |s.value| :: forall key | key in s.value[i] :: s.value[i][key] != M.IdentityMessage()
   {
     if |a| == 0 then
       Some([])
