@@ -50,7 +50,6 @@ method seqIntoArray_slow<A>(s:seq<A>, a:array<A>, index:nat)
 */
 
 method seqIntoArrayOpt<A>(s:seq<A>, a:array<A>)
-    requires a != null;
     requires |s| == a.Length;
     requires |s| < 0x1_0000_0000_0000_0000;
     modifies a;
@@ -58,8 +57,8 @@ method seqIntoArrayOpt<A>(s:seq<A>, a:array<A>)
 {
     var i:uint64 := 0;
 
-    while i < uint64(|s|)
-        invariant 0 <= int(i) <= a.Length;
+    while i < (|s| as uint64)
+        invariant 0 <= (i) as int <= a.Length;
         invariant a[..] == s[0..i] + old(a[i..]);
     {
         a[i] := s[i];
@@ -74,13 +73,12 @@ method seqToArrayOpt<A>(s:seq<A>) returns(a:array<A>)
     ensures  a[..] == s;
     ensures fresh(a);
 {
-    a := new A[uint64(|s|)];
+    a := new A[(|s|) as uint64];
     seqIntoArrayOpt(s, a);
 }
 */
 
 method seqIntoArrayChar(s:seq<char>, a:array<char>)
-    requires a != null;
     requires |s| == a.Length;
     requires |s| < 0x1_0000_0000_0000_0000;
     modifies a;
@@ -88,8 +86,8 @@ method seqIntoArrayChar(s:seq<char>, a:array<char>)
 {
     var i:uint64 := 0;
 
-    while i < uint64(|s|)
-        invariant 0 <= int(i) <= a.Length;
+    while i < (|s| as uint64)
+        invariant 0 <= (i) as int <= a.Length;
         invariant a[..] == s[0..i] + old(a[i..]);
     {
         a[i] := s[i];
@@ -120,7 +118,7 @@ function BEByteSeqToInt(bytes:seq<byte>) : int
     decreases |bytes|;
 {
     if bytes == [] then 0
-    else BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + int(bytes[|bytes|-1])
+    else BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + (bytes[|bytes|-1]) as int
 }
 
 lemma lemma_BEByteSeqToInt_bound(bytes:seq<byte>)
@@ -138,7 +136,7 @@ lemma lemma_BEByteSeqToInt_bound(bytes:seq<byte>)
 
         calc {
             BEByteSeqToInt(bytes);
-            BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + int(bytes[|bytes|-1]);
+            BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + (bytes[|bytes|-1]) as int;
             < 
             BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + 256;
             BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + 1 * 256;
@@ -156,7 +154,7 @@ lemma lemma_BEByteSeqToInt_bound(bytes:seq<byte>)
 lemma lemma_BEByteSeqToUint32_properties(bs:seq<byte>)
     requires |bs| == int(Uint32Size());
     ensures  var ret := uint32(bs[0]) * 256*256*256 + uint32(bs[1]) * 256*256 + uint32(bs[2]) * 256 + uint32(bs[3]);
-             int(ret) == BEByteSeqToInt(bs);
+             (ret as int) == BEByteSeqToInt(bs);
 {
     lemma_2toX(); 
     lemma_BEByteSeqToInt_bound(bs);
@@ -168,46 +166,46 @@ lemma lemma_BEByteSeqToUint32_properties(bs:seq<byte>)
         (BEByteSeqToInt(bs[..|bs|-2]) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
         ((BEByteSeqToInt(bs[..|bs|-3]) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
         (((BEByteSeqToInt(bs[..|bs|-4]) * 256 + int(bs[|bs|-4])) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
-        int(ret);
+        (ret as int);
     }
 }
 */
 
 lemma lemma_BEByteSeqToUint64_properties(bs:seq<byte>)
-    requires |bs| == int(Uint64Size());
-    ensures  var ret := uint64(bs[0]) * 256*256*256*0x100000000 + uint64(bs[1]) * 256*256*0x100000000 + uint64(bs[2]) * 256*0x100000000 + uint64(bs[3]) * 0x100000000 +
-                        uint64(bs[4]) * 256*256*256 + uint64(bs[5]) * 256*256 + uint64(bs[6]) * 256 + uint64(bs[7]);
-             int(ret) == BEByteSeqToInt(bs);
+    requires |bs| == (Uint64Size()) as int;
+    ensures  var ret := (bs[0]) as uint64 * 256*256*256*0x100000000 + (bs[1]) as uint64 * 256*256*0x100000000 + (bs[2]) as uint64 * 256*0x100000000 + (bs[3]) as uint64 * 0x100000000 +
+                        (bs[4]) as uint64 * 256*256*256 + (bs[5]) as uint64 * 256*256 + (bs[6]) as uint64 * 256 + (bs[7]) as uint64;
+             (ret) as int == BEByteSeqToInt(bs);
 {
     lemma_2toX();
-    var ret := uint64(bs[0]) * 256*256*256*0x100000000 + uint64(bs[1]) * 256*256*0x100000000 + uint64(bs[2]) * 256*0x100000000 + uint64(bs[3]) * 0x100000000 +
-                            uint64(bs[4]) * 256*256*256 + uint64(bs[5]) * 256*256 + uint64(bs[6]) * 256 + uint64(bs[7]);
+    var ret := (bs[0]) as uint64 * 256*256*256*0x100000000 + (bs[1]) as uint64 * 256*256*0x100000000 + (bs[2]) as uint64 * 256*0x100000000 + (bs[3]) as uint64 * 0x100000000 +
+                            (bs[4]) as uint64 * 256*256*256 + (bs[5]) as uint64 * 256*256 + (bs[6]) as uint64 * 256 + (bs[7]) as uint64;
 
     var byteSeq := bs;
 
     calc {
         BEByteSeqToInt(bs);
-        BEByteSeqToInt(bs[..|bs|-1]) * 256 + int(bs[|bs|-1]);
+        BEByteSeqToInt(bs[..|bs|-1]) * 256 + (bs[|bs|-1]) as int;
             { assert bs[..|bs|-1][..|bs[..|bs|-1]|-1] == bs[..|bs|-2]; }
-        (BEByteSeqToInt(bs[..|bs|-2]) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
+        (BEByteSeqToInt(bs[..|bs|-2]) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
             { assert bs[..|bs|-2][..|bs[..|bs|-2]|-1] == bs[..|bs|-3]; }
-        ((BEByteSeqToInt(bs[..|bs|-3]) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
+        ((BEByteSeqToInt(bs[..|bs|-3]) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
             { assert bs[..|bs|-3][..|bs[..|bs|-3]|-1] == bs[..|bs|-4]; }
-        (((BEByteSeqToInt(bs[..|bs|-4]) * 256 + int(bs[|bs|-4])) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
+        (((BEByteSeqToInt(bs[..|bs|-4]) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
             { assert bs[..|bs|-4][..|bs[..|bs|-4]|-1] == bs[..|bs|-5]; }
-        ((((BEByteSeqToInt(bs[..|bs|-5]) * 256 + int(bs[|bs|-5])) * 256 + int(bs[|bs|-4])) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
+        ((((BEByteSeqToInt(bs[..|bs|-5]) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
             { assert bs[..|bs|-5][..|bs[..|bs|-5]|-1] == bs[..|bs|-6]; }
-        (((((BEByteSeqToInt(bs[..|bs|-6]) * 256 + int(bs[|bs|-6])) * 256 + int(bs[|bs|-5])) * 256 + int(bs[|bs|-4])) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
+        (((((BEByteSeqToInt(bs[..|bs|-6]) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
             { assert bs[..|bs|-6][..|bs[..|bs|-6]|-1] == bs[..|bs|-7]; }
-        ((((((BEByteSeqToInt(bs[..|bs|-7]) * 256 + int(bs[|bs|-7])) * 256 + int(bs[|bs|-6])) * 256 + int(bs[|bs|-5])) * 256 + int(bs[|bs|-4])) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
-        (((((((BEByteSeqToInt(bs[..|bs|-8]) * 256 + int(bs[|bs|-8])) * 256 + int(bs[|bs|-7])) * 256 + int(bs[|bs|-6])) * 256 + int(bs[|bs|-5])) * 256 + int(bs[|bs|-4])) * 256 + int(bs[|bs|-3])) * 256 + int(bs[|bs|-2])) * 256 + int(bs[|bs|-1]);
-        int(ret);
+        ((((((BEByteSeqToInt(bs[..|bs|-7]) * 256 + (bs[|bs|-7]) as int) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+        (((((((BEByteSeqToInt(bs[..|bs|-8]) * 256 + (bs[|bs|-8]) as int) * 256 + (bs[|bs|-7]) as int) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+        (ret) as int;
     }
 }
 
 /*  Doesn't appear to be in use at present
 function method BEByteSeqToUint32(bs:seq<byte>) : uint32
-    requires |bs| == int(Uint32Size());
+    requires |bs| == (Uint32Size()) as int;
     ensures 0 <= BEByteSeqToInt(SeqByteToByteSeq(bs)) < 0x100000000;    // Need for the cast on the next line
     ensures BEByteSeqToUint32(bs) == uint32(BEByteSeqToInt(SeqByteToByteSeq(bs)));
 {
@@ -216,7 +214,7 @@ function method BEByteSeqToUint32(bs:seq<byte>) : uint32
     //byteIsByte(bs[0]); byteIsByte(bs[1]); byteIsByte(bs[2]); byteIsByte(bs[3]);
     //byteTimes0x100IsWord(bs[2]); byteTimes0x10000IsWord(bs[1]); byteTimes0x1000000IsWord(bs[0]);
     lemma_BEByteSeqToUint32_properties(bs);
-    uint32(bs[uint64(0)]) * 256*256*256 + uint32(bs[uint64(1)]) * 256*256 + uint32(bs[uint64(2)]) * 256 + uint32(bs[uint64(3)])
+    uint32(bs[(0) as uint64]) * 256*256*256 + uint32(bs[(1) as uint64]) * 256*256 + uint32(bs[(2) as uint64]) * 256 + uint32(bs[(3) as uint64])
 }
 */
 
@@ -225,21 +223,21 @@ function method BEByteSeqToUint32(bs:seq<byte>) : uint32
 // access the generic pv library.
 // So let's have SeqByte be a Dafny seq<byte>.
 function method SeqByteToUint64(bs:seq<byte>) : uint64
-    requires |bs| == int(Uint64Size());
+    requires |bs| == (Uint64Size()) as int;
     ensures 0 <= BEByteSeqToInt(bs) < 0x10000000000000000;    // Need for the cast on the next line
-    ensures SeqByteToUint64(bs) == uint64(BEByteSeqToInt(bs));
+    ensures SeqByteToUint64(bs) == (BEByteSeqToInt(bs)) as uint64;
 {
     lemma_2toX();
     lemma_BEByteSeqToUint64_properties(bs);
-    uint64(bs[uint64(0)]) * 256*256*256*0x100000000 + uint64(bs[uint64(1)]) * 256*256*0x100000000 + uint64(bs[uint64(2)]) * 256*0x100000000 + uint64(bs[uint64(3)]) * 0x100000000 +
-    uint64(bs[uint64(4)]) * 256*256*256 + uint64(bs[uint64(5)]) * 256*256 + uint64(bs[uint64(6)]) * 256 + uint64(bs[uint64(7)])
+    (bs[(0) as uint64]) as uint64 * 256*256*256*0x100000000 + (bs[(1) as uint64]) as uint64 * 256*256*0x100000000 + (bs[(2) as uint64]) as uint64 * 256*0x100000000 + (bs[(3) as uint64]) as uint64 * 0x100000000 +
+    (bs[(4) as uint64]) as uint64 * 256*256*256 + (bs[(5) as uint64]) as uint64 * 256*256 + (bs[(6) as uint64]) as uint64 * 256 + (bs[(7) as uint64]) as uint64
 }
 
 function BEUintToSeqByte(v:int, width:int) : seq<byte>
     ensures width >= 0 && v >= 0 ==> |BEUintToSeqByte(v, width)| == width;
 {
     if width > 0 && v >= 0 then
-        BEUintToSeqByte(v/0x100, width - 1) + [ byte(v % 0x100) ]
+        BEUintToSeqByte(v/0x100, width - 1) + [ (v % 0x100) as byte ]
     else
         []
 }
@@ -268,9 +266,9 @@ lemma lemma_BEUintToSeqByte_invertability(bytes:seq<byte>, val:int, width:nat)
 
         calc {
             BEByteSeqToInt(bytes);
-            BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + int(bytes[|bytes|-1]);
+            BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + (bytes[|bytes|-1]) as int;
                 { lemma_BEUintToSeqByte_invertability(bytes[..|bytes|-1], val / 0x100, width - 1); }
-            (val / 0x100) * 256 + int(bytes[|bytes|-1]);
+            (val / 0x100) * 256 + (bytes[|bytes|-1]) as int;
             val;
         }
     }
@@ -300,9 +298,9 @@ lemma lemma_BEByteSeqToInt_invertability(bytes:seq<byte>, val:int, width:nat)
 
         calc {
             BEUintToSeqByte(val, width);
-            BEUintToSeqByte(val/0x100, width - 1) + [ byte(val % 0x100) ];
+            BEUintToSeqByte(val/0x100, width - 1) + [ (val % 0x100) as byte ];
                 { lemma_BEByteSeqToInt_invertability(bytes[..|bytes|-1], val / 0x100, width - 1); }
-            bytes[..|bytes|-1] + [ byte(val % 0x100) ];
+            bytes[..|bytes|-1] + [ (val % 0x100) as byte ];
             bytes;
         }
     }
@@ -329,68 +327,68 @@ lemma lemma_BEByteSeqToInt_BEUintToSeqByte_invertability()
 
 
 function method Uint64ToSeqByte(u:uint64) : seq<byte>
-    ensures Uint64ToSeqByte(u) == BEUintToSeqByte(int(u), 8);
+    ensures Uint64ToSeqByte(u) == BEUintToSeqByte((u) as int, 8);
 {
     ghost var pv := 256;
     var bs := [
-        byte(u/0x100000000000000),
-        byte((u/  0x1000000000000) % 0x100),
-        byte((u/    0x10000000000) % 0x100),
-        byte((u/      0x100000000) % 0x100),
-        byte((u/        0x1000000) % 0x100),
-        byte((u/          0x10000) % 0x100),
-        byte((u/            0x100) % 0x100),
-        byte((u                  ) % 0x100) ];
+        (u/0x100000000000000) as byte,
+        ((u/  0x1000000000000) % 0x100) as byte,
+        ((u/    0x10000000000) % 0x100) as byte,
+        ((u/      0x100000000) % 0x100) as byte,
+        ((u/        0x1000000) % 0x100) as byte,
+        ((u/          0x10000) % 0x100) as byte,
+        ((u/            0x100) % 0x100) as byte,
+        ((u                  ) % 0x100) as byte ];
     lemma_2toX();
-    var u_int := int(u);
+    var u_int := (u) as int;
     calc {
         BEUintToSeqByte(u_int, 8);
-        BEUintToSeqByte(u_int/0x100, 7) + [ byte(u_int % 0x100) ];
-        BEUintToSeqByte((u_int/0x100/0x100), 6) + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x100, 0x100); }
-        BEUintToSeqByte((u_int/0x10000), 6) + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x10000, 0x100); }
-        BEUintToSeqByte(u_int/0x1000000, 5) + [ byte((u_int / 0x10000) % 0x100) ] + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x1000000, 0x100); }
-        BEUintToSeqByte(u_int/0x100000000, 4) + [ byte((u_int / 0x1000000) % 0x100) ] + [ byte((u_int / 0x10000) % 0x100) ] + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x100000000, 0x100); }
-        BEUintToSeqByte(u_int/0x10000000000, 3) + [ byte((u_int / 0x100000000) % 0x100) ] + [ byte((u_int / 0x1000000) % 0x100) ] + [ byte((u_int / 0x10000) % 0x100) ] + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x10000000000, 0x100); }
-        BEUintToSeqByte(u_int/0x1000000000000, 2) + [ byte((u_int / 0x10000000000) % 0x100) ] + [ byte((u_int / 0x100000000) % 0x100) ] + [ byte((u_int / 0x1000000) % 0x100) ] + [ byte((u_int / 0x10000) % 0x100) ] + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x1000000000000, 0x100); }
-        BEUintToSeqByte(u_int/0x100000000000000, 1) + [ byte((u_int / 0x1000000000000) % 0x100) ] + [ byte((u_int / 0x10000000000) % 0x100) ] + [ byte((u_int / 0x100000000) % 0x100) ] + [ byte((u_int / 0x1000000) % 0x100) ] + [ byte((u_int / 0x10000) % 0x100) ] + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x100000000000000, 0x100); }
-        BEUintToSeqByte(u_int/0x10000000000000000, 0) + [ byte((u_int / 0x100000000000000) % 0x100) ] + [ byte((u_int / 0x1000000000000) % 0x100) ] + [ byte((u_int / 0x10000000000) % 0x100) ] + [ byte((u_int / 0x100000000) % 0x100) ] + [ byte((u_int / 0x1000000) % 0x100) ] + [ byte((u_int / 0x10000) % 0x100) ] + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
+        BEUintToSeqByte(u_int/0x100, 7) + [ (u_int % 0x100) as byte ];
+        BEUintToSeqByte((u_int/0x100/0x100), 6) + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x100, 0x100); }
+        BEUintToSeqByte((u_int/0x10000), 6) + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x10000, 0x100); }
+        BEUintToSeqByte(u_int/0x1000000, 5) + [ ((u_int / 0x10000) % 0x100) as byte ] + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x1000000, 0x100); }
+        BEUintToSeqByte(u_int/0x100000000, 4) + [ ((u_int / 0x1000000) % 0x100) as byte ] + [ ((u_int / 0x10000) % 0x100) as byte ] + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x100000000, 0x100); }
+        BEUintToSeqByte(u_int/0x10000000000, 3) + [ ((u_int / 0x100000000) % 0x100) as byte ] + [ ((u_int / 0x1000000) % 0x100) as byte ] + [ ((u_int / 0x10000) % 0x100) as byte ] + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x10000000000, 0x100); }
+        BEUintToSeqByte(u_int/0x1000000000000, 2) + [ ((u_int / 0x10000000000) % 0x100) as byte ] + [ ((u_int / 0x100000000) % 0x100) as byte ] + [ ((u_int / 0x1000000) % 0x100) as byte ] + [ ((u_int / 0x10000) % 0x100) as byte ] + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x1000000000000, 0x100); }
+        BEUintToSeqByte(u_int/0x100000000000000, 1) + [ ((u_int / 0x1000000000000) % 0x100) as byte ] + [ ((u_int / 0x10000000000) % 0x100) as byte ] + [ ((u_int / 0x100000000) % 0x100) as byte ] + [ ((u_int / 0x1000000) % 0x100) as byte ] + [ ((u_int / 0x10000) % 0x100) as byte ] + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x100000000000000, 0x100); }
+        BEUintToSeqByte(u_int/0x10000000000000000, 0) + [ ((u_int / 0x100000000000000) % 0x100) as byte ] + [ ((u_int / 0x1000000000000) % 0x100) as byte ] + [ ((u_int / 0x10000000000) % 0x100) as byte ] + [ ((u_int / 0x100000000) % 0x100) as byte ] + [ ((u_int / 0x1000000) % 0x100) as byte ] + [ ((u_int / 0x10000) % 0x100) as byte ] + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
     }
     bs
 }
 
 function method SeqByteToUint16(bs:seq<byte>) : uint16
-    requires |bs| == int(Uint16Size());
+    requires |bs| == (Uint16Size()) as int;
     ensures 0 <= BEByteSeqToInt(bs) < 0x10000000000000000;    // Need for the cast on the next line
     ensures BEByteSeqToInt(bs) < 0x10000;
-    ensures SeqByteToUint16(bs) == uint16(BEByteSeqToInt(bs));
+    ensures SeqByteToUint16(bs) == (BEByteSeqToInt(bs)) as uint16;
 {
     lemma_2toX();
     lemma_BEByteSeqToInt_bound(bs);
-    uint16(bs[uint64(0)]) * 256 + uint16(bs[uint64(1)])
+    (bs[(0) as uint64] as uint16) * 256 + (bs[(1) as uint64] as uint16)
 }
 
 function method Uint16ToSeqByte(u:uint16) : seq<byte>
-    ensures Uint16ToSeqByte(u) == BEUintToSeqByte(int(u), 2);
+    ensures Uint16ToSeqByte(u) == BEUintToSeqByte((u) as int, 2);
 {
     ghost var pv := 256;
     var s := [
-        byte((u/            0x100) % 0x100),
-        byte((u                  ) % 0x100) ];
+        ((u/            0x100) % 0x100) as byte,
+        ((u                  ) % 0x100) as byte ];
     lemma_2toX();
-    var u_int := int(u);
+    var u_int := (u) as int;
     calc {
         BEUintToSeqByte(u_int, 2);
-        BEUintToSeqByte(u_int/0x100, 1) + [ byte(u_int % 0x100) ];
-        BEUintToSeqByte((u_int/0x100/0x100), 0) + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
-            { lemma_div_denominator(int(u_int), 0x100, 0x100); }
-        BEUintToSeqByte((u_int/0x10000), 0) + [ byte((u_int/0x100) % 0x100) ] + [ byte(u_int % 0x100) ];
+        BEUintToSeqByte(u_int/0x100, 1) + [ (u_int % 0x100) as byte ];
+        BEUintToSeqByte((u_int/0x100/0x100), 0) + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
+            { lemma_div_denominator((u_int) as int, 0x100, 0x100); }
+        BEUintToSeqByte((u_int/0x10000), 0) + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
     }
     s
 }
@@ -399,16 +397,15 @@ function method Uint16ToSeqByte(u:uint16) : seq<byte>
 class Arrays
 {
     static method{:axiom} CopySeqIntoArray<A>(src:seq<A>, srcIndex:uint64, dst:array<A>, dstIndex:uint64, len:uint64)
-        requires dst != null;
-        requires int(srcIndex) + int(len) <= |src|;
-        requires int(dstIndex) + int(len) <= dst.Length;
+        requires (srcIndex) as int + (len as int) <= |src|;
+        requires (dstIndex as int) + (len as int) <= dst.Length;
         modifies dst;
         ensures  forall i :: 0 <= i < dst.Length ==> dst[i] == (
-                    if int(dstIndex) <= i < int(dstIndex) + int(len)
-                    then src[i - int(dstIndex) + int(srcIndex)]
+                    if (dstIndex as int) <= i < (dstIndex as int) + (len as int)
+                    then src[i - (dstIndex as int) + (srcIndex as int)]
                     else old(dst[..])[i]);
-        ensures  forall i :: int(srcIndex) <= i < int(srcIndex) + int(len) ==>
-                    src[i] == dst[i - int(srcIndex) + int(dstIndex)];
+        ensures  forall i :: (srcIndex as int) <= i < (srcIndex as int) + (len as int) ==>
+                    src[i] == dst[i - (srcIndex as int) + (dstIndex as int)];
 }
 
 } 
