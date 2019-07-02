@@ -420,10 +420,13 @@ abstract module Lexicographic_Order refines Total_Order {
     }
   }
 
-  // TODO why the fuck is this not verifying?
   lemma transitivity_forall()
   ensures forall a, b, c | (seq_lte(a, b) && seq_lte(b, c)) :: seq_lte(a, c);
   {
+    // We need this due to dafny bug
+    // https://github.com/dafny-lang/dafny/issues/287
+    reveal_seq_lte();
+
     forall a, b, c | seq_lte(a, b) && seq_lte(b, c)
     ensures seq_lte(a, c)
     {
