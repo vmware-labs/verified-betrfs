@@ -281,20 +281,6 @@ module Marshalling {
     )
   }
 
-  function method {:opaque} parseSector(data: seq<byte>) : Option<Sector>
-  requires |data| < 0x1_0000_0000_0000_0000;
-  ensures var s := parseSector(data);
-      s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
-  ensures var s := parseSector(data);
-      s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
-
-  {
-    match parse_Val(data, SectorGrammar()).0 {
-      case Some(v) => valToSector(v)
-      case None => None
-    }
-  }
-
   /////// Conversion from PivotNode to a val
 
   function method refToVal(ref: Reference) : V
@@ -525,6 +511,53 @@ module Marshalling {
         match w {
           case Some(v) => return Some(VCase(1, v));
           case None => return None;
+        }
+      }
+    }
+  }
+  
+  /////// Marshalling and de-marshalling
+
+  function method {:opaque} parseSector(data: seq<byte>) : Option<Sector>
+  requires |data| < 0x1_0000_0000_0000_0000;
+  ensures var s := parseSector(data);
+      s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
+  ensures var s := parseSector(data);
+      s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
+
+  {
+    match parse_Val(data, SectorGrammar()).0 {
+      case Some(v) => valToSector(v)
+      case None => None
+    }
+  }
+
+  method ParseSector(data: array<byte>) returns (s : Option<Sector>)
+  requires data.Length < 0x1_0000_0000_0000_0000;
+  ensures s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
+  {
+    var success, v, rest_index := ParseVal(data, 0, SectorGrammar());
+    if success {
+      var s := valToSector(v);
+      return s;
+    } else {
+      return None;
+    }
+  }
+
+  method MarshallSector(sector: Sector) returns (data : array?<byte>)
+  ensures data != null ==> parseSector(data[..]) == Some(sector)
+  {
+    var v := sectorToVal(sector);
+    match v {
+      case None => return null;
+      case Some(v) => {
+        if (SizeOfV(v) <= 0x1_0000_0000_0000_0000) {
+          var data := Marshall(v, SectorGrammar());
+          return data;
+        } else {
+          return null;
         }
       }
     }

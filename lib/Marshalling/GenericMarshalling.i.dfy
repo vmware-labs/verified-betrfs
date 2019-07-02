@@ -17,8 +17,8 @@ import opened Libraries__base_s
 import opened Math__power2_i
 
 export S
-  provides NativeTypes, MissingLibrary, parse_Val
-  reveals G, V, ValidGrammar, ValInGrammar
+  provides NativeTypes, MissingLibrary, parse_Val, ParseVal, SizeOfV, Marshall, Demarshallable
+  reveals G, V, ValidGrammar, ValInGrammar, ValidVal
 
 export extends S
 
@@ -68,14 +68,14 @@ predicate ValidVal(val:V)
 
 }
 
-function {:opaque} SeqSum(t:seq<V>) : int
+function method {:opaque} SeqSum(t:seq<V>) : int
     ensures SeqSum(t) >= 0;
 {
     if |t| == 0 then 0
     else SizeOfV(t[0]) + SeqSum(t[1..])
 }
 
-function SizeOfV(val:V) : int
+function method SizeOfV(val:V) : int
     ensures SizeOfV(val) >= 0;
 {
     match val
