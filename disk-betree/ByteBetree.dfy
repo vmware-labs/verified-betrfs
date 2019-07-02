@@ -520,6 +520,13 @@ module Marshalling {
           case None => return None;
         }
       }
+      case SectorBlock(node) => {
+        var w := nodeToVal(node);
+        match w {
+          case Some(v) => return Some(VCase(1, v));
+          case None => return None;
+        }
+      }
     }
   }
 }
