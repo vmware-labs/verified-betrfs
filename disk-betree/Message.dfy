@@ -46,15 +46,23 @@ abstract module Message {
 	lemma MergeIsAssociative(a: Message, b: Message, c: Message)
 		ensures Merge(Merge(a, b), c) == Merge(a, Merge(b, c))
 		{
-			match (a, b, c) {
-				case (Define(a), _, _) => { }
-				case (Update(a), Define(b), _) => { }
-				case (Update(a), Update(b), Define(c)) => {
-					ApplyIsAssociative(a, b, c);
-				}
-				case (Update(a), Update(b), Update(c)) => {
-					DeltaIsAssociative(a, b, c);
-				}
+			match a {
+			  case Define(a) => { }
+			  case Update(a) => {
+			    match b {
+            case Define(b) => { }
+            case Update(b) => {
+              match c {
+                case Define(c) => {
+                  ApplyIsAssociative(a, b, c);
+                }
+                case Update(c) => {
+                  DeltaIsAssociative(a, b, c);
+                }
+              }
+            }
+			    }
+			  }
 			}
 		}
 }
