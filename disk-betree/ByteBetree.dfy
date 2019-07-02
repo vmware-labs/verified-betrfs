@@ -11,11 +11,19 @@ module Marshalling {
   import opened Sequences
   import opened Maps
   import BC = BetreeGraphBlockCache
+
   import BT = PivotBetreeSpec`Internal
+
+  // This is one of the few places where we actually
+  // care what a reference, lba etc. are,
+  // so we open all these things up.
+  // This lets us see, e.g., that a reference fits
+  // in a 64-bit int.
   import M = ValueMessage`Internal
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal
+
   import Pivots = PivotsLib
   import MS = MapSpec
   import Keyspace = MS.Keyspace
@@ -386,12 +394,116 @@ module Marshalling {
     } 
   }
 
+  method bucketsToVal(buckets: seq<Bucket>, ghost pivotTable: Pivots.PivotTable) returns (v: Option<V>)
+  requires Pivots.WFPivots(pivotTable)
+  requires forall i | 0 <= i < |buckets| :: BT.WFBucket(buckets[i], pivotTable, i)
+  ensures v.Some? ==> ValInGrammar(v.value, GArray(BucketGrammar()))
+  ensures v.Some? ==> valToBuckets(v.value.a, pivotTable) == Some(buckets)
+  {
+    if |buckets| == 0 {
+      return Some(VArray([]));
+    } else {
+      var pref := bucketsToVal(DropLast(buckets), pivotTable);
+      match pref {
+        case None => { return None; }
+        case Some(pref) => {
+          var bucketVal := bucketToVal(Last(buckets), pivotTable, |buckets| - 1);
+          match bucketVal {
+            case None => { return None; }
+            case Some(bucketVal) => {
+              assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
+              return Some(VArray(pref.a + [bucketVal]));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lemma KeyInPivotsIsNonempty(pivots: seq<Key>, key: Key)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| > 0
+  requires Last(pivots) == key
+  ensures |key| != 0;
+  {
+    var e := Keyspace.SmallerElement(pivots[0]);
+    Keyspace.reveal_IsStrictlySorted();
+    assert Keyspace.lte(pivots[0], key);
+    assert Keyspace.lt(e, key);
+    Keyspace.reveal_seq_lte();
+    assert key != [];
+  }
+
+  method pivotsToVal(pivots: seq<Key>) returns (v : V)
+  requires Pivots.WFPivots(pivots)
+  ensures ValInGrammar(v, GArray(GByteArray))
+  ensures valToPivots(v.a) == Some(pivots)
+  {
+    if |pivots| == 0 {
+      return VArray([]);
+    } else {
+      var pivots' := DropLast(pivots);
+      Keyspace.StrictlySortedPop(pivots);
+      var pref := pivotsToVal(pivots');
+
+      var key := Last(pivots);
+      var last := VByteArray(key);
+
+      assert pivots == DropLast(pivots) + [key];
+      KeyInPivotsIsNonempty(pivots, key);
+      assert |key| != 0;
+      if |pivots'| > 0 {
+        Keyspace.IsStrictlySortedImpliesLt(pivots, |pivots| - 2, |pivots| - 1);
+        assert Keyspace.lt(Last(pivots'), key);
+      }
+
+      return VArray(pref.a + [last]);
+    }
+  }
+
+  method childrenToVal(children: seq<Reference>) returns (v : V)
+  ensures ValInGrammar(v, GArray(GUint64))
+  ensures valToChildren(v.a) == Some(children)
+  {
+    if |children| == 0 {
+      return VArray([]);
+    } else {
+      var children' := DropLast(children);
+      var pref := childrenToVal(children');
+      var child := Last(children);
+      var last := VUint64(child);
+      assert children == DropLast(children) + [child];
+      return VArray(pref.a + [last]);
+    }
+  }
+
   method nodeToVal(node: Node) returns (v : Option<V>)
   requires BT.WFNode(node)
   ensures v.Some? ==> ValInGrammar(v.value, PivotNodeGrammar())
   ensures v.Some? ==> valToPivotNode(v.value) == Some(node)
   {
-    
+    forall i | 0 <= i < |node.buckets|
+    ensures BT.WFBucket(node.buckets[i], node.pivotTable, i);
+    {
+      assert BT.NodeHasWFBucketAt(node, i);
+    }
+
+    var buckets := bucketsToVal(node.buckets, node.pivotTable);
+    match buckets {
+      case None => { return None; }
+      case Some(buckets) => {
+        var pivots := pivotsToVal(node.pivotTable);
+
+        var children;
+        if node.children.Some? {
+          children := childrenToVal(node.children.value);
+        } else {
+          children := VArray([]);
+        }
+          
+        return Some(VTuple([pivots, children, buckets]));
+      }
+    }
   }
 
   method sectorToVal(sector: Sector) returns (v : Option<V>)
