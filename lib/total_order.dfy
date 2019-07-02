@@ -177,6 +177,14 @@ abstract module Total_Order {
   {
     reveal_IsStrictlySorted();
   }
+
+  lemma StrictlySortedAugment(run: seq<Element>, key: Element)
+  requires IsStrictlySorted(run)
+  requires |run| > 0 ==> lt(Seq.Last(run), key)
+  ensures IsStrictlySorted(run + [key])
+  {
+    reveal_IsStrictlySorted();
+  }
   
   method Merge(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
     requires 0 < |run1|;
