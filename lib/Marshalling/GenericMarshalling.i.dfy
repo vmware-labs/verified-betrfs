@@ -16,6 +16,12 @@ import opened Common__MarshallInt_i
 import opened Libraries__base_s
 import opened Math__power2_i
 
+export S
+  provides NativeTypes, MissingLibrary, parse_Val
+  reveals G, V, ValidGrammar, ValInGrammar
+
+export extends S
+
 datatype G = GUint64
            | GArray(elt:G)
            | GTuple(t:seq<G>)

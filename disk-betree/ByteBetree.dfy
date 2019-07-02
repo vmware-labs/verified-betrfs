@@ -12,8 +12,9 @@ module Marshalling {
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec
   import M = ValueMessage
-  import ReferenceType
-  import LBAType
+  import ReferenceType`Internal
+  import LBAType`Internal
+  import ValueWithDefault`Internal
 
   type Reference = BC.Reference
   type LBA = BC.LBA
@@ -25,27 +26,27 @@ module Marshalling {
 
   /////// Grammar
 
-  function SuperblockGrammar() : G
+  function method SuperblockGrammar() : G
   ensures ValidGrammar(SuperblockGrammar())
   {
     // (Reference, LBA, refcount) triples
     GArray(GTuple([GUint64, GUint64, GUint64]))
   }
 
-  function MessageGrammar() : G
+  function method MessageGrammar() : G
   ensures ValidGrammar(MessageGrammar())
   {
     // Always a Define message.
     GByteArray
   }
 
-  function BucketGrammar() : G
+  function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
     GArray(GTuple([GByteArray, MessageGrammar()]))
   }
 
-  function PivotNodeGrammar() : G
+  function method PivotNodeGrammar() : G
   ensures ValidGrammar(PivotNodeGrammar())
   {
     GTuple([
@@ -55,7 +56,7 @@ module Marshalling {
     ])
   }
 
-  function SectorGrammar() : G
+  function method SectorGrammar() : G
   ensures ValidGrammar(SectorGrammar())
   {
     GTaggedUnion([SuperblockGrammar(), PivotNodeGrammar()])    
@@ -64,13 +65,13 @@ module Marshalling {
   function method valToReference(v: V) : Reference
   requires ValInGrammar(v, GUint64)
   {
-    ReferenceType.toRef(v.u)
+    v.u
   }
 
   function method valToLBA(v: V) : LBA
   requires ValInGrammar(v, GUint64)
   {
-    LBAType.toLBA(v.u)
+    v.u
   }
 
   function method valToInt(v: V) : int
@@ -129,12 +130,13 @@ module Marshalling {
       match res {
         case Some(m) => (
           var tuple := Last(a);
+          assert ValInGrammar(tuple, GTuple([GByteArray, MessageGrammar()]));
           var key := tuple.t[0].b;
           var msg := valToMessage(tuple.t[1]);
-          if key in res then (
+          if key in m then (
             None
           ) else (
-            Some(res[key := msg.value])
+            Some(m[key := msg.value])
           )
         )
         case None => None
@@ -146,6 +148,12 @@ module Marshalling {
   requires ValInGrammar(v, BucketGrammar())
   {
     valToKeyMessageMap(v.a)
+  }
+
+  function method valToKey(v: V) : Key
+  requires ValInGrammar(v, GByteArray)
+  {
+    v.b
   }
 
   function method valToPivots(a: seq<V>) : Option<seq<Key>>
@@ -190,20 +198,20 @@ module Marshalling {
     )
   }
 
-  function method valToPivotNode(v: V) : Option<Node>
+  function method {:fuel ValInGrammar,2} valToPivotNode(v: V) : Option<Node>
   requires ValInGrammar(v, PivotNodeGrammar())
   {
-    match valToPivots(v.t[0]) {
+    match valToPivots(v.t[0].a) {
       case None => None
       case Some(pivots) => (
-        match valToChildren(v.t[1]) {
+        match valToChildren(v.t[1].a) {
           case None => None
           case Some(children) => (
             if (|children| == 0 || |children| == |pivots| + 1) then (
-              match valToBuckets(v.t[2]) {
+              match valToBuckets(v.t[2].a) {
                 case None => None
                 case Some(buckets) => (
-                  Node(pivots, if |children| == 0 then None else Some(children), buckets)
+                  Some(BT.G.Node(pivots, if |children| == 0 then None else Some(children), buckets))
                 )
               }
             ) else (
@@ -220,20 +228,21 @@ module Marshalling {
   {
     if v.c == 0 then (
       match valToSuperblock(v.val) {
-        case Some(s) => SectorSuperblock(s)
+        case Some(s) => Some(BC.SectorSuperblock(s))
         case None => None
       }
     ) else (
       match valToPivotNode(v.val) {
-        case Some(s) => SectorBlock(s)
+        case Some(s) => Some(BC.SectorBlock(s))
         case None => None
       }
     )
   }
 
   function method {:opaque} parseSector(data: seq<byte>) : Option<Sector>
+  requires |data| < 0x1_0000_0000_0000_0000;
   {
-    match parse_Val(data, SectorGrammar()) {
+    match parse_Val(data, SectorGrammar()).0 {
       case Some(v) => valToSector(v)
       case None => None
     }
