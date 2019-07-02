@@ -132,8 +132,7 @@ module Marshalling {
   function method valToKeyMessageMap(a: seq<V>, pivotTable: seq<Key>, i: int) : Option<Bucket>
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GByteArray, MessageGrammar()]))
   requires Pivots.WFPivots(pivotTable)
-  ensures var s := valToKeyMessageMap(a, pivotTable, i) ; s.Some? ==> forall key | key in s.value :: Pivots.Route(pivotTable, key) == i
-  ensures var s := valToKeyMessageMap(a, pivotTable, i) ; s.Some? ==> forall key | key in s.value :: s.value[key] != M.IdentityMessage()
+  ensures var s := valToKeyMessageMap(a, pivotTable, i) ; s.Some? ==> BT.WFBucket(s.value, pivotTable, i)
   {
     if |a| == 0 then
       Some(map[])
@@ -159,7 +158,7 @@ module Marshalling {
   function method valToBucket(v: V, pivotTable: seq<Key>, i: int) : Option<Bucket>
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
-  ensures var s := valToBucket(v, pivotTable, i) ; s.Some? ==> forall key | key in s.value :: s.value[key] != M.IdentityMessage()
+  ensures var s := valToBucket(v, pivotTable, i) ; s.Some? ==> BT.WFBucket(s.value, pivotTable, i)
   {
     valToKeyMessageMap(v.a, pivotTable, i)
   }
@@ -211,8 +210,7 @@ module Marshalling {
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> |s.value| == |a|
-  ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> forall i | 0 <= i < |s.value| :: forall key | key in s.value[i] :: Pivots.Route(pivotTable, key) == i
-  ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> forall i | 0 <= i < |s.value| :: forall key | key in s.value[i] :: s.value[i][key] != M.IdentityMessage()
+  ensures var s := valToBuckets(a, pivotTable) ; s.Some? ==> forall i | 0 <= i < |s.value| :: BT.WFBucket(s.value[i], pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -360,8 +358,7 @@ module Marshalling {
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel ValInGrammar,2} bucketToVal(bucket: Bucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: Option<V>)
   requires Pivots.WFPivots(pivotTable)
-  requires forall key | key in bucket :: Pivots.Route(pivotTable, key) == i
-  requires forall key | key in bucket :: bucket[key] != M.IdentityMessage()
+  requires BT.WFBucket(bucket, pivotTable, i)
   ensures v.Some? ==> ValInGrammar(v.value, BucketGrammar())
   ensures v.Some? ==> valToBucket(v.value, pivotTable, i) == Some(bucket)
   {
