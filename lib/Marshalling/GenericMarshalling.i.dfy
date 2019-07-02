@@ -4,6 +4,7 @@ include "Seqs.i.dfy"
 include "../../tla-tree/MissingLibrary.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
+include "Native.s.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -15,6 +16,7 @@ import opened Common__Util_i
 import opened Common__MarshallInt_i
 import opened Libraries__base_s
 import opened Math__power2_i
+import opened Native
 
 export S
   provides NativeTypes, MissingLibrary, parse_Val, ParseVal, SizeOfV, Marshall, Demarshallable
