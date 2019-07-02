@@ -3,10 +3,10 @@ include "../lib/total_order.dfy"
 include "../lib/NativeTypes.dfy"
 
 module ValueWithDefault {
-  //import NativeTypes
+  import NativeTypes
 
-  type Value(==,!new) = int
-	function DefaultValue() : Value { 0 }
+  type Value(==,!new) = seq<NativeTypes.byte>
+	function DefaultValue() : Value { [] }
 
 	export S provides Value, DefaultValue
 	export extends S
