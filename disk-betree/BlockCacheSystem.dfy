@@ -26,11 +26,11 @@ abstract module BlockCacheSystem {
 
   predicate WFDisk(k: Constants, blocks: map<LBA, Sector>)
   {
-    && var superblockLBA := M.SuperblockLBA(k.machine);
+    && var superblockLBA := M.SuperblockLBA();
     && superblockLBA in blocks
     && blocks[superblockLBA].SectorSuperblock?
     && var superblock := blocks[superblockLBA].superblock;
-    && superblock.refcounts.Keys == superblock.lbas.Keys
+    && M.WFPersistentSuperblock(superblock)
   }
 
   predicate WFSuperblockWrtDisk(k: Constants, superblock: Superblock, blocks: map<LBA, Sector>)
@@ -43,7 +43,7 @@ abstract module BlockCacheSystem {
   function DiskSuperblock(k: Constants, blocks: map<LBA, Sector>) : Superblock
   requires WFDisk(k, blocks)
   {
-    blocks[M.SuperblockLBA(k.machine)].superblock
+    blocks[M.SuperblockLBA()].superblock
   }
 
   function RefMapOfDisk(

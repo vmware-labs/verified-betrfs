@@ -26,7 +26,7 @@ abstract module BlockCache refines Transactable {
 
   type LBA = LBAType.LBA
   datatype Constants = Constants()
-  function method SuperblockLBA(k: Constants) : LBA { LBAType.SuperblockLBA() }
+  function method SuperblockLBA() : LBA { LBAType.SuperblockLBA() }
 
   // TODO make superblock take up more than one block (it's not really a superblock)
   datatype Superblock = Superblock(
@@ -61,7 +61,7 @@ abstract module BlockCache refines Transactable {
   }
   predicate ValidLBAForNode(k: Constants, lba: LBA)
   {
-    lba != SuperblockLBA(k)
+    lba != SuperblockLBA()
   }
 
   datatype Step =
@@ -75,10 +75,15 @@ abstract module BlockCache refines Transactable {
     | EvictStep(ref: Reference)
     | TransactionStep(ops: seq<Op>)
 
+  predicate WFPersistentSuperblock(superblock: Superblock)
+  {
+    && SuperblockLBA() !in superblock.lbas.Values
+    && superblock.refcounts.Keys == superblock.lbas.Keys
+  }
 
   predicate WFSuperblock(k: Constants, superblock: Superblock)
   {
-    && SuperblockLBA(k) !in superblock.lbas.Values
+    && SuperblockLBA() !in superblock.lbas.Values
     && superblock.lbas.Keys <= superblock.refcounts.Keys
   }
 
@@ -125,7 +130,7 @@ abstract module BlockCache refines Transactable {
   {
     && s.Ready?
     && dop.WriteOp?
-    && dop.lba == SuperblockLBA(k)
+    && dop.lba == SuperblockLBA()
     && dop.sector == SectorSuperblock(s.ephemeralSuperblock)
     && s.cache.Keys <= s.ephemeralSuperblock.lbas.Keys
     && s' == s.(persistentSuperblock := s.ephemeralSuperblock)
@@ -227,7 +232,7 @@ abstract module BlockCache refines Transactable {
   {
     && s.Unready?
     && dop.ReadOp?
-    && dop.lba == SuperblockLBA(k)
+    && dop.lba == SuperblockLBA()
     && dop.sector.SectorSuperblock?
     && WFSuperblock(k, dop.sector.superblock)
     && dop.sector.superblock.lbas.Keys == dop.sector.superblock.refcounts.Keys
@@ -270,9 +275,8 @@ abstract module BlockCache refines Transactable {
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
-    && WFSuperblock(k, s.persistentSuperblock)
+    && WFPersistentSuperblock(s.persistentSuperblock)
     && WFSuperblock(k, s.ephemeralSuperblock)
-    && s.persistentSuperblock.lbas.Keys == s.persistentSuperblock.refcounts.Keys
     && s.cache.Keys <= s.ephemeralSuperblock.refcounts.Keys
     && s.ephemeralSuperblock.refcounts.Keys <= s.cache.Keys + s.ephemeralSuperblock.lbas.Keys
   }

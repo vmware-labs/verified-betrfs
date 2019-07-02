@@ -26,7 +26,7 @@ module {:extern} Impl refines Main {
   requires s.Unready?
   ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.dop))
   {
-    var sector := ReadSector(io, BC.SuperblockLBA(k));
+    var sector := ReadSector(io, BC.SuperblockLBA());
     if (sector.SectorSuperblock?) {
       s' := BC.Ready(sector.superblock, sector.superblock, map[]);
     }
