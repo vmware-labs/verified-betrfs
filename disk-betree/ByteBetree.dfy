@@ -12,7 +12,7 @@ module Marshalling {
   import opened Maps
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
-  import M = ValueMessage
+  import M = ValueMessage`Internal
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal
@@ -312,9 +312,13 @@ module Marshalling {
 
   method {:fuel ValInGrammar,2} lbasRefcountsToVal(lbas: map<Reference, LBA>, refcounts: map<Reference, int>) returns (v: Option<V>)
   requires lbas.Keys == refcounts.Keys
+  requires 0 !in lbas.Values
   ensures v.Some? ==> ValInGrammar(v.value, SuperblockGrammar());
+  ensures v.Some? ==> valToLBAsAndRefcounts(v.value.a) == Some((lbas, refcounts));
   {
     if (|lbas| == 0) {
+      assert lbas == map[];
+      assert refcounts == map[];
       return Some(VArray([]));
     } else {
       var ref :| ref in lbas.Keys;
@@ -325,7 +329,18 @@ module Marshalling {
           var lba := lbas[ref];
           var refcount := refcountToVal(refcounts[ref]);
           if refcount.Some? {
-            return Some(VArray(vpref.a + [VTuple([refToVal(ref), lbaToVal(lba), refcount.value])]));
+            var tuple := VTuple([refToVal(ref), lbaToVal(lba), refcount.value]);
+
+            //assert valToLBAsAndRefcounts(vpref.a) == Some((MapRemove(lbas, {ref}), MapRemove(refcounts, {ref})));
+            assert MapRemove(lbas, {ref})[ref := lba] == lbas;
+            assert MapRemove(refcounts, {ref})[ref := refcounts[ref]] == refcounts;
+            //assert ref == valToReference(tuple.t[0]);
+            //assert lba == valToReference(tuple.t[1]);
+            //assert !(ref in MapRemove(refcounts, {ref}));
+            //assert !(lba == 0);
+            //assert valToLBAsAndRefcounts(vpref.a + [tuple]) == Some((lbas, refcounts));
+
+            return Some(VArray(vpref.a + [tuple]));
           } else {
             return None;
           }
@@ -334,10 +349,59 @@ module Marshalling {
     }
   }
 
+  method messageToVal(m: Message) returns (v : Option<V>)
+  requires m != M.IdentityMessage()
+  ensures v.Some? ==> ValInGrammar(v.value, MessageGrammar())
+  ensures v.Some? ==> valToMessage(v.value) == Some(m)
+  {
+    return Some(VByteArray(m.value));
+  }
+
+  // We pass in pivotTable and i so we can state the pre- and post-conditions.
+  method {:fuel ValInGrammar,2} bucketToVal(bucket: Bucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: Option<V>)
+  requires Pivots.WFPivots(pivotTable)
+  requires forall key | key in bucket :: Pivots.Route(pivotTable, key) == i
+  requires forall key | key in bucket :: bucket[key] != M.IdentityMessage()
+  ensures v.Some? ==> ValInGrammar(v.value, BucketGrammar())
+  ensures v.Some? ==> valToBucket(v.value, pivotTable, i) == Some(bucket)
+  {
+    if (|bucket| == 0) {
+      return Some(VArray([]));
+    } else {
+      var key :| key in bucket;
+      var msg := bucket[key];
+      var bucket' := MapRemove(bucket, {key});
+      var v' := bucketToVal(bucket', pivotTable, i);
+      match v' {
+        case None => { return None; }
+        case Some(VArray(pref)) => {
+          var vmsg := messageToVal(msg);
+          match vmsg {
+            case None => { return None; }
+            case Some(vmsg) => {
+              var pair := VTuple([VByteArray(key), vmsg]);
+              assert bucket'[key := msg] == bucket;
+              return Some(VArray(pref + [pair])); 
+            }
+          }
+        }
+      }
+    } 
+  }
+
+  method nodeToVal(node: Node) returns (v : Option<V>)
+  requires BT.WFNode(node)
+  ensures v.Some? ==> ValInGrammar(v.value, PivotNodeGrammar())
+  ensures v.Some? ==> valToPivotNode(v.value) == Some(node)
+  {
+    
+  }
+
   method sectorToVal(sector: Sector) returns (v : Option<V>)
   requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
   requires sector.SectorBlock? ==> BT.WFNode(sector.block);
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
+  ensures v.Some? ==> valToSector(v.value) == Some(sector)
   {
     match sector {
       case SectorSuperblock(Superblock(lbas, refcounts)) => {
