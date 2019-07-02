@@ -5,10 +5,15 @@ include "Graph.dfy"
 include "Disk.dfy"
 
 module LBAType {
-  type LBA(==,!new) = int
+  import NativeTypes
+
+  type LBA(==,!new) = NativeTypes.uint64
   function method SuperblockLBA() : LBA { 0 }
 
-  export S provides LBA, SuperblockLBA
+  function method toLBA(i: NativeTypes.uint64) : LBA{ i }
+  function method toUint64(i: LBA) : NativeTypes.uint64 { i }
+
+  export S provides LBA, SuperblockLBA, toLBA, toUint64, NativeTypes
   export extends S
 }
 
