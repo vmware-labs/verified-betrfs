@@ -4,7 +4,6 @@ include "ByteBetree.dfy"
 
 module {:extern} Impl refines Main {
   import BC = BetreeGraphBlockCache
-  import BetreeBC = BetreeBlockCache
   import BT = PivotBetreeSpec`Internal
   import M = BetreeBlockCache
   import Marshalling
@@ -16,7 +15,7 @@ module {:extern} Impl refines Main {
   class ImplHeapState {
     var s: Variables
     constructor()
-    ensures BetreeBC.Init(BC.Constants(), s);
+    ensures M.Init(BC.Constants(), s);
     {
       s := BC.Unready;
     }
@@ -41,7 +40,7 @@ module {:extern} Impl refines Main {
 
   predicate Inv(k: Constants, hs: HeapState)
   {
-    BetreeBC.Inv(k, hs.s)
+    M.Inv(k, hs.s)
   }
 
   method InitState() returns (k: Constants, hs: HeapState)
@@ -49,7 +48,7 @@ module {:extern} Impl refines Main {
     k := BC.Constants();
     hs := new ImplHeapState();
 
-    BetreeBC.InitImpliesInv(k, hs.s);
+    M.InitImpliesInv(k, hs.s);
   }
 
   predicate WFSector(sector: M.Sector)
@@ -82,6 +81,9 @@ module {:extern} Impl refines Main {
     var sector := ReadSector(io, BC.SuperblockLBA());
     if (sector.SectorSuperblock?) {
       s' := BC.Ready(sector.superblock, sector.superblock, map[]);
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInSuperblockStep));
+    } else {
+      assume false;
     }
   }
 
@@ -89,6 +91,7 @@ module {:extern} Impl refines Main {
   returns (s': Variables)
   requires io.initialized();
   requires s.Ready?
+  requires M.Inv(k, s)
   requires ref in s.ephemeralSuperblock.lbas
   requires ref !in s.cache
   modifies io
@@ -98,12 +101,16 @@ module {:extern} Impl refines Main {
     var sector := ReadSector(io, lba);
     if (sector.SectorBlock?) {
       s' := s.(cache := s.cache[ref := sector.block]);
+      //assert BC.PageIn(k, s, s', IDiskOp(io.diskOp()), ref);
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInStep(ref)));
+    } else {
+      assume false;
     }
   }
 
   method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   returns (s': Variables)
-  requires BetreeBC.Inv(k, s)
+  requires M.Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
   ensures M.Next(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp)
