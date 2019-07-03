@@ -129,4 +129,7 @@ abstract module Main {
   ensures ValidDiskOp(io.diskOp())
   ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
   // impl defined
+
+  // TODO add proof obligation that the InitState together with the initial disk state
+  // from mkfs together refine to the initial state of the BlockCacheSystem.
 }
