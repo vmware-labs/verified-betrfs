@@ -4,6 +4,7 @@ include "ByteBetree.dfy"
 
 module {:extern} Impl refines Main {
   import BC = BetreeGraphBlockCache
+  import BT = PivotBetreeSpec
   import M = BetreeBlockCache
   import Marshalling
 
@@ -38,18 +39,31 @@ module {:extern} Impl refines Main {
     hs := new ImplHeapState();
   }
 
+  predicate WFSector(sector: M.Sector)
+  {
+    match sector {
+      case SectorSuperblock(superblock) => BC.WFPersistentSuperblock(superblock)
+      case SectorBlock(node) => BT.WFNode(node)
+    }
+  }
+
   method ReadSector(io: DiskIOHandler, lba: M.LBA)
   returns (sector: M.Sector)
   requires io.initialized()
+  modifies io
   ensures IDiskOp(io.diskOp()) == D.ReadOp(lba, sector)
+  ensures WFSector(sector)
   {
-    assume false;
+    var bytes := io.read(lba);
+    var sectorOpt := Marshalling.ParseSector(bytes);
+    sector := sectorOpt.value;
   }
 
   method PageInSuperblock(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires io.initialized();
   requires s.Unready?
+  modifies io
   ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
   {
     var sector := ReadSector(io, BC.SuperblockLBA());
@@ -61,6 +75,7 @@ module {:extern} Impl refines Main {
   method doStuff(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires io.initialized()
+  modifies io
   ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
   {
     if (s.Unready?) {

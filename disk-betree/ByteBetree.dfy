@@ -586,9 +586,11 @@ module Marshalling {
 
   method ParseSector(data: array<byte>) returns (s : Option<Sector>)
   requires data.Length < 0x1_0000_0000_0000_0000;
+  ensures s == parseSector(data[..])
   ensures s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
   {
+    reveal_parseSector();
     var success, v, rest_index := ParseVal(data, 0, SectorGrammar());
     if success {
       var s := valToSector(v);
