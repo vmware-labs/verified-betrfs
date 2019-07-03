@@ -61,8 +61,8 @@ abstract module Main {
   function ISector(sector: Sector) : M.Sector
     requires ValidSector(sector)
 
-  function method InitConstants() : Constants
-  function method InitHeapState() : HeapState
+  method InitState() returns (k: Constants, hs: HeapState)
+    ensures Inv(k, hs)
 
   // DiskInterface
 
