@@ -590,3 +590,15 @@ module PivotBetreeSpec {
     }
   }
 }
+
+module PivotBetreeSpecWFNodes {
+  import P = PivotBetreeSpec
+
+  // This lemma is useful for BetreeBlockCache
+  lemma ValidStepWritesWFNodes(betreeStep: P.BetreeStep)
+  requires P.ValidBetreeStep(betreeStep)
+  ensures forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| :: P.WFNode(P.BetreeStepOps(betreeStep)[i].node)
+  {
+    // TODO
+  }
+}

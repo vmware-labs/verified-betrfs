@@ -17,6 +17,7 @@ module BetreeBlockCache refines Machine {
   import BC = BetreeGraphBlockCache
   import DB = PivotBetree
   import BI = BetreeBlockInterface
+  import PivotBetreeSpecWFNodes
 
   type Variables = BC.Variables
   type Constants = BC.Constants
@@ -31,7 +32,8 @@ module BetreeBlockCache refines Machine {
   }
 
   predicate Inv(k: Constants, s: Variables) {
-    BC.Inv(k, s)
+    && BC.Inv(k, s)
+    && (s.Ready? ==> (forall ref | ref in s.cache :: PivotBetreeSpec.WFNode(s.cache[ref])))
   }
 
   datatype Step =
@@ -59,6 +61,9 @@ module BetreeBlockCache refines Machine {
       || step.EvictStep?
     )
     && BC.NextStep(k, s, s', dop, step)
+    && (dop.ReadOp? && dop.sector.SectorBlock? ==>
+      WFNode(dop.sector.block)
+    )
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: Step) {
@@ -86,6 +91,7 @@ module BetreeBlockCache refines Machine {
   {
     var ops :| BC.OpTransaction(k, s, s', ops);
     BC.TransactionStepPreservesInvariant(k, s, s', D.NoDiskOp, ops);
+    PivotBetreeSpecWFNodes.ValidStepWritesWFNodes(betreeStep);
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step)
