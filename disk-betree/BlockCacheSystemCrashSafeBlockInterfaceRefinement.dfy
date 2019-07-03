@@ -150,6 +150,8 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   {
     var refs := iset{ref};
 
+    BCS.reveal_Predecessors();
+
     if (ref in BI.LiveReferences(Ik(k), I(k, s).ephemeral)) {
       assert BI.ReachableReference(Ik(k), I(k, s).ephemeral, ref);
       var lookup :| BI.LookupIsValid(Ik(k), I(k, s).ephemeral, lookup) && Last(lookup) == ref;
