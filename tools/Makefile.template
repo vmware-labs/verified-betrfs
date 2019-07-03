@@ -7,8 +7,8 @@
 # Shouldn't have to modify anything below here.
 #
 
-BUILD_DIR=build
-TARGETS=build/BetreeRefinement.okay
+BUILD_DIR=inc/build
+TARGETS=$(BUILD_DIR)/BetreeRefinement.okay
 TARGETDEPS=$(patsubst %.okay,%.deps,$(TARGETS))
 all: $(TARGETS)
 
@@ -30,7 +30,7 @@ $(BUILD_DIR)%/.:
 
 .PRECIOUS: $(BUILD_DIR)/%.deps
 $(BUILD_DIR)/%.deps: %.dfy | $$(@D)/.
-	@../tools/deps-for-dfy.py $< > $@
+	../tools/deps-for-dfy.py $< $@
 
 include $(TARGETDEPS)
 

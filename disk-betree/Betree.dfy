@@ -1,9 +1,9 @@
-include "BlockInterface.dfy"  
-include "../lib/sequences.dfy"
-include "../lib/Maps.dfy"
-include "MapSpec.dfy"
-include "Graph.dfy"
-include "BetreeSpec.dfy"
+include "inc/disk-betree/BlockInterface.dfy"  
+include "inc/lib/sequences.dfy"
+include "inc/lib/Maps.dfy"
+include "inc/disk-betree/MapSpec.dfy"
+include "inc/disk-betree/Graph.dfy"
+include "inc/disk-betree/BetreeSpec.dfy"
 
 module Betree {
   import opened BetreeSpec`Internal

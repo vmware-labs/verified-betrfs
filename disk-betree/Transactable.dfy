@@ -1,5 +1,5 @@
-include "../lib/sequences.dfy"
-include "Graph.dfy"
+include "inc/lib/sequences.dfy"
+include "inc/disk-betree/Graph.dfy"
 
 abstract module Transactable {
   import opened Sequences

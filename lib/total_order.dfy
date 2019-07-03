@@ -1,4 +1,4 @@
-include "sequences.dfy"
+include "inc/lib/sequences.dfy"
   
 module Total_Order {
   import Seq = Sequences
