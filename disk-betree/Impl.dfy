@@ -12,6 +12,9 @@ module {:extern} Impl refines Main {
 
   class ImplHeapState {
     var s: Variables
+    constructor() {
+      s := BC.Unready;
+    }
   }
   type HeapState = ImplHeapState
   function HeapSet(hs: HeapState) : set<object> { {hs} }
@@ -29,8 +32,11 @@ module {:extern} Impl refines Main {
     Marshalling.parseSector(sector).value
   }
 
-  function method InitConstants() : Constants { BC.Constants() }
-  function method InitVariables() : Variables { BC.Unready }
+  method InitState() returns (k: Constants, hs: HeapState)
+  {
+    k := BC.Constants();
+    hs := new ImplHeapState();
+  }
 
   method ReadSector(io: DiskIOHandler, lba: M.LBA)
   returns (sector: M.Sector)

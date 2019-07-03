@@ -24,11 +24,9 @@ class DiskIOHandlerImpl : DiskIOHandler {
 
 class Framework {
   public static void Run() {
-    World w = new World();
-    w.diskIOHandler = new DiskIOHandlerImpl();
-    w.s = __default.InitVariables();
-
-    __default.handle(__default.InitConstants(), w);
+    __default.InitState(out var k, out var hs);
+    DiskIOHandler io = new DiskIOHandlerImpl();
+    __default.handle(k, hs, io);
   }
 
   public static void Mkfs() {
