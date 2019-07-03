@@ -9,6 +9,8 @@ module {:extern} Impl refines Main {
   import Marshalling
   import Messages = ValueMessage
 
+  import opened Maps
+
   type Variables = M.Variables
   type Constants = M.Constants
 
@@ -116,8 +118,20 @@ module {:extern} Impl refines Main {
   ensures M.Next(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp)
   {
     var oldroot := s.cache[BT.G.Root()];
-    var newroot := BT.AddMessageToNode(oldroot, key, Messages.Define(value));
-    s' := s.(cache := s.cache[BT.G.Root() := newroot]);
+    var msg := Messages.Define(value);
+    var newroot := BT.AddMessageToNode(oldroot, key, msg);
+    s' := s.(cache := s.cache[BT.G.Root() := newroot])
+           .(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := MapRemove(s.ephemeralSuperblock.lbas, {BT.G.Root()})));
+
+    //assert BC.BlockPointsToValidReferences(oldroot, s.ephemeralSuperblock.refcounts);
+    //assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
+    //assert BC.BlockPointsToValidReferences(newroot, s.ephemeralSuperblock.refcounts);
+    assert BC.Dirty(Ik(k), s, s', BT.G.Root(), newroot);
+    assert BC.OpStep(Ik(k), s, s', BT.G.WriteOp(BT.G.Root(), newroot));
+    assert BC.OpStep(Ik(k), s, s', BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
+    assert BC.OpTransaction(Ik(k), s, s', BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
+    assert M.BetreeMove(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
+    assert M.NextStep(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp, M.BetreeMoveStep(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
   }
 
   method doStuff(k: Constants, s: Variables, io: DiskIOHandler)
