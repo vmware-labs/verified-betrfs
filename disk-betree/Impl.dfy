@@ -15,7 +15,9 @@ module {:extern} Impl refines Main {
 
   class ImplHeapState {
     var s: Variables
-    constructor() {
+    constructor()
+    ensures BetreeBC.Init(BC.Constants(), s);
+    {
       s := BC.Unready;
     }
   }
@@ -44,6 +46,8 @@ module {:extern} Impl refines Main {
   {
     k := BC.Constants();
     hs := new ImplHeapState();
+
+    BetreeBC.InitImpliesInv(k, hs.s);
   }
 
   predicate WFSector(sector: M.Sector)
@@ -97,6 +101,7 @@ module {:extern} Impl refines Main {
 
   method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   returns (s': Variables)
+  requires BetreeBC.Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
   ensures M.Next(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp)
