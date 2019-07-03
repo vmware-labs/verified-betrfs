@@ -37,6 +37,8 @@ module {:extern} Impl refines Main {
     Marshalling.parseSector(sector).value
   }
 
+  function ILBA(lba: LBA) : M.LBA { lba }
+
   predicate Inv(k: Constants, hs: HeapState)
   {
     BetreeBC.Inv(k, hs.s)

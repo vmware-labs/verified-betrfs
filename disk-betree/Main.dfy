@@ -101,6 +101,7 @@ abstract module Main {
 
     function diskOp() : DiskOp
     reads this
+    ensures ValidDiskOp(diskOp())
 
     predicate initialized()
     reads this
@@ -114,7 +115,7 @@ abstract module Main {
   {
     match diskOp {
       case WriteOp(lba, sector) => D.WriteOp(ILBA(lba), ISector(sector))
-      case ReadOp(lba, sector) => D.WriteOp(ILBA(lba), ISector(sector))
+      case ReadOp(lba, sector) => D.ReadOp(ILBA(lba), ISector(sector))
       case NoDiskOp => D.NoDiskOp
     }
   }
