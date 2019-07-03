@@ -33,11 +33,17 @@ abstract module BlockCacheSystem {
     && M.WFPersistentSuperblock(superblock)
   }
 
+  predicate WFSuperblockRefWrtDisk(superblock: Superblock, blocks: map<LBA,Sector>,
+      ref: Reference)
+  requires ref in superblock.lbas
+  {
+    && superblock.lbas[ref] in blocks
+    && blocks[superblock.lbas[ref]].SectorBlock?
+  }
+
   predicate WFSuperblockWrtDisk(k: Constants, superblock: Superblock, blocks: map<LBA, Sector>)
   {
-    && (forall ref | ref in superblock.lbas ::
-        && superblock.lbas[ref] in blocks
-        && blocks[superblock.lbas[ref]].SectorBlock?)
+    && (forall ref | ref in superblock.lbas :: WFSuperblockRefWrtDisk(superblock, blocks, ref))
   }
 
   function DiskSuperblock(k: Constants, blocks: map<LBA, Sector>) : Superblock
@@ -71,7 +77,7 @@ abstract module BlockCacheSystem {
       RefMapOfDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks))
   }
 
-  function Predecessors(graph: map<Reference, Node>, ref: Reference) : set<Reference>
+  function {:opaque} Predecessors(graph: map<Reference, Node>, ref: Reference) : set<Reference>
   {
     set r | r in graph && ref in M.G.Successors(graph[r])
   }
@@ -236,28 +242,45 @@ abstract module BlockCacheSystem {
     WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
   }
 
-  lemma RefcountConservation(k: Constants, s: Variables, s': Variables, graph: map<Reference, Node>, graph': map<Reference, Node>, ref: Reference, r: Reference)
-  requires Inv(k, s);
+  lemma PredecessorsRemoveRef(k: Constants, s: Variables, graph: map<Reference, Node>, r: Reference, ref: Reference)
+  requires M.Inv(k.machine, s.machine)
+  requires WFDisk(k, s.disk.blocks)
+  requires s.machine.Ready?
+  requires WFSuperblockWrtDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)
+  requires graph == EphemeralGraph(k, s)
+  requires ref in s.machine.ephemeralSuperblock.lbas ==> ref in s.machine.cache
+  ensures |Predecessors(graph, r)|
+      - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref]) then 1 else 0)
+      == |Predecessors(graph, r) - {ref}|;
+  {
+    reveal_Predecessors();
+  }
+
+  lemma PredecessorsGraphMinusRefInclusion(
+    k: Constants,
+    s: Variables,
+    s': Variables,
+    graph: map<Reference, Node>,
+    graph': map<Reference, Node>,
+    r: Reference,
+    ref: Reference)
+  requires M.Inv(k.machine, s.machine)
   requires M.Inv(k.machine, s'.machine)
-  requires s'.machine.Ready?
-  requires s'.disk == s.disk
-  requires WFDisk(k, s'.disk.blocks)
-  requires WFSuperblockWrtDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks)
+  requires WFDisk(k, s.disk.blocks)
+  requires s.disk == s'.disk
   requires s.machine.Ready?
   requires s'.machine.Ready?
+  requires WFSuperblockWrtDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)
+  requires WFSuperblockWrtDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks)
   requires graph == EphemeralGraph(k, s)
   requires graph' == EphemeralGraph(k, s')
   requires ref in s.machine.ephemeralSuperblock.lbas ==> ref in s.machine.cache
   requires ref in s'.machine.ephemeralSuperblock.lbas ==> ref in s'.machine.cache
   requires MapRemove(s.machine.cache, {ref}) == MapRemove(s'.machine.cache, {ref})
   requires MapRemove(s.machine.ephemeralSuperblock.lbas, {ref}) == MapRemove(s'.machine.ephemeralSuperblock.lbas, {ref})
-
-  ensures |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref]) then 1 else 0)
-       == |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref]) then 1 else 0)
+  ensures forall r1 | r1 in Predecessors(graph, r) - {ref} ::
+      r1 in Predecessors(graph', r) - {ref}
   {
-    assert |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref]) then 1 else 0) == |Predecessors(graph, r) - {ref}|;
-    assert |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref]) then 1 else 0) == |Predecessors(graph', r) - {ref}|;
-
     forall r1 | r1 in Predecessors(graph, r) - {ref}
     ensures r1 in Predecessors(graph', r) - {ref}
     {
@@ -281,6 +304,8 @@ abstract module BlockCacheSystem {
             == RefMapOfDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks)[r1];
       }
 
+      reveal_Predecessors();
+
       if (r1 in s.machine.cache) {
         assert s.machine.cache.Keys - {ref} == s'.machine.cache.Keys - {ref};
         assert r1 in (s.machine.cache.Keys - {ref});
@@ -291,23 +316,44 @@ abstract module BlockCacheSystem {
             == graph'[r1];
         assert MapsTo(graph', r1, graph[r1]);
       } else {
+        assert r1 in RefMapOfDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks);
+        assert r1 in RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks);
+        assert r1 in graph;
+        assert r1 in graph';
+        assert graph[r1]
+            == RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)[r1]
+            == RefMapOfDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks)[r1]
+            == graph'[r1];
         assert MapsTo(graph', r1, graph[r1]);
       }
       assert r1 in Predecessors(graph', r) - {ref};
-    }
+    }   
+  }
 
-    forall r1 | r1 in Predecessors(graph', r) - {ref}
-    ensures r1 in Predecessors(graph, r) - {ref}
-    {
-      assert r1 != ref;
-      if (r1 in s'.machine.cache) {
-        assert MapsTo(graph, r1, graph[r1]);
-      } else {
-        assert MapsTo(graph, r1, graph[r1]);
-      }
-      assert r1 in Predecessors(graph, r) - {ref};
-    }
+  lemma RefcountConservation(k: Constants, s: Variables, s': Variables, graph: map<Reference, Node>, graph': map<Reference, Node>, ref: Reference, r: Reference)
+  requires Inv(k, s);
+  requires M.Inv(k.machine, s'.machine)
+  requires s'.machine.Ready?
+  requires s'.disk == s.disk
+  requires WFDisk(k, s'.disk.blocks)
+  requires WFSuperblockWrtDisk(k, s'.machine.ephemeralSuperblock, s'.disk.blocks)
+  requires s.machine.Ready?
+  requires s'.machine.Ready?
+  requires graph == EphemeralGraph(k, s)
+  requires graph' == EphemeralGraph(k, s')
+  requires ref in s.machine.ephemeralSuperblock.lbas ==> ref in s.machine.cache
+  requires ref in s'.machine.ephemeralSuperblock.lbas ==> ref in s'.machine.cache
+  requires MapRemove(s.machine.cache, {ref}) == MapRemove(s'.machine.cache, {ref})
+  requires MapRemove(s.machine.ephemeralSuperblock.lbas, {ref}) == MapRemove(s'.machine.ephemeralSuperblock.lbas, {ref})
 
+  ensures |Predecessors(graph, r)| - (if ref in s.machine.cache && r in M.G.Successors(s.machine.cache[ref]) then 1 else 0)
+       == |Predecessors(graph', r)| - (if ref in s'.machine.cache && r in M.G.Successors(s'.machine.cache[ref]) then 1 else 0)
+  {
+    PredecessorsRemoveRef(k, s, graph, r, ref);
+    PredecessorsRemoveRef(k, s', graph', r, ref);
+
+    PredecessorsGraphMinusRefInclusion(k, s, s', graph, graph', r, ref);
+    PredecessorsGraphMinusRefInclusion(k, s', s, graph', graph, r, ref);
     assert Predecessors(graph, r) - {ref} == Predecessors(graph', r) - {ref};
   }
 
@@ -329,16 +375,30 @@ abstract module BlockCacheSystem {
     {
       RefcountConservation(k, s, s', graph, graph', ref, r);
 
+      M.reveal_refCountsChangeConsistently();
+
       /*
       assert refcounts'[r]
           == refcounts[r] +
-            (if ref in cache' && r in M.Successors(cache'[ref]) then 1 else 0) -
-            (if ref in cache && r in M.Successors(cache[ref]) then 1 else 0)
+            (if ref in cache' && r in M.G.Successors(cache'[ref]) then 1 else 0) -
+            (if ref in cache && r in M.G.Successors(cache[ref]) then 1 else 0)
           == |Predecessors(graph, r)| +
-            (if ref in cache' && r in M.Successors(cache'[ref]) then 1 else 0) -
-            (if ref in cache && r in M.Successors(cache[ref]) then 1 else 0)
+            (if ref in cache' && r in M.G.Successors(cache'[ref]) then 1 else 0) -
+            (if ref in cache && r in M.G.Successors(cache[ref]) then 1 else 0)
           == |Predecessors(graph', r)|;
       */
+    }
+
+    forall r1, r2 | r1 in graph' && r2 in M.G.Successors(graph'[r1])
+    ensures r2 in graph'
+    {
+      if (r1 == ref) {
+        assert r2 in graph';
+      } else {
+        //assert graph[r1] == graph'[r1];
+        assert r2 in M.G.Successors(graph[r1]);
+        assert r2 in graph';
+      }
     }
   }
 
@@ -358,6 +418,7 @@ abstract module BlockCacheSystem {
     forall r | r in refcounts'
     ensures refcounts'[r] == |Predecessors(graph', r)|
     {
+      M.reveal_refCountsChangeConsistently();
       if (r == ref) {
         //assert ref !in M.Successors(block);
         //assert ref !in s.machine.cache;
@@ -370,6 +431,7 @@ abstract module BlockCacheSystem {
           assert r in graph;
           assert false;
         }*/
+        reveal_Predecessors();
         assert |Predecessors(graph, r)| == 0;
 
         assert |Predecessors(graph', r)| == 0;
@@ -379,23 +441,16 @@ abstract module BlockCacheSystem {
       }
     }
 
-    /*forall r1, r2 | r1 in graph && r2 in M.Successors(graph[r1])
+    forall r1, r2 | r1 in graph' && r2 in M.G.Successors(graph'[r1])
     ensures r2 in graph'
     {
-      /*
-      if (r_node in graph) {
-        assert node in graph.Values;
-        assume false;
-        assert r in graph;
-        assert r in graph';
+      if (r1 == ref) {
+        assert r2 in graph';
       } else {
-        assume false;
-        assert node == block;
-        assert r in graph;
-        assert r in graph';
+        assert r2 in M.G.Successors(graph[r1]);
+        assert r2 in graph';
       }
-      */
-    }*/
+    }
   }
 
   lemma OpPreservesInvariant(k: Constants, s: Variables, s': Variables, op: Op)
@@ -453,6 +508,20 @@ abstract module BlockCacheSystem {
     {
       assert r != ref;
       RefcountConservation(k, s, s', graph, graph', ref, r);
+      M.reveal_refCountsChangeConsistently();
+      reveal_Predecessors();
+    }
+
+    forall r1, r2 | r1 in graph' && r2 in M.G.Successors(graph'[r1])
+    ensures r2 in graph'
+    {
+      if (r2 == ref) {
+        reveal_Predecessors();
+        assert false;
+      } else {
+        assert r2 in M.G.Successors(graph[r1]);
+        assert r2 in graph';
+      }
     }
   }
 

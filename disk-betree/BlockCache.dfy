@@ -87,7 +87,7 @@ abstract module BlockCache refines Transactable {
     && superblock.lbas.Keys <= superblock.refcounts.Keys
   }
 
-  predicate refCountsChangeConsistently(
+  predicate {:opaque} refCountsChangeConsistently(
       refcounts: map<Reference, int>,
       refcounts': map<Reference, int>,
       cache: map<Reference, Node>,
