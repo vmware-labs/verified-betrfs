@@ -37,7 +37,9 @@ abstract module Main {
   import M : Machine
   import D = Disk
 
+  import MS = MapSpec
   import opened NativeTypes
+  import opened MissingLibrary
   import DiskTypes
   import UI
 
@@ -106,8 +108,6 @@ abstract module Main {
     }
   }
 
-  // State transitions
-
   function IDiskOp(diskOp: DiskOp) : M.DiskOp
   requires ValidDiskOp(diskOp)
   {
@@ -118,17 +118,44 @@ abstract module Main {
     }
   }
 
+  // Implementation of the state transitions
+
   method handle(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.initialized()
   requires Inv(k, hs)
-
   modifies HeapSet(hs)
   modifies io
-
   ensures Inv(k, hs)
   ensures ValidDiskOp(io.diskOp())
   ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
   // impl defined
+
+  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
+  returns (v: Option<MS.Value>)
+  requires io.initialized()
+  requires Inv(k, hs)
+  modifies HeapSet(hs)
+  modifies io
+  ensures Inv(k, hs)
+  ensures ValidDiskOp(io.diskOp())
+  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+    if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
+    IDiskOp(io.diskOp()))
+  // impl defined
+
+  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  returns (success: bool)
+  requires io.initialized()
+  requires Inv(k, hs)
+  modifies HeapSet(hs)
+  modifies io
+  ensures Inv(k, hs)
+  ensures ValidDiskOp(io.diskOp())
+  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+    if success then UI.PutOp(key, value) else UI.NoOp,
+    IDiskOp(io.diskOp()))
+  // impl defined
+
 
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.

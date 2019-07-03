@@ -5,9 +5,10 @@ include "ByteBetree.dfy"
 module {:extern} Impl refines Main {
   import BC = BetreeGraphBlockCache
   import BetreeBC = BetreeBlockCache
-  import BT = PivotBetreeSpec
+  import BT = PivotBetreeSpec`Internal
   import M = BetreeBlockCache
   import Marshalling
+  import Messages = ValueMessage
 
   type Variables = M.Variables
   type Constants = M.Constants
@@ -78,6 +79,33 @@ module {:extern} Impl refines Main {
     }
   }
 
+  method PageIn(k: Constants, s: Variables, io: DiskIOHandler, ref: BC.Reference)
+  returns (s': Variables)
+  requires io.initialized();
+  requires s.Ready?
+  requires ref in s.ephemeralSuperblock.lbas
+  requires ref !in s.cache
+  modifies io
+  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    var lba := s.ephemeralSuperblock.lbas[ref];
+    var sector := ReadSector(io, lba);
+    if (sector.SectorBlock?) {
+      s' := s.(cache := s.cache[ref := sector.block]);
+    }
+  }
+
+  method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
+  returns (s': Variables)
+  requires s.Ready?
+  requires BT.G.Root() in s.cache
+  ensures M.Next(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp)
+  {
+    var oldroot := s.cache[BT.G.Root()];
+    var newroot := BT.AddMessageToNode(oldroot, key, Messages.Define(value));
+    s' := s.(cache := s.cache[BT.G.Root() := newroot]);
+  }
+
   method doStuff(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires io.initialized()
@@ -92,10 +120,95 @@ module {:extern} Impl refines Main {
     }
   }
 
+  method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
+  returns (s': Variables, res: Option<MS.Value>)
+  requires io.initialized()
+  modifies io
+  ensures M.Next(Ik(k), s, s',
+    if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+    IDiskOp(io.diskOp()))
+    /*
+  {
+    if (s.Unready?) {
+      s' := PageInSuperblock(k, s, io);
+    } else {
+      var ref := BT.G.Root();
+      var msg := Messages.IdentityMessage();
+      ghost var lookup := [];
+
+      while !msg.Define?
+      {
+        if (ref !in s.cache) {
+          s' := PageIn(k, s, io, ref);
+          value := None;
+          return;
+        } else {
+          var node := s.cache[ref];
+          lookup := lookup + [BT.G.ReadOp(ref, node)];
+          msg := Messages.MergeMessages(msg, 
+        }
+      }
+
+      if msg.Define? {
+        s' := s;
+        value := msg.value;
+      } else {
+        s' := s;
+        value := MS.ValueWithDefault.DefaultValue();
+      }
+    }
+  }
+  */
+
+  method insert(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  returns (s': Variables, success: bool)
+  requires io.initialized()
+  modifies io
+  ensures M.Next(Ik(k), s, s',
+    if success then UI.PutOp(key, value) else UI.NoOp,
+    IDiskOp(io.diskOp()))
+  {
+    if (s.Unready?) {
+      s' := PageInSuperblock(k, s, io);
+      success := false;
+      return;
+    }
+
+    if (BT.G.Root() !in s.cache) {
+      s' := PageIn(k, s, io, BT.G.Root());
+      success := false;
+      return;
+    }
+
+    s' := InsertKeyValue(k, s, key, value);
+    success := true;
+  }
+
+  ////////// Top-level handlers
+
   method handle(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     var s := hs.s;
     var s' := doStuff(k, s, io);
     hs.s := s';
   }
+
+  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
+  returns (v: Option<MS.Value>)
+  {
+    var s := hs.s;
+    var s', value := query(k, s, io, key);
+    hs.s := s';
+    v := value;
+  }
+
+  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  returns (success: bool)
+  {
+    var s := hs.s;
+    var s', succ := insert(k, s, io, key, value);
+    hs.s := s';
+    success := succ;
+  }
+
 }

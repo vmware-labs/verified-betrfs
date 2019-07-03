@@ -97,11 +97,11 @@ module PivotBetreeSpec {
   // a more imap-like interface (while still being backed by a finite map) so that we don't
   // have to deal with all the identity-message special cases in here.
 
-  function BucketLookup(bucket: Bucket, key: Key) : Message {
+  function method BucketLookup(bucket: Bucket, key: Key) : Message {
     if key in bucket then bucket[key] else M.IdentityMessage()
   }
 
-  function AddMessageToBucket(bucket: Bucket, key: Key, msg: Message) : Bucket
+  function method AddMessageToBucket(bucket: Bucket, key: Key, msg: Message) : Bucket
   {
     var msg := M.Merge(msg, BucketLookup(bucket, key));
     if msg == M.IdentityMessage() then
@@ -110,7 +110,7 @@ module PivotBetreeSpec {
       bucket[key := msg]
   }
 
-  function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
+  function method AddMessageToNode(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
   ensures WFNode(AddMessageToNode(node, key, msg))
   {
