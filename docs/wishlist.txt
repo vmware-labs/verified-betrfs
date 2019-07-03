@@ -35,3 +35,11 @@
     Rob wants the best of both worlds.
     
 - {:namespace} metadata tag on modules so c# code can have reliable namespaces
+
+- non-stupid implementation of sequences
+
+- include-root
+
+- better error messages
+  - output line itself in addition to line numbers
+  - anon wtf?

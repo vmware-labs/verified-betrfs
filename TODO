@@ -1,0 +1,15 @@
+lifting
+basement nodes
+- sub-blocks
+make sure marshalling code verifies
+finish split and merge based on redirect
+generalize splay tree
+fragmentation
+routing filters
+sstables
+all kinds of implementation stuff
+- cache w/ lru
+- implementation version of pivot-y betree
+add i/o errors to model
+add asynchronous i/o to model
+concurrency
