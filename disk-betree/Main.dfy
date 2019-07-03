@@ -46,20 +46,23 @@ abstract module Main {
   // impl defined stuff
 
   type Constants // impl defined
-  type Variables // impl defined (heap state)
+  type HeapState // impl defined (heap state)
+  function HeapSet(hs: HeapState) : set<object>
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(k: Constants, hs: HeapState)
+    reads HeapSet(hs)
   function Ik(k: Constants): M.Constants
-  function I(k: Constants, s: Variables): M.Variables
+  function I(k: Constants, hs: HeapState): M.Variables
+    reads HeapSet(hs)
   function ILBA(lba: LBA) : M.LBA
 
   predicate ValidSector(sector: Sector)
 
   function ISector(sector: Sector) : M.Sector
-  requires ValidSector(sector)
+    requires ValidSector(sector)
 
   function method InitConstants() : Constants
-  function method InitVariables() : Variables
+  function method InitHeapState() : HeapState
 
   // DiskInterface
 
@@ -79,47 +82,31 @@ abstract module Main {
   }
 
   trait DiskIOHandler {
-    ghost var dop: DiskOp;
-
     // TODO make these take byte arrays instead for faster imperative code
     method write(lba: LBA, sector: array<byte>)
     modifies this;
-    requires dop == D.NoDiskOp;
+    requires diskOp() == D.NoDiskOp;
     requires sector.Length <= BlockSize() as int
     requires ValidSector(sector[..])
-    ensures dop == D.WriteOp(lba, sector[..]);
+    ensures diskOp() == D.WriteOp(lba, sector[..]);
 
     method read(lba: LBA) returns (sector: array<byte>)
     modifies this
-    requires dop == D.NoDiskOp
-    ensures dop == D.ReadOp(lba, sector[..])
+    requires diskOp() == D.NoDiskOp
+    ensures diskOp() == D.ReadOp(lba, sector[..])
     ensures sector.Length == BlockSize() as int
     ensures ValidSector(sector[..])
+
+    function diskOp() : DiskOp
 
     predicate initialized()
     reads this
     {
-      dop == D.NoDiskOp
+      diskOp() == D.NoDiskOp
     }
   }
 
   // State transitions
-
-  datatype FWorld = FWorld(s: M.Variables, dop: DiskOp)
-
-  class World {
-    var diskIOHandler : DiskIOHandler
-    var s : Variables
-
-    function interp(k: Constants) : FWorld
-    reads this
-    reads diskIOHandler
-    {
-      FWorld(I(k, s), diskIOHandler.dop)
-    }
-
-    constructor ()
-  }
 
   function IDiskOp(diskOp: DiskOp) : M.DiskOp
   requires ValidDiskOp(diskOp)
@@ -131,18 +118,15 @@ abstract module Main {
     }
   }
 
-  predicate Next(k: Constants, fw: FWorld, fw': FWorld, uiop: UIOp)
-  requires ValidDiskOp(fw'.dop)
-  {
-    M.Next(Ik(k), fw.s, fw'.s, uiop, IDiskOp(fw'.dop))
-  }
+  method handle(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires io.initialized()
+  requires Inv(k, hs)
 
-  method handle(k: Constants, world: World)
-  modifies world
-  requires world.diskIOHandler.initialized()
-  requires Inv(k, world.s)
-  ensures Inv(k, world.s)
-  ensures ValidDiskOp(world.diskIOHandler.dop)
-  ensures Next(k, old(world.interp(k)), world.interp(k), UI.NoOp)
+  modifies HeapSet(hs)
+  modifies io
+
+  ensures Inv(k, hs)
+  ensures ValidDiskOp(io.diskOp())
+  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
   // impl defined
 }
