@@ -100,6 +100,7 @@ abstract module Main {
     ensures ValidSector(sector[..])
 
     function diskOp() : DiskOp
+    reads this
 
     predicate initialized()
     reads this
