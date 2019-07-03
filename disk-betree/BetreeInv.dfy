@@ -582,7 +582,8 @@ abstract module BetreeInv {
               assert LookupFollowsChildRefAtLayer(key, lookup, j);
             }
           }
-
+          assert LookupFollowsChildRefs(key, lookup);
+          
           var middle :=  [lookup[i]]  + [lookup[i+1]];
           var middle' := [lookup'[i]] + [lookup'[i+1]];
 

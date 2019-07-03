@@ -198,8 +198,8 @@ abstract module BetreeSpec {
   requires ValidGrow(growth)
   {
     var newroot := Node(
-        imap key | MS.InDomain(key) :: growth.newchildref,
-        imap key | MS.InDomain(key) :: G.M.Update(G.M.NopDelta()));
+      imap key | MS.InDomain(key) :: growth.newchildref,
+      imap key | MS.InDomain(key) :: G.M.Update(G.M.NopDelta()));
     var allocop := G.AllocOp(growth.newchildref, growth.oldroot);
     var writeop := G.WriteOp(Root(), newroot);
     [allocop, writeop]
