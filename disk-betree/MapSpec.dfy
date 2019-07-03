@@ -1,5 +1,5 @@
-include "inc/tla-tree/MissingLibrary.dfy"
-include "inc/lib/total_order.dfy"
+include "../tla-tree/MissingLibrary.dfy"
+include "../lib/total_order.dfy"
 
 module UI {
   import Keyspace = Total_Order

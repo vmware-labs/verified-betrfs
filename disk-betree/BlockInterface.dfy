@@ -1,7 +1,7 @@
-include "inc/lib/Maps.dfy"
-include "inc/lib/sequences.dfy"
-include "inc/disk-betree/Graph.dfy"
-include "inc/disk-betree/Transactable.dfy"
+include "../lib/Maps.dfy"
+include "../lib/sequences.dfy"
+include "Graph.dfy"
+include "Transactable.dfy"
   
 abstract module BlockInterface refines Transactable {
   // BlockInterface is parameterized by the graph type

@@ -1,4 +1,4 @@
-include "inc/lib/sequences.dfy"
+include "../lib/sequences.dfy"
   
 abstract module Graph {
   import opened Sequences
