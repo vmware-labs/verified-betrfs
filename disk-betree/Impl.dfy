@@ -192,6 +192,7 @@ module {:extern} Impl refines Main {
   returns (s': Variables, success: bool)
   requires io.initialized()
   modifies io
+  ensures M.Inv(k, s')
   ensures M.Next(Ik(k), s, s',
     if success then UI.PutOp(key, value) else UI.NoOp,
     IDiskOp(io.diskOp()))

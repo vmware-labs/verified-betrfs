@@ -83,23 +83,23 @@ abstract module Main {
     }
   }
 
-  trait DiskIOHandler {
+  class DiskIOHandler {
     // TODO make these take byte arrays instead for faster imperative code
-    method write(lba: LBA, sector: array<byte>)
+    method {:axiom} write(lba: LBA, sector: array<byte>)
     modifies this;
     requires diskOp() == D.NoDiskOp;
     requires sector.Length <= BlockSize() as int
     requires ValidSector(sector[..])
     ensures diskOp() == D.WriteOp(lba, sector[..]);
 
-    method read(lba: LBA) returns (sector: array<byte>)
+    method {:axiom} read(lba: LBA) returns (sector: array<byte>)
     modifies this
     requires diskOp() == D.NoDiskOp
     ensures diskOp() == D.ReadOp(lba, sector[..])
     ensures sector.Length == BlockSize() as int
     ensures ValidSector(sector[..])
 
-    function diskOp() : DiskOp
+    function {:axiom} diskOp() : DiskOp
     reads this
     ensures ValidDiskOp(diskOp())
 

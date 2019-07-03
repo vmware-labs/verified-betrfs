@@ -3,29 +3,31 @@ using Impl_Compile;
 using System;
 using System.IO;
 
-class DiskIOHandlerImpl : DiskIOHandler {
-  public void write(ulong lba, byte[] sector) {
-    File.WriteAllBytes(getFilename(lba), sector);
-  }
-
-  public void read(ulong lba, out byte[] sector) {
-    string filename = getFilename(lba);
-    byte[] bytes = File.ReadAllBytes(filename);
-    if (bytes.Length != 1024*1024) {
-      throw new Exception("Invalid block at " + filename);
+namespace Impl_Compile {
+  public partial class DiskIOHandler {
+    public void write(ulong lba, byte[] sector) {
+      File.WriteAllBytes(getFilename(lba), sector);
     }
-    sector = bytes;
-  }
 
-  private string getFilename(ulong lba) {
-    return "filesystem/" + lba.ToString("X16");
+    public void read(ulong lba, out byte[] sector) {
+      string filename = getFilename(lba);
+      byte[] bytes = File.ReadAllBytes(filename);
+      if (bytes.Length != 1024*1024) {
+        throw new Exception("Invalid block at " + filename);
+      }
+      sector = bytes;
+    }
+
+    private string getFilename(ulong lba) {
+      return "filesystem/" + lba.ToString("X16");
+    }
   }
 }
 
 class Framework {
   public static void Run() {
     __default.InitState(out var k, out var hs);
-    DiskIOHandler io = new DiskIOHandlerImpl();
+    DiskIOHandler io = new DiskIOHandler();
     __default.handle(k, hs, io);
   }
 
@@ -42,7 +44,7 @@ class Framework {
     }
     System.IO.Directory.CreateDirectory("filesystem");
 
-    DiskIOHandler io = new DiskIOHandlerImpl();
+    DiskIOHandler io = new DiskIOHandler();
 
     foreach (ulong lba in m.Keys.Elements) {
       byte[] bytes = m.Select(lba);
