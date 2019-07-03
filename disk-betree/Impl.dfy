@@ -4,6 +4,7 @@ include "ByteBetree.dfy"
 
 module {:extern} Impl refines Main {
   import BC = BetreeGraphBlockCache
+  import BetreeBC = BetreeBlockCache
   import BT = PivotBetreeSpec
   import M = BetreeBlockCache
   import Marshalling
@@ -31,6 +32,11 @@ module {:extern} Impl refines Main {
   function ISector(sector: Sector) : M.Sector
   {
     Marshalling.parseSector(sector).value
+  }
+
+  predicate Inv(k: Constants, hs: HeapState)
+  {
+    BetreeBC.Inv(k, hs.s)
   }
 
   method InitState() returns (k: Constants, hs: HeapState)
