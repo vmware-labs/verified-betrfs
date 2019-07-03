@@ -5,7 +5,7 @@ module ReferenceType {
   import NativeTypes
 
   type Reference(==,!new) = NativeTypes.uint64
-  function Root() : Reference { 0 }
+  function method Root() : Reference { 0 }
 
   function method toRef(i: NativeTypes.uint64) : Reference { i }
   function method toUint64(i: Reference) : NativeTypes.uint64 { i }
@@ -22,7 +22,7 @@ abstract module Graph {
   // Abstract features
   type Reference = ReferenceType.Reference
   type Node(!new)
-  function Root() : Reference { ReferenceType.Root() }
+  function method Root() : Reference { ReferenceType.Root() }
   function Successors(node: Node) : iset<Reference>
 
   type Graph = imap<Reference, Node>

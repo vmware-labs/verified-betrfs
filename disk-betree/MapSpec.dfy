@@ -6,7 +6,7 @@ module ValueWithDefault {
   import NativeTypes
 
   type Value(==,!new) = seq<NativeTypes.byte>
-	function DefaultValue() : Value { [] }
+	function method DefaultValue() : Value { [] }
 
 	export S provides Value, DefaultValue
 	export Internal reveals *

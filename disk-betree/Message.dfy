@@ -7,21 +7,21 @@ abstract module Message {
   type Value(!new)
 	type Delta(!new)
 
-	function NopDelta() : Delta
-	function DefaultValue() : Value
+	function method NopDelta() : Delta
+	function method DefaultValue() : Value
 
 	datatype Message =
 	  | Define(value: Value)
 	  | Update(delta: Delta)
 
-	function CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
+	function method CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
 	ensures newdelta == NopDelta() ==> result == olddelta
 	ensures olddelta == NopDelta() ==> result == newdelta
 
-	function ApplyDelta(delta: Delta, value: Value) : (result: Value)
+	function method ApplyDelta(delta: Delta, value: Value) : (result: Value)
 	ensures delta == NopDelta() ==> result == value
 
-	function Merge(newmessage: Message, oldmessage: Message) : Message {
+	function method Merge(newmessage: Message, oldmessage: Message) : Message {
 		match (newmessage, oldmessage) {
 			case (Define(newvalue), _) => Define(newvalue)
 			case (Update(newdelta), Update(olddelta)) => Update(CombineDeltas(newdelta, olddelta))
@@ -29,11 +29,11 @@ abstract module Message {
 		}
 	}
 
-	function IdentityMessage() : Message {
+	function method IdentityMessage() : Message {
 	  Update(NopDelta())
   }
 
-	function DefineDefault() : Message {
+	function method DefineDefault() : Message {
 	  Define(DefaultValue())
   }
 
@@ -73,11 +73,11 @@ module ValueMessage refines Message {
   type Value = V.Value
   datatype Delta = NoDelta
 
-  function NopDelta() : Delta { NoDelta }
-  function DefaultValue() : Value { V.DefaultValue() }
+  function method NopDelta() : Delta { NoDelta }
+  function method DefaultValue() : Value { V.DefaultValue() }
 
-  function CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta { NoDelta }
-  function ApplyDelta(delta: Delta, value: Value) : Value { value }
+  function method CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta { NoDelta }
+  function method ApplyDelta(delta: Delta, value: Value) : Value { value }
 
 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
 	{
