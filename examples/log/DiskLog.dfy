@@ -14,35 +14,40 @@ module LBAType {
     idx.idx + 1
   }
 
-  export S provides Index, LBA, SuperblockLBA, indexToLBA
-  export extends S
-	export Internal reveals *
+  // export S provides Index, LBA, SuperblockLBA, indexToLBA
+  // export extends S
+	// export Internal reveals *
 }
 
 module DiskLog {
   import L = LogSpec
 
   import D = Disk
+
   import LBAType
 
-  type Element
+  type Index = LBAType.Index
+
+  type Element = L.Element
 
   datatype Constants = Constants()
   type Log = seq<Element>
   datatype Superblock = Superblock(length: int)
-  datatype Variables = Variables(log: Log, persistent: Option<Superblock>, stagedLength: int)
+  datatype CachedSuperblock = Unready | Ready(superblock: Superblock)
+  datatype Variables = Variables(log: Log, persistent: CachedSuperblock, stagedLength: int)
 
-  function method SuperblockLBA() : LBA { LBAType.SuperblockLBA() }
+  function method SuperblockLBA() : LBAType.LBA { LBAType.SuperblockLBA() }
 
   datatype Sector = SuperblockSector(superblock: Superblock) | LogSector(element: Element)
 
+  type DiskOp = D.DiskOp<LBAType.LBA, Sector>
+
   predicate Init(k:Constants, s:Variables)
-      ensures Init(k, s) ==> WF(s)
   {
-    s == Variables([], None, 0)
+    s == Variables([], Unready, 0)
   }
 
-  predicate Query(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: L.Index, result: Element)
+  predicate Query(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, result: Element)
   {
     && 0 <= idx.idx < |s.log|
     && result == s.log[idx.idx]
@@ -52,19 +57,19 @@ module DiskLog {
 
   predicate FetchSuperblock(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, length: int)
   {
-    && s.persistent == None
+    && s.persistent == Unready
     && diskOp == D.ReadOp(SuperblockLBA(), SuperblockSector(Superblock(length)))
     && s'.log == s.log
-    && s'.persistent == Some(length)
+    && s'.persistent == Ready(Superblock(length))
     && s'.stagedLength == s.stagedLength
   }
 
-  predicate FetchElement(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: L.Index, element: Element)
+  predicate FetchElement(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, element: Element)
   {
-    && s.persistent.Some?
-    && idx.idx < s.persistent.length
+    && s.persistent.Ready?
+    && idx.idx < s.persistent.superblock.length
     && |s.log| == idx.idx
-    && diskOp == D.ReadOp(indexToLBA(idx), LogSector(element))
+    && diskOp == D.ReadOp(LBAType.indexToLBA(idx), LogSector(element))
     && s'.log == s.log + [element]
     && s'.persistent == s.persistent
     && s'.stagedLength == s.stagedLength
@@ -72,8 +77,8 @@ module DiskLog {
 
   predicate Append(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, element: Element)
   {
-    && s.persistent.Some?
-    && s.persistent <= |s.log|
+    && s.persistent.Ready?
+    && s.persistent.superblock.length <= |s.log|
     && diskOp == D.NoDiskOp
     && s'.log == s.log + [element]
     && s'.persistent == s.persistent
@@ -84,9 +89,10 @@ module DiskLog {
   {
     var stagingIndex := L.Index(s.stagedLength);
 
-    && s.persistent.Some?
-    && s.persistent <= |s.log|
-    && diskOp == D.WriteOp(indexToLBA(stagingIndex), s.log[stagingIndex.idx])
+    && s.persistent.Ready?
+    && s.persistent.superblock.length <= |s.log|
+    && 0 <= stagingIndex.idx < |s.log| // maintained by invariant (not a runtime check)
+    && diskOp == D.WriteOp(LBAType.indexToLBA(stagingIndex), LogSector(s.log[stagingIndex.idx]))
     && s'.log == s.log
     && s'.persistent == s.persistent
     && s'.stagedLength == s.stagedLength + 1
@@ -96,24 +102,24 @@ module DiskLog {
   {
     var newSuperblock := Superblock(s.stagedLength);
 
-    && s.persistent.Some?
-    && s.persistent <= |s.log|
+    && s.persistent.Ready?
+    && s.persistent.superblock.length <= |s.log|
     && diskOp == D.WriteOp(SuperblockLBA(), SuperblockSector(newSuperblock))
     && s'.log == s.log
-    && s'.persistent == Some(newSuperblock)
+    && s'.persistent == Ready(newSuperblock)
     && s'.stagedLength == s.stagedLength + 1
   }
 
-  predicate StutterStep(k: Constants, s: Variables, s': Variables, diskOp: DiskOp)
+  predicate Stutter(k: Constants, s: Variables, s': Variables, diskOp: DiskOp)
   {
     && diskOp == D.NoDiskOp
     && s' == s
   }
 
   datatype Step =
-      | QueryStep(diskOp: DiskOp, idx: L.Index, result: Element)
+      | QueryStep(diskOp: DiskOp, idx: Index, result: Element)
       | FetchSuperblockStep(diskOp: DiskOp, length: int)
-      | FetchElementStep(diskOp: DiskOp, idx: L.Index, element: Element)
+      | FetchElementStep(diskOp: DiskOp, idx: Index, element: Element)
       | AppendStep(diskOp: DiskOp, element: Element)
       | StageElementStep(diskOp: DiskOp)
       | FlushStep(diskOp: DiskOp)
@@ -122,13 +128,13 @@ module DiskLog {
   predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
   {
       match step {
-        case QueryStep(diskOp: DiskOp, idx: L.Index, result: Element) => Query(k, s, s', diskOp, idx, result)
-        case FetchSuperblockStep(diskOp: DiskOp, length: int) => Fetch(k, s, s', diskOp, length)
-        case FetchElementStep(diskOp: DiskOp, idx: L.Index, element: Element) => FetchElement(k, s, s', diskOp, idx, element)
+        case QueryStep(diskOp: DiskOp, idx: Index, result: Element) => Query(k, s, s', diskOp, idx, result)
+        case FetchSuperblockStep(diskOp: DiskOp, length: int) => FetchSuperblock(k, s, s', diskOp, length)
+        case FetchElementStep(diskOp: DiskOp, idx: Index, element: Element) => FetchElement(k, s, s', diskOp, idx, element)
         case AppendStep(diskOp: DiskOp, element: Element) => Append(k, s, s', diskOp, element)
         case StageElementStep(diskOp: DiskOp) => StageElement(k, s, s', diskOp)
         case FlushStep(diskOp: DiskOp) => Flush(k, s, s', diskOp)
-        case StutterStep => Stutter(k, s, s', diskOp)
+        case StutterStep(diskOp: DiskOp) => Stutter(k, s, s', diskOp)
       }
   }
 
