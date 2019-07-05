@@ -103,9 +103,15 @@ module {:extern} Impl refines Main {
     var lba := s.ephemeralSuperblock.lbas[ref];
     var sector := ReadSector(io, lba);
     if (sector.SectorBlock?) {
-      s' := s.(cache := s.cache[ref := sector.block]);
-      //assert BC.PageIn(k, s, s', IDiskOp(io.diskOp()), ref);
-      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInStep(ref)));
+      var node := sector.block;
+      if (s.ephemeralSuperblock.graph[ref] == (if node.children.Some? then node.children.value else [])) {
+        s' := s.(cache := s.cache[ref := sector.block]);
+        assert BC.PageIn(k, s, s', IDiskOp(io.diskOp()), ref);
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInStep(ref)));
+      } else {
+        s' := s;
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
+      }
     } else {
       s' := s;
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
@@ -125,7 +131,15 @@ module {:extern} Impl refines Main {
     s' := s.(cache := s.cache[BT.G.Root() := newroot])
            .(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := MapRemove(s.ephemeralSuperblock.lbas, {BT.G.Root()})));
 
-    //assert BC.BlockPointsToValidReferences(oldroot, s.ephemeralSuperblock.refcounts);
+    assert s'.ephemeralSuperblock.graph[BT.G.Root()] == s.ephemeralSuperblock.graph[BT.G.Root()];
+    assert BC.G.Successors(oldroot) == BC.G.Successors(oldroot);
+    assert BC.BlockPointsToValidReferences(oldroot, s.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(newroot, s.ephemeralSuperblock.graph);
+    assert (iset r | r in s.ephemeralSuperblock.graph[BC.G.Root()]) == BC.G.Successors(oldroot);
+    assert (iset r | r in s'.ephemeralSuperblock.graph[BC.G.Root()])
+        == (iset r | r in s.ephemeralSuperblock.graph[BC.G.Root()])
+        == BC.G.Successors(oldroot)
+        == BC.G.Successors(newroot);
     //assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
     //assert BC.BlockPointsToValidReferences(newroot, s.ephemeralSuperblock.refcounts);
     assert BC.Dirty(Ik(k), s, s', BT.G.Root(), newroot);
@@ -136,6 +150,7 @@ module {:extern} Impl refines Main {
     assert M.NextStep(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp, M.BetreeMoveStep(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
   }
 
+  /*
   method doStuff(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires io.initialized()
@@ -149,6 +164,7 @@ module {:extern} Impl refines Main {
       assume false;
     }
   }
+  */
 
   method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
   returns (s': Variables, res: Option<MS.Value>)
@@ -194,6 +210,7 @@ module {:extern} Impl refines Main {
   returns (s': Variables, success: bool)
   requires io.initialized()
   modifies io
+  requires M.Inv(k, s)
   ensures M.Next(Ik(k), s, s',
     if success then UI.PutOp(key, value) else UI.NoOp,
     IDiskOp(io.diskOp()))
@@ -216,12 +233,14 @@ module {:extern} Impl refines Main {
 
   ////////// Top-level handlers
 
+  /*
   method handle(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     var s := hs.s;
     var s' := doStuff(k, s, io);
     hs.s := s';
   }
+  */
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)

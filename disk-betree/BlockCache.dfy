@@ -77,16 +77,25 @@ abstract module BlockCache refines Transactable {
     | ReadNoOpStep
     | TransactionStep(ops: seq<Op>)
 
+  predicate GraphClosed(graph: map<Reference, seq<Reference>>)
+  {
+    forall ref | ref in graph ::
+      forall succ | succ in graph[ref] ::
+        succ in graph
+  }
+
   predicate WFPersistentSuperblock(superblock: Superblock)
   {
     && SuperblockLBA() !in superblock.lbas.Values
     && superblock.graph.Keys == superblock.lbas.Keys
+    && GraphClosed(superblock.graph)
   }
 
   predicate WFSuperblock(k: Constants, superblock: Superblock)
   {
     && SuperblockLBA() !in superblock.lbas.Values
     && superblock.lbas.Keys <= superblock.graph.Keys
+    && GraphClosed(superblock.graph)
   }
 
   predicate WriteBack(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -132,8 +141,10 @@ abstract module BlockCache refines Transactable {
     && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
 
     && BlockPointsToValidReferences(block, s.ephemeralSuperblock.graph)
-    && IsFiniteSet(G.Successors(block))
-    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := FiniteSeq(G.Successors(block))]
+
+    && ref in s'.ephemeralSuperblock.graph
+    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := s'.ephemeralSuperblock.graph[ref]]
+    && (iset r | r in s'.ephemeralSuperblock.graph[ref]) == G.Successors(block)
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -149,8 +160,10 @@ abstract module BlockCache refines Transactable {
     && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas
 
     && BlockPointsToValidReferences(block, s.ephemeralSuperblock.graph)
-    && IsFiniteSet(G.Successors(block))
-    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := FiniteSeq(G.Successors(block))]
+
+    && ref in s'.ephemeralSuperblock.graph
+    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := s'.ephemeralSuperblock.graph[ref]]
+    && (iset r | r in s'.ephemeralSuperblock.graph[ref]) == G.Successors(block)
   }
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
@@ -213,8 +226,7 @@ abstract module BlockCache refines Transactable {
     && dop.ReadOp?
     && dop.lba == SuperblockLBA()
     && dop.sector.SectorSuperblock?
-    && WFSuperblock(k, dop.sector.superblock)
-    && dop.sector.superblock.lbas.Keys == dop.sector.superblock.graph.Keys
+    && WFPersistentSuperblock(dop.sector.superblock)
     && s' == Ready(dop.sector.superblock, dop.sector.superblock, map[])
   }
 
@@ -269,6 +281,7 @@ abstract module BlockCache refines Transactable {
     && s.cache.Keys <= s.ephemeralSuperblock.graph.Keys
     && s.ephemeralSuperblock.graph.Keys <= s.cache.Keys + s.ephemeralSuperblock.lbas.Keys
     && CacheConsistentWithSuccessors(s.cache, s.ephemeralSuperblock.graph)
+    && GraphClosed(s.ephemeralSuperblock.graph)
   }
 
   predicate Inv(k: Constants, s: Variables)
