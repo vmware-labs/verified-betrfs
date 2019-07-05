@@ -22,7 +22,6 @@ module LBAType {
 
 abstract module BlockCache refines Transactable {
   import opened Maps
-  import opened Sets
   import LBAType
 
   import Disk = Disk
@@ -88,6 +87,7 @@ abstract module BlockCache refines Transactable {
   {
     && SuperblockLBA() !in superblock.lbas.Values
     && superblock.graph.Keys == superblock.lbas.Keys
+    && G.Root() in superblock.graph
     && GraphClosed(superblock.graph)
   }
 
@@ -95,6 +95,7 @@ abstract module BlockCache refines Transactable {
   {
     && SuperblockLBA() !in superblock.lbas.Values
     && superblock.lbas.Keys <= superblock.graph.Keys
+    && G.Root() in superblock.graph
     && GraphClosed(superblock.graph)
   }
 
