@@ -53,6 +53,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
     ensures Inv(k, s)
   {
     BCS.InitImpliesInv(k, s);
+    DBI.InitImpliesInv(Ik(k), PersistentBetree(k, s));
   }
 
   lemma PersistentGraphEqAcrossOps(k: Constants, s: Variables, s': Variables, ops: seq<BC.Op>)

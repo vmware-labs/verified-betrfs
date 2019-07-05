@@ -192,7 +192,6 @@ module {:extern} Impl refines Main {
   returns (s': Variables, success: bool)
   requires io.initialized()
   modifies io
-  ensures M.Inv(k, s')
   ensures M.Next(Ik(k), s, s',
     if success then UI.PutOp(key, value) else UI.NoOp,
     IDiskOp(io.diskOp()))
@@ -227,6 +226,8 @@ module {:extern} Impl refines Main {
   {
     var s := hs.s;
     var s', value := query(k, s, io, key);
+    var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
+    M.NextPreservesInv(k, s, s', uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     v := value;
   }
@@ -236,6 +237,8 @@ module {:extern} Impl refines Main {
   {
     var s := hs.s;
     var s', succ := insert(k, s, io, key, value);
+    var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
+    M.NextPreservesInv(k, s, s', uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     success := succ;
   }
