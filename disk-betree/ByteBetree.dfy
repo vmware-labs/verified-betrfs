@@ -41,8 +41,8 @@ module Marshalling {
   function method SuperblockGrammar() : G
   ensures ValidGrammar(SuperblockGrammar())
   {
-    // (Reference, LBA, refcount) triples
-    GArray(GTuple([GUint64, GUint64, GUint64]))
+    // (Reference, LBA, successor-list) triples
+    GArray(GTuple([GUint64, GUint64, GArray(GUint64)]))
   }
 
   function method MessageGrammar() : G
@@ -94,26 +94,43 @@ module Marshalling {
     v.u as int
   }
 
-  function method valToLBAsAndRefcounts(a: seq<V>) : Option<(map<Reference, LBA>, map<Reference, int>)>
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64]))
-  ensures var s := valToLBAsAndRefcounts(a) ; s.Some? ==> 0 !in s.value.0.Values
-  ensures var s := valToLBAsAndRefcounts(a) ; s.Some? ==> s.value.0.Keys == s.value.1.Keys
+  function method valToChildren(a: seq<V>) : Option<seq<Reference>>
+  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GUint64)
+  {
+    if |a| == 0 then
+      Some([])
+    else
+      match valToChildren(DropLast(a)) {
+        case None => None
+        case Some(pref) => Some(pref + [valToReference(Last(a))])
+      }
+  }
+
+  function method {:fuel ValInGrammar,3} valToLBAsAndSuccs(a: seq<V>) : Option<(map<Reference, LBA>, map<Reference, seq<Reference>>)>
+  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GArray(GUint64)]))
+  ensures var s := valToLBAsAndSuccs(a) ; s.Some? ==> 0 !in s.value.0.Values
+  ensures var s := valToLBAsAndSuccs(a) ; s.Some? ==> s.value.0.Keys == s.value.1.Keys
   {
     if |a| == 0 then
       Some((map[], map[]))
     else (
-      var res := valToLBAsAndRefcounts(DropLast(a));
+      var res := valToLBAsAndSuccs(DropLast(a));
       match res {
-        case Some((lbas, refcounts)) => (
+        case Some((lbas, graph)) => (
           var tuple := Last(a);
           var ref := valToReference(tuple.t[0]);
           var lba := valToLBA(tuple.t[1]);
-          var refcount := valToInt(tuple.t[2]);
-          if ref in refcounts || lba == 0 then (
-            None
-          ) else (
-            Some((lbas[ref := lba], refcounts[ref := refcount]))
-          )
+          var succs := valToChildren(tuple.t[2].a);
+          match succs {
+            case None => None
+            case Some(succs) => (
+              if ref in graph || lba == 0 then (
+                None
+              ) else (
+                Some((lbas[ref := lba], graph[ref := succs]))
+              )
+            )
+          }
         )
         case None => None
       }
@@ -124,7 +141,7 @@ module Marshalling {
   requires ValInGrammar(v, SuperblockGrammar())
   ensures var s := valToSuperblock(v) ; s.Some? ==> BC.WFPersistentSuperblock(s.value)
   {
-    var res := valToLBAsAndRefcounts(v.a);
+    var res := valToLBAsAndSuccs(v.a);
     match res {
       case Some(res) => Some(BC.Superblock(res.0, res.1))
       case None => None
@@ -199,18 +216,6 @@ module Marshalling {
             None
           )
         )
-      }
-  }
-
-  function method valToChildren(a: seq<V>) : Option<seq<Reference>>
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GUint64)
-  {
-    if |a| == 0 then
-      Some([])
-    else
-      match valToChildren(DropLast(a)) {
-        case None => None
-        case Some(pref) => Some(pref + [valToReference(Last(a))])
       }
   }
 
@@ -295,53 +300,62 @@ module Marshalling {
     VUint64(lba)
   }
 
-  function method refcountToVal(refcount: int) : Option<V>
-  ensures refcountToVal(refcount).Some? ==> ValidVal(refcountToVal(refcount).value)
+  method childrenToVal(children: seq<Reference>) returns (v : V)
+  requires |children| < 0x1_0000_0000_0000_0000
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, GArray(GUint64))
+  ensures valToChildren(v.a) == Some(children)
+  ensures |v.a| == |children|
   {
-    if (0 <= refcount < 0x1_0000_0000_0000_000) then (
-      Some(VUint64(refcount as uint64))
-    ) else (
-      None
-    )
+    if |children| == 0 {
+      return VArray([]);
+    } else {
+      var children' := DropLast(children);
+      var pref := childrenToVal(children');
+      var child := Last(children);
+      var last := VUint64(child);
+      assert children == DropLast(children) + [child];
+      return VArray(pref.a + [last]);
+    }
   }
 
-  method {:fuel ValInGrammar,2} lbasRefcountsToVal(lbas: map<Reference, LBA>, refcounts: map<Reference, int>) returns (v: Option<V>)
-  requires lbas.Keys == refcounts.Keys
+  method {:fuel ValInGrammar,2} lbasSuccsToVal(lbas: map<Reference, LBA>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
+  requires lbas.Keys == graph.Keys
   requires 0 !in lbas.Values
   requires |lbas| < 0x1_0000_0000_0000_0000
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, SuperblockGrammar());
   ensures v.Some? ==> |v.value.a| == |lbas|
-  ensures v.Some? ==> valToLBAsAndRefcounts(v.value.a) == Some((lbas, refcounts));
+  ensures v.Some? ==> valToLBAsAndSuccs(v.value.a) == Some((lbas, graph));
   {
     if (|lbas| == 0) {
       assert lbas == map[];
-      assert refcounts == map[];
+      assert graph == map[];
       return Some(VArray([]));
     } else {
       var ref :| ref in lbas.Keys;
-      var vpref := lbasRefcountsToVal(MapRemove(lbas, {ref}), MapRemove(refcounts, {ref}));
+      var vpref := lbasSuccsToVal(MapRemove(lbas, {ref}), MapRemove(graph, {ref}));
       match vpref {
         case None => return None;
         case Some(vpref) => {
           var lba := lbas[ref];
-          var refcount := refcountToVal(refcounts[ref]);
-          if refcount.Some? {
-            var tuple := VTuple([refToVal(ref), lbaToVal(lba), refcount.value]);
-
-            //assert valToLBAsAndRefcounts(vpref.a) == Some((MapRemove(lbas, {ref}), MapRemove(refcounts, {ref})));
-            assert MapRemove(lbas, {ref})[ref := lba] == lbas;
-            assert MapRemove(refcounts, {ref})[ref := refcounts[ref]] == refcounts;
-            //assert ref == valToReference(tuple.t[0]);
-            //assert lba == valToReference(tuple.t[1]);
-            //assert !(ref in MapRemove(refcounts, {ref}));
-            //assert !(lba == 0);
-            //assert valToLBAsAndRefcounts(vpref.a + [tuple]) == Some((lbas, refcounts));
-
-            return Some(VArray(vpref.a + [tuple]));
-          } else {
+          if (|graph[ref]| >= 0x1_0000_0000_0000_0000) {
             return None;
           }
+          var succs := childrenToVal(graph[ref]);
+          var tuple := VTuple([refToVal(ref), lbaToVal(lba), succs]);
+
+          assert MapRemove(lbas, {ref})[ref := lba] == lbas;
+          assert MapRemove(graph, {ref})[ref := graph[ref]] == graph;
+          /*
+          assert ref == valToReference(tuple.t[0]);
+          assert lba == valToReference(tuple.t[1]);
+          assert !(ref in MapRemove(graph, {ref}));
+          assert !(lba == 0);
+          assert valToLBAsAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
+          */
+
+          return Some(VArray(vpref.a + [tuple]));
         }
       }
     }
@@ -484,25 +498,6 @@ module Marshalling {
     }
   }
 
-  method childrenToVal(children: seq<Reference>) returns (v : V)
-  requires |children| < 0x1_0000_0000_0000_0000
-  ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GUint64))
-  ensures valToChildren(v.a) == Some(children)
-  ensures |v.a| == |children|
-  {
-    if |children| == 0 {
-      return VArray([]);
-    } else {
-      var children' := DropLast(children);
-      var pref := childrenToVal(children');
-      var child := Last(children);
-      var last := VUint64(child);
-      assert children == DropLast(children) + [child];
-      return VArray(pref.a + [last]);
-    }
-  }
-
   method nodeToVal(node: Node) returns (v : Option<V>)
   requires BT.WFNode(node)
   ensures v.Some? ==> ValidVal(v.value)
@@ -544,9 +539,9 @@ module Marshalling {
   ensures v.Some? ==> valToSector(v.value) == Some(sector)
   {
     match sector {
-      case SectorSuperblock(Superblock(lbas, refcounts)) => {
+      case SectorSuperblock(Superblock(lbas, succs)) => {
         if |lbas| < 0x1_0000_0000_0000_0000 {
-          var w := lbasRefcountsToVal(lbas, refcounts);
+          var w := lbasSuccsToVal(lbas, succs);
           match w {
             case Some(v) => return Some(VCase(0, v));
             case None => return None;
