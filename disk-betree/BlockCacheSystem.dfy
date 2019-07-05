@@ -592,9 +592,7 @@ abstract module BlockCacheSystem {
       case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
       case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
-
-      //case DirtyStep(ref, block) => DirtyStepPreservesInvariant(k, s, s', dop, ref, block);
-      //case AllocStep(ref, block) => AllocStepPreservesInvariant(k, s, s', dop, ref, block);
+      case ReadNoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);
     }
   }
