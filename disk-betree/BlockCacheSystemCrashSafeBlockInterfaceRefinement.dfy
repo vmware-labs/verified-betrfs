@@ -153,6 +153,7 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     if (ref in BI.LiveReferences(Ik(k), I(k, s).ephemeral)) {
       assert BI.ReachableReference(Ik(k), I(k, s).ephemeral, ref);
       var lookup :| BI.LookupIsValid(Ik(k), I(k, s).ephemeral, lookup) && Last(lookup) == ref;
+
       if (|lookup| == 1) {
         assert ref == Root();
         assert false;
@@ -160,12 +161,10 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
         var graph := BCS.EphemeralGraph(k, s);
         assert lookup[|lookup|-1] in Successors(graph[lookup[|lookup|-2]]);
         assert ref in Successors(graph[lookup[|lookup|-2]]);
-        BCS.reveal_Predecessors();
-        assert lookup[|lookup|-2] in BCS.Predecessors(graph, ref);
-        assert s.machine.ephemeralSuperblock.refcounts[ref] >= 1;
+        assert Successors(graph[lookup[|lookup|-2]]) == (iset r | r in s.machine.ephemeralSuperblock.graph[lookup[|lookup|-2]]);
+        assert ref in s.machine.ephemeralSuperblock.graph[lookup[|lookup|-2]];
         assert false;
       }
-      assert false;
     }
 
     assert refs !! BI.LiveReferences(Ik(k), I(k, s).ephemeral);
@@ -174,7 +173,6 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     forall ref | ref in refs
     ensures BI.Predecessors(I(k, s).ephemeral.view, ref) <= refs
     {
-      BCS.reveal_Predecessors();
     }
     assert BI.ClosedUnderPredecessor(I(k, s).ephemeral.view, refs);
 

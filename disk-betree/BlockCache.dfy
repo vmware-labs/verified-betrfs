@@ -1,6 +1,7 @@
 include "Betree.dfy"
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
+include "../lib/Sets.dfy"
 include "Graph.dfy"
 include "Disk.dfy"
 
@@ -21,6 +22,7 @@ module LBAType {
 
 abstract module BlockCache refines Transactable {
   import opened Maps
+  import opened Sets
   import LBAType
 
   import Disk = Disk
@@ -32,7 +34,7 @@ abstract module BlockCache refines Transactable {
   // TODO make superblock take up more than one block (it's not really a superblock)
   datatype Superblock = Superblock(
       lbas: map<Reference, LBA>,
-      refcounts: map<Reference, int>)
+      graph: map<Reference, seq<Reference>>)
 
   datatype Sector =
     | SectorBlock(block: Node)
@@ -58,7 +60,7 @@ abstract module BlockCache refines Transactable {
   predicate IsAllocated(s: Variables, ref: Reference)
   requires s.Ready?
   {
-    ref in s.ephemeralSuperblock.refcounts
+    ref in s.ephemeralSuperblock.graph
   }
   predicate ValidLBAForNode(k: Constants, lba: LBA)
   {
@@ -78,36 +80,13 @@ abstract module BlockCache refines Transactable {
   predicate WFPersistentSuperblock(superblock: Superblock)
   {
     && SuperblockLBA() !in superblock.lbas.Values
-    && superblock.refcounts.Keys == superblock.lbas.Keys
+    && superblock.graph.Keys == superblock.lbas.Keys
   }
 
   predicate WFSuperblock(k: Constants, superblock: Superblock)
   {
     && SuperblockLBA() !in superblock.lbas.Values
-    && superblock.lbas.Keys <= superblock.refcounts.Keys
-  }
-
-  predicate {:opaque} refCountsChangeConsistently(
-      refcounts: map<Reference, int>,
-      refcounts': map<Reference, int>,
-      cache: map<Reference, Node>,
-      cache': map<Reference, Node>,
-      ref: Reference)
-  {
-    && (forall r :: r in refcounts && r != ref ==> (
-      MapsTo(refcounts', r,
-          refcounts[r] +
-          (if ref in cache' && r in G.Successors(cache'[ref]) then 1 else 0) -
-          (if ref in cache && r in G.Successors(cache[ref]) then 1 else 0)
-      )
-    ))
-    && (ref in refcounts && ref in refcounts' ==>
-      MapsTo(refcounts', ref,
-          refcounts[ref] +
-          (if ref in cache' && ref in G.Successors(cache'[ref]) then 1 else 0) -
-          (if ref in cache && ref in G.Successors(cache[ref]) then 1 else 0)
-      )
-    )
+    && superblock.lbas.Keys <= superblock.graph.Keys
   }
 
   predicate WriteBack(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -122,7 +101,7 @@ abstract module BlockCache refines Transactable {
     && s'.Ready?
     && s'.persistentSuperblock == s.persistentSuperblock
     && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas[ref := dop.lba]
-    && s'.ephemeralSuperblock.refcounts == s.ephemeralSuperblock.refcounts
+    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph
     && s'.cache == s.cache
   }
 
@@ -136,9 +115,9 @@ abstract module BlockCache refines Transactable {
     && s' == s.(persistentSuperblock := s.ephemeralSuperblock)
   }
 
-  predicate BlockPointsToValidReferences(block: Node, refcounts: map<Reference, int>)
+  predicate BlockPointsToValidReferences(block: Node, graph: map<Reference, seq<Reference>>)
   {
-    forall ref | ref in G.Successors(block) :: ref in refcounts
+    forall ref | ref in G.Successors(block) :: ref in graph
   }
 
   predicate Dirty(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -152,9 +131,9 @@ abstract module BlockCache refines Transactable {
 
     && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
 
-    && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
-    && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys
-    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
+    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.graph)
+    && IsFiniteSet(G.Successors(block))
+    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := FiniteSeq(G.Successors(block))]
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -169,10 +148,9 @@ abstract module BlockCache refines Transactable {
 
     && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas
 
-    && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
-    && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys + {ref}
-    && MapsTo(s'.ephemeralSuperblock.refcounts, ref, 0)
-    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.refcounts)
+    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.graph)
+    && IsFiniteSet(G.Successors(block))
+    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := FiniteSeq(G.Successors(block))]
   }
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
@@ -194,27 +172,27 @@ abstract module BlockCache refines Transactable {
     && OpTransaction(k, s, s', ops)
   }
 
+  predicate NoPredecessors(graph: map<Reference, seq<Reference>>, ref: Reference)
+  {
+    forall r | r in graph :: ref !in graph[r]
+  }
+
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && s.Ready?
     && dop.NoDiskOp?
 
-    // This kind of sucks. It needs to be in cache so we know it's successors we can decrement
-    // refcounts. TODO There is an optimization to be made such that we can unalloc leaves
-    // which are not in cache (because they have no outgoing pointers)
-    && ref in s.cache 
+    && IsAllocated(s, ref)
 
     // We can only dealloc this if nothing is pointing to it.
     && ref != G.Root()
-    && MapsTo(s.ephemeralSuperblock.refcounts, ref, 0)
+    && NoPredecessors(s.ephemeralSuperblock.graph, ref)
 
     && s'.Ready?
     && s'.persistentSuperblock == s.persistentSuperblock
     && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
     && s'.cache == MapRemove(s.cache, {ref})
-    && refCountsChangeConsistently(s.ephemeralSuperblock.refcounts, s'.ephemeralSuperblock.refcounts, s.cache, s'.cache, ref)
-    && ref !in s'.ephemeralSuperblock.refcounts
-    && s'.ephemeralSuperblock.refcounts.Keys == s.ephemeralSuperblock.refcounts.Keys - {ref}
+    && s'.ephemeralSuperblock.graph == MapRemove(s.ephemeralSuperblock.graph, {ref})
   }
 
   predicate PageIn(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -225,6 +203,7 @@ abstract module BlockCache refines Transactable {
     && IsNotDirty(s, ref)
     && s.ephemeralSuperblock.lbas[ref] == dop.lba
     && dop.sector.SectorBlock?
+    && (iset r | r in s.ephemeralSuperblock.graph[ref]) == G.Successors(dop.sector.block)
     && s' == s.(cache := s.cache[ref := dop.sector.block])
   }
 
@@ -235,7 +214,7 @@ abstract module BlockCache refines Transactable {
     && dop.lba == SuperblockLBA()
     && dop.sector.SectorSuperblock?
     && WFSuperblock(k, dop.sector.superblock)
-    && dop.sector.superblock.lbas.Keys == dop.sector.superblock.refcounts.Keys
+    && dop.sector.superblock.lbas.Keys == dop.sector.superblock.graph.Keys
     && s' == Ready(dop.sector.superblock, dop.sector.superblock, map[])
   }
 
@@ -276,15 +255,21 @@ abstract module BlockCache refines Transactable {
     exists step: Step :: NextStep(k, s, s', dop, step)
   }
 
+  predicate CacheConsistentWithSuccessors(cache: map<Reference, Node>, graph: map<Reference, seq<Reference>>)
+  requires cache.Keys <= graph.Keys
+  {
+    forall ref | ref in cache :: (iset r | r in graph[ref]) == G.Successors(cache[ref])
+  }
+
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
     && WFPersistentSuperblock(s.persistentSuperblock)
     && WFSuperblock(k, s.ephemeralSuperblock)
-    && s.cache.Keys <= s.ephemeralSuperblock.refcounts.Keys
-    && s.ephemeralSuperblock.refcounts.Keys <= s.cache.Keys + s.ephemeralSuperblock.lbas.Keys
+    && s.cache.Keys <= s.ephemeralSuperblock.graph.Keys
+    && s.ephemeralSuperblock.graph.Keys <= s.cache.Keys + s.ephemeralSuperblock.lbas.Keys
+    && CacheConsistentWithSuccessors(s.cache, s.ephemeralSuperblock.graph)
   }
-
 
   predicate Inv(k: Constants, s: Variables)
   {
@@ -316,16 +301,6 @@ abstract module BlockCache refines Transactable {
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
-      /*
-      forall ref
-      ensures ref in s'.persistentSuperblock.lbas.Keys
-         ==> ref in s'.persistentSuperblock.refcounts.Keys
-      ensures ref in s'.persistentSuperblock.refcounts.Keys
-         ==> ref in s'.persistentSuperblock.lbas.Keys
-      {
-      }
-      assert s'.persistentSuperblock.lbas.Keys == s'.persistentSuperblock.refcounts.Keys;
-      */
       assert InvReady(k, s');
     }
   }
@@ -336,24 +311,6 @@ abstract module BlockCache refines Transactable {
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
-      /*
-      forall r | r in s'.ephemeralSuperblock.refcounts.Keys
-      ensures r in s'.cache.Keys + s'.ephemeralSuperblock.lbas.Keys
-      {
-        if (r == ref) {
-          assert r in s'.cache.Keys;
-        } else if (r in s.cache.Keys) {
-          assert r in s'.cache.Keys;
-        } else {
-          assert s.ephemeralSuperblock.refcounts.Keys
-              == s'.ephemeralSuperblock.refcounts.Keys;
-          assert r in s.ephemeralSuperblock.refcounts.Keys;
-          assert r in s.cache.Keys + s.ephemeralSuperblock.lbas.Keys;
-          assert r in s.ephemeralSuperblock.lbas.Keys;
-          assert r in s'.ephemeralSuperblock.lbas.Keys;
-        }
-      }
-      */
       assert InvReady(k, s');
     }
   }
@@ -401,6 +358,19 @@ abstract module BlockCache refines Transactable {
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
+      /*
+      forall key | key in s'.ephemeralSuperblock.lbas.Keys
+      ensures key in s'.ephemeralSuperblock.graph.Keys
+      {
+        assert key in s.ephemeralSuperblock.lbas.Keys;
+        assert key != ref;
+        assert key in s.ephemeralSuperblock.graph.Keys;
+        assert key in s.ephemeralSuperblock.graph;
+        assert key in MapRemove(s.ephemeralSuperblock.graph, {ref});
+        assert key in s'.ephemeralSuperblock.graph;
+      }
+      assert s'.ephemeralSuperblock.lbas.Keys <= s'.ephemeralSuperblock.graph.Keys;
+      */
       assert InvReady(k, s');
     }
   }
