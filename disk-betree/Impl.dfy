@@ -85,7 +85,8 @@ module {:extern} Impl refines Main {
       s' := BC.Ready(sector.superblock, sector.superblock, map[]);
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInSuperblockStep));
     } else {
-      assume false;
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
     }
   }
 
@@ -106,7 +107,8 @@ module {:extern} Impl refines Main {
       //assert BC.PageIn(k, s, s', IDiskOp(io.diskOp()), ref);
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInStep(ref)));
     } else {
-      assume false;
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
     }
   }
 
