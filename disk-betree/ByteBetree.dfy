@@ -463,6 +463,20 @@ module Marshalling {
     assert key != [];
   }
 
+  lemma lastPivotWf(pivots': seq<Key>, key: Key)
+  requires Pivots.WFPivots(pivots' + [key])
+  ensures |key| != 0
+  ensures |pivots'| > 0 ==> Keyspace.lt(Last(pivots'), key)
+  {
+    var pivots := pivots' + [key];
+    KeyInPivotsIsNonempty(pivots, key);
+    assert |key| != 0;
+    if |pivots'| > 0 {
+      Keyspace.IsStrictlySortedImpliesLt(pivots, |pivots| - 2, |pivots| - 1);
+      assert Keyspace.lt(Last(pivots'), key);
+    }
+  }
+
   method pivotsToVal(pivots: seq<Key>) returns (v : Option<V>)
   requires Pivots.WFPivots(pivots)
   requires |pivots| < 0x1_0000_0000_0000_0000
@@ -487,12 +501,7 @@ module Marshalling {
       assert ValidVal(last); // observe
 
       assert pivots == DropLast(pivots) + [key];
-      KeyInPivotsIsNonempty(pivots, key);
-      assert |key| != 0;
-      if |pivots'| > 0 {
-        Keyspace.IsStrictlySortedImpliesLt(pivots, |pivots| - 2, |pivots| - 1);
-        assert Keyspace.lt(Last(pivots'), key);
-      }
+      lastPivotWf(pivots', key);
 
       return Some(VArray(pref.a + [last]));
     }
