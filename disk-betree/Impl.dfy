@@ -244,6 +244,7 @@ module {:extern} Impl refines Main {
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
+  /*
   {
     var s := hs.s;
     var s', value := query(k, s, io, key);
@@ -252,6 +253,7 @@ module {:extern} Impl refines Main {
     hs.s := s';
     v := value;
   }
+  */
 
   method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (success: bool)

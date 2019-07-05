@@ -5,14 +5,24 @@ using System.IO;
 
 namespace Impl_Compile {
   public partial class DiskIOHandler {
+    const int BLOCK_SIZE = 1024*1024;
+
     public void write(ulong lba, byte[] sector) {
+      if (sector.Length < BLOCK_SIZE) {
+        Array.Resize(ref sector, BLOCK_SIZE);
+      }
+      else if (sector.Length > BLOCK_SIZE) {
+        // We should never get here due to the contract.
+        throw new Exception("Block must be at most BLOCK_SIZE");
+      }
+
       File.WriteAllBytes(getFilename(lba), sector);
     }
 
     public void read(ulong lba, out byte[] sector) {
       string filename = getFilename(lba);
       byte[] bytes = File.ReadAllBytes(filename);
-      if (bytes.Length != 1024*1024) {
+      if (bytes.Length != BLOCK_SIZE) {
         throw new Exception("Invalid block at " + filename);
       }
       sector = bytes;
@@ -25,10 +35,26 @@ namespace Impl_Compile {
 }
 
 class Framework {
-  public static void Run() {
+  public static void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
     __default.InitState(out var k, out var hs);
     DiskIOHandler io = new DiskIOHandler();
-    __default.handle(k, hs, io);
+
+    for (int i = 0; i < 50; i++) {
+      __default.handleInsert(k, hs, io, key, val, out bool success);
+      if (success) {
+        Console.WriteLine("doing insert... success!");
+        return;
+      } else {
+        Console.WriteLine("doing insert...");
+      }
+    }
+    Console.WriteLine("giving up");
+  }
+
+  public static void Run() {
+    byte[] k = {1, 5, 10};
+    byte[] v = {100, 11, 11, 14, 17};
+    Insert(new Dafny.Sequence<byte>(k), new Dafny.Sequence<byte>(v));
   }
 
   public static void Mkfs() {
