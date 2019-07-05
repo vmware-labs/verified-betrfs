@@ -59,6 +59,7 @@ module BetreeBlockCache refines Machine {
       || step.PageInStep?
       || step.PageInSuperblockStep?
       || step.EvictStep?
+      || step.ReadNoOpStep?
     )
     && BC.NextStep(k, s, s', dop, step)
     && (dop.ReadOp? && dop.sector.SectorBlock? ==>

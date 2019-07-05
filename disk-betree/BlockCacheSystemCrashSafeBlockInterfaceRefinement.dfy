@@ -220,6 +220,18 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
+  lemma RefinesReadNoOp(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp)
+  requires BCS.Inv(k, s)
+  requires BCS.Inv(k, s')
+  requires BC.ReadNoOp(k.machine, s.machine, s'.machine, dop)
+  requires D.Read(k.disk, s.disk, s'.disk, dop)
+  ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    assert I(k, s).persistent == I(k, s').persistent;
+    assert BI.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, BI.StutterStep);
+    assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
+  }
+
   lemma RefinesCrashStep(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables)
   requires BCS.Inv(k, s)
   requires BCS.Inv(k, s')
@@ -249,9 +261,7 @@ abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
           case PageInStep(ref) => RefinesPageIn(k, s, s', dop, ref);
           case PageInSuperblockStep => RefinesPageInSuperblock(k, s, s', dop);
           case EvictStep(ref) => RefinesEvict(k, s, s', dop, ref);
-
-          //case DirtyStep(ref, block) => RefinesDirty(k, s, s', dop, ref, block);
-          //case AllocStep(ref, block) => RefinesAlloc(k, s, s', dop, ref, block);
+          case ReadNoOpStep => RefinesReadNoOp(k, s, s', dop);
           case TransactionStep(ops) => RefinesTransaction(k, s, s', dop, ops);
         }
       }
