@@ -17,7 +17,7 @@ module {:extern} MkfsImpl {
   function method InitDisk() : map<LBA, BC.Sector> {
     map[
       // Map ref 0 to lba 1
-      0 := BC.SectorSuperblock(BC.Superblock(map[0 := 1], map[0 := 0])),
+      0 := BC.SectorSuperblock(BC.Superblock(map[0 := 1], map[0 := []])),
       // Put the root at lba 1
       1 := BC.SectorBlock(BT.G.Node([], None, [map[]]))
     ]

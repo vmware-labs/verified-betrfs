@@ -1,7 +1,6 @@
 include "Betree.dfy"
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
-include "../lib/Sets.dfy"
 include "Graph.dfy"
 include "Disk.dfy"
 

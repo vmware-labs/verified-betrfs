@@ -1,7 +1,6 @@
 include "BlockInterface.dfy"  
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
-include "../lib/Sets.dfy"
 include "MapSpec.dfy"
 include "Graph.dfy"
 include "../tla-tree/MissingLibrary.dfy"
