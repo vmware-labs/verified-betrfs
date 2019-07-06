@@ -412,6 +412,7 @@ module PivotBetreeSpec {
         fusion.split_parent.pivotTable[fusion.slot_idx])
   }
 
+  /*
   function SplitBucketLeft(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
   {
     map key | key in bucket && Keyspace.lt(key, pivot) :: bucket[key]
@@ -421,6 +422,7 @@ module PivotBetreeSpec {
   {
     map key | key in bucket && Keyspace.lte(pivot, key) :: bucket[key]
   }
+  */
 
   predicate ValidSplit(fusion: NodeFusion)
   {
@@ -431,14 +433,24 @@ module PivotBetreeSpec {
     && 1 <= fusion.num_children_left < |fusion.fused_child.buckets|
     && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
     && fusion.fused_child.pivotTable[fusion.num_children_left - 1] == fusion.pivot
-    // TODO add condition that pivot fits in the slot_idx bucket
+    && Pivots.Route(fusion.fused_parent.pivotTable, fusion.pivot) == fusion.slot_idx
+    && (fusion.slot_idx > 0 ==>
+        fusion.pivot != fusion.fused_parent.pivotTable[fusion.slot_idx - 1])
+    && Keyspace.NotMinimum(fusion.pivot)
 
-    // TODO consider requiring that the bucket being split is simply empty already
+    // We require buffer to already be flushed.
+    && fusion.fused_parent.buckets[fusion.slot_idx] == map[]
 
     && fusion.split_parent == Node(
       insert(fusion.fused_parent.pivotTable, fusion.pivot, fusion.slot_idx),
       Some(replace1with2(fusion.fused_parent.children.value, fusion.left_childref, fusion.right_childref, fusion.slot_idx)),
-      replace1with2(fusion.fused_parent.buckets, SplitBucketLeft(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot), SplitBucketRight(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot), fusion.slot_idx)
+      replace1with2(
+        fusion.fused_parent.buckets,
+        //SplitBucketLeft(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
+        //SplitBucketRight(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
+        map[],
+        map[],
+        fusion.slot_idx)
     )
 
     && fusion.left_child == Node(
@@ -592,13 +604,125 @@ module PivotBetreeSpec {
 }
 
 module PivotBetreeSpecWFNodes {
-  import P = PivotBetreeSpec
+  import opened MissingLibrary
+  import opened PivotBetreeSpec`Internal
+  import Pivots = PivotsLib
+
+  import MS = MapSpec
+  import Keyspace = MS.Keyspace
+
+  lemma ValidFlushWritesWFNodes(flush: NodeFlush)
+  requires ValidFlush(flush)
+  ensures forall i | 0 <= i < |FlushOps(flush)| :: WFNode(FlushOps(flush)[i].node)
+  {
+    var newparent := G.Node(
+        flush.parent.pivotTable,
+        Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
+        flush.parent.buckets[flush.slotIndex := map[]]
+      );
+    //var newchild := AddMessagesToNode(flush.child, flush.parent.buckets[flush.slotIndex]);
+
+    forall i | 0 <= i < |newparent.buckets|
+    ensures NodeHasWFBucketAt(newparent, i)
+    {
+      //if (i == flush.slotIndex) {
+      //  assert NodeHasWFBucketAt(newparent, i);
+      //} else {
+      assert NodeHasWFBucketAt(flush.parent, i);
+      //  assert NodeHasWFBucketAt(newparent, i);
+      //}
+    }
+
+    //assert WFNode(newparent);
+    //assert WFNode(newchild);
+  }
+
+  // This is useful for proving NodeHasWFBuckets(node')
+  // for indices over the given interval [a, b],
+  // assuming we already know the buckets and pivots come from some other
+  // well-formed node (possibly shifted by the amount d).
+  lemma NodeHasWFBucketAtIdenticalSlice(
+      node: G.Node, node': G.Node, a: int, b: int, d: int)
+  requires WFNode(node)
+  requires Pivots.WFPivots(node'.pivotTable)
+  requires Pivots.NumBuckets(node'.pivotTable) == |node'.buckets|
+  requires NodeHasWFBuckets(node)
+  requires 0 <= a
+  requires b < |node'.buckets|
+  requires a-d >= 0
+  requires b-d < |node.buckets|
+  requires forall i | a <= i <= b :: node'.buckets[i] == node.buckets[i-d]
+  requires forall i | a <= i < b :: node'.pivotTable[i] == node.pivotTable[i-d]
+  requires b >= a && b < |node'.pivotTable| ==>
+      b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d]
+  requires b >= a && a-1 >= 0 ==>
+      a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d]
+  ensures forall i | a <= i <= b :: NodeHasWFBucketAt(node', i)
+  {
+    forall i | a <= i <= b
+    ensures NodeHasWFBucketAt(node', i)
+    {
+      assert NodeHasWFBucketAt(node, i - d);
+      forall key | key in node'.buckets[i]
+      {
+        Pivots.RouteIs(node'.pivotTable, key, i);
+      }
+    }
+  }
+
+  lemma ValidSplitWritesWFNodes(fusion: NodeFusion)
+  requires ValidSplit(fusion)
+  ensures forall i | 0 <= i < |SplitOps(fusion)| :: WFNode(SplitOps(fusion)[i].node)
+  {
+    var split_parent := fusion.split_parent;
+    var fused_parent := fusion.fused_parent;
+    var fused_child := fusion.fused_child;
+    var left_child := fusion.left_child;
+    var right_child := fusion.right_child;
+    var slot_idx := fusion.slot_idx;
+    var pivot := fusion.pivot;
+
+    Pivots.WFPivotsInsert(fused_parent.pivotTable, slot_idx, pivot);
+
+    NodeHasWFBucketAtIdenticalSlice(fused_parent, split_parent, 0, slot_idx - 1, 0);
+    NodeHasWFBucketAtIdenticalSlice(fused_parent, split_parent, slot_idx + 2, |split_parent.buckets| - 1, 1);
+
+    assert WFNode(split_parent);
+
+    Pivots.WFSlice(fused_child.pivotTable, 0, fusion.num_children_left - 1);
+    Pivots.WFSuffix(fused_child.pivotTable, fusion.num_children_left);
+
+    NodeHasWFBucketAtIdenticalSlice(fused_child, left_child, 0, |left_child.buckets| - 1, 0);
+    NodeHasWFBucketAtIdenticalSlice(fused_child, right_child, 0, |right_child.buckets| - 1, -fusion.num_children_left);
+
+    assert WFNode(left_child);
+    assert WFNode(right_child);
+  }
+
+  lemma ValidMergeWritesWFNodes(fusion: NodeFusion)
+  requires ValidMerge(fusion)
+  ensures forall i | 0 <= i < |MergeOps(fusion)| :: WFNode(MergeOps(fusion)[i].node)
+  {
+  }
 
   // This lemma is useful for BetreeBlockCache
-  lemma ValidStepWritesWFNodes(betreeStep: P.BetreeStep)
-  requires P.ValidBetreeStep(betreeStep)
-  ensures forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| :: P.WFNode(P.BetreeStepOps(betreeStep)[i].node)
+  lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
+  requires ValidBetreeStep(betreeStep)
+  ensures forall i | 0 <= i < |BetreeStepOps(betreeStep)| :: WFNode(BetreeStepOps(betreeStep)[i].node)
   {
-    // TODO
+    match betreeStep {
+      case BetreeQuery(q) => {}
+      case BetreeInsert(ins) => {}
+      case BetreeFlush(flush) => {
+        ValidFlushWritesWFNodes(flush);
+      }
+      case BetreeGrow(growth) => {}
+      case BetreeSplit(fusion) => {
+        ValidSplitWritesWFNodes(fusion);
+      }
+      case BetreeMerge(fusion) => {
+        ValidMergeWritesWFNodes(fusion);
+      }
+    }
   }
 }

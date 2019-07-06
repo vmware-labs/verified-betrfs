@@ -130,4 +130,29 @@ module PivotsLib {
       }
     }
   }
+
+  lemma RouteIdenticalForInsert(pt: PivotTable, pt': PivotTable, idx: int, i: int, key: Key)
+  requires WFPivots(pt)
+  requires WFPivots(pt')
+  requires 0 <= idx <= |pt|
+  requires pt' == insert(pt, key, idx)
+  requires Route(pt, key) == i
+  requires i < idx
+  ensures Route(pt', key) == i
+  {
+    RouteIs(pt', key, i);
+  }
+
+  lemma WFSlice(pt: PivotTable, i: int, j: int)
+  requires WFPivots(pt)
+  requires 0 <= i <= j <= |pt|
+  ensures WFPivots(pt[i .. j])
+  {
+    reveal_IsStrictlySorted();
+  }
+
+  lemma WFSuffix(pt: PivotTable, i: int)
+  requires WFPivots(pt)
+  requires 0 <= i <= |pt|
+  ensures WFPivots(pt[i .. ])
 }
