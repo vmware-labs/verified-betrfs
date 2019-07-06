@@ -1,6 +1,5 @@
-abstract module CrashSafeLog {
+module CrashSafeLog {
   import LS = LogSpec
-  import CrashTypes
 
   type Constants = LS.Constants
   datatype Variables = Variables(persistent: LS.Variables, ephemeral: LS.Variables)

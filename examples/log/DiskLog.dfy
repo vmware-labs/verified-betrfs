@@ -41,10 +41,22 @@ module DiskLog {
   datatype Sector = SuperblockSector(superblock: Superblock) | LogSector(element: Element)
 
   type DiskOp = D.DiskOp<LBAType.LBA, Sector>
+  type DiskVariables = D.Variables<LBAType.LBA, Sector>
 
-  predicate Init(k:Constants, s:Variables)
+  predicate Mkfs(k: Constants, disk_k: D.Constants, disk_s: DiskVariables)
+  {
+    && disk_s == D.Variables(map[SuperblockLBA() := SuperblockSector(Superblock(0))])
+  }
+
+  predicate Init(k: Constants, s: Variables)
   {
     s == Variables([], Unready, 0)
+  }
+
+  predicate SupersedesDisk(k: Constants, s: Variables)
+  {
+    && s.persistent.Ready?
+    && s.persistent.superblock.length <= |s.log|
   }
 
   predicate Query(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, result: Element)
@@ -77,8 +89,7 @@ module DiskLog {
 
   predicate Append(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, element: Element)
   {
-    && s.persistent.Ready?
-    && s.persistent.superblock.length <= |s.log|
+    && SupersedesDisk(k, s)
     && diskOp == D.NoDiskOp
     && s'.log == s.log + [element]
     && s'.persistent == s.persistent
@@ -89,8 +100,7 @@ module DiskLog {
   {
     var stagingIndex := L.Index(s.stagedLength);
 
-    && s.persistent.Ready?
-    && s.persistent.superblock.length <= |s.log|
+    && SupersedesDisk(k, s)
     && 0 <= stagingIndex.idx < |s.log| // maintained by invariant (not a runtime check)
     && diskOp == D.WriteOp(LBAType.indexToLBA(stagingIndex), LogSector(s.log[stagingIndex.idx]))
     && s'.log == s.log
@@ -102,8 +112,8 @@ module DiskLog {
   {
     var newSuperblock := Superblock(s.stagedLength);
 
-    && s.persistent.Ready?
-    && s.persistent.superblock.length <= |s.log|
+    && SupersedesDisk(k, s)
+    && s.stagedLength == |s.log| // partial syncs are not allowed by the CrashSafeLog model
     && diskOp == D.WriteOp(SuperblockLBA(), SuperblockSector(newSuperblock))
     && s'.log == s.log
     && s'.persistent == Ready(newSuperblock)
@@ -117,29 +127,29 @@ module DiskLog {
   }
 
   datatype Step =
-      | QueryStep(diskOp: DiskOp, idx: Index, result: Element)
-      | FetchSuperblockStep(diskOp: DiskOp, length: int)
-      | FetchElementStep(diskOp: DiskOp, idx: Index, element: Element)
-      | AppendStep(diskOp: DiskOp, element: Element)
-      | StageElementStep(diskOp: DiskOp)
-      | FlushStep(diskOp: DiskOp)
-      | StutterStep(diskOp: DiskOp)
+      | QueryStep(idx: Index, result: Element)
+      | FetchSuperblockStep(length: int)
+      | FetchElementStep(idx: Index, element: Element)
+      | AppendStep(element: Element)
+      | StageElementStep()
+      | FlushStep()
+      | StutterStep()
 
-  predicate NextStep(k:Constants, s:Variables, s':Variables, step:Step)
+  predicate NextStep(k:Constants, s:Variables, s':Variables, diskOp: DiskOp, step: Step)
   {
       match step {
-        case QueryStep(diskOp: DiskOp, idx: Index, result: Element) => Query(k, s, s', diskOp, idx, result)
-        case FetchSuperblockStep(diskOp: DiskOp, length: int) => FetchSuperblock(k, s, s', diskOp, length)
-        case FetchElementStep(diskOp: DiskOp, idx: Index, element: Element) => FetchElement(k, s, s', diskOp, idx, element)
-        case AppendStep(diskOp: DiskOp, element: Element) => Append(k, s, s', diskOp, element)
-        case StageElementStep(diskOp: DiskOp) => StageElement(k, s, s', diskOp)
-        case FlushStep(diskOp: DiskOp) => Flush(k, s, s', diskOp)
-        case StutterStep(diskOp: DiskOp) => Stutter(k, s, s', diskOp)
+        case QueryStep(idx: Index, result: Element) => Query(k, s, s', diskOp, idx, result)
+        case FetchSuperblockStep(length: int) => FetchSuperblock(k, s, s', diskOp, length)
+        case FetchElementStep(idx: Index, element: Element) => FetchElement(k, s, s', diskOp, idx, element)
+        case AppendStep(element: Element) => Append(k, s, s', diskOp, element)
+        case StageElementStep() => StageElement(k, s, s', diskOp)
+        case FlushStep() => Flush(k, s, s', diskOp)
+        case StutterStep() => Stutter(k, s, s', diskOp)
       }
   }
 
-  predicate Next(k:Constants, s:Variables, s':Variables)
+  predicate Next(k:Constants, s:Variables, s':Variables, diskOp: DiskOp)
   {
-      exists step :: NextStep(k, s, s', step)
+      exists step :: NextStep(k, s, s', diskOp, step)
   }
 }
