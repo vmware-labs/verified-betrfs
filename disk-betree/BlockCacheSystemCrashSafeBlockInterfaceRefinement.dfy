@@ -5,7 +5,7 @@ include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "PivotBetreeSpec.dfy"
 
-module BetreeGraphBlockCache refines BlockCache {
+module {:extern} BetreeGraphBlockCache refines BlockCache {
   import G = PivotBetreeGraph
 }
 

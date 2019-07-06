@@ -271,8 +271,7 @@ module {:extern} Impl refines Main {
         // TODO need a proper stutter step
         assert M.Next(Ik(k), s, s',
           if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-          IDiskOp(io.diskOp()),
-          M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
+          IDiskOp(io.diskOp()));
       }
     }
   }
