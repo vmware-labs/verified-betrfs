@@ -196,7 +196,7 @@ module PivotBetreeSpec {
     && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
-  function NodeLookup(node: Node, key: Key) : Message
+  function method NodeLookup(node: Node, key: Key) : Message
   requires WFNode(node)
   {
     BucketLookup(node.buckets[Pivots.Route(node.pivotTable, key)], key)

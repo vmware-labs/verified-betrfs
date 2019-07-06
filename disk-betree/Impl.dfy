@@ -8,8 +8,10 @@ module {:extern} Impl refines Main {
   import M = BetreeBlockCache
   import Marshalling
   import Messages = ValueMessage
+  import Pivots = PivotsLib
 
   import opened Maps
+  import opened Sequences
 
   type Variables = M.Variables
   type Constants = M.Constants
@@ -169,40 +171,116 @@ module {:extern} Impl refines Main {
   method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
   returns (s': Variables, res: Option<MS.Value>)
   requires io.initialized()
+  requires M.Inv(k, s)
   modifies io
   ensures M.Next(Ik(k), s, s',
     if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
     IDiskOp(io.diskOp()))
-    /*
   {
     if (s.Unready?) {
       s' := PageInSuperblock(k, s, io);
+      res := None;
     } else {
       var ref := BT.G.Root();
       var msg := Messages.IdentityMessage();
       ghost var lookup := [];
 
-      while !msg.Define?
+      // TODO if we have the acyclicity invariant, we can prove
+      // termination without a bound like this.
+      var loopBound := 40;
+      ghost var exiting := false;
+
+      while !msg.Define? && loopBound > 0
+      invariant |lookup| == 0 ==> ref == BT.G.Root()
+      invariant msg.Define? ==> |lookup| > 0
+      invariant |lookup| > 0 ==> BT.WFLookupForKey(lookup, key)
+      invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.Some?
+      invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref
+      invariant forall i | 0 <= i < |lookup| :: MapsTo(s.cache, lookup[i].ref, lookup[i].node)
+      invariant ref in s.ephemeralSuperblock.graph
+      invariant !exiting ==> msg == BT.InterpretLookup(lookup, key)
       {
+        assert !exiting;
+        loopBound := loopBound - 1;
+
         if (ref !in s.cache) {
           s' := PageIn(k, s, io, ref);
-          value := None;
+          res := None;
+
+          exiting := true;
           return;
         } else {
+          ghost var lookup' := lookup;
+
           var node := s.cache[ref];
           lookup := lookup + [BT.G.ReadOp(ref, node)];
-          msg := Messages.MergeMessages(msg, 
+          msg := Messages.Merge(msg, BT.NodeLookup(node, key));
+
+          forall idx | BT.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1
+          ensures BT.LookupFollowsChildRefAtLayer(key, lookup, idx)
+          {
+            if idx == |lookup| - 2 {
+              assert BT.LookupFollowsChildRefAtLayer(key, lookup, idx);
+            } else {
+              assert BT.LookupFollowsChildRefAtLayer(key, lookup', idx);
+              assert BT.LookupFollowsChildRefAtLayer(key, lookup, idx);
+            }
+          }
+          assert BT.LookupFollowsChildRefs(key, lookup);
+
+          if (node.children.Some?) {
+            ref := node.children.value[Pivots.Route(node.pivotTable, key)];
+            assert ref in BT.G.Successors(node);
+            assert ref in s.ephemeralSuperblock.graph;
+          } else {
+            if !msg.Define? {
+              // Case where we reach leaf and find nothing
+              s' := s;
+              res := Some(MS.V.DefaultValue());
+
+              assert M.NextStep(Ik(k), s, s',
+                if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+                IDiskOp(io.diskOp()),
+                M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
+
+              exiting := true;
+              return;
+            }
+          }
         }
       }
 
       if msg.Define? {
         s' := s;
-        value := msg.value;
+        res := Some(msg.value);
+
+        assert BT.ValidQuery(BT.LookupQuery(key, res.value, lookup));
+        assert M.BetreeMove(Ik(k), s, s',
+          UI.GetOp(key, res.value),
+          IDiskOp(io.diskOp()),
+          BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
+        assert M.NextStep(Ik(k), s, s',
+          if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+          IDiskOp(io.diskOp()),
+          M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
       } else {
+        // loop bound exceeded; do nothing :/
         s' := s;
-        value := MS.ValueWithDefault.DefaultValue();
+        res := None;
+
+        // TODO need a proper stutter step
+        assert M.Next(Ik(k), s, s',
+          if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+          IDiskOp(io.diskOp()),
+          M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
       }
     }
+  }
+
+  /*
+  lemma validQuery(lookup: BT.Lookup, key: Key, value: Value)
+  requires BT.WFLookupForKey(lookup, key)
+  {
   }
   */
 
@@ -244,7 +322,6 @@ module {:extern} Impl refines Main {
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
-  /*
   {
     var s := hs.s;
     var s', value := query(k, s, io, key);
@@ -253,7 +330,6 @@ module {:extern} Impl refines Main {
     hs.s := s';
     v := value;
   }
-  */
 
   method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (success: bool)
