@@ -113,6 +113,16 @@ module Sequences {
     s[..pos] + [a, b] + s[pos+1..]
   }
 
+  function method {:opaque} replace2with1<A>(s: seq<A>, a: A, pos: int) : seq<A>
+  requires 0 <= pos < |s| - 1;
+  ensures |replace2with1(s,a,pos)| == |s| - 1;
+  ensures forall i :: 0 <= i < pos ==> replace2with1(s, a, pos)[i] == s[i];
+  ensures forall i :: pos < i < |s| - 1 ==> replace2with1(s, a, pos)[i] == s[i+1];
+  ensures replace2with1(s, a, pos)[pos] == a;
+  {
+    s[..pos] + [a] + s[pos+2..]
+  }
+
   function method {:opaque} concat<A>(a: seq<A>, b: seq<A>) : seq<A>
   ensures |concat(a,b)| == |a| + |b|
   ensures forall i :: 0 <= i < |a| ==> a[i] == concat(a,b)[i];

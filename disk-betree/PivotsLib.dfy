@@ -148,11 +148,38 @@ module PivotsLib {
   requires 0 <= i <= j <= |pt|
   ensures WFPivots(pt[i .. j])
   {
-    reveal_IsStrictlySorted();
+    Keyspace.reveal_IsStrictlySorted();
+
+    if (i < j) {
+      var e := Keyspace.SmallerElement(pt[0]);
+      assert Keyspace.lte(pt[0], pt[i]);
+      Keyspace.IsNotMinimum(e, pt[i]);
+    }
   }
 
   lemma WFSuffix(pt: PivotTable, i: int)
   requires WFPivots(pt)
   requires 0 <= i <= |pt|
   ensures WFPivots(pt[i .. ])
+
+  lemma WFConcat3(left: PivotTable, key: Key, right: PivotTable)
+  requires WFPivots(left)
+  requires WFPivots(right)
+  requires |left| > 0 ==> Keyspace.lt(left[|left|-1], key)
+  requires |right| > 0 ==> Keyspace.lt(key, right[0])
+  requires Keyspace.NotMinimum(key)
+  ensures WFPivots(concat3(left, key, right))
+
+  function method {:opaque} CutoffForLeft(pivots: PivotTable, pivot: Key) : int
+  ensures 0 <= CutoffForLeft(pivots, pivot) <= |pivots|
+  ensures forall i | 0 <= i < CutoffForLeft(pivots, pivot) :: Keyspace.lt(pivots[i], pivot);
+  ensures forall i | CutoffForLeft(pivots, pivot) <= i < |pivots| :: Keyspace.lte(pivot, pivots[i]);
+
+  function method {:opaque} CutoffForRight(pivots: PivotTable, pivot: Key) : int
+  ensures 0 <= CutoffForRight(pivots, pivot) <= |pivots|
+  ensures forall i | 0 <= i < CutoffForRight(pivots, pivot) :: Keyspace.lte(pivots[i], pivot);
+  ensures forall i | CutoffForRight(pivots, pivot) <= i < |pivots| :: Keyspace.lt(pivot, pivots[i]);
+  {
+    Route(pivots, pivot)
+  }
 }
