@@ -412,17 +412,15 @@ module PivotBetreeSpec {
         fusion.split_parent.pivotTable[fusion.slot_idx])
   }
 
-  /*
-  function SplitBucketLeft(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
+  function method SplitBucketLeft(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
   {
     map key | key in bucket && Keyspace.lt(key, pivot) :: bucket[key]
   }
 
-  function SplitBucketRight(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
+  function method SplitBucketRight(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
   {
     map key | key in bucket && Keyspace.lte(pivot, key) :: bucket[key]
   }
-  */
 
   predicate ValidSplit(fusion: NodeFusion)
   {
@@ -485,6 +483,30 @@ module PivotBetreeSpec {
     ]
   }
 
+  // Stuff for cutting up nodes
+
+  function method {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
+  requires WFNode(node)
+  ensures node.children.Some? <==> node'.children.Some?
+  {
+    var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
+    var leftPivots := node.pivotTable[.. cLeft];
+    var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
+    var leftBuckets := node.buckets[.. cLeft] + [SplitBucketLeft(node.buckets[cLeft], pivot)];
+    Node(leftPivots, leftChildren, leftBuckets)
+  }
+
+  function method {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
+  requires WFNode(node)
+  ensures node.children.Some? <==> node'.children.Some?
+  {
+    var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
+    var rightPivots := node.pivotTable[cRight ..];
+    var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
+    var rightBuckets := [SplitBucketRight(node.buckets[cRight], pivot)] + node.buckets[cRight + 1 ..];
+    Node(rightPivots, rightChildren, rightBuckets)
+  }
+
   //// Merge
 
   predicate ValidMerge(fusion: NodeFusion)
@@ -498,28 +520,31 @@ module PivotBetreeSpec {
     && fusion.split_parent.children.Some?
     && fusion.split_parent.children.value[fusion.slot_idx] == fusion.left_childref
     && fusion.split_parent.children.value[fusion.slot_idx + 1] == fusion.right_childref
+    && fusion.split_parent.buckets[fusion.slot_idx] == map[]
+    && fusion.split_parent.buckets[fusion.slot_idx + 1] == map[]
 
     // TODO require bucket to be empty before merge?
-    /*
     && fusion.fused_parent == Node(
       remove(fusion.split_parent.pivotTable, fusion.slot_idx),
-      Some(replace2with1(fusion.split_parent.children.value, fusion.split_childref, fusion.slot_idx)),
-      replace2with1(fusion.split_parent.buckets, MergeBuckets(fusion.split_parent.buckets[fusion.slot_idx], fusion.split_parent.buckets[fusion.slot_idx + 1], fusion.pivot))
+      Some(replace2with1(fusion.split_parent.children.value, fusion.fused_childref, fusion.slot_idx)),
+      replace2with1(fusion.split_parent.buckets, map[], fusion.slot_idx)
     )
-    */
 
     // this is actually an invariant which follows from fixed height of the tree,
     // but we currently don't track that as an invariant... should we?
     && (fusion.left_child.children.Some? ==> fusion.right_child.children.Some?)
     && (fusion.left_child.children.None? ==> fusion.right_child.children.None?)
 
+    && var left := CutoffNodeAndKeepLeft(fusion.left_child, fusion.pivot);
+    && var right := CutoffNodeAndKeepRight(fusion.right_child, fusion.pivot);
+
     // TODO this isn't quite right:
     // we need to cut out every key > pivot in leftChild
     // and likewise cut out every key < pivot in rightChild
     && fusion.fused_child == Node(
-      concat3(fusion.left_child.pivotTable, fusion.pivot, fusion.right_child.pivotTable),
-      if fusion.left_child.children.Some? then Some(fusion.left_child.children.value + fusion.right_child.children.value) else None,
-      fusion.left_child.buckets + fusion.right_child.buckets
+      concat3(left.pivotTable, fusion.pivot, right.pivotTable),
+      if left.children.Some? then Some(left.children.value + right.children.value) else None,
+      left.buckets + right.buckets
     )
   }
 
@@ -610,6 +635,7 @@ module PivotBetreeSpecWFNodes {
 
   import MS = MapSpec
   import Keyspace = MS.Keyspace
+  type Key = Keyspace.Element
 
   lemma ValidFlushWritesWFNodes(flush: NodeFlush)
   requires ValidFlush(flush)
@@ -699,10 +725,45 @@ module PivotBetreeSpecWFNodes {
     assert WFNode(right_child);
   }
 
+  lemma WFCutoffNodeAndKeepLeft(node: G.Node, pivot: Key)
+  requires WFNode(node)
+  ensures WFNode(CutoffNodeAndKeepLeft(node, pivot))
+  {
+  }
+
+  lemma WFCutoffNodeAndKeepRight(node: G.Node, pivot: Key)
+  requires WFNode(node)
+  ensures WFNode(CutoffNodeAndKeepRight(node, pivot))
+  {
+  }
+
   lemma ValidMergeWritesWFNodes(fusion: NodeFusion)
   requires ValidMerge(fusion)
   ensures forall i | 0 <= i < |MergeOps(fusion)| :: WFNode(MergeOps(fusion)[i].node)
   {
+    var split_parent := fusion.split_parent;
+    var fused_parent := fusion.fused_parent;
+    var fused_child := fusion.fused_child;
+    var left_child := CutoffNodeAndKeepLeft(fusion.left_child, fusion.pivot);
+    var right_child := CutoffNodeAndKeepRight(fusion.right_child, fusion.pivot);
+    var slot_idx := fusion.slot_idx;
+    var pivot := fusion.pivot;
+
+    WFCutoffNodeAndKeepLeft(fusion.left_child, fusion.pivot);
+    WFCutoffNodeAndKeepRight(fusion.right_child, fusion.pivot);
+
+    Pivots.WFPivotsRemoved(split_parent.pivotTable, slot_idx);
+
+    NodeHasWFBucketAtIdenticalSlice(split_parent, fused_parent, 0, slot_idx - 1, 0);
+    NodeHasWFBucketAtIdenticalSlice(split_parent, fused_parent, slot_idx + 1, |fused_parent.buckets| - 1, -1);
+
+    assert WFNode(fused_parent);
+    Pivots.WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
+
+    NodeHasWFBucketAtIdenticalSlice(left_child, fused_child, 0, |left_child.buckets| - 1, 0);
+    NodeHasWFBucketAtIdenticalSlice(right_child, fused_child, |left_child.buckets|, |fused_child.buckets| - 1, |left_child.buckets|);
+
+    assert WFNode(fused_child);
   }
 
   // This lemma is useful for BetreeBlockCache
