@@ -34,27 +34,89 @@ namespace Impl_Compile {
   }
 }
 
-class Framework {
-  public static void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
-    __default.InitState(out var k, out var hs);
-    DiskIOHandler io = new DiskIOHandler();
+class Application {
+  // TODO hard-coding these types is annoying... is there another option?
+  public BetreeGraphBlockCache_Compile.Constants k;
+  public Impl_Compile.ImplHeapState hs;
+
+  public DiskIOHandler io;
+
+  public Application() {
+    initialize();
+  }
+
+  public void initialize() {
+    __default.InitState(out k, out hs);
+    io = new DiskIOHandler();
+  }
+
+  public void crash() {
+    Console.WriteLine("'crashing' and reinitializing");
+    Console.WriteLine("");
+    initialize();
+  }
+
+  public void Insert(string key, string val) {
+    Console.WriteLine("Insert (\"" + key + "\", \"" + val + "\")");
+
+    Dafny.Sequence<byte> key_bytes = new Dafny.Sequence<byte>(string_to_bytes(key));
+    Dafny.Sequence<byte> val_bytes = new Dafny.Sequence<byte>(string_to_bytes(val));
 
     for (int i = 0; i < 50; i++) {
-      __default.handleInsert(k, hs, io, key, val, out bool success);
+      __default.handleInsert(k, hs, io, key_bytes, val_bytes, out bool success);
       if (success) {
         Console.WriteLine("doing insert... success!");
+        Console.WriteLine("");
         return;
       } else {
         Console.WriteLine("doing insert...");
       }
     }
     Console.WriteLine("giving up");
+    throw new Exception("operation didn't finish");
   }
 
+  public void Query(string key) {
+    Console.WriteLine("Query \"" + key + "\"");
+
+    Dafny.Sequence<byte> key_bytes = new Dafny.Sequence<byte>(string_to_bytes(key));
+
+    for (int i = 0; i < 50; i++) {
+      __default.handleQuery(k, hs, io, key_bytes, out var result);
+      if (result.is_Some) {
+        byte[] val_bytes = result.dtor_value.Elements;
+        string val = bytes_to_string(val_bytes);
+        Console.WriteLine("doing query... success! Query result is: \"" + val + "\"");
+        Console.WriteLine("");
+        return;
+      } else {
+        Console.WriteLine("doing query...");
+      }
+    }
+    Console.WriteLine("giving up");
+    throw new Exception("operation didn't finish");
+  }
+
+  public static byte[] string_to_bytes(string s) {
+    return System.Text.Encoding.UTF8.GetBytes(s);
+  }
+
+  public static string bytes_to_string(byte[] bytes) {
+    return System.Text.Encoding.UTF8.GetString(bytes);
+  }
+}
+
+class Framework {
   public static void Run() {
-    byte[] k = {1, 5, 10};
-    byte[] v = {100, 11, 11, 14, 17};
-    Insert(new Dafny.Sequence<byte>(k), new Dafny.Sequence<byte>(v));
+    Application app = new Application();
+    app.Insert("abc", "def");
+    app.Insert("xyq", "rawr");
+    app.Query("abc");
+    app.Query("xyq");
+    app.Query("blahblah");
+    app.crash();
+    app.Query("abc");
+    app.Query("xyq");
   }
 
   public static void Mkfs() {
