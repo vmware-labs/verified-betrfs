@@ -485,25 +485,106 @@ module PivotBetreeSpec {
 
   // Stuff for cutting up nodes
 
+  // This is useful for proving NodeHasWFBuckets(node')
+  // for indices over the given interval [a, b],
+  // assuming we already know the buckets and pivots come from some other
+  // well-formed node (possibly shifted by the amount d).
+  lemma NodeHasWFBucketAtIdenticalSlice(
+      node: G.Node, node': G.Node, a: int, b: int, d: int)
+  requires WFNode(node)
+  requires Pivots.WFPivots(node'.pivotTable)
+  requires Pivots.NumBuckets(node'.pivotTable) == |node'.buckets|
+  requires NodeHasWFBuckets(node)
+  requires 0 <= a
+  requires b < |node'.buckets|
+  requires a-d >= 0
+  requires b-d < |node.buckets|
+  requires forall i | a <= i <= b :: node'.buckets[i] == node.buckets[i-d]
+  requires forall i | a <= i < b :: node'.pivotTable[i] == node.pivotTable[i-d]
+  requires b >= a && b < |node'.pivotTable| ==>
+      b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d]
+  requires b >= a && a-1 >= 0 ==>
+      a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d]
+  ensures forall i | a <= i <= b :: NodeHasWFBucketAt(node', i)
+  {
+    forall i | a <= i <= b
+    ensures NodeHasWFBucketAt(node', i)
+    {
+      assert NodeHasWFBucketAt(node, i - d);
+      forall key | key in node'.buckets[i]
+      {
+        Pivots.RouteIs(node'.pivotTable, key, i);
+      }
+    }
+  }
+
+  lemma WFSplitBucketLeft(bucket: Bucket, pivot: Key, pivots: seq<Key>, i: int)
+  requires 0 <= i <= |pivots|
+  requires Pivots.WFPivots(pivots)
+  requires WFBucket(bucket, pivots, i)
+  ensures Pivots.WFPivots(pivots[.. i])
+  ensures WFBucket(SplitBucketLeft(bucket, pivot), pivots[.. i], i)
+  {
+    Pivots.WFSlice(pivots, 0, i);
+    forall key | key in SplitBucketLeft(bucket, pivot)
+    ensures Pivots.Route(pivots[.. i], key) == i
+    {
+      Pivots.RouteIs(pivots[.. i], key, i);
+    }
+  }
+
+  lemma WFSplitBucketRight(bucket: Bucket, pivot: Key, pivots: seq<Key>, i: int)
+  requires 0 <= i <= |pivots|
+  requires Pivots.WFPivots(pivots)
+  requires WFBucket(bucket, pivots, i)
+  ensures Pivots.WFPivots(pivots[i ..])
+  ensures WFBucket(SplitBucketRight(bucket, pivot), pivots[i ..], 0)
+  {
+    Pivots.WFSuffix(pivots, i);
+    forall key | key in SplitBucketRight(bucket, pivot)
+    ensures Pivots.Route(pivots[i ..], key) == 0
+    {
+      Pivots.RouteIs(pivots[i ..], key, 0);
+    }
+  }
+
   function method {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
+  ensures WFNode(node')
+  ensures |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), pivot)
   {
     var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
     var leftBuckets := node.buckets[.. cLeft] + [SplitBucketLeft(node.buckets[cLeft], pivot)];
+
+    //Pivots.WFSlice(node.pivotTable, 0, cLeft);
+    assert NodeHasWFBucketAt(node, cLeft);
+    WFSplitBucketLeft(node.buckets[cLeft], pivot, node.pivotTable, cLeft);
+    //assert WFBucket(SplitBucketLeft(node.buckets[cLeft], pivot), leftPivots, cLeft);
+    //assert WFBucket(leftBuckets[cLeft], leftPivots, cLeft);
+    NodeHasWFBucketAtIdenticalSlice(node, Node(leftPivots, leftChildren, leftBuckets), 0, cLeft - 1, 0);
+
     Node(leftPivots, leftChildren, leftBuckets)
   }
 
   function method {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
+  ensures WFNode(node')
+  ensures |node'.pivotTable| > 0 ==> Keyspace.lt(pivot, node'.pivotTable[0])
   {
     var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
     var rightBuckets := [SplitBucketRight(node.buckets[cRight], pivot)] + node.buckets[cRight + 1 ..];
+
+    assert NodeHasWFBucketAt(node, cRight);
+    WFSplitBucketRight(node.buckets[cRight], pivot, node.pivotTable, cRight);
+    NodeHasWFBucketAtIdenticalSlice(node, Node(rightPivots, rightChildren, rightBuckets),
+      1, |rightBuckets| - 1, -cRight);
+
     Node(rightPivots, rightChildren, rightBuckets)
   }
 
@@ -663,39 +744,6 @@ module PivotBetreeSpecWFNodes {
     //assert WFNode(newchild);
   }
 
-  // This is useful for proving NodeHasWFBuckets(node')
-  // for indices over the given interval [a, b],
-  // assuming we already know the buckets and pivots come from some other
-  // well-formed node (possibly shifted by the amount d).
-  lemma NodeHasWFBucketAtIdenticalSlice(
-      node: G.Node, node': G.Node, a: int, b: int, d: int)
-  requires WFNode(node)
-  requires Pivots.WFPivots(node'.pivotTable)
-  requires Pivots.NumBuckets(node'.pivotTable) == |node'.buckets|
-  requires NodeHasWFBuckets(node)
-  requires 0 <= a
-  requires b < |node'.buckets|
-  requires a-d >= 0
-  requires b-d < |node.buckets|
-  requires forall i | a <= i <= b :: node'.buckets[i] == node.buckets[i-d]
-  requires forall i | a <= i < b :: node'.pivotTable[i] == node.pivotTable[i-d]
-  requires b >= a && b < |node'.pivotTable| ==>
-      b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d]
-  requires b >= a && a-1 >= 0 ==>
-      a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d]
-  ensures forall i | a <= i <= b :: NodeHasWFBucketAt(node', i)
-  {
-    forall i | a <= i <= b
-    ensures NodeHasWFBucketAt(node', i)
-    {
-      assert NodeHasWFBucketAt(node, i - d);
-      forall key | key in node'.buckets[i]
-      {
-        Pivots.RouteIs(node'.pivotTable, key, i);
-      }
-    }
-  }
-
   lemma ValidSplitWritesWFNodes(fusion: NodeFusion)
   requires ValidSplit(fusion)
   ensures forall i | 0 <= i < |SplitOps(fusion)| :: WFNode(SplitOps(fusion)[i].node)
@@ -725,18 +773,6 @@ module PivotBetreeSpecWFNodes {
     assert WFNode(right_child);
   }
 
-  lemma WFCutoffNodeAndKeepLeft(node: G.Node, pivot: Key)
-  requires WFNode(node)
-  ensures WFNode(CutoffNodeAndKeepLeft(node, pivot))
-  {
-  }
-
-  lemma WFCutoffNodeAndKeepRight(node: G.Node, pivot: Key)
-  requires WFNode(node)
-  ensures WFNode(CutoffNodeAndKeepRight(node, pivot))
-  {
-  }
-
   lemma ValidMergeWritesWFNodes(fusion: NodeFusion)
   requires ValidMerge(fusion)
   ensures forall i | 0 <= i < |MergeOps(fusion)| :: WFNode(MergeOps(fusion)[i].node)
@@ -749,19 +785,20 @@ module PivotBetreeSpecWFNodes {
     var slot_idx := fusion.slot_idx;
     var pivot := fusion.pivot;
 
-    WFCutoffNodeAndKeepLeft(fusion.left_child, fusion.pivot);
-    WFCutoffNodeAndKeepRight(fusion.right_child, fusion.pivot);
-
     Pivots.WFPivotsRemoved(split_parent.pivotTable, slot_idx);
 
     NodeHasWFBucketAtIdenticalSlice(split_parent, fused_parent, 0, slot_idx - 1, 0);
     NodeHasWFBucketAtIdenticalSlice(split_parent, fused_parent, slot_idx + 1, |fused_parent.buckets| - 1, -1);
 
     assert WFNode(fused_parent);
+    Pivots.PivotNotMinimum(split_parent.pivotTable, slot_idx);
     Pivots.WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
 
-    NodeHasWFBucketAtIdenticalSlice(left_child, fused_child, 0, |left_child.buckets| - 1, 0);
-    NodeHasWFBucketAtIdenticalSlice(right_child, fused_child, |left_child.buckets|, |fused_child.buckets| - 1, |left_child.buckets|);
+    NodeHasWFBucketAtIdenticalSlice(left_child, fused_child, 0, |left_child.buckets| - 2, 0);
+    NodeHasWFBucketAtIdenticalSlice(right_child, fused_child, |left_child.buckets| + 1, |fused_child.buckets| - 1, |left_child.buckets|);
+
+    assert NodeHasWFBucketAt(fused_child, |left_child.buckets| - 1);
+    assert NodeHasWFBucketAt(fused_child, |left_child.buckets|);
 
     assert WFNode(fused_child);
   }
