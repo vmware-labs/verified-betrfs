@@ -182,4 +182,14 @@ module PivotsLib {
   {
     Route(pivots, pivot)
   }
+
+  lemma PivotNotMinimum(pivots: PivotTable, i: int)
+  requires WFPivots(pivots)
+  requires 0 <= i < |pivots|
+  ensures Keyspace.NotMinimum(pivots[i])
+  {
+    reveal_IsStrictlySorted();
+    var e := Keyspace.SmallerElement(pivots[0]);
+    assert Keyspace.lte(pivots[0], pivots[i]);
+  }
 }
