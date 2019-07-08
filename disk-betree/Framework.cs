@@ -56,6 +56,23 @@ class Application {
     initialize();
   }
 
+  public void Sync() {
+    Console.WriteLine("Sync");
+
+    for (int i = 0; i < 50; i++) {
+      __default.handleSync(k, hs, io, out bool success);
+      if (success) {
+        Console.WriteLine("doing sync... success!");
+        Console.WriteLine("");
+        return;
+      } else {
+        Console.WriteLine("doing sync...");
+      }
+    }
+    Console.WriteLine("giving up");
+    throw new Exception("operation didn't finish");
+  }
+
   public void Insert(string key, string val) {
     Console.WriteLine("Insert (\"" + key + "\", \"" + val + "\")");
 
@@ -114,6 +131,13 @@ class Framework {
     app.Query("abc");
     app.Query("xyq");
     app.Query("blahblah");
+    app.crash();
+    app.Query("abc");
+    app.Query("xyq");
+
+    app.Insert("abc", "def");
+    app.Insert("xyq", "rawr");
+    app.Sync();
     app.crash();
     app.Query("abc");
     app.Query("xyq");

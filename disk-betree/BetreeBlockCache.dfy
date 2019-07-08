@@ -72,7 +72,7 @@ module BetreeBlockCache refines Machine {
     match step {
       case BetreeMoveStep(step) => BetreeMove(k, s, s', uiop, dop, step)
       case BlockCacheMoveStep(step) => BlockCacheMove(k, s, s', uiop, dop, step)
-      case StutterStep => uiop.NoOp? && s == s'
+      case StutterStep => uiop.NoOp? && s == s' && dop.NoDiskOp?
     }
   }
 
