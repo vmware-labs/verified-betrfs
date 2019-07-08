@@ -608,12 +608,13 @@ module Marshalling {
   requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
   requires sector.SectorBlock? ==> BT.WFNode(sector.block);
   ensures data != null ==> parseSector(data[..]) == Some(sector)
+  ensures data != null ==> data.Length <= 1024*1024
   {
     var v := sectorToVal(sector);
     match v {
       case None => return null;
       case Some(v) => {
-        if (SizeOfV(v) < 0x1_0000_0000_0000_0000) {
+        if (SizeOfV(v) <= 0x1_00000) {
           var data := Marshall(v, SectorGrammar());
           reveal_parseSector();
           return data;
