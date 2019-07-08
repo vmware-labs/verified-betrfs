@@ -187,6 +187,37 @@ module {:extern} Impl refines Main {
   }
   */
 
+  // note: I split this out because of sequence-related trigger loop problems
+  ghost method AugmentLookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: MS.Key, s: Variables)
+  returns (lookup' : seq<BT.G.ReadOp>)
+  requires s.Ready?
+  requires |lookup| > 0 ==> BT.WFLookupForKey(lookup, key)
+  requires forall i | 0 <= i < |lookup| :: MapsTo(s.cache, lookup[i].ref, lookup[i].node)
+  requires |lookup| == 0 ==> ref == BT.G.Root()
+  requires |lookup| > 0 ==> Last(lookup).node.children.Some?
+  requires |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref
+  requires BT.WFNode(node)
+  requires MapsTo(s.cache, ref, node);
+  ensures BT.WFLookupForKey(lookup', key)
+  ensures Last(lookup').node == node
+  ensures BT.InterpretLookup(lookup', key) == Messages.Merge(BT.InterpretLookup(lookup, key), BT.NodeLookup(node, key))
+  ensures forall i | 0 <= i < |lookup'| :: MapsTo(s.cache, lookup'[i].ref, lookup'[i].node)
+  {
+    lookup' := lookup + [BT.G.ReadOp(ref, node)];
+
+    forall idx | BT.ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
+    ensures BT.LookupFollowsChildRefAtLayer(key, lookup', idx)
+    {
+      if idx == |lookup'| - 2 {
+        assert BT.LookupFollowsChildRefAtLayer(key, lookup', idx);
+      } else {
+        assert BT.LookupFollowsChildRefAtLayer(key, lookup, idx);
+        assert BT.LookupFollowsChildRefAtLayer(key, lookup', idx);
+      }
+    }
+    assert BT.LookupFollowsChildRefs(key, lookup');
+  }
+
   method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
   returns (s': Variables, res: Option<MS.Value>)
   requires io.initialized()
@@ -218,6 +249,7 @@ module {:extern} Impl refines Main {
       invariant forall i | 0 <= i < |lookup| :: MapsTo(s.cache, lookup[i].ref, lookup[i].node)
       invariant ref in s.ephemeralSuperblock.graph
       invariant !exiting ==> msg == BT.InterpretLookup(lookup, key)
+      invariant io.initialized()
       {
         assert !exiting;
         loopBound := loopBound - 1;
@@ -229,23 +261,9 @@ module {:extern} Impl refines Main {
           exiting := true;
           return;
         } else {
-          ghost var lookup' := lookup;
-
           var node := s.cache[ref];
-          lookup := lookup + [BT.G.ReadOp(ref, node)];
+          lookup := AugmentLookup(lookup, ref, node, key, s); // ghost-y
           msg := Messages.Merge(msg, BT.NodeLookup(node, key));
-
-          forall idx | BT.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1
-          ensures BT.LookupFollowsChildRefAtLayer(key, lookup, idx)
-          {
-            if idx == |lookup| - 2 {
-              assert BT.LookupFollowsChildRefAtLayer(key, lookup, idx);
-            } else {
-              assert BT.LookupFollowsChildRefAtLayer(key, lookup', idx);
-              assert BT.LookupFollowsChildRefAtLayer(key, lookup, idx);
-            }
-          }
-          assert BT.LookupFollowsChildRefs(key, lookup);
 
           if (node.children.Some?) {
             ref := node.children.value[Pivots.Route(node.pivotTable, key)];
