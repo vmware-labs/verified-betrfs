@@ -120,6 +120,14 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma IsStrictlySortedImpliesLte(run: seq<Element>, i: int, j: int)
+  requires IsStrictlySorted(run)
+  requires 0 <= i <= j < |run|
+  ensures lte(run[i], run[j])
+  {
+    reveal_IsStrictlySorted();
+  }
+
   lemma IsStrictlySortedImpliesIsSorted(run: seq<Element>)
   requires IsStrictlySorted(run);
   ensures IsSorted(run);
