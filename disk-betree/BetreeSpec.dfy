@@ -378,6 +378,7 @@ abstract module BetreeSpec {
     | BetreeGrow(growth: RootGrowth)
     | BetreeSplit(fusion: NodeFusion)
     | BetreeMerge(fusion: NodeFusion)
+    | BetreeRedirect(redirect: Redirect)
 
   predicate ValidBetreeStep(step: BetreeStep)
   {
@@ -388,6 +389,7 @@ abstract module BetreeSpec {
       case BetreeGrow(growth) => ValidGrow(growth)
       case BetreeSplit(fusion) => ValidSplit(fusion)
       case BetreeMerge(fusion) => ValidMerge(fusion)
+      case BetreeRedirect(redirect) => ValidRedirect(redirect)
     }
   }
 
@@ -401,6 +403,7 @@ abstract module BetreeSpec {
       case BetreeGrow(growth) => GrowReads(growth)
       case BetreeSplit(fusion) => SplitReads(fusion)
       case BetreeMerge(fusion) => MergeReads(fusion)
+      case BetreeRedirect(redirect) => RedirectReads(redirect)
     }
   }
 
@@ -414,6 +417,7 @@ abstract module BetreeSpec {
       case BetreeGrow(growth) => GrowOps(growth)
       case BetreeSplit(fusion) => SplitOps(fusion)
       case BetreeMerge(fusion) => MergeOps(fusion)
+      case BetreeRedirect(redirect) => RedirectOps(redirect)
     }
   }
 
@@ -425,6 +429,7 @@ abstract module BetreeSpec {
       case BetreeGrow(growth) => uiop.NoOp?
       case BetreeSplit(fusion) => uiop.NoOp?
       case BetreeMerge(fusion) => uiop.NoOp?
+      case BetreeRedirect(redirect) => uiop.NoOp?
     }
   }
 }

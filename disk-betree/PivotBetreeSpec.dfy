@@ -336,7 +336,7 @@ module PivotBetreeSpec {
     fused_child: Node,
     left_child: Node,
     right_child: Node,
-    
+
     slot_idx: int,
     num_children_left: int,
     pivot: Key
