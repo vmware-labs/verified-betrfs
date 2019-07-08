@@ -324,7 +324,7 @@ module PivotBetreeSpec {
     [allocop, writeop]
   }
 
-  //// Split
+  //// Datatype for Split and Merge
 
   datatype NodeFusion = NodeFusion(
     parentref: Reference,
@@ -342,75 +342,7 @@ module PivotBetreeSpec {
     pivot: Key
   )
 
-  predicate BucketFusion(
-      fusedBucket: Bucket,
-      leftBucket: Bucket,
-      rightBucket: Bucket,
-      pivot: Key)
-  {
-    && (forall key | Keyspace.lt(key, pivot) :: MapsAgreeOnKey(fusedBucket, leftBucket, key))
-    && (forall key | Keyspace.lte(pivot, key) :: MapsAgreeOnKey(fusedBucket, rightBucket, key))
-  }
-
-  predicate PivotTableFusion(table: PivotTable, left: PivotTable, right: PivotTable, pivot: Key)
-  {
-    && table == concat3(left, pivot, right)
-  }
-
-  predicate ChildFusion(child: Node, left: Node, right: Node, pivot: Key)
-  {
-    && left.buckets + right.buckets == child.buckets
-    && (child.children.Some? ==>
-      && left.children.Some?
-      && right.children.Some?
-      && child.children.value == left.children.value + right.children.value
-     )
-    && (child.children.None? ==>
-      && left.children.None?
-      && right.children.None?
-     )
-    && PivotTableFusion(child.pivotTable, left.pivotTable, right.pivotTable, pivot)
-  }
-
-  // TODO get rid of this from the spec (or keep it around to use as proof tool?)
-  predicate ValidFusion(fusion: NodeFusion)
-  {
-    && WFNode(fusion.split_parent)
-    && WFNode(fusion.fused_parent)
-    && WFNode(fusion.fused_child)
-    && WFNode(fusion.left_child)
-    && WFNode(fusion.right_child)
-
-    && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
-    && |fusion.split_parent.buckets| == |fusion.fused_parent.buckets| + 1
-
-    && fusion.fused_parent.children.Some?
-    && fusion.split_parent.children.Some?
-
-    && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
-    && fusion.split_parent.children.value[fusion.slot_idx] == fusion.left_childref
-    && fusion.split_parent.children.value[fusion.slot_idx + 1] == fusion.right_childref
-    && BucketFusion(
-        fusion.fused_parent.buckets[fusion.slot_idx],
-        fusion.split_parent.buckets[fusion.slot_idx],
-        fusion.split_parent.buckets[fusion.slot_idx + 1],
-        fusion.split_parent.pivotTable[fusion.slot_idx])
-
-    && (forall i | 0 <= i < fusion.slot_idx :: fusion.fused_parent.children.value[i] == fusion.split_parent.children.value[i])
-    && (forall i | fusion.slot_idx < i < |fusion.fused_parent.children.value| :: fusion.fused_parent.children.value[i] == fusion.split_parent.children.value[i+1])
-
-    && (forall i | 0 <= i < fusion.slot_idx :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i])
-    && (forall i | fusion.slot_idx < i < |fusion.fused_parent.buckets| :: fusion.fused_parent.buckets[i] == fusion.split_parent.buckets[i+1])
-
-    && (forall i | 0 <= i < fusion.slot_idx :: fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i])
-    && (forall i | fusion.slot_idx <= i < |fusion.fused_parent.pivotTable| :: fusion.fused_parent.pivotTable[i] == fusion.split_parent.pivotTable[i+1])
-
-    && ChildFusion(
-        fusion.fused_child,
-        fusion.left_child,
-        fusion.right_child,
-        fusion.split_parent.pivotTable[fusion.slot_idx])
-  }
+  //// Useful functions and lemmas for Split, Merge (other redirects)
 
   function method SplitBucketLeft(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
   {
@@ -420,106 +352,6 @@ module PivotBetreeSpec {
   function method SplitBucketRight(bucket: map<Key, Message>, pivot: Key) : map<Key, Message>
   {
     map key | key in bucket && Keyspace.lte(pivot, key) :: bucket[key]
-  }
-
-  predicate ValidSplit(fusion: NodeFusion)
-  {
-    && WFNode(fusion.fused_parent)
-    && WFNode(fusion.fused_child)
-    && fusion.fused_parent.children.Some?
-    && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
-    && 1 <= fusion.num_children_left < |fusion.fused_child.buckets|
-    && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
-    && fusion.fused_child.pivotTable[fusion.num_children_left - 1] == fusion.pivot
-    && Pivots.Route(fusion.fused_parent.pivotTable, fusion.pivot) == fusion.slot_idx
-    && (fusion.slot_idx > 0 ==>
-        fusion.pivot != fusion.fused_parent.pivotTable[fusion.slot_idx - 1])
-    && Keyspace.NotMinimum(fusion.pivot)
-
-    // We require buffer to already be flushed.
-    && fusion.fused_parent.buckets[fusion.slot_idx] == map[]
-
-    && fusion.split_parent == Node(
-      insert(fusion.fused_parent.pivotTable, fusion.pivot, fusion.slot_idx),
-      Some(replace1with2(fusion.fused_parent.children.value, fusion.left_childref, fusion.right_childref, fusion.slot_idx)),
-      replace1with2(
-        fusion.fused_parent.buckets,
-        //SplitBucketLeft(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
-        //SplitBucketRight(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
-        map[],
-        map[],
-        fusion.slot_idx)
-    )
-
-    && fusion.left_child == Node(
-      fusion.fused_child.pivotTable[ .. fusion.num_children_left - 1 ],
-      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ .. fusion.num_children_left ]) else None,
-      fusion.fused_child.buckets[ .. fusion.num_children_left ]
-    )
-
-    && fusion.right_child == Node(
-      fusion.fused_child.pivotTable[ fusion.num_children_left .. ],
-      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ fusion.num_children_left .. ]) else None,
-      fusion.fused_child.buckets[ fusion.num_children_left .. ]
-    )
-  }
-
-  function SplitReads(fusion: NodeFusion) : seq<ReadOp>
-  requires ValidSplit(fusion)
-  {
-    [
-      ReadOp(fusion.parentref, fusion.fused_parent),
-      ReadOp(fusion.fused_childref, fusion.fused_child)
-    ]
-  }
-
-  function SplitOps(fusion: NodeFusion) : seq<Op>
-  requires ValidSplit(fusion)
-  {
-    [
-      G.AllocOp(fusion.left_childref, fusion.left_child),
-      G.AllocOp(fusion.right_childref, fusion.right_child),
-      G.WriteOp(fusion.parentref, fusion.split_parent)
-    ]
-  }
-
-  // Stuff for cutting up nodes
-
-  // This is useful for proving NodeHasWFBuckets(node')
-  // for indices over the given interval [a, b],
-  // assuming we already know the buckets and pivots come from some other
-  // well-formed node (possibly shifted by the amount d).
-  lemma NodeHasWFBucketAtIdenticalSlice(
-      node: G.Node, node': G.Node, a: int, b: int, d: int)
-  requires WFNode(node)
-  requires Pivots.WFPivots(node'.pivotTable)
-  requires Pivots.NumBuckets(node'.pivotTable) == |node'.buckets|
-  requires NodeHasWFBuckets(node)
-  requires 0 <= a
-  requires b < |node'.buckets|
-  requires a-d >= 0
-  requires b-d < |node.buckets|
-  requires forall i | a <= i <= b :: node'.buckets[i] == node.buckets[i-d]
-  requires forall i | a <= i < b :: node'.pivotTable[i] == node.pivotTable[i-d]
-  requires b >= a && b < |node'.pivotTable| ==> (
-      || (b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d])
-      || (forall key | key in node'.buckets[b] :: Keyspace.lt(key, node'.pivotTable[b]))
-    )
-  requires b >= a && a-1 >= 0 ==> (
-      || (a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d])
-      || (forall key | key in node'.buckets[a] :: Keyspace.lte(node'.pivotTable[a-1], key))
-    )
-  ensures forall i | a <= i <= b :: NodeHasWFBucketAt(node', i)
-  {
-    forall i | a <= i <= b
-    ensures NodeHasWFBucketAt(node', i)
-    {
-      assert NodeHasWFBucketAt(node, i - d);
-      forall key | key in node'.buckets[i]
-      {
-        Pivots.RouteIs(node'.pivotTable, key, i);
-      }
-    }
   }
 
   lemma WFSplitBucketLeft(bucket: Bucket, pivot: Key, pivots: seq<Key>, i: int)
@@ -594,6 +426,108 @@ module PivotBetreeSpec {
     Node(rightPivots, rightChildren, rightBuckets)
   }
 
+  // Stuff for cutting up nodes
+
+  // This is useful for proving NodeHasWFBuckets(node')
+  // for indices over the given interval [a, b],
+  // assuming we already know the buckets and pivots come from some other
+  // well-formed node (possibly shifted by the amount d).
+  lemma NodeHasWFBucketAtIdenticalSlice(
+      node: G.Node, node': G.Node, a: int, b: int, d: int)
+  requires WFNode(node)
+  requires Pivots.WFPivots(node'.pivotTable)
+  requires Pivots.NumBuckets(node'.pivotTable) == |node'.buckets|
+  requires NodeHasWFBuckets(node)
+  requires 0 <= a
+  requires b < |node'.buckets|
+  requires a-d >= 0
+  requires b-d < |node.buckets|
+  requires forall i | a <= i <= b :: node'.buckets[i] == node.buckets[i-d]
+  requires forall i | a <= i < b :: node'.pivotTable[i] == node.pivotTable[i-d]
+  requires b >= a && b < |node'.pivotTable| ==> (
+      || (b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d])
+      || (forall key | key in node'.buckets[b] :: Keyspace.lt(key, node'.pivotTable[b]))
+    )
+  requires b >= a && a-1 >= 0 ==> (
+      || (a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d])
+      || (forall key | key in node'.buckets[a] :: Keyspace.lte(node'.pivotTable[a-1], key))
+    )
+  ensures forall i | a <= i <= b :: NodeHasWFBucketAt(node', i)
+  {
+    forall i | a <= i <= b
+    ensures NodeHasWFBucketAt(node', i)
+    {
+      assert NodeHasWFBucketAt(node, i - d);
+      forall key | key in node'.buckets[i]
+      {
+        Pivots.RouteIs(node'.pivotTable, key, i);
+      }
+    }
+  }
+
+  //// Split
+
+  predicate ValidSplit(fusion: NodeFusion)
+  {
+    && WFNode(fusion.fused_parent)
+    && WFNode(fusion.fused_child)
+    && fusion.fused_parent.children.Some?
+    && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
+    && 1 <= fusion.num_children_left < |fusion.fused_child.buckets|
+    && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
+    && fusion.fused_child.pivotTable[fusion.num_children_left - 1] == fusion.pivot
+    && Pivots.Route(fusion.fused_parent.pivotTable, fusion.pivot) == fusion.slot_idx
+    && (fusion.slot_idx > 0 ==>
+        fusion.pivot != fusion.fused_parent.pivotTable[fusion.slot_idx - 1])
+    && Keyspace.NotMinimum(fusion.pivot)
+
+    // We require buffer to already be flushed.
+    && fusion.fused_parent.buckets[fusion.slot_idx] == map[]
+
+    && fusion.split_parent == Node(
+      insert(fusion.fused_parent.pivotTable, fusion.pivot, fusion.slot_idx),
+      Some(replace1with2(fusion.fused_parent.children.value, fusion.left_childref, fusion.right_childref, fusion.slot_idx)),
+      replace1with2(
+        fusion.fused_parent.buckets,
+        //SplitBucketLeft(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
+        //SplitBucketRight(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
+        map[],
+        map[],
+        fusion.slot_idx)
+    )
+
+    && fusion.left_child == Node(
+      fusion.fused_child.pivotTable[ .. fusion.num_children_left - 1 ],
+      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ .. fusion.num_children_left ]) else None,
+      fusion.fused_child.buckets[ .. fusion.num_children_left ]
+    )
+
+    && fusion.right_child == Node(
+      fusion.fused_child.pivotTable[ fusion.num_children_left .. ],
+      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ fusion.num_children_left .. ]) else None,
+      fusion.fused_child.buckets[ fusion.num_children_left .. ]
+    )
+  }
+
+  function SplitReads(fusion: NodeFusion) : seq<ReadOp>
+  requires ValidSplit(fusion)
+  {
+    [
+      ReadOp(fusion.parentref, fusion.fused_parent),
+      ReadOp(fusion.fused_childref, fusion.fused_child)
+    ]
+  }
+
+  function SplitOps(fusion: NodeFusion) : seq<Op>
+  requires ValidSplit(fusion)
+  {
+    [
+      G.AllocOp(fusion.left_childref, fusion.left_child),
+      G.AllocOp(fusion.right_childref, fusion.right_child),
+      G.WriteOp(fusion.parentref, fusion.split_parent)
+    ]
+  }
+
   //// Merge
 
   predicate ValidMerge(fusion: NodeFusion)
@@ -653,7 +587,6 @@ module PivotBetreeSpec {
       G.WriteOp(fusion.parentref, fusion.fused_parent)
     ]
   }
-
 
   //// Put it all together
 
