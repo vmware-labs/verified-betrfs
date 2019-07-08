@@ -1,4 +1,5 @@
 include "Main.dfy"
+include "../lib/Sets.dfy"
 include "BetreeBlockCache.dfy"
 include "ByteBetree.dfy"
 
@@ -9,6 +10,7 @@ module {:extern} Impl refines Main {
   import Marshalling
   import Messages = ValueMessage
   import Pivots = PivotsLib
+  import opened Sets
 
   import opened Maps
   import opened Sequences
@@ -318,10 +320,37 @@ module {:extern} Impl refines Main {
   }
 
   method getFreeLba(s: Variables)
-  returns (lba : LBA)
-  ensures lba !in s.persistentSuperblock.lbas.Values
-  ensures lba !in s.ephemeralSuperblock.lbas.Values
-  ensures lba != BC.SuperblockLBA()
+  returns (lba : Option<LBA>)
+  requires s.Ready?
+  ensures lba.Some? ==> lba.value !in s.persistentSuperblock.lbas.Values
+  ensures lba.Some? ==> lba.value !in s.ephemeralSuperblock.lbas.Values
+  ensures lba.Some? ==> lba.value != BC.SuperblockLBA()
+  {
+    var v1 := s.persistentSuperblock.lbas.Values;
+    var v2 := s.ephemeralSuperblock.lbas.Values;
+
+    var m1;
+    var m2;
+
+    if |v1| >= 1 {
+      m1 := maximum(v1);
+    } else {
+      m1 := 0;
+    }
+
+    if |v2| >= 1 {
+      m2 := maximum(v2);
+    } else {
+      m2 := 0;
+    }
+
+    var m := if m1 > m2 then m1 else m2;
+    if (m < 0xffff_ffff_ffff_ffff) {
+      lba := Some(m + 1);
+    } else {
+      lba := None;
+    }
+  }
 
   method sync(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables, success: bool)
@@ -341,16 +370,25 @@ module {:extern} Impl refines Main {
 
     if ref :| ref in s.ephemeralSuperblock.graph && ref !in s.ephemeralSuperblock.lbas {
       var lba := getFreeLba(s);
-      var succ := WriteSector(io, lba, BC.SectorBlock(s.cache[ref]));
-      if (succ) {
-        success := false;
-        s' := s.(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := s.ephemeralSuperblock.lbas[ref := lba]));
-        assert BC.WriteBack(Ik(k), s, s', IDiskOp(io.diskOp()), ref);
-        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.WriteBackStep(ref)));
-      } else {
-        success := false;
-        s' := s;
-        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+      match lba {
+        case Some(lba) => {
+          var succ := WriteSector(io, lba, BC.SectorBlock(s.cache[ref]));
+          if (succ) {
+            success := false;
+            s' := s.(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := s.ephemeralSuperblock.lbas[ref := lba]));
+            assert BC.WriteBack(Ik(k), s, s', IDiskOp(io.diskOp()), ref);
+            assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.WriteBackStep(ref)));
+          } else {
+            success := false;
+            s' := s;
+            assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+          }
+        }
+        case None => {
+          success := false;
+          s' := s;
+          assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+        }
       }
     } else {
       var succ := WriteSector(io, BC.SuperblockLBA(), BC.SectorSuperblock(s.ephemeralSuperblock));
