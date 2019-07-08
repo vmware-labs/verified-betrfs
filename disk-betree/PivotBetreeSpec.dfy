@@ -426,6 +426,62 @@ module PivotBetreeSpec {
     Node(rightPivots, rightChildren, rightBuckets)
   }
 
+  lemma CutoffNodeCorrect(node: Node, node1: Node, node2: Node, lpivot: Key, rpivot: Key)
+  requires WFNode(node)
+  requires node1 == CutoffNodeAndKeepLeft(node, rpivot);
+  requires node2 == CutoffNodeAndKeepRight(node1, lpivot);
+  ensures |node2.pivotTable| > 0 ==> Keyspace.lt(lpivot, node2.pivotTable[0])
+  ensures |node2.pivotTable| > 0 ==> Keyspace.lt(Last(node2.pivotTable), rpivot)
+  ensures forall key | key in node2.buckets[0] :: Keyspace.lte(lpivot, key)
+  ensures forall key | key in Last(node2.buckets) :: Keyspace.lt(key, rpivot)
+  {
+    reveal_CutoffNodeAndKeepLeft();
+    reveal_CutoffNodeAndKeepRight();
+    if (|node2.pivotTable| > 0) {
+      assert node2.pivotTable[0]
+          == node1.pivotTable[|node1.pivotTable| - |node2.pivotTable|];
+      Keyspace.IsStrictlySortedImpliesLte(node1.pivotTable, 0, |node1.pivotTable| - |node2.pivotTable|);
+    }
+  }
+
+  function method {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
+  requires WFNode(node)
+  ensures node.children.Some? <==> node'.children.Some?
+  ensures WFNode(node')
+  ensures lpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(lpivot.value, node'.pivotTable[0])
+  ensures rpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), rpivot.value)
+  ensures lpivot.Some? ==> forall key | key in node'.buckets[0] :: Keyspace.lte(lpivot.value, key)
+  ensures rpivot.Some? ==> forall key | key in Last(node'.buckets) :: Keyspace.lt(key, rpivot.value)
+  {
+    match lpivot {
+      case None => (
+        match rpivot {
+          case None => (
+            node
+          )
+          case Some(rpivot) => (
+            CutoffNodeAndKeepLeft(node, rpivot)
+          )
+        }
+      )
+      case Some(lpivot) => (
+        match rpivot {
+          case None => (
+            CutoffNodeAndKeepRight(node, lpivot)
+          )
+          case Some(rpivot) => (
+            var node1 := CutoffNodeAndKeepLeft(node, rpivot);
+            var node' := CutoffNodeAndKeepRight(node1, lpivot);
+
+            CutoffNodeCorrect(node, node1, node', lpivot, rpivot);
+
+            node'
+          )
+        }
+      )
+    }
+  }
+
   // Stuff for cutting up nodes
 
   // This is useful for proving NodeHasWFBuckets(node')
@@ -556,8 +612,11 @@ module PivotBetreeSpec {
     && (fusion.left_child.children.Some? ==> fusion.right_child.children.Some?)
     && (fusion.left_child.children.None? ==> fusion.right_child.children.None?)
 
-    && var left := CutoffNodeAndKeepLeft(fusion.left_child, fusion.pivot);
-    && var right := CutoffNodeAndKeepRight(fusion.right_child, fusion.pivot);
+    && var lbound := (if fusion.slot_idx > 0 then Some(fusion.split_parent.pivotTable[fusion.slot_idx - 1]) else None);
+    && var ubound := (if fusion.slot_idx + 1 < |fusion.split_parent.pivotTable| then Some(fusion.split_parent.pivotTable[fusion.slot_idx + 1]) else None);
+
+    && var left := CutoffNode(fusion.left_child, lbound, Some(fusion.pivot));
+    && var right := CutoffNode(fusion.right_child, Some(fusion.pivot), ubound);
 
     // TODO this isn't quite right:
     // we need to cut out every key > pivot in leftChild
@@ -719,8 +778,10 @@ module PivotBetreeSpecWFNodes {
     var split_parent := fusion.split_parent;
     var fused_parent := fusion.fused_parent;
     var fused_child := fusion.fused_child;
-    var left_child := CutoffNodeAndKeepLeft(fusion.left_child, fusion.pivot);
-    var right_child := CutoffNodeAndKeepRight(fusion.right_child, fusion.pivot);
+    var lbound := (if fusion.slot_idx > 0 then Some(fusion.split_parent.pivotTable[fusion.slot_idx - 1]) else None);
+    var ubound := (if fusion.slot_idx + 1 < |fusion.split_parent.pivotTable| then Some(fusion.split_parent.pivotTable[fusion.slot_idx + 1]) else None);
+    var left_child := CutoffNode(fusion.left_child, lbound, Some(fusion.pivot));
+    var right_child := CutoffNode(fusion.right_child, Some(fusion.pivot), ubound);
     var slot_idx := fusion.slot_idx;
     var pivot := fusion.pivot;
 
