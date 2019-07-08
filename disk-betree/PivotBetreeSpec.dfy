@@ -501,10 +501,14 @@ module PivotBetreeSpec {
   requires b-d < |node.buckets|
   requires forall i | a <= i <= b :: node'.buckets[i] == node.buckets[i-d]
   requires forall i | a <= i < b :: node'.pivotTable[i] == node.pivotTable[i-d]
-  requires b >= a && b < |node'.pivotTable| ==>
-      b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d]
-  requires b >= a && a-1 >= 0 ==>
-      a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d]
+  requires b >= a && b < |node'.pivotTable| ==> (
+      || (b-d < |node.pivotTable| && node'.pivotTable[b] == node.pivotTable[b-d])
+      || (forall key | key in node'.buckets[b] :: Keyspace.lt(key, node'.pivotTable[b]))
+    )
+  requires b >= a && a-1 >= 0 ==> (
+      || (a-1-d >= 0 && node'.pivotTable[a-1] == node.pivotTable[a-1-d])
+      || (forall key | key in node'.buckets[a] :: Keyspace.lte(node'.pivotTable[a-1], key))
+    )
   ensures forall i | a <= i <= b :: NodeHasWFBucketAt(node', i)
   {
     forall i | a <= i <= b
@@ -553,6 +557,7 @@ module PivotBetreeSpec {
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), pivot)
+  ensures forall key | key in Last(node'.buckets) :: Keyspace.lt(key, pivot)
   {
     var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
@@ -574,6 +579,7 @@ module PivotBetreeSpec {
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(pivot, node'.pivotTable[0])
+  ensures forall key | key in node'.buckets[0] :: Keyspace.lte(pivot, key)
   {
     var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
@@ -794,11 +800,8 @@ module PivotBetreeSpecWFNodes {
     Pivots.PivotNotMinimum(split_parent.pivotTable, slot_idx);
     Pivots.WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
 
-    NodeHasWFBucketAtIdenticalSlice(left_child, fused_child, 0, |left_child.buckets| - 2, 0);
-    NodeHasWFBucketAtIdenticalSlice(right_child, fused_child, |left_child.buckets| + 1, |fused_child.buckets| - 1, |left_child.buckets|);
-
-    assert NodeHasWFBucketAt(fused_child, |left_child.buckets| - 1);
-    assert NodeHasWFBucketAt(fused_child, |left_child.buckets|);
+    NodeHasWFBucketAtIdenticalSlice(left_child, fused_child, 0, |left_child.buckets| - 1, 0);
+    NodeHasWFBucketAtIdenticalSlice(right_child, fused_child, |left_child.buckets|, |fused_child.buckets| - 1, |left_child.buckets|);
 
     assert WFNode(fused_child);
   }
