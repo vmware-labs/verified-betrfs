@@ -188,8 +188,13 @@ module PivotsLib {
   requires 0 <= i < |pivots|
   ensures Keyspace.NotMinimum(pivots[i])
   {
-    reveal_IsStrictlySorted();
+    Keyspace.reveal_IsStrictlySorted();
     var e := Keyspace.SmallerElement(pivots[0]);
     assert Keyspace.lte(pivots[0], pivots[i]);
+  }
+
+  function PivotTableBucketKeySet(pivots: PivotTable, i: int) : iset<Key>
+  {
+    iset key | Route(pivots, key) == i
   }
 }

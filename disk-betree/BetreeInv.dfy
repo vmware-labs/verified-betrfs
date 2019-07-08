@@ -1457,6 +1457,17 @@ abstract module BetreeInv {
 	MergePreservesAcyclic(k, s, s', fusion);
   }
 
+  // Redirect
+  lemma RedirectStepPreservesInvariant(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(k, s)
+    requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
+    ensures Inv(k, s')
+  {
+    RedirectPreservesAcyclic(k, s, s', redirect);
+    RedirectEquivalentLookups(k, s, s', redirect);
+  }
+
+
   // GC Step
 
   lemma IsPathFromRootLookupImpliesReachable(k: Constants, s: Variables, key: Key, lookup: Lookup, i: int)
@@ -1558,6 +1569,7 @@ abstract module BetreeInv {
       case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);
       case BetreeSplit(fusion) => SplitStepPreservesInvariant(k, s, s', fusion);
       case BetreeMerge(fusion) => MergeStepPreservesInvariant(k, s, s', fusion);
+      case BetreeRedirect(redirect) => RedirectStepPreservesInvariant(k, s, s', redirect);
     }
   }
 
