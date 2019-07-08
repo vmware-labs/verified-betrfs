@@ -179,6 +179,18 @@ abstract module Total_Order {
     else 1 + LargestLte(run[1..], needle)
   }
 
+  function method LargestLt(run: seq<Element>, needle: Element) : int
+    requires IsSorted(run);
+    ensures -1 <= LargestLt(run, needle) < |run|;
+    ensures forall i :: 0 <= i <= LargestLt(run, needle) ==> lt(run[i], needle);
+    ensures forall i :: LargestLt(run, needle) < i < |run| ==> lte(needle, run[i]);
+    ensures needle in run ==> LargestLt(run, needle) + 1 < |run| && run[LargestLt(run, needle) + 1] == needle;
+  {
+    reveal_IsSorted();
+    if |run| == 0 || lte(needle, run[0]) then -1
+    else 1 + LargestLt(run[1..], needle)
+  }
+
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
   requires IsStrictlySorted(run);
   requires 0 <= pos < |run|

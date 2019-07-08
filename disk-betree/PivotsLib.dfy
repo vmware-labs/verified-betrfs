@@ -162,6 +162,10 @@ module PivotsLib {
   requires WFPivots(pt)
   requires 0 <= i <= |pt|
   ensures WFPivots(pt[i .. ])
+  {
+    WFSlice(pt, i, |pt|);
+    assert pt[i .. ] == pt[i .. |pt|];
+  }
 
   lemma WFConcat3(left: PivotTable, key: Key, right: PivotTable)
   requires WFPivots(left)
@@ -170,12 +174,47 @@ module PivotsLib {
   requires |right| > 0 ==> Keyspace.lt(key, right[0])
   requires Keyspace.NotMinimum(key)
   ensures WFPivots(concat3(left, key, right))
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    var run := concat3(left, key, right);
+
+    forall i, j | 0 <= i < j < |run|
+    ensures Keyspace.lt(run[i], run[j])
+    {
+      if (i < |left|) {
+        if (j < |left|) {
+          assert Keyspace.lt(run[i], run[j]);
+        } else if (j == |left|) {
+          assert Keyspace.lt(run[i], run[j]);
+        } else {
+          assert run[i] == left[i];
+          assert run[j] == right[j - |left| - 1];
+          assert Keyspace.lte(left[i], Last(left));
+          assert Keyspace.lte(right[0], right[j - |left| - 1]);
+          assert Keyspace.lt(run[i], run[j]);
+        }
+      } else if (i == |left|) {
+        assert j > |left|;
+        assert run[j] == right[j - |left| - 1];
+        assert Keyspace.lte(right[0], right[j - |left| - 1]);
+        assert Keyspace.lt(run[i], run[j]);
+      } else {
+        assert j > |left|;
+        assert run[i] == right[i - |left| - 1];
+        assert run[j] == right[j - |left| - 1];
+        assert Keyspace.lt(run[i], run[j]);
+      }
+    }
+  }
 
   function method {:opaque} CutoffForLeft(pivots: PivotTable, pivot: Key) : int
   requires WFPivots(pivots)
   ensures 0 <= CutoffForLeft(pivots, pivot) <= |pivots|
   ensures forall i | 0 <= i < CutoffForLeft(pivots, pivot) :: Keyspace.lt(pivots[i], pivot);
   ensures forall i | CutoffForLeft(pivots, pivot) <= i < |pivots| :: Keyspace.lte(pivot, pivots[i]);
+  {
+    Keyspace.LargestLt(pivots, pivot) + 1
+  }
 
   function method {:opaque} CutoffForRight(pivots: PivotTable, pivot: Key) : int
   requires WFPivots(pivots)
