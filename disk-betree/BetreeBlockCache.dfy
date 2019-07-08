@@ -39,6 +39,7 @@ module BetreeBlockCache refines Machine {
   datatype Step =
     | BetreeMoveStep(betreeStep: BetreeStep)
     | BlockCacheMoveStep(blockCacheStep: BC.Step)
+    | StutterStep
 
   predicate BetreeMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep)
   {
@@ -71,6 +72,7 @@ module BetreeBlockCache refines Machine {
     match step {
       case BetreeMoveStep(step) => BetreeMove(k, s, s', uiop, dop, step)
       case BlockCacheMoveStep(step) => BlockCacheMove(k, s, s', uiop, dop, step)
+      case StutterStep => uiop.NoOp? && s == s'
     }
   }
 

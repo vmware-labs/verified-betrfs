@@ -75,6 +75,23 @@ module {:extern} Impl refines Main {
     sector := sectorOpt.value;
   }
 
+  method WriteSector(io: DiskIOHandler, lba: M.LBA, sector: M.Sector)
+  returns (success: bool)
+  requires WFSector(sector)
+  requires io.initialized()
+  modifies io
+  ensures success ==> IDiskOp(io.diskOp()) == D.WriteOp(lba, sector)
+  ensures !success ==> IDiskOp(io.diskOp()) == D.NoDiskOp
+  {
+    var bytes := Marshalling.MarshallSector(sector);
+    if (bytes == null) {
+      return false;
+    } else {
+      io.write(lba, bytes);
+      return true;
+    }
+  }
+
   method PageInSuperblock(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires io.initialized();
@@ -268,10 +285,9 @@ module {:extern} Impl refines Main {
         s' := s;
         res := None;
 
-        // TODO need a proper stutter step
-        assert M.Next(Ik(k), s, s',
+        assert M.NextStep(Ik(k), s, s',
           if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-          IDiskOp(io.diskOp()));
+          IDiskOp(io.diskOp()), M.StutterStep);
       }
     }
   }
@@ -301,6 +317,12 @@ module {:extern} Impl refines Main {
     success := true;
   }
 
+  method getFreeLba(s: Variables)
+  returns (lba : LBA)
+  ensures lba !in s.persistentSuperblock.lbas.Values
+  ensures lba !in s.ephemeralSuperblock.lbas.Values
+  ensures lba != BC.SuperblockLBA()
+
   method sync(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables, success: bool)
   requires io.initialized()
@@ -310,7 +332,39 @@ module {:extern} Impl refines Main {
     if success then UI.SyncOp else UI.NoOp,
     IDiskOp(io.diskOp()))
   {
-    assume false;
+    if (s.Unready?) {
+      // TODO we could just do nothing here instead
+      s' := PageInSuperblock(k, s, io);
+      success := false;
+      return;
+    }
+
+    if ref :| ref in s.ephemeralSuperblock.graph && ref !in s.ephemeralSuperblock.lbas {
+      var lba := getFreeLba(s);
+      var succ := WriteSector(io, lba, BC.SectorBlock(s.cache[ref]));
+      if (succ) {
+        success := false;
+        s' := s.(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := s.ephemeralSuperblock.lbas[ref := lba]));
+        assert BC.WriteBack(Ik(k), s, s', IDiskOp(io.diskOp()), ref);
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.WriteBackStep(ref)));
+      } else {
+        success := false;
+        s' := s;
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+      }
+    } else {
+      var succ := WriteSector(io, BC.SuperblockLBA(), BC.SectorSuperblock(s.ephemeralSuperblock));
+      if (succ) {
+        success := true;
+        s' := s.(persistentSuperblock := s.ephemeralSuperblock);
+        assert BC.WriteBackSuperblock(Ik(k), s, s', IDiskOp(io.diskOp()));
+        assert M.NextStep(Ik(k), s, s', UI.SyncOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.WriteBackSuperblockStep));
+      } else {
+        success := false;
+        s' := s;
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+      }
+    }
   }
 
   ////////// Top-level handlers
