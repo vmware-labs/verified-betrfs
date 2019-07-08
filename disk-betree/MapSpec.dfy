@@ -23,6 +23,7 @@ module UI {
 
   datatype Op =
     | NoOp
+    | SyncOp
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
 }

@@ -103,6 +103,7 @@ abstract module CrashSafeBetree {
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.NormalOp?
+    && (uiop.uiop.NoOp? || (uiop.uiop.SyncOp? && s'.persistent == s'.ephemeral))
     && s.persistent == s'.persistent
     && DB.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
   }
@@ -110,7 +111,7 @@ abstract module CrashSafeBetree {
   predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.NormalOp?
-    && uiop.uiop.NoOp?
+    && (uiop.uiop.NoOp? || uiop.uiop.SyncOp?)
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }
@@ -182,6 +183,7 @@ abstract module CrashSafePivotBetree {
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.NormalOp?
+    && (uiop.uiop.SyncOp? ==> s'.persistent == s'.ephemeral)
     && s.persistent == s'.persistent
     && DB.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
   }
@@ -189,7 +191,7 @@ abstract module CrashSafePivotBetree {
   predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.NormalOp?
-    && uiop.uiop.NoOp?
+    && (uiop.uiop.NoOp? || (uiop.uiop.SyncOp? && s'.persistent == s'.ephemeral))
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }
@@ -262,13 +264,14 @@ abstract module CrashSafeMap {
   {
     && s.persistent == s'.persistent
     && uiop.NormalOp?
+    && (uiop.uiop.SyncOp? ==> s'.persistent == s'.ephemeral)
     && MS.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
   }
 
   predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.NormalOp?
-    && uiop.uiop.NoOp?
+    && (uiop.uiop.NoOp? || uiop.uiop.SyncOp?)
     && s'.persistent == s.ephemeral
     && s'.ephemeral  == s.ephemeral
   }

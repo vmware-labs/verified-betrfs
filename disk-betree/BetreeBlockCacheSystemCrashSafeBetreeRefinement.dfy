@@ -89,7 +89,7 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   lemma RefinesWriteBackSuperblockStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
-  requires uiop.NoOp?
+  requires uiop.NoOp? || uiop.SyncOp?
   requires BC.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
   requires D.Write(k.disk, s.disk, s'.disk, dop);
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))
@@ -169,7 +169,7 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   lemma RefinesBlockCacheMoveStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp, step: BC.Step)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
-  requires uiop.NoOp?
+  requires (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackSuperblockStep?))
   requires M.BlockCacheMove(k.machine, s.machine, s'.machine, uiop, dop, step)
   requires D.Next(k.disk, s.disk, s'.disk, dop)
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))

@@ -276,13 +276,6 @@ module {:extern} Impl refines Main {
     }
   }
 
-  /*
-  lemma validQuery(lookup: BT.Lookup, key: Key, value: Value)
-  requires BT.WFLookupForKey(lookup, key)
-  {
-  }
-  */
-
   method insert(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (s': Variables, success: bool)
   requires io.initialized()
@@ -308,16 +301,30 @@ module {:extern} Impl refines Main {
     success := true;
   }
 
+  method sync(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables, success: bool)
+  requires io.initialized()
+  modifies io
+  requires M.Inv(k, s)
+  ensures M.Next(Ik(k), s, s',
+    if success then UI.SyncOp else UI.NoOp,
+    IDiskOp(io.diskOp()))
+  {
+    assume false;
+  }
+
   ////////// Top-level handlers
 
-  /*
-  method handle(k: Constants, hs: HeapState, io: DiskIOHandler)
+  method handleSync(k: Constants, hs: HeapState, io: DiskIOHandler)
+  returns (success: bool)
   {
     var s := hs.s;
-    var s' := doStuff(k, s, io);
+    var s', succ := sync(k, s, io);
+    var uiop := if succ then UI.SyncOp else UI.NoOp;
+    M.NextPreservesInv(k, s, s', uiop, IDiskOp(io.diskOp()));
     hs.s := s';
+    success := succ;
   }
-  */
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
