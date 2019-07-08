@@ -773,6 +773,8 @@ module PivotBetreeSpecWFNodes {
 
   lemma ValidMergeWritesWFNodes(fusion: NodeFusion)
   requires ValidMerge(fusion)
+  ensures WFNode(fusion.fused_parent);
+  ensures WFNode(fusion.fused_child);
   ensures forall i | 0 <= i < |MergeOps(fusion)| :: WFNode(MergeOps(fusion)[i].node)
   {
     var split_parent := fusion.split_parent;

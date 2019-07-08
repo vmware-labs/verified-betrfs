@@ -197,4 +197,14 @@ module PivotsLib {
   {
     iset key | Route(pivots, key) == i
   }
+
+  lemma GetKeyInChildBucket(parentPivots: seq<Key>, childPivots: seq<Key>, parentIdx: int, childIdx: int) returns (key: Key)
+  requires 0 <= parentIdx <= |parentPivots|
+  requires 0 <= childIdx <= |childPivots|
+  requires parentIdx > 0 && |childPivots| > 0 ==> Keyspace.lt(parentPivots[parentIdx-1], childPivots[0])
+  requires parentIdx < |parentPivots| && |childPivots| > 0 ==> Keyspace.lt(Last(childPivots), parentPivots[parentIdx])
+  ensures Route(parentPivots, key) == parentIdx
+  ensures Route(childPivots, key) == childIdx
+  {
+  }
 }
