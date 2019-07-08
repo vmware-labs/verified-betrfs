@@ -84,10 +84,12 @@ abstract module Main {
   }
 
   class DiskIOHandler {
-    // TODO make these take byte arrays instead for faster imperative code
     method {:axiom} write(lba: LBA, sector: array<byte>)
     modifies this;
     requires diskOp() == D.NoDiskOp;
+    // TODO this isn't sound (unless we prove that adding extra bytes doesn't
+    // change the demarshalling result). Should just make it
+    // sector.Length == BlockSize() instead.
     requires sector.Length <= BlockSize() as int
     requires ValidSector(sector[..])
     ensures diskOp() == D.WriteOp(lba, sector[..]);
@@ -122,14 +124,17 @@ abstract module Main {
 
   // Implementation of the state transitions
 
-  method handle(k: Constants, hs: HeapState, io: DiskIOHandler)
+  method handleSync(k: Constants, hs: HeapState, io: DiskIOHandler)
+  returns (success: bool)
   requires io.initialized()
   requires Inv(k, hs)
   modifies HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
   ensures ValidDiskOp(io.diskOp())
-  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+    if success then UI.SyncOp else UI.NoOp,
+    IDiskOp(io.diskOp()))
   // impl defined
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)

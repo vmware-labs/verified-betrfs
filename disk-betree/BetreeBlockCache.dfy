@@ -51,7 +51,7 @@ module BetreeBlockCache refines Machine {
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step) {
-    && uiop.NoOp?
+    && (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackSuperblockStep?))
     && (
       || step.WriteBackStep?
       || step.WriteBackSuperblockStep?
