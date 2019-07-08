@@ -6,6 +6,8 @@ abstract module Total_Order {
     
 	type Element(!new,==)
 
+	function SomeElement() : Element
+
 	predicate method lt(a: Element, b: Element)
 	{
 		lte(a, b) && a != b
@@ -312,6 +314,8 @@ abstract module Bounded_Total_Order refines Total_Order {
   import Base_Order : Total_Order
   datatype Element = Min_Element | Element(e: Base_Order.Element) | Max_Element
 
+  function SomeElement() : Element { Min_Element }
+
   predicate method lte(a: Element, b: Element) {
       || a.Min_Element?
       || b.Max_Element?
@@ -328,6 +332,8 @@ abstract module Bounded_Total_Order refines Total_Order {
 module Integer_Order refines Total_Order {
   type Element = int
 
+  function SomeElement() : Element { 0 }
+
   predicate method lte(a: Element, b: Element) {
     reveal_ltedef();
     ltedef(a, b)
@@ -340,6 +346,8 @@ module Integer_Order refines Total_Order {
 
 module Char_Order refines Total_Order {
   type Element = char
+
+  function SomeElement() : Element { '\0' }
 
   predicate method lte(a: Element, b: Element) {
     a <= b
@@ -369,6 +377,8 @@ module Byte_Order refines Total_Order {
   import opened NativeTypes
   type Element = byte
 
+  function SomeElement() : Element { 0 }
+
   predicate method {:opaque} lte(a: Element, b: Element) {
     reveal_ltedef();
     a <= b
@@ -382,6 +392,8 @@ module Byte_Order refines Total_Order {
 abstract module Lexicographic_Order refines Total_Order {
   import Base_Order : Total_Order
   type Element = seq<Base_Order.Element>
+
+  function SomeElement() : Element { [] }
 
   predicate method lte(a: Element, b: Element)
   {

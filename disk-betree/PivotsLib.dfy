@@ -52,7 +52,7 @@ module PivotsLib {
   // we need to pass in some key as an argument.
   // Might make sense to more generally require in Keyspace that
   // it be inhabited.
-  lemma GetKeyInBucket(pivotTable: PivotTable, idx: int, anyKey: Key) returns (key: Key)
+  lemma GetKeyInBucket(pivotTable: PivotTable, idx: int) returns (key: Key)
   requires WFPivots(pivotTable)
   requires 0 <= idx < NumBuckets(pivotTable)
   ensures Route(pivotTable, key) == idx
@@ -63,8 +63,9 @@ module PivotsLib {
         RouteIs(pivotTable, key, 0);
         return key;
       } else {
-        RouteIs(pivotTable, anyKey, 0);
-        return anyKey;
+        var key := Keyspace.SomeElement();
+        RouteIs(pivotTable, key, 0);
+        return key;
       }
     } else {
       if (idx < |pivotTable|) {
@@ -171,11 +172,13 @@ module PivotsLib {
   ensures WFPivots(concat3(left, key, right))
 
   function method {:opaque} CutoffForLeft(pivots: PivotTable, pivot: Key) : int
+  requires WFPivots(pivots)
   ensures 0 <= CutoffForLeft(pivots, pivot) <= |pivots|
   ensures forall i | 0 <= i < CutoffForLeft(pivots, pivot) :: Keyspace.lt(pivots[i], pivot);
   ensures forall i | CutoffForLeft(pivots, pivot) <= i < |pivots| :: Keyspace.lte(pivot, pivots[i]);
 
   function method {:opaque} CutoffForRight(pivots: PivotTable, pivot: Key) : int
+  requires WFPivots(pivots)
   ensures 0 <= CutoffForRight(pivots, pivot) <= |pivots|
   ensures forall i | 0 <= i < CutoffForRight(pivots, pivot) :: Keyspace.lte(pivots[i], pivot);
   ensures forall i | CutoffForRight(pivots, pivot) <= i < |pivots| :: Keyspace.lt(pivot, pivots[i]);
@@ -191,14 +194,18 @@ module PivotsLib {
     Keyspace.reveal_IsStrictlySorted();
     var e := Keyspace.SmallerElement(pivots[0]);
     assert Keyspace.lte(pivots[0], pivots[i]);
+    Keyspace.IsNotMinimum(e, pivots[i]);
   }
 
   function PivotTableBucketKeySet(pivots: PivotTable, i: int) : iset<Key>
+  requires WFPivots(pivots)
   {
     iset key | Route(pivots, key) == i
   }
 
   lemma GetKeyInChildBucket(parentPivots: seq<Key>, childPivots: seq<Key>, parentIdx: int, childIdx: int) returns (key: Key)
+  requires WFPivots(parentPivots)
+  requires WFPivots(childPivots)
   requires 0 <= parentIdx <= |parentPivots|
   requires 0 <= childIdx <= |childPivots|
   requires parentIdx > 0 && |childPivots| > 0 ==> Keyspace.lt(parentPivots[parentIdx-1], childPivots[0])
@@ -206,5 +213,35 @@ module PivotsLib {
   ensures Route(parentPivots, key) == parentIdx
   ensures Route(childPivots, key) == childIdx
   {
+    if (childIdx > 0) {
+      key := childPivots[childIdx - 1];
+      Keyspace.IsStrictlySortedImpliesLte(childPivots, childIdx - 1, |childPivots| - 1);
+      Keyspace.IsStrictlySortedImpliesLte(childPivots, 0, childIdx - 1);
+      RouteIs(parentPivots, key, parentIdx);
+      if (childIdx < |childPivots|) {
+        Keyspace.IsStrictlySortedImpliesLt(childPivots, childIdx - 1, childIdx);
+      }
+      RouteIs(childPivots, key, childIdx);
+    } else if (parentIdx > 0) {
+      key := parentPivots[parentIdx - 1];
+      if (parentIdx < |parentPivots|) {
+        Keyspace.IsStrictlySortedImpliesLt(parentPivots, parentIdx - 1, parentIdx);
+      }
+      RouteIs(parentPivots, key, parentIdx);
+      RouteIs(childPivots, key, childIdx);
+    } else if (|childPivots| > 0) {
+      key := Keyspace.SmallerElement(childPivots[0]);
+      Keyspace.IsStrictlySortedImpliesLte(childPivots, 0, |childPivots| - 1);
+      RouteIs(parentPivots, key, parentIdx);
+      RouteIs(childPivots, key, childIdx);
+    } else if (|parentPivots| > 0) {
+      key := Keyspace.SmallerElement(parentPivots[0]);
+      RouteIs(parentPivots, key, parentIdx);
+      RouteIs(childPivots, key, childIdx);
+    } else {
+      key := Keyspace.SomeElement();
+      RouteIs(parentPivots, key, parentIdx);
+      RouteIs(childPivots, key, childIdx);
+    }
   }
 }

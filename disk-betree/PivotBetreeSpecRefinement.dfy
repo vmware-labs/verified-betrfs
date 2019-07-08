@@ -471,14 +471,14 @@ abstract module PivotBetreeSpecRefinement {
     {
       assert ref == f.left_childref || ref == f.right_childref;
       if (ref == f.left_childref) {
-        var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx, f.pivot);
+        var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx);
         RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
         assert key in redirect.keys;
         assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
         assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
         assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
       } else {
-        var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx + 1, f.pivot);
+        var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx + 1);
         RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
         assert key in redirect.keys;
         assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
