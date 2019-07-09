@@ -320,6 +320,22 @@ abstract module Total_Order {
     reveal_NotMinimum();
     b :| lt(b, a);
   }
+
+  // note this is terrrrrrribly slow
+  method SortedSeqOfSet(s: set<Element>) returns (run: seq<Element>)
+  ensures IsStrictlySorted(run)
+  ensures |run| == |s|
+  ensures (set e | e in run) == s
+  {
+    if |s| == 0 {
+      return [];
+    } else {
+      var x :| x in s;
+      var l := SortedSeqOfSet(set t | t in s && lt(t, x));
+      var r := SortedSeqOfSet(set t | t in s && lt(x, t));
+      run := l + [x] + r;
+    }
+  }
 }
 
 abstract module Bounded_Total_Order refines Total_Order {

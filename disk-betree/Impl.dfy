@@ -446,7 +446,6 @@ module {:extern} Impl refines Main {
   requires M.Inv(k, s)
   ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
   {
-    // TODO
     s' := BC.Ready(
         s.persistentSuperblock,
         BC.Superblock(
@@ -490,6 +489,41 @@ module {:extern} Impl refines Main {
     }
   }
 
+  method GetNewPivots(bucket: map<MS.Key, Messages.Message>)
+  returns (pivots : seq<MS.Key>)
+  ensures Pivots.WFPivots(pivots)
+  {
+    // try to split the keys evenly, but don't let any bucket
+    // be larger than the cap
+
+    var allKeys := MS.Keyspace.SortedSeqOfSet(bucket.Keys);
+
+    var m := (|allKeys| + Marshalling.CapNumBuckets() as int) / Marshalling.CapNumBuckets() as int;
+    if m > Marshalling.CapBucketSize() as int / 2 {
+      m := Marshalling.CapBucketSize() as int / 2;
+    }
+    if m < 1 {
+      m := 1;
+    }
+
+    MS.Keyspace.reveal_IsStrictlySorted();
+    var r := [];
+    var i := m;
+    while i < |allKeys|
+    invariant MS.Keyspace.IsStrictlySorted(r);
+    invariant |r| > 0 ==> 0 <= i-m < |allKeys| && r[|r|-1] == allKeys[i - m];
+    invariant |r| > 0 ==> MS.Keyspace.NotMinimum(r[0]);
+    invariant i > 0
+    {
+      MS.Keyspace.IsNotMinimum(allKeys[0], allKeys[i]);
+
+      r := r + [allKeys[i]];
+      i := i + m;
+    }
+
+    pivots := r;
+  }
+
   method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': Variables)
   requires s.Ready?
@@ -506,9 +540,31 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    // TODO
-    s' := s;
-    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+    var node := s.cache[ref];
+
+    if i :| 0 <= i < |node.buckets| && |node.buckets[i]| > Marshalling.CapBucketSize() as int {
+      if (node.children.Some?) {
+        // internal node case: flush
+        s' := s;
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      } else {
+        // leaf case
+        var joined := BT.JoinBuckets(node.buckets);
+        var pivots := GetNewPivots(joined);
+        var buckets' := BT.SplitBucketOnPivots(pivots, joined);
+        var newnode := BT.G.Node(pivots, None, buckets');
+
+        s' := write(k, s, ref, newnode);
+
+        //assert BT.ValidRepivot(BT.Repivot(ref, node, pivots));
+        ghost var step := BT.BetreeRepivot(BT.Repivot(ref, node, pivots));
+        BC.MakeTransaction1(k, s, s', BT.BetreeStepOps(step));
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+      }
+    } else {
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+    }
   }
 
   method sync(k: Constants, s: Variables, io: DiskIOHandler)
