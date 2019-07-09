@@ -58,6 +58,8 @@ module PivotBetreeSpec {
 
   export extends Spec // Default export-style is Spec
 
+  // TODO maybe move bucket stuff into the PivotsLib
+
   // We require that all keys in a bucket map actually fit into that bucket
   // according to the pivot table.
   predicate WFBucket(bucket: Bucket, pivotTable: Pivots.PivotTable, i: int)
@@ -647,6 +649,58 @@ module PivotBetreeSpec {
     ]
   }
 
+  //// Repivot
+
+  datatype Repivot = Repivot(ref: Reference, leaf: Node, pivots: seq<Key>)
+
+  predicate ValidRepivot(r: Repivot)
+  {
+    && WFNode(r.leaf)
+    && r.leaf.children.None?
+    && Pivots.WFPivots(r.pivots)
+  }
+
+  function RepivotReads(r: Repivot) : seq<ReadOp>
+  requires ValidRepivot(r)
+  {
+    [
+      ReadOp(r.ref, r.leaf)
+    ]
+  }
+
+  function method JoinBuckets(buckets: seq<Bucket>) : (bucket : Bucket)
+  {
+    if |buckets| == 0 then map[] else MapUnion(JoinBuckets(DropLast(buckets)), Last(buckets))
+  }
+
+  function method SplitBucketOnPivots(pivots: seq<Key>, bucket: Bucket) : (buckets: seq<Bucket>)
+  {
+    if |pivots| == 0 then (
+      [bucket]
+    ) else (
+      var l := map key | key in bucket && Keyspace.lt(key, Last(pivots)) :: bucket[key];
+      var r := map key | key in bucket && Keyspace.lte(Last(pivots), key) :: bucket[key];
+
+      SplitBucketOnPivots(DropLast(pivots), l) + [r]
+    )
+  }
+
+  function method ApplyRepivot(leaf: Node, pivots: seq<Key>) : (leaf': Node)
+  requires WFNode(leaf)
+  requires leaf.children.None?
+  requires Pivots.WFPivots(pivots)
+  {
+    Node(pivots, None, SplitBucketOnPivots(pivots, JoinBuckets(leaf.buckets)))
+  }
+
+  function RepivotOps(r: Repivot) : seq<Op>
+  requires ValidRepivot(r)
+  {
+    [
+      G.WriteOp(r.ref, ApplyRepivot(r.leaf, r.pivots))
+    ]
+  }
+
   //// Put it all together
 
   datatype BetreeStep =
@@ -656,6 +710,7 @@ module PivotBetreeSpec {
     | BetreeGrow(growth: RootGrowth)
     | BetreeSplit(fusion: NodeFusion)
     | BetreeMerge(fusion: NodeFusion)
+    | BetreeRepivot(repivot: Repivot)
 
   predicate ValidBetreeStep(step: BetreeStep)
   {
@@ -666,6 +721,7 @@ module PivotBetreeSpec {
       case BetreeGrow(growth) => ValidGrow(growth)
       case BetreeSplit(fusion) => ValidSplit(fusion)
       case BetreeMerge(fusion) => ValidMerge(fusion)
+      case BetreeRepivot(r) => ValidRepivot(r)
     }
   }
 
@@ -679,6 +735,7 @@ module PivotBetreeSpec {
       case BetreeGrow(growth) => GrowReads(growth)
       case BetreeSplit(fusion) => SplitReads(fusion)
       case BetreeMerge(fusion) => MergeReads(fusion)
+      case BetreeRepivot(r) => RepivotReads(r)
     }
   }
 
@@ -692,6 +749,7 @@ module PivotBetreeSpec {
       case BetreeGrow(growth) => GrowOps(growth)
       case BetreeSplit(fusion) => SplitOps(fusion)
       case BetreeMerge(fusion) => MergeOps(fusion)
+      case BetreeRepivot(r) => RepivotOps(r)
     }
   }
 
@@ -703,6 +761,7 @@ module PivotBetreeSpec {
       case BetreeGrow(growth) => uiop.NoOp?
       case BetreeSplit(fusion) => uiop.NoOp?
       case BetreeMerge(fusion) => uiop.NoOp?
+      case BetreeRepivot(r) => uiop.NoOp?
     }
   }
 }
@@ -710,7 +769,10 @@ module PivotBetreeSpec {
 module PivotBetreeSpecWFNodes {
   import opened Options
   import opened PivotBetreeSpec`Internal
+  import opened Maps
+  import opened Sequences
   import Pivots = PivotsLib
+  import M = ValueMessage
 
   import MS = MapSpec
   import Keyspace = MS.Keyspace
@@ -802,6 +864,77 @@ module PivotBetreeSpecWFNodes {
     assert WFNode(fused_child);
   }
 
+  lemma SplitBucketOnPivotsCorrect(pivots: seq<Key>, bucket: G.Bucket, buckets: seq<G.Bucket>)
+  requires Pivots.WFPivots(pivots)
+  requires forall key | key in bucket :: bucket[key] != M.IdentityMessage()
+  requires buckets == SplitBucketOnPivots(pivots, bucket)
+
+  ensures |buckets| == |pivots| + 1
+  ensures forall i | 0 <= i < |buckets| :: WFBucket(buckets[i], pivots, i)
+  ensures forall i, key | 0 <= i < |buckets| && key in buckets[i] :: key in bucket
+  ensures JoinBuckets(buckets) == bucket
+  {
+    if |pivots| == 0 {
+    } else {
+      var l := map key | key in bucket && Keyspace.lt(key, Last(pivots)) :: bucket[key];
+      var r := map key | key in bucket && Keyspace.lte(Last(pivots), key) :: bucket[key];
+
+      var bucketsPref := SplitBucketOnPivots(DropLast(pivots), l);
+      Pivots.WFSlice(pivots, 0, |pivots| - 1);
+      SplitBucketOnPivotsCorrect(DropLast(pivots), l, bucketsPref);
+
+      forall i | 0 <= i < |buckets|
+      ensures WFBucket(buckets[i], pivots, i)
+      {
+        if i < |buckets| - 1 {
+          assert WFBucket(bucketsPref[i], DropLast(pivots), i);
+          forall key | key in buckets[i] ensures Pivots.Route(pivots, key) == i
+          {
+            assert Pivots.Route(DropLast(pivots), key) == i;
+            assert buckets[i] == bucketsPref[i];
+            assert key in bucketsPref[i];
+            assert key in l;
+            Pivots.RouteIs(pivots, key, i);
+          }
+          assert WFBucket(buckets[i], pivots, i);
+        } else {
+          forall key | key in buckets[i] ensures Pivots.Route(pivots, key) == i
+          {
+            Pivots.RouteIs(pivots, key, i);
+          }
+          assert WFBucket(buckets[i], pivots, i);
+        }
+      }
+    }
+  }
+
+  lemma JoinBucketsNoIdentity(buckets: seq<G.Bucket>)
+  requires forall i | 0 <= i < |buckets| :: forall key | key in buckets[i] :: buckets[i][key] != M.IdentityMessage()
+  ensures forall key | key in JoinBuckets(buckets) :: JoinBuckets(buckets)[key] != M.IdentityMessage()
+  {
+    if |buckets| == 0 {
+    } else {
+      JoinBucketsNoIdentity(DropLast(buckets));
+    }
+  }
+
+  lemma WFApplyRepivot(leaf: G.Node, pivots: seq<Key>)
+  requires WFNode(leaf)
+  requires leaf.children.None?
+  requires Pivots.WFPivots(pivots)
+  ensures WFNode(ApplyRepivot(leaf, pivots))
+  {
+    var j := JoinBuckets(leaf.buckets);
+    var s := SplitBucketOnPivots(pivots, j);
+    forall i | 0 <= i < |leaf.buckets|
+    ensures forall key | key in leaf.buckets[i] :: leaf.buckets[i][key] != M.IdentityMessage()
+    {
+      assert NodeHasWFBucketAt(leaf, i);
+    }
+    JoinBucketsNoIdentity(leaf.buckets);
+    SplitBucketOnPivotsCorrect(pivots, j, s);
+  }
+
   // This lemma is useful for BetreeBlockCache
   lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
   requires ValidBetreeStep(betreeStep)
@@ -822,4 +955,5 @@ module PivotBetreeSpecWFNodes {
       }
     }
   }
+
 }
