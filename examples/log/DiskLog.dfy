@@ -13,10 +13,6 @@ module LBAType {
   {
     idx.idx + 1
   }
-
-  // export S provides Index, LBA, SuperblockLBA, indexToLBA
-  // export extends S
-	// export Internal reveals *
 }
 
 module DiskLog {
@@ -34,8 +30,7 @@ module DiskLog {
   type Log = seq<Element>
   datatype Superblock = Superblock(length: int)
   datatype CachedSuperblock = Unready | Ready(superblock: Superblock)
-  // TODO: rename 'persistent'
-  datatype Variables = Variables(log: Log, persistent: CachedSuperblock, stagedLength: int)
+  datatype Variables = Variables(log: Log, cachedSuperblock: CachedSuperblock, stagedLength: int)
 
   function method SuperblockLBA() : LBAType.LBA { LBAType.SuperblockLBA() }
 
@@ -56,8 +51,8 @@ module DiskLog {
 
   predicate SupersedesDisk(k: Constants, s: Variables)
   {
-    && s.persistent.Ready?
-    && s.persistent.superblock.length <= |s.log|
+    && s.cachedSuperblock.Ready?
+    && s.cachedSuperblock.superblock.length <= |s.log|
   }
 
   predicate Query(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, result: Element)
@@ -70,21 +65,21 @@ module DiskLog {
 
   predicate FetchSuperblock(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, length: int)
   {
-    && s.persistent == Unready
+    && s.cachedSuperblock == Unready
     && diskOp == D.ReadOp(SuperblockLBA(), SuperblockSector(Superblock(length)))
     && s'.log == s.log
-    && s'.persistent == Ready(Superblock(length))
+    && s'.cachedSuperblock == Ready(Superblock(length))
     && s'.stagedLength == s.stagedLength
   }
 
   predicate FetchElement(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, element: Element)
   {
-    && s.persistent.Ready?
-    && idx.idx < s.persistent.superblock.length
+    && s.cachedSuperblock.Ready?
+    && idx.idx < s.cachedSuperblock.superblock.length
     && |s.log| == idx.idx
     && diskOp == D.ReadOp(LBAType.indexToLBA(idx), LogSector(element))
     && s'.log == s.log + [element]
-    && s'.persistent == s.persistent
+    && s'.cachedSuperblock == s.cachedSuperblock
     && s'.stagedLength == |s'.log|
   }
 
@@ -93,7 +88,7 @@ module DiskLog {
     && SupersedesDisk(k, s)
     && diskOp == D.NoDiskOp
     && s'.log == s.log + [element]
-    && s'.persistent == s.persistent
+    && s'.cachedSuperblock == s.cachedSuperblock
     && s'.stagedLength == s.stagedLength
   }
 
@@ -105,7 +100,7 @@ module DiskLog {
     && 0 <= stagingIndex.idx < |s.log| // maintained by invariant (not a runtime check)
     && diskOp == D.WriteOp(LBAType.indexToLBA(stagingIndex), LogSector(s.log[stagingIndex.idx]))
     && s'.log == s.log
-    && s'.persistent == s.persistent
+    && s'.cachedSuperblock == s.cachedSuperblock
     && s'.stagedLength == s.stagedLength + 1
   }
 
@@ -117,7 +112,7 @@ module DiskLog {
     && s.stagedLength == |s.log| // partial syncs are not allowed by the CrashSafeLog model
     && diskOp == D.WriteOp(SuperblockLBA(), SuperblockSector(newSuperblock))
     && s'.log == s.log
-    && s'.persistent == Ready(newSuperblock)
+    && s'.cachedSuperblock == Ready(newSuperblock)
     && s'.stagedLength == s.stagedLength
   }
 

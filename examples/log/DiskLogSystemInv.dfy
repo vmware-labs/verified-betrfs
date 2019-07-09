@@ -68,12 +68,12 @@ module DiskLogSystemInv {
   predicate MachinePersistentWhenReadyMatchesDiskSuperblock(k: Constants, s: Variables)
     requires DiskHasValidSuperblock(k.disk, s.disk)
   {
-    s.machine.persistent.Ready? ==> s.machine.persistent.superblock.length == LengthFromSuperblock(k.disk, s.disk) 
+    s.machine.cachedSuperblock.Ready? ==> s.machine.cachedSuperblock.superblock.length == LengthFromSuperblock(k.disk, s.disk) 
   }
 
   predicate LogIsZeroLengthWhenUnready(k: Constants, s: Variables)
   {
-    s.machine.persistent.Unready? ==> |s.machine.log| == 0
+    s.machine.cachedSuperblock.Unready? ==> |s.machine.log| == 0
   }
 
   predicate Inv(k: Constants, s: Variables)
