@@ -396,15 +396,40 @@ module {:extern} Impl refines Main {
     assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.UnallocStep(ref)));
   }
 
-  method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
+  method fixBigRoot(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires s.Ready?
-  requires ref in s.cache
   requires io.initialized()
   modifies io
   requires M.Inv(k, s)
   ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
   {
+    if (BT.G.Root() !in s.cache) {
+      s' := PageIn(k, s, io, BT.G.Root());
+      return;
+    }
+
+    // TODO
+    s' := s;
+    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+  }
+
+  method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
+  returns (s': Variables)
+  requires s.Ready?
+  requires ref in s.cache
+  requires parentref in s.ephemeralSuperblock.graph
+  requires ref in s.ephemeralSuperblock.graph[parentref]
+  requires io.initialized()
+  modifies io
+  requires M.Inv(k, s)
+  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    if (ref !in s.cache) {
+      s' := PageIn(k, s, io, ref);
+      return;
+    }
+
     // TODO
     s' := s;
     assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
@@ -431,7 +456,16 @@ module {:extern} Impl refines Main {
       s' := dealloc(k, s, io, ref);
     } else if ref :| ref in s.cache && !Marshalling.CappedNode(s.cache[ref]) {
       success := false;
-      s' := fixBigNode(k, s, io, ref);
+      if (ref == BT.G.Root()) {
+        s' := fixBigRoot(k, s, io);
+      } else {
+        assert !deallocable(s, ref);
+        assert !(forall r | r in s.ephemeralSuperblock.graph :: ref !in s.ephemeralSuperblock.graph[r]);
+        assert !(forall r :: r in s.ephemeralSuperblock.graph ==> ref !in s.ephemeralSuperblock.graph[r]);
+        assert (exists r :: !(r in s.ephemeralSuperblock.graph ==> ref !in s.ephemeralSuperblock.graph[r]));
+        var r :| !(r in s.ephemeralSuperblock.graph ==> ref !in s.ephemeralSuperblock.graph[r]);
+        s' := fixBigNode(k, s, io, ref, r);
+      }
     } else if ref :| ref in s.ephemeralSuperblock.graph && ref !in s.ephemeralSuperblock.lbas {
       var lba := getFreeLba(s);
       match lba {
