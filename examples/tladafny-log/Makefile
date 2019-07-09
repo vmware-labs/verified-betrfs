@@ -9,7 +9,7 @@ build/dfys.built: $(dfys)
 
 dfy/%.dfy: src/%.dfy
 	mkdir -p dfy
-	cp $< $@
+	./venv/bin/python3 tladfy.py < $< > $@
 
 build/%.success: dfy/%.dfy build/dfys.built
 	mkdir -p build
