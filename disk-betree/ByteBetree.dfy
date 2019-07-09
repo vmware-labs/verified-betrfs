@@ -85,29 +85,29 @@ module Marshalling {
   function method CapValueSize() : uint64 { 1024 }
   function method CapBucketSize() : uint64 { 507 }
 
-  predicate CappedKey(key: Key) {
+  predicate method CappedKey(key: Key) {
     |key| <= CapKeySize() as int
   }
 
-  predicate CappedMessage(msg: Message)
+  predicate method CappedMessage(msg: Message)
   requires msg != M.IdentityMessage()
   {
     |msg.value| <= CapValueSize() as int
   }
 
-  predicate CappedPivotTable(pivots: seq<Key>)
+  predicate method CappedPivotTable(pivots: seq<Key>)
   {
     forall i | 0 <= i < |pivots| :: CappedKey(pivots[i])
   }
 
-  predicate CappedBucket(bucket: map<Key, Message>)
+  predicate method CappedBucket(bucket: map<Key, Message>)
   requires forall key | key in bucket :: bucket[key] != M.IdentityMessage()
   {
     && |bucket| <= CapBucketSize() as int
     && forall key | key in bucket :: CappedKey(key) && CappedMessage(bucket[key])
   }
 
-  predicate CappedBuckets(buckets: seq<Bucket>)
+  predicate method CappedBuckets(buckets: seq<Bucket>)
   requires forall i | 0 <= i < |buckets| :: forall key | key in buckets[i] :: buckets[i][key] != M.IdentityMessage()
   {
     forall i | 0 <= i < |buckets| :: CappedBucket(buckets[i])
@@ -125,7 +125,7 @@ module Marshalling {
     }
   }
 
-  predicate CappedNode(node: Node)
+  predicate method CappedNode(node: Node)
   requires BT.WFNode(node)
   {
     AllMessagesNeIdentity(node);

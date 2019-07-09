@@ -81,6 +81,7 @@ module {:extern} Impl refines Main {
   returns (success: bool)
   requires WFSector(sector)
   requires io.initialized()
+  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
   modifies io
   ensures success ==> IDiskOp(io.diskOp()) == D.WriteOp(lba, sector)
   ensures !success ==> IDiskOp(io.diskOp()) == D.NoDiskOp
@@ -368,6 +369,47 @@ module {:extern} Impl refines Main {
     }
   }
 
+  predicate method deallocable(s: Variables, ref: BT.G.Reference) {
+    && s.Ready?
+    && ref in s.cache
+    && ref != BT.G.Root()
+    && forall r | r in s.ephemeralSuperblock.graph :: ref !in s.ephemeralSuperblock.graph[r]
+  }
+
+  method dealloc(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
+  returns (s': Variables)
+  requires io.initialized()
+  requires deallocable(s, ref)
+  modifies io
+  requires M.Inv(k, s)
+  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    // TODO
+    s' := BC.Ready(
+        s.persistentSuperblock,
+        BC.Superblock(
+          MapRemove(s.ephemeralSuperblock.lbas, {ref}),
+          MapRemove(s.ephemeralSuperblock.graph, {ref})
+        ),
+        MapRemove(s.cache, {ref})
+      );
+    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.UnallocStep(ref)));
+  }
+
+  method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
+  returns (s': Variables)
+  requires s.Ready?
+  requires ref in s.cache
+  requires io.initialized()
+  modifies io
+  requires M.Inv(k, s)
+  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    // TODO
+    s' := s;
+    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+  }
+
   method sync(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables, success: bool)
   requires io.initialized()
@@ -384,7 +426,13 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    if ref :| ref in s.ephemeralSuperblock.graph && ref !in s.ephemeralSuperblock.lbas {
+    if ref :| ref in s.cache && deallocable(s, ref) {
+      success := false;
+      s' := dealloc(k, s, io, ref);
+    } else if ref :| ref in s.cache && !Marshalling.CappedNode(s.cache[ref]) {
+      success := false;
+      s' := fixBigNode(k, s, io, ref);
+    } else if ref :| ref in s.ephemeralSuperblock.graph && ref !in s.ephemeralSuperblock.lbas {
       var lba := getFreeLba(s);
       match lba {
         case Some(lba) => {
