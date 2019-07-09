@@ -117,7 +117,7 @@ module DiskLog {
     && diskOp == D.WriteOp(SuperblockLBA(), SuperblockSector(newSuperblock))
     && s'.log == s.log
     && s'.persistent == Ready(newSuperblock)
-    && s'.stagedLength == s.stagedLength + 1
+    && s'.stagedLength == s.stagedLength
   }
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, diskOp: DiskOp)
