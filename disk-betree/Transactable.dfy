@@ -182,6 +182,16 @@ abstract module Transactable {
     assert IsStatePath(k, s, s'', ops + [op], path1);
   }
 
+  lemma MakeTransaction1(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  requires |ops| == 1
+  requires OpStep(k, s, s', ops[0]);
+  ensures OpTransaction(k, s, s', ops);
+  {
+    reveal_OpTransaction();
+    var path := [s, s'];
+    assert IsStatePath(k, s, s', ops, path);
+  }
+
   lemma MakeTransaction2(k: Constants, s: Variables, s': Variables, s'': Variables, ops: seq<Op>)
   requires |ops| == 2
   requires OpStep(k, s, s', ops[0]);
@@ -193,8 +203,15 @@ abstract module Transactable {
     assert IsStatePath(k, s, s'', ops, path);
   }
 
-  lemma MakeTransaction1(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-  requires |ops| == 1
+  lemma MakeTransaction3(k: Constants, s: Variables, s': Variables, s'': Variables, s''': Variables, ops: seq<Op>)
+  requires |ops| == 3
   requires OpStep(k, s, s', ops[0]);
-  ensures OpTransaction(k, s, s', ops);
+  requires OpStep(k, s', s'', ops[1]);
+  requires OpStep(k, s'', s''', ops[2]);
+  ensures OpTransaction(k, s, s''', ops);
+  {
+    reveal_OpTransaction();
+    var path := [s, s', s'', s'''];
+    assert IsStatePath(k, s, s''', ops, path);
+  }
 }

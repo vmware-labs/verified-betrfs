@@ -321,7 +321,7 @@ abstract module Total_Order {
     b :| lt(b, a);
   }
 
-  // note this is terrrrrrribly slow
+  // note this is terrrrrrribly slow (but probably best we can do with dafny's built-in set)
   method SortedSeqOfSet(s: set<Element>) returns (run: seq<Element>)
   ensures IsStrictlySorted(run)
   ensures |run| == |s|
