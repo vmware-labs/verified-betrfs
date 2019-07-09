@@ -3,7 +3,7 @@ include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 include "Graph.dfy"
-include "../tla-tree/MissingLibrary.dfy"
+include "../lib/Option.dfy"
 include "Message.dfy"
 include "BetreeSpec.dfy"
 include "Betree.dfy"
@@ -16,7 +16,7 @@ module PivotBetree {
   import BI = PivotBetreeBlockInterface
   import MS = MapSpec
   import opened Maps
-  import opened MissingLibrary
+  import opened Options
 
   import opened G = PivotBetreeGraph
 

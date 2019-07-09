@@ -1,4 +1,4 @@
-include "../tla-tree/MissingLibrary.dfy"
+include "../lib/Option.dfy"
 include "../lib/total_order.dfy"
 include "../lib/NativeTypes.dfy"
 
@@ -29,7 +29,6 @@ module UI {
 }
 
 module MapSpec {
-  import opened MissingLibrary
   import V = ValueWithDefault
 
   import UI = UI

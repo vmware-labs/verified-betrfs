@@ -4,7 +4,7 @@ include "Impl.dfy"
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {
   import Marshalling
-  import opened MissingLibrary
+  import opened Options
   import opened NativeTypes
   import opened Impl
 

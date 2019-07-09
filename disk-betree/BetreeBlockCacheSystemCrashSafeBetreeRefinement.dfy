@@ -154,11 +154,11 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop), CSBT.EphemeralMoveStep);
   }
 
-  lemma RefinesReadNoOpStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
+  lemma RefinesNoOpStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
   requires uiop.NoOp?
-  requires BC.ReadNoOp(k.machine, s.machine, s'.machine, dop)
+  requires BC.NoOp(k.machine, s.machine, s'.machine, dop)
   requires D.Read(k.disk, s.disk, s'.disk, dop);
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))
   {
@@ -181,7 +181,7 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
       case PageInStep(ref) => RefinesPageInStep(k, s, s', uiop, dop, ref);
       case PageInSuperblockStep => RefinesPageInSuperblockStep(k, s, s', uiop, dop);
       case EvictStep(ref) => RefinesEvictStep(k, s, s', uiop, dop, ref);
-      case ReadNoOpStep => RefinesReadNoOpStep(k, s, s', uiop, dop);
+      case NoOpStep => RefinesNoOpStep(k, s, s', uiop, dop);
       case TransactionStep(ops) => { assert false; }
     }
   }
