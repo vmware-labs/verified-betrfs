@@ -39,7 +39,7 @@ abstract module Main {
 
   import MS = MapSpec
   import opened NativeTypes
-  import opened MissingLibrary
+  import opened Options
   import DiskTypes
   import UI
 

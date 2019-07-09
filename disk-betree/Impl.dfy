@@ -3,7 +3,7 @@ include "../lib/Sets.dfy"
 include "BetreeBlockCache.dfy"
 include "ByteBetree.dfy"
 
-module {:extern} Impl refines Main {
+module {:extern} Impl refines Main { 
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
   import M = BetreeBlockCache
@@ -107,7 +107,7 @@ module {:extern} Impl refines Main {
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInSuperblockStep));
     } else {
       s' := s;
-      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
     }
   }
 
@@ -131,11 +131,11 @@ module {:extern} Impl refines Main {
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInStep(ref)));
       } else {
         s' := s;
-        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
       }
     } else {
       s' := s;
-      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.ReadNoOpStep));
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
     }
   }
 
@@ -305,9 +305,7 @@ module {:extern} Impl refines Main {
         s' := s;
         res := None;
 
-        assert M.NextStep(Ik(k), s, s',
-          if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-          IDiskOp(io.diskOp()), M.StutterStep);
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
       }
     }
   }
@@ -399,13 +397,13 @@ module {:extern} Impl refines Main {
           } else {
             success := false;
             s' := s;
-            assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+            assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
           }
         }
         case None => {
           success := false;
           s' := s;
-          assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+          assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
         }
       }
     } else {
@@ -418,7 +416,7 @@ module {:extern} Impl refines Main {
       } else {
         success := false;
         s' := s;
-        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.StutterStep);
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
       }
     }
   }

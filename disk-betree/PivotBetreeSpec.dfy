@@ -3,7 +3,7 @@ include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "MapSpec.dfy"
 include "Graph.dfy"
-include "../tla-tree/MissingLibrary.dfy"
+include "../lib/Option.dfy"
 include "Message.dfy"
 include "BetreeSpec.dfy"
 include "Betree.dfy"
@@ -13,7 +13,7 @@ module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph
 
   import MS = MapSpec
-  import opened MissingLibrary
+  import opened Options
   import M = ValueMessage
 
   import Keyspace = MS.Keyspace
@@ -50,7 +50,7 @@ module PivotBetreeSpec {
   import opened G = PivotBetreeGraph
   import opened Sequences
   import opened Maps
-  import opened MissingLibrary
+  import opened Options
   import Pivots = PivotsLib
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
@@ -708,7 +708,7 @@ module PivotBetreeSpec {
 }
 
 module PivotBetreeSpecWFNodes {
-  import opened MissingLibrary
+  import opened Options
   import opened PivotBetreeSpec`Internal
   import Pivots = PivotsLib
 

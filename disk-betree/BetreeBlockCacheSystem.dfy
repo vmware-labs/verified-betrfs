@@ -186,7 +186,7 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
       case PageInStep(ref) => PageInStepPreservesInv(k, s, s', dop, ref);
       case PageInSuperblockStep => PageInSuperblockStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
-      case ReadNoOpStep => { }
+      case NoOpStep => { }
       case TransactionStep(ops) => { assert false; }
     }
   }

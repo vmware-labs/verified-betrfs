@@ -72,7 +72,7 @@ abstract module BlockCache refines Transactable {
     | PageInStep(ref: Reference)
     | PageInSuperblockStep
     | EvictStep(ref: Reference)
-    | ReadNoOpStep
+    | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
   predicate GraphClosed(graph: map<Reference, seq<Reference>>)
@@ -239,9 +239,9 @@ abstract module BlockCache refines Transactable {
     && s' == s.(cache := MapRemove(s.cache, {ref}))
   }
 
-  predicate ReadNoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.ReadOp?
+    && (dop.ReadOp? || dop.NoDiskOp?)
     && s' == s
   }
 
@@ -258,7 +258,7 @@ abstract module BlockCache refines Transactable {
       case PageInStep(ref) => PageIn(k, s, s', dop, ref)
       case PageInSuperblockStep => PageInSuperblock(k, s, s', dop)
       case EvictStep(ref) => Evict(k, s, s', dop, ref)
-      case ReadNoOpStep => ReadNoOp(k, s, s', dop)
+      case NoOpStep => NoOp(k, s, s', dop)
       case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
     }
   }
@@ -430,7 +430,7 @@ abstract module BlockCache refines Transactable {
       case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
       case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
-      case ReadNoOpStep => { }
+      case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);
     }
   }

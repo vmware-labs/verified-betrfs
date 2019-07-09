@@ -2,11 +2,11 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "BlockCacheSystemCrashSafeBlockInterfaceRefinement.dfy"
 include "PivotBetreeSpec.dfy"
 include "Message.dfy"
-include "../tla-tree/MissingLibrary.dfy"
+include "../lib/Option.dfy"
 
 module Marshalling {
   import opened GenericMarshalling
-  import opened MissingLibrary
+  import opened Options
   import opened NativeTypes
   import opened Sequences
   import opened Maps
