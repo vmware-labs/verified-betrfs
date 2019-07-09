@@ -5,15 +5,12 @@ using System.IO;
 
 namespace Impl_Compile {
   public partial class DiskIOHandler {
-    const int BLOCK_SIZE = 1024*1024;
+    const int BLOCK_SIZE = 8*1024*1024;
 
     public void write(ulong lba, byte[] sector) {
-      if (sector.Length < BLOCK_SIZE) {
-        Array.Resize(ref sector, BLOCK_SIZE);
-      }
-      else if (sector.Length > BLOCK_SIZE) {
+      if (sector.Length != BLOCK_SIZE) {
         // We should never get here due to the contract.
-        throw new Exception("Block must be at most BLOCK_SIZE");
+        throw new Exception("Block must be exactly BLOCK_SIZE bytes");
       }
 
       File.WriteAllBytes(getFilename(lba), sector);

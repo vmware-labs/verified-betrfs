@@ -19,9 +19,9 @@ import opened Math__power2_i
 import opened Native
 
 export S
-  provides NativeTypes, MissingLibrary, parse_Val, ParseVal, SizeOfV, Marshall, Demarshallable,
-      ComputeSizeOf, MarshallVal, lemma_parse_Val_view_specific
-  reveals G, V, ValidGrammar, ValInGrammar, ValidVal
+  provides NativeTypes, MissingLibrary, parse_Val, ParseVal, Marshall, Demarshallable,
+      ComputeSizeOf, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix
+  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum
 
 export extends S
 

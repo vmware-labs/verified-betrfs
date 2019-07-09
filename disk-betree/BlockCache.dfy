@@ -75,7 +75,7 @@ abstract module BlockCache refines Transactable {
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
-  predicate GraphClosed(graph: map<Reference, seq<Reference>>)
+  predicate method GraphClosed(graph: map<Reference, seq<Reference>>)
   {
     forall ref | ref in graph ::
       forall succ | succ in graph[ref] ::

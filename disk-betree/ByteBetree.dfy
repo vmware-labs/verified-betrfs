@@ -74,6 +74,66 @@ module Marshalling {
     GTaggedUnion([SuperblockGrammar(), PivotNodeGrammar()])    
   }
 
+  // Disk block size
+  function method BlockSize() : uint64 { 8 * 1024 * 1024 }
+
+  // Limit on stuff for a node to be marshallable to disk.
+  // (These are set so that when marshalled, the result
+  // will fit on a disk block).
+  function method CapNumBuckets() : uint64 { 8 }
+  function method CapKeySize() : uint64 { 1024 }
+  function method CapValueSize() : uint64 { 1024 }
+  function method CapBucketSize() : uint64 { 507 }
+
+  predicate CappedKey(key: Key) {
+    |key| <= CapKeySize() as int
+  }
+
+  predicate CappedMessage(msg: Message)
+  requires msg != M.IdentityMessage()
+  {
+    |msg.value| <= CapValueSize() as int
+  }
+
+  predicate CappedPivotTable(pivots: seq<Key>)
+  {
+    forall i | 0 <= i < |pivots| :: CappedKey(pivots[i])
+  }
+
+  predicate CappedBucket(bucket: map<Key, Message>)
+  requires forall key | key in bucket :: bucket[key] != M.IdentityMessage()
+  {
+    && |bucket| <= CapBucketSize() as int
+    && forall key | key in bucket :: CappedKey(key) && CappedMessage(bucket[key])
+  }
+
+  predicate CappedBuckets(buckets: seq<Bucket>)
+  requires forall i | 0 <= i < |buckets| :: forall key | key in buckets[i] :: buckets[i][key] != M.IdentityMessage()
+  {
+    forall i | 0 <= i < |buckets| :: CappedBucket(buckets[i])
+  }
+
+  // this is kind of annoying
+  lemma AllMessagesNeIdentity(node: Node)
+  requires BT.WFNode(node)
+  ensures forall i | 0 <= i < |node.buckets| :: forall key | key in node.buckets[i] :: node.buckets[i][key] != M.IdentityMessage()
+  {
+    forall i | 0 <= i < |node.buckets|
+    ensures forall key | key in node.buckets[i] :: node.buckets[i][key] != M.IdentityMessage()
+    {
+      assert BT.NodeHasWFBucketAt(node, i);
+    }
+  }
+
+  predicate CappedNode(node: Node)
+  requires BT.WFNode(node)
+  {
+    AllMessagesNeIdentity(node);
+    && |node.buckets| <= CapNumBuckets() as int
+    && CappedPivotTable(node.pivotTable)
+    && CappedBuckets(node.buckets)
+  }
+
   /////// Conversion to PivotNode
 
   function method valToReference(v: V) : Reference
@@ -137,13 +197,19 @@ module Marshalling {
     )
   }
 
-  function method valToSuperblock(v: V) : Option<BC.Superblock>
+  function method valToSuperblock(v: V) : (s : Option<BC.Superblock>)
   requires ValInGrammar(v, SuperblockGrammar())
-  ensures var s := valToSuperblock(v) ; s.Some? ==> BC.WFPersistentSuperblock(s.value)
+  ensures s.Some? ==> BC.WFPersistentSuperblock(s.value)
   {
     var res := valToLBAsAndSuccs(v.a);
     match res {
-      case Some(res) => Some(BC.Superblock(res.0, res.1))
+      case Some(res) => (
+        if BT.G.Root() in res.1 && BC.GraphClosed(res.1) then (
+          Some(BC.Superblock(res.0, res.1))
+        ) else (
+          None
+        )
+      )
       case None => None
     }
   }
@@ -288,14 +354,16 @@ module Marshalling {
 
   /////// Conversion from PivotNode to a val
 
-  function method refToVal(ref: Reference) : V
-  ensures ValidVal(refToVal(ref))
+  function method refToVal(ref: Reference) : (v : V)
+  ensures ValidVal(v)
+  ensures SizeOfV(v) == 8
   {
     VUint64(ref)
   }
 
-  function method lbaToVal(lba: LBA) : V
-  ensures ValidVal(lbaToVal(lba))
+  function method lbaToVal(lba: LBA) : (v : V)
+  ensures ValidVal(v)
+  ensures SizeOfV(v) == 8
   {
     VUint64(lba)
   }
@@ -303,6 +371,7 @@ module Marshalling {
   method childrenToVal(children: seq<Reference>) returns (v : V)
   requires |children| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
+  ensures SizeOfV(v) <= 8 + |children| * 8
   ensures ValInGrammar(v, GArray(GUint64))
   ensures valToChildren(v.a) == Some(children)
   ensures |v.a| == |children|
@@ -315,6 +384,7 @@ module Marshalling {
       var child := Last(children);
       var last := VUint64(child);
       assert children == DropLast(children) + [child];
+      lemma_SeqSum_prefix(pref.a, last);
       return VArray(pref.a + [last]);
     }
   }
@@ -361,91 +431,75 @@ module Marshalling {
     }
   }
 
-  method messageToVal(m: Message) returns (v : Option<V>)
+  method messageToVal(m: Message) returns (v : V)
   requires m != M.IdentityMessage()
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, MessageGrammar())
-  ensures v.Some? ==> valToMessage(v.value) == Some(m)
+  requires CappedMessage(m)
+  ensures ValidVal(v)
+  ensures SizeOfV(v) <= 8 + CapValueSize() as int
+  ensures ValInGrammar(v, MessageGrammar())
+  ensures valToMessage(v) == Some(m)
   {
-    if |m.value| < 0x1_0000_0000_0000_0000 {
-      return Some(VByteArray(m.value));
-    } else {
-      return None;
-    }
+    return VByteArray(m.value);
   }
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
-  method {:fuel ValInGrammar,2} bucketToVal(bucket: Bucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: Option<V>)
+  method {:fuel ValInGrammar,2} {:fuel SizeOfV,3} bucketToVal(bucket: Bucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires BT.WFBucket(bucket, pivotTable, i)
-  requires |bucket| < 0x1_0000_0000_0000_0000
-  ensures v.Some? ==> ValInGrammar(v.value, BucketGrammar())
-  ensures v.Some? ==> |v.value.a| == |bucket|
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> valToBucket(v.value, pivotTable, i) == Some(bucket)
+  requires CappedBucket(bucket)
+  ensures ValInGrammar(v, BucketGrammar())
+  ensures SizeOfV(v) <= 8 + |bucket| * (8 + 8 + CapKeySize() as int + CapValueSize() as int)
+  ensures |v.a| == |bucket|
+  ensures ValidVal(v)
+  ensures valToBucket(v, pivotTable, i) == Some(bucket)
   {
     if (|bucket| == 0) {
-      return Some(VArray([]));
+      return VArray([]);
     } else {
       var key :| key in bucket;
 
-      if (|key| >= 0x1_0000_0000_0000_0000) { return None; }
-      
       var msg := bucket[key];
       var bucket' := MapRemove(bucket, {key});
       var v' := bucketToVal(bucket', pivotTable, i);
       match v' {
-        case None => { return None; }
-        case Some(VArray(pref)) => {
+        case VArray(pref) => {
           var vmsg := messageToVal(msg);
-          match vmsg {
-            case None => { return None; }
-            case Some(vmsg) => {
-              var pair := VTuple([VByteArray(key), vmsg]);
-              assert bucket'[key := msg] == bucket;
+          var pair := VTuple([VByteArray(key), vmsg]);
+          assert bucket'[key := msg] == bucket;
 
-              assert |pref + [pair]| == |bucket|; // observe
-              forall v | v in pref + [pair]
-              ensures ValidVal(v)
-              {
-              }
-
-              return Some(VArray(pref + [pair])); 
-            }
+          assert |pref + [pair]| == |bucket|; // observe
+          forall v | v in pref + [pair]
+          ensures ValidVal(v)
+          {
           }
+
+          lemma_SeqSum_prefix(pref, pair);
+          return VArray(pref + [pair]);
         }
       }
     } 
   }
 
-  method bucketsToVal(buckets: seq<Bucket>, ghost pivotTable: Pivots.PivotTable) returns (v: Option<V>)
+  method bucketsToVal(buckets: seq<Bucket>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |buckets| :: BT.WFBucket(buckets[i], pivotTable, i)
-  requires |buckets| < 0x1_0000_0000_0000_0000
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, GArray(BucketGrammar()))
-  ensures v.Some? ==> |v.value.a| == |buckets|
-  ensures v.Some? ==> valToBuckets(v.value.a, pivotTable) == Some(buckets)
+  requires CappedBuckets(buckets)
+  requires |buckets| <= CapNumBuckets() as int
+  ensures ValidVal(v)
+  ensures SizeOfV(v) <= 8 + |buckets| * (8 + CapBucketSize() as int * (8 + 8 + CapKeySize() as int + CapValueSize() as int))
+  ensures ValInGrammar(v, GArray(BucketGrammar()))
+  ensures |v.a| == |buckets|
+  ensures valToBuckets(v.a, pivotTable) == Some(buckets)
   {
     if |buckets| == 0 {
-      return Some(VArray([]));
+      return VArray([]);
     } else {
       var pref := bucketsToVal(DropLast(buckets), pivotTable);
-      match pref {
-        case None => { return None; }
-        case Some(pref) => {
-          var bucket := Last(buckets);
-          if (|bucket| >= 0x1_0000_0000_0000_0000) { return None; }
-          var bucketVal := bucketToVal(bucket, pivotTable, |buckets| - 1);
-          match bucketVal {
-            case None => { return None; }
-            case Some(bucketVal) => {
-              assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
-              return Some(VArray(pref.a + [bucketVal]));
-            }
-          }
-        }
-      }
+      var bucket := Last(buckets);
+      var bucketVal := bucketToVal(bucket, pivotTable, |buckets| - 1);
+      assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
+      lemma_SeqSum_prefix(pref.a, bucketVal);
+      return VArray(pref.a + [bucketVal]);
     }
   }
 
@@ -477,25 +531,24 @@ module Marshalling {
     }
   }
 
-  method pivotsToVal(pivots: seq<Key>) returns (v : Option<V>)
+  method pivotsToVal(pivots: seq<Key>) returns (v : V)
   requires Pivots.WFPivots(pivots)
-  requires |pivots| < 0x1_0000_0000_0000_0000
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, GArray(GByteArray))
-  ensures v.Some? ==> |v.value.a| == |pivots|
-  ensures v.Some? ==> valToPivots(v.value.a) == Some(pivots)
+  requires CappedPivotTable(pivots)
+  requires |pivots| <= CapNumBuckets() as int - 1
+  ensures ValidVal(v)
+  ensures SizeOfV(v) <= 8 + |pivots| * (8 + CapKeySize() as int)
+  ensures ValInGrammar(v, GArray(GByteArray))
+  ensures |v.a| == |pivots|
+  ensures valToPivots(v.a) == Some(pivots)
   {
     if |pivots| == 0 {
-      return Some(VArray([]));
+      return VArray([]);
     } else {
       var pivots' := DropLast(pivots);
       Keyspace.StrictlySortedPop(pivots);
-      var prefOpt := pivotsToVal(pivots');
-      if prefOpt.None? { return None; }
-      var pref := prefOpt.value;
+      var pref := pivotsToVal(pivots');
 
       var key := Last(pivots);
-      if (|key| >= 0x1_0000_0000_0000_0000) { return None; }
 
       var last := VByteArray(key);
       assert ValidVal(last); // observe
@@ -503,15 +556,21 @@ module Marshalling {
       assert pivots == DropLast(pivots) + [key];
       lastPivotWf(pivots', key);
 
-      return Some(VArray(pref.a + [last]));
+      lemma_SeqSum_prefix(pref.a, last);
+      return VArray(pref.a + [last]);
     }
   }
 
-  method nodeToVal(node: Node) returns (v : Option<V>)
+  method {:fuel SizeOfV,4} nodeToVal(node: Node) returns (v : V)
   requires BT.WFNode(node)
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, PivotNodeGrammar())
-  ensures v.Some? ==> valToPivotNode(v.value) == Some(node)
+  requires CappedNode(node)
+  ensures ValidVal(v)
+  ensures SizeOfV(v) <= 
+      8 + CapNumBuckets() as int * (8 + CapBucketSize() as int * (8 + 8 + CapKeySize() as int + CapValueSize() as int)) +
+      8 + (CapNumBuckets() as int - 1) * (8 + CapKeySize() as int) +
+      8 + CapNumBuckets() as int * 8
+  ensures ValInGrammar(v, PivotNodeGrammar())
+  ensures valToPivotNode(v) == Some(node)
   {
     forall i | 0 <= i < |node.buckets|
     ensures BT.WFBucket(node.buckets[i], node.pivotTable, i);
@@ -519,33 +578,31 @@ module Marshalling {
       assert BT.NodeHasWFBucketAt(node, i);
     }
 
-    if (|node.buckets| >= 0x1_0000_0000_0000_0000) { return None; }
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
-    match buckets {
-      case None => { return None; }
-      case Some(buckets) => {
-        var pivots := pivotsToVal(node.pivotTable);
-        if (pivots.None?) { return None; }
+    var pivots := pivotsToVal(node.pivotTable);
 
-        var children;
-        if node.children.Some? {
-          children := childrenToVal(node.children.value);
-        } else {
-          children := VArray([]);
-        }
-          
-        return Some(VTuple([pivots.value, children, buckets]));
-      }
+    var children;
+    if node.children.Some? {
+      children := childrenToVal(node.children.value);
+    } else {
+      children := VArray([]);
     }
+      
+    v := VTuple([pivots, children, buckets]);
+
+    assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
   }
 
   method sectorToVal(sector: Sector) returns (v : Option<V>)
   requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
   requires sector.SectorBlock? ==> BT.WFNode(sector.block);
+  requires sector.SectorBlock? ==> CappedNode(sector.block);
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
   ensures v.Some? ==> valToSector(v.value) == Some(sector)
+  ensures sector.SectorBlock? ==> v.Some?
+  ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int
   {
     match sector {
       case SectorSuperblock(Superblock(lbas, succs)) => {
@@ -560,23 +617,17 @@ module Marshalling {
         }
       }
       case SectorBlock(node) => {
-        var w := nodeToVal(node);
-        match w {
-          case Some(v) => return Some(VCase(1, v));
-          case None => return None;
-        }
+        var v := nodeToVal(node);
+        return Some(VCase(1, v));
       }
     }
   }
-  
+
   /////// Marshalling and de-marshalling
 
-  function method {:opaque} parseSector(data: seq<byte>) : Option<Sector>
-  ensures var s := parseSector(data);
-      s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
-  ensures var s := parseSector(data);
-      s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
-
+  function method {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
+  ensures s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(s.value.block)
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -622,15 +673,17 @@ module Marshalling {
   method MarshallSector(sector: Sector) returns (data : array?<byte>)
   requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
   requires sector.SectorBlock? ==> BT.WFNode(sector.block);
+  requires sector.SectorBlock? ==> CappedNode(sector.block);
   ensures data != null ==> parseSector(data[..]) == Some(sector)
-  ensures data != null ==> data.Length == 1024*1024
+  ensures data != null ==> data.Length == BlockSize() as int
+  ensures sector.SectorBlock? ==> data != null;
   {
     var v := sectorToVal(sector);
     match v {
       case None => return null;
       case Some(v) => {
-        if (SizeOfV(v) <= 0x1_00000) {
-          var data := MarshallIntoFixedSize(v, SectorGrammar(), 1024*1024);
+        if (SizeOfV(v) <= BlockSize() as int) {
+          var data := MarshallIntoFixedSize(v, SectorGrammar(), BlockSize());
           reveal_parseSector();
           return data;
         } else {
