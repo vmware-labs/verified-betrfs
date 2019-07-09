@@ -68,7 +68,7 @@ abstract module Main {
 
   // DiskInterface
 
-  function method BlockSize() : uint64 { 1024*1024 }
+  function method BlockSize() : uint64 { 8*1024*1024 }
 
   type LBA = DiskTypes.LBA
   type Sector = DiskTypes.ByteSector
