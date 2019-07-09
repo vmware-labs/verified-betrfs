@@ -138,6 +138,12 @@ class Framework {
     app.crash();
     app.Query("abc");
     app.Query("xyq");
+
+    for (int i = 0; i < 520; i++) {
+      app.Insert("num" + i.ToString(), "llama");
+    }
+
+    app.Sync();
   }
 
   public static void Mkfs() {
