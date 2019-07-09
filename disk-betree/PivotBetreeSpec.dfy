@@ -935,6 +935,13 @@ module PivotBetreeSpecWFNodes {
     SplitBucketOnPivotsCorrect(pivots, j, s);
   }
 
+  lemma ValidRepivotWFNodes(r: Repivot)
+  requires ValidRepivot(r)
+  ensures forall i | 0 <= i < |RepivotOps(r)| :: WFNode(RepivotOps(r)[i].node)
+  {
+    WFApplyRepivot(r.leaf, r.pivots);
+  }
+
   // This lemma is useful for BetreeBlockCache
   lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
   requires ValidBetreeStep(betreeStep)
@@ -952,6 +959,9 @@ module PivotBetreeSpecWFNodes {
       }
       case BetreeMerge(fusion) => {
         ValidMergeWritesWFNodes(fusion);
+      }
+      case BetreeRepivot(r) => {
+        ValidRepivotWFNodes(r);
       }
     }
   }

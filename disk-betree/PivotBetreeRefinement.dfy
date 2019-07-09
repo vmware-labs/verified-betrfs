@@ -164,34 +164,42 @@ abstract module PivotBetreeInvAndRefinement {
   requires Inv(k, s)
   requires PB.NextStep(k, s, s', uiop, PB.BetreeStep(betreeStep))
   ensures Inv(k, s')
-  ensures B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)))
+  //ensures B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)))
+  ensures B.Next(Ik(k), I(k,s), I(k,s'), uiop)
   {
-    SpecRef.RefinesValidBetreeStep(betreeStep);
-    SpecRef.RefinesReadOps(betreeStep);
-    SpecRef.RefinesOps(betreeStep);
-    TransactionRefines(k, s, s', BetreeStepOps(betreeStep));
-    ReadsRefines(k, s, BetreeStepReads(betreeStep));
+    if (betreeStep.BetreeRepivot?) {
+      SpecRef.RepivotPreservesNode(betreeStep.repivot);
 
-    /*
-    match betreeStep {
-      case BetreeQuery(q) => {
-        assert B.Betree(Ik(k), I(k,s), I(k,s'), uiop, SpecRef.IStep(betreeStep));
+      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.StutterStep);
+      BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    } else {
+      SpecRef.RefinesValidBetreeStep(betreeStep);
+      SpecRef.RefinesReadOps(betreeStep);
+      SpecRef.RefinesOps(betreeStep);
+      TransactionRefines(k, s, s', BetreeStepOps(betreeStep));
+      ReadsRefines(k, s, BetreeStepReads(betreeStep));
+
+      /*
+      match betreeStep {
+        case BetreeQuery(q) => {
+          assert B.Betree(Ik(k), I(k,s), I(k,s'), uiop, SpecRef.IStep(betreeStep));
+          assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+        }
+        case BetreeInsert(ins) => 
+        assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+        case BetreeFlush(flush) => 
+        assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+        case BetreeGrow(growth) => 
+        assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+        case BetreeSplit(fusion) => 
+        assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+        case BetreeMerge(fusion) => 
         assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
       }
-      case BetreeInsert(ins) => 
+      */
       assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
-      case BetreeFlush(flush) => 
-      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
-      case BetreeGrow(growth) => 
-      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
-      case BetreeSplit(fusion) => 
-      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
-      case BetreeMerge(fusion) => 
-      assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
+      BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
     }
-    */
-    assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
-    BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
   lemma GCStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>)
