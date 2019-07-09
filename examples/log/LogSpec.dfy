@@ -21,6 +21,7 @@ module LogSpec {
     && s' == s
   }
 
+  // Append(element) == log' = log + [element]
   predicate Append(k: Constants, s: Variables, s': Variables, element: Element)
   {
     && s'.log == s.log + [element]
