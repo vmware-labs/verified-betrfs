@@ -87,10 +87,7 @@ abstract module Main {
     method {:axiom} write(lba: LBA, sector: array<byte>)
     modifies this;
     requires diskOp() == D.NoDiskOp;
-    // TODO this isn't sound (unless we prove that adding extra bytes doesn't
-    // change the demarshalling result). Should just make it
-    // sector.Length == BlockSize() instead.
-    requires sector.Length <= BlockSize() as int
+    requires sector.Length == BlockSize() as int
     requires ValidSector(sector[..])
     ensures diskOp() == D.WriteOp(lba, sector[..]);
 

@@ -604,18 +604,33 @@ module Marshalling {
     }
   }
 
+  method MarshallIntoFixedSize(val:V, grammar:G, n: uint64) returns (data:array<byte>)
+    requires ValidGrammar(grammar);
+    requires ValInGrammar(val, grammar);
+    requires ValidVal(val);
+    requires 0 <= SizeOfV(val) <= n as int
+    ensures fresh(data);
+    ensures |data[..]| == n as int
+    ensures parse_Val(data[..], grammar).0.Some? && parse_Val(data[..], grammar).0.value == val;
+  {
+    data := new byte[n];
+    var computed_size := GenericMarshalling.MarshallVal(val, grammar, data, 0);
+    GenericMarshalling.lemma_parse_Val_view_specific(data[..], val, grammar, 0, (n as int));
+    assert data[..] == data[0..n];
+  }
+
   method MarshallSector(sector: Sector) returns (data : array?<byte>)
   requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
   requires sector.SectorBlock? ==> BT.WFNode(sector.block);
   ensures data != null ==> parseSector(data[..]) == Some(sector)
-  ensures data != null ==> data.Length <= 1024*1024
+  ensures data != null ==> data.Length == 1024*1024
   {
     var v := sectorToVal(sector);
     match v {
       case None => return null;
       case Some(v) => {
         if (SizeOfV(v) <= 0x1_00000) {
-          var data := Marshall(v, SectorGrammar());
+          var data := MarshallIntoFixedSize(v, SectorGrammar(), 1024*1024);
           reveal_parseSector();
           return data;
         } else {
@@ -624,4 +639,5 @@ module Marshalling {
       }
     }
   }
+
 }
