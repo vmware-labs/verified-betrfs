@@ -525,127 +525,133 @@ module PivotBetreeSpec {
 
   //// Split
 
-  predicate ValidSplit(fusion: NodeFusion)
+  predicate ValidSplit(f: NodeFusion)
   {
-    && WFNode(fusion.fused_parent)
-    && WFNode(fusion.fused_child)
-    && fusion.fused_parent.children.Some?
-    && 0 <= fusion.slot_idx < |fusion.fused_parent.buckets|
-    && 1 <= fusion.num_children_left < |fusion.fused_child.buckets|
-    && fusion.fused_parent.children.value[fusion.slot_idx] == fusion.fused_childref
-    && fusion.fused_child.pivotTable[fusion.num_children_left - 1] == fusion.pivot
-    && Pivots.Route(fusion.fused_parent.pivotTable, fusion.pivot) == fusion.slot_idx
-    && (fusion.slot_idx > 0 ==>
-        fusion.pivot != fusion.fused_parent.pivotTable[fusion.slot_idx - 1])
-    && Keyspace.NotMinimum(fusion.pivot)
+    && WFNode(f.fused_parent)
+    && WFNode(f.fused_child)
+
+    && f.fused_parent.children.Some?
+    && 0 <= f.slot_idx < |f.fused_parent.buckets|
+
+    && var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
+    && var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
+    && var child := CutoffNode(f.fused_child, lbound, ubound);
+
+    && 1 <= f.num_children_left < |child.buckets|
+    && f.fused_parent.children.value[f.slot_idx] == f.fused_childref
+    && child.pivotTable[f.num_children_left - 1] == f.pivot
+    && Pivots.Route(f.fused_parent.pivotTable, f.pivot) == f.slot_idx
+    && (f.slot_idx > 0 ==>
+        f.pivot != f.fused_parent.pivotTable[f.slot_idx - 1])
+    && Keyspace.NotMinimum(f.pivot)
 
     // We require buffer to already be flushed.
-    && fusion.fused_parent.buckets[fusion.slot_idx] == map[]
+    && f.fused_parent.buckets[f.slot_idx] == map[]
 
-    && fusion.split_parent == Node(
-      insert(fusion.fused_parent.pivotTable, fusion.pivot, fusion.slot_idx),
-      Some(replace1with2(fusion.fused_parent.children.value, fusion.left_childref, fusion.right_childref, fusion.slot_idx)),
+    && f.split_parent == Node(
+      insert(f.fused_parent.pivotTable, f.pivot, f.slot_idx),
+      Some(replace1with2(f.fused_parent.children.value, f.left_childref, f.right_childref, f.slot_idx)),
       replace1with2(
-        fusion.fused_parent.buckets,
-        //SplitBucketLeft(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
-        //SplitBucketRight(fusion.fused_parent.buckets[fusion.slot_idx], fusion.pivot),
+        f.fused_parent.buckets,
+        //SplitBucketLeft(f.fused_parent.buckets[f.slot_idx], f.pivot),
+        //SplitBucketRight(f.fused_parent.buckets[f.slot_idx], f.pivot),
         map[],
         map[],
-        fusion.slot_idx)
+        f.slot_idx)
     )
 
-    && fusion.left_child == Node(
-      fusion.fused_child.pivotTable[ .. fusion.num_children_left - 1 ],
-      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ .. fusion.num_children_left ]) else None,
-      fusion.fused_child.buckets[ .. fusion.num_children_left ]
+    && f.left_child == Node(
+      child.pivotTable[ .. f.num_children_left - 1 ],
+      if child.children.Some? then Some(child.children.value[ .. f.num_children_left ]) else None,
+      child.buckets[ .. f.num_children_left ]
     )
 
-    && fusion.right_child == Node(
-      fusion.fused_child.pivotTable[ fusion.num_children_left .. ],
-      if fusion.fused_child.children.Some? then Some(fusion.fused_child.children.value[ fusion.num_children_left .. ]) else None,
-      fusion.fused_child.buckets[ fusion.num_children_left .. ]
+    && f.right_child == Node(
+      child.pivotTable[ f.num_children_left .. ],
+      if child.children.Some? then Some(child.children.value[ f.num_children_left .. ]) else None,
+      child.buckets[ f.num_children_left .. ]
     )
   }
 
-  function SplitReads(fusion: NodeFusion) : seq<ReadOp>
-  requires ValidSplit(fusion)
+  function SplitReads(f: NodeFusion) : seq<ReadOp>
+  requires ValidSplit(f)
   {
     [
-      ReadOp(fusion.parentref, fusion.fused_parent),
-      ReadOp(fusion.fused_childref, fusion.fused_child)
+      ReadOp(f.parentref, f.fused_parent),
+      ReadOp(f.fused_childref, f.fused_child)
     ]
   }
 
-  function SplitOps(fusion: NodeFusion) : seq<Op>
-  requires ValidSplit(fusion)
+  function SplitOps(f: NodeFusion) : seq<Op>
+  requires ValidSplit(f)
   {
     [
-      G.AllocOp(fusion.left_childref, fusion.left_child),
-      G.AllocOp(fusion.right_childref, fusion.right_child),
-      G.WriteOp(fusion.parentref, fusion.split_parent)
+      G.AllocOp(f.left_childref, f.left_child),
+      G.AllocOp(f.right_childref, f.right_child),
+      G.WriteOp(f.parentref, f.split_parent)
     ]
   }
 
   //// Merge
 
-  predicate ValidMerge(fusion: NodeFusion)
+  predicate ValidMerge(f: NodeFusion)
   {
-    && WFNode(fusion.split_parent)
-    && WFNode(fusion.left_child)
-    && WFNode(fusion.right_child)
-    && 0 <= fusion.slot_idx < |fusion.split_parent.buckets| - 1
-    && fusion.num_children_left == |fusion.left_child.buckets|
-    && fusion.split_parent.pivotTable[fusion.slot_idx] == fusion.pivot
-    && fusion.split_parent.children.Some?
-    && fusion.split_parent.children.value[fusion.slot_idx] == fusion.left_childref
-    && fusion.split_parent.children.value[fusion.slot_idx + 1] == fusion.right_childref
-    && fusion.split_parent.buckets[fusion.slot_idx] == map[]
-    && fusion.split_parent.buckets[fusion.slot_idx + 1] == map[]
+    && WFNode(f.split_parent)
+    && WFNode(f.left_child)
+    && WFNode(f.right_child)
+    && 0 <= f.slot_idx < |f.split_parent.buckets| - 1
+    && f.num_children_left == |f.left_child.buckets|
+    && f.split_parent.pivotTable[f.slot_idx] == f.pivot
+    && f.split_parent.children.Some?
+    && f.split_parent.children.value[f.slot_idx] == f.left_childref
+    && f.split_parent.children.value[f.slot_idx + 1] == f.right_childref
+    && f.split_parent.buckets[f.slot_idx] == map[]
+    && f.split_parent.buckets[f.slot_idx + 1] == map[]
 
     // TODO require bucket to be empty before merge?
-    && fusion.fused_parent == Node(
-      remove(fusion.split_parent.pivotTable, fusion.slot_idx),
-      Some(replace2with1(fusion.split_parent.children.value, fusion.fused_childref, fusion.slot_idx)),
-      replace2with1(fusion.split_parent.buckets, map[], fusion.slot_idx)
+    && f.fused_parent == Node(
+      remove(f.split_parent.pivotTable, f.slot_idx),
+      Some(replace2with1(f.split_parent.children.value, f.fused_childref, f.slot_idx)),
+      replace2with1(f.split_parent.buckets, map[], f.slot_idx)
     )
 
     // this is actually an invariant which follows from fixed height of the tree,
     // but we currently don't track that as an invariant... should we?
-    && (fusion.left_child.children.Some? ==> fusion.right_child.children.Some?)
-    && (fusion.left_child.children.None? ==> fusion.right_child.children.None?)
+    && (f.left_child.children.Some? ==> f.right_child.children.Some?)
+    && (f.left_child.children.None? ==> f.right_child.children.None?)
 
-    && var lbound := (if fusion.slot_idx > 0 then Some(fusion.split_parent.pivotTable[fusion.slot_idx - 1]) else None);
-    && var ubound := (if fusion.slot_idx + 1 < |fusion.split_parent.pivotTable| then Some(fusion.split_parent.pivotTable[fusion.slot_idx + 1]) else None);
+    && var lbound := (if f.slot_idx > 0 then Some(f.split_parent.pivotTable[f.slot_idx - 1]) else None);
+    && var ubound := (if f.slot_idx + 1 < |f.split_parent.pivotTable| then Some(f.split_parent.pivotTable[f.slot_idx + 1]) else None);
 
-    && var left := CutoffNode(fusion.left_child, lbound, Some(fusion.pivot));
-    && var right := CutoffNode(fusion.right_child, Some(fusion.pivot), ubound);
+    && var left := CutoffNode(f.left_child, lbound, Some(f.pivot));
+    && var right := CutoffNode(f.right_child, Some(f.pivot), ubound);
 
     // TODO this isn't quite right:
     // we need to cut out every key > pivot in leftChild
     // and likewise cut out every key < pivot in rightChild
-    && fusion.fused_child == Node(
-      concat3(left.pivotTable, fusion.pivot, right.pivotTable),
+    && f.fused_child == Node(
+      concat3(left.pivotTable, f.pivot, right.pivotTable),
       if left.children.Some? then Some(left.children.value + right.children.value) else None,
       left.buckets + right.buckets
     )
   }
 
-  function MergeReads(fusion: NodeFusion) : seq<ReadOp>
-  requires ValidMerge(fusion)
+  function MergeReads(f: NodeFusion) : seq<ReadOp>
+  requires ValidMerge(f)
   {
     [
-      ReadOp(fusion.parentref, fusion.split_parent),
-      ReadOp(fusion.left_childref, fusion.left_child),
-      ReadOp(fusion.right_childref, fusion.right_child)
+      ReadOp(f.parentref, f.split_parent),
+      ReadOp(f.left_childref, f.left_child),
+      ReadOp(f.right_childref, f.right_child)
     ]
   }
 
-  function MergeOps(fusion: NodeFusion) : seq<Op>
-  requires ValidMerge(fusion)
+  function MergeOps(f: NodeFusion) : seq<Op>
+  requires ValidMerge(f)
   {
     [
-      G.AllocOp(fusion.fused_childref, fusion.fused_child),
-      G.WriteOp(fusion.parentref, fusion.fused_parent)
+      G.AllocOp(f.fused_childref, f.fused_child),
+      G.WriteOp(f.parentref, f.fused_parent)
     ]
   }
 
@@ -804,17 +810,21 @@ module PivotBetreeSpecWFNodes {
     //assert WFNode(newchild);
   }
 
-  lemma ValidSplitWritesWFNodes(fusion: NodeFusion)
-  requires ValidSplit(fusion)
-  ensures forall i | 0 <= i < |SplitOps(fusion)| :: WFNode(SplitOps(fusion)[i].node)
+  lemma ValidSplitWritesWFNodes(f: NodeFusion)
+  requires ValidSplit(f)
+  ensures forall i | 0 <= i < |SplitOps(f)| :: WFNode(SplitOps(f)[i].node)
   {
-    var split_parent := fusion.split_parent;
-    var fused_parent := fusion.fused_parent;
-    var fused_child := fusion.fused_child;
-    var left_child := fusion.left_child;
-    var right_child := fusion.right_child;
-    var slot_idx := fusion.slot_idx;
-    var pivot := fusion.pivot;
+    var split_parent := f.split_parent;
+    var fused_parent := f.fused_parent;
+
+    var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
+    var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
+    var child := CutoffNode(f.fused_child, lbound, ubound);
+
+    var left_child := f.left_child;
+    var right_child := f.right_child;
+    var slot_idx := f.slot_idx;
+    var pivot := f.pivot;
 
     Pivots.WFPivotsInsert(fused_parent.pivotTable, slot_idx, pivot);
 
@@ -823,31 +833,31 @@ module PivotBetreeSpecWFNodes {
 
     assert WFNode(split_parent);
 
-    Pivots.WFSlice(fused_child.pivotTable, 0, fusion.num_children_left - 1);
-    Pivots.WFSuffix(fused_child.pivotTable, fusion.num_children_left);
+    Pivots.WFSlice(child.pivotTable, 0, f.num_children_left - 1);
+    Pivots.WFSuffix(child.pivotTable, f.num_children_left);
 
-    NodeHasWFBucketAtIdenticalSlice(fused_child, left_child, 0, |left_child.buckets| - 1, 0);
-    NodeHasWFBucketAtIdenticalSlice(fused_child, right_child, 0, |right_child.buckets| - 1, -fusion.num_children_left);
+    NodeHasWFBucketAtIdenticalSlice(child, left_child, 0, |left_child.buckets| - 1, 0);
+    NodeHasWFBucketAtIdenticalSlice(child, right_child, 0, |right_child.buckets| - 1, -f.num_children_left);
 
     assert WFNode(left_child);
     assert WFNode(right_child);
   }
 
-  lemma ValidMergeWritesWFNodes(fusion: NodeFusion)
-  requires ValidMerge(fusion)
-  ensures WFNode(fusion.fused_parent);
-  ensures WFNode(fusion.fused_child);
-  ensures forall i | 0 <= i < |MergeOps(fusion)| :: WFNode(MergeOps(fusion)[i].node)
+  lemma ValidMergeWritesWFNodes(f: NodeFusion)
+  requires ValidMerge(f)
+  ensures WFNode(f.fused_parent);
+  ensures WFNode(f.fused_child);
+  ensures forall i | 0 <= i < |MergeOps(f)| :: WFNode(MergeOps(f)[i].node)
   {
-    var split_parent := fusion.split_parent;
-    var fused_parent := fusion.fused_parent;
-    var fused_child := fusion.fused_child;
-    var lbound := (if fusion.slot_idx > 0 then Some(fusion.split_parent.pivotTable[fusion.slot_idx - 1]) else None);
-    var ubound := (if fusion.slot_idx + 1 < |fusion.split_parent.pivotTable| then Some(fusion.split_parent.pivotTable[fusion.slot_idx + 1]) else None);
-    var left_child := CutoffNode(fusion.left_child, lbound, Some(fusion.pivot));
-    var right_child := CutoffNode(fusion.right_child, Some(fusion.pivot), ubound);
-    var slot_idx := fusion.slot_idx;
-    var pivot := fusion.pivot;
+    var split_parent := f.split_parent;
+    var fused_parent := f.fused_parent;
+    var fused_child := f.fused_child;
+    var lbound := (if f.slot_idx > 0 then Some(f.split_parent.pivotTable[f.slot_idx - 1]) else None);
+    var ubound := (if f.slot_idx + 1 < |f.split_parent.pivotTable| then Some(f.split_parent.pivotTable[f.slot_idx + 1]) else None);
+    var left_child := CutoffNode(f.left_child, lbound, Some(f.pivot));
+    var right_child := CutoffNode(f.right_child, Some(f.pivot), ubound);
+    var slot_idx := f.slot_idx;
+    var pivot := f.pivot;
 
     Pivots.WFPivotsRemoved(split_parent.pivotTable, slot_idx);
 
