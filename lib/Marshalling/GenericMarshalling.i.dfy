@@ -19,7 +19,8 @@ import opened Math__power2_i
 import opened Native
 
 export S
-  provides NativeTypes, MissingLibrary, parse_Val, ParseVal, SizeOfV, Marshall, Demarshallable
+  provides NativeTypes, MissingLibrary, parse_Val, ParseVal, SizeOfV, Marshall, Demarshallable,
+      ComputeSizeOf, MarshallVal, lemma_parse_Val_view_specific
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal
 
 export extends S
@@ -1842,4 +1843,6 @@ method Marshall(val:V, grammar:G) returns (data:array<byte>)
 
     lemma_parse_Val_view_specific(data[..], val, grammar, 0, (size as int));
 }
+
+
 } 
