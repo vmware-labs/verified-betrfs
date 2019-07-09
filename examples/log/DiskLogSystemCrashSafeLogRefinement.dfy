@@ -63,15 +63,25 @@ module DiskLogSystemCrashSafeLogRefinement {
         assert DLS.M.Query(k.machine, s.machine, s'.machine, step.diskOp, idx, result);
         assert step.diskOp == DLS.D.NoDiskOp;
         if DLS.M.SupersedesDisk(k.machine, s.machine) {
-          assert s.machine.log == is.ephemeral.log;
           assert 0 <= idx.idx < |is.ephemeral.log|;
           assert result == is.ephemeral.log[idx.idx];
         } else {
           assert DLSI.MemoryMatchesDisk(k, s);
           assert IDisk(k.disk, s.disk).log == is.ephemeral.log;
-          assert |s.machine.log| < DLSI.LengthFromSuperblock(k.disk, s.disk);
-          assert 0 <= idx.idx < |is.ephemeral.log|;
-          assert result == is.ephemeral.log[idx.idx];
+
+          assert DLSI.MachinePersistentWhenReadyMatchesDiskSuperblock(k, s);
+          if s.machine.persistent.Ready? {
+            assert s.machine.persistent.superblock.length == DLSI.LengthFromSuperblock(k.disk, s.disk);
+            assert |s.machine.log| < DLSI.LengthFromSuperblock(k.disk, s.disk);
+            assert 0 <= idx.idx < |is.ephemeral.log|;
+            assert 0 <= idx.idx < DLSI.LengthFromSuperblock(k.disk, s.disk);
+            assert DLSI.MemoryMatchesDisk(k, s);
+            assert result == s.machine.log[idx.idx];
+            assert s.machine.log[idx.idx] == is.ephemeral.log[idx.idx];
+            assert result == is.ephemeral.log[idx.idx];
+          } else {
+            assert false;
+          }
         }
         assert CSL.LS.Query(ik, is.ephemeral, is'.ephemeral, idx, result);
         assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.QueryStep(idx, result));
@@ -80,62 +90,26 @@ module DiskLogSystemCrashSafeLogRefinement {
         assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
       case FetchSuperblockStep(length: int) => {
-        assert DLS.M.FetchSuperblock(k.machine, s.machine, s'.machine, step.diskOp, length);
-        assert DLSI.MemoryMatchesDisk(k, s);
-        assert DLSI.MemoryMatchesDisk(k, s');
-        assert s.machine.persistent == DLS.M.Unready;
-        assert s'.machine.log == s.machine.log;
-        assert s'.machine.persistent == DLS.M.Ready(DLS.M.Superblock(length));
-        assert !DLS.M.SupersedesDisk(k.machine, s.machine);
-        if DLS.M.SupersedesDisk(k.machine, s'.machine) {
-          assert s'.machine.persistent.superblock.length <= |s.machine.log|;
-          assert IEphemeral(k, s) == IDisk(k.disk, s.disk);
-          assert is'.persistent == is.persistent;
-
-          assert DLSI.MemoryMatchesDisk(k, s);
-          // assert forall idx : DLSI.Index :: 0 <= idx.idx < |s.machine.log| ==> s.machine.log[idx.idx] == DLSI.ElementFromDiskLog(k.disk, s.disk, idx);
-          assert DLSI.DiskIsValidLog(k.disk, s.disk);
-          if |s.machine.log| == 0 {
-            assert s.machine.log == IDisk(k.disk, s.disk).log;
-          } else {
-            assert false;
-            //assert s.machine.log == ExtractDiskPrefix(k.disk, s.disk, |s.machine.log|);
-            //assert s.machine.log == IDisk(k.disk, s.disk).log;
-          }
-
-          assert is.ephemeral.log == IDisk(k.disk, s.disk).log;
-          assert is'.ephemeral.log == s.machine.log;
-          assert is'.ephemeral.log == s'.machine.log;
-          assert is'.ephemeral == CSL.LS.Variables(s.machine.log);
-
-          assert is'.ephemeral == is.ephemeral;
-
-          assert is == is';
-        } else {
-          assert is == is';
-        }
-        assert CSL.LS.Stutter(ik, is.ephemeral, is'.ephemeral);
-        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.StutterStep);
-        assert CSL.LS.Next(ik, is.ephemeral, is'.ephemeral);
-        assert CSL.EphemeralMove(Ik(k), I(k, s), I(k, s'));
+        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.StutterStep); // witness
         assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
       case FetchElementStep(idx: DLSI.Index, element: Element) => {
-        /* TODO */ assume CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
+        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.StutterStep); // witness
+        assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
       case AppendStep(element: Element) => {
-        /* TODO */ assume CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
+        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.AppendStep(element)); // witness
+        assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
       case StageElementStep() => {
-        /* TODO */ assume CSL.EphemeralMove(Ik(k), I(k, s), I(k, s'));
+        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.StutterStep); // witness
         assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
       case FlushStep() => {
-        /* TODO */ assert CSL.Sync(Ik(k), I(k, s), I(k, s'));
         assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.SyncStep); // witness
       }
       case StutterStep() => {
-        /* TODO */ assume CSL.EphemeralMove(Ik(k), I(k, s), I(k, s'));
+        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.StutterStep); // witness
         assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
     }

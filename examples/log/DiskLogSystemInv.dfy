@@ -57,7 +57,7 @@ module DiskLogSystemInv {
   predicate MemoryMatchesDisk(k: Constants, s: Variables)
     requires DiskIsValidLog(k.disk, s.disk)
   {
-    forall idx: Index :: 0 <= idx.idx < |s.machine.log| && idx.idx < s.machine.stagedLength ==> (
+    forall idx: Index :: 0 <= idx.idx < |s.machine.log| && (idx.idx < s.machine.stagedLength || IndexValidForDiskLog(k.disk, s.disk, idx)) ==> (
       && IsALogSectorBlock(s.disk.blocks, idx)
       && s.machine.log[idx.idx] == ElementFromDiskLog(k.disk, s.disk, idx)
     )
@@ -69,12 +69,18 @@ module DiskLogSystemInv {
     s.machine.persistent.Ready? ==> s.machine.persistent.superblock.length == LengthFromSuperblock(k.disk, s.disk) 
   }
 
+  predicate LogIsZeroLengthWhenUnready(k: Constants, s: Variables)
+  {
+    s.machine.persistent.Unready? ==> |s.machine.log| == 0
+  }
+
   predicate Inv(k: Constants, s: Variables)
   {
     && DiskIsValidLog(k.disk, s.disk)
     && MachinePersistentWhenReadyMatchesDiskSuperblock(k, s)
     && StagedTrailsLogLength(k, s)
     && MemoryMatchesDisk(k, s)
+    && LogIsZeroLengthWhenUnready(k, s)
   }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
@@ -101,6 +107,7 @@ module DiskLogSystemInv {
       case MachineStep(diskOp) => {
         var step :| M.NextStep(k.machine, s.machine, s'.machine, diskOp, step);
         match step {
+          // TODO if step.StageElementStep?, default
           case QueryStep(idx: Index, result: M.Element) => { }
           case FetchSuperblockStep(length: int) => { }
           case FetchElementStep(idx: Index, element: M.Element) => { }

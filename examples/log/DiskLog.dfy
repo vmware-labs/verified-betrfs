@@ -34,6 +34,7 @@ module DiskLog {
   type Log = seq<Element>
   datatype Superblock = Superblock(length: int)
   datatype CachedSuperblock = Unready | Ready(superblock: Superblock)
+  // TODO: rename 'persistent'
   datatype Variables = Variables(log: Log, persistent: CachedSuperblock, stagedLength: int)
 
   function method SuperblockLBA() : LBAType.LBA { LBAType.SuperblockLBA() }
@@ -84,7 +85,7 @@ module DiskLog {
     && diskOp == D.ReadOp(LBAType.indexToLBA(idx), LogSector(element))
     && s'.log == s.log + [element]
     && s'.persistent == s.persistent
-    && s'.stagedLength == s.stagedLength
+    && s'.stagedLength == |s'.log|
   }
 
   predicate Append(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, element: Element)
