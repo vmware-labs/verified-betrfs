@@ -181,4 +181,15 @@ abstract module Transactable {
     var path1 := path + [s''];
     assert IsStatePath(k, s, s'', ops + [op], path1);
   }
+
+  lemma MakeTransaction2(k: Constants, s: Variables, s': Variables, s'': Variables, ops: seq<Op>)
+  requires |ops| == 2
+  requires OpStep(k, s, s', ops[0]);
+  requires OpStep(k, s', s'', ops[1]);
+  ensures OpTransaction(k, s, s'', ops);
+  {
+    reveal_OpTransaction();
+    var path := [s, s', s''];
+    assert IsStatePath(k, s, s'', ops, path);
+  }
 }

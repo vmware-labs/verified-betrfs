@@ -172,6 +172,47 @@ module {:extern} Impl refines Main {
     assert M.NextStep(Ik(k), s, s', UI.PutOp(key, value), D.NoDiskOp, M.BetreeMoveStep(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
   }
 
+  method write(k: Constants, s: Variables, ref: BT.G.Reference, node: BT.G.Node)
+  returns (s': Variables)
+  requires s.Ready?
+  requires ref in s.cache
+  requires BC.BlockPointsToValidReferences(node, s.ephemeralSuperblock.graph)
+  ensures BC.Dirty(k, s, s', ref, node)
+  {
+    s' := BC.Ready(
+      s.persistentSuperblock,
+      BC.Superblock(
+        MapRemove(s.ephemeralSuperblock.lbas, {ref}),
+        s.ephemeralSuperblock.graph[ref := if node.children.Some? then node.children.value else []]
+      ),
+      s.cache[ref := node]
+    );
+  }
+
+
+  method alloc(k: Constants, s: Variables, node: BT.G.Node)
+  returns (s': Variables, ref: Option<BT.G.Reference>)
+  requires BC.Inv(k, s);
+  requires s.Ready?
+  requires BC.BlockPointsToValidReferences(node, s.ephemeralSuperblock.graph)
+  ensures ref.Some? ==> BC.Alloc(k, s, s', ref.value, node)
+  ensures ref.None? ==> s' == s
+  {
+    ref := getFreeRef(s);
+    if (ref.Some?) {
+      s' := BC.Ready(
+        s.persistentSuperblock,
+        BC.Superblock(
+          s.ephemeralSuperblock.lbas,
+          s.ephemeralSuperblock.graph[ref.value := if node.children.Some? then node.children.value else []]
+        ),
+        s.cache[ref.value := node]
+      );
+    } else {
+      s' := s;
+    }
+  }
+
   /*
   method doStuff(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
@@ -336,6 +377,27 @@ module {:extern} Impl refines Main {
     success := true;
   }
 
+  method getFreeRef(s: Variables)
+  returns (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  ensures ref.Some? ==> ref.value !in s.ephemeralSuperblock.graph
+  {
+    var v := s.ephemeralSuperblock.graph.Keys;
+
+    var m;
+    if |v| >= 1 {
+      m := maximum(v);
+    } else {
+      m := 0;
+    }
+
+    if (m < 0xffff_ffff_ffff_ffff) {
+      ref := Some(m + 1);
+    } else {
+      ref := None;
+    }
+  }
+
   method getFreeLba(s: Variables)
   returns (lba : Option<LBA>)
   requires s.Ready?
@@ -409,9 +471,23 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    // TODO
-    s' := s;
-    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+    var oldroot := s.cache[BT.G.Root()];
+    var s1, newref := alloc(k, s, oldroot);
+    match newref {
+      case None => {
+        s' := s;
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      }
+      case Some(newref) => {
+        var newroot := BT.G.Node([], Some([newref]), [map[]]);
+        s' := write(k, s1, BT.G.Root(), newroot);
+
+        ghost var step := BT.BetreeGrow(BT.RootGrowth(oldroot, newref));
+        BC.MakeTransaction2(k, s, s1, s', BT.BetreeStepOps(step));
+        //assert M.BetreeMove(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), step);
+        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+      }
+    }
   }
 
   method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
