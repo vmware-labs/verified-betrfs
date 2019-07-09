@@ -57,9 +57,11 @@ module DiskLogSystemInv {
   predicate MemoryMatchesDisk(k: Constants, s: Variables)
     requires DiskIsValidLog(k.disk, s.disk)
   {
-    forall idx: Index :: 0 <= idx.idx < |s.machine.log| && (idx.idx < s.machine.stagedLength || IndexValidForDiskLog(k.disk, s.disk, idx)) ==> (
-      && IsALogSectorBlock(s.disk.blocks, idx)
-      && s.machine.log[idx.idx] == ElementFromDiskLog(k.disk, s.disk, idx)
+    forall idx: Index :: 0 <= idx.idx < |s.machine.log| && (
+      || idx.idx < s.machine.stagedLength
+      || IndexValidForDiskLog(k.disk, s.disk, idx)) ==> (
+        && IsALogSectorBlock(s.disk.blocks, idx)
+        && s.machine.log[idx.idx] == ElementFromDiskLog(k.disk, s.disk, idx)
     )
   }
 
@@ -89,92 +91,11 @@ module DiskLogSystemInv {
   {
   }
 
-  lemma NextPreservesMachinePersistentWhenReadyMatchesDiskSuperblock(k: Constants, s: Variables, s': Variables)
-    requires Inv(k, s)
-    requires Next(k, s, s')
-    ensures MachinePersistentWhenReadyMatchesDiskSuperblock(k, s')
-  {
-  }
-
-  lemma NextPreservesDiskIsValidLog(k: Constants, s: Variables, s': Variables)
-    requires Inv(k, s)
-    requires Next(k, s, s')
-    requires MachinePersistentWhenReadyMatchesDiskSuperblock(k, s')
-    ensures DiskIsValidLog(k.disk, s'.disk)
-  {
-    var step :| NextStep(k, s, s', step);
-    match step {
-      case MachineStep(diskOp) => {
-        var step :| M.NextStep(k.machine, s.machine, s'.machine, diskOp, step);
-        match step {
-          // TODO if step.StageElementStep?, default
-          case QueryStep(idx: Index, result: M.Element) => { }
-          case FetchSuperblockStep(length: int) => { }
-          case FetchElementStep(idx: Index, element: M.Element) => { }
-          case AppendStep(element: M.Element) => { }
-          case StageElementStep() => {
-            assert forall idx :: IndexValidForDiskLog(k.disk, s.disk, idx) ==> IsALogSectorBlock(s.disk.blocks, idx);
-            assert LengthFromSuperblock(k.disk, s'.disk) == LengthFromSuperblock(k.disk, s.disk);
-            assert forall idx :: IndexValidForDiskLog(k.disk, s.disk, idx) ==> IsALogSectorBlock(s'.disk.blocks, idx);
-            assert forall idx :: IndexValidForDiskLog(k.disk, s'.disk, idx) ==> IsALogSectorBlock(s'.disk.blocks, idx);
-            assert DiskIsValidLog(k.disk, s'.disk);
-          }
-          case FlushStep() => { }
-          case StutterStep() => { }
-        }
-      }
-      case CrashStep => { }
-    }
-  }
-
-  lemma NextPreservesStagedTrailsLogLength(k: Constants, s: Variables, s': Variables)
-    requires Inv(k, s)
-    requires Next(k, s, s')
-    ensures StagedTrailsLogLength(k, s')
-  {
-  }
-
-  lemma NextPreservesMemoryMatchesDisk(k: Constants, s: Variables, s': Variables)
-    requires Inv(k, s)
-    requires Next(k, s, s')
-    requires DiskIsValidLog(k.disk, s'.disk)
-    ensures MemoryMatchesDisk(k, s')
-  {
-    var step :| NextStep(k, s, s', step);
-    match step {
-      case MachineStep(diskOp) => {
-        var step :| M.NextStep(k.machine, s.machine, s'.machine, diskOp, step);
-        match step {
-          case QueryStep(idx: Index, result: M.Element) => { }
-          case FetchSuperblockStep(length: int) => { }
-          case FetchElementStep(idx: Index, element: M.Element) => { }
-          case AppendStep(element: M.Element) => {
-            assert s'.machine.stagedLength == s.machine.stagedLength;
-            assert MemoryMatchesDisk(k, s);
-            assert s'.machine.log == s.machine.log + [element];
-            assert s'.machine.log == s'.machine.log[..|s'.machine.log|-1] + [s'.machine.log[|s'.machine.log|-1]];
-            assert MemoryMatchesDisk(k, s');
-          }
-          case StageElementStep() => { }
-          case FlushStep() => { }
-          case StutterStep() => { }
-        }
-      }
-      case CrashStep => {
-        assert MemoryMatchesDisk(k, s');
-      }
-    }
-  }
-
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
     requires Next(k, s, s')
     ensures Inv(k, s')
   {
-    NextPreservesMachinePersistentWhenReadyMatchesDiskSuperblock(k, s, s');
-    NextPreservesDiskIsValidLog(k, s, s');
-    NextPreservesStagedTrailsLogLength(k, s, s');
-    NextPreservesMemoryMatchesDisk(k, s, s');
   }
 }
 

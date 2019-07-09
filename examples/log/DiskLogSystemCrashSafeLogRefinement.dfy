@@ -59,34 +59,7 @@ module DiskLogSystemCrashSafeLogRefinement {
     var is' := I(k, s');
     match mstep {
       case QueryStep(idx: DLSI.Index, result: Element) => {
-        assert is.persistent == is'.persistent;
-        assert DLS.M.Query(k.machine, s.machine, s'.machine, step.diskOp, idx, result);
-        assert step.diskOp == DLS.D.NoDiskOp;
-        if DLS.M.SupersedesDisk(k.machine, s.machine) {
-          assert 0 <= idx.idx < |is.ephemeral.log|;
-          assert result == is.ephemeral.log[idx.idx];
-        } else {
-          assert DLSI.MemoryMatchesDisk(k, s);
-          assert IDisk(k.disk, s.disk).log == is.ephemeral.log;
-
-          assert DLSI.MachinePersistentWhenReadyMatchesDiskSuperblock(k, s);
-          if s.machine.persistent.Ready? {
-            assert s.machine.persistent.superblock.length == DLSI.LengthFromSuperblock(k.disk, s.disk);
-            assert |s.machine.log| < DLSI.LengthFromSuperblock(k.disk, s.disk);
-            assert 0 <= idx.idx < |is.ephemeral.log|;
-            assert 0 <= idx.idx < DLSI.LengthFromSuperblock(k.disk, s.disk);
-            assert DLSI.MemoryMatchesDisk(k, s);
-            assert result == s.machine.log[idx.idx];
-            assert s.machine.log[idx.idx] == is.ephemeral.log[idx.idx];
-            assert result == is.ephemeral.log[idx.idx];
-          } else {
-            assert false;
-          }
-        }
-        assert CSL.LS.Query(ik, is.ephemeral, is'.ephemeral, idx, result);
-        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.QueryStep(idx, result));
-        assert CSL.LS.Next(ik, is.ephemeral, is'.ephemeral);
-        assert CSL.EphemeralMove(ik, is, is');
+        assert CSL.LS.NextStep(ik, is.ephemeral, is'.ephemeral, CSL.LS.QueryStep(idx, result)); // witness
         assert CSL.NextStep(Ik(k), I(k, s), I(k, s'), CSL.EphemeralMoveStep); // witness
       }
       case FetchSuperblockStep(length: int) => {
