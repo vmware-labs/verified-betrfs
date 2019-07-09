@@ -146,6 +146,7 @@ abstract module PivotBetreeSpecRefinement {
   }
 
   function IStep(betreeStep: P.BetreeStep) : B.BetreeStep
+  requires !betreeStep.BetreeRepivot?
   requires P.ValidBetreeStep(betreeStep)
   {
     match betreeStep {
@@ -568,6 +569,7 @@ abstract module PivotBetreeSpecRefinement {
 
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
+  requires !betreeStep.BetreeRepivot?
   ensures B.ValidBetreeStep(IStep(betreeStep))
   {
     match betreeStep {
@@ -582,6 +584,7 @@ abstract module PivotBetreeSpecRefinement {
 
   lemma {:fuel IReadOps,3} RefinesReadOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
+  requires !betreeStep.BetreeRepivot?
   ensures B.ValidBetreeStep(IStep(betreeStep))
   ensures IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep))
   {
@@ -834,6 +837,7 @@ abstract module PivotBetreeSpecRefinement {
 
   lemma {:fuel IOps,3} RefinesOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
+  requires !betreeStep.BetreeRepivot?
   ensures B.ValidBetreeStep(IStep(betreeStep))
   ensures forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
       P.WFNode(P.BetreeStepOps(betreeStep)[i].node)
@@ -867,5 +871,105 @@ abstract module PivotBetreeSpecRefinement {
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
       }
     }
+  }
+
+  lemma KeyInJoinedBucketsInSomeBucket(buckets: seq<P.G.Bucket>, key: Key)
+  returns (i : int)
+  requires key in P.JoinBuckets(buckets)
+  ensures 0 <= i < |buckets|
+  ensures key in buckets[i]
+  {
+    assert |buckets| > 0;
+    if key in Last(buckets) {
+      i := |buckets| - 1;
+    } else {
+      i := KeyInJoinedBucketsInSomeBucket(DropLast(buckets), key);
+    }
+  }
+
+  lemma BucketLookupEqJoinLookup(buckets: seq<P.G.Bucket>, pivots: seq<Key>, key: Key)
+  requires WFPivots(pivots)
+  requires |buckets| == |pivots| + 1
+  requires forall i | 0 <= i < |buckets| :: P.WFBucket(buckets[i], pivots, i)
+  ensures P.BucketLookup(buckets[Route(pivots, key)], key) == P.BucketLookup(P.JoinBuckets(buckets), key);
+  {
+    if |pivots| == 0 {
+      assert P.BucketLookup(buckets[Route(pivots, key)], key) == P.BucketLookup(P.JoinBuckets(buckets), key);
+    } else {
+      var b1 := P.JoinBuckets(DropLast(buckets));
+      var b2 := Last(buckets);
+
+      var piv := Last(pivots);
+      WFSlice(pivots, 0, |pivots| - 1);
+
+      forall i | 0 <= i < |DropLast(buckets)| ensures P.WFBucket(DropLast(buckets)[i], DropLast(pivots), i)
+      {
+        var bucket := DropLast(buckets)[i];
+        assert P.WFBucket(buckets[i], pivots, i);
+        forall key | key in bucket ensures Route(DropLast(pivots), key) == i {
+          RouteIs(DropLast(pivots), key, i);
+        }
+      }
+
+      BucketLookupEqJoinLookup(DropLast(buckets), DropLast(pivots), key);
+
+
+      if Keyspace.lt(key, piv) {
+        assert P.WFBucket(buckets[|buckets| - 1], pivots, |buckets| - 1);
+        //if (key in b2) {
+        //  assert Keyspace.lte(piv, key);
+        //  assert false;
+        //}
+        assert key !in b2;
+        assert P.BucketLookup(buckets[Route(pivots, key)], key) == P.BucketLookup(P.JoinBuckets(buckets), key);
+      } else {
+        if (key in b1) {
+          var i := KeyInJoinedBucketsInSomeBucket(DropLast(buckets), key);
+          assert false;
+        }
+        assert key !in b1;
+        assert P.BucketLookup(buckets[Route(pivots, key)], key) == P.BucketLookup(P.JoinBuckets(buckets), key);
+      }
+    }
+  }
+
+  lemma IBufferLeafEqJoin(node: PNode)
+  requires P.WFNode(node)
+  ensures IBufferLeaf(node) == imap key :: M.Merge(P.BucketLookup(P.JoinBuckets(node.buckets), key), M.DefineDefault())
+  {
+    forall key
+    ensures IBufferLeaf(node)[key] == M.Merge(P.BucketLookup(P.JoinBuckets(node.buckets), key), M.DefineDefault())
+    {
+      forall i | 0 <= i < |node.buckets| ensures P.WFBucket(node.buckets[i], node.pivotTable, i)
+      {
+        assert P.NodeHasWFBucketAt(node, i);
+      }
+      BucketLookupEqJoinLookup(node.buckets, node.pivotTable, key);
+      //assert P.BucketLookup(node.buckets[Route(node.pivotTable, key)], key) == P.BucketLookup(P.JoinBuckets(node.buckets), key);
+    }
+  }
+
+  lemma RepivotPreservesNode(r: P.Repivot)
+  requires P.ValidRepivot(r)
+  ensures P.WFNode(P.ApplyRepivot(r.leaf, r.pivots))
+  ensures INode(r.leaf) == INode(P.ApplyRepivot(r.leaf, r.pivots))
+  {
+    PivotBetreeSpecWFNodes.WFApplyRepivot(r.leaf, r.pivots);
+
+    var buckets1 := r.leaf.buckets;
+    var joined := P.JoinBuckets(buckets1);
+    var buckets2 := P.SplitBucketOnPivots(r.pivots, joined);
+
+    forall i | 0 <= i < |buckets1|
+    ensures forall key | key in buckets1[i] :: buckets1[i][key] != M.IdentityMessage()
+    {
+      assert P.NodeHasWFBucketAt(r.leaf, i);
+    }
+    PivotBetreeSpecWFNodes.JoinBucketsNoIdentity(r.leaf.buckets);
+    PivotBetreeSpecWFNodes.SplitBucketOnPivotsCorrect(r.pivots, joined, buckets2);
+    assert P.JoinBuckets(buckets1) == P.JoinBuckets(buckets2);
+    
+    IBufferLeafEqJoin(r.leaf);
+    IBufferLeafEqJoin(P.ApplyRepivot(r.leaf, r.pivots));
   }
 }
