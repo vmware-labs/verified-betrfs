@@ -1,9 +1,5 @@
-include "../../lib/Maps.dfy"
 
 module Disk {
-  import opened Maps
-
-  // TODO make async
   datatype DiskOp<LBA(==), Sector> =
     | WriteOp(lba: LBA, sector: Sector)
     | ReadOp(lba: LBA, sector: Sector)
@@ -30,7 +26,7 @@ module Disk {
   predicate Read(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
     && dop.ReadOp?
     && s' == s
-    && MapsTo(s.blocks, dop.lba, dop.sector)
+    && dop.lba in s.blocks && s.blocks[dop.lba] == dop.sector
   }
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, dop: DiskOp) {

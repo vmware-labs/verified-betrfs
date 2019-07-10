@@ -1,3 +1,5 @@
+include "LogSpec.dfy"
+
 module CrashSafeLog {
   import LS = LogSpec
 

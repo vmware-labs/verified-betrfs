@@ -1,7 +1,7 @@
 
 module LogSpec {
   
-  type Element
+  type Element = int
 
   datatype Constants = Constants()
   type Log = seq<Element>
