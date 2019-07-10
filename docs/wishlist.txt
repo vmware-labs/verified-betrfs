@@ -34,3 +34,4 @@
     in a different way.
     Rob wants the best of both worlds.
     
+- {:namespace} metadata tag on modules so c# code can have reliable namespaces
