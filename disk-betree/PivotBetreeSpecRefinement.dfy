@@ -139,8 +139,10 @@ abstract module PivotBetreeSpecRefinement {
         split.right_childref := INode(split.right_child)
       ],
       INode(split.fused_parent),
-      split.fused_childref,
-      INode(split.fused_child),
+      [split.fused_childref],
+      imap[
+        split.fused_childref := INode(split.fused_child)
+      ],
       PivotTableBucketKeySet(split.fused_parent.pivotTable, split.slot_idx)
     )
   }
@@ -524,8 +526,8 @@ abstract module PivotBetreeSpecRefinement {
 
     forall key | key in redirect.keys * redirect.old_parent.children.Keys
     ensures redirect.old_parent.children[key] in redirect.old_children
-    ensures IMapsAgreeOnKey(redirect.new_child.buffer, redirect.old_children[redirect.old_parent.children[key]].buffer, key)
-    ensures IMapsAgreeOnKey(redirect.new_child.children, redirect.old_children[redirect.old_parent.children[key]].children, key)
+    ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].buffer, redirect.old_children[redirect.old_parent.children[key]].buffer, key)
+    ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].children, redirect.old_children[redirect.old_parent.children[key]].children, key)
     {
       assert key in redirect.keys;
       if (Keyspace.lt(key, f.pivot)) {
@@ -546,25 +548,30 @@ abstract module PivotBetreeSpecRefinement {
       }
     }
 
-    forall ref | ref in redirect.new_child.children.Values
-    ensures ref in IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values
+    forall childref, ref | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values
+    ensures exists key ::
+          && IMapsTo(redirect.new_parent.children, key, childref)
+          && IMapsTo(redirect.new_children[childref].children, key, ref)
+          && key in redirect.keys
+          && key in redirect.old_parent.children
     {
-      var key :| key in redirect.new_child.children && redirect.new_child.children[key] == ref;
+      assert childref == f.fused_childref;
+      var new_child := redirect.new_children[childref];
+      var key :| key in new_child.children && new_child.children[key] == ref;
       var i := Route(f.fused_child.pivotTable, key);
       ValidMergeChildHasGoodPivots(f);
       var key1 := GetKeyInChildBucket(f.fused_parent.pivotTable, f.fused_child.pivotTable, f.slot_idx, i);
       assert key1 in redirect.keys;
       assert key1 in redirect.old_parent.children.Keys;
-      assert redirect.new_child.children[key1] == ref;
+      assert new_child.children[key1] == ref;
       assert key1 in redirect.keys * redirect.old_parent.children.Keys;
-      assert key1 in IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys);
-      assert IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys)[key1] == ref;
+      assert key1 in IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys);
+
+      assert IMapsTo(redirect.new_parent.children, key1, childref)
+          && IMapsTo(redirect.new_children[childref].children, key1, ref)
+          && key1 in redirect.keys
+          && key1 in redirect.old_parent.children;
     }
-    forall ref | ref in IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values
-    ensures ref in redirect.new_child.children.Values
-    {
-    }
-    assert redirect.new_child.children.Values == IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values;
   }
 
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
