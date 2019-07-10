@@ -5,7 +5,7 @@ module LogSpec {
 
   datatype Index = Index(idx: int)
 
-  state machine k() s(log: Log)
+  state machine k() s(log: Log) step()
 
   init
   {

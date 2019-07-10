@@ -26,11 +26,11 @@ module DiskLog {
 
   type Element = L.Element
 
-  datatype Constants = Constants()
   type Log = seq<Element>
   datatype Superblock = Superblock(length: int)
   datatype CachedSuperblock = Unready | Ready(superblock: Superblock)
-  datatype Variables = Variables(log: Log, cachedSuperblock: CachedSuperblock, stagedLength: int)
+
+  state machine k() s(log: Log, cachedSuperblock: CachedSuperblock, stagedLength: int) step(diskOp: DiskOp)
 
   function method SuperblockLBA() : LBAType.LBA { LBAType.SuperblockLBA() }
 
@@ -44,7 +44,7 @@ module DiskLog {
     && disk_s == D.Variables(map[SuperblockLBA() := SuperblockSector(Superblock(0))])
   }
 
-  predicate Init(k: Constants, s: Variables)
+  init
   {
     s == Variables([], Unready, 0)
   }
@@ -55,7 +55,7 @@ module DiskLog {
     && s.cachedSuperblock.superblock.length <= |s.log|
   }
 
-  predicate Query(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, result: Element)
+  step Query(idx: Index, result: Element)
   {
     && 0 <= idx.idx < |s.log|
     && result == s.log[idx.idx]
@@ -63,7 +63,7 @@ module DiskLog {
     && s' == s
   }
 
-  predicate FetchSuperblock(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, length: int)
+  step FetchSuperblock(length: int)
   {
     && s.cachedSuperblock == Unready
     && diskOp == D.ReadOp(SuperblockLBA(), SuperblockSector(Superblock(length)))
@@ -72,7 +72,7 @@ module DiskLog {
     && s'.stagedLength == s.stagedLength
   }
 
-  predicate FetchElement(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, idx: Index, element: Element)
+  step FetchElement(idx: Index, element: Element)
   {
     && s.cachedSuperblock.Ready?
     && idx.idx < s.cachedSuperblock.superblock.length
@@ -83,7 +83,7 @@ module DiskLog {
     && s'.stagedLength == |s'.log|
   }
 
-  predicate Append(k: Constants, s: Variables, s': Variables, diskOp: DiskOp, element: Element)
+  step Append(element: Element)
   {
     && SupersedesDisk(k, s)
     && diskOp == D.NoDiskOp
@@ -92,7 +92,7 @@ module DiskLog {
     && s'.stagedLength == s.stagedLength
   }
 
-  predicate StageElement(k: Constants, s: Variables, s': Variables, diskOp: DiskOp)
+  step StageElement()
   {
     var stagingIndex := L.Index(s.stagedLength);
 
@@ -104,7 +104,7 @@ module DiskLog {
     && s'.stagedLength == s.stagedLength + 1
   }
 
-  predicate Flush(k: Constants, s: Variables, s': Variables, diskOp: DiskOp)
+  step Flush()
   {
     var newSuperblock := Superblock(s.stagedLength);
 
@@ -116,36 +116,9 @@ module DiskLog {
     && s'.stagedLength == s.stagedLength
   }
 
-  predicate Stutter(k: Constants, s: Variables, s': Variables, diskOp: DiskOp)
+  step Stutter()
   {
     && diskOp == D.NoDiskOp
     && s' == s
-  }
-
-  datatype Step =
-      | QueryStep(idx: Index, result: Element)
-      | FetchSuperblockStep(length: int)
-      | FetchElementStep(idx: Index, element: Element)
-      | AppendStep(element: Element)
-      | StageElementStep()
-      | FlushStep()
-      | StutterStep()
-
-  predicate NextStep(k:Constants, s:Variables, s':Variables, diskOp: DiskOp, step: Step)
-  {
-      match step {
-        case QueryStep(idx: Index, result: Element) => Query(k, s, s', diskOp, idx, result)
-        case FetchSuperblockStep(length: int) => FetchSuperblock(k, s, s', diskOp, length)
-        case FetchElementStep(idx: Index, element: Element) => FetchElement(k, s, s', diskOp, idx, element)
-        case AppendStep(element: Element) => Append(k, s, s', diskOp, element)
-        case StageElementStep() => StageElement(k, s, s', diskOp)
-        case FlushStep() => Flush(k, s, s', diskOp)
-        case StutterStep() => Stutter(k, s, s', diskOp)
-      }
-  }
-
-  predicate Next(k:Constants, s:Variables, s':Variables, diskOp: DiskOp)
-  {
-      exists step :: NextStep(k, s, s', diskOp, step)
   }
 }
