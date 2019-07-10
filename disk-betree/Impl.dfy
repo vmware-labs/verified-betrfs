@@ -109,6 +109,7 @@ module {:extern} Impl refines Main {
     } else {
       s' := s;
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; did not get superblock when reading\n";
     }
   }
 
@@ -133,10 +134,12 @@ module {:extern} Impl refines Main {
       } else {
         s' := s;
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        print "giving up; block does not match graph\n";
       }
     } else {
       s' := s;
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; block read in was not block\n";
     }
   }
 
@@ -348,6 +351,7 @@ module {:extern} Impl refines Main {
         res := None;
 
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        print "giving up; did not reach Leaf or a Define\n";
       }
     }
   }
@@ -476,6 +480,7 @@ module {:extern} Impl refines Main {
       case None => {
         s' := s;
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
         var newroot := BT.G.Node([], Some([newref]), [map[]]);
@@ -524,6 +529,137 @@ module {:extern} Impl refines Main {
     pivots := r;
   }
 
+  method doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  returns (s': Variables)
+  requires s.Ready?
+  requires ref in s.cache
+  requires parentref in s.cache
+  requires s.cache[parentref].children.Some?
+  requires 0 <= slot < |s.cache[parentref].children.value|
+  requires s.cache[parentref].children.value[slot] == ref
+  requires io.initialized()
+  modifies io
+  requires M.Inv(k, s)
+  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    var fused_parent := s.cache[parentref];
+    var fused_child := s.cache[ref];
+
+    var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
+    var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
+    var child := BT.CutoffNode(fused_child, lbound, ubound);
+
+    if fused_parent.buckets[slot] != map[] {
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; trying to split but parent has non-empty buffer";
+      return;
+    }
+
+    if (|child.pivotTable| == 0) {
+      // TODO there should be an operation which just
+      // cuts off the node and doesn't split it.
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; child.pivots == 0\n";
+      return;
+    }
+
+    var num_children_left := |child.buckets| / 2;
+    var pivot := child.pivotTable[num_children_left - 1];
+
+    var left_child := BT.G.Node(
+      child.pivotTable[ .. num_children_left - 1 ],
+      if child.children.Some? then Some(child.children.value[ .. num_children_left ]) else None,
+      child.buckets[ .. num_children_left ]
+    );
+
+    var right_child := BT.G.Node(
+      child.pivotTable[ num_children_left .. ],
+      if child.children.Some? then Some(child.children.value[ num_children_left .. ]) else None,
+      child.buckets[ num_children_left .. ]
+    );
+
+    forall r | r in BT.G.Successors(child)
+    ensures r in s.ephemeralSuperblock.graph
+    {
+      assert BC.BlockPointsToValidReferences(fused_child, s.ephemeralSuperblock.graph);
+      assert r in BT.G.Successors(fused_child);
+    }
+    assert BC.BlockPointsToValidReferences(child, s.ephemeralSuperblock.graph);
+
+    // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
+    assert BC.BlockPointsToValidReferences(left_child, s.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(right_child, s.ephemeralSuperblock.graph);
+
+    var s1, left_childref := alloc(k, s, left_child);
+    if left_childref.None? {
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; could not get ref\n";
+      return;
+    }
+
+    var s2, right_childref := alloc(k, s1, right_child);
+    if right_childref.None? {
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; could not get ref\n";
+      return;
+    }
+
+    var split_parent_pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot);
+    var split_parent_children := replace1with2(fused_parent.children.value, left_childref.value, right_childref.value, slot);
+    var split_parent_buckets := replace1with2(fused_parent.buckets, map[], map[], slot);
+    var split_parent := BT.G.Node(
+      split_parent_pivots,
+      Some(split_parent_children),
+      split_parent_buckets
+    );
+
+    forall r | r in BT.G.Successors(split_parent)
+    ensures r in s2.ephemeralSuperblock.graph
+    {
+      assert BC.BlockPointsToValidReferences(fused_parent, s2.ephemeralSuperblock.graph);
+      var idx :| 0 <= idx < |split_parent_children| && split_parent_children[idx] == r;
+      if (idx < slot) {
+        assert r == fused_parent.children.value[idx];
+        assert r in s2.ephemeralSuperblock.graph;
+      } else if (idx == slot) {
+        assert r == left_childref.value;
+        assert r in s2.ephemeralSuperblock.graph;
+      } else if (idx == slot + 1) {
+        assert r == right_childref.value;
+        assert r in s2.ephemeralSuperblock.graph;
+      } else {
+        assert r == fused_parent.children.value[idx-1];
+        assert r in s2.ephemeralSuperblock.graph;
+      }
+    }
+    assert BC.BlockPointsToValidReferences(split_parent, s2.ephemeralSuperblock.graph);
+
+    s' := write(k, s2, parentref, split_parent);
+
+    ghost var splitStep := BT.NodeFusion(
+      parentref,
+      ref,
+      left_childref.value,
+      right_childref.value,
+      fused_parent,
+      split_parent,
+      fused_child,
+      left_child,
+      right_child,
+      slot,
+      num_children_left,
+      pivot
+    );
+    assert BT.ValidSplit(splitStep);
+    ghost var step := BT.BetreeSplit(splitStep);
+    BC.MakeTransaction3(k, s, s1, s2, s', BT.BetreeStepOps(step));
+    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+  }
+
   method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': Variables)
   requires s.Ready?
@@ -547,6 +683,7 @@ module {:extern} Impl refines Main {
         // internal node case: flush
         s' := s;
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        print "giving up; internal node flush\n";
       } else {
         // leaf case
         var joined := BT.JoinBuckets(node.buckets);
@@ -561,9 +698,22 @@ module {:extern} Impl refines Main {
         BC.MakeTransaction1(k, s, s', BT.BetreeStepOps(step));
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
       }
+    } else if |node.buckets| > Marshalling.CapNumBuckets() as int {
+      if (parentref !in s.cache) {
+        s' := PageIn(k, s, io, parentref);
+        return;
+      }
+
+      var parent := s.cache[parentref];
+
+      assert ref in BT.G.Successors(parent);
+      var i :| 0 <= i < |parent.children.value| && parent.children.value[i] == ref;
+
+      s' := doSplit(k, s, io, parentref, ref, i);
     } else {
       s' := s;
       assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; fixBigNode\n";
     }
   }
 
@@ -612,12 +762,14 @@ module {:extern} Impl refines Main {
             success := false;
             s' := s;
             assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+            print "giving up; sync could not write\n";
           }
         }
         case None => {
           success := false;
           s' := s;
           assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+          print "giving up; could not get lba\n";
         }
       }
     } else {
@@ -631,6 +783,7 @@ module {:extern} Impl refines Main {
         success := false;
         s' := s;
         assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        print "giving up; could not write superblock\n";
       }
     }
   }

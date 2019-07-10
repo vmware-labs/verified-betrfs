@@ -392,6 +392,7 @@ module PivotBetreeSpec {
   ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), pivot)
   ensures forall key | key in Last(node'.buckets) :: Keyspace.lt(key, pivot)
+  ensures G.Successors(node') <= G.Successors(node)
   {
     var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
@@ -414,6 +415,7 @@ module PivotBetreeSpec {
   ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(pivot, node'.pivotTable[0])
   ensures forall key | key in node'.buckets[0] :: Keyspace.lte(pivot, key)
+  ensures G.Successors(node') <= G.Successors(node)
   {
     var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
@@ -454,6 +456,7 @@ module PivotBetreeSpec {
   ensures rpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), rpivot.value)
   ensures lpivot.Some? ==> forall key | key in node'.buckets[0] :: Keyspace.lte(lpivot.value, key)
   ensures rpivot.Some? ==> forall key | key in Last(node'.buckets) :: Keyspace.lt(key, rpivot.value)
+  ensures G.Successors(node') <= G.Successors(node)
   {
     match lpivot {
       case None => (
@@ -541,9 +544,6 @@ module PivotBetreeSpec {
     && f.fused_parent.children.value[f.slot_idx] == f.fused_childref
     && child.pivotTable[f.num_children_left - 1] == f.pivot
     && Pivots.Route(f.fused_parent.pivotTable, f.pivot) == f.slot_idx
-    && (f.slot_idx > 0 ==>
-        f.pivot != f.fused_parent.pivotTable[f.slot_idx - 1])
-    && Keyspace.NotMinimum(f.pivot)
 
     // We require buffer to already be flushed.
     && f.fused_parent.buckets[f.slot_idx] == map[]
