@@ -29,11 +29,13 @@ module = seq(whitespace, regex('module').mark().tag('keyword'), whitespace, iden
 
 file_ = seq(before_module, module.many(), whitespace)
 
+type_name = regex(r'[A-Za-z_](\w|\.)*').mark().tag('identifier')
+
 @generate
 def type_params():
-    return (yield seq(string('<'), identifier, seq(whitespace, string(','), whitespace, identifier, whitespace, type_params.optional(), whitespace).many(), string('>')))
+    return (yield seq(string('<'), type_name, seq(whitespace, string(','), whitespace, type_name, whitespace, type_params.optional(), whitespace).many(), string('>')))
 
-formal_arg = seq(identifier, whitespace, string(':').mark().tag('colon'), whitespace, identifier, whitespace, seq(type_params, whitespace).optional())
+formal_arg = seq(identifier, whitespace, string(':').mark().tag('colon'), whitespace, type_name, whitespace, seq(type_params, whitespace).optional())
 formal_args = seq(formal_arg.optional(), whitespace, seq(string(',').mark().tag('comma') >> whitespace >> formal_arg).many())
 
 # test
