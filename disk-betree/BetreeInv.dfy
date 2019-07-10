@@ -953,6 +953,7 @@ abstract module BetreeInv {
   {
     RedirectPreservesAcyclic(k, s, s', redirect);
     RedirectEquivalentLookups(k, s, s', redirect);
+    BI.TransactionPreservesInv(k.bck, s.bcv, s'.bcv, RedirectOps(redirect));
   }
 
 
