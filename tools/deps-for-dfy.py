@@ -4,11 +4,41 @@ import os
 import re
 import sys
 
+ROOT_PATH = os.getenv("ROOT")
+assert ROOT_PATH
+
 def fileFromIncludeLine(line):
     mo = re.search('include "(.*)"', line)
     if mo==None:
         return mo
     return mo.groups(1)[0]
+
+class IncludeReference:
+    def __init__(self, origin, line_num, raw_reference):
+        self.origin = origin
+        self.line_num = line_num
+        self.raw_reference = raw_reference
+
+    def validPath(self):
+        return True
+
+    def __repr__(self):
+        return "%s, from %s line %d" % (self.raw_reference, self.origin, self.line_num)
+
+    def __str__(self):
+        return repr(self)
+
+    def rootPath(self):
+        path = os.path.normpath(
+                os.path.join(os.path.dirname(self.origin), self.raw_reference))
+        return path
+
+    def __hash__(self):
+        return hash(self.rootPath())
+
+    def __cmp__(self, other):
+        return cmp(self.rootPath(), other.rootPath())
+
 
 class IncludeNotFound(Exception):
     def __init__(self, path, referencingPath):
@@ -22,69 +52,63 @@ class IncludeNotFound(Exception):
         return self.msg()
 
 class InvalidDafnyIncludePath(Exception):
-    def __init__(self, path, filename, lineNum):
-        self.path = path
-        self.filename = filename
-        self.lineNum = lineNum
+    def __init__(self, iref):
+        self.iref = iref
 
     def msg(self):
-        return "Includes must begin with 'inc/'; got %s in %s line %d" % (self.path, self.filename, self.lineNum)
+        return "Includes must not contain ..; got %s" % (self.iref)
 
     def __str__(self):
         return self.msg()
 
-def validPath(path):
-    return path.startswith("inc/")
-
-def visit(path, referencingPath):
-    paths = []
+def visit(iref):
+    subIrefs = []
     try:
-        contents = open(path).readlines()
+        contents = open(iref.rootPath()).readlines()
     except IOError:
-        raise IncludeNotFound(path, referencingPath)
-    for lineNum in range(len(contents)):
-        line = contents[lineNum]
+        raise IncludeNotFound(iref.rootPath(), iref.origin)
+    for line_num in range(len(contents)):
+        line = contents[line_num]
         includePath = fileFromIncludeLine(line)
         if includePath == None:
             continue
-        if not validPath(includePath):
-            raise InvalidDafnyIncludePath(includePath, path, lineNum+1)
-        paths.append(includePath)
-    return paths
+        subIref = IncludeReference(iref.rootPath(), line_num+1, includePath)
+        if not subIref.validPath():
+            raise InvalidDafnyIncludePath(subIref)
+        subIrefs.append(subIref)
+    return subIrefs
 
 def depsFromDfySource(path):
-    needExplore = [path]
+    initialRef = IncludeReference("./dummy", 0, path)
+    needExplore = [initialRef]
     visited = set()
     while len(needExplore)>0:
-        subPath = needExplore.pop()
-        if subPath in visited:
+        iref = needExplore.pop()
+        if iref in visited:
             continue
-        visited.add(subPath)
-        needExplore.extend(visit(subPath, path))
+        visited.add(iref)
+        needExplore.extend(visit(iref))
+    visited.remove(initialRef)
     return visited
 
 def okay(path):
     path = path.replace(".dfy", ".okay")
+    assert path.startswith(ROOT_PATH)
+    path = path[len(ROOT_PATH):]
     return "$(BUILD_DIR)/%s" % path
 
 def main():
-    try:
-        target = sys.argv[1]
-        outputFilename = sys.argv[2]
+    target = sys.argv[1]
+    outputFilename = sys.argv[2]
 
-        output = ""
-        output += "# deps from %s\n" % target
-        allDeps = depsFromDfySource(target)
-        allDeps.remove(target)
-        for dep in allDeps:
-            output += "%s: %s\n\n" % (okay(target), okay(dep))
+    output = ""
+    output += "# deps from %s\n" % target
+    allDeps = depsFromDfySource(target)
+    for dep in allDeps:
+        output += "%s: %s\n\n" % (okay(target), okay(dep.rootPath()))
 
-        outfp = open(outputFilename, "w")
-        outfp.write(output)
-        outfp.close()
-    except Exception as ex:
-        sys.stderr.write("Kaboom: %s (%s)\n" % (ex, type(ex)))
-        sys.exit(-1)
-    sys.exit(0)
+    outfp = open(outputFilename, "w")
+    outfp.write(output)
+    outfp.close()
 
 main()

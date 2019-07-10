@@ -6,10 +6,13 @@
 #
 # Shouldn't have to modify anything below here.
 #
+#TODO assert ROOT defined
 
-BUILD_DIR=inc/build
-TARGETS=$(BUILD_DIR)/BetreeRefinement.okay
+export ROOT
+
+BUILD_DIR=$(ROOT)build
 TARGETDEPS=$(patsubst %.okay,%.deps,$(TARGETS))
+$(warning targetdeps is $(TARGETDEPS))
 all: $(TARGETS)
 
 clean:
@@ -29,11 +32,11 @@ $(BUILD_DIR)%/.:
 	mkdir -p $@
 
 .PRECIOUS: $(BUILD_DIR)/%.deps
-$(BUILD_DIR)/%.deps: %.dfy | $$(@D)/.
-	../tools/deps-for-dfy.py $< $@
+$(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
+	$(ROOT)tools/deps-for-dfy.py $< $@
 
 include $(TARGETDEPS)
 
-$(BUILD_DIR)/%.okay: %.dfy $(BUILD_DIR)/%.deps | $$(@D)/.
+$(BUILD_DIR)/%.okay: $(ROOT)%.dfy $(BUILD_DIR)/%.deps | $$(@D)/.
 	dafny /compile:0 $<
 	touch $@

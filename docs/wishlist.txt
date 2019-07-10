@@ -13,3 +13,24 @@
       which has Y replaced with Y'. Instead I have to write a lot of boilerplate.
 
 - Better way to specify implemenation vs spec files with including files.
+
+- Sequence comprehension syntax
+
+- Type aliasing is a bit broken.
+    - type foo = parent.bar
+    - diamond problem -- sometimes Dafny can't see type equivalence where we expect it
+    - if parent.bar is a datatype, its constructors aren't aliased in at foo.
+
+- It seems like a bug that Dafny lets you mention a generic type in a parameter list without
+    mentioning the <actual types>
+
+- How do we program generically over algebraic datatypes? Would like to
+    have a datatype with an associated < method. We see the (==) trait,
+    but ... how do we write our own?
+
+- current code uses 'type' abstraction for Values; it will require lots
+    of code to instantiate the Betree for specific Values.
+    Prior code used <>-generics for Values, which was wordy and gross
+    in a different way.
+    Rob wants the best of both worlds.
+    
