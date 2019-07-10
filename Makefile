@@ -66,4 +66,7 @@ build/Bundle.cs: $(shell find . -name '*.dfy')
 
 build/Veribetrfs.exe: disk-betree/Framework.cs build/Bundle.cs
 	csc build/Bundle.cs disk-betree/Framework.cs /r:System.Numerics.dll /debug /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /out:build/Veribetrfs.exe
+<<<<<<< HEAD
 >>>>>>> Makefile rule for Veribetrfs.exe
+=======
+>>>>>>> 651111facaaeaf3d4669528afd32ea4fdb268042
