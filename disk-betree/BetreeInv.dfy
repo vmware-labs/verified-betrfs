@@ -440,6 +440,7 @@ abstract module BetreeInv {
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
         } else {
           assert lookup[i] == lookup'[i+1];
+          assert IMapsTo(s.bcv.view, lookup'[i+1].ref, lookup'[i+1].node); // observe
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
         }
       }
