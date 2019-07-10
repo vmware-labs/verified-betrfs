@@ -6,6 +6,7 @@ abstract module BetreeRefinement {
   import opened DBI = BetreeInv
   import opened G = BetreeGraph
   import opened BetreeSpec`Internal
+  import ValueMessage`Internal
   import opened Maps
 
   type UIOp = DB.MS.UI.Op
@@ -222,6 +223,18 @@ abstract module BetreeRefinement {
     assert I(k, s) == I(k, s');
   }
 
+  lemma RedirectRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, r: DB.BetreeSpec.Redirect)
+    requires Inv(k, s)
+    requires uiop.NoOp?
+    requires DBI.Redirect(k.bck, s.bcv, s'.bcv, r)
+    requires Inv(k, s')
+    ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
+  {
+    RedirectEquivalentLookups(k, s, s', r);
+    EquivalentLookupsImplInterpsEqual(k, s, s');
+    assert I(k, s) == I(k, s');
+  }
+
   lemma BetreeStepRefinesMap(k: DB.Constants, s: DB.Variables, s':DB.Variables, uiop: UIOp, betreeStep: DBI.BetreeSpec.BetreeStep)
     requires Inv(k, s)
     requires BetreeStepUI(betreeStep, uiop)
@@ -236,6 +249,7 @@ abstract module BetreeRefinement {
       case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', uiop, flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
       case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', uiop, growth.oldroot, growth.newchildref);
       case BetreeSplit(fusion) => SplitStepRefinesMap(k, s, s', uiop, fusion);
+      case BetreeRedirect(r) => RedirectRefinesMap(k, s, s', uiop, r);
     }
   }
 

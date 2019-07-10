@@ -826,6 +826,7 @@ module PivotBetreeSpecWFNodes {
     var slot_idx := f.slot_idx;
     var pivot := f.pivot;
 
+    Pivots.PivotNotMinimum(child.pivotTable, f.num_children_left - 1);
     Pivots.WFPivotsInsert(fused_parent.pivotTable, slot_idx, pivot);
 
     NodeHasWFBucketAtIdenticalSlice(fused_parent, split_parent, 0, slot_idx - 1, 0);

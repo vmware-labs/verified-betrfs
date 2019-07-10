@@ -184,13 +184,6 @@ abstract module BetreeInv {
     && BI.OpTransaction(k, s, s', SplitOps(fusion))
   }
 
-  predicate Merge(k: BI.Constants, s: BI.Variables, s': BI.Variables, fusion: NodeFusion)
-  {
-    && ValidMerge(fusion)
-    && BI.Reads(k, s, MergeReads(fusion))
-    && BI.OpTransaction(k, s, s', MergeOps(fusion))
-  }
-
   predicate Query(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, value: Value, lookup: Lookup)
   {
     && ValidQuery(LookupQuery(key, value, lookup))
@@ -267,6 +260,7 @@ abstract module BetreeInv {
     requires Inv(k, s);
     requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
     ensures Acyclic(k, s');
+    ensures G.IsAcyclic(s'.bcv.view);
   {
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, redirect.parentref)
       ensures ref in G.ReachableReferences(s.bcv.view, redirect.parentref)
@@ -327,40 +321,6 @@ abstract module BetreeInv {
           assert G.IsPath(s.bcv.view, [fusion.parentref, fusion.fused_childref, ref]); // observe
         }
       }
-    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref); // observe
-    AcyclicGraphImpliesAcyclic(k, s'); // observe
-  }
-
-  lemma MergePreservesAcyclic(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-    requires Inv(k, s);
-    requires Merge(k.bck, s.bcv, s'.bcv, fusion);
-    ensures Acyclic(k, s');
-  {
-    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, fusion.parentref)
-      ensures ref in G.ReachableReferences(s.bcv.view, fusion.parentref)
-    {
-      var path :| G.NewPath(s.bcv.view, s'.bcv.view, fusion.parentref, path) && Last(path) == ref;
-      if ref == path[1] {
-        forall childref | childref in fusion.fused_parent.children.Values
-          ensures childref in fusion.split_parent.children.Values + iset{fusion.fused_childref}
-        {
-          var key :| IMapsTo(fusion.fused_parent.children, key, childref);
-          if key in fusion.left_keys || key in fusion.right_keys {
-          } else {
-          }
-        }
-        assert fusion.fused_parent.children.Values <= fusion.split_parent.children.Values + iset{fusion.fused_childref};
-        assert ref != fusion.fused_childref;
-        assert ref in fusion.split_parent.children.Values;
-        assert G.IsPath(s.bcv.view, [fusion.parentref, ref]);
-      } else {
-        assert path[|path|-2] == fusion.fused_childref;
-        assert path[|path|-3] == fusion.parentref;
-        assert
-          || G.IsPath(s.bcv.view, [fusion.parentref, fusion.left_childref, ref])
-          || G.IsPath(s.bcv.view, [fusion.parentref, fusion.right_childref, ref]);
-      }
-    }
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, fusion.parentref); // observe
     AcyclicGraphImpliesAcyclic(k, s'); // observe
   }
@@ -1450,14 +1410,6 @@ abstract module BetreeInv {
     //SplitPreservesReachablePointersValid(k, s, s', fusion);
   }
 
-  lemma MergeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, fusion: NodeFusion)
-    requires Inv(k, s)
-    requires Merge(k.bck, s.bcv, s'.bcv, fusion)
-    ensures Inv(k, s')
-  {
-	MergePreservesAcyclic(k, s, s', fusion);
-  }
-
   // Redirect
   lemma RedirectStepPreservesInvariant(k: Constants, s: Variables, s': Variables, redirect: Redirect)
     requires Inv(k, s)
@@ -1569,7 +1521,6 @@ abstract module BetreeInv {
       case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
       case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);
       case BetreeSplit(fusion) => SplitStepPreservesInvariant(k, s, s', fusion);
-      case BetreeMerge(fusion) => MergeStepPreservesInvariant(k, s, s', fusion);
       case BetreeRedirect(redirect) => RedirectStepPreservesInvariant(k, s, s', redirect);
     }
   }
