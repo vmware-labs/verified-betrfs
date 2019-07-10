@@ -232,7 +232,7 @@ abstract module BetreeSpec {
 
     // Consistency of new_parent, new_childrefs, new_children, and keys
     && (forall ref :: ref in IMapRestrict(redirect.new_parent.children, redirect.keys).Values ==> ref in redirect.new_childrefs)
-    && redirect.new_children.Keys == IMapRestrict(redirect.new_parent.children, redirect.keys).Values
+    && redirect.new_children.Keys == (iset ref | ref in redirect.new_childrefs)
 
     // Defines new_parent
     && redirect.new_parent.buffer == redirect.old_parent.buffer
