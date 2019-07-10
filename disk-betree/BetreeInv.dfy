@@ -256,12 +256,43 @@ abstract module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
+  lemma RedirectResultingGraph(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+  requires Inv(k, s);
+  requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
+  ensures IMapsTo(s'.bcv.view, redirect.parentref, redirect.new_parent);
+  ensures forall childref | childref in redirect.new_childrefs :: IMapsTo(s'.bcv.view, childref, redirect.new_children[childref])
+  ensures forall childref | childref in redirect.new_childrefs :: childref !in s.bcv.view
+  ensures s'.bcv.view.Keys - s.bcv.view.Keys == redirect.new_children.Keys
+  ensures forall ref | ref in s.bcv.view && ref != redirect.parentref :: IMapsTo(s'.bcv.view, ref, s.bcv.view[ref])
+  {
+  }
+
+  lemma RedirectResultingGraphParent(k: Constants, s: Variables, s': Variables, redirect: Redirect)
+  requires Inv(k, s);
+  requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
+  ensures IMapsTo(s'.bcv.view, redirect.parentref, redirect.new_parent);
+  {
+    RedirectResultingGraph(k, s, s', redirect);
+  }
+
+  lemma RedirectOnlyPredOfChildIsParent(k: Constants, s: Variables, s': Variables, redirect: Redirect, parentref: Reference, ref: Reference)
+  requires Inv(k, s);
+  requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
+  requires ref in redirect.new_children
+  requires parentref in s'.bcv.view
+  requires ref in Successors(s'.bcv.view[parentref])
+  ensures parentref == redirect.parentref
+  {
+  }
+
   lemma RedirectPreservesAcyclic(k: Constants, s: Variables, s': Variables, redirect: Redirect)
     requires Inv(k, s);
     requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
     ensures Acyclic(k, s');
     ensures G.IsAcyclic(s'.bcv.view);
   {
+    RedirectResultingGraph(k, s, s', redirect);
+
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, redirect.parentref)
       ensures ref in G.ReachableReferences(s.bcv.view, redirect.parentref)
     {
@@ -271,15 +302,48 @@ abstract module BetreeInv {
         assert key !in redirect.keys;
         assert G.IsPath(s.bcv.view, [redirect.parentref, ref]);
       } else {
-        assert path[|path|-2] == redirect.new_childref;
-        assert ref in IMapRestrict(redirect.new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values;
-        var key :| key in redirect.keys * redirect.old_parent.children.Keys * redirect.new_child.children.Keys && redirect.new_child.children[key] == ref;
+        var new_childref := path[|path|-2];
+        assert new_childref in redirect.new_childrefs;
+        var new_child := redirect.new_children[new_childref];
+        //assert ref in IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values;
+        //var key :| key in redirect.keys * redirect.old_parent.children.Keys * new_child.children.Keys && new_child.children[key] == ref;
+        assert new_childref in redirect.new_children;
+        assert ref in redirect.new_children[new_childref].children.Values;
+        var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
         var old_childref := redirect.old_parent.children[key];
         var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
         assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+        //assert ref in Successors(s.bcv.view[old_childref]);
         assert G.IsPath(s.bcv.view, [redirect.parentref, old_childref, ref]);
       }
     }
+
+    forall path |
+      && IsPath(s'.bcv.view, path)
+      && (forall i :: 0 <= i < |path| ==> path[i] in s'.bcv.view.Keys - s.bcv.view.Keys)
+    ensures !IsCycle(s'.bcv.view, path)
+    {
+      if (IsCycle(s'.bcv.view, path)) {
+        assert path[0] in redirect.new_children.Keys;
+        assert Last(path) in redirect.new_children.Keys;
+        assert path[0] in Successors(s'.bcv.view[Last(path)]);
+
+        // TODO duplication with above
+        var new_childref := Last(path);
+        var new_child := s'.bcv.view[new_childref];
+        var ref := path[0];
+        assert new_childref in redirect.new_children;
+        assert ref in redirect.new_children[new_childref].children.Values;
+        var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
+        var old_childref := redirect.old_parent.children[key];
+        var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
+        assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+
+        assert path[0] in s.bcv.view;
+        assert false;
+      }
+    }
+
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, redirect.parentref); // observe
     AcyclicGraphImpliesAcyclic(k, s'); // observe
   }
@@ -568,7 +632,9 @@ abstract module BetreeInv {
     {
       if i :| 0 <= i < |lookup| && lookup[i].ref == redirect.parentref {
         if key in redirect.keys && i < |lookup| - 1 {
-          var lookup' := lookup[i := G.ReadOp(redirect.parentref, redirect.new_parent)][i+1 := G.ReadOp(redirect.new_childref, redirect.new_child)];
+          var new_childref := redirect.new_parent.children[key];
+          var new_child := redirect.new_children[new_childref];
+          var lookup' := lookup[i := G.ReadOp(redirect.parentref, redirect.new_parent)][i+1 := G.ReadOp(new_childref, new_child)];
 
           assert LookupFollowsChildRefAtLayer(key, lookup, i);
           var old_childref := redirect.old_parent.children[key];
@@ -607,6 +673,7 @@ abstract module BetreeInv {
           InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
           assert lookup == lookup[..i] + middle + lookup[i+2..];
 
+          RedirectResultingGraph(k, s, s', redirect);
           assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
         } else {
           var lookup' := lookup[i := G.ReadOp(redirect.parentref, redirect.new_parent)];
@@ -622,10 +689,12 @@ abstract module BetreeInv {
           InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
           assert lookup == lookup[..i] + [lookup[i]] + lookup[i+1..];
           
+          RedirectResultingGraph(k, s, s', redirect);
           assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
           
         }
       } else {
+        RedirectResultingGraph(k, s, s', redirect);
         assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
       }
     }
@@ -638,15 +707,17 @@ abstract module BetreeInv {
     ensures PreservesLookups(k, s', s)
   {
     RedirectPreservesAcyclic(k, s, s', redirect);
+    //RedirectResultingGraph(k, s, s', redirect);
     
     forall lookup': Lookup, key, value | IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
       ensures exists lookup :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
     {
       if i :| 0 <= i < |lookup'| && lookup'[i].ref == redirect.parentref {
         var lookup := lookup'[i := G.ReadOp(redirect.parentref, redirect.old_parent)];
-        if i + 1 < |lookup'| && lookup'[i+1].ref == redirect.new_childref {
+        if i + 1 < |lookup'| && lookup'[i+1].ref in redirect.new_childrefs {
           assert LookupFollowsChildRefAtLayer(key, lookup', i);
           if key in redirect.old_parent.children {
+            RedirectResultingGraph(k, s, s', redirect);
             lookup := lookup[i+1 := G.ReadOp(redirect.old_parent.children[key], redirect.old_children[redirect.old_parent.children[key]])];
 
             var l :| 0 <= l < |redirect.old_childrefs| && redirect.old_childrefs[l] == redirect.old_parent.children[key];
@@ -659,8 +730,24 @@ abstract module BetreeInv {
             ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node)
             {
               if i == j {
+                assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
               } else if i + 1 == j {
+                assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
               } else {
+                assert IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node);
+                if (lookup'[j].ref in redirect.new_children.Keys) {
+                  assert j > 0;
+                  RedirectOnlyPredOfChildIsParent(k, s, s', redirect, lookup'[j-1].ref, lookup'[j].ref);
+                  assert false;
+                }
+                assert lookup'[j].ref !in redirect.new_children.Keys;
+                assert lookup'[j].ref in s'.bcv.view.Keys;
+                assert lookup'[j].ref !in (s'.bcv.view.Keys - s.bcv.view.Keys);
+                assert lookup'[j].ref in s.bcv.view.Keys;
+                assert lookup'[j].ref in s.bcv.view;
+                assert s.bcv.view[lookup'[j].ref] == s'.bcv.view[lookup'[j].ref];
+                assert lookup[j] == lookup'[j];
+                assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
               }
             }
             forall j | ValidLayerIndex(lookup, j) && j < |lookup| - 1
@@ -705,11 +792,30 @@ abstract module BetreeInv {
 
             assert lookup[..i] == lookup'[..i];
             
+            RedirectResultingGraph(k, s, s', redirect);
+            forall j | 0 <= j < |lookup|
+              ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node)
+            {
+              if (j == i) {
+                assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
+              } else {
+                if (lookup'[j].ref in redirect.new_children.Keys) {
+                  assert j > 0;
+                  assert LookupFollowsChildRefAtLayer(key, lookup', j-1);
+                  RedirectOnlyPredOfChildIsParent(k, s, s', redirect, lookup'[j-1].ref, lookup'[j].ref);
+                  assert false;
+                }
+                assert IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node);
+              }
+            }
+
             assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
           }
         } else {
           assert lookup[..i] == lookup'[..i];
           assert lookup[i+1..] == lookup'[i+1..];
+
+          RedirectResultingGraph(k, s, s', redirect);
 
           forall j | ValidLayerIndex(lookup, j) && j < |lookup| - 1
           ensures LookupFollowsChildRefAtLayer(key, lookup, j);
@@ -717,15 +823,19 @@ abstract module BetreeInv {
             if i == j {
               if key in redirect.keys {
                 if |lookup'| == i + 1 { // lookup stops at parent
+                  assert LookupFollowsChildRefAtLayer(key, lookup', i);
+                  assert LookupFollowsChildRefAtLayer(key, lookup, j);
                 } else {
                   assert LookupFollowsChildRefAtLayer(key, lookup', i);
                   assert false;
                 }
               } else { // key !in redirect.keys
                 assert LookupFollowsChildRefAtLayer(key, lookup', j);
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
               }
             } else {
               assert LookupFollowsChildRefAtLayer(key, lookup', j);
+              assert LookupFollowsChildRefAtLayer(key, lookup, j);
             }
           }
 
@@ -737,8 +847,9 @@ abstract module BetreeInv {
           {
             if i != j {
               assert IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node);
-              if lookup'[j].ref == redirect.new_childref {
+              if lookup'[j].ref in redirect.new_childrefs {
                 assert LookupFollowsChildRefAtLayer(key, lookup', j-1);
+                RedirectOnlyPredOfChildIsParent(k, s, s', redirect, lookup'[j-1].ref, lookup'[j].ref);
                 assert false;
               }
             }
@@ -756,10 +867,14 @@ abstract module BetreeInv {
 
           assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
         }
-      } else  if i :| 0 <= i < |lookup'| && lookup'[i].ref == redirect.new_childref {
+      } else  if i :| 0 <= i < |lookup'| && lookup'[i].ref in redirect.new_childrefs {
+        RedirectResultingGraph(k, s, s', redirect);
+        assert i >= 1;
         assert LookupFollowsChildRefAtLayer(key, lookup', i-1);
+        RedirectOnlyPredOfChildIsParent(k, s, s', redirect, lookup'[i-1].ref, lookup'[i].ref);
         assert false;
       } else {
+        RedirectResultingGraph(k, s, s', redirect);
         assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup');
       }
     }
