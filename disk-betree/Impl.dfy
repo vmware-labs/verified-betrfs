@@ -589,6 +589,7 @@ module {:extern} Impl refines Main {
     assert BC.BlockPointsToValidReferences(child, s.ephemeralSuperblock.graph);
 
     // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
+    // This sort of proof logic shouldn't have to be in the implementation.
     assert BC.BlockPointsToValidReferences(left_child, s.ephemeralSuperblock.graph);
     assert BC.BlockPointsToValidReferences(right_child, s.ephemeralSuperblock.graph);
 
