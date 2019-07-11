@@ -119,12 +119,26 @@ abstract module PivotBetreeSpecRefinement {
     B.RootGrowth(INode(growth.oldroot), growth.newchildref)
   }
 
-  /*
   function ISplit(split: P.NodeFusion) : B.Redirect
   requires P.ValidSplit(split)
   {
+    PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(split);
+    B.Redirect(
+      split.parentref,
+      INode(split.fused_parent),
+      [split.fused_childref],
+      imap[
+        split.fused_childref := INode(split.fused_child)
+      ],
+      INode(split.split_parent),
+      [split.left_childref, split.right_childref],
+      imap[
+        split.left_childref := INode(split.left_child),
+        split.right_childref := INode(split.right_child)
+      ],
+      PivotTableBucketKeySet(split.fused_parent.pivotTable, split.slot_idx)
+    )
   }
-  */
 
   function IMerge(split: P.NodeFusion) : B.Redirect
   requires P.ValidMerge(split)
@@ -156,7 +170,7 @@ abstract module PivotBetreeSpecRefinement {
       case BetreeInsert(ins) => B.BetreeInsert(IInsertion(ins))
       case BetreeFlush(flush) => B.BetreeFlush(IFlush(flush))
       case BetreeGrow(growth) => B.BetreeGrow(IGrow(growth))
-      //case BetreeSplit(fusion) => B.BetreeSplit(IFusion(fusion))
+      case BetreeSplit(fusion) => B.BetreeRedirect(ISplit(fusion))
       case BetreeMerge(fusion) => B.BetreeRedirect(IMerge(fusion))
     }
   }
@@ -300,15 +314,6 @@ abstract module PivotBetreeSpecRefinement {
   {
   }
 
-  /*
-  lemma RefinesValidSplit(fusion: P.NodeFusion)
-  requires P.ValidSplit(fusion)
-  ensures B.ValidSplit(ISplit(fusion))
-  {
-    // TODO
-  }
-  */
-
   lemma CutoffNodeAndKeepLeftAgree(node: PNode, node': PNode, pivot: Key, key: Key)
   requires P.WFNode(node)
   requires P.WFNode(node')
@@ -361,6 +366,39 @@ abstract module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma WriteFusedChildInTermsOfLeftAndRight(l: PNode, r: PNode, child: PNode, pivot: Key, num_children_left: int)
+  requires P.WFNode(l)
+  requires P.WFNode(r)
+  requires P.WFNode(child)
+  requires 1 <= num_children_left < |child.buckets|
+  requires l == P.G.Node(
+      child.pivotTable[ .. num_children_left - 1 ],
+      if child.children.Some? then Some(child.children.value[ .. num_children_left ]) else None,
+      child.buckets[ .. num_children_left ]
+    )
+  requires r == P.G.Node(
+      child.pivotTable[ num_children_left .. ],
+      if child.children.Some? then Some(child.children.value[ num_children_left .. ]) else None,
+      child.buckets[ num_children_left .. ]
+    )
+  requires child.pivotTable[num_children_left - 1] == pivot
+  ensures child == P.G.Node(
+      concat3(l.pivotTable, pivot, r.pivotTable),
+      if l.children.Some? then Some(l.children.value + r.children.value) else None,
+      l.buckets + r.buckets
+    )
+  {
+    reveal_concat3();
+    assert child.pivotTable == concat3(l.pivotTable, pivot, r.pivotTable);
+    if (child.children.Some?) {
+      assert child.children.value == child.children.value[..num_children_left] + child.children.value[num_children_left..];
+      assert child.children == if l.children.Some? then Some(l.children.value + r.children.value) else None;
+    } else {
+      assert child.children == if l.children.Some? then Some(l.children.value + r.children.value) else None;
+    }
+    assert child.buckets == l.buckets + r.buckets;
+  }
+
   lemma MergedNodeAndLeftAgree(l: PNode, r: PNode, node: PNode, pivot: Key, key: Key)
   requires P.WFNode(l)
   requires P.WFNode(r)
@@ -403,6 +441,16 @@ abstract module PivotBetreeSpecRefinement {
     RouteIs(node.pivotTable, key, i + |l.buckets|);
   }
 
+  lemma ValidLeftChildHasGoodPivots(f: P.NodeFusion)
+  requires P.ValidSplit(f)
+  ensures f.slot_idx > 0 && |f.left_child.pivotTable| > 0 ==> Keyspace.lt(f.split_parent.pivotTable[f.slot_idx-1], f.left_child.pivotTable[0])
+  ensures |f.left_child.pivotTable| > 0 ==> Keyspace.lt(Last(f.left_child.pivotTable), f.split_parent.pivotTable[f.slot_idx])
+
+  lemma ValidRightChildHasGoodPivots(f: P.NodeFusion)
+  requires P.ValidSplit(f)
+  ensures |f.right_child.pivotTable| > 0 ==> Keyspace.lt(f.split_parent.pivotTable[f.slot_idx], f.right_child.pivotTable[0])
+  ensures f.slot_idx+1 < |f.split_parent.pivotTable| && |f.right_child.pivotTable| > 0 ==> Keyspace.lt(Last(f.right_child.pivotTable), f.split_parent.pivotTable[f.slot_idx+1])
+
   lemma ValidMergeChildHasGoodPivots(f: P.NodeFusion)
   requires P.ValidMerge(f)
   ensures f.slot_idx > 0 && |f.fused_child.pivotTable| > 0 ==> Keyspace.lt(f.fused_parent.pivotTable[f.slot_idx-1], f.fused_child.pivotTable[0])
@@ -437,6 +485,64 @@ abstract module PivotBetreeSpecRefinement {
       }
     }
 
+  }
+
+  lemma SplitMergeBuffersChildrenEq(node: PNode, node': PNode, idx: int)
+  requires P.WFNode(node)
+  requires P.WFNode(node')
+  requires |node'.buckets| == |node.buckets| + 1
+  requires 0 <= idx < |node.buckets|
+  requires forall i | 0 <= i < idx :: node.buckets[i] == node'.buckets[i]
+  requires node.buckets[idx] == map[]
+  requires node'.buckets[idx] == map[]
+  requires node'.buckets[idx+1] == map[]
+  requires forall i | idx + 2 <= i < |node'.buckets| :: node'.buckets[i] == node.buckets[i-1]
+  requires forall i | 0 <= i < idx :: node.pivotTable[i] == node'.pivotTable[i]
+  requires forall i | idx < i < |node'.pivotTable| :: node'.pivotTable[i] == node.pivotTable[i-1]
+  requires node.children.Some?
+  requires node'.children.Some?
+  requires forall i | 0 <= i < idx :: node.children.value[i] == node'.children.value[i]
+  requires forall i | idx + 2 <= i < |node'.buckets| :: node'.children.value[i] == node.children.value[i-1]
+  ensures IBuffer(node) == IBuffer(node')
+  ensures forall key | key !in PivotTableBucketKeySet(node.pivotTable, idx) ::
+      IChildren(node)[key] == IChildren(node')[key]
+  {
+    forall key
+    ensures IBuffer(node)[key] == IBuffer(node')[key]
+    {
+      var i := Route(node'.pivotTable, key);
+      if (i < idx) {
+        RouteIs(node.pivotTable, key, i);
+        assert node'.buckets[i] == node.buckets[i];
+        assert IBuffer(node)[key] == IBuffer(node')[key];
+      } else if (i == idx) {
+        if (idx < |node.pivotTable|) {
+          assert node'.pivotTable[idx+1] == node.pivotTable[idx];
+        }
+        RouteIs(node.pivotTable, key, idx);
+        assert node'.buckets[i] == map[];
+        assert node.buckets[i] == map[];
+        assert IBuffer(node)[key] == IBuffer(node')[key];
+      } else if (i == idx + 1) {
+        if (idx + 1 < |node'.pivotTable|) {
+          assert node'.pivotTable[idx+1] == node.pivotTable[idx];
+        }
+        RouteIs(node.pivotTable, key, idx);
+        assert node'.buckets[i] == map[];
+        assert node.buckets[idx] == map[];
+        assert IBuffer(node)[key] == IBuffer(node')[key];
+      } else {
+        if i - 1 > 0 {
+          assert node.pivotTable[i-2] == node'.pivotTable[i-1];
+        }
+        if i - 1 < |node.pivotTable| {
+          assert node.pivotTable[i-1] == node'.pivotTable[i];
+        }
+        RouteIs(node.pivotTable, key, i - 1);
+        assert node'.buckets[i] == node.buckets[i-1];
+        assert IBuffer(node)[key] == IBuffer(node')[key];
+      }
+    }
   }
 
   lemma RefinesValidMerge(f: P.NodeFusion)
@@ -490,31 +596,7 @@ abstract module PivotBetreeSpecRefinement {
       }
     }
 
-    forall key
-    ensures redirect.new_parent.buffer[key] == redirect.old_parent.buffer[key]
-    ensures key !in redirect.keys ==> redirect.new_parent.children[key] == redirect.old_parent.children[key]
-    {
-      var i := Route(f.split_parent.pivotTable, key);
-      if (i < f.slot_idx) {
-        RouteIs(f.fused_parent.pivotTable, key, i);
-        assert f.split_parent.buckets[i] == f.fused_parent.buckets[i];
-        assert redirect.new_parent.buffer[key] == redirect.old_parent.buffer[key];
-      } else if (i == f.slot_idx) {
-        RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
-        assert f.split_parent.buckets[i] == map[];
-        assert f.fused_parent.buckets[i] == map[];
-        assert redirect.new_parent.buffer[key] == redirect.old_parent.buffer[key];
-      } else if (i == f.slot_idx + 1) {
-        RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
-        assert f.split_parent.buckets[i] == map[];
-        assert f.fused_parent.buckets[f.slot_idx] == map[];
-        assert redirect.new_parent.buffer[key] == redirect.old_parent.buffer[key];
-      } else {
-        RouteIs(f.fused_parent.pivotTable, key, i - 1);
-        assert f.split_parent.buckets[i] == f.fused_parent.buckets[i-1];
-        assert redirect.new_parent.buffer[key] == redirect.old_parent.buffer[key];
-      }
-    }
+    SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
 
     var lb := (if f.slot_idx > 0 then Some(f.split_parent.pivotTable[f.slot_idx - 1]) else None);
     var ub := (if f.slot_idx + 1 < |f.split_parent.pivotTable| then Some(f.split_parent.pivotTable[f.slot_idx + 1]) else None);
@@ -574,6 +656,102 @@ abstract module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma RefinesValidSplit(f: P.NodeFusion)
+  requires P.ValidSplit(f)
+  ensures B.ValidRedirect(ISplit(f))
+  {
+    var r := ISplit(f);
+    PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(f);
+
+    forall ref | ref in IMapRestrict(r.old_parent.children, r.keys).Values
+    ensures ref in r.old_childrefs
+    {
+      //var key :| key in IMapRestrict(r.old_parent.children, r.keys) && IMapRestrict(r.old_parent.children, r.keys)[key] == ref;
+      //assert key in r.keys;
+      //assert Route(f.fused_parent.pivotTable, key) == f.slot_idx;
+      //assert ref == f.fused_childref;
+    }
+
+    forall ref | ref in r.old_childrefs
+    ensures ref in IMapRestrict(r.old_parent.children, r.keys).Values
+    {
+      assert ref == f.fused_childref;
+      var key := GetKeyInBucket(f.fused_parent.pivotTable, f.slot_idx);
+      assert IMapRestrict(r.old_parent.children, r.keys)[key] == ref;
+    }
+
+    SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
+
+    var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
+    var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
+    var ch := P.CutoffNode(f.fused_child, lbound, ubound);
+
+    forall key | key in r.keys * r.old_parent.children.Keys
+    ensures r.old_parent.children[key] in r.old_children
+    ensures r.new_parent.children[key] in r.new_children
+    ensures IMapsAgreeOnKey(
+          r.new_children[r.new_parent.children[key]].buffer,
+          r.old_children[r.old_parent.children[key]].buffer,
+          key)
+    ensures IMapsAgreeOnKey(
+          r.new_children[r.new_parent.children[key]].children,
+          r.old_children[r.old_parent.children[key]].children,
+          key)
+    {
+      CutoffNodeAgree(f.fused_child, ch, lbound, ubound, key);
+
+      assert key in r.keys;
+      if (Keyspace.lt(key, f.pivot)) {
+        RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
+        assert r.new_parent.children[key] == f.left_childref;
+        assert r.new_children[r.new_parent.children[key]] == INode(f.left_child);
+        WriteFusedChildInTermsOfLeftAndRight(f.left_child, f.right_child, ch, f.pivot, f.num_children_left);
+        MergedNodeAndLeftAgree(f.left_child, f.right_child, ch, f.pivot, key);
+      } else {
+        if f.slot_idx + 1 < |f.split_parent.pivotTable| {
+          assert f.split_parent.pivotTable[f.slot_idx + 1] == f.fused_parent.pivotTable[f.slot_idx];
+        }
+        RouteIs(f.split_parent.pivotTable, key, f.slot_idx + 1);
+        assert r.new_parent.children[key] == f.right_childref;
+        assert r.new_children[r.new_parent.children[key]] == INode(f.right_child);
+        WriteFusedChildInTermsOfLeftAndRight(f.left_child, f.right_child, ch, f.pivot, f.num_children_left);
+        MergedNodeAndRightAgree(f.left_child, f.right_child, ch, f.pivot, key);
+      }
+    }
+
+    forall childref, ref | childref in r.new_children && ref in r.new_children[childref].children.Values
+    ensures exists key ::
+          && IMapsTo(r.new_parent.children, key, childref)
+          && IMapsTo(r.new_children[childref].children, key, ref)
+          && key in r.keys
+          && key in r.old_parent.children
+    {
+      var new_child := r.new_children[childref];
+      var key :| key in new_child.children && new_child.children[key] == ref;
+
+      var parent_slot;
+      var lr_child;
+      if (childref == f.left_childref) {
+        parent_slot := f.slot_idx;
+        lr_child := f.left_child;
+      } else {
+        parent_slot := f.slot_idx + 1;
+        lr_child := f.right_child;
+      }
+      var child_slot := Route(lr_child.pivotTable, key);
+      ValidLeftChildHasGoodPivots(f);
+      ValidRightChildHasGoodPivots(f);
+      var key1 := GetKeyInChildBucket(f.split_parent.pivotTable, lr_child.pivotTable, parent_slot, child_slot);
+        
+      assert IMapsTo(r.new_parent.children, key1, childref);
+
+      assert IMapsTo(r.new_children[childref].children, key1, ref);
+      assert key1 in r.keys;
+      assert key1 in r.old_parent.children;
+    }
+
+  }
+
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   requires !betreeStep.BetreeRepivot?
@@ -584,7 +762,7 @@ abstract module PivotBetreeSpecRefinement {
       case BetreeInsert(ins) => RefinesValidInsertion(ins);
       case BetreeFlush(flush) => RefinesValidFlush(flush);
       case BetreeGrow(growth) => RefinesValidGrow(growth);
-      //case BetreeSplit(fusion) => RefinesValidSplit(fusion);
+      case BetreeSplit(fusion) => RefinesValidSplit(fusion);
       case BetreeMerge(fusion) => RefinesValidMerge(fusion);
     }
   }

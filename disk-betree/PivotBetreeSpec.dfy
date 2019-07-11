@@ -545,6 +545,8 @@ module PivotBetreeSpec {
     && child.pivotTable[f.num_children_left - 1] == f.pivot
     && Pivots.Route(f.fused_parent.pivotTable, f.pivot) == f.slot_idx
 
+    && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
+
     // We require buffer to already be flushed.
     && f.fused_parent.buckets[f.slot_idx] == map[]
 
@@ -607,6 +609,8 @@ module PivotBetreeSpec {
     && f.split_parent.children.value[f.slot_idx + 1] == f.right_childref
     && f.split_parent.buckets[f.slot_idx] == map[]
     && f.split_parent.buckets[f.slot_idx + 1] == map[]
+
+    && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
 
     // TODO require bucket to be empty before merge?
     && f.fused_parent == Node(
@@ -812,6 +816,9 @@ module PivotBetreeSpecWFNodes {
 
   lemma ValidSplitWritesWFNodes(f: NodeFusion)
   requires ValidSplit(f)
+  ensures WFNode(f.split_parent);
+  ensures WFNode(f.left_child);
+  ensures WFNode(f.right_child);
   ensures forall i | 0 <= i < |SplitOps(f)| :: WFNode(SplitOps(f)[i].node)
   {
     var split_parent := f.split_parent;
