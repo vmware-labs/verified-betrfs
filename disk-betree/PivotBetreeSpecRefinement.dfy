@@ -445,11 +445,17 @@ abstract module PivotBetreeSpecRefinement {
   requires P.ValidSplit(f)
   ensures f.slot_idx > 0 && |f.left_child.pivotTable| > 0 ==> Keyspace.lt(f.split_parent.pivotTable[f.slot_idx-1], f.left_child.pivotTable[0])
   ensures |f.left_child.pivotTable| > 0 ==> Keyspace.lt(Last(f.left_child.pivotTable), f.split_parent.pivotTable[f.slot_idx])
+  {
+    Keyspace.reveal_IsStrictlySorted();
+  }
 
   lemma ValidRightChildHasGoodPivots(f: P.NodeFusion)
   requires P.ValidSplit(f)
   ensures |f.right_child.pivotTable| > 0 ==> Keyspace.lt(f.split_parent.pivotTable[f.slot_idx], f.right_child.pivotTable[0])
   ensures f.slot_idx+1 < |f.split_parent.pivotTable| && |f.right_child.pivotTable| > 0 ==> Keyspace.lt(Last(f.right_child.pivotTable), f.split_parent.pivotTable[f.slot_idx+1])
+  {
+    Keyspace.reveal_IsStrictlySorted();
+  }
 
   lemma ValidMergeChildHasGoodPivots(f: P.NodeFusion)
   requires P.ValidMerge(f)
@@ -509,12 +515,15 @@ abstract module PivotBetreeSpecRefinement {
   {
     forall key
     ensures IBuffer(node)[key] == IBuffer(node')[key]
+    ensures key !in PivotTableBucketKeySet(node.pivotTable, idx) ==> IChildren(node)[key] == IChildren(node')[key]
+
     {
       var i := Route(node'.pivotTable, key);
       if (i < idx) {
         RouteIs(node.pivotTable, key, i);
         assert node'.buckets[i] == node.buckets[i];
         assert IBuffer(node)[key] == IBuffer(node')[key];
+        assert IChildren(node)[key] == IChildren(node')[key];
       } else if (i == idx) {
         if (idx < |node.pivotTable|) {
           assert node'.pivotTable[idx+1] == node.pivotTable[idx];
@@ -523,6 +532,7 @@ abstract module PivotBetreeSpecRefinement {
         assert node'.buckets[i] == map[];
         assert node.buckets[i] == map[];
         assert IBuffer(node)[key] == IBuffer(node')[key];
+        assert key in PivotTableBucketKeySet(node.pivotTable, idx);
       } else if (i == idx + 1) {
         if (idx + 1 < |node'.pivotTable|) {
           assert node'.pivotTable[idx+1] == node.pivotTable[idx];
@@ -531,6 +541,7 @@ abstract module PivotBetreeSpecRefinement {
         assert node'.buckets[i] == map[];
         assert node.buckets[idx] == map[];
         assert IBuffer(node)[key] == IBuffer(node')[key];
+        assert key in PivotTableBucketKeySet(node.pivotTable, idx);
       } else {
         if i - 1 > 0 {
           assert node.pivotTable[i-2] == node'.pivotTable[i-1];
@@ -541,6 +552,7 @@ abstract module PivotBetreeSpecRefinement {
         RouteIs(node.pivotTable, key, i - 1);
         assert node'.buckets[i] == node.buckets[i-1];
         assert IBuffer(node)[key] == IBuffer(node')[key];
+        assert IChildren(node)[key] == IChildren(node')[key];
       }
     }
   }

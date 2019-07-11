@@ -214,4 +214,11 @@ abstract module Transactable {
     var path := [s, s', s'', s'''];
     assert IsStatePath(k, s, s''', ops, path);
   }
+
+  lemma GetPenultimateState(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
+  returns (smid : Variables)
+  requires |ops| >= 1
+  requires OpTransaction(k, s, s', ops)
+  ensures OpTransaction(k, s, smid, DropLast(ops))
+  ensures OpStep(k, smid, s', Last(ops))
 }

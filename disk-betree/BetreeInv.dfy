@@ -249,6 +249,31 @@ abstract module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
+  lemma RedirectResultingGraphAfterAllocs(k: BI.Constants, s: BI.Variables, s': BI.Variables, childrefs: seq<Reference>, children: imap<Reference, Node>)
+  requires forall ref :: ref in childrefs ==> ref in children
+  requires BI.Inv(k, s)
+  requires BI.OpTransaction(k, s, s', RedirectChildAllocs(childrefs, children))
+  ensures BI.Inv(k, s')
+  ensures forall childref | childref in childrefs :: IMapsTo(s'.view, childref, children[childref])
+  ensures forall childref | childref in childrefs :: childref !in s.view
+  ensures s.view.Keys <= s'.view.Keys
+  ensures s'.view.Keys - s.view.Keys == (iset r | r in childrefs)
+  ensures forall ref | ref in s.view :: IMapsTo(s'.view, ref, s.view[ref])
+  decreases |childrefs|
+  {
+    if |childrefs| == 0 {
+    } else {
+      var ops := RedirectChildAllocs(childrefs, children);
+      var smid := BI.GetPenultimateState(k, s, s', ops);
+      RedirectResultingGraphAfterAllocs(k, s, smid, DropLast(childrefs), children);
+      assert s'.view.Keys - s.view.Keys
+          == (smid.view.Keys + iset{Last(childrefs)}) - s.view.Keys
+          == (smid.view.Keys - s.view.Keys) + iset{Last(childrefs)}
+          == (iset r | r in DropLast(childrefs)) + iset{Last(childrefs)}
+          == (iset r | r in childrefs);
+    }
+  }
+
   lemma RedirectResultingGraph(k: Constants, s: Variables, s': Variables, redirect: Redirect)
   requires Inv(k, s);
   requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
@@ -258,14 +283,10 @@ abstract module BetreeInv {
   ensures s'.bcv.view.Keys - s.bcv.view.Keys == redirect.new_children.Keys
   ensures forall ref | ref in s.bcv.view && ref != redirect.parentref :: IMapsTo(s'.bcv.view, ref, s.bcv.view[ref])
   {
-  }
-
-  lemma RedirectResultingGraphParent(k: Constants, s: Variables, s': Variables, redirect: Redirect)
-  requires Inv(k, s);
-  requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
-  ensures IMapsTo(s'.bcv.view, redirect.parentref, redirect.new_parent);
-  {
-    RedirectResultingGraph(k, s, s', redirect);
+    var ops := RedirectOps(redirect);
+    var smid := BI.GetPenultimateState(k.bck, s.bcv, s'.bcv, ops);
+    RedirectResultingGraphAfterAllocs(k.bck, s.bcv, smid, redirect.new_childrefs, redirect.new_children);
+    assert s'.bcv.view.Keys == smid.view.Keys;
   }
 
   lemma RedirectOnlyPredOfChildIsParent(k: Constants, s: Variables, s': Variables, redirect: Redirect, parentref: Reference, ref: Reference)
@@ -276,6 +297,26 @@ abstract module BetreeInv {
   requires ref in Successors(s'.bcv.view[parentref])
   ensures parentref == redirect.parentref
   {
+    RedirectResultingGraph(k, s, s', redirect);
+    if (parentref == redirect.parentref) {
+    } else if (parentref in redirect.new_children.Keys) {
+      assert ref in redirect.new_children.Keys;
+      assert ref in Successors(s'.bcv.view[parentref]);
+
+      var new_childref := parentref;
+      var new_child := s'.bcv.view[new_childref];
+      assert new_childref in redirect.new_children;
+      assert ref in redirect.new_children[new_childref].children.Values;
+      var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
+      var old_childref := redirect.old_parent.children[key];
+      var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
+      assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+
+      assert ref in s.bcv.view;
+      assert false;
+    } else {
+      assert false;
+    }
   }
 
   lemma RedirectPreservesAcyclic(k: Constants, s: Variables, s': Variables, redirect: Redirect)
@@ -313,6 +354,9 @@ abstract module BetreeInv {
     ensures !IsCycle(s'.bcv.view, path)
     {
       if (IsCycle(s'.bcv.view, path)) {
+        RedirectOnlyPredOfChildIsParent(k, s, s', redirect, Last(path), path[0]);
+        assert false;
+        /*
         assert path[0] in redirect.new_children.Keys;
         assert Last(path) in redirect.new_children.Keys;
         assert path[0] in Successors(s'.bcv.view[Last(path)]);
@@ -330,6 +374,7 @@ abstract module BetreeInv {
 
         assert path[0] in s.bcv.view;
         assert false;
+        */
       }
     }
 
