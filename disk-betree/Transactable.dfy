@@ -221,4 +221,10 @@ abstract module Transactable {
   requires OpTransaction(k, s, s', ops)
   ensures OpTransaction(k, s, smid, DropLast(ops))
   ensures OpStep(k, smid, s', Last(ops))
+  {
+    reveal_OpTransaction();
+    var path :| IsStatePath(k, s, s', ops, path);
+    smid := path[|path| - 2];
+    assert IsStatePath(k, s, smid, DropLast(ops), DropLast(path));
+  }
 }
