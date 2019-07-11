@@ -163,4 +163,18 @@ abstract module Graph {
       assert IsCycle(g, DropLast(rpath));
     }
   }
+
+  lemma UnallocPreservesAcyclic(g: Graph, g': Graph)
+    requires IsClosed(g)
+    requires IsAcyclic(g)
+    requires forall node | node in g' :: node in g && g[node] == g'[node]
+    ensures IsAcyclic(g')
+  {
+    forall path | IsPath(g', path)
+    ensures !IsCycle(g', path)
+    {
+      assert IsPath(g, path);
+      assert !IsCycle(g, path);
+    }
+  }
 }

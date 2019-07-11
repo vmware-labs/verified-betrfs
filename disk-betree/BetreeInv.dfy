@@ -1063,6 +1063,7 @@ abstract module BetreeInv {
       IsPathFromRootLookupImpliesReachable(k, s, key, lookup, i-1);
       var l: BI.Lookup :| BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[i-1].ref;
       var l' := l + [lookup[i].ref];
+      assert LookupFollowsChildRefAtLayer(key, lookup, i-1);
       assert BI.LookupIsValid(k.bck, s.bcv, l') && Last(l') == lookup[i].ref;
       assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
     }
@@ -1095,13 +1096,11 @@ abstract module BetreeInv {
   lemma GCStepPreservesAcyclicity(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)
     requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
+    ensures G.IsAcyclic(s'.bcv.view)
     ensures Acyclic(k, s')
   {
-    forall key, lookup | IsPathFromRootLookup(k, s'.bcv.view, key, lookup)
-    ensures LookupIsAcyclic(lookup)
-    {
-      GCStepPreservesIsPathFromRootLookupRev(k, s, s', refs, lookup, key);
-    }
+    G.UnallocPreservesAcyclic(s.bcv.view, s'.bcv.view);
+    AcyclicGraphImpliesAcyclic(k, s');
   }
 
   lemma GCStepEquivalentLookups(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
