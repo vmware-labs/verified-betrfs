@@ -942,15 +942,11 @@ abstract module BetreeInv {
   lemma InsertMessagePreservesAcyclicAndReachablePointersValid(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
     requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+    ensures G.IsAcyclic(s'.bcv.view)
     ensures Acyclic(k, s')
   {
-    forall key1, lookup': Lookup | IsPathFromRootLookup(k, s'.bcv.view, key1, lookup')
-      ensures LookupIsAcyclic(lookup')
-      ensures key1 in Last(lookup').node.children ==> Last(lookup').node.children[key1] in s'.bcv.view
-    {
-      var lookup := Apply((x: Layer) => x.(node := if x.ref in s.bcv.view then s.bcv.view[x.ref] else EmptyNode()), lookup');
-      assert IsPathFromRootLookup(k, s.bcv.view, key1, lookup);
-    }
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, G.Root());
+    AcyclicGraphImpliesAcyclic(k, s');
   }
 
   lemma InsertMessagePreservesTotality(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
@@ -965,20 +961,17 @@ abstract module BetreeInv {
       var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()),
                            lookup);
       if key1 != key {
-        var i := 1;
-        while i < |lookup|
-        invariant i <= |lookup|
-        invariant InterpretLookup(lookup'[..i], key1) == InterpretLookup(lookup[..i], key1);
-        {
-          assert lookup[..i] == lookup[..i+1][..i];
-          assert lookup'[..i] == lookup'[..i+1][..i];
-          i := i + 1;
-        }
-        assert lookup == lookup[..i];
-        assert lookup' == lookup'[..i];
-        assert InterpretLookup(lookup', key1) == InterpretLookup(lookup, key1);
+        InterpsEqual(lookup, lookup', key1);
 
         assert BufferDefinesValue(InterpretLookup(lookup', key1), value);
+
+        forall idx | ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
+        ensures key1 in lookup'[idx].node.children
+        ensures LookupFollowsChildRefAtLayer(key1, lookup', idx)
+        {
+          assert LookupFollowsChildRefAtLayer(key1, lookup, idx);
+        }
+
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
       } else {
         assert lookup' == [lookup'[0]] + lookup'[1..];
@@ -988,6 +981,14 @@ abstract module BetreeInv {
         InterpretLookupAdditive([lookup[0]], lookup[1..], key);
         assert lookup == [lookup[0]] + lookup[1..];
         var message' := G.M.Merge(msg, InterpretLookup(lookup, key));
+
+        forall idx | ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
+        ensures key in lookup'[idx].node.children
+        ensures LookupFollowsChildRefAtLayer(key, lookup', idx)
+        {
+          assert LookupFollowsChildRefAtLayer(key, lookup, idx);
+        }
+
         assert IsSatisfyingLookup(k, s'.bcv.view, key1, message'.value, lookup');
       }
     }
