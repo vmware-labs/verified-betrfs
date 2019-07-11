@@ -1032,6 +1032,50 @@ abstract module PivotBetreeSpecRefinement {
     */
   }
 
+  lemma {:fuel IOps,3} SplitRefinesOps(f: P.NodeFusion)
+  requires P.ValidSplit(f)
+  requires B.ValidRedirect(ISplit(f))
+  ensures forall i | 0 <= i < |P.SplitOps(f)| ::
+      P.WFNode(P.SplitOps(f)[i].node)
+  ensures IOps(P.SplitOps(f)) == B.RedirectOps(ISplit(f))
+  {
+    PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(f);
+    //assert IOp(P.G.AllocOp(f.left_childref, f.left_child)) == B.RedirectOps(ISplit(f))[0];
+    //assert IOp(P.G.AllocOp(f.right_childref, f.right_child)) == B.RedirectOps(ISplit(f))[1];
+    //assert IOp(P.G.WriteOp(f.parentref, f.split_parent)) == B.RedirectOps(ISplit(f))[2];
+
+    /*
+    assert IOps(P.SplitOps(f)) == [
+      IOp(P.G.AllocOp(f.left_childref, f.left_child)),
+      IOp(P.G.AllocOp(f.right_childref, f.right_child)),
+      IOp(P.G.WriteOp(f.parentref, f.split_parent))
+    ];
+
+    assert IOps(P.SplitOps(f))
+        == [
+          IOp(P.G.AllocOp(f.left_childref, f.left_child)),
+          IOp(P.G.AllocOp(f.right_childref, f.right_child)),
+          IOp(P.G.WriteOp(f.parentref, f.split_parent))
+        ]
+        == [
+          B.RedirectOps(ISplit(f))[0],
+          B.RedirectOps(ISplit(f))[1],
+          B.RedirectOps(ISplit(f))[2]
+        ]
+        == B.RedirectOps(ISplit(f));
+        */
+  }
+
+  lemma {:fuel IOps,3} MergeRefinesOps(f: P.NodeFusion)
+  requires P.ValidMerge(f)
+  requires B.ValidRedirect(IMerge(f))
+  ensures forall i | 0 <= i < |P.MergeOps(f)| ::
+      P.WFNode(P.MergeOps(f)[i].node)
+  ensures IOps(P.MergeOps(f)) == B.RedirectOps(IMerge(f))
+  {
+    PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(f);
+  }
+
   lemma {:fuel IOps,3} RefinesOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   requires !betreeStep.BetreeRepivot?
@@ -1058,14 +1102,10 @@ abstract module PivotBetreeSpecRefinement {
         GrowRefinesOps(growth);
       }
       case BetreeSplit(fusion) => {
-        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
-        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+        SplitRefinesOps(fusion);
       }
       case BetreeMerge(fusion) => {
-        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
-        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+        MergeRefinesOps(fusion);
       }
     }
   }
