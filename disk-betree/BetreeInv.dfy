@@ -75,6 +75,19 @@ abstract module BetreeInv {
 
   //
 
+  lemma InterpsEqual(a: Lookup, b: Lookup, key: Key)
+  requires LookupVisitsWFNodes(a);
+  requires LookupVisitsWFNodes(b);
+  requires |a| == |b|
+  requires forall j | 0 <= j < |a| :: a[j].node.buffer[key] == b[j].node.buffer[key]
+  ensures InterpretLookup(a, key) == InterpretLookup(b, key)
+  {
+    if |a| == 0 {
+    } else {
+      InterpsEqual(DropLast(a), DropLast(b), key);
+    }
+  }
+
   lemma InterpretLookupAdditive(a: Lookup, b: Lookup, key: Key)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
@@ -732,13 +745,30 @@ abstract module BetreeInv {
       lookup: Lookup, lookup': Lookup, key: Key, value: Value)
   requires Inv(k, s)
   requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
+  requires LookupVisitsWFNodes(lookup);
+  requires LookupVisitsWFNodes(lookup');
   requires |lookup| <= |lookup'|
+  requires |lookup| >= 1
   requires |lookup| < |lookup'| ==> key !in Last(lookup).node.children
-  requires forall j | 0 <= j < |lookup| :: lookup[j].buffer[key] == lookup'[j].buffer[key]
-  requires BufferDefinesValue(InterpretLookup(lookup, key), value)
+  requires forall j | 0 <= j < |lookup| :: lookup[j].node.buffer[key] == lookup'[j].node.buffer[key]
   requires BufferDefinesValue(InterpretLookup(lookup', key), value)
+  ensures BufferDefinesValue(InterpretLookup(lookup, key), value)
   {
-    if |lookup
+    if |lookup| == |lookup'| {
+      InterpsEqual(lookup, lookup', key);
+    } else {
+      // This uses the fact that if Last(lookup).node has no child for key,
+      // then Last(lookup).node must be defining.
+
+      // It's a sort of roundabout way of doing the proof.
+      // We could instead require that ValidRedirect require that newparent
+      // can never have children for keys were oldparent doesn't have keys.
+
+      InterpsEqual(lookup, lookup'[..|lookup|], key);
+      InterpretLookupAdditive(lookup'[..|lookup|], lookup'[|lookup|..], key);
+      assert lookup'[..|lookup|] + lookup'[|lookup|..] == lookup';
+      assert BufferDefinesValue(InterpretLookup(lookup, key), value);
+    }
   }
 
   // TODO(alattuada) minimize
@@ -789,17 +819,8 @@ abstract module BetreeInv {
                 assert LookupFollowsChildRefAtLayer(key, lookup', j);
               }
             }
-
-            {
-              var middle' := [ lookup'[i] ] + [ lookup'[i+1] ];
-              assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
-              InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
-              var middle := [ lookup[i] ] + [ lookup[i+1] ];
-              assert lookup == lookup[..i] + middle + lookup[i+2..];
-              InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
-              assert InterpretLookup(middle, key) == InterpretLookup(middle', key);
-            }
-            assert BufferDefinesValue(InterpretLookup(lookup, key), value);
+  
+            RedirectLookupRevIsDefining(k, s, s', redirect, lookup, lookup', key, value);
 
             assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
             
@@ -813,14 +834,6 @@ abstract module BetreeInv {
               assert LookupFollowsChildRefAtLayer(key, lookup', j);
             }
 
-            InterpretLookupAdditive(lookup[..i], [lookup[i]], key);
-            assert lookup == lookup[..i] + [lookup[i]];
-
-            InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
-            assert lookup' == lookup'[..i] + [lookup'[i]] + lookup'[i+1..];
-
-            assert lookup[..i] == lookup'[..i];
-            
             RedirectResultingGraph(k, s, s', redirect);
             forall j | 0 <= j < |lookup|
               ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node)
@@ -831,6 +844,8 @@ abstract module BetreeInv {
                 RedirectLookupRevRefPointsToNodeForUntouchedNode(k, s, s', redirect, lookup, lookup', key, value, j, Some(i));
               }
             }
+
+            RedirectLookupRevIsDefining(k, s, s', redirect, lookup, lookup', key, value);
 
             assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
           }
@@ -862,9 +877,6 @@ abstract module BetreeInv {
             }
           }
 
-          assert lookup[..i] == lookup'[..i];
-          assert lookup[i+1..] == lookup'[i+1..];
-
           forall j | 0 <= j < |lookup|
           ensures IMapsTo(s.bcv.view, lookup[j].ref, lookup[j].node)
           {
@@ -875,15 +887,7 @@ abstract module BetreeInv {
             }
           }
 
-          InterpretLookupAdditive3(lookup'[..i], [ lookup'[i] ], lookup'[i+1..], key);
-          assert lookup' == lookup'[..i] + [ lookup'[i] ] + lookup'[i+1..];
-
-          InterpretLookupAdditive3(lookup[..i], [ lookup[i] ], lookup[i+1..], key);
-          assert lookup == lookup[..i] + [ lookup[i] ] + lookup[i+1..];
-
-          assert InterpretLookup([lookup[i]], key) == InterpretLookup([lookup'[i]], key);
-        
-          assert BufferDefinesValue(InterpretLookup(lookup, key), value);
+          RedirectLookupRevIsDefining(k, s, s', redirect, lookup, lookup', key, value);
 
           assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
         }
