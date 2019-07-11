@@ -71,10 +71,27 @@ abstract module BetreeRefinement {
     //assert I(k, s) == MS.Variables(MS.EmptyMap());
   }
 
-  lemma EquivalentLookupsImplInterpsEqual(k: DB.Constants, s: DB.Variables, s': DB.Variables)
+  lemma PreservesLookupsRev(k: DB.Constants, s: DB.Variables, s': DB.Variables)
   requires Inv(k, s);
   requires Inv(k, s');
-  requires EquivalentLookups(k, s, s');
+  requires PreservesLookups(k, s, s');
+  ensures PreservesLookups(k, s', s);
+  {
+    forall lookup', key, value' | DB.IsSatisfyingLookup(k, s'.bcv.view, key, value', lookup')
+      ensures exists lookup :: DB.IsSatisfyingLookup(k, s.bcv.view, key, value', lookup)
+    {
+      assert KeyHasSatisfyingLookup(k, s.bcv.view, key);
+      var lookup, value :| DB.IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+      var lookup'2 :| DB.IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'2);
+      CantEquivocate(k, s', key, value, value', lookup'2, lookup');
+      assert DB.IsSatisfyingLookup(k, s.bcv.view, key, value', lookup);
+    }
+  }
+
+  lemma PreservesLookupsImplInterpsEqual(k: DB.Constants, s: DB.Variables, s': DB.Variables)
+  requires Inv(k, s);
+  requires Inv(k, s');
+  requires PreservesLookups(k, s, s');
   ensures I(k, s) == I(k, s');
   {
     forall key
@@ -92,7 +109,7 @@ abstract module BetreeRefinement {
       var lookup' := res'.lookup;
 
       assert DB.IsSatisfyingLookup(k, view, key, value, lookup);
-      // Follows from EquivalentLookup:
+      PreservesLookupsRev(k, s, s');
       var lookup'' :| DB.IsSatisfyingLookup(k, view, key, value', lookup'');
       CantEquivocate(k, s, key, value, value', lookup, lookup'');
       assert value == value';
@@ -101,10 +118,28 @@ abstract module BetreeRefinement {
         == IView(k, s'.bcv.view);
   }
 
-  lemma EquivalentLookupsWithPutImplInterpsPut(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value)
+  lemma PreservesLookupsRevExcept(k: DB.Constants, s: DB.Variables, s': DB.Variables, except: Key)
   requires Inv(k, s);
   requires Inv(k, s');
-  requires EquivalentLookupsWithPut(k, s, s', key, value);
+  requires PreservesLookupsExcept(k, s, s', except);
+  ensures PreservesLookupsExcept(k, s', s, except);
+  {
+    forall lookup', key, value' | key != except && DB.IsSatisfyingLookup(k, s'.bcv.view, key, value', lookup')
+      ensures exists lookup :: DB.IsSatisfyingLookup(k, s.bcv.view, key, value', lookup)
+    {
+      assert KeyHasSatisfyingLookup(k, s.bcv.view, key);
+      var lookup, value :| DB.IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+      var lookup'2 :| DB.IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'2);
+      CantEquivocate(k, s', key, value, value', lookup'2, lookup');
+      assert DB.IsSatisfyingLookup(k, s.bcv.view, key, value', lookup);
+    }
+  }
+
+
+  lemma PreservesLookupsPutImplInterpsPut(k: DB.Constants, s: DB.Variables, s': DB.Variables, key: Key, value: Value)
+  requires Inv(k, s);
+  requires Inv(k, s');
+  requires PreservesLookupsPut(k, s, s', key, value);
   ensures IView(k, s'.bcv.view) == IView(k, s.bcv.view)[key := value];
   {
     var view := s.bcv.view;
@@ -130,7 +165,7 @@ abstract module BetreeRefinement {
         var lookup' := res'.lookup;
 
         assert DB.IsSatisfyingLookup(k, view, key', value, lookup);
-        // Follows from EquivalentLookupWithPut:
+        PreservesLookupsRevExcept(k, s, s', key);
         var lookup'' :| DB.IsSatisfyingLookup(k, view, key', value', lookup'');
         CantEquivocate(k, s, key', value, value', lookup, lookup'');
         assert value == value';
@@ -166,11 +201,9 @@ abstract module BetreeRefinement {
   {
     var value := msg.value;
 
-    // TODO show this:
-    // (InsertMessageStepRefinesMap does half of it)
-    assert EquivalentLookupsWithPut(k, s, s', key, value);
+    assert PreservesLookupsPut(k, s, s', key, value);
     
-    EquivalentLookupsWithPutImplInterpsPut(k, s, s', key, value);
+    PreservesLookupsPutImplInterpsPut(k, s, s', key, value);
     assert DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.WriteStep(key, value));
   }
 
@@ -182,8 +215,8 @@ abstract module BetreeRefinement {
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
   {
-    FlushEquivalentLookups(k, s, s', parentref, parent, childref, child, newchildref, movedKeys);
-    EquivalentLookupsImplInterpsEqual(k, s, s');
+    FlushPreservesLookups(k, s, s', parentref, parent, childref, child, newchildref, movedKeys);
+    PreservesLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
 
@@ -194,8 +227,8 @@ abstract module BetreeRefinement {
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
   {
-    GrowEquivalentLookups(k, s, s', oldroot, newchildref);
-    EquivalentLookupsImplInterpsEqual(k, s, s');
+    GrowPreservesLookups(k, s, s', oldroot, newchildref);
+    PreservesLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
 
@@ -206,8 +239,8 @@ abstract module BetreeRefinement {
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
   {
-    RedirectEquivalentLookups(k, s, s', redirect);
-    EquivalentLookupsImplInterpsEqual(k, s, s');
+    RedirectPreservesLookups(k, s, s', redirect);
+    PreservesLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
 
@@ -218,8 +251,8 @@ abstract module BetreeRefinement {
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
   {
-    RedirectEquivalentLookups(k, s, s', r);
-    EquivalentLookupsImplInterpsEqual(k, s, s');
+    RedirectPreservesLookups(k, s, s', r);
+    PreservesLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
 
@@ -246,8 +279,8 @@ abstract module BetreeRefinement {
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
   {
-    GCStepEquivalentLookups(k, s, s', refs);
-    EquivalentLookupsImplInterpsEqual(k, s, s');
+    GCStepPreservesLookups(k, s, s', refs);
+    PreservesLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
 
