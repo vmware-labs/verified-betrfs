@@ -159,7 +159,9 @@ abstract module BetreeBlockCacheSystemCrashSafeBetreeRefinement {
   requires BBCS.Inv(k, s')
   requires uiop.NoOp?
   requires BC.NoOp(k.machine, s.machine, s'.machine, dop)
-  requires D.Read(k.disk, s.disk, s'.disk, dop);
+  requires dop.ReadOp? || dop.NoDiskOp?
+  requires uiop.NoOp?
+  requires s.disk == s'.disk
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))
   {
     assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, uiop, BT.StutterStep);
