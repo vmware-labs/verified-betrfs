@@ -75,7 +75,7 @@ abstract module BetreeInv {
 
   //
 
-  lemma InterpsEqual(a: Lookup, b: Lookup, key: Key)
+  lemma InterpsEqualOfAllBuffersEqual(a: Lookup, b: Lookup, key: Key)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
   requires |a| == |b|
@@ -84,7 +84,7 @@ abstract module BetreeInv {
   {
     if |a| == 0 {
     } else {
-      InterpsEqual(DropLast(a), DropLast(b), key);
+      InterpsEqualOfAllBuffersEqual(DropLast(a), DropLast(b), key);
     }
   }
 
@@ -475,6 +475,17 @@ abstract module BetreeInv {
           assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
         }
       }
+
+      forall idx | ValidLayerIndex(lookup, idx) && idx < |lookup| - 1
+      ensures key in lookup[idx].node.children
+      ensures LookupFollowsChildRefAtLayer(key, lookup, idx)
+      {
+        if (idx > 1) {
+          assert LookupFollowsChildRefAtLayer(key, lookup', idx - 1);
+        } else {
+        }
+      }
+
       assert IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
     }
   }
@@ -755,7 +766,7 @@ abstract module BetreeInv {
   ensures BufferDefinesValue(InterpretLookup(lookup, key), value)
   {
     if |lookup| == |lookup'| {
-      InterpsEqual(lookup, lookup', key);
+      InterpsEqualOfAllBuffersEqual(lookup, lookup', key);
     } else {
       // This uses the fact that if Last(lookup).node has no child for key,
       // then Last(lookup).node must be defining.
@@ -764,7 +775,7 @@ abstract module BetreeInv {
       // We could instead require that ValidRedirect require that newparent
       // can never have children for keys were oldparent doesn't have keys.
 
-      InterpsEqual(lookup, lookup'[..|lookup|], key);
+      InterpsEqualOfAllBuffersEqual(lookup, lookup'[..|lookup|], key);
       InterpretLookupAdditive(lookup'[..|lookup|], lookup'[|lookup|..], key);
       assert lookup'[..|lookup|] + lookup'[|lookup|..] == lookup';
       assert BufferDefinesValue(InterpretLookup(lookup, key), value);
@@ -961,7 +972,7 @@ abstract module BetreeInv {
       var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()),
                            lookup);
       if key1 != key {
-        InterpsEqual(lookup, lookup', key1);
+        InterpsEqualOfAllBuffersEqual(lookup, lookup', key1);
 
         assert BufferDefinesValue(InterpretLookup(lookup', key1), value);
 
