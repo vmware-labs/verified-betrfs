@@ -40,6 +40,14 @@ abstract module BetreeBlockCacheSystem refines DiskAccessModel {
     DB.Variables(BI.Variables(MapToImap(BCS.EphemeralGraph(k, s))))
   }
 
+  predicate Init(k: Constants, s: Variables)
+  {
+    && M.Init(k.machine, s.machine)
+    && D.Init(k.disk, s.disk)
+    && BCS.Init(k, s)
+    && DB.Init(Ik(k), PersistentBetree(k, s))
+  }
+
   predicate Inv(k: Constants, s: Variables) {
     && BCS.Inv(k, s)
     && DBI.Inv(Ik(k), PersistentBetree(k, s))

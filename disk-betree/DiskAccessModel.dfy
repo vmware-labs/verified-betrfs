@@ -34,12 +34,6 @@ abstract module DiskAccessModel {
   type Constants = DAMTypes.DAMConstants<M.Constants, D.Constants>
   type Variables = DAMTypes.DAMVariables<M.Variables, D.Variables<M.LBA, M.Sector>>
   type CrashableUIOp = CrashTypes.CrashableUIOp<M.UIOp>
-  
-  predicate Init(k: Constants, s: Variables)
-  {
-    && M.Init(k.machine, s.machine)
-    && D.Init(k.disk, s.disk)
-  }
 
   datatype Step =
     | DamStep(dop: DiskOp)
@@ -70,4 +64,7 @@ abstract module DiskAccessModel {
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp) {
     exists step :: NextStep(k, s, s', uiop, step)
   }
+
+  predicate Init(k: Constants, s: Variables)
+  predicate Inv(k: Constants, s: Variables)
 }
