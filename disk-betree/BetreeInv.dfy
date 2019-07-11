@@ -230,6 +230,7 @@ abstract module BetreeInv {
                               movedKeys: iset<Key>)
     requires Inv(k, s)
     requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
+    ensures G.IsAcyclic(s'.bcv.view)
     ensures Acyclic(k, s')
   {
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, parentref)
@@ -250,6 +251,7 @@ abstract module BetreeInv {
   lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
     requires Inv(k, s)
     requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+    ensures G.IsAcyclic(s'.bcv.view)
     ensures Acyclic(k, s')
   {
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, Root())
