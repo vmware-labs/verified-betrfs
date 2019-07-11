@@ -125,7 +125,7 @@ module PivotBetreeSpec {
     newnode
   }
 
-  function AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
+  function method AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
   requires Pivots.WFPivots(pivotTable)
   ensures forall key | key in AddMessagesToBucket(pivotTable, i, childBucket, parentBucket) :: Pivots.Route(pivotTable, key) == i
   {
@@ -136,7 +136,7 @@ module PivotBetreeSpec {
     :: M.Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key))
   }
 
-  function AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
+  function method AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |buckets|;
   ensures |AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)| == i
@@ -148,7 +148,7 @@ module PivotBetreeSpec {
     )
   }
 
-  function AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
+  function method AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
   requires WFNode(node)
   ensures WFNode(AddMessagesToNode(node, buffer))
   {

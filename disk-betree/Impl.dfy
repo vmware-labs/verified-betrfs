@@ -661,6 +661,75 @@ module {:extern} Impl refines Main {
     assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
   }
 
+  lemma ChildCanBePagedIn(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
+  requires M.Inv(k, s)
+  requires s.Ready?
+  requires childref !in s.cache
+  requires ref in s.cache
+  requires childref in BT.G.Successors(s.cache[ref])
+  ensures childref in s.ephemeralSuperblock.lbas
+  {
+  }
+
+  method flush(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, slot: int)
+  returns (s': Variables)
+  requires s.Ready?
+  requires ref in s.cache
+  requires s.cache[ref].children.Some?
+  requires 0 <= slot < |s.cache[ref].buckets|
+  requires io.initialized()
+  modifies io
+  requires M.Inv(k, s)
+  ensures M.Next(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    var node := s.cache[ref];
+    var childref := node.children.value[slot];
+
+    if (childref !in s.cache) {
+      ChildCanBePagedIn(k, s, ref, childref);
+      s' := PageIn(k, s, io, childref);
+      return;
+    }
+
+    var child := s.cache[childref];
+
+    var newchild := BT.AddMessagesToNode(child, node.buckets[slot]);
+
+    assert BT.G.Successors(newchild) == BT.G.Successors(child);
+    assert BC.BlockPointsToValidReferences(newchild, s.ephemeralSuperblock.graph);
+
+    var s1, newchildref := alloc(k, s, newchild);
+    if newchildref.None? {
+      s' := s;
+      assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; could not get ref\n";
+      return;
+    }
+
+    var newparent := BT.G.Node(
+        node.pivotTable,
+        Some(node.children.value[slot := newchildref.value]),
+        node.buckets[slot := map[]]
+      );
+
+    assert BC.BlockPointsToValidReferences(node, s1.ephemeralSuperblock.graph);
+    forall ref | ref in BT.G.Successors(newparent) ensures ref in s1.ephemeralSuperblock.graph {
+      if (ref == newchildref.value) {
+      } else {
+        assert ref in BT.G.Successors(node);
+      }
+    }
+    assert BC.BlockPointsToValidReferences(newparent, s1.ephemeralSuperblock.graph);
+
+    s' := write(k, s1, ref, newparent);
+
+    ghost var flushStep := BT.NodeFlush(ref, node, childref, child, newchildref.value, newchild, slot);
+    assert BT.ValidFlush(flushStep);
+    ghost var step := BT.BetreeFlush(flushStep);
+    BC.MakeTransaction2(k, s, s1, s', BT.BetreeStepOps(step));
+    assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+  }
+
   method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': Variables)
   requires s.Ready?
@@ -682,9 +751,7 @@ module {:extern} Impl refines Main {
     if i :| 0 <= i < |node.buckets| && |node.buckets[i]| > Marshalling.CapBucketSize() as int {
       if (node.children.Some?) {
         // internal node case: flush
-        s' := s;
-        assert M.NextStep(Ik(k), s, s', UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
-        print "giving up; internal node flush\n";
+        s' := flush(k, s, io, ref, i);
       } else {
         // leaf case
         var joined := BT.JoinBuckets(node.buckets);
