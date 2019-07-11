@@ -294,6 +294,9 @@ abstract module BetreeRefinement {
     match step {
       case BetreeStep(betreeStep) => BetreeStepRefinesMap(k, s, s', uiop, betreeStep);
       case GCStep(refs) => GCStepRefinesMap(k, s, s', uiop, refs);
+      case StutterStep() => {
+        assert DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep);
+      }
     }
   }
     
