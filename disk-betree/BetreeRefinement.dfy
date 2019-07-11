@@ -201,7 +201,7 @@ abstract module BetreeRefinement {
   {
     var value := msg.value;
 
-    assert PreservesLookupsPut(k, s, s', key, value);
+    InsertMessagePreservesLookupsPut(k, s, s', key, msg, oldroot);
     
     PreservesLookupsPutImplInterpsPut(k, s, s', key, value);
     assert DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.WriteStep(key, value));

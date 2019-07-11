@@ -58,6 +58,8 @@ abstract module BetreeInv {
       exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
   }
 
+  // TODO generalize this to explain how the value changes when a non-Define
+  // message is inserted
   predicate PreservesLookupsPut(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
   {
     && PreservesLookupsExcept(k, s, s', key)
@@ -613,58 +615,65 @@ abstract module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
-  lemma InsertMessagePreservesTotality(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessagePreservesLookupsPut(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
     requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
-    ensures forall key1 | MS.InDomain(key1) :: KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
+    requires msg.Define?
+    //ensures forall key1 | MS.InDomain(key1) :: KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
+    ensures PreservesLookupsPut(k, s, s', key, msg.value);
   {
-    forall key1 | MS.InDomain(key1)
-      ensures KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
+    forall lookup, key1, value | key1 != key && IsSatisfyingLookup(k, s.bcv.view, key1, value, lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup')
     {
-      var value, lookup: Lookup :| IsSatisfyingLookup(k, s.bcv.view, key1, value, lookup);
-      var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()),
-                           lookup);
-      if key1 != key {
-        InterpsEqualOfAllBuffersEqual(lookup, lookup', key1);
+      var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()), lookup);
+      InterpsEqualOfAllBuffersEqual(lookup, lookup', key1);
 
-        assert BufferDefinesValue(InterpretLookup(lookup', key1), value);
+      assert BufferDefinesValue(InterpretLookup(lookup', key1), value);
 
-        forall idx | ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
-        ensures key1 in lookup'[idx].node.children
-        ensures LookupFollowsChildRefAtLayer(key1, lookup', idx)
-        {
-          assert LookupFollowsChildRefAtLayer(key1, lookup, idx);
-        }
-
-        assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
-      } else {
-        assert lookup' == [lookup'[0]] + lookup'[1..];
-        InterpretLookupAdditive([lookup'[0]], lookup'[1..], key);
-        assert lookup[1..] == lookup'[1..];
-        G.M.MergeIsAssociative(msg, InterpretLookup([lookup[0]], key), InterpretLookup(lookup[1..], key));
-        InterpretLookupAdditive([lookup[0]], lookup[1..], key);
-        assert lookup == [lookup[0]] + lookup[1..];
-        var message' := G.M.Merge(msg, InterpretLookup(lookup, key));
-
-        forall idx | ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
-        ensures key in lookup'[idx].node.children
-        ensures LookupFollowsChildRefAtLayer(key, lookup', idx)
-        {
-          assert LookupFollowsChildRefAtLayer(key, lookup, idx);
-        }
-
-        assert IsSatisfyingLookup(k, s'.bcv.view, key1, message'.value, lookup');
+      forall idx | ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
+      ensures key1 in lookup'[idx].node.children
+      ensures LookupFollowsChildRefAtLayer(key1, lookup', idx)
+      {
+        assert LookupFollowsChildRefAtLayer(key1, lookup, idx);
       }
+
+      assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
+    }
+
+    {
+      assert KeyHasSatisfyingLookup(k, s.bcv.view, key);
+      var value, lookup: Lookup :| IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+      var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()), lookup);
+      assert lookup' == [lookup'[0]] + lookup'[1..];
+      InterpretLookupAdditive([lookup'[0]], lookup'[1..], key);
+      assert lookup[1..] == lookup'[1..];
+      G.M.MergeIsAssociative(msg, InterpretLookup([lookup[0]], key), InterpretLookup(lookup[1..], key));
+      InterpretLookupAdditive([lookup[0]], lookup[1..], key);
+      assert lookup == [lookup[0]] + lookup[1..];
+      var message' := G.M.Merge(msg, InterpretLookup(lookup, key));
+
+      forall idx | ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
+      ensures key in lookup'[idx].node.children
+      ensures LookupFollowsChildRefAtLayer(key, lookup', idx)
+      {
+        assert LookupFollowsChildRefAtLayer(key, lookup, idx);
+      }
+
+      assert IsSatisfyingLookup(k, s'.bcv.view, key, message'.value, lookup');
     }
   }
     
   lemma InsertMessageStepPreservesInvariant(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(k, s)
     requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+    // We can have this msg.Define? condition becasue right now the uiop condition
+    // enforces that the inserted message must be a Define. Eventually we'll need
+    // to expand the semantics of the map and the proof to support non-Define messages.
+    requires msg.Define?
     ensures Inv(k, s')
   {
     InsertMessagePreservesAcyclicAndReachablePointersValid(k, s, s', key, msg, oldroot);
-    InsertMessagePreservesTotality(k, s, s', key, msg, oldroot);
+    InsertMessagePreservesLookupsPut(k, s, s', key, msg, oldroot);
   }
 
   lemma FlushStepPreservesInvariant(k: Constants, s: Variables, s': Variables,
