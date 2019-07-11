@@ -331,9 +331,36 @@ abstract module Total_Order {
       return [];
     } else {
       var x :| x in s;
-      var l := SortedSeqOfSet(set t | t in s && lt(t, x));
-      var r := SortedSeqOfSet(set t | t in s && lt(x, t));
+      var lset := set t | t in s && lt(t, x);
+      var rset := set t | t in s && lt(x, t);
+      var l := SortedSeqOfSet(lset);
+      var r := SortedSeqOfSet(rset);
       run := l + [x] + r;
+
+      assert lset !! {x};
+      assert rset !! {x};
+      assert lset !! rset;
+
+      assert lset + {x} + rset == s;
+
+      assert |run| == |l| + 1 + |r|
+        == |lset| + |{x}| + |rset|
+        == |lset + {x} + rset|
+        == |s|;
+
+      reveal_IsStrictlySorted();
+      forall i, j | 0 <= i < j < |run|
+      ensures lt(run[i], run[j])
+      {
+        if i < |l| { }
+        if i == |l| { }
+        if j < |l| { }
+        if j == |l| { }
+        if (run[i] in lset) { }
+        if (run[j] in lset) { }
+        if (run[i] in rset) { }
+        if (run[j] in rset) { }
+      }
     }
   }
 }
