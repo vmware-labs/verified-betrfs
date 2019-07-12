@@ -69,14 +69,14 @@ abstract module BetreeSpec {
   }
 
   predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
-  requires ValidLayerIndex(lookup, idx) && idx < |lookup| - 1;
+    requires 0 <= idx < |lookup| - 1;
   {
     IMapsTo(lookup[idx].node.children, key, lookup[idx+1].ref)
   }
 
   predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
-    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> key in lookup[idx].node.children)
-    && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
+    //&& (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> key in lookup[idx].node.children)
+    && (forall idx :: 0 <= idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
   function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message

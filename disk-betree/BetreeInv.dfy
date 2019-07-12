@@ -204,6 +204,11 @@ abstract module BetreeInv {
       ensures LookupIsAcyclic(lookup)
     {
       var path := PathOfLookup(lookup);
+      forall i | 0 <= i < |path|-1
+        ensures path[i] in g && path[i+1] in Successors(g[path[i]])
+      {
+        assert LookupFollowsChildRefAtLayer(key, lookup, i);
+      }
       G.AcyclicGraphImpliesSimplePath(g, path);
     }
   }
@@ -442,7 +447,7 @@ abstract module BetreeInv {
   ensures PreservesLookups(k, s, s')
   {
     //FIXME
-    assume false;
+    //assume false;
 
     var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
@@ -463,12 +468,24 @@ abstract module BetreeInv {
           assert lookup'[..i] + [lookup'[i]] + lookup'[i+1..] == lookup'; // observe
           InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
           InterpretLookupAdditive3(lookup'[..i], [lookup'[i]], lookup'[i+1..], key);
+          forall j | 0 <= j < |lookup'|-1
+            ensures LookupFollowsChildRefAtLayer(key, lookup', j)
+          {
+            assert LookupFollowsChildRefAtLayer(key, lookup, j);
+          }
           assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
         } else {
           if |lookup| - 1 == i { // we stopped at parent
             var lookup' := lookup[..i] + [ ReadOp(parentref, newparent) ] + [ ReadOp(newchildref, newchild) ];
             forall j | 0 <= j < |lookup'|
             ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+            }
+            forall j | 0 <= j < |lookup'|-1
+              ensures LookupFollowsChildRefAtLayer(key, lookup', j)
+            {
+              if j <= i-1 {
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
+              }
             }
             assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
           } else {
@@ -493,6 +510,23 @@ abstract module BetreeInv {
             InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
             InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
 
+            forall j | 0 <= j < |lookup'|-1
+              ensures LookupFollowsChildRefAtLayer(key, lookup', j)
+            {
+              if j < i-1 {
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
+              } else if j == i-1 {
+                assume false;
+              } else if j == i {
+                assume false;
+              } else if j == i+1 {
+                assume false;
+              } else {
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
+              }
+            }
+            assert LookupFollowsChildRefs(key, lookup');
+            
             assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
           }
         }
