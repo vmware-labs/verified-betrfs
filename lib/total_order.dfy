@@ -399,6 +399,23 @@ module Integer_Order refines Total_Order {
   }
 }
 
+module Uint64_Order refines Total_Order {
+  import opened NativeTypes
+  type Element = uint64
+
+  function SomeElement() : Element { 0 }
+
+  predicate method lte(a: Element, b: Element) {
+    reveal_ltedef();
+    ltedef(a, b)
+  }
+
+  predicate method {:opaque} ltedef(a: Element, b: Element) {
+    a <= b
+  }
+}
+
+
 module Char_Order refines Total_Order {
   type Element = char
 

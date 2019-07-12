@@ -34,8 +34,6 @@
     in a different way.
     Rob wants the best of both worlds.
     
-- {:namespace} metadata tag on modules so c# code can have reliable namespaces
-
 - non-stupid implementation of sequences
 
 - include-root
@@ -43,3 +41,6 @@
 - better error messages
   - output line itself in addition to line numbers
   - anon wtf?
+
+- auto-cast uint64 to ints
+- methods on datatypes (because we don't necessarily want to use a class)
