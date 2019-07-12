@@ -7,13 +7,6 @@ module MutableVec {
   import opened Options
   import opened Sequences
 
-  // FIXME
-  // function method unwrap<V(==)>(e: Option<V>): V
-  //   requires e.Some?
-  // {
-  //   e.value
-  // }
-
   class Vec<V(==)> {
     var Array: array<Option<V>>;
     var Length: uint64;
@@ -137,32 +130,28 @@ module MutableVec {
       Contents := old(Contents)[..|old(Contents)|-1];
     }
 
-    method get(index: uint64) returns (result: V)
+    function method get(index: uint64): (result: V)
       requires Inv()
       requires 0 <= (index as int) < (Length as int)
       ensures Inv()
-      ensures Contents == old(Contents)
-      ensures Length == old(Length)
       ensures result == Contents[index]
+      reads this
+      reads this.Array
     {
-      result := Array[index].value;
+      Array[index].value
     }
 
-    // FIXME
-    // method toSeq() returns (result: seq<V>)
-    //   requires Inv()
-    //   ensures Inv()
-    //   ensures Contents == old(Contents)
-    //   ensures Length == old(Length)
-    //   ensures result == Contents
-    // {
-    //   assert forall i :: 0 <= i < Length ==> Array[i].Some?;
-    //   // ???
-    //   var contents: array<V> := new [Length] (i => Array[i].value);
-    //   result := contents[..];
-
-    //   // FIXME result := Apply(unwrap, contents);
-    // }
-
+    method toSeq() returns (result: seq<V>)
+      requires Inv()
+      ensures Inv()
+      ensures Contents == old(Contents)
+      ensures Length == old(Length)
+      ensures result == Contents
+    {
+      assert forall i :: 0 <= i < Length ==> Array[i].Some?;
+      var contents: array<V> := new [Length] (
+        (i: int) requires Inv() requires 0 <= i < (Length as int) reads this.Array, this => get(i as uint64));
+      result := contents[..];
+    }
   }
 }
