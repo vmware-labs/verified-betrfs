@@ -26,7 +26,7 @@ namespace Impl_Compile {
     }
 
     private string getFilename(ulong lba) {
-      return "filesystem/" + lba.ToString("X16");
+      return ".veribetrfs-storage/" + lba.ToString("X16");
     }
   }
 }
@@ -40,6 +40,14 @@ class Application {
 
   public Application() {
     initialize();
+    verbose = true;
+  }
+
+  public bool verbose;
+  public void log(string s) {
+    if (verbose) {
+      Console.WriteLine(s);
+    }
   }
 
   public void initialize() {
@@ -48,66 +56,83 @@ class Application {
   }
 
   public void crash() {
-    Console.WriteLine("'crashing' and reinitializing");
-    Console.WriteLine("");
+    log("'crashing' and reinitializing");
+    log("");
     initialize();
   }
 
   public void Sync() {
-    Console.WriteLine("Sync");
+    log("Sync");
 
     for (int i = 0; i < 50; i++) {
       __default.handleSync(k, hs, io, out bool success);
       if (success) {
-        Console.WriteLine("doing sync... success!");
-        Console.WriteLine("");
+        log("doing sync... success!");
+        log("");
         return;
       } else {
-        Console.WriteLine("doing sync...");
+        log("doing sync...");
       }
     }
-    Console.WriteLine("giving up");
+    log("giving up");
     throw new Exception("operation didn't finish");
   }
 
   public void Insert(string key, string val) {
-    Console.WriteLine("Insert (\"" + key + "\", \"" + val + "\")");
+    log("Insert (\"" + key + "\", \"" + val + "\")");
+    Insert(
+      new Dafny.Sequence<byte>(string_to_bytes(key)),
+      new Dafny.Sequence<byte>(string_to_bytes(val))
+    );
+  }
 
-    Dafny.Sequence<byte> key_bytes = new Dafny.Sequence<byte>(string_to_bytes(key));
-    Dafny.Sequence<byte> val_bytes = new Dafny.Sequence<byte>(string_to_bytes(val));
+  public void Insert(byte[] key, byte[] val) {
+    Insert(
+      new Dafny.Sequence<byte>(key),
+      new Dafny.Sequence<byte>(val)
+    );
+  }
 
+  public void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
     for (int i = 0; i < 50; i++) {
-      __default.handleInsert(k, hs, io, key_bytes, val_bytes, out bool success);
+      __default.handleInsert(k, hs, io, key, val, out bool success);
       if (success) {
-        Console.WriteLine("doing insert... success!");
-        Console.WriteLine("");
+        log("doing insert... success!");
+        log("");
         return;
       } else {
-        Console.WriteLine("doing insert...");
+        log("doing insert...");
       }
     }
-    Console.WriteLine("giving up");
+    log("giving up");
     throw new Exception("operation didn't finish");
   }
 
   public void Query(string key) {
-    Console.WriteLine("Query \"" + key + "\"");
+    byte[] val_bytes = Query(new Dafny.Sequence<byte>(string_to_bytes(key)));
+    string val = bytes_to_string(val_bytes);
+    log("Query result is: \"" + val + "\"");
+  }
 
-    Dafny.Sequence<byte> key_bytes = new Dafny.Sequence<byte>(string_to_bytes(key));
+  public void Query(byte[] key) {
+    Query(new Dafny.Sequence<byte>(key));
+  }
+
+  public byte[] Query(Dafny.Sequence<byte> key) {
+    log("Query \"" + key + "\"");
 
     for (int i = 0; i < 50; i++) {
-      __default.handleQuery(k, hs, io, key_bytes, out var result);
+      __default.handleQuery(k, hs, io, key, out var result);
       if (result.is_Some) {
         byte[] val_bytes = result.dtor_value.Elements;
-        string val = bytes_to_string(val_bytes);
-        Console.WriteLine("doing query... success! Query result is: \"" + val + "\"");
-        Console.WriteLine("");
-        return;
+        log("doing query... success!");
+        log("");
+        return val_bytes;
       } else {
-        Console.WriteLine("doing query...");
+        log("doing query...");
       }
     }
-    Console.WriteLine("giving up");
+    log("giving up");
     throw new Exception("operation didn't finish");
   }
 
@@ -117,6 +142,35 @@ class Application {
 
   public static string bytes_to_string(byte[] bytes) {
     return System.Text.Encoding.UTF8.GetString(bytes);
+  }
+}
+
+public class FSUtil {
+  public static void ClearIfExists() {
+    if (System.IO.Directory.Exists(".veribetrfs-storage")) {
+      System.IO.Directory.Delete(".veribetrfs-storage", true /* recursive */);
+    } 
+  }
+
+  public static void Mkfs() {
+    Dafny.Map<ulong, byte[]> m;
+    MkfsImpl_Compile.__default.InitDiskBytes(out m);
+
+    if (m.Count == 0) {
+      throw new Exception("InitDiskBytes failed.");
+    }
+
+    if (System.IO.Directory.Exists(".veribetrfs-storage")) {
+      throw new Exception("error: .veribetrfs-storage/ already exists");
+    }
+    System.IO.Directory.CreateDirectory(".veribetrfs-storage");
+
+    DiskIOHandler io = new DiskIOHandler();
+
+    foreach (ulong lba in m.Keys.Elements) {
+      byte[] bytes = m.Select(lba);
+      io.write(lba, bytes);
+    }
   }
 }
 
@@ -146,37 +200,23 @@ class Framework {
     app.Sync();
   }
 
-  public static void Mkfs() {
-    Dafny.Map<ulong, byte[]> m;
-    MkfsImpl_Compile.__default.InitDiskBytes(out m);
-
-    if (m.Count == 0) {
-      throw new Exception("InitDiskBytes failed.");
-    }
-
-    if (System.IO.Directory.Exists("filesystem")) {
-      throw new Exception("error: filesystem/ already exists");
-    }
-    System.IO.Directory.CreateDirectory("filesystem");
-
-    DiskIOHandler io = new DiskIOHandler();
-
-    foreach (ulong lba in m.Keys.Elements) {
-      byte[] bytes = m.Select(lba);
-      io.write(lba, bytes);
-    }
-  }
-
   public static void Main(string[] args) {
     bool mkfs = false;
+    bool benchmark = false;
     foreach (string arg in args) {
       if (arg.Equals("--mkfs")) {
         mkfs = true;
       }
+      if (arg.Equals("--benchmark")) {
+        benchmark = true;
+      }
     }
 
-    if (mkfs) {
-      Mkfs();
+    if (benchmark) {
+      Benchmarks b = new Benchmarks();
+      b.RunAllBenchmarks();
+    } else if (mkfs) {
+      FSUtil.Mkfs();
     } else {
       Run();
     }
