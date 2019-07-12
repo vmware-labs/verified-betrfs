@@ -68,23 +68,28 @@ abstract class Benchmark {
 
   // Generate random keys to query.
   // Half will be existing keys, half will be totally random keys
-  protected List<byte[]> RandomQueryKeys(int n, int seed, List<byte[]> insertedKeys) {
+  protected void RandomQueryKeysAndValues(int n, int seed, List<byte[]> insertedKeys, List<byte[]> insertedValues,
+      out List<byte[]> queryKeys, out List<byte[]> queryValues) {
     Random rand = new Random(seed);
 
-    List<byte[]> l = new List<byte[]>();
+    byte[] emptyBytes = new byte[0];
+
+    queryKeys = new List<byte[]>();
+    queryValues = new List<byte[]>();
     for (int i = 0; i < n; i++) {
       if (rand.Next(0, 2) == 0) {
-        int sz = rand.Next(1, 1024 + 1);
+        // Min length 20 so probability of collision is miniscule
+        int sz = rand.Next(20, 1024 + 1);
         byte[] bytes = new byte[sz];
         rand.NextBytes(bytes);
-        l.Add(bytes);
+        queryKeys.Add(bytes);
+        queryValues.Add(emptyBytes);
       } else {
         int idx = rand.Next(0, insertedKeys.Count);
-        l.Add(insertedKeys[idx]);
+        queryKeys.Add(insertedKeys[idx]);
+        queryValues.Add(insertedValues[idx]);
       }
     }
-
-    return l;
   }
 }
 
@@ -118,6 +123,7 @@ class BenchmarkRandomQueries : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
   List<byte[]> query_keys;
+  List<byte[]> query_values;
 
   public BenchmarkRandomQueries() {
     int seed1 = 1234;
@@ -125,7 +131,7 @@ class BenchmarkRandomQueries : Benchmark {
     int seed3 = 19232;
     keys = RandomKeys(2000, seed1);
     values = RandomValues(2000, seed2);
-    query_keys = RandomQueryKeys(2000, seed3, keys);
+    RandomQueryKeysAndValues(2000, seed3, keys, values, out query_keys, out query_values);
   }
 
   override protected void Prepare(Application app) {
@@ -138,7 +144,7 @@ class BenchmarkRandomQueries : Benchmark {
 
   override protected void Go(Application app) {
     for (int i = 0; i < query_keys.Count; i++) {
-      app.Query(query_keys[i]);
+      app.QueryAndExpect(query_keys[i], query_values[i]);
     }
   }
 }
@@ -190,7 +196,7 @@ class BenchmarkSequentialQueries : Benchmark {
 
   override protected void Go(Application app) {
     for (int i = 0; i < keys.Count; i++) {
-      app.Query(keys[i]);
+      app.QueryAndExpect(keys[i], values[i]);
     }
   }
 }

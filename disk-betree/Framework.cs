@@ -118,6 +118,14 @@ class Application {
     Query(new Dafny.Sequence<byte>(key));
   }
 
+  public void QueryAndExpect(byte[] key, byte[] expected) {
+    byte[] actual = Query(new Dafny.Sequence<byte>(key));
+
+    if (!byteArraysEqual(actual, expected)) {
+      throw new Exception("did not get expected result\n");
+    }
+  }
+
   public byte[] Query(Dafny.Sequence<byte> key) {
     log("Query \"" + key + "\"");
 
@@ -143,6 +151,17 @@ class Application {
   public static string bytes_to_string(byte[] bytes) {
     return System.Text.Encoding.UTF8.GetString(bytes);
   }
+
+  bool byteArraysEqual(byte[] a, byte[] b) {
+    if (a.Length != b.Length) return false;
+    for (int i = 0; i < a.Length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
 }
 
 public class FSUtil {
