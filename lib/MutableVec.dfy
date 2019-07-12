@@ -1,9 +1,18 @@
-include "../lib/NativeTypes.dfy"
-include "../lib/Option.dfy"
+include "NativeTypes.dfy"
+include "Option.dfy"
+include "sequences.dfy"
 
 module MutableVec {
   import opened NativeTypes
   import opened Options
+  import opened Sequences
+
+  // FIXME
+  // function method unwrap<V(==)>(e: Option<V>): V
+  //   requires e.Some?
+  // {
+  //   e.value
+  // }
 
   class Vec<V(==)> {
     var Array: array<Option<V>>;
@@ -127,5 +136,33 @@ module MutableVec {
 
       Contents := old(Contents)[..|old(Contents)|-1];
     }
+
+    method get(index: uint64) returns (result: V)
+      requires Inv()
+      requires 0 <= (index as int) < (Length as int)
+      ensures Inv()
+      ensures Contents == old(Contents)
+      ensures Length == old(Length)
+      ensures result == Contents[index]
+    {
+      result := Array[index].value;
+    }
+
+    // FIXME
+    // method toSeq() returns (result: seq<V>)
+    //   requires Inv()
+    //   ensures Inv()
+    //   ensures Contents == old(Contents)
+    //   ensures Length == old(Length)
+    //   ensures result == Contents
+    // {
+    //   assert forall i :: 0 <= i < Length ==> Array[i].Some?;
+    //   // ???
+    //   var contents: array<V> := new [Length] (i => Array[i].value);
+    //   result := contents[..];
+
+    //   // FIXME result := Apply(unwrap, contents);
+    // }
+
   }
 }
