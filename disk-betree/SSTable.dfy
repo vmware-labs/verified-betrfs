@@ -241,10 +241,6 @@ module SSTable {
     I(SSTable(starts[..startsIdx], strings[..stringsIdx]))
   }
 
-  method MaxLens(s: seq<SSTable>)
-  returns (startsLen : uint64, stringsLen: uint64)
-  ensures forall i | 0 <= i < |s| :: |s[i].starts| <= startsLen as int
-  ensures forall i | 0 <= i < |s| :: |s[i].strings| <= stringsLen as int
 
   lemma LemmaStartsArrayIsStrictlySorted(startsArray: array<uint64>, startsIdx: int, stringsIdx: int)
   requires 0 <= startsIdx
@@ -258,14 +254,146 @@ module SSTable {
     Uint64Order.reveal_IsSorted();
   }
 
-  method LemmaAugmentSSTable(sst: SSTable, sst': SSTable)
+  lemma LemmaKeysArrayIsStrictlySorted(startsArray: array<uint64>,
+      stringsArray: array<byte>, startsIdx: int, startsIdx': int, stringsIdx: int, stringsIdx': int, newKey: Key)
+  requires 0 <= startsIdx
+  requires startsIdx' == startsIdx + 2
+  requires startsIdx' <= startsArray.Length
+  requires startsArray[startsIdx] as int == stringsIdx
+  requires startsArray[startsIdx + 1] as int >= stringsIdx
+  requires stringsIdx <= stringsIdx'
+  requires stringsIdx' as int <= stringsArray.Length
+  requires WFSSTableMap(SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx]))
+  requires KeysStrictlySorted(SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx]))
+  requires forall key | key in IArrays(startsArray, startsIdx as uint64, stringsArray, stringsIdx as uint64) :: lt(key, newKey)
+  requires Uint64Order.IsSorted(startsArray[..startsIdx + 2])
+  requires startsArray[startsIdx+1] as int <= stringsArray.Length
+  requires stringsArray[stringsIdx .. startsArray[startsIdx+1]] == newKey
+  requires WFSSTable(SSTable(startsArray[..startsIdx'], stringsArray[..stringsIdx']))
+  ensures KeysStrictlySorted(SSTable(startsArray[..startsIdx'], stringsArray[..stringsIdx']))
+  {
+    var sst := SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx]);
+    var sst' := SSTable(startsArray[..startsIdx'], stringsArray[..stringsIdx']);
+
+    reveal_KeysStrictlySorted();
+
+    forall i, j | 0 <= 2*i < 2*j < |sst'.starts|
+    ensures lt(Entry(sst', 2*i), Entry(sst', 2*j))
+    {
+      if (2*j == |sst.starts|) {
+        LemmaStartEndIndices(sst, 2*i);
+        assert Entry(sst, 2*i) == Entry(sst', 2*i);
+
+        assert Entry(sst, 2*i) in I(sst);
+        assert Entry(sst', 2*i) in I(sst);
+        assert newKey == Entry(sst', 2*j);
+        assert lt(Entry(sst', 2*i), Entry(sst', 2*j));
+      } else {
+        LemmaStartEndIndices(sst, 2*i);
+        LemmaStartEndIndices(sst, 2*j);
+        assert Entry(sst, 2*i) == Entry(sst', 2*i);
+        assert Entry(sst, 2*j) == Entry(sst', 2*j);
+        assert lt(Entry(sst, 2*i), Entry(sst, 2*j));
+        assert lt(Entry(sst', 2*i), Entry(sst', 2*j));
+      }
+    }
+  }
+
+  lemma KeysStrictlySortedImpliesLt(sst: SSTable, i: int, j: int)
+  requires WFSSTable(sst)
+  requires KeysStrictlySorted(sst)
+  requires 0 <= 2*i;
+  requires 2*i < 2*j
+  requires 2*j < |sst.starts|
+  ensures lt(Entry(sst, 2*i), Entry(sst, 2*j))
+  {
+    reveal_KeysStrictlySorted();
+  }
+
+  lemma LemmaAugmentSSTable(sst: SSTable, sst': SSTable, key: Key, value: String)
   requires WFSSTableMap(sst)
   requires WFSSTableMap(sst')
   requires |sst'.starts| == |sst.starts| + 2
+  requires |sst'.strings| >= |sst.strings|
   requires sst.starts == sst'.starts[..|sst.starts|]
   requires sst.strings == sst'.strings[..|sst.strings|]
-  ensures I(sst) == I(sst')
+  requires key == Entry(sst', |sst.starts|);
+  requires value == Entry(sst', |sst.starts| + 1);
+  requires sst'.starts[|sst.starts|] as int == |sst.strings|
+  ensures I(sst') == I(sst)[key := Define(value)]
   {
+    var a := I(sst');
+    var b := I(sst)[key := Define(value)];
+
+    forall k | k in a
+    ensures k in b && a[k] == b[k]
+    {
+      var i :| 0 <= 2*i < |sst'.starts| && Entry(sst', 2*i) == k;
+      if (2*i == |sst.starts|) {
+        assert k in b;
+        assert a[k] == b[k];
+      } else {
+        assert 2*i < |sst.starts|;
+
+        var j := |sst.starts| / 2;
+        assert 2*j == |sst.starts|;
+        KeysStrictlySortedImpliesLt(sst', i, j);
+        assert lt(Entry(sst', 2*i), Entry(sst', 2*j));
+        assert k != key;
+
+        assert Entry(sst, 2*i) in I(sst);
+
+        assert Start(sst, 2*i as uint64) == Start(sst', 2*i as uint64);
+        assert End(sst, 2*i as uint64) == End(sst', 2*i as uint64);
+        LemmaStartEndIndices(sst, 2*i);
+        //assert End(sst, 2*i as uint64) as int <= |sst.strings|;
+
+        assert 2*i + 1 < |sst.starts|;
+        assert Start(sst, 2*i as uint64 + 1) == Start(sst', 2*i as uint64 + 1);
+        assert End(sst, 2*i as uint64 + 1) == End(sst', 2*i as uint64 + 1);
+        LemmaStartEndIndices(sst, 2*i+1);
+        //assert End(sst, 2*i+1 as uint64) as int <= |sst.strings|;
+
+        assert Entry(sst, 2*i) == Entry(sst', 2*i);
+        assert k in I(sst);
+        assert I(sst)[k] == Define(Entry(sst, 2*i+1));
+        assert I(sst')[k] == Define(Entry(sst', 2*i+1));
+        assert I(sst)[k] == I(sst')[k];
+        assert k in b;
+        assert a[k] == b[k];
+      }
+    }
+
+    forall k | k in b
+    ensures k in a
+    {
+      var j := |sst.starts| / 2;
+      assert 2*j == |sst.starts|;
+
+      if (k == key) {
+        assert k == Entry(sst', 2*j);
+        assert Entry(sst', 2*j) in I(sst');
+        assert k in I(sst');
+      } else {
+        assert k in I(sst);
+
+        var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == k;
+        assert 2*i < 2*j;
+
+        assert Start(sst, 2*i as uint64) == Start(sst', 2*i as uint64);
+        assert End(sst, 2*i as uint64) == End(sst', 2*i as uint64);
+        LemmaStartEndIndices(sst, 2*i);
+
+        assert Entry(sst, 2*i) == Entry(sst', 2*i);
+        assert k in I(sst');
+      }
+    }
+
+    assert a.Keys == b.Keys;
+
+    assert forall k | k in b :: k in a && a[k] == b[k];
+
+    assert a == b;
   }
 
   method WriteKeyValue(startsArray: array<uint64>, stringsArray: array<byte>, startsIdx: uint64, stringsIdx: uint64, sst: SSTable, i: uint64)
@@ -309,15 +437,49 @@ module SSTable {
     assert old(IArrays(startsArray, startsIdx, stringsArray, stringsIdx))
         == IArrays(startsArray, startsIdx, stringsArray, stringsIdx);
     assert WFSSTableMapArrays(startsArray, startsIdx, stringsArray, stringsIdx);
-    
+
+    LemmaKeysArrayIsStrictlySorted(startsArray, stringsArray, startsIdx as int,
+        startsIdx' as int, stringsIdx as int, stringsIdx' as int, Entry(sst, i as int));
+
+    LemmaAugmentSSTable(
+        SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx]),
+        SSTable(startsArray[..startsIdx'], stringsArray[..stringsIdx']),
+        Entry(sst, i as int),
+        Entry(sst, i as int + 1)
+    );
+  }
+
+  method MaxLens(s: seq<SSTable>)
+  returns (startsLen : uint64, stringsLen: uint64)
+  requires forall i | 0 <= i < |s| :: |s[i].strings| < 0x800_0000_0000_0000
+  requires forall i | 0 <= i < |s| :: |s[i].starts| < 0x800_0000_0000_0000
+  ensures forall i | 0 <= i < |s| :: |s[i].starts| <= startsLen as int
+  ensures forall i | 0 <= i < |s| :: |s[i].strings| <= stringsLen as int
+  ensures startsLen < 0x800_0000_0000_0000
+  ensures stringsLen < 0x800_0000_0000_0000
+  
+  lemma LemmaWFEmptyArrays(startsArray: array<uint64>, stringsArray: array<byte>)
+  ensures WFSSTableMapArrays(startsArray, 0, stringsArray, 0)
+  ensures IArrays(startsArray, 0, stringsArray, 0) == map[]
+  {
+    Uint64Order.reveal_IsSorted();
+    reveal_KeysStrictlySorted();
   }
 
   method Flush(parent: SSTable, children: seq<SSTable>, pivots: seq<Key>)
   returns (res : seq<SSTable>)
+  requires WFSSTableMap(parent)
+  requires P.WFPivots(pivots)
+  requires |parent.strings| < 0x800_0000_0000_0000
+  requires |parent.starts| < 0x800_0000_0000_0000
+  requires forall i | 0 <= i < |children| :: WFSSTableMap(children[i])
+  requires forall i | 0 <= i < |children| :: |children[i].strings| < 0x800_0000_0000_0000
+  requires forall i | 0 <= i < |children| :: |children[i].starts| < 0x800_0000_0000_0000
   requires |children| == |pivots| + 1
   requires forall i, key | 0 <= i < |children| && key in I(children[i]) :: P.Route(pivots, key) == i
   //ensures |res| == |children|
   //ensures forall i, key | 0 <= i < |res| && key in I(res[i]) ==> Route(pivots, key) == i
+  ensures forall i | 0 <= i < |res| :: WFSSTableMap(res[i])
   ensures ISeq(res) == BT.AddMessagesToBuckets(pivots, |children|, ISeq(children), I(parent))
   {
     var maxChildStartsLen: uint64, maxChildStringsLen: uint64 := MaxLens(children);
@@ -328,6 +490,8 @@ module SSTable {
 
     res := [];
 
+    LemmaWFEmptyArrays(startsArray, stringsArray);
+
     var parentIdx: uint64 := 0;
     var childrenIdx: int := 0;
     var childIdx: uint64 := 0;
@@ -337,11 +501,11 @@ module SSTable {
     invariant childrenIdx < |children| ==> 0 <= 2*childIdx as int <= |children[childrenIdx].starts|
     invariant 0 <= startsIdx as int <= startsArray.Length
     invariant 0 <= stringsIdx as int <= stringsArray.Length
+    invariant WFSSTableMapArrays(startsArray, startsIdx, stringsArray, stringsIdx)
     invariant 2*parentIdx as int < |parent.starts| ==>
         forall key | key in IArrays(startsArray, startsIdx, stringsArray, stringsIdx) :: lt(key, Entry(parent, 2*parentIdx as int))
     invariant childrenIdx < |children| && 2*childIdx as int < |children[childrenIdx].starts| ==>
         forall key | key in IArrays(startsArray, startsIdx, stringsArray, stringsIdx) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int))
-    invariant WFSSTableMapArrays(startsArray, startsIdx, stringsArray, stringsIdx)
     invariant IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
            == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int))
     invariant ISeq(res) == BT.AddMessagesToBuckets(pivots, |res|, ISeq(children), I(parent))
