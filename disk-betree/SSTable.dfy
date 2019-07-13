@@ -80,6 +80,15 @@ module SSTable {
       lt(Entry(sst, 2*i), Entry(sst, 2*j))
   }
 
+  lemma KeysStrictlySortedImplLt(sst: SSTable, i: int, j: int)
+  requires WFSSTable(sst)
+  requires KeysStrictlySorted(sst)
+  requires 0 <= 2*i < 2*j < |sst.starts|
+  ensures lt(Entry(sst, 2*i), Entry(sst, 2*j))
+  {
+    reveal_KeysStrictlySorted();
+  }
+
   predicate WFSSTableMap(sst: SSTable)
   {
     && WFSSTable(sst)
@@ -432,7 +441,6 @@ module SSTable {
   requires stringsIdx as int + End(sst, i+1) as int - Start(sst, i) as int <= stringsArray.Length
   requires WFSSTableMapArrays(startsArray, startsIdx, stringsArray, stringsIdx)
   requires forall key | key in IArrays(startsArray, startsIdx, stringsArray, stringsIdx) :: lt(key, Entry(sst, i as int))
-  requires forall j | 0 <= j < startsIdx :: startsArray[j] <= stringsIdx
   requires stringsArray.Length < 0x1000_0000_0000_0000
   requires startsArray.Length < 0x1000_0000_0000_0000
   requires startsIdx == 0 ==> stringsIdx == 0
@@ -446,6 +454,11 @@ module SSTable {
   {
     LemmaStartEndIndices(sst, i as int);
     LemmaStartEndIndices(sst, i as int + 1);
+    forall j | 0 <= j < startsIdx
+    ensures startsArray[j] <= stringsIdx
+    {
+      Uint64Order.reveal_IsSorted();
+    }
 
     startsArray[startsIdx] := stringsIdx;
     startsArray[startsIdx + 1] := stringsIdx + (End(sst, i) - Start(sst, i));
@@ -561,7 +574,7 @@ module SSTable {
   requires P.WFPivots(pivots)
   requires WFSSTableMap(parent)
   requires WFSSTableMap(child)
-  requires 0 <= childrenIdx < |pivots|
+  requires 0 <= childrenIdx <= |pivots|
   requires 0 <= 2*parentIdx <= |parent.starts|
   requires 0 <= 2*childIdx < |child.starts|
   requires m' == m[Entry(child, 2*childIdx as int) := Define(Entry(child, 2*childIdx as int + 1))]
@@ -585,11 +598,11 @@ module SSTable {
     reveal_IPrefix();
   }
 
-  lemma LemmaFlushAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
+  lemma {:fuel P.Route,0} LemmaFlushAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
   requires P.WFPivots(pivots)
   requires WFSSTableMap(parent)
   requires WFSSTableMap(child)
-  requires 0 <= childrenIdx < |pivots|
+  requires 0 <= childrenIdx <= |pivots|
   requires 0 <= 2*parentIdx < |parent.starts|
   requires 0 <= 2*childIdx < |child.starts|
   requires m' == m[Entry(child, 2*childIdx as int) := Define(Entry(parent, 2*parentIdx as int + 1))]
@@ -710,12 +723,11 @@ module SSTable {
 
     invariant startsIdx as int <= 2 * (childIdx as int + parentIdx as int)
     invariant childrenIdx < |children| ==> stringsIdx as int <= Boundary(children[childrenIdx], 2*childIdx) + Boundary(parent, 2*parentIdx)
-
-    invariant forall j | 0 <= j < startsIdx :: startsArray[j] <= stringsIdx
+    invariant startsIdx == 0 ==> stringsIdx == 0
 
     invariant childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==>
         forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int))
-    invariant 0 < childrenIdx < |children| ==> lt(pivots[childrenIdx - 1], Entry(parent, 2*parentIdx as int))
+    invariant 0 < childrenIdx < |children| && 2*parentIdx as int < |parent.starts| ==> lt(pivots[childrenIdx - 1], Entry(parent, 2*parentIdx as int))
 
     invariant childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==>
         forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int))
@@ -737,12 +749,16 @@ module SSTable {
       ghost var oldIArray := IArrays(startsArray, startsIdx, stringsArray, stringsIdx);
       assert |children[childrenIdx].starts| + |parent.starts| <= startsArray.Length;
       assert |children[childrenIdx].strings| + |parent.strings| <= stringsArray.Length;
+      if (childIdx > 0) {
+        LemmaStartEndIndices(children[childrenIdx], 2*childIdx as int - 1);
+      }
       assert Boundary(children[childrenIdx], 2*childIdx) <= |children[childrenIdx].strings|;
       if (parentIdx > 0) {
         LemmaStartEndIndices(parent, 2*parentIdx as int - 1);
       }
       assert Boundary(parent, 2*parentIdx) <= |parent.strings|;
       if (2*(childIdx as int + 1) <= |children[childrenIdx].starts|) {
+        LemmaStartEndIndices(children[childrenIdx], 2*childIdx as int + 1);
         assert Boundary(children[childrenIdx], 2*(childIdx+1)) <= |children[childrenIdx].strings|;
       }
       if (2*(parentIdx as int + 1) <= |parent.starts|) {
@@ -750,6 +766,15 @@ module SSTable {
         assert Boundary(parent, 2*(parentIdx+1)) <= |parent.strings|;
       }
       LemmaIArrayKeysLt(parent, children[childrenIdx], childrenIdx as int, parentIdx as int, childIdx as int, pivots, startsArray, startsIdx, stringsArray, stringsIdx);
+
+      if (2*(parentIdx+1) as int < |parent.starts|) {
+        KeysStrictlySortedImplLt(parent, parentIdx as int, parentIdx as int + 1);
+        assert lt(Entry(parent, 2*parentIdx as int), Entry(parent, 2*(parentIdx as int + 1)));
+      }
+      if (2*(childIdx+1) as int < |children[childrenIdx].starts|) {
+        KeysStrictlySortedImplLt(children[childrenIdx], childIdx as int, childIdx as int + 1);
+        assert lt(Entry(children[childrenIdx], 2*childIdx as int), Entry(children[childrenIdx], 2*(childIdx as int + 1)));
+      }
 
       if (2*parentIdx == |parent.starts| as uint64) {
         if (2*childIdx == |children[childrenIdx].starts| as uint64) {
