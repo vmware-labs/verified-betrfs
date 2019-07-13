@@ -715,9 +715,13 @@ module SSTable {
 
     invariant childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==>
         forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int))
+    invariant 0 < childrenIdx < |children| ==> lt(pivots[childrenIdx - 1], Entry(parent, 2*parentIdx as int))
 
     invariant childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==>
         forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int))
+
+    invariant childrenIdx < |children| - 1 ==>
+        forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx])
 
     invariant childrenIdx < |children| ==>
           IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
@@ -731,14 +735,18 @@ module SSTable {
 
     {
       ghost var oldIArray := IArrays(startsArray, startsIdx, stringsArray, stringsIdx);
-      assert 2 * (|children[childrenIdx].starts| + |parent.starts|) <= startsArray.Length;
+      assert |children[childrenIdx].starts| + |parent.starts| <= startsArray.Length;
       assert |children[childrenIdx].strings| + |parent.strings| <= stringsArray.Length;
       assert Boundary(children[childrenIdx], 2*childIdx) <= |children[childrenIdx].strings|;
+      if (parentIdx > 0) {
+        LemmaStartEndIndices(parent, 2*parentIdx as int - 1);
+      }
       assert Boundary(parent, 2*parentIdx) <= |parent.strings|;
       if (2*(childIdx as int + 1) <= |children[childrenIdx].starts|) {
         assert Boundary(children[childrenIdx], 2*(childIdx+1)) <= |children[childrenIdx].strings|;
       }
       if (2*(parentIdx as int + 1) <= |parent.starts|) {
+        LemmaStartEndIndices(parent, 2*parentIdx as int + 1);
         assert Boundary(parent, 2*(parentIdx+1)) <= |parent.strings|;
       }
       LemmaIArrayKeysLt(parent, children[childrenIdx], childrenIdx as int, parentIdx as int, childIdx as int, pivots, startsArray, startsIdx, stringsArray, stringsIdx);
@@ -753,6 +761,8 @@ module SSTable {
           childIdx := 0;
           childrenIdx := childrenIdx + 1;
         } else {
+          // TODO possible optimization: if childIdx is 0, then we can just use the existing childBucket with no changes
+
           startsIdx, stringsIdx := WriteKeyValue(startsArray, stringsArray, startsIdx, stringsIdx, children[childrenIdx], 2*childIdx);
 
           LemmaFlushAddChildKey(pivots, childrenIdx, oldIArray, IArrays(startsArray, startsIdx, stringsArray, stringsIdx), parent, children[childrenIdx], parentIdx as int, childIdx as int);
