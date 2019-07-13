@@ -598,7 +598,7 @@ module SSTable {
     reveal_IPrefix();
   }
 
-  lemma {:fuel P.Route,0} LemmaFlushAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
+  lemma {:fuel P.Route,0} {:fuel BT.AddMessagesToBucket,0} LemmaFlushAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
   requires P.WFPivots(pivots)
   requires WFSSTableMap(parent)
   requires WFSSTableMap(child)
@@ -629,8 +629,17 @@ module SSTable {
 
   function Boundary(sst: SSTable, i: uint64) : int
   requires WFSSTable(sst)
+  requires 0 <= i as int <= |sst.starts|
   {
     if i as int < |sst.starts| then sst.starts[i] as int else |sst.strings|
+  }
+
+  lemma BoundaryLe(sst: SSTable, i: uint64, j: uint64)
+  requires WFSSTable(sst)
+  requires 0 <= i as int <= j as int <= |sst.starts|
+  ensures Boundary(sst, i) <= Boundary(sst, j)
+  {
+    Uint64Order.reveal_IsSorted();
   }
 
   lemma KeyInPrefixImpliesLt(key: Key, sst: SSTable, idx: int)
@@ -684,7 +693,53 @@ module SSTable {
     }
   }
 
-  method {:fuel P.Route,0} Flush(parent: SSTable, children: seq<SSTable>, pivots: seq<Key>)
+  lemma PivotLeFirstChildOfNextBucket(childrenIdx: int, children: seq<SSTable>, pivots: seq<Key>)
+  requires P.WFPivots(pivots)
+  requires forall i | 0 <= i < |children| :: WFSSTableMap(children[i])
+  requires forall i, key | 0 <= i < |children| && key in I(children[i]) :: P.Route(pivots, key) == i
+  requires 0 <= childrenIdx <= |pivots|
+  requires |children| == |pivots| + 1
+  ensures childrenIdx+1 < |children| && 0 < |children[childrenIdx+1].starts| ==>
+    lte(pivots[childrenIdx], Entry(children[childrenIdx+1], 0))
+  {
+    if (childrenIdx+1 < |children| && 0 < |children[childrenIdx+1].starts|) {
+      assert SSTKeyMapsToValueAt(I(children[childrenIdx+1]), children[childrenIdx+1], 0);
+      assert P.Route(pivots, Entry(children[childrenIdx+1], 0)) == childrenIdx+1;
+    }
+  }
+
+  lemma CurChildLtPivot(childrenIdx: int, childIdx: int, children: seq<SSTable>, pivots: seq<Key>)
+  requires P.WFPivots(pivots)
+  requires forall i | 0 <= i < |children| :: WFSSTableMap(children[i])
+  requires forall i, key | 0 <= i < |children| && key in I(children[i]) :: P.Route(pivots, key) == i
+  requires 0 <= childrenIdx <= |pivots|
+  requires childrenIdx < |children|
+  requires 0 <= 2*childIdx <= |children[childrenIdx].starts|
+  requires |children| == |pivots| + 1
+  ensures childrenIdx+1 < |children| && 2*childIdx < |children[childrenIdx].starts| ==>
+    lt(Entry(children[childrenIdx], 2*childIdx), pivots[childrenIdx])
+  {
+    if childrenIdx+1 < |children| && 2*childIdx < |children[childrenIdx].starts| {
+      assert SSTKeyMapsToValueAt(I(children[childrenIdx]), children[childrenIdx], childIdx);
+      assert P.Route(pivots, Entry(children[childrenIdx], 2*childIdx)) == childrenIdx;
+    }
+  }
+
+  lemma EmptyAddMessagesToBucket(pivots: seq<Key>)
+  requires P.WFPivots(pivots)
+  ensures BT.AddMessagesToBucket(pivots, 0, map[], map[]) == map[]
+  {
+  }
+
+  lemma EmptyAddMessagesToBucketWhenAllKeysInParentAreLt(pivots: seq<Key>, i: int, m: map<Key, Message>)
+  requires P.WFPivots(pivots)
+  requires 0 <= i < |pivots|
+  requires forall key | key in m :: lt(key, pivots[i])
+  ensures BT.AddMessagesToBucket(pivots, i+1, map[], m) == map[]
+  {
+  }
+
+  method {:fuel P.Route,0} {:fuel BT.AddMessagesToBucket,0} DoFlush(parent: SSTable, children: seq<SSTable>, pivots: seq<Key>)
   returns (res : seq<SSTable>)
   requires WFSSTableMap(parent)
   requires P.WFPivots(pivots)
@@ -707,10 +762,13 @@ module SSTable {
     res := [];
 
     LemmaWFEmptyArrays(startsArray, stringsArray);
+    EmptyAddMessagesToBucket(pivots);
 
     var parentIdx: uint64 := 0;
     var childrenIdx: int := 0;
     var childIdx: uint64 := 0;
+
+    reveal_IPrefix();
 
     while childrenIdx < |children|
 
@@ -727,7 +785,7 @@ module SSTable {
 
     invariant childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==>
         forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int))
-    invariant 0 < childrenIdx < |children| && 2*parentIdx as int < |parent.starts| ==> lt(pivots[childrenIdx - 1], Entry(parent, 2*parentIdx as int))
+    invariant 0 < childrenIdx < |children| && 2*parentIdx as int < |parent.starts| ==> lte(pivots[childrenIdx - 1], Entry(parent, 2*parentIdx as int))
 
     invariant childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==>
         forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int))
@@ -760,10 +818,12 @@ module SSTable {
       if (2*(childIdx as int + 1) <= |children[childrenIdx].starts|) {
         LemmaStartEndIndices(children[childrenIdx], 2*childIdx as int + 1);
         assert Boundary(children[childrenIdx], 2*(childIdx+1)) <= |children[childrenIdx].strings|;
+        BoundaryLe(children[childrenIdx], 2*childIdx, 2*(childIdx+1));
       }
       if (2*(parentIdx as int + 1) <= |parent.starts|) {
         LemmaStartEndIndices(parent, 2*parentIdx as int + 1);
         assert Boundary(parent, 2*(parentIdx+1)) <= |parent.strings|;
+        BoundaryLe(parent, 2*parentIdx, 2*(parentIdx+1));
       }
       LemmaIArrayKeysLt(parent, children[childrenIdx], childrenIdx as int, parentIdx as int, childIdx as int, pivots, startsArray, startsIdx, stringsArray, stringsIdx);
 
@@ -775,6 +835,11 @@ module SSTable {
         KeysStrictlySortedImplLt(children[childrenIdx], childIdx as int, childIdx as int + 1);
         assert lt(Entry(children[childrenIdx], 2*childIdx as int), Entry(children[childrenIdx], 2*(childIdx as int + 1)));
       }
+      PivotLeFirstChildOfNextBucket(childrenIdx, children, pivots);
+      CurChildLtPivot(childrenIdx, childIdx as int, children, pivots);
+      if childrenIdx+1 < |pivots| {
+        IsStrictlySortedImpliesLt(pivots, childrenIdx, childrenIdx+1);
+      }
 
       if (2*parentIdx == |parent.starts| as uint64) {
         if (2*childIdx == |children[childrenIdx].starts| as uint64) {
@@ -785,6 +850,25 @@ module SSTable {
 
           childIdx := 0;
           childrenIdx := childrenIdx + 1;
+
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+
+          if (childrenIdx < |children| && 2*childIdx as int < |children[childrenIdx].starts|) {
+            //assert SSTKeyMapsToValueAt(I(children[childrenIdx]), children[childrenIdx], 0);
+            assert lte(pivots[childrenIdx-1], Entry(children[childrenIdx], 2*childIdx as int));
+            assert forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx-1]);
+            assert forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          }
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx-1]);
+          assert childrenIdx < |children| - 1 ==> lt(pivots[childrenIdx-1], pivots[childrenIdx]);
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+
+          LemmaWFEmptyArrays(startsArray, stringsArray);
+          if childrenIdx < |children| { EmptyAddMessagesToBucketWhenAllKeysInParentAreLt(pivots, childrenIdx - 1, IPrefix(parent, parentIdx as int)); }
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == map[]
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
         } else {
           // TODO possible optimization: if childIdx is 0, then we can just use the existing childBucket with no changes
 
@@ -793,6 +877,13 @@ module SSTable {
           LemmaFlushAddChildKey(pivots, childrenIdx, oldIArray, IArrays(startsArray, startsIdx, stringsArray, stringsIdx), parent, children[childrenIdx], parentIdx as int, childIdx as int);
 
           childIdx := childIdx + 1; 
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          assert childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
         }
       } else {
         if (2*childIdx == |children[childrenIdx].starts| as uint64) {
@@ -802,14 +893,26 @@ module SSTable {
             LemmaFlushAddParentKey(pivots, childrenIdx, oldIArray, IArrays(startsArray, startsIdx, stringsArray, stringsIdx), parent, children[childrenIdx], parentIdx as int, childIdx as int);
 
             parentIdx := parentIdx + 1;
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          assert childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
           } else {
             var c := Cmp(pivots[childrenIdx], parent, 2*parentIdx);
-            if (c == -1) {
+            if (c == 1) {
               startsIdx, stringsIdx := WriteKeyValue(startsArray, stringsArray, startsIdx, stringsIdx, parent, 2*parentIdx);
 
               LemmaFlushAddParentKey(pivots, childrenIdx, oldIArray, IArrays(startsArray, startsIdx, stringsArray, stringsIdx), parent, children[childrenIdx], parentIdx as int, childIdx as int);
 
               parentIdx := parentIdx + 1;
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          assert childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
             } else {
               res := res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])];
 
@@ -817,6 +920,25 @@ module SSTable {
               stringsIdx := 0;
               childIdx := 0;
               childrenIdx := childrenIdx + 1;
+
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          if (childrenIdx < |children| && 2*childIdx as int < |children[childrenIdx].starts|) {
+            //assert SSTKeyMapsToValueAt(I(children[childrenIdx]), children[childrenIdx], 0);
+            assert lte(pivots[childrenIdx-1], Entry(children[childrenIdx], 2*childIdx as int));
+            assert forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx-1]);
+            assert forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          }
+
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx-1]);
+          assert childrenIdx < |children| - 1 ==> lt(pivots[childrenIdx-1], pivots[childrenIdx]);
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+
+          LemmaWFEmptyArrays(startsArray, stringsArray);
+          if childrenIdx < |children| { EmptyAddMessagesToBucketWhenAllKeysInParentAreLt(pivots, childrenIdx - 1, IPrefix(parent, parentIdx as int)); }
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == map[]
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
             }
           }
         } else {
@@ -828,18 +950,43 @@ module SSTable {
 
             childIdx := childIdx + 1;
             parentIdx := parentIdx + 1;
+
+            assert Entry(parent, 2*(parentIdx as int-1)) == Entry(children[childrenIdx], 2*(childIdx as int - 1));
+            assert childrenIdx < |children| - 1 ==> lt(Entry(children[childrenIdx], 2*(childIdx as int - 1)), pivots[childrenIdx]);
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          assert childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
           } else if (c == -1) {
             startsIdx, stringsIdx := WriteKeyValue(startsArray, stringsArray, startsIdx, stringsIdx, parent, 2*parentIdx);
 
             LemmaFlushAddParentKey(pivots, childrenIdx, oldIArray, IArrays(startsArray, startsIdx, stringsArray, stringsIdx), parent, children[childrenIdx], parentIdx as int, childIdx as int);
 
             parentIdx := parentIdx + 1;
+
+            assert lt(Entry(parent, 2*(parentIdx as int-1)), Entry(children[childrenIdx], 2*(childIdx as int)));
+            assert childrenIdx < |children| - 1 ==> lt(Entry(children[childrenIdx], 2*(childIdx as int)), pivots[childrenIdx]);
+
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          assert childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
           } else if (c == 1) {
             startsIdx, stringsIdx := WriteKeyValue(startsArray, stringsArray, startsIdx, stringsIdx, children[childrenIdx], 2*childIdx);
 
             LemmaFlushAddChildKey(pivots, childrenIdx, oldIArray, IArrays(startsArray, startsIdx, stringsArray, stringsIdx), parent, children[childrenIdx], parentIdx as int, childIdx as int);
 
             childIdx := childIdx + 1; 
+          assert childrenIdx < |children| ==> 2*parentIdx as int < |parent.starts| ==> forall key | key in IPrefix(children[childrenIdx], childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int));
+          assert childrenIdx < |children| ==> 2*childIdx as int < |children[childrenIdx].starts| ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(children[childrenIdx], 2*childIdx as int));
+          assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
+          assert childrenIdx < |children| ==>
+              IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
           }
         }
       }
