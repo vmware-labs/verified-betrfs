@@ -62,17 +62,10 @@ module ImplState {
     }
   }
 
-  function IBuckets(buckets: seq<SSTable.SSTable>) : (s : seq<map<Key, Message>>)
-  requires WFBuckets(buckets)
-  ensures |s| == |buckets|
-  ensures forall i | 0 <= i < |s| :: s[i] == SSTable.I(buckets[i])
-  {
-    if |buckets| == 0 then [] else IBuckets(DropLast(buckets)) + [SSTable.I(Last(buckets))]
-  }
   function INode(node: Node) : BT.G.Node
   requires WFNode(node)
   {
-    BT.G.Node(node.pivotTable, node.children, IBuckets(node.buckets))
+    BT.G.Node(node.pivotTable, node.children, SSTable.ISeq(node.buckets))
   }
   function ICache(cache: map<Reference, Node>) : map<Reference, BT.G.Node>
   requires WFCache(cache)
@@ -88,6 +81,14 @@ module ImplState {
       case Unready => BC.Unready
     }
   }
+  function ISector(sector: Sector) : BC.Sector
+  requires WFSector(sector)
+  {
+    match sector {
+      case SectorBlock(node) => BC.SectorBlock(INode(node))
+      case SectorSuperblock(superblock) => BC.SectorSuperblock(superblock)
+    }
+  }
 
   class ImplHeapState {
     var s: Variables
@@ -98,8 +99,5 @@ module ImplState {
       s := Unready;
     }
   }
-  type HeapState = ImplHeapState
-  function HeapSet(hs: HeapState) : set<object> { {hs} }
-
-  
+  function ImplHeapSet(hs: ImplHeapState) : set<object> { {hs} }
 }

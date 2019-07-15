@@ -155,6 +155,26 @@ module SSTable {
     if |ssts| == 0 then [] else ISeq(DropLast(ssts)) + [I(Last(ssts))]
   }
 
+  function method {:opaque} Empty() : (sst : SSTable)
+  ensures WFSSTableMap(sst)
+  ensures I(sst) == map[]
+  {
+    reveal_I();
+    Uint64Order.reveal_IsSorted();
+    reveal_KeysStrictlySorted();
+
+    SSTable([], [])
+  }
+
+  predicate method {:opaque} IsEmpty(sst: SSTable)
+  requires WFSSTableMap(sst)
+  ensures IsEmpty(sst) == (I(sst) == map[])
+
+  function method {:opaque} Size(sst: SSTable) : (n : uint64)
+  requires WFSSTableMap(sst)
+  ensures n as int == |I(sst)|
+  ensures 2*n as int == |sst.starts|
+
   method Cmp(key: Key, sst: SSTable, i: uint64) returns (c: int32)
   requires WFSSTable(sst)
   requires 0 <= i as int < |sst.starts|
@@ -1227,4 +1247,55 @@ module SSTable {
       }
     }
   }
+
+  method Insert(sst: SSTable, key: Key, msg: Message)
+  returns (res : SSTable)
+  requires WFSSTableMap(sst)
+  requires |sst.strings| < 0x800_0000_0000_0000
+  requires |sst.starts| < 0x800_0000_0000_0000
+  requires |key| < 0x800_0000_0000_0000
+  requires msg.Define?
+  requires |msg.value| < 0x800_0000_0000_0000
+  ensures WFSSTableMap(res)
+  ensures I(res) == I(sst)[key := msg]
+
+  method Join(ssts: seq<SSTable>)
+  returns (sst: SSTable)
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  requires forall i, j, key1, key2 | 0 <= i < j < |ssts| && key1 in I(ssts[i]) && key2 in I(ssts[j]) :: lt(key1, key2)
+  ensures WFSSTableMap(sst)
+  ensures I(sst) == BT.JoinBuckets(ISeq(ssts))
+
+  method SplitOnPivots(sst: SSTable, pivots: seq<Key>)
+  returns (ssts : seq<SSTable>)
+  requires WFSSTableMap(sst)
+  requires P.WFPivots(pivots)
+  ensures forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  ensures ISeq(ssts) == BT.SplitBucketOnPivots(pivots, I(sst))
+
+  function method KeyAtIndex(sst: SSTable, i: int) : (key: Key)
+  requires WFSSTableMap(sst)
+  requires 0 <= i < Size(sst) as int
+  ensures 2*i <= |sst.starts|
+  ensures key == Entry(sst, 2*i)
+
+  lemma Ireplace1with2(ssts: seq<SSTable>, sst1: SSTable, sst2: SSTable, slot: int)
+  requires WFSSTableMap(sst1)
+  requires WFSSTableMap(sst2)
+  requires 0 <= slot < |ssts|
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  ensures forall i | 0 <= i < |replace1with2(ssts, sst1, sst2, slot)| :: WFSSTableMap(replace1with2(ssts, sst1, sst2, slot)[i])
+  ensures ISeq(replace1with2(ssts, sst1, sst2, slot)) == replace1with2(ISeq(ssts), I(sst1), I(sst2), slot)
+
+  lemma Islice(ssts: seq<SSTable>, a: int, b: int)
+  requires 0 <= a <= b <= |ssts|
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  ensures forall i | 0 <= i < |ssts[a..b]| :: WFSSTableMap(ssts[a..b][i])
+  ensures ISeq(ssts[a..b]) == ISeq(ssts)[a..b]
+
+  lemma Isuffix(ssts: seq<SSTable>, a: int)
+  requires 0 <= a <= |ssts|
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  ensures forall i | 0 <= i < |ssts[a..]| :: WFSSTableMap(ssts[a..][i])
+  ensures ISeq(ssts[a..]) == ISeq(ssts)[a..]
 }
