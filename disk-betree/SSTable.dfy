@@ -6,7 +6,7 @@ include "PivotBetreeSpec.dfy"
 include "../lib/Marshalling/Native.s.dfy"
 
 module SSTable {
-  import opened ValueMessage
+  import opened ValueMessage`Internal
   import opened Lexicographic_Byte_Order
   import opened Options
   import opened Sequences
@@ -103,6 +103,27 @@ module SSTable {
     MapsTo(m, Entry(sst, 2*i), Define(Entry(sst, 1 + 2*i)))
   }
 
+  lemma IPrefixLemma(sst: SSTable, k: int, m: map<String, Message>)
+  requires WFSSTableMap(sst)
+  requires 1 <= k
+  requires 2*k <= |sst.starts|
+  requires forall i | 0 <= i < k-1 :: SSTKeyMapsToValueAt(m, sst, i)
+  requires forall key | key in m :: exists i :: 0 <= i < (k-1) && Entry(sst, 2*i) == key
+  ensures forall i | 0 <= i < k :: SSTKeyMapsToValueAt(m[Entry(sst, 2*(k-1)) := Define(Entry(sst, 2*(k-1) + 1))], sst, i)
+  {
+    forall i | 0 <= i < k
+    ensures SSTKeyMapsToValueAt(m[Entry(sst, 2*(k-1)) := Define(Entry(sst, 2*(k-1) + 1))], sst, i)
+    {
+      if (Entry(sst, 2*(k-1)) in m) {
+        var i :| 0 <= i < (k-1) && Entry(sst, 2*i) == Entry(sst, 2*(k-1));
+        reveal_KeysStrictlySorted();
+      }
+      if (i < k-1) {
+        assert SSTKeyMapsToValueAt(m, sst, i);
+      }
+    }
+  }
+
   function {:opaque} IPrefix(sst: SSTable, k: int) : (m : map<String, Message>)
   requires WFSSTableMap(sst)
   requires 0 <= 2*k <= |sst.starts|
@@ -112,6 +133,8 @@ module SSTable {
     if k == 0 then
       map[]
     else (
+      IPrefixLemma(sst, k, IPrefix(sst, k-1));
+
       IPrefix(sst, k-1)[Entry(sst, 2*(k-1)) := Define(Entry(sst, 2*(k-1) + 1))]
     )
   }
@@ -186,16 +209,61 @@ module SSTable {
     return 0;
   }
 
-  method Cmp2(sst: SSTable, i: uint64, sst': SSTable, j: uint64) returns (c: int32)
+  method Cmp2(sst: SSTable, i: uint64, sst': SSTable, i': uint64) returns (c: int32)
   requires WFSSTable(sst)
   requires WFSSTable(sst')
   requires 0 <= i as int < |sst.starts|
-  requires 0 <= j as int < |sst'.starts|
+  requires 0 <= i' as int < |sst'.starts|
   ensures c == 0 || c == -1 || c == 1
-  ensures c == 0 ==> Entry(sst, i as int) == Entry(sst', j as int)
-  ensures c == -1 ==> lt(Entry(sst, i as int), Entry(sst', j as int))
-  ensures c == 1 ==> lt(Entry(sst', j as int), Entry(sst, i as int))
+  ensures c == 0 ==> Entry(sst, i as int) == Entry(sst', i' as int)
+  ensures c == -1 ==> lt(Entry(sst, i as int), Entry(sst', i' as int))
+  ensures c == 1 ==> lt(Entry(sst', i' as int), Entry(sst, i as int))
+  {
+    reveal_seq_lte();
+    Base_Order.reveal_lte();
 
+    var j: uint64 := 0;
+    var start: uint64 := Start(sst, i);
+    var end: uint64 := End(sst, i);
+    var start': uint64 := Start(sst', i');
+    var end': uint64 := End(sst', i');
+
+    LemmaStartEndIndices(sst, i as int);
+    LemmaStartEndIndices(sst', i' as int);
+
+    while start + j < end && start' + j < end'
+    invariant 0 <= j
+    invariant start as int + j as int <= end as int
+    invariant start' as int + j as int <= end' as int
+    invariant seq_lte(Entry(sst, i as int)[j..], Entry(sst', i' as int)[j..]) ==> seq_lte(Entry(sst, i as int), Entry(sst', i' as int))
+    invariant seq_lte(Entry(sst', i' as int)[j..], Entry(sst, i as int)[j..]) ==> seq_lte(Entry(sst', i' as int), Entry(sst, i as int))
+    invariant Entry(sst, i as int)[..j] == Entry(sst', i' as int)[..j]
+    {
+      if sst.strings[start + j] < sst'.strings[start' + j] {
+        return -1;
+      }
+      if sst.strings[start + j] > sst'.strings[start' + j] {
+        return 1;
+      }
+
+      assert seq_lte(Entry(sst, i as int)[j+1..], Entry(sst', i' as int)[j+1..]) ==> seq_lte(Entry(sst, i as int)[j..], Entry(sst', i' as int)[j..]);
+
+      j := j + 1;
+    }
+
+    if start' + j < end' {
+      assert start + j == end;
+      return -1;
+    }
+    if start + j < end {
+      assert start' + j == end';
+      return 1;
+    }
+
+    assert start + j == end;
+    assert start' + j == end';
+    return 0;
+  }
 
   lemma IndicesLtOfKeysLt(sst: SSTable, i: int, j: int)
   requires WFSSTableMap(sst)
@@ -517,6 +585,28 @@ module SSTable {
   ensures forall i | 0 <= i < |s| :: |s[i].strings| <= stringsLen as int
   ensures startsLen < 0x800_0000_0000_0000
   ensures stringsLen < 0x800_0000_0000_0000
+  {
+    startsLen := 0;
+    stringsLen := 0;
+
+    var j := 0;
+    while j < |s|
+    invariant j <= |s|
+    invariant forall i | 0 <= i < j :: |s[i].starts| <= startsLen as int
+    invariant forall i | 0 <= i < j :: |s[i].strings| <= stringsLen as int
+    invariant startsLen < 0x800_0000_0000_0000
+    invariant stringsLen < 0x800_0000_0000_0000
+    {
+      if |s[j].starts| as uint64 > startsLen {
+        startsLen := |s[j].starts| as uint64;
+      }
+      if |s[j].strings| as uint64 > stringsLen {
+        stringsLen := |s[j].strings| as uint64;
+      }
+
+      j := j + 1;
+    }
+  }
   
   lemma LemmaWFEmptyArrays(startsArray: array<uint64>, stringsArray: array<byte>)
   ensures WFSSTableMapArrays(startsArray, 0, stringsArray, 0)
@@ -533,7 +623,10 @@ module SSTable {
   requires key !in child
   requires m == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent)
   requires P.Route(pivots, key) == childrenIdx
+  requires msg != IdentityMessage()
   ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent[key := msg])
+  {
+  }
 
   lemma AddMessagesToBucketAddChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, key: Key, msg: Message, parent: map<Key, Message>, child: map<Key, Message>)
   requires P.WFPivots(pivots)
@@ -542,7 +635,29 @@ module SSTable {
   requires key !in child
   requires m == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent)
   requires P.Route(pivots, key) == childrenIdx
+  requires msg != IdentityMessage()
   ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msg], parent)
+  {
+    /*
+    var amtb := BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msg], parent);
+    forall k | k in m'
+    ensures k in amtb
+    ensures m'[k] == amtb[k]
+    {
+      if (k == key) {
+        var childBucket := child[key := msg];
+        assert key in (childBucket.Keys + parent.Keys);
+        assert P.Route(pivots, key) == childrenIdx;
+        assert k in amtb;
+        assert m'[k] == amtb[k];
+      } else {
+        assert k in amtb;
+        assert m'[k] == amtb[k];
+      }
+    }
+    assert m' == amtb;
+    */
+  }
 
   lemma AddMessagesToBucketAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, key: Key, msgParent: Message, msgChild: Message, parent: map<Key, Message>, child: map<Key, Message>)
   requires P.WFPivots(pivots)
@@ -551,12 +666,21 @@ module SSTable {
   requires key !in child
   requires m == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent)
   requires P.Route(pivots, key) == childrenIdx
+  requires ValueMessage.Merge(msgParent, msgChild) != IdentityMessage()
   ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msgChild], parent[key := msgParent])
+  {
+  }
 
   lemma KeyNotInPrefix(sst: SSTable, i: int)
   requires WFSSTableMap(sst)
   requires 0 <= 2*i < |sst.starts|
   ensures Entry(sst, 2*i) !in IPrefix(sst, i)
+  {
+    if (Entry(sst, 2*i) in IPrefix(sst, i)) {
+      var j :| 0 <= j < i && Entry(sst, 2*j) == Entry(sst, 2*i);
+      reveal_KeysStrictlySorted();
+    }
+  }
 
   lemma LemmaFlushAddParentKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
   requires P.WFPivots(pivots)
@@ -670,6 +794,10 @@ module SSTable {
   requires 0 <= 2*idx < |sst.starts|
   requires key in IPrefix(sst, idx)
   ensures lt(key, Entry(sst, 2*idx))
+  {
+    var j :| 0 <= j < idx && key == Entry(sst, 2*j);
+    reveal_KeysStrictlySorted();
+  }
   
   lemma LemmaIArrayKeysLt(parent: SSTable, child: SSTable, childrenIdx: int, parentIdx: int, childIdx: int, pivots: seq<Key>,
       startsArray: array<uint64>, startsIdx: uint64, stringsArray: array<byte>, stringsIdx: uint64)
@@ -768,6 +896,8 @@ module SSTable {
   requires forall key | P.Route(pivots, key) == i :: MapsAgreeOnKey(p1, p2, key)
   ensures BT.AddMessagesToBucket(pivots, i, child, p1)
        == BT.AddMessagesToBucket(pivots, i, child, p2)
+  {
+  }
 
   lemma LemmaAddMessagesToBucketsAugment(
     pivots: seq<Key>,
