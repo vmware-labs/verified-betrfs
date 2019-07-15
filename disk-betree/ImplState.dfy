@@ -62,8 +62,10 @@ module ImplState {
     }
   }
 
-  function IBuckets(buckets: seq<SSTable.SSTable>) : seq<map<Key, Message>>
+  function IBuckets(buckets: seq<SSTable.SSTable>) : (s : seq<map<Key, Message>>)
   requires WFBuckets(buckets)
+  ensures |s| == |buckets|
+  ensures forall i | 0 <= i < |s| :: s[i] == SSTable.I(buckets[i])
   {
     if |buckets| == 0 then [] else IBuckets(DropLast(buckets)) + [SSTable.I(Last(buckets))]
   }

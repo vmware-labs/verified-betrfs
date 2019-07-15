@@ -199,13 +199,17 @@ module Marshalling {
     }
   }
 
-  function method valToUint64Array(a: seq<V>) : (s : seq<uint64>)
+  function valToUint64Array(a: seq<V>) : (s : seq<uint64>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GUint64)
   {
     if |a| == 0 then [] else valToUint64Array(DropLast(a)) + [Last(a).u]
   }
 
-  function method valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<SSTable.SSTable>)
+  method ValToUint64Array(a: seq<V>) returns (s: seq<uint64>)
+  requires valToUint64Array.requires(a)
+  ensures s == valToUint64Array(a)
+
+  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<SSTable.SSTable>)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
   ensures s.Some? ==> SSTable.WFSSTableMap(s.value)
@@ -223,6 +227,10 @@ module Marshalling {
     else
       None
   }
+
+  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<SSTable.SSTable>)
+  requires valToBucket.requires(v, pivotTable, i)
+  ensures s == valToBucket(v, pivotTable, i)
 
   function method valToKey(v: V) : Key
   requires ValInGrammar(v, GByteArray)
@@ -255,7 +263,7 @@ module Marshalling {
       }
   }
 
-  function method valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<SSTable.SSTable>>)
+  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<SSTable.SSTable>>)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   ensures s.Some? ==> |s.value| == |a|
@@ -277,7 +285,11 @@ module Marshalling {
     )
   }
 
-  function method {:fuel ValInGrammar,2} valToPivotNode(v: V) : (s : Option<Node>)
+  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<SSTable.SSTable>>)
+  requires valToBuckets.requires(a, pivotTable)
+  ensures s == valToBuckets(a, pivotTable)
+
+  function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValInGrammar(v, PivotNodeGrammar())
   ensures s.Some? ==> ImplState.WFNode(s.value)
   ensures s.Some? ==> BT.WFNode(ImplState.INode(s.value))
@@ -292,7 +304,8 @@ module Marshalling {
               match valToBuckets(v.t[2].a, pivots) {
                 case None => None
                 case Some(buckets) => (
-                  Some(ImplState.Node(pivots, if |children| == 0 then None else Some(children), buckets))
+                  var node := ImplState.Node(pivots, if |children| == 0 then None else Some(children), buckets);
+                  Some(node)
                 )
               }
             ) else (
@@ -304,7 +317,11 @@ module Marshalling {
     }
   }
 
-  function method valToSector(v: V) : (s : Option<Sector>)
+  method ValToNode(v: V) returns (s : Option<Node>)
+  requires valToNode.requires(v)
+  ensures s == valToNode(v)
+
+  function valToSector(v: V) : (s : Option<Sector>)
   requires ValInGrammar(v, SectorGrammar())
   ensures s.Some? ==> ImplState.WFSector(s.value)
   {
@@ -314,12 +331,16 @@ module Marshalling {
         case None => None
       }
     ) else (
-      match valToPivotNode(v.val) {
+      match valToNode(v.val) {
         case Some(s) => Some(ImplState.SectorBlock(s))
         case None => None
       }
     )
   }
+
+  method ValToSector(v: V) returns (s : Option<Sector>)
+  requires valToSector.requires(v)
+  ensures s == valToSector(v)
 
   /////// Conversion from PivotNode to a val
 
@@ -400,17 +421,22 @@ module Marshalling {
     }
   }
 
-  method uint64ArrayToVal(a: seq<uint64>) returns (v: V)
+  method {:fueld ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
+  requires |a| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(GUint64))
   ensures SizeOfV(v) == 8 + 8 * |a|
+  ensures |v.a| == |a|
+  ensures valToUint64Array(v.a) == a
   {
     // TODO this is slow
     if |a| == 0 {
       return VArray([]);
     } else {
       var pref := uint64ArrayToVal(DropLast(a));
-      return VArray(pref.a + [VUint64(Last(a))]);
+      lemma_SeqSum_prefix(pref.a, VUint64(Last(a)));
+      var res := pref.a + [VUint64(Last(a))];
+      return VArray(res);
     }
   }
 
@@ -516,6 +542,7 @@ module Marshalling {
 
   method {:fuel SizeOfV,4} nodeToVal(node: Node) returns (v : V)
   requires ImplState.WFNode(node)
+  requires BT.WFNode(ImplState.INode(node))
   requires CappedNode(node)
   ensures ValidVal(v)
   ensures SizeOfV(v) <= 
@@ -523,13 +550,13 @@ module Marshalling {
       8 + (CapNumBuckets() as int - 1) * (8 + CapKeySize() as int) +
       8 + CapNumBuckets() as int * 8
   ensures ValInGrammar(v, PivotNodeGrammar())
-  ensures valToPivotNode(v) == Some(node)
+  ensures valToNode(v) == Some(node)
   {
-    /*forall i | 0 <= i < |node.buckets|
-    ensures BT.WFBucket(node.buckets[i], node.pivotTable, i);
+    forall i | 0 <= i < |node.buckets|
+    ensures BT.WFBucket(SSTable.I(node.buckets[i]), node.pivotTable, i);
     {
-      assert BT.NodeHasWFBucketAt(node, i);
-    }*/
+      assert BT.NodeHasWFBucketAt(ImplState.INode(node), i);
+    }
 
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
@@ -548,8 +575,8 @@ module Marshalling {
   }
 
   method sectorToVal(sector: Sector) returns (v : Option<V>)
-  requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
-  requires sector.SectorBlock? ==> ImplState.WFNode(sector.block);
+  requires ImplState.WFSector(sector)
+  requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
@@ -578,9 +605,9 @@ module Marshalling {
 
   /////// Marshalling and de-marshalling
 
-  function method {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
-  ensures s.Some? && s.value.SectorBlock? ==> ImplState.WFNode(s.value.block)
+  function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
+  ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -595,13 +622,13 @@ module Marshalling {
   method ParseSector(data: array<byte>) returns (s : Option<Sector>)
   requires data.Length < 0x1_0000_0000_0000_0000;
   ensures s == parseSector(data[..])
-  ensures s.Some? && s.value.SectorSuperblock? ==> BC.WFPersistentSuperblock(s.value.superblock)
-  ensures s.Some? && s.value.SectorBlock? ==> ImplState.WFNode(s.value.block)
+  ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
   {
     reveal_parseSector();
     var success, v, rest_index := ParseVal(data, 0, SectorGrammar());
     if success {
-      var s := valToSector(v);
+      var s := ValToSector(v);
       return s;
     } else {
       return None;
@@ -624,8 +651,8 @@ module Marshalling {
   }
 
   method MarshallSector(sector: Sector) returns (data : array?<byte>)
-  requires sector.SectorSuperblock? ==> BC.WFPersistentSuperblock(sector.superblock);
-  requires sector.SectorBlock? ==> ImplState.WFNode(sector.block);
+  requires ImplState.WFSector(sector)
+  requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
   ensures data != null ==> parseSector(data[..]) == Some(sector)
   ensures data != null ==> data.Length == BlockSize() as int
