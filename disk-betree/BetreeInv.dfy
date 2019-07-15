@@ -441,6 +441,24 @@ abstract module BetreeInv {
   //////// Flush
   ////////
 
+  lemma PropagateInterperetation(lookup:Lookup, lookup':Lookup, i:int, middle:Lookup, middle':Lookup, key:Key)
+    requires 0 <= i < |lookup|-1
+    requires |lookup'| == |lookup|
+    requires lookup[..i] == lookup'[..i]
+    requires lookup[i+2..] == lookup'[i+2..]
+    requires lookup == lookup[..i] + middle + lookup[i+2..]
+    requires lookup' == lookup'[..i] + middle' + lookup'[i+2..]
+    requires LookupVisitsWFNodes(lookup)
+    requires LookupVisitsWFNodes(middle)
+    requires LookupVisitsWFNodes(middle')
+    requires InterpretLookup(middle, key) == InterpretLookup(middle', key)
+    ensures LookupVisitsWFNodes(lookup')
+    ensures InterpretLookup(lookup, key) == InterpretLookup(lookup', key)
+  {
+    InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+    InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
+  }
+
   lemma FlushPreservesLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
   requires Inv(k, s)
   requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
@@ -497,18 +515,15 @@ abstract module BetreeInv {
 
             forall j | 0 <= j < |lookup'|
             ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
-            if j == i {
-            } else {
-            }
+              if j == i {
+              } else {
+              }
             }
 
             assert lookup[..i] == lookup'[..i];
             assert lookup[i+2..] == lookup'[i+2..];
 
             assert InterpretLookup([lookup'[i]], key) == G.M.Update(G.M.NopDelta());
-
-            InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
-            InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
 
             forall j | 0 <= j < |lookup'|-1
               ensures LookupFollowsChildRefAtLayer(key, lookup', j)
@@ -525,8 +540,12 @@ abstract module BetreeInv {
                 assert LookupFollowsChildRefAtLayer(key, lookup, j);
               }
             }
-            assert LookupFollowsChildRefs(key, lookup');
-            
+            //assert LookupFollowsChildRefs(key, lookup');
+
+            assert LookupFollowsChildRefAtLayer(key, lookup, i);    // Connect middle[1] to child.
+
+            PropagateInterperetation(lookup, lookup', i, middle, middle', key);
+
             assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
           }
         }
@@ -535,6 +554,7 @@ abstract module BetreeInv {
       }
     }
   }
+
 
   ////////
   //////// Redirect
