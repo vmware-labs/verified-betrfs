@@ -120,11 +120,17 @@ module SSTable {
   requires WFSSTableMap(sst)
   ensures forall i | 0 <= 2*i < |sst.starts| :: SSTKeyMapsToValueAt(m, sst, i)
   ensures forall key | key in m :: exists i :: 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == key
+  {
+    IPrefix(sst, |sst.starts| / 2)
+  }
 
   function ISeq(ssts: seq<SSTable>) : (res : seq<map<String, Message>>)
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   ensures |res| == |ssts|
   ensures forall i | 0 <= i < |ssts| :: I(ssts[i]) == res[i]
+  {
+    if |ssts| == 0 then [] else ISeq(DropLast(ssts)) + [I(Last(ssts))]
+  }
 
   method Cmp(key: Key, sst: SSTable, i: uint64) returns (c: int32)
   requires WFSSTable(sst)
@@ -336,6 +342,17 @@ module SSTable {
     reveal_KeysStrictlySorted();
   }
 
+  lemma KeysStrictlySortedImpliesLte(sst: SSTable, i: int, j: int)
+  requires WFSSTable(sst)
+  requires KeysStrictlySorted(sst)
+  requires 0 <= 2*i;
+  requires 2*i <= 2*j
+  requires 2*j < |sst.starts|
+  ensures lte(Entry(sst, 2*i), Entry(sst, 2*j))
+  {
+    reveal_KeysStrictlySorted();
+  }
+
   lemma LemmaAugmentSSTable(sst: SSTable, sst': SSTable, key: Key, value: String)
   requires WFSSTableMap(sst)
   requires WFSSTableMap(sst')
@@ -477,6 +494,12 @@ module SSTable {
 
     LemmaKeysArrayIsStrictlySorted(startsArray, stringsArray, startsIdx as int,
         startsIdx' as int, stringsIdx as int, stringsIdx' as int, Entry(sst, i as int));
+
+    assert sst.strings[Start(sst, i) .. End(sst, i)]
+        == stringsArray[startsArray[startsIdx] .. startsArray[startsIdx + 1]];
+
+    assert sst.strings[Start(sst, i + 1) .. End(sst, i + 1)]
+        == stringsArray[startsArray[startsIdx + 1] .. stringsIdx'];
 
     LemmaAugmentSSTable(
         SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx]),
@@ -739,6 +762,81 @@ module SSTable {
   {
   }
 
+  lemma AddMessagesToBucketEqIfEqInRange(pivots: seq<Key>, i: int, child: map<Key, Message>, p1: map<Key, Message>, p2: map<Key, Message>)
+  requires P.WFPivots(pivots)
+  requires 0 <= i <= |pivots|
+  requires forall key | P.Route(pivots, key) == i :: MapsAgreeOnKey(p1, p2, key)
+  ensures BT.AddMessagesToBucket(pivots, i, child, p1)
+       == BT.AddMessagesToBucket(pivots, i, child, p2)
+
+  lemma LemmaAddMessagesToBucketsAugment(
+    pivots: seq<Key>,
+    parent: SSTable,
+    children: seq<SSTable>,
+    childrenIdx: int,
+    childIdx: int,
+    parentIdx: int,
+    res: seq<SSTable>,
+    res': seq<SSTable>,
+    startsArray: array<uint64>,
+    stringsArray: array<byte>,
+    startsIdx: uint64,
+    stringsIdx: uint64)
+  requires P.WFPivots(pivots)
+  requires WFSSTableMap(parent)
+  requires forall i | 0 <= i < |children| :: WFSSTableMap(children[i])
+  requires 0 <= startsIdx as int <= startsArray.Length
+  requires 0 <= stringsIdx as int <= stringsArray.Length
+  requires WFSSTableMapArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+  requires res' == res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])];
+  requires 0 <= childrenIdx <= |pivots|
+  requires |children| == |pivots| + 1
+  requires 2*childIdx == |children[childrenIdx].starts|
+  requires 0 <= 2*parentIdx <= |parent.starts|
+  requires |res| == childrenIdx
+  requires IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
+       == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx), IPrefix(parent, parentIdx))
+  requires |res| == childrenIdx
+  requires  forall i | 0 <= i < |res| :: WFSSTableMap(res[i])
+  requires ISeq(res) == BT.AddMessagesToBuckets(pivots, |res|, ISeq(children), I(parent))
+  requires 2*parentIdx < |parent.starts| && childrenIdx < |pivots| ==> lte(pivots[childrenIdx], Entry(parent, 2*parentIdx))
+  requires childrenIdx == |pivots| ==> 2*parentIdx == |parent.starts|
+  ensures forall i | 0 <= i < |res'| :: WFSSTableMap(res'[i])
+  ensures ISeq(res') == BT.AddMessagesToBuckets(pivots, |res'|, ISeq(children), I(parent))
+  {
+    forall key | P.Route(pivots, key) == childrenIdx
+    ensures MapsAgreeOnKey(I(parent), IPrefix(parent, parentIdx), key)
+    {
+      if (key in IPrefix(parent, parentIdx)) {
+        var i :| 0 <= i < parentIdx && Entry(parent, 2*i) == key;
+        assert SSTKeyMapsToValueAt(IPrefix(parent, parentIdx), parent, i);
+        assert SSTKeyMapsToValueAt(I(parent), parent, i);
+      } else if (key in I(parent)) {
+        var i :| 0 <= 2*i < |parent.starts| && Entry(parent, 2*i) == key;
+        assert SSTKeyMapsToValueAt(I(parent), parent, i);
+        if (i < parentIdx) {
+          assert SSTKeyMapsToValueAt(IPrefix(parent, parentIdx), parent, i);
+          assert false;
+        } else {
+          assert childrenIdx < |pivots|;
+          assert 2*parentIdx < |parent.starts|;
+          assert lt(Entry(parent, 2*i), pivots[childrenIdx]);
+          assert lte(pivots[childrenIdx], Entry(parent, 2*parentIdx));
+          KeysStrictlySortedImpliesLte(parent, parentIdx, i);
+          assert false;
+        }
+      }
+    }
+    AddMessagesToBucketEqIfEqInRange(pivots, childrenIdx, I(children[childrenIdx]), I(parent), IPrefix(parent, parentIdx));
+
+    reveal_I();
+    assert IPrefix(children[childrenIdx], childIdx) == I(children[childrenIdx]);
+
+    assert BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx), IPrefix(parent, parentIdx))
+        == BT.AddMessagesToBucket(pivots, childrenIdx, I(children[childrenIdx]), IPrefix(parent, parentIdx))
+        == BT.AddMessagesToBucket(pivots, childrenIdx, I(children[childrenIdx]), I(parent));
+  }
+
   method {:fuel P.Route,0} {:fuel BT.AddMessagesToBucket,0} DoFlush(parent: SSTable, children: seq<SSTable>, pivots: seq<Key>)
   returns (res : seq<SSTable>)
   requires WFSSTableMap(parent)
@@ -843,6 +941,8 @@ module SSTable {
 
       if (2*parentIdx == |parent.starts| as uint64) {
         if (2*childIdx == |children[childrenIdx].starts| as uint64) {
+          LemmaAddMessagesToBucketsAugment(pivots, parent, children, childrenIdx as int, childIdx as int, parentIdx as int, res, res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])], startsArray, stringsArray, startsIdx, stringsIdx);
+
           res := res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])];
 
           startsIdx := 0;
@@ -914,6 +1014,8 @@ module SSTable {
               IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
            == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
             } else {
+              LemmaAddMessagesToBucketsAugment(pivots, parent, children, childrenIdx as int, childIdx as int, parentIdx as int, res, res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])], startsArray, stringsArray, startsIdx, stringsIdx);
+
               res := res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])];
 
               startsIdx := 0;
