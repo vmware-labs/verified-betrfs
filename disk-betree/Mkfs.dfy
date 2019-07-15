@@ -13,13 +13,15 @@ module {:extern} MkfsImpl {
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal
+  import SSTable
+  import IS = ImplState
 
-  function method InitDisk() : map<LBA, BC.Sector> {
+  function method InitDisk() : map<LBA, IS.Sector> {
     map[
       // Map ref 0 to lba 1
-      0 := BC.SectorSuperblock(BC.Superblock(map[0 := 1], map[0 := []])),
+      0 := IS.SectorSuperblock(BC.Superblock(map[0 := 1], map[0 := []])),
       // Put the root at lba 1
-      1 := BC.SectorBlock(BT.G.Node([], None, [map[]]))
+      1 := IS.SectorBlock(IS.Node([], None, [SSTable.Empty()]))
     ]
   }
 
@@ -30,6 +32,8 @@ module {:extern} MkfsImpl {
   ensures forall lba | lba in m :: ValidSector(m[lba][..])
   {
     var d := InitDisk();
+
+    SSTable.reveal_Empty();
 
     var b0 := Marshalling.MarshallSector(d[0]);
     if (b0 == null) { return map[]; }
