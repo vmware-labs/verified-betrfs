@@ -513,9 +513,7 @@ abstract module BetreeInv {
 
             forall j | 0 <= j < |lookup'|
             ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
-              if j == parentLayer {
-              } else {
-              }
+              if j == parentLayer { }   // case split.
             }
 
             assert lookup[..parentLayer] == lookup'[..parentLayer];
@@ -523,26 +521,12 @@ abstract module BetreeInv {
 
             assert InterpretLookup([lookup'[parentLayer]], key) == G.M.Update(G.M.NopDelta());
 
+            assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer);    // Handles the j==parentLayer+1 case; connects middle[1] to child.
             forall j | 0 <= j < |lookup'|-1
               ensures LookupFollowsChildRefAtLayer(key, lookup', j)
             {
-              if j < parentLayer-1 {
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
-              } else if j == parentLayer-1 {
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
-              } else if j == parentLayer {
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
-              } else if j == parentLayer+1 {
-                assert LookupFollowsChildRefAtLayer(key, lookup, j-1);
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
-
-              } else {
-                assert LookupFollowsChildRefAtLayer(key, lookup, j);
-              }
+              assert LookupFollowsChildRefAtLayer(key, lookup, j);
             }
-            //assert LookupFollowsChildRefs(key, lookup');
-
-            assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer);    // Connect middle[1] to child.
 
             PropagateInterperetation(lookup, lookup', parentLayer, middle, middle', key);
 
