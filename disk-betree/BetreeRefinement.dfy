@@ -207,15 +207,14 @@ abstract module BetreeRefinement {
     assert DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.WriteStep(key, value));
   }
 
-  lemma FlushStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp,
-                                           parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
+  lemma FlushStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, flush:NodeFlush)
     requires Inv(k, s)
     requires uiop.NoOp?
-    requires DBI.Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
+    requires DBI.Flush(k.bck, s.bcv, s'.bcv, flush)
     requires Inv(k, s')
     ensures DB.MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, DB.MS.StutterStep)
   {
-    FlushPreservesLookups(k, s, s', parentref, parent, childref, child, newchildref, movedKeys);
+    FlushPreservesLookups(k, s, s', flush);
     PreservesLookupsImplInterpsEqual(k, s, s');
     assert I(k, s) == I(k, s');
   }
@@ -267,7 +266,7 @@ abstract module BetreeRefinement {
     match betreeStep {
       case BetreeQuery(q) => QueryStepRefinesMap(k, s, s', uiop, q.key, q.value, q.lookup);
       case BetreeInsert(ins) => InsertMessageStepRefinesMap(k, s, s', uiop, ins.key, ins.msg, ins.oldroot);
-      case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', uiop, flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
+      case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', uiop, flush);
       case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', uiop, growth.oldroot, growth.newchildref);
       case BetreeRedirect(r) => RedirectRefinesMap(k, s, s', uiop, r);
     }
