@@ -1298,4 +1298,8 @@ module SSTable {
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   ensures forall i | 0 <= i < |ssts[a..]| :: WFSSTableMap(ssts[a..][i])
   ensures ISeq(ssts[a..]) == ISeq(ssts)[a..]
+
+  method IsWFSSTableMap(sst: SSTable)
+  returns (b: bool)
+  ensures b == WFSSTableMap(sst)
 }

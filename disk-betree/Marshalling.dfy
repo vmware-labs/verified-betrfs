@@ -199,29 +199,47 @@ module Marshalling {
     }
   }
 
-  function valToUint64Array(a: seq<V>) : (s : seq<uint64>)
+  function valToUint64Seq(a: seq<V>) : (s : seq<uint64>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GUint64)
   {
-    if |a| == 0 then [] else valToUint64Array(DropLast(a)) + [Last(a).u]
+    if |a| == 0 then [] else valToUint64Seq(DropLast(a)) + [Last(a).u]
   }
 
-  method ValToUint64Array(a: seq<V>) returns (s: seq<uint64>)
-  requires valToUint64Array.requires(a)
-  ensures s == valToUint64Array(a)
+  method ValToUint64Seq(a: seq<V>) returns (s: seq<uint64>)
+  requires valToUint64Seq.requires(a)
+  ensures s == valToUint64Seq(a)
+  {
+    var ar := new uint64[|a|];
+
+    var i := 0;
+    while i < |a|
+    invariant 0 <= i <= |a|
+    invariant ar[..i] == valToUint64Seq(a[..i])
+    {
+      ar[i] := a[i].u;
+
+      assert DropLast(a[..i+1]) == a[..i];
+
+      i := i + 1;
+    }
+
+    assert a[..|a|] == a;
+    assert ar[..|a|] == ar[..];
+    s := ar[..];
+  }
 
   function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<SSTable.SSTable>)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
+  requires 0 <= i <= |pivotTable|
   ensures s.Some? ==> SSTable.WFSSTableMap(s.value)
   ensures s.Some? ==> BT.WFBucket(SSTable.I(s.value), pivotTable, i)
   {
-    // TODO this is slow:
-    var starts := valToUint64Array(v.t[0].a);
+    var starts := valToUint64Seq(v.t[0].a);
 
     var strings := v.t[1].b;
     var sst := SSTable.SSTable(starts, strings);
 
-    // TODO these checks are slow:
     if SSTable.WFSSTableMap(sst) && BT.WFBucket(SSTable.I(sst), pivotTable, i) then
       Some(sst)
     else
@@ -231,6 +249,56 @@ module Marshalling {
   method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<SSTable.SSTable>)
   requires valToBucket.requires(v, pivotTable, i)
   ensures s == valToBucket(v, pivotTable, i)
+  {
+    var starts := ValToUint64Seq(v.t[0].a);
+
+    var strings := v.t[1].b;
+    var sst := SSTable.SSTable(starts, strings);
+
+    var wf := SSTable.IsWFSSTableMap(sst);
+    if !wf {
+      return None;
+    }
+
+    // Check that it fits in the desired bucket
+    if |sst.starts| > 0 {
+      if i > 0 {
+        var c := SSTable.Cmp(pivotTable[i-1], sst, 0);
+        if (c == 1) {
+          assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, 0);
+          //assert !BT.WFBucket(SSTable.I(sst), pivotTable, i);
+
+          return None;
+        }
+      }
+
+      if i < |pivotTable| {
+        var c := SSTable.Cmp(pivotTable[i], sst, |sst.starts| as uint64 - 2);
+        if (c != 1) {
+          assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, |sst.starts| / 2 - 1);
+          //assert !BT.WFBucket(SSTable.I(sst), pivotTable, i);
+
+          return None;
+        }
+      }
+    }
+
+    forall key | key in SSTable.I(sst)
+    ensures Pivots.Route(pivotTable, key) == i
+    ensures SSTable.I(sst)[key] != M.IdentityMessage()
+    {
+      var j :| 0 <= 2*j < |sst.starts| && SSTable.Entry(sst, 2*j) == key;
+      assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, j);
+      if |sst.starts| > 0 {
+        SSTable.KeysStrictlySortedImpliesLte(sst, 0, j);
+        SSTable.KeysStrictlySortedImpliesLte(sst, j, |sst.starts| / 2 - 1);
+      }
+      Pivots.RouteIs(pivotTable, key, i);
+    }
+
+    assert BT.WFBucket(SSTable.I(sst), pivotTable, i);
+    s := Some(sst);
+  }
 
   function method valToKey(v: V) : Key
   requires ValInGrammar(v, GByteArray)
@@ -266,6 +334,7 @@ module Marshalling {
   function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<SSTable.SSTable>>)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
+  requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: SSTable.WFSSTableMap(s.value[i])
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: BT.WFBucket(SSTable.I(s.value[i]), pivotTable, i)
@@ -285,9 +354,51 @@ module Marshalling {
     )
   }
 
+  lemma LemmaValToBucketNone(a: seq<V>, pivotTable: seq<Key>, i: int)
+  requires Pivots.WFPivots(pivotTable)
+  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
+  requires |a| <= |pivotTable| + 1
+  requires 0 <= i < |a|
+  requires valToBucket(a[i], pivotTable, i) == None
+  ensures valToBuckets(a, pivotTable) == None
+  {
+    if (|a| == i + 1) {
+    } else {
+      LemmaValToBucketNone(DropLast(a), pivotTable, i);
+    }
+  }
+
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<SSTable.SSTable>>)
   requires valToBuckets.requires(a, pivotTable)
   ensures s == valToBuckets(a, pivotTable)
+  {
+    var ar := new SSTable.SSTable[|a|];
+
+    var i := 0;
+    while i < |a|
+    invariant 0 <= i <= |a|
+    invariant Some(ar[..i]) == valToBuckets(a[..i], pivotTable)
+    {
+      var b := ValToBucket(a[i], pivotTable, i);
+      if (b.None?) {
+        s := None;
+
+        LemmaValToBucketNone(a, pivotTable, i);
+        return;
+      }
+
+      ar[i] := b.value;
+
+      assert DropLast(a[..i+1]) == a[..i];
+      assert ar[..i+1] == ar[..i] + [b.value];
+
+      i := i + 1;
+    }
+
+    assert a[..|a|] == a;
+    assert ar[..|a|] == ar[..];
+    s := Some(ar[..]);
+  }
 
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValInGrammar(v, PivotNodeGrammar())
@@ -320,6 +431,32 @@ module Marshalling {
   method ValToNode(v: V) returns (s : Option<Node>)
   requires valToNode.requires(v)
   ensures s == valToNode(v)
+  {
+    var pivotsOpt := valToPivots(v.t[0].a);
+    if (pivotsOpt.None?) {
+      return None;
+    }
+    var pivots := pivotsOpt.value;
+
+    var childrenOpt := valToChildren(v.t[1].a);
+    if (childrenOpt.None?) {
+      return None;
+    }
+    var children := childrenOpt.value;
+
+    if (!((|children| == 0 || |children| == |pivots| + 1) && |v.t[2].a| == |pivots| + 1)) {
+      return None;
+    }
+
+    var bucketsOpt := ValToBuckets(v.t[2].a, pivots);
+    if (bucketsOpt.None?) {
+      return None;
+    }
+    var buckets := bucketsOpt.value;
+
+    var node := ImplState.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+    return Some(node);
+  }
 
   function valToSector(v: V) : (s : Option<Sector>)
   requires ValInGrammar(v, SectorGrammar())
@@ -341,6 +478,20 @@ module Marshalling {
   method ValToSector(v: V) returns (s : Option<Sector>)
   requires valToSector.requires(v)
   ensures s == valToSector(v)
+  {
+    if v.c == 0 {
+      match valToSuperblock(v.val) {
+        case Some(s) => return Some(ImplState.SectorSuperblock(s));
+        case None => return None;
+      }
+    } else {
+      var node := ValToNode(v.val);
+      match node {
+        case Some(s) => return Some(ImplState.SectorBlock(s));
+        case None => return None;
+      }
+    }
+  }
 
   /////// Conversion from PivotNode to a val
 
@@ -421,13 +572,13 @@ module Marshalling {
     }
   }
 
-  method {:fueld ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
+  method {:fuel ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
   requires |a| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(GUint64))
   ensures SizeOfV(v) == 8 + 8 * |a|
   ensures |v.a| == |a|
-  ensures valToUint64Array(v.a) == a
+  ensures valToUint64Seq(v.a) == a
   {
     // TODO this is slow
     if |a| == 0 {
@@ -446,6 +597,7 @@ module Marshalling {
   requires SSTable.WFSSTableMap(bucket)
   requires BT.WFBucket(SSTable.I(bucket), pivotTable, i)
   requires CappedBucket(bucket)
+  requires 0 <= i <= |pivotTable|
   ensures ValInGrammar(v, BucketGrammar())
   ensures SizeOfV(v) <= 8 + CapBucketNumEntries() as int * 8 + 8 + CapBucketSize() as int
   ensures ValidVal(v)
@@ -464,6 +616,7 @@ module Marshalling {
   requires forall i | 0 <= i < |buckets| :: BT.WFBucket(SSTable.I(buckets[i]), pivotTable, i)
   requires CappedBuckets(buckets)
   requires |buckets| <= CapNumBuckets() as int
+  requires |buckets| <= |pivotTable| + 1
   ensures ValidVal(v)
   ensures SizeOfV(v) <= 8 + |buckets| * (8 + CapBucketNumEntries() as int * 8 + 8 + CapBucketSize() as int)
   ensures ValInGrammar(v, GArray(BucketGrammar()))
