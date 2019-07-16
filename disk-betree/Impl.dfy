@@ -813,7 +813,7 @@ module {:extern} Impl refines Main {
     assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
   }
 
-  method fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
+  method {:fuel BT.JoinBuckets,0} fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': Variables)
   requires IS.WFVars(s)
   requires M.Inv(k, IS.IVars(s))
@@ -840,6 +840,17 @@ module {:extern} Impl refines Main {
       } else {
         // leaf case
 
+        if (!(
+          && |node.buckets| < 0x100
+          && forall i | 0 <= i < |node.buckets| :: |node.buckets[i].strings| < 0x10_0000_0000_0000
+          && forall i | 0 <= i < |node.buckets| :: |node.buckets[i].starts| < 0x10_0000_0000_0000
+        )) {
+          s' := s;
+          assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+          print "giving up; stuff too big to call Join\n";
+          return;
+        }
+
         forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in SSTable.I(node.buckets[i]) && key2 in SSTable.I(node.buckets[j])
         ensures MS.Keyspace.lt(key1, key2)
         {
@@ -850,7 +861,7 @@ module {:extern} Impl refines Main {
           MS.Keyspace.IsStrictlySortedImpliesLte(node.pivotTable, i, j-1);
         }
 
-        var joined := SSTable.Join(node.buckets);
+        var joined := SSTable.DoJoin(node.buckets);
         var pivots := GetNewPivots(joined);
         var buckets' := SSTable.SplitOnPivots(joined, pivots);
         var newnode := IS.Node(pivots, None, buckets');
