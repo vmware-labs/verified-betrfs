@@ -11,14 +11,14 @@ module MutableMap {
 
   datatype Slot = Slot(slot: nat)
 
-  datatype Item<V(==)> = Empty | Filled(key: uint64, value: V)
+  datatype Item<V(==)> = Empty | Filled(key: uint64, value: V) | Tombstone(key: uint64)
 
   // FIXME(utaal) reduce proofs!
   class FixedSizeHashMap<V(==)> {
     var Storage: array<Item<V>>;
     var Count: uint64;
 
-    ghost var Contents: map<uint64, V>;
+    ghost var Contents: map<uint64, Option<V>>;
 
     predicate ValidElements(elements: seq<Item<V>>)
     {
@@ -95,7 +95,8 @@ module MutableMap {
       requires ValidElements(elements)
       requires ValidSlot(|elements|, slot)
     {
-      elements[slot.slot].Filled? && elements[slot.slot].key != excludingKey
+      || (elements[slot.slot].Tombstone? && elements[slot.slot].key != excludingKey)
+      || (elements[slot.slot].Filled? && elements[slot.slot].key != excludingKey)
     }
 
     predicate FilledWithOtherKeys(elements: seq<Item<V>>, start: Slot, count: nat, excludingKey: uint64)
@@ -110,7 +111,7 @@ module MutableMap {
       requires ValidElements(elements)
       requires ValidSlot(|elements|, slot)
     {
-      elements[slot.slot].Filled? && elements[slot.slot].key == key
+      (elements[slot.slot].Filled? || elements[slot.slot].Tombstone?) && elements[slot.slot].key == key
     }
 
     predicate SlotExplainsKey(elements: seq<Item<V>>, skips: nat, key: uint64)
@@ -122,18 +123,18 @@ module MutableMap {
       && FilledWithKey(elements, foundSlot, key)
     }
 
-    predicate SeqMatchesContents(elements: seq<Item<V>>, contents: map<uint64, V>)
+    predicate SeqMatchesContentKeys(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
       requires ValidElements(elements)
     {
       && (forall key :: key in contents ==> exists skips :: SlotExplainsKey(elements, skips, key))
-      && (forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Filled? ==>
+      && (forall slot :: ValidSlot(|elements|, slot) && (elements[slot.slot].Filled? || elements[slot.slot].Tombstone?) ==>
         && var key := elements[slot.slot].key;
         && key in contents)
       && (forall slot1, slot2 :: (
         && ValidSlot(|elements|, slot1)
         && ValidSlot(|elements|, slot2)
-        && elements[slot1.slot].Filled?
-        && elements[slot2.slot].Filled?
+        && (elements[slot1.slot].Filled? || elements[slot1.slot].Tombstone?)
+        && (elements[slot2.slot].Filled? || elements[slot2.slot].Tombstone?)
         && elements[slot1.slot].key == elements[slot2.slot].key
       ) ==> slot1 == slot2)
     }
@@ -146,13 +147,19 @@ module MutableMap {
       && Count as nat < Storage.Length 
 
       && |Contents| == (Count as nat)
-      && SeqMatchesContents(Storage[..], Contents)
+      && SeqMatchesContentKeys(Storage[..], Contents)
+      && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Filled? ==>
+          && var item := Storage[slot.slot];
+          && Contents[item.key] == Some(item.value))
+      && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone? ==>
+          && var item := Storage[slot.slot];
+          && Contents[item.key].None?)
     }
 
     function IndexSetThrough(elements: seq<Item<V>>, through: nat): set<int>
       requires through <= |elements|
     {
-      set i | 0 <= i < through && elements[i].Filled?
+      set i | 0 <= i < through && (elements[i].Filled? || elements[i].Tombstone?)
     }
 
     function IndexSet(elements: seq<Item<V>>): set<int>
@@ -162,7 +169,7 @@ module MutableMap {
 
     function Count1(item: Item<V>): nat
     {
-      if item.Filled? then 1 else 0
+      if item.Filled? || item.Tombstone? then 1 else 0
     }
 
     function CountFilled(view: seq<Item<V>>): (result: nat)
@@ -184,7 +191,7 @@ module MutableMap {
         var j := i + 1;
         CountFilledAdditive(elements[..i], [elements[i]]);
         assert elements[..i] + [elements[i]] == elements[..j];
-        if elements[i].Filled? {
+        if elements[i].Filled? || elements[i].Tombstone? {
           assert IndexSetThrough(elements, j) == IndexSetThrough(elements, i) + {i};
         } else {
           assert IndexSetThrough(elements, j) == IndexSetThrough(elements, i);
@@ -194,9 +201,9 @@ module MutableMap {
       assert elements[..i] == elements;
     }
 
-    lemma IndexSetMatchesContents(elements: seq<Item<V>>, contents: map<uint64, V>)
+    lemma IndexSetMatchesContents(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
       requires ValidElements(elements)
-      requires SeqMatchesContents(elements, contents)
+      requires SeqMatchesContentKeys(elements, contents)
       ensures |IndexSet(elements)| == |contents.Keys|
     {
       var relation := set i | i in IndexSet(elements) :: (i, elements[i].key);
@@ -217,9 +224,9 @@ module MutableMap {
       BijectivityImpliesEqualCardinality(IndexSet(elements), contents.Keys, relation);
     }
 
-    lemma CountFilledMatchesContents(elements: seq<Item<V>>, contents: map<uint64, V>)
+    lemma CountFilledMatchesContents(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
       requires ValidElements(elements)
-      requires SeqMatchesContents(elements, contents)
+      requires SeqMatchesContentKeys(elements, contents)
       ensures CountFilled(elements) == |contents|
     {
       CountFilledMatchesIndexSet(elements);
@@ -287,7 +294,7 @@ module MutableMap {
       ensures 0 <= ghostSkips
       ensures slotIdx as nat == KthSlotSuccessor(Storage.Length, Slot(startSlotIdx as nat), ghostSkips as nat).slot
       ensures key in Contents ==> SlotExplainsKey(Storage[..], ghostSkips as nat, key)
-      ensures key !in Contents ==> FilledWithOtherKeys(Storage[..], Slot(startSlotIdx as nat), ghostSkips as nat, key) && Storage[slotIdx].Empty?
+      ensures key !in Contents ==> FilledWithOtherKeys(Storage[..], Slot(startSlotIdx as nat), ghostSkips as nat, key) && (Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key))
       ensures Storage[slotIdx].Filled? ==> key in Contents && key == Storage[slotIdx].key
       ensures Storage[slotIdx].Empty? ==> key !in Contents
     {
@@ -335,12 +342,12 @@ module MutableMap {
         invariant FilledWithOtherKeys(Storage[..], startSlot, skips as nat, key)
         invariant CountFilled(viewFromStartSlot[..skips]) == skips as nat
       {
-        if Storage[slotIdx].Empty? {
+        if Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key) {
           return;
         } else if Storage[slotIdx].key == key {
           return;
         }
-        assert Storage[slotIdx].Filled?;
+        assert Storage[slotIdx].Filled? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key != key);
         assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
         assert Storage[slotIdx] == viewFromStartSlot[skips];
         assert slotIdx as nat == KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot;
@@ -359,7 +366,7 @@ module MutableMap {
           assert Storage[slotIdx] == viewFromStartSlot[skips];
         }
         assert CountFilled(viewFromStartSlot[..skipsBefore]) == skipsBefore as nat;
-        assert viewFromStartSlot[skipsBefore].Filled?;
+        assert viewFromStartSlot[skipsBefore].Filled? || viewFromStartSlot[skipsBefore].Tombstone?;
         assert viewFromStartSlot[..skips] == viewFromStartSlot[..skipsBefore] + [viewFromStartSlot[skipsBefore]];
         assert CountFilled([viewFromStartSlot[skipsBefore]]) == 1;
         CountFilledAdditive(viewFromStartSlot[..skipsBefore], [viewFromStartSlot[skipsBefore]]);
@@ -373,7 +380,7 @@ module MutableMap {
       requires Inv()
       requires Count as nat < Storage.Length - 1
       ensures Inv()
-      ensures Contents == old(Contents[key := value])
+      ensures Contents == old(Contents[key := Some(value)])
       modifies this, this.Storage
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
@@ -392,7 +399,7 @@ module MutableMap {
         assert key in Contents;
       }
       Storage[slotIdx] := Filled(key, value);
-      Contents := Contents[key := value];
+      Contents := Contents[key := Some(value)];
       // --------------
 
       assert |Contents| == (Count as nat);
@@ -422,6 +429,70 @@ module MutableMap {
         && Storage[slot1.slot].key == Storage[slot2.slot].key
       ) ==> slot1 == slot2;
       assert Count as nat < Storage.Length;
+    }
+
+    method Get(key: uint64) returns (found: Option<V>)
+      requires Inv()
+      requires Count as nat < Storage.Length - 1
+      ensures Inv()
+      ensures if key in Contents && Contents[key].Some? then found == Some(Contents[key].value) else found.None?
+    {
+      var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
+
+      if Storage[slotIdx].Filled? {
+        assert key in Contents;
+        found := Some(Storage[slotIdx].value);
+        assert found == Contents[key];
+      } else if Storage[slotIdx].Tombstone? {
+        assert key in Contents && Contents[key].None?;
+        found := None;
+        assert found.None?;
+      } else {
+        assert key !in Contents;
+        found := None;
+        assert found.None?;
+      }
+    }
+
+    method Remove(key: uint64)
+      requires Inv()
+      // requires Count as nat < Storage.Length - 1
+      ensures Inv()
+      ensures Contents == if key in Contents
+          then old(Contents[key := None])
+          else old(Contents)
+      ensures Count == old(Count)
+      modifies this, this.Storage
+    {
+      var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
+
+      if Storage[slotIdx].Filled? {
+        assert key in Contents;
+
+        // -- mutation --
+        Storage[slotIdx] := Tombstone(key);
+        Contents := Contents[key := None];
+        // --------------
+
+        forall explainedKey | explainedKey in Contents
+        ensures exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey)
+        {
+          if key == explainedKey {
+            assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
+            assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+          } else {
+            var oldSkips :| SlotExplainsKey(old(Storage[..]), oldSkips, explainedKey);
+            assert SlotExplainsKey(Storage[..], oldSkips, explainedKey);
+            assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+          }
+        }
+
+        assert Storage[slotIdx].key == old(Storage[slotIdx].key) == key;
+        assert Inv();
+      } else {
+        assert key !in Contents || (key in Contents && Contents[key].None?);
+        assert Inv();
+      }
     }
 
   }
