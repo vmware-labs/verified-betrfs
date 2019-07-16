@@ -1346,6 +1346,21 @@ module SSTable {
   ensures old(ar[..dstIdx]) == ar[..dstIdx]
   ensures ar[dstIdx .. dstIdx as int + |s|] == addToStarts(s, offset)
 
+  function subFromStarts(starts: seq<uint64>, offset: uint64) : (res: seq<uint64>)
+  requires forall i | 0 <= i < |starts| :: offset <= starts[i]
+  ensures |res| == |starts|
+  ensures forall i | 0 <= i < |res| :: res[i] == starts[i] - offset
+  {
+    if |starts| == 0 then [] else subFromStarts(DropLast(starts), offset) + [Last(starts) - offset]
+  }
+
+  method CopySeqIntoArraySubtracting(s: seq<uint64>, ar: array<uint64>, dstIdx: uint64, offset: uint64)
+  requires forall i | 0 <= i < |s| :: offset <= s[i]
+  requires 0 <= dstIdx
+  requires dstIdx as int + |s| <= ar.Length
+  ensures old(ar[..dstIdx]) == ar[..dstIdx]
+  ensures ar[dstIdx .. dstIdx as int + |s|] == subFromStarts(s, offset)
+
   lemma startsAppendAddToStartsSorted(
       starts: seq<uint64>,
       starts2: seq<uint64>,
@@ -1601,18 +1616,44 @@ module SSTable {
     joinIsJoinBuckets(ssts); // lemma
   }
 
+  function method EmptySeq(n: int) : (s : seq<SSTable>)
+  requires n >= 0
+  ensures |s| == n
+  ensures forall i | 0 <= i < n :: WFSSTableMap(s[i])
+  ensures forall i | 0 <= i < n :: s[i] == Empty()
+  {
+    if n == 0 then [] else EmptySeq(n-1) + [Empty()]
+  }
+
+  lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>)
+  requires P.WFPivots(pivots)
+  requires |emp| == |pivots| + 1
+  ensures forall i | 0 <= i < |emp| :: emp[i] == map[]
+  ensures BT.SplitBucketOnPivots(pivots, bucket) == BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)
+
   method SplitOnPivots(sst: SSTable, pivots: seq<Key>)
   returns (ssts : seq<SSTable>)
   requires WFSSTableMap(sst)
   requires P.WFPivots(pivots)
+  requires |sst.strings| < 0x800_0000_0000_0000
+  requires |sst.starts| < 0x800_0000_0000_0000
   ensures forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   ensures ISeq(ssts) == BT.SplitBucketOnPivots(pivots, I(sst))
+  {
+    reveal_Empty();
+    ssts := DoFlush(sst, EmptySeq(|pivots| + 1), pivots);
+
+    LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(sst), pivots, ISeq(EmptySeq(|pivots| + 1)));
+  }
 
   function method KeyAtIndex(sst: SSTable, i: int) : (key: Key)
   requires WFSSTableMap(sst)
   requires 0 <= i < Size(sst) as int
   ensures 2*i <= |sst.starts|
   ensures key == Entry(sst, 2*i)
+  {
+    Entry(sst, 2*i)
+  }
 
   lemma Ireplace1with2(ssts: seq<SSTable>, sst1: SSTable, sst2: SSTable, slot: int)
   requires WFSSTableMap(sst1)
@@ -1637,4 +1678,210 @@ module SSTable {
   method IsWFSSTableMap(sst: SSTable)
   returns (b: bool)
   ensures b == WFSSTableMap(sst)
+  {
+    var startsSorted := Uint64Order.ComputeIsSorted(sst.starts);
+    if (!startsSorted) { return false; }
+
+    if (!(
+        && |sst.strings| < 0x1000_0000_0000_0000
+        && |sst.starts| < 0x1000_0000_0000_0000
+        && (|sst.starts| > 0 ==> (
+          && sst.starts[0] == 0
+          && 0 <= Last(sst.starts) as int <= |sst.strings|
+        ))
+        && (|sst.starts| == 0 ==> |sst.strings| == 0)
+    )) { return false; }
+
+    if |sst.starts| % 2 != 0 { return false; }
+
+    reveal_KeysStrictlySorted();
+
+    var k: uint64 := 2;
+    ghost var m := 1;
+    while k as int < |sst.starts|
+    invariant k as int == m * 2
+    invariant |sst.starts| > 0 ==> 0 <= k as int <= |sst.starts|
+    invariant |sst.starts| > 0 ==> forall i, j :: 0 <= 2*i < 2*j < k as int ==> lt(Entry(sst, 2*i), Entry(sst, 2*j))
+    {
+      var c := Cmp2(sst, k-2, sst, k);
+      if (c != -1) {
+        assert !lt(Entry(sst, 2*(m-1)), Entry(sst, 2*m));
+        return false;
+      }
+      k := k + 2;
+      m := m + 1;
+
+      forall i, j | 0 <= 2*i < 2*j < k as int
+      ensures lt(Entry(sst, 2*i), Entry(sst, 2*j))
+      {
+        if (j == m - 1 as int) {
+          assert lte(Entry(sst, 2*i), Entry(sst, 2*(m-2)));
+          assert lte(Entry(sst, 2*(m-2)), Entry(sst, 2*(m-1)));
+          assert lt(Entry(sst, 2*i), Entry(sst, 2*j));
+        } else {
+          assert 2*j < k as int - 2;
+          assert lt(Entry(sst, 2*i), Entry(sst, 2*j));
+        }
+      }
+    }
+
+    return true;
+  }
+
+  method ComputeCutoffPoint(sst: SSTable, key: Key)
+  returns (idx: uint64)
+  requires WFSSTableMap(sst)
+  ensures 0 <= 2*idx as int <= |sst.starts|
+  ensures forall i | 0 <= 2*i < 2*idx as int :: lt(Entry(sst, 2*i), key)
+  ensures forall i | 2*idx as int <= 2*i as int < |sst.starts| :: lte(key, Entry(sst, 2*i))
+  {
+    var lo: uint64 := 0;
+    var hi: uint64 := (|sst.starts| as uint64) / 2;
+
+    while lo < hi
+    invariant 0 <= 2*lo as int <= |sst.starts|
+    invariant 0 <= 2*hi as int <= |sst.starts|
+    invariant forall i | 0 <= 2*i < 2*lo as int :: lt(Entry(sst, 2*i), key)
+    invariant forall i | 2*hi as int <= 2*i < |sst.starts| :: lte(key, Entry(sst, 2*i))
+    decreases hi as int - lo as int
+    {
+      reveal_KeysStrictlySorted();
+
+      var mid: uint64 := (lo + hi) / 2;
+      var c := Cmp(key, sst, 2*mid);
+      if (c == 1) {
+        lo := mid + 1;
+      } else {
+        hi := mid;
+      }
+    }
+
+    idx := lo;
+  }
+
+  lemma leftPreserves(sst: SSTable, left: SSTable, idx: int, stringIdx: int, i: int)
+  requires WFSSTableMap(sst)
+  requires WFSSTable(left)
+  requires 0 <= 2*idx <= |sst.starts|
+  requires 0 <= stringIdx <= |sst.strings|
+  requires stringIdx == (if 2*idx == |sst.starts| then |sst.strings| else sst.starts[2*idx] as int)
+  requires left.starts == sst.starts[.. 2*idx]
+  requires left.strings == sst.strings[.. stringIdx]
+  requires 0 <= i < idx
+  ensures Entry(sst, 2*i) == Entry(left, 2*i)
+  ensures Entry(sst, 2*i + 1) == Entry(left, 2*i + 1)
+
+  method SplitLeft(sst: SSTable, pivot: Key)
+  returns (left: SSTable)
+  requires WFSSTableMap(sst)
+  ensures WFSSTableMap(left)
+  ensures I(left) == BT.SplitBucketLeft(I(sst), pivot)
+  {
+    Uint64Order.reveal_IsSorted();
+    reveal_KeysStrictlySorted();
+
+    var idx := ComputeCutoffPoint(sst, pivot);
+    var stringIdx := (if 2*idx == |sst.starts| as uint64 then |sst.strings| as uint64 else sst.starts[2*idx]);
+    left := SSTable(sst.starts[.. 2 * idx], sst.strings[.. stringIdx]);
+
+    forall i, j | 0 <= 2*i < 2*j < |left.starts|
+    ensures lt(Entry(left, 2*i), Entry(left, 2*j))
+    {
+      leftPreserves(sst, left, idx as int, stringIdx as int, i);
+      leftPreserves(sst, left, idx as int, stringIdx as int, j);
+    }
+
+    ghost var a := BT.SplitBucketLeft(I(sst), pivot);
+    ghost var b := I(left);
+
+    forall key | key in a
+    ensures key in b
+    ensures a[key] == b[key]
+    {
+      var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == key;
+      assert 2*i < |left.starts|;
+      assert SSTKeyMapsToValueAt(I(left), left, i);
+      assert SSTKeyMapsToValueAt(I(sst), sst, i);
+      leftPreserves(sst, left, idx as int, stringIdx as int, i);
+    }
+
+    forall key | key in b
+    ensures key in a
+    {
+      var i :| 0 <= 2*i < |left.starts| && Entry(left, 2*i) == key;
+      leftPreserves(sst, left, idx as int, stringIdx as int, i);
+      assert SSTKeyMapsToValueAt(I(sst), sst, i);
+      //assert lt(Entry(sst, 2*i), pivot);
+      //assert key in I(sst);
+      //assert lt(key, pivot);
+    }
+
+    assert a == b;
+  }
+
+  lemma rightPreserves(sst: SSTable, right: SSTable, idx: int, stringIdx: int, i: int)
+  requires WFSSTableMap(sst)
+  requires WFSSTable(right)
+  requires 0 <= 2*idx <= |sst.starts|
+  requires 0 <= stringIdx <= |sst.strings|
+  requires stringIdx == (if 2*idx == |sst.starts| then |sst.strings| else sst.starts[2*idx] as int)
+  requires forall i | 2*idx <= i < |sst.starts| :: stringIdx <= sst.starts[i] as int
+  requires right.starts == subFromStarts(sst.starts[2*idx ..], stringIdx as uint64);
+  requires right.strings == sst.strings[stringIdx ..]
+  requires 2*idx <= 2*i < |sst.starts|
+  ensures Entry(sst, 2*i) == Entry(right, 2*i - 2*idx)
+  ensures Entry(sst, 2*i + 1) == Entry(right, 2*i + 1 - 2*idx)
+
+  method SplitRight(sst: SSTable, pivot: Key)
+  returns (right: SSTable)
+  requires WFSSTableMap(sst)
+  ensures WFSSTableMap(right)
+  ensures I(right) == BT.SplitBucketRight(I(sst), pivot)
+  {
+    Uint64Order.reveal_IsSorted();
+    reveal_KeysStrictlySorted();
+
+    var idx: uint64 := ComputeCutoffPoint(sst, pivot);
+    var stringIdx := (if 2*idx == |sst.starts| as uint64 then |sst.strings| as uint64 else sst.starts[2*idx]);
+
+    var startsArray := new uint64[|sst.starts| as uint64 - 2*idx];
+    CopySeqIntoArraySubtracting(sst.starts[2*idx..], startsArray, 0, stringIdx);
+
+    right := SSTable(startsArray[..], sst.strings[stringIdx ..]);
+
+    forall i, j | 0 <= 2*i < 2*j < |right.starts|
+    ensures lt(Entry(right, 2*i), Entry(right, 2*j))
+    {
+      rightPreserves(sst, right, idx as int, stringIdx as int, i + idx as int);
+      rightPreserves(sst, right, idx as int, stringIdx as int, j + idx as int);
+    }
+
+    ghost var a := BT.SplitBucketRight(I(sst), pivot);
+    ghost var b := I(right);
+
+    forall key | key in a
+    ensures key in b
+    ensures a[key] == b[key]
+    {
+      var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == key;
+      assert 0 <= 2*i - 2*idx as int < |right.starts|;
+      assert SSTKeyMapsToValueAt(I(right), right, i - idx as int);
+      assert SSTKeyMapsToValueAt(I(sst), sst, i);
+      rightPreserves(sst, right, idx as int, stringIdx as int, i);
+    }
+
+    forall key | key in b
+    ensures key in a
+    {
+      var i :| 0 <= 2*i < |right.starts| && Entry(right, 2*i) == key;
+      rightPreserves(sst, right, idx as int, stringIdx as int, i + idx as int);
+      assert SSTKeyMapsToValueAt(I(sst), sst, i + idx as int);
+      //assert lt(Entry(sst, 2*i), pivot);
+      //assert key in I(sst);
+      //assert lt(key, pivot);
+    }
+
+    assert a == b;
+  }
+
 }

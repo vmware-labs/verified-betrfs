@@ -101,11 +101,29 @@ abstract module Total_Order {
     elt := run[index];
   }
   
-  predicate method {:opaque} IsSorted(run: seq<Element>) {
+  predicate {:opaque} IsSorted(run: seq<Element>) {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  predicate method {:opaque} IsStrictlySorted(run: seq<Element>)
+  method ComputeIsSorted(run: seq<Element>)
+  returns (b: bool)
+  ensures b == IsSorted(run)
+  {
+    reveal_IsSorted();
+    var k := 1;
+    while k < |run|
+    invariant |run| > 0 ==> 0 <= k <= |run|
+    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
+    {
+      if (!lte(run[k-1], run[k])) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
+  }
+
+  predicate {:opaque} IsStrictlySorted(run: seq<Element>)
   ensures IsStrictlySorted(run) ==> IsSorted(run)
   ensures |run| == 0 ==> IsStrictlySorted(run)
   ensures |run| == 1 ==> IsStrictlySorted(run)
