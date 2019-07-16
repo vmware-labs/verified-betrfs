@@ -66,6 +66,23 @@ module MutableMap {
         SlotSuccessor(elementsLength, KthSlotSuccessor(elementsLength, slot, k - 1))
     }
 
+    lemma KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
+      requires k >= 0
+      requires ValidSlot(elementsLength, slot)
+      ensures if k < (elementsLength-slot.slot) then
+            KthSlotSuccessor(elementsLength, slot, k).slot == slot.slot + k
+          else
+            KthSlotSuccessor(elementsLength, slot, k).slot == k - (elementsLength - slot.slot)
+    {
+      var elementsInRightSlice := (elementsLength-slot.slot);
+      if k < elementsInRightSlice {
+        assert KthSlotSuccessor(elementsLength, slot, k).slot == slot.slot + k;
+      } else { // k >= elementsInRightSlice
+        assert KthSlotSuccessor(elementsLength, slot, k - elementsInRightSlice).slot == slot.slot + (k - elementsInRightSlice);
+        assert KthSlotSuccessor(elementsLength, slot, k).slot == k - (elementsLength - slot.slot);
+      }
+    }
+
     predicate FilledWithOtherKey(elements: seq<Item<V>>, slot: Slot, excludingKey: uint64)
       requires ValidElements(elements)
       requires ValidSlot(|elements|, slot)
@@ -228,7 +245,7 @@ module MutableMap {
       }
     }
 
-    lemma ViewsHasConsistentCounts(a: seq<Item<V>>, b: seq<Item<V>>, delta: nat)
+    lemma ViewsHaveConsistentCounts(a: seq<Item<V>>, b: seq<Item<V>>, delta: nat)
       requires delta < |a|
       requires b == View(a, delta)
       ensures CountFilled(a) == CountFilled(b)
@@ -240,44 +257,96 @@ module MutableMap {
       assert b == b[..n-delta] + b[n-delta..];
     }
 
-    method Probe(key: uint64) returns (skips: uint64)
+    function method Uint64SlotSuccessor(slot: uint64): (nextSlot: uint64)
+      requires Inv()
+      requires ValidSlot(Storage.Length, Slot(slot as nat))
+      ensures ValidSlot(Storage.Length, Slot(nextSlot as nat))
+      ensures Slot(nextSlot as nat) == SlotSuccessor(Storage.Length, Slot(slot as nat))
+      reads this, this.Storage
+    {
+      if slot == (Storage.Length as uint64) - 1 then
+        0
+      else
+        slot + 1
+    }
+
+    method Probe(key: uint64) returns (startSlotIdx: uint64, skips: uint64)
       requires Inv()
       requires Count as nat < Storage.Length
       ensures ValidSlot(Storage.Length, KthSlotSuccessor(Storage.Length, SlotForKey(Storage.Length, key), skips as nat))
       ensures key in Contents ==> SlotExplainsKey(Storage[..], skips as nat, key)
       ensures key !in Contents ==> Storage[KthSlotSuccessor(Storage.Length, SlotForKey(Storage.Length, key), skips as nat).slot].Empty?
-      // ensures FilledWithOtherKeys(Storage[..], SlotForKey(Storage.Length, key), , key)
     {
-      var startSlotIdx := Uint64SlotForKey(key);
-      skips := 0;
+      startSlotIdx := Uint64SlotForKey(key);
+      ghost var startSlot := Slot(startSlotIdx as nat);
+
       ghost var viewFromStartSlot := View(Storage[..], startSlotIdx as nat);
-      //while i < (Storage.Length as uint64) - 1
-      //  invariant ValidSlot(Storage.Length as uint64, slot)
-      //  invariant FilledWithOtherKeys(Storage[..], startSlot, slot, key)
-      //  invariant FilledSlots(Storage[..], startSlot, slot)
-      //  invariant Storage.Length == old(Storage.Length)
-      //  invariant i <= (Storage.Length as uint64) - 1
-      //  invariant NextSlotK(startSlot, i as int) == slot;
+      ViewsHaveConsistentCounts(Storage[..], viewFromStartSlot, startSlotIdx as nat);
+      CountFilledMatchesContents(Storage[..], Contents);
+      assert CountFilled(Storage[..]) == CountFilled(viewFromStartSlot) == |Contents|;
+
+      assert Storage[startSlotIdx..] + Storage[..startSlotIdx] == viewFromStartSlot;
+      assert Storage[startSlotIdx..] + Storage[..startSlotIdx] ==
+        viewFromStartSlot[..Storage.Length-(startSlotIdx as int)] + viewFromStartSlot[Storage.Length-(startSlotIdx as int)..];
+      assert Storage[startSlotIdx..] == viewFromStartSlot[..Storage.Length-(startSlotIdx as int)];
+      assert Storage[..startSlotIdx] == viewFromStartSlot[Storage.Length-(startSlotIdx as int)..];
+      forall dist: nat | dist < Storage.Length
+      ensures Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist]
+      {
+        KthSlotSuccessorWrapsAround(Storage.Length, startSlot, dist);
+        if dist < Storage.Length-(startSlotIdx as int) {
+          assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == startSlotIdx as int + (dist as int);
+          assert Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
+        } else {
+          assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == (dist as int) - (Storage.Length-(startSlotIdx as int));
+          assert Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
+        }
+      }
+
+      assert forall dist: nat :: dist < Storage.Length ==>
+          Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
+
+      skips := 0;
+      var slotIdx := startSlotIdx;
+      while skips < (Storage.Length as uint64)
+        invariant skips <= (Storage.Length as uint64)
+        invariant slotIdx < (Storage.Length as uint64)
+        invariant Storage.Length == |viewFromStartSlot|
+        invariant Storage[startSlotIdx..] + Storage[..startSlotIdx] == viewFromStartSlot
+        invariant slotIdx as nat == KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot
+        invariant skips < (Storage.Length as uint64) ==> Storage[slotIdx] == viewFromStartSlot[skips]
+        invariant ValidSlot(Storage.Length, KthSlotSuccessor(Storage.Length, startSlot, skips as nat))
+        invariant FilledWithOtherKeys(Storage[..], startSlot, skips as nat, key)
+        invariant CountFilled(viewFromStartSlot[..skips]) == skips as nat
+      {
+        if Storage[slotIdx].Empty? {
+          return;
+        } else if Storage[slotIdx].key == key {
+          return;
+        }
+        assert Storage[slotIdx].Filled?;
+        assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
+        assert Storage[slotIdx] == viewFromStartSlot[skips];
+        assert slotIdx as nat == KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot;
+
+        ghost var slotIdxBefore := slotIdx;
+        ghost var skipsBefore := skips;
+        // INCREMENT
+        slotIdx := Uint64SlotSuccessor(slotIdx);
+        skips := skips + 1;
+        if skips < (Storage.Length as uint64) {
+          assert Storage[KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot] == viewFromStartSlot[skips];
+          assert Storage[slotIdx] == viewFromStartSlot[skips];
+        }
+        assert CountFilled(viewFromStartSlot[..skipsBefore]) == skipsBefore as nat;
+        assert viewFromStartSlot[skipsBefore].Filled?;
+        assert viewFromStartSlot[..skips] == viewFromStartSlot[..skipsBefore] + [viewFromStartSlot[skipsBefore]];
+        assert CountFilled([viewFromStartSlot[skipsBefore]]) == 1;
+        CountFilledAdditive(viewFromStartSlot[..skipsBefore], [viewFromStartSlot[skipsBefore]]);
+        assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
+      }
+      assert viewFromStartSlot[..skips] == viewFromStartSlot;
+      assert false;
     }
-    //   {
-    //     if Storage[slot.slot].Empty? {
-    //       if key in Contents { // contradiction
-    //         ghost var keySlot :| SlotExplainsKey(Storage[..], keySlot, key);
-    //         if SlotBetween(Storage.Length as uint64, startSlot, slot, keySlot) {
-    //           assert FilledWithOtherKey(Storage[..], slot, key);
-    //           assert false;
-    //         } else {
-    //           assert FilledWithOtherKey(Storage[..], keySlot, key);
-    //           assert false;
-    //         }
-    //       }
-    //       return slot;
-    //     } else if Storage[slot.slot].key == key {
-    //       return slot;
-    //     }
-    //     slot := SlotSuccessor(slot);
-    //     i := i + 1;
-    //   }
-    // }
   }
 }
