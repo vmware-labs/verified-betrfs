@@ -55,6 +55,7 @@ abstract module Main {
     reads HeapSet(hs)
   function Ik(k: Constants): M.Constants
   function I(k: Constants, hs: HeapState): M.Variables
+    requires Inv(k, hs)
     reads HeapSet(hs)
   function ILBA(lba: LBA) : M.LBA
 
