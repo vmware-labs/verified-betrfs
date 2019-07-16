@@ -13,6 +13,7 @@ module MutableMap {
 
   datatype Item<V(==)> = Empty | Filled(key: uint64, value: V)
 
+  // FIXME(utaal) reduce proofs!
   class FixedSizeHashMap<V(==)> {
     var Storage: array<Item<V>>;
     var Count: uint64;
@@ -142,7 +143,7 @@ module MutableMap {
       {
       && 0 < Storage.Length < 0x10000000000000000
       && (Count as nat) < 0x10000000000000000
-      && Count as nat <= Storage.Length 
+      && Count as nat < Storage.Length 
 
       && |Contents| == (Count as nat)
       && SeqMatchesContents(Storage[..], Contents)
@@ -277,15 +278,18 @@ module MutableMap {
         slot + 1
     }
 
-    method Probe(key: uint64) returns (slotIdx: uint64, ghost startSlotIdx: uint64, /* impl */ skips: uint64)
+    method Probe(key: uint64) returns (slotIdx: uint64, ghost startSlotIdx: uint64, ghost ghostSkips: uint64)
       requires Inv()
-      requires Count as nat < Storage.Length
+      ensures Inv()
       ensures ValidSlot(Storage.Length, Slot(slotIdx as nat))
       ensures ValidSlot(Storage.Length, Slot(startSlotIdx as nat))
-      ensures skips >= 0
-      ensures slotIdx as nat == KthSlotSuccessor(Storage.Length, Slot(startSlotIdx as nat), skips as nat).slot
-      ensures key in Contents ==> SlotExplainsKey(Storage[..], skips as nat, key)
-      ensures key !in Contents ==> Storage[slotIdx].Empty?
+      ensures Slot(startSlotIdx as nat) == SlotForKey(Storage.Length, key)
+      ensures 0 <= ghostSkips
+      ensures slotIdx as nat == KthSlotSuccessor(Storage.Length, Slot(startSlotIdx as nat), ghostSkips as nat).slot
+      ensures key in Contents ==> SlotExplainsKey(Storage[..], ghostSkips as nat, key)
+      ensures key !in Contents ==> FilledWithOtherKeys(Storage[..], Slot(startSlotIdx as nat), ghostSkips as nat, key) && Storage[slotIdx].Empty?
+      ensures Storage[slotIdx].Filled? ==> key in Contents && key == Storage[slotIdx].key
+      ensures Storage[slotIdx].Empty? ==> key !in Contents
     {
       slotIdx := Uint64SlotForKey(key);
       startSlotIdx := slotIdx;
@@ -317,12 +321,14 @@ module MutableMap {
       assert forall dist: nat :: dist < Storage.Length ==>
           Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
 
-      skips := 0;
+      var skips := 0;
+      ghostSkips := 0;
       while skips < (Storage.Length as uint64)
         invariant skips <= (Storage.Length as uint64)
         invariant slotIdx < (Storage.Length as uint64)
         invariant Storage.Length == |viewFromStartSlot|
         invariant Storage[startSlotIdx..] + Storage[..startSlotIdx] == viewFromStartSlot
+        invariant skips == ghostSkips
         invariant slotIdx as nat == KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot
         invariant skips < (Storage.Length as uint64) ==> Storage[slotIdx] == viewFromStartSlot[skips]
         invariant ValidSlot(Storage.Length, KthSlotSuccessor(Storage.Length, startSlot, skips as nat))
@@ -341,9 +347,13 @@ module MutableMap {
 
         ghost var slotIdxBefore := slotIdx;
         ghost var skipsBefore := skips;
-        // INCREMENT
+
+        // -- increment --
         slotIdx := Uint64SlotSuccessor(slotIdx);
         skips := skips + 1;
+        ghostSkips := skips;
+        // ---------------
+
         if skips < (Storage.Length as uint64) {
           assert Storage[KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot] == viewFromStartSlot[skips];
           assert Storage[slotIdx] == viewFromStartSlot[skips];
@@ -358,5 +368,61 @@ module MutableMap {
       assert viewFromStartSlot[..skips] == viewFromStartSlot;
       assert false;
     }
+
+    method Insert(key: uint64, value: V)
+      requires Inv()
+      requires Count as nat < Storage.Length - 1
+      ensures Inv()
+      ensures Contents == old(Contents[key := value])
+      modifies this, this.Storage
+    {
+      var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
+
+      assert FilledWithOtherKeys(Storage[..], SlotForKey(Storage.Length, key), probeSkips as nat, key);
+      assert slotIdx as nat == KthSlotSuccessor(Storage.Length, SlotForKey(Storage.Length, key), probeSkips as nat).slot;
+
+      assert forall explainedKey :: explainedKey in Contents ==>
+          exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+
+      // -- mutation --
+      if Storage[slotIdx].Empty? {
+        assert key !in Contents;
+        Count := Count + 1;
+      } else {
+        assert key in Contents;
+      }
+      Storage[slotIdx] := Filled(key, value);
+      Contents := Contents[key := value];
+      // --------------
+
+      assert |Contents| == (Count as nat);
+      assert FilledWithOtherKeys(Storage[..], SlotForKey(Storage.Length, key), probeSkips as nat, key);
+      assert FilledWithKey(Storage[..], Slot(slotIdx as nat), key);
+      assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
+
+      assert key in Contents;
+      forall explainedKey | explainedKey in Contents
+      ensures exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey)
+      {
+        if key == explainedKey {
+          assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
+          assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+        } else {
+          var oldSkips :| SlotExplainsKey(old(Storage[..]), oldSkips, explainedKey);
+          assert SlotExplainsKey(Storage[..], oldSkips, explainedKey);
+          assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+        }
+      }
+
+      assert forall slot1, slot2 :: (
+        && ValidSlot(Storage.Length, slot1)
+        && ValidSlot(Storage.Length, slot2)
+        && Storage[slot1.slot].Filled?
+        && Storage[slot2.slot].Filled?
+        && Storage[slot1.slot].key == Storage[slot2.slot].key
+      ) ==> slot1 == slot2;
+      assert Count as nat < Storage.Length;
+    }
+
   }
 }
