@@ -459,6 +459,7 @@ abstract module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
   }
 
+  // TODO tidy: why does this lemma take all the parts of the Flush as separate parameters, rather than taking a NodeFlush?
   lemma FlushPreservesLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
   requires Inv(k, s)
   requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
@@ -528,11 +529,32 @@ abstract module BetreeInv {
               if j < parentLayer-1 {
                 assert LookupFollowsChildRefAtLayer(key, lookup, j);
               } else if j == parentLayer-1 {
-                assume false;
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
               } else if j == parentLayer {
-                assume false;
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
               } else if j == parentLayer+1 {
-                assume false;
+                assert LookupFollowsChildRefAtLayer(key, lookup, j-1);
+                assert LookupFollowsChildRefAtLayer(key, lookup, j);
+
+                    assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer+1);
+                    assert IMapsTo(lookup[j].node.children, key, lookup[j+1].ref);
+                    assert lookup'[parentLayer] == ReadOp(parentref, newparent);
+                    assert lookup'[parentLayer+1] == ReadOp(newchildref, newchild);
+                    assert lookup'[j] == ReadOp(newchildref, newchild);
+
+                    assert key in /*flush.*/movedKeys;
+                    assert IMapsTo(/*flush.*/parent.children, key, /*flush.*/childref); // from flush 
+                    assert IMapsTo(lookup[j-1].node.children, key, lookup[j].ref);  // from LookupFollowsChildRefAtLayer
+                    assert /*flush.*/parent == lookup[j-1].node;
+                    assert /*flush.*/childref == lookup[j].ref;
+                    assert /*flush.*/child == lookup[j].node;
+
+                    assert child == lookup[j].node;
+                    assert child.children == newchild.children;
+                    assert IMapsTo(newchild.children, key, lookup'[j+1].ref);
+                    assert lookup'[j].node == newchild;
+                    assert IMapsTo(lookup'[j].node.children, key, lookup'[j+1].ref);
+                    assert LookupFollowsChildRefAtLayer(key, lookup', j);
               } else {
                 assert LookupFollowsChildRefAtLayer(key, lookup, j);
               }

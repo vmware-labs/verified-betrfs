@@ -79,18 +79,22 @@ abstract module BetreeSpec {
     && (forall idx :: 0 <= idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
-  requires LookupVisitsWFNodes(lookup)
-  {
-    if |lookup| == 0 then G.M.Update(G.M.NopDelta()) else G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
-  }
-
   predicate WFLookupForKey(lookup: Lookup, key: Key)
   {
     && |lookup| > 0
     && lookup[0].ref == Root()
     && LookupFollowsChildRefs(key, lookup)
     && LookupVisitsWFNodes(lookup)
+  }
+
+  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  requires LookupVisitsWFNodes(lookup)
+  {
+    if |lookup| == 0
+    then
+        G.M.Update(G.M.NopDelta())
+    else
+        G.M.Merge(InterpretLookup(DropLast(lookup), key), Last(lookup).node.buffer[key])
   }
 
   predicate ValidQuery(q: LookupQuery) {
@@ -148,7 +152,7 @@ abstract module BetreeSpec {
   {
     && WFNode(flush.parent)
     && WFNode(flush.child)
-    && forall key :: key in flush.movedKeys ==> IMapsTo(flush.parent.children, key, flush.childref)
+    && (forall key :: key in flush.movedKeys ==> IMapsTo(flush.parent.children, key, flush.childref))
   }
 
   function FlushReads(flush: NodeFlush) : seq<ReadOp>
