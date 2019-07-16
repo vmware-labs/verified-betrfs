@@ -536,25 +536,6 @@ abstract module BetreeInv {
                 assert LookupFollowsChildRefAtLayer(key, lookup, j-1);
                 assert LookupFollowsChildRefAtLayer(key, lookup, j);
 
-                    assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer+1);
-                    assert IMapsTo(lookup[j].node.children, key, lookup[j+1].ref);
-                    assert lookup'[parentLayer] == ReadOp(parentref, newparent);
-                    assert lookup'[parentLayer+1] == ReadOp(newchildref, newchild);
-                    assert lookup'[j] == ReadOp(newchildref, newchild);
-
-                    assert key in /*flush.*/movedKeys;
-                    assert IMapsTo(/*flush.*/parent.children, key, /*flush.*/childref); // from flush 
-                    assert IMapsTo(lookup[j-1].node.children, key, lookup[j].ref);  // from LookupFollowsChildRefAtLayer
-                    assert /*flush.*/parent == lookup[j-1].node;
-                    assert /*flush.*/childref == lookup[j].ref;
-                    assert /*flush.*/child == lookup[j].node;
-
-                    assert child == lookup[j].node;
-                    assert child.children == newchild.children;
-                    assert IMapsTo(newchild.children, key, lookup'[j+1].ref);
-                    assert lookup'[j].node == newchild;
-                    assert IMapsTo(lookup'[j].node.children, key, lookup'[j+1].ref);
-                    assert LookupFollowsChildRefAtLayer(key, lookup', j);
               } else {
                 assert LookupFollowsChildRefAtLayer(key, lookup, j);
               }
