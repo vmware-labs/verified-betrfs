@@ -1253,11 +1253,82 @@ module SSTable {
   requires WFSSTableMap(sst)
   requires |sst.strings| < 0x800_0000_0000_0000
   requires |sst.starts| < 0x800_0000_0000_0000
-  requires |key| < 0x800_0000_0000_0000
+  requires |key| < 0x400_0000_0000_0000
   requires msg.Define?
-  requires |msg.value| < 0x800_0000_0000_0000
+  requires |msg.value| < 0x400_0000_0000_0000
   ensures WFSSTableMap(res)
   ensures I(res) == I(sst)[key := msg]
+  {
+    Uint64Order.reveal_IsSorted();
+    reveal_KeysStrictlySorted();
+    var sst1 := SSTable([0, |key| as uint64], key + msg.value);
+    var fl := DoFlush(sst1, [sst], []);
+    res := fl[0];
+
+    assert Entry(sst1, 0) == key;
+    assert SSTKeyMapsToValueAt(I(sst1), sst1, 0);
+    assert key in I(sst1);
+
+    assert I(res) == BT.AddMessagesToBucket([], 0, I(sst), I(sst1));
+
+    ghost var a := I(sst)[key := msg];
+    ghost var b := BT.AddMessagesToBucket([], 0, I(sst), I(sst1));
+    forall k | k in a
+    ensures k in b
+    ensures a[k] == b[k]
+    {
+      if (k == key) {
+        //assert k in (I(sst1).Keys + I(sst).Keys);
+        //assert P.Route([], k) == 0;
+        //assert ValueMessage.Merge(BT.BucketLookup(I(sst1), k), BT.BucketLookup(I(sst), k)) != IdentityMessage();
+      } else {
+        if (k in I(sst1)) {
+          ghost var i :| 0 <= 2*i < |sst1.starts| && Entry(sst1, 2*i) == k;
+          assert false;
+        }
+        assert BT.BucketLookup(I(sst1), k) == IdentityMessage();
+        assert k in I(sst);
+        ghost var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == k;
+        assert SSTKeyMapsToValueAt(I(sst), sst, i);
+
+        /*assert BT.BucketLookup(I(sst), k) != IdentityMessage();
+        assert ValueMessage.Merge(BT.BucketLookup(I(sst1), k), BT.BucketLookup(I(sst), k))
+            == BT.BucketLookup(I(sst), k);
+
+        assert k in (I(sst1).Keys + I(sst).Keys);
+        assert P.Route([], k) == 0;
+        assert ValueMessage.Merge(BT.BucketLookup(I(sst1), k), BT.BucketLookup(I(sst), k)) != IdentityMessage();*/
+      }
+    }
+    forall k | k in b
+    ensures k in a
+    {
+    }
+
+    /*
+    var lo := 0;
+    var hi := Size(sst);
+    while lo < hi
+    invariant lo <= hi
+    invariant forall i | 0 <= i < lo :: lt(Entry(sst, 2*i), key)
+    invariant forall i | hi <= i <= Size(sst) :: lt(key, Entry(sst, 2*i))
+    decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      
+      var c := Cmp(key, sst, 2*mid);
+      if (c == -1) {
+        lo = mid + 1;
+      }
+      else if (c == 1) {
+        hi = mid;
+      }
+      else {
+        res := 
+      }
+    }
+    */
+  }
 
   method Join(ssts: seq<SSTable>)
   returns (sst: SSTable)

@@ -207,7 +207,7 @@ module {:extern} Impl refines Main {
     var bucket := oldroot.buckets[Pivots.Route(oldroot.pivotTable, key)];
 
     if (!(|bucket.strings| < 0x800_0000_0000_0000 && |bucket.starts| < 0x800_0000_0000_0000
-        && |key| < 0x800_0000_0000_0000 && |value| < 0x800_0000_0000_0000)) {
+        && |key| < 0x400_0000_0000_0000 && |value| < 0x400_0000_0000_0000)) {
       s' := s;
       success := false;
       assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, M.BlockCacheMoveStep(BC.NoOpStep));
