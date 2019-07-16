@@ -162,9 +162,8 @@ abstract module BetreeInv {
     && BI.OpTransaction(k, s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
   }
 
-  predicate Flush(k: BI.Constants, s: BI.Variables, s': BI.Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
+  predicate Flush(k: BI.Constants, s: BI.Variables, s': BI.Variables, flush:NodeFlush)
   {
-    var flush := NodeFlush(parentref, parent, childref, child, newchildref, movedKeys);
     && ValidFlush(flush)
     && BI.Reads(k, s, FlushReads(flush))
     && BI.OpTransaction(k, s, s', FlushOps(flush))
@@ -222,27 +221,25 @@ abstract module BetreeInv {
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
-  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables,
-                              parentref: BI.Reference, parent: Node,
-                              childref: BI.Reference, child: Node, newchildref: BI.Reference,
-                              movedKeys: iset<Key>)
+  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
     requires Inv(k, s)
-    requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
+    requires Flush(k.bck, s.bcv, s'.bcv, flush)
     ensures G.IsAcyclic(s'.bcv.view)
     ensures Acyclic(k, s')
   {
-    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, parentref)
-      ensures ref in G.ReachableReferences(s.bcv.view, parentref)
+    var f := flush;
+    forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, f.parentref)
+      ensures ref in G.ReachableReferences(s.bcv.view, f.parentref)
       {
-        var path :| G.NewPath(s.bcv.view, s'.bcv.view, parentref, path) && Last(path) == ref;
+        var path :| G.NewPath(s.bcv.view, s'.bcv.view, f.parentref, path) && Last(path) == ref;
         if path[1] == ref {
-          assert G.IsPath(s.bcv.view, [parentref, ref]);
+          assert G.IsPath(s.bcv.view, [f.parentref, ref]);
         } else {
-          assert path[|path|-2] == newchildref;
-          assert G.IsPath(s.bcv.view, [parentref, childref, ref]);
+          assert path[|path|-2] == f.newchildref;
+          assert G.IsPath(s.bcv.view, [f.parentref, f.childref, ref]);
         }
       }
-    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, parentref);
+    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, f.parentref);
     AcyclicGraphImpliesAcyclic(k, s');
   }
 
@@ -459,24 +456,24 @@ abstract module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
   }
 
-  // TODO tidy: why does this lemma take all the parts of the Flush as separate parameters, rather than taking a NodeFlush?
-  lemma FlushPreservesLookups(k: Constants, s: Variables, s': Variables, parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
+  lemma FlushPreservesLookups(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
   requires Inv(k, s)
-  requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
+  requires Flush(k.bck, s.bcv, s'.bcv, flush)
   ensures PreservesLookups(k, s, s')
   {
-    var newbuffer := imap k :: (if k in movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
-    var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
-    var newparentchildren := imap k | k in parent.children :: (if k in movedKeys then newchildref else parent.children[k]);
+    var f := flush;
+    var newbuffer := imap k :: (if k in f.movedKeys then G.M.Merge(f.parent.buffer[k], f.child.buffer[k]) else f.child.buffer[k]);
+    var newchild := Node(f.child.children, newbuffer);
+    var newparentbuffer := imap k :: (if k in f.movedKeys then G.M.Update(G.M.NopDelta()) else f.parent.buffer[k]);
+    var newparentchildren := imap k | k in f.parent.children :: (if k in f.movedKeys then f.newchildref else f.parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
 
     forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
       ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
     {
-      if parentLayer :| 0 <= parentLayer < |lookup| && lookup[parentLayer].ref == parentref {
-        if key !in movedKeys {
-          var lookup' := lookup[parentLayer := ReadOp(parentref, newparent)];
+      if parentLayer :| 0 <= parentLayer < |lookup| && lookup[parentLayer].ref == f.parentref {
+        if key !in f.movedKeys {
+          var lookup' := lookup[parentLayer := ReadOp(f.parentref, newparent)];
           forall j | 0 <= j < |lookup'|
           ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
           }
@@ -491,8 +488,8 @@ abstract module BetreeInv {
           }
           assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
         } else {
-          if |lookup| - 1 == parentLayer { // we stopped at parent
-            var lookup' := lookup[..parentLayer] + [ ReadOp(parentref, newparent) ] + [ ReadOp(newchildref, newchild) ];
+          if |lookup| - 1 == parentLayer { // we stopped at f.parent
+            var lookup' := lookup[..parentLayer] + [ ReadOp(f.parentref, newparent) ] + [ ReadOp(f.newchildref, newchild) ];
             forall j | 0 <= j < |lookup'|
             ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
             }
@@ -506,7 +503,7 @@ abstract module BetreeInv {
             assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
           } else {
             var middle := [ lookup[parentLayer] ] + [ lookup[parentLayer+1] ];
-            var middle' := ([ ReadOp(parentref, newparent) ] + [ ReadOp(newchildref, newchild) ]);
+            var middle' := ([ ReadOp(f.parentref, newparent) ] + [ ReadOp(f.newchildref, newchild) ]);
 
             assert lookup == lookup[..parentLayer] + middle + lookup[parentLayer+2..];
             var lookup' := lookup[..parentLayer] + middle' + lookup[parentLayer+2..];
@@ -521,7 +518,7 @@ abstract module BetreeInv {
 
             assert InterpretLookup([lookup'[parentLayer]], key) == G.M.Update(G.M.NopDelta());
 
-            assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer);    // Handles the j==parentLayer+1 case; connects middle[1] to child.
+            assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer);    // Handles the j==parentLayer+1 case; connects middle[1] to f.child.
             forall j | 0 <= j < |lookup'|-1
               ensures LookupFollowsChildRefAtLayer(key, lookup', j)
             {
@@ -723,14 +720,13 @@ abstract module BetreeInv {
     InsertMessagePreservesLookupsPut(k, s, s', key, msg, oldroot);
   }
 
-  lemma FlushStepPreservesInvariant(k: Constants, s: Variables, s': Variables,
-                                           parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
+  lemma FlushStepPreservesInvariant(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
     requires Inv(k, s)
-    requires Flush(k.bck, s.bcv, s'.bcv, parentref, parent, childref, child, newchildref, movedKeys)
+    requires Flush(k.bck, s.bcv, s'.bcv, flush)
     ensures Inv(k, s')
   {
-    FlushPreservesAcyclic(k, s, s', parentref, parent, childref, child, newchildref, movedKeys);
-    FlushPreservesLookups(k, s, s', parentref, parent, childref, child, newchildref, movedKeys);
+    FlushPreservesAcyclic(k, s, s', flush);
+    FlushPreservesLookups(k, s, s', flush);
   }
   
   lemma GrowStepPreservesInvariant(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
@@ -843,7 +839,7 @@ abstract module BetreeInv {
     match betreeStep {
       case BetreeQuery(q) => QueryStepPreservesInvariant(k, s, s');
       case BetreeInsert(ins) => InsertMessageStepPreservesInvariant(k, s, s', ins.key, ins.msg, ins.oldroot);
-      case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush.parentref, flush.parent, flush.childref, flush.child, flush.newchildref, flush.movedKeys);
+      case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush);
       case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);
       case BetreeRedirect(redirect) => RedirectStepPreservesInvariant(k, s, s', redirect);
     }
