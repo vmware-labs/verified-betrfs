@@ -23,7 +23,7 @@ module UI {
 
   datatype Op =
     | NoOp
-    | SyncOp
+    | SyncOp    // Move this into the crash uiop?
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
 }
@@ -74,6 +74,7 @@ module MapSpec {
       s == Variables(EmptyMap())
   }
 
+  // Can collapse key and result; use the ones that came in uiop for free.
   predicate Query(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, result:Value)
   {
       && uiop == UI.GetOp(key, result)
@@ -97,6 +98,7 @@ module MapSpec {
       && s' == s
   }
 
+  // uiop should be in here, too.
   datatype Step =
       | QueryStep(key:Key, result:Value)
       | WriteStep(key:Key, new_value:Value)

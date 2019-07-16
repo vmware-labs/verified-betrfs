@@ -136,7 +136,7 @@ abstract module BetreeSpec {
     [G.ReadOp(Root(), ins.oldroot)]
   }
 
-  function InsertionOps(ins: MessageInsertion) : seq<Op>
+  function InsertionOps(ins: MessageInsertion) : seq<Op>    // jonh: rename Op to UpdateOp?
   requires ValidInsertion(ins)
   {
     var newroot := AddMessageToNode(ins.oldroot, ins.key, ins.msg);
@@ -316,6 +316,7 @@ abstract module BetreeSpec {
     | BetreeGrow(growth: RootGrowth)
     | BetreeRedirect(redirect: Redirect)
 
+  // jonh: can this be called 'Next' at this layer?
   predicate ValidBetreeStep(step: BetreeStep)
   {
     match step {

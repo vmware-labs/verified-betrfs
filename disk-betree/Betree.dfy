@@ -5,6 +5,7 @@ include "MapSpec.dfy"
 include "Graph.dfy"
 include "BetreeSpec.dfy"
 
+// jonh: we should rename this. It marries a BetreeSpec to the abstract block interface.
 abstract module Betree {
   import opened BetreeSpec`Internal
   import BI = BetreeBlockInterface

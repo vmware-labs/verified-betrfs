@@ -262,10 +262,10 @@ abstract module CrashSafeMap {
 
   predicate EphemeralMove(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
-    && s.persistent == s'.persistent
     && uiop.NormalOp?
-    && (uiop.uiop.SyncOp? ==> s'.persistent == s'.ephemeral)
+    && (uiop.uiop.SyncOp? ==> s'.persistent == s'.ephemeral)    // jonh thinks this is strange
     && MS.Next(k, s.ephemeral, s'.ephemeral, uiop.uiop)
+    && s'.persistent == s.persistent
   }
 
   predicate Sync(k: Constants, s: Variables, s': Variables, uiop: UIOp)
