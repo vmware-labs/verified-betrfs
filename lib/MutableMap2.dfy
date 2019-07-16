@@ -67,19 +67,26 @@ module MutableMap {
     }
 
     lemma KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
-      requires k >= 0
+      requires 0 <= k < elementsLength
       requires ValidSlot(elementsLength, slot)
       ensures if k < (elementsLength-slot.slot) then
             KthSlotSuccessor(elementsLength, slot, k).slot == slot.slot + k
           else
             KthSlotSuccessor(elementsLength, slot, k).slot == k - (elementsLength - slot.slot)
+      decreases k
     {
-      var elementsInRightSlice := (elementsLength-slot.slot);
+      var elementsInRightSlice := elementsLength - slot.slot;
       if k < elementsInRightSlice {
         assert KthSlotSuccessor(elementsLength, slot, k).slot == slot.slot + k;
       } else { // k >= elementsInRightSlice
-        assert KthSlotSuccessor(elementsLength, slot, k - elementsInRightSlice).slot == slot.slot + (k - elementsInRightSlice);
-        assert KthSlotSuccessor(elementsLength, slot, k).slot == k - (elementsLength - slot.slot);
+        assert KthSlotSuccessor(elementsLength, slot, elementsInRightSlice).slot == 0;
+        var firstSlot := KthSlotSuccessor(elementsLength, slot, elementsInRightSlice);
+        assert firstSlot.slot == 0;
+        var idx: nat := k - elementsInRightSlice;
+        assert k == elementsInRightSlice + idx;
+        KthSlotSuccessorWrapsAround(elementsLength, firstSlot, idx);
+        assert KthSlotSuccessor(elementsLength, firstSlot, idx).slot == idx;
+        assert KthSlotSuccessor(elementsLength, slot, elementsInRightSlice + idx).slot == idx;
       }
     }
 
@@ -270,14 +277,18 @@ module MutableMap {
         slot + 1
     }
 
-    method Probe(key: uint64) returns (startSlotIdx: uint64, skips: uint64)
+    method Probe(key: uint64) returns (slotIdx: uint64, ghost startSlotIdx: uint64, /* impl */ skips: uint64)
       requires Inv()
       requires Count as nat < Storage.Length
-      ensures ValidSlot(Storage.Length, KthSlotSuccessor(Storage.Length, SlotForKey(Storage.Length, key), skips as nat))
+      ensures ValidSlot(Storage.Length, Slot(slotIdx as nat))
+      ensures ValidSlot(Storage.Length, Slot(startSlotIdx as nat))
+      ensures skips >= 0
+      ensures slotIdx as nat == KthSlotSuccessor(Storage.Length, Slot(startSlotIdx as nat), skips as nat).slot
       ensures key in Contents ==> SlotExplainsKey(Storage[..], skips as nat, key)
-      ensures key !in Contents ==> Storage[KthSlotSuccessor(Storage.Length, SlotForKey(Storage.Length, key), skips as nat).slot].Empty?
+      ensures key !in Contents ==> Storage[slotIdx].Empty?
     {
-      startSlotIdx := Uint64SlotForKey(key);
+      slotIdx := Uint64SlotForKey(key);
+      startSlotIdx := slotIdx;
       ghost var startSlot := Slot(startSlotIdx as nat);
 
       ghost var viewFromStartSlot := View(Storage[..], startSlotIdx as nat);
@@ -307,7 +318,6 @@ module MutableMap {
           Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
 
       skips := 0;
-      var slotIdx := startSlotIdx;
       while skips < (Storage.Length as uint64)
         invariant skips <= (Storage.Length as uint64)
         invariant slotIdx < (Storage.Length as uint64)
