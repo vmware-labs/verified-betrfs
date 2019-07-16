@@ -54,6 +54,7 @@ module SSTable {
       && sst.starts[0] == 0
       && 0 <= Last(sst.starts) as int <= |sst.strings|
     ))
+    && (|sst.starts| == 0 ==> |sst.strings| == 0)
   }
 
   lemma LemmaStartEndIndices(sst: SSTable, i: int)
@@ -1330,12 +1331,275 @@ module SSTable {
     */
   }
 
-  method Join(ssts: seq<SSTable>)
+  function addToStarts(starts: seq<uint64>, offset: uint64) : (res : seq<uint64>)
+  requires forall i | 0 <= i < |starts| :: starts[i] as int + offset as int < 0x1_0000_0000_0000_0000
+  ensures |res| == |starts|
+  ensures forall i | 0 <= i < |res| :: res[i] == starts[i] + offset
+  {
+    if |starts| == 0 then [] else addToStarts(DropLast(starts), offset) + [Last(starts) + offset]
+  }
+
+  method CopySeqIntoArrayAdding(s: seq<uint64>, ar: array<uint64>, dstIdx: uint64, offset: uint64)
+  requires forall i | 0 <= i < |s| :: s[i] as int + offset as int < 0x1_0000_0000_0000_0000
+  requires 0 <= dstIdx
+  requires dstIdx as int + |s| <= ar.Length
+  ensures old(ar[..dstIdx]) == ar[..dstIdx]
+  ensures ar[dstIdx .. dstIdx as int + |s|] == addToStarts(s, offset)
+
+  lemma startsAppendAddToStartsSorted(
+      starts: seq<uint64>,
+      starts2: seq<uint64>,
+      offset: uint64)
+  requires addToStarts.requires(starts2, offset)
+  requires Uint64Order.IsSorted(starts)
+  requires Uint64Order.IsSorted(starts2)
+  requires |starts| > 0 ==> Last(starts) <= offset
+  ensures Uint64Order.IsSorted(starts + addToStarts(starts2, offset))
+  {
+    //var run := starts + addToStarts(starts2, offset);
+    Uint64Order.reveal_IsSorted();
+    //forall i, j | 0 <= i <= j < |run| ensures run[i] <= run[j]
+    //{
+    //}
+  }
+
+  lemma lemmaJoinStartsInBounds(sst: SSTable, offset: uint64)
+  requires WFSSTable(sst)
+  requires |sst.strings| < 0x10_0000_0000_0000
+  requires offset < 0x10_0000_0000_0000 * (0x100 - 1)
+  ensures forall i | 0 <= i < |sst.starts| :: sst.starts[i] as int + offset as int < 0x1_0000_0000_0000_0000
+  {
+    Uint64Order.reveal_IsSorted();
+  }
+
+  function join(ssts: seq<SSTable>) : (sst : SSTable)
+  requires |ssts| < 0x100
+  requires forall i | 0 <= i < |ssts| :: WFSSTable(ssts[i])
+  requires forall i | 0 <= i < |ssts| :: |ssts[i].strings| < 0x10_0000_0000_0000
+  requires forall i | 0 <= i < |ssts| :: |ssts[i].starts| < 0x10_0000_0000_0000
+  ensures |sst.strings| <= |ssts| * 0x10_0000_0000_0000
+  ensures |sst.starts| <= |ssts| * 0x10_0000_0000_0000
+  ensures WFSSTable(sst)
+  {
+    if |ssts| == 0 then (
+      reveal_Empty();
+      Empty()
+    ) else (
+      var pref := join(DropLast(ssts));
+      var last := Last(ssts);
+
+      lemmaJoinStartsInBounds(last, |pref.strings| as uint64);
+      startsAppendAddToStartsSorted(pref.starts, last.starts, |pref.strings| as uint64);
+
+      var sst := SSTable(
+        pref.starts + addToStarts(last.starts, |pref.strings| as uint64),
+        pref.strings + last.strings
+      );
+
+      assert Uint64Order.IsSorted(sst.starts);
+      assert (|sst.starts| > 0 ==> (
+        && sst.starts[0] == 0
+        && 0 <= Last(sst.starts) as int <= |sst.strings|
+      ));
+      assert (|sst.starts| == 0 ==> |sst.strings| == 0);
+
+      sst
+    ) 
+  }
+
+  /*predicate AllKeysLt(sst1: SSTable, sst2: SSTable)
+  requires WFSSTableMap(sst1)
+  requires WFSSTableMap(sst2)
+  {
+    forall key1, key2 | key1 in I(sst1) && key2 in I(sst2) :: lt(key1, key2)
+  }*/
+
+  lemma join2Preserves(sst1: SSTable, sst2: SSTable, sst: SSTable, i: int)
+  requires WFSSTableMap(sst1)
+  requires WFSSTableMap(sst2)
+  requires WFSSTable(sst)
+  requires sst.strings == sst1.strings + sst2.strings
+  requires addToStarts.requires(sst2.starts, |sst1.strings| as uint64)
+  requires sst.starts == sst1.starts + addToStarts(sst2.starts, |sst1.strings| as uint64)
+  requires 0 <= 2*i < |sst.starts|
+  ensures 2*i < |sst1.starts| ==> Entry(sst, 2*i) == Entry(sst1, 2*i)
+  ensures 2*i < |sst1.starts| ==> Entry(sst, 2*i + 1) == Entry(sst1, 2*i + 1)
+  ensures 2*i >= |sst1.starts| ==> Entry(sst, 2*i) == Entry(sst2, 2*(i - |sst1.starts|/2))
+  ensures 2*i >= |sst1.starts| ==> Entry(sst, 2*i + 1) == Entry(sst2, 2*(i - |sst1.starts|/2) + 1)
+
+  lemma join2IsJoinBuckets(sst1: SSTable, sst2: SSTable, sst: SSTable)
+  requires WFSSTableMap(sst1)
+  requires WFSSTableMap(sst2)
+  requires WFSSTable(sst)
+  requires sst.strings == sst1.strings + sst2.strings
+  requires addToStarts.requires(sst2.starts, |sst1.strings| as uint64)
+  requires sst.starts == sst1.starts + addToStarts(sst2.starts, |sst1.strings| as uint64)
+  requires forall key1, key2 | key1 in I(sst1) && key2 in I(sst2) :: lt(key1, key2)
+  ensures WFSSTableMap(sst)
+  ensures I(sst1) !! I(sst2)
+  ensures I(sst) == MapUnion(I(sst1), I(sst2))
+  {
+    reveal_KeysStrictlySorted();
+    forall i, j | 0 <= 2*i < 2*j < |sst.starts|
+    ensures lt(Entry(sst, 2*i), Entry(sst, 2*j))
+    {
+      join2Preserves(sst1, sst2, sst, i);
+      join2Preserves(sst1, sst2, sst, j);
+      if (2*i < |sst1.starts|) {
+        assert SSTKeyMapsToValueAt(I(sst1), sst1, i);
+      }
+      if (2*j >= |sst1.starts|) {
+        assert SSTKeyMapsToValueAt(I(sst2), sst2, j - |sst1.starts|/2);
+      }
+    }
+
+    forall key | key in (I(sst1).Keys * I(sst2).Keys) ensures false { }
+    assert I(sst1).Keys * I(sst2).Keys == {};
+
+    forall key | key in I(sst1)
+    ensures key in I(sst)
+    ensures I(sst)[key] == I(sst1)[key]
+    {
+      var i :| 0 <= 2*i < |sst1.starts| && Entry(sst1, 2*i) == key;
+      join2Preserves(sst1, sst2, sst, i);
+      assert SSTKeyMapsToValueAt(I(sst), sst, i);
+      assert SSTKeyMapsToValueAt(I(sst1), sst1, i);
+    }
+    forall key | key in I(sst2)
+    ensures key in I(sst)
+    ensures I(sst)[key] == I(sst2)[key]
+    {
+      var i :| 0 <= 2*i < |sst2.starts| && Entry(sst2, 2*i) == key;
+      join2Preserves(sst1, sst2, sst, i + |sst1.starts|/2);
+      assert SSTKeyMapsToValueAt(I(sst), sst, i + |sst1.starts|/2);
+      assert SSTKeyMapsToValueAt(I(sst2), sst2, i);
+    }
+    forall key | key in I(sst) ensures (key in I(sst1) || key in I(sst2))
+    {
+      var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == key;
+      join2Preserves(sst1, sst2, sst, i);
+      if (2*i < |sst1.starts|) {
+        assert SSTKeyMapsToValueAt(I(sst1), sst1, i);
+      }
+      if (2*i >= |sst1.starts|) {
+        assert SSTKeyMapsToValueAt(I(sst2), sst2, i - |sst1.starts|/2);
+      }
+    }
+
+    IsMapUnion(I(sst1), I(sst2), I(sst));
+  }
+
+  lemma joinDropLastLt(ssts: seq<SSTable>, sst1: SSTable, sst2: SSTable)
+  requires join.requires(ssts)
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  requires forall i, j, key1, key2 | 0 <= i < j < |ssts| && key1 in I(ssts[i]) && key2 in I(ssts[j]) :: lt(key1, key2)
+  requires |ssts| > 0
+  requires WFSSTableMap(sst1)
+  requires WFSSTableMap(sst2)
+  requires I(sst1) == BT.JoinBuckets(ISeq(DropLast(ssts)))
+  requires sst2 == Last(ssts)
+  ensures forall key1, key2 | key1 in I(sst1) && key2 in I(sst2) :: lt(key1, key2)
+
+  lemma joinIsJoinBuckets(ssts: seq<SSTable>)
+  requires join.requires(ssts)
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  requires forall i, j, key1, key2 | 0 <= i < j < |ssts| && key1 in I(ssts[i]) && key2 in I(ssts[j]) :: lt(key1, key2)
+  //requires forall i, j | 0 <= i < j < |ssts| :: AllKeysLt(ssts[i], ssts[j])
+  ensures WFSSTableMap(join(ssts))
+  ensures I(join(ssts)) == BT.JoinBuckets(ISeq(ssts))
+  {
+    reveal_KeysStrictlySorted();
+    if (|ssts| == 0) {
+    } else {
+      joinIsJoinBuckets(DropLast(ssts));
+      joinDropLastLt(ssts, join(DropLast(ssts)), Last(ssts));
+      join2IsJoinBuckets(join(DropLast(ssts)), Last(ssts), join(ssts));
+    }
+  }
+
+  function startsSum(ssts: seq<SSTable>) : int
+  {
+    if |ssts| == 0 then 0 else startsSum(DropLast(ssts)) + |Last(ssts).starts|
+  }
+
+  function stringsSum(ssts: seq<SSTable>) : int
+  {
+    if |ssts| == 0 then 0 else stringsSum(DropLast(ssts)) + |Last(ssts).strings|
+  }
+
+  lemma lemmaStartsStringsSumPrefixLe(ssts: seq<SSTable>, i: int)
+  requires 0 <= i <= |ssts|
+  ensures startsSum(ssts[..i]) <= startsSum(ssts)
+  ensures stringsSum(ssts[..i]) <= stringsSum(ssts)
+
+  method {:fuel BT.JoinBuckets,0} DoJoin(ssts: seq<SSTable>)
   returns (sst: SSTable)
+  requires join.requires(ssts)
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   requires forall i, j, key1, key2 | 0 <= i < j < |ssts| && key1 in I(ssts[i]) && key2 in I(ssts[j]) :: lt(key1, key2)
   ensures WFSSTableMap(sst)
   ensures I(sst) == BT.JoinBuckets(ISeq(ssts))
+  {
+    var startsLen: uint64 := 0;
+    var stringsLen: uint64 := 0;
+    var i: uint64 := 0;
+    while i < |ssts| as uint64
+    invariant 0 <= i as int <= |ssts|
+    invariant startsLen as int == startsSum(ssts[..i])
+    invariant stringsLen as int == stringsSum(ssts[..i])
+    invariant startsLen as int <= i as int * 0x10_0000_0000_0000
+    invariant stringsLen as int <= i as int * 0x10_0000_0000_0000
+    {
+      assert DropLast(ssts[..i+1]) == ssts[..i];
+      assert Last(ssts[..i+1]) == ssts[i];
+
+      startsLen := startsLen + |ssts[i].starts| as uint64;
+      stringsLen := stringsLen + |ssts[i].strings| as uint64;
+      i := i + 1;
+    }
+
+    assert ssts[..i] == ssts;
+
+    var starts := new uint64[startsLen];
+    var strings := new byte[stringsLen];
+    var startsIdx: uint64 := 0;
+    var stringsIdx: uint64 := 0;
+    var j: uint64 := 0;
+    while j < |ssts| as uint64
+    invariant 0 <= j as int <= |ssts|
+    invariant 0 <= startsIdx as int <= starts.Length
+    invariant 0 <= stringsIdx as int <= strings.Length
+    invariant startsIdx as int == startsSum(ssts[..j])
+    invariant stringsIdx as int == stringsSum(ssts[..j])
+    invariant SSTable(starts[..startsIdx], strings[..stringsIdx]) == join(ssts[..j])
+    {
+      ghost var pref := join(ssts[..j]);
+
+      assert DropLast(ssts[..j+1]) == ssts[..j];
+      assert Last(ssts[..j+1]) == ssts[j];
+      assert startsIdx as int + |ssts[j].starts| == startsSum(ssts[..j+1]);
+      assert stringsIdx as int + |ssts[j].strings| == stringsSum(ssts[..j+1]);
+      lemmaStartsStringsSumPrefixLe(ssts, j as int + 1);
+      lemmaJoinStartsInBounds(ssts[j], stringsIdx);
+
+      Native.Arrays.CopySeqIntoArray(ssts[j].strings, 0, strings, stringsIdx, |ssts[j].strings| as uint64);
+      CopySeqIntoArrayAdding(ssts[j].starts, starts, startsIdx as uint64, stringsIdx as uint64);
+
+      assert join(ssts[..j+1])
+          == SSTable(pref.starts + addToStarts(ssts[j].starts, |pref.strings| as uint64), pref.strings + ssts[j].strings)
+          == SSTable(starts[..startsIdx] + addToStarts(ssts[j].starts, |pref.strings| as uint64), strings[..stringsIdx] + ssts[j].strings)
+          == SSTable(starts[..startsIdx as int + |ssts[j].starts|], strings[..stringsIdx as int + |ssts[j].strings|]);
+
+      stringsIdx := stringsIdx + |ssts[j].strings| as uint64;
+      startsIdx := startsIdx + |ssts[j].starts| as uint64;
+      j := j + 1;
+    }
+
+    sst := SSTable(starts[..], strings[..]);
+
+    assert sst == join(ssts);
+    joinIsJoinBuckets(ssts); // lemma
+  }
 
   method SplitOnPivots(sst: SSTable, pivots: seq<Key>)
   returns (ssts : seq<SSTable>)
