@@ -14,7 +14,7 @@ include "BetreeRefinement.dfy"
 module PivotBetree_Refines_Map {
   import PB = PivotBetree
   import PivotBetreeRefinesBetree = PivotBetreeInvAndRefinement
-  import BetreeRefinesMap = BetreeRefinement
+  import BetreeRefinesMap = Betree_Refinement
   import MS = MapSpec
   type UIOp = MS.UI.Op
 

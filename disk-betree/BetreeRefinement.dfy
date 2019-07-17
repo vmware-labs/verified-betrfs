@@ -2,7 +2,7 @@ include "Betree.dfy"
 include "MapSpec.dfy"
 include "BetreeInv.dfy"
 
-module BetreeRefinement {
+module Betree_Refines_Map {
   import opened DBI = BetreeInv
   import opened G = BetreeGraph
   import opened BetreeSpec`Internal
