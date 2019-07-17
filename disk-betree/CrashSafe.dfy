@@ -5,7 +5,6 @@ include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"
 include "PivotBetreeRefinesMap.dfy"
-include "BetreeRefinement.dfy"
 include "CrashTypes.dfy"
 
 module CrashSafeBlockInterface {

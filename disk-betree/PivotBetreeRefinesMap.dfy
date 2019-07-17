@@ -1,6 +1,6 @@
 include "MapSpec.dfy"
 include "PivotBetreeRefinement.dfy"
-include "BetreeRefinement.dfy"
+include "Betree_Refines_Map.dfy"
 
 // This composes the two refinements:
 //
@@ -14,7 +14,7 @@ include "BetreeRefinement.dfy"
 module PivotBetree_Refines_Map {
   import PB = PivotBetree
   import PivotBetreeRefinesBetree = PivotBetreeInvAndRefinement
-  import BetreeRefinesMap = Betree_Refinement
+  import BetreeRefinesMap = Betree_Refines_Map
   import MS = MapSpec
   type UIOp = MS.UI.Op
 
