@@ -142,4 +142,6 @@ module Maps {
 	requires forall key | key in m2 :: key in m && m[key] == m2[key]
 	requires forall key | key in m :: (key in m1 || key in m2)
 	ensures m == MapUnion(m1, m2)
+	{
+	}
 }

@@ -1712,18 +1712,56 @@ module SSTable {
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   ensures forall i | 0 <= i < |replace1with2(ssts, sst1, sst2, slot)| :: WFSSTableMap(replace1with2(ssts, sst1, sst2, slot)[i])
   ensures ISeq(replace1with2(ssts, sst1, sst2, slot)) == replace1with2(ISeq(ssts), I(sst1), I(sst2), slot)
+  {
+    forall i | 0 <= i < |replace1with2(ssts, sst1, sst2, slot)|
+    ensures WFSSTableMap(replace1with2(ssts, sst1, sst2, slot)[i])
+    {
+      if i < slot {
+        assert replace1with2(ssts, sst1, sst2, slot)[i] == ssts[i];
+      }
+      if i == slot {
+        assert replace1with2(ssts, sst1, sst2, slot)[i] == sst1;
+      }
+      if i == slot + 1 {
+        assert replace1with2(ssts, sst1, sst2, slot)[i] == sst2;
+      }
+      if i > slot + 1 {
+        assert replace1with2(ssts, sst1, sst2, slot)[i] == ssts[i-1];
+      }
+    }
+
+    if slot == |ssts|-1 {
+    } else {
+      Ireplace1with2(DropLast(ssts), sst1, sst2, slot);
+    }
+
+    reveal_replace1with2();
+  }
 
   lemma Islice(ssts: seq<SSTable>, a: int, b: int)
   requires 0 <= a <= b <= |ssts|
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   ensures forall i | 0 <= i < |ssts[a..b]| :: WFSSTableMap(ssts[a..b][i])
   ensures ISeq(ssts[a..b]) == ISeq(ssts)[a..b]
+  {
+    if b == |ssts| {
+      if (a == b) {
+      } else {
+        Islice(DropLast(ssts), a, b - 1);
+      }
+    } else {
+      Islice(DropLast(ssts), a, b);
+    }
+  }
 
   lemma Isuffix(ssts: seq<SSTable>, a: int)
   requires 0 <= a <= |ssts|
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   ensures forall i | 0 <= i < |ssts[a..]| :: WFSSTableMap(ssts[a..][i])
   ensures ISeq(ssts[a..]) == ISeq(ssts)[a..]
+  {
+    Islice(ssts, a, |ssts|);
+  }
 
   method IsWFSSTableMap(sst: SSTable)
   returns (b: bool)
@@ -1820,6 +1858,17 @@ module SSTable {
   requires 0 <= i < idx
   ensures Entry(sst, 2*i) == Entry(left, 2*i)
   ensures Entry(sst, 2*i + 1) == Entry(left, 2*i + 1)
+  {
+    LemmaStartEndIndices(sst, 2*i);
+    LemmaStartEndIndices(sst, 2*i+1);
+    LemmaStartEndIndices(left, 2*i);
+    LemmaStartEndIndices(left, 2*i+1);
+    //assert Entry(sst, 2*i)
+    //    == sst.strings[Start(sst, 2*i as uint64)..End(sst, 2*i as uint64)]
+    //    == left.strings[Start(sst, 2*i as uint64)..End(sst, 2*i as uint64)]
+    //    == left.strings[Start(left, 2*i as uint64)..End(left, 2*i as uint64)]
+    //    == Entry(left, 2*i);
+  }
 
   method SplitLeft(sst: SSTable, pivot: Key)
   returns (left: SSTable)
@@ -1881,6 +1930,12 @@ module SSTable {
   requires 2*idx <= 2*i < |sst.starts|
   ensures Entry(sst, 2*i) == Entry(right, 2*i - 2*idx)
   ensures Entry(sst, 2*i + 1) == Entry(right, 2*i + 1 - 2*idx)
+  {
+    LemmaStartEndIndices(sst, 2*i);
+    LemmaStartEndIndices(sst, 2*i+1);
+    LemmaStartEndIndices(right, 2*i - 2*idx);
+    LemmaStartEndIndices(right, 2*i+1 - 2*idx);
+  }
 
   lemma LemmaSplitRight(sst: SSTable, pivot: Key, idx: uint64, stringIdx: uint64)
   requires WFSSTableMap(sst)
