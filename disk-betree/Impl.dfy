@@ -893,7 +893,7 @@ module {:extern} Impl refines Main {
 
     var node := s.cache[ref];
 
-    if i :| 0 <= i < |node.buckets| && SSTable.Size(node.buckets[i]) > Marshalling.CapBucketSize() {
+    if i :| 0 <= i < |node.buckets| && !Marshalling.CappedBucket(node.buckets[i]) {
       if (node.children.Some?) {
         // internal node case: flush
         s' := flush(k, s, io, ref, i);
