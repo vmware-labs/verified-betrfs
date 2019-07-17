@@ -864,6 +864,17 @@ module {:extern} Impl refines Main {
 
         var joined := SSTable.DoJoin(node.buckets);
         var pivots := GetNewPivots(joined);
+
+        if (!(
+          && |joined.strings| < 0x800_0000_0000_0000
+          && |joined.starts| < 0x800_0000_0000_0000
+        )) {
+          s' := s;
+          assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
+          print "giving up; stuff too big to call Split\n";
+          return;
+        }
+
         var buckets' := SSTable.SplitOnPivots(joined, pivots);
         var newnode := IS.Node(pivots, None, buckets');
 
