@@ -3,6 +3,7 @@ include "../lib/Sets.dfy"
 include "BetreeBlockCache.dfy"
 include "BetreeBlockCacheSystem.dfy"
 include "Marshalling.dfy"
+include "BetreeBlockCacheSystem_Refines_CrashSafeMap.dfy"
 
 module {:extern} Impl refines Main { 
   import BC = BetreeGraphBlockCache
@@ -14,6 +15,7 @@ module {:extern} Impl refines Main {
   import SSTable = SSTable
   import opened Sets
   import IS = ImplState
+  import BetreeBlockCacheSystem_Refines_CrashSafeMap
 
   import opened Maps
   import opened Sequences
@@ -1069,5 +1071,27 @@ module {:extern} Impl refines Main {
     DAM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     success := succ;
+  }
+
+  // Refinement proof stuff
+
+  function SystemIk(k: DAM.Constants) : CrashSafeMap.Constants {
+    BetreeBlockCacheSystem_Refines_CrashSafeMap.Ik(k)
+  }
+  function SystemI(k: DAM.Constants, s: DAM.Variables) : CrashSafeMap.Variables
+  {
+    BetreeBlockCacheSystem_Refines_CrashSafeMap.I(k, s)
+  }
+
+  lemma SystemRefinesCrashSafeMapInit(
+    k: DAM.Constants, s: DAM.Variables)
+  {
+    BetreeBlockCacheSystem_Refines_CrashSafeMap.RefinesInit(k, s);
+  }
+
+  lemma SystemRefinesCrashSafeMapNext(
+    k: DAM.Constants, s: DAM.Variables, s': DAM.Variables, uiop: DAM.CrashableUIOp)
+  {
+    BetreeBlockCacheSystem_Refines_CrashSafeMap.RefinesNext(k, s, s', uiop);
   }
 }

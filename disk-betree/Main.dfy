@@ -168,16 +168,21 @@ abstract module Main {
 
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.
+
   function SystemIk(k: DAM.Constants) : CrashSafeMap.Constants
   function SystemI(k: DAM.Constants, s: DAM.Variables) : CrashSafeMap.Variables
+  requires DAM.Inv(k, s)
 
   lemma SystemRefinesCrashSafeMapInit(
     k: DAM.Constants, s: DAM.Variables)
   requires DAM.Init(k, s)
+  ensures DAM.Inv(k, s)
   ensures CrashSafeMap.Init(SystemIk(k), SystemI(k, s))
 
   lemma SystemRefinesCrashSafeMapNext(
     k: DAM.Constants, s: DAM.Variables, s': DAM.Variables, uiop: DAM.CrashableUIOp)
+  requires DAM.Inv(k, s)
   requires DAM.Next(k, s, s', uiop)
+  ensures DAM.Inv(k, s')
   ensures CrashSafeMap.Next(SystemIk(k), SystemI(k, s), SystemI(k, s'), uiop)
 }
