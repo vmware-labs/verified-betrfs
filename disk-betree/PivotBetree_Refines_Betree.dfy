@@ -249,7 +249,7 @@ module PivotBetreeInvAndRefinement {
     PivotBetreeRefinesBetreeNextStep(k, s, s', uiop, step);
   }
 
-  lemma PivotBetreeRefinesBetreeInit(k: Constants, s: Variables)
+  lemma RefinesInit(k: Constants, s: Variables)
     requires PB.Init(k, s)
     ensures Inv(k, s)
     ensures B.Init(Ik(k), I(k, s))
@@ -258,7 +258,7 @@ module PivotBetreeInvAndRefinement {
     BInv.InitImpliesInv(Ik(k), I(k, s));
   }
 
-  lemma PivotBetreeRefinesBetreeNext(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma RefinesNext(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
     requires PB.Next(k, s, s', uiop)
     ensures Inv(k, s')

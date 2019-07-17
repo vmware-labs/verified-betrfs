@@ -42,7 +42,7 @@ module Betree_Refines_Map {
     DB.MS.Variables(IView(k, s.bcv.view))
   }
 
-  lemma BetreeRefinesMapInit(k: DB.Constants, s: DB.Variables)
+  lemma RefinesInit(k: DB.Constants, s: DB.Variables)
     requires DB.Init(k, s)
     ensures Inv(k, s)
     ensures DB.MS.Init(Ik(k), I(k, s))
@@ -283,7 +283,7 @@ module Betree_Refines_Map {
     assert I(k, s) == I(k, s');
   }
 
-  lemma BetreeRefinesMapNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, uiop: UIOp, step: DB.Step)
+  lemma RefinesNextStep(k: DB.Constants, s: DB.Variables, s':DB.Variables, uiop: UIOp, step: DB.Step)
     requires Inv(k, s)
     requires DB.NextStep(k, s, s', uiop, step)
     ensures Inv(k, s')
@@ -299,7 +299,7 @@ module Betree_Refines_Map {
     }
   }
     
-  lemma BetreeRefinesMapNext(k: DB.Constants, s: DB.Variables, s':DB.Variables, uiop: UIOp)
+  lemma RefinesNext(k: DB.Constants, s: DB.Variables, s':DB.Variables, uiop: UIOp)
     requires Inv(k, s)
     requires DB.Next(k, s, s', uiop)
     ensures Inv(k, s')
@@ -307,6 +307,6 @@ module Betree_Refines_Map {
   {
     NextPreservesInv(k, s, s', uiop);
     var step :| DB.NextStep(k, s, s', uiop, step);
-    BetreeRefinesMapNextStep(k, s, s', uiop, step);
+    RefinesNextStep(k, s, s', uiop, step);
   }
 }

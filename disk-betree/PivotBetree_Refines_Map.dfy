@@ -36,8 +36,8 @@ module PivotBetree_Refines_Map {
     ensures PivotBetreeRefinesBetree.Inv(k, s)
     ensures MS.Init(Ik(k), I(k, s))
   {
-    PivotBetreeRefinesBetree.PivotBetreeRefinesBetreeInit(k, s);
-    BetreeRefinesMap.BetreeRefinesMapInit(
+    PivotBetreeRefinesBetree.RefinesInit(k, s);
+    BetreeRefinesMap.RefinesInit(
       PivotBetreeRefinesBetree.Ik(k),
       PivotBetreeRefinesBetree.I(k, s));
   }
@@ -48,8 +48,8 @@ module PivotBetree_Refines_Map {
     ensures PivotBetreeRefinesBetree.Inv(k, s')
     ensures MS.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    PivotBetreeRefinesBetree.PivotBetreeRefinesBetreeNext(k, s, s', uiop);
-    BetreeRefinesMap.BetreeRefinesMapNext(
+    PivotBetreeRefinesBetree.RefinesNext(k, s, s', uiop);
+    BetreeRefinesMap.RefinesNext(
       PivotBetreeRefinesBetree.Ik(k),
       PivotBetreeRefinesBetree.I(k, s),
       PivotBetreeRefinesBetree.I(k, s'),
