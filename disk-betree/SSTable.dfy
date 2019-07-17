@@ -1432,6 +1432,9 @@ module SSTable {
   requires subFromStarts.requires(starts, offset)
   requires Uint64Order.IsSorted(starts)
   ensures Uint64Order.IsSorted(subFromStarts(starts, offset))
+  {
+    Uint64Order.reveal_IsSorted();
+  }
 
   lemma startsAppendAddToStartsSorted(
       starts: seq<uint64>,
@@ -1513,6 +1516,26 @@ module SSTable {
   ensures 2*i < |sst1.starts| ==> Entry(sst, 2*i + 1) == Entry(sst1, 2*i + 1)
   ensures 2*i >= |sst1.starts| ==> Entry(sst, 2*i) == Entry(sst2, 2*(i - |sst1.starts|/2))
   ensures 2*i >= |sst1.starts| ==> Entry(sst, 2*i + 1) == Entry(sst2, 2*(i - |sst1.starts|/2) + 1)
+  {
+    LemmaStartEndIndices(sst, 2*i);
+    LemmaStartEndIndices(sst, 2*i+1);
+    if (2*i < |sst1.starts|) {
+      LemmaStartEndIndices(sst1, 2*i);
+      LemmaStartEndIndices(sst1, 2*i+1);
+    } else {
+      LemmaStartEndIndices(sst2, 2*i - |sst1.starts|);
+      LemmaStartEndIndices(sst2, 2*i+1 - |sst1.starts|);
+
+      assert Entry(sst, 2*i)
+          == sst.strings[Start(sst, 2*i as uint64) .. End(sst, 2*i as uint64)]
+          == sst2.strings[Start(sst2, 2*(i - |sst1.starts|/2) as uint64) .. End(sst2, 2*(i - |sst1.starts|/2) as uint64)]
+          == Entry(sst2, 2*(i - |sst1.starts|/2));
+      assert Entry(sst, 2*i+1)
+          == sst.strings[Start(sst, 2*i as uint64 + 1) .. End(sst, 2*i as uint64 + 1)]
+          == sst2.strings[Start(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1) .. End(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1)]
+          == Entry(sst2, 2*(i - |sst1.starts|/2) + 1);
+    }
+  }
 
   lemma join2IsJoinBuckets(sst1: SSTable, sst2: SSTable, sst: SSTable)
   requires WFSSTableMap(sst1)
@@ -1618,6 +1641,14 @@ module SSTable {
   requires 0 <= i <= |ssts|
   ensures startsSum(ssts[..i]) <= startsSum(ssts)
   ensures stringsSum(ssts[..i]) <= stringsSum(ssts)
+  {
+    if i == |ssts| {
+      assert ssts[..i] == ssts;
+    } else {
+      assert DropLast(ssts)[..i] == ssts[..i];
+      lemmaStartsStringsSumPrefixLe(DropLast(ssts), i);
+    }
+  }
 
   method {:fuel BT.JoinBuckets,0} DoJoin(ssts: seq<SSTable>)
   returns (sst: SSTable)
