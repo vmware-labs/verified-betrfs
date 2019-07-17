@@ -3,6 +3,7 @@ include "../lib/maps.dfy"
 include "../lib/total_order.dfy"
 include "Message.dfy"
 include "PivotBetreeSpec.dfy"
+include "PivotBetreeSpecRefinement.dfy"
 include "../lib/Marshalling/Native.s.dfy"
 
 module SSTable {
@@ -17,6 +18,7 @@ module SSTable {
   import BT = PivotBetreeSpec`Internal
   import P = PivotsLib
   import Native
+  import PivotBetreeSpecRefinement
 
   type String = seq<byte>
   type Key = String
@@ -1609,6 +1611,17 @@ module SSTable {
   requires I(sst1) == BT.JoinBuckets(ISeq(DropLast(ssts)))
   requires sst2 == Last(ssts)
   ensures forall key1, key2 | key1 in I(sst1) && key2 in I(sst2) :: lt(key1, key2)
+  {
+    forall key1, key2 | key1 in I(sst1) && key2 in I(sst2)
+    ensures lt(key1, key2)
+    {
+      assert key1 in BT.JoinBuckets(ISeq(DropLast(ssts)));
+      var i := PivotBetreeSpecRefinement.KeyInJoinedBucketsInSomeBucket(ISeq(DropLast(ssts)), key1);
+      assert key1 in I(DropLast(ssts)[i]);
+      assert key1 in I(ssts[i]);
+      assert key2 in I(ssts[|ssts| - 1]);
+    }
+  }
 
   lemma joinIsJoinBuckets(ssts: seq<SSTable>)
   requires join.requires(ssts)

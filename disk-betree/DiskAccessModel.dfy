@@ -68,4 +68,13 @@ abstract module DiskAccessModel {
 
   predicate Init(k: Constants, s: Variables)
   predicate Inv(k: Constants, s: Variables)
+
+  lemma InitImpliesInv(k: Constants, s: Variables)
+    requires Init(k, s)
+    ensures Inv(k, s)
+
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp)
+    requires Inv(k, s)
+    requires Next(k, s, s', uiop)
+    ensures Inv(k, s')
 }

@@ -57,8 +57,9 @@ module BetreeBlockCacheSystem refines DiskAccessModel {
   // Proofs
 
   lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
+    // pre and post conditions are inherited
+    //requires Init(k, s)
+    //ensures Inv(k, s)
   {
     BCS.InitImpliesInv(k, s);
     DBI.InitImpliesInv(Ik(k), PersistentBetree(k, s));
@@ -231,9 +232,10 @@ module BetreeBlockCacheSystem refines DiskAccessModel {
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', uiop)
-    ensures Inv(k, s')
+    // pre and post conditions are inherited
+    //requires Inv(k, s)
+    //requires Next(k, s, s', uiop)
+    //ensures Inv(k, s')
   {
     var step :| NextStep(k, s, s', uiop, step);
     NextStepPreservesInv(k, s, s', uiop, step);
