@@ -4,7 +4,7 @@ include "../lib/Option.dfy"
 include "SSTable.dfy"
 include "BetreeBlockCache.dfy"
 
-module ImplState {
+module {:extern} ImplState {
   import opened Options
   import opened Sequences
 
