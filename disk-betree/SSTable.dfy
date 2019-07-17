@@ -180,9 +180,42 @@ module SSTable {
     |sst.starts| == 0
   }
 
+  lemma KeyNotInPrefix(sst: SSTable, i: int)
+  requires WFSSTableMap(sst)
+  requires 0 <= 2*i < |sst.starts|
+  ensures Entry(sst, 2*i) !in IPrefix(sst, i)
+  {
+    if (Entry(sst, 2*i) in IPrefix(sst, i)) {
+      var j :| 0 <= j < i && Entry(sst, 2*j) == Entry(sst, 2*i);
+      reveal_KeysStrictlySorted();
+    }
+  }
+
+  lemma SizeEqPrefix(sst: SSTable, i: int)
+  requires WFSSTableMap(sst)
+  requires 0 <= 2*i <= |sst.starts|
+  ensures i == |IPrefix(sst, i)|
+  {
+    if (i == 0) {
+      assert i == |IPrefix(sst, i)|;
+    } else {
+      SizeEqPrefix(sst, i-1);
+      reveal_IPrefix();
+      KeyNotInPrefix(sst, i-1);
+      assert |IPrefix(sst, i)|
+          == |IPrefix(sst, i-1)[Entry(sst, 2*(i-1)) := Define(Entry(sst, 2*(i-1) + 1))]|
+          == |IPrefix(sst, i-1)| + 1;
+      assert i == |IPrefix(sst, i)|;
+    }
+  }
+
   lemma SizeEq(sst: SSTable)
   requires WFSSTableMap(sst)
   ensures |sst.starts| == 2 * |I(sst)|
+  {
+    SizeEqPrefix(sst, |sst.starts|/2);
+    reveal_I();
+  }
 
   function method {:opaque} Size(sst: SSTable) : (n : uint64)
   requires WFSSTableMap(sst)
@@ -707,17 +740,6 @@ module SSTable {
   requires ValueMessage.Merge(msgParent, msgChild) != IdentityMessage()
   ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msgChild], parent[key := msgParent])
   {
-  }
-
-  lemma KeyNotInPrefix(sst: SSTable, i: int)
-  requires WFSSTableMap(sst)
-  requires 0 <= 2*i < |sst.starts|
-  ensures Entry(sst, 2*i) !in IPrefix(sst, i)
-  {
-    if (Entry(sst, 2*i) in IPrefix(sst, i)) {
-      var j :| 0 <= j < i && Entry(sst, 2*j) == Entry(sst, 2*i);
-      reveal_KeysStrictlySorted();
-    }
   }
 
   lemma LemmaFlushAddParentKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
