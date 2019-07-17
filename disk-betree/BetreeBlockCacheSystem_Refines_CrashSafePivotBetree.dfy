@@ -43,9 +43,9 @@ module BetreeBlockCacheSystem_Refines_CrashSafePivotBetree {
   requires BBCS.Init(k, s)
   ensures BBCS.Inv(k, s)
   ensures CSBT.Init(Ik(k), I(k, s))
-  // TODO figure out how initial conditions are going to work
-  // Right now the BlockCacheSystem assumes any valid disk
-  // whereas the Betree requires the Betree to start empty
+  {
+    BBCS.InitImpliesInv(k, s);
+  }
 
   lemma RefinesBetreeMoveStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp, betreeStep: BetreeStep)
   requires BBCS.Inv(k, s)
