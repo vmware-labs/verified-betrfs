@@ -11,7 +11,7 @@ include "BetreeRefinement.dfy"
 //
 //   PivotBetree -> Map
 
-module PivotBetreeRefinesMap {
+module PivotBetree_Refines_Map {
   import PB = PivotBetree
   import PivotBetreeRefinesBetree = PivotBetreeInvAndRefinement
   import BetreeRefinesMap = BetreeRefinement

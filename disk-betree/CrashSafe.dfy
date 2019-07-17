@@ -329,10 +329,10 @@ module CrashSafeMap {
 //
 //    CrashSafe PivotBetree -> CrashSafe Map
 
-module CrashSafePivotBetreeRefinesCrashSafeMap {
+module CrashSafePivotBetree_Refines_CrashSafeMap {
   import A = CrashSafePivotBetree
   import B = CrashSafeMap
-  import Ref = PivotBetreeRefinesMap
+  import Ref = PivotBetree_Refines_Map
   type UIOp = A.UIOp
 
   function Ik(k: A.Constants) : B.Constants
