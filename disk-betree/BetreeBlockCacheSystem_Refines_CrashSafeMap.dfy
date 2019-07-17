@@ -1,5 +1,5 @@
 include "CrashSafe.dfy"
-include "BetreeBlockCacheSystemCrashSafeBetreeRefinement.dfy"
+include "BetreeBlockCacheSystem_Refines_CrashSafePivotBetree.dfy"
 
 // This composes the two refinements:
 //
@@ -14,7 +14,7 @@ module BetreeBlockCacheSystem_Refines_CrashSafeMap {
   import BBCS = BetreeBlockCacheSystem
   import CSPB = CrashSafePivotBetree
   import CSM = CrashSafeMap
-  import Ref1 = BetreeBlockCacheSystem_Refines_CrashSafeBetree
+  import Ref1 = BetreeBlockCacheSystem_Refines_CrashSafePivotBetree
   import Ref2 = CrashSafePivotBetree_Refines_CrashSafeMap
 
   type UIOp = Ref2.UIOp
