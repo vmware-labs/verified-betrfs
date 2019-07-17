@@ -4,19 +4,20 @@ include "CrashTypes.dfy"
 
 // Spec for the DiskAccessModel
 
-abstract module DAMTypes {
+module DAMTypes {
   datatype DAMConstants<M,D> = DAMConstants(machine: M, disk: D)
   datatype DAMVariables<M,D> = DAMVariables(machine: M, disk: D)
 }
 
-abstract module DiskAccessMachine {
+module DiskAccessMachine {
   import D = Disk
+  import UI
 
   type Variables
   type Constants
   type LBA(==)
   type Sector
-  type UIOp
+  type UIOp = UI.Op
 
   type DiskOp = D.DiskOp<LBA, Sector>
 

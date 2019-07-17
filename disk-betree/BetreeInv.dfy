@@ -3,7 +3,7 @@ include "../lib/sequences.dfy"
 include "MapSpec.dfy"
 include "Betree.dfy"
   
-abstract module BetreeInv {
+module BetreeInv {
   import opened DB = Betree
   import opened Maps
   import opened Sequences

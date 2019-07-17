@@ -8,7 +8,7 @@ include "PivotBetree.dfy"
 
 include "Main.dfy"
 
-module BetreeBlockCache refines Machine {
+module BetreeBlockCache refines DiskAccessMachine {
   import opened Maps
   import opened Sequences
 

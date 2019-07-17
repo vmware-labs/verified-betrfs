@@ -26,7 +26,7 @@ module BetreeBlockInterface refines BlockInterface {
   import G = BetreeGraph
 }
 
-abstract module BetreeSpec {
+module BetreeSpec {
   import MS = MapSpec
   import opened G = BetreeGraph
   import opened Sequences

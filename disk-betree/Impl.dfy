@@ -1,12 +1,13 @@
 include "Main.dfy"
 include "../lib/Sets.dfy"
 include "BetreeBlockCache.dfy"
+include "BetreeBlockCacheSystem.dfy"
 include "Marshalling.dfy"
 
 module {:extern} Impl refines Main { 
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
-  import M = BetreeBlockCache
+  import DAM = BetreeBlockCacheSystem
   import Marshalling
   import Messages = ValueMessage
   import Pivots = PivotsLib
@@ -20,31 +21,31 @@ module {:extern} Impl refines Main {
   type Key = MS.Key
   type Message = Messages.Message
 
-  type Constants = M.Constants
+  type Constants = DAM.M.Constants
   type Variables = IS.Variables
 
   type HeapState = IS.ImplHeapState
   function HeapSet(hs: HeapState) : set<object> { IS.ImplHeapSet(hs) }
 
-  function Ik(k: Constants) : M.Constants { k }
-  function I(k: Constants, hs: HeapState) : M.Variables { IS.IVars(hs.s) }
+  function Ik(k: Constants) : DAM.M.Constants { k }
+  function I(k: Constants, hs: HeapState) : DAM.M.Variables { IS.IVars(hs.s) }
 
   predicate ValidSector(sector: Sector)
   {
     && Marshalling.parseSector(sector).Some?
   }
 
-  function ISector(sector: Sector) : M.Sector
+  function ISector(sector: Sector) : DAM.M.Sector
   {
     IS.ISector(Marshalling.parseSector(sector).value)
   }
 
-  function ILBA(lba: LBA) : M.LBA { lba }
+  function ILBA(lba: LBA) : DAM.M.LBA { lba }
 
   predicate Inv(k: Constants, hs: HeapState)
   {
     && IS.WFVars(hs.s)
-    && M.Inv(k, IS.IVars(hs.s))
+    && DAM.M.Inv(k, IS.IVars(hs.s))
   }
 
   method InitState() returns (k: Constants, hs: HeapState)
@@ -52,10 +53,10 @@ module {:extern} Impl refines Main {
     k := BC.Constants();
     hs := new IS.ImplHeapState();
 
-    M.InitImpliesInv(k, IS.IVars(hs.s));
+    DAM.M.InitImpliesInv(k, IS.IVars(hs.s));
   }
 
-  predicate WFSector(sector: M.Sector)
+  predicate WFSector(sector: DAM.M.Sector)
   {
     match sector {
       case SectorSuperblock(superblock) => BC.WFPersistentSuperblock(superblock)
@@ -63,7 +64,7 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method ReadSector(io: DiskIOHandler, lba: M.LBA)
+  method ReadSector(io: DiskIOHandler, lba: DAM.M.LBA)
   returns (sector: IS.Sector)
   requires io.initialized()
   modifies io
@@ -75,7 +76,7 @@ module {:extern} Impl refines Main {
     sector := sectorOpt.value;
   }
 
-  method WriteSector(io: DiskIOHandler, lba: M.LBA, sector: IS.Sector)
+  method WriteSector(io: DiskIOHandler, lba: DAM.M.LBA, sector: IS.Sector)
   returns (success: bool)
   requires IS.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
@@ -101,15 +102,15 @@ module {:extern} Impl refines Main {
   requires s.Unready?
   modifies io
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     var sector := ReadSector(io, BC.SuperblockLBA());
     if (sector.SectorSuperblock?) {
       s' := IS.Ready(sector.superblock, sector.superblock, map[]);
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInSuperblockStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.PageInSuperblockStep));
     } else {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; did not get superblock when reading\n";
     }
   }
@@ -119,12 +120,12 @@ module {:extern} Impl refines Main {
   requires io.initialized();
   requires s.Ready?
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   requires ref in s.ephemeralSuperblock.lbas
   requires ref !in s.cache
   modifies io
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     var lba := s.ephemeralSuperblock.lbas[ref];
     var sector := ReadSector(io, lba);
@@ -133,15 +134,15 @@ module {:extern} Impl refines Main {
       if (s.ephemeralSuperblock.graph[ref] == (if node.children.Some? then node.children.value else [])) {
         s' := s.(cache := s.cache[ref := sector.block]);
         assert BC.PageIn(k, IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.PageInStep(ref)));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.PageInStep(ref)));
       } else {
         s' := s;
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
         print "giving up; block does not match graph\n";
       }
     } else {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; block read in was not block\n";
     }
   }
@@ -195,11 +196,11 @@ module {:extern} Impl refines Main {
   method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   returns (s': Variables, success: bool)
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   requires s.Ready?
   requires BT.G.Root() in s.cache
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   {
     var oldroot := s.cache[BT.G.Root()];
     var msg := Messages.Define(value);
@@ -210,7 +211,7 @@ module {:extern} Impl refines Main {
         && |key| < 0x400_0000_0000_0000 && |value| < 0x400_0000_0000_0000)) {
       s' := s;
       success := false;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; data is impossibly big\n";
       return;
     }
@@ -231,8 +232,8 @@ module {:extern} Impl refines Main {
     assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), IS.INode(newroot)));
     assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot))))[0]);
     assert BC.OpTransaction(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot)))));
-    assert M.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), D.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot))));
-    assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), D.NoDiskOp, M.BetreeMoveStep(BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot)))));
+    assert DAM.M.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), D.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot))));
+    assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), D.NoDiskOp, DAM.M.BetreeMoveStep(BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot)))));
   }
 
   // note: I split this out because of sequence-related trigger loop problems
@@ -269,10 +270,10 @@ module {:extern} Impl refines Main {
   returns (s': Variables, res: Option<MS.Value>)
   requires io.initialized()
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   modifies io
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
     if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
     IDiskOp(io.diskOp()))
   {
@@ -327,10 +328,10 @@ module {:extern} Impl refines Main {
               s' := s;
               res := Some(MS.V.DefaultValue());
 
-              assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'),
+              assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'),
                 if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
                 IDiskOp(io.diskOp()),
-                M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
+                DAM.M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
 
               exiting := true;
               return;
@@ -344,20 +345,20 @@ module {:extern} Impl refines Main {
         res := Some(msg.value);
 
         assert BT.ValidQuery(BT.LookupQuery(key, res.value, lookup));
-        assert M.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'),
+        assert DAM.M.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'),
           UI.GetOp(key, res.value),
           IDiskOp(io.diskOp()),
           BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'),
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'),
           if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
           IDiskOp(io.diskOp()),
-          M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
+          DAM.M.BetreeMoveStep(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
       } else {
         // loop bound exceeded; do nothing :/
         s' := s;
         res := None;
 
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
         print "giving up; did not reach Leaf or a Define\n";
       }
     }
@@ -368,9 +369,9 @@ module {:extern} Impl refines Main {
   requires io.initialized()
   modifies io
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
     if success then UI.PutOp(key, value) else UI.NoOp,
     IDiskOp(io.diskOp()))
   {
@@ -456,9 +457,9 @@ module {:extern} Impl refines Main {
   requires io.initialized()
   requires deallocable(s, ref)
   modifies io
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     s' := IS.Ready(
         s.persistentSuperblock,
@@ -468,7 +469,7 @@ module {:extern} Impl refines Main {
         ),
         MapRemove(s.cache, {ref})
       );
-    assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.UnallocStep(ref)));
+    assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.UnallocStep(ref)));
   }
 
   method fixBigRoot(k: Constants, s: Variables, io: DiskIOHandler)
@@ -477,9 +478,9 @@ module {:extern} Impl refines Main {
   requires s.Ready?
   requires io.initialized()
   modifies io
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     if (BT.G.Root() !in s.cache) {
       s' := PageIn(k, s, io, BT.G.Root());
@@ -491,7 +492,7 @@ module {:extern} Impl refines Main {
     match newref {
       case None => {
         s' := s;
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
         print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
@@ -508,8 +509,8 @@ module {:extern} Impl refines Main {
         assert IS.INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [map[]]);
         ghost var step := BT.BetreeGrow(growth);
         BC.MakeTransaction2(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
-        //assert M.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), step);
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+        //assert DAM.M.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), step);
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BetreeMoveStep(step));
       }
     }
   }
@@ -562,7 +563,7 @@ module {:extern} Impl refines Main {
   returns (s': Variables)
   requires s.Ready?
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   requires ref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
@@ -571,7 +572,7 @@ module {:extern} Impl refines Main {
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[ref];
@@ -585,7 +586,7 @@ module {:extern} Impl refines Main {
 
     if !SSTable.IsEmpty(fused_parent.buckets[slot]) {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; trying to split but parent has non-empty buffer";
       return;
     }
@@ -594,7 +595,7 @@ module {:extern} Impl refines Main {
       // TODO there should be an operation which just
       // cuts off the node and doesn't split it.
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; child.pivots == 0\n";
       return;
     }
@@ -633,7 +634,7 @@ module {:extern} Impl refines Main {
     var s1, left_childref := alloc(k, s, left_child);
     if left_childref.None? {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; could not get ref\n";
       return;
     }
@@ -641,7 +642,7 @@ module {:extern} Impl refines Main {
     var s2, right_childref := alloc(k, s1, right_child);
     if right_childref.None? {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; could not get ref\n";
       return;
     }
@@ -705,12 +706,12 @@ module {:extern} Impl refines Main {
     assert BT.ValidSplit(splitStep);
     ghost var step := BT.BetreeSplit(splitStep);
     BC.MakeTransaction3(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s2), IS.IVars(s'), BT.BetreeStepOps(step));
-    assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+    assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BetreeMoveStep(step));
   }
 
   lemma ChildCanBePagedIn(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   requires s.Ready?
   requires childref !in s.cache
   requires ref in s.cache
@@ -730,9 +731,9 @@ module {:extern} Impl refines Main {
   requires 0 <= slot < |s.cache[ref].buckets|
   requires io.initialized()
   modifies io
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     var node := s.cache[ref];
 
@@ -759,7 +760,7 @@ module {:extern} Impl refines Main {
         && (forall i | 0 <= i < |child.buckets| :: |child.buckets[i].starts| < 0x800_0000_0000_0000)
     )) {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; data is 2 big\n";
       return;
     }
@@ -778,7 +779,7 @@ module {:extern} Impl refines Main {
     var s1, newchildref := alloc(k, s, newchild);
     if newchildref.None? {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; could not get ref\n";
       return;
     }
@@ -810,13 +811,13 @@ module {:extern} Impl refines Main {
     ghost var step := BT.BetreeFlush(flushStep);
     assert IS.INode(newparent) == BT.FlushOps(flushStep)[1].node;
     BC.MakeTransaction2(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
-    assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+    assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BetreeMoveStep(step));
   }
 
   method {:fuel BT.JoinBuckets,0} fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': Variables)
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   requires s.Ready?
   requires ref in s.cache
   requires parentref in s.ephemeralSuperblock.graph
@@ -824,7 +825,7 @@ module {:extern} Impl refines Main {
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     if (ref !in s.cache) {
       s' := PageIn(k, s, io, ref);
@@ -846,7 +847,7 @@ module {:extern} Impl refines Main {
           && forall i | 0 <= i < |node.buckets| :: |node.buckets[i].starts| < 0x10_0000_0000_0000
         )) {
           s' := s;
-          assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+          assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
           print "giving up; stuff too big to call Join\n";
           return;
         }
@@ -871,7 +872,7 @@ module {:extern} Impl refines Main {
         //assert BT.ValidRepivot(BT.Repivot(ref, node, pivots));
         ghost var step := BT.BetreeRepivot(BT.Repivot(ref, IS.INode(node), pivots));
         BC.MakeTransaction1(k, IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(step));
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BetreeMoveStep(step));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BetreeMoveStep(step));
       }
     } else if |node.buckets| > Marshalling.CapNumBuckets() as int {
       if (parentref !in s.cache) {
@@ -887,7 +888,7 @@ module {:extern} Impl refines Main {
       s' := doSplit(k, s, io, parentref, ref, i);
     } else {
       s' := s;
-      assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; fixBigNode\n";
     }
   }
@@ -897,9 +898,9 @@ module {:extern} Impl refines Main {
   requires io.initialized()
   modifies io
   requires IS.WFVars(s)
-  requires M.Inv(k, IS.IVars(s))
+  requires DAM.M.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
     if success then UI.SyncOp else UI.NoOp,
     IDiskOp(io.diskOp()))
   {
@@ -934,18 +935,18 @@ module {:extern} Impl refines Main {
             success := false;
             s' := s.(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := s.ephemeralSuperblock.lbas[ref := lba]));
             assert BC.WriteBack(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
-            assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.WriteBackStep(ref)));
+            assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.WriteBackStep(ref)));
           } else {
             success := false;
             s' := s;
-            assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+            assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
             print "giving up; sync could not write\n";
           }
         }
         case None => {
           success := false;
           s' := s;
-          assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+          assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
           print "giving up; could not get lba\n";
         }
       }
@@ -955,11 +956,11 @@ module {:extern} Impl refines Main {
         success := true;
         s' := s.(persistentSuperblock := s.ephemeralSuperblock);
         assert BC.WriteBackSuperblock(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.SyncOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.WriteBackSuperblockStep));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.SyncOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.WriteBackSuperblockStep));
       } else {
         success := false;
         s' := s;
-        assert M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), M.BlockCacheMoveStep(BC.NoOpStep));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
         print "giving up; could not write superblock\n";
       }
     }
@@ -973,7 +974,7 @@ module {:extern} Impl refines Main {
     var s := hs.s;
     var s', succ := sync(k, s, io);
     var uiop := if succ then UI.SyncOp else UI.NoOp;
-    M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
+    DAM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     success := succ;
   }
@@ -984,7 +985,7 @@ module {:extern} Impl refines Main {
     var s := hs.s;
     var s', value := query(k, s, io, key);
     var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
-    M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
+    DAM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     v := value;
   }
@@ -995,7 +996,7 @@ module {:extern} Impl refines Main {
     var s := hs.s;
     var s', succ := insert(k, s, io, key, value);
     var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
-    M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
+    DAM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     success := succ;
   }

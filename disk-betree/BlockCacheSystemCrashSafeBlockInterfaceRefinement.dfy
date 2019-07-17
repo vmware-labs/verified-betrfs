@@ -9,11 +9,11 @@ module {:extern} BetreeGraphBlockCache refines BlockCache {
   import G = PivotBetreeGraph
 }
 
-abstract module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
+module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
   import M = BetreeGraphBlockCache
 }
 
-abstract module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
+module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   // Ideally we would prove the refinement for an arbitrary graph,
   // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
   // separately then we wouldn't know they were using the same graph.

@@ -8,7 +8,7 @@ include "PivotBetreeRefinement.dfy"
 include "BetreeRefinement.dfy"
 include "CrashTypes.dfy"
 
-abstract module CrashSafeBlockInterface {
+module CrashSafeBlockInterface {
   import BI = PivotBetreeBlockInterface
 
   type Constants = BI.Constants
@@ -80,7 +80,7 @@ abstract module CrashSafeBlockInterface {
   }
 }
 
-abstract module CrashSafeBetree {
+module CrashSafeBetree {
   import DB = Betree
   import DBI = BetreeInv
   import CrashTypes
@@ -160,7 +160,7 @@ abstract module CrashSafeBetree {
   }
 }
 
-abstract module CrashSafePivotBetree {
+module CrashSafePivotBetree {
   import DB = PivotBetree
   import DBI = PivotBetreeInvAndRefinement
   import CrashTypes
@@ -241,7 +241,7 @@ abstract module CrashSafePivotBetree {
 }
 
 // TODO this is spec and so should get its own file
-abstract module CrashSafeMap {
+module CrashSafeMap {
   import MS = MapSpec
   import CrashTypes
 
@@ -321,7 +321,7 @@ abstract module CrashSafeMap {
   }
 }
 
-abstract module CrashSafeBetreeMapRefinement {
+module CrashSafeBetreeMapRefinement {
   import A = CrashSafeBetree
   import B = CrashSafeMap
   import Ref = BetreeRefinement

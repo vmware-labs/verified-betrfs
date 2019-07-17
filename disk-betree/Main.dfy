@@ -1,4 +1,5 @@
 include "MapSpec.dfy"
+include "CrashSafe.dfy"
 include "Disk.dfy"
 include "DiskAccessModel.dfy"
 include "../lib/NativeTypes.dfy"
@@ -18,6 +19,7 @@ module DiskTypes {
 // IDEALLY we would be able to say: define a machine type M and also give me a proof
 // that MachineSystem<M> refines CrashSafeMap
 
+/*
 abstract module Machine refines DiskAccessMachine {
   import UI = UI
   import DiskTypes
@@ -32,18 +34,20 @@ abstract module Machine refines DiskAccessMachine {
   //requires Next(k, s, s', uiop, dop)
   //ensures Next(Ik(k), I(k, s), I(k, s'), uiop, dop)
 }
+*/
 
 abstract module Main {
-  import M : Machine
+  import DAM : DiskAccessModel
   import D = Disk
 
   import MS = MapSpec
+  import CrashSafeMap
   import opened NativeTypes
   import opened Options
   import DiskTypes
   import UI
 
-  type UIOp = M.UIOp
+  type UIOp = DAM.M.UIOp
 
   // impl defined stuff
 
@@ -53,15 +57,15 @@ abstract module Main {
 
   predicate Inv(k: Constants, hs: HeapState)
     reads HeapSet(hs)
-  function Ik(k: Constants): M.Constants
-  function I(k: Constants, hs: HeapState): M.Variables
+  function Ik(k: Constants): DAM.M.Constants
+  function I(k: Constants, hs: HeapState): DAM.M.Variables
     requires Inv(k, hs)
     reads HeapSet(hs)
-  function ILBA(lba: LBA) : M.LBA
+  function ILBA(lba: LBA) : DAM.M.LBA
 
   predicate ValidSector(sector: Sector)
 
-  function ISector(sector: Sector) : M.Sector
+  function ISector(sector: Sector) : DAM.M.Sector
     requires ValidSector(sector)
 
   method InitState() returns (k: Constants, hs: HeapState)
@@ -110,7 +114,7 @@ abstract module Main {
     }
   }
 
-  function IDiskOp(diskOp: DiskOp) : M.DiskOp
+  function IDiskOp(diskOp: DiskOp) : DAM.M.DiskOp
   requires ValidDiskOp(diskOp)
   {
     match diskOp {
@@ -130,7 +134,7 @@ abstract module Main {
   modifies io
   ensures Inv(k, hs)
   ensures ValidDiskOp(io.diskOp())
-  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures DAM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if success then UI.SyncOp else UI.NoOp,
     IDiskOp(io.diskOp()))
   // impl defined
@@ -143,7 +147,7 @@ abstract module Main {
   modifies io
   ensures Inv(k, hs)
   ensures ValidDiskOp(io.diskOp())
-  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures DAM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
     IDiskOp(io.diskOp()))
   // impl defined
@@ -156,7 +160,7 @@ abstract module Main {
   modifies io
   ensures Inv(k, hs)
   ensures ValidDiskOp(io.diskOp())
-  ensures M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures DAM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if success then UI.PutOp(key, value) else UI.NoOp,
     IDiskOp(io.diskOp()))
   // impl defined
@@ -164,4 +168,16 @@ abstract module Main {
 
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.
+  function SystemIk(k: DAM.Constants) : CrashSafeMap.Constants
+  function SystemI(k: DAM.Constants, s: DAM.Variables) : CrashSafeMap.Variables
+
+  lemma SystemRefinesCrashSafeMapInit(
+    k: DAM.Constants, s: DAM.Variables)
+  requires DAM.Init(k, s)
+  ensures CrashSafeMap.Init(SystemIk(k), SystemI(k, s))
+
+  lemma SystemRefinesCrashSafeMapNext(
+    k: DAM.Constants, s: DAM.Variables, s': DAM.Variables, uiop: DAM.CrashableUIOp)
+  requires DAM.Next(k, s, s', uiop)
+  ensures CrashSafeMap.Next(SystemIk(k), SystemI(k, s), SystemI(k, s'), uiop)
 }

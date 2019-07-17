@@ -11,7 +11,7 @@ include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotsLib.dfy"
 
-abstract module PivotBetreeSpecRefinement {
+module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
   import M = ValueMessage
