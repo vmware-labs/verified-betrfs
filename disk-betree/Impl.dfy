@@ -552,12 +552,71 @@ module {:extern} Impl refines Main {
     pivots := r;
   }
 
+  method CutoffNodeAndKeepLeft(node: IS.Node, pivot: Key)
+  returns (node': IS.Node)
+  requires IS.WFNode(node)
+  requires BT.WFNode(IS.INode(node))
+  ensures IS.WFNode(node')
+  ensures IS.INode(node') == BT.CutoffNodeAndKeepLeft(IS.INode(node), pivot)
+  {
+    BT.reveal_CutoffNodeAndKeepLeft();
+    var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
+    var leftPivots := node.pivotTable[.. cLeft];
+    var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
+    var splitBucket := SSTable.SplitLeft(node.buckets[cLeft], pivot);
+    var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
+    node' := IS.Node(leftPivots, leftChildren, leftBuckets);
+  }
+
+  method CutoffNodeAndKeepRight(node: IS.Node, pivot: Key)
+  returns (node': IS.Node)
+  requires IS.WFNode(node)
+  requires BT.WFNode(IS.INode(node))
+  ensures IS.WFNode(node')
+  ensures IS.INode(node') == BT.CutoffNodeAndKeepRight(IS.INode(node), pivot)
+  {
+    BT.reveal_CutoffNodeAndKeepRight();
+    var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
+    var rightPivots := node.pivotTable[cRight ..];
+    var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
+    var splitBucket := SSTable.SplitRight(node.buckets[cRight], pivot);
+    var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
+    node' := IS.Node(rightPivots, rightChildren, rightBuckets);
+  }
+
   method CutoffNode(node: IS.Node, lbound: Option<Key>, rbound: Option<Key>)
   returns (node' : IS.Node)
   requires IS.WFNode(node)
   requires BT.WFNode(IS.INode(node))
   ensures IS.WFNode(node')
   ensures IS.INode(node') == BT.CutoffNode(IS.INode(node), lbound, rbound)
+  {
+    BT.reveal_CutoffNode();
+
+    match lbound {
+      case None => {
+        match rbound {
+          case None => {
+            node' := node;
+          }
+          case Some(rbound) => {
+            node' := CutoffNodeAndKeepLeft(node, rbound);
+          }
+        }
+      }
+      case Some(lbound) => {
+        match rbound {
+          case None => {
+            node' := CutoffNodeAndKeepRight(node, lbound);
+          }
+          case Some(rbound) => {
+            var node1 := CutoffNodeAndKeepLeft(node, rbound);
+            node' := CutoffNodeAndKeepRight(node1, lbound);
+          }
+        }
+      }
+    }
+  }
 
   method doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   returns (s': Variables)
