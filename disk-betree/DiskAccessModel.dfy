@@ -9,7 +9,7 @@ module DAMTypes {
   datatype DAMVariables<M,D> = DAMVariables(machine: M, disk: D)
 }
 
-module DiskAccessMachine {
+abstract module DiskAccessMachine {
   import D = Disk
   import UI
 
