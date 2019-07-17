@@ -170,11 +170,28 @@ module SSTable {
   predicate method {:opaque} IsEmpty(sst: SSTable)
   requires WFSSTableMap(sst)
   ensures IsEmpty(sst) == (I(sst) == map[])
+  {
+    reveal_I();
+    reveal_IPrefix();
+    //assert |sst.starts| == 0 ==> I(sst) == map[];
+    assert |sst.starts| > 0 ==> SSTKeyMapsToValueAt(I(sst), sst, 0);
+    //assert |sst.starts| > 0 ==> I(sst) != map[];
+
+    |sst.starts| == 0
+  }
+
+  lemma SizeEq(sst: SSTable)
+  requires WFSSTableMap(sst)
+  ensures |sst.starts| == 2 * |I(sst)|
 
   function method {:opaque} Size(sst: SSTable) : (n : uint64)
   requires WFSSTableMap(sst)
   ensures n as int == |I(sst)|
   ensures 2*n as int == |sst.starts|
+  {
+    SizeEq(sst);
+    |sst.starts| as uint64 / 2
+  }
 
   method Cmp(key: Key, sst: SSTable, i: uint64) returns (c: int32)
   requires WFSSTable(sst)
@@ -1343,8 +1360,22 @@ module SSTable {
   requires forall i | 0 <= i < |s| :: s[i] as int + offset as int < 0x1_0000_0000_0000_0000
   requires 0 <= dstIdx
   requires dstIdx as int + |s| <= ar.Length
+  requires |s| < 0x1_0000_0000_0000_0000
+  requires ar.Length < 0x1_0000_0000_0000_0000
+  modifies ar
   ensures old(ar[..dstIdx]) == ar[..dstIdx]
   ensures ar[dstIdx .. dstIdx as int + |s|] == addToStarts(s, offset)
+  {
+    var i: uint64 := 0;
+    while i < |s| as uint64
+    invariant 0 <= i as int <= |s|
+    invariant ar[dstIdx .. dstIdx as int + i as int] == addToStarts(s[..i], offset)
+    invariant old(ar[..dstIdx]) == ar[..dstIdx]
+    {
+      ar[dstIdx + i] := s[i] + offset; 
+      i := i + 1;
+    }
+  }
 
   function subFromStarts(starts: seq<uint64>, offset: uint64) : (res: seq<uint64>)
   requires forall i | 0 <= i < |starts| :: offset <= starts[i]
@@ -1358,8 +1389,27 @@ module SSTable {
   requires forall i | 0 <= i < |s| :: offset <= s[i]
   requires 0 <= dstIdx
   requires dstIdx as int + |s| <= ar.Length
+  requires |s| < 0x1_0000_0000_0000_0000
+  requires ar.Length < 0x1_0000_0000_0000_0000
+  modifies ar
   ensures old(ar[..dstIdx]) == ar[..dstIdx]
   ensures ar[dstIdx .. dstIdx as int + |s|] == subFromStarts(s, offset)
+  {
+    var i: uint64 := 0;
+    while i < |s| as uint64
+    invariant 0 <= i as int <= |s|
+    invariant ar[dstIdx .. dstIdx as int + i as int] == subFromStarts(s[..i], offset)
+    invariant old(ar[..dstIdx]) == ar[..dstIdx]
+    {
+      ar[dstIdx + i] := s[i] - offset; 
+      i := i + 1;
+    }
+  }
+
+  lemma subFromStartsSorted(starts: seq<uint64>, offset: uint64)
+  requires subFromStarts.requires(starts, offset)
+  requires Uint64Order.IsSorted(starts)
+  ensures Uint64Order.IsSorted(subFromStarts(starts, offset))
 
   lemma startsAppendAddToStartsSorted(
       starts: seq<uint64>,
@@ -1832,23 +1882,37 @@ module SSTable {
   ensures Entry(sst, 2*i) == Entry(right, 2*i - 2*idx)
   ensures Entry(sst, 2*i + 1) == Entry(right, 2*i + 1 - 2*idx)
 
+  lemma LemmaSplitRight(sst: SSTable, pivot: Key, idx: uint64, stringIdx: uint64)
+  requires WFSSTableMap(sst)
+  requires 0 <= 2*idx as int <= |sst.starts|
+  requires stringIdx == (if 2*idx == |sst.starts| as uint64 then |sst.strings| as uint64 else sst.starts[2*idx])
+  ensures forall i | 0 <= i < |sst.starts[2*idx..]| :: stringIdx <= sst.starts[2*idx..][i]
+  ensures Uint64Order.IsSorted(sst.starts[2*idx..])
+  {
+    Uint64Order.reveal_IsSorted();
+  }
+
   method SplitRight(sst: SSTable, pivot: Key)
   returns (right: SSTable)
   requires WFSSTableMap(sst)
   ensures WFSSTableMap(right)
   ensures I(right) == BT.SplitBucketRight(I(sst), pivot)
   {
-    Uint64Order.reveal_IsSorted();
+    //Uint64Order.reveal_IsSorted();
     reveal_KeysStrictlySorted();
 
     var idx: uint64 := ComputeCutoffPoint(sst, pivot);
     var stringIdx := (if 2*idx == |sst.starts| as uint64 then |sst.strings| as uint64 else sst.starts[2*idx]);
+
+    LemmaSplitRight(sst, pivot, idx, stringIdx);
 
     var startsArray := new uint64[|sst.starts| as uint64 - 2*idx];
     CopySeqIntoArraySubtracting(sst.starts[2*idx..], startsArray, 0, stringIdx);
 
     right := SSTable(startsArray[..], sst.strings[stringIdx ..]);
 
+    assert startsArray[..] == subFromStarts(sst.starts[2*idx..], stringIdx);
+    subFromStartsSorted(sst.starts[2*idx..], stringIdx);
     forall i, j | 0 <= 2*i < 2*j < |right.starts|
     ensures lt(Entry(right, 2*i), Entry(right, 2*j))
     {
