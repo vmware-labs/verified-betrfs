@@ -4,7 +4,7 @@ include "Betree.dfy"
 include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"
-include "PivotBetreeRefinement.dfy"
+include "PivotBetreeRefinesMap.dfy"
 include "BetreeRefinement.dfy"
 include "CrashTypes.dfy"
 
@@ -321,10 +321,18 @@ module CrashSafeMap {
   }
 }
 
-module CrashSafeBetreeMapRefinement {
-  import A = CrashSafeBetree
+// Lift the refinement
+//
+//    PivotBetree -> Map
+//
+// to
+//
+//    CrashSafe PivotBetree -> CrashSafe Map
+
+module CrashSafePivotBetreeRefinesCrashSafeMap {
+  import A = CrashSafePivotBetree
   import B = CrashSafeMap
-  import Ref = BetreeRefinement
+  import Ref = PivotBetreeRefinesMap
   type UIOp = A.UIOp
 
   function Ik(k: A.Constants) : B.Constants
@@ -344,7 +352,7 @@ module CrashSafeBetreeMapRefinement {
   ensures B.Init(Ik(k), I(k, s))
   {
     A.InitImpliesInv(k, s);
-    Ref.BetreeRefinesMapInit(k, s.ephemeral);
+    Ref.PivotBetreeRefinesMapInit(k, s.ephemeral);
   }
 
   lemma RefinesNextStep(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UIOp, step: A.Step)
@@ -356,7 +364,7 @@ module CrashSafeBetreeMapRefinement {
     A.NextPreservesInv(k, s, s', uiop);
     match step {
       case EphemeralMoveStep => {
-        Ref.BetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral, uiop.uiop);
+        Ref.PivotBetreeRefinesMapNext(k, s.ephemeral, s'.ephemeral, uiop.uiop);
         assert B.NextStep(Ik(k), I(k, s), I(k, s'), uiop, B.EphemeralMoveStep);
         assert B.Next(Ik(k), I(k, s), I(k, s'), uiop);
       }
