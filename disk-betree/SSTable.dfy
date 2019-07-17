@@ -1741,11 +1741,15 @@ module SSTable {
     if n == 0 then [] else EmptySeq(n-1) + [Empty()]
   }
 
+  /*
   lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>)
   requires P.WFPivots(pivots)
   requires |emp| == |pivots| + 1
   ensures forall i | 0 <= i < |emp| :: emp[i] == map[]
   ensures BT.SplitBucketOnPivots(pivots, bucket) == BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)
+  {
+  }
+  */
 
   method SplitOnPivots(sst: SSTable, pivots: seq<Key>)
   returns (ssts : seq<SSTable>)
@@ -1759,7 +1763,7 @@ module SSTable {
     reveal_Empty();
     ssts := DoFlush(sst, EmptySeq(|pivots| + 1), pivots);
 
-    LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(sst), pivots, ISeq(EmptySeq(|pivots| + 1)));
+    //LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(sst), pivots, ISeq(EmptySeq(|pivots| + 1)));
   }
 
   function method KeyAtIndex(sst: SSTable, i: int) : (key: Key)
