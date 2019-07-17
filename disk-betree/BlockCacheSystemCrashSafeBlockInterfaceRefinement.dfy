@@ -51,6 +51,9 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
   requires BCS.Init(k, s)
   ensures BCS.Inv(k, s)
   ensures CSBI.Init(Ik(k), I(k, s))
+  {
+    //assert BI.Init(Ik(k), I(k, s).persistent);
+  }
 
   lemma RefinesWriteBack(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp, ref: Reference)
   requires BCS.Inv(k, s)

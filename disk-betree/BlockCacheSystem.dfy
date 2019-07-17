@@ -98,6 +98,8 @@ abstract module BlockCacheSystem {
     && WFSuperblockWrtDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks)
     && SuccessorsAgree(DiskSuperblock(k, s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
+    && PersistentGraph(k, s).Keys == {M.G.Root()}
+    && M.G.Successors(PersistentGraph(k, s)[M.G.Root()]) == iset{}
   }
 
   datatype Step =
