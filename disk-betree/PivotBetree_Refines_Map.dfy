@@ -1,5 +1,5 @@
 include "MapSpec.dfy"
-include "PivotBetreeRefinement.dfy"
+include "PivotBetree_Refines_Betree.dfy"
 include "Betree_Refines_Map.dfy"
 
 // This composes the two refinements:
