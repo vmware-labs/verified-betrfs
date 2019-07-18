@@ -136,6 +136,11 @@ module AsyncDisk {
   {
     exists step :: NextInternalStep(k, s, s', step)
   }
+
+  predicate Crash(k: Constants, s: Variables, s': Variables)
+  {
+    s' == Variables(map[], map[], map[], map[], s.blocks)
+  }
 }
 
 abstract module AsyncDiskMachine {
@@ -189,7 +194,7 @@ abstract module AsyncDiskModel {
   {
     && uiop.CrashOp?
     && M.Init(k.machine, s'.machine)
-    && s'.disk == s.disk
+    && D.Crash(k.disk, s.disk, s'.disk)
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: Step)

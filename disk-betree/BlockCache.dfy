@@ -29,7 +29,7 @@ abstract module BlockCache refines Transactable {
   datatype Constants = Constants()
   function method IndirectionTableLBA() : LBA { LBAType.IndirectionTableLBA() }
 
-  // TODO make indirectionTable take up more than one block (it's not really a indirectionTable)
+  // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
       lbas: map<Reference, LBA>,
       graph: map<Reference, seq<Reference>>)
