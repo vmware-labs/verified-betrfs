@@ -29,6 +29,15 @@ module Maps {
   {
     map j | j in m && j !in ks :: m[j]
   }
+ 
+  function method {:opaque} MapRemove1<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
+    ensures m'.Keys == m.Keys - {k}
+    ensures forall j :: j in m' ==> m'[j] == m[j]
+    ensures |m'.Keys| <= |m.Keys|
+    ensures |m'| <= |m|
+  {
+    map j | j in m && j != k :: m[j]
+  }
   
   function {:opaque} IMapRemove<K,V>(m:imap<K,V>, ks:iset<K>) : (m':imap<K,V>)
     ensures m'.Keys == m.Keys - ks

@@ -3,7 +3,6 @@ include "../lib/Maps.dfy"
 module Disk {
   import opened Maps
 
-  // TODO make async
   datatype DiskOp<LBA(==), Sector> =
     | WriteOp(lba: LBA, sector: Sector)
     | ReadOp(lba: LBA, sector: Sector)
