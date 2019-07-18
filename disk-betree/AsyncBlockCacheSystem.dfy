@@ -170,11 +170,20 @@ abstract module AsyncBlockCacheSystem {
 
   ////// Invariants
 
+  predicate IsCleanCacheEntry(k: Constants, s: Variables, ref: Reference)
+  requires s.machine.Ready?
+  requires ref in s.machine.cache
+  {
+    && ref in s.machine.ephemeralIndirectionTable.lbas
+    && M.OutstandingWrite(ref, s.machine.ephemeralIndirectionTable.lbas[ref]) !in
+        s.machine.outstandingBlockWrites.Values
+  }
+
   predicate CleanCacheEntriesAreCorrect(k: Constants, s: Variables)
   requires s.machine.Ready?
   {
     forall ref | ref in s.machine.cache ::
-      ref in s.machine.ephemeralIndirectionTable.lbas ==>
+      IsCleanCacheEntry(k, s, ref) ==>
       MapsTo(
           s.disk.blocks,
           s.machine.ephemeralIndirectionTable.lbas[ref],
