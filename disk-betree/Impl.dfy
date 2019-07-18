@@ -61,7 +61,7 @@ module {:extern} Impl refines Main {
   predicate WFSector(sector: DAM.M.Sector)
   {
     match sector {
-      case SectorSuperblock(superblock) => BC.WFPersistentSuperblock(superblock)
+      case SectorIndirectionTable(indirectionTable) => BC.WFPersistentIndirectionTable(indirectionTable)
       case SectorBlock(node) => BT.WFNode(node)
     }
   }
@@ -97,7 +97,7 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method PageInSuperblock(k: Constants, s: Variables, io: DiskIOHandler)
+  method PageInIndirectionTable(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires IS.WFVars(s)
   requires io.initialized();
@@ -106,14 +106,14 @@ module {:extern} Impl refines Main {
   ensures IS.WFVars(s')
   ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
-    var sector := ReadSector(io, BC.SuperblockLBA());
-    if (sector.SectorSuperblock?) {
-      s' := IS.Ready(sector.superblock, sector.superblock, map[]);
-      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.PageInSuperblockStep));
+    var sector := ReadSector(io, BC.IndirectionTableLBA());
+    if (sector.SectorIndirectionTable?) {
+      s' := IS.Ready(sector.indirectionTable, sector.indirectionTable, map[]);
+      assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.PageInIndirectionTableStep));
     } else {
       s' := s;
       assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; did not get superblock when reading\n";
+      print "giving up; did not get indirectionTable when reading\n";
     }
   }
 
@@ -123,17 +123,17 @@ module {:extern} Impl refines Main {
   requires s.Ready?
   requires IS.WFVars(s)
   requires DAM.M.Inv(k, IS.IVars(s))
-  requires ref in s.ephemeralSuperblock.lbas
+  requires ref in s.ephemeralIndirectionTable.lbas
   requires ref !in s.cache
   modifies io
   ensures IS.WFVars(s')
   ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
-    var lba := s.ephemeralSuperblock.lbas[ref];
+    var lba := s.ephemeralIndirectionTable.lbas[ref];
     var sector := ReadSector(io, lba);
     if (sector.SectorBlock?) {
       var node := sector.block;
-      if (s.ephemeralSuperblock.graph[ref] == (if node.children.Some? then node.children.value else [])) {
+      if (s.ephemeralIndirectionTable.graph[ref] == (if node.children.Some? then node.children.value else [])) {
         s' := s.(cache := s.cache[ref := sector.block]);
         assert BC.PageIn(k, IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
         assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.PageInStep(ref)));
@@ -155,15 +155,15 @@ module {:extern} Impl refines Main {
   requires IS.WFVars(s)
   requires ref in s.cache
   requires IS.WFNode(node)
-  requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralSuperblock.graph)
+  requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralIndirectionTable.graph)
   ensures IS.WFVars(s')
   ensures BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node))
   {
     s' := IS.Ready(
-      s.persistentSuperblock,
-      BC.Superblock(
-        MapRemove(s.ephemeralSuperblock.lbas, {ref}),
-        s.ephemeralSuperblock.graph[ref := if node.children.Some? then node.children.value else []]
+      s.persistentIndirectionTable,
+      BC.IndirectionTable(
+        MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
+        s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]
       ),
       s.cache[ref := node]
     );
@@ -175,7 +175,7 @@ module {:extern} Impl refines Main {
   requires IS.WFNode(node)
   requires BC.Inv(k, IS.IVars(s));
   requires s.Ready?
-  requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralSuperblock.graph)
+  requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralIndirectionTable.graph)
   ensures IS.WFVars(s')
   ensures ref.Some? ==> BC.Alloc(k, IS.IVars(s), IS.IVars(s'), ref.value, IS.INode(node))
   ensures ref.None? ==> s' == s
@@ -183,10 +183,10 @@ module {:extern} Impl refines Main {
     ref := getFreeRef(s);
     if (ref.Some?) {
       s' := IS.Ready(
-        s.persistentSuperblock,
-        BC.Superblock(
-          s.ephemeralSuperblock.lbas,
-          s.ephemeralSuperblock.graph[ref.value := if node.children.Some? then node.children.value else []]
+        s.persistentIndirectionTable,
+        BC.IndirectionTable(
+          s.ephemeralIndirectionTable.lbas,
+          s.ephemeralIndirectionTable.graph[ref.value := if node.children.Some? then node.children.value else []]
         ),
         s.cache[ref.value := node]
       );
@@ -221,9 +221,9 @@ module {:extern} Impl refines Main {
     var newbucket := SSTable.Insert(bucket, key, msg);
     var newroot := oldroot.(buckets := oldroot.buckets[Pivots.Route(oldroot.pivotTable, key) := newbucket]);
 
-    assert BC.BlockPointsToValidReferences(IS.INode(oldroot), s.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(oldroot), s.ephemeralIndirectionTable.graph);
     //assert IS.INode(oldroot).children == IS.INode(newroot).children;
-    //assert BC.BlockPointsToValidReferences(IS.INode(newroot), s.ephemeralSuperblock.graph);
+    //assert BC.BlockPointsToValidReferences(IS.INode(newroot), s.ephemeralIndirectionTable.graph);
 
     assert IS.INode(newroot) == BT.AddMessageToNode(IS.INode(oldroot), key, msg);
 
@@ -280,7 +280,7 @@ module {:extern} Impl refines Main {
     IDiskOp(io.diskOp()))
   {
     if (s.Unready?) {
-      s' := PageInSuperblock(k, s, io);
+      s' := PageInIndirectionTable(k, s, io);
       res := None;
     } else {
       var ref := BT.G.Root();
@@ -299,7 +299,7 @@ module {:extern} Impl refines Main {
       invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.Some?
       invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref
       invariant forall i | 0 <= i < |lookup| :: MapsTo(IS.ICache(s.cache), lookup[i].ref, lookup[i].node)
-      invariant ref in s.ephemeralSuperblock.graph
+      invariant ref in s.ephemeralIndirectionTable.graph
       invariant !exiting ==> msg == BT.InterpretLookup(lookup, key)
       invariant io.initialized()
       {
@@ -323,7 +323,7 @@ module {:extern} Impl refines Main {
           if (node.children.Some?) {
             ref := node.children.value[Pivots.Route(node.pivotTable, key)];
             assert ref in BT.G.Successors(IS.INode(node));
-            assert ref in s.ephemeralSuperblock.graph;
+            assert ref in s.ephemeralIndirectionTable.graph;
           } else {
             if !msg.Define? {
               // Case where we reach leaf and find nothing
@@ -378,7 +378,7 @@ module {:extern} Impl refines Main {
     IDiskOp(io.diskOp()))
   {
     if (s.Unready?) {
-      s' := PageInSuperblock(k, s, io);
+      s' := PageInIndirectionTable(k, s, io);
       success := false;
       return;
     }
@@ -395,9 +395,9 @@ module {:extern} Impl refines Main {
   method getFreeRef(s: Variables)
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
-  ensures ref.Some? ==> ref.value !in s.ephemeralSuperblock.graph
+  ensures ref.Some? ==> ref.value !in s.ephemeralIndirectionTable.graph
   {
-    var v := s.ephemeralSuperblock.graph.Keys;
+    var v := s.ephemeralIndirectionTable.graph.Keys;
 
     var m;
     if |v| >= 1 {
@@ -416,12 +416,12 @@ module {:extern} Impl refines Main {
   method getFreeLba(s: Variables)
   returns (lba : Option<LBA>)
   requires s.Ready?
-  ensures lba.Some? ==> lba.value !in s.persistentSuperblock.lbas.Values
-  ensures lba.Some? ==> lba.value !in s.ephemeralSuperblock.lbas.Values
-  ensures lba.Some? ==> lba.value != BC.SuperblockLBA()
+  ensures lba.Some? ==> lba.value !in s.persistentIndirectionTable.lbas.Values
+  ensures lba.Some? ==> lba.value !in s.ephemeralIndirectionTable.lbas.Values
+  ensures lba.Some? ==> lba.value != BC.IndirectionTableLBA()
   {
-    var v1 := s.persistentSuperblock.lbas.Values;
-    var v2 := s.ephemeralSuperblock.lbas.Values;
+    var v1 := s.persistentIndirectionTable.lbas.Values;
+    var v2 := s.ephemeralIndirectionTable.lbas.Values;
 
     var m1;
     var m2;
@@ -450,7 +450,7 @@ module {:extern} Impl refines Main {
     && s.Ready?
     && ref in s.cache
     && ref != BT.G.Root()
-    && forall r | r in s.ephemeralSuperblock.graph :: ref !in s.ephemeralSuperblock.graph[r]
+    && forall r | r in s.ephemeralIndirectionTable.graph :: ref !in s.ephemeralIndirectionTable.graph[r]
   }
 
   method dealloc(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
@@ -464,10 +464,10 @@ module {:extern} Impl refines Main {
   ensures DAM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     s' := IS.Ready(
-        s.persistentSuperblock,
-        BC.Superblock(
-          MapRemove(s.ephemeralSuperblock.lbas, {ref}),
-          MapRemove(s.ephemeralSuperblock.graph, {ref})
+        s.persistentIndirectionTable,
+        BC.IndirectionTable(
+          MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
+          MapRemove(s.ephemeralIndirectionTable.graph, {ref})
         ),
         MapRemove(s.cache, {ref})
       );
@@ -680,17 +680,17 @@ module {:extern} Impl refines Main {
     SSTable.Isuffix(child.buckets, num_children_left);
 
     forall r | r in BT.G.Successors(IS.INode(child))
-    ensures r in s.ephemeralSuperblock.graph
+    ensures r in s.ephemeralIndirectionTable.graph
     {
-      assert BC.BlockPointsToValidReferences(IS.INode(fused_child), s.ephemeralSuperblock.graph);
+      assert BC.BlockPointsToValidReferences(IS.INode(fused_child), s.ephemeralIndirectionTable.graph);
       assert r in BT.G.Successors(IS.INode(fused_child));
     }
-    assert BC.BlockPointsToValidReferences(IS.INode(child), s.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(child), s.ephemeralIndirectionTable.graph);
 
     // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
     // This sort of proof logic shouldn't have to be in the implementation.
-    assert BC.BlockPointsToValidReferences(IS.INode(left_child), s.ephemeralSuperblock.graph);
-    assert BC.BlockPointsToValidReferences(IS.INode(right_child), s.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(left_child), s.ephemeralIndirectionTable.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(right_child), s.ephemeralIndirectionTable.graph);
 
     var s1, left_childref := alloc(k, s, left_child);
     if left_childref.None? {
@@ -722,25 +722,25 @@ module {:extern} Impl refines Main {
     assert IS.WFNode(split_parent);
 
     forall r | r in BT.G.Successors(IS.INode(split_parent))
-    ensures r in s2.ephemeralSuperblock.graph
+    ensures r in s2.ephemeralIndirectionTable.graph
     {
-      assert BC.BlockPointsToValidReferences(IS.INode(fused_parent), s2.ephemeralSuperblock.graph);
+      assert BC.BlockPointsToValidReferences(IS.INode(fused_parent), s2.ephemeralIndirectionTable.graph);
       var idx :| 0 <= idx < |split_parent_children| && split_parent_children[idx] == r;
       if (idx < slot) {
         assert r == fused_parent.children.value[idx];
-        assert r in s2.ephemeralSuperblock.graph;
+        assert r in s2.ephemeralIndirectionTable.graph;
       } else if (idx == slot) {
         assert r == left_childref.value;
-        assert r in s2.ephemeralSuperblock.graph;
+        assert r in s2.ephemeralIndirectionTable.graph;
       } else if (idx == slot + 1) {
         assert r == right_childref.value;
-        assert r in s2.ephemeralSuperblock.graph;
+        assert r in s2.ephemeralIndirectionTable.graph;
       } else {
         assert r == fused_parent.children.value[idx-1];
-        assert r in s2.ephemeralSuperblock.graph;
+        assert r in s2.ephemeralIndirectionTable.graph;
       }
     }
-    assert BC.BlockPointsToValidReferences(IS.INode(split_parent), s2.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(split_parent), s2.ephemeralIndirectionTable.graph);
 
     assert parentref in s.cache;
     assert parentref in IS.ICache(s.cache);
@@ -777,10 +777,10 @@ module {:extern} Impl refines Main {
   requires childref !in s.cache
   requires ref in s.cache
   requires childref in BT.G.Successors(IS.INode(s.cache[ref]))
-  ensures childref in s.ephemeralSuperblock.lbas
+  ensures childref in s.ephemeralIndirectionTable.lbas
   {
     assert childref in BT.G.Successors(IS.ICache(s.cache)[ref]);
-    assert childref in IS.IVars(s).ephemeralSuperblock.lbas;
+    assert childref in IS.IVars(s).ephemeralIndirectionTable.lbas;
   }
 
   method flush(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, slot: int)
@@ -835,7 +835,7 @@ module {:extern} Impl refines Main {
     var newchild := child.(buckets := newbuckets);
 
     assert BT.G.Successors(IS.INode(newchild)) == BT.G.Successors(IS.INode(child));
-    assert BC.BlockPointsToValidReferences(IS.INode(newchild), s.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(newchild), s.ephemeralIndirectionTable.graph);
 
     var s1, newchildref := alloc(k, s, newchild);
     if newchildref.None? {
@@ -851,14 +851,14 @@ module {:extern} Impl refines Main {
         node.buckets[slot := SSTable.Empty()]
       );
 
-    assert BC.BlockPointsToValidReferences(IS.INode(node), s1.ephemeralSuperblock.graph);
-    forall ref | ref in BT.G.Successors(IS.INode(newparent)) ensures ref in s1.ephemeralSuperblock.graph {
+    assert BC.BlockPointsToValidReferences(IS.INode(node), s1.ephemeralIndirectionTable.graph);
+    forall ref | ref in BT.G.Successors(IS.INode(newparent)) ensures ref in s1.ephemeralIndirectionTable.graph {
       if (ref == newchildref.value) {
       } else {
         assert ref in BT.G.Successors(IS.INode(node));
       }
     }
-    assert BC.BlockPointsToValidReferences(IS.INode(newparent), s1.ephemeralSuperblock.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(newparent), s1.ephemeralIndirectionTable.graph);
 
     assert ref in s.cache;
     assert ref in IS.ICache(s.cache);
@@ -881,8 +881,8 @@ module {:extern} Impl refines Main {
   requires DAM.M.Inv(k, IS.IVars(s))
   requires s.Ready?
   requires ref in s.cache
-  requires parentref in s.ephemeralSuperblock.graph
-  requires ref in s.ephemeralSuperblock.graph[parentref]
+  requires parentref in s.ephemeralIndirectionTable.graph
+  requires ref in s.ephemeralIndirectionTable.graph[parentref]
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
@@ -978,7 +978,7 @@ module {:extern} Impl refines Main {
   {
     if (s.Unready?) {
       // TODO we could just do nothing here instead
-      s' := PageInSuperblock(k, s, io);
+      s' := PageInIndirectionTable(k, s, io);
       success := false;
       return;
     }
@@ -992,20 +992,20 @@ module {:extern} Impl refines Main {
         s' := fixBigRoot(k, s, io);
       } else {
         assert !deallocable(s, ref);
-        assert !(forall r | r in s.ephemeralSuperblock.graph :: ref !in s.ephemeralSuperblock.graph[r]);
-        assert !(forall r :: r in s.ephemeralSuperblock.graph ==> ref !in s.ephemeralSuperblock.graph[r]);
-        assert (exists r :: !(r in s.ephemeralSuperblock.graph ==> ref !in s.ephemeralSuperblock.graph[r]));
-        var r :| !(r in s.ephemeralSuperblock.graph ==> ref !in s.ephemeralSuperblock.graph[r]);
+        assert !(forall r | r in s.ephemeralIndirectionTable.graph :: ref !in s.ephemeralIndirectionTable.graph[r]);
+        assert !(forall r :: r in s.ephemeralIndirectionTable.graph ==> ref !in s.ephemeralIndirectionTable.graph[r]);
+        assert (exists r :: !(r in s.ephemeralIndirectionTable.graph ==> ref !in s.ephemeralIndirectionTable.graph[r]));
+        var r :| !(r in s.ephemeralIndirectionTable.graph ==> ref !in s.ephemeralIndirectionTable.graph[r]);
         s' := fixBigNode(k, s, io, ref, r);
       }
-    } else if ref :| ref in s.ephemeralSuperblock.graph && ref !in s.ephemeralSuperblock.lbas {
+    } else if ref :| ref in s.ephemeralIndirectionTable.graph && ref !in s.ephemeralIndirectionTable.lbas {
       var lba := getFreeLba(s);
       match lba {
         case Some(lba) => {
           var succ := WriteSector(io, lba, IS.SectorBlock(s.cache[ref]));
           if (succ) {
             success := false;
-            s' := s.(ephemeralSuperblock := s.ephemeralSuperblock.(lbas := s.ephemeralSuperblock.lbas[ref := lba]));
+            s' := s.(ephemeralIndirectionTable := s.ephemeralIndirectionTable.(lbas := s.ephemeralIndirectionTable.lbas[ref := lba]));
             assert BC.WriteBack(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
             assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.WriteBackStep(ref)));
           } else {
@@ -1023,17 +1023,17 @@ module {:extern} Impl refines Main {
         }
       }
     } else {
-      var succ := WriteSector(io, BC.SuperblockLBA(), IS.SectorSuperblock(s.ephemeralSuperblock));
+      var succ := WriteSector(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.ephemeralIndirectionTable));
       if (succ) {
         success := true;
-        s' := s.(persistentSuperblock := s.ephemeralSuperblock);
-        assert BC.WriteBackSuperblock(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
-        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.SyncOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.WriteBackSuperblockStep));
+        s' := s.(persistentIndirectionTable := s.ephemeralIndirectionTable);
+        assert BC.WriteBackIndirectionTable(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
+        assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.SyncOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.WriteBackIndirectionTableStep));
       } else {
         success := false;
         s' := s;
         assert DAM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), DAM.M.BlockCacheMoveStep(BC.NoOpStep));
-        print "giving up; could not write superblock\n";
+        print "giving up; could not write indirectionTable\n";
       }
     }
   }

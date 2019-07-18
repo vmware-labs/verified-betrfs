@@ -27,13 +27,13 @@ module {:extern} ImplState {
     )
   datatype Variables =
     | Ready(
-        persistentSuperblock: BC.Superblock,
-        ephemeralSuperblock: BC.Superblock,
+        persistentIndirectionTable: BC.IndirectionTable,
+        ephemeralIndirectionTable: BC.IndirectionTable,
         cache: map<Reference, Node>)
     | Unready
   datatype Sector =
     | SectorBlock(block: Node)
-    | SectorSuperblock(superblock: BC.Superblock)
+    | SectorIndirectionTable(indirectionTable: BC.IndirectionTable)
 
   predicate WFBuckets(buckets: seq<SSTable.SSTable>)
   {
@@ -50,7 +50,7 @@ module {:extern} ImplState {
   predicate WFVars(vars: Variables)
   {
     match vars {
-      case Ready(persistentSuperblock, ephemeralSuperblock, cache) => WFCache(cache)
+      case Ready(persistentIndirectionTable, ephemeralIndirectionTable, cache) => WFCache(cache)
       case Unready => true
     }
   }
@@ -58,7 +58,7 @@ module {:extern} ImplState {
   {
     match sector {
       case SectorBlock(node) => WFNode(node)
-      case SectorSuperblock(superblock) => BC.WFPersistentSuperblock(superblock)
+      case SectorIndirectionTable(indirectionTable) => BC.WFPersistentIndirectionTable(indirectionTable)
     }
   }
 
@@ -76,8 +76,8 @@ module {:extern} ImplState {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentSuperblock, ephemeralSuperblock, cache) =>
-        BC.Ready(persistentSuperblock, ephemeralSuperblock, ICache(cache))
+      case Ready(persistentIndirectionTable, ephemeralIndirectionTable, cache) =>
+        BC.Ready(persistentIndirectionTable, ephemeralIndirectionTable, ICache(cache))
       case Unready => BC.Unready
     }
   }
@@ -86,7 +86,7 @@ module {:extern} ImplState {
   {
     match sector {
       case SectorBlock(node) => BC.SectorBlock(INode(node))
-      case SectorSuperblock(superblock) => BC.SectorSuperblock(superblock)
+      case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(indirectionTable)
     }
   }
 

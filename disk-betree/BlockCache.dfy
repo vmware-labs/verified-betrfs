@@ -9,12 +9,12 @@ module LBAType {
   import NativeTypes
 
   type LBA(==,!new) = NativeTypes.uint64
-  function method SuperblockLBA() : LBA { 0 }
+  function method IndirectionTableLBA() : LBA { 0 }
 
   function method toLBA(i: NativeTypes.uint64) : LBA{ i }
   function method toUint64(i: LBA) : NativeTypes.uint64 { i }
 
-  export S provides LBA, SuperblockLBA, toLBA, toUint64, NativeTypes
+  export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes
   export extends S
 	export Internal reveals *
 }
@@ -27,16 +27,16 @@ abstract module BlockCache refines Transactable {
 
   type LBA = LBAType.LBA
   datatype Constants = Constants()
-  function method SuperblockLBA() : LBA { LBAType.SuperblockLBA() }
+  function method IndirectionTableLBA() : LBA { LBAType.IndirectionTableLBA() }
 
-  // TODO make superblock take up more than one block (it's not really a superblock)
-  datatype Superblock = Superblock(
+  // TODO make indirectionTable take up more than one block (it's not really a indirectionTable)
+  datatype IndirectionTable = IndirectionTable(
       lbas: map<Reference, LBA>,
       graph: map<Reference, seq<Reference>>)
 
   datatype Sector =
     | SectorBlock(block: Node)
-    | SectorSuperblock(superblock: Superblock)
+    | SectorIndirectionTable(indirectionTable: IndirectionTable)
 
   type DiskOp = Disk.DiskOp<LBA, Sector>
 
@@ -44,8 +44,8 @@ abstract module BlockCache refines Transactable {
 
   datatype Variables =
     | Ready(
-        persistentSuperblock: Superblock,
-        ephemeralSuperblock: Superblock,
+        persistentIndirectionTable: IndirectionTable,
+        ephemeralIndirectionTable: IndirectionTable,
         cache: map<Reference, Node>)
     | Unready
 
@@ -53,24 +53,24 @@ abstract module BlockCache refines Transactable {
   predicate IsNotDirty(s: Variables, ref: Reference)
   requires s.Ready?
   {
-    ref in s.ephemeralSuperblock.lbas
+    ref in s.ephemeralIndirectionTable.lbas
   }
   predicate IsAllocated(s: Variables, ref: Reference)
   requires s.Ready?
   {
-    ref in s.ephemeralSuperblock.graph
+    ref in s.ephemeralIndirectionTable.graph
   }
   predicate ValidLBAForNode(k: Constants, lba: LBA)
   {
-    lba != SuperblockLBA()
+    lba != IndirectionTableLBA()
   }
 
   datatype Step =
     | WriteBackStep(ref: Reference)
-    | WriteBackSuperblockStep
+    | WriteBackIndirectionTableStep
     | UnallocStep(ref: Reference)
     | PageInStep(ref: Reference)
-    | PageInSuperblockStep
+    | PageInIndirectionTableStep
     | EvictStep(ref: Reference)
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
@@ -82,20 +82,20 @@ abstract module BlockCache refines Transactable {
         succ in graph
   }
 
-  predicate WFPersistentSuperblock(superblock: Superblock)
+  predicate WFPersistentIndirectionTable(indirectionTable: IndirectionTable)
   {
-    && SuperblockLBA() !in superblock.lbas.Values
-    && superblock.graph.Keys == superblock.lbas.Keys
-    && G.Root() in superblock.graph
-    && GraphClosed(superblock.graph)
+    && IndirectionTableLBA() !in indirectionTable.lbas.Values
+    && indirectionTable.graph.Keys == indirectionTable.lbas.Keys
+    && G.Root() in indirectionTable.graph
+    && GraphClosed(indirectionTable.graph)
   }
 
-  predicate WFSuperblock(k: Constants, superblock: Superblock)
+  predicate WFIndirectionTable(k: Constants, indirectionTable: IndirectionTable)
   {
-    && SuperblockLBA() !in superblock.lbas.Values
-    && superblock.lbas.Keys <= superblock.graph.Keys
-    && G.Root() in superblock.graph
-    && GraphClosed(superblock.graph)
+    && IndirectionTableLBA() !in indirectionTable.lbas.Values
+    && indirectionTable.lbas.Keys <= indirectionTable.graph.Keys
+    && G.Root() in indirectionTable.graph
+    && GraphClosed(indirectionTable.graph)
   }
 
   predicate WriteBack(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -104,24 +104,24 @@ abstract module BlockCache refines Transactable {
     && dop.WriteOp?
     && ref in s.cache
     && ValidLBAForNode(k, dop.lba)
-    && dop.lba !in s.persistentSuperblock.lbas.Values
-    && dop.lba !in s.ephemeralSuperblock.lbas.Values
+    && dop.lba !in s.persistentIndirectionTable.lbas.Values
+    && dop.lba !in s.ephemeralIndirectionTable.lbas.Values
     && dop.sector == SectorBlock(s.cache[ref])
     && s'.Ready?
-    && s'.persistentSuperblock == s.persistentSuperblock
-    && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas[ref := dop.lba]
-    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph
+    && s'.persistentIndirectionTable == s.persistentIndirectionTable
+    && s'.ephemeralIndirectionTable.lbas == s.ephemeralIndirectionTable.lbas[ref := dop.lba]
+    && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph
     && s'.cache == s.cache
   }
 
-  predicate WriteBackSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate WriteBackIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Ready?
     && dop.WriteOp?
-    && dop.lba == SuperblockLBA()
-    && dop.sector == SectorSuperblock(s.ephemeralSuperblock)
-    && s.cache.Keys <= s.ephemeralSuperblock.lbas.Keys
-    && s' == s.(persistentSuperblock := s.ephemeralSuperblock)
+    && dop.lba == IndirectionTableLBA()
+    && dop.sector == SectorIndirectionTable(s.ephemeralIndirectionTable)
+    && s.cache.Keys <= s.ephemeralIndirectionTable.lbas.Keys
+    && s' == s.(persistentIndirectionTable := s.ephemeralIndirectionTable)
   }
 
   predicate BlockPointsToValidReferences(block: Node, graph: map<Reference, seq<Reference>>)
@@ -136,15 +136,15 @@ abstract module BlockCache refines Transactable {
     && ref in s.cache
     && s'.Ready?
     && s'.cache == s.cache[ref := block]
-    && s'.persistentSuperblock == s.persistentSuperblock
+    && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
-    && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
+    && s'.ephemeralIndirectionTable.lbas == MapRemove(s.ephemeralIndirectionTable.lbas, {ref})
 
-    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.graph)
+    && BlockPointsToValidReferences(block, s.ephemeralIndirectionTable.graph)
 
-    && ref in s'.ephemeralSuperblock.graph
-    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := s'.ephemeralSuperblock.graph[ref]]
-    && (iset r | r in s'.ephemeralSuperblock.graph[ref]) == G.Successors(block)
+    && ref in s'.ephemeralIndirectionTable.graph
+    && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph[ref := s'.ephemeralIndirectionTable.graph[ref]]
+    && (iset r | r in s'.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -155,15 +155,15 @@ abstract module BlockCache refines Transactable {
     && !IsAllocated(s, ref)
     && s'.Ready?
     && s'.cache == s.cache[ref := block]
-    && s'.persistentSuperblock == s.persistentSuperblock
+    && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
-    && s'.ephemeralSuperblock.lbas == s.ephemeralSuperblock.lbas
+    && s'.ephemeralIndirectionTable.lbas == s.ephemeralIndirectionTable.lbas
 
-    && BlockPointsToValidReferences(block, s.ephemeralSuperblock.graph)
+    && BlockPointsToValidReferences(block, s.ephemeralIndirectionTable.graph)
 
-    && ref in s'.ephemeralSuperblock.graph
-    && s'.ephemeralSuperblock.graph == s.ephemeralSuperblock.graph[ref := s'.ephemeralSuperblock.graph[ref]]
-    && (iset r | r in s'.ephemeralSuperblock.graph[ref]) == G.Successors(block)
+    && ref in s'.ephemeralIndirectionTable.graph
+    && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph[ref := s'.ephemeralIndirectionTable.graph[ref]]
+    && (iset r | r in s'.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
   }
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
@@ -199,13 +199,13 @@ abstract module BlockCache refines Transactable {
 
     // We can only dealloc this if nothing is pointing to it.
     && ref != G.Root()
-    && NoPredecessors(s.ephemeralSuperblock.graph, ref)
+    && NoPredecessors(s.ephemeralIndirectionTable.graph, ref)
 
     && s'.Ready?
-    && s'.persistentSuperblock == s.persistentSuperblock
-    && s'.ephemeralSuperblock.lbas == MapRemove(s.ephemeralSuperblock.lbas, {ref})
+    && s'.persistentIndirectionTable == s.persistentIndirectionTable
+    && s'.ephemeralIndirectionTable.lbas == MapRemove(s.ephemeralIndirectionTable.lbas, {ref})
     && s'.cache == MapRemove(s.cache, {ref})
-    && s'.ephemeralSuperblock.graph == MapRemove(s.ephemeralSuperblock.graph, {ref})
+    && s'.ephemeralIndirectionTable.graph == MapRemove(s.ephemeralIndirectionTable.graph, {ref})
   }
 
   predicate PageIn(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -214,20 +214,20 @@ abstract module BlockCache refines Transactable {
     && dop.ReadOp?
     && IsAllocated(s, ref)
     && IsNotDirty(s, ref)
-    && s.ephemeralSuperblock.lbas[ref] == dop.lba
+    && s.ephemeralIndirectionTable.lbas[ref] == dop.lba
     && dop.sector.SectorBlock?
-    && (iset r | r in s.ephemeralSuperblock.graph[ref]) == G.Successors(dop.sector.block)
+    && (iset r | r in s.ephemeralIndirectionTable.graph[ref]) == G.Successors(dop.sector.block)
     && s' == s.(cache := s.cache[ref := dop.sector.block])
   }
 
-  predicate PageInSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate PageInIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Unready?
     && dop.ReadOp?
-    && dop.lba == SuperblockLBA()
-    && dop.sector.SectorSuperblock?
-    && WFPersistentSuperblock(dop.sector.superblock)
-    && s' == Ready(dop.sector.superblock, dop.sector.superblock, map[])
+    && dop.lba == IndirectionTableLBA()
+    && dop.sector.SectorIndirectionTable?
+    && WFPersistentIndirectionTable(dop.sector.indirectionTable)
+    && s' == Ready(dop.sector.indirectionTable, dop.sector.indirectionTable, map[])
   }
 
   predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -253,10 +253,10 @@ abstract module BlockCache refines Transactable {
   predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step) {
     match step {
       case WriteBackStep(ref) => WriteBack(k, s, s', dop, ref)
-      case WriteBackSuperblockStep => WriteBackSuperblock(k, s, s', dop)
+      case WriteBackIndirectionTableStep => WriteBackIndirectionTable(k, s, s', dop)
       case UnallocStep(ref) => Unalloc(k, s, s', dop, ref)
       case PageInStep(ref) => PageIn(k, s, s', dop, ref)
-      case PageInSuperblockStep => PageInSuperblock(k, s, s', dop)
+      case PageInIndirectionTableStep => PageInIndirectionTable(k, s, s', dop)
       case EvictStep(ref) => Evict(k, s, s', dop, ref)
       case NoOpStep => NoOp(k, s, s', dop)
       case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
@@ -276,18 +276,18 @@ abstract module BlockCache refines Transactable {
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
-    && WFPersistentSuperblock(s.persistentSuperblock)
-    && WFSuperblock(k, s.ephemeralSuperblock)
-    && s.cache.Keys <= s.ephemeralSuperblock.graph.Keys
-    && s.ephemeralSuperblock.graph.Keys <= s.cache.Keys + s.ephemeralSuperblock.lbas.Keys
-    && CacheConsistentWithSuccessors(s.cache, s.ephemeralSuperblock.graph)
-    && GraphClosed(s.ephemeralSuperblock.graph)
+    && WFPersistentIndirectionTable(s.persistentIndirectionTable)
+    && WFIndirectionTable(k, s.ephemeralIndirectionTable)
+    && s.cache.Keys <= s.ephemeralIndirectionTable.graph.Keys
+    && s.ephemeralIndirectionTable.graph.Keys <= s.cache.Keys + s.ephemeralIndirectionTable.lbas.Keys
+    && CacheConsistentWithSuccessors(s.cache, s.ephemeralIndirectionTable.graph)
+    && GraphClosed(s.ephemeralIndirectionTable.graph)
   }
 
   predicate Inv(k: Constants, s: Variables)
   {
     match s {
-      case Ready(persistentSuperblock, ephemeralSuperblock, cache) => InvReady(k, s)
+      case Ready(persistentIndirectionTable, ephemeralIndirectionTable, cache) => InvReady(k, s)
       case Unready => true
     }
   }
@@ -308,9 +308,9 @@ abstract module BlockCache refines Transactable {
     }
   }
 
-  lemma WriteBackSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackIndirectionTableStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires WriteBackSuperblock(k, s, s', dop)
+    requires WriteBackIndirectionTable(k, s, s', dop)
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
@@ -372,17 +372,17 @@ abstract module BlockCache refines Transactable {
   {
     if (s'.Ready?) {
       /*
-      forall key | key in s'.ephemeralSuperblock.lbas.Keys
-      ensures key in s'.ephemeralSuperblock.graph.Keys
+      forall key | key in s'.ephemeralIndirectionTable.lbas.Keys
+      ensures key in s'.ephemeralIndirectionTable.graph.Keys
       {
-        assert key in s.ephemeralSuperblock.lbas.Keys;
+        assert key in s.ephemeralIndirectionTable.lbas.Keys;
         assert key != ref;
-        assert key in s.ephemeralSuperblock.graph.Keys;
-        assert key in s.ephemeralSuperblock.graph;
-        assert key in MapRemove(s.ephemeralSuperblock.graph, {ref});
-        assert key in s'.ephemeralSuperblock.graph;
+        assert key in s.ephemeralIndirectionTable.graph.Keys;
+        assert key in s.ephemeralIndirectionTable.graph;
+        assert key in MapRemove(s.ephemeralIndirectionTable.graph, {ref});
+        assert key in s'.ephemeralIndirectionTable.graph;
       }
-      assert s'.ephemeralSuperblock.lbas.Keys <= s'.ephemeralSuperblock.graph.Keys;
+      assert s'.ephemeralIndirectionTable.lbas.Keys <= s'.ephemeralIndirectionTable.graph.Keys;
       */
       assert InvReady(k, s');
     }
@@ -398,9 +398,9 @@ abstract module BlockCache refines Transactable {
     }
   }
 
-  lemma PageInSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInIndirectionTableStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires PageInSuperblock(k, s, s', dop)
+    requires PageInIndirectionTable(k, s, s', dop)
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
@@ -425,10 +425,10 @@ abstract module BlockCache refines Transactable {
   {
     match step {
       case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
-      case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInvariant(k, s, s', dop);
+      case WriteBackIndirectionTableStep => WriteBackIndirectionTableStepPreservesInvariant(k, s, s', dop);
       case UnallocStep(ref) => UnallocStepPreservesInvariant(k, s, s', dop, ref);
       case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
-      case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
+      case PageInIndirectionTableStep => PageInIndirectionTableStepPreservesInvariant(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
       case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);

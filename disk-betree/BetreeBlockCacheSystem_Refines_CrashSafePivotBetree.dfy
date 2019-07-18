@@ -86,15 +86,15 @@ module BetreeBlockCacheSystem_Refines_CrashSafePivotBetree {
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop), CSBT.EphemeralMoveStep);
   }
 
-  lemma RefinesWriteBackSuperblockStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
+  lemma RefinesWriteBackIndirectionTableStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
   requires uiop.NoOp? || uiop.SyncOp?
-  requires BC.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+  requires BC.WriteBackIndirectionTable(k.machine, s.machine, s'.machine, dop)
   requires D.Write(k.disk, s.disk, s'.disk, dop);
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))
   {
-    BCS.WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
+    BCS.WriteBackIndirectionTableStepSyncsGraphs(k, s, s', dop);
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop), CSBT.SyncStep);
   }
 
@@ -128,15 +128,15 @@ module BetreeBlockCacheSystem_Refines_CrashSafePivotBetree {
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop), CSBT.EphemeralMoveStep);
   }
 
-  lemma RefinesPageInSuperblockStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
+  lemma RefinesPageInIndirectionTableStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
   requires uiop.NoOp?
-  requires BC.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+  requires BC.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
   requires D.Read(k.disk, s.disk, s'.disk, dop);
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))
   {
-    BCS.PageInSuperblockStepPreservesGraphs(k, s, s', dop);
+    BCS.PageInIndirectionTableStepPreservesGraphs(k, s, s', dop);
     assert BT.NextStep(Ik(k), I(k, s).ephemeral, I(k, s').ephemeral, uiop, BT.StutterStep);
     assert CSBT.NextStep(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop), CSBT.EphemeralMoveStep);
   }
@@ -171,17 +171,17 @@ module BetreeBlockCacheSystem_Refines_CrashSafePivotBetree {
   lemma RefinesBlockCacheMoveStep(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: M.UIOp, dop: DiskOp, step: BC.Step)
   requires BBCS.Inv(k, s)
   requires BBCS.Inv(k, s')
-  requires (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackSuperblockStep?))
+  requires (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackIndirectionTableStep?))
   requires M.BlockCacheMove(k.machine, s.machine, s'.machine, uiop, dop, step)
   requires D.Next(k.disk, s.disk, s'.disk, dop)
   ensures CSBT.Next(Ik(k), I(k, s), I(k, s'), CrashTypes.NormalOp(uiop))
   {
     match step {
       case WriteBackStep(ref) => RefinesWriteBackStep(k, s, s', uiop, dop, ref);
-      case WriteBackSuperblockStep => RefinesWriteBackSuperblockStep(k, s, s', uiop, dop);
+      case WriteBackIndirectionTableStep => RefinesWriteBackIndirectionTableStep(k, s, s', uiop, dop);
       case UnallocStep(ref) => RefinesUnallocStep(k, s, s', uiop, dop, ref);
       case PageInStep(ref) => RefinesPageInStep(k, s, s', uiop, dop, ref);
-      case PageInSuperblockStep => RefinesPageInSuperblockStep(k, s, s', uiop, dop);
+      case PageInIndirectionTableStep => RefinesPageInIndirectionTableStep(k, s, s', uiop, dop);
       case EvictStep(ref) => RefinesEvictStep(k, s, s', uiop, dop, ref);
       case NoOpStep => RefinesNoOpStep(k, s, s', uiop, dop);
       case TransactionStep(ops) => { assert false; }

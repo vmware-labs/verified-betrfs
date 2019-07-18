@@ -41,8 +41,8 @@ module Marshalling {
 
   /////// Grammar
 
-  function method SuperblockGrammar() : G
-  ensures ValidGrammar(SuperblockGrammar())
+  function method IndirectionTableGrammar() : G
+  ensures ValidGrammar(IndirectionTableGrammar())
   {
     // (Reference, LBA, successor-list) triples
     GArray(GTuple([GUint64, GUint64, GArray(GUint64)]))
@@ -70,7 +70,7 @@ module Marshalling {
   function method SectorGrammar() : G
   ensures ValidGrammar(SectorGrammar())
   {
-    GTaggedUnion([SuperblockGrammar(), PivotNodeGrammar()])    
+    GTaggedUnion([IndirectionTableGrammar(), PivotNodeGrammar()])    
   }
 
   // Disk block size
@@ -182,15 +182,15 @@ module Marshalling {
     )
   }
 
-  function method valToSuperblock(v: V) : (s : Option<BC.Superblock>)
-  requires ValInGrammar(v, SuperblockGrammar())
-  ensures s.Some? ==> BC.WFPersistentSuperblock(s.value)
+  function method valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
+  requires ValInGrammar(v, IndirectionTableGrammar())
+  ensures s.Some? ==> BC.WFPersistentIndirectionTable(s.value)
   {
     var res := valToLBAsAndSuccs(v.a);
     match res {
       case Some(res) => (
         if BT.G.Root() in res.1 && BC.GraphClosed(res.1) then (
-          Some(BC.Superblock(res.0, res.1))
+          Some(BC.IndirectionTable(res.0, res.1))
         ) else (
           None
         )
@@ -463,8 +463,8 @@ module Marshalling {
   ensures s.Some? ==> ImplState.WFSector(s.value)
   {
     if v.c == 0 then (
-      match valToSuperblock(v.val) {
-        case Some(s) => Some(ImplState.SectorSuperblock(s))
+      match valToIndirectionTable(v.val) {
+        case Some(s) => Some(ImplState.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
@@ -480,8 +480,8 @@ module Marshalling {
   ensures s == valToSector(v)
   {
     if v.c == 0 {
-      match valToSuperblock(v.val) {
-        case Some(s) => return Some(ImplState.SectorSuperblock(s));
+      match valToIndirectionTable(v.val) {
+        case Some(s) => return Some(ImplState.SectorIndirectionTable(s));
         case None => return None;
       }
     } else {
@@ -535,7 +535,7 @@ module Marshalling {
   requires 0 !in lbas.Values
   requires |lbas| < 0x1_0000_0000_0000_0000
   ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, SuperblockGrammar());
+  ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableGrammar());
   ensures v.Some? ==> |v.value.a| == |lbas|
   ensures v.Some? ==> valToLBAsAndSuccs(v.value.a) == Some((lbas, graph));
   {
@@ -738,7 +738,7 @@ module Marshalling {
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int
   {
     match sector {
-      case SectorSuperblock(Superblock(lbas, succs)) => {
+      case SectorIndirectionTable(IndirectionTable(lbas, succs)) => {
         if |lbas| < 0x1_0000_0000_0000_0000 {
           var w := lbasSuccsToVal(lbas, succs);
           match w {

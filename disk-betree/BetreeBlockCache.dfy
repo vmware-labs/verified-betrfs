@@ -51,13 +51,13 @@ module BetreeBlockCache refines DiskAccessMachine {
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step) {
-    && (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackSuperblockStep?))
+    && (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackIndirectionTableStep?))
     && (
       || step.WriteBackStep?
-      || step.WriteBackSuperblockStep?
+      || step.WriteBackIndirectionTableStep?
       || step.UnallocStep?
       || step.PageInStep?
-      || step.PageInSuperblockStep?
+      || step.PageInIndirectionTableStep?
       || step.EvictStep?
       || step.NoOpStep?
     )

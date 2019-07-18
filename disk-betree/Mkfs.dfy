@@ -19,7 +19,7 @@ module {:extern} MkfsImpl {
   function method InitDisk() : map<LBA, IS.Sector> {
     map[
       // Map ref 0 to lba 1
-      0 := IS.SectorSuperblock(BC.Superblock(map[0 := 1], map[0 := []])),
+      0 := IS.SectorIndirectionTable(BC.IndirectionTable(map[0 := 1], map[0 := []])),
       // Put the root at lba 1
       1 := IS.SectorBlock(IS.Node([], None, [SSTable.Empty()]))
     ]

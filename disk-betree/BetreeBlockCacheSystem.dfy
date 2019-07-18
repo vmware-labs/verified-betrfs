@@ -125,14 +125,14 @@ module BetreeBlockCacheSystem refines DiskAccessModel {
     BCS.WriteBackStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma WriteBackSuperblockStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackIndirectionTableStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires BCS.Inv(k, s')
-    requires BC.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires BC.WriteBackIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.Write(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    BCS.WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
+    BCS.WriteBackIndirectionTableStepSyncsGraphs(k, s, s', dop);
   }
 
   lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
@@ -158,14 +158,14 @@ module BetreeBlockCacheSystem refines DiskAccessModel {
     BCS.PageInStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma PageInSuperblockStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInIndirectionTableStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires BCS.Inv(k, s')
-    requires BC.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires BC.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    BCS.PageInSuperblockStepPreservesGraphs(k, s, s', dop);
+    BCS.PageInIndirectionTableStepPreservesGraphs(k, s, s', dop);
   }
 
   lemma EvictStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: BCS.Reference)
@@ -190,10 +190,10 @@ module BetreeBlockCacheSystem refines DiskAccessModel {
 
     match step {
       case WriteBackStep(ref) => WriteBackStepPreservesInv(k, s, s', dop, ref);
-      case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInv(k, s, s', dop);
+      case WriteBackIndirectionTableStep => WriteBackIndirectionTableStepPreservesInv(k, s, s', dop);
       case UnallocStep(ref) => UnallocStepPreservesInv(k, s, s', dop, ref);
       case PageInStep(ref) => PageInStepPreservesInv(k, s, s', dop, ref);
-      case PageInSuperblockStep => PageInSuperblockStepPreservesInv(k, s, s', dop);
+      case PageInIndirectionTableStep => PageInIndirectionTableStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
       case NoOpStep => { }
       case TransactionStep(ops) => { assert false; }

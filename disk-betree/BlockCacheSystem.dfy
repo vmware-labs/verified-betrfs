@@ -19,62 +19,62 @@ abstract module BlockCacheSystem {
   type Constants = DAMConstants<M.Constants, D.Constants>
   type Variables = DAMVariables<M.Variables, D.Variables<LBA, Sector>>
 
-  type Superblock = M.Superblock
+  type IndirectionTable = M.IndirectionTable
   type Reference = M.G.Reference
   type Node = M.G.Node
   type Op = M.Op
 
   predicate WFDisk(k: Constants, blocks: map<LBA, Sector>)
   {
-    && var superblockLBA := M.SuperblockLBA();
-    && superblockLBA in blocks
-    && blocks[superblockLBA].SectorSuperblock?
-    && var superblock := blocks[superblockLBA].superblock;
-    && M.WFPersistentSuperblock(superblock)
+    && var indirectionTableLBA := M.IndirectionTableLBA();
+    && indirectionTableLBA in blocks
+    && blocks[indirectionTableLBA].SectorIndirectionTable?
+    && var indirectionTable := blocks[indirectionTableLBA].indirectionTable;
+    && M.WFPersistentIndirectionTable(indirectionTable)
   }
 
-  predicate WFSuperblockRefWrtDisk(superblock: Superblock, blocks: map<LBA,Sector>,
+  predicate WFIndirectionTableRefWrtDisk(indirectionTable: IndirectionTable, blocks: map<LBA,Sector>,
       ref: Reference)
-  requires ref in superblock.lbas
+  requires ref in indirectionTable.lbas
   {
-    && superblock.lbas[ref] in blocks
-    && blocks[superblock.lbas[ref]].SectorBlock?
+    && indirectionTable.lbas[ref] in blocks
+    && blocks[indirectionTable.lbas[ref]].SectorBlock?
   }
 
-  predicate WFSuperblockWrtDisk(k: Constants, superblock: Superblock, blocks: map<LBA, Sector>)
+  predicate WFIndirectionTableWrtDisk(k: Constants, indirectionTable: IndirectionTable, blocks: map<LBA, Sector>)
   {
-    && (forall ref | ref in superblock.lbas :: WFSuperblockRefWrtDisk(superblock, blocks, ref))
+    && (forall ref | ref in indirectionTable.lbas :: WFIndirectionTableRefWrtDisk(indirectionTable, blocks, ref))
   }
 
-  function DiskSuperblock(k: Constants, blocks: map<LBA, Sector>) : Superblock
+  function DiskIndirectionTable(k: Constants, blocks: map<LBA, Sector>) : IndirectionTable
   requires WFDisk(k, blocks)
   {
-    blocks[M.SuperblockLBA()].superblock
+    blocks[M.IndirectionTableLBA()].indirectionTable
   }
 
   function RefMapOfDisk(
       k: Constants,
-      superblock: Superblock,
+      indirectionTable: IndirectionTable,
       blocks: map<LBA, Sector>) : map<Reference, Node>
   requires WFDisk(k, blocks)
-  requires WFSuperblockWrtDisk(k, superblock, blocks)
+  requires WFIndirectionTableWrtDisk(k, indirectionTable, blocks)
   {
-    map ref | ref in superblock.lbas :: blocks[superblock.lbas[ref]].block
+    map ref | ref in indirectionTable.lbas :: blocks[indirectionTable.lbas[ref]].block
   }
 
-  function Graph(superblock: set<Reference>, block: map<Reference, Node>) : map<Reference, Node>
-  requires superblock <= block.Keys
+  function Graph(indirectionTable: set<Reference>, block: map<Reference, Node>) : map<Reference, Node>
+  requires indirectionTable <= block.Keys
   {
-    map ref | ref in superblock :: block[ref]
+    map ref | ref in indirectionTable :: block[ref]
   }
 
   function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires WFDisk(k, s.disk.blocks)
-  requires WFSuperblockWrtDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks)
+  requires WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
   {
     Graph(
-      DiskSuperblock(k, s.disk.blocks).graph.Keys,
-      RefMapOfDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks))
+      DiskIndirectionTable(k, s.disk.blocks).graph.Keys,
+      RefMapOfDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks))
   }
 
   predicate NoDanglingPointers(graph: map<Reference, Node>)
@@ -95,8 +95,8 @@ abstract module BlockCacheSystem {
     && M.Init(k.machine, s.machine)
     && D.Init(k.disk, s.disk)
     && WFDisk(k, s.disk.blocks)
-    && WFSuperblockWrtDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks)
-    && SuccessorsAgree(DiskSuperblock(k, s.disk.blocks).graph, PersistentGraph(k, s))
+    && WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(DiskIndirectionTable(k, s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && PersistentGraph(k, s).Keys == {M.G.Root()}
     && M.G.Successors(PersistentGraph(k, s)[M.G.Root()]) == iset{}
@@ -136,11 +136,11 @@ abstract module BlockCacheSystem {
   requires M.Inv(k.machine, s.machine)
   requires s.machine.Ready?
   requires WFDisk(k, s.disk.blocks)
-  requires WFSuperblockWrtDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)
+  requires WFIndirectionTableWrtDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks)
   {
     Graph(
-      s.machine.ephemeralSuperblock.graph.Keys,
-      MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), s.machine.cache)
+      s.machine.ephemeralIndirectionTable.graph.Keys,
+      MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks), s.machine.cache)
     )
   }
 
@@ -148,23 +148,23 @@ abstract module BlockCacheSystem {
   requires s.machine.Ready?
   {
     forall ref | ref in s.machine.cache ::
-      ref in s.machine.ephemeralSuperblock.lbas ==>
+      ref in s.machine.ephemeralIndirectionTable.lbas ==>
       MapsTo(
           s.disk.blocks,
-          s.machine.ephemeralSuperblock.lbas[ref],
+          s.machine.ephemeralIndirectionTable.lbas[ref],
           M.SectorBlock(s.machine.cache[ref]))
   }
 
   predicate Inv(k: Constants, s: Variables) {
     && M.Inv(k.machine, s.machine)
     && WFDisk(k, s.disk.blocks)
-    && WFSuperblockWrtDisk(k, DiskSuperblock(k, s.disk.blocks), s.disk.blocks)
-    && SuccessorsAgree(DiskSuperblock(k, s.disk.blocks).graph, PersistentGraph(k, s))
+    && WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(DiskIndirectionTable(k, s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && (s.machine.Ready? ==>
-      && s.machine.persistentSuperblock == DiskSuperblock(k, s.disk.blocks)
-      && WFSuperblockWrtDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)
-      && SuccessorsAgree(s.machine.ephemeralSuperblock.graph, EphemeralGraph(k, s))
+      && s.machine.persistentIndirectionTable == DiskIndirectionTable(k, s.disk.blocks)
+      && WFIndirectionTableWrtDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks)
+      && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(k, s))
       && NoDanglingPointers(EphemeralGraph(k, s))
       && CleanCacheEntriesAreCorrect(k, s)
     )
@@ -194,41 +194,41 @@ abstract module BlockCacheSystem {
     WriteBackStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma WriteBackSuperblockStepSyncsGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackIndirectionTableStepSyncsGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires M.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires M.WriteBackIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.Write(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s') == EphemeralGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     //assert M.Inv(k.machine, s'.machine);
     //assert WFDisk(k, s'.disk.blocks);
-    //assert WFSuperblockWrtDisk(k, DiskSuperblock(k, s'.disk.blocks), s'.disk.blocks);
+    //assert WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s'.disk.blocks), s'.disk.blocks);
 
-    assert DiskSuperblock(k, s'.disk.blocks) == s.machine.ephemeralSuperblock;
+    assert DiskIndirectionTable(k, s'.disk.blocks) == s.machine.ephemeralIndirectionTable;
 
     /*
     forall ref | ref in s.machine.cache
     ensures MapsTo(
-          RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks),
+          RefMapOfDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks),
           ref, s.machine.cache)[ref]
     {
     }
     */
 
-    assert RefMapOfDisk(k, DiskSuperblock(k, s'.disk.blocks), s'.disk.blocks)
-        == RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks)
-        == MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralSuperblock, s.disk.blocks), s.machine.cache);
+    assert RefMapOfDisk(k, DiskIndirectionTable(k, s'.disk.blocks), s'.disk.blocks)
+        == RefMapOfDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks)
+        == MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks), s.machine.cache);
     assert PersistentGraph(k, s') == EphemeralGraph(k, s);
   }
 
-  lemma WriteBackSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackIndirectionTableStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires M.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires M.WriteBackIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.Write(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    WriteBackSuperblockStepSyncsGraphs(k, s, s', dop);
+    WriteBackIndirectionTableStepSyncsGraphs(k, s, s', dop);
   }
 
   lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -328,22 +328,22 @@ abstract module BlockCacheSystem {
     PageInStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma PageInSuperblockStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInIndirectionTableStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires M.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires M.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
     ensures PersistentGraph(k, s) == EphemeralGraph(k, s');
   {
   }
 
-  lemma PageInSuperblockStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInIndirectionTableStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires M.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+    requires M.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.Read(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    PageInSuperblockStepPreservesGraphs(k, s, s', dop);
+    PageInIndirectionTableStepPreservesGraphs(k, s, s', dop);
   }
 
   lemma EvictStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -372,10 +372,10 @@ abstract module BlockCacheSystem {
     var step :| M.NextStep(k.machine, s.machine, s'.machine, dop, step);
     match step {
       case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
-      case WriteBackSuperblockStep => WriteBackSuperblockStepPreservesInvariant(k, s, s', dop);
+      case WriteBackIndirectionTableStep => WriteBackIndirectionTableStepPreservesInvariant(k, s, s', dop);
       case UnallocStep(ref) => UnallocStepPreservesInvariant(k, s, s', dop, ref);
       case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
-      case PageInSuperblockStep => PageInSuperblockStepPreservesInvariant(k, s, s', dop);
+      case PageInIndirectionTableStep => PageInIndirectionTableStepPreservesInvariant(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
       case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);

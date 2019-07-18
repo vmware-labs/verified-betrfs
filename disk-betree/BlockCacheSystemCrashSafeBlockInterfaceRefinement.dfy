@@ -67,10 +67,10 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
-  lemma RefinesWriteBackSuperblock(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp)
+  lemma RefinesWriteBackIndirectionTable(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp)
   requires BCS.Inv(k, s)
   requires BCS.Inv(k, s')
-  requires BC.WriteBackSuperblock(k.machine, s.machine, s'.machine, dop)
+  requires BC.WriteBackIndirectionTable(k.machine, s.machine, s'.machine, dop)
   requires D.Write(k.disk, s.disk, s'.disk, dop)
   ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
   {
@@ -164,8 +164,8 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
         var graph := BCS.EphemeralGraph(k, s);
         assert lookup[|lookup|-1] in Successors(graph[lookup[|lookup|-2]]);
         assert ref in Successors(graph[lookup[|lookup|-2]]);
-        assert Successors(graph[lookup[|lookup|-2]]) == (iset r | r in s.machine.ephemeralSuperblock.graph[lookup[|lookup|-2]]);
-        assert ref in s.machine.ephemeralSuperblock.graph[lookup[|lookup|-2]];
+        assert Successors(graph[lookup[|lookup|-2]]) == (iset r | r in s.machine.ephemeralIndirectionTable.graph[lookup[|lookup|-2]]);
+        assert ref in s.machine.ephemeralIndirectionTable.graph[lookup[|lookup|-2]];
         assert false;
       }
     }
@@ -197,10 +197,10 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
     assert CSBI.NextStep(Ik(k), I(k, s), I(k, s'), CSBI.EphemeralMoveStep);
   }
 
-  lemma RefinesPageInSuperblock(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp)
+  lemma RefinesPageInIndirectionTable(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, dop: DiskOp)
   requires BCS.Inv(k, s)
   requires BCS.Inv(k, s')
-  requires BC.PageInSuperblock(k.machine, s.machine, s'.machine, dop)
+  requires BC.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
   requires D.Read(k.disk, s.disk, s'.disk, dop)
   ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
   {
@@ -257,10 +257,10 @@ module BlockCacheSystemCrashSafeBlockInterfaceRefinement {
         var mstep :| BC.NextStep(k.machine, s.machine, s'.machine, dop, mstep);
         match mstep {
           case WriteBackStep(ref) => RefinesWriteBack(k, s, s', dop, ref);
-          case WriteBackSuperblockStep => RefinesWriteBackSuperblock(k, s, s', dop);
+          case WriteBackIndirectionTableStep => RefinesWriteBackIndirectionTable(k, s, s', dop);
           case UnallocStep(ref) => RefinesUnalloc(k, s, s', dop, ref);
           case PageInStep(ref) => RefinesPageIn(k, s, s', dop, ref);
-          case PageInSuperblockStep => RefinesPageInSuperblock(k, s, s', dop);
+          case PageInIndirectionTableStep => RefinesPageInIndirectionTable(k, s, s', dop);
           case EvictStep(ref) => RefinesEvict(k, s, s', dop, ref);
           case NoOpStep => RefinesNoOp(k, s, s', dop);
           case TransactionStep(ops) => RefinesTransaction(k, s, s', dop, ops);
