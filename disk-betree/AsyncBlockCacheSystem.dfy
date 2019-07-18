@@ -6,6 +6,7 @@ abstract module AsyncBlockCacheSystem {
 
   import opened Maps
   import opened Sequences
+  import opened Options
   import opened AsyncDiskModelTypes
 
   type LBA = M.LBA
@@ -168,4 +169,140 @@ abstract module AsyncBlockCacheSystem {
   }
 
   ////// Invariants
+
+  predicate CleanCacheEntriesAreCorrect(k: Constants, s: Variables)
+  requires s.machine.Ready?
+  {
+    forall ref | ref in s.machine.cache ::
+      ref in s.machine.ephemeralIndirectionTable.lbas ==>
+      MapsTo(
+          s.disk.blocks,
+          s.machine.ephemeralIndirectionTable.lbas[ref],
+          M.SectorBlock(s.machine.cache[ref]))
+  }
+
+  // Any outstanding read we have recorded should be consistent with
+  // whatever is in the queue.
+
+  predicate CorrectInflightBlockRead(k: Constants, s: Variables, id: D.ReqId, ref: Reference)
+  requires s.machine.Ready?
+  {
+    && ref in s.machine.ephemeralIndirectionTable.lbas
+    && var lba := s.machine.ephemeralIndirectionTable.lbas[ref];
+    && lba in s.disk.blocks
+    && var sector := s.disk.blocks[lba];
+    && !(id in s.disk.reqReads && id in s.disk.respReads)
+    && (id in s.disk.reqReads ==> s.disk.reqReads[id] == D.ReqRead(lba))
+    && (id in s.disk.respReads ==> s.disk.respReads[id] == D.RespRead(sector))
+  }
+
+  predicate CorrectInflightBlockReads(k: Constants, s: Variables)
+  requires s.machine.Ready?
+  {
+    forall id | id in s.machine.outstandingBlockReads ::
+      CorrectInflightBlockRead(k, s, id, s.machine.outstandingBlockReads[id].ref)
+  }
+
+  predicate CorrectInflightIndirectionTableReads(k: Constants, s: Variables)
+  requires s.machine.Unready?
+  {
+    s.machine.outstandingIndirectionTableRead.Some? ==> (
+      MapsTo(s.disk.reqReads,
+        s.machine.outstandingIndirectionTableRead.value,
+        D.ReqRead(M.IndirectionTableLBA())
+      )
+    )
+  }
+
+  // Any outstanding write we have recorded should be consistent with
+  // whatever is in the queue.
+
+  predicate CorrectInflightBlockWrite(k: Constants, s: Variables, id: D.ReqId, ref: Reference, lba: LBA)
+  requires s.machine.Ready?
+  {
+    && lba !in s.machine.persistentIndirectionTable.lbas.Values
+    && (s.machine.outstandingIndirectionTableWrite.Some? ==>
+        lba !in s.machine.outstandingIndirectionTableWrite.value.indirectionTable.lbas.Values)
+    && (forall r | r in s.machine.ephemeralIndirectionTable.lbas ::
+        s.machine.ephemeralIndirectionTable.lbas[r] == lba ==> r == ref)
+    && !(id in s.disk.reqWrites && id in s.disk.respWrites)
+    && (MapsTo(s.machine.ephemeralIndirectionTable.lbas, ref, lba) ==> (
+      && ref in s.machine.cache
+      && (id in s.disk.reqWrites ==> (
+        s.disk.reqWrites[id] == D.ReqWrite(lba, M.SectorBlock(s.machine.cache[ref]))
+      ))
+      && (id in s.disk.respWrites ==> (
+        MapsTo(s.disk.blocks, lba, M.SectorBlock(s.machine.cache[ref]))
+      ))
+    ))
+  }
+
+  predicate CorrectInflightBlockWrites(k: Constants, s: Variables)
+  requires s.machine.Ready?
+  {
+    forall id | id in s.machine.outstandingBlockWrites ::
+      CorrectInflightBlockWrite(k, s, id, s.machine.outstandingBlockWrites[id].ref, s.machine.outstandingBlockWrites[id].lba)
+  }
+
+  predicate CorrectInflightIndirectionTableWrites(k: Constants, s: Variables)
+  requires s.machine.Ready?
+  {
+    s.machine.outstandingIndirectionTableWrite.Some? ==> (
+      MapsTo(s.disk.reqWrites,
+        s.machine.outstandingIndirectionTableWrite.value.reqId,
+        D.ReqWrite(
+          M.IndirectionTableLBA(),
+          M.SectorIndirectionTable(
+            s.machine.outstandingIndirectionTableWrite.value.indirectionTable
+          )
+        )
+      )
+    )
+  }
+
+  // If there's a write in progress, then the in-memory state must know about it.
+
+  predicate RecordedWriteRequest(k: Constants, s: Variables, id: D.ReqId, lba: LBA, sector: Sector)
+  {
+    && s.machine.Ready?
+    && (match sector {
+      case SectorIndirectionTable(indirectionTable) => (
+        s.machine.outstandingIndirectionTableWrite == Some(M.OutstandingIndirectionTableWrite(id, indirectionTable))
+      )
+      case SectorBlock(block) => (
+        && id in s.machine.outstandingBlockWrites
+      )
+    })
+  }
+
+  predicate RecordedWriteRequests(k: Constants, s: Variables)
+  {
+    forall id | id in s.disk.reqWrites :: RecordedWriteRequest(k, s, id, s.disk.reqWrites[id].lba, s.disk.reqWrites[id].sector)
+  }
+
+  predicate Inv(k: Constants, s: Variables) {
+    && M.Inv(k.machine, s.machine)
+    && WFDisk(k, s.disk.blocks)
+    && WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(DiskIndirectionTable(k, s.disk.blocks).graph, PersistentGraph(k, s))
+    && NoDanglingPointers(PersistentGraph(k, s))
+    && (s.machine.Ready? ==>
+      && (s.machine.outstandingIndirectionTableWrite.Some? ==>
+        && WFIndirectionTableWrtDisk(k, s.machine.outstandingIndirectionTableWrite.value.indirectionTable, s.disk.blocks)
+      )
+      && s.machine.persistentIndirectionTable == DiskIndirectionTable(k, s.disk.blocks)
+      && WFIndirectionTableWrtDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks)
+      && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(k, s))
+      && NoDanglingPointers(EphemeralGraph(k, s))
+      && CleanCacheEntriesAreCorrect(k, s)
+      && CorrectInflightBlockReads(k, s)
+      && CorrectInflightBlockWrites(k, s)
+      && CorrectInflightIndirectionTableWrites(k, s)
+    )
+    && (s.machine.Unready? ==>
+      && CorrectInflightIndirectionTableReads(k, s)
+    )
+    && RecordedWriteRequests(k, s)
+  }
+
 }
