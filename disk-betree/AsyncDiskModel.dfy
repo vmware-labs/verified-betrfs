@@ -46,8 +46,8 @@ module AsyncDisk {
   datatype Step =
     | RecvReadStep
     | RecvWriteStep
-    | SendReadStep
-    | SendWriteStep
+    | AckReadStep
+    | AckWriteStep
     | StutterStep
 
   predicate RecvRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -66,7 +66,7 @@ module AsyncDisk {
     && s' == s.(reqWrites := s.reqWrites[dop.id := dop.reqWrite])
   }
 
-  predicate SendRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadOp?
     && dop.id in s.respReads
@@ -74,7 +74,7 @@ module AsyncDisk {
     && s' == s.(respReads := MapRemove1(s.respReads, dop.id))
   }
 
-  predicate SendWrite(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckWrite(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteOp?
     && dop.id in s.respWrites
@@ -92,8 +92,8 @@ module AsyncDisk {
     match step {
       case RecvReadStep => RecvRead(k, s, s', dop)
       case RecvWriteStep => RecvWrite(k, s, s', dop)
-      case SendReadStep => SendRead(k, s, s', dop)
-      case SendWriteStep => SendWrite(k, s, s', dop)
+      case AckReadStep => AckRead(k, s, s', dop)
+      case AckWriteStep => AckWrite(k, s, s', dop)
       case StutterStep => Stutter(k, s, s', dop)
     }
   }

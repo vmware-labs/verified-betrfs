@@ -380,7 +380,7 @@ abstract module AsyncBlockCacheSystem {
   lemma WriteBackRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
-    requires D.SendWrite(k.disk, s.disk, s'.disk, dop);
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
@@ -389,7 +389,7 @@ abstract module AsyncBlockCacheSystem {
   lemma WriteBackRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
-    requires D.SendWrite(k.disk, s.disk, s'.disk, dop);
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
     WriteBackRespStepPreservesGraphs(k, s, s', dop);
@@ -416,7 +416,7 @@ abstract module AsyncBlockCacheSystem {
   lemma WriteBackIndirectionTableRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
-    requires D.SendWrite(k.disk, s.disk, s'.disk, dop);
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
@@ -425,7 +425,7 @@ abstract module AsyncBlockCacheSystem {
   lemma WriteBackIndirectionTableRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
-    requires D.SendWrite(k.disk, s.disk, s'.disk, dop);
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
     WriteBackIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
@@ -519,7 +519,7 @@ abstract module AsyncBlockCacheSystem {
   lemma PageInRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
-    requires D.SendRead(k.disk, s.disk, s'.disk, dop);
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
@@ -528,7 +528,7 @@ abstract module AsyncBlockCacheSystem {
   lemma PageInRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
-    requires D.SendRead(k.disk, s.disk, s'.disk, dop);
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
     PageInRespStepPreservesGraphs(k, s, s', dop);
