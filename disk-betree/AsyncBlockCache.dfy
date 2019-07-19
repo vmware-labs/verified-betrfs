@@ -262,7 +262,10 @@ abstract module AsyncBlockCache refines Transactable {
     && s.Ready?
     && dop.NoDiskOp?
     && ref in s.cache
-    && (ref in s.ephemeralIndirectionTable.graph ==> ref in s.ephemeralIndirectionTable.lbas)
+    && (ref in s.ephemeralIndirectionTable.graph ==>
+      && ref in s.ephemeralIndirectionTable.lbas
+      && OutstandingWrite(ref, s.ephemeralIndirectionTable.lbas[ref]) !in s.outstandingBlockWrites.Values
+    )
     && (s.frozenIndirectionTable.Some? ==>
         ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas)
     && s' == s.(cache := MapRemove(s.cache, {ref}))
@@ -393,6 +396,14 @@ abstract module AsyncBlockCache refines Transactable {
     && indirectionTable.graph.Keys <= cache.Keys + indirectionTable.lbas.Keys
   }
 
+  predicate EphemeralTableEntriesInCacheOrNotBeingWritten(k: Constants, s: Variables)
+  requires s.Ready?
+  requires IndirectionTableCacheConsistent(s.ephemeralIndirectionTable, s.cache)
+  {
+    forall ref | ref in s.ephemeralIndirectionTable.graph ::
+      ref !in s.cache ==> OutstandingWrite(ref, s.ephemeralIndirectionTable.lbas[ref]) !in s.outstandingBlockWrites.Values
+  }
+
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
@@ -401,6 +412,7 @@ abstract module AsyncBlockCache refines Transactable {
     && WFIndirectionTable(s.ephemeralIndirectionTable)
     && IndirectionTableCacheConsistent(s.ephemeralIndirectionTable, s.cache)
     && CacheConsistentWithSuccessors(s.cache, s.ephemeralIndirectionTable.graph)
+    && EphemeralTableEntriesInCacheOrNotBeingWritten(k, s)
 
     && (s.frozenIndirectionTable.Some? ==> (
       && WFIndirectionTable(s.frozenIndirectionTable.value)

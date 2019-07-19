@@ -768,6 +768,10 @@ abstract module AsyncBlockCacheSystem {
     ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma PageInRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
