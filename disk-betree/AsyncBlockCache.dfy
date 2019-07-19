@@ -126,6 +126,8 @@ abstract module AsyncBlockCache refines Transactable {
     && s'.Ready?
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
+    && s.outstandingIndirectionTableWrite.None?
+
     && ref !in s.ephemeralIndirectionTable.lbas
     && s'.ephemeralIndirectionTable == AssignRefToLBA(s.ephemeralIndirectionTable, ref, dop.reqWrite.lba)
 
@@ -180,6 +182,11 @@ abstract module AsyncBlockCache refines Transactable {
     forall r | r in graph :: ref !in graph[r]
   }
 
+  function OutstandingBlockReadsRemoveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference) : map<ReqId, OutstandingRead>
+  {
+    map reqId | reqId in outstandingBlockReads && outstandingBlockReads[reqId].ref != ref :: outstandingBlockReads[reqId]
+  }
+
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.NoDiskOp?
@@ -201,7 +208,7 @@ abstract module AsyncBlockCache refines Transactable {
 
     && s'.outstandingIndirectionTableWrite == s.outstandingIndirectionTableWrite
     && s'.outstandingBlockWrites == s.outstandingBlockWrites
-    && s'.outstandingBlockReads == s.outstandingBlockReads
+    && s'.outstandingBlockReads == OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref)
     && s'.frozenIndirectionTable == s.frozenIndirectionTable
   }
 
