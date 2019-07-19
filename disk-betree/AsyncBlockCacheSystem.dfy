@@ -395,6 +395,34 @@ abstract module AsyncBlockCacheSystem {
   ensures QueueLookupIdByLBA(reqWrites', req.lba) == Some(id)
   ensures lba != req.lba ==>
       QueueLookupIdByLBA(reqWrites', lba) == QueueLookupIdByLBA(reqWrites, lba)
+  {
+    assert reqWrites'[id].lba == req.lba;
+    //if (QueueLookupIdByLBA(reqWrites', req.lba).None?) {
+    //  assert forall id | id in reqWrites' :: reqWrites'[id].lba != req.lba;
+    //  assert false;
+    //}
+    //assert QueueLookupIdByLBA(reqWrites', req.lba).Some?;
+    //assert QueueLookupIdByLBA(reqWrites', req.lba).value == id;
+
+    forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].lba == reqWrites[id2].lba
+    ensures id1 == id2
+    {
+      assert reqWrites'[id1] == reqWrites[id1];
+      assert reqWrites'[id2] == reqWrites[id2];
+    }
+    assert WriteRequestsUniqueLBAs(reqWrites);
+
+    if (lba != req.lba) {
+      if id' :| id' in reqWrites && reqWrites[id'].lba == lba {
+        assert reqWrites'[id'].lba == lba;
+        //assert QueueLookupIdByLBA(reqWrites', lba)
+        //    == Some(id')
+        //    == QueueLookupIdByLBA(reqWrites, lba);
+      } else {
+        //assert QueueLookupIdByLBA(reqWrites', lba) == QueueLookupIdByLBA(reqWrites, lba);
+      }
+    }
+  }
 
   lemma WriteBackReqStepUniqueLBAs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
     requires Inv(k, s)
