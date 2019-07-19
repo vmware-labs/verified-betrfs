@@ -156,13 +156,12 @@ abstract module AsyncBlockCacheSystem {
 
   function FrozenGraphOpt(k: Constants, s: Variables) : Option<map<Reference, Node>>
   requires WFDisk(s.disk.blocks)
-  requires s.machine.Ready?
-  requires s.machine.frozenIndirectionTable.Some? ==> M.WFIndirectionTable(s.machine.frozenIndirectionTable.value)
-  requires s.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
-  requires s.machine.frozenIndirectionTable.Some? ==> M.IndirectionTableCacheConsistent(s.machine.frozenIndirectionTable.value, s.machine.cache)
+  requires s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==> M.WFIndirectionTable(s.machine.frozenIndirectionTable.value)
+  requires s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
+  requires s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==> M.IndirectionTableCacheConsistent(s.machine.frozenIndirectionTable.value, s.machine.cache)
   requires WFReqWriteBlocks(s.disk.reqWrites)
   {
-    if s.machine.frozenIndirectionTable.Some? then Some(FrozenGraph(k, s)) else None
+    if s.machine.Ready? && s.machine.frozenIndirectionTable.Some? then Some(FrozenGraph(k, s)) else None
   }
 
   function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
@@ -174,6 +173,16 @@ abstract module AsyncBlockCacheSystem {
   requires WFReqWriteBlocks(s.disk.reqWrites)
   {
     DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+  }
+
+  function EphemeralGraphOpt(k: Constants, s: Variables) : Option<map<Reference, Node>>
+  requires M.Inv(k.machine, s.machine)
+  requires WFDisk(s.disk.blocks)
+  requires s.machine.Ready? ==> WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
+  requires s.machine.Ready? ==> M.IndirectionTableCacheConsistent(s.machine.ephemeralIndirectionTable, s.machine.cache)
+  requires WFReqWriteBlocks(s.disk.reqWrites)
+  {
+    if s.machine.Ready? then Some(EphemeralGraph(k, s)) else None
   }
 
   predicate NoDanglingPointers(graph: map<Reference, Node>)
@@ -280,11 +289,16 @@ abstract module AsyncBlockCacheSystem {
 
   predicate CorrectInflightIndirectionTableReads(k: Constants, s: Variables)
   requires s.machine.Unready?
+  requires WFDisk(s.disk.blocks)
   {
     s.machine.outstandingIndirectionTableRead.Some? ==> (
-      MapsTo(s.disk.reqReads,
-        s.machine.outstandingIndirectionTableRead.value,
-        D.ReqRead(M.IndirectionTableLBA())
+      && var reqId := s.machine.outstandingIndirectionTableRead.value;
+      && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
+      && (reqId in s.disk.reqReads ==>
+        s.disk.reqReads[reqId] == D.ReqRead(M.IndirectionTableLBA())
+      )
+      && (reqId in s.disk.respReads ==>
+        s.disk.respReads[reqId] == D.RespRead(M.SectorIndirectionTable(DiskIndirectionTable(s.disk.blocks)))
       )
     )
   }
@@ -788,9 +802,13 @@ abstract module AsyncBlockCacheSystem {
     requires M.PageInIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
     requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
-    ensures PersistentGraph(k, s) == EphemeralGraph(k, s');
+    ensures FrozenGraphOpt(k, s) == None
+    ensures EphemeralGraphOpt(k, s) == None
   {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma PageInIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -806,10 +824,22 @@ abstract module AsyncBlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
-    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
-    ensures PersistentGraph(k, s) == EphemeralGraph(k, s');
+
+    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
+
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraph(k, s') == PersistentGraph(k, s);
   {
+    assert DiskIndirectionTable(s.disk.blocks) == s'.machine.persistentIndirectionTable;
+    /*
+    forall ref | ref in s'.machine.ephemeralIndirectionTable.lbas
+    ensures WFIndirectionTableRefWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk, ref)
+    {
+      assert ref in DiskIndirectionTable(s.disk.blocks).lbas;
+      assert WFIndirectionTableRefWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks, ref);
+    }
+    */
   }
 
   lemma PageInIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -829,6 +859,10 @@ abstract module AsyncBlockCacheSystem {
     ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma EvictStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)

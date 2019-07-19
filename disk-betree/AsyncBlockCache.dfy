@@ -220,6 +220,7 @@ abstract module AsyncBlockCache refines Transactable {
     && ref in s.ephemeralIndirectionTable.lbas
     && ref !in s.cache
     && s.ephemeralIndirectionTable.lbas[ref] == dop.reqRead.lba
+    && OutstandingRead(ref) !in s.outstandingBlockReads.Values
     && s' == s.(outstandingBlockReads := s.outstandingBlockReads[dop.id := OutstandingRead(ref)])
   }
 
@@ -404,6 +405,12 @@ abstract module AsyncBlockCache refines Transactable {
       ref !in s.cache ==> OutstandingWrite(ref, s.ephemeralIndirectionTable.lbas[ref]) !in s.outstandingBlockWrites.Values
   }
 
+  predicate OutstandingReadRefsUnique(outstandingBlockReads: map<ReqId, OutstandingRead>)
+  {
+    forall id1, id2 | id1 in outstandingBlockReads && id2 in outstandingBlockReads && outstandingBlockReads[id1] == outstandingBlockReads[id2] ::
+      id1 == id2
+  }
+
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
@@ -413,6 +420,7 @@ abstract module AsyncBlockCache refines Transactable {
     && IndirectionTableCacheConsistent(s.ephemeralIndirectionTable, s.cache)
     && CacheConsistentWithSuccessors(s.cache, s.ephemeralIndirectionTable.graph)
     && EphemeralTableEntriesInCacheOrNotBeingWritten(k, s)
+    && OutstandingReadRefsUnique(s.outstandingBlockReads)
 
     && (s.frozenIndirectionTable.Some? ==> (
       && WFIndirectionTable(s.frozenIndirectionTable.value)
