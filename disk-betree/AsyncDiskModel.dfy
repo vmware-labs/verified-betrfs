@@ -40,7 +40,10 @@ module AsyncDisk {
 
   predicate Init(k: Constants, s: Variables)
   {
-    true
+    && s.reqReads == map[]
+    && s.reqWrites == map[]
+    && s.respReads == map[]
+    && s.respWrites == map[]
   }
 
   datatype Step =

@@ -85,6 +85,21 @@ abstract module AsyncBlockCacheSystem {
     if id :| id in reqWrites && reqWrites[id].lba == lba then Some(id) else None
   }
 
+  predicate WFIndirectionTableRefWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables<LBA, Sector>, ref: Reference)
+  requires ref in indirectionTable.lbas
+  {
+    && (indirectionTable.lbas[ref] !in disk.blocks ==>
+      QueueLookupIdByLBA(disk.reqWrites, indirectionTable.lbas[ref]).Some?
+    )
+    && (indirectionTable.lbas[ref] in disk.blocks ==>
+        disk.blocks[indirectionTable.lbas[ref]].SectorBlock?)
+  }
+
+  predicate WFIndirectionTableWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables<LBA, Sector>)
+  {
+    && (forall ref | ref in indirectionTable.lbas :: WFIndirectionTableRefWrtDiskQueue(indirectionTable, disk, ref))
+  }
+
   predicate WFReqWriteBlocks(reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>)
   {
     forall id | id in reqWrites && M.ValidLBAForNode(reqWrites[id].lba) ::
@@ -94,7 +109,7 @@ abstract module AsyncBlockCacheSystem {
   function DiskQueueCacheLookup(indirectionTable: IndirectionTable, disk: D.Variables<LBA,Sector>, cache: map<Reference, Node>, ref: Reference) : Node
   requires WFDisk(disk.blocks)
   requires M.WFIndirectionTable(indirectionTable)
-  requires WFIndirectionTableWrtDisk(indirectionTable, disk.blocks)
+  requires WFIndirectionTableWrtDiskQueue(indirectionTable, disk)
   requires M.IndirectionTableCacheConsistent(indirectionTable, cache)
   requires WFReqWriteBlocks(disk.reqWrites)
   requires ref in indirectionTable.graph
@@ -112,7 +127,7 @@ abstract module AsyncBlockCacheSystem {
   function DiskCacheGraph(indirectionTable: IndirectionTable, disk: D.Variables<LBA,Sector>, cache: map<Reference, Node>) : map<Reference, Node>
   requires WFDisk(disk.blocks)
   requires M.WFIndirectionTable(indirectionTable)
-  requires WFIndirectionTableWrtDisk(indirectionTable, disk.blocks)
+  requires WFIndirectionTableWrtDiskQueue(indirectionTable, disk)
   requires M.IndirectionTableCacheConsistent(indirectionTable, cache)
   requires WFReqWriteBlocks(disk.reqWrites)
   {
@@ -123,8 +138,9 @@ abstract module AsyncBlockCacheSystem {
   requires WFDisk(s.disk.blocks)
   requires s.machine.Ready?
   requires s.machine.frozenIndirectionTable.Some?
-  requires M.WFCompleteIndirectionTable(s.machine.frozenIndirectionTable.value)
-  requires WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
+  requires M.WFIndirectionTable(s.machine.frozenIndirectionTable.value)
+  requires WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
+  requires M.IndirectionTableCacheConsistent(s.machine.frozenIndirectionTable.value, s.machine.cache)
   requires WFReqWriteBlocks(s.disk.reqWrites)
   {
     DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -134,7 +150,8 @@ abstract module AsyncBlockCacheSystem {
   requires M.Inv(k.machine, s.machine)
   requires s.machine.Ready?
   requires WFDisk(s.disk.blocks)
-  requires WFIndirectionTableWrtDisk(s.machine.ephemeralIndirectionTable, s.disk.blocks)
+  requires WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
+  requires M.IndirectionTableCacheConsistent(s.machine.ephemeralIndirectionTable, s.machine.cache)
   requires WFReqWriteBlocks(s.disk.reqWrites)
   {
     DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
@@ -333,11 +350,14 @@ abstract module AsyncBlockCacheSystem {
     && SuccessorsAgree(DiskIndirectionTable(s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && (s.machine.Ready? ==>
+      && (s.machine.frozenIndirectionTable.Some? ==>
+        && WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
+      )
       && (s.machine.outstandingIndirectionTableWrite.Some? ==>
         && WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
       )
       && s.machine.persistentIndirectionTable == DiskIndirectionTable(s.disk.blocks)
-      && WFIndirectionTableWrtDisk(s.machine.ephemeralIndirectionTable, s.disk.blocks)
+      && WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
       && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(k, s))
       && NoDanglingPointers(EphemeralGraph(k, s))
       && CleanCacheEntriesAreCorrect(k, s)
@@ -364,6 +384,14 @@ abstract module AsyncBlockCacheSystem {
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+
+    ensures s.machine.frozenIndirectionTable.Some? ==> (
+      && s'.machine.frozenIndirectionTable.Some?
+      && WFIndirectionTableWrtDisk(s'.machine.frozenIndirectionTable.value, s'.disk.blocks)
+      && FrozenGraph(k, s) == FrozenGraph(k, s')
+    )
+
+    ensures WFIndirectionTableWrtDisk(s'.machine.ephemeralIndirectionTable, s'.disk.blocks)
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
   }
