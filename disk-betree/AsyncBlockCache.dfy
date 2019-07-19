@@ -107,6 +107,14 @@ abstract module AsyncBlockCache refines Transactable {
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
+  function AssignRefToLBA(indirectionTable: IndirectionTable, ref: Reference, lba: LBA) : IndirectionTable
+  {
+    IndirectionTable(
+      if ref in indirectionTable.graph then indirectionTable.lbas[ref := lba] else indirectionTable.lbas,
+      indirectionTable.graph
+    )
+  }
+
   predicate WriteBackReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.ReqWriteOp?
@@ -118,15 +126,12 @@ abstract module AsyncBlockCache refines Transactable {
     && s'.Ready?
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
-    && (ref in s.ephemeralIndirectionTable.graph ==> s'.ephemeralIndirectionTable.lbas == s.ephemeralIndirectionTable.lbas[ref := dop.reqWrite.lba])
-    && (ref !in s.ephemeralIndirectionTable.graph ==> s'.ephemeralIndirectionTable.lbas == s.ephemeralIndirectionTable.lbas)
-    && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph
+    && ref !in s.ephemeralIndirectionTable.lbas
+    && s'.ephemeralIndirectionTable == AssignRefToLBA(s.ephemeralIndirectionTable, ref, dop.reqWrite.lba)
 
     && (s.frozenIndirectionTable.Some? ==> (
-      && s'.frozenIndirectionTable.Some?
-      && (ref in s.frozenIndirectionTable.value.graph ==> s'.frozenIndirectionTable.value.lbas == s.frozenIndirectionTable.value.lbas[ref := dop.reqWrite.lba])
-      && (ref !in s.frozenIndirectionTable.value.graph ==> s'.frozenIndirectionTable.value.lbas == s.frozenIndirectionTable.value.lbas)
-      && s'.frozenIndirectionTable.value.graph == s.frozenIndirectionTable.value.graph
+      && ref !in s.frozenIndirectionTable.value.lbas
+      && s'.frozenIndirectionTable == Some(AssignRefToLBA(s.frozenIndirectionTable.value, ref, dop.reqWrite.lba))
     ))
     && (s.frozenIndirectionTable.None? ==> s'.frozenIndirectionTable.None?)
 

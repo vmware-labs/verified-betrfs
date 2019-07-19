@@ -27,6 +27,7 @@ abstract module AsyncBlockCacheSystem {
     && indirectionTableLBA in blocks
     && blocks[indirectionTableLBA].SectorIndirectionTable?
     && M.WFCompleteIndirectionTable(blocks[indirectionTableLBA].indirectionTable)
+    && (forall lba | lba in blocks :: lba != M.IndirectionTableLBA() ==> blocks[lba].SectorBlock?)
   }
 
   predicate WFIndirectionTableRefWrtDisk(indirectionTable: IndirectionTable, blocks: map<LBA,Sector>,
@@ -91,8 +92,6 @@ abstract module AsyncBlockCacheSystem {
     && (indirectionTable.lbas[ref] !in disk.blocks ==>
       QueueLookupIdByLBA(disk.reqWrites, indirectionTable.lbas[ref]).Some?
     )
-    && (indirectionTable.lbas[ref] in disk.blocks ==>
-        disk.blocks[indirectionTable.lbas[ref]].SectorBlock?)
   }
 
   predicate WFIndirectionTableWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables<LBA, Sector>)
@@ -106,6 +105,18 @@ abstract module AsyncBlockCacheSystem {
         reqWrites[id].sector.SectorBlock?
   }
 
+  function DiskQueueLookup(disk: D.Variables<LBA,Sector>, lba: LBA) : Node
+  requires WFDisk(disk.blocks)
+  requires WFReqWriteBlocks(disk.reqWrites)
+  requires M.ValidLBAForNode(lba)
+  requires lba !in disk.blocks ==> QueueLookupIdByLBA(disk.reqWrites, lba).Some?
+  {
+    if QueueLookupIdByLBA(disk.reqWrites, lba).Some? then
+      disk.reqWrites[QueueLookupIdByLBA(disk.reqWrites, lba).value].sector.block
+    else
+      disk.blocks[lba].block
+  }
+
   function DiskQueueCacheLookup(indirectionTable: IndirectionTable, disk: D.Variables<LBA,Sector>, cache: map<Reference, Node>, ref: Reference) : Node
   requires WFDisk(disk.blocks)
   requires M.WFIndirectionTable(indirectionTable)
@@ -115,10 +126,7 @@ abstract module AsyncBlockCacheSystem {
   requires ref in indirectionTable.graph
   {
     if ref in indirectionTable.lbas then (
-      if QueueLookupIdByLBA(disk.reqWrites, indirectionTable.lbas[ref]).Some? then
-        disk.reqWrites[QueueLookupIdByLBA(disk.reqWrites, indirectionTable.lbas[ref]).value].sector.block
-      else
-        disk.blocks[indirectionTable.lbas[ref]].block
+      DiskQueueLookup(disk, indirectionTable.lbas[ref])
     ) else (
       cache[ref]
     )
@@ -224,24 +232,16 @@ abstract module AsyncBlockCacheSystem {
 
   ////// Invariants
 
-  predicate IsCleanCacheEntry(k: Constants, s: Variables, ref: Reference)
-  requires s.machine.Ready?
-  requires ref in s.machine.cache
-  {
-    && ref in s.machine.ephemeralIndirectionTable.lbas
-    && M.OutstandingWrite(ref, s.machine.ephemeralIndirectionTable.lbas[ref]) !in
-        s.machine.outstandingBlockWrites.Values
-  }
-
   predicate CleanCacheEntriesAreCorrect(k: Constants, s: Variables)
+  requires WFDisk(s.disk.blocks)
+  requires WFReqWriteBlocks(s.disk.reqWrites)
   requires s.machine.Ready?
+  requires M.WFIndirectionTable(s.machine.ephemeralIndirectionTable)
+  requires WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
   {
     forall ref | ref in s.machine.cache ::
-      IsCleanCacheEntry(k, s, ref) ==>
-      MapsTo(
-          s.disk.blocks,
-          s.machine.ephemeralIndirectionTable.lbas[ref],
-          M.SectorBlock(s.machine.cache[ref]))
+      ref in s.machine.ephemeralIndirectionTable.lbas ==>
+        s.machine.cache[ref] == DiskQueueLookup(s.disk, s.machine.ephemeralIndirectionTable.lbas[ref])
   }
 
   // Any outstanding read we have recorded should be consistent with
@@ -283,16 +283,14 @@ abstract module AsyncBlockCacheSystem {
   predicate CorrectInflightBlockWrite(k: Constants, s: Variables, id: D.ReqId, ref: Reference, lba: LBA)
   requires s.machine.Ready?
   {
-    && lba !in s.machine.persistentIndirectionTable.lbas.Values
-    && (s.machine.frozenIndirectionTable.Some? ==>
-        lba !in s.machine.frozenIndirectionTable.value.lbas.Values)
-
     && (forall r | r in s.machine.ephemeralIndirectionTable.lbas ::
         s.machine.ephemeralIndirectionTable.lbas[r] == lba ==> r == ref)
 
     && (s.machine.frozenIndirectionTable.Some? ==>
         forall r | r in s.machine.frozenIndirectionTable.value.lbas ::
         s.machine.frozenIndirectionTable.value.lbas[r] == lba ==> r == ref)
+
+    && (id in s.disk.reqWrites ==> s.disk.reqWrites[id].lba == lba)
 
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
   }
@@ -342,6 +340,11 @@ abstract module AsyncBlockCacheSystem {
     forall id | id in s.disk.reqWrites :: RecordedWriteRequest(k, s, id, s.disk.reqWrites[id].lba, s.disk.reqWrites[id].sector)
   }
 
+  predicate WriteRequestsUniqueLBAs(reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>)
+  {
+    forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].lba == reqWrites[id2].lba :: id1 == id2
+  }
+
   predicate Inv(k: Constants, s: Variables) {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk.blocks)
@@ -368,6 +371,7 @@ abstract module AsyncBlockCacheSystem {
     && (s.machine.Unready? ==>
       && CorrectInflightIndirectionTableReads(k, s)
     )
+    && WriteRequestsUniqueLBAs(s.disk.reqWrites)
     && RecordedWriteRequests(k, s)
   }
 
@@ -379,6 +383,143 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
+  lemma QueueLookupIdByLBAInsert(
+      reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>,
+      reqWrites': map<D.ReqId, D.ReqWrite<LBA, Sector>>,
+      id: D.ReqId,
+      req: D.ReqWrite<LBA, Sector>,
+      lba: LBA)
+  requires id !in reqWrites
+  requires reqWrites' == reqWrites[id := req]
+  requires WriteRequestsUniqueLBAs(reqWrites')
+  ensures QueueLookupIdByLBA(reqWrites', req.lba) == Some(id)
+  ensures lba != req.lba ==>
+      QueueLookupIdByLBA(reqWrites', lba) == QueueLookupIdByLBA(reqWrites, lba)
+
+  lemma WriteBackReqStepUniqueLBAs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
+    requires Inv(k, s)
+    requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures WriteRequestsUniqueLBAs(s'.disk.reqWrites)
+  {
+    /*forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].lba == s'.disk.reqWrites[id2].lba
+    ensures id1 == id2
+    {
+      var lba := s'.disk.reqWrites[id1].lba;
+      if (lba == dop.reqWrite.lba) {
+        if (id1 in s.disk.reqWrites) {
+          assert RecordedWriteRequest(k, s, id1, s.disk.reqWrites[id1].lba, s.disk.reqWrites[id1].sector);
+          assert id1 in s.machine.outstandingBlockWrites;
+          assert CorrectInflightBlockWrite(k, s, id1, s.machine.outstandingBlockWrites[id1].ref, s.machine.outstandingBlockWrites[id1].lba);
+          assert s.machine.outstandingBlockWrites[id1].lba == dop.reqWrite.lba;
+          assert false;
+        }
+        assert id1 == dop.id;
+        assert id2 == dop.id;
+        assert id1 == id2;
+      } else {
+        assert id1 == id2;
+      }
+    }*/
+  }
+
+  lemma WriteBackReqStepPreservesGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
+    requires Inv(k, s)
+    requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+
+    requires M.WFIndirectionTable(indirectionTable)
+    requires WFIndirectionTableWrtDiskQueue(indirectionTable, s.disk)
+    requires indirectionTable' == M.AssignRefToLBA(indirectionTable, ref, dop.reqWrite.lba)
+    requires M.IndirectionTableCacheConsistent(indirectionTable, s.machine.cache)
+    requires ref !in indirectionTable.lbas
+    requires dop.reqWrite.lba !in indirectionTable.lbas.Values
+
+    ensures M.WFIndirectionTable(indirectionTable')
+    ensures WFIndirectionTableWrtDiskQueue(indirectionTable', s'.disk)
+    ensures DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+         == DiskCacheGraph(indirectionTable', s'.disk, s'.machine.cache)
+  {
+    assert dop.id !in s.disk.reqWrites;
+
+    forall r | r in indirectionTable'.lbas
+    ensures WFIndirectionTableRefWrtDiskQueue(indirectionTable', s'.disk, r)
+    {
+      if (r == ref) {
+        assert s'.disk.reqWrites[dop.id].lba == dop.reqWrite.lba;
+        //assert indirectionTable'.lbas[ref] == dop.reqWrite.lba;
+        //assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable'.lbas[ref]).Some?;
+        //assert WFIndirectionTableRefWrtDiskQueue(indirectionTable', s'.disk, r);
+      } else {
+        //assert r in indirectionTable.lbas;
+        //assert WFIndirectionTableRefWrtDiskQueue(indirectionTable, s.disk, r);
+        //assert indirectionTable.lbas[r] == indirectionTable'.lbas[r];
+        //assert s.disk.blocks == s'.disk.blocks;
+        if QueueLookupIdByLBA(s.disk.reqWrites, indirectionTable.lbas[r]).Some? {
+          var oid := QueueLookupIdByLBA(s.disk.reqWrites, indirectionTable.lbas[r]).value;
+          //assert oid in s.disk.reqWrites;
+          //assert s.disk.reqWrites[oid].lba == indirectionTable.lbas[r];
+          assert s'.disk.reqWrites[oid].lba == indirectionTable.lbas[r];
+          //assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable.lbas[r]).Some?;
+        }
+        //assert WFIndirectionTableRefWrtDiskQueue(indirectionTable', s'.disk, r);
+      }
+    }
+
+    forall r | r in indirectionTable.graph
+    ensures DiskQueueCacheLookup(indirectionTable, s.disk, s.machine.cache, r)
+         == DiskQueueCacheLookup(indirectionTable', s'.disk, s'.machine.cache, r)
+    {
+      if (r == ref) {
+        QueueLookupIdByLBAInsert(s.disk.reqWrites, s'.disk.reqWrites, dop.id, dop.reqWrite, indirectionTable'.lbas[ref]);
+
+        //assert s'.disk.reqWrites[dop.id].lba == dop.reqWrite.lba;
+        /*
+        assert indirectionTable'.lbas[ref] == dop.reqWrite.lba;
+        assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable'.lbas[ref]).Some?;
+        assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable'.lbas[ref]) == Some(dop.id);
+        assert s'.disk.reqWrites[dop.id].sector.SectorBlock?;
+        assert r !in indirectionTable.lbas;
+
+        assert DiskQueueCacheLookup(indirectionTable, s.disk, s.machine.cache, r)
+            == s.machine.cache[r]
+            == s'.disk.reqWrites[dop.id].sector.block
+            == DiskQueueCacheLookup(indirectionTable', s'.disk, s'.machine.cache, r);
+        */
+      } else if (r in indirectionTable.lbas) {
+        //assert indirectionTable.lbas[r] != dop.reqWrite.lba;
+        QueueLookupIdByLBAInsert(s.disk.reqWrites, s'.disk.reqWrites, dop.id, dop.reqWrite, indirectionTable.lbas[r]);
+
+        //assert WFIndirectionTableRefWrtDiskQueue(indirectionTable, s.disk, r);
+        //assert indirectionTable.lbas[r] == indirectionTable'.lbas[r];
+        //assert s.disk.blocks == s'.disk.blocks;
+
+        /*
+        if QueueLookupIdByLBA(s.disk.reqWrites, indirectionTable.lbas[r]).Some? {
+          var oid := QueueLookupIdByLBA(s.disk.reqWrites, indirectionTable.lbas[r]).value;
+          assert oid in s.disk.reqWrites;
+          assert s.disk.reqWrites[oid].lba == indirectionTable.lbas[r];
+          assert s'.disk.reqWrites[oid].lba == indirectionTable.lbas[r];
+          assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable.lbas[r]).Some?;
+          assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable'.lbas[r])
+              == QueueLookupIdByLBA(s.disk.reqWrites, indirectionTable.lbas[r]);
+        } else {
+          assert QueueLookupIdByLBA(s'.disk.reqWrites, indirectionTable.lbas[r]).None?;
+          assert s.disk.blocks[indirectionTable.lbas[r]].block
+              == s'.disk.blocks[indirectionTable.lbas[r]].block
+              == s'.disk.blocks[indirectionTable'.lbas[r]].block;
+        }
+        */
+
+        //assert DiskQueueCacheLookup(indirectionTable, s.disk, s.machine.cache, r)
+        //    == DiskQueueCacheLookup(indirectionTable', s'.disk, s'.machine.cache, r);
+      } else {
+        //assert DiskQueueCacheLookup(indirectionTable, s.disk, s.machine.cache, r)
+        //    == DiskQueueCacheLookup(indirectionTable', s'.disk, s'.machine.cache, r);
+      }
+    }
+  }
+
   lemma WriteBackReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
@@ -387,13 +528,17 @@ abstract module AsyncBlockCacheSystem {
 
     ensures s.machine.frozenIndirectionTable.Some? ==> (
       && s'.machine.frozenIndirectionTable.Some?
-      && WFIndirectionTableWrtDisk(s'.machine.frozenIndirectionTable.value, s'.disk.blocks)
+      && WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
       && FrozenGraph(k, s) == FrozenGraph(k, s')
     )
 
-    ensures WFIndirectionTableWrtDisk(s'.machine.ephemeralIndirectionTable, s'.disk.blocks)
+    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
+    WriteBackReqStepPreservesGraph(k, s, s', dop, ref, s.machine.ephemeralIndirectionTable, s'.machine.ephemeralIndirectionTable);
+    if s.machine.frozenIndirectionTable.Some? {
+      WriteBackReqStepPreservesGraph(k, s, s', dop, ref, s.machine.frozenIndirectionTable.value, s'.machine.frozenIndirectionTable.value);
+    }
   }
 
   lemma WriteBackReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
