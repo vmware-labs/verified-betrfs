@@ -103,8 +103,8 @@ module AsyncDisk {
   }
 
   datatype InternalStep =
-    | ProcessRead(id: ReqId)
-    | ProcessWrite(id: ReqId)
+    | ProcessReadStep(id: ReqId)
+    | ProcessWriteStep(id: ReqId)
 
   predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
@@ -127,8 +127,8 @@ module AsyncDisk {
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
   {
     match step {
-      case ProcessRead(id) => ProcessRead(k, s, s', id)
-      case ProcessWrite(id) => ProcessWrite(k, s, s', id)
+      case ProcessReadStep(id) => ProcessRead(k, s, s', id)
+      case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
     }
   }
 
@@ -171,11 +171,11 @@ abstract module AsyncDiskModel {
   type CrashableUIOp = CrashTypes.CrashableUIOp<M.UIOp>
 
   datatype Step =
-    | CommStep(dop: DiskOp)
+    | MachineStep(dop: DiskOp)
     | DiskInternalStep(step: D.InternalStep)
     | CrashStep
   
-  predicate Comm(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, dop: DiskOp)
+  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, dop: DiskOp)
   {
     && uiop.NormalOp?
     && M.Next(k.machine, s.machine, s'.machine, uiop.uiop, dop)
@@ -200,7 +200,7 @@ abstract module AsyncDiskModel {
   predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: Step)
   {
     match step {
-      case CommStep(dop) => Comm(k, s, s', uiop, dop)
+      case MachineStep(dop) => Machine(k, s, s', uiop, dop)
       case DiskInternalStep(step) => DiskInternal(k, s, s', uiop, step)
       case CrashStep => Crash(k, s, s', uiop)
     }

@@ -170,11 +170,11 @@ abstract module AsyncBlockCacheSystem {
   ////// Next
 
   datatype Step =
-    | CommStep(dop: DiskOp)
+    | MachineStep(dop: DiskOp)
     | DiskInternalStep(step: D.InternalStep)
     | CrashStep
   
-  predicate Comm(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && M.Next(k.machine, s.machine, s'.machine, dop)
     && D.Next(k.disk, s.disk, s'.disk, dop)
@@ -195,7 +195,7 @@ abstract module AsyncBlockCacheSystem {
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
   {
     match step {
-      case CommStep(dop) => Comm(k, s, s', dop)
+      case MachineStep(dop) => Machine(k, s, s', dop)
       case DiskInternalStep(step) => DiskInternal(k, s, s', step)
       case CrashStep => Crash(k, s, s')
     }
@@ -368,7 +368,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma WriteBackReqStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma WriteBackReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
@@ -386,7 +386,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma WriteBackRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
@@ -404,7 +404,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma WriteBackIndirectionTableReqStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
@@ -422,7 +422,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma WriteBackIndirectionTableRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma WriteBackIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
@@ -431,7 +431,7 @@ abstract module AsyncBlockCacheSystem {
     WriteBackIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
-  lemma DirtyStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+  lemma DirtyStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
     requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
@@ -439,7 +439,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma AllocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+  lemma AllocStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
     requires M.Alloc(k.machine, s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
@@ -447,19 +447,19 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma OpPreservesInvariant(k: Constants, s: Variables, s': Variables, op: Op)
+  lemma OpPreservesInv(k: Constants, s: Variables, s': Variables, op: Op)
     requires Inv(k, s)
     requires M.OpStep(k.machine, s.machine, s'.machine, op)
     requires s.disk == s'.disk
     ensures Inv(k, s')
   {
     match op {
-      case WriteOp(ref, block) => DirtyStepPreservesInvariant(k, s, s', ref, block);
-      case AllocOp(ref, block) => AllocStepPreservesInvariant(k, s, s', ref, block);
+      case WriteOp(ref, block) => DirtyStepPreservesInv(k, s, s', ref, block);
+      case AllocOp(ref, block) => AllocStepPreservesInv(k, s, s', ref, block);
     }
   }
 
-  lemma TransactionStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+  lemma TransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
     requires Inv(k, s)
     requires M.Transaction(k.machine, s.machine, s'.machine, dop, ops)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
@@ -468,11 +468,11 @@ abstract module AsyncBlockCacheSystem {
   {
     if |ops| == 0 {
     } else if |ops| == 1 {
-      OpPreservesInvariant(k, s, s', ops[0]);
+      OpPreservesInv(k, s, s', ops[0]);
     } else {
       var ops1, smid, ops2 := M.SplitTransaction(k.machine, s.machine, s'.machine, ops);
-      TransactionStepPreservesInvariant(k, s, AsyncDiskModelVariables(smid, s.disk), dop, ops1);
-      TransactionStepPreservesInvariant(k, AsyncDiskModelVariables(smid, s.disk), s', dop, ops2);
+      TransactionStepPreservesInv(k, s, AsyncDiskModelVariables(smid, s.disk), dop, ops1);
+      TransactionStepPreservesInv(k, AsyncDiskModelVariables(smid, s.disk), s', dop, ops2);
     }
   }
 
@@ -484,7 +484,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma UnallocStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
@@ -507,7 +507,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma PageInReqStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma PageInReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.PageInReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
@@ -525,7 +525,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma PageInRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
@@ -534,24 +534,40 @@ abstract module AsyncBlockCacheSystem {
     PageInRespStepPreservesGraphs(k, s, s', dop);
   }
 
-
-  /*
-  lemma PageInIndirectionTableStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInIndirectionTableReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires M.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
-    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    requires M.PageInIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
     ensures PersistentGraph(k, s) == EphemeralGraph(k, s');
   {
   }
 
-  lemma PageInIndirectionTableStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires M.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
-    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    requires M.PageInIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    PageInIndirectionTableStepPreservesGraphs(k, s, s', dop);
+    PageInIndirectionTableReqStepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma PageInIndirectionTableRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures PersistentGraph(k, s) == EphemeralGraph(k, s');
+  {
+  }
+
+  lemma PageInIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PageInIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
   lemma EvictStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -563,7 +579,7 @@ abstract module AsyncBlockCacheSystem {
   {
   }
 
-  lemma EvictStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma EvictStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.Evict(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
@@ -572,39 +588,90 @@ abstract module AsyncBlockCacheSystem {
     EvictStepPreservesGraphs(k, s, s', dop, ref);
   }
 
-  lemma MachineStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma FreezeStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.Freeze(k.machine, s.machine, s'.machine, dop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+  {
+  }
+
+  lemma FreezeStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.Freeze(k.machine, s.machine, s'.machine, dop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    FreezeStepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires Machine(k, s, s', dop)
     ensures Inv(k, s')
   {
     var step :| M.NextStep(k.machine, s.machine, s'.machine, dop, step);
     match step {
-      case WriteBackStep(ref) => WriteBackStepPreservesInvariant(k, s, s', dop, ref);
-      case WriteBackIndirectionTableStep => WriteBackIndirectionTableStepPreservesInvariant(k, s, s', dop);
-      case UnallocStep(ref) => UnallocStepPreservesInvariant(k, s, s', dop, ref);
-      case PageInStep(ref) => PageInStepPreservesInvariant(k, s, s', dop, ref);
-      case PageInIndirectionTableStep => PageInIndirectionTableStepPreservesInvariant(k, s, s', dop);
-      case EvictStep(ref) => EvictStepPreservesInvariant(k, s, s', dop, ref);
+      case WriteBackReqStep(ref) => WriteBackReqStepPreservesInv(k, s, s', dop, ref);
+      case WriteBackRespStep => WriteBackRespStepPreservesInv(k, s, s', dop);
+      case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop);
+      case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(k, s, s', dop);
+      case UnallocStep(ref) => UnallocStepPreservesInv(k, s, s', dop, ref);
+      case PageInReqStep(ref) => PageInReqStepPreservesInv(k, s, s', dop, ref);
+      case PageInRespStep => PageInRespStepPreservesInv(k, s, s', dop);
+      case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(k, s, s', dop);
+      case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
+      case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
+      case FreezeStep => FreezeStepPreservesInv(k, s, s', dop);
       case NoOpStep => { }
-      case TransactionStep(ops) => TransactionStepPreservesInvariant(k, s, s', dop, ops);
+      case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, ops);
     }
   }
 
-  lemma CrashStepPreservesInvariant(k: Constants, s: Variables, s': Variables)
+  lemma ProcessReadPreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessRead(k.disk, s.disk, s'.disk, id)
+    ensures Inv(k, s')
+  {
+  }
+
+  lemma ProcessWritePreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
+    ensures Inv(k, s')
+  {
+  }
+
+  lemma DiskInternalStepPreservesInv(k: Constants, s: Variables, s': Variables, step: D.InternalStep)
+    requires Inv(k, s)
+    requires DiskInternal(k, s, s', step)
+    ensures Inv(k, s')
+  {
+    match step {
+      case ProcessReadStep(id) => ProcessReadPreservesInv(k, s, s', id);
+      case ProcessWriteStep(id) => ProcessWritePreservesInv(k, s, s', id);
+    }
+  }
+
+  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
     requires Crash(k, s, s')
     ensures Inv(k, s')
   {
   }
 
-  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, step: Step)
+  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', step)
     ensures Inv(k, s')
   {
     match step {
-      case MachineStep(dop: DiskOp) => MachineStepPreservesInvariant(k, s, s', dop);
-      case CrashStep => CrashStepPreservesInvariant(k, s, s');
+      case MachineStep(dop) => MachineStepPreservesInv(k, s, s', dop);
+      case DiskInternalStep(step) => DiskInternalStepPreservesInv(k, s, s', step);
+      case CrashStep => CrashStepPreservesInv(k, s, s');
     }
   }
 
@@ -614,8 +681,6 @@ abstract module AsyncBlockCacheSystem {
     ensures Inv(k, s')
   {
     var step :| NextStep(k, s, s', step);
-    NextStepPreservesInvariant(k, s, s', step);
+    NextStepPreservesInv(k, s, s', step);
   }
-
-  */
 }
