@@ -103,6 +103,7 @@ abstract module AsyncBlockCache refines Transactable {
     | PageInIndirectionTableReqStep
     | PageInIndirectionTableRespStep
     | EvictStep(ref: Reference)
+    | FreezeStep
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
@@ -255,6 +256,14 @@ abstract module AsyncBlockCache refines Transactable {
     && s' == s.(cache := MapRemove(s.cache, {ref}))
   }
 
+  predicate Freeze(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && s.Ready?
+    && dop.NoDiskOp?
+    && s.outstandingIndirectionTableWrite.None?
+    && s' == s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
+  }
+
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && (dop.RespReadOp? || dop.NoDiskOp?)
@@ -352,6 +361,7 @@ abstract module AsyncBlockCache refines Transactable {
       case PageInIndirectionTableReqStep => PageInIndirectionTableReq(k, s, s', dop)
       case PageInIndirectionTableRespStep => PageInIndirectionTableResp(k, s, s', dop)
       case EvictStep(ref) => Evict(k, s, s', dop, ref)
+      case FreezeStep => Freeze(k, s, s', dop)
       case NoOpStep => NoOp(k, s, s', dop)
       case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
     }
@@ -549,6 +559,16 @@ abstract module AsyncBlockCache refines Transactable {
     }
   }
 
+  lemma FreezeStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires Freeze(k, s, s', dop)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', dop, step)
@@ -565,6 +585,7 @@ abstract module AsyncBlockCache refines Transactable {
       case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
+      case FreezeStep => FreezeStepPreservesInv(k, s, s', dop);
       case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, ops);
     }
@@ -578,6 +599,5 @@ abstract module AsyncBlockCache refines Transactable {
     var step :| NextStep(k, s, s', dop, step);
     NextStepPreservesInv(k, s, s', dop, step);
   }
-
 }
 
