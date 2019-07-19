@@ -309,6 +309,7 @@ abstract module AsyncBlockCacheSystem {
   predicate CorrectInflightBlockWrite(k: Constants, s: Variables, id: D.ReqId, ref: Reference, lba: LBA)
   requires s.machine.Ready?
   {
+    && lba != M.IndirectionTableLBA()
     && (forall r | r in s.machine.ephemeralIndirectionTable.lbas ::
         s.machine.ephemeralIndirectionTable.lbas[r] == lba ==> r == ref)
 
@@ -316,7 +317,10 @@ abstract module AsyncBlockCacheSystem {
         forall r | r in s.machine.frozenIndirectionTable.value.lbas ::
         s.machine.frozenIndirectionTable.value.lbas[r] == lba ==> r == ref)
 
-    && (id in s.disk.reqWrites ==> s.disk.reqWrites[id].lba == lba)
+    && (id in s.disk.reqWrites ==>
+      && s.disk.reqWrites[id].lba == lba
+      && s.disk.reqWrites[id].sector.SectorBlock?
+    )
 
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
   }
@@ -390,10 +394,14 @@ abstract module AsyncBlockCacheSystem {
       )
       && (s.machine.outstandingIndirectionTableWrite.Some? ==>
         && WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
+        && s.machine.outstandingBlockWrites == map[]
       )
       && (
         || s.machine.persistentIndirectionTable == DiskIndirectionTable(s.disk.blocks)
         || s.machine.frozenIndirectionTable == Some(DiskIndirectionTable(s.disk.blocks))
+      )
+      && (s.machine.outstandingIndirectionTableWrite.None? ==>
+        || s.machine.persistentIndirectionTable == DiskIndirectionTable(s.disk.blocks)
       )
       && WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
       && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(k, s))
@@ -486,7 +494,7 @@ abstract module AsyncBlockCacheSystem {
     }*/
   }
 
-  lemma WriteBackReqStepPreservesGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
+  lemma WriteBackReqStepPreservesDiskCacheGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
     requires Inv(k, s)
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
@@ -599,9 +607,9 @@ abstract module AsyncBlockCacheSystem {
     ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
-    WriteBackReqStepPreservesGraph(k, s, s', dop, ref, s.machine.ephemeralIndirectionTable, s'.machine.ephemeralIndirectionTable);
+    WriteBackReqStepPreservesDiskCacheGraph(k, s, s', dop, ref, s.machine.ephemeralIndirectionTable, s'.machine.ephemeralIndirectionTable);
     if s.machine.frozenIndirectionTable.Some? {
-      WriteBackReqStepPreservesGraph(k, s, s', dop, ref, s.machine.frozenIndirectionTable.value, s'.machine.frozenIndirectionTable.value);
+      WriteBackReqStepPreservesDiskCacheGraph(k, s, s', dop, ref, s.machine.frozenIndirectionTable.value, s'.machine.frozenIndirectionTable.value);
     }
   }
 
@@ -878,9 +886,9 @@ abstract module AsyncBlockCacheSystem {
     requires Inv(k, s)
     requires M.Freeze(k.machine, s.machine, s'.machine, dop)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == Some(EphemeralGraph(k, s'));
-    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == Some(EphemeralGraph(k, s));
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
   }
 
@@ -916,12 +924,105 @@ abstract module AsyncBlockCacheSystem {
     }
   }
 
+  lemma ProcessReadPreservesGraphs(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessRead(k.disk, s.disk, s'.disk, id)
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures EphemeralGraphOpt(k, s) == EphemeralGraphOpt(k, s');
+  {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
+    if (EphemeralGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
+    }
+  }
+
   lemma ProcessReadPreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
     requires Inv(k, s)
     requires s.machine == s'.machine
     requires D.ProcessRead(k.disk, s.disk, s'.disk, id)
     ensures Inv(k, s')
   {
+  }
+
+  lemma ProcessWritePreservesDiskCacheGraph(k: Constants, s: Variables, s': Variables, id: D.ReqId, indirectionTable: IndirectionTable)
+  requires Inv(k, s)
+  requires s.machine == s'.machine
+  requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
+
+  requires M.WFIndirectionTable(indirectionTable)
+  requires WFIndirectionTableWrtDiskQueue(indirectionTable, s.disk)
+  requires M.IndirectionTableCacheConsistent(indirectionTable, s.machine.cache)
+
+  ensures DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+       == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache)
+  {
+    /*var req := s.disk.reqWrites[id];
+    if (req.lba == M.IndirectionTableLBA()) {
+      assert WFDisk(s'.disk.blocks);
+      assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
+    } else {
+      assert WFDisk(s'.disk.blocks);
+      assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
+    }*/
+  }
+
+  lemma DiskCacheGraphEqDiskGraph(k: Constants, s: Variables, indirectionTable: IndirectionTable)
+  requires Inv(k, s)
+  requires s.machine.Ready?
+  requires M.WFCompleteIndirectionTable(indirectionTable)
+  requires WFIndirectionTableWrtDisk(indirectionTable, s.disk.blocks)
+  requires M.IndirectionTableCacheConsistent(indirectionTable, s.machine.cache)
+  requires s.machine.outstandingBlockWrites == map[]
+  ensures DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+       == DiskGraph(indirectionTable, s.disk.blocks)
+  {
+    /*forall ref | ref in indirectionTable.graph
+    ensures RefMapOfDisk(indirectionTable, s.disk.blocks)[ref]
+        == DiskQueueCacheLookup(indirectionTable, s.disk, s.machine.cache, ref)
+    {
+      assert QueueLookupIdByLBA(s.disk.reqWrites, indirectionTable.lbas[ref]).None?;
+    }*/
+  }
+
+  lemma ProcessWritePreservesGraphs(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
+
+    ensures WFDisk(s'.disk.blocks)
+
+    ensures (
+      || PersistentGraph(k, s') == PersistentGraph(k, s)
+      || Some(PersistentGraph(k, s')) == FrozenGraphOpt(k, s)
+    )
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+  {
+    if (s.machine.frozenIndirectionTable.Some?) { 
+      ProcessWritePreservesDiskCacheGraph(k, s, s', id, s.machine.frozenIndirectionTable.value);
+    }
+    ProcessWritePreservesDiskCacheGraph(k, s, s', id, s.machine.ephemeralIndirectionTable);
+
+    var req := s.disk.reqWrites[id];
+    if (req.lba == M.IndirectionTableLBA()) {
+      var indirectionTable := s.machine.frozenIndirectionTable.value;
+      DiskCacheGraphEqDiskGraph(k, s, indirectionTable);
+
+      assert FrozenGraph(k, s)
+          == DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskGraph(s.machine.frozenIndirectionTable.value, s.disk.blocks)
+          == PersistentGraph(k, s');
+    } else {
+      assert PersistentGraph(k, s') == PersistentGraph(k, s);
+    }
   }
 
   lemma ProcessWritePreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
