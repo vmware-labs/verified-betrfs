@@ -693,12 +693,40 @@ abstract module AsyncBlockCacheSystem {
     WriteBackIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
+  lemma DirtyStepUpdatesGraph(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+    requires Inv(k, s)
+    requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
+    requires s.disk == s'.disk
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
+  {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
+  }
+
   lemma DirtyStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
     requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
     ensures Inv(k, s')
   {
+  }
+
+  lemma AllocStepUpdatesGraph(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+    requires Inv(k, s)
+    requires M.Alloc(k.machine, s.machine, s'.machine, ref, block)
+    requires s.disk == s'.disk
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
+  {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma AllocStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
