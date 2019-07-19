@@ -308,6 +308,7 @@ abstract module AsyncBlockCacheSystem {
 
   predicate CorrectInflightBlockWrite(k: Constants, s: Variables, id: D.ReqId, ref: Reference, lba: LBA)
   requires s.machine.Ready?
+  requires WFDisk(s.disk.blocks)
   {
     && lba != M.IndirectionTableLBA()
     && (forall r | r in s.machine.ephemeralIndirectionTable.lbas ::
@@ -316,6 +317,9 @@ abstract module AsyncBlockCacheSystem {
     && (s.machine.frozenIndirectionTable.Some? ==>
         forall r | r in s.machine.frozenIndirectionTable.value.lbas ::
         s.machine.frozenIndirectionTable.value.lbas[r] == lba ==> r == ref)
+
+    && (forall r | r in DiskIndirectionTable(s.disk.blocks).lbas ::
+        DiskIndirectionTable(s.disk.blocks).lbas[r] != lba)
 
     && (id in s.disk.reqWrites ==>
       && s.disk.reqWrites[id].lba == lba
@@ -327,6 +331,7 @@ abstract module AsyncBlockCacheSystem {
 
   predicate CorrectInflightBlockWrites(k: Constants, s: Variables)
   requires s.machine.Ready?
+  requires WFDisk(s.disk.blocks)
   {
     forall id | id in s.machine.outstandingBlockWrites ::
       CorrectInflightBlockWrite(k, s, id, s.machine.outstandingBlockWrites[id].ref, s.machine.outstandingBlockWrites[id].lba)
@@ -391,6 +396,7 @@ abstract module AsyncBlockCacheSystem {
     && (s.machine.Ready? ==>
       && (s.machine.frozenIndirectionTable.Some? ==>
         && WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
+        && SuccessorsAgree(s.machine.frozenIndirectionTable.value.graph, FrozenGraph(k, s))
       )
       && (s.machine.outstandingIndirectionTableWrite.Some? ==>
         && WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
@@ -1021,7 +1027,22 @@ abstract module AsyncBlockCacheSystem {
           == DiskGraph(s.machine.frozenIndirectionTable.value, s.disk.blocks)
           == PersistentGraph(k, s');
     } else {
-      assert PersistentGraph(k, s') == PersistentGraph(k, s);
+      var indirectionTable := DiskIndirectionTable(s.disk.blocks);
+
+      /*forall ref | ref in indirectionTable.graph
+      ensures RefMapOfDisk(indirectionTable, s.disk.blocks)[ref]
+           == RefMapOfDisk(indirectionTable, s'.disk.blocks)[ref]
+      {
+        assert RecordedWriteRequest(k, s, id, req.lba, req.sector);
+        assert CorrectInflightBlockWrite(k, s, id, s.machine.outstandingBlockWrites[id].ref, req.lba);
+        assert indirectionTable.lbas[ref] != req.lba;
+      }*/
+
+      assert PersistentGraph(k, s)
+          == DiskGraph(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
+          == DiskGraph(DiskIndirectionTable(s.disk.blocks), s'.disk.blocks)
+          == DiskGraph(DiskIndirectionTable(s'.disk.blocks), s'.disk.blocks)
+          == PersistentGraph(k, s');
     }
   }
 
@@ -1031,6 +1052,7 @@ abstract module AsyncBlockCacheSystem {
     requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
     ensures Inv(k, s')
   {
+    ProcessWritePreservesGraphs(k, s, s', id);
   }
 
   lemma DiskInternalStepPreservesInv(k: Constants, s: Variables, s': Variables, step: D.InternalStep)
