@@ -21,7 +21,7 @@ abstract module AsyncBlockCacheSystem {
   type Node = M.G.Node
   type Op = M.Op
 
-  predicate WFDisk(k: Constants, blocks: map<LBA, Sector>)
+  predicate WFDisk(blocks: map<LBA, Sector>)
   {
     && var indirectionTableLBA := M.IndirectionTableLBA();
     && indirectionTableLBA in blocks
@@ -37,23 +37,22 @@ abstract module AsyncBlockCacheSystem {
     && blocks[indirectionTable.lbas[ref]].SectorBlock?
   }
 
-  predicate WFIndirectionTableWrtDisk(k: Constants, indirectionTable: IndirectionTable, blocks: map<LBA, Sector>)
+  predicate WFIndirectionTableWrtDisk(indirectionTable: IndirectionTable, blocks: map<LBA, Sector>)
   {
     && (forall ref | ref in indirectionTable.lbas :: WFIndirectionTableRefWrtDisk(indirectionTable, blocks, ref))
   }
 
-  function DiskIndirectionTable(k: Constants, blocks: map<LBA, Sector>) : IndirectionTable
-  requires WFDisk(k, blocks)
+  function DiskIndirectionTable(blocks: map<LBA, Sector>) : IndirectionTable
+  requires WFDisk(blocks)
   {
     blocks[M.IndirectionTableLBA()].indirectionTable
   }
 
   function RefMapOfDisk(
-      k: Constants,
       indirectionTable: IndirectionTable,
       blocks: map<LBA, Sector>) : map<Reference, Node>
-  requires WFDisk(k, blocks)
-  requires WFIndirectionTableWrtDisk(k, indirectionTable, blocks)
+  requires WFDisk(blocks)
+  requires WFIndirectionTableWrtDisk(indirectionTable, blocks)
   {
     map ref | ref in indirectionTable.lbas :: blocks[indirectionTable.lbas[ref]].block
   }
@@ -64,43 +63,81 @@ abstract module AsyncBlockCacheSystem {
     map ref | ref in refs :: refmap[ref]
   }
 
-  function DiskGraph(k: Constants, indirectionTable: IndirectionTable, blocks: map<LBA, Sector>) : map<Reference, Node>
-  requires WFDisk(k, blocks)
+  function DiskGraph(indirectionTable: IndirectionTable, blocks: map<LBA, Sector>) : map<Reference, Node>
+  requires WFDisk(blocks)
   requires M.WFCompleteIndirectionTable(indirectionTable)
-  requires WFIndirectionTableWrtDisk(k, indirectionTable, blocks)
+  requires WFIndirectionTableWrtDisk(indirectionTable, blocks)
   {
-    Graph(indirectionTable.graph.Keys, RefMapOfDisk(k, indirectionTable, blocks))
+    Graph(indirectionTable.graph.Keys, RefMapOfDisk(indirectionTable, blocks))
   }
 
   function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
-  requires WFDisk(k, s.disk.blocks)
-  requires WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
+  requires WFDisk(s.disk.blocks)
+  requires WFIndirectionTableWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
   {
-    DiskGraph(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
+    DiskGraph(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
   }
 
-  function WritingGraph(k: Constants, s: Variables) : map<Reference, Node>
-  requires WFDisk(k, s.disk.blocks)
-  requires s.machine.Ready?
-  requires s.machine.outstandingIndirectionTableWrite.Some?
-  requires M.WFCompleteIndirectionTable(s.machine.outstandingIndirectionTableWrite.value.indirectionTable)
-  requires WFIndirectionTableWrtDisk(k, s.machine.outstandingIndirectionTableWrite.value.indirectionTable, s.disk.blocks)
+  function {:opaque} QueueLookupIdByLBA(reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>, lba: LBA) : (res : Option<D.ReqId>)
+  ensures res.None? ==> forall id | id in reqWrites :: reqWrites[id].lba != lba
+  ensures res.Some? ==> res.value in reqWrites && reqWrites[res.value].lba == lba
   {
-    DiskGraph(k,
-      s.machine.outstandingIndirectionTableWrite.value.indirectionTable,
-      s.disk.blocks)
+    if id :| id in reqWrites && reqWrites[id].lba == lba then Some(id) else None
+  }
+
+  predicate WFReqWriteBlocks(reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>)
+  {
+    forall id | id in reqWrites && M.ValidLBAForNode(reqWrites[id].lba) ::
+        reqWrites[id].sector.SectorBlock?
+  }
+
+  function DiskQueueCacheLookup(indirectionTable: IndirectionTable, disk: D.Variables<LBA,Sector>, cache: map<Reference, Node>, ref: Reference) : Node
+  requires WFDisk(disk.blocks)
+  requires M.WFIndirectionTable(indirectionTable)
+  requires WFIndirectionTableWrtDisk(indirectionTable, disk.blocks)
+  requires M.IndirectionTableCacheConsistent(indirectionTable, cache)
+  requires WFReqWriteBlocks(disk.reqWrites)
+  requires ref in indirectionTable.graph
+  {
+    if ref in indirectionTable.lbas then (
+      if QueueLookupIdByLBA(disk.reqWrites, indirectionTable.lbas[ref]).Some? then
+        disk.reqWrites[QueueLookupIdByLBA(disk.reqWrites, indirectionTable.lbas[ref]).value].sector.block
+      else
+        disk.blocks[indirectionTable.lbas[ref]].block
+    ) else (
+      cache[ref]
+    )
+  }
+
+  function DiskCacheGraph(indirectionTable: IndirectionTable, disk: D.Variables<LBA,Sector>, cache: map<Reference, Node>) : map<Reference, Node>
+  requires WFDisk(disk.blocks)
+  requires M.WFIndirectionTable(indirectionTable)
+  requires WFIndirectionTableWrtDisk(indirectionTable, disk.blocks)
+  requires M.IndirectionTableCacheConsistent(indirectionTable, cache)
+  requires WFReqWriteBlocks(disk.reqWrites)
+  {
+    map ref | ref in indirectionTable.graph :: DiskQueueCacheLookup(indirectionTable, disk, cache, ref)
+  }
+
+  function FrozenGraph(k: Constants, s: Variables) : map<Reference, Node>
+  requires WFDisk(s.disk.blocks)
+  requires s.machine.Ready?
+  requires s.machine.frozenIndirectionTable.Some?
+  requires M.WFCompleteIndirectionTable(s.machine.frozenIndirectionTable.value)
+  requires WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
+  requires WFReqWriteBlocks(s.disk.reqWrites)
+  {
+    DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
   }
 
   function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires M.Inv(k.machine, s.machine)
   requires s.machine.Ready?
-  requires WFDisk(k, s.disk.blocks)
-  requires WFIndirectionTableWrtDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks)
+  requires WFDisk(s.disk.blocks)
+  requires WFIndirectionTableWrtDisk(s.machine.ephemeralIndirectionTable, s.disk.blocks)
+  requires WFReqWriteBlocks(s.disk.reqWrites)
   {
-    Graph(
-      s.machine.ephemeralIndirectionTable.graph.Keys,
-      MapUnionPreferB(RefMapOfDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks), s.machine.cache)
-    )
+    DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
   }
 
   predicate NoDanglingPointers(graph: map<Reference, Node>)
@@ -122,9 +159,9 @@ abstract module AsyncBlockCacheSystem {
   {
     && M.Init(k.machine, s.machine)
     && D.Init(k.disk, s.disk)
-    && WFDisk(k, s.disk.blocks)
-    && WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
-    && SuccessorsAgree(DiskIndirectionTable(k, s.disk.blocks).graph, PersistentGraph(k, s))
+    && WFDisk(s.disk.blocks)
+    && WFIndirectionTableWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(DiskIndirectionTable(s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && PersistentGraph(k, s).Keys == {M.G.Root()}
     && M.G.Successors(PersistentGraph(k, s)[M.G.Root()]) == iset{}
@@ -230,20 +267,17 @@ abstract module AsyncBlockCacheSystem {
   requires s.machine.Ready?
   {
     && lba !in s.machine.persistentIndirectionTable.lbas.Values
-    && (s.machine.outstandingIndirectionTableWrite.Some? ==>
-        lba !in s.machine.outstandingIndirectionTableWrite.value.indirectionTable.lbas.Values)
+    && (s.machine.frozenIndirectionTable.Some? ==>
+        lba !in s.machine.frozenIndirectionTable.value.lbas.Values)
+
     && (forall r | r in s.machine.ephemeralIndirectionTable.lbas ::
         s.machine.ephemeralIndirectionTable.lbas[r] == lba ==> r == ref)
+
+    && (s.machine.frozenIndirectionTable.Some? ==>
+        forall r | r in s.machine.frozenIndirectionTable.value.lbas ::
+        s.machine.frozenIndirectionTable.value.lbas[r] == lba ==> r == ref)
+
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
-    && (MapsTo(s.machine.ephemeralIndirectionTable.lbas, ref, lba) ==> (
-      && ref in s.machine.cache
-      && (id in s.disk.reqWrites ==> (
-        s.disk.reqWrites[id] == D.ReqWrite(lba, M.SectorBlock(s.machine.cache[ref]))
-      ))
-      && (id in s.disk.respWrites ==> (
-        MapsTo(s.disk.blocks, lba, M.SectorBlock(s.machine.cache[ref]))
-      ))
-    ))
   }
 
   predicate CorrectInflightBlockWrites(k: Constants, s: Variables)
@@ -257,12 +291,13 @@ abstract module AsyncBlockCacheSystem {
   requires s.machine.Ready?
   {
     s.machine.outstandingIndirectionTableWrite.Some? ==> (
-      MapsTo(s.disk.reqWrites,
-        s.machine.outstandingIndirectionTableWrite.value.reqId,
+      && s.machine.frozenIndirectionTable.Some?
+      && MapsTo(s.disk.reqWrites,
+        s.machine.outstandingIndirectionTableWrite.value,
         D.ReqWrite(
           M.IndirectionTableLBA(),
           M.SectorIndirectionTable(
-            s.machine.outstandingIndirectionTableWrite.value.indirectionTable
+            s.machine.frozenIndirectionTable.value
           )
         )
       )
@@ -276,7 +311,8 @@ abstract module AsyncBlockCacheSystem {
     && s.machine.Ready?
     && (match sector {
       case SectorIndirectionTable(indirectionTable) => (
-        s.machine.outstandingIndirectionTableWrite == Some(M.OutstandingIndirectionTableWrite(id, indirectionTable))
+        && s.machine.outstandingIndirectionTableWrite == Some(id)
+        && s.machine.frozenIndirectionTable == Some(indirectionTable)
       )
       case SectorBlock(block) => (
         && id in s.machine.outstandingBlockWrites
@@ -291,16 +327,17 @@ abstract module AsyncBlockCacheSystem {
 
   predicate Inv(k: Constants, s: Variables) {
     && M.Inv(k.machine, s.machine)
-    && WFDisk(k, s.disk.blocks)
-    && WFIndirectionTableWrtDisk(k, DiskIndirectionTable(k, s.disk.blocks), s.disk.blocks)
-    && SuccessorsAgree(DiskIndirectionTable(k, s.disk.blocks).graph, PersistentGraph(k, s))
+    && WFDisk(s.disk.blocks)
+    && WFReqWriteBlocks(s.disk.reqWrites)
+    && WFIndirectionTableWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(DiskIndirectionTable(s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && (s.machine.Ready? ==>
       && (s.machine.outstandingIndirectionTableWrite.Some? ==>
-        && WFIndirectionTableWrtDisk(k, s.machine.outstandingIndirectionTableWrite.value.indirectionTable, s.disk.blocks)
+        && WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
       )
-      && s.machine.persistentIndirectionTable == DiskIndirectionTable(k, s.disk.blocks)
-      && WFIndirectionTableWrtDisk(k, s.machine.ephemeralIndirectionTable, s.disk.blocks)
+      && s.machine.persistentIndirectionTable == DiskIndirectionTable(s.disk.blocks)
+      && WFIndirectionTableWrtDisk(s.machine.ephemeralIndirectionTable, s.disk.blocks)
       && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(k, s))
       && NoDanglingPointers(EphemeralGraph(k, s))
       && CleanCacheEntriesAreCorrect(k, s)
@@ -461,25 +498,44 @@ abstract module AsyncBlockCacheSystem {
     */
   }
 
-  /*
-  lemma PageInStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma PageInReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
-    requires M.PageIn(k.machine, s.machine, s'.machine, dop, ref)
-    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    requires M.PageInReq(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
   }
 
-  lemma PageInStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma PageInReqStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
-    requires M.PageIn(k.machine, s.machine, s'.machine, dop, ref)
-    requires D.Read(k.disk, s.disk, s'.disk, dop);
+    requires M.PageInReq(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    PageInStepPreservesGraphs(k, s, s', dop, ref);
+    PageInReqStepPreservesGraphs(k, s, s', dop, ref);
   }
 
+  lemma PageInRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
+    requires D.SendRead(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+  {
+  }
+
+  lemma PageInRespStepPreservesInvariant(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
+    requires D.SendRead(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PageInRespStepPreservesGraphs(k, s, s', dop);
+  }
+
+
+  /*
   lemma PageInIndirectionTableStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInIndirectionTable(k.machine, s.machine, s'.machine, dop)
