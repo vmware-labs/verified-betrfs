@@ -1,4 +1,5 @@
 include "AsyncBlockCache.dfy"
+include "PivotBetreeSpec.dfy"
 
 abstract module AsyncBlockCacheSystem {
   import M : AsyncBlockCache
@@ -215,13 +216,13 @@ abstract module AsyncBlockCacheSystem {
   ////// Next
 
   datatype Step =
-    | MachineStep(dop: DiskOp)
+    | MachineStep(dop: DiskOp, machineStep: M.Step)
     | DiskInternalStep(step: D.InternalStep)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp, machineStep: M.Step)
   {
-    && M.Next(k.machine, s.machine, s'.machine, dop)
+    && M.NextStep(k.machine, s.machine, s'.machine, dop, machineStep)
     && D.Next(k.disk, s.disk, s'.disk, dop)
   }
 
@@ -240,7 +241,7 @@ abstract module AsyncBlockCacheSystem {
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', dop)
+      case MachineStep(dop, machineStep) => Machine(k, s, s', dop, machineStep)
       case DiskInternalStep(step) => DiskInternal(k, s, s', step)
       case CrashStep => Crash(k, s, s')
     }
@@ -935,13 +936,12 @@ abstract module AsyncBlockCacheSystem {
     FreezeStepPreservesGraphs(k, s, s', dop);
   }
 
-  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, machineStep: M.Step)
     requires Inv(k, s)
-    requires Machine(k, s, s', dop)
+    requires Machine(k, s, s', dop, machineStep)
     ensures Inv(k, s')
   {
-    var step :| M.NextStep(k.machine, s.machine, s'.machine, dop, step);
-    match step {
+    match machineStep {
       case WriteBackReqStep(ref) => WriteBackReqStepPreservesInv(k, s, s', dop, ref);
       case WriteBackRespStep => WriteBackRespStepPreservesInv(k, s, s', dop);
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop);
@@ -1107,7 +1107,7 @@ abstract module AsyncBlockCacheSystem {
     ensures Inv(k, s')
   {
     match step {
-      case MachineStep(dop) => MachineStepPreservesInv(k, s, s', dop);
+      case MachineStep(dop, machineStep) => MachineStepPreservesInv(k, s, s', dop, machineStep);
       case DiskInternalStep(step) => DiskInternalStepPreservesInv(k, s, s', step);
       case CrashStep => CrashStepPreservesInv(k, s, s');
     }
@@ -1121,4 +1121,8 @@ abstract module AsyncBlockCacheSystem {
     var step :| NextStep(k, s, s', step);
     NextStepPreservesInv(k, s, s', step);
   }
+}
+
+module BetreeGraphAsyncBlockCacheSystem refines AsyncBlockCacheSystem {
+  import M = BetreeGraphAsyncBlockCache
 }

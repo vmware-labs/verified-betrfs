@@ -4,6 +4,7 @@ include "../lib/Maps.dfy"
 include "Graph.dfy"
 include "AsyncDiskModel.dfy"
 include "BlockCache.dfy"
+include "PivotBetreeSpec.dfy"
 
 abstract module AsyncBlockCache refines Transactable {
   import opened Maps
@@ -633,3 +634,6 @@ abstract module AsyncBlockCache refines Transactable {
   }
 }
 
+module {:extern} BetreeGraphAsyncBlockCache refines AsyncBlockCache {
+  import G = PivotBetreeGraph
+}
