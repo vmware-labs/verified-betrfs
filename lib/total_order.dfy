@@ -209,6 +209,53 @@ abstract module Total_Order {
     else 1 + LargestLt(run[1..], needle)
   }
 
+  lemma LargestLtIsUnique(run: seq<Element>, needle: Element, pos: int)
+    requires IsSorted(run)
+    requires -1 <= pos < |run|
+    requires forall i ::   0 <= i <= pos   ==> lt(run[i], needle)
+    requires forall i :: pos < i < |run| ==> lte(needle, run[i])
+    ensures pos == LargestLt(run, needle)
+  {
+    reveal_IsSorted();
+    var llt := LargestLt(run, needle);
+    if pos < llt {
+      assert lt(run[llt], needle);
+      assert lte(needle, run[llt]);
+      assert false;
+    } else if llt < pos {
+      assert lt(run[pos], needle);
+      assert lte(needle, run[pos]);
+      assert false;
+    }
+  }
+  
+  method InsertionPoint(run: seq<Element>, needle: Element) returns (pos: int)
+    requires IsSorted(run)
+    ensures 0 <= pos <= |run|
+    ensures forall i :: 0 <= i < pos ==> lt(run[i], needle)
+    ensures forall i :: pos <= i < |run| ==> lte(needle, run[i])
+    ensures pos-1 == LargestLt(run, needle)
+  {
+    reveal_IsSorted();
+    var lo := 0;
+    var hi := |run|;
+    while lo < hi
+      invariant 0 <= lo <= hi <= |run|
+      invariant forall i :: 0 <= i < lo ==> lt(run[i], needle)
+      invariant forall i :: hi <= i < |run| ==> lte(needle, run[i])
+      decreases hi - lo
+    {
+      var mid := (hi + lo) / 2;
+      if lt(run[mid], needle) {
+        lo := mid + 1;
+      } else {
+        hi := mid;
+      }
+    }
+    pos := lo;
+    LargestLtIsUnique(run, needle, pos-1);
+  }
+  
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
   requires IsStrictlySorted(run);
   requires 0 <= pos < |run|

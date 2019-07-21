@@ -154,7 +154,7 @@ ensures node.r !in node_set(max_node.l)
 method
 {:fuel is_structurally_valid,0,0} {:fuel value_set,0,0}
 delete(tree: Tree, value: uint64)
-modifies tree
+modifies tree, tree.root, if tree.root != null then tree.root.node_set else {}
 requires is_valid_tree(tree)
 ensures is_valid_tree(tree)
 ensures tree_set(tree) == old(tree_set(tree)) - {value}
