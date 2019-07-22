@@ -635,21 +635,19 @@ module MutableMap {
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
     }
 
-    method NewUnderlying() returns (newUnderlying: FixedSizeHashMap<V>)
+    method Realloc()
       requires Underlying.Storage.Length < 0x10000000000000000 / 2
       requires Inv()
       ensures Inv()
-      ensures UnderlyingContentsMatchesContents(newUnderlying, Contents)
-      ensures UnderlyingInv(newUnderlying)
-      ensures MapFromStorage(newUnderlying.Storage[..]) == Contents
-      ensures fresh(newUnderlying)
-      ensures fresh(newUnderlying.Storage)
+      ensures Contents == old(Contents)
+      ensures fresh(Underlying) && fresh(Underlying.Storage)
+      modifies this
     {
       assert |Contents| == Count as nat;
 
       assert 128 <= Underlying.Storage.Length < 0x10000000000000000 / 2;
       var newSize: uint64 := (Underlying.Storage.Length as uint64) * 2;
-      newUnderlying := new FixedSizeHashMap(newSize);
+      var newUnderlying := new FixedSizeHashMap(newSize);
       assert fresh(newUnderlying) && fresh(newUnderlying.Storage);
       
       assert newUnderlying.Storage.Length == newSize as nat;
@@ -665,8 +663,10 @@ module MutableMap {
         invariant i <= Underlying.Storage.Length
         invariant newUnderlying.Inv()
         invariant |Contents| == Count as nat
+        invariant Contents == old(Contents) // this is necessary because of `modifies this` (?)
         invariant UnderlyingContentsMatchesContents(newUnderlying, transferredContents)
         invariant MapFromStorage(Underlying.Storage[..i]) == transferredContents
+        invariant MapFromStorage(Underlying.Storage[..]) == Contents
 
         invariant newUnderlying.Count as nat <= i
         invariant Underlying.Count == old(Underlying.Count)
@@ -717,18 +717,14 @@ module MutableMap {
 
       assert newUnderlying.Inv();
       assert UnderlyingInv(newUnderlying);
-    }
+      assert UnderlyingContentsMatchesContents(newUnderlying, Contents);
+      assert MapFromStorage(newUnderlying.Storage[..]) == Contents;
 
-    method Realloc()
-      requires Underlying.Storage.Length < 0x10000000000000000 / 2
-      requires Inv()
-      ensures Inv()
-      ensures Contents == old(Contents)
-      ensures fresh(Underlying) && fresh(Underlying.Storage)
-      modifies this
-    {
+      assert fresh(newUnderlying);
+      assert fresh(newUnderlying.Storage);
+
       // -- mutation --
-      Underlying := NewUnderlying();
+      Underlying := newUnderlying;
       // --------------
 
       assert Contents == old(Contents);
