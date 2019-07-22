@@ -9,8 +9,9 @@ include "BetreeSpec.dfy"
 include "Betree.dfy"
 include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
+include "UIStateMachine.dfy"
 
-module PivotBetree {
+module PivotBetree refines UIStateMachine {
   import opened PivotBetreeSpec`Internal
 
   import BI = PivotBetreeBlockInterface
@@ -22,7 +23,6 @@ module PivotBetree {
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
-  type UIOp = MS.UI.Op
 
   function EmptyNode() : Node
   {

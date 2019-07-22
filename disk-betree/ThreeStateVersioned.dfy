@@ -1,16 +1,6 @@
 include "MapSpec.dfy"
 include "../lib/Maps.dfy"
 
-abstract module StateMachine {
-  import UI
-  type UIOp = UI.Op
-
-  type Constants
-  type Variables
-  predicate Init(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp)
-}
-
 abstract module ThreeStateVersionedSystem {
   import SM : StateMachine
 
