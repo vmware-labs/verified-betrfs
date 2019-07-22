@@ -24,7 +24,6 @@ module AsyncDisk {
     | RespReadOp(id: ReqId, respRead: RespRead<Sector>)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
-    | InternalDiskOp
 
   datatype Constants = Constants()
   datatype Variables<LBA, Sector> = Variables(
@@ -157,6 +156,10 @@ abstract module AsyncDiskMachine {
   type UIOp = UI.Op
 
   type DiskOp = D.DiskOp<LBA, Sector>
+  type ReqRead = D.ReqRead<LBA>
+  type ReqWrite = D.ReqWrite<LBA, Sector>
+  type RespRead = D.RespRead<Sector>
+  type RespWrite = D.RespWrite
 
   predicate Init(k: Constants, s: Variables)
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)

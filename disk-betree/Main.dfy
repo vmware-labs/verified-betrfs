@@ -10,32 +10,6 @@ module DiskTypes {
   type ByteSector = seq<byte>
 }
 
-// Implementation has to instantiate this
-// and refine it to the BetreeBlockCache
-// either than or BetreeBlockCache itself will be the instantiation of this module?
-
-// TODO how to create all the contracts without a dependency on the .i file that instantiates
-// the machine? Sounds like it would require parameterized modules?
-// IDEALLY we would be able to say: define a machine type M and also give me a proof
-// that MachineSystem<M> refines CrashSafeMap
-
-/*
-abstract module Machine refines DiskAccessMachine {
-  import UI = UI
-  import DiskTypes
-
-  type Constants
-  type Variables
-
-  type UIOp = UI.Op
-
-  // TODO create a proof obligation for the refinement
-  //lemma Refines(k: Constants, s: Variables, s': Variables, uiop, dop)
-  //requires Next(k, s, s', uiop, dop)
-  //ensures Next(Ik(k), I(k, s), I(k, s'), uiop, dop)
-}
-*/
-
 abstract module Main {
   import DAM : DiskAccessModel
   import D = Disk
