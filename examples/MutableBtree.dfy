@@ -13,10 +13,10 @@ abstract module MutableBtree {
 
   type Key = Keys.Element
   type Value
-    
+
   function method MaxKeysPerLeaf() : uint64
   function method MinKeysPerLeaf() : uint64
-    
+
   function method MaxChildren() : uint64
   function method MinChildren() : uint64
 
@@ -28,9 +28,12 @@ abstract module MutableBtree {
 
     predicate WF()
       reads this, myFields
-      
+
+    function Interpretation() : map<Key, Value>
+      requires WF()
+      reads this, myFields
   }
-  
+    
   class Leaf extends Node {
     var nkeys : uint64
     var keys: array<Key>
@@ -39,11 +42,12 @@ abstract module MutableBtree {
     predicate WF()
       reads this, myFields
     {
-      && myFields == {keys, values}
+      && keys in myFields
+      && values in myFields
+      && keys != values
       && keys.Length == MaxKeysPerLeaf() as int
       && values.Length == MaxKeysPerLeaf() as int
       && 0 <= nkeys <= keys.Length as uint64
-      && keys != values
       && Keys.IsStrictlySorted(keys[..nkeys])
     }
     
@@ -74,7 +78,7 @@ abstract module MutableBtree {
       requires nkeys < MaxKeysPerLeaf()
       ensures WF()
       ensures Interpretation() == old(Interpretation())[key := value]
-      modifies this, keys, values
+      modifies this, myFields
     {
       Keys.reveal_IsStrictlySorted();
       var pos': int := Keys.InsertionPoint(keys[..nkeys], key);
@@ -103,6 +107,7 @@ abstract module MutableBtree {
       Arrays.Memcpy(right.values, 0, values[nkeys/2..nkeys]);
       right.nkeys := nkeys - nkeys/2;
       nkeys := nkeys/2;
+      assert forall key1, key2 :: key1 in Interpretation() && key2 in right.Interpretation() ==> Keys.lt(key1, key2); // OBSERVE
     }
       
     constructor ()
