@@ -45,6 +45,13 @@ module Maps {
   {
     imap j | j in m && j !in ks :: m[j]
   }
+ 
+  function {:opaque} IMapRemove1<K,V>(m:imap<K,V>, k:K) : (m':imap<K,V>)
+    ensures m'.Keys == m.Keys - iset{k}
+    ensures forall j :: j in m' ==> m'[j] == m[j]
+  {
+    imap j | j in m && j != k :: m[j]
+  }
 
   function MapRestrict<K,V>(m:map<K,V>, ks: set<K>) : (m':map<K,V>) {
     map k | k in ks && k in m :: m[k]

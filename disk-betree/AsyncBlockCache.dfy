@@ -298,7 +298,8 @@ abstract module AsyncBlockCache refines Transactable {
   {
     // Possibly allocs ref, possibly overwrites it.
     && s.Ready?
-    && ref in s.cache
+    && ref in s.cache // probably not necessary?
+    && ref in s.ephemeralIndirectionTable.graph
     && s'.Ready?
     && s'.cache == s.cache[ref := block]
     && s'.persistentIndirectionTable == s.persistentIndirectionTable

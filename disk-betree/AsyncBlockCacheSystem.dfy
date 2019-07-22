@@ -700,6 +700,7 @@ abstract module AsyncBlockCacheSystem {
     requires s.disk == s'.disk
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+    ensures ref in EphemeralGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
   {
     if (FrozenGraphOpt(k, s).Some?) {
@@ -722,6 +723,7 @@ abstract module AsyncBlockCacheSystem {
     requires s.disk == s'.disk
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+    ensures ref !in EphemeralGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
   {
     if (FrozenGraphOpt(k, s).Some?) {
@@ -767,12 +769,18 @@ abstract module AsyncBlockCacheSystem {
     }
   }
 
-  lemma UnallocStepPreservesPersistentGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma UnallocStepUpdatesGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraph(k, s') == MapRemove1(EphemeralGraph(k, s), ref)
   {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
