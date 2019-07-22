@@ -1,8 +1,9 @@
 include "MapSpec.dfy"
+include "UIStateMachine.dfy"
 include "../lib/Maps.dfy"
 
 abstract module ThreeStateVersionedSystem {
-  import SM : StateMachine
+  import SM : UIStateMachine
 
   import opened Maps
   import UI
