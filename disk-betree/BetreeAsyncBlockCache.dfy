@@ -6,10 +6,6 @@ include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"
 include "Main.dfy"
 
-module {:extern} BetreeGraphAsyncBlockCache refines AsyncBlockCache {
-  import G = PivotBetreeGraph
-}
-
 module BetreeAsyncBlockCache refines AsyncDiskMachine {
   import opened Maps
   import opened Sequences
