@@ -23,7 +23,12 @@ module UI {
 
   datatype Op =
     | NoOp
-    | SyncOp    // Move this into the crash uiop?
+    | SyncOp
+    | CrashOp
+    | PushSyncOp(id: int)
+    | PopSyncOp(id: int)
+
+    // TODO make these async? any value from it?
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
 }

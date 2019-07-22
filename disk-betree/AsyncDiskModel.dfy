@@ -2,6 +2,9 @@ include "MapSpec.dfy"
 include "CrashTypes.dfy"
 include "../lib/Maps.dfy"
 
+// TODO model the disk as an array of bytes
+// TODO disallow overlapping writes/reads
+
 module AsyncDiskModelTypes {
   datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
   datatype AsyncDiskModelVariables<M,D> = AsyncDiskModelVariables(machine: M, disk: D)
