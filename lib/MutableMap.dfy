@@ -386,6 +386,7 @@ module MutableMap {
       ensures Inv()
       ensures Contents == old(Contents[key := Some(value)])
       ensures Count as nat <= old(Count as nat) + 1
+      ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
       ensures Storage.Length == old(Storage.Length)
       modifies this, this.Storage
     {
@@ -639,7 +640,10 @@ module MutableMap {
       requires Inv()
       ensures Inv()
       ensures UnderlyingContentsMatchesContents(newUnderlying, Contents)
-      ensures fresh(newUnderlying) && fresh(newUnderlying.Storage)
+      ensures UnderlyingInv(newUnderlying)
+      ensures MapFromStorage(newUnderlying.Storage[..]) == Contents
+      ensures fresh(newUnderlying)
+      ensures fresh(newUnderlying.Storage)
     {
       assert |Contents| == Count as nat;
 
@@ -669,37 +673,42 @@ module MutableMap {
         invariant Underlying.Storage.Length == old(Underlying.Storage.Length)
         invariant newUnderlying.Storage.Length == newSize as nat
         invariant newUnderlying.Storage.Length == (Underlying.Storage.Length as uint64 * 2) as nat
-        decreases Underlying.Storage.Length - i
 
-        modifies newUnderlying, newUnderlying.Storage
+        invariant fresh(newUnderlying)
+        invariant fresh(newUnderlying.Storage)
+        decreases Underlying.Storage.Length - i
       {
         var item := Underlying.Storage[i];
-        if item.Entry? {
-          // assert Underlying.Count as nat <= Underlying.Storage.Length;
-          // assert newUnderlying.Count <= Underlying.Count;
-          // assert Underlying.Storage.Length < newUnderlying.Storage.Length - 1;
-          // assert newUnderlying.Count as nat < newUnderlying.Storage.Length - 1;
+        assert Underlying.Storage[..i+1] == Underlying.Storage[..i] + [Underlying.Storage[i]];
 
+        if item.Entry? {
           assert MapFromStorage(Underlying.Storage[..i]) == transferredContents;
 
           // -- mutation --
+          assert fresh(newUnderlying);
+          assert fresh(newUnderlying.Storage);
           newUnderlying.Insert(item.key, item.value);
           transferredContents := transferredContents[item.key := item.value];
           // --------------
 
-          assume MapFromStorage(Underlying.Storage[..i+1]) == transferredContents;
+          assert MapFromStorage(Underlying.Storage[..i+1]) == transferredContents;
+        } else {
+          assert MapFromStorage(Underlying.Storage[..i+1]) == transferredContents;
         }
 
         // -- increment --
         i := i + 1;
         // ---------------
 
-        assume MapFromStorage(Underlying.Storage[..i]) == transferredContents;
+        assert MapFromStorage(Underlying.Storage[..i]) == transferredContents;
       }
 
-      assume MapFromStorage(Underlying.Storage[..]) == transferredContents;
+      assert i == Underlying.Storage.Length;
+      assert Underlying.Storage[..i] == Underlying.Storage[..];
+
+      assert MapFromStorage(Underlying.Storage[..]) == transferredContents;
       UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, transferredContents);
-      assume transferredContents == Contents;
+      assert transferredContents == Contents;
 
       assert |Contents| == Count as nat;
 
@@ -722,15 +731,9 @@ module MutableMap {
       Underlying := NewUnderlying();
       // --------------
 
-      assert fresh(Underlying) && fresh(Underlying.Storage);
-
-      assume Contents == old(Contents);
+      assert Contents == old(Contents);
       assert Inv();
     }
-
-    // Insert
-    // if Underlying.Count as nat >= Underlying.Storage.Length - 1 {
-    // }
 
   }
 }
