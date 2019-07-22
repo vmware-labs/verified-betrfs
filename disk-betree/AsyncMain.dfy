@@ -167,7 +167,7 @@ abstract module Main {
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if success then UI.SyncOp else UI.NoOp,
     IDiskOp(io.diskOp()))
-  // impl defined
+  */
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
@@ -180,7 +180,6 @@ abstract module Main {
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
     IDiskOp(io.diskOp()))
-  // impl defined
 
   method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (success: bool)
@@ -193,8 +192,6 @@ abstract module Main {
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if success then UI.PutOp(key, value) else UI.NoOp,
     IDiskOp(io.diskOp()))
-  // impl defined
-
 
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.
@@ -215,5 +212,4 @@ abstract module Main {
   requires ADM.Next(k, s, s', uiop)
   ensures ADM.Inv(k, s')
   ensures CrashSafeMap.Next(SystemIk(k), SystemI(k, s), SystemI(k, s'), uiop)
-  */
 }
