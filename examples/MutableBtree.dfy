@@ -24,14 +24,24 @@ abstract module MutableBtree {
   function method DefaultKey() : Key
 
   trait Node {
-    ghost var myFields: set<object>
-
+    ghost var subtreeObjects: set<object>
+      
     predicate WF()
-      reads this, myFields
-
+      reads this, subtreeObjects
+      decreases subtreeObjects
+      
     function Interpretation() : map<Key, Value>
       requires WF()
-      reads this, myFields
+      reads this, subtreeObjects
+      decreases subtreeObjects
+
+    method Query(needle: Key) returns (value: Value)
+      requires WF()
+      ensures WF()
+      ensures Interpretation() == old(Interpretation())
+      ensures needle in Interpretation() ==> value == Interpretation()[needle]
+      ensures needle !in Interpretation() ==> value == DefaultValue()
+      decreases subtreeObjects
   }
     
   class Leaf extends Node {
@@ -40,10 +50,10 @@ abstract module MutableBtree {
     var values: array<Value>
 
     predicate WF()
-      reads this, myFields
+      reads this, subtreeObjects
+      decreases subtreeObjects
     {
-      && keys in myFields
-      && values in myFields
+      && subtreeObjects == {this, keys, values}
       && keys != values
       && keys.Length == MaxKeysPerLeaf() as int
       && values.Length == MaxKeysPerLeaf() as int
@@ -53,7 +63,8 @@ abstract module MutableBtree {
     
     function Interpretation() : map<Key, Value>
       requires WF()
-      reads this, myFields
+      reads this, subtreeObjects
+      decreases subtreeObjects
     {
       map k | (k in multiset(keys[..nkeys])) :: values[IndexOf(keys[..nkeys], k)]
     }
@@ -61,8 +72,10 @@ abstract module MutableBtree {
     method Query(needle: Key) returns (value: Value)
       requires WF()
       ensures WF()
+      ensures Interpretation() == old(Interpretation())
       ensures needle in Interpretation() ==> value == Interpretation()[needle]
       ensures needle !in Interpretation() ==> value == DefaultValue()
+      decreases subtreeObjects
     {
       Keys.reveal_IsStrictlySorted();
       var pos: int := Keys.InsertionPoint(keys[..nkeys], needle);
@@ -78,7 +91,7 @@ abstract module MutableBtree {
       requires nkeys < MaxKeysPerLeaf()
       ensures WF()
       ensures Interpretation() == old(Interpretation())[key := value]
-      modifies this, myFields
+      modifies this, subtreeObjects
     {
       Keys.reveal_IsStrictlySorted();
       var pos': int := Keys.InsertionPoint(keys[..nkeys], key);
@@ -108,6 +121,9 @@ abstract module MutableBtree {
       right.nkeys := nkeys - nkeys/2;
       nkeys := nkeys/2;
       assert forall key1, key2 :: key1 in Interpretation() && key2 in right.Interpretation() ==> Keys.lt(key1, key2); // OBSERVE
+      assert Interpretation().Keys + right.Interpretation().Keys <= old(Interpretation().Keys);
+      assert Interpretation().Keys + right.Interpretation().Keys >= old(Interpretation().Keys);
+      assert forall k :: k in Interpretation() ==> Interpretation()[k] == old(Interpretation()[k]);
     }
       
     constructor ()
@@ -119,7 +135,69 @@ abstract module MutableBtree {
       nkeys := 0;
       keys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
       values := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
-      myFields := {keys, values};
+      subtreeObjects := {this, keys, values};
+    }
+  }
+
+  class Index extends Node {
+    var nchildren: uint64
+    var pivots: array<Key>
+    var children: array<Node?>
+
+    predicate WF()
+      reads this, subtreeObjects
+      decreases subtreeObjects
+    {
+      && {this, pivots, children} <= subtreeObjects
+      && pivots != children
+      && pivots.Length == (MaxChildren() as int) - 1
+      && children.Length == MaxChildren() as int
+      && 1 <= nchildren <= MaxChildren()
+      && Keys.IsStrictlySorted(pivots[..nchildren-1])
+      && (forall i :: 0 <= i < nchildren ==> children[i] != null)
+      && (forall i :: 0 <= i < nchildren ==> children[i] in subtreeObjects)
+      && (forall i :: 0 <= i < nchildren ==> children[i].subtreeObjects < subtreeObjects)
+      && (forall i :: 0 <= i < nchildren ==> children[i].WF())
+    }
+
+    function Interpretation'(len: int) : map<Key, Value>
+      requires WF()
+      requires 0 < len <= nchildren as int
+      reads subtreeObjects
+      decreases subtreeObjects, len
+    {
+      if len == 1 then
+        children[0].Interpretation()
+      else
+        MapUnion(MapIRestrict(Interpretation'(len-1),           iset k | Keys.lt(k, pivots[len-2])),
+                 MapIRestrict(children[len-1].Interpretation(), iset k | Keys.lte(pivots[len-2], k)))
+    }
+    
+    function Interpretation() : map<Key, Value>
+      requires WF()
+      reads this, subtreeObjects
+    {
+      Interpretation'(nchildren as int)
+    }
+
+    method Query(needle: Key) returns (value: Value)
+      requires WF()
+      ensures WF()
+      ensures Interpretation() == old(Interpretation())
+      ensures needle in Interpretation() ==> value == Interpretation()[needle]
+      ensures needle !in Interpretation() ==> value == DefaultValue()
+      decreases subtreeObjects
+    {
+      Keys.reveal_IsStrictlySorted();
+      var pos' := Keys.InsertionPoint(pivots[..nchildren-1], needle);
+      var pos := pos' as uint64;
+      if pos == nchildren-1 {
+        value := children[nchildren-1].Query(needle);
+      } else if needle == pivots[pos] {
+        value := children[pos+1].Query(needle);
+      } else {
+        value := children[pos].Query(needle);
+      }
     }
   }
 }
