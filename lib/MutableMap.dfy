@@ -123,16 +123,30 @@ module MutableMap {
       && FilledWithKey(elements, foundSlot, key)
     }
 
+    // hide forall trigger
+    predicate TwoNonEmptyValidSlotsWithSameKey(elements: seq<Item<V>>, slot1: Slot, slot2: Slot)
+      requires ValidElements(elements)
+    {
+      && ValidSlot(|elements|, slot1)
+      && ValidSlot(|elements|, slot2)
+      && (elements[slot1.slot].Entry? || elements[slot1.slot].Tombstone?)
+      && (elements[slot2.slot].Entry? || elements[slot2.slot].Tombstone?)
+      && elements[slot1.slot].key == elements[slot2.slot].key
+    }
+
+    // hide forall trigger
+    predicate SameSlot(elementsLength: nat, slot1: Slot, slot2: Slot)
+      requires ValidSlot(elementsLength, slot1)
+      requires ValidSlot(elementsLength, slot2)
+    {
+      slot1 == slot2
+    }
+
     predicate CantEquivocateStorageKey(elements: seq<Item<V>>)
       requires ValidElements(elements)
     {
-      forall slot1, slot2 :: (
-        && ValidSlot(|elements|, slot1)
-        && ValidSlot(|elements|, slot2)
-        && (elements[slot1.slot].Entry? || elements[slot1.slot].Tombstone?)
-        && (elements[slot2.slot].Entry? || elements[slot2.slot].Tombstone?)
-        && elements[slot1.slot].key == elements[slot2.slot].key
-      ) ==> slot1 == slot2
+      forall slot1, slot2 :: TwoNonEmptyValidSlotsWithSameKey(elements, slot1, slot2)
+          ==> SameSlot(|elements|, slot1, slot2)
     }
 
     predicate SeqMatchesContentKeys(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
@@ -226,6 +240,7 @@ module MutableMap {
       {
         assert ValidSlot(|elements|, Slot(a1));
         assert ValidSlot(|elements|, Slot(a2));
+        assert SameSlot(|elements|, Slot(a1), Slot(a2));
       }
       BijectivityImpliesEqualCardinality(IndexSet(elements), contents.Keys, relation);
     }
@@ -444,14 +459,42 @@ module MutableMap {
         }
       }
 
-      assert forall slot1, slot2 :: (
-        && ValidSlot(Storage.Length, slot1)
-        && ValidSlot(Storage.Length, slot2)
-        && Storage[slot1.slot].Entry?
-        && Storage[slot2.slot].Entry?
-        && Storage[slot1.slot].key == Storage[slot2.slot].key
-      ) ==> slot1 == slot2;
+      assert CantEquivocateStorageKey(Storage[..]);
       assert Count as nat < Storage.Length;
+
+      forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry?
+      ensures && var item := Storage[slot.slot];
+              && Contents[item.key] == Some(item.value)
+      {
+        var item := Storage[slot.slot];
+        if slot == Slot(slotIdx as nat) {
+          assert Contents[item.key] == Some(item.value);
+        } else {
+          assert Storage[slot.slot] == old(Storage[slot.slot]);
+          if item.key == key {
+            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
+            assert false;
+          }
+          assert item.key != key;
+          assert Contents[item.key] == Some(item.value);
+        }
+      }
+      forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone?
+      ensures && var item := Storage[slot.slot];
+              && Contents[item.key].None?
+      {
+        var item := Storage[slot.slot];
+        if slot == Slot(slotIdx as nat) {
+          assert Contents[item.key].None?;
+        } else {
+          if item.key == key {
+            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
+            assert false;
+          }
+          assert item.key != key;
+          assert Contents[item.key].None?;
+        }
+      }
     }
 
     method Get(key: uint64) returns (found: Option<V>)
@@ -515,6 +558,22 @@ module MutableMap {
         }
 
         assert Storage[slotIdx].key == old(Storage[slotIdx].key) == key;
+        assert CantEquivocateStorageKey(Storage[..]);
+
+        forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry?
+        ensures && var item := Storage[slot.slot];
+                && Contents[item.key] == Some(item.value)
+        {
+          var item := Storage[slot.slot];
+          if slot == Slot(slotIdx as nat) {
+          } else {
+            if item.key == key {
+              assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
+              assert false;
+            }
+            assert item.key != key;
+          }
+        }
         assert Inv();
       } else {
         removed := None;
@@ -556,13 +615,23 @@ module MutableMap {
       assert underlying.Storage.Length > 0;
       assert ValidSlot(underlying.Storage.Length, Slot(0));
       assert exists slot :: ValidSlot(underlying.Storage.Length, slot);
-      var slot1 :| ValidSlot(underlying.Storage.Length, slot1);
-      var slot2 :| ValidSlot(underlying.Storage.Length, slot2);
-      if underlying.Storage[slot1.slot].Entry? && underlying.Storage[slot2.slot].Entry? &&
-        underlying.Storage[slot1.slot].key == underlying.Storage[slot2.slot].key {
+      forall slot1, slot2 | (
+        && ValidSlot(underlying.Storage.Length, slot1) && ValidSlot(underlying.Storage.Length, slot2)
+        && underlying.Storage[slot1.slot].Entry? && underlying.Storage[slot2.slot].Entry?
+        && underlying.Storage[slot1.slot].key == underlying.Storage[slot2.slot].key)
+      ensures slot1 == slot2
+      {
+        assert underlying.CantEquivocateStorageKey(underlying.Storage[..]);
+        if underlying.Storage[slot1.slot].Entry? && underlying.Storage[slot2.slot].Entry? &&
+          underlying.Storage[slot1.slot].key == underlying.Storage[slot2.slot].key {
 
-        if slot1 != slot2 {
-          assert false;
+          assert underlying.TwoNonEmptyValidSlotsWithSameKey(underlying.Storage[..], slot1, slot2);
+          if slot1 != slot2 {
+            assert false;
+          }
+          assert slot1 == slot2;
+        } else {
+          assert slot1 == slot2;
         }
       }
     }
