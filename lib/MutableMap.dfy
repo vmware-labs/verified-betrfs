@@ -511,6 +511,10 @@ module MutableMap {
         assert Storage[slotIdx].key == old(Storage[slotIdx].key) == key;
         assert Inv();
       } else {
+        removed := None;
+        assert removed == if old(key in Contents) && old(Contents[key].Some?)
+            then Some(old(Contents[key].value))
+            else None;
         assert key !in Contents || (key in Contents && Contents[key].None?);
         assert Inv();
       }
@@ -869,10 +873,17 @@ module MutableMap {
     {
       // -- mutation --
       removed := Underlying.Remove(key);
+      assert Contents == old(Contents);
       Contents := map k | k in Contents && k != key :: Contents[k];
       if removed.Some? {
         Count := Count - 1;
         assert old(key in Contents);
+        assert Contents.Keys <= old(Contents.Keys);
+        assert old(|Contents|) == Count as nat + 1;
+        assert old(|Contents.Keys|) == Count as nat + 1;
+        assert old(|Contents.Keys - {key}|) == old(|Contents.Keys| - |{key}|);
+        assert old(Contents.Keys - {key}) == Contents.Keys;
+        assert |Contents| == old(|Contents|) - 1;
         assert |Contents| == Count as nat;
       } else {
         assert old(key !in Contents);
