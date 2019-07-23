@@ -94,11 +94,15 @@ abstract module BlockInterface refines Transactable {
     OpTransaction(k, s, s', ops)
   }
    
-  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
+  predicate CanGCRefs(k: Constants, s: Variables, refs: iset<Reference>)
+  {
     && refs !! LiveReferences(k, s)
     && refs <= s.view.Keys
     && ClosedUnderPredecessor(s.view, refs)
-    
+  }
+
+  predicate GC(k: Constants, s: Variables, s': Variables, refs: iset<Reference>) {
+    && CanGCRefs(k, s, refs) 
     && s'.view == IMapRemove(s.view, refs)
   }
 

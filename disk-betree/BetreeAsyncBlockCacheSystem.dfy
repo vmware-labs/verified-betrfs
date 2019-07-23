@@ -71,34 +71,6 @@ module BetreeBlockCacheSystem refines AsyncDiskModel {
     Ref.InitImpliesGraphsEq(k, s);
   }
 
-  /*lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: BetreeStep)
-  requires Inv(k, s)
-  requires M.BetreeMove(k, s, s', uiop, dop, step)
-  ensures Inv(k, s')
-
-  lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: BC.Step)
-  requires Inv(k, s)
-  requires M.BlockCacheMove(k, s, s', uiop, step)
-  ensures Inv(k, s')*/
-
-  /*
-    // Handles almost all cases by just showing that all graphs are
-    // equal to each other:
-    Ref.StepGraphs(k, s, s', step);
-
-    // Other cases:
-
-    if (step.machineStep.UnallocStep?) {
-      BTI.GCStepRefines(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'),
-          iset{step.machineStep.ref});
-    }
-
-    if (step.machineStep.TransactionStep?) {
-      BTI.
-    }
-  }
-  */
-
   lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, betreeStep: BetreeStep)
     requires Inv(k, s)
     requires M.BetreeMove(k.machine, s.machine, s'.machine, uiop, dop, betreeStep)
@@ -106,6 +78,8 @@ module BetreeBlockCacheSystem refines AsyncDiskModel {
     ensures Inv(k, s')
   {
     Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep))));
+    Ref.RefinesReads(k, s, BetreeStepReads(betreeStep));
+    //assert BT.Betree(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
     assert BT.NextStep(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, BT.BetreeStep(betreeStep));
     BTI.NextPreservesInv(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop);
   }
@@ -121,6 +95,7 @@ module BetreeBlockCacheSystem refines AsyncDiskModel {
     Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, step));
     if (step.UnallocStep?) {
       //assert BI.GC(Ik(k).bck, EphemeralBetree(k, s).bcv, s'.bcv, refs)
+      Ref.UnallocStepMeetsGCConditions(k, s, s', dop, step.ref);
       assert step.ref in EphemeralBetree(k, s).bcv.view;
       assert iset{step.ref} !! BI.LiveReferences(Ik(k).bck, EphemeralBetree(k, s).bcv);
       assert BI.ClosedUnderPredecessor(EphemeralBetree(k, s).bcv.view, iset{step.ref});

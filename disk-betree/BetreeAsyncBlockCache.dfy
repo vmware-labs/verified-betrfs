@@ -50,6 +50,7 @@ module BetreeAsyncBlockCache refines AsyncDiskMachine {
     // TODO:
     //&& (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackIndirectionTableStep?))
     && !step.TransactionStep?
+    && uiop.NoOp?
     && BC.NextStep(k, s, s', dop, step)
     && (dop.RespReadOp? && dop.respRead.sector.SectorBlock? ==>
       WFNode(dop.respRead.sector.block)

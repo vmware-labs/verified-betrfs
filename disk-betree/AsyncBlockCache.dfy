@@ -345,7 +345,7 @@ abstract module AsyncBlockCache refines Transactable {
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
   {
-    s.Ready? && MapsTo(s.cache, op.ref, op.node)
+    s.Ready? && op.ref in s.ephemeralIndirectionTable.graph && MapsTo(s.cache, op.ref, op.node)
   }
 
   predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)

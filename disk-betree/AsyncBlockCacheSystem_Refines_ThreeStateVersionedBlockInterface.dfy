@@ -99,6 +99,39 @@ module AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
     }
   }
 
+  lemma RefinesReads(k: BCS.Constants, s: BCS.Variables, ops: seq<ReadOp>)
+  requires BCS.Inv(k, s)
+  requires BC.Reads(k.machine, s.machine, ops)
+  ensures BI.Reads(BI.Constants(), BI.Variables(EphemeralGraph(k, s)), ops)
+  {
+    reveal_EphemeralGraph();
+    /*forall op | op in ops
+    ensures BI.ReadStep(BI.Constants, BI.Variables(EphemeralGraph(k, s)), op)
+    {
+      assert s.machine.cache[op.ref] == op.node;
+      assert op.ref in EphemeralGraph(k, s);
+      assert EphemeralGraph(k, s)[op.ref] == op.node;
+    }*/
+  }
+
+  lemma UnallocStepMeetsGCConditions(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables,
+      dop: DiskOp, ref: Reference)
+  requires BCS.Inv(k, s)
+  requires s'.disk == s.disk
+  requires BC.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
+  ensures BI.CanGCRefs(BI.Constants(), BI.Variables(EphemeralGraph(k, s)), iset{ref})
+  {
+    reveal_EphemeralGraph();
+    if (ref in BI.LiveReferences(BI.Constants(), BI.Variables(EphemeralGraph(k, s)))) {
+      assert BI.ReachableReference(BI.Constants(), BI.Variables(EphemeralGraph(k, s)), ref);
+      var lookup :| BI.LookupIsValid(BI.Constants(), BI.Variables(EphemeralGraph(k, s)), lookup) && Last(lookup) == ref;
+      assert |lookup| > 1;
+      var pred := lookup[|lookup| - 2];
+      assert ref in G.Successors(EphemeralGraph(k, s)[pred]);
+      assert false;
+    }
+  }
+
   // This is the uber lemma that explains how the graphs transform
   // for all the different step types
 
