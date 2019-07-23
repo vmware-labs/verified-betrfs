@@ -4,14 +4,13 @@ include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
-module AsyncBlockCacheSystem_Refines_CrashSafeBlockInterface {
+module AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   // Ideally we would prove the refinement for an arbitrary graph,
   // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
   // separately then we wouldn't know they were using the same graph.
   // So for now, we just prove the refinement specifically for BetreeGraph.
   import opened G = PivotBetreeGraph
   import BCS = BetreeGraphAsyncBlockCacheSystem
-  //import CSBI = CrashSafeBlockInterface
   import opened AsyncDiskModelTypes
 
   import opened Maps
@@ -22,10 +21,10 @@ module AsyncBlockCacheSystem_Refines_CrashSafeBlockInterface {
   import D = AsyncDisk
   type DiskOp = BC.DiskOp
 
-  /*function Ik(k: BCS.Constants) : CSBI.Constants
+  function Ik(k: BCS.Constants) : BI.Constants
   {
     BI.Constants()
-  }*/
+  }
 
   function {:opaque} PersistentGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
   requires BCS.Inv(k, s)
@@ -49,6 +48,16 @@ module AsyncBlockCacheSystem_Refines_CrashSafeBlockInterface {
       BCS.FrozenGraphOpt(k, s).value
     else
       BCS.PersistentGraph(k, s))
+  }
+
+  lemma InitImpliesGraphsEq(k: BCS.Constants, s: BCS.Variables)
+  requires BCS.Init(k, s)
+  ensures PersistentGraph(k, s) == FrozenGraph(k, s)
+  ensures PersistentGraph(k, s) == EphemeralGraph(k, s)
+  {
+    reveal_PersistentGraph();
+    reveal_FrozenGraph();
+    reveal_EphemeralGraph();
   }
 
   lemma TransactionUpdate(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, ops: seq<Op>)

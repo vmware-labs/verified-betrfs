@@ -1,5 +1,4 @@
 include "MapSpec.dfy"
-include "CrashTypes.dfy"
 include "../lib/Maps.dfy"
 
 // TODO model the disk as an array of bytes
@@ -177,36 +176,34 @@ abstract module AsyncDiskModel {
   type DiskOp = M.DiskOp
   type Constants = AsyncDiskModelTypes.AsyncDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncDiskModelTypes.AsyncDiskModelVariables<M.Variables, D.Variables<M.LBA, M.Sector>>
-  type CrashableUIOp = CrashTypes.CrashableUIOp<M.UIOp>
+  type UIOp = M.UIOp
 
   datatype Step =
     | MachineStep(dop: DiskOp)
     | DiskInternalStep(step: D.InternalStep)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, dop: DiskOp)
+  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
   {
-    && uiop.NormalOp?
-    && M.Next(k.machine, s.machine, s'.machine, uiop.uiop, dop)
+    && M.Next(k.machine, s.machine, s'.machine, uiop, dop)
     && D.Next(k.disk, s.disk, s'.disk, dop)
   }
 
-  predicate DiskInternal(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: D.InternalStep)
+  predicate DiskInternal(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: D.InternalStep)
   {
-    && uiop.NormalOp?
-    && uiop.uiop.NoOp?
+    && uiop.NoOp?
     && s.machine == s'.machine
     && D.NextInternalStep(k.disk, s.disk, s'.disk, step)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp)
+  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.CrashOp?
     && M.Init(k.machine, s'.machine)
     && D.Crash(k.disk, s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp, step: Step)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
   {
     match step {
       case MachineStep(dop) => Machine(k, s, s', uiop, dop)
@@ -215,7 +212,7 @@ abstract module AsyncDiskModel {
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp) {
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
     exists step :: NextStep(k, s, s', uiop, step)
   }
 
@@ -226,7 +223,7 @@ abstract module AsyncDiskModel {
     requires Init(k, s)
     ensures Inv(k, s)
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: CrashableUIOp)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
     requires Next(k, s, s', uiop)
     ensures Inv(k, s')
