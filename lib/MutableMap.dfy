@@ -123,6 +123,18 @@ module MutableMap {
       && FilledWithKey(elements, foundSlot, key)
     }
 
+    predicate CantEquivocateStorageKey(elements: seq<Item<V>>)
+      requires ValidElements(elements)
+    {
+      forall slot1, slot2 :: (
+        && ValidSlot(|elements|, slot1)
+        && ValidSlot(|elements|, slot2)
+        && (elements[slot1.slot].Entry? || elements[slot1.slot].Tombstone?)
+        && (elements[slot2.slot].Entry? || elements[slot2.slot].Tombstone?)
+        && elements[slot1.slot].key == elements[slot2.slot].key
+      ) ==> slot1 == slot2
+    }
+
     predicate SeqMatchesContentKeys(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
       requires ValidElements(elements)
     {
@@ -130,13 +142,7 @@ module MutableMap {
       && (forall slot :: ValidSlot(|elements|, slot) && (elements[slot.slot].Entry? || elements[slot.slot].Tombstone?) ==>
         && var key := elements[slot.slot].key;
         && key in contents)
-      && (forall slot1, slot2 :: (
-        && ValidSlot(|elements|, slot1)
-        && ValidSlot(|elements|, slot2)
-        && (elements[slot1.slot].Entry? || elements[slot1.slot].Tombstone?)
-        && (elements[slot2.slot].Entry? || elements[slot2.slot].Tombstone?)
-        && elements[slot1.slot].key == elements[slot2.slot].key
-      ) ==> slot1 == slot2)
+      && CantEquivocateStorageKey(elements)
     }
 
     predicate Inv()
@@ -666,6 +672,13 @@ module MutableMap {
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
     }
 
+    lemma {:opaque} SetInclusionImpliesSmallerCardinality(a: set<uint64>, b: set<uint64>)
+      requires a <= b
+      ensures |a| <= |b|
+    {
+      assert b == a + (b - a);
+    }
+
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
       requires Inv()
@@ -746,6 +759,12 @@ module MutableMap {
           }
           assert item.key !in newUnderlying.Contents;
 
+          assert transferredContents.Keys <= Contents.Keys;
+          SetInclusionImpliesSmallerCardinality(transferredContents.Keys, Contents.Keys);
+          assert |transferredContents.Keys| <= |Contents.Keys|;
+          assert |transferredContents.Keys| == |transferredContents|;
+          assert |Contents.Keys| == |Contents|;
+          assert |transferredContents| <= |Contents|;
           assert newUnderlying.Count as nat < newUnderlying.Storage.Length - 1;
           // -- mutation --
           ghost var _ := newUnderlying.Insert(item.key, item.value);
