@@ -1249,6 +1249,7 @@ module {:extern} Impl refines Main {
     hs.s := s';
     success := succ;
   }
+  */
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
@@ -1271,5 +1272,4 @@ module {:extern} Impl refines Main {
     hs.s := s';
     success := succ;
   }
-  */
 }
