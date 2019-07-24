@@ -3,6 +3,13 @@ include "NativeTypes.dfy"
 module Sets {
   import opened NativeTypes 
 
+  lemma {:opaque} SetInclusionImpliesSmallerCardinality(a: set<uint64>, b: set<uint64>)
+    requires a <= b
+    ensures |a| <= |b|
+  {
+    assert b == a + (b - a);
+  }
+
   // NOTE: these are horribly slow
 
   method minimum(s: set<uint64>) returns (o: uint64)

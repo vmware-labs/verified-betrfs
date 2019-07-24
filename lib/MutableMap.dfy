@@ -1,12 +1,14 @@
 include "NativeTypes.dfy"
 include "Option.dfy"
 include "sequences.dfy"
+include "Sets.dfy"
 include "SetBijectivity.dfy"
 
 module MutableMap {
   import opened NativeTypes
   import opened Options
   import opened Sequences
+  import opened Sets
   import opened SetBijectivity
 
   datatype Slot = Slot(slot: nat)
@@ -499,8 +501,9 @@ module MutableMap {
 
     method Get(key: uint64) returns (found: Option<V>)
       requires Inv()
-      requires Count as nat < Storage.Length - 1
       ensures Inv()
+      ensures Contents == old(Contents)
+      ensures Count == old(Count)
       ensures if key in Contents && Contents[key].Some? then found == Some(Contents[key].value) else found.None?
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
@@ -741,13 +744,6 @@ module MutableMap {
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
     }
 
-    lemma {:opaque} SetInclusionImpliesSmallerCardinality(a: set<uint64>, b: set<uint64>)
-      requires a <= b
-      ensures |a| <= |b|
-    {
-      assert b == a + (b - a);
-    }
-
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
       requires Inv()
@@ -984,6 +980,16 @@ module MutableMap {
       UnderlyingInvImpliesMapFromStorageMatchesContents(Underlying, Contents);
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
       assert |Contents| == Count as nat;
+    }
+
+    method Get(key: uint64) returns (found: Option<V>)
+      requires Inv()
+      ensures Inv()
+      ensures Count == old(Count)
+      ensures if key in Contents then found == Some(Contents[key]) else found.None?
+      ensures found.Some? <==> key in Contents
+    {
+      found := Underlying.Get(key);
     }
   }
 }
