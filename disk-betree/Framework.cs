@@ -175,6 +175,7 @@ class Application {
   public void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
     for (int i = 0; i < 50; i++) {
       __default.handleInsert(k, hs, io, key, val, out bool success);
+      this.maybeDoResponse();
       if (success) {
         log("doing insert... success!");
         log("");
@@ -210,6 +211,7 @@ class Application {
 
     for (int i = 0; i < 50; i++) {
       __default.handleQuery(k, hs, io, key, out var result);
+      this.maybeDoResponse();
       if (result.is_Some) {
         byte[] val_bytes = result.dtor_value.Elements;
         log("doing query... success!");
@@ -221,6 +223,17 @@ class Application {
     }
     log("giving up");
     throw new Exception("operation didn't finish");
+  }
+
+  public void maybeDoResponse() {
+    if (io.prepareReadResponse()) {
+      __default.handleReadResponse(k, hs, io);
+      log("doing read response...");
+    }
+    else if (io.prepareWriteResponse()) {
+      __default.handleWriteResponse(k, hs, io);
+      log("doing read response...");
+    }
   }
 
   public static byte[] string_to_bytes(string s) {
