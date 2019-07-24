@@ -759,8 +759,7 @@ module MutableMap {
       && MapFromStorage(Underlying.Storage[..]) == Contents
       // && Count as nat < Underlying.Storage.Length
       && |Contents| == Count as nat
-      && this.Underlying in Repr
-      && this.Underlying.Repr <= Repr
+      && Repr == { this.Underlying } + this.Underlying.Repr
     }
 
     constructor (size: uint64)
