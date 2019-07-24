@@ -7,7 +7,7 @@ include "AsyncBlockCacheSystem.dfy"
 include "BetreeAsyncBlockCache.dfy"
 include "AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.dfy"
 
-module BetreeBlockCacheSystem refines AsyncDiskModel {
+module BetreeAsyncBlockCacheSystem refines AsyncDiskModel {
   import opened Maps
   import opened Sequences
 

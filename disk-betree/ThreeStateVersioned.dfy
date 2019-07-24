@@ -2,7 +2,7 @@ include "MapSpec.dfy"
 include "UIStateMachine.dfy"
 include "../lib/Maps.dfy"
 
-abstract module ThreeStateVersionedSystem {
+abstract module ThreeStateVersioned {
   import SM : UIStateMachine
 
   import opened Maps
@@ -68,7 +68,7 @@ abstract module ThreeStateVersionedSystem {
   predicate Move3(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
     && SM.Next(k.k, s.s3, s'.s3, uiop)
-    && s' == Variables(s.s1, s.s3, s'.s3, s.outstandingSyncReqs)
+    && s' == Variables(s.s1, s.s2, s'.s3, s.outstandingSyncReqs)
   }
 
   predicate PushSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: int)
