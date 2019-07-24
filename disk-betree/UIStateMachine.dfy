@@ -1,8 +1,8 @@
 include "UI.dfy"
 
 abstract module UIStateMachine {
-  import UI
-  type UIOp = UI.Op
+  import _UI = UI
+  type UIOp = _UI.Op
 
   type Constants
   type Variables

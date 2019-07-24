@@ -1,11 +1,12 @@
 include "../lib/Option.dfy"
 include "../lib/total_order.dfy"
 include "UI.dfy"
+include "UIStateMachine.dfy"
 
-module MapSpec {
+module MapSpec refines UIStateMachine {
   import V = ValueWithDefault
 
-  import UI = UI
+  import UI
   import Keyspace = UI.Keyspace
   type Key = Keyspace.Element
   type Value = V.Value
@@ -49,7 +50,7 @@ module MapSpec {
   }
 
   // Can collapse key and result; use the ones that came in uiop for free.
-  predicate Query(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, result:Value)
+  predicate Query(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value)
   {
       && uiop == UI.GetOp(key, result)
       && WF(s)
@@ -57,7 +58,7 @@ module MapSpec {
       && s' == s
   }
 
-  predicate Write(k:Constants, s:Variables, s':Variables, uiop: UI.Op, key:Key, new_value:Value)
+  predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
       ensures Write(k, s, s', uiop, key, new_value) ==> WF(s')
   {
       && uiop == UI.PutOp(key, new_value)
@@ -66,7 +67,7 @@ module MapSpec {
       && s'.view == s.view[key := new_value]
   }
 
-  predicate Stutter(k:Constants, s:Variables, s':Variables, uiop: UI.Op)
+  predicate Stutter(k:Constants, s:Variables, s':Variables, uiop: UIOp)
   {
       && uiop.NoOp?
       && s' == s
@@ -78,7 +79,7 @@ module MapSpec {
       | WriteStep(key:Key, new_value:Value)
       | StutterStep
 
-  predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UI.Op, step:Step)
+  predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UIOp, step:Step)
   {
       match step {
           case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
@@ -87,7 +88,7 @@ module MapSpec {
       }
   }
 
-  predicate Next(k:Constants, s:Variables, s':Variables, uiop: UI.Op)
+  predicate Next(k:Constants, s:Variables, s':Variables, uiop: UIOp)
   {
       exists step :: NextStep(k, s, s', uiop, step)
   }
@@ -100,7 +101,7 @@ module MapSpec {
   {
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
     requires Inv(k, s)
     requires Next(k, s, s', uiop)
     ensures Inv(k, s')

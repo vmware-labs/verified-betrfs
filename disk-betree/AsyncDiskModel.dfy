@@ -170,7 +170,6 @@ abstract module AsyncDiskMachine {
 abstract module AsyncDiskModel {
   import D = AsyncDisk
   import M : AsyncDiskMachine
-  import CrashTypes
   import AsyncDiskModelTypes
 
   type DiskOp = M.DiskOp

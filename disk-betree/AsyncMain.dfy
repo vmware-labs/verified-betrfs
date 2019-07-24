@@ -1,5 +1,5 @@
 include "MapSpec.dfy"
-include "CrashSafe.dfy"
+include "ThreeStateVersionedMap.dfy"
 include "AsyncDiskModel.dfy"
 include "../lib/NativeTypes.dfy"
 
@@ -14,7 +14,7 @@ abstract module Main {
   import D = AsyncDisk
 
   import MS = MapSpec
-  import CrashSafeMap
+  import ThreeStateVersionedMap
   import opened NativeTypes
   import opened Options
   import DiskTypes
@@ -196,20 +196,20 @@ abstract module Main {
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.
 
-  function SystemIk(k: ADM.Constants) : CrashSafeMap.Constants
-  function SystemI(k: ADM.Constants, s: ADM.Variables) : CrashSafeMap.Variables
+  function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants
+  function SystemI(k: ADM.Constants, s: ADM.Variables) : ThreeStateVersionedMap.Variables
   requires ADM.Inv(k, s)
 
   lemma SystemRefinesCrashSafeMapInit(
     k: ADM.Constants, s: ADM.Variables)
   requires ADM.Init(k, s)
   ensures ADM.Inv(k, s)
-  ensures CrashSafeMap.Init(SystemIk(k), SystemI(k, s))
+  ensures ThreeStateVersionedMap.Init(SystemIk(k), SystemI(k, s))
 
   lemma SystemRefinesCrashSafeMapNext(
-    k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.CrashableUIOp)
+    k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
   requires ADM.Inv(k, s)
   requires ADM.Next(k, s, s', uiop)
   ensures ADM.Inv(k, s')
-  ensures CrashSafeMap.Next(SystemIk(k), SystemI(k, s), SystemI(k, s'), uiop)
+  ensures ThreeStateVersionedMap.Next(SystemIk(k), SystemI(k, s), SystemI(k, s'), uiop)
 }
