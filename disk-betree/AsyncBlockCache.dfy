@@ -159,7 +159,7 @@ abstract module AsyncBlockCache refines Transactable {
     && dop.reqWrite.lba == IndirectionTableLBA()
     && s.frozenIndirectionTable.Some?
     && dop.reqWrite.sector == SectorIndirectionTable(s.frozenIndirectionTable.value)
-    && s.cache.Keys <= s.frozenIndirectionTable.value.lbas.Keys
+    && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.lbas.Keys
     && s.outstandingIndirectionTableWrite.None?
     && s.outstandingBlockWrites == map[]
     && s.frozenIndirectionTable.Some?

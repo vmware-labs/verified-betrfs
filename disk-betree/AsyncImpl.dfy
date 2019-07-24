@@ -1128,6 +1128,14 @@ module {:extern} Impl refines Main {
       return;
     }
 
+    if (s.outstandingIndirectionTableWrite.Some?) {
+      success := false;
+      s' := s;
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; frozen table is currently being written\n";
+      return;
+    }
+
     // Plan:
     // - If the indirection table is not frozen then:
     //    - If anything can be unalloc'ed, do it
@@ -1207,12 +1215,23 @@ module {:extern} Impl refines Main {
           print "giving up; could not get lba\n";
         }
       }
-    } else {
-      var succ := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
-      success := true;
+    } else if (s.outstandingBlockWrites != map[]) {
+      success := false;
       s' := s;
-      assert BC.WriteBackIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
-      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.SyncOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackIndirectionTableReqStep));
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; blocks are still being written\n";
+    } else {
+      var id := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
+      if (id.Some?) {
+        success := false;
+        s' := s.(outstandingIndirectionTableWrite := id);
+        assert BC.WriteBackIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
+        assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackIndirectionTableReqStep));
+      } else {
+        success := false;
+        s' := s;
+        assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      }
     }
   }
 
