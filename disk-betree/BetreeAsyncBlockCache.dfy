@@ -4,7 +4,6 @@ include "../lib/sequences.dfy"
 include "AsyncDiskModel.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"
-include "Main.dfy"
 
 module BetreeAsyncBlockCache refines AsyncDiskMachine {
   import opened Maps
