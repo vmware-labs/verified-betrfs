@@ -26,6 +26,7 @@ module MutableMap {
     var Count: uint64;
 
     ghost var Contents: map<uint64, Option<V>>;
+    ghost var Repr: set<object>;
 
     predicate ValidElements(elements: seq<Item<V>>)
     {
@@ -116,6 +117,14 @@ module MutableMap {
       (elements[slot.slot].Entry? || elements[slot.slot].Tombstone?) && elements[slot.slot].key == key
     }
 
+    predicate FilledWithEntryKey(elements: seq<Item<V>>, slot: Slot, key: uint64)
+      requires ValidElements(elements)
+      requires ValidSlot(|elements|, slot)
+    {
+      && elements[slot.slot].Entry?
+      && elements[slot.slot].key == key
+    }
+
     predicate SlotExplainsKey(elements: seq<Item<V>>, skips: nat, key: uint64)
       requires ValidElements(elements)
     {
@@ -151,13 +160,24 @@ module MutableMap {
           ==> SameSlot(|elements|, slot1, slot2)
     }
 
+    predicate SlotIsEntryOrTombstone(elements: seq<Item<V>>, slot: Slot)
+    {
+      ValidSlot(|elements|, slot) && (elements[slot.slot].Entry? || elements[slot.slot].Tombstone?)
+    }
+
+    predicate KeyInSlotIsInContents(elements: seq<Item<V>>, contents: map<uint64, Option<V>>, slot: Slot)
+      requires SlotIsEntryOrTombstone(elements, slot)
+    {
+      && var key := elements[slot.slot].key;
+      && key in contents
+    }
+
     predicate SeqMatchesContentKeys(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
       requires ValidElements(elements)
     {
       && (forall key :: key in contents ==> exists skips :: SlotExplainsKey(elements, skips, key))
-      && (forall slot :: ValidSlot(|elements|, slot) && (elements[slot.slot].Entry? || elements[slot.slot].Tombstone?) ==>
-        && var key := elements[slot.slot].key;
-        && key in contents)
+      && (forall slot :: SlotIsEntryOrTombstone(elements, slot)
+          ==> KeyInSlotIsInContents(elements, contents, slot))
       && CantEquivocateStorageKey(elements)
     }
 
@@ -172,10 +192,14 @@ module MutableMap {
       && SeqMatchesContentKeys(Storage[..], Contents)
       && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry? ==>
           && var item := Storage[slot.slot];
+          && item.key in Contents
           && Contents[item.key] == Some(item.value))
       && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone? ==>
           && var item := Storage[slot.slot];
+          && item.key in Contents
           && Contents[item.key].None?)
+
+      && Repr == { this.Storage }
     }
 
     function IndexSetThrough(elements: seq<Item<V>>, through: nat): set<int>
@@ -236,6 +260,7 @@ module MutableMap {
       {
         var slot := Slot(a);
         assert ValidSlot(|elements|, slot);
+        assert SlotIsEntryOrTombstone(elements, slot);
       }
       forall a1, a2, b | a1 in setA && a2 in setA && b in setB && (a1, b) in relation && (a2, b) in relation
       ensures a1 == a2
@@ -262,11 +287,14 @@ module MutableMap {
       ensures forall slot :: ValidSlot(Storage.Length, slot) ==> Storage[slot.slot].Empty?
       ensures Contents == map[]
       ensures size as nat == Storage.Length
-      ensures fresh(this) && fresh(this.Storage)
+      ensures fresh(this)
+      ensures fresh(this.Storage)
+      ensures forall r :: r in Repr ==> fresh(r)
     {
       Count := 0;
       Storage := new [size] (_ => Empty);
       Contents := map[];
+      Repr := { Storage };
     }
 
     function View(elements: seq<Item<V>>, start: nat): (result: seq<Item<V>>)
@@ -324,6 +352,7 @@ module MutableMap {
       ensures key !in Contents ==> FilledWithOtherKeys(Storage[..], Slot(startSlotIdx as nat), ghostSkips as nat, key) && (Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key))
       ensures Storage[slotIdx].Entry? ==> key in Contents && key == Storage[slotIdx].key
       ensures Storage[slotIdx].Empty? ==> key !in Contents
+      ensures Repr == old(Repr)
     {
       slotIdx := Uint64SlotForKey(key);
       startSlotIdx := slotIdx;
@@ -416,6 +445,7 @@ module MutableMap {
       ensures old(key !in Contents) ==> Count as nat == old(Count as nat) + 1
       ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
       ensures Storage.Length == old(Storage.Length)
+      ensures Repr == old(Repr) || forall r :: r in Repr ==> fresh(Repr)
       modifies this, this.Storage
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
@@ -504,6 +534,7 @@ module MutableMap {
       ensures Inv()
       ensures Contents == old(Contents)
       ensures Count == old(Count)
+      ensures Repr == old(Repr)
       ensures if key in Contents && Contents[key].Some? then found == Some(Contents[key].value) else found.None?
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
@@ -534,6 +565,7 @@ module MutableMap {
           then Some(old(Contents[key].value))
           else None
       ensures Count == old(Count)
+      ensures Repr == old(Repr)
       modifies this, this.Storage
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
@@ -595,6 +627,7 @@ module MutableMap {
     var Count: uint64;
 
     ghost var Contents: map<uint64, V>;
+    ghost var Repr: set<object>;
 
     function MapFromStorage(elements: seq<Item<V>>): (result: map<uint64, V>)
     {
@@ -726,18 +759,26 @@ module MutableMap {
       && MapFromStorage(Underlying.Storage[..]) == Contents
       // && Count as nat < Underlying.Storage.Length
       && |Contents| == Count as nat
+      && this.Underlying in Repr
+      && this.Underlying.Repr <= Repr
     }
 
     constructor (size: uint64)
       requires 128 <= size
       ensures Inv()
       ensures Contents == map[]
+      ensures fresh(this)
+      ensures fresh(this.Underlying)
+      ensures fresh(this.Underlying.Storage)
+      ensures forall r :: r in Repr ==> fresh(r)
     {
       Count := 0;
       Underlying := new FixedSizeHashMap(size);
       Contents := map[];
 
       new;
+
+      Repr := { Underlying } + Underlying.Repr;
 
       assert forall slot :: ValidSlot(Underlying.Storage.Length, slot) ==> !Underlying.Storage[slot.slot].Entry?;
       UnderlyingInvImpliesMapFromStorageMatchesContents(Underlying, Contents);
@@ -750,7 +791,9 @@ module MutableMap {
       ensures Inv()
       ensures Contents == old(Contents)
       ensures Underlying.Count as nat < Underlying.Storage.Length - 2
-      ensures fresh(Underlying) && fresh(Underlying.Storage)
+      ensures fresh(Underlying)
+      ensures fresh(Underlying.Storage)
+      ensures forall r :: r in Repr ==> fresh(r)
       modifies this
     {
 
@@ -793,8 +836,7 @@ module MutableMap {
         invariant forall key :: key in newUnderlying.Contents ==> exists slot: Slot :: (
             && slot.slot < i
             && ValidSlot(Underlying.Storage.Length, slot)
-            && Underlying.Storage[slot.slot].Entry?
-            && Underlying.Storage[slot.slot].key == key)
+            && Underlying.FilledWithEntryKey(Underlying.Storage[..], slot, key))
 
         invariant fresh(newUnderlying)
         invariant fresh(newUnderlying.Storage)
@@ -902,6 +944,13 @@ module MutableMap {
       Underlying := newUnderlying;
       // --------------
 
+      assert fresh(Underlying);
+      assert fresh(Underlying.Storage);
+      Repr := { Underlying } + Underlying.Repr;
+      assert Underlying.Repr == { Underlying.Storage };
+      assert Repr == { Underlying, Underlying.Storage };
+      assert forall r :: r in Repr ==> fresh(r);
+
       assert Underlying.Count as nat < Underlying.Storage.Length - 2;
       assert Contents == old(Contents);
       assert Count == old(Count);
@@ -915,6 +964,7 @@ module MutableMap {
       ensures Inv()
       ensures Contents == old(Contents[key := value])
       ensures Count as nat == old(Count as nat) + (if replaced.Some? then 0 else 1)
+      ensures Repr == old(Repr) || forall r :: r in Repr ==> fresh(r)
       modifies this, this.Underlying, this.Underlying.Storage
     {
       // print "Insert ", key, "\n";
@@ -953,6 +1003,7 @@ module MutableMap {
       ensures Inv()
       ensures Contents == map k | old(k in Contents) && k != key :: old(Contents[k])
       ensures Count as nat == old(Count as nat) - (if removed.Some? then 1 else 0)
+      ensures Repr == old(Repr)
       modifies this, this.Underlying, this.Underlying.Storage
     {
       // -- mutation --
@@ -986,6 +1037,7 @@ module MutableMap {
       requires Inv()
       ensures Inv()
       ensures Count == old(Count)
+      ensures Repr == old(Repr)
       ensures if key in Contents then found == Some(Contents[key]) else found.None?
       ensures found.Some? <==> key in Contents
     {

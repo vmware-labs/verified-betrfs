@@ -14,6 +14,7 @@ module Main {
     var i: uint64 := 0;
     while i < nInsertions
       invariant hashMap.Inv()
+      invariant fresh(hashMap)
     {
       if i % 1000000 == 0 {
         print "Inserting ", i, "\n";
