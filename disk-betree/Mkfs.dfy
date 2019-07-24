@@ -1,5 +1,5 @@
-include "Marshalling.dfy"
-include "Impl.dfy"
+include "AsyncMarshalling.dfy"
+include "AsyncImpl.dfy"
 
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {
@@ -9,7 +9,7 @@ module {:extern} MkfsImpl {
   import opened Impl
 
   import BT = PivotBetreeSpec
-  import BC = BetreeGraphBlockCache
+  import BC = BetreeGraphAsyncBlockCache
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal

@@ -33,7 +33,7 @@ namespace Impl_Compile {
 
 class Application {
   // TODO hard-coding these types is annoying... is there another option?
-  public BetreeGraphBlockCache_Compile.Constants k;
+  public BetreeGraphAsyncBlockCache_Compile.Constants k;
   public ImplState_Compile.ImplHeapState hs;
 
   public DiskIOHandler io;

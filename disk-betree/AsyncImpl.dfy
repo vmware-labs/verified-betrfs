@@ -782,7 +782,7 @@ module {:extern} Impl refines Main {
     if (s.frozenIndirectionTable.Some? && parentref in s.frozenIndirectionTable.value.graph && parentref !in s.frozenIndirectionTable.value.lbas) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; fixBigRoot can't run because frozen isn't written";
+      print "giving up; doSplit can't run because frozen isn't written";
       return;
     }
 
@@ -935,12 +935,21 @@ module {:extern} Impl refines Main {
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
+    if (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph && ref !in s.frozenIndirectionTable.value.lbas) {
+      s' := s;
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; flush can't run because frozen isn't written";
+      return;
+    }
+
     var node := s.cache[ref];
 
     assert IS.INode(node) == IS.ICache(s.cache)[ref];
     assert BT.WFNode(IS.INode(node));
 
     var childref := node.children.value[slot];
+
+    assert childref in BT.G.Successors(IS.INode(node));
 
     if (childref !in s.cache) {
       s' := PageInReq(k, s, io, childref);
