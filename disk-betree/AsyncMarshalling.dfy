@@ -12,7 +12,7 @@ module Marshalling {
   import opened Sequences
   import opened Maps
   import BC = BetreeGraphAsyncBlockCache
-  import ImplState = AsyncImplState
+  import ImplState
   import SSTable
 
   import BT = PivotBetreeSpec`Internal

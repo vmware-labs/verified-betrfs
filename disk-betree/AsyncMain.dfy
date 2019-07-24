@@ -85,6 +85,16 @@ abstract module Main {
     requires diskOp() == D.NoDiskOp
     ensures diskOp() == D.ReqReadOp(id, D.ReqRead(lba))
 
+    method {:axiom} getWriteResult() returns (id : D.ReqId)
+    requires diskOp().RespWriteOp?
+    ensures diskOp() == D.RespWriteOp(id, D.RespWrite)
+
+    method {:axiom} getReadResult() returns (id : D.ReqId, sector: array<byte>)
+    requires diskOp().RespReadOp?
+    ensures sector.Length == BlockSize() as int
+    ensures ValidSector(sector[..])
+    ensures diskOp() == D.RespReadOp(id, D.RespRead(sector[..]))
+
     function {:axiom} diskOp() : DiskOp
     reads this
     ensures ValidDiskOp(diskOp())
@@ -94,30 +104,6 @@ abstract module Main {
     {
       diskOp() == D.NoDiskOp
     }
-  }
-
-  class DiskIOWriteResult {
-    method {:axiom} getResult() returns (id : D.ReqId)
-    modifies this;
-    ensures diskOp() == D.RespWriteOp(id, D.RespWrite)
-
-    function {:axiom} diskOp() : DiskOp
-    reads this
-    ensures ValidDiskOp(diskOp())
-    ensures diskOp().RespWriteOp?
-  }
-
-  class DiskIOReadResult {
-    method {:axiom} getResult() returns (id : D.ReqId, sector: array<byte>)
-    modifies this;
-    ensures sector.Length == BlockSize() as int
-    ensures ValidSector(sector[..])
-    ensures diskOp() == D.RespReadOp(id, D.RespRead(sector[..]))
-
-    function {:axiom} diskOp() : DiskOp
-    reads this
-    ensures ValidDiskOp(diskOp())
-    ensures diskOp().RespReadOp?
   }
 
   function IReqRead(reqRead: ReqRead) : ADM.M.ReqRead

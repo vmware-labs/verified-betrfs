@@ -4,7 +4,7 @@ include "../lib/Option.dfy"
 include "SSTable.dfy"
 include "BetreeAsyncBlockCache.dfy"
 
-module {:extern} AsyncImplState {
+module {:extern} ImplState {
   import opened Options
   import opened Sequences
 

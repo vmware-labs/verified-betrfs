@@ -2,7 +2,7 @@ include "AsyncMain.dfy"
 include "../lib/Sets.dfy"
 include "BetreeAsyncBlockCache.dfy"
 include "BetreeAsyncBlockCacheSystem.dfy"
-include "Marshalling.dfy"
+include "AsyncMarshalling.dfy"
 
 module {:extern} Impl refines Main { 
   import ADM = BetreeAsyncBlockCacheSystem
@@ -60,55 +60,89 @@ module {:extern} Impl refines Main {
   predicate WFSector(sector: ADM.M.Sector)
   {
     match sector {
-      case SectorIndirectionTable(indirectionTable) => BC.WFPersistentIndirectionTable(indirectionTable)
+      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(indirectionTable)
       case SectorBlock(node) => BT.WFNode(node)
     }
   }
 
-  method ReadSector(io: DiskIOHandler, lba: ADM.M.LBA)
-  returns (sector: IS.Sector)
+  method RequestRead(io: DiskIOHandler, lba: ADM.M.LBA)
+  returns (id: D.ReqId)
   requires io.initialized()
   modifies io
-  ensures IS.WFSector(sector)
-  ensures IDiskOp(io.diskOp()) == D.ReadOp(lba, IS.ISector(sector))
+  ensures IDiskOp(io.diskOp()) == D.ReqReadOp(id, D.ReqRead(lba))
   {
-    var bytes := io.read(lba);
+    id := io.read(lba);
+  }
+
+  method ReadSector(io: DiskIOHandler)
+  returns (id: D.ReqId, sector: IS.Sector)
+  requires io.diskOp().RespReadOp?
+  ensures IS.WFSector(sector)
+  ensures IDiskOp(io.diskOp()) == D.RespReadOp(id, D.RespRead(IS.ISector(sector)))
+  {
+    var id1, bytes := io.getReadResult();
+    id := id1;
     var sectorOpt := Marshalling.ParseSector(bytes);
     sector := sectorOpt.value;
   }
 
-  method WriteSector(io: DiskIOHandler, lba: ADM.M.LBA, sector: IS.Sector)
-  returns (success: bool)
+  method ConfirmWrite(io: DiskIOHandler)
+  returns (id: D.ReqId)
+  requires io.diskOp().RespWriteOp?
+  ensures IDiskOp(io.diskOp()) == D.RespWriteOp(id, D.RespWrite)
+  {
+    id := io.getWriteResult();
+  }
+
+  method RequestWrite(io: DiskIOHandler, lba: ADM.M.LBA, sector: IS.Sector)
+  returns (id: Option<D.ReqId>)
   requires IS.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
   requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
   requires io.initialized()
   modifies io
-  ensures success ==> IDiskOp(io.diskOp()) == D.WriteOp(lba, IS.ISector(sector))
-  ensures !success ==> IDiskOp(io.diskOp()) == D.NoDiskOp
+  ensures id.Some? ==> IDiskOp(io.diskOp()) == D.ReqWriteOp(id.value, D.ReqWrite(lba, IS.ISector(sector)))
+  ensures id.None? ==> IDiskOp(io.diskOp()) == D.NoDiskOp
   {
     var bytes := Marshalling.MarshallSector(sector);
     if (bytes == null) {
-      return false;
+      id := None;
     } else {
-      io.write(lba, bytes);
-      return true;
+      var i := io.write(lba, bytes);
+      id := Some(i);
     }
   }
 
-  method PageInIndirectionTable(k: Constants, s: Variables, io: DiskIOHandler)
+  method PageInIndirectionTableReq(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
   requires IS.WFVars(s)
   requires io.initialized();
+  requires s.Unready?
+  requires s.outstandingIndirectionTableRead.None?
+  modifies io
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    var id := RequestRead(io, BC.IndirectionTableLBA());
+    s' := IS.Unready(Some(id));
+
+    assert BC.PageInIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
+    assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInIndirectionTableReqStep));
+  }
+
+  method PageInIndirectionTableResp(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
+  requires IS.WFVars(s)
+  requires io.diskOp().RespReadOp?
   requires s.Unready?
   modifies io
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
-    var sector := ReadSector(io, BC.IndirectionTableLBA());
-    if (sector.SectorIndirectionTable?) {
-      s' := IS.Ready(sector.indirectionTable, sector.indirectionTable, map[]);
-      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInIndirectionTableStep));
+    var id, sector := ReadSector(io);
+    if (Some(id) == s.outstandingIndirectionTableRead && sector.SectorIndirectionTable?) {
+      s' := IS.Ready(sector.indirectionTable, None, sector.indirectionTable, None, map[], map[], map[]);
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInIndirectionTableRespStep));
     } else {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
@@ -116,7 +150,7 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method PageIn(k: Constants, s: Variables, io: DiskIOHandler, ref: BC.Reference)
+  method PageInReq(k: Constants, s: Variables, io: DiskIOHandler, ref: BC.Reference)
   returns (s': Variables)
   requires io.initialized();
   requires s.Ready?
@@ -128,14 +162,60 @@ module {:extern} Impl refines Main {
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
+    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
+      s' := s;
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      print "giving up; already an outstanding read for this ref\n";
+    } else {
+      var lba := s.ephemeralIndirectionTable.lbas[ref];
+      var id := RequestRead(io, lba);
+      s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+
+      assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInReqStep(ref)));
+    }
+  }
+
+  method PageInResp(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
+  requires io.diskOp().RespReadOp?
+  requires s.Ready?
+  requires IS.WFVars(s)
+  requires ADM.M.Inv(k, IS.IVars(s))
+  modifies io
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    var id, sector := ReadSector(io);
+
+    if (id !in s.outstandingBlockReads) {
+      s' := s;
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      print "PageInResp: unrecognized id from Read\n";
+      return;
+    }
+
+    // TODO we should probably remove the id from outstandingBlockReads
+    // even in the case we don't do anything with it
+
+    var ref := s.outstandingBlockReads[id].ref;
+    
+    if (ref !in s.ephemeralIndirectionTable.lbas || ref in s.cache) {
+      s' := s;
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+      print "PageInResp: ref !in lbas or ref in s.cache\n";
+      return;
+    }
+
     var lba := s.ephemeralIndirectionTable.lbas[ref];
-    var sector := ReadSector(io, lba);
+
     if (sector.SectorBlock?) {
       var node := sector.block;
       if (s.ephemeralIndirectionTable.graph[ref] == (if node.children.Some? then node.children.value else [])) {
-        s' := s.(cache := s.cache[ref := sector.block]);
-        assert BC.PageIn(k, IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
-        assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInStep(ref)));
+        s' := s.(cache := s.cache[ref := sector.block])
+               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
+        assert BC.PageInResp(k, IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
+        assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInRespStep));
       } else {
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
@@ -148,24 +228,98 @@ module {:extern} Impl refines Main {
     }
   }
 
+  method getFreeRef(s: Variables)
+  returns (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  ensures ref.Some? ==> ref.value !in s.ephemeralIndirectionTable.graph
+  ensures ref.Some? ==> ref.value !in s.cache
+  {
+    if r :| r !in s.ephemeralIndirectionTable.graph && r !in s.cache {
+      ref := Some(r);
+    } else {
+      ref := None;
+    }
+    /*var v := s.ephemeralIndirectionTable.graph.Keys;
+
+    var m;
+    if |v| >= 1 {
+      m := maximum(v);
+    } else {
+      m := 0;
+    }
+
+    if (m < 0xffff_ffff_ffff_ffff) {
+      ref := Some(m + 1);
+    } else {
+      ref := None;
+    }*/
+  }
+
+  method getFreeLba(s: Variables)
+  returns (lba : Option<LBA>)
+  requires s.Ready?
+  requires IS.WFVars(s)
+  ensures lba.Some? ==> BC.LBAFree(IS.IVars(s), lba.value)
+  {
+    if l :| (
+      && l !in s.persistentIndirectionTable.lbas.Values
+      && l !in s.ephemeralIndirectionTable.lbas.Values
+      && (s.frozenIndirectionTable.Some? ==>
+          l !in s.frozenIndirectionTable.value.lbas.Values)
+      && (forall id | id in s.outstandingBlockWrites ::
+          s.outstandingBlockWrites[id].lba != l)
+    ) {
+      lba := Some(l);
+    } else {
+      lba := None;
+    }
+  /*
+    var v1 := s.persistentIndirectionTable.lbas.Values;
+    var v2 := s.ephemeralIndirectionTable.lbas.Values;
+
+    var m1;
+    var m2;
+
+    if |v1| >= 1 {
+      m1 := maximum(v1);
+    } else {
+      m1 := 0;
+    }
+
+    if |v2| >= 1 {
+      m2 := maximum(v2);
+    } else {
+      m2 := 0;
+    }
+
+    var m := if m1 > m2 then m1 else m2;
+    if (m < 0xffff_ffff_ffff_ffff) {
+      lba := Some(m + 1);
+    } else {
+      lba := None;
+    }
+    */
+  }
+
   method write(k: Constants, s: Variables, ref: BT.G.Reference, node: IS.Node)
   returns (s': Variables)
   requires s.Ready?
   requires IS.WFVars(s)
+  requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
   requires IS.WFNode(node)
   requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralIndirectionTable.graph)
+  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas
   ensures IS.WFVars(s')
   ensures BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node))
   {
-    s' := IS.Ready(
-      s.persistentIndirectionTable,
-      BC.IndirectionTable(
-        MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
-        s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]
-      ),
-      s.cache[ref := node]
-    );
+    s' := s
+      .(ephemeralIndirectionTable :=
+        BC.IndirectionTable(
+          MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
+          s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]
+        ))
+      .(cache := s.cache[ref := node]);
   }
 
   method alloc(k: Constants, s: Variables, node: IS.Node)
@@ -181,19 +335,20 @@ module {:extern} Impl refines Main {
   {
     ref := getFreeRef(s);
     if (ref.Some?) {
-      s' := IS.Ready(
-        s.persistentIndirectionTable,
-        BC.IndirectionTable(
-          s.ephemeralIndirectionTable.lbas,
-          s.ephemeralIndirectionTable.graph[ref.value := if node.children.Some? then node.children.value else []]
-        ),
-        s.cache[ref.value := node]
-      );
+      s' := s
+        .(ephemeralIndirectionTable :=
+          BC.IndirectionTable(
+            s.ephemeralIndirectionTable.lbas,
+            s.ephemeralIndirectionTable.graph[ref.value := if node.children.Some? then node.children.value else []]
+          )
+        )
+        .(cache := s.cache[ref.value := node]);
     } else {
       s' := s;
     }
   }
 
+  /*
   method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   returns (s': Variables, success: bool)
   requires IS.WFVars(s)
@@ -389,60 +544,6 @@ module {:extern} Impl refines Main {
     }
 
     s', success := InsertKeyValue(k, s, key, value);
-  }
-
-  method getFreeRef(s: Variables)
-  returns (ref : Option<BT.G.Reference>)
-  requires s.Ready?
-  ensures ref.Some? ==> ref.value !in s.ephemeralIndirectionTable.graph
-  {
-    var v := s.ephemeralIndirectionTable.graph.Keys;
-
-    var m;
-    if |v| >= 1 {
-      m := maximum(v);
-    } else {
-      m := 0;
-    }
-
-    if (m < 0xffff_ffff_ffff_ffff) {
-      ref := Some(m + 1);
-    } else {
-      ref := None;
-    }
-  }
-
-  method getFreeLba(s: Variables)
-  returns (lba : Option<LBA>)
-  requires s.Ready?
-  ensures lba.Some? ==> lba.value !in s.persistentIndirectionTable.lbas.Values
-  ensures lba.Some? ==> lba.value !in s.ephemeralIndirectionTable.lbas.Values
-  ensures lba.Some? ==> lba.value != BC.IndirectionTableLBA()
-  {
-    var v1 := s.persistentIndirectionTable.lbas.Values;
-    var v2 := s.ephemeralIndirectionTable.lbas.Values;
-
-    var m1;
-    var m2;
-
-    if |v1| >= 1 {
-      m1 := maximum(v1);
-    } else {
-      m1 := 0;
-    }
-
-    if |v2| >= 1 {
-      m2 := maximum(v2);
-    } else {
-      m2 := 0;
-    }
-
-    var m := if m1 > m2 then m1 else m2;
-    if (m < 0xffff_ffff_ffff_ffff) {
-      lba := Some(m + 1);
-    } else {
-      lba := None;
-    }
   }
 
   predicate method deallocable(s: Variables, ref: BT.G.Reference) {
@@ -1071,4 +1172,5 @@ module {:extern} Impl refines Main {
     hs.s := s';
     success := succ;
   }
+  */
 }
