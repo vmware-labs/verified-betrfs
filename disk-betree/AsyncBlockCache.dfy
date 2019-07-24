@@ -52,7 +52,7 @@ abstract module AsyncBlockCache refines Transactable {
   {
     ref in s.ephemeralIndirectionTable.graph
   }
-  predicate ValidLBAForNode(lba: LBA)
+  predicate method ValidLBAForNode(lba: LBA)
   {
     lba != IndirectionTableLBA()
   }
@@ -108,7 +108,7 @@ abstract module AsyncBlockCache refines Transactable {
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
-  function AssignRefToLBA(indirectionTable: IndirectionTable, ref: Reference, lba: LBA) : IndirectionTable
+  function method AssignRefToLBA(indirectionTable: IndirectionTable, ref: Reference, lba: LBA) : IndirectionTable
   {
     IndirectionTable(
       if ref in indirectionTable.graph then indirectionTable.lbas[ref := lba] else indirectionTable.lbas,
@@ -183,7 +183,7 @@ abstract module AsyncBlockCache refines Transactable {
     forall r | r in graph :: ref !in graph[r]
   }
 
-  function OutstandingBlockReadsRemoveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference) : map<ReqId, OutstandingRead>
+  function method OutstandingBlockReadsRemoveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference) : map<ReqId, OutstandingRead>
   {
     map reqId | reqId in outstandingBlockReads && outstandingBlockReads[reqId].ref != ref :: outstandingBlockReads[reqId]
   }
