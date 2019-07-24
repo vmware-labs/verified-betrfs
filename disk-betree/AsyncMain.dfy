@@ -155,6 +155,22 @@ abstract module Main {
     IDiskOp(io.diskOp()))
   */
 
+  method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires io.diskOp().RespReadOp?
+  requires Inv(k, hs)
+  modifies HeapSet(hs)
+  ensures Inv(k, hs)
+  ensures ValidDiskOp(io.diskOp())
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
+
+  method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires io.diskOp().RespWriteOp?
+  requires Inv(k, hs)
+  modifies HeapSet(hs)
+  ensures Inv(k, hs)
+  ensures ValidDiskOp(io.diskOp())
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
+
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
   requires io.initialized()

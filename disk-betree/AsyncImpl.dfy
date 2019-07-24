@@ -86,14 +86,6 @@ module {:extern} Impl refines Main {
     sector := sectorOpt.value;
   }
 
-  method ConfirmWrite(io: DiskIOHandler)
-  returns (id: D.ReqId)
-  requires io.diskOp().RespWriteOp?
-  ensures IDiskOp(io.diskOp()) == D.RespWriteOp(id, D.RespWrite)
-  {
-    id := io.getWriteResult();
-  }
-
   method RequestWrite(io: DiskIOHandler, lba: ADM.M.LBA, sector: IS.Sector)
   returns (id: Option<D.ReqId>)
   requires IS.WFSector(sector)
@@ -140,7 +132,6 @@ module {:extern} Impl refines Main {
   requires IS.WFVars(s)
   requires io.diskOp().RespReadOp?
   requires s.Unready?
-  modifies io
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
@@ -187,7 +178,6 @@ module {:extern} Impl refines Main {
   requires s.Ready?
   requires IS.WFVars(s)
   requires ADM.M.Inv(k, IS.IVars(s))
-  modifies io
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
@@ -1244,6 +1234,44 @@ module {:extern} Impl refines Main {
     }
   }
 
+  method readResponse(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
+  requires io.diskOp().RespReadOp?
+  requires IS.WFVars(s)
+  requires ADM.M.Inv(k, IS.IVars(s))
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    if (s.Unready?) {
+      s' := PageInIndirectionTableResp(k, s, io);
+    } else {
+      s' := PageInResp(k, s, io);
+    }
+  }
+
+  method writeResponse(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
+  requires io.diskOp().RespWriteOp?
+  requires IS.WFVars(s)
+  requires ADM.M.Inv(k, IS.IVars(s))
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    var id := io.getWriteResult();
+    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
+      s' := s.(outstandingIndirectionTableWrite := None)
+             .(frozenIndirectionTable := None)
+             .(persistentIndirectionTable := s.frozenIndirectionTable.value);
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackIndirectionTableRespStep));
+    } else if (s.Ready? && id in s.outstandingBlockWrites) {
+      s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackRespStep));
+    } else {
+      // TODO have the AsyncBlockCache allow this step
+      assume false;
+    }
+  }
+
   /*
 
   ////////// Top-level handlers
@@ -1280,5 +1308,23 @@ module {:extern} Impl refines Main {
     ADM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
     hs.s := s';
     success := succ;
+  }
+
+  method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    var s := hs.s;
+    var s' := readResponse(k, s, io);
+    var uiop := UI.NoOp;
+    ADM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
+    hs.s := s';
+  }
+
+  method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    var s := hs.s;
+    var s' := writeResponse(k, s, io);
+    var uiop := UI.NoOp;
+    ADM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
+    hs.s := s';
   }
 }
