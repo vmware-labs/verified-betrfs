@@ -2,12 +2,23 @@ using Impl_Compile;
 
 using System;
 using System.IO;
+using System.Collections.Generic;
 
 namespace Impl_Compile {
+  // TODO make this actually async lol
   public partial class DiskIOHandler {
     const int BLOCK_SIZE = 8*1024*1024;
 
-    public void write(ulong lba, byte[] sector) {
+    ulong curId = 0;
+    HashSet<ulong> writeReqs;
+    Dictionary<ulong, byte[]> readReqs;
+
+    public DiskIOHandler() {
+      writeReqs = new HashSet<ulong>();
+      readReqs = new Dictionary<ulong, byte[]>();
+    }
+
+    public void writeSync(ulong lba, byte[] sector) {
       if (sector.Length != BLOCK_SIZE) {
         // We should never get here due to the contract.
         throw new Exception("Block must be exactly BLOCK_SIZE bytes");
@@ -16,13 +27,78 @@ namespace Impl_Compile {
       File.WriteAllBytes(getFilename(lba), sector);
     }
 
-    public void read(ulong lba, out byte[] sector) {
+    public void readSync(ulong lba, out byte[] sector) {
       string filename = getFilename(lba);
       byte[] bytes = File.ReadAllBytes(filename);
       if (bytes.Length != BLOCK_SIZE) {
         throw new Exception("Invalid block at " + filename);
       }
       sector = bytes;
+    }
+
+    public void write(ulong lba, byte[] sector, out ulong id) {
+      if (sector.Length != BLOCK_SIZE) {
+        // We should never get here due to the contract.
+        throw new Exception("Block must be exactly BLOCK_SIZE bytes");
+      }
+
+      File.WriteAllBytes(getFilename(lba), sector);
+
+      id = this.curId;
+      this.curId++;
+
+      this.writeReqs.Add(this.curId);
+    }
+
+    public void read(ulong lba, out ulong id) {
+      string filename = getFilename(lba);
+      byte[] bytes = File.ReadAllBytes(filename);
+      if (bytes.Length != BLOCK_SIZE) {
+        throw new Exception("Invalid block at " + filename);
+      }
+
+      id = this.curId;
+      this.curId++;
+
+      this.readReqs.Add(id, bytes);
+    }
+
+    ulong readResponseId;
+    byte[] readResponseBytes;
+    public bool prepareReadResponse() {
+      if (this.readReqs.Count > 0) {
+        foreach (ulong id in this.readReqs.Keys) {
+          readResponseId = id;
+          break;
+        }
+        readResponseBytes = readReqs[readResponseId];
+        readReqs.Remove(readResponseId);
+        return true;
+      } else {
+        return false;
+      }
+    }
+    public void getReadResult(out ulong id, out byte[] sector) {
+      id = readResponseId;
+      sector = new byte[readResponseBytes.Length];
+      readResponseBytes.CopyTo(sector, 0);
+    }
+
+    ulong writeResponseId;
+    public bool prepareWriteResponse() {
+      if (this.writeReqs.Count > 0) {
+        foreach (ulong id in this.writeReqs) {
+          writeResponseId = id;
+          break;
+        }
+        writeReqs.Remove(writeResponseId);
+        return true;
+      } else {
+        return false;
+      }
+    }
+    public void getWriteResult(out ulong id) {
+      id = writeResponseId;
     }
 
     private string getFilename(ulong lba) {
@@ -62,6 +138,8 @@ class Application {
   }
 
   public void Sync() {
+    throw new Exception("sync not implemented");
+    /*
     log("Sync");
 
     for (int i = 0; i < 50; i++) {
@@ -76,6 +154,7 @@ class Application {
     }
     log("giving up");
     throw new Exception("operation didn't finish");
+    */
   }
 
   public void Insert(string key, string val) {
@@ -188,7 +267,7 @@ public class FSUtil {
 
     foreach (ulong lba in m.Keys.Elements) {
       byte[] bytes = m.Select(lba);
-      io.write(lba, bytes);
+      io.writeSync(lba, bytes);
     }
   }
 }

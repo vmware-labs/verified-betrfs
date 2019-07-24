@@ -131,7 +131,7 @@ module {:extern} Impl refines Main {
     } else {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "PageInIndirectionTableReq: request already out";
+      print "PageInIndirectionTableReq: request already out\n";
     }
   }
 
@@ -369,7 +369,7 @@ module {:extern} Impl refines Main {
       s' := s;
       success := false;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; can't dirty root when frozen is not written yet";
+      print "giving up; can't dirty root when frozen is not written yet\n";
       return;
     }
 
@@ -591,7 +591,7 @@ module {:extern} Impl refines Main {
     if (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph && ref !in s.frozenIndirectionTable.value.lbas) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; dealloc can't dealloc because frozen isn't written";
+      print "giving up; dealloc can't dealloc because frozen isn't written\n";
       return;
     }
 
@@ -627,7 +627,7 @@ module {:extern} Impl refines Main {
     if (s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.graph && BT.G.Root() !in s.frozenIndirectionTable.value.lbas) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; fixBigRoot can't run because frozen isn't written";
+      print "giving up; fixBigRoot can't run because frozen isn't written\n";
       return;
     }
 
@@ -782,7 +782,7 @@ module {:extern} Impl refines Main {
     if (s.frozenIndirectionTable.Some? && parentref in s.frozenIndirectionTable.value.graph && parentref !in s.frozenIndirectionTable.value.lbas) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; doSplit can't run because frozen isn't written";
+      print "giving up; doSplit can't run because frozen isn't written\n";
       return;
     }
 
@@ -799,7 +799,7 @@ module {:extern} Impl refines Main {
     if !SSTable.IsEmpty(fused_parent.buckets[slot]) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; trying to split but parent has non-empty buffer";
+      print "giving up; trying to split but parent has non-empty buffer\n";
       return;
     }
 
