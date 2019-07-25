@@ -1127,7 +1127,7 @@ module {:extern} Impl refines Main {
     if (s.outstandingIndirectionTableWrite.Some?) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; frozen table is currently being written\n";
+      print "sync: giving up; frozen table is currently being written\n";
       return;
     }
 
@@ -1168,7 +1168,7 @@ module {:extern} Impl refines Main {
         // with too-big nodes in it)
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-        print "giving up; frozen table has big node rip (TODO we should prove this case impossible)\n";
+        print "sync: giving up; frozen table has big node rip (TODO we should prove this case impossible)\n";
         return;
       }
 
@@ -1176,7 +1176,7 @@ module {:extern} Impl refines Main {
         // TODO we should be able to prove this is impossible as well
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-        print "giving up; ref already in ephemeralIndirectionTable.lbas but not frozen";
+        print "sync: giving up; ref already in ephemeralIndirectionTable.lbas but not frozen";
         return;
       }
 
@@ -1194,19 +1194,19 @@ module {:extern} Impl refines Main {
           } else {
             s' := s;
             assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-            print "giving up; write req failed\n";
+            print "sync: giving up; write req failed\n";
           }
         }
         case None => {
           s' := s;
           assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-          print "giving up; could not get lba\n";
+          print "sync: giving up; could not get lba\n";
         }
       }
     } else if (s.outstandingBlockWrites != map[]) {
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
-      print "giving up; blocks are still being written\n";
+      print "sync: giving up; blocks are still being written\n";
     } else {
       var id := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
       if (id.Some?) {
@@ -1216,6 +1216,7 @@ module {:extern} Impl refines Main {
       } else {
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
+        print "sync: giving up; write back indirection table failed (no id)\n";
       }
     }
   }

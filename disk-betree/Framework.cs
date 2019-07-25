@@ -47,7 +47,7 @@ namespace Impl_Compile {
       id = this.curId;
       this.curId++;
 
-      this.writeReqs.Add(this.curId);
+      this.writeReqs.Add(id);
     }
 
     public void read(ulong lba, out ulong id) {
@@ -138,12 +138,14 @@ class Application {
   }
 
   public void Sync() {
-    throw new Exception("sync not implemented");
-    /*
     log("Sync");
 
+    __default.handlePushSync(k, hs, io, out var id);
+    log("doing push sync...");
+
     for (int i = 0; i < 50; i++) {
-      __default.handleSync(k, hs, io, out bool success);
+      __default.handlePopSync(k, hs, io, id, out bool success);
+      this.maybeDoResponse();
       if (success) {
         log("doing sync... success!");
         log("");
@@ -154,7 +156,6 @@ class Application {
     }
     log("giving up");
     throw new Exception("operation didn't finish");
-    */
   }
 
   public void Insert(string key, string val) {
@@ -232,7 +233,7 @@ class Application {
     }
     else if (io.prepareWriteResponse()) {
       __default.handleWriteResponse(k, hs, io);
-      log("doing read response...");
+      log("doing write response...");
     }
   }
 
