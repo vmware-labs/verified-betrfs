@@ -1110,25 +1110,21 @@ module {:extern} Impl refines Main {
   }
 
   method {:fuel BC.GraphClosed,0} sync(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables, success: bool)
+  returns (s': Variables)
   requires io.initialized()
   modifies io
   requires IS.WFVars(s)
   requires ADM.M.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
-    if success then UI.SyncOp else UI.NoOp,
-    IDiskOp(io.diskOp()))
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()))
   {
     if (s.Unready?) {
       // TODO we could just do nothing here instead
       s' := PageInIndirectionTableReq(k, s, io);
-      success := false;
       return;
     }
 
     if (s.outstandingIndirectionTableWrite.Some?) {
-      success := false;
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; frozen table is currently being written\n";
@@ -1146,10 +1142,8 @@ module {:extern} Impl refines Main {
 
     if (s.frozenIndirectionTable.None?) {
       if ref :| ref in s.ephemeralIndirectionTable.graph && deallocable(s, ref) {
-        success := false;
         s' := dealloc(k, s, io, ref);
       } else if ref :| ref in s.ephemeralIndirectionTable.graph && ref in s.cache && !Marshalling.CappedNode(s.cache[ref]) {
-        success := false;
         if (ref == BT.G.Root()) {
           s' := fixBigRoot(k, s, io);
         } else {
@@ -1163,7 +1157,6 @@ module {:extern} Impl refines Main {
       } else {
         s' := s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
             .(syncReqs := BC.syncReqs3to2(s.syncReqs));
-        success := false;
         assert BC.Freeze(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.FreezeStep));
         return;
@@ -1173,7 +1166,6 @@ module {:extern} Impl refines Main {
         // TODO we should be able to prove this is impossible by adding an invariant
         // about frozenIndirectionTable (that is, we should never be freezing a table
         // with too-big nodes in it)
-        success := false;
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
         print "giving up; frozen table has big node rip (TODO we should prove this case impossible)\n";
@@ -1182,7 +1174,6 @@ module {:extern} Impl refines Main {
 
       if (ref in s.ephemeralIndirectionTable.lbas) {
         // TODO we should be able to prove this is impossible as well
-        success := false;
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
         print "giving up; ref already in ephemeralIndirectionTable.lbas but not frozen";
@@ -1194,7 +1185,6 @@ module {:extern} Impl refines Main {
         case Some(lba) => {
           var id := RequestWrite(io, lba, IS.SectorBlock(s.cache[ref]));
           if (id.Some?) {
-            success := false;
             s' := s
               .(ephemeralIndirectionTable := BC.AssignRefToLBA(s.ephemeralIndirectionTable, ref, lba))
               .(frozenIndirectionTable := Some(BC.AssignRefToLBA(s.frozenIndirectionTable.value, ref, lba)))
@@ -1202,33 +1192,28 @@ module {:extern} Impl refines Main {
             assert BC.WriteBackReq(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()), ref);
             assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackReqStep(ref)));
           } else {
-            success := false;
             s' := s;
             assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
             print "giving up; write req failed\n";
           }
         }
         case None => {
-          success := false;
           s' := s;
           assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
           print "giving up; could not get lba\n";
         }
       }
     } else if (s.outstandingBlockWrites != map[]) {
-      success := false;
       s' := s;
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
       print "giving up; blocks are still being written\n";
     } else {
       var id := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
       if (id.Some?) {
-        success := false;
         s' := s.(outstandingIndirectionTableWrite := id);
         assert BC.WriteBackIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackIndirectionTableReqStep));
       } else {
-        success := false;
         s' := s;
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
       }
@@ -1274,21 +1259,61 @@ module {:extern} Impl refines Main {
     }
   }
 
-  /*
+  method pushSync(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables, id: int)
+  requires io.initialized()
+  requires IS.WFVars(s)
+  requires ADM.M.Inv(k, IS.IVars(s))
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), IDiskOp(io.diskOp()))
+  {
+    id :| id !in s.syncReqs;
+    s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
+    assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PushSyncReqStep(id)));
+  }
+
+  method popSync(k: Constants, s: Variables, io: DiskIOHandler, id: int)
+  returns (s': Variables, success: bool)
+  requires io.initialized()
+  requires IS.WFVars(s)
+  requires ADM.M.Inv(k, IS.IVars(s))
+  modifies io
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, IDiskOp(io.diskOp()))
+  {
+    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
+      success := true;
+      s' := s.(syncReqs := MapRemove1(s.syncReqs, id));
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PopSyncOp(id), IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PopSyncReqStep(id)));
+    } else {
+      success := false;
+      s' := sync(k, s, io);
+    }
+  }
 
   ////////// Top-level handlers
 
-  method handleSync(k: Constants, hs: HeapState, io: DiskIOHandler)
+  method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
+  returns (id: int)
+  {
+    var s := hs.s;
+    var s', id1 := pushSync(k, s, io);
+    id := id1;
+    var uiop := UI.PushSyncOp(id);
+    ADM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
+    hs.s := s';
+  }
+
+  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
   returns (success: bool)
   {
     var s := hs.s;
-    var s', succ := sync(k, s, io);
-    var uiop := if succ then UI.SyncOp else UI.NoOp;
+    var s', succ := popSync(k, s, io, id);
+    success := succ;
+    var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
     ADM.M.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, IDiskOp(io.diskOp()));
     hs.s := s';
-    success := succ;
   }
-  */
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)

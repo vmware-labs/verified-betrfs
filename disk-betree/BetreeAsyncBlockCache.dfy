@@ -46,10 +46,11 @@ module BetreeAsyncBlockCache refines AsyncDiskMachine {
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step) {
-    // TODO:
-    //&& (uiop.NoOp? || (uiop.SyncOp? && step.WriteBackIndirectionTableStep?))
     && !step.TransactionStep?
-    && uiop.NoOp?
+    && (step.PushSyncReqStep? ==> uiop.PushSyncOp? && step.id == uiop.id)
+    && (step.PopSyncReqStep? ==> uiop.PopSyncOp? && step.id == uiop.id)
+    && (!step.PushSyncReqStep? && !step.PopSyncReqStep? ==> uiop.NoOp?)
+
     && BC.NextStep(k, s, s', dop, step)
     && (dop.RespReadOp? && dop.respRead.sector.SectorBlock? ==>
       WFNode(dop.respRead.sector.block)
