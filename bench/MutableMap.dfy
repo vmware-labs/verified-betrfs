@@ -25,7 +25,9 @@ module Main {
       var v := (i * 1073741827) % nInsertions;
       assert fresh(hashMap);
       assert hashMap.Count as nat < 0x10000000000000000 / 8;
-      var _ := hashMap.Insert(v, v);
+      var _ := hashMap.Insert(v, v); // if this wasn't fresh, we'd need to add it to the modifies clause
+                                     // but this is main, and hashMap is freshly allocated in this method
+                                     // guaranteed non-aliasing probably allows for easier reasoning here
       assert fresh(hashMap);
       assert v in hashMap.Contents && hashMap.Contents[v] == v;
       if i >= 1000000 {
