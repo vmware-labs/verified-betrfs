@@ -1,7 +1,7 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "PivotBetreeSpec.dfy"
 include "Message.dfy"
-include "AsyncImplState.dfy"
+include "ImplState.dfy"
 include "SSTable.dfy"
 include "../lib/Option.dfy"
 

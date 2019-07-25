@@ -2,7 +2,7 @@ include "PivotBetreeSpec.dfy"
 include "Message.dfy"
 include "../lib/Option.dfy"
 include "SSTable.dfy"
-include "BetreeAsyncBlockCache.dfy"
+include "BetreeBlockCache.dfy"
 
 module {:extern} ImplState {
   import opened Options

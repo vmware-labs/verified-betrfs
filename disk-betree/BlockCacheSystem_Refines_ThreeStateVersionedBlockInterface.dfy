@@ -1,5 +1,5 @@
-include "AsyncBlockCache.dfy"
-include "AsyncBlockCacheSystem.dfy"
+include "BlockCache.dfy"
+include "BlockCacheSystem.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 

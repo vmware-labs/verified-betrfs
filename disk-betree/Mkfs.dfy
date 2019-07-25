@@ -1,5 +1,5 @@
-include "AsyncMarshalling.dfy"
-include "AsyncImpl.dfy"
+include "Marshalling.dfy"
+include "Impl.dfy"
 
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {

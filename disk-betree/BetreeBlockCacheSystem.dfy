@@ -1,11 +1,11 @@
 include "AsyncDiskModel.dfy"
 include "PivotBetree_Refines_Betree.dfy"
-include "AsyncBlockCache.dfy"
+include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
-include "AsyncBlockCacheSystem.dfy"
-include "BetreeAsyncBlockCache.dfy"
-include "AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.dfy"
+include "BlockCacheSystem.dfy"
+include "BetreeBlockCache.dfy"
+include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.dfy"
 
 module BetreeAsyncBlockCacheSystem refines AsyncDiskModel {
   import opened Maps

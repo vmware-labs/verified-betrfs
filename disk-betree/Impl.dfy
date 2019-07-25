@@ -1,8 +1,8 @@
-include "AsyncMain.dfy"
+include "Main.dfy"
 include "../lib/Sets.dfy"
-include "BetreeAsyncBlockCache.dfy"
-include "BetreeAsyncBlockCacheSystem.dfy"
-include "AsyncMarshalling.dfy"
+include "BetreeBlockCache.dfy"
+include "BetreeBlockCacheSystem.dfy"
+include "Marshalling.dfy"
 
 module {:extern} Impl refines Main { 
   import ADM = BetreeAsyncBlockCacheSystem

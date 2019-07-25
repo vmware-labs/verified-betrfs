@@ -1,4 +1,4 @@
-include "AsyncBlockCache.dfy"
+include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 include "AsyncDiskModel.dfy"

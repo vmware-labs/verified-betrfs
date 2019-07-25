@@ -1,4 +1,4 @@
-include "AsyncBlockCache.dfy"
+include "BlockCache.dfy"
 include "PivotBetreeSpec.dfy"
 
 abstract module AsyncBlockCacheSystem {
