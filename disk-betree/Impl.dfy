@@ -1260,6 +1260,18 @@ module {:extern} Impl refines Main {
     }
   }
 
+  method freeId<A>(syncReqs: map<int, A>) returns (id: int)
+  ensures id !in syncReqs
+  {
+    var s := syncReqs.Keys;
+    if (|s| == 0) {
+      id := 0;
+    } else {
+      var maxId := maximumInt(syncReqs.Keys);
+      id := maxId + 1;
+    }
+  }
+
   method pushSync(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables, id: int)
   requires io.initialized()
@@ -1268,7 +1280,7 @@ module {:extern} Impl refines Main {
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), IDiskOp(io.diskOp()))
   {
-    id :| id !in s.syncReqs;
+    id := freeId(s.syncReqs);
     s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
     assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PushSyncReqStep(id)));
   }

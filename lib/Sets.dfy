@@ -55,4 +55,26 @@ module Sets {
       return y;
     }
   }
+
+  method maximumInt(s: set<int>) returns (o: int)
+  requires |s| >= 1
+  ensures forall t : int :: t in s ==> o >= t
+  {
+    var y :| y in s;
+    if (|s| > 1) {
+      var m := maximumInt(s - {y});
+
+      assert forall t : int :: t in (s - {y}) ==> m >= t;
+      o := (if y > m then y else m);
+      assert forall t : int :: t in (s - {y}) ==> o >= t;
+      assert o >= y;
+    } else {
+      assert |s| == 1;
+      assert y in s;
+      assert |s - {y}| == 0;
+      assert s - {y} == {};
+      assert s == {y};
+      return y;
+    }
+  }
 }
