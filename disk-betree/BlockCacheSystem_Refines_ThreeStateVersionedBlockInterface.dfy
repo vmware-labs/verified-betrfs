@@ -3,19 +3,19 @@ include "BlockCacheSystem.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
-module AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
+module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   // Ideally we would prove the refinement for an arbitrary graph,
   // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
   // separately then we wouldn't know they were using the same graph.
   // So for now, we just prove the refinement specifically for BetreeGraph.
   import opened G = PivotBetreeGraph
-  import BCS = BetreeGraphAsyncBlockCacheSystem
+  import BCS = BetreeGraphBlockCacheSystem
   import opened AsyncDiskModelTypes
 
   import opened Maps
   import opened Sequences
 
-  import BC = BetreeGraphAsyncBlockCache
+  import BC = BetreeGraphBlockCache
   import BI = PivotBetreeBlockInterface
   import D = AsyncDisk
   type DiskOp = BC.DiskOp

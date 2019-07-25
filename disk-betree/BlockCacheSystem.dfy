@@ -1,8 +1,8 @@
 include "BlockCache.dfy"
 include "PivotBetreeSpec.dfy"
 
-abstract module AsyncBlockCacheSystem {
-  import M : AsyncBlockCache
+abstract module BlockCacheSystem {
+  import M : BlockCache
   import D = AsyncDisk
 
   import opened Maps
@@ -1179,6 +1179,6 @@ abstract module AsyncBlockCacheSystem {
   }
 }
 
-module BetreeGraphAsyncBlockCacheSystem refines AsyncBlockCacheSystem {
-  import M = BetreeGraphAsyncBlockCache
+module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
+  import M = BetreeGraphBlockCache
 }

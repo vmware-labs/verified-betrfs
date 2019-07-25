@@ -7,19 +7,19 @@ include "BlockCacheSystem.dfy"
 include "BetreeBlockCache.dfy"
 include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.dfy"
 
-module BetreeAsyncBlockCacheSystem refines AsyncDiskModel {
+module BetreeBlockCacheSystem refines AsyncDiskModel {
   import opened Maps
   import opened Sequences
 
   import opened PivotBetreeSpec`Spec
-  import BC = BetreeGraphAsyncBlockCache
-  import BCS = BetreeGraphAsyncBlockCacheSystem
+  import BC = BetreeGraphBlockCache
+  import BCS = BetreeGraphBlockCacheSystem
   import BT = PivotBetree
   import BTI = PivotBetreeInvAndRefinement
   import BI = PivotBetreeBlockInterface
-  import Ref = AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface
+  import Ref = BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface
 
-  import M = BetreeAsyncBlockCache
+  import M = BetreeBlockCache
 
   function Ik(k: Constants) : BT.Constants
   {

@@ -5,13 +5,13 @@ include "AsyncDiskModel.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"
 
-module BetreeAsyncBlockCache refines AsyncDiskMachine {
+module BetreeBlockCache refines AsyncDiskMachine {
   import opened Maps
   import opened Sequences
 
   import opened PivotBetreeSpec`Spec
   import G = PivotBetreeGraph
-  import BC = BetreeGraphAsyncBlockCache
+  import BC = BetreeGraphBlockCache
   import BI = BetreeBlockInterface
   import PivotBetreeSpecWFNodes
 

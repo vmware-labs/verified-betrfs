@@ -12,8 +12,8 @@ module {:extern} ImplState {
   import Messages = ValueMessage
   import MS = MapSpec
   import Pivots = PivotsLib
-  import BC = BetreeGraphAsyncBlockCache
-  import M = BetreeAsyncBlockCache
+  import BC = BetreeGraphBlockCache
+  import M = BetreeBlockCache
   import SSTable = SSTable
   import D = AsyncDisk
 

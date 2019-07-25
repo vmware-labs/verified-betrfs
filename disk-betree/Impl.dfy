@@ -5,9 +5,9 @@ include "BetreeBlockCacheSystem.dfy"
 include "Marshalling.dfy"
 
 module {:extern} Impl refines Main { 
-  import ADM = BetreeAsyncBlockCacheSystem
+  import ADM = BetreeBlockCacheSystem
 
-  import BC = BetreeGraphAsyncBlockCache
+  import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
   import Marshalling
   import Messages = ValueMessage
@@ -1255,7 +1255,7 @@ module {:extern} Impl refines Main {
       s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackRespStep));
     } else {
-      // TODO have the AsyncBlockCache allow this step
+      // TODO have the BlockCache allow this step
       assume false;
     }
   }

@@ -11,7 +11,7 @@ module Marshalling {
   import opened NativeTypes
   import opened Sequences
   import opened Maps
-  import BC = BetreeGraphAsyncBlockCache
+  import BC = BetreeGraphBlockCache
   import ImplState
   import SSTable
 

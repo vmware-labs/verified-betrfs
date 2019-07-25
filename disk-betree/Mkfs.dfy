@@ -9,7 +9,7 @@ module {:extern} MkfsImpl {
   import opened Impl
 
   import BT = PivotBetreeSpec
-  import BC = BetreeGraphAsyncBlockCache
+  import BC = BetreeGraphBlockCache
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal

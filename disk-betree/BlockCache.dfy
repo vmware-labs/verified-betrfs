@@ -19,7 +19,7 @@ module LBAType {
 	export Internal reveals *
 }
 
-abstract module AsyncBlockCache refines Transactable {
+abstract module BlockCache refines Transactable {
   import opened Maps
   import opened Options
   import LBAType
@@ -712,6 +712,6 @@ abstract module AsyncBlockCache refines Transactable {
   }
 }
 
-module {:extern} BetreeGraphAsyncBlockCache refines AsyncBlockCache {
+module {:extern} BetreeGraphBlockCache refines BlockCache {
   import G = PivotBetreeGraph
 }

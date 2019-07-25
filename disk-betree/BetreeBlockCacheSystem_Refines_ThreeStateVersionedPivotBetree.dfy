@@ -9,23 +9,23 @@ include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.dfy"
 include "ThreeStateVersionedPivotBetree.dfy"
 include "BetreeBlockCacheSystem.dfy"
 
-module BetreeAsyncBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
+module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
   import opened Maps
   import opened Sequences
 
-  import BBCS = BetreeAsyncBlockCacheSystem
+  import BBCS = BetreeBlockCacheSystem
   import TSV = ThreeStateVersionedPivotBetree
 
   import opened PivotBetreeSpec`Spec
-  import BC = BetreeGraphAsyncBlockCache
-  import BCS = BetreeGraphAsyncBlockCacheSystem
+  import BC = BetreeGraphBlockCache
+  import BCS = BetreeGraphBlockCacheSystem
   import BT = PivotBetree
   import BTI = PivotBetreeInvAndRefinement
   import BI = PivotBetreeBlockInterface
-  import Ref = AsyncBlockCacheSystem_Refines_ThreeStateVersionedBlockInterface
+  import Ref = BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface
   import D = AsyncDisk
 
-  import M = BetreeAsyncBlockCache
+  import M = BetreeBlockCache
   type UIOp = BBCS.UIOp
 
   function Ik(k: BBCS.Constants) : TSV.Constants
