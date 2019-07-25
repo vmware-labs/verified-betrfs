@@ -3,8 +3,21 @@ include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "Graph.dfy"
 include "AsyncDiskModel.dfy"
-include "BlockCache.dfy"
 include "PivotBetreeSpec.dfy"
+
+module LBAType {
+  import NativeTypes
+
+  type LBA(==,!new) = NativeTypes.uint64
+  function method IndirectionTableLBA() : LBA { 0 }
+
+  function method toLBA(i: NativeTypes.uint64) : LBA{ i }
+  function method toUint64(i: LBA) : NativeTypes.uint64 { i }
+
+  export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes
+  export extends S
+	export Internal reveals *
+}
 
 abstract module AsyncBlockCache refines Transactable {
   import opened Maps

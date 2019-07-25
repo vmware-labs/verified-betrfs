@@ -1,6 +1,5 @@
 include "AsyncBlockCache.dfy"
 include "AsyncBlockCacheSystem.dfy"
-include "CrashSafe.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
