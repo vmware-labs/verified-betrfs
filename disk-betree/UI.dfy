@@ -1,4 +1,5 @@
 include "../lib/NativeTypes.dfy"
+include "../lib/total_order.dfy"
 
 module ValueWithDefault {
   import NativeTypes

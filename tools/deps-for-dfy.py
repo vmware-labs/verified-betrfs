@@ -8,10 +8,11 @@ ROOT_PATH = os.getenv("ROOT")
 assert ROOT_PATH
 
 def fileFromIncludeLine(line):
-    mo = re.search('include "(.*)"', line)
-    if mo==None:
-        return mo
-    return mo.groups(1)[0]
+    if not line.startswith("//"):
+        mo = re.search('include "(.*)"', line)
+        if mo==None:
+            return mo
+        return mo.groups(1)[0]
 
 class IncludeReference:
     def __init__(self, origin, line_num, raw_reference):
