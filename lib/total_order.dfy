@@ -197,6 +197,26 @@ abstract module Total_Order {
     else 1 + LargestLte(run[1..], needle)
   }
 
+  lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
+    requires IsSorted(run)
+    requires -1 <= pos < |run|
+    requires forall i ::   0 <= i <= pos   ==> lte(run[i], needle)
+    requires forall i :: pos < i < |run| ==> lt(needle, run[i])
+    ensures pos == LargestLte(run, needle)
+  {
+    reveal_IsSorted();
+    var llte := LargestLte(run, needle);
+    if pos < llte {
+      assert lt(run[llte], needle);
+      assert lte(needle, run[llte]);
+      assert false;
+    } else if llte < pos {
+      assert lt(run[pos], needle);
+      assert lte(needle, run[pos]);
+      assert false;
+    }
+  }
+  
   function method LargestLt(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLt(run, needle) < |run|;
@@ -229,31 +249,29 @@ abstract module Total_Order {
     }
   }
   
-  method InsertionPoint(run: seq<Element>, needle: Element) returns (pos: int)
-    requires IsSorted(run)
-    ensures 0 <= pos <= |run|
-    ensures forall i :: 0 <= i < pos ==> lt(run[i], needle)
-    ensures forall i :: pos <= i < |run| ==> lte(needle, run[i])
-    ensures pos-1 == LargestLt(run, needle)
+  method ArrayLargestLte(run: array<Element>, start: int, end: int, needle: Element) returns (pos: int)
+    requires 0 <= start <= end <= run.Length
+    requires IsSorted(run[start..end]);
+    ensures pos == start + LargestLte(run[start..end], needle)
   {
     reveal_IsSorted();
-    var lo := 0;
-    var hi := |run|;
+    var lo := start;
+    var hi := end;
     while lo < hi
-      invariant 0 <= lo <= hi <= |run|
-      invariant forall i :: 0 <= i < lo ==> lt(run[i], needle)
-      invariant forall i :: hi <= i < |run| ==> lte(needle, run[i])
+      invariant start <= lo <= hi <= end
+      invariant forall i :: start <= i < lo ==> lte(run[i], needle)
+      invariant forall i :: hi <= i < end ==> lt(needle, run[i])
       decreases hi - lo
     {
-      var mid := (hi + lo) / 2;
-      if lt(run[mid], needle) {
-        lo := mid + 1;
+      var mid := (lo + hi) / 2;
+      if lte(run[mid], needle) {
+        lo := mid+1;
       } else {
         hi := mid;
       }
     }
-    pos := lo;
-    LargestLtIsUnique(run, needle, pos-1);
+    pos := lo-1;
+    LargestLteIsUnique(run[start..end], needle, pos - start);
   }
   
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)

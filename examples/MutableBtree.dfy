@@ -33,6 +33,7 @@ abstract module MutableBtree {
       
     predicate WF()
       reads this, subtreeObjects
+      ensures WF() ==> this in subtreeObjects
       decreases subtreeObjects
 
     function QueryDef(needle: Key) : QueryResult
@@ -55,7 +56,7 @@ abstract module MutableBtree {
       //ensures needle !in Interpretation() ==> value == DefaultValue()
       decreases subtreeObjects
 
-    predicate Full()
+    predicate method Full()
       requires WF()
       reads this, subtreeObjects
       
@@ -64,8 +65,10 @@ abstract module MutableBtree {
       requires !Full()
       ensures WF()
       ensures Interpretation() == old(Interpretation())[key := value]
+      ensures fresh(subtreeObjects-old(subtreeObjects))
       modifies this, subtreeObjects
-
+      decreases subtreeObjects
+      
     static function MergeMaps(left: map<Key, Value>, pivot: Key, right: map<Key, Value>) : map<Key, Value> {
       map key |
         && key in left.Keys + right.Keys
@@ -91,6 +94,9 @@ abstract module MutableBtree {
       requires WF()
       requires Full()
       ensures SplitEnsures(old(Interpretation()), pivot, rightnode)
+      ensures subtreeObjects <= old(subtreeObjects)
+      ensures subtreeObjects !! rightnode.subtreeObjects
+      ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
       modifies this
   }
     
@@ -101,6 +107,7 @@ abstract module MutableBtree {
 
     predicate WF()
       reads this, subtreeObjects
+      ensures WF() ==> this in subtreeObjects
       decreases subtreeObjects
     {
       && subtreeObjects == {this, keys, values}
@@ -141,15 +148,15 @@ abstract module MutableBtree {
       decreases subtreeObjects
     {
       Keys.reveal_IsStrictlySorted();
-      var pos: int := Keys.InsertionPoint(keys[..nkeys], needle);
-      if pos as uint64 < nkeys && keys[pos] == needle {
+      var pos: int := Keys.ArrayLargestLte(keys, 0, nkeys as int, needle);
+      if 0 <= pos && keys[pos] == needle {
         result := Found(values[pos]);
       } else {
         result := NotFound;
       }
     }
 
-    predicate Full()
+    predicate method Full()
       requires WF()
       reads this, subtreeObjects
     {
@@ -161,18 +168,18 @@ abstract module MutableBtree {
       requires !Full()
       ensures WF()
       ensures Interpretation() == old(Interpretation())[key := value]
+      ensures fresh(subtreeObjects-old(subtreeObjects))
       modifies this, subtreeObjects
+      decreases subtreeObjects
     {
       Keys.reveal_IsStrictlySorted();
-      var pos': int := Keys.InsertionPoint(keys[..nkeys], key);
-      var pos := pos' as uint64;
-      assert 0 <= pos <= nkeys;
+      var pos: int := Keys.ArrayLargestLte(keys, 0, nkeys as int, key);
 
-      if pos < nkeys && keys[pos] == key {
+      if 0 <= pos && keys[pos] == key {
         values[pos] := value;
       } else {
-        Arrays.Insert(keys, nkeys as int, key, pos');
-        Arrays.Insert(values, nkeys as int, value, pos');
+        Arrays.Insert(keys, nkeys as int, key, pos + 1);
+        Arrays.Insert(values, nkeys as int, value, pos + 1);
         nkeys := nkeys + 1;
       }
     }
@@ -180,17 +187,21 @@ abstract module MutableBtree {
     method Split() returns (pivot: Key, rightnode: Node)
       requires WF()
       ensures SplitEnsures(old(Interpretation()), pivot, rightnode)
+      ensures subtreeObjects <= old(subtreeObjects)
+      ensures subtreeObjects !! rightnode.subtreeObjects
+      ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
       modifies this
     {
       Keys.reveal_IsStrictlySorted();
       var right := new Leaf();
       var boundary := nkeys/2;
-      Arrays.Memcpy(right.keys, 0, keys[boundary..nkeys]);
-      Arrays.Memcpy(right.values, 0, values[boundary..nkeys]);
+      Arrays.Memcpy(right.keys, 0, keys[boundary..nkeys]); // FIXME: remove conversion to seq
+      Arrays.Memcpy(right.values, 0, values[boundary..nkeys]); // FIXME: remove conversion to seq
       right.nkeys := nkeys - boundary;
       nkeys := boundary;
       pivot := right.keys[0];
       rightnode := right;
+      assert MergeMaps(Interpretation(), pivot, rightnode.Interpretation()) == old(Interpretation()); // OBSERVE?!?
     }
       
     constructor ()
@@ -214,6 +225,7 @@ abstract module MutableBtree {
 
     predicate WF()
       reads this, subtreeObjects
+      ensures WF() ==> this in subtreeObjects
       decreases subtreeObjects
     {
       && {this, pivots, children} <= subtreeObjects
@@ -225,7 +237,9 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < nchildren ==> children[i] != null)
       && (forall i :: 0 <= i < nchildren ==> children[i] in subtreeObjects)
       && (forall i :: 0 <= i < nchildren ==> children[i].subtreeObjects < subtreeObjects)
+      && (forall i :: 0 <= i < nchildren ==> {this, pivots, children} !! children[i].subtreeObjects)
       && (forall i :: 0 <= i < nchildren ==> children[i].WF())
+      && (forall i, j :: 0 <= i < j < nchildren ==> children[i].subtreeObjects !! children[j].subtreeObjects)
     }
 
     function QueryDef(needle: Key) : QueryResult
@@ -236,18 +250,6 @@ abstract module MutableBtree {
       var pos := Keys.LargestLte(pivots[..nchildren-1], needle);
       children[pos + 1].QueryDef(needle)
     }
-    
-    // function Interpretation'(len: int) : (result: map<Key, Value>)
-    //   requires WF()
-    //   requires 0 < len <= nchildren as int
-    //   reads subtreeObjects
-    //   decreases subtreeObjects, len
-    // {
-    //   if len == 1 then
-    //     children[0].Interpretation()
-    //   else
-    //     MergeMaps(Interpretation'(len-1), pivots[len-2], children[len-1].Interpretation())
-    // }
     
     function Interpretation() : (result: map<Key, Value>)
       requires WF()
@@ -263,39 +265,20 @@ abstract module MutableBtree {
         && key in allkeys
         && key in children[Keys.LargestLte(pivots[..nchildren-1], key) + 1].Interpretation()
         :: children[Keys.LargestLte(pivots[..nchildren-1], key) + 1].Interpretation()[key];
-      
+
+      assert forall key :: QueryDef(key).Found? ==> key in children[Keys.LargestLte(pivots[..nchildren-1], key)+1].Interpretation();
+        
       result
-      //Interpretation'(nchildren as int)
     }
 
     method Query(needle: Key) returns (result: QueryResult)
       requires WF()
       ensures result == QueryDef(needle)
       decreases subtreeObjects
-    // {
-    //   Keys.reveal_IsStrictlySorted();
-    //   var pos' := Keys.InsertionPoint(pivots[..nchildren-1], needle);
-    //   var pos := pos' as uint64;
-    //   if pos == nchildren-1 {
-    //     value := children[nchildren-1].Query(needle);
-    //     assert needle in Interpretation() <==> needle in children[nchildren-1].Interpretation(); // OBSERVE
-    //     assert needle in Interpretation() ==> value == Interpretation()[needle];
-    //     assert needle !in Interpretation() ==> value == DefaultValue();
-    //   } else if needle == pivots[pos] {
-    //     value := children[pos+1].Query(needle);
-    //     assert forall i :: 0 <= i < pos ==> Keys.lt(pivots[i], needle);
-    //     assert needle in Interpretation() ==> needle in children[pos+1].Interpretation();
-    //     assert needle in Interpretation() <== needle in children[pos+1].Interpretation();
-    //     assert needle in Interpretation() ==> value == Interpretation()[needle];
-    //     assert needle !in Interpretation() ==> value == DefaultValue();
-    //   } else {
-    //     value := children[pos].Query(needle);
-    //     assert needle in Interpretation() ==> needle in children[pos].Interpretation();
-    //     assert needle in Interpretation() <== needle in children[pos].Interpretation();
-    //     assert needle in Interpretation() ==> value == Interpretation()[needle];
-    //     assert needle !in Interpretation() ==> value == DefaultValue();
-    //   }
-    // }
+    {
+      var pos := Keys.ArrayLargestLte(pivots, 0, (nchildren as int)-1, needle);
+      result := children[pos + 1].Query(needle);
+    }
 
     predicate Full()
       requires WF()
@@ -309,12 +292,41 @@ abstract module MutableBtree {
       requires !Full()
       ensures WF()
       ensures Interpretation() == old(Interpretation())[key := value]
+      ensures fresh(subtreeObjects - old(subtreeObjects))
       modifies this, subtreeObjects
+      decreases subtreeObjects
+    {
+      var pos := Keys.ArrayLargestLte(pivots, 0, (nchildren as int)-1, key);
+      if children[pos+1].Full() {
+        assume false;
+        var pivot, right := children[pos+1].Split();
+        Arrays.Insert(pivots, (nchildren as int)-1, pivot, pos+1);
+        Arrays.Insert(children, nchildren as int, right, pos+2);
+        subtreeObjects := subtreeObjects + right.subtreeObjects;
 
+        Keys.reveal_IsStrictlySorted();
+        assert Interpretation() == old(Interpretation());
+
+        if Keys.lte(pivot, key) {
+          pos := pos + 1;
+        }
+      }
+      children[pos+1].Insert(key, value);
+      subtreeObjects := subtreeObjects + children[pos+1].subtreeObjects;
+      forall key' | key' != key
+        ensures QueryDef(key') == old(QueryDef(key'))
+      {
+      }
+      assert QueryDef(key) == Found(value);
+    }
+    
     method Split() returns (pivot: Key, rightnode: Node)
       requires WF()
       requires Full()
       ensures SplitEnsures(old(Interpretation()), pivot, rightnode)
-      modifies this  
+      ensures subtreeObjects <= old(subtreeObjects)
+      ensures subtreeObjects !! rightnode.subtreeObjects
+      ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
+      modifies this
   }
 }
