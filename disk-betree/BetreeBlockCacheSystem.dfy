@@ -88,7 +88,6 @@ module BetreeBlockCacheSystem refines AsyncDiskModel {
     requires Inv(k, s)
     requires !step.TransactionStep?
     requires M.BlockCacheMove(k.machine, s.machine, s'.machine, uiop, dop, step)
-    requires uiop.NoOp?
     requires D.Next(k.disk, s.disk, s'.disk, dop)
     ensures Inv(k, s')
   {

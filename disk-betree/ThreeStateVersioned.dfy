@@ -2,13 +2,37 @@ include "MapSpec.dfy"
 include "UIStateMachine.dfy"
 include "../lib/Maps.dfy"
 
+module ThreeStateTypes {
+  datatype SyncReqStatus = State1 | State2 | State3
+
+  function SyncReqs2to1(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus> {
+    map id | id in syncReqs :: (
+      match syncReqs[id] {
+        case State1 => State1
+        case State2 => State1
+        case State3 => State3
+      }
+    )
+  }
+
+  function SyncReqs3to2(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus> {
+    map id | id in syncReqs :: (
+      match syncReqs[id] {
+        case State1 => State1
+        case State2 => State2
+        case State3 => State2
+      }
+    )
+  }
+}
+
 abstract module ThreeStateVersioned {
   import SM : UIStateMachine
 
   import opened Maps
   import UI
+  import opened ThreeStateTypes
 
-  datatype SyncReqStatus = State1 | State2 | State3
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
       s1: SM.Variables,
@@ -42,27 +66,13 @@ abstract module ThreeStateVersioned {
   predicate Move1to2(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
     && uiop.NoOp?
-    && s' == Variables(s.s2, s.s2, s.s3,
-      map id | id in s.outstandingSyncReqs :: (
-        match s.outstandingSyncReqs[id] {
-          case State1 => State1
-          case State2 => State1
-          case State3 => State3
-        }
-      ))
+    && s' == Variables(s.s2, s.s2, s.s3, SyncReqs2to1(s.outstandingSyncReqs))
   }
 
   predicate Move2to3(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
     && uiop.NoOp?
-    && s' == Variables(s.s1, s.s3, s.s3,
-      map id | id in s.outstandingSyncReqs :: (
-        match s.outstandingSyncReqs[id] {
-          case State1 => State1
-          case State2 => State2
-          case State3 => State2
-        }
-      ))
+    && s' == Variables(s.s1, s.s3, s.s3, SyncReqs3to2(s.outstandingSyncReqs))
   }
 
   predicate Move3(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)

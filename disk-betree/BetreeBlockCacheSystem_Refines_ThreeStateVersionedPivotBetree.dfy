@@ -24,6 +24,7 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
   import BI = PivotBetreeBlockInterface
   import Ref = BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface
   import D = AsyncDisk
+  import ThreeState = ThreeStateTypes
 
   import M = BetreeBlockCache
   type UIOp = BBCS.UIOp
@@ -40,7 +41,7 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
       BBCS.PersistentBetree(k, s),
       BBCS.FrozenBetree(k, s),
       BBCS.EphemeralBetree(k, s),
-      map[] // TODO
+      Ref.SyncReqs(k, s)
     )
   }
 
@@ -54,6 +55,7 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
     BCS.InitImpliesInv(k, s);
     BTI.InitImpliesInv(Ik(k).k, BBCS.PersistentBetree(k, s));
     Ref.InitImpliesGraphsEq(k, s);
+    Ref.reveal_SyncReqs();
   }
 
   lemma BetreeMoveStepRefines(k: BBCS.Constants, s: BBCS.Variables, s': BBCS.Variables, uiop: UIOp, dop: M.DiskOp, betreeStep: BetreeStep)
@@ -64,6 +66,7 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
     ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep))));
+    Ref.StepSyncReqs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep))));
     Ref.RefinesReads(k, s, BetreeStepReads(betreeStep));
     assert BT.NextStep(Ik(k).k, BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), uiop, BT.BetreeStep(betreeStep));
     BTI.NextPreservesInv(Ik(k).k, BBCS.EphemeralBetree(k, s), BBCS.EphemeralBetree(k, s'), uiop);
@@ -76,12 +79,12 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
     requires BBCS.Inv(k, s)
     requires !step.TransactionStep?
     requires M.BlockCacheMove(k.machine, s.machine, s'.machine, uiop, dop, step)
-    requires uiop.NoOp?
     requires D.Next(k.disk, s.disk, s'.disk, dop)
     ensures BBCS.Inv(k, s')
     ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, step));
+    Ref.StepSyncReqs(k, s, s', BCS.MachineStep(dop, step));
     if (step.UnallocStep?) {
       //assert BI.GC(Ik(k).bck, EphemeralBetree(k, s).bcv, s'.bcv, refs)
       Ref.UnallocStepMeetsGCConditions(k, s, s', dop, step.ref);
@@ -96,9 +99,14 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
       assert BT.NextStep(Ik(k).k, I(k, s).s3, I(k, s').s3, uiop, BT.GCStep(iset{step.ref}));
       assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move3Step);
     } else {
-      if (TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move2to3Step)) {
-        // freeze case
+      if (step.FreezeStep?) {
+        assert TSV.Move2to3(Ik(k), I(k, s), I(k, s'), uiop);
+        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move2to3Step);
         assert TSV.Next(Ik(k), I(k, s), I(k, s'), uiop);
+      } else if (step.PushSyncReqStep?) {
+        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.PushSyncStep(step.id));
+      } else if (step.PopSyncReqStep?) {
+        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.PopSyncStep(step.id));
       } else {
         // everything else is a no-op
         assert BT.NextStep(Ik(k).k, I(k, s).s3, I(k, s').s3, uiop, BT.StutterStep);
@@ -114,6 +122,7 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
     ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     Ref.StepGraphs(k, s, s', BCS.CrashStep);
+    Ref.StepSyncReqs(k, s, s', BCS.CrashStep);
     assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.CrashStep);
   }
 
@@ -125,6 +134,7 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
     ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     Ref.StepGraphs(k, s, s', BCS.DiskInternalStep(step));
+    Ref.StepSyncReqs(k, s, s', BCS.DiskInternalStep(step));
     if (TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move1to2Step)) {
       assert TSV.Next(Ik(k), I(k, s), I(k, s'), uiop);
     } else {

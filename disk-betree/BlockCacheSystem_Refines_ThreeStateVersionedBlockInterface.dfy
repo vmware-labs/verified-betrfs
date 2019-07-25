@@ -1,5 +1,6 @@
 include "BlockCache.dfy"
 include "BlockCacheSystem.dfy"
+include "ThreeStateVersioned.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
 
@@ -14,10 +15,12 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
 
   import opened Maps
   import opened Sequences
+  import opened Options
 
   import BC = BetreeGraphBlockCache
   import BI = PivotBetreeBlockInterface
   import D = AsyncDisk
+  import ThreeState = ThreeStateTypes
   type DiskOp = BC.DiskOp
 
   function Ik(k: BCS.Constants) : BI.Constants
@@ -43,10 +46,49 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   function {:opaque} FrozenGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
   requires BCS.Inv(k, s)
   {
-    MapToImap(if BCS.FrozenGraphOpt(k, s).Some? then
-      BCS.FrozenGraphOpt(k, s).value
-    else
-      BCS.PersistentGraph(k, s))
+    MapToImap(
+      if BCS.FrozenGraphOpt(k, s).Some? then
+        BCS.FrozenGraphOpt(k, s).value
+      else
+        BCS.PersistentGraph(k, s)
+    )
+  }
+  
+  function SyncReqState(k: BCS.Constants, s: BCS.Variables, status: BC.SyncReqStatus) : ThreeState.SyncReqStatus
+  {
+    match status {
+      case State1 => ThreeState.State1
+      case State2 => (
+        // It's possible that the disk has written the superblock but the BlockCache
+        // hasn't heard about it yet. In that case, we need to upgrade State2 to State1.
+        if s.machine.Ready? && s.machine.outstandingIndirectionTableWrite.Some?
+            && s.machine.outstandingIndirectionTableWrite.value in s.disk.respWrites then
+          ThreeState.State1
+        else
+          ThreeState.State2
+      )
+      case State3 => ThreeState.State3
+    }
+  }
+
+  function {:opaque} SyncReqs(k: BCS.Constants, s: BCS.Variables) : map<int, ThreeState.SyncReqStatus>
+  requires BCS.Inv(k, s)
+  {
+    map id | id in s.machine.syncReqs :: SyncReqState(k, s, s.machine.syncReqs[id])
+  }
+
+  predicate IsPersistStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
+  {
+    && s.machine.Ready?
+    && step.DiskInternalStep?
+    && step.step.ProcessWriteStep?
+    && Some(step.step.id) == s.machine.outstandingIndirectionTableWrite
+  }
+
+  predicate IsFreezeStep(step: BCS.Step)
+  {
+    && step.MachineStep?
+    && step.machineStep.FreezeStep?
   }
 
   lemma InitImpliesGraphsEq(k: BCS.Constants, s: BCS.Variables)
@@ -70,6 +112,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
             BI.Variables(EphemeralGraph(k, s)),
             BI.Variables(EphemeralGraph(k, s')),
             ops)
+  ensures SyncReqs(k, s) == SyncReqs(k, s');
   decreases |ops|
   {
     reveal_PersistentGraph();
@@ -77,12 +120,15 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
     reveal_EphemeralGraph();
     if |ops| == 0 {
     } else if |ops| == 1 {
+      reveal_SyncReqs();
       match ops[0] {
         case WriteOp(ref, block) => {
           BCS.DirtyStepUpdatesGraph(k, s, s', ref, block);
+          assert s.machine.syncReqs == s'.machine.syncReqs;
         }
         case AllocOp(ref, block) => {
           BCS.AllocStepUpdatesGraph(k, s, s', ref, block);
+          assert s.machine.syncReqs == s'.machine.syncReqs;
         }
       }
     } else {
@@ -146,7 +192,8 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
     )
 
   ensures (step.DiskInternalStep? ==>
-      && (PersistentGraph(k, s') == PersistentGraph(k, s) || PersistentGraph(k, s') == FrozenGraph(k, s))
+      && (!IsPersistStep(k, s, step) ==> PersistentGraph(k, s') == PersistentGraph(k, s))
+      && (IsPersistStep(k, s, step) ==> PersistentGraph(k, s') == FrozenGraph(k, s))
       && FrozenGraph(k, s') == FrozenGraph(k, s)
       && EphemeralGraph(k, s') == EphemeralGraph(k, s)
     )
@@ -202,6 +249,8 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
           case PageInIndirectionTableRespStep => BCS.PageInIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
           case EvictStep(ref: Reference) => BCS.EvictStepPreservesGraphs(k, s, s', dop, ref);
           case FreezeStep => BCS.FreezeStepPreservesGraphs(k, s, s', dop);
+          case PushSyncReqStep(id) => BCS.PushSyncReqStepPreservesGraphs(k, s, s', dop, id);
+          case PopSyncReqStep(id) => BCS.PopSyncReqStepPreservesGraphs(k, s, s', dop, id);
           case NoOpStep => { }
           case TransactionStep(ops) => TransactionUpdate(k, s, s', ops);
         }
@@ -216,50 +265,86 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
     }
   }
 
-  /*function I(k: BCS.Constants, s: BCS.Variables) : CSBI.Variables
-  requires BCS.Inv(k, s)
-  {
-    CSBI.Variables(
-      BI.Variables(MapToImap(persistentGraph)),
-      BI.Variables(MapToImap(ephemeralGraph))
-    )
-  }*/
-
-
-  /*
-  lemma RefinesInit(k: BCS.Constants, s: BCS.Variables)
-  requires BCS.Init(k, s)
-  ensures BCS.Inv(k, s)
-  ensures CSBI.Init(Ik(k), I(k, s))
-  {
-    //assert BI.Init(Ik(k), I(k, s).persistent);
-  }
-
-  lemma RefinesNextStep(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, step: BCS.Step)
+  lemma StepSyncReqs(k: BCS.Constants, s: BCS.Variables, s': BCS.Variables, step: BCS.Step)
   requires BCS.Inv(k, s)
   requires BCS.NextStep(k, s, s', step)
   ensures BCS.Inv(k, s')
-  ensures CSBI.Next(Ik(k), I(k, s), I(k, s'))
+
+  ensures IsPersistStep(k, s, step) ==> SyncReqs(k, s') == ThreeState.SyncReqs2to1(SyncReqs(k, s))
+  ensures IsFreezeStep(step) ==> SyncReqs(k, s') == ThreeState.SyncReqs3to2(SyncReqs(k, s))
+  ensures step.MachineStep? && step.machineStep.PushSyncReqStep? ==>
+      && step.machineStep.id !in SyncReqs(k, s)
+      && SyncReqs(k, s') == SyncReqs(k, s)[step.machineStep.id := ThreeState.State3]
+  ensures step.MachineStep? && step.machineStep.PopSyncReqStep? ==>
+      && step.machineStep.id in SyncReqs(k, s)
+      && SyncReqs(k, s)[step.machineStep.id] == ThreeState.State1
+      && SyncReqs(k, s') == MapRemove1(SyncReqs(k, s), step.machineStep.id)
+  ensures step.CrashStep? ==> SyncReqs(k, s') == map[]
+  ensures
+    && !IsPersistStep(k, s, step)
+    && !IsFreezeStep(step)
+    && !step.CrashStep?
+    && !(step.MachineStep? && step.machineStep.PushSyncReqStep?)
+    && !(step.MachineStep? && step.machineStep.PopSyncReqStep?)
+    ==> SyncReqs(k, s') == SyncReqs(k, s)
   {
-    BCS.NextPreservesInv(k, s, s');
-    match step {
-      case MachineStep(dop: DiskOp) => {
-        var mstep :| BC.NextStep(k.machine, s.machine, s'.machine, dop, mstep);
-        match mstep {
-          case WriteBackStep(ref) => RefinesWriteBack(k, s, s', dop, ref);
-          case WriteBackIndirectionTableStep => RefinesWriteBackIndirectionTable(k, s, s', dop);
-          case UnallocStep(ref) => RefinesUnalloc(k, s, s', dop, ref);
-          case PageInStep(ref) => RefinesPageIn(k, s, s', dop, ref);
-          case PageInIndirectionTableStep => RefinesPageInIndirectionTable(k, s, s', dop);
-          case EvictStep(ref) => RefinesEvict(k, s, s', dop, ref);
-          case NoOpStep => RefinesNoOp(k, s, s', dop);
-          case TransactionStep(ops) => RefinesTransaction(k, s, s', dop, ops);
+    reveal_SyncReqs();
+    BCS.NextStepPreservesInv(k, s, s', step);
+
+    if (
+      && !IsPersistStep(k, s, step)
+      && !IsFreezeStep(step)
+      && !step.CrashStep?
+      && !(step.MachineStep? && step.machineStep.PushSyncReqStep?)
+      && !(step.MachineStep? && step.machineStep.PopSyncReqStep?)
+    ) {
+      match step {
+        case MachineStep(dop, machineStep) => {
+          match machineStep {
+            case WriteBackReqStep(ref) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case WriteBackRespStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case WriteBackIndirectionTableReqStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case WriteBackIndirectionTableRespStep => {
+              /*assert SyncReqState(k, s, BC.State1) == SyncReqState(k, s', BC.State1);
+              assert SyncReqState(k, s, BC.State2) == SyncReqState(k, s', BC.State1);
+              assert SyncReqState(k, s, BC.State3) == SyncReqState(k, s', BC.State3);
+              forall id | id in SyncReqs(k, s)
+              ensures id in SyncReqs(k, s')
+              ensures SyncReqs(k, s)[id] == SyncReqs(k, s')[id]
+              {
+              }
+              forall id | id in SyncReqs(k, s')
+              ensures id in SyncReqs(k, s)
+              {
+              }*/
+              assert SyncReqs(k,s) == SyncReqs(k, s');
+            }
+            case UnallocStep(ref: Reference) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInReqStep(ref: Reference) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInRespStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInIndirectionTableReqStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInIndirectionTableRespStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case EvictStep(ref: Reference) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case FreezeStep => assert false;
+            case PushSyncReqStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PopSyncReqStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case NoOpStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case TransactionStep(ops) => {
+              TransactionUpdate(k, s, s', ops);
+              assert SyncReqs(k,s) == SyncReqs(k,s');
+            }
+          }
         }
+        case DiskInternalStep(step) => {
+          match step {
+            case ProcessReadStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case ProcessWriteStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
+          }
+        }
+        case CrashStep => assert false;
       }
-      case CrashStep => {
-        RefinesCrashStep(k, s, s');
-      }
+
+      assert SyncReqs(k,s) == SyncReqs(k,s');
     }
   }
-  */
 }
