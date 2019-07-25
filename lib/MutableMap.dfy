@@ -445,7 +445,7 @@ module MutableMap {
       ensures old(key !in Contents) ==> Count as nat == old(Count as nat) + 1
       ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
       ensures Storage.Length == old(Storage.Length)
-      ensures Repr == old(Repr) || forall r :: r in Repr ==> fresh(Repr)
+      ensures Repr == old(Repr) || fresh(Repr)
       modifies this, this.Storage
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
