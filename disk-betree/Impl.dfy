@@ -1255,8 +1255,8 @@ module {:extern} Impl refines Main {
       s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackRespStep));
     } else {
-      // TODO have the BlockCache allow this step
-      assume false;
+      s' := s;
+      assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.NoOpStep));
     }
   }
 

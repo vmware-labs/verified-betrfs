@@ -334,7 +334,13 @@ abstract module BlockCache refines Transactable {
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && (dop.RespReadOp? || dop.NoDiskOp?)
+    && (dop.RespReadOp? || dop.NoDiskOp? || (
+      && dop.RespWriteOp?
+      && !(
+        || (s.Ready? && s.outstandingIndirectionTableWrite == Some(dop.id))
+        || (s.Ready? && dop.id in s.outstandingBlockWrites)
+      )
+    ))
     && s' == s
   }
 
