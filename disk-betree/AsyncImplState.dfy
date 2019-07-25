@@ -34,8 +34,9 @@ module {:extern} ImplState {
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
+        syncReqs: map<int, BC.SyncReqStatus>,
         cache: map<Reference, Node>)
-    | Unready(outstandingIndirectionTableRead: Option<D.ReqId>)
+    | Unready(outstandingIndirectionTableRead: Option<D.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: BC.IndirectionTable)
@@ -55,8 +56,8 @@ module {:extern} ImplState {
   predicate WFVars(vars: Variables)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache) => WFCache(cache)
-      case Unready(outstandingIndirectionTableRead) => true
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) => WFCache(cache)
+      case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
   predicate WFSector(sector: Sector)
@@ -81,9 +82,9 @@ module {:extern} ImplState {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache) =>
-        BC.Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, ICache(cache))
-      case Unready(outstandingIndirectionTableRead) => BC.Unready(outstandingIndirectionTableRead)
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) =>
+        BC.Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
+      case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }
   function ISector(sector: Sector) : BC.Sector
@@ -101,7 +102,7 @@ module {:extern} ImplState {
     ensures WFVars(s)
     ensures M.Init(BC.Constants(), IVars(s));
     {
-      s := Unready(None);
+      s := Unready(None, map[]);
     }
   }
   function ImplHeapSet(hs: ImplHeapState) : set<object> { {hs} }

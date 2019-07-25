@@ -116,7 +116,7 @@ module {:extern} Impl refines Main {
   {
     if (s.outstandingIndirectionTableRead.None?) {
       var id := RequestRead(io, BC.IndirectionTableLBA());
-      s' := IS.Unready(Some(id));
+      s' := IS.Unready(Some(id), s.syncReqs);
 
       assert BC.PageInIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInIndirectionTableReqStep));
@@ -137,7 +137,7 @@ module {:extern} Impl refines Main {
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.SectorIndirectionTable?) {
-      s' := IS.Ready(sector.indirectionTable, None, sector.indirectionTable, None, map[], map[], map[]);
+      s' := IS.Ready(sector.indirectionTable, None, sector.indirectionTable, None, map[], map[], s.syncReqs, map[]);
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.PageInIndirectionTableRespStep));
     } else {
       s' := s;
@@ -1161,7 +1161,8 @@ module {:extern} Impl refines Main {
           s' := fixBigNode(k, s, io, ref, r);
         }
       } else {
-        s' := s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable));
+        s' := s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
+            .(syncReqs := BC.syncReqs3to2(s.syncReqs));
         success := false;
         assert BC.Freeze(Ik(k), IS.IVars(s), IS.IVars(s'), IDiskOp(io.diskOp()));
         assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.FreezeStep));
@@ -1261,7 +1262,8 @@ module {:extern} Impl refines Main {
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
       s' := s.(outstandingIndirectionTableWrite := None)
              .(frozenIndirectionTable := None)
-             .(persistentIndirectionTable := s.frozenIndirectionTable.value);
+             .(persistentIndirectionTable := s.frozenIndirectionTable.value)
+             .(syncReqs := BC.syncReqs2to1(s.syncReqs));
       assert ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, IDiskOp(io.diskOp()), ADM.M.BlockCacheMoveStep(BC.WriteBackIndirectionTableRespStep));
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
       s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));

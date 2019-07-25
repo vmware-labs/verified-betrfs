@@ -679,10 +679,12 @@ abstract module AsyncBlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures M.Inv(k.machine, s'.machine)
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
+    M.WriteBackIndirectionTableRespStepPreservesInv(k.machine, s.machine, s'.machine, dop);
   }
 
   lemma WriteBackIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -691,6 +693,7 @@ abstract module AsyncBlockCacheSystem {
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    M.WriteBackIndirectionTableRespStepPreservesInv(k.machine, s.machine, s'.machine, dop);
     WriteBackIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
@@ -929,10 +932,12 @@ abstract module AsyncBlockCacheSystem {
     requires Inv(k, s)
     requires M.Freeze(k.machine, s.machine, s'.machine, dop)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures M.Inv(k.machine, s'.machine);
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == Some(EphemeralGraph(k, s));
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
+    M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop);
   }
 
   lemma FreezeStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -941,7 +946,48 @@ abstract module AsyncBlockCacheSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop);
     FreezeStepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma PushSyncReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+    requires Inv(k, s)
+    requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, id)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures M.Inv(k.machine, s'.machine);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+  {
+  }
+
+  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+    requires Inv(k, s)
+    requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, id)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PushSyncReqStepPreservesGraphs(k, s, s', dop, id);
+  }
+
+  lemma PopSyncReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+    requires Inv(k, s)
+    requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, id)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures M.Inv(k.machine, s'.machine);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+  {
+  }
+
+  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+    requires Inv(k, s)
+    requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, id)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PopSyncReqStepPreservesGraphs(k, s, s', dop, id);
   }
 
   lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, machineStep: M.Step)
@@ -961,6 +1007,8 @@ abstract module AsyncBlockCacheSystem {
       case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop);
+      case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, id);
+      case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, id);
       case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, ops);
     }

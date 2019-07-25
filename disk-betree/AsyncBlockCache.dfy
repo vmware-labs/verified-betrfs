@@ -34,6 +34,8 @@ abstract module AsyncBlockCache refines Transactable {
   datatype OutstandingWrite = OutstandingWrite(ref: Reference, lba: LBA)
   datatype OutstandingRead = OutstandingRead(ref: Reference)
 
+  datatype SyncReqStatus = State1 | State2 | State3
+
   datatype Variables =
     | Ready(
         persistentIndirectionTable: IndirectionTable,
@@ -43,9 +45,13 @@ abstract module AsyncBlockCache refines Transactable {
         outstandingIndirectionTableWrite: Option<ReqId>,
         outstandingBlockWrites: map<ReqId, OutstandingWrite>,
         outstandingBlockReads: map<ReqId, OutstandingRead>,
+        syncReqs: map<int, SyncReqStatus>,
 
         cache: map<Reference, Node>)
-    | Unready(outstandingIndirectionTableRead: Option<ReqId>)
+    | Unready(
+        outstandingIndirectionTableRead: Option<ReqId>,
+        syncReqs: map<int, SyncReqStatus>
+        )
 
   predicate IsAllocated(s: Variables, ref: Reference)
   requires s.Ready?
@@ -105,6 +111,8 @@ abstract module AsyncBlockCache refines Transactable {
     | PageInIndirectionTableRespStep
     | EvictStep(ref: Reference)
     | FreezeStep
+    | PushSyncReqStep(id: int)
+    | PopSyncReqStep(id: int)
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
@@ -142,6 +150,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s'.outstandingBlockWrites == s.outstandingBlockWrites[dop.id := OutstandingWrite(ref, dop.reqWrite.lba)]
     && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.outstandingIndirectionTableWrite == s.outstandingIndirectionTableWrite
+    && s'.syncReqs == s.syncReqs
   }
 
   predicate WriteBackResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -166,6 +175,16 @@ abstract module AsyncBlockCache refines Transactable {
     && s' == s.(outstandingIndirectionTableWrite := Some(dop.id))
   }
 
+  function method syncReqs3to2(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus>
+  {
+    map id | id in syncReqs :: (if syncReqs[id] == State3 then State2 else syncReqs[id])
+  }
+
+  function method syncReqs2to1(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus>
+  {
+    map id | id in syncReqs :: (if syncReqs[id] == State2 then State1 else syncReqs[id])
+  }
+
   predicate WriteBackIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteOp?
@@ -176,6 +195,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s' == s.(outstandingIndirectionTableWrite := None)
               .(frozenIndirectionTable := None)
               .(persistentIndirectionTable := s.frozenIndirectionTable.value)
+              .(syncReqs := syncReqs2to1(s.syncReqs))
   }
 
   predicate NoPredecessors(graph: map<Reference, seq<Reference>>, ref: Reference)
@@ -211,6 +231,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s'.outstandingBlockWrites == s.outstandingBlockWrites
     && s'.outstandingBlockReads == OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref)
     && s'.frozenIndirectionTable == s.frozenIndirectionTable
+    && s'.syncReqs == s.syncReqs
   }
 
   predicate PageInReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -246,7 +267,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s.Unready?
     && s.outstandingIndirectionTableRead.None?
     && dop.reqRead.lba == IndirectionTableLBA()
-    && s' == Unready(Some(dop.id))
+    && s' == Unready(Some(dop.id), s.syncReqs)
   }
 
   predicate PageInIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -256,7 +277,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s.outstandingIndirectionTableRead == Some(dop.id)
     && dop.respRead.sector.SectorIndirectionTable?
     && WFCompleteIndirectionTable(dop.respRead.sector.indirectionTable)
-    && s' == Ready(dop.respRead.sector.indirectionTable, None, dop.respRead.sector.indirectionTable, None, map[], map[], map[])
+    && s' == Ready(dop.respRead.sector.indirectionTable, None, dop.respRead.sector.indirectionTable, None, map[], map[], s.syncReqs, map[])
   }
 
   predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -278,7 +299,24 @@ abstract module AsyncBlockCache refines Transactable {
     && s.Ready?
     && dop.NoDiskOp?
     && s.outstandingIndirectionTableWrite.None?
-    && s' == s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
+    && s' ==
+        s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
+         .(syncReqs := syncReqs3to2(s.syncReqs))
+  }
+
+  predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  {
+    && dop.NoDiskOp?
+    && id !in s.syncReqs
+    && s' == s.(syncReqs := s.syncReqs[id := State3])
+  }
+
+  predicate PopSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  {
+    && dop.NoDiskOp?
+    && id in s.syncReqs
+    && s.syncReqs[id] == State1
+    && s' == s.(syncReqs := MapRemove1(s.syncReqs, id))
   }
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -317,6 +355,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s'.outstandingBlockWrites == s.outstandingBlockWrites
     && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.frozenIndirectionTable == s.frozenIndirectionTable
+    && s'.syncReqs == s.syncReqs
   }
 
   predicate Alloc(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -341,6 +380,7 @@ abstract module AsyncBlockCache refines Transactable {
     && s'.outstandingBlockWrites == s.outstandingBlockWrites
     && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.frozenIndirectionTable == s.frozenIndirectionTable
+    && s'.syncReqs == s.syncReqs
   }
 
   predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
@@ -364,7 +404,7 @@ abstract module AsyncBlockCache refines Transactable {
 
   predicate Init(k: Constants, s: Variables)
   {
-    s == Unready(None)
+    s == Unready(None, map[])
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step) {
@@ -380,6 +420,8 @@ abstract module AsyncBlockCache refines Transactable {
       case PageInIndirectionTableRespStep => PageInIndirectionTableResp(k, s, s', dop)
       case EvictStep(ref) => Evict(k, s, s', dop, ref)
       case FreezeStep => Freeze(k, s, s', dop)
+      case PushSyncReqStep(id: int) => PushSyncReq(k, s, s', dop, id)
+      case PopSyncReqStep(id: int) => PopSyncReq(k, s, s', dop, id)
       case NoOpStep => NoOp(k, s, s', dop)
       case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
     }
@@ -437,7 +479,7 @@ abstract module AsyncBlockCache refines Transactable {
 
   predicate Inv(k: Constants, s: Variables)
   {
-    s.Ready? ==> InvReady(k, s)
+    && (s.Ready? ==> InvReady(k, s))
   }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
@@ -603,6 +645,26 @@ abstract module AsyncBlockCache refines Transactable {
     }
   }
 
+  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+    requires Inv(k, s)
+    requires PushSyncReq(k, s, s', dop, id)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
+  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+    requires Inv(k, s)
+    requires PopSyncReq(k, s, s', dop, id)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', dop, step)
@@ -620,6 +682,8 @@ abstract module AsyncBlockCache refines Transactable {
       case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop);
+      case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, id);
+      case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, id);
       case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, ops);
     }
