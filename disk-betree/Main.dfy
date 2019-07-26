@@ -1,6 +1,6 @@
 include "MapSpec.dfy"
 include "ThreeStateVersionedMap.dfy"
-include "AsyncDiskModel.dfy"
+include "AsyncSectorDiskModel.dfy"
 include "../lib/NativeTypes.dfy"
 
 module DiskTypes {
@@ -10,8 +10,8 @@ module DiskTypes {
 }
 
 abstract module Main {
-  import ADM : AsyncDiskModel
-  import D = AsyncDisk
+  import ADM : AsyncSectorDiskModel
+  import D = AsyncSectorDisk
 
   import MS = MapSpec
   import ThreeStateVersionedMap

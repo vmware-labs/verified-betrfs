@@ -11,7 +11,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   // So for now, we just prove the refinement specifically for BetreeGraph.
   import opened G = PivotBetreeGraph
   import BCS = BetreeGraphBlockCacheSystem
-  import opened AsyncDiskModelTypes
+  import opened AsyncSectorDiskModelTypes
 
   import opened Maps
   import opened Sequences
@@ -19,7 +19,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
 
   import BC = BetreeGraphBlockCache
   import BI = PivotBetreeBlockInterface
-  import D = AsyncDisk
+  import D = AsyncSectorDisk
   import ThreeState = ThreeStateTypes
   type DiskOp = BC.DiskOp
 
@@ -133,7 +133,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
       }
     } else {
       var ops1, mid, ops2 := BC.SplitTransaction(k.machine, s.machine, s'.machine, ops);
-      var smid := AsyncDiskModelVariables(mid, s.disk);
+      var smid := AsyncSectorDiskModelVariables(mid, s.disk);
       TransactionUpdate(k, s, smid, ops1);
       TransactionUpdate(k, smid, s', ops2);
       BI.JoinTransactions(BI.Constants(),

@@ -2,7 +2,7 @@ include "Betree.dfy"
 include "../lib/sequences.dfy"
 include "../lib/Maps.dfy"
 include "Graph.dfy"
-include "AsyncDiskModel.dfy"
+include "AsyncSectorDiskModel.dfy"
 include "PivotBetreeSpec.dfy"
 
 module LBAType {
@@ -24,7 +24,7 @@ abstract module BlockCache refines Transactable {
   import opened Options
   import LBAType
 
-  import Disk = AsyncDisk
+  import Disk = AsyncSectorDisk
 
   type ReqId = Disk.ReqId
   type LBA = LBAType.LBA

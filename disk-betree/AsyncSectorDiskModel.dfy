@@ -4,12 +4,12 @@ include "../lib/Maps.dfy"
 // TODO model the disk as an array of bytes
 // TODO disallow overlapping writes/reads
 
-module AsyncDiskModelTypes {
-  datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
-  datatype AsyncDiskModelVariables<M,D> = AsyncDiskModelVariables(machine: M, disk: D)
+module AsyncSectorDiskModelTypes {
+  datatype AsyncSectorDiskModelConstants<M,D> = AsyncSectorDiskModelConstants(machine: M, disk: D)
+  datatype AsyncSectorDiskModelVariables<M,D> = AsyncSectorDiskModelVariables(machine: M, disk: D)
 }
 
-module AsyncDisk {
+module AsyncSectorDisk {
   import opened NativeTypes
   import opened Maps
 
@@ -147,8 +147,8 @@ module AsyncDisk {
   }
 }
 
-abstract module AsyncDiskMachine {
-  import D = AsyncDisk
+abstract module AsyncSectorDiskMachine {
+  import D = AsyncSectorDisk
   import UI
 
   type Variables
@@ -167,14 +167,14 @@ abstract module AsyncDiskMachine {
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
 }
 
-abstract module AsyncDiskModel {
-  import D = AsyncDisk
-  import M : AsyncDiskMachine
-  import AsyncDiskModelTypes
+abstract module AsyncSectorDiskModel {
+  import D = AsyncSectorDisk
+  import M : AsyncSectorDiskMachine
+  import AsyncSectorDiskModelTypes
 
   type DiskOp = M.DiskOp
-  type Constants = AsyncDiskModelTypes.AsyncDiskModelConstants<M.Constants, D.Constants>
-  type Variables = AsyncDiskModelTypes.AsyncDiskModelVariables<M.Variables, D.Variables<M.LBA, M.Sector>>
+  type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
+  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables<M.LBA, M.Sector>>
   type UIOp = M.UIOp
 
   datatype Step =

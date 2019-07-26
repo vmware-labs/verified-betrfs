@@ -3,19 +3,19 @@ include "PivotBetreeSpec.dfy"
 
 abstract module BlockCacheSystem {
   import M : BlockCache
-  import D = AsyncDisk
+  import D = AsyncSectorDisk
 
   import opened Maps
   import opened Sequences
   import opened Options
-  import opened AsyncDiskModelTypes
+  import opened AsyncSectorDiskModelTypes
 
   type LBA = M.LBA
   type Sector = M.Sector
   type DiskOp = M.DiskOp
 
-  type Constants = AsyncDiskModelConstants<M.Constants, D.Constants>
-  type Variables = AsyncDiskModelVariables<M.Variables, D.Variables<LBA, Sector>>
+  type Constants = AsyncSectorDiskModelConstants<M.Constants, D.Constants>
+  type Variables = AsyncSectorDiskModelVariables<M.Variables, D.Variables<LBA, Sector>>
 
   type IndirectionTable = M.IndirectionTable
   type Reference = M.G.Reference
@@ -767,8 +767,8 @@ abstract module BlockCacheSystem {
       OpPreservesInv(k, s, s', ops[0]);
     } else {
       var ops1, smid, ops2 := M.SplitTransaction(k.machine, s.machine, s'.machine, ops);
-      TransactionStepPreservesInv(k, s, AsyncDiskModelVariables(smid, s.disk), dop, ops1);
-      TransactionStepPreservesInv(k, AsyncDiskModelVariables(smid, s.disk), s', dop, ops2);
+      TransactionStepPreservesInv(k, s, AsyncSectorDiskModelVariables(smid, s.disk), dop, ops1);
+      TransactionStepPreservesInv(k, AsyncSectorDiskModelVariables(smid, s.disk), s', dop, ops2);
     }
   }
 

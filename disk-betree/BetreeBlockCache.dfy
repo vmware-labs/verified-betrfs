@@ -1,11 +1,11 @@
 include "BlockCache.dfy"
 include "../lib/Maps.dfy"
 include "../lib/sequences.dfy"
-include "AsyncDiskModel.dfy"
+include "AsyncSectorDiskModel.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"
 
-module BetreeBlockCache refines AsyncDiskMachine {
+module BetreeBlockCache refines AsyncSectorDiskMachine {
   import opened Maps
   import opened Sequences
 

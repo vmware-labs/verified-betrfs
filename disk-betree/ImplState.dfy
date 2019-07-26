@@ -15,7 +15,7 @@ module {:extern} ImplState {
   import BC = BetreeGraphBlockCache
   import M = BetreeBlockCache
   import SSTable = SSTable
-  import D = AsyncDisk
+  import D = AsyncSectorDisk
 
   type Reference = BT.G.Reference
   type Key = MS.Key
