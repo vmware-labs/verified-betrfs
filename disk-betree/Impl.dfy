@@ -752,7 +752,8 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  // TODO FIXME this method is flaky and takes a long time to verify
+  method {:fuel BT.NodeHasWFBuckets,0} doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   returns (s': Variables)
   requires s.Ready?
   requires IS.WFVars(s)
