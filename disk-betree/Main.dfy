@@ -59,15 +59,15 @@ abstract module Main {
 
   predicate ValidReqRead(reqRead: ReqRead) { true }
   predicate ValidReqWrite(reqWrite: ReqWrite) { ValidSector(reqWrite.sector) }
-  predicate ValidRespRead(respRead: RespRead) { ValidSector(respRead.sector) }
+  predicate ValidRespRead(respRead: RespRead) { respRead.sector.Some? ==> ValidSector(respRead.sector.value) }
   predicate ValidRespWrite(respWrite: RespWrite) { true }
   predicate ValidDiskOp(dop: DiskOp)
   {
     match dop {
-      case ReqReadOp(id, reqRead) => true
-      case ReqWriteOp(id, reqWrite) => ValidSector(reqWrite.sector)
-      case RespReadOp(id, respRead) => ValidSector(respRead.sector)
-      case RespWriteOp(id, respWrite) => true
+      case ReqReadOp(id, reqRead) => ValidReqRead(reqRead)
+      case ReqWriteOp(id, reqWrite) => ValidReqWrite(reqWrite)
+      case RespReadOp(id, respRead) => ValidRespRead(respRead)
+      case RespWriteOp(id, respWrite) => ValidRespWrite(respWrite)
       case NoDiskOp => true
     }
   }
@@ -93,7 +93,7 @@ abstract module Main {
     requires diskOp().RespReadOp?
     ensures sector.Length == BlockSize() as int
     ensures ValidSector(sector[..])
-    ensures diskOp() == D.RespReadOp(id, D.RespRead(sector[..]))
+    ensures diskOp() == D.RespReadOp(id, D.RespRead(Some(sector[..])))
 
     function {:axiom} diskOp() : DiskOp
     reads this
@@ -119,7 +119,10 @@ abstract module Main {
   function IRespRead(respRead: RespRead) : ADM.M.RespRead
   requires ValidRespRead(respRead)
   {
-    D.RespRead(ISector(respRead.sector))
+    D.RespRead(match respRead.sector {
+      case Some(sector) => Some(ISector(sector))
+      case None => None
+    })
   }
   function IRespWrite(respWrite: RespWrite) : ADM.M.RespWrite
   requires ValidRespWrite(respWrite)

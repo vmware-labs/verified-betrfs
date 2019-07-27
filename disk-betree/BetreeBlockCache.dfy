@@ -52,8 +52,8 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
     && (!step.PushSyncReqStep? && !step.PopSyncReqStep? ==> uiop.NoOp?)
 
     && BC.NextStep(k, s, s', dop, step)
-    && (dop.RespReadOp? && dop.respRead.sector.SectorBlock? ==>
-      WFNode(dop.respRead.sector.block)
+    && (dop.RespReadOp? && dop.respRead.sector.Some? && dop.respRead.sector.value.SectorBlock? ==>
+      WFNode(dop.respRead.sector.value.block)
     )
   }
 

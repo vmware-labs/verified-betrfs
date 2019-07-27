@@ -78,7 +78,7 @@ module {:extern} Impl refines Main {
   returns (id: D.ReqId, sector: IS.Sector)
   requires io.diskOp().RespReadOp?
   ensures IS.WFSector(sector)
-  ensures IDiskOp(io.diskOp()) == D.RespReadOp(id, D.RespRead(IS.ISector(sector)))
+  ensures IDiskOp(io.diskOp()) == D.RespReadOp(id, D.RespRead(Some(IS.ISector(sector))))
   {
     var id1, bytes := io.getReadResult();
     id := id1;

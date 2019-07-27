@@ -278,7 +278,7 @@ abstract module BlockCacheSystem {
     && var sector := s.disk.blocks[lba];
     && !(id in s.disk.reqReads && id in s.disk.respReads)
     && (id in s.disk.reqReads ==> s.disk.reqReads[id] == D.ReqRead(lba))
-    && (id in s.disk.respReads ==> s.disk.respReads[id] == D.RespRead(sector))
+    && (id in s.disk.respReads ==> s.disk.respReads[id] == D.RespRead(Some(sector)))
   }
 
   predicate CorrectInflightBlockReads(k: Constants, s: Variables)
@@ -299,7 +299,7 @@ abstract module BlockCacheSystem {
         s.disk.reqReads[reqId] == D.ReqRead(M.IndirectionTableLBA())
       )
       && (reqId in s.disk.respReads ==>
-        s.disk.respReads[reqId] == D.RespRead(M.SectorIndirectionTable(DiskIndirectionTable(s.disk.blocks)))
+        s.disk.respReads[reqId] == D.RespRead(Some(M.SectorIndirectionTable(DiskIndirectionTable(s.disk.blocks))))
       )
     )
   }

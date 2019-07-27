@@ -11,12 +11,13 @@ module AsyncSectorDiskModelTypes {
 module AsyncSectorDisk {
   import opened NativeTypes
   import opened Maps
+  import opened Options
 
   type ReqId = uint64
 
   datatype ReqRead<LBA> = ReqRead(lba: LBA)
   datatype ReqWrite<LBA, Sector> = ReqWrite(lba: LBA, sector: Sector)
-  datatype RespRead<Sector> = RespRead(sector: Sector)
+  datatype RespRead<Sector> = RespRead(sector: Option<Sector>)
   datatype RespWrite = RespWrite
 
   datatype DiskOp<LBA(==), Sector> =
@@ -113,9 +114,8 @@ module AsyncSectorDisk {
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
-    && req.lba in s.blocks
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(s.blocks[req.lba])])
+              .(respReads := s.respReads[id := RespRead(MapLookupOption(s.blocks, req.lba))])
   }
 
   predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)

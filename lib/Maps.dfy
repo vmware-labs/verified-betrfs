@@ -1,4 +1,5 @@
 module Maps {
+  import opened Options
 
   predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
     k in m && m[k] == v
@@ -159,5 +160,10 @@ module Maps {
 	requires forall key | key in m :: (key in m1 || key in m2)
 	ensures m == MapUnion(m1, m2)
 	{
+	}
+
+	function MapLookupOption<K,V>(m: map<K,V>, key: K) : Option<V>
+	{
+	  if key in m then Some(m[key]) else None
 	}
 }

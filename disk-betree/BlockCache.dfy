@@ -266,8 +266,9 @@ abstract module BlockCache refines Transactable {
     && dop.id in s.outstandingBlockReads
     && var ref := s.outstandingBlockReads[dop.id].ref;
     && ref !in s.cache
-    && dop.respRead.sector.SectorBlock?
-    && var block := dop.respRead.sector.block;
+    && dop.respRead.sector.Some?
+    && dop.respRead.sector.value.SectorBlock?
+    && var block := dop.respRead.sector.value.block;
     && ref in s.ephemeralIndirectionTable.graph
     && (iset r | r in s.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
     && s' == s.(cache := s.cache[ref := block])
@@ -288,9 +289,10 @@ abstract module BlockCache refines Transactable {
     && dop.RespReadOp?
     && s.Unready?
     && s.outstandingIndirectionTableRead == Some(dop.id)
-    && dop.respRead.sector.SectorIndirectionTable?
-    && WFCompleteIndirectionTable(dop.respRead.sector.indirectionTable)
-    && s' == Ready(dop.respRead.sector.indirectionTable, None, dop.respRead.sector.indirectionTable, None, map[], map[], s.syncReqs, map[])
+    && dop.respRead.sector.Some?
+    && dop.respRead.sector.value.SectorIndirectionTable?
+    && WFCompleteIndirectionTable(dop.respRead.sector.value.indirectionTable)
+    && s' == Ready(dop.respRead.sector.value.indirectionTable, None, dop.respRead.sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[])
   }
 
   predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
