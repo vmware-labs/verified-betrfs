@@ -35,7 +35,7 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     IS.ISector(Marshalling.parseSector(sector).value)
   }
 
-  predicate ValidReqRead(reqRead: D.ReqRead) { true }
+  predicate ValidReqRead(reqRead: D.ReqRead) { reqRead.len as int == BlockSize() }
   predicate ValidReqWrite(reqWrite: D.ReqWrite) { ValidBytes(reqWrite.bytes) }
   predicate ValidRespRead(respRead: D.RespRead) { ValidBytes(respRead.bytes) }
   predicate ValidRespWrite(respWrite: D.RespWrite) { true }

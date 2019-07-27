@@ -1,7 +1,6 @@
 include "MapSpec.dfy"
 include "../lib/Maps.dfy"
 
-// TODO model the disk as an array of bytes
 // TODO disallow overlapping writes/reads
 
 module AsyncDiskModelTypes {
