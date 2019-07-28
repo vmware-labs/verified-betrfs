@@ -5,6 +5,7 @@ include "ImplState.dfy"
 
 module ByteBetreeBlockCache refines AsyncDiskMachine {
   import opened NativeTypes
+  import opened Options
 
   import BBC = BetreeBlockCache
   import Marshalling
@@ -35,17 +36,25 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     IS.ISector(Marshalling.parseSector(sector).value)
   }
 
-  predicate ValidReqRead(reqRead: D.ReqRead) { reqRead.len as int == BlockSize() }
-  predicate ValidReqWrite(reqWrite: D.ReqWrite) { ValidBytes(reqWrite.bytes) }
-  predicate ValidRespRead(respRead: D.RespRead) { ValidBytes(respRead.bytes) }
+  function IBytesOpt(sector: seq<byte>) : Option<BBC.Sector>
+  {
+    if ValidBytes(sector) then
+      Some(IBytes(sector))
+    else
+      None
+  }
+
+  predicate ValidReqRead(reqRead: D.ReqRead) { ValidAddr(reqRead.addr) && reqRead.len as int == BlockSize() }
+  predicate ValidReqWrite(reqWrite: D.ReqWrite) { ValidAddr(reqWrite.addr) && ValidBytes(reqWrite.bytes) }
+  predicate ValidRespRead(respRead: D.RespRead) { true }
   predicate ValidRespWrite(respWrite: D.RespWrite) { true }
   predicate ValidDiskOp(dop: D.DiskOp)
   {
     match dop {
-      case ReqReadOp(id, reqRead) => ValidAddr(reqRead.addr)
-      case ReqWriteOp(id, reqWrite) => ValidAddr(reqWrite.addr) && ValidBytes(reqWrite.bytes)
-      case RespReadOp(id, respRead) => ValidBytes(respRead.bytes)
-      case RespWriteOp(id, respWrite) => true
+      case ReqReadOp(id, reqRead) => ValidReqRead(reqRead)
+      case ReqWriteOp(id, reqWrite) => ValidReqWrite(reqWrite)
+      case RespReadOp(id, respRead) => ValidRespRead(respRead)
+      case RespWriteOp(id, respWrite) => ValidRespWrite(respWrite)
       case NoDiskOp => true
     }
   }
@@ -61,9 +70,8 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     SD.ReqWrite(reqWrite.addr, IBytes(reqWrite.bytes))
   }
   function IRespRead(respRead: D.RespRead) : SD.RespRead<BBC.Sector>
-  requires ValidRespRead(respRead)
   {
-    SD.RespRead(IBytes(respRead.bytes))
+    SD.RespRead(IBytesOpt(respRead.bytes))
   }
   function IRespWrite(respWrite: D.RespWrite) : SD.RespWrite
   requires ValidRespWrite(respWrite)

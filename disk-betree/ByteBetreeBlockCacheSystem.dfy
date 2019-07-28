@@ -7,6 +7,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
 
   import opened NativeTypes
   import opened AsyncSectorDiskModelTypes
+  import opened Maps
   import BC = BetreeGraphBlockCache
   import BBC = BetreeBlockCache
   import BBCS = BetreeBlockCacheSystem
@@ -98,30 +99,149 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   }
 
   lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
+  DiskRecvReadStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  requires Inv(k, s)
+  requires M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+  requires D.RecvRead(k.disk, s.disk, s'.disk, dop)
+  ensures M.ValidDiskOp(dop)
+  ensures ValidDisk(s'.disk)
+  ensures SD.Next(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop))
+  {
+    assert SD.NextStep(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop), SD.RecvReadStep);
+  }
+
+  lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
+  DiskRecvWriteStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  requires Inv(k, s)
+  requires M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+  requires D.RecvWrite(k.disk, s.disk, s'.disk, dop)
+  ensures M.ValidDiskOp(dop)
+  ensures ValidDisk(s'.disk)
+  ensures SD.Next(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop))
+  {
+    assert SD.NextStep(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop), SD.RecvWriteStep);
+  }
+
+  lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
+  DiskAckReadStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  requires Inv(k, s)
+  requires M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+  requires D.AckRead(k.disk, s.disk, s'.disk, dop)
+  ensures M.ValidDiskOp(dop)
+  ensures ValidDisk(s'.disk)
+  ensures SD.Next(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop))
+  {
+    assert SD.NextStep(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop), SD.AckReadStep);
+  }
+
+  lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
+  DiskAckWriteStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  requires Inv(k, s)
+  requires M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+  requires D.AckWrite(k.disk, s.disk, s'.disk, dop)
+  ensures M.ValidDiskOp(dop)
+  ensures ValidDisk(s'.disk)
+  ensures SD.Next(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop))
+  {
+    assert SD.NextStep(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop), SD.AckWriteStep);
+  }
+
+  lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
+  DiskNextStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: D.Step)
+  requires Inv(k, s)
+  requires M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+  requires D.NextStep(k.disk, s.disk, s'.disk, dop, step)
+  ensures M.ValidDiskOp(dop)
+  ensures ValidDisk(s'.disk)
+  ensures SD.Next(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop))
+  {
+    match step {
+      case RecvReadStep => DiskRecvReadStepRefines(k, s, s', uiop, dop);
+      case RecvWriteStep => DiskRecvWriteStepRefines(k, s, s', uiop, dop);
+      case AckReadStep => DiskAckReadStepRefines(k, s, s', uiop, dop);
+      case AckWriteStep => DiskAckWriteStepRefines(k, s, s', uiop, dop);
+      case StutterStep => {
+        assert SD.NextStep(SD.Constants(), IDisk(s.disk), IDisk(s'.disk), IDiskOp(dop), SD.StutterStep);
+      }
+    }
+  }
+
+  lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
+  DiskNextRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  requires Inv(k, s)
+  requires M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+  requires D.Next(k.disk, s.disk, s'.disk, dop)
+  ensures M.ValidDiskOp(dop)
+  ensures ValidDisk(s'.disk)
+  ensures SD.Next(Ik(k).disk, I(k,s).disk, I(k,s').disk, IDiskOp(dop))
+  {
+    var step :| D.NextStep(k.disk, s.disk, s'.disk, dop, step);
+    DiskNextStepRefines(k, s, s', uiop, dop, step);
+  }
+
+  lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
   MachineStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
   requires Inv(k, s)
   requires Machine(k, s, s', uiop, dop)
   ensures Inv(k, s')
   ensures BBCS.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
+    var step :| M.NextStep(k.machine, s.machine, s'.machine, uiop, dop, step);
+    assert BBC.NextStep(k.machine, s.machine, s'.machine, uiop, IDiskOp(dop), step.step);
+    assert Ik(k).machine == k.machine;
+    assert I(k, s).machine == s.machine;
+    assert I(k, s').machine == s'.machine;
+    assert BBC.NextStep(Ik(k).machine, I(k, s).machine, I(k, s').machine, uiop, IDiskOp(dop), step.step);
+
+    DiskNextRefines(k, s, s', uiop, dop);
+
+    assert BBCS.Machine(Ik(k), I(k, s), I(k, s'), uiop, IDiskOp(dop));
+    assert BBCS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, BBCS.MachineStep(IDiskOp(dop)));
+    BBCS.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
-  lemma {:fuel M.IBytes,0}
+  lemma {:fuel M.IBytes,0} {:fuel BC.Inv,0} {:fuel BC.WFIndirectionTable,0} {:fuel BC.WFCompleteIndirectionTable,0} {:fuel BC.GraphClosed,0}
   ProcessReadRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId)
   requires Inv(k, s)
   requires D.ProcessRead(k.disk, s.disk, s'.disk, id)
   ensures ValidDisk(s'.disk)
   ensures SD.ProcessRead(Ik(k).disk, I(k, s).disk, I(k, s').disk, id)
   {
-    var req := s.disk.reqReads[id];
-    assert req.addr in IContents(s.disk.contents);
-    //assert s.disk.contents[req.addr .. req.addr as int + req.len as int] ==
-     //   IContents(s.disk.contents)[req.addr];
-    assert M.ValidBytes(s.disk.contents[req.addr .. req.addr as int + req.len as int]);
-    assert M.ValidRespRead(D.RespRead(s.disk.contents[req.addr .. req.addr as int + req.len as int]));
-    forall id | id in s'.disk.respReads
-    ensures M.ValidRespRead(s'.disk.respReads[id])
-    {
+  }
+
+  lemma SplicePreserves(bytes: seq<byte>, start: uint64, ins: seq<byte>, other: uint64)
+  requires 0 <= start
+  requires start as int + |ins| <= |bytes|
+  requires 0 <= other
+  requires other != start
+  requires other as int + M.BlockSize() <= |bytes|
+  requires M.ValidAddr(start)
+  requires M.ValidAddr(other)
+  requires |ins| == M.BlockSize()
+  ensures |D.splice(bytes, start as int, ins)| == |bytes|
+  ensures bytes[other .. other as int + M.BlockSize()]
+      == D.splice(bytes, start as int, ins)[other .. other as int + M.BlockSize()]
+  {
+    D.reveal_splice();
+    M.reveal_ValidAddr();
+    if (other < start) {
+      assert other as int + M.BlockSize() <= start as int;
+      assert D.splice(bytes, start as int, ins)[other .. other as int + M.BlockSize()]
+          == bytes[.. start][other .. other as int + M.BlockSize()];
+
+      assert bytes[.. start][other .. other as int + M.BlockSize()]
+          == bytes[other .. other as int + M.BlockSize()];
+    } else {
+      var s :| start as int == s * M.BlockSize();
+      var o :| other as int == o * M.BlockSize();
+      assert o >= s + 1;
+      assert other as int >= start as int + |ins|
+          == |bytes[..start] + ins|;
+      assert D.splice(bytes, start as int, ins)[other .. other as int + M.BlockSize()]
+          == bytes[start as int + |ins| ..][other as int - |bytes[..start] + ins| .. other as int + M.BlockSize() - |bytes[..start] + ins|]
+          == bytes[start as int + |ins| ..][other as int - (start as int + |ins|).. other as int + M.BlockSize() - (start as int + |ins|)]
+          == bytes[other .. other as int + M.BlockSize()];
+
     }
   }
 
@@ -131,6 +251,55 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
   ensures ValidDisk(s'.disk)
   ensures SD.ProcessWrite(Ik(k).disk, I(k, s).disk, I(k, s').disk, id)
+  {
+    var req1 := s.disk.reqWrites[id];
+    var bytes := req1.bytes;
+
+    var req := I(k,s).disk.reqWrites[id];
+    assert I(k,s').disk.reqWrites == MapRemove1(I(k,s).disk.reqWrites, id);
+    assert I(k,s').disk.respWrites == I(k,s).disk.respWrites[id := SD.RespWrite];
+
+    var b1 := I(k,s).disk.blocks[req.lba := req.sector];
+    var b2 := I(k,s').disk.blocks;
+
+    D.reveal_splice();
+    assert 0 <= req.lba;
+    assert req.lba as int + M.BlockSize() <= |s'.disk.contents|;
+    assert req.lba == req1.addr;
+    assert M.BlockSize() == |req1.bytes|;
+    assert |s.disk.contents| == |s'.disk.contents|;
+
+    forall lba:uint64 | lba in b1
+    ensures lba in b2
+    ensures b1[lba] == b2[lba]
+    {
+      if (lba == req.lba) {
+        assert bytes
+            == s'.disk.contents[lba .. lba as int + M.BlockSize()];
+        assert lba in b2;
+        assert b1[lba] == b2[lba];
+      } else {
+        SplicePreserves(s.disk.contents, req1.addr, req1.bytes, lba);
+        assert s.disk.contents[lba .. lba as int + M.BlockSize()]
+            == s'.disk.contents[lba .. lba as int + M.BlockSize()];
+        assert lba in b2;
+        assert b1[lba] == b2[lba];
+      }
+    }
+
+    forall lba | lba in b2
+    ensures lba in b1
+    {
+      if (lba == req.lba) {
+        assert bytes
+            == s'.disk.contents[lba .. lba as int + M.BlockSize()];
+      } else {
+        SplicePreserves(s.disk.contents, req1.addr, req1.bytes, lba);
+      }
+    }
+
+    assert I(k,s').disk.blocks == I(k,s).disk.blocks[req.lba := req.sector];
+  }
 
   lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
   DiskInternalStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, internalStep: D.InternalStep)
@@ -187,10 +356,8 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     NextStepRefines(k, s, s', uiop, step);
   }
 
-  /*
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
   {
-    BBCS.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    NextRefines(k, s, s', uiop);
   }
-  */
 }
