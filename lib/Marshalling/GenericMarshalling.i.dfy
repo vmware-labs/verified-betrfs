@@ -5,6 +5,7 @@ include "../../tla-tree/MissingLibrary.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 include "Native.s.dfy"
+include "../Math/bases.i.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -15,8 +16,9 @@ import opened MissingLibrary
 import opened Common__Util_i
 import opened Common__MarshallInt_i
 import opened Libraries__base_s
-import opened Math__power2_i
+//import opened Math__power2_i
 import opened Native
+import opened Math
 
 export S
   provides NativeTypes, MissingLibrary, parse_Val, ParseVal, Marshall, Demarshallable,
@@ -1710,7 +1712,8 @@ method MarshallByteArray(val:V, grammar:G, data:array<byte>, index:uint64) retur
     ghost var tuple := parse_Uint64(data_seq);
     ghost var len := tuple.0;
     ghost var rest := tuple.1;
-    assert{:split_here} true;assert len.value.u == (|val.b| as uint64);
+    //assert{:split_here} true;
+    assert len.value.u == (|val.b| as uint64);
     
     assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.b;
     assert !len.None? && (len.value.u as int) <= |rest|;

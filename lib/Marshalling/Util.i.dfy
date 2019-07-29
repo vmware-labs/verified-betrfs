@@ -1,13 +1,14 @@
 include "../NativeTypes.dfy"
 //include "../../Common/Native/Io.s.dfy"
-include "../Math/power2.i.dfy"
+include "Math.i.dfy"
 
 module Common__Util_i {
 import opened NativeTypes
 //import opened Native__Io_s
-import opened Math__power2_i
-import opened Math__power2_s
-import opened Math__div_i
+//import opened Math__power2_i
+//import opened Math__power2_s
+//import opened Math__div_i
+import opened Math
 
 // Uses BigIntegers.  If you can, consider using the Opt versions below
 /*
