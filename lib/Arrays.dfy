@@ -1,10 +1,13 @@
-module Arrays {
+include "sequences.dfy"
   
+module Arrays {
+  import Seq = Sequences
 
   method Insert<T>(arr: array<T>, length: int, element: T, pos: int)
     requires 0 <= length < arr.Length
     requires 0 <= pos <= length
-    ensures arr[..] == old(arr[..pos]) + [element] + old(arr[pos..length]) + old(arr[length+1..])
+    ensures arr[..length+1] == Seq.insert(old(arr[..length]), element, pos)
+    ensures arr[length+1..] == old(arr[length+1..])
     modifies arr
   {
     ghost var oldarr := arr[..];
@@ -14,7 +17,7 @@ module Arrays {
 
     var i := pos+1;
     while i <= length
-      invariant 0 <= i <= length+1
+      invariant pos+1 <= i <= length+1
       invariant arr == old(arr)
       invariant forall j :: 0 <= j < pos ==> arr[j] == oldarr[j]
       invariant arr[pos] == element
