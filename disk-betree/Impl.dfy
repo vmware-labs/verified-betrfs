@@ -295,7 +295,9 @@ module {:extern} Impl refines Main {
   ensures lba.Some? ==> BC.ValidLBAForNode(lba.value)
   ensures lba.Some? ==> BC.LBAFree(IS.IVars(s), lba.value)
   {
-    if l :| (
+    if i: uint64 :| (
+      && i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
+      && var l := i * LBAType.BlockSize();
       && BC.ValidLBAForNode(l)
       && l !in s.persistentIndirectionTable.lbas.Values
       && l !in s.ephemeralIndirectionTable.lbas.Values
@@ -304,7 +306,7 @@ module {:extern} Impl refines Main {
       && (forall id | id in s.outstandingBlockWrites ::
           s.outstandingBlockWrites[id].lba != l)
     ) {
-      lba := Some(l);
+      lba := Some(i * LBAType.BlockSize());
     } else {
       lba := None;
     }
