@@ -194,8 +194,10 @@ module PivotBetreeSpecRefinement {
       ensures B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx)
       {
         if idx < |lookup| - 2 {
-          assert key in IReadOps(lookup)[idx].node.children;
-          //assert B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx);
+          assert B.LookupFollowsChildRefAtLayer(key, IReadOps(DropLast(lookup)), idx);
+          assert key in IReadOps(DropLast(lookup))[idx].node.children;
+          //assert key in IReadOps(lookup)[idx].node.children;
+          assert B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx);
         } else {
           assert P.LookupFollowsChildRefAtLayer(key, lookup, |lookup|-2);
           /*

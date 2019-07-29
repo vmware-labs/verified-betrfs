@@ -237,7 +237,7 @@ module PivotBetreeInvAndRefinement {
     requires PB.Init(k, s)
     ensures Inv(k, s)
   {
-    PivotBetreeRefinesBetreeInit(k, s);
+    RefinesInit(k, s);
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)

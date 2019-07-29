@@ -1,5 +1,5 @@
 include "../lib/sequences.dfy"
-include "../lib/maps.dfy"
+include "../lib/Maps.dfy"
 include "../lib/total_order.dfy"
 include "Message.dfy"
 include "PivotBetreeSpec.dfy"

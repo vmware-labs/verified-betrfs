@@ -1,3 +1,5 @@
+include "Option.dfy"
+
 module Maps {
   import opened Options
 
