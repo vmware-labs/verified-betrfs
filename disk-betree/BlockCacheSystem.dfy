@@ -28,7 +28,7 @@ abstract module BlockCacheSystem {
     && indirectionTableLBA in blocks
     && blocks[indirectionTableLBA].SectorIndirectionTable?
     && M.WFCompleteIndirectionTable(blocks[indirectionTableLBA].indirectionTable)
-    && (forall lba | lba in blocks :: lba != M.IndirectionTableLBA() ==> blocks[lba].SectorBlock?)
+    && (forall lba | lba in blocks :: M.ValidLBAForNode(lba) ==> blocks[lba].SectorBlock?)
   }
 
   predicate WFIndirectionTableRefWrtDisk(indirectionTable: IndirectionTable, blocks: map<LBA,Sector>,
@@ -311,7 +311,7 @@ abstract module BlockCacheSystem {
   requires s.machine.Ready?
   requires WFDisk(s.disk.blocks)
   {
-    && lba != M.IndirectionTableLBA()
+    && M.ValidLBAForNode(lba)
     && (forall r | r in s.machine.ephemeralIndirectionTable.lbas ::
         s.machine.ephemeralIndirectionTable.lbas[r] == lba ==> r == ref)
 

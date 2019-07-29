@@ -17,11 +17,11 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   type Constants = BBC.Constants
   type Variables = BBC.Variables
 
-  function BlockSize() : int { 8 * 1024 * 1024 }
+  function method BlockSize() : int { 8 * 1024 * 1024 }
 
-  predicate {:opaque} ValidAddr(addr: uint64)
+  predicate ValidAddr(addr: uint64)
   {
-    exists x: int :: (addr as int) == x * BlockSize()
+    LBAType.ValidAddr(addr)
   }
 
   predicate ValidBytes(sector: seq<byte>)

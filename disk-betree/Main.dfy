@@ -1,6 +1,6 @@
 include "MapSpec.dfy"
 include "ThreeStateVersionedMap.dfy"
-include "AsyncSectorDiskModel.dfy"
+include "AsyncDiskModel.dfy"
 include "../lib/NativeTypes.dfy"
 
 module DiskTypes {
@@ -10,8 +10,8 @@ module DiskTypes {
 }
 
 abstract module Main {
-  import ADM : AsyncSectorDiskModel
-  import D = AsyncSectorDisk
+  import ADM : AsyncDiskModel
+  import D = AsyncDisk
 
   import MS = MapSpec
   import ThreeStateVersionedMap
@@ -34,111 +34,38 @@ abstract module Main {
   function I(k: Constants, hs: HeapState): ADM.M.Variables
     requires Inv(k, hs)
     reads HeapSet(hs)
-  function ILBA(lba: LBA) : ADM.M.LBA
-
-  predicate ValidSector(sector: Sector)
-
-  function ISector(sector: Sector) : ADM.M.Sector
-    requires ValidSector(sector)
 
   method InitState() returns (k: Constants, hs: HeapState)
     ensures Inv(k, hs)
 
   // DiskInterface
 
-  function method BlockSize() : uint64 { 8*1024*1024 }
-
-  type LBA = DiskTypes.LBA
-  type Sector = DiskTypes.ByteSector
-
-  type DiskOp = D.DiskOp<LBA, Sector>
-  type ReqRead = D.ReqRead<LBA>
-  type ReqWrite = D.ReqWrite<LBA, Sector>
-  type RespRead = D.RespRead<Sector>
-  type RespWrite = D.RespWrite
-
-  predicate ValidReqRead(reqRead: ReqRead) { true }
-  predicate ValidReqWrite(reqWrite: ReqWrite) { ValidSector(reqWrite.sector) }
-  predicate ValidRespRead(respRead: RespRead) { respRead.sector.Some? ==> ValidSector(respRead.sector.value) }
-  predicate ValidRespWrite(respWrite: RespWrite) { true }
-  predicate ValidDiskOp(dop: DiskOp)
-  {
-    match dop {
-      case ReqReadOp(id, reqRead) => ValidReqRead(reqRead)
-      case ReqWriteOp(id, reqWrite) => ValidReqWrite(reqWrite)
-      case RespReadOp(id, respRead) => ValidRespRead(respRead)
-      case RespWriteOp(id, respWrite) => ValidRespWrite(respWrite)
-      case NoDiskOp => true
-    }
-  }
-
   class DiskIOHandler {
-    method {:axiom} write(lba: LBA, sector: array<byte>) returns (id : D.ReqId)
+    method {:axiom} write(addr: uint64, bytes: array<byte>) returns (id : D.ReqId)
     modifies this;
     requires diskOp() == D.NoDiskOp;
-    requires sector.Length == BlockSize() as int
-    requires ValidSector(sector[..])
-    ensures diskOp() == D.ReqWriteOp(id, D.ReqWrite(lba, sector[..]));
+    ensures diskOp() == D.ReqWriteOp(id, D.ReqWrite(addr, bytes[..]));
 
-    method {:axiom} read(lba: LBA) returns (id: D.ReqId)
+    method {:axiom} read(addr: uint64, len: uint64) returns (id: D.ReqId)
     modifies this
     requires diskOp() == D.NoDiskOp
-    ensures diskOp() == D.ReqReadOp(id, D.ReqRead(lba))
+    ensures diskOp() == D.ReqReadOp(id, D.ReqRead(addr, len))
 
     method {:axiom} getWriteResult() returns (id : D.ReqId)
     requires diskOp().RespWriteOp?
     ensures diskOp() == D.RespWriteOp(id, D.RespWrite)
 
-    method {:axiom} getReadResult() returns (id : D.ReqId, sector: array<byte>)
+    method {:axiom} getReadResult() returns (id : D.ReqId, bytes: array<byte>)
     requires diskOp().RespReadOp?
-    ensures sector.Length == BlockSize() as int
-    ensures ValidSector(sector[..])
-    ensures diskOp() == D.RespReadOp(id, D.RespRead(Some(sector[..])))
+    ensures diskOp() == D.RespReadOp(id, D.RespRead(bytes[..]))
 
-    function {:axiom} diskOp() : DiskOp
+    function {:axiom} diskOp() : D.DiskOp
     reads this
-    ensures ValidDiskOp(diskOp())
 
     predicate initialized()
     reads this
     {
       diskOp() == D.NoDiskOp
-    }
-  }
-
-  function IReqRead(reqRead: ReqRead) : ADM.M.ReqRead
-  requires ValidReqRead(reqRead)
-  {
-    D.ReqRead(ILBA(reqRead.lba))
-  }
-  function IReqWrite(reqWrite: ReqWrite) : ADM.M.ReqWrite
-  requires ValidReqWrite(reqWrite)
-  {
-    D.ReqWrite(ILBA(reqWrite.lba), ISector(reqWrite.sector))
-  }
-  function IRespRead(respRead: RespRead) : ADM.M.RespRead
-  requires ValidRespRead(respRead)
-  {
-    D.RespRead(match respRead.sector {
-      case Some(sector) => Some(ISector(sector))
-      case None => None
-    })
-  }
-  function IRespWrite(respWrite: RespWrite) : ADM.M.RespWrite
-  requires ValidRespWrite(respWrite)
-  {
-    D.RespWrite
-  }
-
-  function IDiskOp(diskOp: DiskOp) : ADM.M.DiskOp
-  requires ValidDiskOp(diskOp)
-  {
-    match diskOp {
-      case ReqReadOp(id, reqRead) => D.ReqReadOp(id, IReqRead(reqRead))
-      case ReqWriteOp(id, reqWrite) => D.ReqWriteOp(id, IReqWrite(reqWrite))
-      case RespReadOp(id, respRead) => D.RespReadOp(id, IRespRead(respRead))
-      case RespWriteOp(id, respWrite) => D.RespWriteOp(id, IRespWrite(respWrite))
-      case NoDiskOp => D.NoDiskOp
     }
   }
 
@@ -151,8 +78,7 @@ abstract module Main {
   modifies HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
-  ensures ValidDiskOp(io.diskOp())
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), IDiskOp(io.diskOp()))
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp())
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
   returns (success: bool)
@@ -161,26 +87,23 @@ abstract module Main {
   modifies HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
-  ensures ValidDiskOp(io.diskOp())
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
       if success then UI.PopSyncOp(id) else UI.NoOp,
-      IDiskOp(io.diskOp()))
+      io.diskOp())
 
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
   requires Inv(k, hs)
   modifies HeapSet(hs)
   ensures Inv(k, hs)
-  ensures ValidDiskOp(io.diskOp())
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
   method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires Inv(k, hs)
   modifies HeapSet(hs)
   ensures Inv(k, hs)
-  ensures ValidDiskOp(io.diskOp())
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, IDiskOp(io.diskOp()))
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
@@ -189,10 +112,9 @@ abstract module Main {
   modifies HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
-  ensures ValidDiskOp(io.diskOp())
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
-    IDiskOp(io.diskOp()))
+    io.diskOp())
 
   method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (success: bool)
@@ -201,10 +123,9 @@ abstract module Main {
   modifies HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
-  ensures ValidDiskOp(io.diskOp())
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if success then UI.PutOp(key, value) else UI.NoOp,
-    IDiskOp(io.diskOp()))
+    io.diskOp())
 
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.

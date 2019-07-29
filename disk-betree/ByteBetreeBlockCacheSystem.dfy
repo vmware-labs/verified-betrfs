@@ -223,7 +223,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
       == D.splice(bytes, start as int, ins)[other .. other as int + M.BlockSize()]
   {
     D.reveal_splice();
-    M.reveal_ValidAddr();
+    LBAType.reveal_ValidAddr();
     if (other < start) {
       assert other as int + M.BlockSize() <= start as int;
       assert D.splice(bytes, start as int, ins)[other .. other as int + M.BlockSize()]
@@ -232,8 +232,8 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
       assert bytes[.. start][other .. other as int + M.BlockSize()]
           == bytes[other .. other as int + M.BlockSize()];
     } else {
-      var s :| start as int == s * M.BlockSize();
-      var o :| other as int == o * M.BlockSize();
+      var s := LBAType.ValidAddrDivisor(start);
+      var o := LBAType.ValidAddrDivisor(other);
       assert o >= s + 1;
       assert other as int >= start as int + |ins|
           == |bytes[..start] + ins|;

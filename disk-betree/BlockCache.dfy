@@ -14,7 +14,21 @@ module LBAType {
   function method toLBA(i: NativeTypes.uint64) : LBA{ i }
   function method toUint64(i: LBA) : NativeTypes.uint64 { i }
 
-  export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes
+  function method BlockSize() : NativeTypes.uint64 { 8*1024*1024 }
+  predicate method {:opaque} ValidAddr(addr: LBA) {
+    //exists j: int :: j * BlockSize() as int == addr as int
+    addr as int % BlockSize() as int == 0
+  }
+  lemma ValidAddrDivisor(addr: LBA) returns (i: int)
+  requires ValidAddr(addr);
+  ensures i * BlockSize() as int == addr as int
+  {
+    reveal_ValidAddr();
+    i := addr as int / BlockSize() as int;
+  }
+
+  export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
+      reveals BlockSize
   export extends S
 	export Internal reveals *
 }
@@ -71,9 +85,11 @@ abstract module BlockCache refines Transactable {
   {
     ref in s.ephemeralIndirectionTable.graph
   }
+
   predicate method ValidLBAForNode(lba: LBA)
   {
-    lba != IndirectionTableLBA()
+    && LBAType.ValidAddr(lba)
+    && lba != IndirectionTableLBA()
   }
 
   predicate method GraphClosed(graph: map<Reference, seq<Reference>>)
@@ -86,7 +102,7 @@ abstract module BlockCache refines Transactable {
   // WF IndirectionTable which must have all LBAs filled in
   predicate WFCompleteIndirectionTable(indirectionTable: IndirectionTable)
   {
-    && IndirectionTableLBA() !in indirectionTable.lbas.Values
+    && (forall lba | lba in indirectionTable.lbas.Values :: ValidLBAForNode(lba))
     && indirectionTable.graph.Keys == indirectionTable.lbas.Keys
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
@@ -95,7 +111,7 @@ abstract module BlockCache refines Transactable {
   // WF IndirectionTable which might not have all LBAs filled in
   predicate WFIndirectionTable(indirectionTable: IndirectionTable)
   {
-    && IndirectionTableLBA() !in indirectionTable.lbas.Values
+    && (forall lba | lba in indirectionTable.lbas.Values :: ValidLBAForNode(lba))
     && indirectionTable.lbas.Keys <= indirectionTable.graph.Keys
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)

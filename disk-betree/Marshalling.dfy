@@ -150,10 +150,10 @@ module Marshalling {
       }
   }
 
-  function method {:fuel ValInGrammar,3} valToLBAsAndSuccs(a: seq<V>) : Option<(map<Reference, LBA>, map<Reference, seq<Reference>>)>
+  function method {:fuel ValInGrammar,3} valToLBAsAndSuccs(a: seq<V>) : (s : Option<(map<Reference, LBA>, map<Reference, seq<Reference>>)>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GArray(GUint64)]))
-  ensures var s := valToLBAsAndSuccs(a) ; s.Some? ==> 0 !in s.value.0.Values
-  ensures var s := valToLBAsAndSuccs(a) ; s.Some? ==> s.value.0.Keys == s.value.1.Keys
+  ensures s.Some? ==> forall lba | lba in s.value.0.Values :: BC.ValidLBAForNode(lba)
+  ensures s.Some? ==> s.value.0.Keys == s.value.1.Keys
   {
     if |a| == 0 then
       Some((map[], map[]))
@@ -168,7 +168,7 @@ module Marshalling {
           match succs {
             case None => None
             case Some(succs) => (
-              if ref in graph || lba == 0 then (
+              if ref in graph || lba == 0 || !LBAType.ValidAddr(lba) then (
                 None
               ) else (
                 Some((lbas[ref := lba], graph[ref := succs]))
@@ -531,7 +531,7 @@ module Marshalling {
 
   method {:fuel ValInGrammar,2} lbasSuccsToVal(lbas: map<Reference, LBA>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
   requires lbas.Keys == graph.Keys
-  requires 0 !in lbas.Values
+  requires forall lba | lba in lbas.Values :: BC.ValidLBAForNode(lba)
   requires |lbas| < 0x1_0000_0000_0000_0000
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableGrammar());
@@ -557,13 +557,13 @@ module Marshalling {
 
           assert MapRemove(lbas, {ref})[ref := lba] == lbas;
           assert MapRemove(graph, {ref})[ref := graph[ref]] == graph;
-          /*
-          assert ref == valToReference(tuple.t[0]);
-          assert lba == valToReference(tuple.t[1]);
-          assert !(ref in MapRemove(graph, {ref}));
-          assert !(lba == 0);
-          assert valToLBAsAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
-          */
+
+          //assert ref == valToReference(tuple.t[0]);
+          //assert lba == valToReference(tuple.t[1]);
+          //assert !(ref in MapRemove(graph, {ref}));
+          assert BC.ValidLBAForNode(lba);
+          //assert !(lba == 0);
+          //assert valToLBAsAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
 
           return Some(VArray(vpref.a + [tuple]));
         }
