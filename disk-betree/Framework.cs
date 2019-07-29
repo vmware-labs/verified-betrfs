@@ -18,17 +18,22 @@ namespace Impl_Compile {
       readReqs = new Dictionary<ulong, byte[]>();
     }
 
-    public void writeSync(ulong lba, byte[] sector) {
-      if (sector.Length != BLOCK_SIZE) {
-        // We should never get here due to the contract.
-        throw new Exception("Block must be exactly BLOCK_SIZE bytes");
+    public void writeSync(ulong addr, byte[] sector) {
+      if (sector.Length != BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
+        Console.WriteLine(addr);
+        Console.WriteLine(sector.Length);
+        throw new Exception("writeSync not implemented for these arguments");
       }
 
-      File.WriteAllBytes(getFilename(lba), sector);
+      File.WriteAllBytes(getFilename(addr), sector);
     }
 
-    public void readSync(ulong lba, out byte[] sector) {
-      string filename = getFilename(lba);
+    public void readSync(ulong addr, ulong len, out byte[] sector) {
+      if (addr % BLOCK_SIZE != 0 || len != BLOCK_SIZE) {
+        throw new Exception("readSync not implemented for these arguments");
+      }
+
+      string filename = getFilename(addr);
       byte[] bytes = File.ReadAllBytes(filename);
       if (bytes.Length != BLOCK_SIZE) {
         throw new Exception("Invalid block at " + filename);
@@ -36,13 +41,8 @@ namespace Impl_Compile {
       sector = bytes;
     }
 
-    public void write(ulong lba, byte[] sector, out ulong id) {
-      if (sector.Length != BLOCK_SIZE) {
-        // We should never get here due to the contract.
-        throw new Exception("Block must be exactly BLOCK_SIZE bytes");
-      }
-
-      File.WriteAllBytes(getFilename(lba), sector);
+    public void write(ulong addr, byte[] sector, out ulong id) {
+      writeSync(addr, sector);
 
       id = this.curId;
       this.curId++;
@@ -50,12 +50,9 @@ namespace Impl_Compile {
       this.writeReqs.Add(id);
     }
 
-    public void read(ulong lba, out ulong id) {
-      string filename = getFilename(lba);
-      byte[] bytes = File.ReadAllBytes(filename);
-      if (bytes.Length != BLOCK_SIZE) {
-        throw new Exception("Invalid block at " + filename);
-      }
+    public void read(ulong addr, ulong len, out ulong id) {
+      byte[] bytes;
+      readSync(addr, len, out bytes);
 
       id = this.curId;
       this.curId++;
