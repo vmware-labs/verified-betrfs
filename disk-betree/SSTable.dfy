@@ -19,6 +19,7 @@ module SSTable {
   import P = PivotsLib
   import Native
   import PivotBetreeSpecRefinement
+  import PivotBetreeSpecWFNodes
 
   type String = seq<byte>
   type Key = String
@@ -1528,10 +1529,21 @@ module SSTable {
       LemmaStartEndIndices(sst2, 2*i - |sst1.starts|);
       LemmaStartEndIndices(sst2, 2*i+1 - |sst1.starts|);
 
+      assert Start(sst2, 2*(i - |sst1.starts|/2) as uint64) as int + |sst1.strings|
+          == Start(sst, 2*i as uint64) as int;
+      assert End(sst2, 2*(i - |sst1.starts|/2) as uint64) as int + |sst1.strings|
+          == End(sst, 2*i as uint64) as int;
+
       assert Entry(sst, 2*i)
           == sst.strings[Start(sst, 2*i as uint64) .. End(sst, 2*i as uint64)]
           == sst2.strings[Start(sst2, 2*(i - |sst1.starts|/2) as uint64) .. End(sst2, 2*(i - |sst1.starts|/2) as uint64)]
           == Entry(sst2, 2*(i - |sst1.starts|/2));
+
+      assert Start(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1) as int + |sst1.strings|
+          == Start(sst, 2*i as uint64 + 1) as int;
+      assert End(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1) as int + |sst1.strings|
+          == End(sst, 2*i as uint64 + 1) as int;
+
       assert Entry(sst, 2*i+1)
           == sst.strings[Start(sst, 2*i as uint64 + 1) .. End(sst, 2*i as uint64 + 1)]
           == sst2.strings[Start(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1) .. End(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1)]
@@ -1741,15 +1753,101 @@ module SSTable {
     if n == 0 then [] else EmptySeq(n-1) + [Empty()]
   }
 
-  /*
+  lemma SplitBucketOnPivotsAt(bucket: map<Key, Message>, pivots: seq<Key>, i: int)
+  requires P.WFPivots(pivots)
+  requires 0 <= i <= |pivots|
+  ensures BT.SplitBucketOnPivots(pivots, bucket)[i] == map key | key in bucket && P.Route(pivots, key) == i :: bucket[key]
+  {
+    if i == |pivots| {
+    } else {
+      var l := map key | key in bucket && lt(key, Last(pivots)) :: bucket[key];
+      P.WFSlice(pivots, 0, |pivots| - 1);
+      SplitBucketOnPivotsAt(l, DropLast(pivots), i);
+      var a := BT.SplitBucketOnPivots(pivots, bucket)[i];
+      var b := map key | key in bucket && P.Route(pivots, key) == i :: bucket[key];
+
+      forall key | key in a
+      ensures key in b
+      ensures a[key] == b[key];
+      {
+        assert key in bucket;
+        P.RouteIs(pivots, key, i);
+      }
+
+      forall key | key in b
+      ensures key in a
+      {
+        //assert key in l;
+        P.RouteIs(DropLast(pivots), key, i);
+        //assert key in (map key | key in l && P.Route(DropLast(pivots), key) == i :: l[key]);
+        //assert key in BT.SplitBucketOnPivots(DropLast(pivots), l)[i];
+      }
+
+      assert a == b;
+    }
+  }
+
+  lemma AddMessagesToBucketsEmpAt(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>, i: int)
+  requires P.WFPivots(pivots)
+  requires 0 <= i <= |pivots|
+  requires |emp| == |pivots| + 1
+  requires forall i | 0 <= i < |emp| :: emp[i] == map[]
+  requires forall key | key in bucket :: bucket[key] != IdentityMessage();
+  ensures BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)[i] == map key | key in bucket && P.Route(pivots, key) == i :: bucket[key]
+  {
+    var a := BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)[i];
+    var b := map key | key in bucket && P.Route(pivots, key) == i :: bucket[key];
+    forall key | key in a
+    ensures key in b
+    ensures a[key] == b[key];
+    {
+      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(pivots, |emp|, emp, bucket, key);
+      P.RouteIs(pivots, key, i);
+
+      //assert BT.BucketLookup(a, key) != IdentityMessage();
+      //assert BT.BucketLookup(emp[i], key) == IdentityMessage();
+      //assert BT.BucketLookup(bucket, key) != IdentityMessage();
+
+      //assert key in bucket;
+    }
+    forall key | key in b
+    ensures key in a
+    {
+      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(pivots, |emp|, emp, bucket, key);
+    }
+    assert a == b;
+  }
+
   lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>)
   requires P.WFPivots(pivots)
   requires |emp| == |pivots| + 1
-  ensures forall i | 0 <= i < |emp| :: emp[i] == map[]
+  requires forall i | 0 <= i < |emp| :: emp[i] == map[]
+  requires forall key | key in bucket :: bucket[key] != IdentityMessage();
   ensures BT.SplitBucketOnPivots(pivots, bucket) == BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)
   {
+    var a := BT.SplitBucketOnPivots(pivots, bucket);
+    var b := BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket);
+    assert |a| == |emp|;
+    assert |b| == |emp|;
+    forall i | 0 <= i < |emp|
+    ensures a[i] == b[i]
+    {
+      SplitBucketOnPivotsAt(bucket, pivots, i);
+      AddMessagesToBucketsEmpAt(bucket, pivots, emp, i);
+    }
   }
-  */
+
+  lemma LemmaINoIdentity(sst: SSTable)
+  requires WFSSTableMap(sst)
+  ensures forall key | key in I(sst) :: I(sst)[key] != IdentityMessage()
+  {
+    reveal_I();
+    forall key | key in I(sst) ensures I(sst)[key] != IdentityMessage()
+    {
+      var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == key;
+      assert SSTKeyMapsToValueAt(I(sst), sst, i);
+    }
+  }
 
   method SplitOnPivots(sst: SSTable, pivots: seq<Key>)
   returns (ssts : seq<SSTable>)
@@ -1763,7 +1861,8 @@ module SSTable {
     reveal_Empty();
     ssts := DoFlush(sst, EmptySeq(|pivots| + 1), pivots);
 
-    //LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(sst), pivots, ISeq(EmptySeq(|pivots| + 1)));
+    LemmaINoIdentity(sst);
+    LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(sst), pivots, ISeq(EmptySeq(|pivots| + 1)));
   }
 
   function method KeyAtIndex(sst: SSTable, i: int) : (key: Key)

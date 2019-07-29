@@ -684,6 +684,7 @@ module PivotBetreeSpec {
   }
 
   function method SplitBucketOnPivots(pivots: seq<Key>, bucket: Bucket) : (buckets: seq<Bucket>)
+  ensures |buckets| == |pivots| + 1
   {
     if |pivots| == 0 then (
       [bucket]
