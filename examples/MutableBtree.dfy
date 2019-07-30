@@ -24,7 +24,7 @@ abstract module MutableBtree {
   function method MaxChildren() : uint64
     ensures 3 < MaxChildren()
 
-  function method DefaultValue<Value>() : Value
+  function method DefaultValue() : Value
   function method DefaultKey() : Key
 
   trait Node {
@@ -246,7 +246,6 @@ abstract module MutableBtree {
       decreases subtreeObjects, 0
     {
       && {this, pivots, children} <= subtreeObjects
-      && pivots != children
       && pivots.Length == (MaxChildren() as int) - 1
       && children.Length == MaxChildren() as int
       && 1 <= nchildren <= MaxChildren()
@@ -522,5 +521,52 @@ abstract module MutableBtree {
     {
       root := new Leaf();
     }
+  }
+}
+
+module TestMutableBtree refines MutableBtree {
+  import Keys = Integer_Order
+  type Value = int
+
+  function method MaxKeysPerLeaf() : uint64 { 8 }
+  function method MaxChildren() : uint64 { 8 }
+
+  function method DefaultValue() : Value { 0 }
+  function method DefaultKey() : Key { 0 }
+}
+
+method Main()
+{
+  var t := new TestMutableBtree.MutableBtree();
+  var i := 0;
+  while i < 1000
+    invariant 0 <= i <= 1000
+    invariant t.root.WF()
+    modifies t
+  {
+    t.Insert((i * 307) % 1000 , i);
+    i := i + 1;
+  }
+
+  i := 0;
+  while i < 1000
+    invariant 0 <= i <= 1000
+  {
+    var qr := t.Query((i * 307) % 1000);
+    if qr != TestMutableBtree.Found(i) {
+      print "Test failed";
+    }
+    i := i + 1;
+  }
+
+  i := 0;
+  while i < 1000
+    invariant 0 <= i <= 1000
+  {
+    var qr := t.Query(1000 + ((i * 307) % 1000));
+    if qr != TestMutableBtree.NotFound {
+      print "Test failed";
+    }
+    i := i + 1;
   }
 }
