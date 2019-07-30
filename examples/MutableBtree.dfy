@@ -318,7 +318,7 @@ abstract module MutableBtree {
       modifies this, subtreeObjects
       decreases subtreeObjects
     {
-      var pos := Keys.ArrayLargestLte(pivots, 0, (nchildren as int)-1, key);
+      var pos: int := Keys.ArrayLargestLte(pivots, 0, (nchildren as int)-1, key);
       if children[pos+1].Full() {
         var wit, pivot, right := children[pos+1].Split();
         Arrays.Insert(pivots, (nchildren as int)-1, pivot, pos+1);
@@ -329,7 +329,18 @@ abstract module MutableBtree {
         assert pos == Keys.LargestLte(old(pivots[..nchildren-1]), pivot);
         Keys.strictlySortedInsert(old(pivots[..nchildren-1]), pivot, pos);
         assert Keys.IsStrictlySorted(pivots[..nchildren-1]);
-        assert Interpretation() == old(Interpretation());
+        forall i: int | 0 <= i < nchildren as int
+          ensures children[i] != null
+          ensures children[i] in subtreeObjects
+          ensures children[i].subtreeObjects < subtreeObjects
+          ensures {this, pivots, children} !! children[i].subtreeObjects
+        {
+          if pos + 2 < i {
+            assert children[i] == old(children[i-1]);
+          }
+        }
+        assert WF();
+        //assert Interpretation() == old(Interpretation());
 
         if Keys.lte(pivot, key) {
           pos := pos + 1;
@@ -337,11 +348,7 @@ abstract module MutableBtree {
       }
       children[pos+1].Insert(key, value);
       subtreeObjects := subtreeObjects + children[pos+1].subtreeObjects;
-      forall key' | key' != key
-        ensures QueryDef(key') == old(QueryDef(key'))
-      {
-      }
-      assert QueryDef(key) == Found(value);
+      allKeys := allKeys + {key};
     }
 
     function UnionSubtreeObjects() : set<object>
