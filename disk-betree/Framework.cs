@@ -156,7 +156,7 @@ class Application {
   }
 
   public void Insert(string key, string val) {
-    log("Insert (\"" + key + "\", \"" + val + "\")");
+    if (verbose) log("Insert (\"" + key + "\", \"" + val + "\")");
     Insert(
       new Dafny.Sequence<byte>(string_to_bytes(key)),
       new Dafny.Sequence<byte>(string_to_bytes(val))
@@ -188,8 +188,10 @@ class Application {
 
   public void Query(string key) {
     byte[] val_bytes = Query(new Dafny.Sequence<byte>(string_to_bytes(key)));
-    string val = bytes_to_string(val_bytes);
-    log("Query result is: \"" + val + "\"");
+    if (verbose) {
+      string val = bytes_to_string(val_bytes);
+      log("Query result is: \"" + val + "\"");
+    }
   }
 
   public void Query(byte[] key) {
@@ -205,7 +207,7 @@ class Application {
   }
 
   public byte[] Query(Dafny.Sequence<byte> key) {
-    log("Query \"" + key + "\"");
+    if (verbose) log("Query \"" + key + "\"");
 
     for (int i = 0; i < 50; i++) {
       __default.handleQuery(k, hs, io, key, out var result);
