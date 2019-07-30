@@ -1,4 +1,5 @@
 include "Main.dfy"
+
 include "../lib/Sets.dfy"
 include "ByteBetreeBlockCacheSystem.dfy"
 include "Marshalling.dfy"
@@ -406,7 +407,8 @@ module {:extern} Impl refines Main {
     var oldroot := s.cache[BT.G.Root()];
     var msg := Messages.Define(value);
 
-    var bucket := oldroot.buckets[Pivots.Route(oldroot.pivotTable, key)];
+    var r := Pivots.ComputeRoute(oldroot.pivotTable, key);
+    var bucket := oldroot.buckets[r];
 
     if (!(|bucket.strings| < 0x800_0000_0000_0000 && |bucket.starts| < 0x800_0000_0000_0000
         && |key| < 0x400_0000_0000_0000 && |value| < 0x400_0000_0000_0000)) {
@@ -418,7 +420,8 @@ module {:extern} Impl refines Main {
     }
 
     var newbucket := SSTable.Insert(bucket, key, msg);
-    var newroot := oldroot.(buckets := oldroot.buckets[Pivots.Route(oldroot.pivotTable, key) := newbucket]);
+    var r1 := Pivots.ComputeRoute(oldroot.pivotTable, key);
+    var newroot := oldroot.(buckets := oldroot.buckets[r1 := newbucket]);
 
     assert BC.BlockPointsToValidReferences(IS.INode(oldroot), s.ephemeralIndirectionTable.graph);
     //assert IS.INode(oldroot).children == IS.INode(newroot).children;
@@ -520,12 +523,14 @@ module {:extern} Impl refines Main {
           var node := s.cache[ref];
           lookup := AugmentLookup(lookup, ref, IS.INode(node), key, IS.ICache(s.cache), s.ephemeralIndirectionTable.graph); // ghost-y
 
-          var sstMsg := SSTable.Query(node.buckets[Pivots.Route(node.pivotTable, key)], key);
+          var r := Pivots.ComputeRoute(node.pivotTable, key);
+          var sstMsg := SSTable.Query(node.buckets[r], key);
           var lookupMsg := if sstMsg.Some? then sstMsg.value else Messages.IdentityMessage();
           msg := Messages.Merge(msg, lookupMsg);
 
           if (node.children.Some?) {
-            ref := node.children.value[Pivots.Route(node.pivotTable, key)];
+            var r1 := Pivots.ComputeRoute(node.pivotTable, key);
+            ref := node.children.value[r1];
             assert ref in BT.G.Successors(IS.INode(node));
             assert ref in s.ephemeralIndirectionTable.graph;
           } else {
@@ -732,7 +737,7 @@ module {:extern} Impl refines Main {
   ensures IS.INode(node') == BT.CutoffNodeAndKeepLeft(IS.INode(node), pivot)
   {
     BT.reveal_CutoffNodeAndKeepLeft();
-    var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
+    var cLeft := Pivots.ComputeCutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
     var splitBucket := SSTable.SplitLeft(node.buckets[cLeft], pivot);
@@ -748,7 +753,7 @@ module {:extern} Impl refines Main {
   ensures IS.INode(node') == BT.CutoffNodeAndKeepRight(IS.INode(node), pivot)
   {
     BT.reveal_CutoffNodeAndKeepRight();
-    var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
+    var cRight := Pivots.ComputeCutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
     var splitBucket := SSTable.SplitRight(node.buckets[cRight], pivot);

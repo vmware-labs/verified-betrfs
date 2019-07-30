@@ -192,7 +192,7 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
-  function method LargestLte(run: seq<Element>, needle: Element) : int
+  function LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLte(run, needle) < |run|;
     ensures forall i :: 0 <= i <= LargestLte(run, needle) ==> lte(run[i], needle);
@@ -204,7 +204,7 @@ abstract module Total_Order {
     else 1 + LargestLte(run[1..], needle)
   }
 
-  function method LargestLt(run: seq<Element>, needle: Element) : int
+  function LargestLt(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLt(run, needle) < |run|;
     ensures forall i :: 0 <= i <= LargestLt(run, needle) ==> lt(run[i], needle);
@@ -412,6 +412,31 @@ abstract module Total_Order {
 
     return lo - 1;
   }
+
+  method ComputeLargestLt(run: seq<Element>, needle: Element) returns (res : int)
+    requires IsSorted(run)
+    ensures res == LargestLt(run, needle)
+  {
+    var lo := 0;
+    var hi := |run|;
+    while lo < hi
+    invariant 0 <= lo <= hi <= |run|
+    invariant 1 <= lo ==> lt(run[lo-1], needle)
+    invariant hi < |run| ==> lte(needle, run[hi])
+    decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var c := cmp(run[mid], needle);
+      if (c == -1) {
+        lo := mid+1;
+      } else {
+        hi := mid;
+      }
+    }
+
+    return lo - 1;
+  }
+
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {

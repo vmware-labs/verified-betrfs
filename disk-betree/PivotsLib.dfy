@@ -29,11 +29,19 @@ module PivotsLib {
     |pt| + 1
   }
 
-  function method Route(pt: PivotTable, key: Key) : int
+  function Route(pt: PivotTable, key: Key) : int
   requires WFPivots(pt)
   ensures 0 <= Route(pt, key) < NumBuckets(pt)
   {
     Keyspace.LargestLte(pt, key) + 1
+  }
+
+  method ComputeRoute(pt: PivotTable, key: Key) returns (i: int)
+  requires WFPivots(pt)
+  ensures i == Route(pt, key)
+  {
+    i := Keyspace.ComputeLargestLte(pt, key);
+    i := i + 1;
   }
 
   // Quick lemma for proving that Route(pt, key) == idx
@@ -207,7 +215,7 @@ module PivotsLib {
     }
   }
 
-  function method {:opaque} CutoffForLeft(pivots: PivotTable, pivot: Key) : int
+  function {:opaque} CutoffForLeft(pivots: PivotTable, pivot: Key) : int
   requires WFPivots(pivots)
   ensures 0 <= CutoffForLeft(pivots, pivot) <= |pivots|
   ensures forall i | 0 <= i < CutoffForLeft(pivots, pivot) :: Keyspace.lt(pivots[i], pivot);
@@ -216,13 +224,30 @@ module PivotsLib {
     Keyspace.LargestLt(pivots, pivot) + 1
   }
 
-  function method {:opaque} CutoffForRight(pivots: PivotTable, pivot: Key) : int
+  method ComputeCutoffForLeft(pivots: PivotTable, pivot: Key) returns (i: int)
+  requires WFPivots(pivots)
+  ensures i == CutoffForLeft(pivots, pivot)
+  {
+    reveal_CutoffForLeft();
+    i := Keyspace.ComputeLargestLt(pivots, pivot);
+    i := i + 1;
+  }
+
+  function {:opaque} CutoffForRight(pivots: PivotTable, pivot: Key) : int
   requires WFPivots(pivots)
   ensures 0 <= CutoffForRight(pivots, pivot) <= |pivots|
   ensures forall i | 0 <= i < CutoffForRight(pivots, pivot) :: Keyspace.lte(pivots[i], pivot);
   ensures forall i | CutoffForRight(pivots, pivot) <= i < |pivots| :: Keyspace.lt(pivot, pivots[i]);
   {
     Route(pivots, pivot)
+  }
+
+  method ComputeCutoffForRight(pivots: PivotTable, pivot: Key) returns (i: int)
+  requires WFPivots(pivots)
+  ensures i == CutoffForRight(pivots, pivot)
+  {
+    reveal_CutoffForRight();
+    i := ComputeRoute(pivots, pivot);
   }
 
   lemma PivotNotMinimum(pivots: PivotTable, i: int)

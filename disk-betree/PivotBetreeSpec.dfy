@@ -112,7 +112,7 @@ module PivotBetreeSpec {
       bucket[key := msg]
   }
 
-  function method AddMessageToNode(node: Node, key: Key, msg: Message) : Node
+  function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
   ensures WFNode(AddMessageToNode(node, key, msg))
   {
@@ -125,7 +125,7 @@ module PivotBetreeSpec {
     newnode
   }
 
-  function method AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
+  function AddMessagesToBucket(pivotTable: PivotTable, i: int, childBucket: map<Key, Message>, parentBucket: map<Key, Message>) : Bucket
   requires Pivots.WFPivots(pivotTable)
   ensures forall key | key in AddMessagesToBucket(pivotTable, i, childBucket, parentBucket) :: Pivots.Route(pivotTable, key) == i
   {
@@ -136,7 +136,7 @@ module PivotBetreeSpec {
     :: M.Merge(BucketLookup(parentBucket, key), BucketLookup(childBucket, key))
   }
 
-  function method AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
+  function AddMessagesToBuckets(pivotTable: PivotTable, i: int, buckets: seq<map<Key, Message>>, parentBucket: map<Key, Message>) : seq<Bucket>
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |buckets|;
   ensures |AddMessagesToBuckets(pivotTable, i, buckets, parentBucket)| == i
@@ -148,7 +148,7 @@ module PivotBetreeSpec {
     )
   }
 
-  function method AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
+  function AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
   requires WFNode(node)
   ensures WFNode(AddMessagesToNode(node, buffer))
   {
@@ -198,7 +198,7 @@ module PivotBetreeSpec {
     && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
-  function method NodeLookup(node: Node, key: Key) : Message
+  function NodeLookup(node: Node, key: Key) : Message
   requires WFNode(node)
   {
     BucketLookup(node.buckets[Pivots.Route(node.pivotTable, key)], key)
@@ -386,7 +386,7 @@ module PivotBetreeSpec {
     }
   }
 
-  function method {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
+  function {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
@@ -409,7 +409,7 @@ module PivotBetreeSpec {
     Node(leftPivots, leftChildren, leftBuckets)
   }
 
-  function method {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
+  function {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
@@ -448,7 +448,7 @@ module PivotBetreeSpec {
     }
   }
 
-  function method {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
+  function {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
   requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
