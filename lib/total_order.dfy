@@ -3,6 +3,7 @@ include "NativeTypes.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
+  import opened NativeTypes
     
 	type Element(!new,==)
 
@@ -18,6 +19,12 @@ abstract module Total_Order {
 		ensures ltedef(a, b) || ltedef(b, a); // Total
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
 		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+    ensures c == -1 || c == 0 || c == 1
+    ensures c == -1 ==> lt(a, b)
+    ensures c == 1 ==> lt(b, a)
+    ensures c == 0 ==> a == b
 
 	predicate method ltedef(a: Element, b: Element)
 
@@ -381,9 +388,33 @@ abstract module Total_Order {
       }
     }
   }
+
+  method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int)
+    requires IsSorted(run)
+    ensures res == LargestLte(run, needle)
+  {
+    var lo := 0;
+    var hi := |run|;
+    while lo < hi
+    invariant 0 <= lo <= hi <= |run|
+    invariant 1 <= lo ==> lte(run[lo-1], needle)
+    invariant hi < |run| ==> lt(needle, run[hi])
+    decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var c := cmp(run[mid], needle);
+      if (c == 1) {
+        hi := mid;
+      } else {
+        lo := mid+1;
+      }
+    }
+
+    return lo - 1;
+  }
 }
 
-abstract module Bounded_Total_Order refines Total_Order {
+/*abstract module Bounded_Total_Order refines Total_Order {
   import Base_Order : Total_Order
   datatype Element = Min_Element | Element(e: Base_Order.Element) | Max_Element
 
@@ -400,7 +431,7 @@ abstract module Bounded_Total_Order refines Total_Order {
       || b.Max_Element?
       || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
   }
-}
+}*/
 
 module Integer_Order refines Total_Order {
   type Element = int
@@ -415,10 +446,14 @@ module Integer_Order refines Total_Order {
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    return if a < b then -1 else if a > b then 1 else 0;
+  }
 }
 
 module Uint64_Order refines Total_Order {
-  import opened NativeTypes
   type Element = uint64
 
   function SomeElement() : Element { 0 }
@@ -430,6 +465,11 @@ module Uint64_Order refines Total_Order {
 
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
+  }
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    return if a < b then -1 else if a > b then 1 else 0;
   }
 }
 
@@ -446,11 +486,16 @@ module Char_Order refines Total_Order {
   predicate method ltedef(a: Element, b: Element) {
     a <= b
   }
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    return if a < b then -1 else if a > b then 1 else 0;
+  }
 }
 
-module Bounded_Integer_Order refines Bounded_Total_Order {
-  import Base_Order = Integer_Order
-}
+//module Bounded_Integer_Order refines Bounded_Total_Order {
+//  import Base_Order = Integer_Order
+//}
 
 // method Main() {
 //   print Integer_Order.lt(10, 11);
@@ -464,7 +509,6 @@ module Bounded_Integer_Order refines Bounded_Total_Order {
 // }
 
 module Byte_Order refines Total_Order {
-  import opened NativeTypes
   type Element = byte
 
   function SomeElement() : Element { 0 }
@@ -476,6 +520,13 @@ module Byte_Order refines Total_Order {
 
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
+  }
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    reveal_lte();
+    reveal_ltedef();
+    return if a < b then -1 else if a > b then 1 else 0;
   }
 }
 
@@ -556,4 +607,39 @@ abstract module Lexicographic_Order refines Total_Order {
 
 module Lexicographic_Byte_Order refines Lexicographic_Order {
   import Base_Order = Byte_Order
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    reveal_seq_lte();
+    Base_Order.reveal_lte();
+    Base_Order.reveal_ltedef();
+
+    var i := 0;
+    var m := if |a| < |b| then |a| else |b|;
+    while i < m
+    invariant i <= |a|
+    invariant i <= |b|
+    invariant lt(a[i..], b[i..]) ==> lt(a, b)
+    invariant lt(b[i..], a[i..]) ==> lt(b, a)
+    invariant a[..i] == b[..i]
+    {
+      if (a[i] < b[i]) {
+        return -1;
+      } else if (a[i] == b[i]) {
+        i := i + 1;
+      } else {
+        return 1;
+      }
+    }
+
+    if i == |a| {
+      if i == |b| {
+        return 0;
+      } else {
+        return -1;
+      }
+    } else {
+      return 1;
+    } 
+  }
 }
