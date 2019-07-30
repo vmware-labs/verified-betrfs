@@ -181,7 +181,44 @@ module Marshalling {
     )
   }
 
-  function method valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
+  method {:fuel ValInGrammar,3} ValToLBAsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
+  requires valToLBAsAndSuccs.requires(a)
+  ensures ImplState.IIndirectionTableOpt(s) == valToLBAsAndSuccs(a)
+  ensures fresh(s)
+  {
+    if |a| == 0 {
+      var newHashMap := new ResizingHashMap<(Option<LBA>, seq<Reference>)>;
+      s := Some(newHashMap);
+    } else {
+      var res := valToLBAsAndSuccs(DropLast(a));
+      match res {
+        case Some(mutMap) => {
+          var tuple := Last(a);
+          var ref := valToReference(tuple.t[0]);
+          var lba := valToLBA(tuple.t[1]);
+          var succs := valToChildren(tuple.t[2].a);
+          match succs {
+            case None => {
+              s := None;
+            }
+            case Some(succs) => {
+              if ref in graph || lba == 0 || !LBAType.ValidAddr(lba) {
+                s := None;
+              } else {
+                mutMap.Insert(ref, (Some(lba), succs));
+                s := Some(mutMap);
+              }
+            }
+          }
+        }
+        case None => {
+          s := None;
+        }
+      }
+    }
+  }
+
+  function valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value)
   {
@@ -195,6 +232,29 @@ module Marshalling {
         )
       )
       case None => None
+    }
+  }
+
+  method GraphClosed(table: MutIndirectionTable) returns (result: bool)
+    requires BC.GraphClosed.requires(IIndirectionTable(table))
+    requires BC.GraphClosed(IIndirectionTable(table)) == result
+
+  method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
+  requires ValInGrammar(v, IndirectionTableGrammar())
+  ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value)
+  {
+    var res := valToLBAsAndSuccs(v.a);
+    match res {
+      case Some(res) => {
+        if res.Get(BT.G.Root()).Some? && GraphClosed(res) {
+          s := Some(res);
+        } else {
+          s := None;
+        }
+      }
+      case None => {
+        s := None;
+      }
     }
   }
 

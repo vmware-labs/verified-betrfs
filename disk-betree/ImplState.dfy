@@ -3,6 +3,7 @@ include "Message.dfy"
 include "../lib/Option.dfy"
 include "SSTable.dfy"
 include "BetreeBlockCache.dfy"
+include "../lib/MutableMap.dfy"
 
 module {:extern} ImplState {
   import opened Options
@@ -17,9 +18,14 @@ module {:extern} ImplState {
   import SSTable = SSTable
   import D = AsyncSectorDisk
 
+  import MM = MutableMap
+  import ReferenceType`Internal
+
   type Reference = BT.G.Reference
   type Key = MS.Key
   type Message = Messages.Message
+
+  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.LBA>, seq<Reference>)>;
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -28,9 +34,9 @@ module {:extern} ImplState {
     )
   datatype Variables =
     | Ready(
-        persistentIndirectionTable: BC.IndirectionTable,
-        frozenIndirectionTable: Option<BC.IndirectionTable>,
-        ephemeralIndirectionTable: BC.IndirectionTable,
+        persistentIndirectionTable: MutIndirectionTable,
+        frozenIndirectionTable: Option<MutIndirectionTable>,
+        ephemeralIndirectionTable: MutIndirectionTable,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
@@ -78,12 +84,29 @@ module {:extern} ImplState {
   {
     map ref | ref in cache :: INode(cache[ref])
   }
+  function IIndirectionTable(table: MutIndirectionTable) : (result: BC.IndirectionTable)
+    reads table
+  {
+    var lbas := map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value;
+    var graph := map k | k in table.Contents :: table.Contents[k].1;
+    BC.IndirectionTable(lbas, graph)
+  }
+  function IIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<BC.IndirectionTable>)
+    reads if table.Some? then {table.value} else {}
+  {
+    if table.Some? then
+      Some(IIndirectionTable(table.value))
+    else
+      None
+  }
   function IVars(vars: Variables) : M.Variables
   requires WFVars(vars)
+  reads if vars.Ready? then {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} else {}
+  reads if vars.Ready? && vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) =>
-        BC.Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
+        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }
