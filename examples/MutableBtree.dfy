@@ -339,6 +339,48 @@ abstract module MutableBtree {
             assert children[i] == old(children[i-1]);
           }
         }
+        forall i: int | 0 <= i < nchildren as int
+          ensures children[i].WF()
+        {
+          if i < pos + 2 {
+            assert children[i] == old(children[i]);
+          } else if pos + 2 < i {
+            assert children[i] == old(children[i-1]);
+          }
+        }
+        forall i: int, j: int | 0 <= i < j < nchildren as int
+          ensures children[i].subtreeObjects !! children[j].subtreeObjects
+        {
+          if j < pos + 2 {
+            //assume false;
+          } else if j == pos + 2 {
+            //assume false;
+          } else if i < pos + 2 < j {
+            assert pos + 2 < j;
+            assert children[j] == old(children[j-1]);
+          } else if i == pos + 2 {
+            assert pos + 2 < j;
+            assert children[j] == old(children[j-1]);
+          } else if pos + 2 < i {
+            assert children[i] == old(children[i-1]);
+            assert pos + 2 < j;
+            assert children[j] == old(children[j-1]);
+          }
+        }
+        forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].allKeys
+          ensures Keys.lt(key, pivots[i])
+        {
+          if pos + 2 < i {
+            assert children[i] == old(children[i-1]);
+          }
+        }
+        forall i: int, key | 0 < i < nchildren as int && key in children[i].allKeys
+          ensures Keys.lt(pivots[i-1], key)
+        {
+          if pos + 2 < i {
+            assert children[i] == old(children[i-1]);
+          }
+        }
         assert WF();
         //assert Interpretation() == old(Interpretation());
 
