@@ -784,6 +784,59 @@ module MutableMap {
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
     }
 
+    
+
+    method ToArray() returns (result: array<(uint64, V)>)
+      requires Inv()
+      ensures Contents == old(Contents)
+      ensures forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
+          ==> i == j
+      ensures Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1
+      ensures Repr == old(Repr)
+    {
+      if Count == 0 {
+        assert Contents == map[];
+        result := new [0];
+        assert Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1;
+        return;
+      }
+      assert Count > 0;
+      assert exists i: nat :: i < Underlying.Storage.Length && Underlying.Storage[i].Entry?;
+
+      var storagePos := 0;
+      while storagePos < Underlying.Storage.Length && !Underlying.Storage[storagePos].Entry?
+        invariant 0 <= storagePos <= Underlying.Storage.Length
+        invariant MapFromStorage(Underlying.Storage[..storagePos]) == map[]
+      {
+        storagePos := storagePos + 1;
+      }
+      if storagePos == Underlying.Storage.Length {
+        assert false;
+      }
+      assert storagePos < Underlying.Storage.Length;
+      var firstV := Underlying.Storage[storagePos].value;
+      result := new [Count] (_ => (0, firstV));
+
+      var resultPos := 1;
+      ghost var transferredContents := map[];
+      while storagePos < Underlying.Storage.Length
+        invariant 0 <= storagePos <= Underlying.Storage.Length
+        invariant MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents
+      {
+        var item := Underlying.Storage[storagePos];
+        if item.Entry? {
+          result[resultPos] := (item.key, item.value);
+          transferredContents := transferredContents[item.key := item.value];
+        }
+        storagePos := storagePos + 1;
+        resultPos := resultPos + 1;
+      }
+
+      assert forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
+          ==> i == j;
+      assert Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1;
+    }
+
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
       requires Inv()
