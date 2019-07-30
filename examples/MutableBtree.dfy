@@ -178,19 +178,19 @@ abstract module MutableBtree {
       modifies this, subtreeObjects
       decreases subtreeObjects
     {
-      Keys.reveal_IsStrictlySorted();
       var pos: int := Keys.ArrayLargestLte(keys, 0, nkeys as int, key);
 
       if 0 <= pos && keys[pos] == key {
         values[pos] := value;
       } else {
+        ghost var oldkeys := keys[..nkeys];
         Arrays.Insert(keys, nkeys as int, key, pos + 1);
         Arrays.Insert(values, nkeys as int, value, pos + 1);
         nkeys := nkeys + 1;
-        assert multiset(keys[..nkeys]) == old(multiset(keys[..nkeys])) + multiset{key};
         allKeys := allKeys + {key};
-        Keys.strictlySortedInsert(old(keys[..nkeys]), key, pos);
-        assert Interpretation()[key] == value; // OBSERVE?
+
+        InsertMultiset(oldkeys, key, pos+1); // OBSERVE
+        Keys.strictlySortedInsert(oldkeys, key, pos); // OBSERVE
       }
     }
 
