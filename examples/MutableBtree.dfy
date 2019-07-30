@@ -20,11 +20,9 @@ abstract module MutableBtree {
     
   function method MaxKeysPerLeaf() : uint64
     ensures 1 < MaxKeysPerLeaf()
-  function method MinKeysPerLeaf() : uint64
 
   function method MaxChildren() : uint64
     ensures 3 < MaxChildren()
-  function method MinChildren() : uint64
 
   function method DefaultValue<Value>() : Value
   function method DefaultKey() : Key
@@ -307,6 +305,98 @@ abstract module MutableBtree {
     {
       nchildren == MaxChildren()
     }
+
+    // static lemma ChildSplitPreservesWF(
+    //   oldpivots: seq<Key>,
+    //   oldchildren: seq<Node?>,
+    //   oldsubtreeObjects: set<object>,
+    //   pos: int,
+    //   newpivots: seq<Key>,
+    //   newchildren: seq<Node?>,
+    //   newsubtreeObjects: seq<object>)
+    //   requires 
+
+    method SplitChild(key: Key, childidx: uint64) returns (newchildidx: uint64)
+      requires WF()
+      requires !Full()
+      requires childidx as int == 1 + Keys.LargestLte(pivots[..nchildren-1], key)
+      requires children[childidx].Full()
+      ensures WF()
+      ensures Interpretation() == old(Interpretation())
+      ensures newchildidx as int == 1 + Keys.LargestLte(pivots[..nchildren-1], key)
+      ensures !children[newchildidx].Full()
+      ensures allKeys == old(allKeys)
+      ensures fresh(subtreeObjects-old(subtreeObjects))
+      modifies this, subtreeObjects
+    {
+        var wit, pivot, right := children[childidx].Split();
+        Arrays.Insert(pivots, (nchildren as int)-1, pivot, childidx as int);
+        Arrays.Insert(children, nchildren as int, right, childidx as int +1);
+        nchildren := nchildren + 1;
+        subtreeObjects := subtreeObjects + right.subtreeObjects;
+        if Keys.lte(pivot, key) {
+          newchildidx := childidx + 1;
+        } else {
+          newchildidx := childidx;
+        }
+        assume false;
+        
+    //     Keys.strictlySortedInsert(old(pivots[..nchildren-1]), pivot, childidx-1);
+    //     assert Keys.IsStrictlySorted(pivots[..nchildren-1]);
+    //     forall i: int | 0 <= i < nchildren as int
+    //       ensures children[i] != null
+    //       ensures children[i] in subtreeObjects
+    //       ensures children[i].subtreeObjects < subtreeObjects
+    //       ensures {this, pivots, children} !! children[i].subtreeObjects
+    //     {
+    //       if childidx + 1 < i {
+    //         assert children[i] == old(children[i-1]);
+    //       }
+    //     }
+    //     forall i: int | 0 <= i < nchildren as int
+    //       ensures children[i].WF()
+    //     {
+    //       if i < childidx + 1 {
+    //         assert children[i] == old(children[i]);
+    //       } else if childidx + 1 < i {
+    //         assert children[i] == old(children[i-1]);
+    //       }
+    //     }
+    //     forall i: int, j: int | 0 <= i < j < nchildren as int
+    //       ensures children[i].subtreeObjects !! children[j].subtreeObjects
+    //     {
+    //       if j < childidx + 1 {
+    //       } else if j == childidx + 1 {
+    //       } else if i < childidx + 1 < j {
+    //         assert childidx + 1 < j;
+    //         assert children[j] == old(children[j-1]);
+    //       } else if i == childidx + 1 {
+    //         assert childidx + 1 < j;
+    //         assert children[j] == old(children[j-1]);
+    //       } else if childidx + 1 < i {
+    //         assert children[i] == old(children[i-1]);
+    //         assert childidx + 1 < j;
+    //         assert children[j] == old(children[j-1]);
+    //       }
+    //     }
+    //     forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].allKeys
+    //       ensures Keys.lt(key, pivots[i])
+    //     {
+    //       if childidx + 1 < i {
+    //         assert children[i] == old(children[i-1]);
+    //       }
+    //     }
+    //     forall i: int, key | 0 < i < nchildren as int && key in children[i].allKeys
+    //       ensures Keys.lt(pivots[i-1], key)
+    //     {
+    //       if childidx + 1 < i {
+    //         assert children[i] == old(children[i-1]);
+    //       }
+    //     }
+    //     assert WF();
+    //     //assert Interpretation() == old(Interpretation());
+
+    }
     
     method Insert(key: Key, value: Value)
       requires WF()
@@ -319,87 +409,24 @@ abstract module MutableBtree {
       decreases subtreeObjects
     {
       var pos: int := Keys.ArrayLargestLte(pivots, 0, (nchildren as int)-1, key);
+      var childidx := (pos + 1) as uint64;
       if children[pos+1].Full() {
-        var wit, pivot, right := children[pos+1].Split();
-        Arrays.Insert(pivots, (nchildren as int)-1, pivot, pos+1);
-        Arrays.Insert(children, nchildren as int, right, pos+2);
-        nchildren := nchildren + 1;
-        subtreeObjects := subtreeObjects + right.subtreeObjects;
-
-        assert pos == Keys.LargestLte(old(pivots[..nchildren-1]), pivot);
-        Keys.strictlySortedInsert(old(pivots[..nchildren-1]), pivot, pos);
-        assert Keys.IsStrictlySorted(pivots[..nchildren-1]);
-        forall i: int | 0 <= i < nchildren as int
-          ensures children[i] != null
-          ensures children[i] in subtreeObjects
-          ensures children[i].subtreeObjects < subtreeObjects
-          ensures {this, pivots, children} !! children[i].subtreeObjects
-        {
-          if pos + 2 < i {
-            assert children[i] == old(children[i-1]);
-          }
-        }
-        forall i: int | 0 <= i < nchildren as int
-          ensures children[i].WF()
-        {
-          if i < pos + 2 {
-            assert children[i] == old(children[i]);
-          } else if pos + 2 < i {
-            assert children[i] == old(children[i-1]);
-          }
-        }
-        forall i: int, j: int | 0 <= i < j < nchildren as int
-          ensures children[i].subtreeObjects !! children[j].subtreeObjects
-        {
-          if j < pos + 2 {
-            //assume false;
-          } else if j == pos + 2 {
-            //assume false;
-          } else if i < pos + 2 < j {
-            assert pos + 2 < j;
-            assert children[j] == old(children[j-1]);
-          } else if i == pos + 2 {
-            assert pos + 2 < j;
-            assert children[j] == old(children[j-1]);
-          } else if pos + 2 < i {
-            assert children[i] == old(children[i-1]);
-            assert pos + 2 < j;
-            assert children[j] == old(children[j-1]);
-          }
-        }
-        forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].allKeys
-          ensures Keys.lt(key, pivots[i])
-        {
-          if pos + 2 < i {
-            assert children[i] == old(children[i-1]);
-          }
-        }
-        forall i: int, key | 0 < i < nchildren as int && key in children[i].allKeys
-          ensures Keys.lt(pivots[i-1], key)
-        {
-          if pos + 2 < i {
-            assert children[i] == old(children[i-1]);
-          }
-        }
-        assert WF();
-        //assert Interpretation() == old(Interpretation());
-
-        if Keys.lte(pivot, key) {
-          pos := pos + 1;
-        }
+        childidx := SplitChild(key, childidx);
       }
-      children[pos+1].Insert(key, value);
-      subtreeObjects := subtreeObjects + children[pos+1].subtreeObjects;
+      assume children[childidx].subtreeObjects < old(subtreeObjects);
+      children[childidx].Insert(key, value);
+      subtreeObjects := subtreeObjects + children[childidx].subtreeObjects;
       allKeys := allKeys + {key};
+      assume false;
     }
 
     function UnionSubtreeObjects() : set<object>
       requires nchildren as int <= children.Length
       requires forall i :: 0 <= i < nchildren ==> children[i] != null
       reads this, children, children[..nchildren]
-    // {
-    //   set o, i | 0 <= i < nchildren && o in children[i].subtreeObjects :: o
-    // }
+    {
+      set o, i | 0 <= i < nchildren && o in children[i].subtreeObjects :: o
+    }
     
     method Split() returns (ghost wit: Key, pivot: Key, rightnode: Node)
       requires WF()
@@ -414,27 +441,26 @@ abstract module MutableBtree {
       ensures subtreeObjects !! rightnode.subtreeObjects
       ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
       modifies this
-    // {
-    //   var right := new Index();
-    //   var boundary := nchildren/2;
-    //   Arrays.Memcpy(right.pivots, 0, pivots[boundary..nchildren-1]); // FIXME: remove conversion to seq
-    //   Arrays.Memcpy(right.children, 0, children[boundary..nchildren]); // FIXME: remove conversion to seq
-    //   right.nchildren := nchildren - boundary;
-    //   nchildren := boundary;
+    {
+      var right := new Index();
+      var boundary := nchildren/2;
+      Arrays.Memcpy(right.pivots, 0, pivots[boundary..nchildren-1]); // FIXME: remove conversion to seq
+      Arrays.Memcpy(right.children, 0, children[boundary..nchildren]); // FIXME: remove conversion to seq
+      right.nchildren := nchildren - boundary;
+      nchildren := boundary;
+      subtreeObjects := {this, pivots, children} + UnionSubtreeObjects();
+      right.subtreeObjects := right.subtreeObjects + right.UnionSubtreeObjects();
 
-    //   subtreeObjects := {this, pivots, children} + UnionSubtreeObjects();
-    //   right.subtreeObjects := right.subtreeObjects + right.UnionSubtreeObjects();
-
-    //   //assert multiset(children[..nchildren]) !! multiset(right.children[..right.nchildren]);
+      wit := right.pivots[0];
+      pivot := pivots[boundary-1];
+      rightnode := right;
+      assume false;
       
-    //   pivot := pivots[boundary-1];
-    //   rightnode := right;
-
-    //   Keys.reveal_IsStrictlySorted();
-    //   assert WF();
-    //   assert rightnode.WF();
-    //   assert MergeMaps(Interpretation(), pivot, rightnode.Interpretation()) == old(Interpretation());
-    // }
+      // Keys.reveal_IsStrictlySorted();
+      // assert WF();
+      // assert rightnode.WF();
+      // assert MergeMaps(Interpretation(), pivot, rightnode.Interpretation()) == old(Interpretation());
+    }
 
     constructor()
       ensures nchildren == 0
@@ -442,13 +468,59 @@ abstract module MutableBtree {
       ensures children.Length == (MaxChildren() as int)
       ensures forall i :: 0 <= i < children.Length ==> children[i] == null
       ensures subtreeObjects == {this, pivots, children}
+      ensures allKeys == {}
       ensures fresh(pivots)
       ensures fresh(children)
-    // {
-    //   pivots := new Key[MaxChildren()-1](_ => DefaultKey());
-    //   children := new Node?[MaxChildren()](_ => null);
-    //   nchildren := 0;
-    //   subtreeObjects := {this, pivots, children};
-    // }
+    {
+      pivots := new Key[MaxChildren()-1](_ => DefaultKey());
+      children := new Node?[MaxChildren()](_ => null);
+      nchildren := 0;
+      subtreeObjects := {this, pivots, children};
+      allKeys := {};
+    }
+  }
+
+  class MutableBtree {
+    var root: Node
+
+    function Interpretation() : map<Key, Value>
+      requires root.WF()
+      reads this, root, root.subtreeObjects
+    {
+      root.Interpretation()
+    }
+
+    method Query(needle: Key) returns (result: QueryResult)
+      requires root.WF()
+      ensures result == NotFound ==> needle !in Interpretation()
+      ensures result.Found? ==> needle in Interpretation() && Interpretation()[needle] == result.value
+    {
+      result := root.Query(needle);
+    }
+
+    method Insert(key: Key, value: Value)
+      requires root.WF()
+      ensures root.WF()
+      ensures Interpretation() == old(Interpretation())[key := value]
+      modifies this, root, root.subtreeObjects
+    {
+      if root.Full() {
+        var newroot := new Index();
+        newroot.children[0] := root;
+        newroot.nchildren := 1;
+        newroot.subtreeObjects := newroot.subtreeObjects + root.subtreeObjects;
+        newroot.allKeys := root.allKeys;
+        root := newroot;
+      }
+      assume false;
+      root.Insert(key, value);
+    }
+    
+    constructor()
+      ensures root.WF()
+      ensures Interpretation() == map[]
+    {
+      root := new Leaf();
+    }
   }
 }

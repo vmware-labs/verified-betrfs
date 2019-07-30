@@ -13,3 +13,62 @@ all kinds of implementation stuff
 add i/o errors to model
 add asynchronous i/o to model
 concurrency
+
+When can we benchmark performance
+---------------------------------
+1. un-marshall is slow (quadratically building maps?)
+   - sstables
+
+2. Background event triggering
+   - Flush/split/grow/merge
+   - evict/writeback
+
+3. Unrealistic superblock
+
+3.5 hashmap (mutable)
+
+4. checksummed blocks
+
+13. partial reads/writes
+
+5. sub-block query reads
+   - bloom filters
+
+6. more serious benchmark
+   - ycsb
+   - range queries
+
+7. avoid needless log n descent
+
+8. async disk model
+8.5 async implementation
+
+9. mutable buffers at root
+
+10. efficient mechanism to merge buffers
+    - mutable vectors
+
+11. log for low-latency sync
+
+12. GC pause benchmark
+
+14. C++ backend
+
+Publication
+-----------
+
+- good perf. benchmark
+
+- handle i/o errors / corruption
+
+- key lifting and file system layer
+
+- extend crash semantics to include torn write
+
+
+Maintainability
+---------------
+
+- .s vs .i separation
+- .i /noCheating
+
