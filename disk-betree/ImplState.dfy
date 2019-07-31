@@ -45,7 +45,7 @@ module {:extern} ImplState {
     | Unready(outstandingIndirectionTableRead: Option<D.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
-    | SectorIndirectionTable(indirectionTable: BC.IndirectionTable)
+    | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
 
   predicate WFBuckets(buckets: seq<SSTable.SSTable>)
   {
@@ -67,10 +67,11 @@ module {:extern} ImplState {
     }
   }
   predicate WFSector(sector: Sector)
+    reads if sector.SectorIndirectionTable? then { sector.indirectionTable } else {}
   {
     match sector {
       case SectorBlock(node) => WFNode(node)
-      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(indirectionTable)
+      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 
@@ -112,10 +113,11 @@ module {:extern} ImplState {
   }
   function ISector(sector: Sector) : BC.Sector
   requires WFSector(sector)
+  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {}
   {
     match sector {
       case SectorBlock(node) => BC.SectorBlock(INode(node))
-      case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(indirectionTable)
+      case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 

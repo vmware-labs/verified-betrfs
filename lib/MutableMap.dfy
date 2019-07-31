@@ -837,6 +837,16 @@ module MutableMap {
       assert Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1;
     }
 
+    method ToMap() returns (result: map<uint64, V>)
+      requires Inv()
+      ensures Contents == old(Contents)
+      ensures Contents == result
+      ensures Repr == old(Repr)
+    {
+      var asArray := ToArray();
+      result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
+    }
+
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
       requires Inv()
