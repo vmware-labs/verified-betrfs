@@ -388,8 +388,6 @@ module MutableMap {
       assert forall dist: nat :: dist < Storage.Length ==>
           Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
 
-      assume false;
-
       var skips := 0;
       ghostSkips := 0;
       while skips < (Storage.Length as uint64)
@@ -435,8 +433,22 @@ module MutableMap {
         assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
         assert FilledWithOtherKeys(Storage[..], startSlot, skips as nat, key);
       }
+
       assert viewFromStartSlot[..skips] == viewFromStartSlot;
-      assert false;
+      forall ensures false
+      {
+        calc {
+          Storage.Length;
+          skips as nat;
+          CountFilled(viewFromStartSlot[..skips]);
+          CountFilled(viewFromStartSlot);
+          |Contents|;
+          Count as nat;
+          < Storage.Length;
+        }
+        assert Storage.Length < Storage.Length; // adding this line makes the proof work,
+                                                // which is surprising because it's the output of the calc
+      }
     }
 
     method Insert(key: uint64, value: V) returns (replaced: Option<V>)
