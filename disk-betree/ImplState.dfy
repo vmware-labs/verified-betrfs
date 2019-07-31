@@ -3,10 +3,12 @@ include "Message.dfy"
 include "../lib/Option.dfy"
 include "SSTable.dfy"
 include "BetreeBlockCache.dfy"
+include "../lib/tttree.dfy"
 
 module {:extern} ImplState {
   import opened Options
   import opened Sequences
+  import TTT = TwoThreeTree
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -20,6 +22,7 @@ module {:extern} ImplState {
   type Reference = BT.G.Reference
   type Key = MS.Key
   type Message = Messages.Message
+  type TreeMap = TTT.Tree<Message>
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -35,7 +38,8 @@ module {:extern} ImplState {
         outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
         syncReqs: map<int, BC.SyncReqStatus>,
-        cache: map<Reference, Node>)
+        cache: map<Reference, Node>,
+        rootBucket: TreeMap)
     | Unready(outstandingIndirectionTableRead: Option<D.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
@@ -47,7 +51,8 @@ module {:extern} ImplState {
   }
   predicate WFNode(node: Node)
   {
-    WFBuckets(node.buckets)
+    && WFBuckets(node.buckets)
+    && Pivots.WFPivots(node.pivotTable)
   }
   predicate WFCache(cache: map<Reference, Node>)
   {
@@ -56,7 +61,11 @@ module {:extern} ImplState {
   predicate WFVars(vars: Variables)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) => WFCache(cache)
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) => (
+        && WFCache(cache)
+        && TTT.TTTree(rootBucket)
+        && (rootBucket != TTT.EmptyTree ==> BT.G.Root() in cache)
+      )
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
@@ -73,17 +82,36 @@ module {:extern} ImplState {
   {
     BT.G.Node(node.pivotTable, node.children, SSTable.ISeq(node.buckets))
   }
-  function ICache(cache: map<Reference, Node>) : map<Reference, BT.G.Node>
-  requires WFCache(cache)
+  function INodeRoot(node: Node, rootBucket: TreeMap) : BT.G.Node
+  requires WFNode(node)
+  requires TTT.TTTree(rootBucket)
   {
-    map ref | ref in cache :: INode(cache[ref])
+    BT.G.Node(node.pivotTable, node.children,
+      BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
+          TTT.I(rootBucket)))
+  }
+  function INodeForRef(cache: map<Reference, Node>, ref: Reference, rootBucket: TreeMap) : BT.G.Node
+  requires WFCache(cache)
+  requires ref in cache
+  requires TTT.TTTree(rootBucket)
+  {
+    if ref == BT.G.Root() then
+      INodeRoot(cache[ref], rootBucket)
+    else
+      INode(cache[ref])
+  }
+  function ICache(cache: map<Reference, Node>, rootBucket: TreeMap) : map<Reference, BT.G.Node>
+  requires WFCache(cache)
+  requires TTT.TTTree(rootBucket)
+  {
+    map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
   function IVars(vars: Variables) : M.Variables
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) =>
-        BC.Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) =>
+        BC.Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache, rootBucket))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }

@@ -3,8 +3,8 @@ include "../lib/lexical.dfy"
 include "../lib/Maps.dfy"
 include "../lib/mathematics.dfy"
 
-abstract module TwoThreeTree {
-    import Keyspace : Total_Order
+module TwoThreeTree {
+    import Keyspace = Lexicographic_Byte_Order
     import Maps = Maps
     import Math = Mathematics
 
@@ -26,49 +26,49 @@ abstract module TwoThreeTree {
         }
     }
 
-    predicate ContentsAreLessThan(tree: Node, pivot: Keyspace.Element) {
+    predicate IAreLessThan(tree: Node, pivot: Keyspace.Element) {
         forall lv :: lv in SubtreeAllKeys(tree) ==> Keyspace.lt(lv, pivot)
     }
 
-    predicate ContentsAreGreaterEqualThan(pivot: Keyspace.Element, tree: Node) {
+    predicate IAreGreaterEqualThan(pivot: Keyspace.Element, tree: Node) {
         forall lv :: lv in SubtreeAllKeys(tree) ==> !Keyspace.lt(lv, pivot)
     }
 
     predicate {:opaque} TreeIsOrdered(tree: Node)
         ensures TreeIsOrdered(tree) && tree.TwoNode? ==>
-            ContentsAreLessThan(tree.left, tree.pivot) &&
-            ContentsAreGreaterEqualThan(tree.pivot, tree.right);
+            IAreLessThan(tree.left, tree.pivot) &&
+            IAreGreaterEqualThan(tree.pivot, tree.right);
         ensures TreeIsOrdered(tree) && tree.ThreeNode? ==>
             Keyspace.lt(tree.pivota, tree.pivotb) &&
-            ContentsAreLessThan(tree.left, tree.pivota) &&
-            ContentsAreGreaterEqualThan(tree.pivota, tree.middle) &&
-            ContentsAreLessThan(tree.middle, tree.pivotb) &&
-            ContentsAreGreaterEqualThan(tree.pivotb, tree.right);
+            IAreLessThan(tree.left, tree.pivota) &&
+            IAreGreaterEqualThan(tree.pivota, tree.middle) &&
+            IAreLessThan(tree.middle, tree.pivotb) &&
+            IAreGreaterEqualThan(tree.pivotb, tree.right);
         ensures tree.Leaf? ==> TreeIsOrdered(tree);
     {
         if tree.Leaf?
             then true
         else if tree.TwoNode?
             then
-            ContentsAreLessThan(tree.left, tree.pivot) &&
-            ContentsAreGreaterEqualThan(tree.pivot, tree.right) &&
+            IAreLessThan(tree.left, tree.pivot) &&
+            IAreGreaterEqualThan(tree.pivot, tree.right) &&
             TreeIsOrdered(tree.left) &&
             TreeIsOrdered(tree.right)
         else
             Keyspace.lt(tree.pivota, tree.pivotb) &&
-            ContentsAreLessThan(tree.left, tree.pivota) &&
-            ContentsAreGreaterEqualThan(tree.pivota, tree.middle) &&
-            ContentsAreLessThan(tree.middle, tree.pivotb) &&
-            ContentsAreGreaterEqualThan(tree.pivotb, tree.right) &&
+            IAreLessThan(tree.left, tree.pivota) &&
+            IAreGreaterEqualThan(tree.pivota, tree.middle) &&
+            IAreLessThan(tree.middle, tree.pivotb) &&
+            IAreGreaterEqualThan(tree.pivotb, tree.right) &&
             TreeIsOrdered(tree.left) &&
             TreeIsOrdered(tree.middle) &&
             TreeIsOrdered(tree.right)
     }
 
-    function SubtreeContents<Value>(tree: Node<Value>) : map<Keyspace.Element, Value>
+    function SubtreeI<Value>(tree: Node<Value>) : map<Keyspace.Element, Value>
         requires TreeIsOrdered(tree);
-        ensures SubtreeContents(tree).Keys <= SubtreeAllKeys(tree);
-        ensures SubtreeContents(tree) != map[];
+        ensures SubtreeI(tree).Keys <= SubtreeAllKeys(tree);
+        ensures SubtreeI(tree) != map[];
     {
         if tree.Leaf? then
             var r := map[tree.key := tree.value];
@@ -76,16 +76,16 @@ abstract module TwoThreeTree {
             r
         else if tree.TwoNode? then
             reveal_TreeIsOrdered();
-            assert SubtreeContents(tree.left).Keys !! SubtreeContents(tree.right).Keys; // observe
-            Maps.MapDisjointUnion(SubtreeContents(tree.left), SubtreeContents(tree.right))
+            assert SubtreeI(tree.left).Keys !! SubtreeI(tree.right).Keys; // observe
+            Maps.MapDisjointUnion(SubtreeI(tree.left), SubtreeI(tree.right))
         else
             reveal_TreeIsOrdered();
-            assert SubtreeContents(tree.left).Keys
-                !! SubtreeContents(tree.middle).Keys
-                !! SubtreeContents(tree.right).Keys; // observe
-            Maps.MapDisjointUnion3(SubtreeContents(tree.left),
-                                 SubtreeContents(tree.middle), 
-                                 SubtreeContents(tree.right))
+            assert SubtreeI(tree.left).Keys
+                !! SubtreeI(tree.middle).Keys
+                !! SubtreeI(tree.right).Keys; // observe
+            Maps.MapDisjointUnion3(SubtreeI(tree.left),
+                                 SubtreeI(tree.middle), 
+                                 SubtreeI(tree.right))
     }
 
     datatype QueryResult<Value> = KeyDoesNotExist | ValueForKey(value: Value)
@@ -93,9 +93,9 @@ abstract module TwoThreeTree {
     function method QuerySubtree<Value>(tree: Node<Value>, key: Keyspace.Element) : QueryResult<Value>
         requires TreeIsOrdered(tree);
         ensures QuerySubtree(tree, key) == KeyDoesNotExist <==>
-            (key !in SubtreeContents(tree));
+            (key !in SubtreeI(tree));
             ensures QuerySubtree(tree, key).ValueForKey? <==>
-                (key in SubtreeContents(tree) && SubtreeContents(tree)[key] == QuerySubtree(tree, key).value);
+                (key in SubtreeI(tree) && SubtreeI(tree)[key] == QuerySubtree(tree, key).value);
     {
         reveal_TreeIsOrdered();
         if tree.Leaf? && tree.key == key then
@@ -116,8 +116,8 @@ abstract module TwoThreeTree {
 
     function method MinKVPair<Value>(tree: Node<Value>) : (Keyspace.Element, Value)
         requires TreeIsOrdered(tree);
-        ensures MinKVPair(tree).0 in SubtreeContents(tree).Keys;
-        ensures MinKVPair(tree).1 == SubtreeContents(tree)[MinKVPair(tree).0];
+        ensures MinKVPair(tree).0 in SubtreeI(tree).Keys;
+        ensures MinKVPair(tree).1 == SubtreeI(tree)[MinKVPair(tree).0];
         ensures forall x :: x in SubtreeAllKeys(tree) ==> Keyspace.lte(MinKVPair(tree).0, x);
     {
         reveal_TreeIsOrdered();
@@ -208,15 +208,15 @@ abstract module TwoThreeTree {
         requires TTSubtree(t1);
         requires TTSubtree(t2);
         requires Height(t1) == Height(t2);
-        requires ContentsAreLessThan(t1, pivot);
-        requires ContentsAreGreaterEqualThan(pivot, t2);
-        requires SubtreeContents(t1).Keys
-               !! SubtreeContents(t2).Keys; // Should be implied, but dafny can't always see it
+        requires IAreLessThan(t1, pivot);
+        requires IAreGreaterEqualThan(pivot, t2);
+        requires SubtreeI(t1).Keys
+               !! SubtreeI(t2).Keys; // Should be implied, but dafny can't always see it
         ensures TTSubtree(mkTwoNode(t1, pivot, t2));
         ensures SubtreeAllKeys(mkTwoNode(t1, pivot, t2))
              == SubtreeAllKeys(t1) + { pivot } + SubtreeAllKeys(t2);
-        ensures SubtreeContents(mkTwoNode(t1, pivot, t2)) ==
-            Maps.MapDisjointUnion(SubtreeContents(t1), SubtreeContents(t2));
+        ensures SubtreeI(mkTwoNode(t1, pivot, t2)) ==
+            Maps.MapDisjointUnion(SubtreeI(t1), SubtreeI(t2));
         ensures Height(mkTwoNode(t1, pivot, t2)) == Height(t1) + 1;
     {
         reveal_minHeight();
@@ -232,16 +232,16 @@ abstract module TwoThreeTree {
         requires TTSubtree(t3);
         requires Height(t1) == Height(t2) == Height(t3);
         requires Keyspace.lt(pivota, pivotb);
-        requires ContentsAreLessThan(t1, pivota);
-        requires ContentsAreGreaterEqualThan(pivota, t2);
-        requires ContentsAreLessThan(t2, pivotb);
-        requires ContentsAreGreaterEqualThan(pivotb, t3);
-        requires SubtreeContents(t1).Keys !! SubtreeContents(t2).Keys !! SubtreeContents(t3).Keys; // Should be implied, but dafny can't always see it
+        requires IAreLessThan(t1, pivota);
+        requires IAreGreaterEqualThan(pivota, t2);
+        requires IAreLessThan(t2, pivotb);
+        requires IAreGreaterEqualThan(pivotb, t3);
+        requires SubtreeI(t1).Keys !! SubtreeI(t2).Keys !! SubtreeI(t3).Keys; // Should be implied, but dafny can't always see it
         ensures TTSubtree(mkThreeNode(t1, pivota, t2, pivotb, t3));
         ensures SubtreeAllKeys(mkThreeNode(t1, pivota, t2, pivotb, t3)) ==
             SubtreeAllKeys(t1) + { pivota } + SubtreeAllKeys(t2) + { pivotb } + SubtreeAllKeys(t3);
-        ensures SubtreeContents(mkThreeNode(t1, pivota, t2, pivotb, t3)) ==
-            Maps.MapDisjointUnion3(SubtreeContents(t1), SubtreeContents(t2), SubtreeContents(t3));
+        ensures SubtreeI(mkThreeNode(t1, pivota, t2, pivotb, t3)) ==
+            Maps.MapDisjointUnion3(SubtreeI(t1), SubtreeI(t2), SubtreeI(t3));
         ensures Height(mkThreeNode(t1, pivota, t2, pivotb, t3)) == Height(t1) + 1;
     {
         reveal_TreeIsOrdered();
@@ -260,7 +260,7 @@ abstract module TwoThreeTree {
     {
         TTSubtree(result.tree) &&
            (SubtreeAllKeys(result.tree) == SubtreeAllKeys(tree) + {key}) &&
-           (SubtreeContents(result.tree) == SubtreeContents(tree)[key := value]) &&
+           (SubtreeI(result.tree) == SubtreeI(tree)[key := value]) &&
            (result.Split? ==> result.tree.TwoNode?) &&
            (result.Split? ==> Height(result.tree) == Height(tree) + 1) &&
            (result.DidntSplit? ==> Height(result.tree) == Height(tree))
@@ -460,9 +460,9 @@ abstract module TwoThreeTree {
      else 
       TTSubtree(result.tree) &&
       (SubtreeAllKeys(result.tree) <= SubtreeAllKeys(tree)) &&
-      (SubtreeContents(result.tree).Keys == SubtreeContents(tree).Keys - {key}) && 
-      (forall x :: x in SubtreeContents(result.tree) ==>
-      SubtreeContents(result.tree)[x] == SubtreeContents(tree)[x]) &&
+      (SubtreeI(result.tree).Keys == SubtreeI(tree).Keys - {key}) && 
+      (forall x :: x in SubtreeI(result.tree) ==>
+      SubtreeI(result.tree)[x] == SubtreeI(tree)[x]) &&
       (result.Merged? ==> !tree.Leaf?) &&
       (result.Merged? ==> Height(result.tree) == Height(tree) - 1) &&
       (!result.Merged? ==> Height(result.tree) == Height(tree))
@@ -704,8 +704,8 @@ abstract module TwoThreeTree {
     // {
     //       TTSubtree(result.tree)
     //     && SubtreeAllKeys(result.tree) == SubtreeAllKeys(root1) + SubtreeAllKeys(root2)
-    //     && SubtreeContents(result.tree) ==
-    //       Maps.MapDisjointUnion(SubtreeContents(root1), SubtreeContents(root2))
+    //     && SubtreeI(result.tree) ==
+    //       Maps.MapDisjointUnion(SubtreeI(root1), SubtreeI(root2))
     //     && (result.Split? ==> result.tree.TwoNode?)
     //     && (result.Split? ==> Height(result.tree) == Math.max(Height(root1), Height(root2)) + 1)
     //     && (result.DidntSplit? ==> Height(result.tree) == Math.max(Height(root1), Height(root2)))
@@ -779,21 +779,21 @@ abstract module TwoThreeTree {
         tree.EmptyTree? || TTSubtree(tree.root)
     }
 
-    function Contents<Value>(tree: Tree<Value>) : map<Keyspace.Element, Value>
+    function I<Value>(tree: Tree<Value>) : map<Keyspace.Element, Value>
         requires TTTree(tree);
     {
         if tree.EmptyTree?
             then map[]
         else
-            SubtreeContents(tree.root)
+            SubtreeI(tree.root)
     }
 
     function method Query<Value>(tree: Tree<Value>, key: Keyspace.Element) : QueryResult<Value>
         requires(TTTree(tree));
         ensures Query(tree, key) == KeyDoesNotExist <==>
-            (key !in Contents(tree));
+            (key !in I(tree));
             ensures Query(tree, key).ValueForKey? <==>
-                (key in Contents(tree) && Contents(tree)[key] == Query(tree, key).value);
+                (key in I(tree) && I(tree)[key] == Query(tree, key).value);
     {
         if tree.EmptyTree? then
             KeyDoesNotExist
@@ -804,7 +804,7 @@ abstract module TwoThreeTree {
     method Insert<Value>(tree: Tree<Value>, key: Keyspace.Element, value: Value) returns (newtree: Tree<Value>)
         requires TTTree(tree);
         ensures TTTree(newtree);
-        ensures Contents(newtree) == Contents(tree)[key := value];
+        ensures I(newtree) == I(tree)[key := value];
         ensures newtree.NonEmptyTree?;
     {
         if tree.EmptyTree? {
@@ -818,8 +818,8 @@ abstract module TwoThreeTree {
     method Delete<Value>(tree: Tree<Value>, key: Keyspace.Element) returns (newtree: Tree<Value>)
         requires TTTree(tree);
         ensures TTTree(newtree);
-        ensures Contents(newtree).Keys == Contents(tree).Keys - {key};
-        ensures forall k :: k in Contents(newtree).Keys ==> Contents(newtree)[k] == Contents(tree)[k];
+        ensures I(newtree).Keys == I(tree).Keys - {key};
+        ensures forall k :: k in I(newtree).Keys ==> I(newtree)[k] == I(tree)[k];
     {
         if tree.EmptyTree? {
             newtree := EmptyTree;

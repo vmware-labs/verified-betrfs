@@ -7,6 +7,7 @@ include "Marshalling.dfy"
 module {:extern} Impl refines Main { 
   import ADM = ByteBetreeBlockCacheSystem
 
+  import TTT = TwoThreeTree
   import BBC = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
@@ -174,7 +175,7 @@ module {:extern} Impl refines Main {
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
-      s' := IS.Ready(sector.value.indirectionTable, None, sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[]);
+      s' := IS.Ready(sector.value.indirectionTable, None, sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
       assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
   assert ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
@@ -210,6 +211,33 @@ module {:extern} Impl refines Main {
       assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInReqStep(ref));
     }
   }
+
+  lemma INodeRootEqINodeForEmptyRootBucket(node: IS.Node)
+  requires IS.WFNode(node)
+  ensures IS.INodeRoot(node, TTT.EmptyTree) == IS.INode(node);
+  /*{
+    assert BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
+          map[]) == SSTable.ISeq(node.buckets);
+  }*/
+
+  /*lemma LemmaPageInBlockCacheSet(s: Variables, ref: BT.G.Reference, node: IS.Node)
+  requires IS.WFVars(s)
+  requires s.Ready?
+  requires ref !in s.cache
+  requires IS.WFNode(node)
+  ensures IS.ICache(s.cache, s.rootBucket)[ref := IS.INode(node)]
+       == IS.ICache(s.cache[ref := node], s.rootBucket);
+  {
+    if (ref == BT.G.Root()) {
+      //assert TTT.I(rootBucket) == map[];
+      //assert BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
+      //    map[]) == IS.INode(node).buckets;
+      INodeRootEqINodeForEmptyRootBucket(node);
+      assert IS.INodeRoot(node, s.rootBucket) == IS.INode(node);
+    }
+    assert IS.INodeForRef(s.cache[ref := node], ref, s.rootBucket) == IS.INode(node);
+    assert IS.ICache(s.cache[ref := node], s.rootBucket)[ref] == IS.INode(node);
+  }*/
 
   method PageInResp(k: Constants, s: Variables, io: DiskIOHandler)
   returns (s': Variables)
@@ -248,6 +276,9 @@ module {:extern} Impl refines Main {
       if (s.ephemeralIndirectionTable.graph[ref] == (if node.children.Some? then node.children.value else [])) {
         s' := s.(cache := s.cache[ref := sector.value.block])
                .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
+
+        INodeRootEqINodeForEmptyRootBucket(node);
+
         assert BC.PageInResp(k, IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()));
         assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInRespStep);
       } else {
@@ -345,12 +376,17 @@ module {:extern} Impl refines Main {
   requires IS.WFVars(s)
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
+  requires ref == BT.G.Root() ==> s.rootBucket == TTT.EmptyTree
   requires IS.WFNode(node)
   requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralIndirectionTable.graph)
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas
   ensures IS.WFVars(s')
   ensures BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node))
   {
+    if (ref == BT.G.Root()) {
+      INodeRootEqINodeForEmptyRootBucket(node);
+    }
+
     s' := s
       .(ephemeralIndirectionTable :=
         BC.IndirectionTable(
@@ -370,6 +406,7 @@ module {:extern} Impl refines Main {
   ensures IS.WFVars(s')
   ensures ref.Some? ==> BC.Alloc(k, IS.IVars(s), IS.IVars(s'), ref.value, IS.INode(node))
   ensures ref.None? ==> s' == s
+  ensures s.rootBucket == s'.rootBucket
   {
     ref := getFreeRef(s);
     if (ref.Some?) {
@@ -385,6 +422,13 @@ module {:extern} Impl refines Main {
       s' := s;
     }
   }
+
+  lemma LemmaInsertToRootBucket(node: IS.Node, rootBucket: IS.TreeMap, rootBucket': IS.TreeMap, key: Key, msg: Message)
+  requires IS.WFNode(node)
+  requires TTT.TTTree(rootBucket)
+  requires TTT.TTTree(rootBucket')
+  requires TTT.I(rootBucket') == TTT.I(rootBucket)[key := msg]
+  ensures IS.INodeRoot(node, rootBucket') == BT.AddMessageToNode(IS.INodeRoot(node, rootBucket), key, msg)
 
   method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   returns (s': Variables, success: bool)
@@ -404,40 +448,80 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    var oldroot := s.cache[BT.G.Root()];
     var msg := Messages.Define(value);
 
-    var r := Pivots.ComputeRoute(oldroot.pivotTable, key);
-    var bucket := oldroot.buckets[r];
+    ghost var baseroot := s.cache[BT.G.Root()];
 
-    if (!(|bucket.strings| < 0x800_0000_0000_0000 && |bucket.starts| < 0x800_0000_0000_0000
-        && |key| < 0x400_0000_0000_0000 && |value| < 0x400_0000_0000_0000)) {
-      s' := s;
-      success := false;
-      assert noop(k, s, s');
-      print "giving up; data is impossibly big\n";
-      return;
-    }
+    ghost var r := Pivots.Route(baseroot.pivotTable, key);
+    ghost var bucket := baseroot.buckets[r];
 
-    var newbucket := SSTable.Insert(bucket, key, msg);
-    var r1 := Pivots.ComputeRoute(oldroot.pivotTable, key);
-    var newroot := oldroot.(buckets := oldroot.buckets[r1 := newbucket]);
-
-    assert BC.BlockPointsToValidReferences(IS.INode(oldroot), s.ephemeralIndirectionTable.graph);
+    assert BC.BlockPointsToValidReferences(IS.INodeRoot(baseroot, s.rootBucket), s.ephemeralIndirectionTable.graph);
     //assert IS.INode(oldroot).children == IS.INode(newroot).children;
     //assert BC.BlockPointsToValidReferences(IS.INode(newroot), s.ephemeralIndirectionTable.graph);
 
-    assert IS.INode(newroot) == BT.AddMessageToNode(IS.INode(oldroot), key, msg);
-
-    s' := write(k, s, BT.G.Root(), newroot);
+    var newRootBucket := TTT.Insert(s.rootBucket, key, msg);
+    s' := s
+        .(rootBucket := newRootBucket)
+        .(ephemeralIndirectionTable :=
+        BC.IndirectionTable(
+          MapRemove(s.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+          s.ephemeralIndirectionTable.graph
+        ));
     success := true;
 
-    assert BC.Dirty(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.Root(), IS.INode(newroot));
-    assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), IS.INode(newroot)));
-    assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot))))[0]);
-    assert BC.OpTransaction(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot)))));
-    assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot))));
-    assert stepsBetree(k, s, s', UI.PutOp(key, value), BT.BetreeInsert(BT.MessageInsertion(key, msg, IS.INode(oldroot))));
+    ghost var oldroot := IS.INodeRoot(baseroot, s.rootBucket);
+    ghost var newroot := IS.INodeRoot(baseroot, newRootBucket);
+    LemmaInsertToRootBucket(baseroot, s.rootBucket, newRootBucket, key, msg);
+    assert newroot == BT.AddMessageToNode(oldroot, key, msg);
+
+    assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
+
+    assert BC.Dirty(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.Root(), newroot);
+    assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
+    assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
+    assert BC.OpTransaction(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
+    assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
+    assert stepsBetree(k, s, s', UI.PutOp(key, value), BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
+  }
+
+  method TryRootBucketLookup(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
+  returns (res: Option<MS.Value>)
+  requires io.initialized()
+  requires IS.WFVars(s)
+  requires BBC.Inv(k, IS.IVars(s))
+  requires s.Ready?
+  modifies io
+  ensures res.Some? ==> ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s),
+    UI.GetOp(key, res.value), io.diskOp())
+  ensures res.None? ==> io.initialized()
+  ensures res.None? ==> key !in TTT.I(s.rootBucket)
+  {
+    var qres := TTT.Query(s.rootBucket, key);
+    if (qres.ValueForKey?) {
+      assert qres.value.Define?;
+      res := Some(qres.value.value);
+
+      ghost var lookup := [BT.G.ReadOp(BT.G.Root(), IS.INodeRoot(s.cache[BT.G.Root()], s.rootBucket))];
+
+      assert BT.NodeLookup(IS.INodeRoot(s.cache[BT.G.Root()], s.rootBucket), key) == TTT.I(s.rootBucket)[key];
+
+      assert BT.InterpretLookup(lookup, key) == TTT.I(s.rootBucket)[key]
+          == qres.value;
+      //assert BT.InterpretLookupAccountingForLeaf(lookup, key) == qres.value;
+
+      //assert BT.ValidQuery(BT.LookupQuery(key, res.value, lookup));
+      //assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s),
+      //  UI.GetOp(key, res.value),
+      //  ADM.M.IDiskOp(io.diskOp()),
+      //  BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
+
+      assert stepsBetree(k, s, s,
+        UI.GetOp(key, res.value),
+        BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
+
+    } else {
+      res := None;
+    }
   }
 
   // note: I split this out because of sequence-related trigger loop problems
@@ -473,6 +557,11 @@ module {:extern} Impl refines Main {
     assert BT.LookupFollowsChildRefs(key, lookup');
   }
 
+  lemma NodeLookupIfNotInRootBucket(node: IS.Node, rootBucket: IS.TreeMap, key: Key)
+  requires IS.WFNode(node)
+  requires TTT.TTTree(rootBucket)
+  requires key !in TTT.I(rootBucket)
+  ensures BT.NodeLookup(IS.INode(node), key) == BT.NodeLookup(IS.INodeRoot(node, rootBucket), key)
 
   method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
   returns (s': Variables, res: Option<MS.Value>)
@@ -493,6 +582,13 @@ module {:extern} Impl refines Main {
       var msg := Messages.IdentityMessage();
       ghost var lookup := [];
 
+      var rootLookup := TryRootBucketLookup(k, s, io, key);
+      if (rootLookup.Some?) {
+        s' := s;
+        res := rootLookup;
+        return;
+      }
+
       // TODO if we have the acyclicity invariant, we can prove
       // termination without a bound like this.
       var loopBound := 40;
@@ -505,10 +601,11 @@ module {:extern} Impl refines Main {
       invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.Some?
       invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref
       invariant forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.graph
-      invariant forall i | 0 <= i < |lookup| :: MapsTo(IS.ICache(s.cache), lookup[i].ref, lookup[i].node)
+      invariant forall i | 0 <= i < |lookup| :: MapsTo(IS.ICache(s.cache, s.rootBucket), lookup[i].ref, lookup[i].node)
       invariant ref in s.ephemeralIndirectionTable.graph
       invariant !exiting ==> msg == BT.InterpretLookup(lookup, key)
       invariant io.initialized()
+      invariant key !in TTT.I(s.rootBucket)
       {
         assert !exiting;
         loopBound := loopBound - 1;
@@ -521,17 +618,21 @@ module {:extern} Impl refines Main {
           return;
         } else {
           var node := s.cache[ref];
-          lookup := AugmentLookup(lookup, ref, IS.INode(node), key, IS.ICache(s.cache), s.ephemeralIndirectionTable.graph); // ghost-y
+          ghost var inode := IS.INodeForRef(s.cache, ref, s.rootBucket);
+          lookup := AugmentLookup(lookup, ref, inode, key, IS.ICache(s.cache, s.rootBucket), s.ephemeralIndirectionTable.graph); // ghost-y
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var sstMsg := SSTable.Query(node.buckets[r], key);
           var lookupMsg := if sstMsg.Some? then sstMsg.value else Messages.IdentityMessage();
           msg := Messages.Merge(msg, lookupMsg);
 
+          NodeLookupIfNotInRootBucket(s.cache[BT.G.Root()], s.rootBucket, key);
+          assert lookupMsg == BT.NodeLookup(inode, key);
+
           if (node.children.Some?) {
             var r1 := Pivots.ComputeRoute(node.pivotTable, key);
             ref := node.children.value[r1];
-            assert ref in BT.G.Successors(IS.INode(node));
+            assert ref in BT.G.Successors(inode);
             assert ref in s.ephemeralIndirectionTable.graph;
           } else {
             if !msg.Define? {
@@ -647,6 +748,7 @@ module {:extern} Impl refines Main {
   requires IS.WFVars(s)
   requires s.Ready?
   requires io.initialized()
+  requires s.rootBucket == TTT.EmptyTree
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
@@ -656,6 +758,8 @@ module {:extern} Impl refines Main {
       s' := PageInReq(k, s, io, BT.G.Root());
       return;
     }
+
+    INodeRootEqINodeForEmptyRootBucket(s.cache[BT.G.Root()]);
 
     if (s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.graph && BT.G.Root() !in s.frozenIndirectionTable.value.lbas) {
       s' := s;
@@ -676,8 +780,8 @@ module {:extern} Impl refines Main {
         var newroot := IS.Node([], Some([newref]), [SSTable.Empty()]);
 
         assert BT.G.Root() in s.cache;
-        assert BT.G.Root() in IS.ICache(s.cache);
-        assert BT.G.Root() in IS.ICache(s1.cache);
+        assert BT.G.Root() in IS.ICache(s.cache, s.rootBucket);
+        assert BT.G.Root() in IS.ICache(s1.cache, s1.rootBucket);
         assert BT.G.Root() in s1.cache;
 
         s' := write(k, s1, BT.G.Root(), newroot);
@@ -809,6 +913,7 @@ module {:extern} Impl refines Main {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == ref
   requires io.initialized()
+  requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this unless paretnref is root
   modifies io
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
@@ -823,8 +928,11 @@ module {:extern} Impl refines Main {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[ref];
 
-    assert BT.WFNode(IS.ICache(s.cache)[parentref]);
-    assert BT.WFNode(IS.ICache(s.cache)[ref]);
+    INodeRootEqINodeForEmptyRootBucket(fused_parent);
+    INodeRootEqINodeForEmptyRootBucket(fused_child);
+
+    assert BT.WFNode(IS.ICache(s.cache, s.rootBucket)[parentref]);
+    assert BT.WFNode(IS.ICache(s.cache, s.rootBucket)[ref]);
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
@@ -871,6 +979,11 @@ module {:extern} Impl refines Main {
       assert r in BT.G.Successors(IS.INode(fused_child));
     }
     assert BC.BlockPointsToValidReferences(IS.INode(child), s.ephemeralIndirectionTable.graph);
+
+    Pivots.WFSlice(child.pivotTable, 0, num_children_left - 1);
+    Pivots.WFSuffix(child.pivotTable, num_children_left);
+    INodeRootEqINodeForEmptyRootBucket(left_child);
+    INodeRootEqINodeForEmptyRootBucket(right_child);
 
     // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
     // This sort of proof logic shouldn't have to be in the implementation.
@@ -928,9 +1041,9 @@ module {:extern} Impl refines Main {
     assert BC.BlockPointsToValidReferences(IS.INode(split_parent), s2.ephemeralIndirectionTable.graph);
 
     assert parentref in s.cache;
-    assert parentref in IS.ICache(s.cache);
-    assert parentref in IS.ICache(s1.cache);
-    assert parentref in IS.ICache(s2.cache);
+    assert parentref in IS.ICache(s.cache, s.rootBucket);
+    assert parentref in IS.ICache(s1.cache, s1.rootBucket);
+    assert parentref in IS.ICache(s2.cache, s2.rootBucket);
     assert parentref in s2.cache;
 
     s' := write(k, s2, parentref, split_parent);
@@ -964,6 +1077,7 @@ module {:extern} Impl refines Main {
   requires s.cache[ref].children.Some?
   requires 0 <= slot < |s.cache[ref].buckets|
   requires io.initialized()
+  requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this unless we're flushing the root
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
@@ -978,7 +1092,9 @@ module {:extern} Impl refines Main {
 
     var node := s.cache[ref];
 
-    assert IS.INode(node) == IS.ICache(s.cache)[ref];
+    INodeRootEqINodeForEmptyRootBucket(node);
+
+    assert IS.INode(node) == IS.ICache(s.cache, s.rootBucket)[ref];
     assert BT.WFNode(IS.INode(node));
 
     var childref := node.children.value[slot];
@@ -992,7 +1108,9 @@ module {:extern} Impl refines Main {
 
     var child := s.cache[childref];
 
-    assert IS.INode(child) == IS.ICache(s.cache)[childref];
+    INodeRootEqINodeForEmptyRootBucket(child);
+
+    assert IS.INode(child) == IS.ICache(s.cache, s.rootBucket)[childref];
     assert BT.WFNode(IS.INode(child));
 
     if (!(
@@ -1042,8 +1160,8 @@ module {:extern} Impl refines Main {
     assert BC.BlockPointsToValidReferences(IS.INode(newparent), s1.ephemeralIndirectionTable.graph);
 
     assert ref in s.cache;
-    assert ref in IS.ICache(s.cache);
-    assert ref in IS.ICache(s1.cache);
+    assert ref in IS.ICache(s.cache, s.rootBucket);
+    assert ref in IS.ICache(s1.cache, s1.rootBucket);
     assert ref in s1.cache;
 
     s' := write(k, s1, ref, newparent);
