@@ -553,6 +553,8 @@ module MainModule {
     // var p: uint64 := 300_007;
     var n: uint64 := 10_000_000;
     var p: uint64 := 3_000_017;
+    // var n: uint64 := 100_000_000;
+    // var p: uint64 := 1_073_741_827;
     var t := new TestMutableBtree.MutableBtree();
     var i: uint64 := 0;
     while i < n

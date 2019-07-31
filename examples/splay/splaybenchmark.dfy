@@ -10,10 +10,10 @@ method Main() {
   while i < nInsertions
     invariant is_valid_tree(tree)
   {
-    var v := (i * 1073741827) % nInsertions;
+    var v := (i * 1_073_741_827) % nInsertions;
     insert(tree, v);
     assert v in tree_set(tree);
-    var c := contains(tree, v);
+    //var c := contains(tree, v);
     i := i + 1;
   }
   print i;

@@ -255,25 +255,43 @@ abstract module Total_Order {
     requires IsSorted(run[start..end]);
     ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
   {
-    reveal_IsSorted();
-    var lo := start;
-    var hi := end;
-    while lo < hi
-      invariant start <= lo <= hi <= end
-      invariant forall i :: start <= i < lo ==> lte(run[i], needle)
-      invariant forall i :: hi <= i < end ==> lt(needle, run[i])
-      decreases hi - lo
+    var i: uint64 := start;
+    while i < end && lte(run[i], needle)
+      invariant start <= i <= end
+      invariant forall j :: start <= j < i ==> lte(run[j], needle)
     {
-      var mid := (lo + hi) / 2;
-      if lte(run[mid], needle) {
-        lo := mid+1;
-      } else {
-        hi := mid;
-      }
+      i := i + 1;
     }
-    posplus1 := lo;
-    LargestLteIsUnique(run[start..end], needle, posplus1 as int - 1 - start as int);
+    forall j | i <= j < end
+      ensures lt(needle, run[j])
+    {
+      reveal_IsSorted();
+      assert lt(needle, run[i]);
+      assert lte(run[i], run[j]);
+    }
+    LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
+    posplus1 := i;
   }
+  // {
+  //   reveal_IsSorted();
+  //   var lo := start;
+  //   var hi := end;
+  //   while lo < hi
+  //     invariant start <= lo <= hi <= end
+  //     invariant forall i :: start <= i < lo ==> lte(run[i], needle)
+  //     invariant forall i :: hi <= i < end ==> lt(needle, run[i])
+  //     decreases hi - lo
+  //   {
+  //     var mid := (lo + hi) / 2;
+  //     if lte(run[mid], needle) {
+  //       lo := mid+1;
+  //     } else {
+  //       hi := mid;
+  //     }
+  //   }
+  //   posplus1 := lo;
+  //   LargestLteIsUnique(run[start..end], needle, posplus1 as int - 1 - start as int);
+  // }
   
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
   requires IsStrictlySorted(run);
