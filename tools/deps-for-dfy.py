@@ -92,11 +92,17 @@ def depsFromDfySource(path):
     visited.remove(initialRef)
     return visited
 
-def okay(path):
-    path = path.replace(".dfy", ".okay")
+def target(dfypath, suffix):
+    path = dfypath.replace(".dfy", suffix)
     assert path.startswith(ROOT_PATH)
     path = path[len(ROOT_PATH):]
     return "$(BUILD_DIR)/%s" % path
+
+def okay(dfypath):
+    return target(dfypath, ".okay")
+
+def deps(dfypath):
+    return target(dfypath, ".deps")
 
 def main():
     target = sys.argv[1]
@@ -107,6 +113,7 @@ def main():
     allDeps = depsFromDfySource(target)
     for dep in allDeps:
         output += "%s: %s\n\n" % (okay(target), okay(dep.rootPath()))
+        output += "%s: %s\n\n" % (deps(target), deps(dep.rootPath()))
 
     outfp = open(outputFilename, "w")
     outfp.write(output)
