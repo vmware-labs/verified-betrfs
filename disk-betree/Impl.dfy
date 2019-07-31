@@ -561,6 +561,12 @@ module {:extern} Impl refines Main {
     assert BT.LookupFollowsChildRefs(key, lookup');
   }
 
+  lemma WFNodeRootImpliesWFRootBase(node: IS.Node, rootBucket: IS.TreeMap)
+  requires IS.WFNode(node)
+  requires TTT.TTTree(rootBucket)
+  requires BT.WFNode(IS.INodeRoot(node, rootBucket))
+  ensures BT.WFNode(IS.INode(node))
+
   lemma NodeLookupIfNotInRootBucket(node: IS.Node, rootBucket: IS.TreeMap, key: Key)
   requires IS.WFNode(node)
   requires TTT.TTTree(rootBucket)
@@ -1371,6 +1377,7 @@ module {:extern} Impl refines Main {
       return;
     }
 
+    WFNodeRootImpliesWFRootBase(oldroot, s.rootBucket);
     forall i, key | 0 <= i < |oldroot.buckets| && key in SSTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
     {
       assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
@@ -1382,6 +1389,10 @@ module {:extern} Impl refines Main {
 
     s' := s.(rootBucket := TTT.EmptyTree)
         .(cache := s.cache[BT.G.Root() := newroot]);
+
+    assert IS.INodeRoot(oldroot, s.rootBucket) == IS.INodeRoot(newroot, TTT.EmptyTree);
+    assert IS.ICache(s.cache, s.rootBucket) == IS.ICache(s'.cache, TTT.EmptyTree);
+
     assert noop(k, s, s');
   }
 
