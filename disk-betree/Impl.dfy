@@ -1182,6 +1182,7 @@ module {:extern} Impl refines Main {
   requires ref in s.cache
   requires parentref in s.ephemeralIndirectionTable.graph
   requires ref in s.ephemeralIndirectionTable.graph[parentref]
+  requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this I think
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
@@ -1200,6 +1201,8 @@ module {:extern} Impl refines Main {
     }
 
     var node := s.cache[ref];
+
+    INodeRootEqINodeForEmptyRootBucket(node);
 
     if i :| 0 <= i < |node.buckets| && !Marshalling.CappedBucket(node.buckets[i]) {
       if (node.children.Some?) {
@@ -1260,6 +1263,8 @@ module {:extern} Impl refines Main {
 
       var parent := s.cache[parentref];
 
+      INodeRootEqINodeForEmptyRootBucket(parent);
+
       assert ref in BT.G.Successors(IS.INode(parent));
       var i :| 0 <= i < |parent.children.value| && parent.children.value[i] == ref;
 
@@ -1269,6 +1274,30 @@ module {:extern} Impl refines Main {
       assert noop(k, s, s');
       print "giving up; fixBigNode\n";
     }
+  }
+
+  method {:fuel BC.GraphClosed,0} flushRootBucket(k: Constants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
+  requires io.initialized()
+  modifies io
+  requires IS.WFVars(s)
+  requires BBC.Inv(k, IS.IVars(s))
+  requires s.Ready?
+  requires s.rootBucket != TTT.EmptyTree
+  ensures IS.WFVars(s')
+  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  {
+    var oldroot := s.cache[BT.G.Root()];
+
+    var rootBucketSeq := TTT.AsSeq(s.rootBucket);
+    var sst := SSTable.SSTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
+    var newbuckets := SSTable.DoFlush(sst, oldroot.buckets, oldroot.pivotTable);
+
+    var newroot := oldroot.(buckets := newbuckets);
+
+    s' := s.(rootBucket := TTT.EmptyTree)
+        .(cache := s.cache[BT.G.Root() := newroot]);
+    assert noop(k, s, s');
   }
 
   method {:fuel BC.GraphClosed,0} sync(k: Constants, s: Variables, io: DiskIOHandler)
@@ -1290,6 +1319,11 @@ module {:extern} Impl refines Main {
       s' := s;
       assert noop(k, s, s');
       print "sync: giving up; frozen table is currently being written\n";
+      return;
+    }
+
+    if (s.rootBucket != TTT.EmptyTree) {
+      s' := flushRootBucket(k, s, io);
       return;
     }
 
@@ -1345,6 +1379,7 @@ module {:extern} Impl refines Main {
       var lba := getFreeLba(s);
       match lba {
         case Some(lba) => {
+          INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
           var id := RequestWrite(io, lba, IS.SectorBlock(s.cache[ref]));
           if (id.Some?) {
             s' := s

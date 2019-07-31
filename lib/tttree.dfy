@@ -1,5 +1,4 @@
 include "../lib/total_order.dfy"
-include "../lib/lexical.dfy"
 include "../lib/Maps.dfy"
 include "../lib/mathematics.dfy"
 
@@ -831,6 +830,39 @@ module TwoThreeTree {
                 newtree := NonEmptyTree(result.tree);
             }
         }
+    }
+
+    method NodeAsSeq<Value>(node: Node<Value>) returns (s : seq<(Keyspace.Element, Value)>)
+    requires TTSubtree(node)
+    ensures Keyspace.SortedSeqForMap(s, SubtreeI(node))
+    {
+      match node {
+        case Leaf(key, value) => {
+          s := [(key, value)];
+        }
+        case TwoNode(left, pivot, right) => {
+          var s1 := NodeAsSeq(left);
+          var s2 := NodeAsSeq(right);
+          s := s1 + s2;
+        }
+        case ThreeNode(left, pivota, middle, pivotb, right) => {
+          var s1 := NodeAsSeq(left);
+          var s2 := NodeAsSeq(middle);
+          var s3 := NodeAsSeq(right);
+          s := s1 + s2 + s3;
+        }
+      }
+    }
+
+    method AsSeq<Value>(tree: Tree<Value>) returns (s : seq<(Keyspace.Element, Value)>)
+    requires TTTree(tree)
+    ensures Keyspace.SortedSeqForMap(s, I(tree))
+    {
+      if tree.EmptyTree? {
+        s := [];
+      } else {
+        s := NodeAsSeq(tree.root);
+      }
     }
 }
 

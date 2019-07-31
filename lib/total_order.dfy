@@ -437,6 +437,12 @@ abstract module Total_Order {
     return lo - 1;
   }
 
+  predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
+  {
+    && (forall i, j | 0 <= i < j < |s| :: lt(s[i].0, s[j].0))
+    && (forall i | 0 <= i < |s| :: s[i].0 in m && m[s[i].0] == s[i].1)
+    && (forall key | key in m :: exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key])
+  }
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {

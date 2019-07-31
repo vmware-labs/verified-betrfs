@@ -2172,4 +2172,44 @@ module SSTable {
     assert a == b;
   }
 
+  method SSTableOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (sst: SSTable)
+  requires SortedSeqForMap(s, m)
+  requires |s| < 0x800_0000_0000
+  requires forall key | key in m :: |key| < 0x1_0000
+  requires forall key | key in m :: m[key] != IdentityMessage()
+  requires forall key | key in m :: |m[key].value| < 0x1_0000
+  ensures WFSSTableMap(sst)
+  ensures I(sst) == m
+  {
+    var startsLen: uint64 := 2 * |s| as uint64;
+    var stringsLen: uint64 := 0;
+    var i := 0;
+    while i < |s|
+    invariant 0 <= i <= |s|
+    {
+      stringsLen := stringsLen + |s[i].0| as uint64 + |s[i].1.value| as uint64;
+      i := i + 1;
+    }
+
+    var starts := new uint64[startsLen];
+    var strings := new byte[stringsLen];
+
+    var stringsIdx: uint64 := 0;
+
+    var j := 0;
+    while j < |s|
+    {
+      starts[2*j] := stringsIdx;
+      Native.Arrays.CopySeqIntoArray(s[j].0, 0, strings, stringsIdx, |s[j].0| as uint64);
+      stringsIdx := stringsIdx + |s[j].0| as uint64;
+
+      starts[2*j + 1] := stringsIdx;
+      Native.Arrays.CopySeqIntoArray(s[j].1.value, 0, strings, stringsIdx, |s[j].1.value| as uint64);
+      stringsIdx := stringsIdx + |s[j].1.value| as uint64;
+
+      j := j + 1;
+    }
+
+    sst := SSTable(starts[..], strings[..]);
+  }
 }
