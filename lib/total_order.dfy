@@ -302,26 +302,22 @@ abstract module Total_Order {
         hi := mid;
       }
     }
-    assert run[lo..end] == run[start..end][lo-start..end-start];
-    SortedSubsequence(run[start..end], (lo-start) as int, (end-start) as int);
-    assert run[lo..hi] == run[lo..end][..hi-lo];
-    SortedSubsequence(run[lo..end], 0, (hi-lo) as int);
-    posplus1 := ArrayLargestLtePlus1Linear(run, lo, hi, needle);
-    forall i | start <= i < posplus1
-      ensures lte(run[i], needle)
+    var i: uint64 := lo;
+    while i < hi && lte(run[i], needle)
+      invariant start <= i <= end
+      invariant forall j :: start <= j < i ==> lte(run[j], needle)
     {
-      if i < lo {
-      } else {
-      }
+      i := i + 1;
     }
-    forall i | posplus1 <= i < end
-      ensures lt(needle, run[i])
+    forall j | i <= j < end
+      ensures lt(needle, run[j])
     {
-      if i < hi {
-      } else {
-      }
+      reveal_IsSorted();
+      assert lt(needle, run[i]);
+      assert lte(run[i], run[j]);
     }
-    LargestLteIsUnique(run[start..end], needle, posplus1 as int - 1 - start as int);
+    LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
+    posplus1 := i;
   }
   
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
