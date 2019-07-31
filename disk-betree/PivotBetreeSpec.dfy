@@ -528,6 +528,43 @@ module PivotBetreeSpec {
 
   //// Split
 
+  function SplitChildLeft(child: Node, num_children_left: int) : Node
+  requires 0 <= num_children_left - 1 <= |child.pivotTable|
+  requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
+  requires 0 <= num_children_left <= |child.buckets|
+  {
+    Node(
+      child.pivotTable[ .. num_children_left - 1 ],
+      if child.children.Some? then Some(child.children.value[ .. num_children_left ]) else None,
+      child.buckets[ .. num_children_left ]
+    )
+  }
+
+  function SplitChildRight(child: Node, num_children_left: int) : Node
+  requires 0 <= num_children_left <= |child.pivotTable|
+  requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
+  requires 0 <= num_children_left <= |child.buckets|
+  {
+    Node(
+      child.pivotTable[ num_children_left .. ],
+      if child.children.Some? then Some(child.children.value[ num_children_left .. ]) else None,
+      child.buckets[ num_children_left .. ]
+    )
+  }
+
+  function SplitParent(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: Reference, right_childref: Reference) : Node
+  requires 0 <= slot_idx <= |fused_parent.pivotTable|
+  requires fused_parent.children.Some?
+  requires fused_parent.children.Some? ==> 0 <= slot_idx < |fused_parent.children.value|
+  requires 0 <= slot_idx < |fused_parent.buckets|
+  {
+    Node(
+      insert(fused_parent.pivotTable, pivot, slot_idx),
+      Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
+      replace1with2(fused_parent.buckets, map[], map[], slot_idx)
+    )
+  }
+
   predicate ValidSplit(f: NodeFusion)
   {
     && WFNode(f.fused_parent)
@@ -550,29 +587,10 @@ module PivotBetreeSpec {
     // We require buffer to already be flushed.
     && f.fused_parent.buckets[f.slot_idx] == map[]
 
-    && f.split_parent == Node(
-      insert(f.fused_parent.pivotTable, f.pivot, f.slot_idx),
-      Some(replace1with2(f.fused_parent.children.value, f.left_childref, f.right_childref, f.slot_idx)),
-      replace1with2(
-        f.fused_parent.buckets,
-        //SplitBucketLeft(f.fused_parent.buckets[f.slot_idx], f.pivot),
-        //SplitBucketRight(f.fused_parent.buckets[f.slot_idx], f.pivot),
-        map[],
-        map[],
-        f.slot_idx)
-    )
+    && f.split_parent == SplitParent(f.fused_parent, f.pivot, f.slot_idx, f.left_childref, f.right_childref)
 
-    && f.left_child == Node(
-      child.pivotTable[ .. f.num_children_left - 1 ],
-      if child.children.Some? then Some(child.children.value[ .. f.num_children_left ]) else None,
-      child.buckets[ .. f.num_children_left ]
-    )
-
-    && f.right_child == Node(
-      child.pivotTable[ f.num_children_left .. ],
-      if child.children.Some? then Some(child.children.value[ f.num_children_left .. ]) else None,
-      child.buckets[ f.num_children_left .. ]
-    )
+    && f.left_child == SplitChildLeft(child, f.num_children_left)
+    && f.right_child == SplitChildRight(child, f.num_children_left)
   }
 
   function SplitReads(f: NodeFusion) : seq<ReadOp>

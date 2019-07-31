@@ -899,8 +899,109 @@ module {:extern} Impl refines Main {
     }
   }
 
+  function method SplitChildLeft(child: IS.Node, num_children_left: int) : IS.Node
+  requires 0 <= num_children_left - 1 <= |child.pivotTable|
+  requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
+  requires 0 <= num_children_left <= |child.buckets|
+  {
+    IS.Node(
+      child.pivotTable[ .. num_children_left - 1 ],
+      if child.children.Some? then Some(child.children.value[ .. num_children_left ]) else None,
+      child.buckets[ .. num_children_left ]
+    )
+  }
+
+  function method SplitChildRight(child: IS.Node, num_children_left: int) : IS.Node
+  requires 0 <= num_children_left <= |child.pivotTable|
+  requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
+  requires 0 <= num_children_left <= |child.buckets|
+  {
+    IS.Node(
+      child.pivotTable[ num_children_left .. ],
+      if child.children.Some? then Some(child.children.value[ num_children_left .. ]) else None,
+      child.buckets[ num_children_left .. ]
+    )
+  }
+
+  lemma lemmaSplitChild(child: IS.Node, num_children_left: int)
+  requires IS.WFNode(child)
+  requires BT.WFNode(IS.INode(child))
+  requires 1 <= num_children_left <= |child.buckets| - 1
+  ensures IS.WFNode(SplitChildLeft(child, num_children_left))
+  ensures IS.WFNode(SplitChildRight(child, num_children_left))
+  ensures IS.INode(SplitChildLeft(child, num_children_left)) == BT.SplitChildLeft(IS.INode(child), num_children_left)
+  ensures IS.INode(SplitChildRight(child, num_children_left)) == BT.SplitChildRight(IS.INode(child), num_children_left)
+  {
+    Pivots.WFSlice(child.pivotTable, 0, num_children_left - 1);
+    Pivots.WFSuffix(child.pivotTable, num_children_left);
+    SSTable.Islice(child.buckets, 0, num_children_left);
+    SSTable.Isuffix(child.buckets, num_children_left);
+  }
+
+  // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
+  // This sort of proof logic shouldn't have to be in the implementation.
+  lemma lemmaSplitChildValidReferences(child1: BT.G.Node, child: BT.G.Node, num_children_left: int, graph: map<BT.G.Reference, seq<BT.G.Reference>>, lbound: Option<Key>, rbound: Option<Key>)
+  requires BT.WFNode(child1)
+  requires BT.WFNode(child)
+  requires 1 <= num_children_left <= |child.buckets| - 1
+  requires BC.BlockPointsToValidReferences(child1, graph);
+  requires child == BT.CutoffNode(child1, lbound, rbound);
+  ensures BC.BlockPointsToValidReferences(BT.SplitChildLeft(child, num_children_left), graph);
+  ensures BC.BlockPointsToValidReferences(BT.SplitChildRight(child, num_children_left), graph);
+  {
+  }
+
+  method SplitParent(fused_parent: IS.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference) returns (res : IS.Node)
+  requires IS.WFNode(fused_parent)
+  requires BT.WFNode(IS.INode(fused_parent))
+  requires 0 <= slot_idx < |fused_parent.buckets|
+  requires fused_parent.children.Some?
+  ensures IS.WFNode(res)
+  ensures IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref)
+  {
+    res := IS.Node(
+      Sequences.insert(fused_parent.pivotTable, pivot, slot_idx),
+      Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
+      replace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx)
+    );
+    SSTable.Ireplace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx);
+  }
+
+  lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  requires BT.WFNode(fused_parent)
+  requires 0 <= slot_idx < |fused_parent.buckets|
+  requires fused_parent.children.Some?
+  requires BC.BlockPointsToValidReferences(fused_parent, graph);
+  requires left_childref in graph
+  requires right_childref in graph
+  ensures BC.BlockPointsToValidReferences(BT.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref), graph);
+  {
+    var split_parent := BT.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
+    forall r | r in BT.G.Successors(split_parent)
+    ensures r in graph
+    {
+      assert BC.BlockPointsToValidReferences(fused_parent, graph);
+      var idx :| 0 <= idx < |split_parent.children.value| && split_parent.children.value[idx] == r;
+      if (idx < slot_idx) {
+        assert r == fused_parent.children.value[idx];
+        assert r in graph;
+      } else if (idx == slot_idx) {
+        assert r == left_childref;
+        assert r in graph;
+      } else if (idx == slot_idx + 1) {
+        assert r == right_childref;
+        assert r in graph;
+      } else {
+        assert r == fused_parent.children.value[idx-1];
+        assert r in graph;
+      }
+    }
+  }
+
   // TODO FIXME this method is flaky and takes a long time to verify
-  method {:fuel BT.NodeHasWFBuckets,0} doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  method {:fuel BT.NodeHasWFBuckets,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
+      {:fuel SplitChildLeft,0} {:fuel SplitChildRight,0}
+  doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   returns (s': Variables)
   requires s.Ready?
   requires IS.WFVars(s)
@@ -957,38 +1058,12 @@ module {:extern} Impl refines Main {
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
 
-    var left_child := IS.Node(
-      child.pivotTable[ .. num_children_left - 1 ],
-      if child.children.Some? then Some(child.children.value[ .. num_children_left ]) else None,
-      child.buckets[ .. num_children_left ]
-    );
+    var left_child := SplitChildLeft(child, num_children_left);
+    var right_child := SplitChildRight(child, num_children_left);
 
-    var right_child := IS.Node(
-      child.pivotTable[ num_children_left .. ],
-      if child.children.Some? then Some(child.children.value[ num_children_left .. ]) else None,
-      child.buckets[ num_children_left .. ]
-    );
-
-    SSTable.Islice(child.buckets, 0, num_children_left);
-    SSTable.Isuffix(child.buckets, num_children_left);
-
-    forall r | r in BT.G.Successors(IS.INode(child))
-    ensures r in s.ephemeralIndirectionTable.graph
-    {
-      assert BC.BlockPointsToValidReferences(IS.INode(fused_child), s.ephemeralIndirectionTable.graph);
-      assert r in BT.G.Successors(IS.INode(fused_child));
-    }
-    assert BC.BlockPointsToValidReferences(IS.INode(child), s.ephemeralIndirectionTable.graph);
-
-    Pivots.WFSlice(child.pivotTable, 0, num_children_left - 1);
-    Pivots.WFSuffix(child.pivotTable, num_children_left);
-    INodeRootEqINodeForEmptyRootBucket(left_child);
-    INodeRootEqINodeForEmptyRootBucket(right_child);
-
-    // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
-    // This sort of proof logic shouldn't have to be in the implementation.
-    assert BC.BlockPointsToValidReferences(IS.INode(left_child), s.ephemeralIndirectionTable.graph);
-    assert BC.BlockPointsToValidReferences(IS.INode(right_child), s.ephemeralIndirectionTable.graph);
+    lemmaSplitChild(child, num_children_left);
+    lemmaSplitChildValidReferences(IS.INode(fused_child), IS.INode(child), num_children_left,
+        s.ephemeralIndirectionTable.graph, lbound, ubound);
 
     var s1, left_childref := alloc(k, s, left_child);
     if left_childref.None? {
@@ -1006,39 +1081,8 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    var split_parent_pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot);
-    var split_parent_children := replace1with2(fused_parent.children.value, left_childref.value, right_childref.value, slot);
-    var split_parent_buckets := replace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot);
-    var split_parent := IS.Node(
-      split_parent_pivots,
-      Some(split_parent_children),
-      split_parent_buckets
-    );
-
-    SSTable.Ireplace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot);
-
-    assert IS.WFNode(split_parent);
-
-    forall r | r in BT.G.Successors(IS.INode(split_parent))
-    ensures r in s2.ephemeralIndirectionTable.graph
-    {
-      assert BC.BlockPointsToValidReferences(IS.INode(fused_parent), s2.ephemeralIndirectionTable.graph);
-      var idx :| 0 <= idx < |split_parent_children| && split_parent_children[idx] == r;
-      if (idx < slot) {
-        assert r == fused_parent.children.value[idx];
-        assert r in s2.ephemeralIndirectionTable.graph;
-      } else if (idx == slot) {
-        assert r == left_childref.value;
-        assert r in s2.ephemeralIndirectionTable.graph;
-      } else if (idx == slot + 1) {
-        assert r == right_childref.value;
-        assert r in s2.ephemeralIndirectionTable.graph;
-      } else {
-        assert r == fused_parent.children.value[idx-1];
-        assert r in s2.ephemeralIndirectionTable.graph;
-      }
-    }
-    assert BC.BlockPointsToValidReferences(IS.INode(split_parent), s2.ephemeralIndirectionTable.graph);
+    var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
+    lemmaSplitParentValidReferences(IS.INode(fused_parent), pivot, slot, left_childref.value, right_childref.value, s2.ephemeralIndirectionTable.graph);
 
     assert parentref in s.cache;
     assert parentref in IS.ICache(s.cache, s.rootBucket);

@@ -78,7 +78,7 @@ module {:extern} ImplState {
   }
 
   function INode(node: Node) : BT.G.Node
-  requires WFNode(node)
+  requires WFBuckets(node.buckets)
   {
     BT.G.Node(node.pivotTable, node.children, SSTable.ISeq(node.buckets))
   }
