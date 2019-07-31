@@ -241,7 +241,7 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
   
-  method Merge(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
+  method MergeRuns(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
     requires 0 < |run1|;
     requires IsSorted(run1);
     requires IsSorted(run2);
@@ -302,7 +302,7 @@ abstract module Total_Order {
       assert run == run[..i] + run[i..]; // OBSERVE
       var a1 := MergeSort(run[..i]);
       var a2 := MergeSort(run[i..]);
-      result :=  Merge(a1[..], a2[..]);
+      result :=  MergeRuns(a1[..], a2[..]);
     }
   }
 

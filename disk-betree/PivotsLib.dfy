@@ -56,10 +56,6 @@ module PivotsLib {
 
   // Demonstrates that each bucket is non-empty
   // by returning a key in that bucket.
-  // note: In the edge-case that the pivotTable is empty (so there's 1 bucket)
-  // we need to pass in some key as an argument.
-  // Might make sense to more generally require in Keyspace that
-  // it be inhabited.
   lemma GetKeyInBucket(pivotTable: PivotTable, idx: int) returns (key: Key)
   requires WFPivots(pivotTable)
   requires 0 <= idx < NumBuckets(pivotTable)
