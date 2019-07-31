@@ -419,6 +419,7 @@ module Marshalling {
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: BT.WFBucket(s.value[i], pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -469,7 +470,10 @@ module Marshalling {
     var i := 0;
     while i < |a|
     invariant 0 <= i <= |a|
-    invariant ISeqSSTableOpt(Some(ar[..i])) == valToBuckets(a[..i], pivotTable)
+    invariant forall k: nat | k < i :: SSTable.WFSSTableMap(ar[k])
+    invariant forall k: nat | k < i :: BT.WFBucket(SSTable.I(ar[k]), pivotTable, k)
+    invariant valToBuckets(a[..i], pivotTable).Some?
+    invariant Apply(SSTable.I, ar[..i]) == valToBuckets(a[..i], pivotTable).value
     {
       var b := ValToBucket(a[i], pivotTable, i);
       if (b.None?) {
@@ -489,6 +493,10 @@ module Marshalling {
 
     assert a[..|a|] == a;
     assert ar[..|a|] == ar[..];
+
+    assert valToBuckets(a[..], pivotTable).Some?;
+    assert Apply(SSTable.I, ar[..]) == valToBuckets(a, pivotTable).value;
+
     s := Some(ar[..]);
   }
 
