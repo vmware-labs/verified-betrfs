@@ -11,6 +11,7 @@ module {:extern} Impl refines Main {
   import BBC = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
+  import PivotBetreeSpecRefinement
   import Marshalling
   import Messages = ValueMessage
   import Pivots = PivotsLib
@@ -428,6 +429,7 @@ module {:extern} Impl refines Main {
   requires TTT.TTTree(rootBucket)
   requires TTT.TTTree(rootBucket')
   requires TTT.I(rootBucket') == TTT.I(rootBucket)[key := msg]
+  requires BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures IS.INodeRoot(node, rootBucket') == BT.AddMessageToNode(IS.INodeRoot(node, rootBucket), key, msg)
 
   method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
@@ -503,7 +505,9 @@ module {:extern} Impl refines Main {
 
       ghost var lookup := [BT.G.ReadOp(BT.G.Root(), IS.INodeRoot(s.cache[BT.G.Root()], s.rootBucket))];
 
-      assert BT.NodeLookup(IS.INodeRoot(s.cache[BT.G.Root()], s.rootBucket), key) == TTT.I(s.rootBucket)[key];
+      ghost var node := s.cache[BT.G.Root()];
+      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets), TTT.I(s.rootBucket), key);
+      assert BT.NodeLookup(IS.INodeRoot(node, s.rootBucket), key) == TTT.I(s.rootBucket)[key];
 
       assert BT.InterpretLookup(lookup, key) == TTT.I(s.rootBucket)[key]
           == qres.value;
@@ -561,6 +565,9 @@ module {:extern} Impl refines Main {
   requires IS.WFNode(node)
   requires TTT.TTTree(rootBucket)
   requires key !in TTT.I(rootBucket)
+  requires BT.WFNode(IS.INode(node)) || BT.WFNode(IS.INodeRoot(node, rootBucket))
+  ensures BT.WFNode(IS.INode(node))
+  ensures BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures BT.NodeLookup(IS.INode(node), key) == BT.NodeLookup(IS.INodeRoot(node, rootBucket), key)
 
   method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
@@ -846,6 +853,7 @@ module {:extern} Impl refines Main {
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
     var splitBucket := SSTable.SplitLeft(node.buckets[cLeft], pivot);
     var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
+    Pivots.WFSlice(node.pivotTable, 0, cLeft);
     node' := IS.Node(leftPivots, leftChildren, leftBuckets);
   }
 
@@ -862,6 +870,7 @@ module {:extern} Impl refines Main {
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
     var splitBucket := SSTable.SplitRight(node.buckets[cRight], pivot);
     var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
+    Pivots.WFSuffix(node.pivotTable, cRight);
     node' := IS.Node(rightPivots, rightChildren, rightBuckets);
   }
 
@@ -965,6 +974,7 @@ module {:extern} Impl refines Main {
       replace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx)
     );
     SSTable.Ireplace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx);
+    assume Pivots.WFPivots(res.pivotTable);
   }
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -1334,7 +1344,38 @@ module {:extern} Impl refines Main {
     var oldroot := s.cache[BT.G.Root()];
 
     var rootBucketSeq := TTT.AsSeq(s.rootBucket);
+
+    if (!(
+        && |rootBucketSeq| < 0x800_0000_0000
+        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].0| < 0x1_000)
+        && (forall i | 0 <= i < |rootBucketSeq| :: rootBucketSeq[i].1 != Messages.IdentityMessage())
+        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].1.value| < 0x1_000)))
+    {
+      s' := s;
+      assert noop(k, s, s');
+      print "giving up; rootBucketSeq too big\n";
+      return;
+    }
+
     var sst := SSTable.SSTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
+
+    if (!(
+      && |sst.strings| < 0x800_0000_0000_0000
+      && |sst.starts| < 0x800_0000_0000_0000
+      && forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].strings| < 0x800_0000_0000_0000
+      && forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].starts| < 0x800_0000_0000_0000
+    )) {
+      s' := s;
+      assert noop(k, s, s');
+      print "giving up; sst/oldroot.buckets too big\n";
+      return;
+    }
+
+    forall i, key | 0 <= i < |oldroot.buckets| && key in SSTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
+    {
+      assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
+    }
+
     var newbuckets := SSTable.DoFlush(sst, oldroot.buckets, oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);

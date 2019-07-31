@@ -64,6 +64,7 @@ module {:extern} ImplState {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) => (
         && WFCache(cache)
         && TTT.TTTree(rootBucket)
+        && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
         && (rootBucket != TTT.EmptyTree ==> BT.G.Root() in cache)
       )
       case Unready(outstandingIndirectionTableRead, syncReqs) => true

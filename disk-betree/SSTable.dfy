@@ -2175,9 +2175,9 @@ module SSTable {
   method SSTableOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (sst: SSTable)
   requires SortedSeqForMap(s, m)
   requires |s| < 0x800_0000_0000
-  requires forall key | key in m :: |key| < 0x1_0000
-  requires forall key | key in m :: m[key] != IdentityMessage()
-  requires forall key | key in m :: |m[key].value| < 0x1_0000
+  requires forall i | 0 <= i < |s| :: |s[i].0| < 0x1_000
+  requires forall i | 0 <= i < |s| :: s[i].1 != IdentityMessage()
+  requires forall i | 0 <= i < |s| :: |s[i].1.value| < 0x1_000
   ensures WFSSTableMap(sst)
   ensures I(sst) == m
   {
