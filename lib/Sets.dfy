@@ -10,6 +10,14 @@ module Sets {
     assert b == a + (b - a);
   }
 
+  lemma {:opaque} SetInclusionAndEqualCardinalityImpliesSetEquality(a: set<uint64>, b: set<uint64>)
+    requires a <= b
+    requires |a| == |b|
+    ensures a == b
+  {
+    assert b == a + (b - a);
+  }
+
   // NOTE: these are horribly slow
 
   method minimum(s: set<uint64>) returns (o: uint64)
