@@ -54,10 +54,11 @@ module Sequences {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
   
-  function method Apply<E,R>(f: (E -> R), run: seq<E>) : (result: seq<R>)
+  function method Apply<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
+    reads f.reads
   {
     if |run| == 0 then []
     else  [f(run[0])] + Apply(f, run[1..])
