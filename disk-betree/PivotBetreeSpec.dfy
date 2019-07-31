@@ -90,7 +90,7 @@ module PivotBetreeSpec {
     Node(
       node.pivotTable,
       node.children,
-      Buckets.BucketListFlush(node.buckets, node.pivotTable, buffer)
+      Buckets.BucketListFlush(buffer, node.buckets, node.pivotTable)
     )
   }
 
@@ -744,7 +744,7 @@ module PivotBetreeSpecWFNodes {
     {
       assert NodeHasWFBucketAt(leaf, i);
     }*/
-    Buckets.WFJoinBuckets(leaf.buckets);
+    Buckets.WFJoinBucketList(leaf.buckets);
     Buckets.JoinBucketsSplitBucketOnPivotsCancel(j, pivots);
   }
 

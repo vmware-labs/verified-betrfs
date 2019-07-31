@@ -20,6 +20,7 @@ module SSTable {
   import Native
   import PivotBetreeSpecRefinement
   import PivotBetreeSpecWFNodes
+  import opened BucketsLib
 
   type String = seq<byte>
   type Key = String
@@ -690,61 +691,6 @@ module SSTable {
     reveal_KeysStrictlySorted();
   }
 
-  lemma AddMessagesToBucketAddParentKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, key: Key, msg: Message, parent: map<Key, Message>, child: map<Key, Message>)
-  requires P.WFPivots(pivots)
-  requires m' == m[key := msg]
-  requires key !in parent
-  requires key !in child
-  requires m == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent)
-  requires P.Route(pivots, key) == childrenIdx
-  requires msg != IdentityMessage()
-  ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent[key := msg])
-  {
-  }
-
-  lemma AddMessagesToBucketAddChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, key: Key, msg: Message, parent: map<Key, Message>, child: map<Key, Message>)
-  requires P.WFPivots(pivots)
-  requires m' == m[key := msg]
-  requires key !in parent
-  requires key !in child
-  requires m == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent)
-  requires P.Route(pivots, key) == childrenIdx
-  requires msg != IdentityMessage()
-  ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msg], parent)
-  {
-    /*
-    var amtb := BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msg], parent);
-    forall k | k in m'
-    ensures k in amtb
-    ensures m'[k] == amtb[k]
-    {
-      if (k == key) {
-        var childBucket := child[key := msg];
-        assert key in (childBucket.Keys + parent.Keys);
-        assert P.Route(pivots, key) == childrenIdx;
-        assert k in amtb;
-        assert m'[k] == amtb[k];
-      } else {
-        assert k in amtb;
-        assert m'[k] == amtb[k];
-      }
-    }
-    assert m' == amtb;
-    */
-  }
-
-  lemma AddMessagesToBucketAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, key: Key, msgParent: Message, msgChild: Message, parent: map<Key, Message>, child: map<Key, Message>)
-  requires P.WFPivots(pivots)
-  requires m' == m[key := ValueMessage.Merge(msgParent, msgChild)]
-  requires key !in parent
-  requires key !in child
-  requires m == BT.AddMessagesToBucket(pivots, childrenIdx, child, parent)
-  requires P.Route(pivots, key) == childrenIdx
-  requires ValueMessage.Merge(msgParent, msgChild) != IdentityMessage()
-  ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, child[key := msgChild], parent[key := msgParent])
-  {
-  }
-
   lemma LemmaFlushAddParentKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
   requires P.WFPivots(pivots)
   requires WFSSTableMap(parent)
@@ -753,13 +699,13 @@ module SSTable {
   requires 0 <= 2*parentIdx < |parent.starts|
   requires 0 <= 2*childIdx <= |child.starts|
   requires m' == m[Entry(parent, 2*parentIdx as int) := Define(Entry(parent, 2*parentIdx as int + 1))]
-  requires m == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx as int), IPrefix(parent, parentIdx as int))
+  requires m == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(child, childIdx as int), pivots, childrenIdx)
   requires forall key | key in IPrefix(child, childIdx as int) :: lt(key, Entry(parent, 2*parentIdx as int))
   requires childrenIdx > 0 ==> lte(pivots[childrenIdx - 1], Entry(parent, 2*parentIdx as int))
   requires forall key | key in I(child) :: P.Route(pivots, key) == childrenIdx
   requires 2*childIdx < |child.starts| ==> lt(Entry(parent, 2*parentIdx as int), Entry(child, 2*childIdx as int))
   requires 2*childIdx == |child.starts| && childrenIdx < |pivots| ==> lt(Entry(parent, 2*parentIdx as int), pivots[childrenIdx])
-  ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx as int), IPrefix(parent, parentIdx as int + 1))
+  ensures m' == BucketListItemFlush(IPrefix(parent, parentIdx as int + 1), IPrefix(child, childIdx as int), pivots, childrenIdx)
   {
     var key := Entry(parent, 2*parentIdx as int);
     assert key !in IPrefix(child, childIdx as int);
@@ -771,11 +717,12 @@ module SSTable {
     }
     P.RouteIs(pivots, key, childrenIdx);
 
-    AddMessagesToBucketAddParentKey(pivots, childrenIdx, m, m', 
-        Entry(parent, 2*parentIdx as int),
-        Define(Entry(parent, 2*parentIdx as int + 1)),
+    BucketListItemFlushAddParentKey(
         IPrefix(parent, parentIdx as int),
-        IPrefix(child, childIdx as int));
+        IPrefix(child, childIdx as int),
+        pivots,
+        Entry(parent, 2*parentIdx as int),
+        Define(Entry(parent, 2*parentIdx as int + 1)));
     reveal_IPrefix();
     //assert IPrefix(parent, parentIdx as int + 1) == IPrefix(parent, parentIdx)[Entry(parent, 2*parentIdx as int) := Define(Entry(parent, 2*parentIdx as int + 1))];
   }
@@ -788,10 +735,10 @@ module SSTable {
   requires 0 <= 2*parentIdx <= |parent.starts|
   requires 0 <= 2*childIdx < |child.starts|
   requires m' == m[Entry(child, 2*childIdx as int) := Define(Entry(child, 2*childIdx as int + 1))]
-  requires m == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx as int), IPrefix(parent, parentIdx as int))
+  requires m == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(child, childIdx as int), pivots, childrenIdx)
   requires forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, Entry(child, 2*childIdx as int))
   requires forall key | key in I(child) :: P.Route(pivots, key) == childrenIdx
-  ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx as int + 1), IPrefix(parent, parentIdx as int))
+  ensures m' == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(child, childIdx as int + 1), pivots, childrenIdx)
   {
     var key := Entry(child, 2*childIdx as int);
     assert key !in IPrefix(parent, parentIdx as int);
@@ -800,15 +747,16 @@ module SSTable {
     assert SSTKeyMapsToValueAt(I(child), child, childIdx);
     assert P.Route(pivots, key) == childrenIdx;
 
-    AddMessagesToBucketAddChildKey(pivots, childrenIdx, m, m', 
-        Entry(child, 2*childIdx as int),
-        Define(Entry(child, 2*childIdx as int + 1)),
+    BucketListItemFlushAddChildKey(
         IPrefix(parent, parentIdx as int),
-        IPrefix(child, childIdx as int));
+        IPrefix(child, childIdx as int),
+        pivots,
+        Entry(child, 2*childIdx as int),
+        Define(Entry(child, 2*childIdx as int + 1)));
     reveal_IPrefix();
   }
 
-  lemma {:fuel P.Route,0} {:fuel BT.AddMessagesToBucket,0} LemmaFlushAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
+  lemma {:fuel P.Route,0} {:fuel BucketListItemFlush,0} LemmaFlushAddParentAndChildKey(pivots: seq<Key>, childrenIdx: int, m: map<Key, Message>, m': map<Key, Message>, parent: SSTable, child: SSTable, parentIdx: int, childIdx: int)
   requires P.WFPivots(pivots)
   requires WFSSTableMap(parent)
   requires WFSSTableMap(child)
@@ -816,10 +764,10 @@ module SSTable {
   requires 0 <= 2*parentIdx < |parent.starts|
   requires 0 <= 2*childIdx < |child.starts|
   requires m' == m[Entry(child, 2*childIdx as int) := Define(Entry(parent, 2*parentIdx as int + 1))]
-  requires m == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx as int), IPrefix(parent, parentIdx as int))
+  requires m == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(child, childIdx as int), pivots, childrenIdx)
   requires Entry(child, 2*childIdx as int) == Entry(parent, 2*parentIdx as int)
   requires forall key | key in I(child) :: P.Route(pivots, key) == childrenIdx
-  ensures m' == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx as int + 1), IPrefix(parent, parentIdx as int + 1))
+  ensures m' == BucketListItemFlush(IPrefix(parent, parentIdx as int + 1), IPrefix(child, childIdx as int + 1), pivots, childrenIdx)
   {
     var key := Entry(child, 2*childIdx as int);
     KeyNotInPrefix(parent, parentIdx);
@@ -828,12 +776,13 @@ module SSTable {
     assert SSTKeyMapsToValueAt(I(child), child, childIdx);
     assert P.Route(pivots, key) == childrenIdx;
 
-    AddMessagesToBucketAddParentAndChildKey(pivots, childrenIdx, m, m', 
+    BucketListItemFlushAddParentAndChildKey(
+        IPrefix(parent, parentIdx as int),
+        IPrefix(child, childIdx as int),
+        pivots,
         Entry(child, 2*childIdx as int),
         Define(Entry(parent, 2*parentIdx as int + 1)),
-        Define(Entry(child, 2*childIdx as int + 1)),
-        IPrefix(parent, parentIdx as int),
-        IPrefix(child, childIdx as int));
+        Define(Entry(child, 2*childIdx as int + 1)));
     reveal_IPrefix();
   }
 
@@ -875,7 +824,7 @@ module SSTable {
   requires WFSSTableMapArrays(startsArray, startsIdx, stringsArray, stringsIdx)
   requires 2*parentIdx < |parent.starts| ==> forall key | key in IPrefix(child, childIdx) :: lt(key, Entry(parent, 2*parentIdx))
   requires 2*childIdx < |child.starts| ==> forall key | key in IPrefix(parent, parentIdx) :: lt(key, Entry(child, 2*childIdx))
-  requires IArrays(startsArray, startsIdx, stringsArray, stringsIdx) == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(child, childIdx), IPrefix(parent, parentIdx))
+  requires IArrays(startsArray, startsIdx, stringsArray, stringsIdx) == BucketListItemFlush(IPrefix(parent, parentIdx), IPrefix(child, childIdx), pivots, childrenIdx)
   ensures 2*parentIdx < |parent.starts| ==> forall key | key in IArrays(startsArray, startsIdx, stringsArray, stringsIdx) :: lt(key, Entry(parent, 2*parentIdx))
   ensures 2*childIdx < |child.starts| ==> forall key | key in IArrays(startsArray, startsIdx, stringsArray, stringsIdx) :: lt(key, Entry(child, 2*childIdx))
   {
@@ -939,29 +888,6 @@ module SSTable {
     }
   }
 
-  lemma EmptyAddMessagesToBucket(pivots: seq<Key>)
-  requires P.WFPivots(pivots)
-  ensures BT.AddMessagesToBucket(pivots, 0, map[], map[]) == map[]
-  {
-  }
-
-  lemma EmptyAddMessagesToBucketWhenAllKeysInParentAreLt(pivots: seq<Key>, i: int, m: map<Key, Message>)
-  requires P.WFPivots(pivots)
-  requires 0 <= i < |pivots|
-  requires forall key | key in m :: lt(key, pivots[i])
-  ensures BT.AddMessagesToBucket(pivots, i+1, map[], m) == map[]
-  {
-  }
-
-  lemma AddMessagesToBucketEqIfEqInRange(pivots: seq<Key>, i: int, child: map<Key, Message>, p1: map<Key, Message>, p2: map<Key, Message>)
-  requires P.WFPivots(pivots)
-  requires 0 <= i <= |pivots|
-  requires forall key | P.Route(pivots, key) == i :: MapsAgreeOnKey(p1, p2, key)
-  ensures BT.AddMessagesToBucket(pivots, i, child, p1)
-       == BT.AddMessagesToBucket(pivots, i, child, p2)
-  {
-  }
-
   lemma LemmaAddMessagesToBucketsAugment(
     pivots: seq<Key>,
     parent: SSTable,
@@ -988,14 +914,14 @@ module SSTable {
   requires 0 <= 2*parentIdx <= |parent.starts|
   requires |res| == childrenIdx
   requires IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-       == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx), IPrefix(parent, parentIdx))
+       == BucketListItemFlush(IPrefix(parent, parentIdx), IPrefix(children[childrenIdx], childIdx), pivots, childrenIdx)
   requires |res| == childrenIdx
   requires  forall i | 0 <= i < |res| :: WFSSTableMap(res[i])
-  requires ISeq(res) == BT.AddMessagesToBuckets(pivots, |res|, ISeq(children), I(parent))
+  requires ISeq(res) == BucketListFlush'(I(parent), ISeq(children), pivots, |res|)
   requires 2*parentIdx < |parent.starts| && childrenIdx < |pivots| ==> lte(pivots[childrenIdx], Entry(parent, 2*parentIdx))
   requires childrenIdx == |pivots| ==> 2*parentIdx == |parent.starts|
   ensures forall i | 0 <= i < |res'| :: WFSSTableMap(res'[i])
-  ensures ISeq(res') == BT.AddMessagesToBuckets(pivots, |res'|, ISeq(children), I(parent))
+  ensures ISeq(res') == BucketListFlush'(I(parent), ISeq(children), pivots, |res'|)
   {
     forall key | P.Route(pivots, key) == childrenIdx
     ensures MapsAgreeOnKey(I(parent), IPrefix(parent, parentIdx), key)
@@ -1020,17 +946,17 @@ module SSTable {
         }
       }
     }
-    AddMessagesToBucketEqIfEqInRange(pivots, childrenIdx, I(children[childrenIdx]), I(parent), IPrefix(parent, parentIdx));
+    BucketListItemFlushEq(I(parent), IPrefix(parent, parentIdx), I(children[childrenIdx]), pivots, childrenIdx);
 
     reveal_I();
     assert IPrefix(children[childrenIdx], childIdx) == I(children[childrenIdx]);
 
-    assert BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx), IPrefix(parent, parentIdx))
-        == BT.AddMessagesToBucket(pivots, childrenIdx, I(children[childrenIdx]), IPrefix(parent, parentIdx))
-        == BT.AddMessagesToBucket(pivots, childrenIdx, I(children[childrenIdx]), I(parent));
+    assert BucketListItemFlush(IPrefix(parent, parentIdx), IPrefix(children[childrenIdx], childIdx), pivots, childrenIdx)
+        == BucketListItemFlush(IPrefix(parent, parentIdx), I(children[childrenIdx]), pivots, childrenIdx)
+        == BucketListItemFlush(I(parent), I(children[childrenIdx]), pivots, childrenIdx);
   }
 
-  method {:fuel P.Route,0} {:fuel BT.AddMessagesToBucket,0} DoFlush(parent: SSTable, children: seq<SSTable>, pivots: seq<Key>)
+  method {:fuel P.Route,0} {:fuel BucketListItemFlush,0} DoFlush(parent: SSTable, children: seq<SSTable>, pivots: seq<Key>)
   returns (res : seq<SSTable>)
   requires WFSSTableMap(parent)
   requires P.WFPivots(pivots)
@@ -1042,7 +968,7 @@ module SSTable {
   requires |children| == |pivots| + 1
   requires forall i, key | 0 <= i < |children| && key in I(children[i]) :: P.Route(pivots, key) == i
   ensures forall i | 0 <= i < |res| :: WFSSTableMap(res[i])
-  ensures ISeq(res) == BT.AddMessagesToBuckets(pivots, |children|, ISeq(children), I(parent))
+  ensures ISeq(res) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
     var maxChildStartsLen: uint64, maxChildStringsLen: uint64 := MaxLens(children);
     var startsArray : array<uint64> := new uint64[maxChildStartsLen + |parent.starts| as uint64];
@@ -1053,7 +979,7 @@ module SSTable {
     res := [];
 
     LemmaWFEmptyArrays(startsArray, stringsArray);
-    EmptyAddMessagesToBucket(pivots);
+    BucketListItemFlushEmpty(pivots);
 
     var parentIdx: uint64 := 0;
     var childrenIdx: int := 0;
@@ -1086,10 +1012,10 @@ module SSTable {
 
     invariant childrenIdx < |children| ==>
           IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-       == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int))
+       == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx)
     invariant |res| == childrenIdx
     invariant forall i | 0 <= i < |res| :: WFSSTableMap(res[i])
-    invariant ISeq(res) == BT.AddMessagesToBuckets(pivots, |res|, ISeq(children), I(parent))
+    invariant ISeq(res) == BucketListFlush'(I(parent), ISeq(children), pivots, |res|)
 
     decreases |children| - childrenIdx as int
     decreases (|parent.starts| - 2*parentIdx as int) + (if childrenIdx as int < |children| then |children[childrenIdx].starts| - 2*childIdx as int else 0)
@@ -1157,11 +1083,11 @@ module SSTable {
           assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
 
           LemmaWFEmptyArrays(startsArray, stringsArray);
-          if childrenIdx < |children| { EmptyAddMessagesToBucketWhenAllKeysInParentAreLt(pivots, childrenIdx - 1, IPrefix(parent, parentIdx as int)); }
+          if childrenIdx < |children| { BucketListItemFlushOfKeysLt(IPrefix(parent, parentIdx as int), pivots, childrenIdx - 1); }
           assert childrenIdx < |children| ==>
               IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
            == map[]
-           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+           == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
         } else {
           // TODO possible optimization: if childIdx is 0, then we can just use the existing childBucket with no changes
 
@@ -1177,7 +1103,7 @@ module SSTable {
 
           assert childrenIdx < |children| ==>
               IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-           == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+           == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int),pivots, childrenIdx);
         }
       } else {
         if (2*childIdx == |children[childrenIdx].starts| as uint64) {
@@ -1193,7 +1119,7 @@ module SSTable {
             assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
             assert childrenIdx < |children| ==>
                 IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-             == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+             == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
           } else {
             var c := Cmp(pivots[childrenIdx], parent, 2*parentIdx);
             if (c == 1) {
@@ -1207,7 +1133,7 @@ module SSTable {
               assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
               assert childrenIdx < |children| ==>
                   IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-               == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+               == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
             } else {
               LemmaAddMessagesToBucketsAugment(pivots, parent, children, childrenIdx as int, childIdx as int, parentIdx as int, res, res + [SSTable(startsArray[..startsIdx], stringsArray[..stringsIdx])], startsArray, stringsArray, startsIdx, stringsIdx);
 
@@ -1231,11 +1157,11 @@ module SSTable {
               assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
 
               LemmaWFEmptyArrays(startsArray, stringsArray);
-              if childrenIdx < |children| { EmptyAddMessagesToBucketWhenAllKeysInParentAreLt(pivots, childrenIdx - 1, IPrefix(parent, parentIdx as int)); }
+              if childrenIdx < |children| { BucketListItemFlushOfKeysLt(IPrefix(parent, parentIdx as int), pivots, childrenIdx - 1); }
               assert childrenIdx < |children| ==>
                   IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
                == map[]
-               == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+               == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
             }
           }
         } else {
@@ -1255,7 +1181,7 @@ module SSTable {
             assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
             assert childrenIdx < |children| ==>
                 IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-             == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+             == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
           } else if (c == -1) {
             startsIdx, stringsIdx := WriteKeyValue(startsArray, stringsArray, startsIdx, stringsIdx, parent, 2*parentIdx);
 
@@ -1271,7 +1197,7 @@ module SSTable {
             assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
             assert childrenIdx < |children| ==>
                 IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-             == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+             == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
           } else if (c == 1) {
             startsIdx, stringsIdx := WriteKeyValue(startsArray, stringsArray, startsIdx, stringsIdx, children[childrenIdx], 2*childIdx);
 
@@ -1284,7 +1210,7 @@ module SSTable {
             assert childrenIdx < |children| - 1 ==> forall key | key in IPrefix(parent, parentIdx as int) :: lt(key, pivots[childrenIdx]);
             assert childrenIdx < |children| ==>
                 IArrays(startsArray, startsIdx, stringsArray, stringsIdx)
-             == BT.AddMessagesToBucket(pivots, childrenIdx, IPrefix(children[childrenIdx], childIdx as int), IPrefix(parent, parentIdx as int));
+             == BucketListItemFlush(IPrefix(parent, parentIdx as int), IPrefix(children[childrenIdx], childIdx as int), pivots, childrenIdx);
           }
         }
       }
@@ -1312,10 +1238,10 @@ module SSTable {
     assert SSTKeyMapsToValueAt(I(sst1), sst1, 0);
     assert key in I(sst1);
 
-    assert I(res) == BT.AddMessagesToBucket([], 0, I(sst), I(sst1));
+    assert I(res) == BucketListItemFlush(I(sst1), I(sst), [], 0);
 
     ghost var a := I(sst)[key := msg];
-    ghost var b := BT.AddMessagesToBucket([], 0, I(sst), I(sst1));
+    ghost var b := BucketListItemFlush(I(sst1), I(sst), [], 0);
     forall k | k in a
     ensures k in b
     ensures a[k] == b[k]
@@ -1323,24 +1249,24 @@ module SSTable {
       if (k == key) {
         //assert k in (I(sst1).Keys + I(sst).Keys);
         //assert P.Route([], k) == 0;
-        //assert ValueMessage.Merge(BT.BucketLookup(I(sst1), k), BT.BucketLookup(I(sst), k)) != IdentityMessage();
+        //assert ValueMessage.Merge(BucketGet(I(sst1), k), BucketGet(I(sst), k)) != IdentityMessage();
       } else {
         if (k in I(sst1)) {
           ghost var i :| 0 <= 2*i < |sst1.starts| && Entry(sst1, 2*i) == k;
           assert false;
         }
-        assert BT.BucketLookup(I(sst1), k) == IdentityMessage();
+        assert BucketGet(I(sst1), k) == IdentityMessage();
         assert k in I(sst);
         ghost var i :| 0 <= 2*i < |sst.starts| && Entry(sst, 2*i) == k;
         assert SSTKeyMapsToValueAt(I(sst), sst, i);
 
-        /*assert BT.BucketLookup(I(sst), k) != IdentityMessage();
-        assert ValueMessage.Merge(BT.BucketLookup(I(sst1), k), BT.BucketLookup(I(sst), k))
-            == BT.BucketLookup(I(sst), k);
+        /*assert BucketGet(I(sst), k) != IdentityMessage();
+        assert ValueMessage.Merge(BucketGet(I(sst1), k), BucketGet(I(sst), k))
+            == BucketGet(I(sst), k);
 
         assert k in (I(sst1).Keys + I(sst).Keys);
         assert P.Route([], k) == 0;
-        assert ValueMessage.Merge(BT.BucketLookup(I(sst1), k), BT.BucketLookup(I(sst), k)) != IdentityMessage();*/
+        assert ValueMessage.Merge(BucketGet(I(sst1), k), BucketGet(I(sst), k)) != IdentityMessage();*/
       }
     }
     forall k | k in b
@@ -1620,14 +1546,14 @@ module SSTable {
   requires |ssts| > 0
   requires WFSSTableMap(sst1)
   requires WFSSTableMap(sst2)
-  requires I(sst1) == BT.JoinBuckets(ISeq(DropLast(ssts)))
+  requires I(sst1) == JoinBucketList(ISeq(DropLast(ssts)))
   requires sst2 == Last(ssts)
   ensures forall key1, key2 | key1 in I(sst1) && key2 in I(sst2) :: lt(key1, key2)
   {
     forall key1, key2 | key1 in I(sst1) && key2 in I(sst2)
     ensures lt(key1, key2)
     {
-      assert key1 in BT.JoinBuckets(ISeq(DropLast(ssts)));
+      assert key1 in JoinBucketList(ISeq(DropLast(ssts)));
       var i := PivotBetreeSpecRefinement.KeyInJoinedBucketsInSomeBucket(ISeq(DropLast(ssts)), key1);
       assert key1 in I(DropLast(ssts)[i]);
       assert key1 in I(ssts[i]);
@@ -1641,7 +1567,7 @@ module SSTable {
   requires forall i, j, key1, key2 | 0 <= i < j < |ssts| && key1 in I(ssts[i]) && key2 in I(ssts[j]) :: lt(key1, key2)
   //requires forall i, j | 0 <= i < j < |ssts| :: AllKeysLt(ssts[i], ssts[j])
   ensures WFSSTableMap(join(ssts))
-  ensures I(join(ssts)) == BT.JoinBuckets(ISeq(ssts))
+  ensures I(join(ssts)) == JoinBucketList(ISeq(ssts))
   {
     reveal_KeysStrictlySorted();
     if (|ssts| == 0) {
@@ -1675,13 +1601,13 @@ module SSTable {
     }
   }
 
-  method {:fuel BT.JoinBuckets,0} DoJoin(ssts: seq<SSTable>)
+  method {:fuel JoinBucketList,0} DoJoin(ssts: seq<SSTable>)
   returns (sst: SSTable)
   requires join.requires(ssts)
   requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
   requires forall i, j, key1, key2 | 0 <= i < j < |ssts| && key1 in I(ssts[i]) && key2 in I(ssts[j]) :: lt(key1, key2)
   ensures WFSSTableMap(sst)
-  ensures I(sst) == BT.JoinBuckets(ISeq(ssts))
+  ensures I(sst) == JoinBucketList(ISeq(ssts))
   {
     var startsLen: uint64 := 0;
     var stringsLen: uint64 := 0;
@@ -1753,90 +1679,6 @@ module SSTable {
     if n == 0 then [] else EmptySeq(n-1) + [Empty()]
   }
 
-  lemma SplitBucketOnPivotsAt(bucket: map<Key, Message>, pivots: seq<Key>, i: int)
-  requires P.WFPivots(pivots)
-  requires 0 <= i <= |pivots|
-  ensures BT.SplitBucketOnPivots(pivots, bucket)[i] == map key | key in bucket && P.Route(pivots, key) == i :: bucket[key]
-  {
-    if i == |pivots| {
-    } else {
-      var l := map key | key in bucket && lt(key, Last(pivots)) :: bucket[key];
-      P.WFSlice(pivots, 0, |pivots| - 1);
-      SplitBucketOnPivotsAt(l, DropLast(pivots), i);
-      var a := BT.SplitBucketOnPivots(pivots, bucket)[i];
-      var b := map key | key in bucket && P.Route(pivots, key) == i :: bucket[key];
-
-      forall key | key in a
-      ensures key in b
-      ensures a[key] == b[key];
-      {
-        assert key in bucket;
-        P.RouteIs(pivots, key, i);
-      }
-
-      forall key | key in b
-      ensures key in a
-      {
-        //assert key in l;
-        P.RouteIs(DropLast(pivots), key, i);
-        //assert key in (map key | key in l && P.Route(DropLast(pivots), key) == i :: l[key]);
-        //assert key in BT.SplitBucketOnPivots(DropLast(pivots), l)[i];
-      }
-
-      assert a == b;
-    }
-  }
-
-  lemma AddMessagesToBucketsEmpAt(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>, i: int)
-  requires P.WFPivots(pivots)
-  requires 0 <= i <= |pivots|
-  requires |emp| == |pivots| + 1
-  requires forall i | 0 <= i < |emp| :: emp[i] == map[]
-  requires forall key | key in bucket :: bucket[key] != IdentityMessage();
-  ensures BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)[i] == map key | key in bucket && P.Route(pivots, key) == i :: bucket[key]
-  {
-    var a := BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)[i];
-    var b := map key | key in bucket && P.Route(pivots, key) == i :: bucket[key];
-    forall key | key in a
-    ensures key in b
-    ensures a[key] == b[key];
-    {
-      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(pivots, |emp|, emp, bucket, key);
-      P.RouteIs(pivots, key, i);
-
-      //assert BT.BucketLookup(a, key) != IdentityMessage();
-      //assert BT.BucketLookup(emp[i], key) == IdentityMessage();
-      //assert BT.BucketLookup(bucket, key) != IdentityMessage();
-
-      //assert key in bucket;
-    }
-    forall key | key in b
-    ensures key in a
-    {
-      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(pivots, |emp|, emp, bucket, key);
-    }
-    assert a == b;
-  }
-
-  lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>)
-  requires P.WFPivots(pivots)
-  requires |emp| == |pivots| + 1
-  requires forall i | 0 <= i < |emp| :: emp[i] == map[]
-  requires forall key | key in bucket :: bucket[key] != IdentityMessage();
-  ensures BT.SplitBucketOnPivots(pivots, bucket) == BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket)
-  {
-    var a := BT.SplitBucketOnPivots(pivots, bucket);
-    var b := BT.AddMessagesToBuckets(pivots, |emp|, emp, bucket);
-    assert |a| == |emp|;
-    assert |b| == |emp|;
-    forall i | 0 <= i < |emp|
-    ensures a[i] == b[i]
-    {
-      SplitBucketOnPivotsAt(bucket, pivots, i);
-      AddMessagesToBucketsEmpAt(bucket, pivots, emp, i);
-    }
-  }
-
   lemma LemmaINoIdentity(sst: SSTable)
   requires WFSSTableMap(sst)
   ensures forall key | key in I(sst) :: I(sst)[key] != IdentityMessage()
@@ -1856,7 +1698,7 @@ module SSTable {
   requires |sst.strings| < 0x800_0000_0000_0000
   requires |sst.starts| < 0x800_0000_0000_0000
   ensures forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
-  ensures ISeq(ssts) == BT.SplitBucketOnPivots(pivots, I(sst))
+  ensures ISeq(ssts) == SplitBucketOnPivots(I(sst), pivots)
   {
     reveal_Empty();
     ssts := DoFlush(sst, EmptySeq(|pivots| + 1), pivots);
@@ -2043,7 +1885,7 @@ module SSTable {
   returns (left: SSTable)
   requires WFSSTableMap(sst)
   ensures WFSSTableMap(left)
-  ensures I(left) == BT.SplitBucketLeft(I(sst), pivot)
+  ensures I(left) == SplitBucketLeft(I(sst), pivot)
   {
     Uint64Order.reveal_IsSorted();
     reveal_KeysStrictlySorted();
@@ -2059,7 +1901,7 @@ module SSTable {
       leftPreserves(sst, left, idx as int, stringIdx as int, j);
     }
 
-    ghost var a := BT.SplitBucketLeft(I(sst), pivot);
+    ghost var a := SplitBucketLeft(I(sst), pivot);
     ghost var b := I(left);
 
     forall key | key in a
@@ -2120,7 +1962,7 @@ module SSTable {
   returns (right: SSTable)
   requires WFSSTableMap(sst)
   ensures WFSSTableMap(right)
-  ensures I(right) == BT.SplitBucketRight(I(sst), pivot)
+  ensures I(right) == SplitBucketRight(I(sst), pivot)
   {
     //Uint64Order.reveal_IsSorted();
     reveal_KeysStrictlySorted();
@@ -2144,7 +1986,7 @@ module SSTable {
       rightPreserves(sst, right, idx as int, stringIdx as int, j + idx as int);
     }
 
-    ghost var a := BT.SplitBucketRight(I(sst), pivot);
+    ghost var a := SplitBucketRight(I(sst), pivot);
     ghost var b := I(right);
 
     forall key | key in a
