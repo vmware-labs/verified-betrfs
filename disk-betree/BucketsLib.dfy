@@ -69,7 +69,7 @@ module BucketsLib {
   }
 
   function BucketListFlush'(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
-  requires WFBucketList(children, pivots)
+  requires WFPivots(pivots)
   requires 0 <= i <= |children|
   ensures |res| == i
   {
@@ -79,7 +79,7 @@ module BucketsLib {
   }
 
   function BucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable) : (res : BucketList)
-  requires WFBucketList(children, pivots)
+  requires WFPivots(pivots)
   ensures |res| == |children|
   {
     BucketListFlush'(parent, children, pivots, |children|)

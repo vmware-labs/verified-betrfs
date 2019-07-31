@@ -1470,6 +1470,7 @@ module SSTable {
       assert End(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1) as int + |sst1.strings|
           == End(sst, 2*i as uint64 + 1) as int;
 
+      // TODO this is flaky for some reason:
       assert Entry(sst, 2*i+1)
           == sst.strings[Start(sst, 2*i as uint64 + 1) .. End(sst, 2*i as uint64 + 1)]
           == sst2.strings[Start(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1) .. End(sst2, 2*(i - |sst1.starts|/2) as uint64 + 1)]
