@@ -19,10 +19,10 @@ abstract module MutableBtree {
     | NotFound
     
   function method MaxKeysPerLeaf() : uint64
-    ensures 1 < MaxKeysPerLeaf()
+    ensures 1 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 2
 
   function method MaxChildren() : uint64
-    ensures 3 < MaxChildren()
+    ensures 3 < MaxChildren() as int < Uint64UpperBound() / 2
 
   function method DefaultValue() : Value
   function method DefaultKey() : Key
@@ -71,7 +71,7 @@ abstract module MutableBtree {
       ensures allKeys == old(allKeys) + {key}
       ensures fresh(subtreeObjects-old(subtreeObjects))
       modifies this, subtreeObjects
-      decreases subtreeObjects
+      decreases allKeys
       
     static function MergeMaps(left: map<Key, Value>, pivot: Key, right: map<Key, Value>) : map<Key, Value> {
       map key |
@@ -92,6 +92,8 @@ abstract module MutableBtree {
       && rightnode.WF()
       && !rightnode.Full()
       && MergeMaps(Interpretation(), pivot, rightnode.Interpretation()) == oldint
+      && allKeys != {}
+      && rightnode.allKeys != {}
       && (forall key :: key in allKeys ==> Keys.lt(key, pivot))
       && (forall key :: key in rightnode.allKeys ==> Keys.lte(pivot, key))
     }
@@ -182,7 +184,7 @@ abstract module MutableBtree {
       ensures allKeys == old(allKeys) + {key}
       ensures fresh(subtreeObjects-old(subtreeObjects))
       modifies this, subtreeObjects
-      decreases subtreeObjects
+      decreases allKeys
     {
       var posplus1 := Keys.ArrayLargestLtePlus1(keys, 0, nkeys, key);
 
@@ -223,6 +225,8 @@ abstract module MutableBtree {
       nkeys := boundary;
       allKeys := set key | key in multiset(keys[..nkeys]);
       right.allKeys := set key | key in multiset(right.keys[..right.nkeys]);
+      assert keys[0] in allKeys;
+      assert right.keys[0] in right.allKeys;
       wit := keys[0];
       pivot := right.keys[0];
       rightnode := right;
@@ -266,8 +270,13 @@ abstract module MutableBtree {
       && (forall i, j :: 0 <= i < j < nchildren ==> children[i].node.subtreeObjects !! children[j].node.subtreeObjects)
       && (forall i, key :: 0 <= i < nchildren-1 && key in children[i].node.allKeys ==> Keys.lt(key, pivots[i]))
       && (forall i, key :: 0 < i < nchildren   && key in children[i].node.allKeys ==> Keys.lte(pivots[i-1], key))
+      && (forall i :: 0 <= i < nchildren ==> children[i].node.allKeys != {})
     }
 
+    lemma AllKeysStrictlyDecreasing()
+      requires WF()
+      ensures forall i :: 0 <= i < nchildren ==> children[i].node.allKeys < allKeys
+    
     function QueryDef(needle: Key) : QueryResult
       requires WF()
       reads this, subtreeObjects
@@ -413,18 +422,17 @@ abstract module MutableBtree {
       ensures allKeys == old(allKeys) + {key}
       ensures fresh(subtreeObjects - old(subtreeObjects))
       modifies this, subtreeObjects
-      decreases subtreeObjects
+      decreases allKeys
     {
       var posplus1 := Keys.ArrayLargestLtePlus1(pivots, 0, nchildren - 1, key);
       var childidx := (posplus1) as uint64;
       if children[posplus1].node.Full() {
         childidx := SplitChild(key, childidx);
       }
-      assert children[childidx].node.subtreeObjects < old(subtreeObjects);
+      AllKeysStrictlyDecreasing();
       children[childidx].node.Insert(key, value);
       subtreeObjects := subtreeObjects + children[childidx].node.subtreeObjects;
       allKeys := allKeys + {key};
-      AssumeFalse();
     }
 
     function UnionSubtreeObjects() : set<object>
@@ -458,8 +466,12 @@ abstract module MutableBtree {
       subtreeObjects := {this, pivots, children} + UnionSubtreeObjects();
       right.subtreeObjects := right.subtreeObjects + right.UnionSubtreeObjects();
 
-      wit := right.pivots[0];
       pivot := pivots[boundary-1];
+
+      right.allKeys := set k | k in allKeys && Keys.lte(pivot, k);
+      allKeys := set k | k in allKeys && Keys.lt(k, pivot);
+      
+      wit := right.pivots[0];
       rightnode := right;
       AssumeFalse();
       
