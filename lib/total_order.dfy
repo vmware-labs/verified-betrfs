@@ -3,6 +3,7 @@ include "NativeTypes.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
+  import opened NativeTypes
     
 	type Element(!new,==)
 
@@ -248,11 +249,11 @@ abstract module Total_Order {
       assert false;
     }
   }
-  
-  method ArrayLargestLte(run: array<Element>, start: int, end: int, needle: Element) returns (pos: int)
-    requires 0 <= start <= end <= run.Length
+
+  method ArrayLargestLte(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
     requires IsSorted(run[start..end]);
-    ensures pos == start + LargestLte(run[start..end], needle)
+    ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
   {
     reveal_IsSorted();
     var lo := start;
@@ -270,8 +271,8 @@ abstract module Total_Order {
         hi := mid;
       }
     }
-    pos := lo-1;
-    LargestLteIsUnique(run[start..end], needle, pos - start);
+    posplus1 := lo;
+    LargestLteIsUnique(run[start..end], needle, posplus1 as int - 1 - start as int);
   }
   
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
@@ -483,7 +484,6 @@ module Integer_Order refines Total_Order {
 }
 
 module Uint64_Order refines Total_Order {
-  import opened NativeTypes
   type Element = uint64
 
   function SomeElement() : Element { 0 }
@@ -529,7 +529,6 @@ module Bounded_Integer_Order refines Bounded_Total_Order {
 // }
 
 module Byte_Order refines Total_Order {
-  import opened NativeTypes
   type Element = byte
 
   function SomeElement() : Element { 0 }
