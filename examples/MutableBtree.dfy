@@ -159,7 +159,7 @@ abstract module MutableBtree {
       decreases subtreeObjects
     {
       Keys.reveal_IsStrictlySorted();
-      var posplus1: uint64 := Keys.ArrayLargestLte(keys, 0, nkeys, needle);
+      var posplus1: uint64 := Keys.ArrayLargestLtePlus1(keys, 0, nkeys, needle);
       if 1 <= posplus1 && keys[posplus1-1] == needle {
         result := Found(values[posplus1-1]);
       } else {
@@ -184,7 +184,7 @@ abstract module MutableBtree {
       modifies this, subtreeObjects
       decreases subtreeObjects
     {
-      var posplus1 := Keys.ArrayLargestLte(keys, 0, nkeys, key);
+      var posplus1 := Keys.ArrayLargestLtePlus1(keys, 0, nkeys, key);
 
       if 1 <= posplus1 && keys[posplus1-1] == key {
         values[posplus1-1] := value;
@@ -302,7 +302,7 @@ abstract module MutableBtree {
       ensures result == QueryDef(needle)
       decreases subtreeObjects
     {
-      var posplus1 := Keys.ArrayLargestLte(pivots, 0, nchildren-1, needle);
+      var posplus1 := Keys.ArrayLargestLtePlus1(pivots, 0, nchildren-1, needle);
       result := children[posplus1].node.Query(needle);
     }
 
@@ -415,7 +415,7 @@ abstract module MutableBtree {
       modifies this, subtreeObjects
       decreases subtreeObjects
     {
-      var posplus1 := Keys.ArrayLargestLte(pivots, 0, nchildren - 1, key);
+      var posplus1 := Keys.ArrayLargestLtePlus1(pivots, 0, nchildren - 1, key);
       var childidx := (posplus1) as uint64;
       if children[posplus1].node.Full() {
         childidx := SplitChild(key, childidx);

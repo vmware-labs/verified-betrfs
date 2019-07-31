@@ -157,6 +157,14 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma SortedSubsequence(run: seq<Element>, i: int, j: int)
+    requires IsSorted(run)
+    requires 0 <= i <= j <= |run|
+    ensures IsSorted(run[i..j])
+  {
+    reveal_IsSorted();
+  }
+  
   lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
   requires -1 <= pos < |l|;
   requires IsStrictlySorted(l);
@@ -250,7 +258,7 @@ abstract module Total_Order {
     }
   }
 
-  method ArrayLargestLte(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+  method ArrayLargestLtePlus1Linear(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
     requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
     requires IsSorted(run[start..end]);
     ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
@@ -272,26 +280,49 @@ abstract module Total_Order {
     LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
     posplus1 := i;
   }
-  // {
-  //   reveal_IsSorted();
-  //   var lo := start;
-  //   var hi := end;
-  //   while lo < hi
-  //     invariant start <= lo <= hi <= end
-  //     invariant forall i :: start <= i < lo ==> lte(run[i], needle)
-  //     invariant forall i :: hi <= i < end ==> lt(needle, run[i])
-  //     decreases hi - lo
-  //   {
-  //     var mid := (lo + hi) / 2;
-  //     if lte(run[mid], needle) {
-  //       lo := mid+1;
-  //     } else {
-  //       hi := mid;
-  //     }
-  //   }
-  //   posplus1 := lo;
-  //   LargestLteIsUnique(run[start..end], needle, posplus1 as int - 1 - start as int);
-  // }
+
+  method ArrayLargestLtePlus1(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
+    requires IsSorted(run[start..end]);
+    ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
+  {
+    reveal_IsSorted();
+    var lo := start;
+    var hi := end;
+    while 64 < hi - lo 
+      invariant start <= lo <= hi <= end
+      invariant forall i :: start <= i < lo ==> lte(run[i], needle)
+      invariant forall i :: hi <= i < end ==> lt(needle, run[i])
+      decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      if lte(run[mid], needle) {
+        lo := mid+1;
+      } else {
+        hi := mid;
+      }
+    }
+    assert run[lo..end] == run[start..end][lo-start..end-start];
+    SortedSubsequence(run[start..end], (lo-start) as int, (end-start) as int);
+    assert run[lo..hi] == run[lo..end][..hi-lo];
+    SortedSubsequence(run[lo..end], 0, (hi-lo) as int);
+    posplus1 := ArrayLargestLtePlus1Linear(run, lo, hi, needle);
+    forall i | start <= i < posplus1
+      ensures lte(run[i], needle)
+    {
+      if i < lo {
+      } else {
+      }
+    }
+    forall i | posplus1 <= i < end
+      ensures lt(needle, run[i])
+    {
+      if i < hi {
+      } else {
+      }
+    }
+    LargestLteIsUnique(run[start..end], needle, posplus1 as int - 1 - start as int);
+  }
   
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
   requires IsStrictlySorted(run);
