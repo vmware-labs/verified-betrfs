@@ -64,9 +64,11 @@ module Sequences {
     else  [f(run[0])] + Apply(f, run[1..])
   }
 
-  function method Filter<E>(f : (E -> bool), run: seq<E>) : (result: seq<E>)
+  function method Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| <= |run|
+    ensures forall i: nat :: i < |result| && f.requires(result[i]) ==> f(result[i])
+    reads f.reads
   {
     if |run| == 0 then []
     else ((if f(run[0]) then [run[0]] else []) + Filter(f, run[1..]))
