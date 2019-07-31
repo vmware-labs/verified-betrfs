@@ -528,6 +528,7 @@ module Marshalling {
   }
 
   function INodeOpt(s : Option<ImplState.Node>): Option<Node>
+  requires s.Some? ==> ImplState.WFNode(s.value)
   {
     if s.Some? then
       Some(ImplState.INode(s.value))
@@ -537,8 +538,8 @@ module Marshalling {
 
   method ValToNode(v: V) returns (s : Option<ImplState.Node>)
   requires valToNode.requires(v)
-  ensures INodeOpt(s) == valToNode(v)
   ensures s.Some? ==> ImplState.WFNode(s.value)
+  ensures INodeOpt(s) == valToNode(v)
   {
     var pivotsOpt := valToPivots(v.t[0].a);
     if (pivotsOpt.None?) {
@@ -563,6 +564,9 @@ module Marshalling {
     var buckets := bucketsOpt.value;
 
     var node := ImplState.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+
+    assert valToNode(v).Some?;
+    assert ImplState.INode(node) == valToNode(v).value;
     return Some(node);
   }
 
@@ -583,6 +587,8 @@ module Marshalling {
   }
 
   function ISectorOpt(s : Option<ImplState.Sector>): Option<BC.Sector>
+  requires s.Some? ==> ImplState.WFSector(s.value)
+  reads if s.Some? && s.value.SectorIndirectionTable? then {s.value.indirectionTable} else {}
   {
     if s.Some? then
       Some(ImplState.ISector(s.value))
@@ -592,8 +598,8 @@ module Marshalling {
 
   method ValToSector(v: V) returns (s : Option<ImplState.Sector>)
   requires valToSector.requires(v)
-  ensures ISectorOpt(s) == valToSector(v)
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures ISectorOpt(s) == valToSector(v)
   {
     if v.c == 0 {
       var mutMap := ValToIndirectionTable(v.val);
@@ -748,6 +754,8 @@ module Marshalling {
       var bucketVal := bucketToVal(bucket, pivotTable, |buckets| - 1);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
+      assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
+      assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == Apply(SSTable.I, buckets); // observe
       return VArray(pref.a + [bucketVal]);
     }
   }
@@ -842,6 +850,8 @@ module Marshalling {
     v := VTuple([pivots, children, buckets]);
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
+    assert valToNode(v).Some?;
+    assert valToNode(v).value == ImplState.INode(node);
   }
 
   method sectorToVal(sector: ImplState.Sector) returns (v : Option<V>)

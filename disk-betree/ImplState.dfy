@@ -34,7 +34,7 @@ module {:extern} ImplState {
     )
   datatype Variables =
     | Ready(
-        persistentIndirectionTable: MutIndirectionTable,
+        persistentIndirectionTable: MutIndirectionTable, // should this be just in ghost land?
         frozenIndirectionTable: Option<MutIndirectionTable>,
         ephemeralIndirectionTable: MutIndirectionTable,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
@@ -67,11 +67,14 @@ module {:extern} ImplState {
     }
   }
   predicate WFSector(sector: Sector)
-    reads if sector.SectorIndirectionTable? then { sector.indirectionTable } else {}
+    reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   {
     match sector {
       case SectorBlock(node) => WFNode(node)
-      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorIndirectionTable(indirectionTable) => (
+        && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+        && indirectionTable.Inv()
+      )
     }
   }
 
@@ -113,7 +116,7 @@ module {:extern} ImplState {
   }
   function ISector(sector: Sector) : BC.Sector
   requires WFSector(sector)
-  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {}
+  reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   {
     match sector {
       case SectorBlock(node) => BC.SectorBlock(INode(node))

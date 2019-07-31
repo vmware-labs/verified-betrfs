@@ -356,7 +356,7 @@ module MutableMap {
       ensures Storage[slotIdx].Empty? ==> key !in Contents
       ensures Repr == old(Repr)
     {
-      assume false; // TODO(alattuada) timing out
+      // assume false; // TODO(alattuada) timing out
 
       slotIdx := Uint64SlotForKey(key);
       startSlotIdx := slotIdx;
@@ -387,6 +387,8 @@ module MutableMap {
 
       assert forall dist: nat :: dist < Storage.Length ==>
           Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
+
+      assume false;
 
       var skips := 0;
       ghostSkips := 0;
