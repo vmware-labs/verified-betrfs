@@ -192,7 +192,10 @@ module Marshalling {
       && if table.Some?
          then (inter.Some? && table.value.lbas == inter.value.0 && table.value.graph == inter.value.1)
          else inter.None?)
-  ensures s.Some? ==> fresh(s.value)
+  ensures s.Some? ==> s.value.Inv()
+  ensures s.Some? ==> s.value.Count as nat == |a|
+  ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
+  ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
   {
     if |a| == 0 {
       var newHashMap := new MM.ResizingHashMap<(Option<LBA>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
@@ -216,6 +219,7 @@ module Marshalling {
               } else {
                 var _ := mutMap.Insert(ref, (Some(lba), succs));
                 s := Some(mutMap);
+                assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
               }
             }
           }
@@ -314,7 +318,9 @@ module Marshalling {
       None
   }
 
-  function ISSTableOpt(table : Option<SSTable.SSTable>): Option<map<Key, Message>> {
+  function ISSTableOpt(table : Option<SSTable.SSTable>): Option<map<Key, Message>>
+  requires table.Some? ==> SSTable.WFSSTableMap(table.value)
+  {
     if table.Some? then
       Some(SSTable.I(table.value))
     else
@@ -323,8 +329,8 @@ module Marshalling {
 
   method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<SSTable.SSTable>)
   requires valToBucket.requires(v, pivotTable, i)
-  ensures ISSTableOpt(s) == valToBucket(v, pivotTable, i)
   ensures s.Some? ==> SSTable.WFSSTableMap(s.value)
+  ensures ISSTableOpt(s) == valToBucket(v, pivotTable, i)
   ensures s.Some? ==> BT.WFBucket(SSTable.I(s.value), pivotTable, i)
   {
     var starts := ValToUint64Seq(v.t[0].a);
@@ -444,6 +450,7 @@ module Marshalling {
   }
 
   function ISeqSSTableOpt(s : Option<seq<SSTable.SSTable>>): Option<seq<map<Key, Message>>>
+  requires s.Some? ==> forall i: nat :: i < |s.value| ==> SSTable.WFSSTableMap(s.value[i])
   {
     if s.Some? then
       Some(Apply(SSTable.I, s.value))
@@ -453,8 +460,8 @@ module Marshalling {
 
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<SSTable.SSTable>>)
   requires valToBuckets.requires(a, pivotTable)
-  ensures ISeqSSTableOpt(s) == valToBuckets(a, pivotTable)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: SSTable.WFSSTableMap(s.value[i])
+  ensures ISeqSSTableOpt(s) == valToBuckets(a, pivotTable)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: BT.WFBucket(SSTable.I(s.value[i]), pivotTable, i)
   {
     var ar := new SSTable.SSTable[|a|];
@@ -635,7 +642,7 @@ module Marshalling {
   method {:fuel ValInGrammar,2} lbasSuccsToVal(lbas: map<Reference, LBA>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
   requires lbas.Keys == graph.Keys
   requires forall lba | lba in lbas.Values :: BC.ValidLBAForNode(lba)
-  requires |lbas| < 0x1_0000_0000_0000_0000
+  requires |lbas| < 0x1_0000_0000_0000_0000 / 8
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableGrammar());
   ensures v.Some? ==> |v.value.a| == |lbas|
@@ -841,9 +848,12 @@ module Marshalling {
   {
     match sector {
       case SectorIndirectionTable(mutMap) => {
-        var table := ImplState.IIndirectionTable(mutMap);
-        if |table.lbas| < 0x1_0000_0000_0000_0000 {
-          var w := lbasSuccsToVal(table.lbas, table.graph);
+        var table := mutMap.ToMap();
+        // TODO(alattuada) extract to method
+        var lbas := map k | k in table && table[k].0.Some? :: k := table[k].0.value;
+        var graph := map k | k in table :: k := table[k].1;
+        if |lbas| < 0x1_0000_0000_0000_0000 {
+          var w := lbasSuccsToVal(lbas, graph);
           match w {
             case Some(v) => return Some(VCase(0, v));
             case None => return None;
