@@ -340,5 +340,15 @@ namespace Native_Compile {
       public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
           System.Array.Copy(src.Elements, (long)srcIndex, dst, (long)dstIndex, (long)len);
       }
+
+      public static void @ByteSeqCmpByteSeq(
+        Dafny.Sequence<byte> s1, int i1, int l1,
+        Dafny.Sequence<byte> s2, int i2, int l2,
+        out int res)
+      {
+        var span1 = new Span<byte>(s1.Elements, i1, l1);
+        var span2 = new Span<byte>(s2.Elements, i2, l2);
+        res = span1.SequenceCompareTo(span2);
+      }
   }
 }
