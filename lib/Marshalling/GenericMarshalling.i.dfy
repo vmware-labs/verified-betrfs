@@ -31,12 +31,14 @@ datatype G = GUint64
            | GArray(elt:G)
            | GTuple(t:seq<G>)
            | GByteArray
+           | GUint64Array
            | GTaggedUnion(cases:seq<G>)
 
 datatype V = VUint64(u:uint64)
            | VArray(a:seq<V>)
            | VTuple(t:seq<V>)
            | VByteArray(b:seq<byte>)
+           | VUint64Array(ua:seq<uint64>)
            | VCase(c:uint64, val:V)
 
 predicate ValInGrammar(val:V, grammar:G)
@@ -47,6 +49,7 @@ predicate ValInGrammar(val:V, grammar:G)
         case VTuple(t)  => grammar.GTuple? && |t| == |grammar.t|
                               && forall i :: 0 <= i < |t| ==> ValInGrammar(t[i], grammar.t[i])
         case VByteArray(b) => grammar.GByteArray?
+        case VUint64Array(ua) => grammar.GUint64Array?
         case VCase(c, v) => grammar.GTaggedUnion? && (c as int) < |grammar.cases| && ValInGrammar(v, grammar.cases[c])
 }
 
@@ -58,6 +61,7 @@ predicate ValidGrammar(grammar:G)
         case GArray(elt) => ValidGrammar(elt)
         case GTuple(t) => |t| < 0x1_0000_0000_0000_0000 && (forall g :: g in t ==> ValidGrammar(g))
         case GByteArray => true
+        case GUint64Array => true
         case GTaggedUnion(cases) => |cases| < 0x1_0000_0000_0000_0000 && (forall g :: g in cases ==> ValidGrammar(g))
 }
 
@@ -69,6 +73,7 @@ predicate ValidVal(val:V)
         case VArray(a)     => |a| < 0x1_0000_0000_0000_0000 && forall v :: v in a ==> ValidVal(v)
         case VTuple(t)     => |t| < 0x1_0000_0000_0000_0000 && forall v :: v in t ==> ValidVal(v)
         case VByteArray(b) => |b| < 0x1_0000_0000_0000_0000
+        case VUint64Array(ua) => |ua| < 0x1_0000_0000_0000_0000
         case VCase(c, v) => ValidVal(v)
 
 }
@@ -88,6 +93,7 @@ function method SizeOfV(val:V) : int
         case VArray(a)      => 8 + SeqSum(a)     // 8 bytes for length
         case VTuple(t)      => SeqSum(t)
         case VByteArray(b)  => 8 + |b|          // 8 bytes for a length field
+        case VUint64Array(b)  => 8 + 8*|b|          // 8 bytes for a length field
         case VCase(c, v)  => 8 + SizeOfV(v)     // 8 bytes for the case identifier
 }
 
@@ -571,6 +577,85 @@ method ParseByteArray(data:array<byte>, index:uint64) returns (success:bool, v:V
     }
 }
 
+function method SeqByteToSeqUint64(bytes: seq<byte>, l: int) : (us : seq<uint64>)
+  requires |bytes| == Uint64Size() as int * l
+  ensures |us| == l
+{
+  if l == 0 then [] else SeqByteToSeqUint64(bytes[0 .. (l-1) * Uint64Size() as int], l-1) + [SeqByteToUint64(bytes[(l-1) * Uint64Size() as int .. ])]
+}
+
+function method parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+{
+    var (len, rest) := parse_Uint64(data);
+    if !len.None? && len.value.u <= (|rest| as uint64) / Uint64Size() then
+        (Some(VUint64Array(SeqByteToSeqUint64(rest[..Uint64Size()*len.value.u], len.value.u as int))), rest[Uint64Size()*len.value.u..])
+    else
+        (None, [])
+}
+
+method parseUint64ArrayContents(data:array<byte>, index: uint64, len: uint64) returns (s : seq<uint64>)
+    requires (index as int) + (Uint64Size() as int) * (len as int) <= data.Length;
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    ensures  s == SeqByteToSeqUint64(data[index .. index as int + len as int * Uint64Size() as int], len as int)
+{
+  lemma_2toX();
+
+  var ar := new uint64[len];
+  var j: uint64 := 0;
+  while j < len
+  invariant 0 <= j <= len
+  invariant ar[..j] == SeqByteToSeqUint64(data[index .. index as int + j as int * Uint64Size() as int], j as int)
+  {
+    ar[j] :=    (data[index + 8*j + (0 as uint64)] as uint64) * 0x1_00_0000_0000_0000
+              + (data[index + 8*j + (1 as uint64)] as uint64) * 0x1_00_0000_0000_00
+              + (data[index + 8*j + (2 as uint64)] as uint64) * 0x1_00_0000_0000
+              + (data[index + 8*j + (3 as uint64)] as uint64) * 0x1_00_0000_00
+              + (data[index + 8*j + (4 as uint64)] as uint64) * 0x1_00_0000
+              + (data[index + 8*j + (5 as uint64)] as uint64) * 0x1_00_00
+              + (data[index + 8*j + (6 as uint64)] as uint64) * 0x1_00
+              + (data[index + 8*j + (7 as uint64)] as uint64);
+
+    assert ar[j] == SeqByteToUint64(data[index + 8*j .. index + 8*(j+1)]);
+    assert ar[..j] == ar[..j+1][..j];
+    assert data[index .. index as int + j as int * Uint64Size() as int]
+        == data[index .. index as int + (j + 1) as int * Uint64Size() as int][0 .. j * Uint64Size()];
+
+    j := j + 1;
+  }
+  s := ar[..];
+}
+
+method ParseUint64Array(data:array<byte>, index: uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= data.Length;
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= data.Length;
+    ensures  var (v', rest') := parse_Uint64Array(data[index..]);
+             var v_opt := if success then Some(v) else None();
+             && v_opt == v'
+             && data[rest_index..] == rest';
+{
+    var some, len, rest := ParseUint64(data, index);
+    if some && len.u <= ((data.Length as uint64) - rest) / Uint64Size() {
+        ghost var rest_seq := data[rest..];
+        assert len.u as int * Uint64Size() as int <= |rest_seq|;
+        calc {
+            rest_seq[0..len.u];
+            data[rest..rest + len.u];
+        }
+        success := true;
+        var contents := parseUint64ArrayContents(data, index + Uint64Size(), len.u);
+        v := VUint64Array(contents);
+        rest_index := rest + len.u * Uint64Size();
+
+        assert data[index as int + Uint64Size() as int .. index as int + Uint64Size() as int + len.u as int * Uint64Size() as int]
+            == rest_seq[..Uint64Size() as int * len.u as int];
+    } else {
+        success := false;
+        rest_index := (data.Length as uint64);
+    }
+}
+
 function method parse_Case(data:seq<byte>, cases:seq<G>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires |cases| < 0x1_0000_0000_0000_0000;
@@ -633,6 +718,7 @@ function method {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq
         case GArray(elt)         => parse_Array(data, elt)
         case GTuple(t)           => parse_Tuple(data, t)
         case GByteArray          => parse_ByteArray(data)
+        case GUint64Array          => parse_Uint64Array(data)
         case GTaggedUnion(cases) => parse_Case(data, cases)
 }
 
@@ -654,6 +740,7 @@ method ParseVal(data:array<byte>, index:uint64, grammar:G) returns (success:bool
         case GArray(elt)         => success, v, rest_index := ParseArray(data, index, elt);
         case GTuple(t)           => success, v, rest_index := ParseTuple(data, index, t);
         case GByteArray          => success, v, rest_index := ParseByteArray(data, index);
+        case GUint64Array          => success, v, rest_index := ParseUint64Array(data, index);
         case GTaggedUnion(cases) => success, v, rest_index := ParseCase(data, index, cases);
     }
 }
@@ -732,6 +819,43 @@ lemma lemma_parse_Val_view_ByteArray(data:seq<byte>, v:V, grammar:G, index:int)
              ((parse_ByteArray(data[index..bound]).0 == Some(v)) <==> (parse_ByteArray(data[index..index+SizeOfV(v)]).0 == Some(v))));
     assert forall bound :: index+SizeOfV(v) <= bound <= |data| ==>
              parse_ByteArray(data[index..bound]).0 == Some(v) ==> parse_ByteArray(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+}
+
+lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires ValInGrammar(v, grammar);
+    requires ValidGrammar(grammar);
+    requires grammar.GUint64Array?;
+    requires 0 <= index <= |data|;
+    requires 0 <= index + SizeOfV(v) <= |data|;
+    ensures  forall bound :: Trigger(bound) ==> (index+SizeOfV(v) <= bound <= |data| ==>
+             ((parse_Uint64Array(data[index..bound]).0 == Some(v)) <==> (parse_Uint64Array(data[index..index+SizeOfV(v)]).0 == Some(v))));
+    ensures  forall bound :: index+SizeOfV(v) <= bound <= |data| ==>
+             parse_Uint64Array(data[index..bound]).0 == Some(v) ==> parse_Uint64Array(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+{
+  forall bound | Trigger(bound) && index+SizeOfV(v) <= bound <= |data|
+  ensures (parse_Uint64Array(data[index..bound]).0 == Some(v)) ==> (parse_Uint64Array(data[index..index+SizeOfV(v)]).0 == Some(v))
+  ensures (parse_Uint64Array(data[index..index+SizeOfV(v)]).0 == Some(v)) ==> (parse_Uint64Array(data[index..bound]).0 == Some(v))
+  {
+    var len := |v.ua|;
+
+    assert parse_Uint64(data[index..bound]).0
+        == parse_Uint64(data[index..index + SizeOfV(v)]).0;
+    assert parse_Uint64(data[index..bound]).1 == data[index..bound][8..];
+    assert parse_Uint64(data[index..index + SizeOfV(v)]).1 == data[index..index + SizeOfV(v)][8..];
+    assert data[index..bound][8..][..8*len] == data[index..index + SizeOfV(v)][8..][..8*len];
+
+    var l := parse_Uint64(data[index..]).0;
+    if (l.Some? && l.value.u as int == len) {
+      assert parse_Uint64Array(data[index..bound]).0
+          == parse_Uint64Array(data[index..index + SizeOfV(v)]).0;
+    }
+  }
+
+  forall bound | index+SizeOfV(v) <= bound <= |data| && parse_Uint64Array(data[index..bound]).0 == Some(v)
+  ensures parse_Uint64Array(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+  {
+  }
 }
 
 lemma lemma_SeqSum_prefix(s:seq<V>, v:V)
@@ -1116,6 +1240,7 @@ lemma lemma_parse_Val_view(data:seq<byte>, v:V, grammar:G, index:int)
                                         assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GTuple(t)           => lemma_parse_Val_view_Tuple(data, v, t, index, bound); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GByteArray          => lemma_parse_Val_view_ByteArray(data, v, grammar, index); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            case GUint64Array          => lemma_parse_Val_view_Uint64Array(data, v, grammar, index); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GTaggedUnion(cases) => lemma_parse_Val_view_Union(data, v, grammar, index, bound); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
 
     }
@@ -1183,6 +1308,7 @@ method ComputeSizeOf(val:V) returns (size:uint64)
                                }
         case VTuple(t)      => size := ComputeSeqSum(t);
         case VByteArray(b)  => size := 8 + (|b| as uint64);
+        case VUint64Array(b)  => size := 8 + 8*(|b| as uint64);
         case VCase(c, v)    => var vs := ComputeSizeOf(v);
                                size := 8 + vs;
 }
@@ -1205,6 +1331,11 @@ method MarshallUint64(n:uint64, data:array<byte>, index:uint64)
     ensures  forall i :: (index as int) + (Uint64Size() as int) <= i < data.Length ==> data[i] == old(data[i]);
 {
     MarshallUint64_guts(n, data, index);
+
+    forall i | 0 <= i < index ensures data[i] == old(data[i])
+    {
+      assert data[i] == data[..index][i] == old(data[..index])[i] == old(data[i]);
+    }
 }
 
 lemma lemma_marshall_array_contents(contents:seq<V>, eltType:G, marshalled_bytes:seq<byte>, trace:seq<seq<byte>>)
@@ -1593,6 +1724,8 @@ method{:timeLimitMultiplier 2} MarshallTupleContents(contents:seq<V>, eltTypes:s
             old_data + fresh_bytes;
             data[index..old_cur_index] + fresh_bytes;
             data[index..old_cur_index] + data[old_cur_index..cur_index];
+            data[..][index..old_cur_index] + data[..][old_cur_index..cur_index];
+            data[..][index..cur_index];
             data[index..cur_index];
         }
 
@@ -1657,6 +1790,30 @@ method MarshallTuple(val:V, grammar:G, data:array<byte>, index:uint64) returns (
     }
 }
 
+method MarshallUint64s(ints:seq<uint64>, data:array<byte>, index:uint64)
+    requires (index as int) + (Uint64Size() as int)*|ints| <= data.Length;
+    requires 0 <= (index as int) + (Uint64Size() as int)*|ints| < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
+    ensures  forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
+{
+    //Arrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
+
+    var j:uint64 := 0;
+
+    while (j < |ints| as uint64)
+        invariant 0 <= (j as int) <= |ints|;
+        invariant forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+        invariant forall i :: 0 <= i < j as int ==> SeqByteToUint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
+        invariant forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
+    {
+        MarshallUint64(ints[j], data, index + 8*j);
+        j := j + 1;
+    }
+}
+
 method MarshallBytes(bytes:seq<byte>, data:array<byte>, index:uint64)
     requires (index as int) + |bytes| <= data.Length;
     requires 0 <= (index as int) + |bytes| < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
@@ -1712,7 +1869,7 @@ method MarshallByteArray(val:V, grammar:G, data:array<byte>, index:uint64) retur
     ghost var tuple := parse_Uint64(data_seq);
     ghost var len := tuple.0;
     ghost var rest := tuple.1;
-    //assert{:split_here} true;
+    assert{:split_here} true;
     assert len.value.u == (|val.b| as uint64);
     
     assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.b;
@@ -1720,6 +1877,84 @@ method MarshallByteArray(val:V, grammar:G, data:array<byte>, index:uint64) retur
     assert rest[0..len.value.u] == val.b;       // OBSERVE
     size := 8 + (|val.b| as uint64);
 }
+
+lemma parse_Uint64ArrayContents_eq_seq(data: seq<byte>, ints: seq<uint64>)
+  requires |data| < 0x1_0000_0000_0000_0000;
+  requires |data| == 8 * |ints|
+  requires forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[i*8 .. (i+1)*8]) == ints[i]
+  ensures SeqByteToSeqUint64(data, |ints|) == ints
+{
+  if (|ints| == 0) {
+  } else {
+    parse_Uint64ArrayContents_eq_seq(data[.. (|ints| - 1) * 8], ints[.. |ints| - 1]);
+  }
+}
+
+lemma parse_Uint64Array_eq_seq(data: seq<byte>, ints: seq<uint64>)
+  requires |data| < 0x1_0000_0000_0000_0000;
+  requires |data| == 8 + 8 * |ints|
+  requires SeqByteToUint64(data[0..8]) as int == |ints|
+  requires forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[8 + i*8 .. 8 + (i+1)*8]) == ints[i]
+  ensures parse_Uint64Array(data).0.Some?
+  ensures parse_Uint64Array(data).0.value.ua == ints
+{
+  parse_Uint64ArrayContents_eq_seq(data[8..], ints);
+  assert data[8..] == data[8..][..8*|ints|];
+}
+
+method MarshallUint64Array(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+    requires val.VUint64Array?;
+    requires ValidGrammar(grammar);
+    requires ValInGrammar(val, grammar);
+    requires ValidVal(val);
+    requires (index as int) + SizeOfV(val) <= data.Length;
+    requires 0 <= (index as int) + SizeOfV(val) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    decreases grammar;
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.Some?
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.value == val;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SizeOfV(val);
+{
+    MarshallUint64((|val.ua| as uint64), data, index);
+    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
+    MarshallUint64s(val.ua, data, index + 8);
+
+    calc {
+        parse_Val(data[index..(index as int) + SizeOfV(val)], grammar);
+            { reveal_parse_Val(); }
+        parse_Uint64Array(data[index..(index as int) + SizeOfV(val)]);
+    }
+    ghost var data_seq := data[index..(index as int) + SizeOfV(val)];
+    ghost var tuple := parse_Uint64(data_seq);
+    ghost var len := tuple.0;
+    ghost var rest := tuple.1;
+    //assert{:split_here} true;
+    assert data[index..(index as int) + SizeOfV(val)][..8] == data[index..index+8];
+    assert len.value.u
+        == SeqByteToUint64(data_seq[..8])
+        == SeqByteToUint64(data[index .. index + 8])
+        == (|val.ua| as uint64);
+    
+    //assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.ua;
+    assert !len.None? && (len.value.u as int) <= |rest|;
+    //assert rest[0..len.value.u] == val.ua;       // OBSERVE
+    size := 8 + (Uint64Size() * |val.ua| as uint64);
+
+    forall i | 0 <= i < |val.ua|
+    ensures SeqByteToUint64(data_seq[8 + i*8 .. 8 + (i+1)*8]) == val.ua[i]
+    {
+      assert data[index as int .. (index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
+          == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
+      assert data_seq[8 + i*8 .. 8 + (i+1)*8]
+          == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
+
+    }
+    parse_Uint64Array_eq_seq(data_seq, val.ua);
+}
+
 
 method MarshallCase(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VCase?;
@@ -1822,6 +2057,7 @@ method MarshallVal(val:V, grammar:G, data:array<byte>, index:uint64) returns (si
         case VUint64(_)    => size := MarshallVUint64(val, grammar, data, index);
         case VArray(_)     => size := MarshallArray(val, grammar, data, index);
         case VTuple(_)     => size := MarshallTuple(val, grammar, data, index);
+        case VUint64Array(_) => size := MarshallUint64Array(val, grammar, data, index);
         case VByteArray(_) => size := MarshallByteArray(val, grammar, data, index);
         case VCase(_,_)    => size := MarshallCase(val, grammar, data, index);
 }
