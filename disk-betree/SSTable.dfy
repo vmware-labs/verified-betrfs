@@ -1775,6 +1775,11 @@ module SSTable {
     Islice(ssts, a, |ssts|);
   }
 
+  lemma IPopFront(sst: SSTable, ssts: seq<SSTable>)
+  requires WFSSTableMap(sst)
+  requires forall i | 0 <= i < |ssts| :: WFSSTableMap(ssts[i])
+  ensures ISeq([sst] + ssts) == [I(sst)] + ISeq(ssts)
+
   method IsWFSSTableMap(sst: SSTable)
   returns (b: bool)
   ensures b == WFSSTableMap(sst)

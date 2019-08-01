@@ -48,12 +48,12 @@ module {:extern} ImplState {
 
   predicate WFBuckets(buckets: seq<SSTable.SSTable>)
   {
-    forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i])
+    && (forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i]))
   }
   predicate WFNode(node: Node)
   {
     && WFBuckets(node.buckets)
-    && Pivots.WFPivots(node.pivotTable)
+    && WFBucketList(SSTable.ISeq(node.buckets), node.pivotTable)
   }
   predicate WFCache(cache: map<Reference, Node>)
   {

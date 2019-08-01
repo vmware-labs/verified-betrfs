@@ -860,6 +860,9 @@ module {:extern} Impl refines Main {
     var splitBucket := SSTable.SplitLeft(node.buckets[cLeft], pivot);
     var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
     Pivots.WFSlice(node.pivotTable, 0, cLeft);
+    SSTable.Islice(node.buckets, 0, cLeft);
+    WFSplitBucketListLeft(SSTable.ISeq(node.buckets), node.pivotTable, cLeft, pivot);
+
     node' := IS.Node(leftPivots, leftChildren, leftBuckets);
   }
 
@@ -877,6 +880,10 @@ module {:extern} Impl refines Main {
     var splitBucket := SSTable.SplitRight(node.buckets[cRight], pivot);
     var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
     Pivots.WFSuffix(node.pivotTable, cRight);
+    SSTable.Isuffix(node.buckets, cRight + 1);
+    SSTable.IPopFront(splitBucket, node.buckets[cRight + 1 ..]);
+    WFSplitBucketListRight(SSTable.ISeq(node.buckets), node.pivotTable, cRight, pivot);
+
     node' := IS.Node(rightPivots, rightChildren, rightBuckets);
   }
 
@@ -980,7 +987,6 @@ module {:extern} Impl refines Main {
       replace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx)
     );
     SSTable.Ireplace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx);
-    assume Pivots.WFPivots(res.pivotTable);
   }
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -1193,6 +1199,8 @@ module {:extern} Impl refines Main {
     var newbuckets := SSTable.DoFlush(node.buckets[slot], child.buckets, child.pivotTable);
     var newchild := child.(buckets := newbuckets);
 
+    WFBucketListFlush(SSTable.I(node.buckets[slot]), SSTable.ISeq(child.buckets), child.pivotTable);
+
     assert BT.G.Successors(IS.INode(newchild)) == BT.G.Successors(IS.INode(child));
     assert BC.BlockPointsToValidReferences(IS.INode(newchild), s.ephemeralIndirectionTable.graph);
 
@@ -1384,6 +1392,7 @@ module {:extern} Impl refines Main {
     }
 
     var newbuckets := SSTable.DoFlush(sst, oldroot.buckets, oldroot.pivotTable);
+    WFBucketListFlush(SSTable.I(sst), SSTable.ISeq(oldroot.buckets), oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);
 
