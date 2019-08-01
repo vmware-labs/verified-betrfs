@@ -556,7 +556,7 @@ method ParseByteArray(data:array<byte>, index:uint64) returns (success:bool, v:V
 {
     var some, len, rest := ParseUint64(data, index);
     if some && len.u <= (data.Length as uint64) - rest {
-        var rest_seq := data[rest..];
+        ghost var rest_seq := data[rest..];
         assert len.u <= (|rest_seq| as uint64);
         calc {
             rest_seq[0..len.u];
