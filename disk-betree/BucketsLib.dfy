@@ -457,4 +457,8 @@ module BucketsLib {
       AddMessagesToBucketsEmpAt(bucket, pivots, emp, i);
     }
   }*/
+
+  lemma BucketListFlushParentEmpty(blist: BucketList, pivots: PivotTable)
+  requires WFPivots(pivots)
+  ensures BucketListFlush(map[], blist, pivots) == blist
 }

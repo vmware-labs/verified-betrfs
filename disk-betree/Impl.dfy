@@ -1399,6 +1399,7 @@ module {:extern} Impl refines Main {
     s' := s.(rootBucket := TTT.EmptyTree)
         .(cache := s.cache[BT.G.Root() := newroot]);
 
+    BucketListFlushParentEmpty(SSTable.ISeq(newbuckets), oldroot.pivotTable);
     assert IS.INodeRoot(oldroot, s.rootBucket) == IS.INodeRoot(newroot, TTT.EmptyTree);
     assert IS.ICache(s.cache, s.rootBucket) == IS.ICache(s'.cache, TTT.EmptyTree);
 
