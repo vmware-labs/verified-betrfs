@@ -89,28 +89,41 @@ module TwoThreeTree {
 
     datatype QueryResult<Value> = KeyDoesNotExist | ValueForKey(value: Value)
 
-    function method QuerySubtree<Value>(tree: Node<Value>, key: Keyspace.Element) : QueryResult<Value>
+    method QuerySubtree<Value>(tree: Node<Value>, key: Keyspace.Element) returns (q : QueryResult<Value>)
         requires TreeIsOrdered(tree);
-        ensures QuerySubtree(tree, key) == KeyDoesNotExist <==>
+        ensures q == KeyDoesNotExist <==>
             (key !in SubtreeI(tree));
-            ensures QuerySubtree(tree, key).ValueForKey? <==>
-                (key in SubtreeI(tree) && SubtreeI(tree)[key] == QuerySubtree(tree, key).value);
+        ensures q.ValueForKey? <==>
+            (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
     {
-        reveal_TreeIsOrdered();
-        if tree.Leaf? && tree.key == key then
-            ValueForKey(tree.value)
-        else if tree.Leaf? && tree.key != key then
-            KeyDoesNotExist
-        else if tree.TwoNode? && Keyspace.lt(key, tree.pivot) then
-            QuerySubtree(tree.left, key)
-        else if tree.TwoNode? && !Keyspace.lt(key, tree.pivot) then
-            QuerySubtree(tree.right, key)
-        else if tree.ThreeNode? && Keyspace.lt(key, tree.pivota) then
-            QuerySubtree(tree.left, key)
-        else if tree.ThreeNode? && Keyspace.lt(key, tree.pivotb) then
-            QuerySubtree(tree.middle, key)
-        else
-            QuerySubtree(tree.right, key)
+      reveal_TreeIsOrdered();
+
+      if tree.Leaf? {
+        if tree.key == key {
+          q := ValueForKey(tree.value);
+        } else {
+          q := KeyDoesNotExist;
+        }
+      } else if tree.TwoNode? {
+        var c := Keyspace.cmp(key, tree.pivot);
+        if c < 0 {
+          q := QuerySubtree(tree.left, key);
+        } else {
+          q := QuerySubtree(tree.right, key);
+        }
+      } else if tree.ThreeNode? {
+        var c := Keyspace.cmp(key, tree.pivota);
+        if c < 0 {
+          q := QuerySubtree(tree.left, key);
+        } else {
+          var d := Keyspace.cmp(key, tree.pivotb);
+          if d < 0 {
+            q := QuerySubtree(tree.middle, key);
+          } else {
+            q := QuerySubtree(tree.right, key);
+          }
+        }
+      }
     }
 
     function method MinKVPair<Value>(tree: Node<Value>) : (Keyspace.Element, Value)
@@ -271,18 +284,21 @@ module TwoThreeTree {
         requires tree.Leaf?;
         ensures ValidInsertionResult(result, tree, key, value);
     {
-        reveal_TreeIsOrdered();
-        if tree.key == key {
-            result := DidntSplit(Leaf(key, value));
-        } else if Keyspace.lt(tree.key, key) {
-            var newright := Leaf(key, value);
-            var newtree := mkTwoNode(tree, key, newright);
-            result := Split(newtree);
+      reveal_TreeIsOrdered();
+      if tree.key == key {
+          result := DidntSplit(Leaf(key, value));
+      } else {
+        var c := Keyspace.cmp(tree.key, key);
+        if c < 0 {
+          var newright := Leaf(key, value);
+          var newtree := mkTwoNode(tree, key, newright);
+          result := Split(newtree);
         } else {
-            var newleft := Leaf(key, value);
-            var newtree := mkTwoNode(newleft, tree.key, tree);
-            result := Split(newtree);
+          var newleft := Leaf(key, value);
+          var newtree := mkTwoNode(newleft, tree.key, tree);
+          result := Split(newtree);
         }
+      }
     }
 
     method InsertIntoTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
@@ -336,7 +352,8 @@ module TwoThreeTree {
      ensures ValidInsertionResult(result, tree, key, value);
      decreases tree, 1;
     {
-        if Keyspace.lt(key, tree.pivot) {
+        var c := Keyspace.cmp(key, tree.pivot);
+        if c < 0 {
             result := InsertIntoTwoNodeLeft(tree, key, value);
         } else {
             result := InsertIntoTwoNodeRight(tree, key, value);
@@ -420,13 +437,17 @@ module TwoThreeTree {
      ensures ValidInsertionResult(result, tree, key, value);
      decreases tree, 1;
     {
-        if Keyspace.lt(key, tree.pivota) {
-            result := InsertIntoThreeNodeLeft(tree, key, value);
-        } else if Keyspace.lt(key, tree.pivotb) {
-            result := InsertIntoThreeNodeMiddle(tree, key, value);
+      var c := Keyspace.cmp(key, tree.pivota);
+      if c < 0 {
+        result := InsertIntoThreeNodeLeft(tree, key, value);
+      } else {
+        var d := Keyspace.cmp(key, tree.pivotb);
+        if d < 0 {
+          result := InsertIntoThreeNodeMiddle(tree, key, value);
         } else {
-            result := InsertIntoThreeNodeRight(tree, key, value);
+          result := InsertIntoThreeNodeRight(tree, key, value);
         }
+      }
     }
     
     method InsertIntoSubtree<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
@@ -787,17 +808,18 @@ module TwoThreeTree {
             SubtreeI(tree.root)
     }
 
-    function method Query<Value>(tree: Tree<Value>, key: Keyspace.Element) : QueryResult<Value>
+    method Query<Value>(tree: Tree<Value>, key: Keyspace.Element) returns (q : QueryResult<Value>)
         requires(TTTree(tree));
-        ensures Query(tree, key) == KeyDoesNotExist <==>
+        ensures q == KeyDoesNotExist <==>
             (key !in I(tree));
-            ensures Query(tree, key).ValueForKey? <==>
-                (key in I(tree) && I(tree)[key] == Query(tree, key).value);
+            ensures q.ValueForKey? <==>
+                (key in I(tree) && I(tree)[key] == q.value);
     {
-        if tree.EmptyTree? then
-            KeyDoesNotExist
-        else
-            QuerySubtree(tree.root, key)
+        if tree.EmptyTree? {
+            q := KeyDoesNotExist;
+        } else {
+            q := QuerySubtree(tree.root, key);
+        }
     }
 
     method Insert<Value>(tree: Tree<Value>, key: Keyspace.Element, value: Value) returns (newtree: Tree<Value>)
