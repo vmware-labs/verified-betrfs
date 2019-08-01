@@ -258,7 +258,6 @@ abstract module MutableBtree {
       pivot := right.keys[0];
       rightnode := right;
 
-      // Prove these things are still strictly sorted
       assert keys[..nkeys] == old(keys[..nkeys])[..nkeys];
       Keys.StrictlySortedSubsequence(old(keys[..nkeys]), 0, nkeys as int);
       assert WF();
@@ -267,6 +266,20 @@ abstract module MutableBtree {
       assert Keys.IsStrictlySorted(right.keys[..right.nkeys]);
       assert right.WF();
       Keys.IsStrictlySortedImpliesLt(old(keys[..nkeys]), 0, boundary as int);
+      forall i | 0 <= i < nkeys
+        ensures Keys.lt(keys[i], pivot)
+      {
+        Keys.IsStrictlySortedImpliesLt(old(keys[..nkeys]), i as int, boundary as int);
+      }
+      ghost var mergedint := MergeMaps(Interpretation(), pivot, rightnode.Interpretation());
+      forall key | key in old(Interpretation())
+        ensures key in mergedint && mergedint[key] == old(Interpretation())[key]
+      {
+        if Keys.lt(key, pivot) {
+          assert Keys.LargestLte(old(keys[..nkeys]), key) < boundary as int;
+        } else {
+        }
+      }
     }
       
     constructor()
