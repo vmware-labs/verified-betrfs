@@ -255,6 +255,7 @@ module Marshalling {
   method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
   requires valToIndirectionTable.requires(v)
   ensures ImplState.IIndirectionTableOpt(s) == valToIndirectionTable(v)
+  ensures s.Some? ==> s.value.Inv()
   {
     var res := ValToLBAsAndSuccs(v.a);
     match res {
@@ -588,7 +589,7 @@ module Marshalling {
 
   function ISectorOpt(s : Option<ImplState.Sector>): Option<BC.Sector>
   requires s.Some? ==> ImplState.WFSector(s.value)
-  reads if s.Some? && s.value.SectorIndirectionTable? then {s.value.indirectionTable} else {}
+  reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
   {
     if s.Some? then
       Some(ImplState.ISector(s.value))
@@ -858,6 +859,8 @@ module Marshalling {
   requires ImplState.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
+  requires sector.SectorIndirectionTable? ==>
+      BC.WFCompleteIndirectionTable(ImplState.IIndirectionTable(sector.indirectionTable))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
   ensures v.Some? ==> valToSector(v.value) == ISectorOpt(Some(sector))
@@ -868,9 +871,14 @@ module Marshalling {
       case SectorIndirectionTable(mutMap) => {
         var table := mutMap.ToMap();
         // TODO(alattuada) extract to method
-        var lbas := map k | k in table && table[k].0.Some? :: k := table[k].0.value;
-        var graph := map k | k in table :: k := table[k].1;
-        if |lbas| < 0x1_0000_0000_0000_0000 {
+        var lbas := map k | k in table && table[k].0.Some? :: table[k].0.value;
+        var graph := map k | k in table :: table[k].1;
+        assert table == mutMap.Contents;
+        ghost var indirectionTable := ImplState.IIndirectionTable(mutMap);
+        assert lbas == indirectionTable.lbas;
+        assert graph == indirectionTable.graph;
+        assert lbas.Keys == graph.Keys;
+        if |lbas| < 0x1_0000_0000_0000_0000 / 8 {
           var w := lbasSuccsToVal(lbas, graph);
           match w {
             case Some(v) => return Some(VCase(0, v));

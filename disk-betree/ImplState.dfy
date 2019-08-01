@@ -34,7 +34,8 @@ module {:extern} ImplState {
     )
   datatype Variables =
     | Ready(
-        persistentIndirectionTable: MutIndirectionTable, // should this be just in ghost land?
+        persistentIndirectionTable: MutIndirectionTable, // this lets us keep track of available LBAs
+                                                         // TODO replace with something that only tracks LBAs
         frozenIndirectionTable: Option<MutIndirectionTable>,
         ephemeralIndirectionTable: MutIndirectionTable,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
