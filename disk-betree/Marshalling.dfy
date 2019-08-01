@@ -45,14 +45,14 @@ module Marshalling {
   ensures ValidGrammar(IndirectionTableGrammar())
   {
     // (Reference, LBA, successor-list) triples
-    GArray(GTuple([GUint64, GUint64, GArray(GUint64)]))
+    GArray(GTuple([GUint64, GUint64, GUint64Array]))
   }
 
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
     GTuple([
-      GArray(GUint64),
+      GUint64Array,
       GByteArray
     ])
   }
@@ -62,7 +62,7 @@ module Marshalling {
   {
     GTuple([
         GArray(GByteArray), // pivots
-        GArray(GUint64), // children
+        GUint64Array, // children
         GArray(BucketGrammar()) 
     ])
   }
@@ -139,20 +139,14 @@ module Marshalling {
     v.u as int
   }
 
-  function method valToChildren(a: seq<V>) : Option<seq<Reference>>
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GUint64)
+  function method valToChildren(v: V) : Option<seq<Reference>>
+  requires ValInGrammar(v, GUint64Array)
   {
-    if |a| == 0 then
-      Some([])
-    else
-      match valToChildren(DropLast(a)) {
-        case None => None
-        case Some(pref) => Some(pref + [valToReference(Last(a))])
-      }
+    Some(v.ua)
   }
 
   function method {:fuel ValInGrammar,3} valToLBAsAndSuccs(a: seq<V>) : (s : Option<(map<Reference, LBA>, map<Reference, seq<Reference>>)>)
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GArray(GUint64)]))
+  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> forall lba | lba in s.value.0.Values :: BC.ValidLBAForNode(lba)
   ensures s.Some? ==> s.value.0.Keys == s.value.1.Keys
   {
@@ -165,7 +159,7 @@ module Marshalling {
           var tuple := Last(a);
           var ref := valToReference(tuple.t[0]);
           var lba := valToLBA(tuple.t[1]);
-          var succs := valToChildren(tuple.t[2].a);
+          var succs := valToChildren(tuple.t[2]);
           match succs {
             case None => None
             case Some(succs) => (
@@ -199,33 +193,10 @@ module Marshalling {
     }
   }
 
-  function valToUint64Seq(a: seq<V>) : (s : seq<uint64>)
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GUint64)
+  function valToUint64Seq(v: V) : (s : seq<uint64>)
+  requires ValInGrammar(v, GUint64Array)
   {
-    if |a| == 0 then [] else valToUint64Seq(DropLast(a)) + [Last(a).u]
-  }
-
-  method ValToUint64Seq(a: seq<V>) returns (s: seq<uint64>)
-  requires valToUint64Seq.requires(a)
-  ensures s == valToUint64Seq(a)
-  {
-    var ar := new uint64[|a|];
-
-    var i := 0;
-    while i < |a|
-    invariant 0 <= i <= |a|
-    invariant ar[..i] == valToUint64Seq(a[..i])
-    {
-      ar[i] := a[i].u;
-
-      assert DropLast(a[..i+1]) == a[..i];
-
-      i := i + 1;
-    }
-
-    assert a[..|a|] == a;
-    assert ar[..|a|] == ar[..];
-    s := ar[..];
+    v.ua
   }
 
   function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<SSTable.SSTable>)
@@ -235,7 +206,7 @@ module Marshalling {
   ensures s.Some? ==> SSTable.WFSSTableMap(s.value)
   ensures s.Some? ==> WFBucketAt(SSTable.I(s.value), pivotTable, i)
   {
-    var starts := valToUint64Seq(v.t[0].a);
+    var starts := valToUint64Seq(v.t[0]);
 
     var strings := v.t[1].b;
     var sst := SSTable.SSTable(starts, strings);
@@ -250,7 +221,7 @@ module Marshalling {
   requires valToBucket.requires(v, pivotTable, i)
   ensures s == valToBucket(v, pivotTable, i)
   {
-    var starts := ValToUint64Seq(v.t[0].a);
+    var starts := v.t[0].ua;
 
     var strings := v.t[1].b;
     var sst := SSTable.SSTable(starts, strings);
@@ -408,7 +379,7 @@ module Marshalling {
     match valToPivots(v.t[0].a) {
       case None => None
       case Some(pivots) => (
-        match valToChildren(v.t[1].a) {
+        match valToChildren(v.t[1]) {
           case None => None
           case Some(children) => (
             if ((|children| == 0 || |children| == |pivots| + 1) && |v.t[2].a| == |pivots| + 1) then (
@@ -438,7 +409,7 @@ module Marshalling {
     }
     var pivots := pivotsOpt.value;
 
-    var childrenOpt := valToChildren(v.t[1].a);
+    var childrenOpt := valToChildren(v.t[1]);
     if (childrenOpt.None?) {
       return None;
     }
@@ -513,21 +484,11 @@ module Marshalling {
   requires |children| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
   ensures SizeOfV(v) <= 8 + |children| * 8
-  ensures ValInGrammar(v, GArray(GUint64))
-  ensures valToChildren(v.a) == Some(children)
-  ensures |v.a| == |children|
+  ensures ValInGrammar(v, GUint64Array)
+  ensures valToChildren(v) == Some(children)
+  ensures |v.ua| == |children|
   {
-    if |children| == 0 {
-      return VArray([]);
-    } else {
-      var children' := DropLast(children);
-      var pref := childrenToVal(children');
-      var child := Last(children);
-      var last := VUint64(child);
-      assert children == DropLast(children) + [child];
-      lemma_SeqSum_prefix(pref.a, last);
-      return VArray(pref.a + [last]);
-    }
+    return VUint64Array(children);
   }
 
   method {:fuel ValInGrammar,2} lbasSuccsToVal(lbas: map<Reference, LBA>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
@@ -575,20 +536,12 @@ module Marshalling {
   method {:fuel ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
   requires |a| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GUint64))
+  ensures ValInGrammar(v, GUint64Array)
   ensures SizeOfV(v) == 8 + 8 * |a|
-  ensures |v.a| == |a|
-  ensures valToUint64Seq(v.a) == a
+  ensures |v.ua| == |a|
+  ensures valToUint64Seq(v) == a
   {
-    // TODO this is slow
-    if |a| == 0 {
-      return VArray([]);
-    } else {
-      var pref := uint64ArrayToVal(DropLast(a));
-      lemma_SeqSum_prefix(pref.a, VUint64(Last(a)));
-      var res := pref.a + [VUint64(Last(a))];
-      return VArray(res);
-    }
+    return VUint64Array(a);
   }
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
@@ -713,7 +666,7 @@ module Marshalling {
     if node.children.Some? {
       children := childrenToVal(node.children.value);
     } else {
-      children := VArray([]);
+      children := VUint64Array([]);
     }
       
     v := VTuple([pivots, children, buckets]);
