@@ -140,7 +140,7 @@ class Application {
     __default.handlePushSync(k, hs, io, out var id);
     log("doing push sync...");
 
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 5000; i++) {
       __default.handlePopSync(k, hs, io, id, out bool success);
       this.maybeDoResponse();
       if (success) {
