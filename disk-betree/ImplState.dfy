@@ -25,7 +25,7 @@ module {:extern} ImplState {
   type Key = MS.Key
   type Message = Messages.Message
 
-  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.LBA>, seq<Reference>)>;
+  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.LBA>, seq<Reference>)>
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
