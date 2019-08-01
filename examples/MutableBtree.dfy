@@ -42,21 +42,23 @@ abstract module MutableBtree {
       ensures WF() ==> this in subtreeObjects
       decreases subtreeObjects, 0
 
-    function QueryDef(needle: Key) : QueryResult
-      requires WF()
-      reads this, subtreeObjects
-      decreases subtreeObjects
+    // function QueryDef(needle: Key) : QueryResult
+    //   requires WF()
+    //   reads this, subtreeObjects
+    //   decreases subtreeObjects
       
     function Interpretation() : map<Key, Value>
       requires WF()
-      ensures forall key :: QueryDef(key).Found? ==> MapsTo(Interpretation(), key, QueryDef(key).value)
-      ensures forall key :: QueryDef(key).NotFound? ==> key !in Interpretation()
+      // ensures forall key :: QueryDef(key).Found? ==> MapsTo(Interpretation(), key, QueryDef(key).value)
+      // ensures forall key :: QueryDef(key).NotFound? ==> key !in Interpretation()
       reads this, subtreeObjects
       decreases subtreeObjects
 
     method Query(needle: Key) returns (result: QueryResult)
       requires WF()
-      ensures result == QueryDef(needle)
+      //ensures result == QueryDef(needle)
+      ensures needle in Interpretation() ==> result == Found(Interpretation()[needle])
+      ensures needle !in Interpretation() ==> result == NotFound
       decreases subtreeObjects
 
     predicate method Full()
@@ -134,33 +136,35 @@ abstract module MutableBtree {
       && allKeys == set key | key in multiset(keys[..nkeys])
     }
 
-    function QueryDef(needle: Key) : (result: QueryResult)
-      requires WF()
-      reads subtreeObjects
-    {
-      var pos: int := Keys.LargestLt(keys[..nkeys], needle);
-      if (pos + 1) as uint64 < nkeys && keys[pos+1] == needle then Found(values[pos+1])
-      else NotFound
-    }
+    // function QueryDef(needle: Key) : (result: QueryResult)
+    //   requires WF()
+    //   reads subtreeObjects
+    // {
+    //   var pos: int := Keys.LargestLte(keys[..nkeys], needle);
+    //   if 0 <= pos && keys[pos] == needle then Found(values[pos])
+    //   else NotFound
+    // }
     
     function Interpretation() : map<Key, Value>
       requires WF()
-      ensures forall key :: QueryDef(key).Found? ==> MapsTo(Interpretation(), key, QueryDef(key).value)
-      ensures forall key :: QueryDef(key).NotFound? ==> key !in Interpretation()
+      // ensures forall key :: QueryDef(key).Found? ==> MapsTo(Interpretation(), key, QueryDef(key).value)
+      // ensures forall key :: QueryDef(key).NotFound? ==> key !in Interpretation()
       reads this, subtreeObjects
       decreases subtreeObjects
     {
-      Keys.reveal_IsStrictlySorted();
-      map k | (k in multiset(keys[..nkeys])) :: values[IndexOf(keys[..nkeys], k)]
+      Keys.PosEqLargestLteForAllElts(keys[..nkeys]);
+      map k | (k in keys[..nkeys]) :: values[Keys.LargestLte(keys[..nkeys], k)]
     }
 
 
     method Query(needle: Key) returns (result: QueryResult)
       requires WF()
-      ensures result == QueryDef(needle)
+      ensures needle in Interpretation() ==> result == Found(Interpretation()[needle])
+      ensures needle !in Interpretation() ==> result == NotFound
+      //ensures result == QueryDef(needle)
       decreases subtreeObjects
     {
-      Keys.reveal_IsStrictlySorted();
+      //Keys.reveal_IsStrictlySorted();
       var posplus1: uint64 := Keys.ArrayLargestLtePlus1(keys, 0, nkeys, needle);
       if 1 <= posplus1 && keys[posplus1-1] == needle {
         result := Found(values[posplus1-1]);
@@ -199,6 +203,30 @@ abstract module MutableBtree {
 
         InsertMultiset(oldkeys, key, posplus1 as int); // OBSERVE
         Keys.strictlySortedInsert(oldkeys, key, posplus1 as int - 1); // OBSERVE
+        Keys.PosEqLargestLte(keys[..nkeys], key, posplus1 as int);
+        forall key' |  key' != key && key' in old(Interpretation())
+          ensures key' in Interpretation() && Interpretation()[key'] == old(Interpretation())[key']
+        {
+          var i: int := Keys.LargestLte(old(keys[..nkeys]), key');
+          //assert 0 <= i;
+          if i < posplus1 as int {
+            //assert keys[i] == key';
+            Keys.PosEqLargestLte(keys[..nkeys], key', i);
+          } else {
+            //assert keys[i+1] == key';
+            Keys.PosEqLargestLte(keys[..nkeys], key', i+1);
+          }
+        }
+        forall key' | key' != key && key' in Interpretation()
+          ensures key' in old(Interpretation()) && old(Interpretation())[key'] == Interpretation()[key']
+        {
+          var i: int := Keys.LargestLte(keys[..nkeys], key');
+          if i < posplus1 as int {
+            Keys.PosEqLargestLte(old(keys[..nkeys]), key', i);
+          } else {
+            Keys.PosEqLargestLte(old(keys[..nkeys]), key', i-1);
+          }
+        }
       }
     }
 
@@ -216,7 +244,6 @@ abstract module MutableBtree {
       ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
       modifies this
     {
-      Keys.reveal_IsStrictlySorted();
       var right := new Leaf();
       var boundary := nkeys/2;
       Arrays.Memcpy(right.keys, 0, keys[boundary..nkeys]); // FIXME: remove conversion to seq
@@ -230,6 +257,16 @@ abstract module MutableBtree {
       wit := keys[0];
       pivot := right.keys[0];
       rightnode := right;
+
+      // Prove these things are still strictly sorted
+      assert keys[..nkeys] == old(keys[..nkeys])[..nkeys];
+      Keys.StrictlySortedSubsequence(old(keys[..nkeys]), 0, nkeys as int);
+      assert WF();
+      assert right.keys[..right.nkeys] == old(keys[..nkeys])[boundary..old(nkeys)];
+      Keys.StrictlySortedSubsequence(old(keys[..nkeys]), boundary as int, old(nkeys) as int);
+      assert Keys.IsStrictlySorted(right.keys[..right.nkeys]);
+      assert right.WF();
+      Keys.IsStrictlySortedImpliesLt(old(keys[..nkeys]), 0, boundary as int);
     }
       
     constructor()
@@ -252,6 +289,14 @@ abstract module MutableBtree {
     var pivots: array<Key>
     var children: array<NodeBox>
 
+    function ChildSubtreeObjects(i: int) : set<object>
+      requires 0 <= i < nchildren as int <= children.Length
+      requires children[i].node != null
+      reads this, children, children[i].node
+    {
+      children[i].node.subtreeObjects
+    }
+    
     predicate WF()
       reads this, subtreeObjects
       ensures WF() ==> this in subtreeObjects
@@ -264,10 +309,10 @@ abstract module MutableBtree {
       && Keys.IsStrictlySorted(pivots[..nchildren-1])
       && (forall i :: 0 <= i < nchildren ==> children[i].node != null)
       && (forall i :: 0 <= i < nchildren ==> children[i].node in subtreeObjects)
-      && (forall i :: 0 <= i < nchildren ==> children[i].node.subtreeObjects < subtreeObjects)
-      && (forall i :: 0 <= i < nchildren ==> {this, pivots, children} !! children[i].node.subtreeObjects)
+      && (forall i :: 0 <= i < nchildren ==> ChildSubtreeObjects(i as int) < subtreeObjects)
+      && (forall i :: 0 <= i < nchildren ==> {this, pivots, children} !! ChildSubtreeObjects(i as int))
       && (forall i :: 0 <= i < nchildren ==> children[i].node.WF())
-      && (forall i, j :: 0 <= i < j < nchildren ==> children[i].node.subtreeObjects !! children[j].node.subtreeObjects)
+      && (forall i, j :: 0 <= i < j < nchildren ==> ChildSubtreeObjects(i as int) !! ChildSubtreeObjects(j as int))
       && (forall i, key :: 0 <= i < nchildren-1 && key in children[i].node.allKeys ==> Keys.lt(key, pivots[i]))
       && (forall i, key :: 0 < i < nchildren   && key in children[i].node.allKeys ==> Keys.lte(pivots[i-1], key))
       && (forall i :: 0 <= i < nchildren ==> children[i].node.allKeys != {})
@@ -276,20 +321,23 @@ abstract module MutableBtree {
     lemma AllKeysStrictlyDecreasing()
       requires WF()
       ensures forall i :: 0 <= i < nchildren ==> children[i].node.allKeys < allKeys
-    
-    function QueryDef(needle: Key) : QueryResult
-      requires WF()
-      reads this, subtreeObjects
-      decreases subtreeObjects
     {
-      var pos := Keys.LargestLte(pivots[..nchildren-1], needle);
-      children[pos + 1].node.QueryDef(needle)
+      AssumeFalse();
     }
+    
+    // function QueryDef(needle: Key) : QueryResult
+    //   requires WF()
+    //   reads this, subtreeObjects
+    //   decreases subtreeObjects
+    // {
+    //   var pos := Keys.LargestLte(pivots[..nchildren-1], needle);
+    //   children[pos + 1].node.QueryDef(needle)
+    // }
     
     function Interpretation() : (result: map<Key, Value>)
       requires WF()
-      ensures forall key :: QueryDef(key).Found? ==> MapsTo(result, key, QueryDef(key).value)
-      ensures forall key :: QueryDef(key).NotFound? ==> key !in Interpretation()
+      // ensures forall key :: QueryDef(key).Found? ==> MapsTo(result, key, QueryDef(key).value)
+      // ensures forall key :: QueryDef(key).NotFound? ==> key !in Interpretation()
       reads this, subtreeObjects
       decreases subtreeObjects
     {
@@ -301,14 +349,16 @@ abstract module MutableBtree {
         && key in children[Keys.LargestLte(pivots[..nchildren-1], key) + 1].node.Interpretation()
         :: children[Keys.LargestLte(pivots[..nchildren-1], key) + 1].node.Interpretation()[key];
 
-      assert forall key :: QueryDef(key).Found? ==> key in children[Keys.LargestLte(pivots[..nchildren-1], key)+1].node.Interpretation();
+      // assert forall key :: QueryDef(key).Found? ==> key in children[Keys.LargestLte(pivots[..nchildren-1], key)+1].node.Interpretation();
         
       result
     }
 
     method Query(needle: Key) returns (result: QueryResult)
       requires WF()
-      ensures result == QueryDef(needle)
+      ensures needle in Interpretation() ==> result == Found(Interpretation()[needle])
+      ensures needle !in Interpretation() ==> result == NotFound
+      // ensures result == QueryDef(needle)
       decreases subtreeObjects
     {
       var posplus1 := Keys.ArrayLargestLtePlus1(pivots, 0, nchildren-1, needle);
@@ -433,6 +483,12 @@ abstract module MutableBtree {
       children[childidx].node.Insert(key, value);
       subtreeObjects := subtreeObjects + children[childidx].node.subtreeObjects;
       allKeys := allKeys + {key};
+      forall key' | key' in old(Interpretation()) && key' != key
+        ensures key' in Interpretation() && Interpretation()[key'] == old(Interpretation()[key'])
+      {
+        var i :| 0 <= i < old(nchildren) && key' in old(children[i].node.Interpretation());
+      }
+      
     }
 
     function UnionSubtreeObjects() : set<object>

@@ -164,6 +164,14 @@ abstract module Total_Order {
   {
     reveal_IsSorted();
   }
+
+  lemma StrictlySortedSubsequence(run: seq<Element>, i: int, j: int)
+    requires IsStrictlySorted(run)
+    requires 0 <= i <= j <= |run|
+    ensures IsStrictlySorted(run[i..j])
+  {
+    reveal_IsStrictlySorted();
+  }
   
   lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
   requires -1 <= pos < |l|;
@@ -329,6 +337,13 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma PosEqLargestLteForAllElts(run: seq<Element>)
+    requires IsStrictlySorted(run)
+    ensures forall elt :: elt in run ==> Seq.IndexOf(run, elt) == LargestLte(run, elt)
+  {
+    reveal_IsStrictlySorted();
+  }
+  
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
   requires IsStrictlySorted(run)
   requires |run| > 0 ==> lt(Seq.Last(run), key)
