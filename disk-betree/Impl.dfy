@@ -820,8 +820,8 @@ module {:extern} Impl refines Main {
     var n := SSTable.Size(bucket) as int;
 
     var m := (n + Marshalling.CapNumBuckets() as int) / Marshalling.CapNumBuckets() as int;
-    if m > Marshalling.CapBucketSize() as int / 2 {
-      m := Marshalling.CapBucketSize() as int / 2;
+    if m > 500 {
+      m := 500;
     }
     if m < 1 {
       m := 1;

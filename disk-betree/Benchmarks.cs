@@ -102,8 +102,8 @@ class BenchmarkRandomInserts : Benchmark {
   public BenchmarkRandomInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
+    keys = RandomKeys(20000, seed1);
+    values = RandomValues(20000, seed2);
   }
 
   override protected void Prepare(Application app) {
@@ -129,9 +129,9 @@ class BenchmarkRandomQueries : Benchmark {
     int seed1 = 1234;
     int seed2 = 527;
     int seed3 = 19232;
-    keys = RandomKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
-    RandomQueryKeysAndValues(2000, seed3, keys, values, out query_keys, out query_values);
+    keys = RandomKeys(20000, seed1);
+    values = RandomValues(20000, seed2);
+    RandomQueryKeysAndValues(20000, seed3, keys, values, out query_keys, out query_values);
   }
 
   override protected void Prepare(Application app) {
@@ -158,8 +158,8 @@ class BenchmarkSequentialInserts : Benchmark {
   public BenchmarkSequentialInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomSortedKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
+    keys = RandomSortedKeys(20000, seed1);
+    values = RandomValues(20000, seed2);
   }
 
   override protected void Prepare(Application app) {
@@ -182,8 +182,8 @@ class BenchmarkSequentialQueries : Benchmark {
   public BenchmarkSequentialQueries() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomSortedKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
+    keys = RandomSortedKeys(20000, seed1);
+    values = RandomValues(20000, seed2);
   }
 
   override protected void Prepare(Application app) {
