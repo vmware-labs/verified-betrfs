@@ -248,5 +248,8 @@ namespace Native_Compile {
       public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
           System.Array.Copy(src.Elements, (long)srcIndex, dst, (long)dstIndex, (long)len);
       }
+      public static void @CopyArrayIntoArray<A>(A[] src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+          System.Array.Copy(src, (long)srcIndex, dst, (long)dstIndex, (long)len);
+      }
   }
 }

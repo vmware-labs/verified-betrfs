@@ -116,7 +116,7 @@ abstract module MutableBtree {
   }
 
   datatype NodeBox = NodeBox(node: Node?)
-  
+
   class Leaf extends Node {
     var nkeys : uint64
     var keys: array<Key>
@@ -302,14 +302,6 @@ abstract module MutableBtree {
     var pivots: array<Key>
     var children: array<NodeBox>
 
-    function ChildSubtreeObjects(i: int) : set<object>
-      requires 0 <= i < nchildren as int <= children.Length
-      requires children[i].node != null
-      reads this, children, children[i].node
-    {
-      children[i].node.subtreeObjects
-    }
-    
     predicate WF()
       reads this, subtreeObjects
       ensures WF() ==> this in subtreeObjects
@@ -322,10 +314,10 @@ abstract module MutableBtree {
       && Keys.IsStrictlySorted(pivots[..nchildren-1])
       && (forall i :: 0 <= i < nchildren ==> children[i].node != null)
       && (forall i :: 0 <= i < nchildren ==> children[i].node in subtreeObjects)
-      && (forall i :: 0 <= i < nchildren ==> ChildSubtreeObjects(i as int) < subtreeObjects)
-      && (forall i :: 0 <= i < nchildren ==> {this, pivots, children} !! ChildSubtreeObjects(i as int))
+      && (forall i {:trigger children[i].node.subtreeObjects} :: 0 <= i < nchildren as int ==> children[i].node.subtreeObjects < subtreeObjects)
+      && (forall i {:trigger children[i].node.subtreeObjects} :: 0 <= i < nchildren as int ==> {this, pivots, children} !! children[i].node.subtreeObjects)
       && (forall i :: 0 <= i < nchildren ==> children[i].node.WF())
-      && (forall i, j :: 0 <= i < j < nchildren ==> ChildSubtreeObjects(i as int) !! ChildSubtreeObjects(j as int))
+      && (forall i, j {:trigger children[i].node.subtreeObjects, children[j].node.subtreeObjects} :: 0 <= i < j < nchildren as int ==> children[i].node.subtreeObjects !! children[j].node.subtreeObjects)
       && (forall i, key :: 0 <= i < nchildren-1 && key in children[i].node.allKeys ==> Keys.lt(key, pivots[i]))
       && (forall i, key :: 0 < i < nchildren   && key in children[i].node.allKeys ==> Keys.lte(pivots[i-1], key))
       && (forall i :: 0 <= i < nchildren ==> children[i].node.allKeys != {})

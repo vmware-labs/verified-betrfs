@@ -1,8 +1,10 @@
 include "NativeTypes.dfy"
+include "Marshalling/Native.s.dfy"
 include "sequences.dfy"
 
 module Arrays {
   import Seq = Sequences
+  import Native
   import opened NativeTypes
     
   method Insert<T>(arr: array<T>, length: uint64, element: T, pos: uint64)
@@ -12,6 +14,9 @@ module Arrays {
     ensures arr[length+1..] == old(arr[length+1..])
     modifies arr
   {
+    // Native.Arrays.CopyArrayIntoArray(arr, pos, arr, pos+1, length-pos);
+    // arr[pos] := element;
+    
     ghost var oldarr := arr[..];
 
     var curelement := arr[pos];
