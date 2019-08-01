@@ -11,10 +11,10 @@ module {:extern} Impl refines Main {
   import BBC = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import BT = PivotBetreeSpec`Internal
-  import PivotBetreeSpecRefinement
   import Marshalling
   import Messages = ValueMessage
   import Pivots = PivotsLib
+  import opened BucketsLib
   import SSTable = SSTable
   import LBAType = LBAType`Internal
   import opened Sets
@@ -506,7 +506,7 @@ module {:extern} Impl refines Main {
       ghost var lookup := [BT.G.ReadOp(BT.G.Root(), IS.INodeRoot(s.cache[BT.G.Root()], s.rootBucket))];
 
       ghost var node := s.cache[BT.G.Root()];
-      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets), TTT.I(s.rootBucket), key);
+      GetBucketListFlushEqMerge(TTT.I(s.rootBucket), SSTable.ISeq(node.buckets), node.pivotTable, key);
       assert BT.NodeLookup(IS.INodeRoot(node, s.rootBucket), key) == TTT.I(s.rootBucket)[key];
 
       assert BT.InterpretLookup(lookup, key) == TTT.I(s.rootBucket)[key]
@@ -1015,7 +1015,7 @@ module {:extern} Impl refines Main {
   }
 
   // TODO FIXME this method is flaky and takes a long time to verify
-  method {:fuel BT.NodeHasWFBuckets,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
+  method {:fuel WFBucketList,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
       {:fuel SplitChildLeft,0} {:fuel SplitChildRight,0}
   doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   returns (s': Variables)
@@ -1187,7 +1187,7 @@ module {:extern} Impl refines Main {
 
     forall i, key | 0 <= i < |child.buckets| && key in SSTable.I(child.buckets[i]) ensures Pivots.Route(child.pivotTable, key) == i
     {
-      assert BT.NodeHasWFBucketAt(IS.INode(child), i);
+      //assert BT.NodeHasWFBucketAt(IS.INode(child), i);
     }
 
     var newbuckets := SSTable.DoFlush(node.buckets[slot], child.buckets, child.pivotTable);
@@ -1234,7 +1234,7 @@ module {:extern} Impl refines Main {
     assert stepsBetree(k, s, s', UI.NoOp, step);
   }
 
-  method {:fuel BT.JoinBuckets,0} fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
+  method {:fuel JoinBucketList,0} fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': Variables)
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
@@ -1285,8 +1285,8 @@ module {:extern} Impl refines Main {
         forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in SSTable.I(node.buckets[i]) && key2 in SSTable.I(node.buckets[j])
         ensures MS.Keyspace.lt(key1, key2)
         {
-          assert BT.NodeHasWFBucketAt(IS.INode(node), i);
-          assert BT.NodeHasWFBucketAt(IS.INode(node), j);
+          //assert BT.NodeHasWFBucketAt(IS.INode(node), i);
+          //assert BT.NodeHasWFBucketAt(IS.INode(node), j);
           assert Pivots.Route(node.pivotTable, key1) == i;
           assert Pivots.Route(node.pivotTable, key2) == j;
           MS.Keyspace.IsStrictlySortedImpliesLte(node.pivotTable, i, j-1);
@@ -1380,7 +1380,7 @@ module {:extern} Impl refines Main {
     WFNodeRootImpliesWFRootBase(oldroot, s.rootBucket);
     forall i, key | 0 <= i < |oldroot.buckets| && key in SSTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
     {
-      assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
+      //assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
     }
 
     var newbuckets := SSTable.DoFlush(sst, oldroot.buckets, oldroot.pivotTable);

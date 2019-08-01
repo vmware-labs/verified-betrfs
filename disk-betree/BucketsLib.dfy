@@ -266,11 +266,11 @@ module BucketsLib {
   }
   */
 
-  lemma WFBucketListFlush(blist: BucketList, pivots: PivotTable, parent: Bucket)
+  lemma WFBucketListFlush(parent: Bucket, blist: BucketList, pivots: PivotTable)
   requires WFBucketList(blist, pivots)
   ensures WFBucketList(BucketListFlush(parent, blist, pivots), pivots)
 
-  lemma GetBucketListFlushEqMerge(blist: BucketList, pivots: PivotTable, parent: Bucket, key: Key)
+  lemma GetBucketListFlushEqMerge(parent: Bucket, blist: BucketList, pivots: PivotTable, key: Key)
   requires WFBucketList(blist, pivots)
   ensures WFBucketList(BucketListFlush(parent, blist, pivots), pivots)
   ensures BucketListGet(BucketListFlush(parent, blist, pivots), pivots, key)

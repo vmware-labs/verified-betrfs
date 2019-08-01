@@ -11,6 +11,7 @@ module Marshalling {
   import opened NativeTypes
   import opened Sequences
   import opened Maps
+  import opened BucketsLib
   import BC = BetreeGraphBlockCache
   import ImplState
   import SSTable
@@ -232,14 +233,14 @@ module Marshalling {
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |pivotTable|
   ensures s.Some? ==> SSTable.WFSSTableMap(s.value)
-  ensures s.Some? ==> BT.WFBucket(SSTable.I(s.value), pivotTable, i)
+  ensures s.Some? ==> WFBucketAt(SSTable.I(s.value), pivotTable, i)
   {
     var starts := valToUint64Seq(v.t[0].a);
 
     var strings := v.t[1].b;
     var sst := SSTable.SSTable(starts, strings);
 
-    if SSTable.WFSSTableMap(sst) && BT.WFBucket(SSTable.I(sst), pivotTable, i) then
+    if SSTable.WFSSTableMap(sst) && WFBucketAt(SSTable.I(sst), pivotTable, i) then
       Some(sst)
     else
       None
@@ -265,7 +266,7 @@ module Marshalling {
         var c := SSTable.Cmp(pivotTable[i-1], sst, 0);
         if (c == 1) {
           assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, 0);
-          //assert !BT.WFBucket(SSTable.I(sst), pivotTable, i);
+          //assert !WFBucketAt(SSTable.I(sst), pivotTable, i);
 
           return None;
         }
@@ -275,7 +276,7 @@ module Marshalling {
         var c := SSTable.Cmp(pivotTable[i], sst, |sst.starts| as uint64 - 2);
         if (c != 1) {
           assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, |sst.starts| / 2 - 1);
-          //assert !BT.WFBucket(SSTable.I(sst), pivotTable, i);
+          //assert !WFBucketAt(SSTable.I(sst), pivotTable, i);
 
           return None;
         }
@@ -295,7 +296,7 @@ module Marshalling {
       Pivots.RouteIs(pivotTable, key, i);
     }
 
-    assert BT.WFBucket(SSTable.I(sst), pivotTable, i);
+    assert WFBucketAt(SSTable.I(sst), pivotTable, i);
     s := Some(sst);
   }
 
@@ -336,7 +337,7 @@ module Marshalling {
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: SSTable.WFSSTableMap(s.value[i])
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: BT.WFBucket(SSTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(SSTable.I(s.value[i]), pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -594,7 +595,7 @@ module Marshalling {
   method {:fuel ValInGrammar,2} {:fuel SizeOfV,3} bucketToVal(bucket: SSTable.SSTable, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires SSTable.WFSSTableMap(bucket)
-  requires BT.WFBucket(SSTable.I(bucket), pivotTable, i)
+  requires WFBucketAt(SSTable.I(bucket), pivotTable, i)
   requires CappedBucket(bucket)
   requires 0 <= i <= |pivotTable|
   ensures ValInGrammar(v, BucketGrammar())
@@ -612,7 +613,7 @@ module Marshalling {
   method bucketsToVal(buckets: seq<SSTable.SSTable>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i])
-  requires forall i | 0 <= i < |buckets| :: BT.WFBucket(SSTable.I(buckets[i]), pivotTable, i)
+  requires forall i | 0 <= i < |buckets| :: WFBucketAt(SSTable.I(buckets[i]), pivotTable, i)
   requires CappedBuckets(buckets)
   requires |buckets| <= CapNumBuckets() as int
   requires |buckets| <= |pivotTable| + 1
@@ -704,12 +705,6 @@ module Marshalling {
   ensures ValInGrammar(v, PivotNodeGrammar())
   ensures valToNode(v) == Some(node)
   {
-    forall i | 0 <= i < |node.buckets|
-    ensures BT.WFBucket(SSTable.I(node.buckets[i]), node.pivotTable, i);
-    {
-      assert BT.NodeHasWFBucketAt(ImplState.INode(node), i);
-    }
-
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
     var pivots := pivotsToVal(node.pivotTable);

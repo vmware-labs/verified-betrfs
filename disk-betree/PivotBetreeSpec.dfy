@@ -85,7 +85,7 @@ module PivotBetreeSpec {
   requires WFNode(node)
   ensures WFNode(AddMessagesToNode(node, buffer))
   {
-    Buckets.WFBucketListFlush(node.buckets, node.pivotTable, buffer);
+    Buckets.WFBucketListFlush(buffer, node.buckets, node.pivotTable);
 
     Node(
       node.pivotTable,

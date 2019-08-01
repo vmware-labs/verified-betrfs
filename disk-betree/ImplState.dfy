@@ -18,6 +18,7 @@ module {:extern} ImplState {
   import M = BetreeBlockCache
   import SSTable = SSTable
   import D = AsyncSectorDisk
+  import opened BucketsLib
 
   type Reference = BT.G.Reference
   type Key = MS.Key
@@ -88,8 +89,7 @@ module {:extern} ImplState {
   requires TTT.TTTree(rootBucket)
   {
     BT.G.Node(node.pivotTable, node.children,
-      BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
-          TTT.I(rootBucket)))
+      BucketListFlush(TTT.I(rootBucket), SSTable.ISeq(node.buckets), node.pivotTable))
   }
   function INodeForRef(cache: map<Reference, Node>, ref: Reference, rootBucket: TreeMap) : BT.G.Node
   requires WFCache(cache)
