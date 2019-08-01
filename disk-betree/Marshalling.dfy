@@ -757,6 +757,7 @@ module Marshalling {
       lemma_SeqSum_prefix(pref.a, bucketVal);
       assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
       assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == Apply(SSTable.I, buckets); // observe
+      assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == ISeqSSTableOpt(Some(buckets)); // observe (reduces verification time)
       return VArray(pref.a + [bucketVal]);
     }
   }
@@ -911,8 +912,8 @@ module Marshalling {
 
   method ParseSector(data: array<byte>) returns (s : Option<Sector>)
   requires data.Length < 0x1_0000_0000_0000_0000;
-  ensures ISectorOpt(s) == parseSector(data[..])
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures ISectorOpt(s) == parseSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
   {
     reveal_parseSector();
