@@ -190,7 +190,7 @@ module {:extern} Impl refines Main {
   requires s.Ready?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
-  requires ref in s.ephemeralIndirectionTable.lbas
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas
   requires ref !in s.cache
   modifies io
   ensures IS.WFVars(s')
@@ -201,9 +201,12 @@ module {:extern} Impl refines Main {
       assert noop(k, s, s');
       print "giving up; already an outstanding read for this ref\n";
     } else {
-      var lba := s.ephemeralIndirectionTable.lbas[ref];
-      assert BC.ValidLBAForNode(lba);
-      var id := RequestRead(io, lba);
+      var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
+      assert lbaGraph.Some?;
+      var (lba, _) := lbaGraph.value;
+      assert lba.Some?;
+      assert BC.ValidLBAForNode(lba.value);
+      var id := RequestRead(io, lba.value);
       s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
 
       assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()), ref);
@@ -234,18 +237,21 @@ module {:extern} Impl refines Main {
 
     var ref := s.outstandingBlockReads[id].ref;
     
-    if (ref !in s.ephemeralIndirectionTable.lbas || ref in s.cache) {
+    var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
+    if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).lbas || ref in s.cache
       s' := s;
       assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: ref !in lbas or ref in s.cache\n";
       return;
     }
 
-    var lba := s.ephemeralIndirectionTable.lbas[ref];
+    assert lbaGraph.Some? && lbaGraph.value.0.Some?;
+    var lba := lbaGraph.value.0.value;
+    var graph := lbaGraph.value.1;
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
-      if (s.ephemeralIndirectionTable.graph[ref] == (if node.children.Some? then node.children.value else [])) {
+      if (graph == (if node.children.Some? then node.children.value else [])) {
         s' := s.(cache := s.cache[ref := sector.value.block])
                .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
         assert BC.PageInResp(k, IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()));
@@ -265,15 +271,18 @@ module {:extern} Impl refines Main {
   method getFreeRef(s: Variables)
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
-  ensures ref.Some? ==> ref.value !in s.ephemeralIndirectionTable.graph
+  ensures ref.Some? ==> ref.value !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   ensures ref.Some? ==> ref.value !in s.cache
   {
+    /*
     if r :| r !in s.ephemeralIndirectionTable.graph && r !in s.cache {
       ref := Some(r);
     } else {
       ref := None;
     }
-    /*var v := s.ephemeralIndirectionTable.graph.Keys;
+    */
+    var table := s.ephemeralIndirectionTable.ToMap();
+    var v := table.Keys;
 
     var m;
     if |v| >= 1 {
@@ -286,7 +295,7 @@ module {:extern} Impl refines Main {
       ref := Some(m + 1);
     } else {
       ref := None;
-    }*/
+    }
   }
 
   method getFreeLba(s: Variables)
@@ -296,6 +305,7 @@ module {:extern} Impl refines Main {
   ensures lba.Some? ==> BC.ValidLBAForNode(lba.value)
   ensures lba.Some? ==> BC.LBAFree(IS.IVars(s), lba.value)
   {
+    /*
     if i: uint64 :| (
       && i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
       && var l := i * LBAType.BlockSize();
@@ -311,21 +321,29 @@ module {:extern} Impl refines Main {
     } else {
       lba := None;
     }
-  /*
-    var v1 := s.persistentIndirectionTable.lbas.Values;
-    var v2 := s.ephemeralIndirectionTable.lbas.Values;
+    */
+    var table1: map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
+    var table2: map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
+
+    var table1Values := SetToSeq(table1.Values);
+    var table2Values := SetToSeq(table2.Values);
+
+    var v1Opt := Filter((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.Some?, table1Values);
+    var v2Opt := Filter((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.Some?, table2Values);
+    var v1 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.value, v1Opt);
+    var v2 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.value, v2Opt);
 
     var m1;
     var m2;
 
     if |v1| >= 1 {
-      m1 := maximum(v1);
+      m1 := maximum(set x | x in v1);
     } else {
       m1 := 0;
     }
 
     if |v2| >= 1 {
-      m2 := maximum(v2);
+      m2 := maximum(set x | x in v2);
     } else {
       m2 := 0;
     }
@@ -336,28 +354,34 @@ module {:extern} Impl refines Main {
     } else {
       lba := None;
     }
-    */
   }
 
   method write(k: Constants, s: Variables, ref: BT.G.Reference, node: IS.Node)
   returns (s': Variables)
   requires s.Ready?
   requires IS.WFVars(s)
-  requires ref in s.ephemeralIndirectionTable.graph
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in s.cache
   requires IS.WFNode(node)
-  requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralIndirectionTable.graph)
-  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas
+  requires BC.BlockPointsToValidReferences(IS.INode(node), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
+      ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
   ensures IS.WFVars(s')
   ensures BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node))
+  modifies s.ephemeralIndirectionTable
   {
-    s' := s
-      .(ephemeralIndirectionTable :=
-        BC.IndirectionTable(
-          MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
-          s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]
-        ))
-      .(cache := s.cache[ref := node]);
+    var lbaGraph := s.ephemeralIndirectionTable.Remove(ref);
+    assert lbaGraph.Some?;
+    var (lba, graph) := lbaGraph.value;
+    if node.children.Some? {
+      var _ := s.ephemeralIndirectionTable.Insert(ref, (None, node.children.value));
+    }
+    assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
+        old(BC.IndirectionTable(
+          MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas, {ref}),
+          IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ref := if node.children.Some? then node.children.value else []]
+        ));
+    s' := s.(cache := s.cache[ref := node]);
   }
 
   method alloc(k: Constants, s: Variables, node: IS.Node)
@@ -366,21 +390,22 @@ module {:extern} Impl refines Main {
   requires IS.WFNode(node)
   requires BC.Inv(k, IS.IVars(s));
   requires s.Ready?
-  requires BC.BlockPointsToValidReferences(IS.INode(node), s.ephemeralIndirectionTable.graph)
+  requires BC.BlockPointsToValidReferences(IS.INode(node), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
   ensures IS.WFVars(s')
   ensures ref.Some? ==> BC.Alloc(k, IS.IVars(s), IS.IVars(s'), ref.value, IS.INode(node))
   ensures ref.None? ==> s' == s
+  modifies s.ephemeralIndirectionTable
   {
     ref := getFreeRef(s);
     if (ref.Some?) {
-      s' := s
-        .(ephemeralIndirectionTable :=
+      var _ := s.ephemeralIndirectionTable.Insert(ref.value, (None, if node.children.Some? then node.children.value else []));
+      assert IS.IIndirectionTable(s.ephemeralIndirectionTable) == 
+        old(
           BC.IndirectionTable(
-            s.ephemeralIndirectionTable.lbas,
-            s.ephemeralIndirectionTable.graph[ref.value := if node.children.Some? then node.children.value else []]
-          )
-        )
-        .(cache := s.cache[ref.value := node]);
+            IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas,
+            IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ref.value := if node.children.Some? then node.children.value else []]
+          ));
+      s' := s.(cache := s.cache[ref.value := node]);
     } else {
       s' := s;
     }
@@ -395,7 +420,13 @@ module {:extern} Impl refines Main {
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   {
-    if ((s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.graph) && !(BT.G.Root() in s.frozenIndirectionTable.value.lbas)) {
+    var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.Get(BT.G.Root());
+    if (
+      && (s.frozenIndirectionTable.Some? && rootInFrozenLbaGraph.Some?)
+      && rootInFrozenLbaGraph.value.0.None?
+    ) {
+      assert (s.frozenIndirectionTable.Some? && BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph) &&
+          !(BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas);
       // TODO write out the root here instead of giving up
       s' := s;
       success := false;
@@ -423,7 +454,7 @@ module {:extern} Impl refines Main {
     var r1 := Pivots.ComputeRoute(oldroot.pivotTable, key);
     var newroot := oldroot.(buckets := oldroot.buckets[r1 := newbucket]);
 
-    assert BC.BlockPointsToValidReferences(IS.INode(oldroot), s.ephemeralIndirectionTable.graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(oldroot), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
     //assert IS.INode(oldroot).children == IS.INode(newroot).children;
     //assert BC.BlockPointsToValidReferences(IS.INode(newroot), s.ephemeralIndirectionTable.graph);
 
