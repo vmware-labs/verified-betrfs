@@ -535,9 +535,9 @@ module {:extern} Impl refines Main {
       invariant |lookup| > 0 ==> BT.WFLookupForKey(lookup, key)
       invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.Some?
       invariant !exiting && !msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref
-      invariant forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.graph
+      invariant forall i | 0 <= i < |lookup| :: lookup[i].ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
       invariant forall i | 0 <= i < |lookup| :: MapsTo(IS.ICache(s.cache), lookup[i].ref, lookup[i].node)
-      invariant ref in s.ephemeralIndirectionTable.graph
+      invariant ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
       invariant !exiting ==> msg == BT.InterpretLookup(lookup, key)
       invariant io.initialized()
       {
@@ -552,7 +552,7 @@ module {:extern} Impl refines Main {
           return;
         } else {
           var node := s.cache[ref];
-          lookup := AugmentLookup(lookup, ref, IS.INode(node), key, IS.ICache(s.cache), s.ephemeralIndirectionTable.graph); // ghost-y
+          lookup := AugmentLookup(lookup, ref, IS.INode(node), key, IS.ICache(s.cache), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph); // ghost-y
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var sstMsg := SSTable.Query(node.buckets[r], key);
@@ -563,7 +563,7 @@ module {:extern} Impl refines Main {
             var r1 := Pivots.ComputeRoute(node.pivotTable, key);
             ref := node.children.value[r1];
             assert ref in BT.G.Successors(IS.INode(node));
-            assert ref in s.ephemeralIndirectionTable.graph;
+            assert ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph;
           } else {
             if !msg.Define? {
               // Case where we reach leaf and find nothing
@@ -635,14 +635,29 @@ module {:extern} Impl refines Main {
     s', success := InsertKeyValue(k, s, key, value);
   }
 
-  predicate method deallocable(s: Variables, ref: BT.G.Reference) {
+  predicate deallocable(s: Variables, ref: BT.G.Reference) {
     && s.Ready?
-    && ref in s.ephemeralIndirectionTable.graph
+    && ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
     && ref != BT.G.Root()
-    && forall r | r in s.ephemeralIndirectionTable.graph :: ref !in s.ephemeralIndirectionTable.graph[r]
+    && forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph :: ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[r]
   }
 
-  method dealloc(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
+  method Deallocable(s: Variables, ref: BT.G.Reference) returns (result: bool)
+  ensures result == deallocable(s, ref)
+  {
+    if ref == BT.G.Root() {
+      return false;
+    }
+    var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
+    if !(s.Ready? && lbaGraph.Some?) {
+      return false;
+    }
+    var table := s.ephemeralIndirectionTable.ToMap();
+    var graph := map k | k in table :: table[k].1;
+    result := forall r | r in graph :: ref !in graph[r];
+  }
+
+  method Dealloc(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
   returns (s': Variables)
   requires IS.WFVars(s)
   requires io.initialized()
@@ -651,21 +666,32 @@ module {:extern} Impl refines Main {
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  modifies s.ephemeralIndirectionTable
   {
-    if (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph && ref !in s.frozenIndirectionTable.value.lbas) {
-      s' := s;
-      assert noop(k, s, s');
-      print "giving up; dealloc can't dealloc because frozen isn't written\n";
-      return;
+    if s.frozenIndirectionTable.Some? {
+      var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
+      if lbaGraph.Some? {
+        assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
+        var (lba, _) := lbaGraph.value;
+        if lba.None? {
+          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          s' := s;
+          assert noop(k, s, s');
+          print "giving up; dealloc can't dealloc because frozen isn't written\n";
+          return;
+        }
+      }
     }
 
-    s' :=
-      s.(ephemeralIndirectionTable :=
-        BC.IndirectionTable(
-          MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
-          MapRemove(s.ephemeralIndirectionTable.graph, {ref})
-        )
-      )
+    var _ := s.ephemeralIndirectionTable.Remove(ref);
+
+    assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
+      old(BC.IndirectionTable(
+        MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas, {ref}),
+        MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).graph, {ref})
+      ));
+
+    s' := s
       .(cache := MapRemove(s.cache, {ref}))
       .(outstandingBlockReads := BC.OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref));
     assert BC.Unalloc(Ik(k), IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()), ref);
@@ -688,11 +714,19 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    if (s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.graph && BT.G.Root() !in s.frozenIndirectionTable.value.lbas) {
-      s' := s;
-      assert noop(k, s, s');
-      print "giving up; fixBigRoot can't run because frozen isn't written\n";
-      return;
+    if s.frozenIndirectionTable.Some? {
+      var rootLbaGraph := s.frozenIndirectionTable.value.Get(BT.G.Root());
+      if rootLbaGraph.Some? {
+        assert BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
+        var (lba, _) := rootLbaGraph.value;
+        if lba.None? {
+          assert BT.G.Root() !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          s' := s;
+          assert noop(k, s, s');
+          print "giving up; fixBigRoot can't run because frozen isn't written\n";
+          return;
+        }
+      }
     }
 
     var oldroot := s.cache[BT.G.Root()];
