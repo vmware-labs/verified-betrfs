@@ -1,6 +1,6 @@
 include "PivotsLib.dfy"
 include "Message.dfy"
-include "../lib/maps.dfy"
+include "../lib/Maps.dfy"
 
 module BucketsLib {
   import opened PivotsLib
