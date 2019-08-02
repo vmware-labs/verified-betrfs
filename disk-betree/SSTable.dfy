@@ -970,6 +970,8 @@ module SSTable {
   ensures forall i | 0 <= i < |res| :: WFSSTableMap(res[i])
   ensures ISeq(res) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
+    //Native.BenchmarkingUtil.start();
+
     var maxChildStartsLen: uint64, maxChildStringsLen: uint64 := MaxLens(children);
     var startsArray : array<uint64> := new uint64[maxChildStartsLen + |parent.starts| as uint64];
     var stringsArray : array<byte> := new byte[maxChildStringsLen + |parent.strings| as uint64];
@@ -1215,6 +1217,8 @@ module SSTable {
         }
       }
     }
+
+    //Native.BenchmarkingUtil.end();
   }
 
   method Insert(sst: SSTable, key: Key, msg: Message)

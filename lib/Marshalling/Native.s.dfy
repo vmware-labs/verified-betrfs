@@ -38,6 +38,12 @@ module {:extern} Native {
           ensures c < 0 ==> lt(s1[i1 .. i1 + l1], s2[i2 .. i2 + l2])
           ensures c > 0 ==> lt(s2[i2 .. i2 + l2], s1[i1 .. i1 + l1])
           ensures c == 0 ==> s1[i1 .. i1 + l1] == s2[i2 .. i2 + l2]
+
+  }
+
+  class BenchmarkingUtil {
+    static method{:axiom} start()
+    static method{:axiom} end()
   }
 }
 

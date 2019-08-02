@@ -1,11 +1,13 @@
 include "../lib/total_order.dfy"
 include "../lib/Maps.dfy"
 include "../lib/mathematics.dfy"
+include "../lib/Marshalling/Native.s.dfy"
 
 module TwoThreeTree {
     import Keyspace = Lexicographic_Byte_Order
     import Maps = Maps
     import Math = Mathematics
+    import Native
 
     datatype Node<Value> =
         Leaf(key: Keyspace.Element, value: Value) |
@@ -828,12 +830,14 @@ module TwoThreeTree {
         ensures I(newtree) == I(tree)[key := value];
         ensures newtree.NonEmptyTree?;
     {
+        //Native.BenchmarkingUtil.start();
         if tree.EmptyTree? {
             newtree := NonEmptyTree(Leaf(key, value));
         } else {
             var result := InsertIntoSubtree(tree.root, key, value);
             newtree := NonEmptyTree(result.tree);
         }
+        //Native.BenchmarkingUtil.end();
     }
 
     method Delete<Value>(tree: Tree<Value>, key: Keyspace.Element) returns (newtree: Tree<Value>)

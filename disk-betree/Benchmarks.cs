@@ -207,5 +207,31 @@ class Benchmarks {
     new BenchmarkRandomInserts().Run();
     //new BenchmarkSequentialQueries().Run();
     //new BenchmarkSequentialInserts().Run();
+
+    Native_Compile.BenchmarkingUtil.dump();
+  }
+}
+
+namespace Native_Compile {
+  public partial class BenchmarkingUtil
+  {
+    public static Stopwatch sw = null;
+    public static int count = 0;
+    public static void start() {
+      if (sw == null) {
+        sw = new Stopwatch();
+      }
+      sw.Start();
+      count++;
+    }
+    public static void end() {
+      sw.Stop();
+    }
+    public static void dump() {
+      if (sw != null) {
+        Console.WriteLine("measured time: " + sw.ElapsedMilliseconds.ToString());
+        Console.WriteLine("calls: " + count.ToString());
+      }
+    }
   }
 }
