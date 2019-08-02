@@ -400,53 +400,89 @@ abstract module MutableBtree {
       ensures fresh(subtreeObjects-old(subtreeObjects))
       modifies this, pivots, children, children[childidx].node
     {
-        var wit, pivot, right := children[childidx].node.Split();
-        Arrays.Insert(pivots, nchildren - 1, pivot, childidx);
-        Arrays.Insert(children, nchildren, NodeBox(right), childidx + 1);
-        nchildren := nchildren + 1;
-        subtreeObjects := subtreeObjects + right.subtreeObjects;
-        if Keys.lte(pivot, key) {
-          newchildidx := childidx + 1;
+      ghost var oldchildren := children[..nchildren];
+      
+      var wit, pivot, right := children[childidx].node.Split();
+      Arrays.Insert(pivots, nchildren - 1, pivot, childidx);
+      Arrays.Insert(children, nchildren, NodeBox(right), childidx + 1);
+      nchildren := nchildren + 1;
+      subtreeObjects := subtreeObjects + right.subtreeObjects;
+      if Keys.lte(pivot, key) {
+        newchildidx := childidx + 1;
+      } else {
+        newchildidx := childidx;
+      }
+
+      Keys.LargestLteIsUnique(old(pivots[..nchildren-1]), pivot, childidx as int - 1);
+      Keys.strictlySortedInsert(old(pivots[..nchildren-1]), pivot, childidx as int - 1);
+
+      assert forall i :: 0 <= i < childidx as int ==> children[i] == oldchildren[i];
+      assert children[childidx as int + 1].node == right;
+      assert forall i :: childidx as int + 1 < i < nchildren as int  ==> children[i] == oldchildren[i-1];
+      forall i: int, j: int {:trigger children[i].node.subtreeObjects, children[j].node.subtreeObjects}
+      | 0 <= i < j < nchildren as int
+        ensures children[i].node.subtreeObjects !! children[j].node.subtreeObjects
+      {
+        if                                   j  < childidx as int {
+        } else if                            j == childidx as int {
+        } else if i  < childidx as int     && j == childidx as int + 1 {
+        } else if i == childidx as int     && j == childidx as int + 1 {
+        } else if i  < childidx as int     && j  > childidx as int + 1 {
+        } else if i == childidx as int     && j  > childidx as int + 1 {
+        } else if i == childidx as int + 1 && j  > childidx as int + 1 {
         } else {
-          newchildidx := childidx;
         }
-
-        Keys.LargestLteIsUnique(old(pivots[..nchildren-1]), pivot, childidx as int - 1);
-        Keys.strictlySortedInsert(old(pivots[..nchildren-1]), pivot, childidx as int - 1);
-
-        assert forall i :: 0 <= i < childidx as int + 1 ==> children[i] == old(children[i]);
-        assert children[childidx as int + 1].node == right;
-        assert forall i :: childidx as int + 1 < i < nchildren as int  ==> children[i] == old(children[i-1]);
-        forall i: int, j: int | 0 <= i < j < nchildren as int
-          ensures children[i].node.subtreeObjects !! children[j].node.subtreeObjects
+      }
+        // forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].node.allKeys
+        //   ensures Keys.lt(key, pivots[i])
+        // {
+        //   if childidx as int + 1 < i {
+        //     assert children[i] == old(children[i-1]);
+        //   }
+        // }
+        // forall i: int, key | 0 < i < nchildren as int && key in children[i].node.allKeys
+        //   ensures Keys.lt(pivots[i-1], key)
+        // {
+        //   if i < childidx as int {
+        //     assert Keys.lt(pivots[i-1], key);
+        //   } else if i == childidx as int {
+        //     assert Keys.lt(pivots[i-1], key);
+        //   } else if i == childidx as int + 1 {
+        //     assert Keys.lt(pivots[i-1], key);
+        //   } else {
+        //     assert Keys.lt(pivots[i-1], key);
+        //   }
+        // }
+        // assert WF();
+        
+        forall key | key in old(Interpretation())
+        ensures key in Interpretation() && Interpretation()[key] == old(Interpretation()[key])
         {
-          if                                   j  < childidx as int {
-          } else if                            j == childidx as int {
-          } else if i  < childidx as int     && j == childidx as int + 1 {
-          } else if i == childidx as int     && j == childidx as int + 1 {
-          } else if i  < childidx as int     && j  > childidx as int + 1 {
-          } else if i == childidx as int     && j  > childidx as int + 1 {
-          } else if i == childidx as int + 1 && j  > childidx as int + 1 {
+          var llte: int := Keys.LargestLte(old(pivots[..nchildren-1]), key);
+          assert key in old(children[llte+1].node.Interpretation());
+          assert old(children[llte+1].node.Interpretation()[key]) == old(Interpretation()[key]);
+          if llte < childidx as int {
+            assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
+          } else if llte == childidx as int {
+            if Keys.lt(key, pivot) {
+              assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
+            } else {
+              assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
+            }
+          } else {
+            assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
+          }
+        }
+        forall key | key in Interpretation()
+        ensures key in old(Interpretation()) && Interpretation()[key] == old(Interpretation()[key])
+        {
+          var llte: int := Keys.LargestLte(pivots[..nchildren-1], key);
+          if llte < childidx as int {
+          } else if llte == childidx as int {
+          } else if llte == childidx as int + 1 {
           } else {
           }
         }
-        forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].node.allKeys
-          ensures Keys.lt(key, pivots[i])
-        {
-          if childidx as int + 1 < i {
-            assert children[i] == old(children[i-1]);
-          }
-        }
-        forall i: int, key | 0 < i < nchildren as int && key in children[i].node.allKeys
-          ensures Keys.lt(pivots[i-1], key)
-        {
-          if childidx as int + 1 < i {
-            assert children[i] == old(children[i-1]);
-          }
-        }
-    //     assert WF();
-    //     //assert Interpretation() == old(Interpretation());
-
     }
     
     method Insert(key: Key, value: Value)
