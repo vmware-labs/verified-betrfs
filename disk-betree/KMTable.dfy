@@ -85,8 +85,8 @@ module KMTable {
       if parentIdx == |parent.keys| then (
         if childIdx == |child.keys| then (
           flush'(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], KMTable([], []))
-        ) else if childIdx == 0 then (
-          flush'(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], KMTable([], []))
+        //) else if |cur.keys| == 0 then (
+        //  flush'(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], KMTable([], []))
         ) else (
           flush'(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.values[childIdx]))
         )
@@ -189,6 +189,24 @@ module KMTable {
   ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in I(prefix(children[childrenIdx], childIdx))
   ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in I(prefix(parent, parentIdx))
   ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in I(prefix(children[childrenIdx], childIdx))
+  {
+    if parentIdx < |parent.keys| && parent.keys[parentIdx] in I(prefix(parent, parentIdx)) {
+      var i := IndexOfKey(prefix(parent, parentIdx), parent.keys[parentIdx]);
+      IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
+    }
+    if parentIdx < |parent.keys| && parent.keys[parentIdx] in I(prefix(children[childrenIdx], childIdx)) {
+      var i := IndexOfKey(prefix(children[childrenIdx], childIdx), parent.keys[parentIdx]);
+      IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
+    }
+    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in I(prefix(parent, parentIdx)) {
+      var i := IndexOfKey(prefix(parent, parentIdx), children[childrenIdx].keys[childIdx]);
+      IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+    }
+    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in I(prefix(children[childrenIdx], childIdx)) {
+      var i := IndexOfKey(prefix(children[childrenIdx], childIdx), children[childrenIdx].keys[childIdx]);
+      IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
+    }
+  }
 
   lemma flush'AppendParent(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
@@ -217,6 +235,72 @@ module KMTable {
         == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[parent.keys[parentIdx] := parent.values[parentIdx]]
         == BucketListItemFlush(I(prefix(parent, parentIdx))[parent.keys[parentIdx] := parent.values[parentIdx]], I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
         == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx);*/
+  }
+
+  lemma flush'AppendChild(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
+      parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
+  requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
+  requires 0 <= childrenIdx < |children|
+  requires 0 <= childIdx < |children[childrenIdx].keys|
+  ensures WF(append(cur, children[childrenIdx].keys[childIdx], children[childrenIdx].values[childIdx]))
+  ensures I(append(cur, children[childrenIdx].keys[childIdx], children[childrenIdx].values[childIdx]))
+      == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
+  {
+    var child := children[childrenIdx];
+    flush'CurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    flush'NextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
+    BucketListItemFlushAddChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], child.values[childIdx]);
+
+    assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
+    Imaps(child, childIdx);
+    assert child.keys[childIdx] in I(children[childrenIdx]);
+    assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+
+    assert DropLast(child.keys[.. childIdx + 1]) == child.keys[.. childIdx];
+    assert DropLast(child.values[.. childIdx + 1]) == child.values[.. childIdx];
+
+    assert I(append(cur, child.keys[childIdx], child.values[childIdx]))
+        == I(cur)[child.keys[childIdx] := child.values[childIdx]]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[child.keys[childIdx] := child.values[childIdx]]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx))[child.keys[childIdx] := child.values[childIdx]], pivots, childrenIdx)
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);
+  }
+
+  lemma flush'AppendParentAndChild(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
+      parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
+  requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
+  requires 0 <= childrenIdx < |children|
+  requires 0 <= parentIdx < |parent.keys|
+  requires 0 <= childIdx < |children[childrenIdx].keys|
+  requires children[childrenIdx].keys[childIdx] == parent.keys[parentIdx]
+  requires Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx]) != IdentityMessage()
+
+  ensures WF(append(cur, parent.keys[parentIdx], Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])))
+  ensures I(append(cur, parent.keys[parentIdx], Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])))
+      == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
+  {
+    var child := children[childrenIdx];
+    flush'CurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    flush'NextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
+    BucketListItemFlushAddParentAndChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], parent.values[parentIdx], child.values[childIdx]);
+
+    assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
+    Imaps(child, childIdx);
+    assert child.keys[childIdx] in I(children[childrenIdx]);
+    assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+
+    assert DropLast(child.keys[.. childIdx + 1]) == child.keys[.. childIdx];
+    assert DropLast(child.values[.. childIdx + 1]) == child.values[.. childIdx];
+    assert DropLast(parent.keys[.. parentIdx + 1]) == parent.keys[.. parentIdx];
+    assert DropLast(parent.values[.. parentIdx + 1]) == parent.values[.. parentIdx];
+
+    assert I(append(cur, parent.keys[parentIdx], Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])))
+        == I(cur)[parent.keys[parentIdx] := Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[parent.keys[parentIdx] := Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])]
+        == BucketListItemFlush(I(prefix(parent, parentIdx))[parent.keys[parentIdx] := parent.values[parentIdx]], I(prefix(children[childrenIdx], childIdx))[child.keys[childIdx] := child.values[childIdx]], pivots, childrenIdx)
+        == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);
   }
 
   lemma flush'CurEqBucketListItemFlush(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
@@ -252,6 +336,33 @@ module KMTable {
     assert prefix(children[childrenIdx], childIdx) == children[childrenIdx];
   }
 
+  lemma flush'pivotLteChildKey0(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
+      parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
+  requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
+  ensures childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 ==> lte(pivots[childrenIdx], children[childrenIdx + 1].keys[0])
+  {
+    if childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 {
+      Imaps(children[childrenIdx + 1], 0);
+      assert P.Route(pivots, children[childrenIdx + 1].keys[0]) == childrenIdx + 1;
+    }
+  }
+
+  lemma flush'IEmptyEqBucketListItemFlush(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
+      parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
+  requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
+  requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(parent.keys[parentIdx - 1], pivots[childrenIdx])
+  ensures childrenIdx + 1 < |children| ==>
+         I(KMTable([],[]))
+      == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1)
+  {
+    forall key | key in I(prefix(parent, parentIdx))
+    ensures P.Route(pivots, key) != childrenIdx + 1
+    {
+      var i := IndexOfKey(prefix(parent, parentIdx), key);
+      IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+    }
+  }
+
   lemma flush'Res(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
   requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
@@ -262,19 +373,34 @@ module KMTable {
   decreases |parent.keys| - parentIdx +
       (if childrenIdx < |children| then |children[childrenIdx].keys| - childIdx else 0)
   {
-    reveal_IsStrictlySorted();
-
     if childrenIdx == |children| {
     } else {
       var child := children[childrenIdx];
 
+      if parentIdx + 1 < |parent.keys| {
+        IsStrictlySortedImpliesLt(parent.keys, parentIdx, parentIdx + 1);
+      }
+      if childrenIdx + 1 < |pivots| {
+        IsStrictlySortedImpliesLt(pivots, childrenIdx, childrenIdx + 1);
+      }
+      if childIdx + 1 < |child.keys| {
+        IsStrictlySortedImpliesLt(child.keys, childIdx, childIdx + 1);
+      }
+      if childIdx < |child.keys| {
+        Imaps(child, childIdx);
+        assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+      }
+
       if parentIdx == |parent.keys| {
         if childIdx == |child.keys| {
           flush'CurEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+          flush'IEmptyEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+          flush'pivotLteChildKey0(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
           flush'Res(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], KMTable([], []));
-        } else if childIdx == 0 {
-          flush'Res(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], KMTable([], []));
+        //} else if |cur| == 0 {
+        //  flush'Res(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], KMTable([], []));
         } else {
+          flush'AppendChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
           flush'Res(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.values[childIdx]));
         }
       } else {
@@ -287,6 +413,9 @@ module KMTable {
               flush'AppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flush'Res(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.values[parentIdx]));
             } else {
+              flush'CurEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+              flush'IEmptyEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+              flush'pivotLteChildKey0(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flush'Res(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], KMTable([], []));
             }
           }
@@ -294,12 +423,13 @@ module KMTable {
           if child.keys[childIdx] == parent.keys[parentIdx] {
             var m := Merge(parent.values[parentIdx], child.values[childIdx]);
             if m == IdentityMessage() {
-              flush'AppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flush'Res(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, cur);
             } else {
+              flush'AppendParentAndChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flush'Res(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m));
             }
           } else if lt(child.keys[childIdx], parent.keys[parentIdx]) {
+            flush'AppendChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
             flush'Res(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.values[childIdx]));
           } else {
             flush'AppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
@@ -308,6 +438,5 @@ module KMTable {
         }
       }
     }
-   
   }
 }
