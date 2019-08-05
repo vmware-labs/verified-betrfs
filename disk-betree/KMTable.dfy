@@ -373,7 +373,7 @@ module KMTable {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
   requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   ensures var f := flush'(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-      && (forall i | 0 <= i < |f| :: |f[i].keys| == |f[i].values|)
+      && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   decreases |children| - childrenIdx
   decreases |parent.keys| - parentIdx +
@@ -451,7 +451,7 @@ module KMTable {
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires WFBucketList(ISeq(children), pivots)
   ensures var f := flush(parent, children, pivots);
-      && (forall i | 0 <= i < |f| :: |f[i].keys| == |f[i].values|)
+      && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
     flush'Res(parent, children, pivots, 0, 0, 0, [], KMTable([], []));
@@ -465,7 +465,7 @@ module KMTable {
   requires |parent.keys| < 0x8000_0000_0000_0000
   requires |children| < 0x1_0000_0000_0000_0000
   requires forall i | 0 <= i < |children| :: |children[i].keys| < 0x8000_0000_0000_0000
-  ensures forall i | 0 <= i < |f| :: |f[i].keys| == |f[i].values|
+  ensures forall i | 0 <= i < |f| :: WF(f[i])
   ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
     var maxChildLen: uint64 := 0;
@@ -825,5 +825,66 @@ module KMTable {
     assert values[..] == values[..LenSum(kmts, j as int)];
     assert kmts[..j] == kmts;
     joinEqJoinBucketList(kmts, pivots);
+  }
+
+  /////////////////////////
+  //// Splitting
+  /////////////////////////
+
+  function method EmptySeq(n: int) : (s : seq<KMTable>)
+  requires n >= 0
+  ensures |s| == n
+  ensures forall i | 0 <= i < n :: WF(s[i])
+  ensures forall i | 0 <= i < n :: s[i] == KMTable([],[])
+  {
+    if n == 0 then [] else EmptySeq(n-1) + [KMTable([],[])]
+  }
+
+  method SplitOnPivots(kmt: KMTable, pivots: seq<Key>)
+  returns (kmts : seq<KMTable>)
+  requires WF(kmt)
+  requires P.WFPivots(pivots)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  requires |pivots| < 0x7fff_ffff_ffff_ffff
+  ensures forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
+  {
+    kmts := Flush(kmt, EmptySeq(|pivots| + 1), pivots);
+
+    forall key | key in I(kmt)
+    ensures I(kmt)[key] != IdentityMessage()
+    {
+      var i := IndexOfKey(kmt, key);
+      Imaps(kmt, i);
+    }
+    LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(kmt), pivots, ISeq(EmptySeq(|pivots| + 1)));
+  }
+
+  method IsWF(kmt: KMTable) returns (b: bool)
+  requires |kmt.keys| < 0x1_0000_0000_0000_0000
+  requires |kmt.values| < 0x1_0000_0000_0000_0000
+  requires forall i | 0 <= i < |kmt.values| :: kmt.values[i] != IdentityMessage()
+  ensures b == WF(kmt)
+  {
+    if |kmt.keys| as uint64 != |kmt.values| as uint64
+    {
+      return false;
+    }
+
+    reveal_IsStrictlySorted();
+
+    var k: uint64 := 1;
+    while k < |kmt.keys| as uint64
+    invariant |kmt.keys| > 0 ==> 0 <= k as int <= |kmt.keys|
+    invariant |kmt.keys| > 0 ==> forall i, j :: 0 <= i < j < k as int ==> lt(kmt.keys[i], kmt.keys[j])
+    {
+      var c := cmp(kmt.keys[k-1], kmt.keys[k]);
+      if (c >= 0) {
+        return false;
+      }
+      k := k + 1;
+    }
+
+    return true;
   }
 }
