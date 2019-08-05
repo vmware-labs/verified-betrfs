@@ -69,6 +69,7 @@ module {:extern} Impl refines Main {
 
   function ISectorOpt(sector: Option<IS.Sector>) : Option<BC.Sector>
   requires sector.Some? ==> IS.WFSector(sector.value)
+  reads if sector.Some? && sector.value.SectorIndirectionTable? then sector.value.indirectionTable.Repr else {}
   {
     match sector {
       case None => None

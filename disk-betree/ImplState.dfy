@@ -48,6 +48,15 @@ module {:extern} ImplState {
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
 
+  function VariablesReadSet(s: Variables): set<object>
+  {
+    if s.Ready? then
+      s.persistentIndirectionTable.Repr +
+      s.ephemeralIndirectionTable.Repr +
+      (if s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {})
+    else
+      {}
+  }
   predicate WFBuckets(buckets: seq<SSTable.SSTable>)
   {
     forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i])
@@ -90,14 +99,14 @@ module {:extern} ImplState {
     map ref | ref in cache :: INode(cache[ref])
   }
   function IIndirectionTable(table: MutIndirectionTable) : (result: BC.IndirectionTable)
-    reads table
+    reads table.Repr
   {
     var lbas := map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value;
     var graph := map k | k in table.Contents :: table.Contents[k].1;
     BC.IndirectionTable(lbas, graph)
   }
   function IIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<BC.IndirectionTable>)
-    reads if table.Some? then {table.value} else {}
+    reads if table.Some? then table.value.Repr else {}
   {
     if table.Some? then
       Some(IIndirectionTable(table.value))
@@ -106,8 +115,7 @@ module {:extern} ImplState {
   }
   function IVars(vars: Variables) : M.Variables
   requires WFVars(vars)
-  reads if vars.Ready? then {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} else {}
-  reads if vars.Ready? && vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}
+  reads VariablesReadSet(vars)
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) =>
@@ -134,5 +142,13 @@ module {:extern} ImplState {
       s := Unready(None, map[]);
     }
   }
-  function ImplHeapSet(hs: ImplHeapState) : set<object> { {hs} }
+  function ImplHeapSet(hs: ImplHeapState) : set<object> {
+    {hs} +
+    if hs.s.Ready? then
+      hs.s.persistentIndirectionTable.Repr +
+      hs.s.ephemeralIndirectionTable.Repr +
+      (if hs.s.frozenIndirectionTable.Some? then hs.s.frozenIndirectionTable.value.Repr else {})
+    else
+      {}
+  }
 }
