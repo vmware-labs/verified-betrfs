@@ -464,7 +464,7 @@ module MutableMap {
       ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
       ensures Storage.Length == old(Storage.Length)
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-      modifies this, this.Storage
+      modifies Repr
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
@@ -584,7 +584,7 @@ module MutableMap {
           else None
       ensures Count == old(Count)
       ensures Repr == old(Repr)
-      modifies this, this.Storage
+      modifies Repr
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
@@ -1119,7 +1119,7 @@ module MutableMap {
       ensures Contents == old(Contents[key := value])
       ensures Count as nat == old(Count as nat) + (if replaced.Some? then 0 else 1)
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-      modifies this, this.Underlying, this.Underlying.Storage
+      modifies Repr
     {
       // print "Insert ", key, "\n";
 
@@ -1158,7 +1158,7 @@ module MutableMap {
       ensures Contents == map k | old(k in Contents) && k != key :: old(Contents[k])
       ensures Count as nat == old(Count as nat) - (if removed.Some? then 1 else 0)
       ensures Repr == old(Repr)
-      modifies this, this.Underlying, this.Underlying.Storage
+      modifies Repr
     {
       // -- mutation --
       removed := Underlying.Remove(key);

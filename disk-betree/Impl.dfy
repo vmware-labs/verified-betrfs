@@ -117,6 +117,8 @@ module {:extern} Impl refines Main {
   predicate stepsBetree(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: BT.BetreeStep)
   requires IS.WFVars(s)
   requires IS.WFVars(s')
+  reads IS.VariablesReadSet(s)
+  reads IS.VariablesReadSet(s')
   {
     ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, D.NoDiskOp, ADM.M.Step(BBC.BetreeMoveStep(step)))
   }
@@ -125,6 +127,8 @@ module {:extern} Impl refines Main {
   requires IS.WFVars(s)
   requires IS.WFVars(s')
   reads io
+  reads IS.VariablesReadSet(s)
+  reads IS.VariablesReadSet(s')
   {
     ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, io.diskOp(), ADM.M.Step(BBC.BlockCacheMoveStep(step)))
   }
@@ -132,6 +136,8 @@ module {:extern} Impl refines Main {
   predicate noop(k: Constants, s: Variables, s': Variables)
   requires IS.WFVars(s)
   requires IS.WFVars(s')
+  reads IS.VariablesReadSet(s)
+  reads IS.VariablesReadSet(s')
   {
     ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, ADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)))
   }
@@ -331,8 +337,8 @@ module {:extern} Impl refines Main {
 
     var v1Opt := Filter((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.Some?, table1Values);
     var v2Opt := Filter((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.Some?, table2Values);
-    var v1 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.value, v1Opt);
-    var v2 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.value, v2Opt);
+    var v1 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) requires x.0.Some? => x.0.value, v1Opt);
+    var v2 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) requires x.0.Some? => x.0.value, v2Opt);
 
     var m1;
     var m2;
@@ -369,7 +375,7 @@ module {:extern} Impl refines Main {
       ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
   ensures IS.WFVars(s')
   ensures BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node))
-  modifies s.ephemeralIndirectionTable
+  modifies s.ephemeralIndirectionTable.Repr
   {
     var lbaGraph := s.ephemeralIndirectionTable.Remove(ref);
     assert lbaGraph.Some?;
@@ -420,6 +426,7 @@ module {:extern} Impl refines Main {
   requires BT.G.Root() in s.cache
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
+  modifies s.ephemeralIndirectionTable.Repr
   {
     var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.Get(BT.G.Root());
     if (
@@ -709,6 +716,7 @@ module {:extern} Impl refines Main {
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
   ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  modifies s.ephemeralIndirectionTable.Repr
   {
     if (BT.G.Root() !in s.cache) {
       s' := PageInReq(k, s, io, BT.G.Root());
