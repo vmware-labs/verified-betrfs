@@ -2,13 +2,17 @@ include "Message.dfy"
 include "../lib/sequences.dfy"
 include "../lib/maps.dfy"
 include "BucketsLib.dfy"
+include "../lib/Marshalling/Seqs.i.dfy"
 
 module KMTable {
   import opened ValueMessage`Internal
   import opened Lexicographic_Byte_Order
   import opened Sequences
+  import opened Options
   import opened Maps
   import opened BucketsLib
+  import opened NativeTypes
+  import Native
   import P = PivotsLib
 
   type Key = Element
@@ -58,7 +62,9 @@ module KMTable {
   requires 0 <= i < |kmt.keys|
   ensures MapsTo(I(kmt), kmt.keys[i], kmt.values[i])
 
+  /////////////////////////
   //// Flush
+  /////////////////////////
 
   function append(kmt: KMTable, key: Key, value: Message) : KMTable
   {
@@ -438,5 +444,386 @@ module KMTable {
         }
       }
     }
+  }
+
+  lemma flushRes(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>)
+  requires WF(parent)
+  requires forall i | 0 <= i < |children| :: WF(children[i])
+  requires WFBucketList(ISeq(children), pivots)
+  ensures var f := flush(parent, children, pivots);
+      && (forall i | 0 <= i < |f| :: |f[i].keys| == |f[i].values|)
+      && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
+  {
+    flush'Res(parent, children, pivots, 0, 0, 0, [], KMTable([], []));
+  }
+
+  method Flush(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>)
+  returns (f : seq<KMTable>)
+  requires WF(parent)
+  requires forall i | 0 <= i < |children| :: WF(children[i])
+  requires WFBucketList(ISeq(children), pivots)
+  requires |parent.keys| < 0x8000_0000_0000_0000
+  requires |children| < 0x1_0000_0000_0000_0000
+  requires forall i | 0 <= i < |children| :: |children[i].keys| < 0x8000_0000_0000_0000
+  ensures forall i | 0 <= i < |f| :: |f[i].keys| == |f[i].values|
+  ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
+  {
+    var maxChildLen: uint64 := 0;
+    var idx: uint64 := 0;
+    while idx < |children| as uint64
+    invariant 0 <= idx as int <= |children|
+    invariant forall i | 0 <= i < idx as int :: |children[i].keys| <= maxChildLen as int
+    invariant maxChildLen < 0x8000_0000_0000_0000
+    {
+      if |children[idx].keys| as uint64 > maxChildLen {
+        maxChildLen := |children[idx].keys| as uint64;
+      }
+      idx := idx + 1;
+    }
+
+    var parentIdx: uint64 := 0;
+    var childrenIdx: uint64 := 0;
+    var childIdx: uint64 := 0;
+    var acc := [];
+    var cur_keys := new Key[maxChildLen + |parent.keys| as uint64];
+
+    var defaultMessage := IdentityMessage();
+    var cur_values := new Message[maxChildLen + |parent.keys| as uint64]((i) => defaultMessage);
+
+    var cur_idx: uint64 := 0;
+
+    while childrenIdx < |children| as uint64
+    invariant 0 <= parentIdx as int <= |parent.keys|
+    invariant 0 <= childrenIdx as int <= |children|
+    invariant (childrenIdx as int < |children| ==> 0 <= childIdx as int <= |children[childrenIdx].keys|)
+    invariant 0 <= cur_idx
+    invariant childrenIdx as int < |children| ==> cur_idx as int <= parentIdx as int + childIdx as int
+    invariant childrenIdx as int == |children| ==> cur_idx == 0
+    invariant flush'(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]))
+        == flush(parent, children, pivots)
+    decreases |children| - childrenIdx as int
+    decreases |parent.keys| - parentIdx as int +
+        (if childrenIdx as int < |children| then |children[childrenIdx].keys| - childIdx as int else 0)
+    {
+      var child := children[childrenIdx];
+      if parentIdx == |parent.keys| as uint64 {
+        if childIdx == |child.keys| as uint64 {
+          childrenIdx := childrenIdx + 1;
+          childIdx := 0;
+          acc := acc + [KMTable(cur_keys[..cur_idx], cur_values[..cur_idx])];
+          cur_idx := 0;
+        } else {
+          cur_keys[cur_idx] := child.keys[childIdx];
+          cur_values[cur_idx] := child.values[childIdx];
+          assert append(KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]), child.keys[childIdx], child.values[childIdx]) == KMTable(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+          childIdx := childIdx + 1;
+          cur_idx := cur_idx + 1;
+        }
+      } else {
+        if childIdx == |child.keys| as uint64 {
+          if childrenIdx == |children| as uint64 - 1 {
+            cur_keys[cur_idx] := parent.keys[parentIdx];
+            cur_values[cur_idx] := parent.values[parentIdx];
+            assert append(KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == KMTable(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            parentIdx := parentIdx + 1;
+            cur_idx := cur_idx + 1;
+          } else {
+            var c := cmp(parent.keys[parentIdx], pivots[childrenIdx]);
+            if c < 0 {
+              cur_keys[cur_idx] := parent.keys[parentIdx];
+              cur_values[cur_idx] := parent.values[parentIdx];
+              assert append(KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == KMTable(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              parentIdx := parentIdx + 1;
+              cur_idx := cur_idx + 1;
+            } else {
+              acc := acc + [KMTable(cur_keys[..cur_idx], cur_values[..cur_idx])];
+              childrenIdx := childrenIdx + 1;
+              childIdx := 0;
+              cur_idx := 0;
+            }
+          }
+        } else {
+          var c := cmp(child.keys[childIdx], parent.keys[parentIdx]);
+          if c == 0 {
+            var m := Merge(parent.values[parentIdx], child.values[childIdx]);
+            if m == IdentityMessage() {
+              parentIdx := parentIdx + 1;
+              childIdx := childIdx + 1;
+            } else {
+              cur_keys[cur_idx] := parent.keys[parentIdx];
+              cur_values[cur_idx] := m;
+              assert append(KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], m) == KMTable(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              cur_idx := cur_idx + 1;
+              parentIdx := parentIdx + 1;
+              childIdx := childIdx + 1;
+            }
+          } else if c < 0 {
+            cur_keys[cur_idx] := child.keys[childIdx];
+            cur_values[cur_idx] := child.values[childIdx];
+            assert append(KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]), child.keys[childIdx], child.values[childIdx]) == KMTable(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            childIdx := childIdx + 1;
+            cur_idx := cur_idx + 1;
+          } else {
+            cur_keys[cur_idx] := parent.keys[parentIdx];
+            cur_values[cur_idx] := parent.values[parentIdx];
+            assert append(KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == KMTable(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            parentIdx := parentIdx + 1;
+            cur_idx := cur_idx + 1;
+          }
+        }
+      }
+    }
+
+    flushRes(parent, children, pivots);
+    return acc;
+  }
+
+  /////////////////////////
+  //// Query
+  /////////////////////////
+
+  method Query(kmt: KMTable, key: Key) returns (m: Option<Message>)
+  requires WF(kmt)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  ensures m.None? ==> key !in I(kmt)
+  ensures m.Some? ==> key in I(kmt) && I(kmt)[key] == m.value
+  {
+    var lo: uint64 := 0;
+    var hi: uint64 := |kmt.keys| as uint64;
+
+    while lo < hi
+    invariant 0 <= lo as int <= |kmt.keys|
+    invariant 0 <= hi as int <= |kmt.keys|
+    invariant lo > 0 ==> lt(kmt.keys[lo-1], key)
+    invariant hi as int < |kmt.keys| ==> lt(key, kmt.keys[hi])
+    decreases hi as int - lo as int
+    {
+      var mid: uint64 := (lo + hi) / 2;
+      var c := cmp(key, kmt.keys[mid]);
+      if c == 0 {
+        m := Some(kmt.values[mid]);
+        Imaps(kmt, mid as int);
+        return;
+      } else if (c < 0) {
+        hi := mid;
+      } else {
+        lo := mid + 1;
+      }
+    }
+
+    if (key in I(kmt)) {
+      ghost var j := IndexOfKey(kmt, key);
+      if (lo > 0) { IsStrictlySortedImpliesLtIndices(kmt.keys, lo as int - 1, j as int); }
+      if (hi as int < |kmt.keys|) { IsStrictlySortedImpliesLtIndices(kmt.keys, j as int, hi as int); }
+    }
+
+    m := None;
+  }
+
+  /////////////////////////
+  //// Splitting
+  /////////////////////////
+
+  method ComputeCutoffPoint(kmt: KMTable, key: Key)
+  returns (idx: uint64)
+  requires WF(kmt)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  ensures 0 <= idx as int <= |kmt.keys|
+  ensures forall i | 0 <= i < idx as int :: lt(kmt.keys[i], key)
+  ensures forall i | idx as int <= i as int < |kmt.keys| :: lte(key, kmt.keys[i])
+  {
+    var lo: uint64 := 0;
+    var hi: uint64 := |kmt.keys| as uint64;
+
+    while lo < hi
+    invariant 0 <= lo as int <= |kmt.keys|
+    invariant 0 <= hi as int <= |kmt.keys|
+    invariant forall i | 0 <= i < lo as int :: lt(kmt.keys[i], key)
+    invariant forall i | hi as int <= i < |kmt.keys| :: lte(key, kmt.keys[i])
+    decreases hi as int - lo as int
+    {
+      reveal_IsStrictlySorted();
+
+      var mid: uint64 := (lo + hi) / 2;
+      var c := cmp(key, kmt.keys[mid]);
+      if (c > 0) {
+        lo := mid + 1;
+      } else {
+        hi := mid;
+      }
+    }
+
+    idx := lo;
+  }
+
+  method SplitLeft(kmt: KMTable, pivot: Key)
+  returns (left: KMTable)
+  requires WF(kmt)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  ensures WF(left)
+  ensures I(left) == SplitBucketLeft(I(kmt), pivot)
+  {
+    var idx := ComputeCutoffPoint(kmt, pivot);
+    left := KMTable(kmt.keys[..idx], kmt.values[..idx]);
+
+    reveal_IsStrictlySorted();
+
+    ghost var a := I(left);
+    ghost var b := SplitBucketLeft(I(kmt), pivot);
+
+    forall key | key in a
+    ensures key in b
+    ensures a[key] == b[key]
+    {
+      ghost var i := IndexOfKey(left, key);
+      Imaps(left, i);
+      Imaps(kmt, i);
+    }
+
+    forall key | key in b
+    ensures key in a
+    {
+      ghost var i := IndexOfKey(kmt, key);
+      Imaps(left, i);
+      Imaps(kmt, i);
+    }
+
+    assert a == b;
+  }
+
+  method SplitRight(kmt: KMTable, pivot: Key)
+  returns (right: KMTable)
+  requires WF(kmt)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  ensures WF(right)
+  ensures I(right) == SplitBucketRight(I(kmt), pivot)
+  {
+    var idx := ComputeCutoffPoint(kmt, pivot);
+    right := KMTable(kmt.keys[idx..], kmt.values[idx..]);
+
+    reveal_IsStrictlySorted();
+
+    ghost var a := I(right);
+    ghost var b := SplitBucketRight(I(kmt), pivot);
+
+    forall key | key in a
+    ensures key in b
+    ensures a[key] == b[key]
+    {
+      ghost var i := IndexOfKey(right, key);
+      Imaps(right, i);
+      Imaps(kmt, i + idx as int);
+    }
+
+    forall key | key in b
+    ensures key in a
+    {
+      ghost var i := IndexOfKey(kmt, key);
+      Imaps(right, i - idx as int);
+      Imaps(kmt, i);
+    }
+
+    assert a == b;
+  }
+
+  /////////////////////////
+  //// Joining
+  /////////////////////////
+
+  function join(kmts: seq<KMTable>) : KMTable
+  {
+    if |kmts| == 0 then KMTable([], []) else (
+      var j := join(DropLast(kmts));
+      var l := Last(kmts);
+      KMTable(j.keys + l.keys, j.values + l.values)
+    )
+  }
+
+  function LenSum(kmts: seq<KMTable>, i: int) : int
+  requires 0 <= i <= |kmts|
+  {
+    if i == 0 then 0 else LenSum(kmts, i-1) + |kmts[i-1].keys|
+  }
+
+  lemma LenSumPrefixLe(kmts: seq<KMTable>, i: int)
+  requires 0 <= i <= |kmts|
+  ensures LenSum(kmts, i) <= LenSum(kmts, |kmts|)
+
+  lemma joinEqJoinBucketList(kmts: seq<KMTable>, pivots: seq<Key>)
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  requires WFBucketList(ISeq(kmts), pivots)
+  ensures WF(join(kmts))
+  ensures I(join(kmts)) == JoinBucketList(ISeq(kmts))
+
+  method {:fuel JoinBucketList,0} {:fuel WFBucketList,0}
+  Join(kmts: seq<KMTable>, ghost pivots: seq<Key>)
+  returns (kmt: KMTable)
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  requires WFBucketList(ISeq(kmts), pivots)
+  requires |kmts| < 0x1_0000_0000
+  requires forall i | 0 <= i < |kmts| :: |kmts[i].keys| < 0x1_0000_0000
+  ensures WF(kmt)
+  ensures I(kmt) == JoinBucketList(ISeq(kmts))
+  {
+    var len: uint64 := 0;
+    var i: uint64 := 0;
+    while i < |kmts| as uint64
+    invariant 0 <= i as int <= |kmts|
+    invariant len as int == LenSum(kmts, i as int)
+    invariant len <= i * 0x1_0000_0000
+    {
+      LenSumPrefixLe(kmts, i as int + 1);
+
+      len := len + |kmts[i].keys| as uint64;
+      i := i + 1;
+    }
+
+    assert kmts == kmts[..i];
+    assert len as int == LenSum(kmts, |kmts|);
+    var keys := new Key[len];
+    var defaultMessage := IdentityMessage();
+    var values := new Message[len]((i) => defaultMessage);
+
+    var j: uint64 := 0;
+    var pos: uint64 := 0;
+    while j < |kmts| as uint64
+    invariant 0 <= j as int <= |kmts|
+    invariant pos as int == LenSum(kmts, j as int)
+    invariant 0 <= LenSum(kmts, j as int) <= keys.Length
+    invariant keys[..LenSum(kmts, j as int)] == join(kmts[..j]).keys
+    invariant values[..LenSum(kmts, j as int)] == join(kmts[..j]).values
+    {
+      LenSumPrefixLe(kmts, j as int + 1);
+
+      assert LenSum(kmts, j as int + 1)
+          == LenSum(kmts, j as int) + |kmts[j].keys|
+          == pos as int + |kmts[j].keys|;
+
+      assert pos as int + |kmts[j].keys| <= keys.Length;
+      Native.Arrays.CopySeqIntoArray(kmts[j].keys, 0, keys, pos, |kmts[j].keys| as uint64);
+      Native.Arrays.CopySeqIntoArray(kmts[j].values, 0, values, pos, |kmts[j].values| as uint64);
+
+      assert pos as int + |kmts[j].keys|
+          == LenSum(kmts, j as int) + |kmts[j].keys|
+          == LenSum(kmts, j as int + 1);
+
+      assert DropLast(kmts[..j+1]) == kmts[..j];
+      assert keys[..LenSum(kmts, j as int + 1)]
+          == keys[..pos] + keys[pos .. LenSum(kmts, j as int + 1)]
+          == join(kmts[..j]).keys + kmts[j].keys
+          == join(kmts[..j+1]).keys;
+      assert values[..LenSum(kmts, j as int + 1)]
+          == join(kmts[..j+1]).values;
+
+      pos := pos + |kmts[j].keys| as uint64;
+      j := j + 1;
+    }
+
+    kmt := KMTable(keys[..], values[..]);
+
+    assert keys[..] == keys[..LenSum(kmts, j as int)];
+    assert values[..] == values[..LenSum(kmts, j as int)];
+    assert kmts[..j] == kmts;
+    joinEqJoinBucketList(kmts, pivots);
   }
 }
