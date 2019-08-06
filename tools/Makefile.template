@@ -38,9 +38,9 @@ $(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
 include $(TARGETDEPS)
 
 $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy $(BUILD_DIR)/%.s.deps | $$(@D)/.
-	dafny /compile:0 $(NOVERIFY) $<
+	time dafny /compile:0 $(NOVERIFY) $<
 	touch $@
 
 $(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy $(BUILD_DIR)/%.i.deps | $$(@D)/.
-	dafny /compile:0 /noCheating:1 $(NOVERIFY) $<
+	time dafny /compile:0 /noCheating:1 $(NOVERIFY) $<
 	touch $@
