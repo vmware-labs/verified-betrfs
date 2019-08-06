@@ -1,4 +1,4 @@
-include "MissingLibrary.dfy"
+include "MissingLibrary.i.dfy"
 include "KVTypes.dfy"
 include "Disk.dfy"
 

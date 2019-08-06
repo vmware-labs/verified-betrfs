@@ -1,4 +1,4 @@
-include "MissingLibrary.dfy"
+include "MissingLibrary.i.dfy"
 include "KVTypes.dfy"
 
 // A Map that can crash and revert to prior states, but only in

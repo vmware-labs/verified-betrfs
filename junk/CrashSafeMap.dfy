@@ -1,4 +1,4 @@
-include "../tla-tree/MissingLibrary.dfy"
+include "../tla-tree/MissingLibrary.i.dfy"
 include "../lib/total_order.s.dfy"
 
 // A Map that can crash and revert to prior states, but only in

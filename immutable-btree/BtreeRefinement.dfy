@@ -2,7 +2,7 @@ include "../lib/total_order.s.dfy"
 include "../lib/Maps.s.dfy"
 include "../lib/mathematics.i.dfy"
 include "../lib/sequences.s.dfy"
-include "../tla-tree/MissingLibrary.dfy"
+include "../tla-tree/MissingLibrary.i.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"
 
