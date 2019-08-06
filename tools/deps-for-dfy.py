@@ -37,7 +37,7 @@ class IncludeReference:
         return True
 
     def isTrusted(self):
-        self.raw_reference.endswith(".s.dfy")
+        return self.raw_reference.endswith(".s.dfy")
 
     def compatiblePath(self):
         return self.isTrusted() or not self.origin.isTrusted()
@@ -46,10 +46,10 @@ class IncludeReference:
         if self.origin is None:
             return "cmdline"
         else:
-            return self.normPath
+            return self.origin.normPath
 
     def __repr__(self):
-        return "%s, from %s line %d" % (self.raw_reference, self.describeOrigin(), self.line_num)
+        return "%s (via %s:%d)" % (self.normPath, self.describeOrigin(), self.line_num)
 
     def __str__(self):
         return repr(self)
@@ -91,11 +91,12 @@ class InvalidDafnyIncludePath(Exception):
         return self.msg()
 
 class IncompatibleIncludeTrustedness(Exception):
-    def __init__(self, iref):
+    def __init__(self, iref, origin):
         self.iref = iref
+        self.origin = origin
 
     def msg(self):
-        return "Trusted .s files may only include other trusted .s files; got %s" % (self.iref)
+        return "Trusted .s files may only include other trusted .s files; %s includes %s" % (self.origin, self.iref)
 
     def __str__(self):
         return self.msg()
@@ -111,11 +112,11 @@ def visit(iref):
         includePath = fileFromIncludeLine(line)
         if includePath == None:
             continue
-        subIref = IncludeReference(iref, line_num, includePath)
+        subIref = IncludeReference(iref, line_num+1, includePath)
         if not subIref.validPath():
             raise InvalidDafnyIncludePath(subIref)
         if not subIref.compatiblePath():
-            raise IncompatibleIncludeTrustedness(subIref)
+            raise IncompatibleIncludeTrustedness(subIref, iref)
         subIrefs.append(subIref)
     return subIrefs
 

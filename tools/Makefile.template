@@ -38,5 +38,5 @@ $(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
 include $(TARGETDEPS)
 
 $(BUILD_DIR)/%.okay: $(ROOT)%.dfy $(BUILD_DIR)/%.deps | $$(@D)/.
-	dafny /compile:0 $<
+	dafny /noVerify /compile:0 $<
 	touch $@
