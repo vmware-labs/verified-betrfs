@@ -98,7 +98,7 @@ class UndeclaredTrustedness(Exception):
         self.iref = iref
 
     def msg(self):
-        return "Dafny files must declare trustedness with .s.dfy or .i.dfy extension" % self.iref
+        return "Dafny file %s must declare trustedness with .s.dfy or .i.dfy extension" % self.iref
 
     def __str__(self):
         return self.msg()
@@ -129,7 +129,7 @@ def visit(iref):
         if not subIref.validPath():
             raise InvalidDafnyIncludePath(subIref)
         if not subIref.declaresTrustedness():
-            raise UndeclaredTrustedness(iref)
+            raise UndeclaredTrustedness(subIref)
         if not subIref.compatiblePath():
             raise IncompatibleIncludeTrustedness(subIref, iref)
         subIrefs.append(subIref)
