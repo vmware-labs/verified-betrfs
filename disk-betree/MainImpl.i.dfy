@@ -1,10 +1,10 @@
-include "Main.dfy"
+include "Main.s.dfy"
 
-include "../lib/Sets.dfy"
-include "ByteBetreeBlockCacheSystem.dfy"
-include "Marshalling.dfy"
+include "../lib/Sets.i.dfy"
+include "ByteBetreeBlockCacheSystem.i.dfy"
+include "Marshalling.i.dfy"
 
-include "Impl.dfy"
+include "Impl.i.dfy"
 
 module {:extern} MainImpl refines Main { 
 
