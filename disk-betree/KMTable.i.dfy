@@ -478,19 +478,20 @@ module KMTable {
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires WFBucketList(ISeq(children), pivots)
-  requires |parent.keys| < 0x4000_0000_0000_0000
   requires |children| < 0x1_0000_0000_0000_0000
-  requires forall i | 0 <= i < |children| :: |children[i].keys| < 0x4000_0000_0000_0000
+  requires forall i | 0 <= i < |children| :: |children[i].keys| + |parent.keys| < 0x8000_0000_0000_0000
   ensures forall i | 0 <= i < |f| :: WF(f[i])
   ensures forall i | 0 <= i < |f| :: Bounded(f[i])
   ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
+    assert |children[0].keys| + |parent.keys| < 0x8000_0000_0000_0000;
+
     var maxChildLen: uint64 := 0;
     var idx: uint64 := 0;
     while idx < |children| as uint64
     invariant 0 <= idx as int <= |children|
     invariant forall i | 0 <= i < idx as int :: |children[i].keys| <= maxChildLen as int
-    invariant maxChildLen < 0x8000_0000_0000_0000
+    invariant maxChildLen as int + |parent.keys| < 0x8000_0000_0000_0000
     {
       if |children[idx].keys| as uint64 > maxChildLen {
         maxChildLen := |children[idx].keys| as uint64;
@@ -518,6 +519,7 @@ module KMTable {
     invariant childrenIdx as int == |children| ==> cur_idx == 0
     invariant flush'(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]))
         == flush(parent, children, pivots)
+    invariant forall i | 0 <= i < |acc| :: Bounded(acc[i])
     decreases |children| - childrenIdx as int
     decreases |parent.keys| - parentIdx as int +
         (if childrenIdx as int < |children| then |children[childrenIdx].keys| - childIdx as int else 0)
@@ -930,6 +932,11 @@ module KMTable {
   requires WF(kmt)
   ensures IsEmpty(kmt) == (I(kmt) == map[])
   {
+    assert |kmt.keys| > 0 ==> Last(kmt.keys) in I(KMTable(DropLast(kmt.keys), DropLast(kmt.values)))[Last(kmt.keys) := Last(kmt.values)];
+    var emp : Bucket := map[];
+    assert |kmt.keys| > 0 ==> Last(kmt.keys) !in emp;
+    assert |kmt.keys| > 0 ==> I(KMTable(DropLast(kmt.keys), DropLast(kmt.values)))[Last(kmt.keys) := Last(kmt.values)] != map[];
+
     |kmt.keys| == 0
   }
 
@@ -984,6 +991,7 @@ module KMTable {
   ensures WF(kmt)
   ensures I(kmt) == m
   {
+    assume false;
     var keys := new Key[|s| as uint64];
     var defaultMessage := IdentityMessage();
     var values := new Message[|s| as uint64]((i) => defaultMessage);
