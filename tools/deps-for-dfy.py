@@ -36,6 +36,9 @@ class IncludeReference:
     def validPath(self):
         return True
 
+    def declaresTrustedness(self):
+        return self.raw_reference.endswith(".s.dfy") or self.raw_reference.endswith(".i.dfy")
+
     def isTrusted(self):
         return self.raw_reference.endswith(".s.dfy")
 
@@ -90,6 +93,16 @@ class InvalidDafnyIncludePath(Exception):
     def __str__(self):
         return self.msg()
 
+class UndeclaredTrustedness(Exception):
+    def __init__(self, iref):
+        self.iref = iref
+
+    def msg(self):
+        return "Dafny files must declare trustedness with .s.dfy or .i.dfy extension" % self.iref
+
+    def __str__(self):
+        return self.msg()
+
 class IncompatibleIncludeTrustedness(Exception):
     def __init__(self, iref, origin):
         self.iref = iref
@@ -115,6 +128,8 @@ def visit(iref):
         subIref = IncludeReference(iref, line_num+1, includePath)
         if not subIref.validPath():
             raise InvalidDafnyIncludePath(subIref)
+        if not subIref.declaresTrustedness():
+            raise UndeclaredTrustedness(iref)
         if not subIref.compatiblePath():
             raise IncompatibleIncludeTrustedness(subIref, iref)
         subIrefs.append(subIref)
