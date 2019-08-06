@@ -145,7 +145,7 @@ abstract module BlockCache refines Transactable {
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
-  function method AssignRefToLBA(indirectionTable: IndirectionTable, ref: Reference, lba: LBA) : IndirectionTable
+  function method assignRefToLBA(indirectionTable: IndirectionTable, ref: Reference, lba: LBA) : IndirectionTable
   {
     IndirectionTable(
       if ref in indirectionTable.graph then indirectionTable.lbas[ref := lba] else indirectionTable.lbas,
@@ -167,11 +167,11 @@ abstract module BlockCache refines Transactable {
     && s.outstandingIndirectionTableWrite.None?
 
     && ref !in s.ephemeralIndirectionTable.lbas
-    && s'.ephemeralIndirectionTable == AssignRefToLBA(s.ephemeralIndirectionTable, ref, dop.reqWrite.lba)
+    && s'.ephemeralIndirectionTable == assignRefToLBA(s.ephemeralIndirectionTable, ref, dop.reqWrite.lba)
 
     && (s.frozenIndirectionTable.Some? ==> (
       && ref !in s.frozenIndirectionTable.value.lbas
-      && s'.frozenIndirectionTable == Some(AssignRefToLBA(s.frozenIndirectionTable.value, ref, dop.reqWrite.lba))
+      && s'.frozenIndirectionTable == Some(assignRefToLBA(s.frozenIndirectionTable.value, ref, dop.reqWrite.lba))
     ))
     && (s.frozenIndirectionTable.None? ==> s'.frozenIndirectionTable.None?)
 

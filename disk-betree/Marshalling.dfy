@@ -4,6 +4,7 @@ include "Message.dfy"
 include "ImplState.dfy"
 include "KMTable.dfy"
 include "../lib/Option.dfy"
+include "../lib/MutableMap.dfy"
 
 module Marshalling {
   import opened GenericMarshalling
@@ -32,12 +33,14 @@ module Marshalling {
   import MS = MapSpec
   import Keyspace = MS.Keyspace
 
+  import MM = MutableMap
+
   type Reference = BC.Reference
   type LBA = BC.LBA
   type Sector = ImplState.Sector
   type Message = M.Message
   type Key = BT.G.Key
-  type Node = ImplState.Node
+  type Node = BT.G.Node
 
   /////// Grammar
 
@@ -116,7 +119,7 @@ module Marshalling {
     forall i | 0 <= i < |buckets| :: CappedBucket(buckets[i])
   }
 
-  predicate method CappedNode(node: Node)
+  predicate method CappedNode(node: ImplState.Node)
   requires ImplState.WFNode(node)
   {
     && |node.buckets| <= CapNumBuckets() as int
@@ -181,7 +184,54 @@ module Marshalling {
     )
   }
 
-  function method valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
+  method {:fuel ValInGrammar,3} ValToLBAsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
+  requires valToLBAsAndSuccs.requires(a)
+  ensures (
+      && var table := ImplState.IIndirectionTableOpt(s);
+      && var inter := valToLBAsAndSuccs(a);
+      && if table.Some?
+         then (inter.Some? && table.value.lbas == inter.value.0 && table.value.graph == inter.value.1)
+         else inter.None?)
+  ensures s.Some? ==> s.value.Inv()
+  ensures s.Some? ==> s.value.Count as nat == |a|
+  ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
+  ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
+  {
+    if |a| == 0 {
+      var newHashMap := new MM.ResizingHashMap<(Option<LBA>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
+      s := Some(newHashMap);
+    } else {
+      var res := ValToLBAsAndSuccs(DropLast(a));
+      match res {
+        case Some(mutMap) => {
+          var tuple := Last(a);
+          var ref := valToReference(tuple.t[0]);
+          var lba := valToLBA(tuple.t[1]);
+          var succs := valToChildren(tuple.t[2]);
+          match succs {
+            case None => {
+              s := None;
+            }
+            case Some(succs) => {
+              var graphRef := mutMap.Get(ref);
+              if graphRef.Some? || lba == 0 || !LBAType.ValidAddr(lba) {
+                s := None;
+              } else {
+                var _ := mutMap.Insert(ref, (Some(lba), succs));
+                s := Some(mutMap);
+                assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
+              }
+            }
+          }
+        }
+        case None => {
+          s := None;
+        }
+      }
+    }
+  }
+
+  function valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value)
   {
@@ -195,6 +245,32 @@ module Marshalling {
         )
       )
       case None => None
+    }
+  }
+
+  method GraphClosed(table: ImplState.MutIndirectionTable) returns (result: bool)
+    requires BC.GraphClosed.requires(ImplState.IIndirectionTable(table).graph)
+    ensures BC.GraphClosed(ImplState.IIndirectionTable(table).graph) == result
+
+  method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
+  requires valToIndirectionTable.requires(v)
+  ensures ImplState.IIndirectionTableOpt(s) == valToIndirectionTable(v)
+  ensures s.Some? ==> s.value.Inv()
+  {
+    var res := ValToLBAsAndSuccs(v.a);
+    match res {
+      case Some(res) => {
+        var rootRef := res.Get(BT.G.Root());
+        var isGraphClosed := GraphClosed(res);
+        if rootRef.Some? && isGraphClosed {
+          s := Some(res);
+        } else {
+          s := None;
+        }
+      }
+      case None => {
+        s := None;
+      }
     }
   }
 
@@ -229,13 +305,11 @@ module Marshalling {
     )
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KMTable.KMTable>)
+  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<map<Key, Message>>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |pivotTable|
-  ensures s.Some? ==> KMTable.WF(s.value)
-  ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
   {
     var keys := valToKeySeq(v.t[0]);
     var values := valToMessageSeq(v.t[1]);
@@ -243,14 +317,25 @@ module Marshalling {
     var kmt := KMTable.KMTable(keys, values);
 
     if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) then
-      Some(kmt)
+      Some(KMTable.I(kmt))
+    else
+      None
+  }
+
+  function IKMTableOpt(table : Option<KMTable.KMTable>): Option<map<Key, Message>>
+  requires table.Some? ==> KMTable.WF(table.value)
+  {
+    if table.Some? then
+      Some(KMTable.I(table.value))
     else
       None
   }
 
   method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMTable>)
   requires valToBucket.requires(v, pivotTable, i)
-  ensures s == valToBucket(v, pivotTable, i)
+  ensures s.Some? ==> KMTable.WF(s.value)
+  ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
+  ensures IKMTableOpt(s) == valToBucket(v, pivotTable, i)
   {
     var keys := valToKeySeq(v.t[0]);
     var values := valToMessageSeq(v.t[1]);
@@ -328,14 +413,13 @@ module Marshalling {
       }
   }
 
-  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<KMTable.KMTable>>)
+  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<map<Key, Message>>>)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i])
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| ::WFBucketAt(s.value[i], pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -367,16 +451,31 @@ module Marshalling {
     }
   }
 
+
+  function ISeqKMTableOpt(s : Option<seq<KMTable.KMTable>>): Option<seq<map<Key, Message>>>
+  requires s.Some? ==> forall i: nat :: i < |s.value| ==> KMTable.WF(s.value[i])
+  {
+    if s.Some? then
+      Some(Apply(KMTable.I, s.value))
+    else
+      None
+  }
+
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMTable>>)
   requires valToBuckets.requires(a, pivotTable)
-  ensures s == valToBuckets(a, pivotTable)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i])
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
+  ensures ISeqKMTableOpt(s) == valToBuckets(a, pivotTable)
   {
     var ar := new KMTable.KMTable[|a|];
 
     var i := 0;
     while i < |a|
     invariant 0 <= i <= |a|
-    invariant Some(ar[..i]) == valToBuckets(a[..i], pivotTable)
+    invariant forall k: nat | k < i :: KMTable.WF(ar[k])
+    invariant forall k: nat | k < i :: WFBucketAt(KMTable.I(ar[k]), pivotTable, k)
+    invariant valToBuckets(a[..i], pivotTable).Some?
+    invariant Apply(KMTable.I, ar[..i]) == valToBuckets(a[..i], pivotTable).value
     {
       var b := ValToBucket(a[i], pivotTable, i);
       if (b.None?) {
@@ -396,14 +495,17 @@ module Marshalling {
 
     assert a[..|a|] == a;
     assert ar[..|a|] == ar[..];
+
+    assert valToBuckets(a[..], pivotTable).Some?;
+    assert Apply(KMTable.I, ar[..]) == valToBuckets(a, pivotTable).value;
+
     s := Some(ar[..]);
   }
 
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValidVal(v)
   requires ValInGrammar(v, PivotNodeGrammar())
-  ensures s.Some? ==> ImplState.WFNode(s.value)
-  ensures s.Some? ==> BT.WFNode(ImplState.INode(s.value))
+  ensures s.Some? ==> BT.WFNode(s.value)
   {
     match valToPivots(v.t[0].a) {
       case None => None
@@ -416,7 +518,7 @@ module Marshalling {
               match valToBuckets(v.t[2].a, pivots) {
                 case None => None
                 case Some(buckets) => (
-                  var node := ImplState.Node(pivots, if |children| == 0 then None else Some(children), buckets);
+                  var node := BT.G.Node(pivots, if |children| == 0 then None else Some(children), buckets);
                   Some(node)
                 )
               }
@@ -429,9 +531,19 @@ module Marshalling {
     }
   }
 
-  method ValToNode(v: V) returns (s : Option<Node>)
+  function INodeOpt(s : Option<ImplState.Node>): Option<Node>
+  requires s.Some? ==> ImplState.WFNode(s.value)
+  {
+    if s.Some? then
+      Some(ImplState.INode(s.value))
+    else
+      None
+  }
+
+  method ValToNode(v: V) returns (s : Option<ImplState.Node>)
   requires valToNode.requires(v)
-  ensures s == valToNode(v)
+  ensures s.Some? ==> ImplState.WFNode(s.value)
+  ensures INodeOpt(s) == valToNode(v)
   {
     var pivotsOpt := valToPivots(v.t[0].a);
     if (pivotsOpt.None?) {
@@ -457,33 +569,47 @@ module Marshalling {
     var buckets := bucketsOpt.value;
 
     var node := ImplState.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+
+    assert valToNode(v).Some?;
+    assert ImplState.INode(node) == valToNode(v).value;
     return Some(node);
   }
 
-  function valToSector(v: V) : (s : Option<Sector>)
+  function valToSector(v: V) : (s : Option<BC.Sector>)
   requires ValidVal(v)
   requires ValInGrammar(v, SectorGrammar())
-  ensures s.Some? ==> ImplState.WFSector(s.value)
   {
     if v.c == 0 then (
       match valToIndirectionTable(v.val) {
-        case Some(s) => Some(ImplState.SectorIndirectionTable(s))
+        case Some(s) => Some(BC.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(ImplState.SectorBlock(s))
+        case Some(s) => Some(BC.SectorBlock(s))
         case None => None
       }
     )
   }
 
-  method ValToSector(v: V) returns (s : Option<Sector>)
+  function ISectorOpt(s : Option<ImplState.Sector>): Option<BC.Sector>
+  requires s.Some? ==> ImplState.WFSector(s.value)
+  reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
+  {
+    if s.Some? then
+      Some(ImplState.ISector(s.value))
+    else
+      None
+  }
+
+  method ValToSector(v: V) returns (s : Option<ImplState.Sector>)
   requires valToSector.requires(v)
-  ensures s == valToSector(v)
+  ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures ISectorOpt(s) == valToSector(v)
   {
     if v.c == 0 {
-      match valToIndirectionTable(v.val) {
+      var mutMap := ValToIndirectionTable(v.val);
+      match mutMap {
         case Some(s) => return Some(ImplState.SectorIndirectionTable(s));
         case None => return None;
       }
@@ -526,7 +652,7 @@ module Marshalling {
   method {:fuel ValInGrammar,2} lbasSuccsToVal(lbas: map<Reference, LBA>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
   requires lbas.Keys == graph.Keys
   requires forall lba | lba in lbas.Values :: BC.ValidLBAForNode(lba)
-  requires |lbas| < 0x1_0000_0000_0000_0000
+  requires |lbas| < 0x1_0000_0000_0000_0000 / 8
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableGrammar());
   ensures v.Some? ==> |v.value.a| == |lbas|
@@ -652,7 +778,7 @@ module Marshalling {
   ensures ValInGrammar(v, BucketGrammar())
   ensures SizeOfV(v) <= (8 + (8+CapKeySize() as int) * CapBucketNumEntries() as int) + (8 + (8+CapValueSize() as int) * CapBucketNumEntries() as int)
   ensures ValidVal(v)
-  ensures valToBucket(v, pivotTable, i) == Some(bucket)
+  ensures valToBucket(v, pivotTable, i) == IKMTableOpt(Some(bucket))
   {
     var keys := keySeqToVal(bucket.keys);
     var values := messageSeqToVal(bucket.values);
@@ -676,7 +802,7 @@ module Marshalling {
   ensures SizeOfV(v) <= 8 + |buckets| * ((8 + (8+CapKeySize()) as int * CapBucketNumEntries() as int) + (8 + (8+CapValueSize()) as int * CapBucketNumEntries() as int))
   ensures ValInGrammar(v, GArray(BucketGrammar()))
   ensures |v.a| == |buckets|
-  ensures valToBuckets(v.a, pivotTable) == Some(buckets)
+  ensures valToBuckets(v.a, pivotTable) == ISeqKMTableOpt(Some(buckets))
   {
     if |buckets| == 0 {
       return VArray([]);
@@ -686,6 +812,9 @@ module Marshalling {
       var bucketVal := bucketToVal(bucket, pivotTable, |buckets| - 1);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
+      assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
+      assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == Apply(KMTable.I, buckets); // observe
+      assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == ISeqKMTableOpt(Some(buckets)); // observe (reduces verification time)
       return VArray(pref.a + [bucketVal]);
     }
   }
@@ -748,7 +877,7 @@ module Marshalling {
     }
   }
 
-  method {:fuel SizeOfV,4} nodeToVal(node: Node) returns (v : V)
+  method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
   requires ImplState.WFNode(node)
   requires BT.WFNode(ImplState.INode(node))
   requires CappedNode(node)
@@ -758,7 +887,7 @@ module Marshalling {
       8 + (CapNumBuckets() as int - 1) * (8 + CapKeySize() as int) +
       8 + CapNumBuckets() as int * 8
   ensures ValInGrammar(v, PivotNodeGrammar())
-  ensures valToNode(v) == Some(node)
+  ensures valToNode(v) == INodeOpt(Some(node))
   {
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
@@ -774,22 +903,35 @@ module Marshalling {
     v := VTuple([pivots, children, buckets]);
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
+    assert valToNode(v).Some?;
+    assert valToNode(v).value == ImplState.INode(node);
   }
 
-  method sectorToVal(sector: Sector) returns (v : Option<V>)
+  method sectorToVal(sector: ImplState.Sector) returns (v : Option<V>)
   requires ImplState.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
+  requires sector.SectorIndirectionTable? ==>
+      BC.WFCompleteIndirectionTable(ImplState.IIndirectionTable(sector.indirectionTable))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
-  ensures v.Some? ==> valToSector(v.value) == Some(sector)
+  ensures v.Some? ==> valToSector(v.value) == ISectorOpt(Some(sector))
   ensures sector.SectorBlock? ==> v.Some?
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int
   {
     match sector {
-      case SectorIndirectionTable(IndirectionTable(lbas, succs)) => {
-        if |lbas| < 0x1_0000_0000_0000_0000 {
-          var w := lbasSuccsToVal(lbas, succs);
+      case SectorIndirectionTable(mutMap) => {
+        var table := mutMap.ToMap();
+        // TODO(alattuada) extract to method
+        var lbas := map k | k in table && table[k].0.Some? :: table[k].0.value;
+        var graph := map k | k in table :: table[k].1;
+        assert table == mutMap.Contents;
+        ghost var indirectionTable := ImplState.IIndirectionTable(mutMap);
+        assert lbas == indirectionTable.lbas;
+        assert graph == indirectionTable.graph;
+        assert lbas.Keys == graph.Keys;
+        if |lbas| < 0x1_0000_0000_0000_0000 / 8 {
+          var w := lbasSuccsToVal(lbas, graph);
           match w {
             case Some(v) => return Some(VCase(0, v));
             case None => return None;
@@ -807,9 +949,7 @@ module Marshalling {
 
   /////// Marshalling and de-marshalling
 
-  function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> ImplState.WFSector(s.value)
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
+  function {:opaque} parseSector(data: seq<byte>) : (s : Option<BC.Sector>)
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -823,8 +963,8 @@ module Marshalling {
 
   method ParseSector(data: array<byte>) returns (s : Option<Sector>)
   requires data.Length < 0x1_0000_0000_0000_0000;
-  ensures s == parseSector(data[..])
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures ISectorOpt(s) == parseSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
   {
     reveal_parseSector();
@@ -856,7 +996,7 @@ module Marshalling {
   requires ImplState.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
-  ensures data != null ==> parseSector(data[..]) == Some(sector)
+  ensures data != null ==> parseSector(data[..]) == ISectorOpt(Some(sector))
   ensures data != null ==> data.Length == BlockSize() as int
   ensures sector.SectorBlock? ==> data != null;
   {

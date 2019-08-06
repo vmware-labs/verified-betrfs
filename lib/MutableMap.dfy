@@ -356,8 +356,6 @@ module MutableMap {
       ensures Storage[slotIdx].Empty? ==> key !in Contents
       ensures Repr == old(Repr)
     {
-      assume false; // TODO(alattuada) timing out
-
       slotIdx := Uint64SlotForKey(key);
       startSlotIdx := slotIdx;
       ghost var startSlot := Slot(startSlotIdx as nat);
@@ -433,8 +431,22 @@ module MutableMap {
         assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
         assert FilledWithOtherKeys(Storage[..], startSlot, skips as nat, key);
       }
+
       assert viewFromStartSlot[..skips] == viewFromStartSlot;
-      assert false;
+      forall ensures false
+      {
+        calc {
+          Storage.Length;
+          skips as nat;
+          CountFilled(viewFromStartSlot[..skips]);
+          CountFilled(viewFromStartSlot);
+          |Contents|;
+          Count as nat;
+          < Storage.Length;
+        }
+        assert Storage.Length < Storage.Length; // adding this line makes the proof work,
+                                                // which is surprising because it's the output of the calc
+      }
     }
 
     method Insert(key: uint64, value: V) returns (replaced: Option<V>)
@@ -450,7 +462,7 @@ module MutableMap {
       ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
       ensures Storage.Length == old(Storage.Length)
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-      modifies this, this.Storage
+      modifies Repr
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
@@ -570,7 +582,7 @@ module MutableMap {
           else None
       ensures Count == old(Count)
       ensures Repr == old(Repr)
-      modifies this, this.Storage
+      modifies Repr
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
@@ -792,6 +804,139 @@ module MutableMap {
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
     }
 
+    method ToArray() returns (result: array<(uint64, V)>)
+      requires Inv()
+      ensures Contents == old(Contents)
+      ensures forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
+          ==> i == j
+      ensures Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1
+      ensures Repr == old(Repr)
+    {
+      if Count == 0 {
+        assert Contents == map[];
+        result := new [0];
+        assert Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1;
+        return;
+      }
+      assert Count > 0;
+      assert exists i: nat :: i < Underlying.Storage.Length && Underlying.Storage[i].Entry?;
+
+
+      var storagePos := 0;
+      while storagePos < Underlying.Storage.Length && !Underlying.Storage[storagePos].Entry?
+        invariant 0 <= storagePos <= Underlying.Storage.Length
+        invariant MapFromStorage(Underlying.Storage[..storagePos]) == map[]
+        invariant forall i: nat :: i < storagePos ==> !Underlying.Storage[i].Entry?
+      {
+        assert MapFromStorage(Underlying.Storage[..storagePos]) == map[];
+        assert !Underlying.Storage[storagePos].Entry?;
+        assert DropLast(Underlying.Storage[..storagePos+1]) == Underlying.Storage[..storagePos];
+        assert MapFromStorage(Underlying.Storage[..storagePos+1]) == map[];
+
+        // -- increment --
+        storagePos := storagePos + 1;
+        // ---------------
+      }
+      if storagePos == Underlying.Storage.Length {
+        assert false;
+      }
+
+      ghost var transferredContents := map[];
+      assert MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents;
+      assert transferredContents.Keys <= Contents.Keys;
+
+      assert storagePos < Underlying.Storage.Length;
+      var firstEntry := Underlying.Storage[storagePos];
+      assume firstEntry.key in Contents;
+      // -- mutation --
+      result := new [Count] (_ => (firstEntry.key, firstEntry.value));
+      transferredContents := transferredContents[firstEntry.key := firstEntry.value];
+      // --------------
+
+      assert DropLast(Underlying.Storage[..storagePos+1]) == Underlying.Storage[..storagePos];
+      assert MapFromStorage(Underlying.Storage[..storagePos+1]) == transferredContents;
+      assert transferredContents.Keys <= Contents.Keys;
+
+      // -- increment --
+      storagePos := storagePos + 1;
+      // ---------------
+
+      assert MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents;
+
+      var resultPos := 1;
+      while storagePos < Underlying.Storage.Length
+        invariant 0 <= storagePos <= Underlying.Storage.Length
+        invariant result.Length == Count as nat
+        invariant resultPos == |transferredContents|
+        invariant transferredContents.Keys <= Contents.Keys
+        invariant MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents
+        invariant MapFromStorage(Underlying.Storage[..]) == Contents
+      {
+        var item := Underlying.Storage[storagePos];
+
+        if item.Entry? {
+          if resultPos > result.Length {
+            assert |transferredContents| > result.Length;
+            assert |transferredContents| > |Contents|;
+            assert |transferredContents.Keys| > |Contents.Keys|;
+            SetInclusionImpliesSmallerCardinality(transferredContents.Keys, Contents.Keys);
+            assert false;
+          } else if resultPos == result.Length {
+            assume false;
+            assert |transferredContents| == |Contents|;
+            assert |transferredContents.Keys| == |Contents.Keys|;
+            SetInclusionAndEqualCardinalityImpliesSetEquality(transferredContents.Keys, Contents.Keys);
+            assert transferredContents.Keys == Contents.Keys;
+            assert transferredContents == Contents;
+            MapFromStorageProperties(Underlying.Storage[..], Contents);
+            assert exists slot :: (
+                && ValidSlot(Underlying.Storage.Length, slot)
+                && slot.slot < storagePos
+                && Underlying.FilledWithEntryKey(Underlying.Storage[..], slot, item.key));
+          }
+          assert resultPos < result.Length;
+          // -- mutation --
+          result[resultPos] := (item.key, item.value);
+          // --------------
+
+          assume item.key !in transferredContents;
+
+          // -- mutation --
+          transferredContents := transferredContents[item.key := item.value];
+          resultPos := resultPos + 1;
+          // --------------
+
+          assert resultPos == |transferredContents|;
+        }
+
+        assume false;
+
+        assert DropLast(Underlying.Storage[..storagePos+1]) == Underlying.Storage[..storagePos];
+
+        // -- increment --
+        storagePos := storagePos + 1;
+        // ---------------
+
+        assert resultPos == |transferredContents|;
+      }
+
+      assume false;
+      assert forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
+          ==> i == j;
+      assert Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1;
+    }
+
+    method ToMap() returns (result: map<uint64, V>)
+      requires Inv()
+      ensures Contents == old(Contents)
+      ensures Contents == result
+      ensures Repr == old(Repr)
+    {
+      assume false;
+      var asArray := ToArray();
+      result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
+    }
+
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
       requires Inv()
@@ -972,7 +1117,7 @@ module MutableMap {
       ensures Contents == old(Contents[key := value])
       ensures Count as nat == old(Count as nat) + (if replaced.Some? then 0 else 1)
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-      modifies this, this.Underlying, this.Underlying.Storage
+      modifies Repr
     {
       // print "Insert ", key, "\n";
 
@@ -1011,7 +1156,7 @@ module MutableMap {
       ensures Contents == map k | old(k in Contents) && k != key :: old(Contents[k])
       ensures Count as nat == old(Count as nat) - (if removed.Some? then 1 else 0)
       ensures Repr == old(Repr)
-      modifies this, this.Underlying, this.Underlying.Storage
+      modifies Repr
     {
       // -- mutation --
       removed := Underlying.Remove(key);
