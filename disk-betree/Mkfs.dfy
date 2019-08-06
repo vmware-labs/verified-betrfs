@@ -13,7 +13,6 @@ module {:extern} MkfsImpl {
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal
-  import SSTable
   import IS = ImplState
 
   type LBA = LBAType.LBA
@@ -23,7 +22,7 @@ module {:extern} MkfsImpl {
       // Map ref 0 to lba 1
       0 := IS.SectorIndirectionTable(BC.IndirectionTable(map[0 := LBAType.BlockSize()], map[0 := []])),
       // Put the root at lba 1
-      LBAType.BlockSize() := IS.SectorBlock(IS.Node([], None, [SSTable.Empty()]))
+      LBAType.BlockSize() := IS.SectorBlock(IS.Node([], None, [KMTable.Empty()]))
     ]
   }
 
@@ -34,8 +33,6 @@ module {:extern} MkfsImpl {
   //ensures forall lba | lba in m :: ValidSector(m[lba][..])
   {
     var d := InitDisk();
-
-    SSTable.reveal_Empty();
 
     LBAType.reveal_ValidAddr();
     var b0 := Marshalling.MarshallSector(d[0]);

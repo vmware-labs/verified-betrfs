@@ -2,7 +2,7 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "PivotBetreeSpec.dfy"
 include "Message.dfy"
 include "ImplState.dfy"
-include "SSTable.dfy"
+include "KMTable.dfy"
 include "../lib/Option.dfy"
 
 module Marshalling {
@@ -14,7 +14,7 @@ module Marshalling {
   import opened BucketsLib
   import BC = BetreeGraphBlockCache
   import ImplState
-  import SSTable
+  import KMTable
 
   import BT = PivotBetreeSpec`Internal
 
@@ -52,8 +52,8 @@ module Marshalling {
   ensures ValidGrammar(BucketGrammar())
   {
     GTuple([
-      GUint64Array,
-      GByteArray
+      GArray(GByteArray),
+      GArray(GByteArray)
     ])
   }
 
@@ -80,8 +80,7 @@ module Marshalling {
   // (These are set so that when marshalled, the result
   // will fit on a disk block).
   function method CapNumBuckets() : uint64 { 8 }
-  function method CapBucketSize() : uint64 { 1_000_000 }
-  function method CapBucketNumEntries() : uint64 { 4000 }
+  function method CapBucketNumEntries() : uint64 { 500 }
   function method CapKeySize() : uint64 { 1024 }
   function method CapValueSize() : uint64 { 1024 }
 
@@ -100,13 +99,19 @@ module Marshalling {
     forall i | 0 <= i < |pivots| :: CappedKey(pivots[i])
   }
 
-  predicate method CappedBucket(sst: SSTable.SSTable)
+  function method MessageSize(msg: Message) : int
   {
-    && |sst.starts| <= CapBucketNumEntries() as int
-    && |sst.strings| <= CapBucketSize() as int
+    if msg.Define? then |msg.value| else 0
   }
 
-  predicate method CappedBuckets(buckets: seq<SSTable.SSTable>)
+  predicate method CappedBucket(kmt: KMTable.KMTable)
+  {
+    && |kmt.keys| <= CapBucketNumEntries() as int
+    && (forall i | 0 <= i < |kmt.keys| :: |kmt.keys[i]| <= CapKeySize() as int)
+    && (forall i | 0 <= i < |kmt.values| :: MessageSize(kmt.values[i]) <= CapValueSize() as int)
+  }
+
+  predicate method CappedBuckets(buckets: seq<KMTable.KMTable>)
   {
     forall i | 0 <= i < |buckets| :: CappedBucket(buckets[i])
   }
@@ -199,76 +204,97 @@ module Marshalling {
     v.ua
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<SSTable.SSTable>)
+  function method valToKeySeq(v: V) : (s : seq<Key>)
+  requires ValidVal(v)
+  requires ValInGrammar(v, GArray(GByteArray))
+  ensures |s| == |v.a|
+  decreases |v.a|
+  {
+    if |v.a| == 0 then [] else (
+      assert ValInGrammar(Last(v.a), GByteArray);
+      valToKeySeq(VArray(DropLast(v.a))) + [Last(v.a).b]
+    )
+  }
+
+  function method {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : seq<Message>)
+  requires ValidVal(v)
+  requires ValInGrammar(v, GArray(GByteArray))
+  ensures forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
+  ensures |s| == |v.a|
+  decreases |v.a|
+  {
+    if |v.a| == 0 then [] else (
+      assert ValInGrammar(Last(v.a), GByteArray);
+      valToMessageSeq(VArray(DropLast(v.a))) + [M.Define(Last(v.a).b)]
+    )
+  }
+
+  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KMTable.KMTable>)
+  requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |pivotTable|
-  ensures s.Some? ==> SSTable.WFSSTableMap(s.value)
-  ensures s.Some? ==> WFBucketAt(SSTable.I(s.value), pivotTable, i)
+  ensures s.Some? ==> KMTable.WF(s.value)
+  ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
   {
-    var starts := valToUint64Seq(v.t[0]);
+    var keys := valToKeySeq(v.t[0]);
+    var values := valToMessageSeq(v.t[1]);
 
-    var strings := v.t[1].b;
-    var sst := SSTable.SSTable(starts, strings);
+    var kmt := KMTable.KMTable(keys, values);
 
-    if SSTable.WFSSTableMap(sst) && WFBucketAt(SSTable.I(sst), pivotTable, i) then
-      Some(sst)
+    if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) then
+      Some(kmt)
     else
       None
   }
 
-  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<SSTable.SSTable>)
+  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMTable>)
   requires valToBucket.requires(v, pivotTable, i)
   ensures s == valToBucket(v, pivotTable, i)
   {
-    var starts := v.t[0].ua;
+    var keys := valToKeySeq(v.t[0]);
+    var values := valToMessageSeq(v.t[1]);
+    var kmt := KMTable.KMTable(keys, values);
 
-    var strings := v.t[1].b;
-    var sst := SSTable.SSTable(starts, strings);
-
-    var wf := SSTable.IsWFSSTableMap(sst);
+    var wf := KMTable.IsWF(kmt);
     if !wf {
       return None;
     }
 
     // Check that it fits in the desired bucket
-    if |sst.starts| > 0 {
+    if |kmt.keys| > 0 {
       if i > 0 {
-        var c := SSTable.Cmp(pivotTable[i-1], sst, 0);
-        if (c == 1) {
-          assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, 0);
-          //assert !WFBucketAt(SSTable.I(sst), pivotTable, i);
-
+        var c := Keyspace.cmp(pivotTable[i-1], kmt.keys[0]);
+        if (c > 0) {
+          KMTable.Imaps(kmt, 0);
           return None;
         }
       }
 
       if i < |pivotTable| {
-        var c := SSTable.Cmp(pivotTable[i], sst, |sst.starts| as uint64 - 2);
-        if (c != 1) {
-          assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, |sst.starts| / 2 - 1);
-          //assert !WFBucketAt(SSTable.I(sst), pivotTable, i);
-
+        var c := Keyspace.cmp(pivotTable[i], kmt.keys[|kmt.keys| - 1]);
+        if (c <= 0) {
+          KMTable.Imaps(kmt, |kmt.keys| - 1);
           return None;
         }
       }
     }
 
-    forall key | key in SSTable.I(sst)
+    forall key | key in KMTable.I(kmt)
     ensures Pivots.Route(pivotTable, key) == i
-    ensures SSTable.I(sst)[key] != M.IdentityMessage()
+    ensures KMTable.I(kmt)[key] != M.IdentityMessage()
     {
-      var j :| 0 <= 2*j < |sst.starts| && SSTable.Entry(sst, 2*j) == key;
-      assert SSTable.SSTKeyMapsToValueAt(SSTable.I(sst), sst, j);
-      if |sst.starts| > 0 {
-        SSTable.KeysStrictlySortedImpliesLte(sst, 0, j);
-        SSTable.KeysStrictlySortedImpliesLte(sst, j, |sst.starts| / 2 - 1);
+      var j := KMTable.IndexOfKey(kmt, key);
+      KMTable.Imaps(kmt, j);
+      if |kmt.keys| > 0 {
+        Keyspace.IsStrictlySortedImpliesLte(kmt.keys, 0, j);
+        Keyspace.IsStrictlySortedImpliesLte(kmt.keys, j, |kmt.keys| - 1);
       }
       Pivots.RouteIs(pivotTable, key, i);
     }
 
-    assert WFBucketAt(SSTable.I(sst), pivotTable, i);
-    s := Some(sst);
+    assert WFBucketAt(KMTable.I(kmt), pivotTable, i);
+    s := Some(kmt);
   }
 
   function method valToKey(v: V) : Key
@@ -302,13 +328,14 @@ module Marshalling {
       }
   }
 
-  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<SSTable.SSTable>>)
+  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<KMTable.KMTable>>)
   requires Pivots.WFPivots(pivotTable)
+  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: SSTable.WFSSTableMap(s.value[i])
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(SSTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i])
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -327,6 +354,7 @@ module Marshalling {
 
   lemma LemmaValToBucketNone(a: seq<V>, pivotTable: seq<Key>, i: int)
   requires Pivots.WFPivots(pivotTable)
+  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   requires 0 <= i < |a|
@@ -339,11 +367,11 @@ module Marshalling {
     }
   }
 
-  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<SSTable.SSTable>>)
+  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMTable>>)
   requires valToBuckets.requires(a, pivotTable)
   ensures s == valToBuckets(a, pivotTable)
   {
-    var ar := new SSTable.SSTable[|a|];
+    var ar := new KMTable.KMTable[|a|];
 
     var i := 0;
     while i < |a|
@@ -372,6 +400,7 @@ module Marshalling {
   }
 
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
+  requires ValidVal(v)
   requires ValInGrammar(v, PivotNodeGrammar())
   ensures s.Some? ==> ImplState.WFNode(s.value)
   ensures s.Some? ==> BT.WFNode(ImplState.INode(s.value))
@@ -383,6 +412,7 @@ module Marshalling {
           case None => None
           case Some(children) => (
             if ((|children| == 0 || |children| == |pivots| + 1) && |v.t[2].a| == |pivots| + 1) then (
+              assert ValidVal(v.t[2]);
               match valToBuckets(v.t[2].a, pivots) {
                 case None => None
                 case Some(buckets) => (
@@ -419,6 +449,7 @@ module Marshalling {
       return None;
     }
 
+    assert ValidVal(v.t[2]);
     var bucketsOpt := ValToBuckets(v.t[2].a, pivots);
     if (bucketsOpt.None?) {
       return None;
@@ -430,6 +461,7 @@ module Marshalling {
   }
 
   function valToSector(v: V) : (s : Option<Sector>)
+  requires ValidVal(v)
   requires ValInGrammar(v, SectorGrammar())
   ensures s.Some? ==> ImplState.WFSector(s.value)
   {
@@ -544,34 +576,104 @@ module Marshalling {
     return VUint64Array(a);
   }
 
+  method keySeqToVal(s: seq<Key>) returns (v : V)
+  requires |s| <= CapBucketNumEntries() as int
+  requires forall i | 0 <= i < |s| :: |s[i]| <= CapKeySize() as int
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, GArray(GByteArray))
+  ensures SizeOfV(v) <= 8 + (8 + CapKeySize()) as int * CapBucketNumEntries() as int
+  ensures |v.a| == |s|
+  ensures valToKeySeq(v) == s
+  {
+    var ar := new V[|s| as uint64];
+    var i: uint64 := 0;
+    while i < |s| as uint64
+    invariant 0 <= i <= |s| as uint64
+    invariant ValidVal(VArray(ar[..i]))
+    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
+    invariant valToKeySeq(VArray(ar[..i])) == s[..i]
+    invariant SizeOfV(VArray(ar[..i])) <= 8 + (8 + CapKeySize()) as int * i as int
+    {
+      ar[i] := VByteArray(s[i]);
+
+      lemma_SeqSum_prefix(ar[..i], VByteArray(s[i]));
+      assert s[..i+1][..i] == s[..i];
+      assert ar[..i+1][..i] == ar[..i];
+      assert ar[..i+1] == ar[..i] + [ar[i]];
+
+      i := i + 1;
+    }
+    v := VArray(ar[..]);
+
+    assert ar[..i] == ar[..];
+  }
+
+  method messageSeqToVal(s: seq<Message>) returns (v : V)
+  requires |s| <= CapBucketNumEntries() as int
+  requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
+  requires forall i | 0 <= i < |s| :: MessageSize(s[i]) <= CapValueSize() as int
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, GArray(GByteArray))
+  ensures SizeOfV(v) <= 8 + (8 + CapValueSize()) as int * CapBucketNumEntries() as int
+  ensures |v.a| == |s|
+  ensures valToMessageSeq(v) == s
+  {
+    var ar := new V[|s| as uint64];
+    var i: uint64 := 0;
+    while i < |s| as uint64
+    invariant 0 <= i <= |s| as uint64
+    invariant ValidVal(VArray(ar[..i]))
+    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
+    invariant valToMessageSeq(VArray(ar[..i])) == s[..i]
+    invariant SizeOfV(VArray(ar[..i])) <= 8 + (8 + CapValueSize()) as int * i as int
+    {
+      ar[i] := VByteArray(s[i].value);
+
+      lemma_SeqSum_prefix(ar[..i], VByteArray(s[i].value));
+      assert s[..i+1][..i] == s[..i];
+      assert ar[..i+1][..i] == ar[..i];
+      assert ar[..i+1] == ar[..i] + [ar[i]];
+
+      i := i + 1;
+    }
+    v := VArray(ar[..]);
+
+    assert ar[..i] == ar[..];
+  }
+
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
-  method {:fuel ValInGrammar,2} {:fuel SizeOfV,3} bucketToVal(bucket: SSTable.SSTable, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
+  method {:fuel SizeOfV,3}
+  bucketToVal(bucket: KMTable.KMTable, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
-  requires SSTable.WFSSTableMap(bucket)
-  requires WFBucketAt(SSTable.I(bucket), pivotTable, i)
+  requires KMTable.WF(bucket)
+  requires WFBucketAt(KMTable.I(bucket), pivotTable, i)
   requires CappedBucket(bucket)
   requires 0 <= i <= |pivotTable|
   ensures ValInGrammar(v, BucketGrammar())
-  ensures SizeOfV(v) <= 8 + CapBucketNumEntries() as int * 8 + 8 + CapBucketSize() as int
+  ensures SizeOfV(v) <= (8 + (8+CapKeySize() as int) * CapBucketNumEntries() as int) + (8 + (8+CapValueSize() as int) * CapBucketNumEntries() as int)
   ensures ValidVal(v)
   ensures valToBucket(v, pivotTable, i) == Some(bucket)
   {
-    var vstarts := uint64ArrayToVal(bucket.starts);
-    return VTuple([
-      vstarts,
-      VByteArray(bucket.strings)
-    ]);
+    var keys := keySeqToVal(bucket.keys);
+    var values := messageSeqToVal(bucket.values);
+    v := VTuple([keys, values]);
+
+    // FIXME dafny goes nuts with trigger loops here some unknown reason
+    // without these obvious asserts.
+    assert ValInGrammar(v.t[0], BucketGrammar().t[0]);
+    assert ValInGrammar(v.t[1], BucketGrammar().t[1]);
+    assert ValInGrammar(v, BucketGrammar());
   }
 
-  method bucketsToVal(buckets: seq<SSTable.SSTable>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
+  method bucketsToVal(buckets: seq<KMTable.KMTable>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
-  requires forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i])
-  requires forall i | 0 <= i < |buckets| :: WFBucketAt(SSTable.I(buckets[i]), pivotTable, i)
+  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
+  requires forall i | 0 <= i < |buckets| :: WFBucketAt(KMTable.I(buckets[i]), pivotTable, i)
   requires CappedBuckets(buckets)
   requires |buckets| <= CapNumBuckets() as int
   requires |buckets| <= |pivotTable| + 1
   ensures ValidVal(v)
-  ensures SizeOfV(v) <= 8 + |buckets| * (8 + CapBucketNumEntries() as int * 8 + 8 + CapBucketSize() as int)
+  ensures SizeOfV(v) <= 8 + |buckets| * ((8 + (8+CapKeySize()) as int * CapBucketNumEntries() as int) + (8 + (8+CapValueSize()) as int * CapBucketNumEntries() as int))
   ensures ValInGrammar(v, GArray(BucketGrammar()))
   ensures |v.a| == |buckets|
   ensures valToBuckets(v.a, pivotTable) == Some(buckets)
@@ -652,7 +754,7 @@ module Marshalling {
   requires CappedNode(node)
   ensures ValidVal(v)
   ensures SizeOfV(v) <= 
-      8 + CapNumBuckets() as int * (8 + CapBucketNumEntries() as int * 8 + 8 + CapBucketSize() as int) +
+      8 + CapNumBuckets() as int * ((8 + (8+CapKeySize()) as int * CapBucketNumEntries() as int) + (8 + (8+CapValueSize()) as int * CapBucketNumEntries() as int)) +
       8 + (CapNumBuckets() as int - 1) * (8 + CapKeySize() as int) +
       8 + CapNumBuckets() as int * 8
   ensures ValInGrammar(v, PivotNodeGrammar())

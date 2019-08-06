@@ -1,8 +1,8 @@
 include "PivotBetreeSpec.dfy"
 include "Message.dfy"
 include "../lib/Option.dfy"
-include "SSTable.dfy"
 include "BetreeBlockCache.dfy"
+include "KMTable.dfy"
 include "../lib/tttree.dfy"
 
 module {:extern} ImplState {
@@ -16,7 +16,7 @@ module {:extern} ImplState {
   import Pivots = PivotsLib
   import BC = BetreeGraphBlockCache
   import M = BetreeBlockCache
-  import SSTable = SSTable
+  import KMTable = KMTable
   import D = AsyncSectorDisk
   import opened BucketsLib
 
@@ -28,7 +28,7 @@ module {:extern} ImplState {
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<Reference>>,
-      buckets: seq<SSTable.SSTable>
+      buckets: seq<KMTable.KMTable>
     )
   datatype Variables =
     | Ready(
@@ -46,14 +46,14 @@ module {:extern} ImplState {
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: BC.IndirectionTable)
 
-  predicate WFBuckets(buckets: seq<SSTable.SSTable>)
+  predicate WFBuckets(buckets: seq<KMTable.KMTable>)
   {
-    && (forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i]))
+    && (forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i]))
   }
   predicate WFNode(node: Node)
   {
     && WFBuckets(node.buckets)
-    && WFBucketList(SSTable.ISeq(node.buckets), node.pivotTable)
+    && WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
   }
   predicate WFCache(cache: map<Reference, Node>)
   {
@@ -82,14 +82,14 @@ module {:extern} ImplState {
   function INode(node: Node) : BT.G.Node
   requires WFBuckets(node.buckets)
   {
-    BT.G.Node(node.pivotTable, node.children, SSTable.ISeq(node.buckets))
+    BT.G.Node(node.pivotTable, node.children, KMTable.ISeq(node.buckets))
   }
   function INodeRoot(node: Node, rootBucket: TreeMap) : BT.G.Node
   requires WFNode(node)
   requires TTT.TTTree(rootBucket)
   {
     BT.G.Node(node.pivotTable, node.children,
-      BucketListFlush(TTT.I(rootBucket), SSTable.ISeq(node.buckets), node.pivotTable))
+      BucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable))
   }
   function INodeForRef(cache: map<Reference, Node>, ref: Reference, rootBucket: TreeMap) : BT.G.Node
   requires WFCache(cache)

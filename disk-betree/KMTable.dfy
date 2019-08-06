@@ -887,4 +887,68 @@ module KMTable {
 
     return true;
   }
+
+  /////////////////////////
+  //// Misc utils
+  /////////////////////////
+
+  function method {:opaque} Empty() : (kmt : KMTable)
+  ensures WF(kmt)
+  ensures I(kmt) == map[]
+  {
+    KMTable([],[])
+  }
+
+  predicate method {:opaque} IsEmpty(kmt: KMTable)
+  requires WF(kmt)
+  ensures IsEmpty(kmt) == (I(kmt) == map[])
+  {
+    |kmt.keys| == 0
+  }
+
+  lemma Islice(kmts: seq<KMTable>, a: int, b: int)
+  requires 0 <= a <= b <= |kmts|
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures forall i | 0 <= i < |kmts[a..b]| :: WF(kmts[a..b][i])
+  ensures ISeq(kmts[a..b]) == ISeq(kmts)[a..b]
+
+  lemma Isuffix(kmts: seq<KMTable>, a: int)
+  requires 0 <= a <= |kmts|
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures forall i | 0 <= i < |kmts[a..]| :: WF(kmts[a..][i])
+  ensures ISeq(kmts[a..]) == ISeq(kmts)[a..]
+
+  lemma IPopFront(kmt: KMTable, kmts: seq<KMTable>)
+  requires WF(kmt)
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures ISeq([kmt] + kmts) == [I(kmt)] + ISeq(kmts)
+
+  lemma Ireplace1with2(kmts: seq<KMTable>, kmt1: KMTable, kmt2: KMTable, slot: int)
+  requires WF(kmt1)
+  requires WF(kmt2)
+  requires 0 <= slot < |kmts|
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
+  ensures ISeq(replace1with2(kmts, kmt1, kmt2, slot)) == replace1with2(ISeq(kmts), I(kmt1), I(kmt2), slot)
+
+  method KMTableOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (kmt: KMTable)
+  requires SortedSeqForMap(s, m)
+  requires |s| < 0x1_0000_0000_0000_0000
+  ensures WF(kmt)
+  ensures I(kmt) == m
+  {
+    var keys := new Key[|s| as uint64];
+    var defaultMessage := IdentityMessage();
+    var values := new Message[|s| as uint64]((i) => defaultMessage);
+
+    var i := 0;
+    while i < |s| as uint64
+    {
+      keys[i] := s[i].0;
+      values[i] := s[i].1;
+      i := i + 1;
+    }
+
+    kmt := KMTable(keys[..], values[..]);
+  }
 }

@@ -15,7 +15,7 @@ module {:extern} Impl refines Main {
   import Messages = ValueMessage
   import Pivots = PivotsLib
   import opened BucketsLib
-  import SSTable = SSTable
+  import KMTable = KMTable
   import LBAType = LBAType`Internal
   import opened Sets
   import IS = ImplState
@@ -506,7 +506,7 @@ module {:extern} Impl refines Main {
       ghost var lookup := [BT.G.ReadOp(BT.G.Root(), IS.INodeRoot(s.cache[BT.G.Root()], s.rootBucket))];
 
       ghost var node := s.cache[BT.G.Root()];
-      GetBucketListFlushEqMerge(TTT.I(s.rootBucket), SSTable.ISeq(node.buckets), node.pivotTable, key);
+      GetBucketListFlushEqMerge(TTT.I(s.rootBucket), KMTable.ISeq(node.buckets), node.pivotTable, key);
       assert BT.NodeLookup(IS.INodeRoot(node, s.rootBucket), key) == TTT.I(s.rootBucket)[key];
 
       assert BT.InterpretLookup(lookup, key) == TTT.I(s.rootBucket)[key]
@@ -635,7 +635,7 @@ module {:extern} Impl refines Main {
           lookup := AugmentLookup(lookup, ref, inode, key, IS.ICache(s.cache, s.rootBucket), s.ephemeralIndirectionTable.graph); // ghost-y
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
-          var sstMsg := SSTable.Query(node.buckets[r], key);
+          var sstMsg := KMTable.Query(node.buckets[r], key);
           var lookupMsg := if sstMsg.Some? then sstMsg.value else Messages.IdentityMessage();
           msg := Messages.Merge(msg, lookupMsg);
 
@@ -790,7 +790,7 @@ module {:extern} Impl refines Main {
         print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
-        var newroot := IS.Node([], Some([newref]), [SSTable.Empty()]);
+        var newroot := IS.Node([], Some([newref]), [KMTable.Empty()]);
 
         assert BT.G.Root() in s.cache;
         assert BT.G.Root() in IS.ICache(s.cache, s.rootBucket);
@@ -809,15 +809,15 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method GetNewPivots(bucket: SSTable.SSTable)
+  method GetNewPivots(bucket: KMTable.KMTable)
   returns (pivots : seq<MS.Key>)
-  requires SSTable.WFSSTableMap(bucket)
+  requires KMTable.WF(bucket)
   ensures Pivots.WFPivots(pivots)
   {
     // try to split the keys evenly, but don't let any bucket
     // be larger than the cap
 
-    var n := SSTable.Size(bucket) as int;
+    var n := |bucket.keys|;
 
     var m := (n + Marshalling.CapNumBuckets() as int) / Marshalling.CapNumBuckets() as int;
     if m > 500 {
@@ -828,18 +828,17 @@ module {:extern} Impl refines Main {
     }
 
     MS.Keyspace.reveal_IsStrictlySorted();
-    SSTable.reveal_KeysStrictlySorted();
     var r := [];
     var i := m;
     while i < n
     invariant MS.Keyspace.IsStrictlySorted(r);
-    invariant |r| > 0 ==> 0 <= i-m < n && r[|r|-1] == SSTable.KeyAtIndex(bucket, i - m);
+    invariant |r| > 0 ==> 0 <= i-m < n && r[|r|-1] == bucket.keys[i - m];
     invariant |r| > 0 ==> MS.Keyspace.NotMinimum(r[0]);
     invariant i > 0
     {
-      MS.Keyspace.IsNotMinimum(SSTable.KeyAtIndex(bucket, 0), SSTable.KeyAtIndex(bucket, i));
+      MS.Keyspace.IsNotMinimum(bucket.keys[0], bucket.keys[i]);
 
-      r := r + [SSTable.KeyAtIndex(bucket, i)];
+      r := r + [bucket.keys[i]];
       i := i + m;
     }
 
@@ -857,11 +856,11 @@ module {:extern} Impl refines Main {
     var cLeft := Pivots.ComputeCutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
-    var splitBucket := SSTable.SplitLeft(node.buckets[cLeft], pivot);
+    var splitBucket := KMTable.SplitLeft(node.buckets[cLeft], pivot);
     var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
     Pivots.WFSlice(node.pivotTable, 0, cLeft);
-    SSTable.Islice(node.buckets, 0, cLeft);
-    WFSplitBucketListLeft(SSTable.ISeq(node.buckets), node.pivotTable, cLeft, pivot);
+    KMTable.Islice(node.buckets, 0, cLeft);
+    WFSplitBucketListLeft(KMTable.ISeq(node.buckets), node.pivotTable, cLeft, pivot);
 
     node' := IS.Node(leftPivots, leftChildren, leftBuckets);
   }
@@ -877,12 +876,12 @@ module {:extern} Impl refines Main {
     var cRight := Pivots.ComputeCutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
-    var splitBucket := SSTable.SplitRight(node.buckets[cRight], pivot);
+    var splitBucket := KMTable.SplitRight(node.buckets[cRight], pivot);
     var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
     Pivots.WFSuffix(node.pivotTable, cRight);
-    SSTable.Isuffix(node.buckets, cRight + 1);
-    SSTable.IPopFront(splitBucket, node.buckets[cRight + 1 ..]);
-    WFSplitBucketListRight(SSTable.ISeq(node.buckets), node.pivotTable, cRight, pivot);
+    KMTable.Isuffix(node.buckets, cRight + 1);
+    KMTable.IPopFront(splitBucket, node.buckets[cRight + 1 ..]);
+    WFSplitBucketListRight(KMTable.ISeq(node.buckets), node.pivotTable, cRight, pivot);
 
     node' := IS.Node(rightPivots, rightChildren, rightBuckets);
   }
@@ -956,8 +955,8 @@ module {:extern} Impl refines Main {
   {
     Pivots.WFSlice(child.pivotTable, 0, num_children_left - 1);
     Pivots.WFSuffix(child.pivotTable, num_children_left);
-    SSTable.Islice(child.buckets, 0, num_children_left);
-    SSTable.Isuffix(child.buckets, num_children_left);
+    KMTable.Islice(child.buckets, 0, num_children_left);
+    KMTable.Isuffix(child.buckets, num_children_left);
   }
 
   // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
@@ -984,9 +983,9 @@ module {:extern} Impl refines Main {
     res := IS.Node(
       Sequences.insert(fused_parent.pivotTable, pivot, slot_idx),
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
-      replace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx)
+      replace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx)
     );
-    SSTable.Ireplace1with2(fused_parent.buckets, SSTable.Empty(), SSTable.Empty(), slot_idx);
+    KMTable.Ireplace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx);
   }
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -1061,7 +1060,7 @@ module {:extern} Impl refines Main {
     var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
     var child := CutoffNode(fused_child, lbound, ubound);
 
-    if !SSTable.IsEmpty(fused_parent.buckets[slot]) {
+    if !KMTable.IsEmpty(fused_parent.buckets[slot]) {
       s' := s;
       assert noop(k, s, s');
       print "giving up; trying to split but parent has non-empty buffer\n";
@@ -1179,27 +1178,22 @@ module {:extern} Impl refines Main {
     assert IS.INode(child) == IS.ICache(s.cache, s.rootBucket)[childref];
     assert BT.WFNode(IS.INode(child));
 
-    if (!(
-        && |node.buckets[slot].strings| < 0x800_0000_0000_0000
-        && |node.buckets[slot].starts| < 0x800_0000_0000_0000
-        && (forall i | 0 <= i < |child.buckets| :: |child.buckets[i].strings| < 0x800_0000_0000_0000)
-        && (forall i | 0 <= i < |child.buckets| :: |child.buckets[i].starts| < 0x800_0000_0000_0000)
-    )) {
+    if (false) {
       s' := s;
       assert noop(k, s, s');
       print "giving up; data is 2 big\n";
       return;
     }
 
-    forall i, key | 0 <= i < |child.buckets| && key in SSTable.I(child.buckets[i]) ensures Pivots.Route(child.pivotTable, key) == i
+    forall i, key | 0 <= i < |child.buckets| && key in KMTable.I(child.buckets[i]) ensures Pivots.Route(child.pivotTable, key) == i
     {
       //assert BT.NodeHasWFBucketAt(IS.INode(child), i);
     }
 
-    var newbuckets := SSTable.DoFlush(node.buckets[slot], child.buckets, child.pivotTable);
+    var newbuckets := KMTable.Flush(node.buckets[slot], child.buckets, child.pivotTable);
     var newchild := child.(buckets := newbuckets);
 
-    WFBucketListFlush(SSTable.I(node.buckets[slot]), SSTable.ISeq(child.buckets), child.pivotTable);
+    WFBucketListFlush(KMTable.I(node.buckets[slot]), KMTable.ISeq(child.buckets), child.pivotTable);
 
     assert BT.G.Successors(IS.INode(newchild)) == BT.G.Successors(IS.INode(child));
     assert BC.BlockPointsToValidReferences(IS.INode(newchild), s.ephemeralIndirectionTable.graph);
@@ -1215,7 +1209,7 @@ module {:extern} Impl refines Main {
     var newparent := IS.Node(
         node.pivotTable,
         Some(node.children.value[slot := newchildref.value]),
-        node.buckets[slot := SSTable.Empty()]
+        node.buckets[slot := KMTable.Empty()]
       );
 
     assert BC.BlockPointsToValidReferences(IS.INode(node), s1.ephemeralIndirectionTable.graph);
@@ -1279,18 +1273,14 @@ module {:extern} Impl refines Main {
       } else {
         // leaf case
 
-        if (!(
-          && |node.buckets| < 0x100
-          && forall i | 0 <= i < |node.buckets| :: |node.buckets[i].strings| < 0x10_0000_0000_0000
-          && forall i | 0 <= i < |node.buckets| :: |node.buckets[i].starts| < 0x10_0000_0000_0000
-        )) {
+        if (false) {
           s' := s;
           assert noop(k, s, s');
           print "giving up; stuff too big to call Join\n";
           return;
         }
 
-        forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in SSTable.I(node.buckets[i]) && key2 in SSTable.I(node.buckets[j])
+        forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in KMTable.I(node.buckets[i]) && key2 in KMTable.I(node.buckets[j])
         ensures MS.Keyspace.lt(key1, key2)
         {
           //assert BT.NodeHasWFBucketAt(IS.INode(node), i);
@@ -1300,20 +1290,17 @@ module {:extern} Impl refines Main {
           MS.Keyspace.IsStrictlySortedImpliesLte(node.pivotTable, i, j-1);
         }
 
-        var joined := SSTable.DoJoin(node.buckets);
+        var joined := KMTable.Join(node.buckets, node.pivotTable);
         var pivots := GetNewPivots(joined);
 
-        if (!(
-          && |joined.strings| < 0x800_0000_0000_0000
-          && |joined.starts| < 0x800_0000_0000_0000
-        )) {
+        if (false) {
           s' := s;
           assert noop(k, s, s');
           print "giving up; stuff too big to call Split\n";
           return;
         }
 
-        var buckets' := SSTable.SplitOnPivots(joined, pivots);
+        var buckets' := KMTable.SplitOnPivots(joined, pivots);
         var newnode := IS.Node(pivots, None, buckets');
 
         s' := write(k, s, ref, newnode);
@@ -1371,14 +1358,9 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    var sst := SSTable.SSTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
+    var sst := KMTable.KMTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
 
-    if (!(
-      && |sst.strings| < 0x800_0000_0000_0000
-      && |sst.starts| < 0x800_0000_0000_0000
-      && forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].strings| < 0x800_0000_0000_0000
-      && forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].starts| < 0x800_0000_0000_0000
-    )) {
+    if (false) {
       s' := s;
       assert noop(k, s, s');
       print "giving up; sst/oldroot.buckets too big\n";
@@ -1386,20 +1368,20 @@ module {:extern} Impl refines Main {
     }
 
     WFNodeRootImpliesWFRootBase(oldroot, s.rootBucket);
-    forall i, key | 0 <= i < |oldroot.buckets| && key in SSTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
+    forall i, key | 0 <= i < |oldroot.buckets| && key in KMTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
     {
       //assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
     }
 
-    var newbuckets := SSTable.DoFlush(sst, oldroot.buckets, oldroot.pivotTable);
-    WFBucketListFlush(SSTable.I(sst), SSTable.ISeq(oldroot.buckets), oldroot.pivotTable);
+    var newbuckets := KMTable.Flush(sst, oldroot.buckets, oldroot.pivotTable);
+    WFBucketListFlush(KMTable.I(sst), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);
 
     s' := s.(rootBucket := TTT.EmptyTree)
         .(cache := s.cache[BT.G.Root() := newroot]);
 
-    BucketListFlushParentEmpty(SSTable.ISeq(newbuckets), oldroot.pivotTable);
+    BucketListFlushParentEmpty(KMTable.ISeq(newbuckets), oldroot.pivotTable);
     assert IS.INodeRoot(oldroot, s.rootBucket) == IS.INodeRoot(newroot, TTT.EmptyTree);
     assert IS.ICache(s.cache, s.rootBucket) == IS.ICache(s'.cache, TTT.EmptyTree);
 
