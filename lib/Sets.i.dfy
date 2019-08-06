@@ -10,7 +10,37 @@ module Sets {
     assert b == a + (b - a);
   }
 
+  lemma {:opaque} SetInclusionAndEqualCardinalityImpliesSetEquality(a: set<uint64>, b: set<uint64>)
+    requires a <= b
+    requires |a| == |b|
+    ensures a == b
+  {
+    assert b == a + (b - a);
+  }
+
   // NOTE: these are horribly slow
+
+  method SetToSeq<T(==)>(s: set<T>) returns (run: seq<T>)
+  ensures |run| == |s|
+  ensures (set e | e in run) == s
+  {
+    if |s| == 0 {
+      return [];
+    } else {
+      var x :| x in s;
+      var lset := set t | t in s && t != x;
+      var l := SetToSeq(lset);
+      run := l + [x];
+
+      assert lset !! {x};
+      assert lset + {x} == s;
+
+      assert |run| == |l| + 1
+        == |lset| + |{x}|
+        == |lset + {x}|
+        == |s|;
+    }
+  }
 
   method minimum(s: set<uint64>) returns (o: uint64)
   requires |s| >= 1

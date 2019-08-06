@@ -1,7 +1,8 @@
 include "PivotBetreeSpec.i.dfy"
 include "Message.i.dfy"
 include "../lib/Option.s.dfy"
-include "SSTable.i.dfy"
+include "KMTable.i.dfy"
+include "../lib/MutableMap.i.dfy"
 include "BetreeBlockCache.i.dfy"
 include "../lib/tttree.i.dfy"
 
@@ -16,25 +17,31 @@ module {:extern} ImplState {
   import Pivots = PivotsLib
   import BC = BetreeGraphBlockCache
   import M = BetreeBlockCache
-  import SSTable = SSTable
+  import KMTable = KMTable
   import D = AsyncSectorDisk
   import opened BucketsLib
+
+  import MM = MutableMap
+  import ReferenceType`Internal
 
   type Reference = BT.G.Reference
   type Key = MS.Key
   type Message = Messages.Message
   type TreeMap = TTT.Tree<Message>
 
+  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.LBA>, seq<Reference>)>
+
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<Reference>>,
-      buckets: seq<SSTable.SSTable>
+      buckets: seq<KMTable.KMTable>
     )
   datatype Variables =
     | Ready(
-        persistentIndirectionTable: BC.IndirectionTable,
-        frozenIndirectionTable: Option<BC.IndirectionTable>,
-        ephemeralIndirectionTable: BC.IndirectionTable,
+        persistentIndirectionTable: MutIndirectionTable, // this lets us keep track of available LBAs
+                                                         // TODO replace with something that only tracks LBAs
+        frozenIndirectionTable: Option<MutIndirectionTable>,
+        ephemeralIndirectionTable: MutIndirectionTable,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
@@ -44,16 +51,26 @@ module {:extern} ImplState {
     | Unready(outstandingIndirectionTableRead: Option<D.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
-    | SectorIndirectionTable(indirectionTable: BC.IndirectionTable)
+    | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
 
-  predicate WFBuckets(buckets: seq<SSTable.SSTable>)
+  function VariablesReadSet(s: Variables): set<object>
   {
-    && (forall i | 0 <= i < |buckets| :: SSTable.WFSSTableMap(buckets[i]))
+    if s.Ready? then
+      s.persistentIndirectionTable.Repr +
+      s.ephemeralIndirectionTable.Repr +
+      (if s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {})
+    else
+      {}
+  }
+  predicate WFBuckets(buckets: seq<KMTable.KMTable>)
+  {
+    && (forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i]))
+    && (forall i | 0 <= i < |buckets| :: KMTable.Bounded(buckets[i]))
   }
   predicate WFNode(node: Node)
   {
     && WFBuckets(node.buckets)
-    && WFBucketList(SSTable.ISeq(node.buckets), node.pivotTable)
+    && WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
   }
   predicate WFCache(cache: map<Reference, Node>)
   {
@@ -66,30 +83,38 @@ module {:extern} ImplState {
         && WFCache(cache)
         && TTT.TTTree(rootBucket)
         && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
+        && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
         && (rootBucket != TTT.EmptyTree ==> BT.G.Root() in cache)
+        && persistentIndirectionTable.Inv()
+        && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
+        && ephemeralIndirectionTable.Inv()
       )
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
   predicate WFSector(sector: Sector)
+    reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   {
     match sector {
       case SectorBlock(node) => WFNode(node)
-      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(indirectionTable)
+      case SectorIndirectionTable(indirectionTable) => (
+        && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+        && indirectionTable.Inv()
+      )
     }
   }
 
   function INode(node: Node) : BT.G.Node
   requires WFBuckets(node.buckets)
   {
-    BT.G.Node(node.pivotTable, node.children, SSTable.ISeq(node.buckets))
+    BT.G.Node(node.pivotTable, node.children, KMTable.ISeq(node.buckets))
   }
   function INodeRoot(node: Node, rootBucket: TreeMap) : BT.G.Node
   requires WFNode(node)
   requires TTT.TTTree(rootBucket)
   {
     BT.G.Node(node.pivotTable, node.children,
-      BucketListFlush(TTT.I(rootBucket), SSTable.ISeq(node.buckets), node.pivotTable))
+      BucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable))
   }
   function INodeForRef(cache: map<Reference, Node>, ref: Reference, rootBucket: TreeMap) : BT.G.Node
   requires WFCache(cache)
@@ -107,21 +132,38 @@ module {:extern} ImplState {
   {
     map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
+  function IIndirectionTable(table: MutIndirectionTable) : (result: BC.IndirectionTable)
+    reads table.Repr
+  {
+    var lbas := map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value;
+    var graph := map k | k in table.Contents :: table.Contents[k].1;
+    BC.IndirectionTable(lbas, graph)
+  }
+  function IIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<BC.IndirectionTable>)
+    reads if table.Some? then table.value.Repr else {}
+  {
+    if table.Some? then
+      Some(IIndirectionTable(table.value))
+    else
+      None
+  }
   function IVars(vars: Variables) : M.Variables
   requires WFVars(vars)
+  reads VariablesReadSet(vars)
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) =>
-        BC.Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache, rootBucket))
+        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache, rootBucket))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }
   function ISector(sector: Sector) : BC.Sector
   requires WFSector(sector)
+  reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   {
     match sector {
       case SectorBlock(node) => BC.SectorBlock(INode(node))
-      case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(indirectionTable)
+      case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 
@@ -134,5 +176,13 @@ module {:extern} ImplState {
       s := Unready(None, map[]);
     }
   }
-  function ImplHeapSet(hs: ImplHeapState) : set<object> { {hs} }
+  function ImplHeapSet(hs: ImplHeapState) : set<object> {
+    {hs} +
+    if hs.s.Ready? then
+      hs.s.persistentIndirectionTable.Repr +
+      hs.s.ephemeralIndirectionTable.Repr +
+      (if hs.s.frozenIndirectionTable.Some? then hs.s.frozenIndirectionTable.value.Repr else {})
+    else
+      {}
+  }
 }

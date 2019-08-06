@@ -33,7 +33,7 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   function IBytes(sector: seq<byte>) : BBC.Sector
   requires ValidBytes(sector)
   {
-    IS.ISector(Marshalling.parseSector(sector).value)
+    Marshalling.parseSector(sector).value
   }
 
   function IBytesOpt(sector: seq<byte>) : Option<BBC.Sector>

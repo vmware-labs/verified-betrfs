@@ -13,18 +13,27 @@ module {:extern} MkfsImpl {
   import ReferenceType`Internal
   import LBAType`Internal
   import ValueWithDefault`Internal
-  import SSTable
   import IS = ImplState
 
   type LBA = LBAType.LBA
 
-  function method InitDisk() : map<LBA, IS.Sector> {
-    map[
+  method InitDisk() returns (result: map<LBA, IS.Sector>)
+  ensures forall k | k in result :: IS.WFSector(result[k])
+  ensures forall l | l in result :: result[l].SectorBlock? ==> BT.WFNode(IS.INode(result[l].block))
+  ensures forall l | l in result :: result[l].SectorBlock? ==> Marshalling.CappedNode(result[l].block)
+  ensures 0 in result && result[0].SectorIndirectionTable?
+  ensures LBAType.BlockSize() in result && result[LBAType.BlockSize()].SectorBlock?
+  {
+    var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number
+    var _ := sectorIndirectionTable.Insert(0, (Some(LBAType.BlockSize()), []));
+    assert IS.IIndirectionTable(sectorIndirectionTable) == BC.IndirectionTable(map[0 := LBAType.BlockSize()], map[0 := []]);
+    result := map[
       // Map ref 0 to lba 1
-      0 := IS.SectorIndirectionTable(BC.IndirectionTable(map[0 := LBAType.BlockSize()], map[0 := []])),
+      0 := IS.SectorIndirectionTable(sectorIndirectionTable),
       // Put the root at lba 1
-      LBAType.BlockSize() := IS.SectorBlock(IS.Node([], None, [SSTable.Empty()]))
-    ]
+      LBAType.BlockSize() := IS.SectorBlock(IS.Node([], None, [KMTable.Empty()]))
+    ];
+    assume forall k | k in result :: IS.WFSector(result[k]);
   }
 
   // TODO spec out that the data returned by this function
@@ -35,12 +44,12 @@ module {:extern} MkfsImpl {
   {
     var d := InitDisk();
 
-    SSTable.reveal_Empty();
-
     LBAType.reveal_ValidAddr();
+    assert d[0].SectorIndirectionTable?;
     var b0 := Marshalling.MarshallSector(d[0]);
     if (b0 == null) { return map[]; }
 
+    assert d[LBAType.BlockSize()].SectorBlock?;
     var b1 := Marshalling.MarshallSector(d[LBAType.BlockSize()]);
     if (b1 == null) { return map[]; }
 

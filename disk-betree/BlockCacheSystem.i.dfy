@@ -508,7 +508,7 @@ abstract module BlockCacheSystem {
 
     requires M.WFIndirectionTable(indirectionTable)
     requires WFIndirectionTableWrtDiskQueue(indirectionTable, s.disk)
-    requires indirectionTable' == M.AssignRefToLBA(indirectionTable, ref, dop.reqWrite.lba)
+    requires indirectionTable' == M.assignRefToLBA(indirectionTable, ref, dop.reqWrite.lba)
     requires M.IndirectionTableCacheConsistent(indirectionTable, s.machine.cache)
     requires ref !in indirectionTable.lbas
     requires dop.reqWrite.lba !in indirectionTable.lbas.Values
