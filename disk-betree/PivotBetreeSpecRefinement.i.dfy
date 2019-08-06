@@ -1091,20 +1091,6 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma KeyInJoinedBucketsInSomeBucket(buckets: seq<P.G.Bucket>, key: Key)
-  returns (i : int)
-  requires key in JoinBucketList(buckets)
-  ensures 0 <= i < |buckets|
-  ensures key in buckets[i]
-  {
-    assert |buckets| > 0;
-    if key in Last(buckets) {
-      i := |buckets| - 1;
-    } else {
-      i := KeyInJoinedBucketsInSomeBucket(DropLast(buckets), key);
-    }
-  }
-
   lemma IBufferLeafEqJoin(node: PNode)
   requires P.WFNode(node)
   ensures IBufferLeaf(node) == imap key :: M.Merge(BucketGet(JoinBucketList(node.buckets), key), M.DefineDefault())

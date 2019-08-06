@@ -255,7 +255,6 @@ module BucketsLib {
   lemma BucketListFlush'At(parent: Bucket, blist: BucketList, pivots: PivotTable, j: int, i: int)
   requires 0 <= i < j <= |blist|
   requires WFPivots(pivots)
-  requires |blist| == |pivots| + 1
   ensures BucketListFlush'(parent, blist, pivots, j)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
   {
     if j == i + 1 {
@@ -267,7 +266,6 @@ module BucketsLib {
   lemma BucketListFlushAt(parent: Bucket, blist: BucketList, pivots: PivotTable, i: int)
   requires 0 <= i < |blist|
   requires WFPivots(pivots)
-  requires |blist| == |pivots| + 1
   ensures BucketListFlush(parent, blist, pivots)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
   {
     BucketListFlush'At(parent, blist, pivots, |blist|, i);
@@ -296,10 +294,24 @@ module BucketsLib {
     BucketListFlushAt(parent, blist, pivots, i);
   }
 
+  lemma KeyInJoinedBucketsInSomeBucket(buckets: seq<Bucket>, key: Key)
+  returns (i : int)
+  requires key in JoinBucketList(buckets)
+  ensures 0 <= i < |buckets|
+  ensures key in buckets[i]
+  {
+    assert |buckets| > 0;
+    if key in Last(buckets) {
+      i := |buckets| - 1;
+    } else {
+      i := KeyInJoinedBucketsInSomeBucket(DropLast(buckets), key);
+    }
+  }
+
   lemma GetJoinBucketListEq(blist: BucketList, pivots: PivotTable, key: Key)
   requires WFBucketList(blist, pivots)
   ensures BucketGet(JoinBucketList(blist), key) == BucketListGet(blist, pivots, key)
-  /*{
+  {
     if |pivots| == 0 {
       assert BucketGet(blist[Route(pivots, key)], key) == BucketGet(JoinBucketList(blist), key);
     } else {
@@ -337,7 +349,7 @@ module BucketsLib {
         assert BucketGet(blist[Route(pivots, key)], key) == BucketGet(JoinBucketList(blist), key);
       }
     }
-  }*/
+  }
 
   lemma BucketListItemFlushAddParentKey(parent: Bucket, child: Bucket, pivots: PivotTable, key: Key, msg: Message)
   requires WFPivots(pivots)
@@ -396,35 +408,35 @@ module BucketsLib {
   requires WFPivots(pivots)
   requires 0 <= i <= |pivots|
   ensures SplitBucketOnPivots(bucket, pivots)[i] == ClampToSlot(bucket, pivots, i)
-  /*{
+  {
     if i == |pivots| {
     } else {
       var l := map key | key in bucket && lt(key, Last(pivots)) :: bucket[key];
-      P.WFSlice(pivots, 0, |pivots| - 1);
+      WFSlice(pivots, 0, |pivots| - 1);
       SplitBucketOnPivotsAt(l, DropLast(pivots), i);
-      var a := BT.SplitBucketOnPivots(pivots, bucket)[i];
-      var b := map key | key in bucket && P.Route(pivots, key) == i :: bucket[key];
+      var a := SplitBucketOnPivots(bucket, pivots)[i];
+      var b := map key | key in bucket && Route(pivots, key) == i :: bucket[key];
 
       forall key | key in a
       ensures key in b
       ensures a[key] == b[key];
       {
         assert key in bucket;
-        P.RouteIs(pivots, key, i);
+        RouteIs(pivots, key, i);
       }
 
       forall key | key in b
       ensures key in a
       {
         //assert key in l;
-        P.RouteIs(DropLast(pivots), key, i);
-        //assert key in (map key | key in l && P.Route(DropLast(pivots), key) == i :: l[key]);
-        //assert key in BT.SplitBucketOnPivots(DropLast(pivots), l)[i];
+        RouteIs(DropLast(pivots), key, i);
+        //assert key in (map key | key in l && Route(DropLast(pivots), key) == i :: l[key]);
+        //assert key in SplitBucketOnPivots(l, DropLast(pivots))[i];
       }
 
       assert a == b;
     }
-  }*/
+  }
 
   lemma AddMessagesToBucketsEmpAt(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>, i: int)
   requires WFPivots(pivots)
@@ -433,15 +445,15 @@ module BucketsLib {
   requires forall i | 0 <= i < |emp| :: emp[i] == map[]
   requires forall key | key in bucket :: bucket[key] != IdentityMessage();
   ensures BucketListFlush(bucket, emp, pivots)[i] == map key | key in bucket && Route(pivots, key) == i :: bucket[key]
-  /*{
-    var a := BucketListFlush(pivots, |emp|, emp, bucket)[i];
-    var b := map key | key in bucket && P.Route(pivots, key) == i :: bucket[key];
+  {
+    var a := BucketListFlush(bucket, emp, pivots)[i];
+    var b := map key | key in bucket && Route(pivots, key) == i :: bucket[key];
     forall key | key in a
     ensures key in b
     ensures a[key] == b[key];
     {
-      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(pivots, |emp|, emp, bucket, key);
-      P.RouteIs(pivots, key, i);
+      GetBucketListFlushEqMerge(bucket, emp, pivots, key);
+      RouteIs(pivots, key, i);
 
       //assert BT.BucketLookup(a, key) != IdentityMessage();
       //assert BT.BucketLookup(emp[i], key) == IdentityMessage();
@@ -452,10 +464,10 @@ module BucketsLib {
     forall key | key in b
     ensures key in a
     {
-      PivotBetreeSpecRefinement.AddMessagesToBucketsResult(pivots, |emp|, emp, bucket, key);
+      GetBucketListFlushEqMerge(bucket, emp, pivots, key);
     }
     assert a == b;
-  }*/
+  }
 
   lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: map<Key, Message>, pivots: seq<Key>, emp: seq<map<Key, Message>>)
   requires WFPivots(pivots)
@@ -478,7 +490,17 @@ module BucketsLib {
 
   lemma BucketListFlushParentEmpty(blist: BucketList, pivots: PivotTable)
   requires WFPivots(pivots)
+  requires WFBucketList(blist, pivots)
   ensures BucketListFlush(map[], blist, pivots) == blist
+  {
+    var a := BucketListFlush(map[], blist, pivots);
+    var b := blist;
+    forall i | 0 <= i < |a|
+    ensures a[i] == b[i]
+    {
+      BucketListFlushAt(map[], blist, pivots, i);
+    }
+  }
 
   function emptyList(n: int) : (l : BucketList)
   requires n >= 0
