@@ -72,7 +72,12 @@ module {:extern} ImplState {
   predicate WFVars(vars: Variables)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) => WFCache(cache)
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache) => (
+        && WFCache(cache)
+        && persistentIndirectionTable.Inv()
+        && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
+        && ephemeralIndirectionTable.Inv()
+      )
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
