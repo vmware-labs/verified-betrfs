@@ -874,7 +874,7 @@ module PivotBetreeSpecRefinement {
   ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
   ensures key in bucket ==> P.NodeLookup(node', key) == M.Merge(bucket[key], P.NodeLookup(node, key))
   {
-    GetBucketListFlushEqMerge(node.buckets, node.pivotTable, bucket, key);
+    GetBucketListFlushEqMerge(bucket, node.buckets, node.pivotTable, key);
   }
 
   lemma {:fuel IOps,2} FlushRefinesOps(flush: P.NodeFlush)
