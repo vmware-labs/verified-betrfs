@@ -5,10 +5,13 @@ include "ByteBetreeBlockCacheSystem.dfy"
 include "Marshalling.dfy"
 
 include "Impl.dfy"
+include "ImplDo.dfy"
 
 module {:extern} MainImpl refines Main { 
 
   import opened Impl
+  import opened ImplDo
+
   import ADM = Impl.ImplADM
 
   type Constants = ImplConstants
