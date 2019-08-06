@@ -7,3 +7,4 @@
 *.includes
 *.output
 .build_info
+/build/
