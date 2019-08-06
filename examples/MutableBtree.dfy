@@ -433,56 +433,56 @@ abstract module MutableBtree {
         } else {
         }
       }
-        // forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].node.allKeys
-        //   ensures Keys.lt(key, pivots[i])
-        // {
-        //   if childidx as int + 1 < i {
-        //     assert children[i] == old(children[i-1]);
-        //   }
-        // }
-        // forall i: int, key | 0 < i < nchildren as int && key in children[i].node.allKeys
-        //   ensures Keys.lt(pivots[i-1], key)
-        // {
-        //   if i < childidx as int {
-        //     assert Keys.lt(pivots[i-1], key);
-        //   } else if i == childidx as int {
-        //     assert Keys.lt(pivots[i-1], key);
-        //   } else if i == childidx as int + 1 {
-        //     assert Keys.lt(pivots[i-1], key);
-        //   } else {
-        //     assert Keys.lt(pivots[i-1], key);
-        //   }
-        // }
-        // assert WF();
+      // forall i: int, key | 0 <= i < (nchildren as int)-1 && key in children[i].node.allKeys
+      //   ensures Keys.lt(key, pivots[i])
+      // {
+      //   if childidx as int + 1 < i {
+      //     assert children[i] == old(children[i-1]);
+      //   }
+      // }
+      // forall i: int, key | 0 < i < nchildren as int && key in children[i].node.allKeys
+      //   ensures Keys.lt(pivots[i-1], key)
+      // {
+      //   if i < childidx as int {
+      //     assert Keys.lt(pivots[i-1], key);
+      //   } else if i == childidx as int {
+      //     assert Keys.lt(pivots[i-1], key);
+      //   } else if i == childidx as int + 1 {
+      //     assert Keys.lt(pivots[i-1], key);
+      //   } else {
+      //     assert Keys.lt(pivots[i-1], key);
+      //   }
+      // }
+      assert WF();
         
-        forall key | key in old(Interpretation())
+      forall key | key in old(Interpretation())
         ensures key in Interpretation() && Interpretation()[key] == old(Interpretation()[key])
-        {
-          var llte: int := Keys.LargestLte(old(pivots[..nchildren-1]), key);
-          assert key in old(children[llte+1].node.Interpretation());
-          assert old(children[llte+1].node.Interpretation()[key]) == old(Interpretation()[key]);
-          if llte < childidx as int {
+      {
+        var llte: int := Keys.LargestLte(old(pivots[..nchildren-1]), key);
+        assert key in old(children[llte+1].node.Interpretation());
+        assert old(children[llte+1].node.Interpretation()[key]) == old(Interpretation()[key]);
+        if llte < childidx as int {
+          assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
+        } else if llte == childidx as int {
+          if Keys.lt(key, pivot) {
             assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
-          } else if llte == childidx as int {
-            if Keys.lt(key, pivot) {
-              assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
-            } else {
-              assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
-            }
           } else {
             assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
           }
+        } else {
+          assert key in Interpretation() && Interpretation()[key] == old(Interpretation()[key]);
         }
-        forall key | key in Interpretation()
+      }
+      forall key | key in Interpretation()
         ensures key in old(Interpretation()) && Interpretation()[key] == old(Interpretation()[key])
-        {
-          var llte: int := Keys.LargestLte(pivots[..nchildren-1], key);
-          if llte < childidx as int {
-          } else if llte == childidx as int {
-          } else if llte == childidx as int + 1 {
-          } else {
-          }
+      {
+        var llte: int := Keys.LargestLte(pivots[..nchildren-1], key);
+        if llte < childidx as int {
+        } else if llte == childidx as int {
+        } else if llte == childidx as int + 1 {
+        } else {
         }
+      }
     }
     
     method Insert(key: Key, value: Value)
