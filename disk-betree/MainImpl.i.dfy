@@ -12,6 +12,19 @@ module {:extern} MainImpl refines Main {
   import opened Impl
   import opened ImplDo
 
+  //  ---   dep graph   ---
+  //
+  //       MainImpl
+  //      /       \
+  //    ImplDo    |
+  //      |  \----+
+  //      |       |
+  //   ImplSync   |
+  //      |       |
+  //      \---+---/
+  //          |
+  //        Impl
+
   import ADM = Impl.ImplADM
 
   type Constants = ImplConstants
