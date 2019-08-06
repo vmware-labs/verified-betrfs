@@ -25,6 +25,10 @@ module KMTable {
     && (forall i | 0 <= i < |kmt.values| :: kmt.values[i] != IdentityMessage())
   }
 
+  predicate Bounded(kmt: KMTable) {
+    |kmt.keys| < 0x8000_0000_0000_0000
+  }
+
   function I(kmt: KMTable) : Bucket
   requires |kmt.keys| == |kmt.values|
   decreases |kmt.keys|
@@ -462,10 +466,11 @@ module KMTable {
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires WFBucketList(ISeq(children), pivots)
-  requires |parent.keys| < 0x8000_0000_0000_0000
+  requires |parent.keys| < 0x4000_0000_0000_0000
   requires |children| < 0x1_0000_0000_0000_0000
-  requires forall i | 0 <= i < |children| :: |children[i].keys| < 0x8000_0000_0000_0000
+  requires forall i | 0 <= i < |children| :: |children[i].keys| < 0x4000_0000_0000_0000
   ensures forall i | 0 <= i < |f| :: WF(f[i])
+  ensures forall i | 0 <= i < |f| :: Bounded(f[i])
   ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
     var maxChildLen: uint64 := 0;
@@ -661,6 +666,7 @@ module KMTable {
   requires WF(kmt)
   requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures WF(left)
+  ensures Bounded(left)
   ensures I(left) == SplitBucketLeft(I(kmt), pivot)
   {
     var idx := ComputeCutoffPoint(kmt, pivot);
@@ -696,6 +702,7 @@ module KMTable {
   requires WF(kmt)
   requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures WF(right)
+  ensures Bounded(right)
   ensures I(right) == SplitBucketRight(I(kmt), pivot)
   {
     var idx := ComputeCutoffPoint(kmt, pivot);
@@ -760,9 +767,10 @@ module KMTable {
   returns (kmt: KMTable)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   requires WFBucketList(ISeq(kmts), pivots)
-  requires |kmts| < 0x1_0000_0000
+  requires |kmts| < 0x8000_0000
   requires forall i | 0 <= i < |kmts| :: |kmts[i].keys| < 0x1_0000_0000
   ensures WF(kmt)
+  ensures Bounded(kmt)
   ensures I(kmt) == JoinBucketList(ISeq(kmts))
   {
     var len: uint64 := 0;
@@ -843,10 +851,11 @@ module KMTable {
   method SplitOnPivots(kmt: KMTable, pivots: seq<Key>)
   returns (kmts : seq<KMTable>)
   requires WF(kmt)
+  requires Bounded(kmt)
   requires P.WFPivots(pivots)
-  requires |kmt.keys| < 0x8000_0000_0000_0000
   requires |pivots| < 0x7fff_ffff_ffff_ffff
   ensures forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
   {
     kmts := Flush(kmt, EmptySeq(|pivots| + 1), pivots);
@@ -892,7 +901,7 @@ module KMTable {
   //// Misc utils
   /////////////////////////
 
-  function method {:opaque} Empty() : (kmt : KMTable)
+  function method Empty() : (kmt : KMTable)
   ensures WF(kmt)
   ensures I(kmt) == map[]
   {
@@ -922,6 +931,11 @@ module KMTable {
   requires WF(kmt)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures ISeq([kmt] + kmts) == [I(kmt)] + ISeq(kmts)
+
+  lemma IPopBack(kmts: seq<KMTable>, kmt: KMTable)
+  requires WF(kmt)
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures ISeq(kmts + [kmt]) == ISeq(kmts) + [I(kmt)]
 
   lemma Ireplace1with2(kmts: seq<KMTable>, kmt1: KMTable, kmt2: KMTable, slot: int)
   requires WF(kmt1)

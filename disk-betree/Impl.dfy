@@ -635,8 +635,19 @@ module {:extern} Impl refines Main {
           lookup := AugmentLookup(lookup, ref, inode, key, IS.ICache(s.cache, s.rootBucket), s.ephemeralIndirectionTable.graph); // ghost-y
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
-          var sstMsg := KMTable.Query(node.buckets[r], key);
-          var lookupMsg := if sstMsg.Some? then sstMsg.value else Messages.IdentityMessage();
+          var bucket := node.buckets[r];
+
+          if |bucket.keys| >= 0x8000_0000_0000_0000 {
+            s' := s;
+            res := None;
+            assert noop(k, s, s');
+            print "giving up; kmgMsg too big\n";
+            return;
+          }
+
+          var kmtMsg := KMTable.Query(bucket, key);
+
+          var lookupMsg := if kmtMsg.Some? then kmtMsg.value else Messages.IdentityMessage();
           msg := Messages.Merge(msg, lookupMsg);
 
           NodeLookupIfNotInRootBucket(s.cache[BT.G.Root()], s.rootBucket, key);
@@ -860,6 +871,7 @@ module {:extern} Impl refines Main {
     var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
     Pivots.WFSlice(node.pivotTable, 0, cLeft);
     KMTable.Islice(node.buckets, 0, cLeft);
+    KMTable.IPopBack(node.buckets[.. cLeft], splitBucket);
     WFSplitBucketListLeft(KMTable.ISeq(node.buckets), node.pivotTable, cLeft, pivot);
 
     node' := IS.Node(leftPivots, leftChildren, leftBuckets);
@@ -1178,7 +1190,11 @@ module {:extern} Impl refines Main {
     assert IS.INode(child) == IS.ICache(s.cache, s.rootBucket)[childref];
     assert BT.WFNode(IS.INode(child));
 
-    if (false) {
+    if (!(
+      && |node.buckets[slot].keys| < 0x4000_0000_0000_0000
+      && |child.buckets| < 0x1_0000_0000_0000_0000
+      && (forall i | 0 <= i < |child.buckets| :: |child.buckets[i].keys| < 0x4000_0000_0000_0000)
+    )) {
       s' := s;
       assert noop(k, s, s');
       print "giving up; data is 2 big\n";
@@ -1273,7 +1289,10 @@ module {:extern} Impl refines Main {
       } else {
         // leaf case
 
-        if (false) {
+        if (!(
+          && |node.buckets| < 0x8000_0000
+          && (forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000)
+        )) {
           s' := s;
           assert noop(k, s, s');
           print "giving up; stuff too big to call Join\n";
@@ -1293,7 +1312,7 @@ module {:extern} Impl refines Main {
         var joined := KMTable.Join(node.buckets, node.pivotTable);
         var pivots := GetNewPivots(joined);
 
-        if (false) {
+        if (!(|pivots| < 0x7fff_ffff_ffff_ffff)) {
           s' := s;
           assert noop(k, s, s');
           print "giving up; stuff too big to call Split\n";
@@ -1303,6 +1322,7 @@ module {:extern} Impl refines Main {
         var buckets' := KMTable.SplitOnPivots(joined, pivots);
         var newnode := IS.Node(pivots, None, buckets');
 
+        WFSplitBucketOnPivots(KMTable.I(joined), pivots);
         s' := write(k, s, ref, newnode);
 
         //assert BT.ValidRepivot(BT.Repivot(ref, node, pivots));
@@ -1358,12 +1378,16 @@ module {:extern} Impl refines Main {
       return;
     }
 
-    var sst := KMTable.KMTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
+    var kmt := KMTable.KMTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
 
-    if (false) {
+    if (!(
+      && |kmt.keys| < 0x4000_0000_0000_0000
+      && |oldroot.buckets| < 0x1_0000_0000_0000_0000
+      && (forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].keys| < 0x4000_0000_0000_0000)
+    )) {
       s' := s;
       assert noop(k, s, s');
-      print "giving up; sst/oldroot.buckets too big\n";
+      print "giving up; kmt/oldroot.buckets too big\n";
       return;
     }
 
@@ -1373,8 +1397,8 @@ module {:extern} Impl refines Main {
       //assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
     }
 
-    var newbuckets := KMTable.Flush(sst, oldroot.buckets, oldroot.pivotTable);
-    WFBucketListFlush(KMTable.I(sst), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
+    var newbuckets := KMTable.Flush(kmt, oldroot.buckets, oldroot.pivotTable);
+    WFBucketListFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);
 

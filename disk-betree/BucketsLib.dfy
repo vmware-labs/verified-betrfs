@@ -103,6 +103,9 @@ module BucketsLib {
     )
   }
 
+  lemma WFSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
+  ensures WFBucketList(SplitBucketOnPivots(bucket, pivots), pivots)
+
   function ClampToSlot(bucket: Bucket, pivots: PivotTable, i: int) : Bucket
   requires WFPivots(pivots)
   {
