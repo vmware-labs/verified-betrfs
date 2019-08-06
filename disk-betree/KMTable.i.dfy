@@ -38,10 +38,13 @@ module KMTable {
     )
   }
 
-  function ISeq(kmts: seq<KMTable>) : (s : seq<Bucket>)
+  function {:opaque} ISeq(kmts: seq<KMTable>) : (s : seq<Bucket>)
   requires forall i | 0 <= i < |kmts| :: |kmts[i].keys| == |kmts[i].values|
   ensures |s| == |kmts|
   ensures forall i | 0 <= i < |kmts| :: s[i] == I(kmts[i])
+  {
+    if |kmts| == 0 then [] else ISeq(DropLast(kmts)) + [I(Last(kmts))]
+  }
 
   function prefix(kmt: KMTable, i: int) : KMTable
   requires 0 <= i <= |kmt.keys|
@@ -54,6 +57,9 @@ module KMTable {
   requires WF(kmt)
   requires 0 <= i <= |kmt.keys|
   ensures WF(prefix(kmt, i))
+  {
+    reveal_IsStrictlySorted();
+  }
 
   lemma IndexOfKey(kmt: KMTable, key: Key) returns (i : int)
   requires |kmt.keys| == |kmt.values|
