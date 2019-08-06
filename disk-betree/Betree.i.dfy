@@ -1,9 +1,9 @@
-include "BlockInterface.dfy"  
+include "BlockInterface.i.dfy"  
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
-include "Graph.dfy"
-include "BetreeSpec.dfy"
+include "Graph.i.dfy"
+include "BetreeSpec.i.dfy"
 
 // jonh: we should rename this. It marries a BetreeSpec to the abstract block interface.
 module Betree {

@@ -1,5 +1,5 @@
-include "PivotsLib.dfy"
-include "Message.dfy"
+include "PivotsLib.i.dfy"
+include "Message.i.dfy"
 include "../lib/Maps.s.dfy"
 
 module BucketsLib {

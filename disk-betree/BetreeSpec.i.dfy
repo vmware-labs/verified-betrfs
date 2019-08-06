@@ -1,9 +1,9 @@
-include "BlockInterface.dfy"  
+include "BlockInterface.i.dfy"  
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
-include "Graph.dfy"
-include "Message.dfy"
+include "Graph.i.dfy"
+include "Message.i.dfy"
 
 module BetreeGraph refines Graph {
   import MS = MapSpec

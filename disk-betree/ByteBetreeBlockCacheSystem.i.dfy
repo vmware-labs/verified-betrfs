@@ -1,6 +1,6 @@
 include "AsyncDiskModel.s.dfy"
-include "ByteBetreeBlockCache.dfy"
-include "BetreeBlockCacheSystem.dfy"
+include "ByteBetreeBlockCache.i.dfy"
+include "BetreeBlockCacheSystem.i.dfy"
 
 module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import M = ByteBetreeBlockCache

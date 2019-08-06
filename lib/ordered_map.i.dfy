@@ -1,4 +1,4 @@
-include "map.dfy"
+include "map.i.dfy"
 include "total_order.s.dfy"
   
 abstract module Ordered_Map refines Map {

@@ -1,7 +1,7 @@
 include "AsyncDiskModel.s.dfy"
-include "BetreeBlockCache.dfy"
-include "Marshalling.dfy"
-include "ImplState.dfy"
+include "BetreeBlockCache.i.dfy"
+include "Marshalling.i.dfy"
+include "ImplState.i.dfy"
 
 module ByteBetreeBlockCache refines AsyncDiskMachine {
   import opened NativeTypes

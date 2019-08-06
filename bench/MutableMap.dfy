@@ -1,4 +1,4 @@
-include "../lib/MutableMap.dfy"
+include "../lib/MutableMap.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 
 module Main {

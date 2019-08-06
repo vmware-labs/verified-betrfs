@@ -1,14 +1,14 @@
-include "BlockInterface.dfy"  
+include "BlockInterface.i.dfy"  
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
-include "Graph.dfy"
+include "Graph.i.dfy"
 include "../lib/Option.s.dfy"
-include "Message.dfy"
-include "BetreeSpec.dfy"
-include "Betree.dfy"
-include "PivotsLib.dfy"
-include "BucketsLib.dfy"
+include "Message.i.dfy"
+include "BetreeSpec.i.dfy"
+include "Betree.i.dfy"
+include "PivotsLib.i.dfy"
+include "BucketsLib.i.dfy"
 
 module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph

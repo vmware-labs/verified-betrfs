@@ -1,7 +1,7 @@
 include "total_order.s.dfy"
-//include "lexical.dfy"
+//include "lexical.i.dfy"
 include "Maps.s.dfy"
-include "mathematics.dfy"
+include "mathematics.i.dfy"
 include "sequences.s.dfy"
 
 abstract module ImmutableBTree {

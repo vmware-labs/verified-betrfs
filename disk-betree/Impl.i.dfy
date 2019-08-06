@@ -1,8 +1,8 @@
 include "Main.s.dfy"
 
-include "../lib/Sets.dfy"
-include "ByteBetreeBlockCacheSystem.dfy"
-include "Marshalling.dfy"
+include "../lib/Sets.i.dfy"
+include "ByteBetreeBlockCacheSystem.i.dfy"
+include "Marshalling.i.dfy"
 
 module {:extern} Impl refines Main { 
   import ADM = ByteBetreeBlockCacheSystem

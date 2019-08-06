@@ -1,4 +1,4 @@
-include "ByteBetreeBlockCacheSystem.dfy"
+include "ByteBetreeBlockCacheSystem.i.dfy"
 
 module ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem {
   import A = ByteBetreeBlockCacheSystem 

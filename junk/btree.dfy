@@ -1,4 +1,4 @@
-include "lexical.dfy"
+include "lexical.i.dfy"
 	
 import Lex = Lexically
 

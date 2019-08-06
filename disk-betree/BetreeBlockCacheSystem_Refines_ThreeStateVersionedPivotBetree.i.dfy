@@ -1,13 +1,13 @@
-include "AsyncSectorDiskModel.dfy"
-include "PivotBetree_Refines_Betree.dfy"
-include "BlockCache.dfy"
+include "AsyncSectorDiskModel.i.dfy"
+include "PivotBetree_Refines_Betree.i.dfy"
+include "BlockCache.i.dfy"
 include "../lib/Maps.s.dfy"
 include "../lib/sequences.s.dfy"
-include "BlockCacheSystem.dfy"
-include "BetreeBlockCache.dfy"
-include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.dfy"
-include "ThreeStateVersionedPivotBetree.dfy"
-include "BetreeBlockCacheSystem.dfy"
+include "BlockCacheSystem.i.dfy"
+include "BetreeBlockCache.i.dfy"
+include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy"
+include "ThreeStateVersionedPivotBetree.i.dfy"
+include "BetreeBlockCacheSystem.i.dfy"
 
 module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
   import opened Maps

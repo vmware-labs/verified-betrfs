@@ -1,9 +1,9 @@
-include "Betree.dfy"
+include "Betree.i.dfy"
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
-include "Graph.dfy"
-include "AsyncSectorDiskModel.dfy"
-include "PivotBetreeSpec.dfy"
+include "Graph.i.dfy"
+include "AsyncSectorDiskModel.i.dfy"
+include "PivotBetreeSpec.i.dfy"
 
 module LBAType {
   import NativeTypes

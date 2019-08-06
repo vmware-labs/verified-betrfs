@@ -1,8 +1,8 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "PivotBetreeSpec.dfy"
-include "Message.dfy"
-include "ImplState.dfy"
-include "SSTable.dfy"
+include "PivotBetreeSpec.i.dfy"
+include "Message.i.dfy"
+include "ImplState.i.dfy"
+include "SSTable.i.dfy"
 include "../lib/Option.s.dfy"
 
 module Marshalling {

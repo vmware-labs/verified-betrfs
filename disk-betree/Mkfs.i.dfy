@@ -1,5 +1,5 @@
-include "Marshalling.dfy"
-include "Impl.dfy"
+include "Marshalling.i.dfy"
+include "Impl.i.dfy"
 
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {

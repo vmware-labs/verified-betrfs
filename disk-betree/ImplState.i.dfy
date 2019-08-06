@@ -1,9 +1,9 @@
-include "PivotBetreeSpec.dfy"
-include "Message.dfy"
+include "PivotBetreeSpec.i.dfy"
+include "Message.i.dfy"
 include "../lib/Option.s.dfy"
-include "SSTable.dfy"
-include "BetreeBlockCache.dfy"
-include "../lib/tttree.dfy"
+include "SSTable.i.dfy"
+include "BetreeBlockCache.i.dfy"
+include "../lib/tttree.i.dfy"
 
 module {:extern} ImplState {
   import opened Options

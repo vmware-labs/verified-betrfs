@@ -1,9 +1,9 @@
-include "BlockCache.dfy"
+include "BlockCache.i.dfy"
 include "../lib/Maps.s.dfy"
 include "../lib/sequences.s.dfy"
-include "AsyncSectorDiskModel.dfy"
-include "PivotBetreeSpec.dfy"
-include "PivotBetree.dfy"
+include "AsyncSectorDiskModel.i.dfy"
+include "PivotBetreeSpec.i.dfy"
+include "PivotBetree.i.dfy"
 
 module BetreeBlockCache refines AsyncSectorDiskMachine {
   import opened Maps

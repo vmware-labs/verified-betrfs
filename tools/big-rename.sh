@@ -13,3 +13,13 @@ cd lib
 ../tools/rename.sh Option.s.dfy
 ../tools/rename.sh total_order.s.dfy
 ../tools/rename.sh sequences.s.dfy
+cd ..
+
+cd disk-betree
+echo *.dfy| tr ' ' '\n'  | grep -v '\.[is].dfy$' | sed 's#^./##' | sed 's#.dfy$#.i.dfy#' | xargs -n 1 ../tools/rename.sh
+cd ..
+
+cd lib
+echo *.dfy| tr ' ' '\n'  | grep -v '\.[is].dfy$' | sed 's#^./##' | sed 's#.dfy$#.i.dfy#' | xargs -n 1 ../tools/rename.sh
+cd ..
+

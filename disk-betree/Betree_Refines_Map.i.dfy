@@ -1,6 +1,6 @@
-include "Betree.dfy"
+include "Betree.i.dfy"
 include "MapSpec.s.dfy"
-include "BetreeInv.dfy"
+include "BetreeInv.i.dfy"
 
 module Betree_Refines_Map {
   import opened DBI = BetreeInv

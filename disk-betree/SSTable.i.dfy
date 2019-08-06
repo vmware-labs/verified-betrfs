@@ -1,9 +1,9 @@
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
 include "../lib/total_order.s.dfy"
-include "Message.dfy"
-include "PivotBetreeSpec.dfy"
-include "PivotBetreeSpecRefinement.dfy"
+include "Message.i.dfy"
+include "PivotBetreeSpec.i.dfy"
+include "PivotBetreeSpecRefinement.i.dfy"
 include "../lib/Marshalling/Native.s.dfy"
 
 module SSTable {

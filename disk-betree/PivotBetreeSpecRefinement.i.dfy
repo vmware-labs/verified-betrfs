@@ -1,15 +1,15 @@
-include "BlockInterface.dfy"  
+include "BlockInterface.i.dfy"  
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
-include "Graph.dfy"
+include "Graph.i.dfy"
 include "../lib/Option.s.dfy"
-include "Message.dfy"
-include "BetreeSpec.dfy"
-include "Betree.dfy"
-include "BetreeInv.dfy"
-include "PivotBetreeSpec.dfy"
-include "PivotsLib.dfy"
+include "Message.i.dfy"
+include "BetreeSpec.i.dfy"
+include "Betree.i.dfy"
+include "BetreeInv.i.dfy"
+include "PivotBetreeSpec.i.dfy"
+include "PivotsLib.i.dfy"
 
 module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal

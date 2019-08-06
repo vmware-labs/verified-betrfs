@@ -1,7 +1,7 @@
 include "../lib/Maps.s.dfy"
 include "../lib/sequences.s.dfy"
 include "MapSpec.s.dfy"
-include "Betree.dfy"
+include "Betree.i.dfy"
   
 module BetreeInv {
   import opened DB = Betree

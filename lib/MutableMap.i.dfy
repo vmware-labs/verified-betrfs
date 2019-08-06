@@ -1,8 +1,8 @@
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
 include "sequences.s.dfy"
-include "Sets.dfy"
-include "SetBijectivity.dfy"
+include "Sets.i.dfy"
+include "SetBijectivity.i.dfy"
 
 module MutableMap {
   import opened NativeTypes

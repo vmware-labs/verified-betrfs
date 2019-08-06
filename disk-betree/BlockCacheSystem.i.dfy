@@ -1,5 +1,5 @@
-include "BlockCache.dfy"
-include "PivotBetreeSpec.dfy"
+include "BlockCache.i.dfy"
+include "PivotBetreeSpec.i.dfy"
 
 abstract module BlockCacheSystem {
   import M : BlockCache

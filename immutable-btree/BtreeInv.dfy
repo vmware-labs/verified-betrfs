@@ -1,6 +1,6 @@
 include "../lib/total_order.s.dfy"
 include "../lib/Maps.s.dfy"
-include "../lib/mathematics.dfy"
+include "../lib/mathematics.i.dfy"
 include "../lib/sequences.s.dfy"
 include "BtreeSpec.dfy"
 
