@@ -2,6 +2,7 @@ include "MapSpec.dfy"
 include "ThreeStateVersionedMap.dfy"
 include "AsyncDiskModel.dfy"
 include "../lib/NativeTypes.dfy"
+include "MainDiskIOHandler.dfy"
 
 module DiskTypes {
   import opened NativeTypes
@@ -11,7 +12,6 @@ module DiskTypes {
 
 abstract module Main {
   import ADM : AsyncDiskModel
-  import D = AsyncDisk
 
   import MS = MapSpec
   import ThreeStateVersionedMap
@@ -19,6 +19,7 @@ abstract module Main {
   import opened Options
   import DiskTypes
   import UI
+  import opened MainDiskIOHandler
 
   type UIOp = ADM.M.UIOp
 
@@ -38,36 +39,6 @@ abstract module Main {
   method InitState() returns (k: Constants, hs: HeapState)
     ensures Inv(k, hs)
 
-  // DiskInterface
-
-  class DiskIOHandler {
-    method {:axiom} write(addr: uint64, bytes: array<byte>) returns (id : D.ReqId)
-    modifies this;
-    requires diskOp() == D.NoDiskOp;
-    ensures diskOp() == D.ReqWriteOp(id, D.ReqWrite(addr, bytes[..]));
-
-    method {:axiom} read(addr: uint64, len: uint64) returns (id: D.ReqId)
-    modifies this
-    requires diskOp() == D.NoDiskOp
-    ensures diskOp() == D.ReqReadOp(id, D.ReqRead(addr, len))
-
-    method {:axiom} getWriteResult() returns (id : D.ReqId)
-    requires diskOp().RespWriteOp?
-    ensures diskOp() == D.RespWriteOp(id, D.RespWrite)
-
-    method {:axiom} getReadResult() returns (id : D.ReqId, bytes: array<byte>)
-    requires diskOp().RespReadOp?
-    ensures diskOp() == D.RespReadOp(id, D.RespRead(bytes[..]))
-
-    function {:axiom} diskOp() : D.DiskOp
-    reads this
-
-    predicate initialized()
-    reads this
-    {
-      diskOp() == D.NoDiskOp
-    }
-  }
 
   // Implementation of the state transitions
 

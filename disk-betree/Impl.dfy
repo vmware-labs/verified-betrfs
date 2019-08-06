@@ -1,12 +1,17 @@
-include "Main.dfy"
-
+include "MapSpec.dfy"
+include "../lib/NativeTypes.dfy"
 include "../lib/Sets.dfy"
+include "../lib/Option.dfy"
 include "ByteBetreeBlockCacheSystem.dfy"
 include "Marshalling.dfy"
+include "MainDiskIOHandler.dfy"
 
-module {:extern} Impl refines Main { 
-  import ADM = ByteBetreeBlockCacheSystem
+module Impl { 
+  import opened Options
+  import opened MainDiskIOHandler
+  import ImplADM = ByteBetreeBlockCacheSystem
 
+  import MS = MapSpec
   import TTT = TwoThreeTree
   import BBC = BetreeBlockCache
   import BC = BetreeGraphBlockCache
@@ -20,35 +25,21 @@ module {:extern} Impl refines Main {
   import opened Sets
   import IS = ImplState
   import SD = AsyncSectorDisk
+  import opened NativeTypes
 
   import opened Maps
   import opened Sequences
+  import UI
 
+  // TODO <deduplicate>
   type Key = MS.Key
   type Message = Messages.Message
 
-  type Constants = ADM.M.Constants
-  type Variables = IS.Variables
+  type ImplConstants = ImplADM.M.Constants
+  type ImplVariables = IS.Variables
 
-  type HeapState = IS.ImplHeapState
-  function HeapSet(hs: HeapState) : set<object> { IS.ImplHeapSet(hs) }
-
-  function Ik(k: Constants) : ADM.M.Constants { k }
-  function I(k: Constants, hs: HeapState) : ADM.M.Variables { IS.IVars(hs.s) }
-
-  predicate Inv(k: Constants, hs: HeapState)
-  {
-    && IS.WFVars(hs.s)
-    && BBC.Inv(k, IS.IVars(hs.s))
-  }
-
-  method InitState() returns (k: Constants, hs: HeapState)
-  {
-    k := BC.Constants();
-    hs := new IS.ImplHeapState();
-
-    BBC.InitImpliesInv(k, IS.IVars(hs.s));
-  }
+  function Ik(k: ImplConstants) : ImplADM.M.Constants { k }
+  // </deduplicate>
 
   predicate WFSector(sector: BC.Sector)
   {
@@ -61,12 +52,12 @@ module {:extern} Impl refines Main {
   method RequestRead(io: DiskIOHandler, addr: uint64)
   returns (id: D.ReqId)
   requires io.initialized()
-  requires ADM.M.ValidAddr(addr)
+  requires ImplADM.M.ValidAddr(addr)
   modifies io
-  ensures ADM.M.ValidDiskOp(io.diskOp())
-  ensures ADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(addr))
+  ensures ImplADM.M.ValidDiskOp(io.diskOp())
+  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(addr))
   {
-    id := io.read(addr, ADM.M.BlockSize() as uint64);
+    id := io.read(addr, ImplADM.M.BlockSize() as uint64);
   }
 
   function ISectorOpt(sector: Option<IS.Sector>) : Option<BC.Sector>
@@ -83,11 +74,11 @@ module {:extern} Impl refines Main {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures ADM.M.IDiskOp(io.diskOp()) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
+  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
   {
     var id1, bytes := io.getReadResult();
     id := id1;
-    if bytes.Length == ADM.M.BlockSize() {
+    if bytes.Length == ImplADM.M.BlockSize() {
       var sectorOpt := Marshalling.ParseSector(bytes);
       sector := sectorOpt;
     } else {
@@ -101,11 +92,11 @@ module {:extern} Impl refines Main {
   requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
   requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
   requires io.initialized()
-  requires ADM.M.ValidAddr(addr)
+  requires ImplADM.M.ValidAddr(addr)
   modifies io
-  ensures ADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> ADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(addr, IS.ISector(sector)))
-  ensures id.None? ==> ADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
+  ensures ImplADM.M.ValidDiskOp(io.diskOp())
+  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(addr, IS.ISector(sector)))
+  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
   {
     var bytes := Marshalling.MarshallSector(sector);
     if (bytes == null) {
@@ -116,49 +107,49 @@ module {:extern} Impl refines Main {
     }
   }
 
-  predicate stepsBetree(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: BT.BetreeStep)
+  predicate stepsBetree(k: ImplConstants, s: ImplVariables, s': ImplVariables, uiop: UI.Op, step: BT.BetreeStep)
   requires IS.WFVars(s)
   requires IS.WFVars(s')
   reads IS.VariablesReadSet(s)
   reads IS.VariablesReadSet(s')
   {
-    ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, D.NoDiskOp, ADM.M.Step(BBC.BetreeMoveStep(step)))
+    ImplADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, D.NoDiskOp, ImplADM.M.Step(BBC.BetreeMoveStep(step)))
   }
 
-  predicate stepsBC(k: Constants, s: Variables, s': Variables, uiop: UI.Op, io: DiskIOHandler, step: BC.Step)
+  predicate stepsBC(k: ImplConstants, s: ImplVariables, s': ImplVariables, uiop: UI.Op, io: DiskIOHandler, step: BC.Step)
   requires IS.WFVars(s)
   requires IS.WFVars(s')
   reads io
   reads IS.VariablesReadSet(s)
   reads IS.VariablesReadSet(s')
   {
-    ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, io.diskOp(), ADM.M.Step(BBC.BlockCacheMoveStep(step)))
+    ImplADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(step)))
   }
 
-  predicate noop(k: Constants, s: Variables, s': Variables)
+  predicate noop(k: ImplConstants, s: ImplVariables, s': ImplVariables)
   requires IS.WFVars(s)
   requires IS.WFVars(s')
   reads IS.VariablesReadSet(s)
   reads IS.VariablesReadSet(s')
   {
-    ADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, ADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)))
+    ImplADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)))
   }
 
   lemma LemmaIndirectionTableLBAValid()
-  ensures ADM.M.ValidAddr(BC.IndirectionTableLBA())
+  ensures ImplADM.M.ValidAddr(BC.IndirectionTableLBA())
   {
     LBAType.reveal_ValidAddr();
-    assert BC.IndirectionTableLBA() as int == 0 * ADM.M.BlockSize();
+    assert BC.IndirectionTableLBA() as int == 0 * ImplADM.M.BlockSize();
   }
 
-  method PageInIndirectionTableReq(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires io.initialized();
   requires s.Unready?
   modifies io
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     if (s.outstandingIndirectionTableRead.None?) {
       LemmaIndirectionTableLBAValid();
@@ -173,19 +164,19 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method PageInIndirectionTableResp(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires io.diskOp().RespReadOp?
   requires s.Unready?
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       s' := IS.Ready(sector.value.indirectionTable, None, sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
       assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
-  assert ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
+  assert ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
       assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
@@ -193,8 +184,8 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method PageInReq(k: Constants, s: Variables, io: DiskIOHandler, ref: BC.Reference)
-  returns (s': Variables)
+  method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
+  returns (s': ImplVariables)
   requires io.initialized();
   requires s.Ready?
   requires IS.WFVars(s)
@@ -203,7 +194,7 @@ module {:extern} Impl refines Main {
   requires ref !in s.cache
   modifies io
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     assume false; // TODO timing out
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
@@ -219,7 +210,7 @@ module {:extern} Impl refines Main {
       var id := RequestRead(io, lba.value);
       s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
 
-      assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()), ref);
+      assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
       assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInReqStep(ref));
     }
   }
@@ -232,7 +223,7 @@ module {:extern} Impl refines Main {
           map[]) == SSTable.ISeq(node.buckets);
   }*/
 
-  /*lemma LemmaPageInBlockCacheSet(s: Variables, ref: BT.G.Reference, node: IS.Node)
+  /*lemma LemmaPageInBlockCacheSet(s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
   requires IS.WFVars(s)
   requires s.Ready?
   requires ref !in s.cache
@@ -251,14 +242,14 @@ module {:extern} Impl refines Main {
     assert IS.ICache(s.cache[ref := node], s.rootBucket)[ref] == IS.INode(node);
   }*/
 
-  method PageInResp(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires io.diskOp().RespReadOp?
   requires s.Ready?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     var id, sector := ReadSector(io);
 
@@ -294,7 +285,7 @@ module {:extern} Impl refines Main {
 
         INodeRootEqINodeForEmptyRootBucket(node);
 
-        assert BC.PageInResp(k, IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()));
+        assert BC.PageInResp(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
         assume stepsBC(k, s, s', UI.NoOp, io, BC.PageInRespStep);
       } else {
         s' := s;
@@ -308,7 +299,7 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method getFreeRef(s: Variables)
+  method getFreeRef(s: ImplVariables)
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires s.ephemeralIndirectionTable.Inv()
@@ -340,7 +331,7 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method getFreeLba(s: Variables)
+  method getFreeLba(s: ImplVariables)
   returns (lba : Option<BC.LBA>)
   requires s.Ready?
   requires IS.WFVars(s)
@@ -399,8 +390,8 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method write(k: Constants, s: Variables, ref: BT.G.Reference, node: IS.Node)
-  returns (s': Variables)
+  method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
+  returns (s': ImplVariables)
   requires s.Ready?
   requires IS.WFVars(s)
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
@@ -444,8 +435,8 @@ module {:extern} Impl refines Main {
     assume BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node));
   }
 
-  method alloc(k: Constants, s: Variables, node: IS.Node)
-  returns (s': Variables, ref: Option<BT.G.Reference>)
+  method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)
+  returns (s': ImplVariables, ref: Option<BT.G.Reference>)
   requires IS.WFVars(s)
   requires IS.WFNode(node)
   requires BC.Inv(k, IS.IVars(s));
@@ -483,14 +474,14 @@ module {:extern} Impl refines Main {
   requires BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures IS.INodeRoot(node, rootBucket') == BT.AddMessageToNode(IS.INodeRoot(node, rootBucket), key, msg)
 
-  method InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
-  returns (s': Variables, success: bool)
+  method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
+  returns (s': ImplVariables, success: bool)
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   requires s.Ready?
   requires BT.G.Root() in s.cache
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -553,14 +544,14 @@ module {:extern} Impl refines Main {
     assert stepsBetree(k, s, s', UI.PutOp(key, value), BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
   }
 
-  method TryRootBucketLookup(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
+  method TryRootBucketLookup(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
   returns (res: Option<MS.Value>)
   requires io.initialized()
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   requires s.Ready?
   modifies io
-  ensures res.Some? ==> ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s),
+  ensures res.Some? ==> ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s),
     UI.GetOp(key, res.value), io.diskOp())
   ensures res.None? ==> io.initialized()
   ensures res.None? ==> key !in TTT.I(s.rootBucket)
@@ -583,7 +574,7 @@ module {:extern} Impl refines Main {
       //assert BT.ValidQuery(BT.LookupQuery(key, res.value, lookup));
       //assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s),
       //  UI.GetOp(key, res.value),
-      //  ADM.M.IDiskOp(io.diskOp()),
+      //  ImplADM.M.IDiskOp(io.diskOp()),
       //  BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
 
       assert stepsBetree(k, s, s,
@@ -643,14 +634,14 @@ module {:extern} Impl refines Main {
   ensures BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures BT.NodeLookup(IS.INode(node), key) == BT.NodeLookup(IS.INodeRoot(node, rootBucket), key)
 
-  method query(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key)
-  returns (s': Variables, res: Option<MS.Value>)
+  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
+  returns (s': ImplVariables, res: Option<MS.Value>)
   requires io.initialized()
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   modifies io
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
     if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
     io.diskOp())
   {
@@ -734,7 +725,7 @@ module {:extern} Impl refines Main {
 
               assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'),
                 if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-                ADM.M.IDiskOp(io.diskOp()),
+                ImplADM.M.IDiskOp(io.diskOp()),
                 BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
 
               assert stepsBetree(k, s, s',
@@ -755,7 +746,7 @@ module {:extern} Impl refines Main {
         assert BT.ValidQuery(BT.LookupQuery(key, res.value, lookup));
         assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'),
           UI.GetOp(key, res.value),
-          ADM.M.IDiskOp(io.diskOp()),
+          ImplADM.M.IDiskOp(io.diskOp()),
           BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
         assert stepsBetree(k, s, s',
           if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
@@ -771,14 +762,14 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method insert(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
-  returns (s': Variables, success: bool)
+  method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  returns (s': ImplVariables, success: bool)
   requires io.initialized()
   modifies io
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
     if success then UI.PutOp(key, value) else UI.NoOp,
     io.diskOp())
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
@@ -797,12 +788,12 @@ module {:extern} Impl refines Main {
     }
 
     s', success := InsertKeyValue(k, s, key, value);
-    assert ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+    assert ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
       if success then UI.PutOp(key, value) else UI.NoOp,
       io.diskOp());
   }
 
-  predicate deallocable(s: Variables, ref: BT.G.Reference)
+  predicate deallocable(s: ImplVariables, ref: BT.G.Reference)
   reads if s.Ready? then {s.ephemeralIndirectionTable} else {} // TODO necessary?
   reads if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
   {
@@ -812,7 +803,7 @@ module {:extern} Impl refines Main {
     && forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph :: ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[r]
   }
 
-  method Deallocable(s: Variables, ref: BT.G.Reference) returns (result: bool)
+  method Deallocable(s: ImplVariables, ref: BT.G.Reference) returns (result: bool)
   requires s.Ready? ==> s.ephemeralIndirectionTable.Inv()
   ensures result == deallocable(s, ref)
   {
@@ -832,15 +823,15 @@ module {:extern} Impl refines Main {
     assume result == deallocable(s, ref);
   }
 
-  method Dealloc(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference)
-  returns (s': Variables)
+  method Dealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires io.initialized()
   requires deallocable(s, ref)
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -870,13 +861,13 @@ module {:extern} Impl refines Main {
     s' := s
       .(cache := MapRemove(s.cache, {ref}))
       .(outstandingBlockReads := BC.OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref));
-    assert BC.Unalloc(Ik(k), IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()), ref);
-    assert BBC.BlockCacheMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, ADM.M.IDiskOp(io.diskOp()), BC.UnallocStep(ref));
+    assert BC.Unalloc(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
+    assert BBC.BlockCacheMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), BC.UnallocStep(ref));
     assert stepsBC(k, s, s', UI.NoOp, io, BC.UnallocStep(ref));
   }
 
-  method fixBigRoot(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method fixBigRoot(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires s.Ready?
   requires io.initialized()
@@ -884,7 +875,7 @@ module {:extern} Impl refines Main {
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -934,7 +925,7 @@ module {:extern} Impl refines Main {
         assert IS.INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [map[]]);
         ghost var step := BT.BetreeGrow(growth);
         BC.MakeTransaction2(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
-        //assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, ADM.M.IDiskOp(io.diskOp()), step);
+        //assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), step);
         assert stepsBetree(k, s, s', UI.NoOp, step);
       }
     }
@@ -1158,8 +1149,8 @@ module {:extern} Impl refines Main {
   // TODO FIXME this method is flaky and takes a long time to verify
   method {:fuel WFBucketList,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
       {:fuel SplitChildLeft,0} {:fuel SplitChildRight,0}
-  doSplit(k: Constants, s: Variables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
-  returns (s': Variables)
+  doSplit(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  returns (s': ImplVariables)
   requires s.Ready?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
@@ -1174,7 +1165,7 @@ module {:extern} Impl refines Main {
   requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this unless paretnref is root
   modifies io
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -1252,7 +1243,7 @@ module {:extern} Impl refines Main {
     if left_childref.None? {
       s' := s;
       assume noop(k, s, s');
-      assume ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
+      assume ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
       print "giving up; could not get ref\n";
       return;
     }
@@ -1331,8 +1322,8 @@ module {:extern} Impl refines Main {
     assert stepsBetree(k, s, s', UI.NoOp, step);
   }
 
-  method flush(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, slot: int)
-  returns (s': Variables)
+  method flush(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, slot: int)
+  returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires s.Ready?
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
@@ -1344,7 +1335,7 @@ module {:extern} Impl refines Main {
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // timing out
@@ -1449,8 +1440,8 @@ module {:extern} Impl refines Main {
     assert stepsBetree(k, s, s', UI.NoOp, step);
   }
 
-  method {:fuel JoinBucketList,0} fixBigNode(k: Constants, s: Variables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
-  returns (s': Variables)
+  method {:fuel JoinBucketList,0} fixBigNode(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
+  returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   requires s.Ready?
@@ -1461,7 +1452,7 @@ module {:extern} Impl refines Main {
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // timing out
@@ -1562,8 +1553,8 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method {:fuel BC.GraphClosed,0} flushRootBucket(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method {:fuel BC.GraphClosed,0} flushRootBucket(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires io.initialized()
   modifies io
   requires IS.WFVars(s)
@@ -1571,7 +1562,7 @@ module {:extern} Impl refines Main {
   requires s.Ready?
   requires s.rootBucket != TTT.EmptyTree
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     var oldroot := s.cache[BT.G.Root()];
 
@@ -1639,7 +1630,7 @@ module {:extern} Impl refines Main {
         old(BC.assignRefToLBA(IS.IIndirectionTable(table), ref, lba));
   }
 
-  method FindDeallocable(s: Variables) returns (ref: Option<IS.Reference>)
+  method FindDeallocable(s: ImplVariables) returns (ref: Option<IS.Reference>)
   requires s.Ready?
   requires s.ephemeralIndirectionTable.Inv()
   ensures ref.Some? ==> ref.value in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
@@ -1665,7 +1656,7 @@ module {:extern} Impl refines Main {
     return None;
   }
 
-  method FindUncappedNodeInCache(s: Variables) returns (ref: Option<IS.Reference>)
+  method FindUncappedNodeInCache(s: ImplVariables) returns (ref: Option<IS.Reference>)
   requires IS.WFVars(s)
   requires s.Ready?
   ensures ref.Some? ==> ref.value in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
@@ -1692,7 +1683,7 @@ module {:extern} Impl refines Main {
     return None;
   }
 
-  method FindRefInFrozenWithNoLba(s: Variables) returns (ref: Option<IS.Reference>)
+  method FindRefInFrozenWithNoLba(s: ImplVariables) returns (ref: Option<IS.Reference>)
   requires IS.WFVars(s)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
@@ -1723,7 +1714,7 @@ module {:extern} Impl refines Main {
     return None;
   }
 
-  method FindRefNotPointingToRefInEphemeral(s: Variables, ref: IS.Reference) returns (result: IS.Reference)
+  method FindRefNotPointingToRefInEphemeral(s: ImplVariables, ref: IS.Reference) returns (result: IS.Reference)
   requires IS.WFVars(s)
   requires s.Ready?
   requires exists r :: !(r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==>
@@ -1756,14 +1747,14 @@ module {:extern} Impl refines Main {
     assert false;
   }
 
-  method {:fuel BC.GraphClosed,0} sync(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires io.initialized()
   modifies io
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     assume false; // TODO timing out
 
@@ -1826,7 +1817,7 @@ module {:extern} Impl refines Main {
       } else {
         s' := s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
             .(syncReqs := BC.syncReqs3to2(s.syncReqs));
-        assert BC.Freeze(Ik(k), IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()));
+        assert BC.Freeze(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
         assert stepsBC(k, s, s', UI.NoOp, io, BC.FreezeStep);
         return;
       }
@@ -1871,7 +1862,7 @@ module {:extern} Impl refines Main {
               BC.assignRefToLBA(IS.IIndirectionTable(s.frozenIndirectionTable.value), ref, lba);
             s' := s
               .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, lba)]);
-            assert BC.WriteBackReq(Ik(k), IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()), ref);
+            assert BC.WriteBackReq(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
             assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackReqStep(ref));
           } else {
             s' := s;
@@ -1894,7 +1885,7 @@ module {:extern} Impl refines Main {
       var id := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
       if (id.Some?) {
         s' := s.(outstandingIndirectionTableWrite := id);
-        assert BC.WriteBackIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), ADM.M.IDiskOp(io.diskOp()));
+        assert BC.WriteBackIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
         assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackIndirectionTableReqStep);
       } else {
         s' := s;
@@ -1904,13 +1895,13 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method readResponse(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires io.diskOp().RespReadOp?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     if (s.Unready?) {
       s' := PageInIndirectionTableResp(k, s, io);
@@ -1919,13 +1910,13 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method writeResponse(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
+  method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables)
   requires io.diskOp().RespWriteOp?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     assume false; // TODO timing out
 
@@ -1957,27 +1948,27 @@ module {:extern} Impl refines Main {
     }
   }
 
-  method pushSync(k: Constants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables, id: int)
+  method pushSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (s': ImplVariables, id: int)
   requires io.initialized()
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), io.diskOp())
   {
     id := freeId(s.syncReqs);
     s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
     assert stepsBC(k, s, s', UI.PushSyncOp(id), io, BC.PushSyncReqStep(id));
   }
 
-  method popSync(k: Constants, s: Variables, io: DiskIOHandler, id: int)
-  returns (s': Variables, success: bool)
+  method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
+  returns (s': ImplVariables, success: bool)
   requires io.initialized()
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   modifies io
   ensures IS.WFVars(s')
-  ensures ADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
   {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
@@ -1989,73 +1980,4 @@ module {:extern} Impl refines Main {
     }
   }
 
-  ////////// Top-level handlers
-
-  method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
-  returns (id: int)
-  {
-    assume false; // TODO
-    var s := hs.s;
-    var s', id1 := pushSync(k, s, io);
-    id := id1;
-    var uiop := UI.PushSyncOp(id);
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-  }
-
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
-  returns (success: bool)
-  {
-    assume false; // TODO
-    var s := hs.s;
-    var s', succ := popSync(k, s, io, id);
-    success := succ;
-    var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-  }
-
-  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
-  returns (v: Option<MS.Value>)
-  {
-    assume false; // TODO
-    var s := hs.s;
-    var s', value := query(k, s, io, key);
-    var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    v := value;
-  }
-
-  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
-  returns (success: bool)
-  {
-    assume false; // TODO
-    var s := hs.s;
-    var s', succ := insert(k, s, io, key, value);
-    var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    success := succ;
-  }
-
-  method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
-  {
-    assume false; // TODO
-    var s := hs.s;
-    var s' := readResponse(k, s, io);
-    var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-  }
-
-  method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
-  {
-    assume false; // TODO
-    var s := hs.s;
-    var s' := writeResponse(k, s, io);
-    var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-  }
 }
