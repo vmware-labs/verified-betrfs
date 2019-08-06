@@ -44,3 +44,8 @@
 
 - auto-cast uint64 to ints
 - methods on datatypes (because we don't necessarily want to use a class)
+
+
+In tag slow-SplitChild,
+   time dafny MutableBtree.dfy /proc:*SplitChild*
+takes 3 minutes to fail.
