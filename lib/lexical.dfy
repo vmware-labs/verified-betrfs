@@ -1,4 +1,4 @@
-include "total_order.dfy"
+include "total_order.s.dfy"
  
 abstract module Lexical_Order refines Total_Order {
 

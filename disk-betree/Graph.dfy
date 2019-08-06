@@ -1,5 +1,5 @@
-include "../lib/sequences.dfy"
-include "../lib/NativeTypes.dfy"
+include "../lib/sequences.s.dfy"
+include "../lib/NativeTypes.s.dfy"
 
 module ReferenceType {
   import NativeTypes

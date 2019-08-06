@@ -1,4 +1,4 @@
-include "MapSpec.dfy"
+include "MapSpec.s.dfy"
 include "PivotBetree_Refines_Betree.dfy"
 include "Betree_Refines_Map.dfy"
 

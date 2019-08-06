@@ -1,4 +1,4 @@
-include "UI.dfy"
+include "UI.s.dfy"
 
 abstract module UIStateMachine {
   import _UI = UI

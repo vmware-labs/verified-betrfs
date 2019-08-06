@@ -1,4 +1,4 @@
-include "AsyncDiskModel.dfy"
+include "AsyncDiskModel.s.dfy"
 include "BetreeBlockCache.dfy"
 include "Marshalling.dfy"
 include "ImplState.dfy"

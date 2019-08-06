@@ -3,7 +3,7 @@ include "PivotBetreeSpec.dfy"
 include "Message.dfy"
 include "ImplState.dfy"
 include "SSTable.dfy"
-include "../lib/Option.dfy"
+include "../lib/Option.s.dfy"
 
 module Marshalling {
   import opened GenericMarshalling

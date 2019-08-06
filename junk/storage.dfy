@@ -1,4 +1,4 @@
-include "Maps.dfy"
+include "Maps.s.dfy"
 
   // Problems with this model:
   // - non-atomic write-back not modeled (fix by improving model)

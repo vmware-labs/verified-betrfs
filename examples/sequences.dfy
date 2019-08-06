@@ -1,4 +1,4 @@
-include "../lib/sequences.dfy"
+include "../lib/sequences.s.dfy"
 
 module Main {
   import opened Sequences;

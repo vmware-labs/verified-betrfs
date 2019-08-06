@@ -1,5 +1,5 @@
-include "sequences.dfy"
-include "NativeTypes.dfy"
+include "sequences.s.dfy"
+include "NativeTypes.s.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences

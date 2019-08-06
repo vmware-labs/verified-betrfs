@@ -255,7 +255,7 @@ lemma lemma_bit_count_is_unique(x:int, a:int, b:int)
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// This group is still in use by Util/arrays_and_sequences.dfy.
+// This group is still in use by Util/arrays_and_sequences.s.dfy.
 // NB it's not very interesting; lemma_2toX does all but the mapping
 // into div_boogie.
 

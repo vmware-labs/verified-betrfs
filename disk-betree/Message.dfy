@@ -1,4 +1,4 @@
-include "MapSpec.dfy"
+include "MapSpec.s.dfy"
 
 // Delta forms a monoid with a monoid-action on the values
 // (https://en.wikipedia.org/wiki/Monoid_action)

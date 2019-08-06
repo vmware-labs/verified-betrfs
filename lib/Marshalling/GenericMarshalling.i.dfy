@@ -1,4 +1,4 @@
-include "../NativeTypes.dfy"
+include "../NativeTypes.s.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
 include "../../tla-tree/MissingLibrary.dfy"

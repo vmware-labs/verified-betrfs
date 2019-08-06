@@ -1,8 +1,8 @@
-include "../lib/total_order.dfy"
+include "../lib/total_order.s.dfy"
 //include "lexical.dfy"
-include "../lib/Maps.dfy"
+include "../lib/Maps.s.dfy"
 include "../lib/mathematics.dfy"
-include "../lib/sequences.dfy"
+include "../lib/sequences.s.dfy"
 
 abstract module ImmutableBTree {
   import Keyspace = Bounded_Total_Order

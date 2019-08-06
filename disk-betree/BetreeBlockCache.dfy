@@ -1,6 +1,6 @@
 include "BlockCache.dfy"
-include "../lib/Maps.dfy"
-include "../lib/sequences.dfy"
+include "../lib/Maps.s.dfy"
+include "../lib/sequences.s.dfy"
 include "AsyncSectorDiskModel.dfy"
 include "PivotBetreeSpec.dfy"
 include "PivotBetree.dfy"

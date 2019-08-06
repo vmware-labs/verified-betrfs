@@ -1,4 +1,4 @@
-include "Option.dfy"
+include "Option.s.dfy"
 
 module Maps {
   import opened Options

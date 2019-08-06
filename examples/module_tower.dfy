@@ -1,4 +1,4 @@
-include "../lib/total_order.dfy"
+include "../lib/total_order.s.dfy"
 
 abstract module CrashableMap {
   import Keyspace : Bounded_Total_Order

@@ -1,5 +1,5 @@
-include "../lib/total_order.dfy"
-include "../lib/Maps.dfy"
+include "../lib/total_order.s.dfy"
+include "../lib/Maps.s.dfy"
 include "../lib/mathematics.dfy"
 include "../lib/Marshalling/Native.s.dfy"
 

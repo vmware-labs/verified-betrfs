@@ -1,5 +1,5 @@
-include "MapSpec.dfy"
-include "../lib/Maps.dfy"
+include "MapSpec.s.dfy"
+include "../lib/Maps.s.dfy"
 
 // TODO disallow overlapping writes/reads
 

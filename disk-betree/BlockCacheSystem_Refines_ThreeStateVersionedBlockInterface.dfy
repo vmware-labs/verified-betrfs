@@ -1,8 +1,8 @@
 include "BlockCache.dfy"
 include "BlockCacheSystem.dfy"
-include "ThreeStateVersioned.dfy"
-include "../lib/Maps.dfy"
-include "../lib/sequences.dfy"
+include "ThreeStateVersioned.s.dfy"
+include "../lib/Maps.s.dfy"
+include "../lib/sequences.s.dfy"
 
 module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   // Ideally we would prove the refinement for an arbitrary graph,

@@ -1,4 +1,4 @@
-include "../lib/total_order.dfy"
+include "../lib/total_order.s.dfy"
 include "CrashSafeMap.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"  

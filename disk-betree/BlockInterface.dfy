@@ -1,5 +1,5 @@
-include "../lib/Maps.dfy"
-include "../lib/sequences.dfy"
+include "../lib/Maps.s.dfy"
+include "../lib/sequences.s.dfy"
 include "Graph.dfy"
 include "Transactable.dfy"
   

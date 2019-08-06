@@ -1,5 +1,5 @@
 include "Betree.dfy"
-include "MapSpec.dfy"
+include "MapSpec.s.dfy"
 include "BetreeInv.dfy"
 
 module Betree_Refines_Map {

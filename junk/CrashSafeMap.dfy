@@ -1,5 +1,5 @@
 include "../tla-tree/MissingLibrary.dfy"
-include "../lib/total_order.dfy"
+include "../lib/total_order.s.dfy"
 
 // A Map that can crash and revert to prior states, but only in
 // controlled ways, limited by a sync operation.

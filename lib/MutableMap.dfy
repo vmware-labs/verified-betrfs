@@ -1,6 +1,6 @@
-include "NativeTypes.dfy"
-include "Option.dfy"
-include "sequences.dfy"
+include "NativeTypes.s.dfy"
+include "Option.s.dfy"
+include "sequences.s.dfy"
 include "Sets.dfy"
 include "SetBijectivity.dfy"
 

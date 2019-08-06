@@ -1,4 +1,4 @@
-include "../lib/sequences.dfy"
+include "../lib/sequences.s.dfy"
 include "Graph.dfy"
 
 abstract module Transactable {

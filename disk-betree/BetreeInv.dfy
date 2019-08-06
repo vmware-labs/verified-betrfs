@@ -1,6 +1,6 @@
-include "../lib/Maps.dfy"
-include "../lib/sequences.dfy"
-include "MapSpec.dfy"
+include "../lib/Maps.s.dfy"
+include "../lib/sequences.s.dfy"
+include "MapSpec.s.dfy"
 include "Betree.dfy"
   
 module BetreeInv {

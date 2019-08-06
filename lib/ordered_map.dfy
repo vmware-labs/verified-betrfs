@@ -1,5 +1,5 @@
 include "map.dfy"
-include "total_order.dfy"
+include "total_order.s.dfy"
   
 abstract module Ordered_Map refines Map {
   import Key_Space : Total_Order

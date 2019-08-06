@@ -1,5 +1,5 @@
 include "../lib/MutableMap.dfy"
-include "../lib/NativeTypes.dfy"
+include "../lib/NativeTypes.s.dfy"
 
 module Main {
   import opened NativeTypes

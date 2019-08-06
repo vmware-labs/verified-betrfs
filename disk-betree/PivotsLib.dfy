@@ -1,5 +1,5 @@
-include "MapSpec.dfy"
-include "../lib/sequences.dfy"
+include "MapSpec.s.dfy"
+include "../lib/sequences.s.dfy"
 
 module PivotsLib {
   import opened Sequences

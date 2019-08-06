@@ -1,4 +1,4 @@
-include "NativeTypes.dfy"
+include "NativeTypes.s.dfy"
 
 module Sets {
   import opened NativeTypes 

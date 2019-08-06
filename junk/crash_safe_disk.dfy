@@ -1,4 +1,4 @@
-include "Maps.dfy"
+include "Maps.s.dfy"
   
 module Logging_int_int_Map /* refines Crash_Safe_Data_Structure */ {
   import Maps

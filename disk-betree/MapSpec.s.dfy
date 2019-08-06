@@ -1,7 +1,7 @@
-include "../lib/Option.dfy"
-include "../lib/total_order.dfy"
-include "UI.dfy"
-include "UIStateMachine.dfy"
+include "../lib/Option.s.dfy"
+include "../lib/total_order.s.dfy"
+include "UI.s.dfy"
+include "UIStateMachine.s.dfy"
 
 module MapSpec refines UIStateMachine {
   import V = ValueWithDefault

@@ -1,6 +1,6 @@
-include "MapSpec.dfy"
-include "UIStateMachine.dfy"
-include "../lib/Maps.dfy"
+include "MapSpec.s.dfy"
+include "UIStateMachine.s.dfy"
+include "../lib/Maps.s.dfy"
 
 module ThreeStateTypes {
   datatype SyncReqStatus = State1 | State2 | State3

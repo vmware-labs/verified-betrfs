@@ -1,15 +1,15 @@
 include "BlockInterface.dfy"  
-include "../lib/sequences.dfy"
-include "../lib/Maps.dfy"
-include "MapSpec.dfy"
+include "../lib/sequences.s.dfy"
+include "../lib/Maps.s.dfy"
+include "MapSpec.s.dfy"
 include "Graph.dfy"
-include "../lib/Option.dfy"
+include "../lib/Option.s.dfy"
 include "Message.dfy"
 include "BetreeSpec.dfy"
 include "Betree.dfy"
 include "BetreeInv.dfy"
 include "PivotBetreeSpec.dfy"
-include "UIStateMachine.dfy"
+include "UIStateMachine.s.dfy"
 
 module PivotBetree refines UIStateMachine {
   import opened PivotBetreeSpec`Internal

@@ -1,6 +1,6 @@
 include "PivotBetreeSpec.dfy"
 include "Message.dfy"
-include "../lib/Option.dfy"
+include "../lib/Option.s.dfy"
 include "SSTable.dfy"
 include "BetreeBlockCache.dfy"
 include "../lib/tttree.dfy"

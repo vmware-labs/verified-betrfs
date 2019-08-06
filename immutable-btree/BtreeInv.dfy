@@ -1,7 +1,7 @@
-include "../lib/total_order.dfy"
-include "../lib/Maps.dfy"
+include "../lib/total_order.s.dfy"
+include "../lib/Maps.s.dfy"
 include "../lib/mathematics.dfy"
-include "../lib/sequences.dfy"
+include "../lib/sequences.s.dfy"
 include "BtreeSpec.dfy"
 
 abstract module BtreeInv {
@@ -312,7 +312,7 @@ abstract module BtreeInv {
     assert IsSatisfyingLookup(newtree, key, value, lookup);
   }
 
-  // TODO move these to total_order.dfy
+  // TODO move these to total_order.s.dfy
   lemma strictlySortedImplLt(l: seq<Key>, a: int, b: int)
   requires 0 <= a;
   requires a < b;
