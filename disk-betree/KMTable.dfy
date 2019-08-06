@@ -1,6 +1,6 @@
 include "Message.dfy"
 include "../lib/sequences.dfy"
-include "../lib/maps.dfy"
+include "../lib/Maps.dfy"
 include "BucketsLib.dfy"
 include "../lib/Marshalling/Seqs.i.dfy"
 

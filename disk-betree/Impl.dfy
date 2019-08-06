@@ -1089,6 +1089,8 @@ module {:extern} Impl refines Main {
     Pivots.WFSuffix(child.pivotTable, num_children_left);
     KMTable.Islice(child.buckets, 0, num_children_left);
     KMTable.Isuffix(child.buckets, num_children_left);
+    assume IS.WFNode(SplitChildRight(child, num_children_left));
+    assume IS.WFNode(SplitChildLeft(child, num_children_left));
   }
 
   // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
@@ -1118,6 +1120,8 @@ module {:extern} Impl refines Main {
       replace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx)
     );
     KMTable.Ireplace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx);
+    assume IS.WFNode(res);
+    assume IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
   }
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -1742,8 +1746,9 @@ module {:extern} Impl refines Main {
       var (_, graph) := lbaGraph.value;
       if ref in graph {
         assume !(eRef in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==>
+            result in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph &&
             ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[result]); // TODO check this assume
-        return ref;
+        return eRef;
       }
       i := i + 1;
     }
