@@ -1,10 +1,10 @@
 include "MapSpec.s.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/Sets.i.dfy"
-include "../lib/Option.i.dfy"
+include "../lib/Option.s.dfy"
 include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
-include "MainDiskIOHandler.i.dfy"
+include "MainDiskIOHandler.s.dfy"
 
 module Impl { 
   import opened Options

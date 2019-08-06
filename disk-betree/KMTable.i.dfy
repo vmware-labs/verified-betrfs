@@ -1,7 +1,7 @@
-include "Message.dfy"
-include "../lib/sequences.dfy"
-include "../lib/Maps.dfy"
-include "BucketsLib.dfy"
+include "Message.i.dfy"
+include "../lib/sequences.s.dfy"
+include "../lib/Maps.s.dfy"
+include "BucketsLib.i.dfy"
 include "../lib/Marshalling/Seqs.i.dfy"
 
 module KMTable {

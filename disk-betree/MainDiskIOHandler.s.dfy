@@ -1,7 +1,7 @@
 // DiskInterface
 
-include "../lib/NativeTypes.dfy"
-include "AsyncDiskModel.dfy"
+include "../lib/NativeTypes.s.dfy"
+include "AsyncDiskModel.s.dfy"
 
 module MainDiskIOHandler {
   import opened NativeTypes
