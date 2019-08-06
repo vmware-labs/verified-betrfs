@@ -1,4 +1,4 @@
-include "Main.dfy"
+include "Main.s.dfy"
 
 include "../lib/Sets.dfy"
 include "ByteBetreeBlockCacheSystem.dfy"

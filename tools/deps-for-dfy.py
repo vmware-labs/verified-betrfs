@@ -14,17 +14,24 @@ def fileFromIncludeLine(line):
             return mo
         return mo.groups(1)[0]
 
+def normPathToRoot(path):
+    ### Normalize a path to be relative to ROOT_PATH. Assert if it's outside of ROOT_PATH.
+    rootAbsPath = os.path.abspath(ROOT_PATH)
+    absPath = os.path.abspath(path)
+    assert absPath.startswith(rootAbsPath)
+    rootRelPath = absPath[len(rootAbsPath)+1:]
+    return rootRelPath
+
 class IncludeReference:
     def __init__(self, origin, line_num, raw_reference):
-        assert origin == None or origin.__class__ == IncludeReference
         self.origin = origin
         self.line_num = line_num
         self.raw_reference = raw_reference
-        #print("XXX iref: %s\n\torigin %s\n\traw %s " % (self, self.origin, self.raw_reference))
-        #print("XXX\torigin: %s" % self.origin)
-        #print("XXX\torigin root: %s" % self.origin.rootPath() if self.origin else None)
-        #print("XXX\tdirOf: %s" % self.dirOf())
-        #print("XXX\troot: %s" % self.rootPath())
+        self.referencing_abs_dir = os.path.abspath(".") if origin is None else origin.dirOf()
+        # normalized absolute path to the target of this reference
+        self.absPath = os.path.abspath(os.path.join(self.referencing_abs_dir, raw_reference))
+        # normalized root-relative path to the target of this reference
+        self.normPath = normPathToRoot(self.absPath)
 
     def validPath(self):
         return True
@@ -35,25 +42,23 @@ class IncludeReference:
     def compatiblePath(self):
         return self.isTrusted() or not self.origin.isTrusted()
 
+    def describeOrigin(self):
+        if self.origin is None:
+            return "cmdline"
+        else:
+            return self.normPath
+
     def __repr__(self):
-        return "%s, from %s line %d" % (self.raw_reference, self.origin, self.line_num)
+        return "%s, from %s line %d" % (self.raw_reference, self.describeOrigin(), self.line_num)
 
     def __str__(self):
         return repr(self)
 
     def dirOf(self):
-        if self.origin is None:
-            return "."
-        else:
-            result = os.path.dirname(os.path.join(self.origin.dirOf(), self.raw_reference))
-            #print ("XXX\t\tdirOf origin dir: %s" % self.origin.dirOf())
-            #print ("XXX\t\tdirOf raw: %s" % self.raw_reference)
-            #print ("XXX\t\tdirOf result: %s" % result)
-            return result
+        return os.path.dirname(self.absPath)
 
     def rootPath(self):
-        path = os.path.normpath(os.path.join(self.dirOf(), self.raw_reference))
-        return path
+        return self.normPath
 
     def __hash__(self):
         return hash(self.rootPath())
@@ -98,23 +103,15 @@ class IncompatibleIncludeTrustedness(Exception):
 def visit(iref):
     subIrefs = []
     try:
-        contents = open(iref.rootPath()).readlines()
+        contents = open(iref.absPath).readlines()
     except IOError:
-        print ("XXX iref.origin== %s" % iref.origin)
-        print ("XXX iref.origin.dirOf() == %s" % iref.origin.dirOf())
-        print ("XXX iref.raw_reference == %s" % iref.raw_reference)
-        j = os.path.join(iref.dirOf(), iref.raw_reference)
-        print ("XXX joined == %s" % j)
-        n = os.path.normpath(j)
-        print ("XXX norm == %s" % n)
-        print ("XXX iref.rootPath() == %s" % iref.rootPath())
-        raise IncludeNotFound(iref.rootPath(), iref.origin)
+        raise IncludeNotFound(iref.absPath, iref.origin)
     for line_num in range(len(contents)):
         line = contents[line_num]
         includePath = fileFromIncludeLine(line)
         if includePath == None:
             continue
-        subIref = IncludeReference(iref, line_num+1, includePath)
+        subIref = IncludeReference(iref, line_num, includePath)
         if not subIref.validPath():
             raise InvalidDafnyIncludePath(subIref)
         if not subIref.compatiblePath():
@@ -122,8 +119,7 @@ def visit(iref):
         subIrefs.append(subIref)
     return subIrefs
 
-def depsFromDfySource(path):
-    initialRef = IncludeReference(None, 0, path)
+def depsFromDfySource(initialRef):
     needExplore = [initialRef]
     visited = set()
     while len(needExplore)>0:
@@ -135,30 +131,27 @@ def depsFromDfySource(path):
     visited.remove(initialRef)
     return visited
 
-def target(dfypath, suffix):
-    path = dfypath.replace(".dfy", suffix)
-    absPath = os.path.abspath(path)
-    absRoot = os.path.abspath(ROOT_PATH)
-    assert absPath.startswith(absRoot)
-    path = path[len(ROOT_PATH):]
-    return "$(BUILD_DIR)/%s" % path
+def target(iref, suffix):
+    targetRootRelPath = iref.normPath.replace(".dfy", suffix)
+    result = "$(BUILD_DIR)/%s" % targetRootRelPath
+    return result
 
-def okay(dfypath):
-    return target(dfypath, ".okay")
+def okay(iref):
+    return target(iref, ".okay")
 
-def deps(dfypath):
-    return target(dfypath, ".deps")
+def deps(iref):
+    return target(iref, ".deps")
 
 def main():
-    target = sys.argv[1]
+    target = IncludeReference(None, 0, sys.argv[1])
     outputFilename = sys.argv[2]
 
     output = ""
     output += "# deps from %s\n" % target
     allDeps = depsFromDfySource(target)
     for dep in allDeps:
-        output += "%s: %s\n\n" % (okay(target), okay(dep.rootPath()))
-        output += "%s: %s\n\n" % (deps(target), deps(dep.rootPath()))
+        output += "%s: %s\n" % (okay(target), okay(dep))
+        output += "%s: %s\n\n" % (deps(target), deps(dep))
 
     outfp = open(outputFilename, "w")
     outfp.write(output)
