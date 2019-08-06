@@ -47,3 +47,9 @@
 
 - d6d75b81577205ab31aafa4761a97a9b6ef72d1e timeout/instability with no smoking guns in the profiler
 - 1a88431e5c4ec22082a390f894878e10b2009a5f see Probe in MutableMap:449 for fix, surprising assert required
+
+{:axiom} shouldn't be required on a bodyless function of an abstract module
+which is there to introduce an obligation, should it?
+    ../disk-betree/MapSpec.s.dfy(2,8): Error: the included file ../disk-betree/../lib/total_order.s.dfy contains error(s)
+    ../disk-betree/../lib/total_order.s.dfy(21,73): Error: a function with an ensures clause must have a body, unless given the :axiom attribute
+

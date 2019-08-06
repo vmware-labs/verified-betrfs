@@ -14,7 +14,7 @@ abstract module Total_Order {
 		lte(a, b) && a != b
 	}
 		
-	predicate method lte(a: Element, b: Element)
+	predicate method {:axiom} lte(a: Element, b: Element)
 		ensures lte(a, b) == ltedef(a, b);
 		ensures ltedef(a, b) || ltedef(b, a); // Total
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric

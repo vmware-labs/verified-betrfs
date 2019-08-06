@@ -149,6 +149,9 @@ module ImplDo {
   ensures BT.WFNode(IS.INode(node))
   ensures BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures BT.NodeLookup(IS.INode(node), key) == BT.NodeLookup(IS.INodeRoot(node, rootBucket), key)
+  {
+    assume false;
+  }
 
   method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
   returns (s': ImplVariables, res: Option<MS.Value>)
@@ -287,6 +290,9 @@ module ImplDo {
   requires TTT.I(rootBucket') == TTT.I(rootBucket)[key := msg]
   requires BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures IS.INodeRoot(node, rootBucket') == BT.AddMessageToNode(IS.INodeRoot(node, rootBucket), key, msg)
+  {
+    assume false;
+  }
 
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (s': ImplVariables, success: bool)

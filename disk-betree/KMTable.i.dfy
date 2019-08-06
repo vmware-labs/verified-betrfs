@@ -42,6 +42,10 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: |kmts[i].keys| == |kmts[i].values|
   ensures |s| == |kmts|
   ensures forall i | 0 <= i < |kmts| :: s[i] == I(kmts[i])
+  {
+    assume false;   // Was this supposed to be an axiom ...!?
+    []
+  }
 
   function prefix(kmt: KMTable, i: int) : KMTable
   requires 0 <= i <= |kmt.keys|
@@ -54,17 +58,26 @@ module KMTable {
   requires WF(kmt)
   requires 0 <= i <= |kmt.keys|
   ensures WF(prefix(kmt, i))
+  {
+    assume false;
+  }
 
   lemma IndexOfKey(kmt: KMTable, key: Key) returns (i : int)
   requires |kmt.keys| == |kmt.values|
   requires key in I(kmt)
   ensures 0 <= i < |kmt.keys|
   ensures kmt.keys[i] == key
+  {
+    assume false;
+  }
 
   lemma Imaps(kmt: KMTable, i: int)
   requires WF(kmt)
   requires 0 <= i < |kmt.keys|
   ensures MapsTo(I(kmt), kmt.keys[i], kmt.values[i])
+  {
+    assume false;
+  }
 
   /////////////////////////
   //// Flush
@@ -755,12 +768,18 @@ module KMTable {
   lemma LenSumPrefixLe(kmts: seq<KMTable>, i: int)
   requires 0 <= i <= |kmts|
   ensures LenSum(kmts, i) <= LenSum(kmts, |kmts|)
+  {
+    assume false;
+  }
 
   lemma joinEqJoinBucketList(kmts: seq<KMTable>, pivots: seq<Key>)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   requires WFBucketList(ISeq(kmts), pivots)
   ensures WF(join(kmts))
   ensures I(join(kmts)) == JoinBucketList(ISeq(kmts))
+  {
+    assume false;
+  }
 
   method {:fuel JoinBucketList,0} {:fuel WFBucketList,0}
   Join(kmts: seq<KMTable>, ghost pivots: seq<Key>)
@@ -920,22 +939,34 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures forall i | 0 <= i < |kmts[a..b]| :: WF(kmts[a..b][i])
   ensures ISeq(kmts[a..b]) == ISeq(kmts)[a..b]
+  {
+    assume false;
+  }
 
   lemma Isuffix(kmts: seq<KMTable>, a: int)
   requires 0 <= a <= |kmts|
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures forall i | 0 <= i < |kmts[a..]| :: WF(kmts[a..][i])
   ensures ISeq(kmts[a..]) == ISeq(kmts)[a..]
+  {
+    assume false;
+  }
 
   lemma IPopFront(kmt: KMTable, kmts: seq<KMTable>)
   requires WF(kmt)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures ISeq([kmt] + kmts) == [I(kmt)] + ISeq(kmts)
+  {
+    assume false;
+  }
 
   lemma IPopBack(kmts: seq<KMTable>, kmt: KMTable)
   requires WF(kmt)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures ISeq(kmts + [kmt]) == ISeq(kmts) + [I(kmt)]
+  {
+    assume false;
+  }
 
   lemma Ireplace1with2(kmts: seq<KMTable>, kmt1: KMTable, kmt2: KMTable, slot: int)
   requires WF(kmt1)
@@ -944,6 +975,9 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
   ensures ISeq(replace1with2(kmts, kmt1, kmt2, slot)) == replace1with2(ISeq(kmts), I(kmt1), I(kmt2), slot)
+  {
+    assume false;
+  }
 
   method KMTableOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (kmt: KMTable)
   requires SortedSeqForMap(s, m)
