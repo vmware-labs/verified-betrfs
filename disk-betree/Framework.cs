@@ -1,10 +1,11 @@
-using Impl_Compile;
+using MainImpl_Compile;
+using MainDiskIOHandler_Compile;
 
 using System;
 using System.IO;
 using System.Collections.Generic;
 
-namespace Impl_Compile {
+namespace MainDiskIOHandler_Compile {
   // TODO make this actually async lol
   public partial class DiskIOHandler {
     const int BLOCK_SIZE = 8*1024*1024;

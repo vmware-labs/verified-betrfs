@@ -100,6 +100,10 @@ module KMTable {
   requires |kmt.keys| == |kmt.values|
   requires 0 <= i < |kmt.keys|
   ensures I(prefix(kmt, i + 1)) == I(prefix(kmt, i))[kmt.keys[i] := kmt.values[i]]
+  {
+    assert prefix(kmt, i + 1) == append(prefix(kmt, i), kmt.keys[i], kmt.values[i]);
+    Iappend(prefix(kmt, i), kmt.keys[i], kmt.values[i]);
+  }
 
   function flush'(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable) : seq<KMTable>

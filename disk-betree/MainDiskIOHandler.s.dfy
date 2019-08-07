@@ -3,7 +3,7 @@
 include "../lib/NativeTypes.s.dfy"
 include "AsyncDiskModel.s.dfy"
 
-module MainDiskIOHandler {
+module {:extern} MainDiskIOHandler {
   import opened NativeTypes
   import D = AsyncDisk
 
