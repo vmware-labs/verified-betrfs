@@ -197,10 +197,10 @@ module Marshalling {
   ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
   ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
   {
-    assume false;
     if |a| == 0 {
       var newHashMap := new MM.ResizingHashMap<(Option<LBA>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
       s := Some(newHashMap);
+      assume s.value.Count as nat == |a|;
     } else {
       var res := ValToLBAsAndSuccs(DropLast(a));
       match res {
@@ -221,6 +221,7 @@ module Marshalling {
                 var _ := mutMap.Insert(ref, (Some(lba), succs));
                 s := Some(mutMap);
                 assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
+                assume s.value.Count as nat == |a|;
               }
             }
           }
