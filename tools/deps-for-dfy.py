@@ -137,12 +137,12 @@ def visit(iref):
 
 def depsFromDfySource(initialRef):
     needExplore = [initialRef]
-    visited = set()
+    visited = []
     while len(needExplore)>0:
         iref = needExplore.pop()
         if iref in visited:
             continue
-        visited.add(iref)
+        visited.append(iref)
         needExplore.extend(visit(iref))
     visited.remove(initialRef)
     return visited
@@ -165,7 +165,7 @@ def main():
     output = ""
     output += "# deps from %s\n" % target
     allDeps = depsFromDfySource(target)
-    for dep in allDeps:
+    for dep in allDeps[::-1]:
         output += "%s: %s\n" % (okay(target), okay(dep))
         output += "%s: %s\n\n" % (deps(target), deps(dep))
 
