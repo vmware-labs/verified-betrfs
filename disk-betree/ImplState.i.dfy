@@ -147,37 +147,6 @@ module {:extern} ImplState {
   {
     map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
-  // these don't seem to help, keeping them around while I try opaque
-  // function TableContentsHasKey(table: MutIndirectionTable, key: uint64): bool // hide trigger
-  // reads table
-  // {
-  //   && key in table.Contents
-  // }
-  // function TableContentsHasKeyWithSomeLba(table: MutIndirectionTable, key: uint64): bool // hide trigger
-  // reads table
-  // {
-  //   && key in table.Contents
-  //   && table.Contents[key].0.Some?
-  // }
-  // function TableContentsLbaValue(table: MutIndirectionTable, key: uint64): BC.LBA // hide trigger
-  // requires TableContentsHasKeyWithSomeLba(table, key)
-  // reads table
-  // {
-  //   table.Contents[key].0.value
-  // }
-  // function TableContentsGraphValue(table: MutIndirectionTable, key: uint64): seq<Reference> // hide trigger
-  // requires TableContentsHasKey(table, key)
-  // reads table
-  // {
-  //   table.Contents[key].1
-  // }
-  // function {:opaque} IIndirectionTable(table: MutIndirectionTable) : (result: BC.IndirectionTable)
-  // reads table, table.Repr
-  // {
-  //   var lbas := map k | TableContentsHasKeyWithSomeLba(table, k) :: TableContentsLbaValue(table, k);
-  //   var graph := map k | TableContentsHasKey(table, k) :: TableContentsGraphValue(table, k);
-  //   BC.IndirectionTable(lbas, graph)
-  // }
   function IIndirectionTableLbas(table: MutIndirectionTable) : map<uint64, BC.LBA> // hide map trigger (prelude loop)
   {
     map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value
