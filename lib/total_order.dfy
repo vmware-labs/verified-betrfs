@@ -1,8 +1,10 @@
 include "sequences.dfy"
+include "Maps.dfy"
 include "NativeTypes.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
+  import Maps
   import opened NativeTypes
     
 	type Element(!new,==)
@@ -214,6 +216,13 @@ abstract module Total_Order {
     else 1 + LargestLte(run[1..], needle)
   }
 
+  lemma LargestLteIsOrderPreserving(run: seq<Element>, smaller: Element, larger: Element)
+    requires IsSorted(run)
+    requires lte(smaller, larger)
+    ensures LargestLte(run, smaller) <= LargestLte(run, larger)
+  {
+  }
+  
   lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
     requires IsSorted(run)
     requires -1 <= pos < |run|
@@ -233,7 +242,7 @@ abstract module Total_Order {
       assert false;
     }
   }
-  
+    
   function method LargestLt(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLt(run, needle) < |run|;
@@ -507,6 +516,14 @@ abstract module Total_Order {
       }
     }
   }
+
+  function MapPivotedUnion<Value>(left: map<Element, Value>, pivot: Element, right: map<Element, Value>) : map<Element, Value> {
+    var restricted_left := Maps.MapIRestrict(left, iset k | lt(k, pivot));
+    var restricted_right := Maps.MapIRestrict(right, iset k | lte(pivot, k));
+    Maps.MapDisjointUnion(restricted_left, restricted_right)
+  }
+    
+
 }
 
 abstract module Bounded_Total_Order refines Total_Order {
