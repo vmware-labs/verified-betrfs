@@ -962,7 +962,15 @@ module KMTable {
   ensures forall i | 0 <= i < |kmts[a..b]| :: WF(kmts[a..b][i])
   ensures ISeq(kmts[a..b]) == ISeq(kmts)[a..b]
   {
-    assume false;
+    reveal_I();
+    if b == |kmts| {
+      if (a == b) {
+      } else {
+        Islice(DropLast(kmts), a, b - 1);
+      }
+    } else {
+      Islice(DropLast(kmts), a, b);
+    }
   }
 
   lemma Isuffix(kmts: seq<KMTable>, a: int)
@@ -971,7 +979,7 @@ module KMTable {
   ensures forall i | 0 <= i < |kmts[a..]| :: WF(kmts[a..][i])
   ensures ISeq(kmts[a..]) == ISeq(kmts)[a..]
   {
-    assume false;
+    Islice(kmts, a, |kmts|);
   }
 
   lemma IPopFront(kmt: KMTable, kmts: seq<KMTable>)
@@ -979,7 +987,10 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures ISeq([kmt] + kmts) == [I(kmt)] + ISeq(kmts)
   {
-    assume false;
+    if |kmts| == 0 {
+    } else {
+      IPopFront(kmt, DropLast(kmts));
+    }
   }
 
   lemma IPopBack(kmts: seq<KMTable>, kmt: KMTable)
@@ -987,7 +998,7 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures ISeq(kmts + [kmt]) == ISeq(kmts) + [I(kmt)]
   {
-    assume false;
+    reveal_ISeq();
   }
 
   lemma Ireplace1with2(kmts: seq<KMTable>, kmt1: KMTable, kmt2: KMTable, slot: int)
@@ -998,7 +1009,29 @@ module KMTable {
   ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
   ensures ISeq(replace1with2(kmts, kmt1, kmt2, slot)) == replace1with2(ISeq(kmts), I(kmt1), I(kmt2), slot)
   {
-    assume false;
+    forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)|
+    ensures WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
+    {
+      if i < slot {
+        assert replace1with2(kmts, kmt1, kmt2, slot)[i] == kmts[i];
+      }
+      if i == slot {
+        assert replace1with2(kmts, kmt1, kmt2, slot)[i] == kmt1;
+      }
+      if i == slot + 1 {
+        assert replace1with2(kmts, kmt1, kmt2, slot)[i] == kmt2;
+      }
+      if i > slot + 1 {
+        assert replace1with2(kmts, kmt1, kmt2, slot)[i] == kmts[i-1];
+      }
+    }
+
+    if slot == |kmts|-1 {
+    } else {
+      Ireplace1with2(DropLast(kmts), kmt1, kmt2, slot);
+    }
+
+    reveal_replace1with2();
   }
 
   method KMTableOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (kmt: KMTable)
