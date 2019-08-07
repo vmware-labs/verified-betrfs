@@ -53,3 +53,6 @@ which is there to introduce an obligation, should it?
     ../disk-betree/MapSpec.s.dfy(2,8): Error: the included file ../disk-betree/../lib/total_order.s.dfy contains error(s)
     ../disk-betree/../lib/total_order.s.dfy(21,73): Error: a function with an ensures clause must have a body, unless given the :axiom attribute
 
+- [NOALIAS]
+  - examples where statically enforced no-aliasing would help
+    - f03fb540e4fd8e9fa7e04192fbe45120d2beeaa3 (noalias-example-00) disk-betree/MainImpl.i.dfy:73
