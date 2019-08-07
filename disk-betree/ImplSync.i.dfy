@@ -67,11 +67,14 @@ module ImplSync {
           s.outstandingBlockWrites[id].lba != l)
     ) {
       lba := Some(i * LBAType.BlockSize());
+
+      assert IS.IVars(s).persistentIndirectionTable.lbas == persistent;
+      assert IS.IVars(s).ephemeralIndirectionTable.lbas == ephemeral;
+      assert IS.IVars(s).frozenIndirectionTable.Some? ==>
+          IS.IVars(s).frozenIndirectionTable.value.lbas == frozen.value;
     } else {
       lba := None;
     }
-
-    assume false;
   }
 
   method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
