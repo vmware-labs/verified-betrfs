@@ -14,11 +14,11 @@ abstract module Message {
 	  | Define(value: Value)
 	  | Update(delta: Delta)
 
-	function method {:axiom} CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
+	function method CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
 	ensures newdelta == NopDelta() ==> result == olddelta
 	ensures olddelta == NopDelta() ==> result == newdelta
 
-	function method {:axiom} ApplyDelta(delta: Delta, value: Value) : (result: Value)
+	function method ApplyDelta(delta: Delta, value: Value) : (result: Value)
 	ensures delta == NopDelta() ==> result == value
 
 	function method Merge(newmessage: Message, oldmessage: Message) : Message {
@@ -39,15 +39,9 @@ abstract module Message {
 
 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
 		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
-    {
-      assume false; // this should be an axiom or obligation
-    }
 
 	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
 		ensures ApplyDelta(CombineDeltas(a, b), value) == ApplyDelta(a, ApplyDelta(b, value))
-    {
-      assume false; // this should be an axiom or obligation
-    }
 
 	lemma MergeIsAssociative(a: Message, b: Message, c: Message)
 		ensures Merge(Merge(a, b), c) == Merge(a, Merge(b, c))

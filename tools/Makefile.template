@@ -44,6 +44,5 @@ $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy $(BUILD_DIR)/%.s.deps | $$(@D)/.
 	touch $@
 
 $(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy $(BUILD_DIR)/%.i.deps | $$(@D)/.
-	#time dafny /compile:0 /noCheating:1 $(NOVERIFY) $<
 	time dafny /compile:0 $(NOVERIFY) $<
 	touch $@

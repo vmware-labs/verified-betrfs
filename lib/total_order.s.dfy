@@ -14,7 +14,7 @@ abstract module Total_Order {
 		lte(a, b) && a != b
 	}
 		
-	predicate method {:axiom} lte(a: Element, b: Element)
+	predicate method lte(a: Element, b: Element)
 		ensures lte(a, b) == ltedef(a, b);
 		ensures ltedef(a, b) || ltedef(b, a); // Total
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
@@ -149,7 +149,8 @@ abstract module Total_Order {
 
   lemma IsStrictlySortedImpliesLtIndices(run: seq<Element>, i: int, j: int)
   requires IsStrictlySorted(run)
-  requires 0 <= i < j < |run|
+  requires 0 <= i < |run|
+  requires 0 <= j < |run|
   requires lt(run[i], run[j])
   ensures 0 <= i < j < |run|
   {

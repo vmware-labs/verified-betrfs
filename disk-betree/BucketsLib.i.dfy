@@ -569,4 +569,11 @@ module BucketsLib {
   lemma WFBucketsOfWFBucketList(blist: BucketList, pivots: PivotTable)
   requires WFBucketList(blist, pivots)
   ensures forall i | 0 <= i < |blist| :: WFBucket(blist[i])
+  {
+    reveal_WFBucket();
+    forall i | 0 <= i < |blist| ensures WFBucket(blist[i])
+    {
+      assert WFBucketAt(blist[i], pivots, i);
+    }
+  }
 }
