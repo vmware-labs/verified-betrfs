@@ -57,16 +57,27 @@ module ImplSync {
   ensures lba.Some? ==> BC.ValidLBAForNode(lba.value)
   ensures lba.Some? ==> BC.LBAFree(IS.IVars(s), lba.value)
   {
-    assume false; // TODO timing out
-    /*
+    var persistent': map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
+    var persistent := map ref | ref in persistent' && persistent'[ref].0.Some? :: persistent'[ref].0.value;
+
+    var ephemeral': map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
+    var ephemeral := map ref | ref in ephemeral' && ephemeral'[ref].0.Some? :: ephemeral'[ref].0.value;
+
+    var frozen: Option<map<uint64, BC.LBA>> := None;
+    if (s.frozenIndirectionTable.Some?) {
+      var m := s.frozenIndirectionTable.value.ToMap();
+      var frozen' := m;
+      frozen := Some(map ref | ref in frozen' && frozen'[ref].0.Some? :: frozen'[ref].0.value);
+    }
+
     if i: uint64 :| (
       && i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
       && var l := i * LBAType.BlockSize();
       && BC.ValidLBAForNode(l)
-      && l !in s.persistentIndirectionTable.lbas.Values
-      && l !in s.ephemeralIndirectionTable.lbas.Values
-      && (s.frozenIndirectionTable.Some? ==>
-          l !in s.frozenIndirectionTable.value.lbas.Values)
+      && l !in persistent.Values
+      && l !in ephemeral.Values
+      && (frozen.Some? ==>
+          l !in frozen.value.Values)
       && (forall id | id in s.outstandingBlockWrites ::
           s.outstandingBlockWrites[id].lba != l)
     ) {
@@ -74,39 +85,8 @@ module ImplSync {
     } else {
       lba := None;
     }
-    */
-    var table1: map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
-    var table2: map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
 
-    var table1Values := SetToSeq(table1.Values);
-    var table2Values := SetToSeq(table2.Values);
-
-    var v1Opt := Filter((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.Some?, table1Values);
-    var v2Opt := Filter((x: (Option<BC.LBA>, seq<IS.Reference>)) => x.0.Some?, table2Values);
-    var v1 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) requires x.0.Some? => x.0.value, v1Opt);
-    var v2 := Apply((x: (Option<BC.LBA>, seq<IS.Reference>)) requires x.0.Some? => x.0.value, v2Opt);
-
-    var m1;
-    var m2;
-
-    if |v1| >= 1 {
-      m1 := maximum(set x | x in v1);
-    } else {
-      m1 := 0;
-    }
-
-    if |v2| >= 1 {
-      m2 := maximum(set x | x in v2);
-    } else {
-      m2 := 0;
-    }
-
-    var m := if m1 > m2 then m1 else m2;
-    if (m < 0xffff_ffff_ffff_ffff) {
-      lba := Some(m + 1);
-    } else {
-      lba := None;
-    }
+    assume false;
   }
 
   method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)

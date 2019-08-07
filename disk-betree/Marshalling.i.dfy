@@ -250,8 +250,14 @@ module Marshalling {
   }
 
   method GraphClosed(table: ImplState.MutIndirectionTable) returns (result: bool)
+    requires table.Inv()
     requires BC.GraphClosed.requires(ImplState.IIndirectionTable(table).graph)
     ensures BC.GraphClosed(ImplState.IIndirectionTable(table).graph) == result
+  {
+    var m := table.ToMap();
+    var m' := map ref | ref in m :: m[ref].1;
+    result := BC.GraphClosed(m');
+  }
 
   method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
   requires valToIndirectionTable.requires(v)
