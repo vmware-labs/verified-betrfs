@@ -203,10 +203,10 @@ class BenchmarkSequentialQueries : Benchmark {
 
 class Benchmarks {
   public void RunAllBenchmarks() {
-    //new BenchmarkRandomQueries().Run();
+    new BenchmarkRandomQueries().Run();
     new BenchmarkRandomInserts().Run();
-    //new BenchmarkSequentialQueries().Run();
-    //new BenchmarkSequentialInserts().Run();
+    new BenchmarkSequentialQueries().Run();
+    new BenchmarkSequentialInserts().Run();
 
     Native_Compile.BenchmarkingUtil.dump();
   }

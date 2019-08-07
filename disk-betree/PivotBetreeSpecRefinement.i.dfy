@@ -874,7 +874,7 @@ module PivotBetreeSpecRefinement {
   ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
   ensures key in bucket ==> P.NodeLookup(node', key) == M.Merge(bucket[key], P.NodeLookup(node, key))
   {
-    GetBucketListFlushEqMerge(node.buckets, node.pivotTable, bucket, key);
+    GetBucketListFlushEqMerge(bucket, node.buckets, node.pivotTable, key);
   }
 
   lemma {:fuel IOps,2} FlushRefinesOps(flush: P.NodeFlush)
@@ -1116,7 +1116,11 @@ module PivotBetreeSpecRefinement {
 
     var buckets1 := r.leaf.buckets;
     var joined := JoinBucketList(buckets1);
+    WFBucketsOfWFBucketList(buckets1, r.leaf.pivotTable);
+    WFJoinBucketList(buckets1);
+
     var buckets2 := SplitBucketOnPivots(joined, r.pivots);
+    WFSplitBucketOnPivots(joined, r.pivots);
 
     forall i | 0 <= i < |buckets1|
     ensures forall key | key in buckets1[i] :: buckets1[i][key] != M.IdentityMessage()

@@ -17,7 +17,7 @@ module {:extern} Native {
           ensures  forall i :: (srcIndex as int) <= i < (srcIndex as int) + (len as int) ==>
                       src[i] == dst[i - (srcIndex as int) + (dstIndex as int)];
 
-      static predicate lt(a: seq<byte>, b: seq<byte>)
+      /*static predicate lt(a: seq<byte>, b: seq<byte>)
       {
         if |a| == 0 && |b| == 0 then false
         else if |a| == 0 then true
@@ -37,7 +37,7 @@ module {:extern} Native {
           requires i2 as int + l2 as int <= |s2|
           ensures c < 0 ==> lt(s1[i1 .. i1 + l1], s2[i2 .. i2 + l2])
           ensures c > 0 ==> lt(s2[i2 .. i2 + l2], s1[i1 .. i1 + l1])
-          ensures c == 0 ==> s1[i1 .. i1 + l1] == s2[i2 .. i2 + l2]
+          ensures c == 0 ==> s1[i1 .. i1 + l1] == s2[i2 .. i2 + l2]*/
 
   }
 

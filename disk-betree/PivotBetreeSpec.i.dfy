@@ -739,11 +739,7 @@ module PivotBetreeSpecWFNodes {
   {
     var j := Buckets.JoinBucketList(leaf.buckets);
     var s := Buckets.SplitBucketOnPivots(j, pivots);
-    /*forall i | 0 <= i < |leaf.buckets|
-    ensures forall key | key in leaf.buckets[i] :: leaf.buckets[i][key] != M.IdentityMessage()
-    {
-      assert NodeHasWFBucketAt(leaf, i);
-    }*/
+    Buckets.WFBucketsOfWFBucketList(leaf.buckets, leaf.pivotTable);
     Buckets.WFJoinBucketList(leaf.buckets);
     Buckets.JoinBucketsSplitBucketOnPivotsCancel(j, pivots);
   }

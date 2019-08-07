@@ -55,13 +55,23 @@ module {:extern} MainImpl refines Main {
   method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
   returns (id: int)
   {
-    assume false; // TODO
     var s := hs.s;
     var s', id1 := pushSync(k, s, io);
     id := id1;
     var uiop := UI.PushSyncOp(id);
     BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    // TODO factor this out
+    if s'.Ready? {
+      s'.persistentIndirectionTable.InvImpliesRepr();
+      s'.ephemeralIndirectionTable.InvImpliesRepr();
+      if s'.frozenIndirectionTable.Some? {
+        s'.frozenIndirectionTable.value.InvImpliesRepr();
+      }
+    }
+    // NOALIAS this could be unnecessary with statically enforced no-aliasing
+    assert hs !in IS.VariablesReadSet(s'); // observe
     hs.s := s';
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp()); // observe
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
