@@ -361,14 +361,20 @@ module ImplDo {
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
+    ghost var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
+
     assert BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
-    assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
-    assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
-    assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
-    assert stepsBetree(k, s, s', UI.PutOp(key, value), BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
+    assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(btStep)[0]);
+    assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(btStep));
+    assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, btStep);
+    assert stepsBetree(k, old(s), s', UI.PutOp(key, value), btStep);
 
-    assume ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp);
+    if success {
+      assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp,
+          ImplADM.M.Step(BBC.BetreeMoveStep(btStep)));
+    }
+    /* (doc) assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp); */
   }
 
   method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
