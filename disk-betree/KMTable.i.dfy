@@ -25,6 +25,8 @@ module KMTable {
     && (forall i | 0 <= i < |kmt.values| :: kmt.values[i] != IdentityMessage())
   }
 
+  function method MaxNumKeys() : uint64 { 0x8000_0000_0000_0000 }
+
   predicate Bounded(kmt: KMTable) {
     |kmt.keys| < 0x8000_0000_0000_0000
   }

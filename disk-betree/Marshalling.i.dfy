@@ -197,6 +197,7 @@ module Marshalling {
   ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
   ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
   {
+    assume false;
     if |a| == 0 {
       var newHashMap := new MM.ResizingHashMap<(Option<LBA>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
       s := Some(newHashMap);
@@ -316,7 +317,7 @@ module Marshalling {
 
     var kmt := KMTable.KMTable(keys, values);
 
-    if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) then
+    if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) && |keys| < KMTable.MaxNumKeys() as int then
       Some(KMTable.I(kmt))
     else
       None
@@ -334,9 +335,15 @@ module Marshalling {
   method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMTable>)
   requires valToBucket.requires(v, pivotTable, i)
   ensures s.Some? ==> KMTable.WF(s.value)
+  ensures s.Some? ==> KMTable.Bounded(s.value)
   ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
   ensures IKMTableOpt(s) == valToBucket(v, pivotTable, i)
   {
+    assert ValidVal(v.t[0]);
+    if (|v.t[0].a| as uint64 >= KMTable.MaxNumKeys()) {
+      return None;
+    }
+
     var keys := valToKeySeq(v.t[0]);
     var values := valToMessageSeq(v.t[1]);
     var kmt := KMTable.KMTable(keys, values);
@@ -419,7 +426,7 @@ module Marshalling {
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| ::WFBucketAt(s.value[i], pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(s.value[i], pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -463,8 +470,7 @@ module Marshalling {
 
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMTable>>)
   requires valToBuckets.requires(a, pivotTable)
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i])
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> ImplState.WFBuckets(s.value)
   ensures ISeqKMTableOpt(s) == valToBuckets(a, pivotTable)
   {
     var ar := new KMTable.KMTable[|a|];
@@ -473,6 +479,7 @@ module Marshalling {
     while i < |a|
     invariant 0 <= i <= |a|
     invariant forall k: nat | k < i :: KMTable.WF(ar[k])
+    invariant forall k: nat | k < i :: KMTable.Bounded(ar[k])
     invariant forall k: nat | k < i :: WFBucketAt(KMTable.I(ar[k]), pivotTable, k)
     invariant valToBuckets(a[..i], pivotTable).Some?
     invariant Apply(KMTable.I, ar[..i]) == valToBuckets(a[..i], pivotTable).value
@@ -571,6 +578,7 @@ module Marshalling {
     var node := ImplState.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
 
     assert valToNode(v).Some?;
+    assert ImplState.WFBuckets(node.buckets);
     assert ImplState.INode(node) == valToNode(v).value;
     return Some(node);
   }
