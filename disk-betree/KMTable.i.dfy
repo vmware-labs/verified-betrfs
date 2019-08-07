@@ -1041,6 +1041,7 @@ module KMTable {
   ensures I(kmt) == m
   {
     assume false;
+
     var keys := new Key[|s| as uint64];
     var defaultMessage := IdentityMessage();
     var values := new Message[|s| as uint64]((i) => defaultMessage);

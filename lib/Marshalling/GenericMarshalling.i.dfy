@@ -1313,6 +1313,50 @@ method ComputeSizeOf(val:V) returns (size:uint64)
                                size := 8 + vs;
 }
 
+lemma seq_ext(a: seq<byte>, b: seq<byte>)
+requires |a| == |b|
+requires forall i | 0 <= i < |a| :: a[i] == b[i]
+ensures a == b
+{
+}
+
+lemma MarshallUint64_index_splicing(data: array<byte>, index: uint64, val: V, i: int)
+requires 0 <= i
+requires 0 <= index
+requires 8 + (i+1)*8 <= SizeOfV(val)
+requires (index as int) + SizeOfV(val) <= data.Length
+ensures data[index..(index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
+     == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
+{
+  // I had to go through enormous trouble to prove this for some reason
+
+  var ar := data[..];
+  var a := index as int;
+  var b := SizeOfV(val);
+  var c := 8 + i*8;
+  var d := 8;
+
+  var x1 := ar[a .. a + b][c .. c + d];
+  var x2 := ar[a + c .. a + c + d];
+  forall i | 0 <= i < |x1|
+  ensures x1[i] == x2[i]
+  {
+    assert x1[i]
+        == ar[a .. a + b][c .. c + d][i]
+        == ar[a .. a + b][c + i]
+        == ar[a + c + i]
+        == ar[a + c .. a + c + d][i]
+        == x2[i];
+  }
+  assert |x1| == |x2|;
+  seq_ext(x1, x2);
+
+  assert ar[a .. a + b][c .. c + d]
+      == ar[a + c .. a + c + d];
+  assert ar[index..(index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
+     == ar[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
+}
+
 method MarshallUint64(n:uint64, data:array<byte>, index:uint64)
     requires (index as int) + (Uint64Size() as int) <= data.Length;
     requires 0 <= (index as int) + (Uint64Size() as int) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
@@ -1921,6 +1965,7 @@ method MarshallUint64Array(val:V, grammar:G, data:array<byte>, index:uint64) ret
     MarshallUint64((|val.ua| as uint64), data, index);
     assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
     MarshallUint64s(val.ua, data, index + 8);
+    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
 
     calc {
         parse_Val(data[index..(index as int) + SizeOfV(val)], grammar);
@@ -1936,6 +1981,7 @@ method MarshallUint64Array(val:V, grammar:G, data:array<byte>, index:uint64) ret
     assert len.value.u
         == SeqByteToUint64(data_seq[..8])
         == SeqByteToUint64(data[index .. index + 8])
+        == SeqByteToUint64(data[index .. index + (Uint64Size() as uint64)])
         == (|val.ua| as uint64);
     
     //assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.ua;
@@ -1946,11 +1992,7 @@ method MarshallUint64Array(val:V, grammar:G, data:array<byte>, index:uint64) ret
     forall i | 0 <= i < |val.ua|
     ensures SeqByteToUint64(data_seq[8 + i*8 .. 8 + (i+1)*8]) == val.ua[i]
     {
-      assert data[index as int .. (index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
-          == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
-      assert data_seq[8 + i*8 .. 8 + (i+1)*8]
-          == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
-
+      MarshallUint64_index_splicing(data, index, val, i);
     }
     parse_Uint64Array_eq_seq(data_seq, val.ua);
 }
