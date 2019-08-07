@@ -26,15 +26,30 @@ abstract module Main {
   // impl defined stuff
 
   type Constants // impl defined
-  type HeapState // impl defined (heap state)
+  type Variables // impl defined
+
+  class HeapState {
+    var s: Variables;
+    ghost var Repr: set<object>;
+    constructor(s_: Variables, ghost repr: set<object>)
+    ensures fresh(this)
+    ensures Repr == repr
+    ensures this.s == s_;
+    {
+      s := s_;
+      Repr := repr;
+    }
+  }
+
   function HeapSet(hs: HeapState) : set<object>
+    reads hs
 
   predicate Inv(k: Constants, hs: HeapState)
-    reads HeapSet(hs)
+    reads hs, HeapSet(hs)
   function Ik(k: Constants): ADM.M.Constants
   function I(k: Constants, hs: HeapState): ADM.M.Variables
     requires Inv(k, hs)
-    reads HeapSet(hs)
+    reads hs, HeapSet(hs)
 
   method InitState() returns (k: Constants, hs: HeapState)
     ensures Inv(k, hs)
@@ -46,7 +61,7 @@ abstract module Main {
   returns (id: int)
   requires io.initialized()
   requires Inv(k, hs)
-  modifies HeapSet(hs)
+  modifies hs, HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp())
@@ -55,7 +70,7 @@ abstract module Main {
   returns (success: bool)
   requires io.initialized()
   requires Inv(k, hs)
-  modifies HeapSet(hs)
+  modifies hs, HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
@@ -65,14 +80,14 @@ abstract module Main {
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
   requires Inv(k, hs)
-  modifies HeapSet(hs)
+  modifies hs, HeapSet(hs)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
   method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires Inv(k, hs)
-  modifies HeapSet(hs)
+  modifies hs, HeapSet(hs)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
@@ -80,7 +95,7 @@ abstract module Main {
   returns (v: Option<MS.Value>)
   requires io.initialized()
   requires Inv(k, hs)
-  modifies HeapSet(hs)
+  modifies hs, HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
@@ -91,7 +106,7 @@ abstract module Main {
   returns (success: bool)
   requires io.initialized()
   requires Inv(k, hs)
-  modifies HeapSet(hs)
+  modifies hs, HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),

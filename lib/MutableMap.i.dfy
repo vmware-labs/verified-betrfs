@@ -768,17 +768,23 @@ module MutableMap {
       assert MapFromStorage(underlying.Storage[..]) == contents;
     }
 
-    protected predicate Inv()
+    predicate ReprInv()
       reads this, this.Repr
-      ensures Inv() ==> this in Repr && this.Underlying in Repr
-      decreases Repr, 0
+      ensures ReprInv() ==> this in Repr && this.Underlying in Repr
     {
       && { this, this.Underlying } <= Repr
       && { this, this.Underlying } + this.Underlying.Repr == Repr
+      && this.Underlying.Repr == { this.Underlying, this.Underlying.Storage }
+    }
+
+    protected predicate Inv()
+      reads this, this.Repr
+      ensures Inv() ==> ReprInv() // make ReprInv transparent
+    {
+      && ReprInv()
 
       && UnderlyingInv(Underlying)
       && MapFromStorage(Underlying.Storage[..]) == Contents
-      // && Count as nat < Underlying.Storage.Length
       && |Contents| == Count as nat
     }
 

@@ -54,6 +54,10 @@ module {:extern} ImplState {
     | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
 
   function VariablesReadSet(s: Variables): set<object>
+  reads if s.Ready? then (
+      {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
+      (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {}))
+      else {}
   {
     if s.Ready? then
       s.persistentIndirectionTable.Repr +
@@ -77,6 +81,11 @@ module {:extern} ImplState {
     forall ref | ref in cache :: WFNode(cache[ref])
   }
   predicate WFVars(vars: Variables)
+  reads if vars.Ready? then (
+      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
+      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+      else {}
+  reads VariablesReadSet(vars)
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) => (
@@ -93,7 +102,7 @@ module {:extern} ImplState {
     }
   }
   predicate WFSector(sector: Sector)
-    reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
+  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} + sector.indirectionTable.Repr else {}
   {
     match sector {
       case SectorBlock(node) => WFNode(node)
@@ -133,14 +142,14 @@ module {:extern} ImplState {
     map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
   function IIndirectionTable(table: MutIndirectionTable) : (result: BC.IndirectionTable)
-    reads table.Repr
+  reads table, table.Repr
   {
     var lbas := map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value;
     var graph := map k | k in table.Contents :: table.Contents[k].1;
     BC.IndirectionTable(lbas, graph)
   }
   function IIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<BC.IndirectionTable>)
-    reads if table.Some? then table.value.Repr else {}
+  reads if table.Some? then {table.value} + table.value.Repr else {}
   {
     if table.Some? then
       Some(IIndirectionTable(table.value))
@@ -165,18 +174,5 @@ module {:extern} ImplState {
       case SectorBlock(node) => BC.SectorBlock(INode(node))
       case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
-  }
-
-  class ImplHeapState {
-    var s: Variables
-    constructor()
-    ensures WFVars(s)
-    ensures M.Init(BC.Constants(), IVars(s));
-    {
-      s := Unready(None, map[]);
-    }
-  }
-  function ImplHeapSet(hs: ImplHeapState) : set<object> {
-    {hs} + VariablesReadSet(hs.s)
   }
 }

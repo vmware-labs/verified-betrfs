@@ -38,7 +38,7 @@ module ImplDo {
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PushSyncOp(id), io.diskOp())
   {
     id := freeId(s.syncReqs);
     s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
@@ -54,7 +54,7 @@ module ImplDo {
   requires BBC.Inv(k, IS.IVars(s))
   modifies io
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
   {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
@@ -75,7 +75,7 @@ module ImplDo {
   requires BBC.Inv(k, IS.IVars(s))
   requires s.Ready?
   modifies io
-  ensures res.Some? ==> ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s),
+  ensures res.Some? ==> ImplADM.M.Next(Ik(k), old(IS.IVars(s)), old(IS.IVars(s)),
     UI.GetOp(key, res.value), io.diskOp())
   ensures res.None? ==> io.initialized()
   ensures res.None? ==> key !in TTT.I(s.rootBucket)
@@ -162,7 +162,7 @@ module ImplDo {
   requires BBC.Inv(k, IS.IVars(s))
   modifies io
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
     if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
     io.diskOp())
   {
@@ -244,7 +244,7 @@ module ImplDo {
               s' := s;
               res := Some(MS.V.DefaultValue());
 
-              assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'),
+              assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
                 if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
                 ImplADM.M.IDiskOp(io.diskOp()),
                 BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
@@ -265,7 +265,7 @@ module ImplDo {
         res := Some(msg.value);
 
         assert BT.ValidQuery(BT.LookupQuery(key, res.value, lookup));
-        assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'),
+        assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
           UI.GetOp(key, res.value),
           ImplADM.M.IDiskOp(io.diskOp()),
           BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
@@ -303,7 +303,7 @@ module ImplDo {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -358,11 +358,11 @@ module ImplDo {
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
-    assert BC.Dirty(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.Root(), newroot);
-    assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
-    assert BC.OpStep(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
-    assert BC.OpTransaction(Ik(k), IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
-    assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
+    assert BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
+    assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
+    assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
+    assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
+    assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
     assert stepsBetree(k, s, s', UI.PutOp(key, value), BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
   }
 
@@ -373,7 +373,7 @@ module ImplDo {
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
     if success then UI.PutOp(key, value) else UI.NoOp,
     io.diskOp())
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
@@ -392,7 +392,7 @@ module ImplDo {
     }
 
     s', success := InsertKeyValue(k, s, key, value);
-    assert ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'),
+    assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
       if success then UI.PutOp(key, value) else UI.NoOp,
       io.diskOp());
   }
@@ -431,13 +431,13 @@ module ImplDo {
   requires io.diskOp().RespReadOp?
   requires s.Unready?
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       s' := IS.Ready(sector.value.indirectionTable, None, sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
       assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
-  assert ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
+  assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
       assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
@@ -452,7 +452,7 @@ module ImplDo {
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     assume false; // TODO timing out
 
@@ -490,7 +490,7 @@ module ImplDo {
 
         INodeRootEqINodeForEmptyRootBucket(node);
 
-        assert BC.PageInResp(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
+        assert BC.PageInResp(k, old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
         assume stepsBC(k, s, s', UI.NoOp, io, BC.PageInRespStep);
       } else {
         s' := s;
@@ -510,7 +510,7 @@ module ImplDo {
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     if (s.Unready?) {
       s' := PageInIndirectionTableResp(k, s, io);
@@ -527,7 +527,7 @@ module ImplDo {
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     assume false; // TODO timing out
 

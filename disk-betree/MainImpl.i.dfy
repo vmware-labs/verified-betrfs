@@ -30,12 +30,16 @@ module {:extern} MainImpl refines Main {
   type Constants = ImplConstants
   type Variables = ImplVariables
 
-  type HeapState = IS.ImplHeapState
-
-  function HeapSet(hs: HeapState) : set<object> { IS.ImplHeapSet(hs) }
+  function HeapSet(hs: HeapState) : set<object> { hs.Repr }
 
   predicate Inv(k: Constants, hs: HeapState)
   {
+    // TODO this is gross, what can we do about it?
+    && (if hs.s.Ready? then (
+        {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable} +
+        (if hs.s.frozenIndirectionTable.Some? then {hs.s.frozenIndirectionTable.value} else {}))
+        else {}) <= HeapSet(hs)
+    && IS.VariablesReadSet(hs.s) <= HeapSet(hs)
     && IS.WFVars(hs.s)
     && BBC.Inv(k, IS.IVars(hs.s))
   }
@@ -45,7 +49,8 @@ module {:extern} MainImpl refines Main {
   method InitState() returns (k: Constants, hs: HeapState)
   {
     k := BC.Constants();
-    hs := new IS.ImplHeapState();
+    var s := IS.Unready(None, map[]);
+    hs := new HeapState(s, {});
 
     BBC.InitImpliesInv(k, IS.IVars(hs.s));
   }
@@ -59,74 +64,76 @@ module {:extern} MainImpl refines Main {
     var s', id1 := pushSync(k, s, io);
     id := id1;
     var uiop := UI.PushSyncOp(id);
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
-    // TODO factor this out
-    if s'.Ready? {
-      s'.persistentIndirectionTable.InvImpliesRepr();
-      s'.ephemeralIndirectionTable.InvImpliesRepr();
-      if s'.frozenIndirectionTable.Some? {
-        s'.frozenIndirectionTable.value.InvImpliesRepr();
-      }
-    }
-    // NOALIAS this could be unnecessary with statically enforced no-aliasing
-    assert hs !in IS.VariablesReadSet(s'); // observe
+    BBC.NextPreservesInv(k, old(IS.IVars(s)), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
+    hs.Repr := IS.VariablesReadSet(s');
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp()); // observe
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
   returns (success: bool)
   {
-    assume false; // TODO
     var s := hs.s;
     var s', succ := popSync(k, s, io, id);
     success := succ;
     var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, old(IS.IVars(s)), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
+    hs.Repr := IS.VariablesReadSet(s');
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
+        if success then UI.PopSyncOp(id) else UI.NoOp,
+        io.diskOp());
   }
 
   method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
   returns (v: Option<MS.Value>)
   {
-    assume false; // TODO
     var s := hs.s;
     var s', value := query(k, s, io, key);
     var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, old(IS.IVars(s)), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
+    hs.Repr := IS.VariablesReadSet(s');
     v := value;
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
+        if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
+        io.diskOp());
   }
 
   method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (success: bool)
   {
-    assume false; // TODO
     var s := hs.s;
     var s', succ := insert(k, s, io, key, value);
     var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, old(IS.IVars(s)), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
+    hs.Repr := IS.VariablesReadSet(s');
     success := succ;
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
+        if success then UI.PutOp(key, value) else UI.NoOp,
+        io.diskOp());
   }
 
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
-    assume false; // TODO
     var s := hs.s;
     var s' := readResponse(k, s, io);
     var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, old(IS.IVars(s)), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
+    hs.Repr := IS.VariablesReadSet(s');
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
 
   method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
-    assume false; // TODO
     var s := hs.s;
     var s' := writeResponse(k, s, io);
     var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, old(IS.IVars(s)), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
+    hs.Repr := IS.VariablesReadSet(s');
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
 }
