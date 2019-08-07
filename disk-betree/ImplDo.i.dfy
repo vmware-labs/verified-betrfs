@@ -333,11 +333,13 @@ module ImplDo {
 
     var newRootBucket := TTT.Insert(s.rootBucket, key, msg);
 
-    var lbaGraph := s.ephemeralIndirectionTable.Remove(BT.G.Root());
+    // TODO how do we deal with this?
+    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
+
+    label before_removal: var lbaGraph := s.ephemeralIndirectionTable.Remove(BT.G.Root());
     if lbaGraph.Some? {
+      assert s.ephemeralIndirectionTable.Count == old@before_removal(s.ephemeralIndirectionTable.Count) - 1;
       var (lba, graph) := lbaGraph.value;
-      // TODO how do we deal with this?
-      assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
       var _ := s.ephemeralIndirectionTable.Insert(BT.G.Root(), (None, graph));
     }
 
@@ -346,12 +348,20 @@ module ImplDo {
 
     ghost var oldroot := IS.INodeRoot(baseroot, s.rootBucket);
     ghost var newroot := IS.INodeRoot(baseroot, newRootBucket);
+
+    assert IS.IVars(s') == old@before_removal(IS.IVars(s) // timeout observe
+        .(cache := IS.IVars(s).cache[BT.G.Root() := newroot])
+        .(ephemeralIndirectionTable := BC.IndirectionTable(
+          MapRemove(IS.IVars(s).ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+          IS.IVars(s).ephemeralIndirectionTable.graph
+        )));
+
     LemmaInsertToRootBucket(baseroot, s.rootBucket, newRootBucket, key, msg);
     assert newroot == BT.AddMessageToNode(oldroot, key, msg);
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
-    assume BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
+    assert BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
     assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
