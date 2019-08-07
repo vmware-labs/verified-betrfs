@@ -140,7 +140,9 @@ function method {:opaque} parse_Array_contents(data:seq<byte>, eltType:G, len:ui
     requires ValidGrammar(eltType);
     decreases eltType, 1, len;
     ensures var (opt_seq, rest) := parse_Array_contents(data, eltType, len);
-            |rest| <= |data| && (opt_seq.Some? ==> forall i :: 0 <= i < |opt_seq.value| ==> ValInGrammar(opt_seq.value[i], eltType));
+            |rest| <= |data| && (opt_seq.Some? ==>
+            && |opt_seq.value| == len as int
+            && forall i :: 0 <= i < |opt_seq.value| ==> ValidVal(opt_seq.value[i]) && ValInGrammar(opt_seq.value[i], eltType));
 {
    if len == 0 then
        (Some([]), data)
@@ -298,7 +300,9 @@ function method parse_Array(data:seq<byte>, eltType:G) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     decreases eltType;
     ensures var (opt_val, rest) := parse_Array(data, eltType);
-            |rest| <= |data| && (opt_val.Some? ==> ValInGrammar(opt_val.value, GArray(eltType)));
+            |rest| <= |data| && (opt_val.Some? ==>
+              && ValidVal(opt_val.value)
+              && ValInGrammar(opt_val.value, GArray(eltType)));
 {
     var (len, rest) := parse_Uint64(data);
     if !len.None? then
@@ -348,7 +352,7 @@ function method {:opaque} parse_Tuple_contents(data:seq<byte>, eltTypes:seq<G>) 
     ensures var (opt_val, rest) := parse_Tuple_contents(data, eltTypes);
             |rest| <= |data| &&
             (opt_val.Some? ==> (|opt_val.value| == |eltTypes|
-                              && forall i :: 0 <= i < |opt_val.value| ==> ValInGrammar(opt_val.value[i], eltTypes[i])));
+                              && forall i :: 0 <= i < |opt_val.value| ==> ValidVal(opt_val.value[i]) && ValInGrammar(opt_val.value[i], eltTypes[i])));
 {
     if eltTypes == [] then
         (Some([]), data)
@@ -509,7 +513,7 @@ function method parse_Tuple(data:seq<byte>, eltTypes:seq<G>) : (Option<V>, seq<b
     requires forall elt :: elt in eltTypes ==> ValidGrammar(elt);
     decreases eltTypes, 1;
     ensures var (opt_val, rest) := parse_Tuple(data, eltTypes);
-            |rest| <= |data| && (opt_val.Some? ==> ValInGrammar(opt_val.value, GTuple(eltTypes)));
+            |rest| <= |data| && (opt_val.Some? ==> ValidVal(opt_val.value) && ValInGrammar(opt_val.value, GTuple(eltTypes)));
 {
     var (contents, rest) := parse_Tuple_contents(data, eltTypes);
     if !contents.None? then
@@ -662,7 +666,7 @@ function method parse_Case(data:seq<byte>, cases:seq<G>) : (Option<V>, seq<byte>
     requires forall elt :: elt in cases ==> ValidGrammar(elt);
     decreases cases;
     ensures var (opt_val, rest) := parse_Case(data, cases);
-            |rest| <= |data| && (opt_val.Some? ==> ValInGrammar(opt_val.value, GTaggedUnion(cases)));
+            |rest| <= |data| && (opt_val.Some? ==> ValidVal(opt_val.value) && ValInGrammar(opt_val.value, GTaggedUnion(cases)));
 {
     var (caseID, rest1) := parse_Uint64(data);
 
@@ -711,7 +715,7 @@ function method {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq
     requires ValidGrammar(grammar);
     decreases grammar, 0;
     ensures  var (val, rest) := parse_Val(data, grammar);
-             |rest| <= |data| && (!val.None? ==> ValInGrammar(val.value, grammar));
+             |rest| <= |data| && (!val.None? ==> ValidVal(val.value) && ValInGrammar(val.value, grammar));
 {
     match grammar
         case GUint64             => parse_Uint64(data)
