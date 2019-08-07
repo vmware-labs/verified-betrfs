@@ -389,7 +389,6 @@ module ImplDo {
     io.diskOp())
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
   {
-    assume false; // TODO timing out
     if (s.Unready?) {
       s' := PageInIndirectionTableReq(k, s, io);
       success := false;
