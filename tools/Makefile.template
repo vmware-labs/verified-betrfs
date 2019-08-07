@@ -36,6 +36,8 @@ $(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
 	$(ROOT)tools/deps-for-dfy.py $< $@
 
 include $(TARGETDEPS)
+rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 
 $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy $(BUILD_DIR)/%.s.deps | $$(@D)/.
 	time dafny /compile:0 $(NOVERIFY) $<
