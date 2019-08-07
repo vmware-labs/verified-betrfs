@@ -89,7 +89,7 @@ module ImplSync {
   requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
       ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
   ensures IS.WFVars(s')
-  ensures BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node))
+  ensures BC.Dirty(k, old(IS.IVars(s)), IS.IVars(s'), ref, IS.INode(node))
   modifies s.ephemeralIndirectionTable.Repr
   {
     if (ref == BT.G.Root()) {
@@ -104,22 +104,22 @@ module ImplSync {
     //     ))
     //   .(cache := s.cache[ref := node]);
 
-    assume false; // timing out
     var lbaGraph := s.ephemeralIndirectionTable.Remove(ref);
-    assume lbaGraph.Some?;
+    assert lbaGraph.Some?;
     var (lba, graph) := lbaGraph.value;
-    if node.children.Some? {
-      // TODO how do we deal with this?
-      assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
-      var _ := s.ephemeralIndirectionTable.Insert(ref, (None, node.children.value));
-    }
-    assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
-        old(BC.IndirectionTable(
-          MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas, {ref}),
-          IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ref := if node.children.Some? then node.children.value else []]
-        ));
+
+    // TODO how do we deal with this?
+    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
+    var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if node.children.Some? then node.children.value else []));
+
+    //assert IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas ==
+    //  MapRemove(old(IS.IIndirectionTable(s.ephemeralIndirectionTable)).lbas, {ref});
+
+    //assert IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==
+    //      old(IS.IIndirectionTable(s.ephemeralIndirectionTable)).graph[ref := if node.children.Some? then node.children.value else []];
+
     s' := s.(cache := s.cache[ref := node]);
-    assume BC.Dirty(k, IS.IVars(s), IS.IVars(s'), ref, IS.INode(node));
+    assert BC.Dirty(k, old(IS.IVars(s)), IS.IVars(s'), ref, IS.INode(node));
   }
 
   method RequestWrite(io: DiskIOHandler, addr: uint64, sector: IS.Sector)
