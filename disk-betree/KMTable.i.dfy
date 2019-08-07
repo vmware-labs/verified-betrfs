@@ -29,7 +29,7 @@ module KMTable {
     |kmt.keys| < 0x8000_0000_0000_0000
   }
 
-  function I(kmt: KMTable) : Bucket
+  function {:opaque} I(kmt: KMTable) : Bucket
   requires |kmt.keys| == |kmt.values|
   decreases |kmt.keys|
   {
@@ -86,6 +86,18 @@ module KMTable {
   {
     KMTable(kmt.keys + [key], kmt.values + [value])
   }
+
+  lemma Iappend(kmt: KMTable, key: Key, value: Message)
+  requires |kmt.keys| == |kmt.values|
+  ensures I(append(kmt, key, value)) == I(kmt)[key := value]
+  {
+    reveal_I();
+  }
+
+  lemma Iprefix_append(kmt: KMTable, i: int)
+  requires |kmt.keys| == |kmt.values|
+  requires 0 <= i < |kmt.keys|
+  ensures I(prefix(kmt, i + 1)) == I(prefix(kmt, i))[kmt.keys[i] := kmt.values[i]]
 
   function flush'(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable) : seq<KMTable>
@@ -177,6 +189,7 @@ module KMTable {
   ensures |cur.keys| > 0 && parentIdx < |parent.keys| ==> lt(cur.keys[|cur.keys| - 1], parent.keys[parentIdx])
   ensures |cur.keys| > 0 && childIdx < |children[childrenIdx].keys| ==> lt(cur.keys[|cur.keys| - 1], children[childrenIdx].keys[childIdx])
   {
+    reveal_I();
     if (|cur.keys| > 0) {
       var lastCurKey := cur.keys[|cur.keys| - 1];
       assert lastCurKey in I(cur);
@@ -247,10 +260,8 @@ module KMTable {
 
     P.RouteIs(pivots, parent.keys[parentIdx], childrenIdx);
 
-    assert DropLast(parent.keys[.. parentIdx + 1]) == parent.keys[.. parentIdx];
-    assert DropLast(parent.values[.. parentIdx + 1]) == parent.values[.. parentIdx];
-    //assert I(prefix(parent, parentIdx + 1))
-    //    == I(prefix(parent, parentIdx))[parent.keys[parentIdx] := parent.values[parentIdx]];
+    Iappend(cur, parent.keys[parentIdx], parent.values[parentIdx]);
+    Iprefix_append(parent, parentIdx);
 
     /*assert I(append(cur, parent.keys[parentIdx], parent.values[parentIdx]))
         == I(cur)[parent.keys[parentIdx] := parent.values[parentIdx]]
@@ -279,17 +290,18 @@ module KMTable {
     assert child.keys[childIdx] in I(children[childrenIdx]);
     assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
 
-    assert DropLast(child.keys[.. childIdx + 1]) == child.keys[.. childIdx];
-    assert DropLast(child.values[.. childIdx + 1]) == child.values[.. childIdx];
+    Iappend(cur, child.keys[childIdx], child.values[childIdx]);
+    Iprefix_append(child, childIdx);
 
-    assert I(append(cur, child.keys[childIdx], child.values[childIdx]))
+    /*assert I(append(cur, child.keys[childIdx], child.values[childIdx]))
         == I(cur)[child.keys[childIdx] := child.values[childIdx]]
         == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[child.keys[childIdx] := child.values[childIdx]]
         == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx))[child.keys[childIdx] := child.values[childIdx]], pivots, childrenIdx)
-        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);*/
   }
 
-  lemma flush'AppendParentAndChild(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
+  lemma {:fuel BucketListItemFlush,0} {:fuel P.Route,0}
+  flush'AppendParentAndChild(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<KMTable>, cur: KMTable)
   requires flush'Inv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires 0 <= childrenIdx < |children|
@@ -313,16 +325,15 @@ module KMTable {
     assert child.keys[childIdx] in I(children[childrenIdx]);
     assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
 
-    assert DropLast(child.keys[.. childIdx + 1]) == child.keys[.. childIdx];
-    assert DropLast(child.values[.. childIdx + 1]) == child.values[.. childIdx];
-    assert DropLast(parent.keys[.. parentIdx + 1]) == parent.keys[.. parentIdx];
-    assert DropLast(parent.values[.. parentIdx + 1]) == parent.values[.. parentIdx];
+    Iappend(cur, parent.keys[parentIdx], Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx]));
+    Iprefix_append(parent, parentIdx);
+    Iprefix_append(child, childIdx);
 
-    assert I(append(cur, parent.keys[parentIdx], Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])))
+    /*assert I(append(cur, parent.keys[parentIdx], Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])))
         == I(cur)[parent.keys[parentIdx] := Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])]
         == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[parent.keys[parentIdx] := Merge(parent.values[parentIdx], children[childrenIdx].values[childIdx])]
         == BucketListItemFlush(I(prefix(parent, parentIdx))[parent.keys[parentIdx] := parent.values[parentIdx]], I(prefix(children[childrenIdx], childIdx))[child.keys[childIdx] := child.values[childIdx]], pivots, childrenIdx)
-        == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);
+        == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);*/
   }
 
   lemma flush'CurEqBucketListItemFlush(parent: KMTable, children: seq<KMTable>, pivots: seq<Key>,
@@ -377,6 +388,7 @@ module KMTable {
          I(KMTable([],[]))
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1)
   {
+    reveal_I();
     forall key | key in I(prefix(parent, parentIdx))
     ensures P.Route(pivots, key) != childrenIdx + 1
     {
@@ -470,6 +482,7 @@ module KMTable {
       && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
+    reveal_I();
     flush'Res(parent, children, pivots, 0, 0, 0, [], KMTable([], []));
   }
 
@@ -878,6 +891,7 @@ module KMTable {
   ensures forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
   {
+    reveal_I();
     kmts := Flush(kmt, EmptySeq(|pivots| + 1), pivots);
 
     forall key | key in I(kmt)
@@ -921,10 +935,11 @@ module KMTable {
   //// Misc utils
   /////////////////////////
 
-  function method Empty() : (kmt : KMTable)
+  function method {:opaque} Empty() : (kmt : KMTable)
   ensures WF(kmt)
   ensures I(kmt) == map[]
   {
+    reveal_I();
     KMTable([],[])
   }
 
@@ -932,6 +947,7 @@ module KMTable {
   requires WF(kmt)
   ensures IsEmpty(kmt) == (I(kmt) == map[])
   {
+    reveal_I();
     assert |kmt.keys| > 0 ==> Last(kmt.keys) in I(KMTable(DropLast(kmt.keys), DropLast(kmt.values)))[Last(kmt.keys) := Last(kmt.values)];
     var emp : Bucket := map[];
     assert |kmt.keys| > 0 ==> Last(kmt.keys) !in emp;
