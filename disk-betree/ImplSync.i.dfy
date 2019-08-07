@@ -151,8 +151,9 @@ module ImplSync {
   requires s.Ready?
   requires BC.BlockPointsToValidReferences(IS.INode(node), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
   ensures IS.WFVars(s')
-  ensures ref.Some? ==> BC.Alloc(k, IS.IVars(s), IS.IVars(s'), ref.value, IS.INode(node))
+  ensures ref.Some? ==> BC.Alloc(k, old(IS.IVars(s)), IS.IVars(s'), ref.value, IS.INode(node))
   ensures ref.None? ==> s' == s
+  ensures s'.Ready?
   ensures s.rootBucket == s'.rootBucket
   modifies s.ephemeralIndirectionTable.Repr
   {
@@ -168,7 +169,7 @@ module ImplSync {
             IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ref.value := if node.children.Some? then node.children.value else []]
           ));
       s' := s.(cache := s.cache[ref.value := node]);
-      assume ref.Some? ==> BC.Alloc(k, IS.IVars(s), IS.IVars(s'), ref.value, IS.INode(node));
+      assume ref.Some? ==> BC.Alloc(k, old(IS.IVars(s)), IS.IVars(s'), ref.value, IS.INode(node));
     } else {
       s' := s;
     }
@@ -218,7 +219,7 @@ module ImplSync {
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -230,7 +231,7 @@ module ImplSync {
         if lba.None? {
           assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; dealloc can't dealloc because frozen isn't written\n";
           return;
         }
@@ -248,9 +249,9 @@ module ImplSync {
     s' := s
       .(cache := MapRemove(s.cache, {ref}))
       .(outstandingBlockReads := BC.OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref));
-    assert BC.Unalloc(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
-    assert BBC.BlockCacheMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), BC.UnallocStep(ref));
-    assert stepsBC(k, s, s', UI.NoOp, io, BC.UnallocStep(ref));
+    assert BC.Unalloc(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
+    assert BBC.BlockCacheMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), BC.UnallocStep(ref));
+    assert stepsBC(k, old(s), s', UI.NoOp, io, BC.UnallocStep(ref));
   }
 
   method fixBigRoot(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
@@ -262,7 +263,7 @@ module ImplSync {
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -282,7 +283,7 @@ module ImplSync {
         if lba.None? {
           assert BT.G.Root() !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; fixBigRoot can't run because frozen isn't written\n";
           return;
         }
@@ -294,7 +295,7 @@ module ImplSync {
     match newref {
       case None => {
         s' := s;
-        assert noop(k, s, s');
+        assert noop(k, old(s), s');
         print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
@@ -311,9 +312,9 @@ module ImplSync {
         ghost var growth := BT.RootGrowth(IS.INode(oldroot), newref);
         assert IS.INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [map[]]);
         ghost var step := BT.BetreeGrow(growth);
-        BC.MakeTransaction2(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
-        //assert BBC.BetreeMove(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), step);
-        assert stepsBetree(k, s, s', UI.NoOp, step);
+        BC.MakeTransaction2(k, old(IS.IVars(s)), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
+        //assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), step);
+        assert stepsBetree(k, old(s), s', UI.NoOp, step);
       }
     }
   }
@@ -554,7 +555,7 @@ module ImplSync {
   requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this unless paretnref is root
   modifies io
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // TODO timing out
@@ -567,7 +568,7 @@ module ImplSync {
         if lba.None? {
           assert parentref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; doSplit can't run because frozen isn't written\n";
           return;
         }
@@ -589,7 +590,7 @@ module ImplSync {
 
     if !KMTable.IsEmpty(fused_parent.buckets[slot]) {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; trying to split but parent has non-empty buffer\n";
       return;
     }
@@ -598,7 +599,7 @@ module ImplSync {
       // TODO there should be an operation which just
       // cuts off the node and doesn't split it.
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; child.pivots == 0\n";
       return;
     }
@@ -631,8 +632,8 @@ module ImplSync {
     var s1, left_childref := alloc(k, s, left_child);
     if left_childref.None? {
       s' := s;
-      assume noop(k, s, s');
-      assume ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp());
+      assume noop(k, old(s), s');
+      assume ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
       print "giving up; could not get ref\n";
       return;
     }
@@ -640,7 +641,7 @@ module ImplSync {
     var s2, right_childref := alloc(k, s1, right_child);
     if right_childref.None? {
       s' := s;
-      assume noop(k, s, s');
+      assume noop(k, old(s), s');
       print "giving up; could not get ref\n";
       return;
     }
@@ -707,7 +708,7 @@ module ImplSync {
     );
     assert BT.ValidSplit(splitStep);
     ghost var step := BT.BetreeSplit(splitStep);
-    BC.MakeTransaction3(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s2), IS.IVars(s'), BT.BetreeStepOps(step));
+    BC.MakeTransaction3(k, old(IS.IVars(s)), IS.IVars(s1), IS.IVars(s2), IS.IVars(s'), BT.BetreeStepOps(step));
     assert stepsBetree(k, s, s', UI.NoOp, step);
   }
 
@@ -724,7 +725,7 @@ module ImplSync {
   modifies io
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // timing out
@@ -737,7 +738,7 @@ module ImplSync {
         if lba.None? {
           assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; flush can't run because frozen isn't written";
           return;
         }
@@ -773,7 +774,7 @@ module ImplSync {
       && (forall i | 0 <= i < |child.buckets| :: |child.buckets[i].keys| < 0x4000_0000_0000_0000)
     )) {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; data is 2 big\n";
       return;
     }
@@ -794,7 +795,7 @@ module ImplSync {
     var s1, newchildref := alloc(k, s, newchild);
     if newchildref.None? {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; could not get ref\n";
       return;
     }
@@ -825,8 +826,8 @@ module ImplSync {
     assert BT.ValidFlush(flushStep);
     ghost var step := BT.BetreeFlush(flushStep);
     assert IS.INode(newparent) == BT.FlushOps(flushStep)[1].node;
-    BC.MakeTransaction2(k, IS.IVars(s), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
-    assert stepsBetree(k, s, s', UI.NoOp, step);
+    BC.MakeTransaction2(k, old(IS.IVars(s)), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
+    assert stepsBetree(k, old(s), s', UI.NoOp, step);
   }
 
   method {:fuel JoinBucketList,0} fixBigNode(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
@@ -841,7 +842,7 @@ module ImplSync {
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
     assume false; // timing out
@@ -859,7 +860,7 @@ module ImplSync {
         if lba.None? {
           assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; fixBigRoot can't run because frozen isn't written";
           return;
         }
@@ -882,7 +883,7 @@ module ImplSync {
           && (forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000)
         )) {
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; stuff too big to call Join\n";
           return;
         }
@@ -902,7 +903,7 @@ module ImplSync {
 
         if (!(|pivots| < 0x7fff_ffff_ffff_ffff)) {
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "giving up; stuff too big to call Split\n";
           return;
         }
@@ -917,8 +918,8 @@ module ImplSync {
         ghost var step := BT.BetreeRepivot(BT.Repivot(ref, IS.INode(node), pivots));
         assume BT.ValidBetreeStep(step);
         assume |BT.BetreeStepOps(step)| == 1; // TODO
-        assume BC.OpStep(k, IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(step)[0]);
-        BC.MakeTransaction1(k, IS.IVars(s), IS.IVars(s'), BT.BetreeStepOps(step));
+        assume BC.OpStep(k, old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(step)[0]);
+        BC.MakeTransaction1(k, old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(step));
         assume stepsBetree(k, s, s', UI.NoOp, step);
       }
     } else if |node.buckets| > Marshalling.CapNumBuckets() as int {
@@ -937,7 +938,7 @@ module ImplSync {
       s' := doSplit(k, s, io, parentref, ref, i);
     } else {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; fixBigNode\n";
     }
   }
@@ -951,7 +952,7 @@ module ImplSync {
   requires s.Ready?
   requires s.rootBucket != TTT.EmptyTree
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     var oldroot := s.cache[BT.G.Root()];
 
@@ -964,7 +965,7 @@ module ImplSync {
         && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].1.value| < 0x1_000)))
     {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; rootBucketSeq too big\n";
       return;
     }
@@ -977,7 +978,7 @@ module ImplSync {
       && (forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].keys| < 0x4000_0000_0000_0000)
     )) {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "giving up; kmt/oldroot.buckets too big\n";
       return;
     }
@@ -1000,7 +1001,7 @@ module ImplSync {
     assert IS.INodeRoot(oldroot, s.rootBucket) == IS.INodeRoot(newroot, TTT.EmptyTree);
     assert IS.ICache(s.cache, s.rootBucket) == IS.ICache(s'.cache, TTT.EmptyTree);
 
-    assert noop(k, s, s');
+    assert noop(k, old(s), s');
   }
 
   method AssignRefToLBA(table: IS.MutIndirectionTable, ref: IS.Reference, lba: BC.LBA)
@@ -1143,7 +1144,7 @@ module ImplSync {
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
   ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
     assume false; // TODO timing out
 
@@ -1155,7 +1156,7 @@ module ImplSync {
 
     if (s.outstandingIndirectionTableWrite.Some?) {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "sync: giving up; frozen table is currently being written\n";
       return;
     }
@@ -1206,7 +1207,7 @@ module ImplSync {
       } else {
         s' := s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
             .(syncReqs := BC.syncReqs3to2(s.syncReqs));
-        assert BC.Freeze(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
+        assert BC.Freeze(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
         assert stepsBC(k, s, s', UI.NoOp, io, BC.FreezeStep);
         return;
       }
@@ -1222,7 +1223,7 @@ module ImplSync {
         // about frozenIndirectionTable (that is, we should never be freezing a table
         // with too-big nodes in it)
         s' := s;
-        assert noop(k, s, s');
+        assert noop(k, old(s), s');
         print "sync: giving up; frozen table has big node rip (TODO we should prove this case impossible)\n";
         return;
       }
@@ -1232,7 +1233,7 @@ module ImplSync {
         assert ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas;
         // TODO we should be able to prove this is impossible as well
         s' := s;
-        assert noop(k, s, s');
+        assert noop(k, old(s), s');
         print "sync: giving up; ref already in ephemeralIndirectionTable.lbas but not frozen";
         return;
       }
@@ -1251,34 +1252,34 @@ module ImplSync {
               BC.assignRefToLBA(IS.IIndirectionTable(s.frozenIndirectionTable.value), ref, lba);
             s' := s
               .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, lba)]);
-            assert BC.WriteBackReq(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
+            assert BC.WriteBackReq(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
             assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackReqStep(ref));
           } else {
             s' := s;
-            assert noop(k, s, s');
+            assert noop(k, old(s), s');
             print "sync: giving up; write req failed\n";
           }
         }
         case None => {
           s' := s;
-          assert noop(k, s, s');
+          assert noop(k, old(s), s');
           print "sync: giving up; could not get lba\n";
         }
       }
     } else if (s.outstandingBlockWrites != map[]) {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, old(s), s');
       print "sync: giving up; blocks are still being written\n";
     } else {
       LBAType.reveal_ValidAddr();
       var id := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
       if (id.Some?) {
         s' := s.(outstandingIndirectionTableWrite := id);
-        assert BC.WriteBackIndirectionTableReq(Ik(k), IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
+        assert BC.WriteBackIndirectionTableReq(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
         assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackIndirectionTableReqStep);
       } else {
         s' := s;
-        assert noop(k, s, s');
+        assert noop(k, old(s), s');
         print "sync: giving up; write back indirection table failed (no id)\n";
       }
     }
