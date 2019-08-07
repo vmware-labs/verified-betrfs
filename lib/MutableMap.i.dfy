@@ -574,7 +574,7 @@ module MutableMap {
       requires Inv()
       // requires Count as nat < Storage.Length - 1
       ensures Inv()
-      ensures Contents == if key in Contents
+      ensures Contents == if key in old(Contents)
           then old(Contents[key := None])
           else old(Contents)
       ensures removed == if old(key in Contents) && old(Contents[key].Some?)
@@ -786,13 +786,6 @@ module MutableMap {
       && UnderlyingInv(Underlying)
       && MapFromStorage(Underlying.Storage[..]) == Contents
       && |Contents| == Count as nat
-    }
-
-    lemma InvImpliesRepr()
-    requires Inv()
-    ensures { this, this.Underlying } + this.Underlying.Repr == Repr
-    ensures this.Underlying.Repr == { this.Underlying, this.Underlying.Storage }
-    {
     }
 
     constructor (size: uint64)
@@ -1166,7 +1159,12 @@ module MutableMap {
     method Remove(key: uint64) returns (removed: Option<V>)
       requires Inv()
       ensures Inv()
-      ensures Contents == map k | old(k in Contents) && k != key :: old(Contents[k])
+      ensures Contents == if key in old(Contents)
+          then map k | old(k in Contents) && k != key :: old(Contents[k])
+          else old(Contents)
+      ensures removed == if old(key in Contents)
+          then Some(old(Contents)[key])
+          else None
       ensures Count as nat == old(Count as nat) - (if removed.Some? then 1 else 0)
       ensures Repr == old(Repr)
       modifies Repr

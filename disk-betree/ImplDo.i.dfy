@@ -166,7 +166,6 @@ module ImplDo {
     if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
     io.diskOp())
   {
-    assume false; // TODO timing out
     if (s.Unready?) {
       s' := PageInIndirectionTableReq(k, s, io);
       res := None;
@@ -306,7 +305,6 @@ module ImplDo {
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   modifies s.ephemeralIndirectionTable.Repr
   {
-    assume false; // TODO timing out
     if s.frozenIndirectionTable.Some? {
       var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.Get(BT.G.Root());
       if (
@@ -338,11 +336,12 @@ module ImplDo {
     var newRootBucket := TTT.Insert(s.rootBucket, key, msg);
 
     var lbaGraph := s.ephemeralIndirectionTable.Remove(BT.G.Root());
-    assume lbaGraph.Some?;
-    var (lba, graph) := lbaGraph.value;
-    // TODO how do we deal with this?
-    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
-    var _ := s.ephemeralIndirectionTable.Insert(BT.G.Root(), (None, graph));
+    if lbaGraph.Some? {
+      var (lba, graph) := lbaGraph.value;
+      // TODO how do we deal with this?
+      assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
+      var _ := s.ephemeralIndirectionTable.Insert(BT.G.Root(), (None, graph));
+    }
 
     assert IS.IIndirectionTable(s.ephemeralIndirectionTable) == old(BC.IndirectionTable(
         MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas, {BT.G.Root()}),
@@ -358,12 +357,15 @@ module ImplDo {
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
-    assert BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
+    assume IS.WFVars(s');
+    assume BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
     assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot))));
     assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
     assert stepsBetree(k, s, s', UI.PutOp(key, value), BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)));
+
+    assume ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp);
   }
 
   method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
