@@ -177,12 +177,6 @@ module {:extern} ImplState {
     }
   }
   function ImplHeapSet(hs: ImplHeapState) : set<object> {
-    {hs} +
-    if hs.s.Ready? then
-      hs.s.persistentIndirectionTable.Repr +
-      hs.s.ephemeralIndirectionTable.Repr +
-      (if hs.s.frozenIndirectionTable.Some? then hs.s.frozenIndirectionTable.value.Repr else {})
-    else
-      {}
+    {hs} + VariablesReadSet(hs.s)
   }
 }

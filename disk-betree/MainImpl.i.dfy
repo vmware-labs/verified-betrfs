@@ -55,13 +55,37 @@ module {:extern} MainImpl refines Main {
   method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
   returns (id: int)
   {
-    assume false; // TODO
     var s := hs.s;
     var s', id1 := pushSync(k, s, io);
+    assert IS.WFVars(s');
     id := id1;
     var uiop := UI.PushSyncOp(id);
     BBC.NextPreservesInv(k, IS.IVars(s), IS.IVars(s'), uiop, ADM.M.IDiskOp(io.diskOp()));
+    assert BC.Inv(k, IS.IVars(s'));
+    if s'.Ready? {
+      s'.persistentIndirectionTable.InvImpliesRepr();
+      s'.ephemeralIndirectionTable.InvImpliesRepr();
+      if s'.frozenIndirectionTable.Some? {
+        s'.frozenIndirectionTable.value.InvImpliesRepr();
+      }
+    }
+    // NOALIAS this could be unnecessary with statically enforced no-aliasing
+    assert hs !in IS.VariablesReadSet(s');
+    ghost var olds' := IS.IVars(s');
+    label Here: assert true;
+    assert olds' == IS.IVars(s');
     hs.s := s';
+    assert olds' == IS.IVars(s');
+    assert hs.s == old@Here(s');
+    assert IS.IVars(s') == IS.IVars(old@Here(s'));
+    assert BC.Inv(k, IS.IVars(s'));
+    assert IS.IVars(hs.s) == IS.IVars(s');
+    assert BC.Inv(k, IS.IVars(hs.s));
+    assert BBC.Inv(k, IS.IVars(hs.s));
+    assert Inv(k, hs);
+    // assert ImplADM.M.NextStep(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp(), _);
+    assume ImplADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp());
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp());
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
