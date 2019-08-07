@@ -25,26 +25,11 @@ module ImplSync {
   ensures ref.Some? ==> ref.value !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   ensures ref.Some? ==> ref.value !in s.cache
   {
-    /*
-    if r :| r !in s.ephemeralIndirectionTable.graph && r !in s.cache {
+    var ephemeral': map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
+    var ephemeral_graph := map ref | ref in ephemeral' :: ephemeral'[ref].1;
+
+    if r :| r !in ephemeral_graph && r !in s.cache {
       ref := Some(r);
-    } else {
-      ref := None;
-    }
-    */
-    var table := s.ephemeralIndirectionTable.ToMap();
-    var v := table.Keys;
-
-    var m;
-    if |v| >= 1 {
-      m := maximum(v);
-    } else {
-      m := 0;
-    }
-
-    if (m < 0xffff_ffff_ffff_ffff) {
-      ref := Some(m + 1);
-      assume ref.value !in s.cache;
     } else {
       ref := None;
     }
