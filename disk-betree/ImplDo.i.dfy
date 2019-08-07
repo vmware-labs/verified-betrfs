@@ -3,6 +3,7 @@ include "ImplSync.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
+include "PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
@@ -17,6 +18,8 @@ module ImplDo {
   import opened Sequences
 
   import opened BucketsLib
+
+  import opened PBS = PivotBetreeSpec`Spec
 
   // == pushSync ==
 
@@ -242,6 +245,9 @@ module ImplDo {
               // Case where we reach leaf and find nothing
               s' := s;
               res := Some(MS.V.DefaultValue());
+
+              assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
+                PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup))));
 
               assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'),
                 if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,

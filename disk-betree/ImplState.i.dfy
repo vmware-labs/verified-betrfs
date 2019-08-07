@@ -5,10 +5,12 @@ include "KMTable.i.dfy"
 include "../lib/MutableMap.i.dfy"
 include "BetreeBlockCache.i.dfy"
 include "../lib/tttree.i.dfy"
+include "../lib/NativeTypes.s.dfy"
 
 module {:extern} ImplState {
   import opened Options
   import opened Sequences
+  import opened NativeTypes
   import TTT = TwoThreeTree
 
   import BT = PivotBetreeSpec`Internal
@@ -145,11 +147,16 @@ module {:extern} ImplState {
   {
     map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
+  function ContentsHasKey(table: MutIndirectionTable, key: uint64): bool // hide trigger
+  reads table
+  {
+    && key in table.Contents
+  }
   function IIndirectionTable(table: MutIndirectionTable) : (result: BC.IndirectionTable)
   reads table, table.Repr
   {
-    var lbas := map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value;
-    var graph := map k | k in table.Contents :: table.Contents[k].1;
+    var lbas := map k | ContentsHasKey(table, k) && table.Contents[k].0.Some? :: table.Contents[k].0.value;
+    var graph := map k | ContentsHasKey(table, k) :: table.Contents[k].1;
     BC.IndirectionTable(lbas, graph)
   }
   function IIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<BC.IndirectionTable>)
