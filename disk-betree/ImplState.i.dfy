@@ -97,6 +97,10 @@ module {:extern} ImplState {
         && persistentIndirectionTable.Inv()
         && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
         && ephemeralIndirectionTable.Inv()
+        // NOALIAS statically enforced no-aliasing would probably help here
+        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
+        && (frozenIndirectionTable.Some? ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
+        && (frozenIndirectionTable.Some? ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
       )
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }

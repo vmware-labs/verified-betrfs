@@ -330,8 +330,6 @@ module ImplDo {
     ghost var bucket := baseroot.buckets[r];
 
     assert BC.BlockPointsToValidReferences(IS.INodeRoot(baseroot, s.rootBucket), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
-    //assert IS.INode(oldroot).children == IS.INode(newroot).children;
-    //assert BC.BlockPointsToValidReferences(IS.INode(newroot), s.ephemeralIndirectionTable.graph);
 
     var newRootBucket := TTT.Insert(s.rootBucket, key, msg);
 
@@ -343,10 +341,6 @@ module ImplDo {
       var _ := s.ephemeralIndirectionTable.Insert(BT.G.Root(), (None, graph));
     }
 
-    assert IS.IIndirectionTable(s.ephemeralIndirectionTable) == old(BC.IndirectionTable(
-        MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas, {BT.G.Root()}),
-        IS.IIndirectionTable(s.ephemeralIndirectionTable).graph));
-
     s' := s.(rootBucket := newRootBucket);
     success := true;
 
@@ -357,7 +351,6 @@ module ImplDo {
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
-    assume IS.WFVars(s');
     assume BC.Dirty(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot)))[0]);
@@ -435,11 +428,13 @@ module ImplDo {
   ensures IS.WFVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
+    assume false;
+
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       s' := IS.Ready(sector.value.indirectionTable, None, sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
       assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
-  assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
+      assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
       assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
