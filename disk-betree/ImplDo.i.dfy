@@ -449,16 +449,17 @@ module ImplDo {
   ensures IS.WFVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    assume false;
-
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
-      s' := IS.Ready(sector.value.indirectionTable, None, sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
+      var persistentIndirectionTable := sector.value.indirectionTable.Clone();
+      var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
+      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
+      assert IS.WFVars(s');
+      assert stepsBC(k, old(s), s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
       assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
-      assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assume stepsBC(k, old(s), s', UI.NoOp, io, BC.NoOpStep);
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
