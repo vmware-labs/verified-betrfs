@@ -77,6 +77,7 @@ module {:extern} ImplState {
   {
     && WFBuckets(node.buckets)
     && WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
+    && (node.children.Some? ==> |node.buckets| == |node.children.value|)
   }
   predicate WFCache(cache: map<Reference, Node>)
   {
@@ -148,10 +149,12 @@ module {:extern} ImplState {
     map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
   function IIndirectionTableLbas(table: MutIndirectionTable) : map<uint64, BC.LBA> // hide map trigger (prelude loop)
+  reads table, table.Repr
   {
     map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value
   }
   function IIndirectionTableGraph(table: MutIndirectionTable) : map<uint64, seq<Reference>> // hide map trigger (prelude loop)
+  reads table, table.Repr
   {
     map k | k in table.Contents :: table.Contents[k].1
   }

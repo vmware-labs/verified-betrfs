@@ -459,16 +459,6 @@ module ImplDo {
       assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
-      // ??? assert io.diskOp() == D.NoDiskOp;
-      ghost var dop := ImplADM.M.IDiskOp(io.diskOp());
-      assert BC.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), dop, BC.NoOpStep);
-      assert dop.RespReadOp?;
-      // TODO is this the right route?
-      assume dop.respRead.sector.Some?;
-      assume dop.respRead.sector.value.SectorBlock?;
-      assume BT.WFNode(dop.respRead.sector.value.block);
-      assert BBC.BlockCacheMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, dop, BC.NoOpStep);
-      assert BBC.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, dop, BBC.BlockCacheMoveStep(BC.NoOpStep));
       assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
       assert stepsBC(k, old(s), s', UI.NoOp, io, BC.NoOpStep);
       print "giving up; did not get indirectionTable when reading\n";
