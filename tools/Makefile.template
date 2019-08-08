@@ -36,13 +36,17 @@ $(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
 	$(ROOT)tools/deps-for-dfy.py $< $@
 
 include $(TARGETDEPS)
-rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
-include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 
-$(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy $(BUILD_DIR)/%.s.deps | $$(@D)/.
+# jonh thinks we don't want this wildcard include: it's unsound in a surprising way.
+# The single include above is clumsy because it requires deps-for-dafny to emit
+# transitive closure of deps, but at least we know what it does and when it does it.
+#rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+#include $(call rwildcard,$(BUILD_DIR)/,*.deps)
+
+$(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
 	time dafny /compile:0 $(NOVERIFY) $<
 	touch $@
 
-$(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy $(BUILD_DIR)/%.i.deps | $$(@D)/.
+$(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy | $$(@D)/.
 	time dafny /compile:0 $(NOVERIFY) $<
 	touch $@
