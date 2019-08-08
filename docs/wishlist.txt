@@ -57,3 +57,4 @@ which is there to introduce an obligation, should it?
   - examples where statically enforced no-aliasing would help
     - f03fb540e4fd8e9fa7e04192fbe45120d2beeaa3 (noalias-example-00) disk-betree/MainImpl.i.dfy:73
     - ccc3169011232da48d814b8ee1662bf36e4ca198 (noalias-example-01) disk-betree/ImplDo.i.dfy:344 disk-betree/ImplState.i.dfy:100
+    - a5323d0aaa5793cb2b3632ceb5c43e0fccbc66db (noalias-example-02) disk-betree/ImplSync.i.dfy:303 and following lines, :159 and following lines
