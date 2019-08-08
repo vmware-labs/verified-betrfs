@@ -42,23 +42,27 @@ namespace MainDiskIOHandler_Compile {
       sector = bytes;
     }
 
-    public void write(ulong addr, byte[] sector, out ulong id) {
+    public ulong write(ulong addr, byte[] sector) {
       writeSync(addr, sector);
 
-      id = this.curId;
+      ulong id = this.curId;
       this.curId++;
 
       this.writeReqs.Add(id);
+
+      return id;
     }
 
-    public void read(ulong addr, ulong len, out ulong id) {
+    public ulong read(ulong addr, ulong len) {
       byte[] bytes;
       readSync(addr, len, out bytes);
 
-      id = this.curId;
+      ulong id = this.curId;
       this.curId++;
 
       this.readReqs.Add(id, bytes);
+
+      return id;
     }
 
     ulong readResponseId;
@@ -95,8 +99,8 @@ namespace MainDiskIOHandler_Compile {
         return false;
       }
     }
-    public void getWriteResult(out ulong id) {
-      id = writeResponseId;
+    public ulong getWriteResult() {
+      return writeResponseId;
     }
 
     private string getFilename(ulong lba) {
@@ -138,11 +142,11 @@ class Application {
   public void Sync() {
     log("Sync");
 
-    __default.handlePushSync(k, hs, io, out var id);
+    var id = __default.handlePushSync(k, hs, io);
     log("doing push sync...");
 
     for (int i = 0; i < 5000; i++) {
-      __default.handlePopSync(k, hs, io, id, out bool success);
+      bool success = __default.handlePopSync(k, hs, io, id);
       this.maybeDoResponse();
       if (success) {
         log("doing sync... success!");
@@ -173,7 +177,7 @@ class Application {
 
   public void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
     for (int i = 0; i < 50; i++) {
-      __default.handleInsert(k, hs, io, key, val, out bool success);
+      bool success = __default.handleInsert(k, hs, io, key, val);
       this.maybeDoResponse();
       if (success) {
         log("doing insert... success!");
@@ -188,7 +192,7 @@ class Application {
   }
 
   public void Query(string key) {
-    byte[] val_bytes = Query(new Dafny.Sequence<byte>(string_to_bytes(key)));
+    IList<byte> val_bytes = Query(new Dafny.Sequence<byte>(string_to_bytes(key)));
     if (verbose) {
       string val = bytes_to_string(val_bytes);
       log("Query result is: \"" + val + "\"");
@@ -200,21 +204,21 @@ class Application {
   }
 
   public void QueryAndExpect(byte[] key, byte[] expected) {
-    byte[] actual = Query(new Dafny.Sequence<byte>(key));
+    IList<byte> actual = Query(new Dafny.Sequence<byte>(key));
 
     if (!byteArraysEqual(actual, expected)) {
       throw new Exception("did not get expected result\n");
     }
   }
 
-  public byte[] Query(Dafny.Sequence<byte> key) {
+  public IList<byte> Query(Dafny.Sequence<byte> key) {
     if (verbose) log("Query \"" + key + "\"");
 
     for (int i = 0; i < 50; i++) {
-      __default.handleQuery(k, hs, io, key, out var result);
+      var result = __default.handleQuery(k, hs, io, key);
       this.maybeDoResponse();
       if (result.is_Some) {
-        byte[] val_bytes = result.dtor_value.Elements;
+        IList<byte> val_bytes = result.dtor_value.Elements;
         log("doing query... success!");
         log("");
         return val_bytes;
@@ -241,13 +245,15 @@ class Application {
     return System.Text.Encoding.UTF8.GetBytes(s);
   }
 
-  public static string bytes_to_string(byte[] bytes) {
-    return System.Text.Encoding.UTF8.GetString(bytes);
+  public static string bytes_to_string(IList<byte> bytes) {
+    byte[] ar = new byte[bytes.Count];
+    bytes.CopyTo(ar, 0);
+    return System.Text.Encoding.UTF8.GetString(ar);
   }
 
-  bool byteArraysEqual(byte[] a, byte[] b) {
-    if (a.Length != b.Length) return false;
-    for (int i = 0; i < a.Length; i++) {
+  bool byteArraysEqual(IList<byte> a, IList<byte> b) {
+    if (a.Count != b.Count) return false;
+    for (int i = 0; i < a.Count; i++) {
       if (a[i] != b[i]) {
         return false;
       }
@@ -265,8 +271,7 @@ public class FSUtil {
   }
 
   public static void Mkfs() {
-    Dafny.Map<ulong, byte[]> m;
-    MkfsImpl_Compile.__default.InitDiskBytes(out m);
+    Dafny.Map<ulong, byte[]> m = MkfsImpl_Compile.__default.InitDiskBytes();
 
     if (m.Count == 0) {
       throw new Exception("InitDiskBytes failed.");
@@ -339,10 +344,15 @@ namespace Native_Compile {
   public partial class @Arrays
   {
       public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-          System.Array.Copy(src.Elements, (long)srcIndex, dst, (long)dstIndex, (long)len);
+          // Someone who knows C# better than me can maybe do this faster
+          var els = src.Elements;
+          for (int i = 0; i < (int)len; i++) {
+            dst[(int)dstIndex + i] = els[(int)srcIndex + i];
+          }
+          //System.Array.Copy(src.Elements, (long)srcIndex, dst, (long)dstIndex, (long)len);
       }
 
-      public static void @ByteSeqCmpByteSeq(
+      /*public static void @ByteSeqCmpByteSeq(
         Dafny.Sequence<byte> s1, int i1, int l1,
         Dafny.Sequence<byte> s2, int i2, int l2,
         out int res)
@@ -350,6 +360,6 @@ namespace Native_Compile {
         var span1 = new Span<byte>(s1.Elements, i1, l1);
         var span2 = new Span<byte>(s2.Elements, i2, l2);
         res = span1.SequenceCompareTo(span2);
-      }
+      }*/
   }
 }
