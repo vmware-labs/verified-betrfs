@@ -45,7 +45,7 @@ module ImplDo {
   {
     id := freeId(s.syncReqs);
     s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
-    assert stepsBC(k, s, s', UI.PushSyncOp(id), io, BC.PushSyncReqStep(id));
+    assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), io, BC.PushSyncReqStep(id));
   }
 
   // == popSync ==
@@ -62,7 +62,7 @@ module ImplDo {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
       s' := s.(syncReqs := MapRemove1(s.syncReqs, id));
-      assert stepsBC(k, s, s', UI.PopSyncOp(id), io, BC.PopSyncReqStep(id));
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.PopSyncOp(id), io, BC.PopSyncReqStep(id));
     } else {
       success := false;
       s' := sync(k, s, io);
@@ -104,7 +104,7 @@ module ImplDo {
       //  ImplADM.M.IDiskOp(io.diskOp()),
       //  BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
 
-      assert stepsBetree(k, s, s,
+      assert stepsBetree(k, IS.IVars(s), IS.IVars(s),
         UI.GetOp(key, res.value),
         BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
 
@@ -222,7 +222,7 @@ module ImplDo {
           if |bucket.keys| >= 0x8000_0000_0000_0000 {
             s' := s;
             res := None;
-            assert noop(k, s, s');
+            assert noop(k, IS.IVars(s), IS.IVars(s'));
             print "giving up; kmgMsg too big\n";
             return;
           }
@@ -254,7 +254,7 @@ module ImplDo {
                 ImplADM.M.IDiskOp(io.diskOp()),
                 BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
 
-              assert stepsBetree(k, s, s',
+              assert stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'),
                 if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
                 BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
 
@@ -274,7 +274,7 @@ module ImplDo {
           UI.GetOp(key, res.value),
           ImplADM.M.IDiskOp(io.diskOp()),
           BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
-        assert stepsBetree(k, s, s',
+        assert stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'),
           if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
           BT.BetreeQuery(BT.LookupQuery(key, res.value, lookup)));
       } else {
@@ -282,7 +282,7 @@ module ImplDo {
         s' := s;
         res := None;
 
-        assert noop(k, s, s');
+        assert noop(k, IS.IVars(s), IS.IVars(s'));
         print "giving up; did not reach Leaf or a Define\n";
       }
     }
@@ -322,7 +322,7 @@ module ImplDo {
         // TODO write out the root here instead of giving up
         s' := s;
         success := false;
-        assert noop(k, s, s');
+        assert noop(k, IS.IVars(s), IS.IVars(s'));
         print "giving up; can't dirty root when frozen is not written yet\n";
         return;
       }
@@ -389,7 +389,7 @@ module ImplDo {
     assert BC.OpStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(btStep)[0]);
     assert BC.OpTransaction(Ik(k), old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(btStep));
     assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, btStep);
-    assert stepsBetree(k, old(s), s', UI.PutOp(key, value), btStep);
+    assert stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'), UI.PutOp(key, value), btStep);
 
     if success {
       assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp,
@@ -470,12 +470,12 @@ module ImplDo {
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
       s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
       assert IS.WFVars(s');
-      assert stepsBC(k, old(s), s', UI.NoOp, io, BC.PageInIndirectionTableRespStep);
+      assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
       assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
       assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
-      assert stepsBC(k, old(s), s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
@@ -493,7 +493,7 @@ module ImplDo {
 
     if (id !in s.outstandingBlockReads) {
       s' := s;
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: unrecognized id from Read\n";
       return;
     }
@@ -506,7 +506,7 @@ module ImplDo {
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).lbas || ref in s.cache
       s' := s;
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: ref !in lbas or ref in s.cache\n";
       return;
     }
@@ -524,15 +524,15 @@ module ImplDo {
         INodeRootEqINodeForEmptyRootBucket(node);
 
         assert BC.PageInResp(k, old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
-        assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInRespStep);
+        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInRespStep);
       } else {
         s' := s;
-        assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
         print "giving up; block does not match graph\n";
       }
     } else {
       s' := s;
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "giving up; block read in was not block\n";
     }
   }
@@ -568,13 +568,13 @@ module ImplDo {
              .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
              .(syncReqs := BC.syncReqs2to1(s.syncReqs));
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
       s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackRespStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackRespStep);
     } else {
       s' := s;
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
 

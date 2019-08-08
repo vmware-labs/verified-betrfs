@@ -62,32 +62,20 @@ module Impl {
     id := io.read(addr, ImplADM.M.BlockSize() as uint64);
   }
 
-  predicate stepsBetree(k: ImplConstants, s: ImplVariables, s': ImplVariables, uiop: UI.Op, step: BT.BetreeStep)
-  requires IS.WFVars(s)
-  requires IS.WFVars(s')
-  reads IS.VariablesReadSet(s)
-  reads IS.VariablesReadSet(s')
+  predicate stepsBetree(k: ImplConstants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, step: BT.BetreeStep)
   {
-    ImplADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, D.NoDiskOp, ImplADM.M.Step(BBC.BetreeMoveStep(step)))
+    ImplADM.M.NextStep(Ik(k), s, s', uiop, D.NoDiskOp, ImplADM.M.Step(BBC.BetreeMoveStep(step)))
   }
 
-  predicate stepsBC(k: ImplConstants, s: ImplVariables, s': ImplVariables, uiop: UI.Op, io: DiskIOHandler, step: BC.Step)
-  requires IS.WFVars(s)
-  requires IS.WFVars(s')
+  predicate stepsBC(k: ImplConstants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, io: DiskIOHandler, step: BC.Step)
   reads io
-  reads IS.VariablesReadSet(s)
-  reads IS.VariablesReadSet(s')
   {
-    ImplADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), uiop, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(step)))
+    ImplADM.M.NextStep(Ik(k), s, s', uiop, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(step)))
   }
 
-  predicate noop(k: ImplConstants, s: ImplVariables, s': ImplVariables)
-  requires IS.WFVars(s)
-  requires IS.WFVars(s')
-  reads IS.VariablesReadSet(s)
-  reads IS.VariablesReadSet(s')
+  predicate noop(k: ImplConstants, s: BBC.Variables, s': BBC.Variables)
   {
-    ImplADM.M.NextStep(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, D.NoDiskOp, ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)))
+    ImplADM.M.NextStep(Ik(k), s, s', UI.NoOp, D.NoDiskOp, ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)))
   }
 
   lemma LemmaIndirectionTableLBAValid()
@@ -111,10 +99,10 @@ module Impl {
       var id := RequestRead(io, BC.IndirectionTableLBA());
       s' := IS.Unready(Some(id), s.syncReqs);
 
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInIndirectionTableReqStep);
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableReqStep);
     } else {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, IS.IVars(s), IS.IVars(s'));
       print "PageInIndirectionTableReq: request already out\n";
     }
   }
@@ -134,7 +122,7 @@ module Impl {
     assume false; // TODO timing out
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       s' := s;
-      assert noop(k, s, s');
+      assert noop(k, IS.IVars(s), IS.IVars(s'));
       print "giving up; already an outstanding read for this ref\n";
     } else {
       var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
@@ -146,7 +134,7 @@ module Impl {
       s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
 
       assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
-      assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInReqStep(ref));
+      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInReqStep(ref));
     }
   }
 
