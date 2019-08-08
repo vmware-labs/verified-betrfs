@@ -10,6 +10,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import opened Maps
   import BC = BetreeGraphBlockCache
   import BBC = BetreeBlockCache
+  import BCS = BetreeGraphBlockCacheSystem
   import BBCS = BetreeBlockCacheSystem
   import SD = AsyncSectorDisk
   import LBAType`Internal
@@ -209,6 +210,22 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   {
   }
 
+  lemma ProcessReadFailureRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(k, s)
+  requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id, fakeContents)
+  ensures ValidDisk(s'.disk)
+  ensures SD.ProcessReadFailure(Ik(k).disk, I(k, s).disk, I(k, s').disk, id)
+  {
+    M.reveal_ValidCheckedBytes();
+
+    var req := s.disk.reqReads[id];
+    var realContents := s.disk.contents[req.addr .. req.addr as int + req.len as int];
+    BCS.ReadReqIdIsValid(Ik(k), I(k, s), id);
+    assert req.addr in IContents(s.disk.contents);
+    assert D.ChecksumChecksOut(realContents);
+    assert !D.ChecksumChecksOut(fakeContents);
+  }
+
   lemma SplicePreserves(bytes: seq<byte>, start: uint64, ins: seq<byte>, other: uint64)
   requires 0 <= start
   requires start as int + |ins| <= |bytes|
@@ -301,6 +318,37 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     assert I(k,s').disk.blocks == I(k,s).disk.blocks[req.lba := req.sector];
   }
 
+  lemma overlapImpliesEq(start: uint64, start': uint64)
+  requires D.overlap(start as int, M.BlockSize(), start' as int, M.BlockSize())
+  requires M.ValidAddr(start)
+  requires M.ValidAddr(start')
+  ensures start == start'
+  {
+    var i := LBAType.ValidAddrDivisor(start);
+    var j := LBAType.ValidAddrDivisor(start');
+    assert i == j;
+  }
+
+  lemma HavocConflictingWriteReadStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
+  requires Inv(k, s)
+  requires D.HavocConflictingWriteRead(k.disk, s.disk, s'.disk, id, id')
+  ensures false
+  {
+    overlapImpliesEq(s.disk.reqWrites[id].addr, s.disk.reqReads[id'].addr);
+    assert IReqWrites(s.disk.reqWrites)[id].lba
+        == IReqReads(s.disk.reqReads)[id'].lba;
+  }
+
+  lemma HavocConflictingWritesStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
+  requires Inv(k, s)
+  requires D.HavocConflictingWrites(k.disk, s.disk, s'.disk, id, id')
+  ensures false
+  {
+    overlapImpliesEq(s.disk.reqWrites[id].addr, s.disk.reqWrites[id'].addr);
+    assert IReqWrites(s.disk.reqWrites)[id].lba
+        == IReqWrites(s.disk.reqWrites)[id'].lba;
+  }
+
   lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}
   DiskInternalStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, internalStep: D.InternalStep)
   requires Inv(k, s)
@@ -316,6 +364,16 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
       case ProcessWriteStep(id) => {
         ProcessWriteRefines(k, s, s', id);
         BBCS.NextStepPreservesInv(Ik(k), I(k, s), I(k, s'), uiop, BBCS.DiskInternalStep(SD.ProcessWriteStep(id)));
+      }
+      case ProcessReadFailureStep(id, fakeContents) => {
+        ProcessReadFailureRefines(k, s, s', id, fakeContents);
+        BBCS.NextStepPreservesInv(Ik(k), I(k, s), I(k, s'), uiop, BBCS.DiskInternalStep(SD.ProcessWriteStep(id)));
+      }
+      case HavocConflictingWriteReadStep(id, id') => {
+        HavocConflictingWriteReadStepImpossible(k, s, s', id, id');
+      }
+      case HavocConflictingWritesStep(id, id') => {
+        HavocConflictingWritesStepImpossible(k, s, s', id, id');
       }
     }
   }

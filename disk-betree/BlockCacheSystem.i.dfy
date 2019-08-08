@@ -278,7 +278,7 @@ abstract module BlockCacheSystem {
     && var sector := s.disk.blocks[lba];
     && !(id in s.disk.reqReads && id in s.disk.respReads)
     && (id in s.disk.reqReads ==> s.disk.reqReads[id] == D.ReqRead(lba))
-    && (id in s.disk.respReads ==> s.disk.respReads[id] == D.RespRead(Some(sector)))
+    && (id in s.disk.respReads && s.disk.respReads[id].sector.Some? ==> s.disk.respReads[id] == D.RespRead(Some(sector)))
   }
 
   predicate CorrectInflightBlockReads(k: Constants, s: Variables)
@@ -298,7 +298,7 @@ abstract module BlockCacheSystem {
       && (reqId in s.disk.reqReads ==>
         s.disk.reqReads[reqId] == D.ReqRead(M.IndirectionTableLBA())
       )
-      && (reqId in s.disk.respReads ==>
+      && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.Some? ==>
         s.disk.respReads[reqId] == D.RespRead(Some(M.SectorIndirectionTable(DiskIndirectionTable(s.disk.blocks))))
       )
     )
@@ -377,14 +377,32 @@ abstract module BlockCacheSystem {
     })
   }
 
+  predicate RecordedReadRequest(k: Constants, s: Variables, id: D.ReqId)
+  {
+    && (s.machine.Ready? ==> id in s.machine.outstandingBlockReads)
+    && (s.machine.Unready? ==> Some(id) == s.machine.outstandingIndirectionTableRead)
+  }
+
   predicate RecordedWriteRequests(k: Constants, s: Variables)
   {
     forall id | id in s.disk.reqWrites :: RecordedWriteRequest(k, s, id, s.disk.reqWrites[id].lba, s.disk.reqWrites[id].sector)
   }
 
+  predicate RecordedReadRequests(k: Constants, s: Variables)
+  {
+    forall id | id in s.disk.reqReads :: RecordedReadRequest(k, s, id)
+  }
+
   predicate WriteRequestsUniqueLBAs(reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>)
   {
     forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].lba == reqWrites[id2].lba :: id1 == id2
+  }
+
+  predicate NoReadWriteConflicts(
+      reqReads: map<D.ReqId, D.ReqRead<LBA>>,
+      reqWrites: map<D.ReqId, D.ReqWrite<LBA, Sector>>)
+  {
+    forall id1, id2 | id1 in reqReads && id2 in reqWrites :: reqReads[id1].lba != reqWrites[id2].lba
   }
 
   predicate Inv(k: Constants, s: Variables) {
@@ -422,7 +440,9 @@ abstract module BlockCacheSystem {
       && CorrectInflightIndirectionTableReads(k, s)
     )
     && WriteRequestsUniqueLBAs(s.disk.reqWrites)
+    && NoReadWriteConflicts(s.disk.reqReads, s.disk.reqWrites)
     && RecordedWriteRequests(k, s)
+    && RecordedReadRequests(k, s)
   }
 
   ////// Proofs
@@ -1040,6 +1060,32 @@ abstract module BlockCacheSystem {
   {
   }
 
+  lemma ProcessReadFailurePreservesGraphs(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id)
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures EphemeralGraphOpt(k, s) == EphemeralGraphOpt(k, s');
+  {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
+    if (EphemeralGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
+    }
+  }
+
+  lemma ProcessReadFailurePreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id)
+    ensures Inv(k, s')
+  {
+  }
+
   lemma ProcessWritePreservesDiskCacheGraph(k: Constants, s: Variables, s': Variables, id: D.ReqId, indirectionTable: IndirectionTable)
   requires Inv(k, s)
   requires s.machine == s'.machine
@@ -1146,6 +1192,7 @@ abstract module BlockCacheSystem {
   {
     match step {
       case ProcessReadStep(id) => ProcessReadPreservesInv(k, s, s', id);
+      case ProcessReadFailureStep(id) => ProcessReadFailurePreservesInv(k, s, s', id);
       case ProcessWriteStep(id) => ProcessWritePreservesInv(k, s, s', id);
     }
   }
@@ -1176,6 +1223,13 @@ abstract module BlockCacheSystem {
   {
     var step :| NextStep(k, s, s', step);
     NextStepPreservesInv(k, s, s', step);
+  }
+
+  lemma ReadReqIdIsValid(k: Constants, s: Variables, id: D.ReqId)
+  requires Inv(k, s)
+  requires id in s.disk.reqReads
+  ensures s.disk.reqReads[id].lba in s.disk.blocks
+  {
   }
 }
 

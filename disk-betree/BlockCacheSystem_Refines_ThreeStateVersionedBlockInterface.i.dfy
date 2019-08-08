@@ -258,6 +258,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
       case DiskInternalStep(step) => {
         match step {
           case ProcessReadStep(id) => BCS.ProcessReadPreservesGraphs(k, s, s', id);
+          case ProcessReadFailureStep(id) => BCS.ProcessReadFailurePreservesGraphs(k, s, s', id);
           case ProcessWriteStep(id) => BCS.ProcessWritePreservesGraphs(k, s, s', id);
         }
       }
@@ -338,6 +339,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
         case DiskInternalStep(step) => {
           match step {
             case ProcessReadStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case ProcessReadFailureStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
             case ProcessWriteStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
           }
         }
