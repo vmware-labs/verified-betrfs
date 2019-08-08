@@ -944,6 +944,7 @@ module KMTable {
   function method {:opaque} Empty() : (kmt : KMTable)
   ensures WF(kmt)
   ensures I(kmt) == map[]
+  ensures Bounded(kmt)
   {
     reveal_I();
     KMTable([],[])

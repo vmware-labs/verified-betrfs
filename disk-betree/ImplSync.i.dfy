@@ -155,6 +155,8 @@ module ImplSync {
   ensures ref.None? ==> s' == s
   ensures s'.Ready?
   ensures s.rootBucket == s'.rootBucket
+  ensures s'.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr
+  ensures s.ephemeralIndirectionTable.Repr == old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
   {
     ref := getFreeRef(s);
@@ -226,7 +228,6 @@ module ImplSync {
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
-    assume false; // TODO timing out
     if s.frozenIndirectionTable.Some? {
       var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
       if lbaGraph.Some? {
@@ -253,9 +254,10 @@ module ImplSync {
     s' := s
       .(cache := MapRemove(s.cache, {ref}))
       .(outstandingBlockReads := BC.OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref));
-    assert BC.Unalloc(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
-    assert BBC.BlockCacheMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), BC.UnallocStep(ref));
-    assert stepsBC(k, old(s), s', UI.NoOp, io, BC.UnallocStep(ref));
+    ghost var iDiskOp := ImplADM.M.IDiskOp(io.diskOp());
+    assert BC.Unalloc(Ik(k), old(IS.IVars(s)), IS.IVars(s'), iDiskOp, ref);
+    assert BBC.BlockCacheMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, iDiskOp, BC.UnallocStep(ref));
+    assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.UnallocStep(ref))));
   }
 
   method fixBigRoot(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
@@ -270,7 +272,7 @@ module ImplSync {
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
-    assume false; // TODO timing out
+    assume false;
 
     if (BT.G.Root() !in s.cache) {
       s' := PageInReq(k, s, io, BT.G.Root());
@@ -296,6 +298,8 @@ module ImplSync {
 
     var oldroot := s.cache[BT.G.Root()];
     var s1, newref := alloc(k, s, oldroot);
+    assert s1.ephemeralIndirectionTable.Repr == old(s.ephemeralIndirectionTable.Repr);
+    assert s1.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr;
     match newref {
       case None => {
         s' := s;
@@ -310,7 +314,12 @@ module ImplSync {
         assert BT.G.Root() in IS.ICache(s1.cache, s1.rootBucket);
         assert BT.G.Root() in s1.cache;
 
-        assume BC.BlockPointsToValidReferences(IS.INode(newroot), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
+        assert forall i | 0 <= i < |newroot.buckets| :: KMTable.Bounded(newroot.buckets[i]);
+        assert IS.WFBuckets(newroot.buckets);
+        assert forall r | r in BC.G.Successors(IS.INode(newroot)) :: r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph;
+        assert BC.BlockPointsToValidReferences(IS.INode(newroot), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
+        assert s1.ephemeralIndirectionTable.Repr == old(s.ephemeralIndirectionTable.Repr);
+        assert s1.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr;
         s' := write(k, s1, BT.G.Root(), newroot);
 
         ghost var growth := BT.RootGrowth(IS.INode(oldroot), newref);
@@ -321,6 +330,8 @@ module ImplSync {
         assert stepsBetree(k, old(s), s', UI.NoOp, step);
       }
     }
+
+    assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
   }
 
   method GetNewPivots(bucket: KMTable.KMTable)
