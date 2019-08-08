@@ -342,12 +342,27 @@ module ImplDo {
     // TODO how do we deal with this?
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
 
+    ghost var iVarsBeforeRemoval := IS.IVars(s);
+
     label before_removal: var lbaGraph := s.ephemeralIndirectionTable.Remove(BT.G.Root());
     if lbaGraph.Some? {
+      assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
+          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.graph, {BT.G.Root()})));
       assert s.ephemeralIndirectionTable.Count == old@before_removal(s.ephemeralIndirectionTable.Count) - 1;
       var (lba, graph) := lbaGraph.value;
       var _ := s.ephemeralIndirectionTable.Insert(BT.G.Root(), (None, graph));
+
+      assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
+          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.graph, {BT.G.Root()})[BT.G.Root() := graph]));
+      assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
+          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+          iVarsBeforeRemoval.ephemeralIndirectionTable.graph));
     }
+    assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
+        MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+        iVarsBeforeRemoval.ephemeralIndirectionTable.graph));
 
     s' := s.(rootBucket := newRootBucket);
     success := true;
@@ -474,13 +489,11 @@ module ImplDo {
   ensures IS.WFVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    assume false; // TODO timing out
-
     var id, sector := ReadSector(io);
 
     if (id !in s.outstandingBlockReads) {
       s' := s;
-      assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: unrecognized id from Read\n";
       return;
     }
@@ -493,7 +506,7 @@ module ImplDo {
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).lbas || ref in s.cache
       s' := s;
-      assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: ref !in lbas or ref in s.cache\n";
       return;
     }
@@ -511,15 +524,15 @@ module ImplDo {
         INodeRootEqINodeForEmptyRootBucket(node);
 
         assert BC.PageInResp(k, old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
-        assume stepsBC(k, s, s', UI.NoOp, io, BC.PageInRespStep);
+        assert stepsBC(k, s, s', UI.NoOp, io, BC.PageInRespStep);
       } else {
         s' := s;
-        assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+        assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
         print "giving up; block does not match graph\n";
       }
     } else {
       s' := s;
-      assume stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, s, s', UI.NoOp, io, BC.NoOpStep);
       print "giving up; block read in was not block\n";
     }
   }
@@ -549,12 +562,10 @@ module ImplDo {
   ensures IS.WFVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    assume false; // TODO timing out
-
     var id := io.getWriteResult();
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
       s' := s.(outstandingIndirectionTableWrite := None)
-             .(frozenIndirectionTable := None)
+             .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
              .(syncReqs := BC.syncReqs2to1(s.syncReqs));
       assert stepsBC(k, s, s', UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);

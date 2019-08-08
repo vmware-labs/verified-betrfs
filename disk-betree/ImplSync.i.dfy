@@ -169,7 +169,7 @@ module ImplSync {
             IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ref.value := if node.children.Some? then node.children.value else []]
           ));
       s' := s.(cache := s.cache[ref.value := node]);
-      assume ref.Some? ==> BC.Alloc(k, old(IS.IVars(s)), IS.IVars(s'), ref.value, IS.INode(node));
+      assert ref.Some? ==> BC.Alloc(k, old(IS.IVars(s)), IS.IVars(s'), ref.value, IS.INode(node));
     } else {
       s' := s;
     }
@@ -198,17 +198,21 @@ module ImplSync {
     if ref == BT.G.Root() {
       return false;
     }
+    assert ref != BT.G.Root();
     if !s.Ready? {
       return false;
     }
+    assert s.Ready?;
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if !lbaGraph.Some? {
       return false;
     }
+    assert ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph;
     var table := s.ephemeralIndirectionTable.ToMap();
     var graph := map k | k in table :: table[k].1;
+    assert graph == IS.IIndirectionTable(s.ephemeralIndirectionTable).graph;
     result := forall r | r in graph :: ref !in graph[r];
-    assume result == deallocable(s, ref);
+    assert result == deallocable(s, ref);
   }
 
   method Dealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
