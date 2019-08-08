@@ -264,6 +264,7 @@ module ImplSync {
     // assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.UnallocStep(ref))));
   }
 
+  /// The root was found to be too big: grow
   method fixBigRoot(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires IS.WFVars(s)
