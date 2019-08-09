@@ -4,6 +4,7 @@ using MainDiskIOHandler_Compile;
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 
 namespace MainDiskIOHandler_Compile {
   // TODO make this actually async lol
@@ -361,5 +362,23 @@ namespace Native_Compile {
         var span2 = new Span<byte>(s2.Elements, i2, l2);
         res = span1.SequenceCompareTo(span2);
       }*/
+  }
+}
+
+namespace Crypto_Compile {
+  public partial class __default {
+    public static Dafny.Sequence<byte> Sha256(Dafny.Sequence<byte> seq)
+    {
+      Native_Compile.BenchmarkingUtil.start();
+      using (SHA256 mySHA256 = SHA256.Create()) {
+        IList<byte> ilist = seq.Elements;
+        byte[] bytes = new byte[ilist.Count];
+        ilist.CopyTo(bytes, 0);
+
+        byte[] hash = mySHA256.ComputeHash(bytes);
+        Native_Compile.BenchmarkingUtil.end();
+        return new Dafny.Sequence<byte>(hash);
+      }
+    }
   }
 }
