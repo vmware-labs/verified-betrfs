@@ -3,6 +3,7 @@ include "PivotBetreeSpec.i.dfy"
 include "Message.i.dfy"
 include "ImplState.i.dfy"
 include "KMTable.i.dfy"
+include "../lib/Crypto.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/MutableMap.i.dfy"
 
@@ -16,6 +17,8 @@ module Marshalling {
   import BC = BetreeGraphBlockCache
   import ImplState
   import KMTable
+  import Crypto
+  import Native
 
   import BT = PivotBetreeSpec`Internal
 
@@ -932,7 +935,7 @@ module Marshalling {
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
   ensures v.Some? ==> valToSector(v.value) == ISectorOpt(Some(sector))
   ensures sector.SectorBlock? ==> v.Some?
-  ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int
+  ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
   {
     match sector {
       case SectorIndirectionTable(mutMap) => {
@@ -976,14 +979,14 @@ module Marshalling {
     )
   }
 
-  method ParseSector(data: array<byte>) returns (s : Option<Sector>)
-  requires data.Length < 0x1_0000_0000_0000_0000;
+  method ParseSector(data: array<byte>, start: uint64) returns (s : Option<Sector>)
+  requires start as int <= data.Length < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
-  ensures ISectorOpt(s) == parseSector(data[..])
+  ensures ISectorOpt(s) == parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
   {
     reveal_parseSector();
-    var success, v, rest_index := ParseVal(data, 0, SectorGrammar());
+    var success, v, rest_index := ParseVal(data, start, SectorGrammar());
     if success {
       var s := ValToSector(v);
       return s;
@@ -992,26 +995,55 @@ module Marshalling {
     }
   }
 
-  method MarshallIntoFixedSize(val:V, grammar:G, n: uint64) returns (data:array<byte>)
+  method MarshallIntoFixedSize(val:V, grammar:G, start: uint64, n: uint64) returns (data:array<byte>)
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
     requires ValidVal(val);
-    requires 0 <= SizeOfV(val) <= n as int
+    requires start <= n
+    requires 0 <= SizeOfV(val) <= n as int - start as int
     ensures fresh(data);
     ensures |data[..]| == n as int
-    ensures parse_Val(data[..], grammar).0.Some? && parse_Val(data[..], grammar).0.value == val;
+    ensures parse_Val(data[start..], grammar).0.Some? && parse_Val(data[start..], grammar).0.value == val;
   {
     data := new byte[n];
-    var computed_size := GenericMarshalling.MarshallVal(val, grammar, data, 0);
-    GenericMarshalling.lemma_parse_Val_view_specific(data[..], val, grammar, 0, (n as int));
-    assert data[..] == data[0..n];
+    var computed_size := GenericMarshalling.MarshallVal(val, grammar, data, start);
+    GenericMarshalling.lemma_parse_Val_view_specific(data[..], val, grammar, start as int, (n as int));
+    assert data[start..] == data[start..n];
   }
 
-  method MarshallSector(sector: Sector) returns (data : array?<byte>)
+  /////// Marshalling and de-marshalling with checksums
+
+  function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<BC.Sector>)
+  {
+    if |data| >= 32 && Crypto.Sha256(data[32..]) == data[..32] then
+      parseSector(data[32..])
+    else
+      None
+  }
+
+  method ParseCheckedSector(data: array<byte>) returns (s : Option<Sector>)
+  requires data.Length < 0x1_0000_0000_0000_0000;
+  ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures ISectorOpt(s) == parseCheckedSector(data[..])
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
+  {
+    s := None;
+
+    if data.Length >= 32 {
+      var hash := Crypto.Sha256(data[32..]);
+      if hash == data[..32] {
+        s := ParseSector(data, 32);
+      }
+    }
+
+    reveal_parseCheckedSector();
+  }
+
+  method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires ImplState.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
-  ensures data != null ==> parseSector(data[..]) == ISectorOpt(Some(sector))
+  ensures data != null ==> parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
   ensures data != null ==> data.Length == BlockSize() as int
   ensures sector.SectorBlock? ==> data != null;
   {
@@ -1019,9 +1051,24 @@ module Marshalling {
     match v {
       case None => return null;
       case Some(v) => {
-        if (SizeOfV(v) <= BlockSize() as int) {
-          var data := MarshallIntoFixedSize(v, SectorGrammar(), BlockSize());
+        if (SizeOfV(v) <= BlockSize() as int - 32) {
+          var data := MarshallIntoFixedSize(v, SectorGrammar(), 32, BlockSize());
           reveal_parseSector();
+          reveal_parseCheckedSector();
+
+          var hash := Crypto.Sha256(data[32..]);
+          ghost var data_suffix := data[32..];
+          Native.Arrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+          assert data_suffix == data[32..];
+
+          /*ghost var data_seq := data[..];
+          assert |data_seq| >= 32;
+          assert Crypto.Sha256(data_seq[32..])
+              == Crypto.Sha256(data[32..])
+              == hash
+              == data[..32]
+              == data_seq[..32];*/
+
           return data;
         } else {
           return null;
@@ -1029,5 +1076,4 @@ module Marshalling {
       }
     }
   }
-
 }

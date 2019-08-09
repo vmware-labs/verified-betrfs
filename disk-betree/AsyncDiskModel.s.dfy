@@ -1,5 +1,6 @@
 include "MapSpec.s.dfy"
 include "../lib/Maps.s.dfy"
+include "../lib/Crypto.s.dfy"
 
 module AsyncDiskModelTypes {
   datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
@@ -9,6 +10,7 @@ module AsyncDiskModelTypes {
 module AsyncDisk {
   import opened NativeTypes
   import opened Maps
+  import Crypto
 
   type ReqId = uint64
 
@@ -120,7 +122,8 @@ module AsyncDisk {
   }
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
-    false // TODO
+    && |s| >= 32
+    && s[0..32] == Crypto.Sha256(s[32..])
   }
 
   predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)

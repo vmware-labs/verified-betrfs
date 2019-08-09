@@ -134,7 +134,13 @@ module ImplSync {
   ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(addr, IS.ISector(sector)))
   ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
   {
-    var bytes := Marshalling.MarshallSector(sector);
+    Marshalling.reveal_parseCheckedSector();
+    ImplADM.M.reveal_IBytes();
+    ImplADM.M.reveal_ValidCheckedBytes();
+    ImplADM.M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+
+    var bytes := Marshalling.MarshallCheckedSector(sector);
     if (bytes == null) {
       id := None;
     } else {
@@ -246,6 +252,13 @@ module ImplSync {
       }
     }
 
+    if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) {
+      s' := s;
+      assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
+      print "giving up; dealloc can't dealloc because of outstanding read\n";
+      return;
+    }
+
     var _ := s.ephemeralIndirectionTable.Remove(ref);
 
     assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
@@ -255,8 +268,7 @@ module ImplSync {
       ));
 
     s' := s
-      .(cache := MapRemove(s.cache, {ref}))
-      .(outstandingBlockReads := BC.OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref));
+      .(cache := MapRemove(s.cache, {ref}));
     ghost var iDiskOp := ImplADM.M.IDiskOp(io.diskOp());
     assert BC.Unalloc(Ik(k), old(IS.IVars(s)), IS.IVars(s'), iDiskOp, ref);
     assert BBC.BlockCacheMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, iDiskOp, BC.UnallocStep(ref));

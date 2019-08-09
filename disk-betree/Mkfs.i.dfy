@@ -46,11 +46,11 @@ module {:extern} MkfsImpl {
 
     LBAType.reveal_ValidAddr();
     assert d[0].SectorIndirectionTable?;
-    var b0 := Marshalling.MarshallSector(d[0]);
+    var b0 := Marshalling.MarshallCheckedSector(d[0]);
     if (b0 == null) { return map[]; }
 
     assert d[LBAType.BlockSize()].SectorBlock?;
-    var b1 := Marshalling.MarshallSector(d[LBAType.BlockSize()]);
+    var b1 := Marshalling.MarshallCheckedSector(d[LBAType.BlockSize()]);
     if (b1 == null) { return map[]; }
 
     m := map[0 := b0, LBAType.BlockSize() := b1];

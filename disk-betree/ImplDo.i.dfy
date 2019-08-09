@@ -455,10 +455,16 @@ module ImplDo {
   ensures sector.Some? ==> IS.WFSector(sector.value)
   ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
   {
+    Marshalling.reveal_parseCheckedSector();
+    ImplADM.M.reveal_IBytes();
+    ImplADM.M.reveal_ValidCheckedBytes();
+    ImplADM.M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+
     var id1, bytes := io.getReadResult();
     id := id1;
     if bytes.Length == ImplADM.M.BlockSize() {
-      var sectorOpt := Marshalling.ParseSector(bytes);
+      var sectorOpt := Marshalling.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {
       sector := None;
