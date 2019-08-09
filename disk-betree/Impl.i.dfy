@@ -119,7 +119,6 @@ module Impl {
   ensures IS.WFVars(s')
   ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    assume false; // TODO timing out
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       s' := s;
       assert noop(k, IS.IVars(s), IS.IVars(s'));
