@@ -367,7 +367,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
       }
       case ProcessReadFailureStep(id, fakeContents) => {
         ProcessReadFailureRefines(k, s, s', id, fakeContents);
-        BBCS.NextStepPreservesInv(Ik(k), I(k, s), I(k, s'), uiop, BBCS.DiskInternalStep(SD.ProcessWriteStep(id)));
+        BBCS.NextStepPreservesInv(Ik(k), I(k, s), I(k, s'), uiop, BBCS.DiskInternalStep(SD.ProcessReadFailureStep(id)));
       }
       case HavocConflictingWriteReadStep(id, id') => {
         HavocConflictingWriteReadStepImpossible(k, s, s', id, id');
