@@ -1015,7 +1015,7 @@ module Marshalling {
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<BC.Sector>)
   {
-    if |data| >= 32 && Crypto.Sha256(data[32..]) == data[..32] then
+    if |data| >= 32 && Crypto.Crc32(data[32..]) == data[..32] then
       parseSector(data[32..])
     else
       None
@@ -1030,7 +1030,7 @@ module Marshalling {
     s := None;
 
     if data.Length >= 32 {
-      var hash := Crypto.Sha256(data[32..]);
+      var hash := Crypto.Crc32(data[32..]);
       if hash == data[..32] {
         s := ParseSector(data, 32);
       }
@@ -1056,15 +1056,15 @@ module Marshalling {
           reveal_parseSector();
           reveal_parseCheckedSector();
 
-          var hash := Crypto.Sha256(data[32..]);
+          var hash := Crypto.Crc32(data[32..]);
           ghost var data_suffix := data[32..];
           Native.Arrays.CopySeqIntoArray(hash, 0, data, 0, 32);
           assert data_suffix == data[32..];
 
           /*ghost var data_seq := data[..];
           assert |data_seq| >= 32;
-          assert Crypto.Sha256(data_seq[32..])
-              == Crypto.Sha256(data[32..])
+          assert Crypto.Crc32(data_seq[32..])
+              == Crypto.Crc32(data[32..])
               == hash
               == data[..32]
               == data_seq[..32];*/
