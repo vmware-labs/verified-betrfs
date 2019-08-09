@@ -83,7 +83,7 @@ module {:extern} ImplState {
   {
     forall ref | ref in cache :: WFNode(cache[ref])
   }
-  predicate WFVars(vars: Variables)
+  predicate VarsReprInv(vars: Variables)
   reads if vars.Ready? then (
       {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
       (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
@@ -91,6 +91,24 @@ module {:extern} ImplState {
   reads VariablesReadSet(vars)
   {
     match vars {
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, _, _, _, _, _, _) => (
+        // NOALIAS statically enforced no-aliasing would probably help here
+        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
+        && (frozenIndirectionTable.Some? ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
+        && (frozenIndirectionTable.Some? ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
+      )
+      case Unready(outstandingIndirectionTableRead, syncReqs) => true
+    }
+  }
+  predicate WFVars(vars: Variables)
+  reads if vars.Ready? then (
+      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
+      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+      else {}
+  reads VariablesReadSet(vars)
+  {
+    && VarsReprInv(vars)
+    && match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) => (
         && WFCache(cache)
         && TTT.TTTree(rootBucket)
@@ -100,10 +118,6 @@ module {:extern} ImplState {
         && persistentIndirectionTable.Inv()
         && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
         && ephemeralIndirectionTable.Inv()
-        // NOALIAS statically enforced no-aliasing would probably help here
-        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
-        && (frozenIndirectionTable.Some? ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
-        && (frozenIndirectionTable.Some? ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
       )
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
