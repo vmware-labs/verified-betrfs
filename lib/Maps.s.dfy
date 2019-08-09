@@ -26,6 +26,8 @@ module Maps {
   
   function method {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - ks
+    // TODO alattuada try these: ensures forall k :: k in m && k !in ks ==> k in m'
+    // TODO alattuada try these: ensures forall k :: k in m' ==> k in m && k !in ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
     ensures |m'.Keys| <= |m.Keys|
     ensures |m'| <= |m|
@@ -35,6 +37,8 @@ module Maps {
  
   function method {:opaque} MapRemove1<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - {k}
+    // TODO alattuada try these: ensures forall j :: j in m && j != k ==> j in m'
+    // TODO alattuada try these: ensures forall j :: j in m' ==> j in m && j != k
     ensures forall j :: j in m' ==> m'[j] == m[j]
     ensures |m'.Keys| <= |m.Keys|
     ensures |m'| <= |m|
