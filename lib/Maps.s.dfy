@@ -194,4 +194,9 @@ module Maps {
 	{
 	  if key in m then Some(m[key]) else None
 	}
+
+	function ImapLookupOption<K,V>(m: imap<K,V>, key: K) : Option<V>
+	{
+	  if key in m then Some(m[key]) else None
+	}
 }

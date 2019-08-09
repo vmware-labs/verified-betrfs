@@ -886,11 +886,13 @@ module TwoThreeTree {
     ensures Keyspace.SortedSeqForMap(s, I(tree))
     {
       assume false; // I expect we'll replace tttree, no need to prove this at the moment
+      //Native.BenchmarkingUtil.start();
       if tree.EmptyTree? {
         s := [];
       } else {
         s := NodeAsSeq(tree.root);
       }
+      //Native.BenchmarkingUtil.end();
     }
 }
 

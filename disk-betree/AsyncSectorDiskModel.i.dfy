@@ -8,35 +8,72 @@ module AsyncSectorDiskModelTypes {
   datatype AsyncSectorDiskModelVariables<M,D> = AsyncSectorDiskModelVariables(machine: M, disk: D)
 }
 
+module LBAType {
+  import opened NativeTypes
+
+  type LBA(==,!new) = uint64
+  datatype Location = Location(addr: LBA, len: uint64)
+
+  function method BlockSize() : uint64 { 8*1024*1024 }
+  function method IndirectionTableLBA() : LBA { 0 }
+  function method IndirectionTableLocation() : Location {
+    Location(IndirectionTableLBA(), BlockSize())
+  }
+  predicate method {:opaque} ValidAddr(addr: LBA) {
+    //exists j: int :: j * BlockSize() as int == addr as int
+    addr as int % BlockSize() as int == 0
+  }
+  predicate method ValidLocation(loc: Location) {
+    && ValidAddr(loc.addr)
+    && loc.len <= BlockSize()
+  }
+  lemma ValidAddrDivisor(addr: LBA) returns (i: int)
+  requires ValidAddr(addr);
+  ensures i * BlockSize() as int == addr as int
+  {
+    reveal_ValidAddr();
+    i := addr as int / BlockSize() as int;
+  }
+  predicate overlap(loc: Location, loc': Location) {
+    loc.addr == loc'.addr
+  }
+
+  //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
+  //    reveals BlockSize
+  //export extends S
+	//export Internal reveals *
+}
+
 module AsyncSectorDisk {
   import opened NativeTypes
   import opened Maps
   import opened Options
+  import opened LBAType
 
   type ReqId = uint64
 
-  datatype ReqRead<LBA> = ReqRead(lba: LBA)
-  datatype ReqWrite<LBA, Sector> = ReqWrite(lba: LBA, sector: Sector)
+  datatype ReqRead = ReqRead(loc: Location)
+  datatype ReqWrite<Sector> = ReqWrite(loc: Location, sector: Sector)
   datatype RespRead<Sector> = RespRead(sector: Option<Sector>)
   datatype RespWrite = RespWrite
 
-  datatype DiskOp<LBA(==), Sector> =
-    | ReqReadOp(id: ReqId, reqRead: ReqRead<LBA>)
-    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite<LBA, Sector>)
+  datatype DiskOp<Sector> =
+    | ReqReadOp(id: ReqId, reqRead: ReqRead)
+    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite<Sector>)
     | RespReadOp(id: ReqId, respRead: RespRead<Sector>)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
 
   datatype Constants = Constants()
-  datatype Variables<LBA, Sector> = Variables(
+  datatype Variables<Sector> = Variables(
     // Queue of requests and responses:
-    reqReads: map<ReqId, ReqRead<LBA>>,
-    reqWrites: map<ReqId, ReqWrite<LBA, Sector>>,
+    reqReads: map<ReqId, ReqRead>,
+    reqWrites: map<ReqId, ReqWrite<Sector>>,
     respReads: map<ReqId, RespRead<Sector>>,
     respWrites: map<ReqId, RespWrite>,
 
     // The disk:
-    blocks: map<LBA, Sector>
+    blocks: imap<Location, Sector>
   )
 
   predicate Init(k: Constants, s: Variables)
@@ -116,7 +153,7 @@ module AsyncSectorDisk {
     && id in s.reqReads
     && var req := s.reqReads[id];
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(MapLookupOption(s.blocks, req.lba))])
+              .(respReads := s.respReads[id := RespRead(ImapLookupOption(s.blocks, req.loc))])
   }
 
   predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId)
@@ -133,7 +170,15 @@ module AsyncSectorDisk {
     && var req := s.reqWrites[id];
     && s' == s.(reqWrites := MapRemove1(s.reqWrites, id))
               .(respWrites := s.respWrites[id := RespWrite])
-              .(blocks := s.blocks[req.lba := req.sector])
+              .(blocks := s'.blocks)
+
+    // It would be easier to say s'.blocks == s.blocks[req.loc := req.sector]
+    // but to make the refinement from AsyncDiskModel easier, we only require that
+    // the map preserves every location not intersecting the given region. We don't
+    // have to say anything about potential intervals which could intersect this one.
+    && req.loc in s'.blocks
+    && s'.blocks[req.loc] == req.sector
+    && (forall loc | loc in s.blocks && !overlap(loc, req.loc) :: loc in s'.blocks && s'.blocks[loc] == s.blocks[loc])
   }
 
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
@@ -162,13 +207,13 @@ abstract module AsyncSectorDiskMachine {
 
   type Variables
   type Constants
-  type LBA(==)
+  type Location(==)
   type Sector
   type UIOp = UI.Op
 
-  type DiskOp = D.DiskOp<LBA, Sector>
-  type ReqRead = D.ReqRead<LBA>
-  type ReqWrite = D.ReqWrite<LBA, Sector>
+  type DiskOp = D.DiskOp<Sector>
+  type ReqRead = D.ReqRead
+  type ReqWrite = D.ReqWrite<Sector>
   type RespRead = D.RespRead<Sector>
   type RespWrite = D.RespWrite
 
@@ -183,7 +228,7 @@ abstract module AsyncSectorDiskModel {
 
   type DiskOp = M.DiskOp
   type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
-  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables<M.LBA, M.Sector>>
+  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables<M.Sector>>
   type UIOp = M.UIOp
 
   datatype Step =

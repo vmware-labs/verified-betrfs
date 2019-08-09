@@ -23,7 +23,7 @@ module Impl {
   import Pivots = PivotsLib
   import opened BucketsLib
   import KMTable = KMTable
-  import LBAType = LBAType`Internal
+  import LBAType = LBAType
   import opened Sets
   import IS = ImplState
   import SD = AsyncSectorDisk
@@ -51,15 +51,15 @@ module Impl {
     }
   }
 
-  method RequestRead(io: DiskIOHandler, addr: uint64)
+  method RequestRead(io: DiskIOHandler, loc: LBAType.Location)
   returns (id: D.ReqId)
   requires io.initialized()
-  requires ImplADM.M.ValidAddr(addr)
+  requires LBAType.ValidLocation(loc)
   modifies io
   ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(addr))
+  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(loc))
   {
-    id := io.read(addr, ImplADM.M.BlockSize() as uint64);
+    id := io.read(loc.addr, loc.len);
   }
 
   predicate stepsBetree(k: ImplConstants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, step: BT.BetreeStep)
@@ -96,7 +96,7 @@ module Impl {
   {
     if (s.outstandingIndirectionTableRead.None?) {
       LemmaIndirectionTableLBAValid();
-      var id := RequestRead(io, BC.IndirectionTableLBA());
+      var id := RequestRead(io, BC.IndirectionTableLocation());
       s' := IS.Unready(Some(id), s.syncReqs);
 
       assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableReqStep);
@@ -113,7 +113,7 @@ module Impl {
   requires s.Ready?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
   requires ref !in s.cache
   modifies io
   ensures IS.WFVars(s')
@@ -128,7 +128,7 @@ module Impl {
       assert lbaGraph.Some?;
       var (lba, _) := lbaGraph.value;
       assert lba.Some?;
-      assert BC.ValidLBAForNode(lba.value);
+      assert BC.ValidLocationForNode(lba.value);
       var id := RequestRead(io, lba.value);
       s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
 

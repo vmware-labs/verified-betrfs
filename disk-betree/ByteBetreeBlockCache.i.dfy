@@ -1,7 +1,6 @@
 include "AsyncDiskModel.s.dfy"
 include "BetreeBlockCache.i.dfy"
 include "Marshalling.i.dfy"
-include "ImplState.i.dfy"
 
 module ByteBetreeBlockCache refines AsyncDiskMachine {
   import opened NativeTypes
@@ -12,10 +11,11 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   import IS = ImplState
 
   import SD = AsyncSectorDisk
-  import LBAType`Internal
+  import LBAType
 
   type Constants = BBC.Constants
   type Variables = BBC.Variables
+  type Location = LBAType.Location
 
   function method BlockSize() : int { 8 * 1024 * 1024 }
 
@@ -25,13 +25,14 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   }
 
   function {:opaque} Parse(sector: seq<byte>) : Option<BBC.Sector>
-  requires |sector| == BlockSize() - 32
+  requires |sector| <= BlockSize() - 32
   {
     Marshalling.parseSector(sector)
   }
 
   predicate {:opaque} ValidCheckedBytes(sector: seq<byte>)
-  requires |sector| == BlockSize()
+  requires 32 <= |sector|
+  requires |sector| <= BlockSize()
   {
     && D.ChecksumChecksOut(sector)
     && Parse(sector[32..]).Some?
@@ -39,7 +40,8 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
 
   predicate ValidBytes(sector: seq<byte>)
   {
-    && |sector| == BlockSize()
+    && 32 <= |sector|
+    && |sector| <= BlockSize()
     && ValidCheckedBytes(sector)
   }
 
@@ -58,8 +60,11 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
       None
   }
 
-  predicate ValidReqRead(reqRead: D.ReqRead) { ValidAddr(reqRead.addr) && reqRead.len as int == BlockSize() }
-  predicate ValidReqWrite(reqWrite: D.ReqWrite) { ValidAddr(reqWrite.addr) && ValidBytes(reqWrite.bytes) }
+  predicate ValidReqRead(reqRead: D.ReqRead) { ValidAddr(reqRead.addr) && reqRead.len as int <= BlockSize() }
+  predicate ValidReqWrite(reqWrite: D.ReqWrite) {
+    && ValidAddr(reqWrite.addr)
+    && ValidBytes(reqWrite.bytes)
+  }
   predicate ValidRespRead(respRead: D.RespRead) { true }
   predicate ValidRespWrite(respWrite: D.RespWrite) { true }
   predicate ValidDiskOp(dop: D.DiskOp)
@@ -73,15 +78,15 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     }
   }
 
-  function IReqRead(reqRead: D.ReqRead) : SD.ReqRead<BBC.LBA>
+  function IReqRead(reqRead: D.ReqRead) : SD.ReqRead
   requires ValidReqRead(reqRead)
   {
-    SD.ReqRead(reqRead.addr)
+    SD.ReqRead(LBAType.Location(reqRead.addr, reqRead.len))
   }
-  function IReqWrite(reqWrite: D.ReqWrite) : SD.ReqWrite<BBC.LBA, BBC.Sector>
+  function IReqWrite(reqWrite: D.ReqWrite) : SD.ReqWrite<BBC.Sector>
   requires ValidReqWrite(reqWrite)
   {
-    SD.ReqWrite(reqWrite.addr, IBytes(reqWrite.bytes))
+    SD.ReqWrite(LBAType.Location(reqWrite.addr, |reqWrite.bytes| as uint64), IBytes(reqWrite.bytes))
   }
   function IRespRead(respRead: D.RespRead) : SD.RespRead<BBC.Sector>
   {
@@ -93,7 +98,7 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     SD.RespWrite
   }
 
-  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp<BBC.LBA, BBC.Sector>
+  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp<BBC.Sector>
   requires ValidDiskOp(diskOp)
   {
     match diskOp {

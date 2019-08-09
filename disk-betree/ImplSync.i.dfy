@@ -25,7 +25,7 @@ module ImplSync {
   ensures ref.Some? ==> ref.value !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   ensures ref.Some? ==> ref.value !in s.cache
   {
-    var ephemeral': map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
+    var ephemeral': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
     var ephemeral_graph := map ref | ref in ephemeral' :: ephemeral'[ref].1;
 
     if r :| r !in ephemeral_graph && r !in s.cache {
@@ -35,20 +35,22 @@ module ImplSync {
     }
   }
 
-  method getFreeLba(s: ImplVariables)
-  returns (lba : Option<BC.LBA>)
+  method getFreeLba(s: ImplVariables, len: uint64)
+  returns (loc : Option<BC.Location>)
   requires s.Ready?
   requires IS.WFVars(s)
-  ensures lba.Some? ==> BC.ValidLBAForNode(lba.value)
-  ensures lba.Some? ==> BC.LBAFree(IS.IVars(s), lba.value)
+  requires len <= LBAType.BlockSize()
+  ensures loc.Some? ==> BC.ValidLocationForNode(loc.value)
+  ensures loc.Some? ==> BC.ValidAllocation(IS.IVars(s), loc.value)
+  ensures loc.Some? ==> loc.value.len == len
   {
-    var persistent': map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
-    var persistent := map ref | ref in persistent' && persistent'[ref].0.Some? :: persistent'[ref].0.value;
+    var persistent': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
+    var persistent: map<uint64, BC.Location> := map ref | ref in persistent' && persistent'[ref].0.Some? :: persistent'[ref].0.value;
 
-    var ephemeral': map<uint64, (Option<BC.LBA>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
+    var ephemeral': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
     var ephemeral := map ref | ref in ephemeral' && ephemeral'[ref].0.Some? :: ephemeral'[ref].0.value;
 
-    var frozen: Option<map<uint64, BC.LBA>> := None;
+    var frozen: Option<map<uint64, BC.Location>> := None;
     if (s.frozenIndirectionTable.Some?) {
       var m := s.frozenIndirectionTable.value.ToMap();
       var frozen' := m;
@@ -59,21 +61,19 @@ module ImplSync {
       && i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
       && var l := i * LBAType.BlockSize();
       && BC.ValidLBAForNode(l)
-      && l !in persistent.Values
-      && l !in ephemeral.Values
-      && (frozen.Some? ==>
-          l !in frozen.value.Values)
-      && (forall id | id in s.outstandingBlockWrites ::
-          s.outstandingBlockWrites[id].lba != l)
+      && (forall ref | ref in persistent :: persistent[ref].addr != l)
+      && (forall ref | ref in ephemeral :: ephemeral[ref].addr != l)
+      && (frozen.Some? ==> (forall ref | ref in frozen.value :: frozen.value[ref].addr != l))
+      && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != l)
     ) {
-      lba := Some(i * LBAType.BlockSize());
+      loc := Some(LBAType.Location(i * LBAType.BlockSize(), len));
 
-      assert IS.IVars(s).persistentIndirectionTable.lbas == persistent;
-      assert IS.IVars(s).ephemeralIndirectionTable.lbas == ephemeral;
+      assert IS.IVars(s).persistentIndirectionTable.locs == persistent;
+      assert IS.IVars(s).ephemeralIndirectionTable.locs == ephemeral;
       assert IS.IVars(s).frozenIndirectionTable.Some? ==>
-          IS.IVars(s).frozenIndirectionTable.value.lbas == frozen.value;
+          IS.IVars(s).frozenIndirectionTable.value.locs == frozen.value;
     } else {
-      lba := None;
+      loc := None;
     }
   }
 
@@ -87,7 +87,7 @@ module ImplSync {
   requires IS.WFNode(node)
   requires BC.BlockPointsToValidReferences(IS.INode(node), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
-      ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
+      ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs
   ensures IS.WFVars(s')
   ensures IS.IVars(s') == ghostDirty(k, old(IS.IVars(s)), ref, IS.INode(node))
   ensures BC.Dirty(k, old(IS.IVars(s)), IS.IVars(s'), ref, IS.INode(node))
@@ -104,7 +104,7 @@ module ImplSync {
     // s' := s
     //   .(ephemeralIndirectionTable :=
     //     BC.IndirectionTable(
-    //       MapRemove(s.ephemeralIndirectionTable.lbas, {ref}),
+    //       MapRemove(s.ephemeralIndirectionTable.locs, {ref}),
     //       s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]
     //     ))
     //   .(cache := s.cache[ref := node]);
@@ -117,8 +117,8 @@ module ImplSync {
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
     var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if node.children.Some? then node.children.value else []));
 
-    //assert IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas ==
-    //  MapRemove(old(IS.IIndirectionTable(s.ephemeralIndirectionTable)).lbas, {ref});
+    //assert IS.IIndirectionTable(s.ephemeralIndirectionTable).locs ==
+    //  MapRemove(old(IS.IIndirectionTable(s.ephemeralIndirectionTable)).locs, {ref});
 
     //assert IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==
     //      old(IS.IIndirectionTable(s.ephemeralIndirectionTable)).graph[ref := if node.children.Some? then node.children.value else []];
@@ -127,16 +127,48 @@ module ImplSync {
     assert BC.Dirty(k, old(IS.IVars(s)), IS.IVars(s'), ref, IS.INode(node));
   }
 
-  method RequestWrite(io: DiskIOHandler, addr: uint64, sector: IS.Sector)
+  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
   returns (id: Option<D.ReqId>)
   requires IS.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
   requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
   requires io.initialized()
-  requires ImplADM.M.ValidAddr(addr)
+  requires LBAType.ValidLocation(loc)
   modifies io
   ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(addr, IS.ISector(sector)))
+  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc, IS.ISector(sector)))
+  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
+  {
+    Marshalling.reveal_parseCheckedSector();
+    ImplADM.M.reveal_IBytes();
+    ImplADM.M.reveal_ValidCheckedBytes();
+    ImplADM.M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+
+    var bytes := Marshalling.MarshallCheckedSector(sector);
+    if (bytes == null || bytes.Length as uint64 != loc.len) {
+      id := None;
+    } else {
+      var i := io.write(loc.addr, bytes);
+      id := Some(i);
+
+      //assert ImplADM.M.ValidReqWrite(io.diskOp().reqWrite);
+    }
+  }
+
+  method FindLocationAndRequestWrite(s: ImplVariables, io: DiskIOHandler, sector: IS.Sector)
+  returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
+  requires IS.WFVars(s)
+  requires s.Ready?
+  requires IS.WFSector(sector)
+  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
+  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
+  requires io.initialized()
+  modifies io
+  ensures ImplADM.M.ValidDiskOp(io.diskOp())
+  ensures id.Some? ==> loc.Some?
+  ensures id.Some? ==> LBAType.ValidLocation(loc.value);
+  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, IS.ISector(sector)))
   ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
   {
     Marshalling.reveal_parseCheckedSector();
@@ -148,9 +180,16 @@ module ImplSync {
     var bytes := Marshalling.MarshallCheckedSector(sector);
     if (bytes == null) {
       id := None;
+      loc := None;
     } else {
-      var i := io.write(addr, bytes);
-      id := Some(i);
+      var len := bytes.Length as uint64;
+      loc := getFreeLba(s, len);
+      if (loc.Some?) {
+        var i := io.write(loc.value.addr, bytes);
+        id := Some(i);
+      } else {
+        id := None;
+      }
     }
   }
 
@@ -168,11 +207,11 @@ module ImplSync {
   ensures ref.Some? ==> s' == old(s.(cache := s.cache[ref.value := node]))
   ensures ref.Some? ==> IS.IVars(s') == old(IS.IVars(s))
       .(ephemeralIndirectionTable := BC.IndirectionTable(
-          old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
+          old(IS.IVars(s)).ephemeralIndirectionTable.locs,
           old(IS.IVars(s)).ephemeralIndirectionTable.graph[ref.value := if node.children.Some? then node.children.value else []]))
       .(cache := old(IS.IVars(s)).cache[ref.value := IS.INode(node)]);
   ensures ref.Some? ==> ref.value !in old(s.cache)
-  ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.lbas
+  ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.locs
   ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.graph
   ensures ref.None? ==> s' == s
   ensures ref.None? ==> IS.IVars(s') == old(IS.IVars(s))
@@ -192,7 +231,7 @@ module ImplSync {
       assert IS.IIndirectionTable(s.ephemeralIndirectionTable) == 
         old(
           BC.IndirectionTable(
-            IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas,
+            IS.IIndirectionTable(s.ephemeralIndirectionTable).locs,
             IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ref.value := if node.children.Some? then node.children.value else []]
           ));
       s' := s.(cache := s.cache[ref.value := node]);
@@ -207,7 +246,7 @@ module ImplSync {
   requires IS.WFVars(s)
   requires IS.WFNode(node)
   requires s.Ready?
-  requires ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas
+  requires ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in s.cache
   // requires ref != BT.G.Root()
@@ -217,7 +256,7 @@ module ImplSync {
   ensures s'.Ready?
   ensures IS.IVars(s') == old(IS.IVars(s))
       .(ephemeralIndirectionTable := BC.IndirectionTable(
-          old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
+          old(IS.IVars(s)).ephemeralIndirectionTable.locs,
           MapRemove1(old(IS.IVars(s)).ephemeralIndirectionTable.graph, ref)))
       .(cache := MapRemove1(old(IS.IVars(s)).cache, ref))
   ensures s.rootBucket == s'.rootBucket
@@ -231,7 +270,7 @@ module ImplSync {
     s' := s.(cache := MapRemove1(s.cache, ref));
     assert IS.IVars(s') == old(IS.IVars(s))
         .(ephemeralIndirectionTable := BC.IndirectionTable(
-            old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
+            old(IS.IVars(s)).ephemeralIndirectionTable.locs,
             MapRemove1(old(IS.IVars(s)).ephemeralIndirectionTable.graph, ref)))
         .(cache := MapRemove1(old(IS.IVars(s)).cache, ref));
   }
@@ -293,7 +332,7 @@ module ImplSync {
         assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
           assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
           print "giving up; dealloc can't dealloc because frozen isn't written\n";
@@ -313,7 +352,7 @@ module ImplSync {
 
     assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
       old(BC.IndirectionTable(
-        MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas, {ref}),
+        MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).locs, {ref}),
         MapRemove(IS.IIndirectionTable(s.ephemeralIndirectionTable).graph, {ref})
       ));
 
@@ -352,7 +391,7 @@ module ImplSync {
         assert BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
         var (lba, _) := rootLbaGraph.value;
         if lba.None? {
-          assert BT.G.Root() !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          assert BT.G.Root() !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
           assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
           print "giving up; fixBigRoot can't run because frozen isn't written\n";
@@ -704,7 +743,7 @@ module ImplSync {
   {
     s
       .(ephemeralIndirectionTable := BC.IndirectionTable(
-          s.ephemeralIndirectionTable.lbas,
+          s.ephemeralIndirectionTable.locs,
           s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]))
       .(cache := s.cache[ref := node])
   }
@@ -713,14 +752,14 @@ module ImplSync {
   requires s.Ready?
   requires ref in s.cache // probably not necessary?
   requires ref in s.ephemeralIndirectionTable.graph
-  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas
+  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
   requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   ensures BC.Dirty(k, s, s', ref, node)
   {
     s
       .(cache := s.cache[ref := node])
       .(ephemeralIndirectionTable := BC.IndirectionTable(
-          MapRemove1(s.ephemeralIndirectionTable.lbas, ref),
+          MapRemove1(s.ephemeralIndirectionTable.locs, ref),
           s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]))
   }
 
@@ -883,7 +922,7 @@ module ImplSync {
         assert parentref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
         var (lba, _) := parentrefLbaGraph.value;
         if lba.None? {
-          assert parentref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          assert parentref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
           assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
           print "giving up; doSplit can't run because frozen isn't written\n";
@@ -1066,7 +1105,7 @@ module ImplSync {
         assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
           assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
           print "giving up; flush can't run because frozen isn't written";
@@ -1188,7 +1227,7 @@ module ImplSync {
         assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
           assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
           print "giving up; fixBigRoot can't run because frozen isn't written";
@@ -1334,20 +1373,20 @@ module ImplSync {
     assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
   }
 
-  method AssignRefToLBA(table: IS.MutIndirectionTable, ref: IS.Reference, lba: BC.LBA)
+  method AssignRefToLBA(table: IS.MutIndirectionTable, ref: IS.Reference, loc: BC.Location)
   requires table.Inv()
   ensures IS.IIndirectionTable(table) ==
-      old(BC.assignRefToLBA(IS.IIndirectionTable(table), ref, lba))
+      old(BC.assignRefToLocation(IS.IIndirectionTable(table), ref, loc))
   modifies table.Repr
   {
-    var lbaGraph := table.Remove(ref);
-    if lbaGraph.Some? {
-      var (_, graph) := lbaGraph.value;
+    var locGraph := table.Remove(ref);
+    if locGraph.Some? {
+      var (_, graph) := locGraph.value;
       assume table.Count as nat < 0x10000000000000000 / 8;
-      var _ := table.Insert(ref, (Some(lba), graph));
+      var _ := table.Insert(ref, (Some(loc), graph));
     }
     assume IS.IIndirectionTable(table) ==
-        old(BC.assignRefToLBA(IS.IIndirectionTable(table), ref, lba));
+        old(BC.assignRefToLocation(IS.IIndirectionTable(table), ref, loc));
   }
 
   method FindDeallocable(s: ImplVariables) returns (ref: Option<IS.Reference>)
@@ -1408,9 +1447,9 @@ module ImplSync {
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
   ensures ref.Some? ==> ref.value in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph 
-  ensures ref.Some? ==> ref.value !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
+  ensures ref.Some? ==> ref.value !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs
   ensures ref.None? ==> forall r | r in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph
-      :: r in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
+      :: r in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs
   {
     // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
     var frozenTable := s.frozenIndirectionTable.value.ToMap();
@@ -1430,7 +1469,7 @@ module ImplSync {
       i := i + 1;
     }
     assume forall r | r in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph
-        :: r in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+        :: r in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
     return None;
   }
 
@@ -1546,7 +1585,7 @@ module ImplSync {
     if foundInFrozen.Some? {
       var ref := foundInFrozen.value;
       assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
-      assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas;
+      assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
       if (!Marshalling.CappedNode(s.cache[ref])) {
         // TODO we should be able to prove this is impossible by adding an invariant
@@ -1560,41 +1599,31 @@ module ImplSync {
 
       var ephemeralRef := s.ephemeralIndirectionTable.Get(ref);
       if ephemeralRef.Some? && ephemeralRef.value.0.Some? {
-        assert ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas;
+        assert ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs;
         // TODO we should be able to prove this is impossible as well
         s' := s;
         assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-        print "sync: giving up; ref already in ephemeralIndirectionTable.lbas but not frozen";
+        print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
         return;
       }
 
-      var lba := getFreeLba(s);
-      match lba {
-        case Some(lba) => {
-          INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
-          var id := RequestWrite(io, lba, IS.SectorBlock(s.cache[ref]));
-          if (id.Some?) {
-            AssignRefToLBA(s.ephemeralIndirectionTable, ref, lba);
-            assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
-              BC.assignRefToLBA(IS.IIndirectionTable(s.ephemeralIndirectionTable), ref, lba);
-            AssignRefToLBA(s.frozenIndirectionTable.value, ref, lba);
-            assert IS.IIndirectionTable(s.frozenIndirectionTable.value) ==
-              BC.assignRefToLBA(IS.IIndirectionTable(s.frozenIndirectionTable.value), ref, lba);
-            s' := s
-              .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, lba)]);
-            assert BC.WriteBackReq(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
-            assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackReqStep(ref));
-          } else {
-            s' := s;
-            assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-            print "sync: giving up; write req failed\n";
-          }
-        }
-        case None => {
-          s' := s;
-          assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-          print "sync: giving up; could not get lba\n";
-        }
+      INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
+      var id, loc := FindLocationAndRequestWrite(s, io, IS.SectorBlock(s.cache[ref]));
+      if (id.Some?) {
+        AssignRefToLBA(s.ephemeralIndirectionTable, ref, loc.value);
+        assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
+          BC.assignRefToLocation(IS.IIndirectionTable(s.ephemeralIndirectionTable), ref, loc.value);
+        AssignRefToLBA(s.frozenIndirectionTable.value, ref, loc.value);
+        assert IS.IIndirectionTable(s.frozenIndirectionTable.value) ==
+          BC.assignRefToLocation(IS.IIndirectionTable(s.frozenIndirectionTable.value), ref, loc.value);
+        s' := s
+          .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)]);
+        assert BC.WriteBackReq(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
+        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackReqStep(ref));
+      } else {
+        s' := s;
+        assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
+        print "sync: giving up; write req failed\n";
       }
     } else if (s.outstandingBlockWrites != map[]) {
       s' := s;
@@ -1602,7 +1631,7 @@ module ImplSync {
       print "sync: giving up; blocks are still being written\n";
     } else {
       LBAType.reveal_ValidAddr();
-      var id := RequestWrite(io, BC.IndirectionTableLBA(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
+      var id := RequestWrite(io, BC.IndirectionTableLocation(), IS.SectorIndirectionTable(s.frozenIndirectionTable.value));
       if (id.Some?) {
         s' := s.(outstandingIndirectionTableWrite := id);
         assert BC.WriteBackIndirectionTableReq(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));

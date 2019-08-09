@@ -5,60 +5,35 @@ include "Graph.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 
-module LBAType {
-  import NativeTypes
-
-  type LBA(==,!new) = NativeTypes.uint64
-  function method IndirectionTableLBA() : LBA { 0 }
-
-  function method toLBA(i: NativeTypes.uint64) : LBA{ i }
-  function method toUint64(i: LBA) : NativeTypes.uint64 { i }
-
-  function method BlockSize() : NativeTypes.uint64 { 8*1024*1024 }
-  predicate method {:opaque} ValidAddr(addr: LBA) {
-    //exists j: int :: j * BlockSize() as int == addr as int
-    addr as int % BlockSize() as int == 0
-  }
-  lemma ValidAddrDivisor(addr: LBA) returns (i: int)
-  requires ValidAddr(addr);
-  ensures i * BlockSize() as int == addr as int
-  {
-    reveal_ValidAddr();
-    i := addr as int / BlockSize() as int;
-  }
-
-  export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
-      reveals BlockSize
-  export extends S
-	export Internal reveals *
-}
-
 abstract module BlockCache refines Transactable {
   import opened Maps
   import opened Options
+  import opened NativeTypes
   import LBAType
 
   import Disk = AsyncSectorDisk
 
   type ReqId = Disk.ReqId
   type LBA = LBAType.LBA
+  type Location = LBAType.Location
   datatype Constants = Constants()
   function method IndirectionTableLBA() : LBA { LBAType.IndirectionTableLBA() }
+  function method IndirectionTableLocation() : Location { LBAType.IndirectionTableLocation() }
 
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
-      lbas: map<Reference, LBA>,
+      locs: map<Reference, Location>,
       graph: map<Reference, seq<Reference>>)
 
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
 
-  type DiskOp = Disk.DiskOp<LBA, Sector>
+  type DiskOp = Disk.DiskOp<Sector>
 
   // BlockCache stuff
 
-  datatype OutstandingWrite = OutstandingWrite(ref: Reference, lba: LBA)
+  datatype OutstandingWrite = OutstandingWrite(ref: Reference, loc: Location)
   datatype OutstandingRead = OutstandingRead(ref: Reference)
 
   datatype SyncReqStatus = State1 | State2 | State3
@@ -91,6 +66,11 @@ abstract module BlockCache refines Transactable {
     && LBAType.ValidAddr(lba)
     && lba != IndirectionTableLBA()
   }
+  predicate method ValidLocationForNode(loc: Location)
+  {
+    && ValidLBAForNode(loc.addr)
+    && LBAType.ValidLocation(loc)
+  }
 
   predicate method GraphClosed(graph: map<Reference, seq<Reference>>)
   {
@@ -102,8 +82,8 @@ abstract module BlockCache refines Transactable {
   // WF IndirectionTable which must have all LBAs filled in
   predicate WFCompleteIndirectionTable(indirectionTable: IndirectionTable)
   {
-    && (forall lba | lba in indirectionTable.lbas.Values :: ValidLBAForNode(lba))
-    && indirectionTable.graph.Keys == indirectionTable.lbas.Keys
+    && (forall loc | loc in indirectionTable.locs.Values :: ValidLocationForNode(loc))
+    && indirectionTable.graph.Keys == indirectionTable.locs.Keys
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
   }
@@ -111,21 +91,24 @@ abstract module BlockCache refines Transactable {
   // WF IndirectionTable which might not have all LBAs filled in
   predicate WFIndirectionTable(indirectionTable: IndirectionTable)
   {
-    && (forall lba | lba in indirectionTable.lbas.Values :: ValidLBAForNode(lba))
-    && indirectionTable.lbas.Keys <= indirectionTable.graph.Keys
+    && (forall loc | loc in indirectionTable.locs.Values :: ValidLocationForNode(loc))
+    && indirectionTable.locs.Keys <= indirectionTable.graph.Keys
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
   }
 
-  predicate LBAFree(s: Variables, lba: LBA)
+  predicate ValidAllocation(s: Variables, loc: Location)
   requires s.Ready?
   {
-    && lba !in s.persistentIndirectionTable.lbas.Values
-    && lba !in s.ephemeralIndirectionTable.lbas.Values
+    && (forall ref | ref in s.persistentIndirectionTable.locs ::
+        s.persistentIndirectionTable.locs[ref].addr != loc.addr)
+    && (forall ref | ref in s.ephemeralIndirectionTable.locs ::
+        s.ephemeralIndirectionTable.locs[ref].addr != loc.addr)
     && (s.frozenIndirectionTable.Some? ==>
-        lba !in s.frozenIndirectionTable.value.lbas.Values)
+        forall ref | ref in s.frozenIndirectionTable.value.locs ::
+        s.frozenIndirectionTable.value.locs[ref].addr != loc.addr)
     && (forall id | id in s.outstandingBlockWrites ::
-        s.outstandingBlockWrites[id].lba != lba)
+        s.outstandingBlockWrites[id].loc.addr != loc.addr)
   }
 
   datatype Step =
@@ -145,10 +128,10 @@ abstract module BlockCache refines Transactable {
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
-  function method assignRefToLBA(indirectionTable: IndirectionTable, ref: Reference, lba: LBA) : IndirectionTable
+  function method assignRefToLocation(indirectionTable: IndirectionTable, ref: Reference, loc: Location) : IndirectionTable
   {
     IndirectionTable(
-      if ref in indirectionTable.graph then indirectionTable.lbas[ref := lba] else indirectionTable.lbas,
+      if ref in indirectionTable.graph then indirectionTable.locs[ref := loc] else indirectionTable.locs,
       indirectionTable.graph
     )
   }
@@ -163,25 +146,26 @@ abstract module BlockCache refines Transactable {
     && dop.ReqWriteOp?
     && s.Ready?
     && ref in s.cache
-    && ValidLBAForNode(dop.reqWrite.lba)
-    && LBAFree(s, dop.reqWrite.lba)
+    && ValidLocationForNode(dop.reqWrite.loc)
     && dop.reqWrite.sector == SectorBlock(s.cache[ref])
     && s'.Ready?
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
     && s.outstandingIndirectionTableWrite.None?
 
-    && ref !in s.ephemeralIndirectionTable.lbas
-    && s'.ephemeralIndirectionTable == assignRefToLBA(s.ephemeralIndirectionTable, ref, dop.reqWrite.lba)
+    && ValidAllocation(s, dop.reqWrite.loc)
+
+    && ref !in s.ephemeralIndirectionTable.locs
+    && s'.ephemeralIndirectionTable == assignRefToLocation(s.ephemeralIndirectionTable, ref, dop.reqWrite.loc)
 
     && (s.frozenIndirectionTable.Some? ==> (
-      && ref !in s.frozenIndirectionTable.value.lbas
-      && s'.frozenIndirectionTable == Some(assignRefToLBA(s.frozenIndirectionTable.value, ref, dop.reqWrite.lba))
+      && ref !in s.frozenIndirectionTable.value.locs
+      && s'.frozenIndirectionTable == Some(assignRefToLocation(s.frozenIndirectionTable.value, ref, dop.reqWrite.loc))
     ))
     && (s.frozenIndirectionTable.None? ==> s'.frozenIndirectionTable.None?)
 
     && s'.cache == s.cache
-    && s'.outstandingBlockWrites == s.outstandingBlockWrites[dop.id := OutstandingWrite(ref, dop.reqWrite.lba)]
+    && s'.outstandingBlockWrites == s.outstandingBlockWrites[dop.id := OutstandingWrite(ref, dop.reqWrite.loc)]
     && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.outstandingIndirectionTableWrite == s.outstandingIndirectionTableWrite
     && s'.syncReqs == s.syncReqs
@@ -199,10 +183,10 @@ abstract module BlockCache refines Transactable {
   {
     && dop.ReqWriteOp?
     && s.Ready?
-    && dop.reqWrite.lba == IndirectionTableLBA()
+    && dop.reqWrite.loc == IndirectionTableLocation()
     && s.frozenIndirectionTable.Some?
     && dop.reqWrite.sector == SectorIndirectionTable(s.frozenIndirectionTable.value)
-    && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.lbas.Keys
+    && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.locs.Keys
     && s.outstandingIndirectionTableWrite.None?
     && s.outstandingBlockWrites == map[]
     && s.frozenIndirectionTable.Some?
@@ -248,11 +232,11 @@ abstract module BlockCache refines Transactable {
     && ref != G.Root()
     && NoPredecessors(s.ephemeralIndirectionTable.graph, ref)
 
-    && (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas)
+    && (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs)
 
     && s'.Ready?
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
-    && s'.ephemeralIndirectionTable.lbas == MapRemove(s.ephemeralIndirectionTable.lbas, {ref})
+    && s'.ephemeralIndirectionTable.locs == MapRemove(s.ephemeralIndirectionTable.locs, {ref})
     && s'.cache == MapRemove(s.cache, {ref})
     && s'.ephemeralIndirectionTable.graph == MapRemove(s.ephemeralIndirectionTable.graph, {ref})
 
@@ -269,9 +253,9 @@ abstract module BlockCache refines Transactable {
     && dop.ReqReadOp?
     && s.Ready?
     && IsAllocated(s, ref)
-    && ref in s.ephemeralIndirectionTable.lbas
+    && ref in s.ephemeralIndirectionTable.locs
     && ref !in s.cache
-    && s.ephemeralIndirectionTable.lbas[ref] == dop.reqRead.lba
+    && s.ephemeralIndirectionTable.locs[ref] == dop.reqRead.loc
     && OutstandingRead(ref) !in s.outstandingBlockReads.Values
     && s' == s.(outstandingBlockReads := s.outstandingBlockReads[dop.id := OutstandingRead(ref)])
   }
@@ -297,7 +281,7 @@ abstract module BlockCache refines Transactable {
     && dop.ReqReadOp?
     && s.Unready?
     && s.outstandingIndirectionTableRead.None?
-    && dop.reqRead.lba == IndirectionTableLBA()
+    && dop.reqRead.loc == IndirectionTableLocation()
     && s' == Unready(Some(dop.id), s.syncReqs)
   }
 
@@ -318,11 +302,11 @@ abstract module BlockCache refines Transactable {
     && dop.NoDiskOp?
     && ref in s.cache
     && (ref in s.ephemeralIndirectionTable.graph ==>
-      && ref in s.ephemeralIndirectionTable.lbas
-      && OutstandingWrite(ref, s.ephemeralIndirectionTable.lbas[ref]) !in s.outstandingBlockWrites.Values
+      && ref in s.ephemeralIndirectionTable.locs
+      && OutstandingWrite(ref, s.ephemeralIndirectionTable.locs[ref]) !in s.outstandingBlockWrites.Values
     )
     && (s.frozenIndirectionTable.Some? ==>
-        ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas)
+        ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs)
     && s' == s.(cache := MapRemove(s.cache, {ref}))
   }
 
@@ -380,11 +364,11 @@ abstract module BlockCache refines Transactable {
     && s'.cache == s.cache[ref := block]
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
-    && s'.ephemeralIndirectionTable.lbas == MapRemove(s.ephemeralIndirectionTable.lbas, {ref})
+    && s'.ephemeralIndirectionTable.locs == MapRemove(s.ephemeralIndirectionTable.locs, {ref})
 
     && BlockPointsToValidReferences(block, s.ephemeralIndirectionTable.graph)
 
-    && (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas)
+    && (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs)
     && ref in s'.ephemeralIndirectionTable.graph
     && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph[ref := s'.ephemeralIndirectionTable.graph[ref]]
     && (iset r | r in s'.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
@@ -406,7 +390,7 @@ abstract module BlockCache refines Transactable {
     && s'.cache == s.cache[ref := block]
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
-    && s'.ephemeralIndirectionTable.lbas == s.ephemeralIndirectionTable.lbas
+    && s'.ephemeralIndirectionTable.locs == s.ephemeralIndirectionTable.locs
 
     && BlockPointsToValidReferences(block, s.ephemeralIndirectionTable.graph)
 
@@ -476,7 +460,7 @@ abstract module BlockCache refines Transactable {
 
   predicate IndirectionTableCacheConsistent(indirectionTable: IndirectionTable, cache: map<Reference, Node>)
   {
-    && indirectionTable.graph.Keys <= cache.Keys + indirectionTable.lbas.Keys
+    && indirectionTable.graph.Keys <= cache.Keys + indirectionTable.locs.Keys
   }
 
   predicate EphemeralTableEntriesInCacheOrNotBeingWritten(k: Constants, s: Variables)
@@ -484,13 +468,26 @@ abstract module BlockCache refines Transactable {
   requires IndirectionTableCacheConsistent(s.ephemeralIndirectionTable, s.cache)
   {
     forall ref | ref in s.ephemeralIndirectionTable.graph ::
-      ref !in s.cache ==> OutstandingWrite(ref, s.ephemeralIndirectionTable.lbas[ref]) !in s.outstandingBlockWrites.Values
+      ref !in s.cache ==> forall id | id in s.outstandingBlockWrites ::
+        s.outstandingBlockWrites[id].ref != ref || s.outstandingBlockWrites[id].loc.addr != s.ephemeralIndirectionTable.locs[ref].addr
   }
 
   predicate OutstandingReadRefsUnique(outstandingBlockReads: map<ReqId, OutstandingRead>)
   {
     forall id1, id2 | id1 in outstandingBlockReads && id2 in outstandingBlockReads && outstandingBlockReads[id1] == outstandingBlockReads[id2] ::
       id1 == id2
+  }
+
+  predicate OverlappingImpliesEq(loc1: Location, loc2: Location) {
+    loc1.addr == loc2.addr ==> loc1 == loc2
+  }
+
+  predicate OverlappingWritesEqForIndirectionTable(k: Constants, s: Variables, indirectionTable: IndirectionTable)
+  requires s.Ready?
+  {
+    forall ref | ref in indirectionTable.locs ::
+      forall id | id in s.outstandingBlockWrites ::
+        OverlappingImpliesEq(indirectionTable.locs[ref], s.outstandingBlockWrites[id].loc)
   }
 
   predicate InvReady(k: Constants, s: Variables)
@@ -503,10 +500,13 @@ abstract module BlockCache refines Transactable {
     && CacheConsistentWithSuccessors(s.cache, s.ephemeralIndirectionTable.graph)
     && EphemeralTableEntriesInCacheOrNotBeingWritten(k, s)
     && OutstandingReadRefsUnique(s.outstandingBlockReads)
+    && OverlappingWritesEqForIndirectionTable(k, s, s.ephemeralIndirectionTable)
+    && OverlappingWritesEqForIndirectionTable(k, s, s.persistentIndirectionTable)
 
     && (s.frozenIndirectionTable.Some? ==> (
       && WFIndirectionTable(s.frozenIndirectionTable.value)
       && IndirectionTableCacheConsistent(s.frozenIndirectionTable.value, s.cache)
+      && OverlappingWritesEqForIndirectionTable(k, s, s.frozenIndirectionTable.value)
     ))
 
     && (s.outstandingIndirectionTableWrite.Some? ==> (

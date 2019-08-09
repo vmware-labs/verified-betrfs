@@ -201,12 +201,39 @@ class BenchmarkSequentialQueries : Benchmark {
   }
 }
 
+class Hashing : Benchmark {
+  public override string Name { get { return "Hashing"; } }
+
+  const int size = 1024*1024;
+
+  byte[] b;
+  //byte[] a;
+
+  public Hashing() {
+  }
+
+  override protected void Prepare(Application app) {
+    b = new byte[size];
+  }
+
+  override protected void Go(Application app) {
+    for (int i = 0; i < 10; i++) {
+      Crypto_Compile.__default.Crc32(new Dafny.Sequence<byte>(b));
+      /*a = new byte[size];
+      for (int j = 0; j < size; j++) {
+        a[j] = b[j];
+      }*/
+    }
+  }
+}
+
 class Benchmarks {
   public void RunAllBenchmarks() {
     new BenchmarkRandomQueries().Run();
     new BenchmarkRandomInserts().Run();
     new BenchmarkSequentialQueries().Run();
     new BenchmarkSequentialInserts().Run();
+    //new Hashing().Run();
 
     Native_Compile.BenchmarkingUtil.dump();
   }

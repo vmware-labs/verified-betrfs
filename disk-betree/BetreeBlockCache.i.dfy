@@ -17,7 +17,7 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
 
   type Variables = BC.Variables
   type Constants = BC.Constants
-  type LBA = BC.LBA
+  type Location = BC.Location
   type Sector = BC.Sector
 
   type Op = BC.Op

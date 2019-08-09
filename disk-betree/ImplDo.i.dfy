@@ -339,7 +339,7 @@ module ImplDo {
         && rootInFrozenLbaGraph.value.0.None?
       ) {
         assert (s.frozenIndirectionTable.Some? && BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph) &&
-            !(BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas);
+            !(BT.G.Root() in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs);
         // TODO write out the root here instead of giving up
         s' := s;
         success := false;
@@ -370,7 +370,7 @@ module ImplDo {
     RemoveLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root());
 
     assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
-        MapRemove1(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, BT.G.Root()),
+        MapRemove1(iVarsBeforeRemoval.ephemeralIndirectionTable.locs, BT.G.Root()),
         iVarsBeforeRemoval.ephemeralIndirectionTable.graph));
 
     s' := s.(rootBucket := newRootBucket);
@@ -382,7 +382,7 @@ module ImplDo {
     assert IS.IVars(s') == old@before_removal(IS.IVars(s) // timeout observe
         .(cache := IS.IVars(s).cache[BT.G.Root() := newroot])
         .(ephemeralIndirectionTable := BC.IndirectionTable(
-          MapRemove1(IS.IVars(s).ephemeralIndirectionTable.lbas, BT.G.Root()),
+          MapRemove1(IS.IVars(s).ephemeralIndirectionTable.locs, BT.G.Root()),
           IS.IVars(s).ephemeralIndirectionTable.graph
         )));
 
@@ -463,7 +463,7 @@ module ImplDo {
 
     var id1, bytes := io.getReadResult();
     id := id1;
-    if bytes.Length == ImplADM.M.BlockSize() {
+    if bytes.Length <= ImplADM.M.BlockSize() {
       var sectorOpt := Marshalling.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {
@@ -519,7 +519,7 @@ module ImplDo {
     var ref := s.outstandingBlockReads[id].ref;
     
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-    if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).lbas || ref in s.cache
+    if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
       s' := s;
       assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: ref !in lbas or ref in s.cache\n";

@@ -29,7 +29,7 @@ module Marshalling {
   // in a 64-bit int.
   import M = ValueMessage`Internal
   import ReferenceType`Internal
-  import LBAType`Internal
+  import LBAType
   import ValueWithDefault`Internal
 
   import Pivots = PivotsLib
@@ -40,6 +40,7 @@ module Marshalling {
 
   type Reference = BC.Reference
   type LBA = BC.LBA
+  type Location = BC.Location
   type Sector = ImplState.Sector
   type Message = M.Message
   type Key = BT.G.Key
@@ -50,8 +51,8 @@ module Marshalling {
   function method IndirectionTableGrammar() : G
   ensures ValidGrammar(IndirectionTableGrammar())
   {
-    // (Reference, LBA, successor-list) triples
-    GArray(GTuple([GUint64, GUint64, GUint64Array]))
+    // (Reference, address, len, successor-list) triples
+    GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   }
 
   function method BucketGrammar() : G
@@ -156,9 +157,9 @@ module Marshalling {
     Some(v.ua)
   }
 
-  function method {:fuel ValInGrammar,3} valToLBAsAndSuccs(a: seq<V>) : (s : Option<(map<Reference, LBA>, map<Reference, seq<Reference>>)>)
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64Array]))
-  ensures s.Some? ==> forall lba | lba in s.value.0.Values :: BC.ValidLBAForNode(lba)
+  function method {:fuel ValInGrammar,3} valToLBAsAndSuccs(a: seq<V>) : (s : Option<(map<Reference, Location>, map<Reference, seq<Reference>>)>)
+  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+  ensures s.Some? ==> forall loc | loc in s.value.0.Values :: BC.ValidLocationForNode(loc)
   ensures s.Some? ==> s.value.0.Keys == s.value.1.Keys
   {
     if |a| == 0 then
@@ -170,14 +171,16 @@ module Marshalling {
           var tuple := Last(a);
           var ref := valToReference(tuple.t[0]);
           var lba := valToLBA(tuple.t[1]);
-          var succs := valToChildren(tuple.t[2]);
+          var len := tuple.t[2].u;
+          var succs := valToChildren(tuple.t[3]);
           match succs {
             case None => None
             case Some(succs) => (
-              if ref in graph || lba == 0 || !LBAType.ValidAddr(lba) then (
+              var loc := LBAType.Location(lba, len);
+              if ref in graph || lba == 0 || !LBAType.ValidLocation(loc) then (
                 None
               ) else (
-                Some((lbas[ref := lba], graph[ref := succs]))
+                Some((lbas[ref := loc], graph[ref := succs]))
               )
             )
           }
@@ -193,7 +196,7 @@ module Marshalling {
       && var table := ImplState.IIndirectionTableOpt(s);
       && var inter := valToLBAsAndSuccs(a);
       && if table.Some?
-         then (inter.Some? && table.value.lbas == inter.value.0 && table.value.graph == inter.value.1)
+         then (inter.Some? && table.value.locs == inter.value.0 && table.value.graph == inter.value.1)
          else inter.None?)
   ensures s.Some? ==> s.value.Inv()
   ensures s.Some? ==> s.value.Count as nat == |a|
@@ -201,7 +204,7 @@ module Marshalling {
   ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
   {
     if |a| == 0 {
-      var newHashMap := new MM.ResizingHashMap<(Option<LBA>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
+      var newHashMap := new MM.ResizingHashMap<(Option<Location>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
       s := Some(newHashMap);
       assume s.value.Count as nat == |a|;
     } else {
@@ -211,17 +214,19 @@ module Marshalling {
           var tuple := Last(a);
           var ref := valToReference(tuple.t[0]);
           var lba := valToLBA(tuple.t[1]);
-          var succs := valToChildren(tuple.t[2]);
+          var len := tuple.t[2].u;
+          var succs := valToChildren(tuple.t[3]);
           match succs {
             case None => {
               s := None;
             }
             case Some(succs) => {
               var graphRef := mutMap.Get(ref);
-              if graphRef.Some? || lba == 0 || !LBAType.ValidAddr(lba) {
+              var loc := LBAType.Location(lba, len);
+              if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc) {
                 s := None;
               } else {
-                var _ := mutMap.Insert(ref, (Some(lba), succs));
+                var _ := mutMap.Insert(ref, (Some(loc), succs));
                 s := Some(mutMap);
                 assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
                 assume s.value.Count as nat == |a|;
@@ -667,41 +672,42 @@ module Marshalling {
     return VUint64Array(children);
   }
 
-  method {:fuel ValInGrammar,2} lbasSuccsToVal(lbas: map<Reference, LBA>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
-  requires lbas.Keys == graph.Keys
-  requires forall lba | lba in lbas.Values :: BC.ValidLBAForNode(lba)
-  requires |lbas| < 0x1_0000_0000_0000_0000 / 8
+  method {:fuel ValInGrammar,2} lbasSuccsToVal(locs: map<Reference, Location>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
+  requires locs.Keys == graph.Keys
+  requires forall loc | loc in locs.Values :: BC.ValidLocationForNode(loc)
+  requires |locs| < 0x1_0000_0000_0000_0000 / 8
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableGrammar());
-  ensures v.Some? ==> |v.value.a| == |lbas|
-  ensures v.Some? ==> valToLBAsAndSuccs(v.value.a) == Some((lbas, graph));
+  ensures v.Some? ==> |v.value.a| == |locs|
+  ensures v.Some? ==> valToLBAsAndSuccs(v.value.a) == Some((locs, graph));
   {
-    if (|lbas| == 0) {
-      assert lbas == map[];
+    if (|locs| == 0) {
+      assert locs == map[];
       assert graph == map[];
       return Some(VArray([]));
     } else {
-      var ref :| ref in lbas.Keys;
-      var vpref := lbasSuccsToVal(MapRemove(lbas, {ref}), MapRemove(graph, {ref}));
+      var ref :| ref in locs.Keys;
+      var vpref := lbasSuccsToVal(MapRemove(locs, {ref}), MapRemove(graph, {ref}));
       match vpref {
         case None => return None;
         case Some(vpref) => {
-          var lba := lbas[ref];
+          var loc := locs[ref];
           if (|graph[ref]| >= 0x1_0000_0000_0000_0000) {
             return None;
           }
           var succs := childrenToVal(graph[ref]);
-          var tuple := VTuple([refToVal(ref), lbaToVal(lba), succs]);
+          var tuple := VTuple([refToVal(ref), lbaToVal(loc.addr), VUint64(loc.len), succs]);
 
-          assert MapRemove(lbas, {ref})[ref := lba] == lbas;
+          assert MapRemove(locs, {ref})[ref := loc] == locs;
           assert MapRemove(graph, {ref})[ref := graph[ref]] == graph;
 
           //assert ref == valToReference(tuple.t[0]);
           //assert lba == valToReference(tuple.t[1]);
           //assert !(ref in MapRemove(graph, {ref}));
-          assert BC.ValidLBAForNode(lba);
+          assert BC.ValidLocationForNode(loc);
           //assert !(lba == 0);
           //assert valToLBAsAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
+          assert ValidVal(tuple);
 
           return Some(VArray(vpref.a + [tuple]));
         }
@@ -945,7 +951,7 @@ module Marshalling {
         var graph := map k | k in table :: table[k].1;
         assert table == mutMap.Contents;
         ghost var indirectionTable := ImplState.IIndirectionTable(mutMap);
-        assert lbas == indirectionTable.lbas;
+        assert lbas == indirectionTable.locs;
         assert graph == indirectionTable.graph;
         assert lbas.Keys == graph.Keys;
         if |lbas| < 0x1_0000_0000_0000_0000 / 8 {
@@ -1007,6 +1013,7 @@ module Marshalling {
   {
     data := new byte[n];
     var computed_size := GenericMarshalling.MarshallVal(val, grammar, data, start);
+    //print "computed_size "; print computed_size; print "\n";
     GenericMarshalling.lemma_parse_Val_view_specific(data[..], val, grammar, start as int, (n as int));
     assert data[start..] == data[start..n];
   }
@@ -1044,7 +1051,9 @@ module Marshalling {
   requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
   ensures data != null ==> parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
-  ensures data != null ==> data.Length == BlockSize() as int
+  ensures data != null ==> data.Length <= BlockSize() as int
+  ensures data != null ==> 32 <= data.Length
+  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == BlockSize() as int
   ensures sector.SectorBlock? ==> data != null;
   {
     var v := sectorToVal(sector);
@@ -1052,7 +1061,18 @@ module Marshalling {
       case None => return null;
       case Some(v) => {
         if (SizeOfV(v) <= BlockSize() as int - 32) {
-          var data := MarshallIntoFixedSize(v, SectorGrammar(), 32, BlockSize());
+          //Native.BenchmarkingUtil.start();
+          var size: uint64;
+          if (sector.SectorIndirectionTable?) {
+            size := BlockSize();
+          } else {
+            var computedSize := GenericMarshalling.ComputeSizeOf(v);
+            size := 32 + computedSize;
+          }
+
+          var data := MarshallIntoFixedSize(v, SectorGrammar(), 32, size);
+          //Native.BenchmarkingUtil.end();
+
           reveal_parseSector();
           reveal_parseCheckedSector();
 

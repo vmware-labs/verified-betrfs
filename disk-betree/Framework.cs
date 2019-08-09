@@ -20,26 +20,58 @@ namespace MainDiskIOHandler_Compile {
       readReqs = new Dictionary<ulong, byte[]>();
     }
 
+    private int readFile(string filename, byte[] res) {
+      using (FileStream fs = new FileStream(filename, FileMode.Open)) {
+        int actualRead = 0;
+        do {
+          actualRead += fs.Read(res, actualRead, res.Length-actualRead);
+        } while (actualRead != res.Length && fs.Position < fs.Length);
+        return actualRead;
+      } 
+    }
+
+    private void printBytes(byte[] a) {
+      for (int i = 0; i < a.Length; i++) {
+        Console.Write(a[i] + ",");
+      }
+      Console.WriteLine("");
+    }
+
     public void writeSync(ulong addr, byte[] sector) {
-      if (sector.Length != BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
+      //Console.WriteLine("writeSync: " + addr + ", " + sector.Length);
+
+      if (sector.Length > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
         Console.WriteLine(addr);
         Console.WriteLine(sector.Length);
         throw new Exception("writeSync not implemented for these arguments");
+      }
+
+      byte[] fileData = new byte[BLOCK_SIZE];
+      string filename = getFilename(addr);
+      if (File.Exists(filename)) {
+        readFile(filename, fileData);
+      }
+
+      for (int i = 0; i < sector.Length; i++) {
+        fileData[i] = sector[i];
       }
 
       File.WriteAllBytes(getFilename(addr), sector);
     }
 
     public void readSync(ulong addr, ulong len, out byte[] sector) {
-      if (addr % BLOCK_SIZE != 0 || len != BLOCK_SIZE) {
+      //Console.WriteLine("readSync: " + addr + ", " + len);
+      if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
         throw new Exception("readSync not implemented for these arguments");
       }
 
       string filename = getFilename(addr);
-      byte[] bytes = File.ReadAllBytes(filename);
-      if (bytes.Length != BLOCK_SIZE) {
-        throw new Exception("Invalid block at " + filename);
+      byte[] bytes = new byte[len];
+      int actualRead = readFile(filename, bytes);
+      if ((ulong)actualRead < len) {
+        throw new Exception("readSync did not find enough bytes");
       }
+
       sector = bytes;
     }
 
@@ -383,14 +415,15 @@ namespace Crypto_Compile {
 
     public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
     {
-      Native_Compile.BenchmarkingUtil.start();
       using (var crc32 = DamienG.Security.Cryptography.Crc32.Create()) {
         IList<byte> ilist = seq.Elements;
         byte[] bytes = new byte[ilist.Count];
+
         ilist.CopyTo(bytes, 0);
 
+        //Native_Compile.BenchmarkingUtil.start();
         byte[] hash = crc32.ComputeHash(bytes);
-        Native_Compile.BenchmarkingUtil.end();
+        //Native_Compile.BenchmarkingUtil.end();
 
 				// Pad to 32 bytes
 				byte[] padded = new byte[32];

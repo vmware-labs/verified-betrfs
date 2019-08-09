@@ -31,7 +31,7 @@ module {:extern} ImplState {
   type Message = Messages.Message
   type TreeMap = TTT.Tree<Message>
 
-  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.LBA>, seq<Reference>)>
+  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.Location>, seq<Reference>)>
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -162,7 +162,7 @@ module {:extern} ImplState {
   {
     map ref | ref in cache :: INodeForRef(cache, ref, rootBucket)
   }
-  function IIndirectionTableLbas(table: MutIndirectionTable) : map<uint64, BC.LBA> // hide map trigger (prelude loop)
+  function IIndirectionTableLbas(table: MutIndirectionTable) : map<uint64, BC.Location> // hide map trigger (prelude loop)
   reads table, table.Repr
   {
     map k | k in table.Contents && table.Contents[k].0.Some? :: table.Contents[k].0.value
