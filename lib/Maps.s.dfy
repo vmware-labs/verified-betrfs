@@ -23,27 +23,49 @@ module Maps {
     && sub.Keys <= sup.Keys
     && (forall key :: key in sub.Keys ==> IMapsAgreeOnKey(sub, sup, key))
   }
-  
+
   function method {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
-    ensures m'.Keys == m.Keys - ks
-    // TODO alattuada try these: ensures forall k :: k in m && k !in ks ==> k in m'
-    // TODO alattuada try these: ensures forall k :: k in m' ==> k in m && k !in ks
+    ensures forall k :: k in m && k !in ks ==> k in m'
+    ensures forall k :: k in m' ==> k in m && k !in ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
     ensures |m'.Keys| <= |m.Keys|
     ensures |m'| <= |m|
   {
-    map j | j in m && j !in ks :: m[j]
+    var m':= map j | j in m && j !in ks :: m[j];
+    assert m'.Keys == m.Keys - ks;
+    m'
+  }
+  
+  function method {:opaque} MapRemoveStrong<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
+    ensures m'.Keys == m.Keys - ks
+    ensures forall j :: j in m' ==> m'[j] == m[j]
+    ensures |m'.Keys| <= |m.Keys|
+    ensures |m'| <= |m|
+  {
+    reveal_MapRemove();
+    MapRemove(m, ks)
   }
  
   function method {:opaque} MapRemove1<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
-    ensures m'.Keys == m.Keys - {k}
-    // TODO alattuada try these: ensures forall j :: j in m && j != k ==> j in m'
-    // TODO alattuada try these: ensures forall j :: j in m' ==> j in m && j != k
+    ensures forall j :: j in m && j != k ==> j in m'
+    ensures forall j :: j in m' ==> j in m && j != k
     ensures forall j :: j in m' ==> m'[j] == m[j]
     ensures |m'.Keys| <= |m.Keys|
     ensures |m'| <= |m|
   {
-    map j | j in m && j != k :: m[j]
+    var m' := map j | j in m && j != k :: m[j];
+    assert m'.Keys == m.Keys - {k};
+    m'
+  }
+
+  function method {:opaque} MapRemove1Strong<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
+    ensures m'.Keys == m.Keys - {k}
+    ensures forall j :: j in m' ==> m'[j] == m[j]
+    ensures |m'.Keys| <= |m.Keys|
+    ensures |m'| <= |m|
+  {
+    reveal_MapRemove1();
+    MapRemove1(m, k)
   }
   
   function {:opaque} IMapRemove<K,V>(m:imap<K,V>, ks:iset<K>) : (m':imap<K,V>)

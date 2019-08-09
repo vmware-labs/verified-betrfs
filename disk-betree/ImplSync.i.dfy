@@ -641,28 +641,9 @@ module ImplSync {
   ensures childrefs.Some? ==> (
       && var (_, right_childref) := childrefs.value;
       && BC.Alloc(k, iVarsS1.value, IS.IVars(s'), right_childref, IS.INode(right_child)))
-  // ensures childrefs.Some? ==> (
-  //     && var (left_childref, right_childref) := childrefs.value;
-  //     && IS.IVars(s') == old(IS.IVars(s))
-  //         .(ephemeralIndirectionTable := BC.IndirectionTable(
-  //             old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
-  //             old(IS.IVars(s)).ephemeralIndirectionTable.graph[
-  //                 left_childref := if left_child.children.Some? then left_child.children.value else []][
-  //                 right_childref := if right_child.children.Some? then right_child.children.value else []]))
-  //         .(cache := old(IS.IVars(s)).cache[
-  //             left_childref := IS.INode(left_child)][
-  //             right_childref := IS.INode(right_child)]));
   ensures childrefs.Some? ==> (
       && var (left_childref, right_childref) := childrefs.value;
       left_childref != right_childref)
-  // ensures childrefs.Some? ==> (
-  //     && var (left_childref, right_childref) := childrefs.value;
-  //     && left_childref !in old(s.cache)
-  //     && right_childref !in old(s.cache))
-  // ensures childrefs.Some? ==> (
-  //     && var (left_childref, right_childref) := childrefs.value;
-  //     && left_childref !in old(IS.IVars(s).ephemeralIndirectionTable.graph)
-  //     && right_childref !in old(IS.IVars(s).ephemeralIndirectionTable.graph))
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
   {
