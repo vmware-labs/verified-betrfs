@@ -640,10 +640,20 @@ module ImplSync {
       && var is := old(IS.IVars(s));
       && var is1 := ghostAllocTransform(k, is, left_childref, IS.INode(left_child));
       && var is' := ghostAllocTransform(k, is1, right_childref, IS.INode(right_child));
+      && BC.Alloc(k, is, is1, left_childref, IS.INode(left_child))
+      && BC.Alloc(k, is1, is', left_childref, IS.INode(left_child))
       && IS.IVars(s') == is')
   ensures childrefs.Some? ==> (
       && var (left_childref, right_childref) := childrefs.value;
       left_childref != right_childref)
+  // ensures childrefs.Some? ==> (
+  //     && var (left_childref, right_childref) := childrefs.value;
+  //     && left_childref !in old(IS.IVars(s)).cache
+  //     && right_childref !in old(IS.IVars(s)).cache)
+  // ensures childrefs.Some? ==> (
+  //     && var (left_childref, right_childref) := childrefs.value;
+  //     && !BC.IsAllocated(old(IS.IVars(s)), left_childref)
+  //     && !BC.IsAllocated(old(IS.IVars(s)), right_childref))
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
   {
@@ -735,13 +745,18 @@ module ImplSync {
 
   datatype SplitNodesReceipt = SplitNodesReceipt(
       // in
+      ghost fused_parent: IS.Node,
+      ghost fused_child: IS.Node,
       ghost cutoff_child: IS.Node,
+      ghost slot: int,
       ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>,
       // out
       left_child: IS.Node,
       right_child: IS.Node,
+      pivot: Key,
       ghost num_children_left: int,
-      ghost pivot: Key)
+      ghost lbound: Option<Key>,
+      ghost ubound: Option<Key>)
 
   predicate {:opaque} SplitNodesReceiptValid(receipt: SplitNodesReceipt)
   {
@@ -753,8 +768,12 @@ module ImplSync {
     && BC.BlockPointsToValidReferences(BT.SplitChildRight(IS.INode(receipt.cutoff_child), receipt.num_children_left), receipt.graph)
     && receipt.left_child == SplitChildLeft(receipt.cutoff_child, receipt.num_children_left)
     && receipt.right_child == SplitChildRight(receipt.cutoff_child, receipt.num_children_left)
-    && 1 <= receipt.num_children_left < |receipt.cutoff_child.buckets| // ???
+    && 1 <= receipt.num_children_left < |receipt.cutoff_child.buckets|
     && receipt.cutoff_child.pivotTable[receipt.num_children_left - 1] == receipt.pivot
+    && IS.INode(receipt.cutoff_child) == BT.CutoffNode(IS.INode(receipt.fused_child), receipt.lbound, receipt.ubound)
+    && receipt.lbound == (if receipt.slot > 0 then Some(receipt.fused_parent.pivotTable[receipt.slot - 1]) else None)
+    && receipt.ubound == (if receipt.slot < |receipt.fused_parent.pivotTable| then Some(receipt.fused_parent.pivotTable[receipt.slot]) else None)
+    && KMTable.I(receipt.fused_parent.buckets[receipt.slot]) == map[]
   }
 
   method splitNodes(
@@ -770,6 +789,10 @@ module ImplSync {
   ensures receipt.Some? ==> SplitNodesReceiptValid(receipt.value)
   ensures receipt.Some? ==> IS.WFNode(receipt.value.left_child)
   ensures receipt.Some? ==> IS.WFNode(receipt.value.right_child)
+  ensures receipt.Some? ==> receipt.value.fused_parent == fused_parent
+  ensures receipt.Some? ==> receipt.value.fused_child == fused_child
+  ensures receipt.Some? ==> receipt.value.slot == slot
+  ensures receipt.Some? ==> receipt.value.graph == graph
   {
     reveal_SplitNodesReceiptValid();
 
@@ -817,13 +840,18 @@ module ImplSync {
 
     receipt := Some(SplitNodesReceipt(
         // in
+        fused_parent,
+        fused_child,
         cutoff_child,
+        slot,
         graph,
         // out
         left_child,
         right_child,
+        pivot,
         num_children_left,
-        pivot));
+        lbound,
+        ubound));
 
     assert IS.WFNode(left_child);
     assert IS.WFNode(right_child);
@@ -897,11 +925,10 @@ module ImplSync {
         IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
     // TODO
     assume splitNodesReceipt.Some?;
-    var SplitNodesReceipt(
-        // in
-        _, _,
-        // out
-        left_child, right_child, num_children_left, pivot) := splitNodesReceipt.value;
+    var left_child := splitNodesReceipt.value.left_child;
+    var right_child := splitNodesReceipt.value.right_child;
+    ghost var num_children_left := splitNodesReceipt.value.num_children_left;
+    var pivot := splitNodesReceipt.value.pivot;
 
     ghost var is0 := IS.IVars(s);
 
@@ -934,14 +961,17 @@ module ImplSync {
 
     // == start transaction ==
     assert is0 == old(IS.IVars(s));
-    ghost var is1 := ghostAllocTransform(k, is0, left_child_ref, IS.INode(left_child));
-    ghost var is2 := ghostAllocTransform(k, is1, right_child_ref, IS.INode(right_child));
+    ghost var is1 := ghostAlloc(k, is0, left_child_ref, IS.INode(left_child));
+    ghost var is2 := ghostAlloc(k, is1, right_child_ref, IS.INode(right_child));
     ghost var is' := ghostDirty(k, is2, parentref, IS.INode(split_parent));
     assert is2 == s2Interpreted;
     assert is' == IS.IVars(s');
 
     reveal_SplitNodesReceiptValid();
+
+    assert IS.INode(splitNodesReceipt.value.cutoff_child) == BT.CutoffNode(IS.INode(fused_child), splitNodesReceipt.value.lbound, splitNodesReceipt.value.ubound);
     assert SplitNodesReceiptValid(splitNodesReceipt.value);
+    assert 1 <= num_children_left < |splitNodesReceipt.value.cutoff_child.buckets|;
 
     ghost var splitStep := BT.NodeFusion(
       parentref,
@@ -957,6 +987,10 @@ module ImplSync {
       num_children_left,
       pivot
     );
+
+    assert splitStep.num_children_left == splitNodesReceipt.value.num_children_left;
+    assert splitStep.fused_child == IS.INode(splitNodesReceipt.value.fused_child);
+
     assert left_child_ref != right_child_ref;
     assert BT.ValidSplit(splitStep);
     ghost var step := BT.BetreeSplit(splitStep);
