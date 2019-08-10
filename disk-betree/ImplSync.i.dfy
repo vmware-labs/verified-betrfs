@@ -623,8 +623,8 @@ module ImplSync {
   requires IS.WFNode(left_child)
   requires IS.WFNode(right_child)
   // requires BC.Inv(k, IS.IVars(s))
-  // requires BC.BlockPointsToValidReferences(IS.INode(left_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
-  // requires BC.BlockPointsToValidReferences(IS.INode(right_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires BC.BlockPointsToValidReferences(IS.INode(left_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires BC.BlockPointsToValidReferences(IS.INode(right_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
   ensures childrefs.None? ==> s == old(s)
@@ -638,22 +638,14 @@ module ImplSync {
   ensures childrefs.Some? ==> (
       && var (left_childref, right_childref) := childrefs.value;
       && var is := old(IS.IVars(s));
-      && var is1 := ghostAllocTransform(k, is, left_childref, IS.INode(left_child));
-      && var is' := ghostAllocTransform(k, is1, right_childref, IS.INode(right_child));
-      && BC.Alloc(k, is, is1, left_childref, IS.INode(left_child))
-      && BC.Alloc(k, is1, is', left_childref, IS.INode(left_child))
+      && ghostAllocRequires(k, is, left_childref, IS.INode(left_child))
+      && var is1 := ghostAlloc(k, is, left_childref, IS.INode(left_child));
+      && ghostAllocRequires(k, is1, right_childref, IS.INode(right_child))
+      && var is' := ghostAlloc(k, is1, right_childref, IS.INode(right_child));
       && IS.IVars(s') == is')
   ensures childrefs.Some? ==> (
       && var (left_childref, right_childref) := childrefs.value;
       left_childref != right_childref)
-  // ensures childrefs.Some? ==> (
-  //     && var (left_childref, right_childref) := childrefs.value;
-  //     && left_childref !in old(IS.IVars(s)).cache
-  //     && right_childref !in old(IS.IVars(s)).cache)
-  // ensures childrefs.Some? ==> (
-  //     && var (left_childref, right_childref) := childrefs.value;
-  //     && !BC.IsAllocated(old(IS.IVars(s)), left_childref)
-  //     && !BC.IsAllocated(old(IS.IVars(s)), right_childref))
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
   {
@@ -671,7 +663,9 @@ module ImplSync {
     // TODO how do we deal with this?
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
     var _ := s.ephemeralIndirectionTable.Insert(left_childref.value, (None, if left_child.children.Some? then left_child.children.value else []));
+
     var s1 := s.(cache := s.cache[left_childref.value := left_child]);
+    assume IS.IVars(s1).cache == IS.IVars(s).cache[left_childref.value := IS.INode(left_child)]; // TODO ???
 
     assert IS.WFVars(s1);
     ghost var s1Interpreted := IS.IVars(s1);
@@ -681,8 +675,9 @@ module ImplSync {
     assert left_childref.value !in sInterpreted.ephemeralIndirectionTable.lbas;
     assert left_childref.value !in sInterpreted.ephemeralIndirectionTable.graph;
 
-    assume s1Interpreted.cache == ghostAllocTransform(k, sInterpreted, left_childref.value, IS.INode(left_child)).cache;
-    assert s1Interpreted == ghostAllocTransform(k, sInterpreted, left_childref.value, IS.INode(left_child));
+    assert ghostAllocRequires(k, sInterpreted, left_childref.value, IS.INode(left_child));
+    assert s1Interpreted.cache == ghostAlloc(k, sInterpreted, left_childref.value, IS.INode(left_child)).cache;
+    assert s1Interpreted == ghostAlloc(k, sInterpreted, left_childref.value, IS.INode(left_child));
 
     var right_childref := getFreeRef(s);
     if right_childref.None? {
@@ -697,35 +692,37 @@ module ImplSync {
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
     var _ := s.ephemeralIndirectionTable.Insert(right_childref.value, (None, if right_child.children.Some? then right_child.children.value else []));
     var s2 := s1.(cache := s1.cache[right_childref.value := right_child]);
+    assume IS.IVars(s2).cache == IS.IVars(s1).cache[left_childref.value := IS.INode(left_child)]; // TODO ???
     ghost var s2Interpreted := IS.IVars(s2);
 
-    assume s2Interpreted.cache == ghostAllocTransform(k, s1Interpreted, right_childref.value, IS.INode(right_child)).cache;
-    assert s2Interpreted == ghostAllocTransform(k, s1Interpreted, right_childref.value, IS.INode(right_child));
+    assert ghostAllocRequires(k, s1Interpreted, right_childref.value, IS.INode(right_child));
+    assert s2Interpreted.cache == ghostAlloc(k, s1Interpreted, right_childref.value, IS.INode(right_child)).cache;
+    assert s2Interpreted == ghostAlloc(k, s1Interpreted, right_childref.value, IS.INode(right_child));
 
     s' := s2;
 
     childrefs := Some((left_childref.value, right_childref.value));
   }
 
-  function ghostAllocTransform(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node): (s': ImplADM.M.Variables)
+  predicate ghostAllocRequires(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node)
   requires s.Ready?
+  {
+    && ref !in s.cache
+    && !BC.IsAllocated(s, ref)
+    && BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
+  }
+
+  // TODO move this somewhere
+  function ghostAlloc(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node): (s': ImplADM.M.Variables)
+  requires s.Ready?
+  requires ghostAllocRequires(k, s, ref, node)
+  ensures BC.Alloc(k, s, s', ref, node)
   {
     s
       .(ephemeralIndirectionTable := BC.IndirectionTable(
           s.ephemeralIndirectionTable.lbas,
           s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]))
       .(cache := s.cache[ref := node])
-  }
-
-  // TODO move this somewhere
-  function ghostAlloc(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node): (s': ImplADM.M.Variables)
-  requires s.Ready?
-  requires ref !in s.cache
-  requires !BC.IsAllocated(s, ref)
-  requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
-  ensures BC.Alloc(k, s, s', ref, node)
-  {
-    ghostAllocTransform(k, s, ref, node)
   }
 
   function ghostDirty(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node): (s': ImplADM.M.Variables)
@@ -760,6 +757,10 @@ module ImplSync {
 
   predicate {:opaque} SplitNodesReceiptValid(receipt: SplitNodesReceipt)
   {
+    && 1 <= receipt.num_children_left < |receipt.cutoff_child.buckets|
+    && 0 <= receipt.num_children_left - 1 <= |receipt.cutoff_child.pivotTable|
+    && receipt.cutoff_child.children.Some? ==> 0 <= receipt.num_children_left <= |receipt.cutoff_child.children.value|
+    && 0 <= receipt.num_children_left <= |receipt.cutoff_child.pivotTable|
     && IS.WFNode(SplitChildLeft(receipt.cutoff_child, receipt.num_children_left))
     && IS.WFNode(SplitChildRight(receipt.cutoff_child, receipt.num_children_left))
     && IS.INode(SplitChildLeft(receipt.cutoff_child, receipt.num_children_left)) == BT.SplitChildLeft(IS.INode(receipt.cutoff_child), receipt.num_children_left)
@@ -768,11 +769,14 @@ module ImplSync {
     && BC.BlockPointsToValidReferences(BT.SplitChildRight(IS.INode(receipt.cutoff_child), receipt.num_children_left), receipt.graph)
     && receipt.left_child == SplitChildLeft(receipt.cutoff_child, receipt.num_children_left)
     && receipt.right_child == SplitChildRight(receipt.cutoff_child, receipt.num_children_left)
-    && 1 <= receipt.num_children_left < |receipt.cutoff_child.buckets|
     && receipt.cutoff_child.pivotTable[receipt.num_children_left - 1] == receipt.pivot
+    && IS.WFNode(receipt.fused_child)
     && IS.INode(receipt.cutoff_child) == BT.CutoffNode(IS.INode(receipt.fused_child), receipt.lbound, receipt.ubound)
+    && receipt.slot > 0 ==> 0 <= receipt.slot - 1 < |receipt.fused_parent.pivotTable|
     && receipt.lbound == (if receipt.slot > 0 then Some(receipt.fused_parent.pivotTable[receipt.slot - 1]) else None)
     && receipt.ubound == (if receipt.slot < |receipt.fused_parent.pivotTable| then Some(receipt.fused_parent.pivotTable[receipt.slot]) else None)
+    && 0 <= receipt.slot < |receipt.fused_parent.buckets|
+    && |receipt.fused_parent.buckets[receipt.slot].keys| == |receipt.fused_parent.buckets[receipt.slot].values|
     && KMTable.I(receipt.fused_parent.buckets[receipt.slot]) == map[]
   }
 
@@ -793,6 +797,8 @@ module ImplSync {
   ensures receipt.Some? ==> receipt.value.fused_child == fused_child
   ensures receipt.Some? ==> receipt.value.slot == slot
   ensures receipt.Some? ==> receipt.value.graph == graph
+  ensures receipt.Some? ==> BC.BlockPointsToValidReferences(IS.INode(receipt.value.left_child), receipt.value.graph)
+  ensures receipt.Some? ==> BC.BlockPointsToValidReferences(IS.INode(receipt.value.right_child), receipt.value.graph)
   {
     reveal_SplitNodesReceiptValid();
 
@@ -931,6 +937,9 @@ module ImplSync {
     var pivot := splitNodesReceipt.value.pivot;
 
     ghost var is0 := IS.IVars(s);
+
+    assert BC.BlockPointsToValidReferences(IS.INode(left_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(right_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
     var s2, allocedChildrefs := AllocChildrefs(k, s, io, left_child, right_child);
     if allocedChildrefs.None? {
