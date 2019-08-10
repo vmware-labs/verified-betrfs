@@ -771,6 +771,7 @@ module ImplSync {
     && receipt.right_child == SplitChildRight(receipt.cutoff_child, receipt.num_children_left)
     && receipt.cutoff_child.pivotTable[receipt.num_children_left - 1] == receipt.pivot
     && IS.WFNode(receipt.fused_child)
+    && IS.WFBuckets(receipt.cutoff_child.buckets)
     && IS.INode(receipt.cutoff_child) == BT.CutoffNode(IS.INode(receipt.fused_child), receipt.lbound, receipt.ubound)
     && receipt.slot > 0 ==> 0 <= receipt.slot - 1 < |receipt.fused_parent.pivotTable|
     && receipt.lbound == (if receipt.slot > 0 then Some(receipt.fused_parent.pivotTable[receipt.slot - 1]) else None)
@@ -978,8 +979,9 @@ module ImplSync {
 
     reveal_SplitNodesReceiptValid();
 
-    assert IS.INode(splitNodesReceipt.value.cutoff_child) == BT.CutoffNode(IS.INode(fused_child), splitNodesReceipt.value.lbound, splitNodesReceipt.value.ubound);
     assert SplitNodesReceiptValid(splitNodesReceipt.value);
+    assert IS.WFBuckets(splitNodesReceipt.value.cutoff_child.buckets);
+    assert IS.INode(splitNodesReceipt.value.cutoff_child) == BT.CutoffNode(IS.INode(fused_child), splitNodesReceipt.value.lbound, splitNodesReceipt.value.ubound);
     assert 1 <= num_children_left < |splitNodesReceipt.value.cutoff_child.buckets|;
 
     ghost var splitStep := BT.NodeFusion(
