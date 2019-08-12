@@ -94,7 +94,8 @@ lemma lemma_SeqCatRev_adds<T>(A:seq<seq<T>>, B:seq<seq<T>>)
             SeqCatRev(A + B);
                 { assert last(A + B) == last(B);  assert all_but_last(A + B) == A + all_but_last(B); }
             SeqCatRev(A + all_but_last(B)) + last(B);
-             SeqCatRev(A) + SeqCatRev(all_but_last(B)) + last(B);
+            SeqCatRev(A) + SeqCatRev(all_but_last(B)) + last(B);
+                { assert SeqCatRev(all_but_last(B)) + last(B) == SeqCatRev(B); }
             SeqCatRev(A) + SeqCatRev(B);
         }
     }

@@ -14,6 +14,7 @@ module {:extern} MkfsImpl {
   import LBAType`Internal
   import ValueWithDefault`Internal
   import IS = ImplState
+  import D = AsyncDisk
 
   type LBA = LBAType.LBA
 
@@ -25,6 +26,7 @@ module {:extern} MkfsImpl {
   ensures LBAType.BlockSize() in result && result[LBAType.BlockSize()].SectorBlock?
   {
     var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number
+    assume sectorIndirectionTable.Count == 0;
     var _ := sectorIndirectionTable.Insert(0, (Some(LBAType.BlockSize()), []));
     assert IS.IIndirectionTable(sectorIndirectionTable) == BC.IndirectionTable(map[0 := LBAType.BlockSize()], map[0 := []]);
     result := map[
@@ -33,6 +35,9 @@ module {:extern} MkfsImpl {
       // Put the root at lba 1
       LBAType.BlockSize() := IS.SectorBlock(IS.Node([], None, [KMTable.Empty()]))
     ];
+
+    assume Marshalling.CappedNode(IS.SectorBlock(IS.Node([], None, [KMTable.Empty()])).block);
+
     assume forall k | k in result :: IS.WFSector(result[k]);
   }
 
@@ -45,12 +50,13 @@ module {:extern} MkfsImpl {
     var d := InitDisk();
 
     LBAType.reveal_ValidAddr();
+
     assert d[0].SectorIndirectionTable?;
-    var b0 := Marshalling.MarshallSector(d[0]);
+    var b0 := Marshalling.MarshallCheckedSector(d[0]);
     if (b0 == null) { return map[]; }
 
     assert d[LBAType.BlockSize()].SectorBlock?;
-    var b1 := Marshalling.MarshallSector(d[LBAType.BlockSize()]);
+    var b1 := Marshalling.MarshallCheckedSector(d[LBAType.BlockSize()]);
     if (b1 == null) { return map[]; }
 
     m := map[0 := b0, LBAType.BlockSize() := b1];

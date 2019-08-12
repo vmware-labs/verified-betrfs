@@ -153,6 +153,11 @@ abstract module BlockCache refines Transactable {
     )
   }
 
+  predicate method OutstandingBlockReadsDoesNotHaveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference)
+  {
+    forall reqId | reqId in outstandingBlockReads :: outstandingBlockReads[reqId].ref != ref
+  }
+
   predicate WriteBackReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.ReqWriteOp?
@@ -232,11 +237,6 @@ abstract module BlockCache refines Transactable {
     forall r | r in graph :: ref !in graph[r]
   }
 
-  function method OutstandingBlockReadsRemoveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference) : map<ReqId, OutstandingRead>
-  {
-    map reqId | reqId in outstandingBlockReads && outstandingBlockReads[reqId].ref != ref :: outstandingBlockReads[reqId]
-  }
-
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.NoDiskOp?
@@ -258,7 +258,8 @@ abstract module BlockCache refines Transactable {
 
     && s'.outstandingIndirectionTableWrite == s.outstandingIndirectionTableWrite
     && s'.outstandingBlockWrites == s.outstandingBlockWrites
-    && s'.outstandingBlockReads == OutstandingBlockReadsRemoveRef(s.outstandingBlockReads, ref)
+    && OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref)
+    && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.frozenIndirectionTable == s.frozenIndirectionTable
     && s'.syncReqs == s.syncReqs
   }

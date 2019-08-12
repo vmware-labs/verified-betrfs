@@ -24,16 +24,30 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     LBAType.ValidAddr(addr)
   }
 
+  function {:opaque} Parse(sector: seq<byte>) : Option<BBC.Sector>
+  requires |sector| == BlockSize() - 32
+  {
+    Marshalling.parseSector(sector)
+  }
+
+  predicate {:opaque} ValidCheckedBytes(sector: seq<byte>)
+  requires |sector| == BlockSize()
+  {
+    && D.ChecksumChecksOut(sector)
+    && Parse(sector[32..]).Some?
+  }
+
   predicate ValidBytes(sector: seq<byte>)
   {
     && |sector| == BlockSize()
-    && Marshalling.parseSector(sector).Some?
+    && ValidCheckedBytes(sector)
   }
 
-  function IBytes(sector: seq<byte>) : BBC.Sector
+  function {:opaque} IBytes(sector: seq<byte>) : BBC.Sector
   requires ValidBytes(sector)
   {
-    Marshalling.parseSector(sector).value
+    reveal_ValidCheckedBytes();
+    Parse(sector[32..]).value
   }
 
   function IBytesOpt(sector: seq<byte>) : Option<BBC.Sector>

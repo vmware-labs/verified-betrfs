@@ -301,6 +301,27 @@ module ImplDo {
     assume false;
   }
 
+  method RemoveLBAFromIndirectionTable(table: IS.MutIndirectionTable, ref: IS.Reference)
+  requires table.Inv()
+  ensures table.Inv()
+  ensures table.Contents == if ref in old(table.Contents)
+      then old(
+        var (_, graph) := table.Contents[ref];
+        table.Contents[ref := (None, graph)])
+      else old(table.Contents)
+  // NOALIAS statically enforced no-aliasing would probably help here
+  ensures forall r | r in table.Repr :: fresh(r) || r in old(table.Repr)
+  modifies table.Repr
+  {
+    var lbaGraph := table.Remove(ref);
+    if lbaGraph.Some? {
+      // TODO how do we deal with this?
+      assume table.Count as nat < 0x10000000000000000 / 8;
+      var (lba, graph) := lbaGraph.value;
+      var _ := table.Insert(ref, (None, graph));
+    }
+  }
+
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (s': ImplVariables, success: bool)
   requires IS.WFVars(s)
@@ -344,24 +365,12 @@ module ImplDo {
 
     ghost var iVarsBeforeRemoval := IS.IVars(s);
 
-    label before_removal: var lbaGraph := s.ephemeralIndirectionTable.Remove(BT.G.Root());
-    if lbaGraph.Some? {
-      assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
-          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
-          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.graph, {BT.G.Root()})));
-      assert s.ephemeralIndirectionTable.Count == old@before_removal(s.ephemeralIndirectionTable.Count) - 1;
-      var (lba, graph) := lbaGraph.value;
-      var _ := s.ephemeralIndirectionTable.Insert(BT.G.Root(), (None, graph));
+    label before_removal: assert true;
 
-      assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
-          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
-          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.graph, {BT.G.Root()})[BT.G.Root() := graph]));
-      assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
-          MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
-          iVarsBeforeRemoval.ephemeralIndirectionTable.graph));
-    }
+    RemoveLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root());
+
     assert IS.IVars(s) == iVarsBeforeRemoval.(ephemeralIndirectionTable := BC.IndirectionTable(
-        MapRemove(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+        MapRemove1(iVarsBeforeRemoval.ephemeralIndirectionTable.lbas, BT.G.Root()),
         iVarsBeforeRemoval.ephemeralIndirectionTable.graph));
 
     s' := s.(rootBucket := newRootBucket);
@@ -373,7 +382,7 @@ module ImplDo {
     assert IS.IVars(s') == old@before_removal(IS.IVars(s) // timeout observe
         .(cache := IS.IVars(s).cache[BT.G.Root() := newroot])
         .(ephemeralIndirectionTable := BC.IndirectionTable(
-          MapRemove(IS.IVars(s).ephemeralIndirectionTable.lbas, {BT.G.Root()}),
+          MapRemove1(IS.IVars(s).ephemeralIndirectionTable.lbas, BT.G.Root()),
           IS.IVars(s).ephemeralIndirectionTable.graph
         )));
 
@@ -446,10 +455,16 @@ module ImplDo {
   ensures sector.Some? ==> IS.WFSector(sector.value)
   ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
   {
+    Marshalling.reveal_parseCheckedSector();
+    ImplADM.M.reveal_IBytes();
+    ImplADM.M.reveal_ValidCheckedBytes();
+    ImplADM.M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+
     var id1, bytes := io.getReadResult();
     id := id1;
     if bytes.Length == ImplADM.M.BlockSize() {
-      var sectorOpt := Marshalling.ParseSector(bytes);
+      var sectorOpt := Marshalling.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {
       sector := None;

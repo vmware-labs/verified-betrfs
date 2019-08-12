@@ -1,7 +1,6 @@
 include "MapSpec.s.dfy"
 include "../lib/Maps.s.dfy"
-
-// TODO disallow overlapping writes/reads
+include "../lib/Crypto.s.dfy"
 
 module AsyncDiskModelTypes {
   datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
@@ -11,6 +10,7 @@ module AsyncDiskModelTypes {
 module AsyncDisk {
   import opened NativeTypes
   import opened Maps
+  import Crypto
 
   type ReqId = uint64
 
@@ -107,7 +107,10 @@ module AsyncDisk {
 
   datatype InternalStep =
     | ProcessReadStep(id: ReqId)
+    | ProcessReadFailureStep(id: ReqId, fakeContents: seq<byte>)
     | ProcessWriteStep(id: ReqId)
+    | HavocConflictingWritesStep(id: ReqId, id': ReqId)
+    | HavocConflictingWriteReadStep(id: ReqId, id': ReqId)
 
   predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
@@ -116,6 +119,33 @@ module AsyncDisk {
     && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
               .(respReads := s.respReads[id := RespRead(s.contents[req.addr .. req.addr as int + req.len as int])])
+  }
+
+  predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
+    && |s| >= 32
+    && s[0..32] == Crypto.Crc32(s[32..])
+  }
+
+  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
+  {
+    && id in s.reqReads
+    && var req := s.reqReads[id];
+    && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
+    && var realContents := s.contents[req.addr .. req.addr as int + req.len as int];
+    && |fakeContents| == |realContents|
+
+    // We make the assumption that the disk cannot fail from a checksum-correct state
+    // to a different checksum-correct state. This is a reasonable assumption for many
+    // probabilistic failure models of the disk.
+
+    // We don't make a blanket assumption that !ChecksumChecksOut(fakeContents)
+    // because it would be reasonable for a disk to fail into a checksum-correct state
+    // from a checksum-incorrect one.
+
+    && (ChecksumChecksOut(realContents) ==> !ChecksumChecksOut(fakeContents))
+
+    && s' == s.(reqReads := MapRemove1(s.reqReads, id))
+              .(respReads := s.respReads[id := RespRead(fakeContents)])
   }
 
   function {:opaque} splice(bytes: seq<byte>, start: int, ins: seq<byte>) : seq<byte>
@@ -136,11 +166,42 @@ module AsyncDisk {
               .(contents := splice(s.contents, req.addr as int, req.bytes))
   }
 
+  // We assume the disk makes ABSOLUTELY NO GUARANTEES about what happens
+  // when there are conflicting reads or writes.
+
+  predicate overlap(start: int, len: int, start': int, len': int)
+  {
+    && start + len > start'
+    && start' + len' > start
+  }
+
+  predicate HavocConflictingWrites(k: Constants, s: Variables, s': Variables, id: ReqId, id': ReqId)
+  {
+    && id != id'
+    && id in s.reqWrites
+    && id' in s.reqWrites
+    && overlap(
+        s.reqWrites[id].addr as int, |s.reqWrites[id].bytes|,
+        s.reqWrites[id'].addr as int, |s.reqWrites[id'].bytes|)
+  }
+
+  predicate HavocConflictingWriteRead(k: Constants, s: Variables, s': Variables, id: ReqId, id': ReqId)
+  {
+    && id in s.reqWrites
+    && id' in s.reqReads
+    && overlap(
+        s.reqWrites[id].addr as int, |s.reqWrites[id].bytes|,
+        s.reqReads[id'].addr as int, s.reqReads[id'].len as int)
+  }
+
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
   {
     match step {
       case ProcessReadStep(id) => ProcessRead(k, s, s', id)
+      case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailure(k, s, s', id, fakeContents)
       case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
+      case HavocConflictingWritesStep(id, id') => HavocConflictingWrites(k, s, s', id, id')
+      case HavocConflictingWriteReadStep(id, id') => HavocConflictingWriteRead(k, s, s', id, id')
     }
   }
 

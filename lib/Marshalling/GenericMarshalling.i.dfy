@@ -1946,6 +1946,10 @@ lemma parse_Uint64Array_eq_seq(data: seq<byte>, ints: seq<uint64>)
   ensures parse_Uint64Array(data).0.Some?
   ensures parse_Uint64Array(data).0.value.ua == ints
 {
+  forall i | 0 <= i < |ints| ensures SeqByteToUint64(data[8..][i*8 .. (i+1)*8]) == ints[i]
+  {
+    assert data[8..][i*8 .. (i+1)*8] == data[8 + i*8 .. 8 + (i+1)*8];
+  }
   parse_Uint64ArrayContents_eq_seq(data[8..], ints);
   assert data[8..] == data[8..][..8*|ints|];
 }

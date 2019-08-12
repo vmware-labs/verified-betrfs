@@ -108,6 +108,7 @@ module AsyncSectorDisk {
 
   datatype InternalStep =
     | ProcessReadStep(id: ReqId)
+    | ProcessReadFailureStep(id: ReqId)
     | ProcessWriteStep(id: ReqId)
 
   predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
@@ -116,6 +117,14 @@ module AsyncSectorDisk {
     && var req := s.reqReads[id];
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
               .(respReads := s.respReads[id := RespRead(MapLookupOption(s.blocks, req.lba))])
+  }
+
+  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId)
+  {
+    && id in s.reqReads
+    && var req := s.reqReads[id];
+    && s' == s.(reqReads := MapRemove1(s.reqReads, id))
+              .(respReads := s.respReads[id := RespRead(None)])
   }
 
   predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
@@ -131,6 +140,7 @@ module AsyncSectorDisk {
   {
     match step {
       case ProcessReadStep(id) => ProcessRead(k, s, s', id)
+      case ProcessReadFailureStep(id) => ProcessReadFailure(k, s, s', id)
       case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
     }
   }
