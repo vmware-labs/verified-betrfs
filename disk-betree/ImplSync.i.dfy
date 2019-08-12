@@ -858,11 +858,7 @@ module ImplSync {
     assert SplitNodesReceiptValid(receipt.value);
   }
 
-  // TODO FIXME this method is flaky and takes a long time to verify
-  method
-      // {:fuel WFBucketList,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
-      // {:fuel SplitChildLeft,0} {:fuel SplitChildRight,0}
-  doSplit(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  method doSplit(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   returns (s': ImplVariables)
   requires s.Ready?
   requires IS.WFVars(s)
