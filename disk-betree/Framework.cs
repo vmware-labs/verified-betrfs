@@ -99,24 +99,23 @@ namespace MainDiskIOHandler_Compile {
     }
 
     ulong readResponseId;
-    byte[] readResponseBytes;
+    Dafny.Sequence<byte> readResponseBytes;
     public bool prepareReadResponse() {
       if (this.readReqs.Count > 0) {
         foreach (ulong id in this.readReqs.Keys) {
           readResponseId = id;
           break;
         }
-        readResponseBytes = readReqs[readResponseId];
+        readResponseBytes = new Dafny.Sequence<byte>(readReqs[readResponseId]);
         readReqs.Remove(readResponseId);
         return true;
       } else {
         return false;
       }
     }
-    public void getReadResult(out ulong id, out byte[] sector) {
+    public void getReadResult(out ulong id, out Dafny.Sequence<byte> sector) {
       id = readResponseId;
-      sector = new byte[readResponseBytes.Length];
-      readResponseBytes.CopyTo(sector, 0);
+      sector = readResponseBytes;
     }
 
     ulong writeResponseId;

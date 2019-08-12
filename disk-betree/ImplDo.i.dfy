@@ -463,7 +463,7 @@ module ImplDo {
 
     var id1, bytes := io.getReadResult();
     id := id1;
-    if bytes.Length <= ImplADM.M.BlockSize() {
+    if |bytes| <= ImplADM.M.BlockSize() {
       var sectorOpt := Marshalling.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {

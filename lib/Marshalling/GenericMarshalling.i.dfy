@@ -106,17 +106,17 @@ function method parse_Uint64(data:seq<byte>) : (Option<V>, seq<byte>)
         (None, [])
 }
 
-method ParseUint64(data:array<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
-    ensures  (rest_index as int) <= data.Length;
+method ParseUint64(data:seq<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|
     ensures  var (v', rest') := parse_Uint64(data[index..]);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
 {
     lemma_2toX();
 
-    if (data.Length as uint64) >= 8 && index <= (data.Length as uint64) - 8 {
+    if (|data| as uint64) >= 8 && index <= (|data| as uint64) - 8 {
     // Avoids overflow and equvalent to: if index + 8 < uint64(data.Length) {
         var result := (data[index + (0 as uint64)] as uint64) * 0x1_00_0000_0000_0000
                     + (data[index + (1 as uint64)] as uint64) * 0x1_00_0000_0000_00
@@ -131,7 +131,7 @@ method ParseUint64(data:array<byte>, index:uint64) returns (success:bool, v:V, r
         rest_index := index + Uint64Size();
     } else {
         success := false;
-        rest_index := (data.Length as uint64);
+        rest_index := (|data| as uint64);
     }
 }
 
@@ -236,13 +236,13 @@ lemma lemma_ArrayContents_helper_bailout(data:seq<byte>, eltType:G, len:uint64, 
     }
 }
 
-method{:timeLimitMultiplier 2} ParseArrayContents(data:array<byte>, index:uint64, eltType:G, len:uint64) 
+method{:timeLimitMultiplier 2} ParseArrayContents(data:seq<byte>, index:uint64, eltType:G, len:uint64) 
        returns (success:bool, v:seq<V>, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(eltType);
     decreases eltType, 1, len;
-    ensures  (rest_index as int) <= data.Length;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_Array_contents(data[index..], eltType, len);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
@@ -258,7 +258,7 @@ method{:timeLimitMultiplier 2} ParseArrayContents(data:array<byte>, index:uint64
 
     while i < len
         invariant 0 <= i <= len;
-        invariant index <= next_val_index <= (data.Length as uint64);
+        invariant index <= next_val_index <= (|data| as uint64);
         invariant |trace| == (i as int) + 1;
         invariant |g_v| == (i as int);
         invariant vArr[..i] == g_v;
@@ -278,7 +278,7 @@ method{:timeLimitMultiplier 2} ParseArrayContents(data:array<byte>, index:uint64
         trace := trace + [step];
         if !some1 {
             success := false;
-            rest_index := (data.Length as uint64);
+            rest_index := (|data| as uint64);
             lemma_ArrayContents_helper_bailout(data[index..], eltType, len, trace);
             return;
         }
@@ -315,12 +315,12 @@ function method parse_Array(data:seq<byte>, eltType:G) : (Option<V>, seq<byte>)
         (None, [])
 }
 
-method ParseArray(data:array<byte>, index:uint64, eltType:G) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+method ParseArray(data:seq<byte>, index:uint64, eltType:G) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(eltType);
     decreases eltType;
-    ensures  (rest_index as int) <= data.Length;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_Array(data[index..], eltType);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
@@ -335,11 +335,11 @@ method ParseArray(data:array<byte>, index:uint64, eltType:G) returns (success:bo
             rest_index := remainder;
         } else {
             success := false;
-            rest_index := (data.Length as uint64);
+            rest_index := (|data| as uint64);
         }
     } else {
         success := false;
-        rest_index := (data.Length as uint64);
+        rest_index := (|data| as uint64);
     }
 }
 
@@ -447,14 +447,14 @@ lemma lemma_TupleContents_helper_bailout(data:seq<byte>, eltTypes:seq<G>, trace:
     }
 }
 
-method{:timeLimitMultiplier 2} ParseTupleContents(data:array<byte>, index:uint64, eltTypes:seq<G>) 
+method{:timeLimitMultiplier 2} ParseTupleContents(data:seq<byte>, index:uint64, eltTypes:seq<G>) 
        returns (success:bool, v:seq<V>, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires |eltTypes| < 0x1_0000_0000_0000_0000;
     requires forall elt :: elt in eltTypes ==> ValidGrammar(elt);
     decreases eltTypes, 0;
-    ensures  (rest_index as int) <= data.Length;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_Tuple_contents(data[index..], eltTypes);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
@@ -470,7 +470,7 @@ method{:timeLimitMultiplier 2} ParseTupleContents(data:array<byte>, index:uint64
 
     while i < (|eltTypes| as uint64) 
         invariant 0 <= (i as int) <= |eltTypes|;
-        invariant index <= next_val_index <= (data.Length as uint64);
+        invariant index <= next_val_index <= (|data| as uint64);
         invariant |trace| == (i as int) + 1;
         invariant |g_v| == (i as int);
         invariant vArr[..i] == g_v;
@@ -490,7 +490,7 @@ method{:timeLimitMultiplier 2} ParseTupleContents(data:array<byte>, index:uint64
         trace := trace + [step];
         if !some1 {
             success := false;
-            rest_index := (data.Length as uint64);
+            rest_index := (|data| as uint64);
             lemma_TupleContents_helper_bailout(data[index..], eltTypes, trace);
             return;
         }
@@ -523,13 +523,13 @@ function method parse_Tuple(data:seq<byte>, eltTypes:seq<G>) : (Option<V>, seq<b
 }
 
 
-method ParseTuple(data:array<byte>, index:uint64, eltTypes:seq<G>) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+method ParseTuple(data:seq<byte>, index:uint64, eltTypes:seq<G>) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires |eltTypes| < 0x1_0000_0000_0000_0000;
     requires forall elt :: elt in eltTypes ==> ValidGrammar(elt);
     decreases eltTypes, 1;
-    ensures  (rest_index as int) <= data.Length;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_Tuple(data[index..], eltTypes);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
@@ -542,7 +542,7 @@ method ParseTuple(data:array<byte>, index:uint64, eltTypes:seq<G>) returns (succ
         rest_index := rest;
     } else {
         success := false;
-        rest_index := (data.Length as uint64);
+        rest_index := (|data| as uint64);
     }
 }
 
@@ -556,16 +556,16 @@ function method parse_ByteArray(data:seq<byte>) : (Option<V>, seq<byte>)
         (None, [])
 }
 
-method ParseByteArray(data:array<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
-    ensures  (rest_index as int) <= data.Length;
+method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_ByteArray(data[index..]);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
 {
     var some, len, rest := ParseUint64(data, index);
-    if some && len.u <= (data.Length as uint64) - rest {
+    if some && len.u <= (|data| as uint64) - rest {
         ghost var rest_seq := data[rest..];
         assert len.u <= (|rest_seq| as uint64);
         calc {
@@ -577,7 +577,7 @@ method ParseByteArray(data:array<byte>, index:uint64) returns (success:bool, v:V
         rest_index := rest + len.u;
     } else {
         success := false;
-        rest_index := (data.Length as uint64);
+        rest_index := (|data| as uint64);
     }
 }
 
@@ -598,9 +598,9 @@ function method parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
         (None, [])
 }
 
-method parseUint64ArrayContents(data:array<byte>, index: uint64, len: uint64) returns (s : seq<uint64>)
-    requires (index as int) + (Uint64Size() as int) * (len as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+method parseUint64ArrayContents(data:seq<byte>, index: uint64, len: uint64) returns (s : seq<uint64>)
+    requires (index as int) + (Uint64Size() as int) * (len as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
     ensures  s == SeqByteToSeqUint64(data[index .. index as int + len as int * Uint64Size() as int], len as int)
 {
   lemma_2toX();
@@ -630,17 +630,17 @@ method parseUint64ArrayContents(data:array<byte>, index: uint64, len: uint64) re
   s := ar[..];
 }
 
-method ParseUint64Array(data:array<byte>, index: uint64) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
-    ensures  (rest_index as int) <= data.Length;
+method ParseUint64Array(data:seq<byte>, index: uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_Uint64Array(data[index..]);
              var v_opt := if success then Some(v) else None();
              && v_opt == v'
              && data[rest_index..] == rest';
 {
     var some, len, rest := ParseUint64(data, index);
-    if some && len.u <= ((data.Length as uint64) - rest) / Uint64Size() {
+    if some && len.u <= ((|data| as uint64) - rest) / Uint64Size() {
         ghost var rest_seq := data[rest..];
         assert len.u as int * Uint64Size() as int <= |rest_seq|;
         calc {
@@ -656,7 +656,7 @@ method ParseUint64Array(data:array<byte>, index: uint64) returns (success:bool, 
             == rest_seq[..Uint64Size() as int * len.u as int];
     } else {
         success := false;
-        rest_index := (data.Length as uint64);
+        rest_index := (|data| as uint64);
     }
 }
 
@@ -680,13 +680,13 @@ function method parse_Case(data:seq<byte>, cases:seq<G>) : (Option<V>, seq<byte>
         (None, [])
 }
 
-method ParseCase(data:array<byte>, index:uint64, cases:seq<G>) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+method ParseCase(data:seq<byte>, index:uint64, cases:seq<G>) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires |cases| < 0x1_0000_0000_0000_0000;
     requires forall elt :: elt in cases ==> ValidGrammar(elt);
     decreases cases;
-    ensures  (rest_index as int) <= data.Length;
+    ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_Case(data[index..], cases);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
@@ -702,11 +702,11 @@ method ParseCase(data:array<byte>, index:uint64, cases:seq<G>) returns (success:
             rest_index := rest2;
         } else {
             success := false;
-            rest_index := (data.Length as uint64);
+            rest_index := (|data| as uint64);
         }
     } else {
         success := false;
-        rest_index := (data.Length as uint64);
+        rest_index := (|data| as uint64);
     }
 }
 
@@ -726,12 +726,12 @@ function method {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq
         case GTaggedUnion(cases) => parse_Case(data, cases)
 }
 
-method ParseVal(data:array<byte>, index:uint64, grammar:G) returns (success:bool, v:V, rest_index:uint64)
-    requires (index as int) <= data.Length;
-    requires data.Length < 0x1_0000_0000_0000_0000;
+method ParseVal(data:seq<byte>, index:uint64, grammar:G) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(grammar);
     decreases grammar, 0;
-    ensures  (rest_index as int) <= data.Length;
+    ensures  (rest_index as int) <= |data|
     ensures  var (v', rest') := parse_Val(data[index..], grammar);
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
@@ -767,15 +767,15 @@ function DemarshallFunc(data:seq<byte>, grammar:G) : V
     parse_Val(data, grammar).0.value
 }
 
-method Demarshall(data:array<byte>, grammar:G) returns (success:bool, v:V)
-    requires data.Length < 0x1_0000_0000_0000_0000;
+method Demarshall(data:seq<byte>, grammar:G) returns (success:bool, v:V)
+    requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(grammar);
-    ensures  success == Demarshallable(data[..], grammar);
-    ensures  success ==> v == DemarshallFunc(data[..], grammar);
+    ensures  success == Demarshallable(data, grammar);
+    ensures  success ==> v == DemarshallFunc(data, grammar);
 {
     var rest:uint64;
     success, v, rest := ParseVal(data, 0, grammar);
-    if success && rest == (data.Length as uint64) {
+    if success && rest == (|data| as uint64) {
         assert v == parse_Val(data[..], grammar).0.value;
         assert Demarshallable(data[..], grammar);
         assert v == DemarshallFunc(data[..], grammar);

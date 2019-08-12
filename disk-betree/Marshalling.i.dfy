@@ -985,8 +985,8 @@ module Marshalling {
     )
   }
 
-  method ParseSector(data: array<byte>, start: uint64) returns (s : Option<Sector>)
-  requires start as int <= data.Length < 0x1_0000_0000_0000_0000;
+  method ParseSector(data: seq<byte>, start: uint64) returns (s : Option<Sector>)
+  requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures ISectorOpt(s) == parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
@@ -1028,15 +1028,15 @@ module Marshalling {
       None
   }
 
-  method ParseCheckedSector(data: array<byte>) returns (s : Option<Sector>)
-  requires data.Length < 0x1_0000_0000_0000_0000;
+  method ParseCheckedSector(data: seq<byte>) returns (s : Option<Sector>)
+  requires |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures ISectorOpt(s) == parseCheckedSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
   {
     s := None;
 
-    if data.Length >= 32 {
+    if |data| as uint64 >= 32 {
       var hash := Crypto.Crc32(data[32..]);
       if hash == data[..32] {
         s := ParseSector(data, 32);
