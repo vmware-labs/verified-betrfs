@@ -149,13 +149,21 @@ module ImplSync {
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
   ensures ref.Some? ==> BC.Alloc(k, old(IS.IVars(s)), IS.IVars(s'), ref.value, IS.INode(node))
-  // ensures ref.Some? ==> ref.value in s'.cache
-  // ensures ref.Some? ==> s' == old(s.(cache := s.cache[ref.value := node]))
-  // ensures ref.Some? ==> ref.value !in old(s.cache)
-  // ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.lbas
-  // ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.graph
+  ensures ref.Some? ==> ref.value in s'.cache
+
+  ensures ref.Some? ==> ref.value !in old(s.cache)
+  ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.lbas
+  ensures ref.Some? ==> ref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.graph
+  ensures ref.Some? ==> IS.IVars(s') == old(IS.IVars(s))
+      .(ephemeralIndirectionTable := BC.IndirectionTable(
+          old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
+          MapRemove1(old(IS.IVars(s)).ephemeralIndirectionTable.graph, ref.value)))
+      .(cache := MapRemove1(old(IS.IVars(s)).cache, ref.value))
+
   ensures ref.None? ==> s' == s
   ensures ref.None? ==> IS.IVars(s') == old(IS.IVars(s))
+  ensures ref.None? ==> IS.IVars(s) == old(IS.IVars(s))
+
   ensures s'.Ready?
   ensures s.rootBucket == s'.rootBucket
   // NOALIAS statically enforced no-aliasing would probably help here
@@ -182,7 +190,7 @@ module ImplSync {
     }
   }
 
-  method rollbackAlloc(k: ImplConstants, s: ImplVariables, node: IS.Node, ref: BT.G.Reference)
+  method rollbackAlloc(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node, ghost is0: ImplADM.M.Variables)
   returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires IS.WFNode(node)
@@ -192,14 +200,16 @@ module ImplSync {
   requires ref in s.cache
   // requires ref != BT.G.Root()
   requires s.rootBucket != TTT.EmptyTree ==> ref != BT.G.Root()
+  requires BC.Alloc(k, is0, IS.IVars(s), ref, IS.INode(node))
+  requires IS.IVars(s) == is0
+      .(ephemeralIndirectionTable := BC.IndirectionTable(
+          IS.IVars(s).ephemeralIndirectionTable.lbas,
+          MapRemove1(IS.IVars(s).ephemeralIndirectionTable.graph, ref)))
+      .(cache := MapRemove1(IS.IVars(s).cache, ref))
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
   ensures s'.Ready?
-  ensures IS.IVars(s') == old(IS.IVars(s))
-      .(ephemeralIndirectionTable := BC.IndirectionTable(
-          old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
-          MapRemove1(old(IS.IVars(s)).ephemeralIndirectionTable.graph, ref)))
-      .(cache := MapRemove1(old(IS.IVars(s)).cache, ref))
+  ensures IS.IVars(s') == is0
   ensures s.rootBucket == s'.rootBucket
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s'.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr
@@ -606,10 +616,16 @@ module ImplSync {
   requires BT.G.Root() in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
+  ensures BC.Inv(k, IS.IVars(s'))
   ensures childrefs.None? ==> s == old(s)
-  ensures childrefs.None? ==> IS.IVars(s') == old(IS.IVars(s))
   ensures childrefs.None? ==> IS.IVars(s) == old(IS.IVars(s))
+  ensures childrefs.None? ==> IS.IVars(s') == old(IS.IVars(s))
+  ensures childrefs.None? ==> noop(k, old(IS.IVars(s)), IS.IVars(s'))
   ensures childrefs.Some? <==> is1.Some?
+  ensures childrefs.Some? ==> s'.Ready?
+  ensures childrefs.Some? ==> (
+      && var (left_child_ref, right_child_ref) := childrefs.value;
+      && s' == old(s).(cache := old(s.cache[left_child_ref := left_child][right_child_ref := right_child])))
   ensures childrefs.Some? ==> (
       && var (left_child_ref, right_child_ref) := childrefs.value;
       && BC.Alloc(k, old(IS.IVars(s)), is1.value, left_child_ref, IS.INode(left_child))
@@ -621,26 +637,31 @@ module ImplSync {
   modifies s.ephemeralIndirectionTable.Repr
   {
     childrefs := None;
-    ghost var sInterpreted := IS.IVars(s);
+    ghost var is0 := IS.IVars(s);
 
     var s1, left_child_ref := alloc(k, s, left_child);
     if left_child_ref.None? {
       s' := s;
       assert old(IS.IVars(s)) == IS.IVars(s');
       print "giving up; could not get ref\n";
+      is1 := None;
       return;
     }
     is1 := Some(IS.IVars(s1));
-    // assert s1Interpreted == ghostAlloc(k, sInterpreted, left_child_ref.value, IS.INode(left_child));
+
+    assert BC.Alloc(k, old(IS.IVars(s)), is1.value, left_child_ref.value, IS.INode(left_child));
     
     var s2, right_child_ref := alloc(k, s1, right_child);
     if right_child_ref.None? {
-      s' := rollbackAlloc(k, s1, left_child, left_child_ref.value);
+      assert left_child_ref.value in IS.IVars(s1).cache;
+
+      s' := rollbackAlloc(k, s1, left_child_ref.value, left_child, is0);
+
       assert old(IS.IVars(s)) == IS.IVars(s');
       print "giving up; could not get ref\n";
+      is1 := None;
       return;
     }
-    // assert s2Interpreted == ghostAlloc(k, s1Interpreted, right_child_ref.value, IS.INode(right_child));
     s' := s2;
     childrefs := Some((left_child_ref.value, right_child_ref.value));
   }
@@ -754,18 +775,9 @@ module ImplSync {
 
     receipt := Some(SplitNodesReceipt(
         // in
-        fused_parent,
-        fused_child,
-        cutoff_child,
-        slot,
-        graph,
+        fused_parent, fused_child, cutoff_child, slot, graph,
         // out
-        left_child,
-        right_child,
-        pivot,
-        num_children_left,
-        lbound,
-        ubound));
+        left_child, right_child, pivot, num_children_left, lbound, ubound));
 
     assert IS.WFNode(left_child);
     assert IS.WFNode(right_child);
@@ -864,6 +876,8 @@ module ImplSync {
 
     lemmaSplitParentValidReferences(IS.INode(fused_parent), pivot, slot, left_child_ref, right_child_ref, IS.IIndirectionTable(s2.ephemeralIndirectionTable).graph);
 
+    assert parentref == BT.G.Root() ==> s.rootBucket == TTT.EmptyTree;
+
     s' := write(k, s2, parentref, split_parent);
     ghost var is' := IS.IVars(s');
 
@@ -942,7 +956,7 @@ module ImplSync {
       BT.G.ReadOp(parent_ref, IS.INode(splitNodesReceipt.fused_parent)),
       BT.G.ReadOp(fused_child_ref, IS.INode(splitNodesReceipt.fused_child))
     ]; */
-    assert stepsBetree(k, is, is', UI.NoOp, step); // TODO WTH
+    assert stepsBetree(k, is, is', UI.NoOp, step);
   }
 
   method flush(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, slot: int)
