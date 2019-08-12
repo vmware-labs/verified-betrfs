@@ -239,12 +239,6 @@ module ImplSync {
   // requires ref != BT.G.Root()
   requires s.rootBucket != TTT.EmptyTree ==> ref != BT.G.Root()
   requires BC.Alloc(k, is0, IS.IVars(s), ref, IS.INode(node))
-  // TODOTODOTODO
-  //requires IS.IVars(s) == is0
-      //.(ephemeralIndirectionTable := BC.IndirectionTable(
-          //IS.IVars(s).ephemeralIndirectionTable.locs,
-          //MapRemove1(IS.IVars(s).ephemeralIndirectionTable.graph, ref)))
-      //.(cache := MapRemove1(IS.IVars(s).cache, ref))
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
   ensures s'.Ready?
