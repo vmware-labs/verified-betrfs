@@ -304,6 +304,7 @@ module Marshalling {
   {
     if |v.a| == 0 then [] else (
       assert ValInGrammar(Last(v.a), GByteArray);
+      assert ValidVal(Last(v.a));
       valToKeySeq(VArray(DropLast(v.a))) + [Last(v.a).b]
     )
   }
@@ -406,12 +407,14 @@ module Marshalling {
 
   function method valToKey(v: V) : Key
   requires ValInGrammar(v, GByteArray)
+  requires ValidVal(v)
   {
     v.b
   }
 
   function method valToPivots(a: seq<V>) : Option<seq<Key>>
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GByteArray)
+  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   ensures var s := valToPivots(a) ; s.Some? ==> Pivots.WFPivots(s.value)
   {
     if |a| == 0 then
@@ -529,6 +532,7 @@ module Marshalling {
   requires ValInGrammar(v, PivotNodeGrammar())
   ensures s.Some? ==> BT.WFNode(s.value)
   {
+    assert ValidVal(v.t[0]);
     match valToPivots(v.t[0].a) {
       case None => None
       case Some(pivots) => (
@@ -567,6 +571,7 @@ module Marshalling {
   ensures s.Some? ==> ImplState.WFNode(s.value)
   ensures INodeOpt(s) == valToNode(v)
   {
+    assert ValidVal(v.t[0]);
     var pivotsOpt := valToPivots(v.t[0].a);
     if (pivotsOpt.None?) {
       return None;
