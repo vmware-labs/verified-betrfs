@@ -1,19 +1,27 @@
+TOOLS=$(dir $(abspath $(filter %/Makefile.template,$(MAKEFILE_LIST))))
+ROOT=$(abspath $(TOOLS)/..)/
 
-# List the DLLs and EXEs you want to build
-#TARGETDLLS=
-#TARGETEXES=BtreeBenchmark.exe
+BUILD_DIR=$(ROOT)build
+export ROOT
+
+TARGET_DIR_PATH=$(shell realpath --relative-to $(ROOT) .)
+
+define transform-targets
+	$(patsubst %.dfy,$(BUILD_DIR)/$(TARGET_DIR_PATH)/%.okay,$1)
+endef
 
 #
 # Shouldn't have to modify anything below here.
 #
-#TODO assert ROOT defined
 
-export ROOT
+TARGET_OKAYS=$(call transform-targets,$(TARGET_SRCS))
+TARGET_DEPS=$(patsubst %.okay,%.deps,$(TARGET_OKAYS))
 
-BUILD_DIR=$(ROOT)build
-TARGETDEPS=$(patsubst %.okay,%.deps,$(TARGETS))
-$(warning targetdeps is $(TARGETDEPS))
-all: $(TARGETS)
+$(warning TARGET_SRCS $(TARGET_SRCS))
+$(warning TARGET_OKAYS $(TARGET_OKAYS))
+$(warning TARGET_DEPS $(TARGET_DEPS))
+
+all: $(TARGET_OKAYS)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -33,9 +41,9 @@ $(BUILD_DIR)%/.:
 
 .PRECIOUS: $(BUILD_DIR)/%.deps
 $(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
-	$(ROOT)tools/deps-for-dfy.py $< $@
+	@ $(ROOT)tools/deps-for-dfy.py $< $@
 
-include $(TARGETDEPS)
+include $(TARGET_DEPS)
 
 # jonh thinks we don't want this wildcard include: it's unsound in a surprising way.
 # The single include above is clumsy because it requires deps-for-dafny to emit
@@ -43,10 +51,12 @@ include $(TARGETDEPS)
 #rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 #include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 
+TIME=time -f "real %es cpu %Us"
+
 $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
-	time dafny /compile:0 $(NOVERIFY) $<
+	$(TIME) dafny /compile:0 $(NOVERIFY) $<
 	touch $@
 
 $(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy | $$(@D)/.
-	time dafny /compile:0 $(NOVERIFY) $<
+	$(TIME) dafny /compile:0 $(NOVERIFY) $<
 	touch $@

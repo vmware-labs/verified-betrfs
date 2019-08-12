@@ -1,6 +1,3 @@
-ROOT=../
-TARGETS=\
-		$(BUILD_DIR)/disk-betree/Bundle.i.okay \
-		$(BUILD_DIR)/disk-betree/Main.s.okay
+TARGET_SRCS=Bundle.i.dfy Main.s.dfy
 
 include ../tools/Makefile.template
