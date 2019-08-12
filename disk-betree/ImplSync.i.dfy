@@ -89,6 +89,7 @@ module ImplSync {
   requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
       ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).lbas
   ensures IS.WFVars(s')
+  ensures IS.IVars(s') == ghostDirty(k, old(IS.IVars(s)), ref, IS.INode(node))
   ensures BC.Dirty(k, old(IS.IVars(s)), IS.IVars(s'), ref, IS.INode(node))
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s'.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr
@@ -206,16 +207,14 @@ module ImplSync {
   requires IS.WFVars(s)
   requires IS.WFNode(node)
   requires s.Ready?
-  requires BC.BlockPointsToValidReferences(IS.INode(node), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).lbas
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in s.cache
-  requires ref != BT.G.Root()
+  // requires ref != BT.G.Root()
+  requires s.rootBucket != TTT.EmptyTree ==> ref != BT.G.Root()
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
   ensures s'.Ready?
-  // ensures ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
-  // ensures ref !in s'.cache
   ensures IS.IVars(s') == old(IS.IVars(s))
       .(ephemeralIndirectionTable := BC.IndirectionTable(
           old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
@@ -616,77 +615,253 @@ module ImplSync {
   }
 
   method AllocChildrefs(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, left_child: IS.Node, right_child: IS.Node)
-  returns (s': ImplVariables, childrefs: Option<(BT.G.Reference, BT.G.Reference)>, ghost iVarsS1: Option<ImplADM.M.Variables>)
+  returns (s': ImplVariables, childrefs: Option<(BT.G.Reference, BT.G.Reference)>)
   requires s.Ready?
   requires IS.WFVars(s)
   requires IS.WFNode(left_child)
   requires IS.WFNode(right_child)
-  requires BC.Inv(k, IS.IVars(s))
+  // requires BC.Inv(k, IS.IVars(s))
   requires BC.BlockPointsToValidReferences(IS.INode(left_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires BC.BlockPointsToValidReferences(IS.INode(right_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires BT.G.Root() in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   ensures IS.WFVars(s)
   ensures IS.WFVars(s')
-  ensures childrefs.Some? <==> iVarsS1.Some?
+  ensures childrefs.None? ==> s == old(s)
   ensures childrefs.None? ==> IS.IVars(s') == old(IS.IVars(s))
   ensures childrefs.None? ==> IS.IVars(s) == old(IS.IVars(s))
-  ensures childrefs.None? ==> s == old(s)
   ensures childrefs.Some? ==> (
-      && var (left_childref, right_childref) := childrefs.value;
+      && var (left_child_ref, right_child_ref) := childrefs.value;
       && s' == old(s.(cache := s.cache[
-          left_childref := left_child][
-          right_childref := right_child])))
+          left_child_ref := left_child][
+          right_child_ref := right_child])))
   ensures childrefs.Some? ==> (
-      && var (left_childref, _) := childrefs.value;
-      && BC.Alloc(k, old(IS.IVars(s)), iVarsS1.value, left_childref, IS.INode(left_child)))
+      && var (left_child_ref, right_child_ref) := childrefs.value;
+      && var is := old(IS.IVars(s));
+      && ghostAllocRequires(k, is, left_child_ref, IS.INode(left_child))
+      && var is1 := ghostAlloc(k, is, left_child_ref, IS.INode(left_child));
+      && ghostAllocRequires(k, is1, right_child_ref, IS.INode(right_child))
+      && var is' := ghostAlloc(k, is1, right_child_ref, IS.INode(right_child));
+      && IS.IVars(s') == is')
   ensures childrefs.Some? ==> (
-      && var (_, right_childref) := childrefs.value;
-      && BC.Alloc(k, iVarsS1.value, IS.IVars(s'), right_childref, IS.INode(right_child)))
-  ensures childrefs.Some? ==> (
-      && var (left_childref, right_childref) := childrefs.value;
-      left_childref != right_childref)
+      && var (left_child_ref, right_child_ref) := childrefs.value;
+      left_child_ref != right_child_ref)
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
   {
     childrefs := None;
-    iVarsS1 := None;
+    ghost var sInterpreted := IS.IVars(s);
 
-    var s1, left_childref := alloc(k, s, left_child);
-    if left_childref.None? {
+    var left_child_ref := getFreeRef(s);
+    if left_child_ref.None? {
       s' := s;
       assert old(IS.IVars(s)) == IS.IVars(s');
       print "giving up; could not get ref\n";
       return;
     }
-    assert IS.WFVars(s);
 
-    assert s1 == old(s.(cache := s.cache[left_childref.value := left_child]));
-    ghost var iVarsAtS1 := IS.IVars(s1);
+    // TODO how do we deal with this?
+    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
+    var _ := s.ephemeralIndirectionTable.Insert(left_child_ref.value, (None, if left_child.children.Some? then left_child.children.value else []));
+    var s1 := s.(cache := s.cache[left_child_ref.value := left_child]);
+    ghost var s1Interpreted := IS.IVars(s1);
 
-    assert left_childref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.lbas;
-    assert left_childref.value !in old(IS.IVars(s)).ephemeralIndirectionTable.graph;
-    assert IS.IVars(s1) == old(IS.IVars(s))
-        .(ephemeralIndirectionTable := BC.IndirectionTable(
-            old(IS.IVars(s)).ephemeralIndirectionTable.lbas,
-            old(IS.IVars(s)).ephemeralIndirectionTable.graph[left_childref.value := if left_child.children.Some? then left_child.children.value else []]))
-        .(cache := old(IS.IVars(s)).cache[left_childref.value := IS.INode(left_child)]);
+    assert s1Interpreted == ghostAlloc(k, sInterpreted, left_child_ref.value, IS.INode(left_child));
 
-    var s2, right_childref := alloc(k, s1, right_child);
-    if right_childref.None? {
-      s' := rollbackAlloc(k, s1, left_child, left_childref.value);
+    var right_child_ref := getFreeRef(s);
+    if right_child_ref.None? {
+      s' := rollbackAlloc(k, s1, left_child, left_child_ref.value);
       assert old(IS.IVars(s)) == IS.IVars(s');
       print "giving up; could not get ref\n";
       return;
     }
 
+    // TODO how do we deal with this?
+    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
+    var _ := s.ephemeralIndirectionTable.Insert(right_child_ref.value, (None, if right_child.children.Some? then right_child.children.value else []));
+    var s2 := s1.(cache := s1.cache[right_child_ref.value := right_child]);
+    ghost var s2Interpreted := IS.IVars(s2);
+
+    assert s2Interpreted == ghostAlloc(k, s1Interpreted, right_child_ref.value, IS.INode(right_child));
+
     s' := s2;
 
-    iVarsS1 := Some(iVarsAtS1);
-    childrefs := Some((left_childref.value, right_childref.value));
+    childrefs := Some((left_child_ref.value, right_child_ref.value));
+  }
+
+  predicate ghostAllocRequires(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node)
+  requires s.Ready?
+  {
+    && ref !in s.cache
+    && !BC.IsAllocated(s, ref)
+    && BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
+  }
+
+  // TODO move this somewhere
+  function ghostAlloc(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node): (s': ImplADM.M.Variables)
+  requires s.Ready?
+  requires ghostAllocRequires(k, s, ref, node)
+  ensures BC.Alloc(k, s, s', ref, node)
+  {
+    s
+      .(ephemeralIndirectionTable := BC.IndirectionTable(
+          s.ephemeralIndirectionTable.lbas,
+          s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]))
+      .(cache := s.cache[ref := node])
+  }
+
+  function ghostDirty(k: ImplADM.M.Constants, s: ImplADM.M.Variables, ref: BT.G.Reference, node: BC.Node): (s': ImplADM.M.Variables)
+  requires s.Ready?
+  requires ref in s.cache // probably not necessary?
+  requires ref in s.ephemeralIndirectionTable.graph
+  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.lbas
+  requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
+  ensures BC.Dirty(k, s, s', ref, node)
+  {
+    s
+      .(cache := s.cache[ref := node])
+      .(ephemeralIndirectionTable := BC.IndirectionTable(
+          MapRemove1(s.ephemeralIndirectionTable.lbas, ref),
+          s.ephemeralIndirectionTable.graph[ref := if node.children.Some? then node.children.value else []]))
+  }
+
+  datatype SplitNodesReceipt = SplitNodesReceipt(
+      // in
+      ghost fused_parent: IS.Node,
+      ghost fused_child: IS.Node,
+      ghost cutoff_child: IS.Node,
+      ghost slot: int,
+      ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+      // out
+      left_child: IS.Node,
+      right_child: IS.Node,
+      pivot: Key,
+      ghost num_children_left: int,
+      ghost lbound: Option<Key>,
+      ghost ubound: Option<Key>)
+
+  predicate {:opaque} SplitNodesReceiptValid(receipt: SplitNodesReceipt)
+  ensures SplitNodesReceiptValid(receipt) ==> (receipt.fused_parent.children.Some?)
+  ensures SplitNodesReceiptValid(receipt) ==> (0 <= receipt.slot < |receipt.fused_parent.children.value|)
+  ensures SplitNodesReceiptValid(receipt) ==> (IS.WFNode(receipt.fused_parent))
+  ensures SplitNodesReceiptValid(receipt) ==> (IS.WFNode(receipt.fused_child))
+  ensures SplitNodesReceiptValid(receipt) ==> (IS.WFNode(receipt.left_child))
+  ensures SplitNodesReceiptValid(receipt) ==> (IS.WFNode(receipt.right_child))
+  {
+    && (1 <= receipt.num_children_left < |receipt.cutoff_child.buckets|)
+    && (1 <= receipt.num_children_left <= |receipt.cutoff_child.pivotTable|)
+    && ((receipt.cutoff_child.children.Some? ==> 0 <= receipt.num_children_left <= |receipt.cutoff_child.children.value|))
+    && (IS.WFNode(SplitChildLeft(receipt.cutoff_child, receipt.num_children_left)))
+    && (IS.WFNode(SplitChildRight(receipt.cutoff_child, receipt.num_children_left)))
+    && (IS.INode(SplitChildLeft(receipt.cutoff_child, receipt.num_children_left)) == BT.SplitChildLeft(IS.INode(receipt.cutoff_child), receipt.num_children_left))
+    && (IS.INode(SplitChildRight(receipt.cutoff_child, receipt.num_children_left)) == BT.SplitChildRight(IS.INode(receipt.cutoff_child), receipt.num_children_left))
+    && (BC.BlockPointsToValidReferences(BT.SplitChildLeft(IS.INode(receipt.cutoff_child), receipt.num_children_left), receipt.graph))
+    && (BC.BlockPointsToValidReferences(BT.SplitChildRight(IS.INode(receipt.cutoff_child), receipt.num_children_left), receipt.graph))
+    && (receipt.left_child == SplitChildLeft(receipt.cutoff_child, receipt.num_children_left))
+    && (receipt.right_child == SplitChildRight(receipt.cutoff_child, receipt.num_children_left))
+    && (receipt.cutoff_child.pivotTable[receipt.num_children_left - 1] == receipt.pivot)
+    && (IS.WFNode(receipt.fused_parent))
+    && (receipt.fused_parent.children.Some?)
+    && (0 <= receipt.slot < |receipt.fused_parent.children.value|)
+    && (IS.WFNode(receipt.fused_child))
+    && (IS.WFBuckets(receipt.cutoff_child.buckets))
+    && (IS.INode(receipt.cutoff_child) == BT.CutoffNode(IS.INode(receipt.fused_child), receipt.lbound, receipt.ubound))
+    && (receipt.slot > 0 ==> 0 <= receipt.slot - 1 < |receipt.fused_parent.pivotTable|)
+    && (receipt.lbound == (if receipt.slot > 0 then Some(receipt.fused_parent.pivotTable[receipt.slot - 1]) else None))
+    && (receipt.ubound == (if receipt.slot < |receipt.fused_parent.pivotTable| then Some(receipt.fused_parent.pivotTable[receipt.slot]) else None))
+    && (0 <= receipt.slot < |receipt.fused_parent.buckets|)
+    && (|receipt.fused_parent.buckets[receipt.slot].keys| == |receipt.fused_parent.buckets[receipt.slot].values|)
+    && (KMTable.I(receipt.fused_parent.buckets[receipt.slot]) == map[])
+  }
+
+  method splitNodes(
+      fused_parent: IS.Node,
+      fused_child: IS.Node,
+      slot: int,
+      ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>
+  ) returns (receipt: Option<SplitNodesReceipt>)
+  requires fused_parent.children.Some?
+  requires 0 <= slot < |fused_parent.children.value|
+  requires IS.WFNode(fused_parent)
+  requires IS.WFNode(fused_child)
+  requires BC.BlockPointsToValidReferences(IS.INode(fused_child), graph)
+  requires 0 <= slot < |fused_parent.pivotTable| + 1
+  ensures receipt.Some? ==> SplitNodesReceiptValid(receipt.value)
+  ensures receipt.Some? ==> IS.WFNode(receipt.value.left_child)
+  ensures receipt.Some? ==> IS.WFNode(receipt.value.right_child)
+  ensures receipt.Some? ==> receipt.value.fused_parent == fused_parent
+  ensures receipt.Some? ==> receipt.value.fused_child == fused_child
+  ensures receipt.Some? ==> receipt.value.slot == slot
+  ensures receipt.Some? ==> receipt.value.graph == graph
+  ensures receipt.Some? ==> BC.BlockPointsToValidReferences(IS.INode(receipt.value.left_child), receipt.value.graph)
+  ensures receipt.Some? ==> BC.BlockPointsToValidReferences(IS.INode(receipt.value.right_child), receipt.value.graph)
+  {
+    reveal_SplitNodesReceiptValid();
+
+    INodeRootEqINodeForEmptyRootBucket(fused_parent);
+    INodeRootEqINodeForEmptyRootBucket(fused_child);
+
+    var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
+    var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
+    var cutoff_child := CutoffNode(fused_child, lbound, ubound);
+
+    if !KMTable.IsEmpty(fused_parent.buckets[slot]) {
+      receipt := None;
+      print "giving up; trying to split but parent has non-empty buffer\n";
+      return;
+    }
+    assert KMTable.IsEmpty(fused_parent.buckets[slot]);
+
+    if (|cutoff_child.pivotTable| == 0) {
+      receipt := None;
+      // TODO there should be an operation which just
+      // cuts off the node and doesn't split it.
+      print "giving up; child.pivots == 0\n";
+      return;
+    }
+    assert |cutoff_child.pivotTable| != 0;
+
+    assert |cutoff_child.buckets| == |cutoff_child.pivotTable| + 1;
+    var num_children_left := |cutoff_child.buckets| / 2;
+    var pivot := cutoff_child.pivotTable[num_children_left - 1];
+
+    var left_child := SplitChildLeft(cutoff_child, num_children_left);
+    var right_child := SplitChildRight(cutoff_child, num_children_left);
+
+    lemmaSplitChild(cutoff_child, num_children_left);
+    lemmaSplitChildValidReferences(IS.INode(fused_child), IS.INode(cutoff_child), num_children_left,
+        graph, lbound, ubound);
+
+    receipt := Some(SplitNodesReceipt(
+        // in
+        fused_parent,
+        fused_child,
+        cutoff_child,
+        slot,
+        graph,
+        // out
+        left_child,
+        right_child,
+        pivot,
+        num_children_left,
+        lbound,
+        ubound));
+
+    assert IS.WFNode(left_child);
+    assert IS.WFNode(right_child);
+    assert IS.INode(left_child) == BT.SplitChildLeft(IS.INode(cutoff_child), num_children_left);
+    assert IS.INode(right_child) == BT.SplitChildRight(IS.INode(cutoff_child), num_children_left);
+    assert BC.BlockPointsToValidReferences(BT.SplitChildLeft(IS.INode(cutoff_child), num_children_left), graph);
+    assert BC.BlockPointsToValidReferences(BT.SplitChildRight(IS.INode(cutoff_child), num_children_left), graph);
+    assert left_child == SplitChildLeft(cutoff_child, num_children_left);
+    assert right_child == SplitChildRight(cutoff_child, num_children_left);
+
+    assert SplitNodesReceiptValid(receipt.value);
   }
 
   // TODO FIXME this method is flaky and takes a long time to verify
-  method {:fuel WFBucketList,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
-      {:fuel SplitChildLeft,0} {:fuel SplitChildRight,0}
+  method
+      // {:fuel WFBucketList,0} {:fuel BT.SplitChildLeft,0} {:fuel BT.SplitChildRight,0} {:fuel BT.SplitParent,0}
+      // {:fuel SplitChildLeft,0} {:fuel SplitChildRight,0}
   doSplit(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   returns (s': ImplVariables)
   requires s.Ready?
@@ -724,59 +899,53 @@ module ImplSync {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[ref];
 
-    INodeRootEqINodeForEmptyRootBucket(fused_parent);
-    INodeRootEqINodeForEmptyRootBucket(fused_child);
-
     assert BT.WFNode(IS.ICache(s.cache, s.rootBucket)[parentref]);
     assert BT.WFNode(IS.ICache(s.cache, s.rootBucket)[ref]);
 
-    var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
-    var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
-    var child := CutoffNode(fused_child, lbound, ubound);
+    INodeRootEqINodeForEmptyRootBucket(fused_parent);
+    INodeRootEqINodeForEmptyRootBucket(fused_child);
 
-    if !KMTable.IsEmpty(fused_parent.buckets[slot]) {
+    assert WFBucketList(KMTable.ISeq(fused_parent.buckets), fused_parent.pivotTable);
+    assert |KMTable.ISeq(fused_parent.buckets)| == |fused_parent.pivotTable| + 1;
+    assert IS.WFNode(fused_parent);
+    assert |fused_parent.buckets| == |fused_parent.children.value|;
+    assert 0 <= slot < |fused_parent.pivotTable| + 1;
+
+    var splitNodesReceipt := splitNodes(
+        fused_parent,
+        fused_child,
+        slot,
+        IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
+
+    if splitNodesReceipt.None? {
       s' := s;
       assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-      print "giving up; trying to split but parent has non-empty buffer\n";
       return;
     }
+    assert splitNodesReceipt.Some?;
 
-    if (|child.pivotTable| == 0) {
-      // TODO there should be an operation which just
-      // cuts off the node and doesn't split it.
+    var left_child := splitNodesReceipt.value.left_child;
+    var right_child := splitNodesReceipt.value.right_child;
+    ghost var num_children_left := splitNodesReceipt.value.num_children_left;
+    var pivot := splitNodesReceipt.value.pivot;
+
+    ghost var is0 := IS.IVars(s);
+
+    assert BC.BlockPointsToValidReferences(IS.INode(left_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
+    assert BC.BlockPointsToValidReferences(IS.INode(right_child), IS.IIndirectionTable(s.ephemeralIndirectionTable).graph);
+
+    var s2, allocedChildrefs := AllocChildrefs(k, s, io, left_child, right_child);
+    if allocedChildrefs.None? {
       s' := s;
       assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-      print "giving up; child.pivots == 0\n";
       return;
     }
+    var (left_child_ref, right_child_ref) := allocedChildrefs.value;
 
-    var num_children_left := |child.buckets| / 2;
-    var pivot := child.pivotTable[num_children_left - 1];
+    ghost var s2Interpreted := IS.IVars(s2);
 
-    var left_child := SplitChildLeft(child, num_children_left);
-    var right_child := SplitChildRight(child, num_children_left);
-
-    lemmaSplitChild(child, num_children_left);
-    lemmaSplitChildValidReferences(IS.INode(fused_child), IS.INode(child), num_children_left,
-        IS.IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
-
-    ghost var oldIVars := IS.IVars(s);
-
-    var s2, allocatedChildrefs, iVarsS1 := AllocChildrefs(k, s, io, left_child, right_child);
-    if allocatedChildrefs.None? {
-      s' := s;
-      assert old(IS.IVars(s)) == IS.IVars(s');
-      /* (doc) assert ImplADM.M.IDiskOp(D.NoDiskOp) == SD.NoDiskOp; */
-      assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-      print "giving up; could not get ref\n";
-      return;
-    }
-    var (left_childref, right_childref) := allocatedChildrefs.value;
-
-    ghost var iVarsS2 := IS.IVars(s2);
-
-    var split_parent := SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
-    lemmaSplitParentValidReferences(IS.INode(fused_parent), pivot, slot, left_childref, right_childref, IS.IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+    var split_parent := SplitParent(fused_parent, pivot, slot, left_child_ref, right_child_ref);
+    lemmaSplitParentValidReferences(IS.INode(fused_parent), pivot, slot, left_child_ref, right_child_ref, IS.IIndirectionTable(s2.ephemeralIndirectionTable).graph);
 
     assert parentref in s.cache;
     assert parentref in IS.ICache(s.cache, s.rootBucket);
@@ -784,36 +953,97 @@ module ImplSync {
     assert parentref in s2.cache;
 
     assert parentref == BT.G.Root() ==> s2.rootBucket == TTT.EmptyTree;
+
+    assert IS.IVars(s2) == s2Interpreted;
+
     s' := write(k, s2, parentref, split_parent);
 
-    ghost var splitStep := BT.NodeFusion(
+    ghost var sPrimeInterpreted := IS.IVars(s');
+    assert sPrimeInterpreted == ghostDirty(k, s2Interpreted, parentref, IS.INode(split_parent));
+
+    // == start transaction ==
+    assert is0 == old(IS.IVars(s));
+    ghost var is1 := ghostAlloc(k, is0, left_child_ref, IS.INode(left_child));
+    ghost var is2 := ghostAlloc(k, is1, right_child_ref, IS.INode(right_child));
+    ghost var is' := ghostDirty(k, is2, parentref, IS.INode(split_parent));
+    assert is2 == s2Interpreted;
+    assert is' == IS.IVars(s');
+
+    var step := doSplitSteps(splitNodesReceipt.value,
       parentref,
       ref,
-      left_childref,
-      right_childref,
-      IS.INode(fused_parent),
+      left_child_ref,
+      right_child_ref,
       IS.INode(split_parent),
-      IS.INode(fused_child),
-      IS.INode(left_child),
-      IS.INode(right_child),
-      slot,
-      num_children_left,
-      pivot
+      k, is0, is1, is2, is');
+
+    assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
+  }
+
+  lemma doSplitSteps(splitNodesReceipt: SplitNodesReceipt,
+      parent_ref: BT.G.Reference,
+      fused_child_ref: BT.G.Reference,
+      left_child_ref: BT.G.Reference,
+      right_child_ref: BT.G.Reference,
+      split_parent: BT.G.Node,
+      k: ImplADM.M.Constants,
+      is0: ImplADM.M.Variables,
+      is1: ImplADM.M.Variables,
+      is2: ImplADM.M.Variables,
+      is': ImplADM.M.Variables) returns (step: BT.BetreeStep)
+  requires left_child_ref != right_child_ref
+  requires BT.WFNode(split_parent)
+  requires SplitNodesReceiptValid(splitNodesReceipt)
+  requires splitNodesReceipt.fused_parent.children.value[splitNodesReceipt.slot] == fused_child_ref
+  requires 0 <= splitNodesReceipt.slot <= |IS.INode(splitNodesReceipt.fused_parent).pivotTable|
+  requires split_parent == BT.SplitParent(IS.INode(splitNodesReceipt.fused_parent), splitNodesReceipt.pivot, splitNodesReceipt.slot, left_child_ref, right_child_ref)
+  requires BC.ReadStep(k, is0, BT.G.ReadOp(parent_ref, IS.INode(splitNodesReceipt.fused_parent)));
+  requires BC.ReadStep(k, is0, BT.G.ReadOp(fused_child_ref, IS.INode(splitNodesReceipt.fused_child)));
+  requires BC.Alloc(k, is0, is1, left_child_ref, IS.INode(splitNodesReceipt.left_child))
+  requires BC.Alloc(k, is1, is2, right_child_ref, IS.INode(splitNodesReceipt.right_child))
+  requires BC.Dirty(k, is2, is', parent_ref, split_parent)
+  ensures stepsBetree(k, is0, is', UI.NoOp, step)
+  {
+    reveal_SplitNodesReceiptValid();
+
+    assert SplitNodesReceiptValid(splitNodesReceipt);
+    assert IS.WFBuckets(splitNodesReceipt.cutoff_child.buckets);
+    assert IS.INode(splitNodesReceipt.cutoff_child) == BT.CutoffNode(IS.INode(splitNodesReceipt.fused_child), splitNodesReceipt.lbound, splitNodesReceipt.ubound);
+    assert 1 <= splitNodesReceipt.num_children_left < |splitNodesReceipt.cutoff_child.buckets|;
+
+    ghost var splitStep := BT.NodeFusion(
+      parent_ref,
+      fused_child_ref,
+      left_child_ref,
+      right_child_ref,
+      IS.INode(splitNodesReceipt.fused_parent),
+      split_parent,
+      IS.INode(splitNodesReceipt.fused_child),
+      IS.INode(splitNodesReceipt.left_child),
+      IS.INode(splitNodesReceipt.right_child),
+      splitNodesReceipt.slot,
+      splitNodesReceipt.num_children_left,
+      splitNodesReceipt.pivot
     );
-    assert left_childref != right_childref;
+
+    assert splitStep.num_children_left == splitNodesReceipt.num_children_left;
+    assert splitStep.fused_child == IS.INode(splitNodesReceipt.fused_child);
+
+    assert left_child_ref != right_child_ref;
     assert BT.ValidSplit(splitStep);
-    ghost var step := BT.BetreeSplit(splitStep);
+    step := BT.BetreeSplit(splitStep);
     ghost var ops := [
-      BT.G.AllocOp(left_childref, IS.INode(left_child)),
-      BT.G.AllocOp(right_childref, IS.INode(right_child)),
-      BT.G.WriteOp(parentref, IS.INode(split_parent))
+      BT.G.AllocOp(left_child_ref, IS.INode(splitNodesReceipt.left_child)),
+      BT.G.AllocOp(right_child_ref, IS.INode(splitNodesReceipt.right_child)),
+      BT.G.WriteOp(parent_ref, split_parent)
     ];
-    assert BC.Alloc(k, old(IS.IVars(s)), iVarsS1.value, left_childref, IS.INode(left_child));
-    assert BC.OpStep(k, old(IS.IVars(s)), iVarsS1.value, ops[0]);
-    assert BC.Alloc(k, iVarsS1.value, iVarsS2, right_childref, IS.INode(right_child));
-    assert BC.OpStep(k, iVarsS1.value, iVarsS2, ops[1]);
-    BC.MakeTransaction3(k, old(IS.IVars(s)), iVarsS1.value, iVarsS2, IS.IVars(s'), BT.BetreeStepOps(step));
-    assert stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, step);
+    assert ops == BT.BetreeStepOps(step);
+    BC.MakeTransaction3(k, is0, is1, is2, is', ops);
+    /* (doc) assert BT.SplitReads(splitStep) ==[
+      BT.G.ReadOp(parent_ref, IS.INode(splitNodesReceipt.fused_parent)),
+      BT.G.ReadOp(fused_child_ref, IS.INode(splitNodesReceipt.fused_child))
+    ]; */
+    assert stepsBetree(k, is0, is', UI.NoOp, step); // TODO WTH
   }
 
   method flush(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, slot: int)
