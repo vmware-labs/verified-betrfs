@@ -51,7 +51,8 @@ include $(TARGET_DEPS)
 #rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 #include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 
-TIME=time -f "real %es cpu %Us"
+#TIME=time -f "real %es cpu %Us"
+TIME=time
 
 $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
 	$(TIME) dafny /compile:0 $(NOVERIFY) $<
