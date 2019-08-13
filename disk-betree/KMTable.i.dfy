@@ -928,6 +928,7 @@ module KMTable {
   method IsWF(kmt: KMTable) returns (b: bool)
   requires |kmt.keys| < 0x1_0000_0000_0000_0000
   requires |kmt.values| < 0x1_0000_0000_0000_0000
+  requires IsStrictlySorted(kmt.keys)
   requires forall i | 0 <= i < |kmt.values| :: kmt.values[i] != IdentityMessage()
   ensures b == WF(kmt)
   {
@@ -936,6 +937,7 @@ module KMTable {
       return false;
     }
 
+    /*
     reveal_IsStrictlySorted();
 
     var k: uint64 := 1;
@@ -949,6 +951,7 @@ module KMTable {
       }
       k := k + 1;
     }
+    */
 
     return true;
   }

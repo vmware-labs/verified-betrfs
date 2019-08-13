@@ -286,27 +286,121 @@ module Marshalling {
     v.ua
   }
 
-  function method valToKeySeq(v: V) : (s : Option<seq<Key>>)
+  function valToStrictlySortedKeySeq(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
   requires ValInGrammar(v, GArray(GByteArray))
+  ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
   ensures s.Some? ==> |s.value| == |v.a|
   decreases |v.a|
   {
-    if |v.a| == 0 then Some([]) else (
-      assert ValInGrammar(Last(v.a), GByteArray);
-      assert ValidVal(Last(v.a));
-      if |Last(v.a).b| <= Keyspace.MaxLen() as int then (
-        var pref : Option<seq<Key>> := valToKeySeq(VArray(DropLast(v.a)));
-        if pref.Some? then (
-          var l : Key := Last(v.a).b;
-          Some(pref.value + [l])
-        ) else (
-          None
+    if |v.a| == 0 then
+      Some([])
+    else
+      match valToStrictlySortedKeySeq(VArray(DropLast(v.a))) {
+        case None => None
+        case Some(pref) => (
+          assert ValInGrammar(Last(v.a), GByteArray);
+          var key := Last(v.a).b;
+
+          if (|key| <= Keyspace.MaxLen() as int && (|pref| > 0 ==> Keyspace.lt(Last(pref), key))) then (
+            Keyspace.reveal_seq_lte();
+            Keyspace.StrictlySortedAugment(pref, key);
+
+            var k : Key := key;
+
+            Some(pref + [k])
+          ) else (
+            None
+          )
         )
+      }
+  }
+
+  lemma valToStrictlySortedKeySeqPrefixNone(v: V, i: int)
+  requires valToStrictlySortedKeySeq.requires(v)
+  requires 0 <= i <= |v.a|
+  ensures valToStrictlySortedKeySeq(VArray(v.a[..i])) == None
+      ==> valToStrictlySortedKeySeq(v) == None
+  decreases |v.a| - i
+  {
+    if (i < |v.a|) {
+      valToStrictlySortedKeySeqPrefixNone(v, i+1);
+      assert DropLast(v.a[..i+1]) == v.a[..i];
+    } else {
+      assert v.a[..i] == v.a;
+    }
+  }
+
+  method ValToStrictlySortedKeySeq(v: V) returns (s : Option<seq<Key>>)
+  requires valToStrictlySortedKeySeq.requires(v)
+  ensures s == valToStrictlySortedKeySeq(v)
+  {
+    var ar := new Key[|v.a| as uint64];
+
+    var i: uint64 := 0;
+    while i < |v.a| as uint64
+    invariant 0 <= i as int <= |v.a|
+    invariant valToStrictlySortedKeySeq(VArray(v.a[..i])) == Some(ar[..i])
+    {
+      assert ValInGrammar(v.a[i], GByteArray);
+      assert ValidVal(v.a[i]);
+
+      valToStrictlySortedKeySeqPrefixNone(v, i as int + 1);
+
+      if |v.a[i].b| as uint64 > Keyspace.MaxLen() {
+        return None;
+      }
+
+      ar[i] := v.a[i].b;
+
+      if (i > 0) {
+        var c := Keyspace.cmp(ar[i-1], ar[i]);
+        if (c >= 0) {
+          assert Last(ar[..i]) == ar[i-1];
+          assert valToStrictlySortedKeySeq(VArray(v.a[..i+1])) == None;
+
+          return None;
+        }
+      }
+
+      assert DropLast(v.a[..i+1]) == v.a[..i];
+      assert ar[..i+1] == ar[..i] + [ar[i]];
+
+      i := i + 1;
+    }
+
+    assert v.a[..i] == v.a;
+    assert ar[..i] == ar[..];
+    s := Some(ar[..]);
+  }
+
+  function valToPivots(v: V) : (s : Option<seq<Key>>)
+  requires ValidVal(v)
+  requires ValInGrammar(v, GArray(GByteArray))
+  ensures s.Some? ==> Pivots.WFPivots(s.value)
+  {
+    var s := valToStrictlySortedKeySeq(v);
+    if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
+      if |s.value| > 0 then (
+        Keyspace.reveal_seq_lte();
+        Keyspace.IsNotMinimum([], s.value[0]);
+        s
       ) else (
-        None
+        s
       )
+    ) else (
+      None
     )
+  }
+
+  method ValToPivots(v: V) returns (s : Option<seq<Key>>)
+  requires valToPivots.requires(v)
+  ensures s == valToPivots(v)
+  {
+    s := ValToStrictlySortedKeySeq(v);
+    if (s.Some? && |s.value| as uint64 > 0 && |s.value[0]| as uint64 == 0) {
+      s := None;
+    }
   }
 
   function method {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : seq<Message>)
@@ -328,7 +422,7 @@ module Marshalling {
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |pivotTable|
   {
-    var keys := valToKeySeq(v.t[0]);
+    var keys := valToStrictlySortedKeySeq(v.t[0]);
     var values := valToMessageSeq(v.t[1]);
 
     if keys.Some? then (
@@ -364,7 +458,7 @@ module Marshalling {
       return None;
     }
 
-    var keys := valToKeySeq(v.t[0]);
+    var keys := ValToStrictlySortedKeySeq(v.t[0]);
 
     if keys.None? {
       return None;
@@ -412,34 +506,6 @@ module Marshalling {
 
     assert WFBucketAt(KMTable.I(kmt), pivotTable, i);
     s := Some(kmt);
-  }
-
-  function method valToPivots(a: seq<V>) : Option<seq<Key>>
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GByteArray)
-  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
-  ensures var s := valToPivots(a) ; s.Some? ==> Pivots.WFPivots(s.value)
-  {
-    if |a| == 0 then
-      Some([])
-    else
-      match valToPivots(DropLast(a)) {
-        case None => None
-        case Some(pref) => (
-          var key := Last(a).b;
-
-          if (|key| != 0 && |key| <= Keyspace.MaxLen() as int && (|pref| > 0 ==> Keyspace.lt(Last(pref), key))) then (
-            Keyspace.reveal_seq_lte();
-            Keyspace.IsNotMinimum([], key);
-            Keyspace.StrictlySortedAugment(pref, key);
-
-            var k : Key := key;
-
-            Some(pref + [k])
-          ) else (
-            None
-          )
-        )
-      }
   }
 
   function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<map<Key, Message>>>)
@@ -537,7 +603,7 @@ module Marshalling {
   ensures s.Some? ==> BT.WFNode(s.value)
   {
     assert ValidVal(v.t[0]);
-    match valToPivots(v.t[0].a) {
+    match valToPivots(v.t[0]) {
       case None => None
       case Some(pivots) => (
         match valToChildren(v.t[1]) {
@@ -576,7 +642,7 @@ module Marshalling {
   ensures INodeOpt(s) == valToNode(v)
   {
     assert ValidVal(v.t[0]);
-    var pivotsOpt := valToPivots(v.t[0].a);
+    var pivotsOpt := ValToPivots(v.t[0]);
     if (pivotsOpt.None?) {
       return None;
     }
@@ -735,43 +801,70 @@ module Marshalling {
     return VUint64Array(a);
   }
 
-  method keySeqToVal(s: seq<Key>) returns (v : V)
-  requires |s| <= CapBucketNumEntries() as int
-  requires forall i | 0 <= i < |s| :: |s[i]| <= CapKeySize() as int
+  method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
+  requires Keyspace.IsStrictlySorted(keys)
+  requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
+  ensures SizeOfV(v) <= 8 + |keys| * (8 + CapKeySize() as int)
   ensures ValInGrammar(v, GArray(GByteArray))
-  ensures SizeOfV(v) <= 8 + (8 + CapKeySize()) as int * CapBucketNumEntries() as int
-  ensures |v.a| == |s|
-  ensures valToKeySeq(v) == Some(s)
+  ensures |v.a| == |keys|
+  ensures valToStrictlySortedKeySeq(v) == Some(keys)
   {
-    var ar := new V[|s| as uint64];
+    var ar := new V[|keys| as uint64];
     var i: uint64 := 0;
-    while i < |s| as uint64
-    invariant 0 <= i <= |s| as uint64
+    while i < |keys| as uint64
+    invariant i as int <= |keys|
     invariant ValidVal(VArray(ar[..i]))
+    invariant SizeOfV(VArray(ar[..i])) as int <= 8 + i as int * (8 + CapKeySize() as int)
     invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant valToKeySeq(VArray(ar[..i])) == Some(s[..i])
-    invariant SizeOfV(VArray(ar[..i])) <= 8 + (8 + CapKeySize()) as int * i as int
+    invariant valToStrictlySortedKeySeq(VArray(ar[..i])) == Some(keys[..i])
     {
-      ar[i] := VByteArray(s[i]);
+      ar[i] := VByteArray(keys[i]);
 
-      lemma_SeqSum_prefix(ar[..i], VByteArray(s[i]));
-      assert s[..i+1][..i] == s[..i];
+      lemma_SeqSum_prefix(ar[..i], VByteArray(keys[i]));
+      assert keys[..i+1][..i] == keys[..i];
       assert ar[..i+1][..i] == ar[..i];
       assert ar[..i+1] == ar[..i] + [ar[i]];
-      assert s[..i] + [s[i]] == s[..i+1];
+      assert keys[..i] + [keys[i]] == keys[..i+1];
 
-      assert valToKeySeq(VArray(ar[..i+1]))
-          == Some(valToKeySeq(VArray(ar[..i])).value + [s[i]])
-          == Some(s[..i] + [s[i]])
-          == Some(s[..i+1]);
+      if i > 0 {
+        Keyspace.IsStrictlySortedImpliesLt(keys, i as int - 1, i as int);
+      }
+
+      assert i > 0 ==> keys[i-1] == Last(DropLast(keys[..i as int + 1]));
+      assert keys[i] == Last(keys[..i as int + 1]);
 
       i := i + 1;
     }
     v := VArray(ar[..]);
 
     assert ar[..i] == ar[..];
-    assert s[..i] == s;
+    assert keys[..i] == keys;
+  }
+
+  lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| > 0
+  ensures |pivots[0]| != 0;
+  {
+    var e := Keyspace.SmallerElement(pivots[0]);
+    Keyspace.reveal_seq_lte();
+  }
+
+  method pivotsToVal(pivots: seq<Key>) returns (v : V)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| <= CapNumBuckets() as int - 1
+  ensures ValidVal(v)
+  ensures SizeOfV(v) <= 8 + |pivots| * (8 + CapKeySize() as int)
+  ensures ValInGrammar(v, GArray(GByteArray))
+  ensures |v.a| == |pivots|
+  ensures valToPivots(v) == Some(pivots)
+  {
+    v := strictlySortedKeySeqToVal(pivots);
+
+    if |pivots| > 0 {
+      KeyInPivotsIsNonempty(pivots);
+    }
   }
 
   method messageSeqToVal(s: seq<Message>) returns (v : V)
@@ -820,7 +913,7 @@ module Marshalling {
   ensures ValidVal(v)
   ensures valToBucket(v, pivotTable, i) == IKMTableOpt(Some(bucket))
   {
-    var keys := keySeqToVal(bucket.keys);
+    var keys := strictlySortedKeySeqToVal(bucket.keys);
     var values := messageSeqToVal(bucket.values);
     v := VTuple([keys, values]);
 
@@ -857,63 +950,6 @@ module Marshalling {
       assert valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == ISeqKMTableOpt(Some(buckets)); // observe (reduces verification time)
       return VArray(pref.a + [bucketVal]);
     }
-  }
-
-  lemma KeyInPivotsIsNonempty(pivots: seq<Key>, i: int)
-  requires Pivots.WFPivots(pivots)
-  requires 0 <= i < |pivots|
-  ensures |pivots[i]| != 0;
-  {
-    /*var e := Keyspace.SmallerElement(pivots[0]);
-    Keyspace.reveal_IsStrictlySorted();
-    assert Keyspace.lte(pivots[0], key);
-    assert Keyspace.lt(e, key);
-    Keyspace.reveal_seq_lte();
-    assert key != [];*/
-  }
-
-  method pivotsToVal(pivots: seq<Key>) returns (v : V)
-  requires Pivots.WFPivots(pivots)
-  requires |pivots| <= CapNumBuckets() as int - 1
-  ensures ValidVal(v)
-  ensures SizeOfV(v) <= 8 + |pivots| * (8 + CapKeySize() as int)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |pivots|
-  ensures valToPivots(v.a) == Some(pivots)
-  {
-    var ar := new V[|pivots| as uint64];
-    var i: uint64 := 0;
-    while i < |pivots| as uint64
-    invariant i as int <= |pivots|
-    invariant ValidVal(VArray(ar[..i]))
-    invariant SizeOfV(VArray(ar[..i])) as int <= 8 + i as int * (8 + CapKeySize() as int)
-    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant valToPivots(ar[..i]) == Some(pivots[..i])
-    {
-      ar[i] := VByteArray(pivots[i]);
-
-      lemma_SeqSum_prefix(ar[..i], VByteArray(pivots[i]));
-      assert pivots[..i+1][..i] == pivots[..i];
-      assert ar[..i+1][..i] == ar[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-      assert pivots[..i] + [pivots[i]] == pivots[..i+1];
-
-      KeyInPivotsIsNonempty(pivots, i as int);
-      assert |pivots[i]| != 0;
-
-      if i > 0 {
-        Keyspace.IsStrictlySortedImpliesLt(pivots, i as int - 1, i as int);
-      }
-
-      assert i > 0 ==> pivots[i-1] == Last(DropLast(pivots[..i as int + 1]));
-      assert pivots[i] == Last(pivots[..i as int + 1]);
-
-      i := i + 1;
-    }
-    v := VArray(ar[..]);
-
-    assert ar[..i] == ar[..];
-    assert pivots[..i] == pivots;
   }
 
   method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
