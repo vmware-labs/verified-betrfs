@@ -152,6 +152,7 @@ module ImplSync {
   ensures ImplADM.M.ValidDiskOp(io.diskOp())
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> LBAType.ValidLocation(loc.value);
+  ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
   ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, IS.ISector(sector)))
   ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
   {
@@ -1564,6 +1565,19 @@ module ImplSync {
     INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
     var id, loc := FindLocationAndRequestWrite(s, io, IS.SectorBlock(s.cache[ref]));
     if (id.Some?) {
+      assert loc.value == ImplADM.M.IDiskOp(io.diskOp()).reqWrite.loc;
+      /* (doc) assert reqWriteLoc.addr != BC.IndirectionTableLBA(); */
+
+      // TODO
+      assume old(forall r | r in IS.IIndirectionTable(s.persistentIndirectionTable).locs ::
+          IS.IIndirectionTable(s.persistentIndirectionTable).locs[r].addr != loc.value.addr);
+      assume old(forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs ::
+          IS.IIndirectionTable(s.ephemeralIndirectionTable).locs[r].addr != loc.value.addr);
+      assume old(s.frozenIndirectionTable.Some? ==> forall r | r in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs ::
+          IS.IIndirectionTable(s.frozenIndirectionTable.value).locs[r].addr != loc.value.addr);
+      assume old(forall id | id in s.outstandingBlockWrites ::
+          s.outstandingBlockWrites[id].loc.addr != loc.value.addr);
+
       AssignRefToLBA(s.ephemeralIndirectionTable, ref, loc.value);
       assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
         BC.assignRefToLocation(IS.IIndirectionTable(s.ephemeralIndirectionTable), ref, loc.value);
@@ -1572,24 +1586,8 @@ module ImplSync {
         BC.assignRefToLocation(IS.IIndirectionTable(s.frozenIndirectionTable.value), ref, loc.value);
       s' := s
         .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)]);
-      
-      ghost var reqWriteLoc := ImplADM.M.IDiskOp(io.diskOp()).reqWrite.loc;
 
-      // TODO
-      assume reqWriteLoc.addr != BC.IndirectionTableLBA();
-
-      assert BC.ValidLocationForNode(reqWriteLoc);
-
-      // TODO
-      assume old(forall r | r in IS.IIndirectionTable(s.persistentIndirectionTable).locs ::
-          IS.IIndirectionTable(s.persistentIndirectionTable).locs[r].addr != reqWriteLoc.addr);
-      assume old(forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs ::
-          IS.IIndirectionTable(s.ephemeralIndirectionTable).locs[r].addr != reqWriteLoc.addr);
-      assume old(s.frozenIndirectionTable.Some? ==> forall r | r in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs ::
-          IS.IIndirectionTable(s.frozenIndirectionTable.value).locs[r].addr != reqWriteLoc.addr);
-      assume old(forall id | id in s.outstandingBlockWrites ::
-          s.outstandingBlockWrites[id].loc.addr != reqWriteLoc.addr);
-
+      assert BC.ValidLocationForNode(ImplADM.M.IDiskOp(io.diskOp()).reqWrite.loc);
       assert BC.WriteBackReq(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
       assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.WriteBackReqStep(ref));
       return;
