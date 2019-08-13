@@ -859,32 +859,17 @@ module Marshalling {
     }
   }
 
-  lemma KeyInPivotsIsNonempty(pivots: seq<Key>, key: Key)
+  lemma KeyInPivotsIsNonempty(pivots: seq<Key>, i: int)
   requires Pivots.WFPivots(pivots)
-  requires |pivots| > 0
-  requires Last(pivots) == key
-  ensures |key| != 0;
+  requires 0 <= i < |pivots|
+  ensures |pivots[i]| != 0;
   {
-    var e := Keyspace.SmallerElement(pivots[0]);
+    /*var e := Keyspace.SmallerElement(pivots[0]);
     Keyspace.reveal_IsStrictlySorted();
     assert Keyspace.lte(pivots[0], key);
     assert Keyspace.lt(e, key);
     Keyspace.reveal_seq_lte();
-    assert key != [];
-  }
-
-  lemma lastPivotWf(pivots': seq<Key>, key: Key)
-  requires Pivots.WFPivots(pivots' + [key])
-  ensures |key| != 0
-  ensures |pivots'| > 0 ==> Keyspace.lt(Last(pivots'), key)
-  {
-    var pivots := pivots' + [key];
-    KeyInPivotsIsNonempty(pivots, key);
-    assert |key| != 0;
-    if |pivots'| > 0 {
-      Keyspace.IsStrictlySortedImpliesLt(pivots, |pivots| - 2, |pivots| - 1);
-      assert Keyspace.lt(Last(pivots'), key);
-    }
+    assert key != [];*/
   }
 
   method pivotsToVal(pivots: seq<Key>) returns (v : V)
@@ -896,24 +881,39 @@ module Marshalling {
   ensures |v.a| == |pivots|
   ensures valToPivots(v.a) == Some(pivots)
   {
-    if |pivots| == 0 {
-      return VArray([]);
-    } else {
-      var pivots' := DropLast(pivots);
-      Keyspace.StrictlySortedPop(pivots);
-      var pref := pivotsToVal(pivots');
+    var ar := new V[|pivots| as uint64];
+    var i: uint64 := 0;
+    while i < |pivots| as uint64
+    invariant i as int <= |pivots|
+    invariant ValidVal(VArray(ar[..i]))
+    invariant SizeOfV(VArray(ar[..i])) as int <= 8 + i as int * (8 + CapKeySize() as int)
+    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
+    invariant valToPivots(ar[..i]) == Some(pivots[..i])
+    {
+      ar[i] := VByteArray(pivots[i]);
 
-      var key := Last(pivots);
+      lemma_SeqSum_prefix(ar[..i], VByteArray(pivots[i]));
+      assert pivots[..i+1][..i] == pivots[..i];
+      assert ar[..i+1][..i] == ar[..i];
+      assert ar[..i+1] == ar[..i] + [ar[i]];
+      assert pivots[..i] + [pivots[i]] == pivots[..i+1];
 
-      var last := VByteArray(key);
-      assert ValidVal(last); // observe
+      KeyInPivotsIsNonempty(pivots, i as int);
+      assert |pivots[i]| != 0;
 
-      assert pivots == DropLast(pivots) + [key];
-      lastPivotWf(pivots', key);
+      if i > 0 {
+        Keyspace.IsStrictlySortedImpliesLt(pivots, i as int - 1, i as int);
+      }
 
-      lemma_SeqSum_prefix(pref.a, last);
-      return VArray(pref.a + [last]);
+      assert i > 0 ==> pivots[i-1] == Last(DropLast(pivots[..i as int + 1]));
+      assert pivots[i] == Last(pivots[..i as int + 1]);
+
+      i := i + 1;
     }
+    v := VArray(ar[..]);
+
+    assert ar[..i] == ar[..];
+    assert pivots[..i] == pivots;
   }
 
   method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
