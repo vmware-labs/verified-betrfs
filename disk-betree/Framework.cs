@@ -46,17 +46,11 @@ namespace MainDiskIOHandler_Compile {
         throw new Exception("writeSync not implemented for these arguments");
       }
 
-      byte[] fileData = new byte[BLOCK_SIZE];
-      string filename = getFilename(addr);
-      if (File.Exists(filename)) {
-        readFile(filename, fileData);
+      using (FileStream fs = new FileStream(getFilename(addr), FileMode.OpenOrCreate, FileAccess.Write))
+      {
+        //fs.Seek(0, SeekOrigin.Begin);
+        fs.Write(sector, 0, sector.Length);
       }
-
-      for (int i = 0; i < sector.Length; i++) {
-        fileData[i] = sector[i];
-      }
-
-      File.WriteAllBytes(getFilename(addr), sector);
     }
 
     public void readSync(ulong addr, ulong len, out byte[] sector) {
