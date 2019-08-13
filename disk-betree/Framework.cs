@@ -51,6 +51,7 @@ namespace MainDiskIOHandler_Compile {
       {
         //fs.Seek(0, SeekOrigin.Begin);
         fs.Write(sector, 0, sector.Length);
+        fs.Flush(true);
       }
       //Native_Compile.BenchmarkingUtil.end();
     }
