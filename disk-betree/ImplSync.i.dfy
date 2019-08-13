@@ -151,7 +151,8 @@ module ImplSync {
   modifies io
   ensures ImplADM.M.ValidDiskOp(io.diskOp())
   ensures id.Some? ==> loc.Some?
-  ensures id.Some? ==> LBAType.ValidLocation(loc.value);
+  ensures id.Some? ==> LBAType.ValidLocation(loc.value)
+  ensures id.Some? ==> BC.ValidAllocation(old(IS.IVars(s)), loc.value)
   ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
   ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, IS.ISector(sector)))
   ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
@@ -1567,16 +1568,7 @@ module ImplSync {
     if (id.Some?) {
       assert loc.value == ImplADM.M.IDiskOp(io.diskOp()).reqWrite.loc;
       /* (doc) assert reqWriteLoc.addr != BC.IndirectionTableLBA(); */
-
-      // TODO
-      assume old(forall r | r in IS.IIndirectionTable(s.persistentIndirectionTable).locs ::
-          IS.IIndirectionTable(s.persistentIndirectionTable).locs[r].addr != loc.value.addr);
-      assume old(forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs ::
-          IS.IIndirectionTable(s.ephemeralIndirectionTable).locs[r].addr != loc.value.addr);
-      assume old(s.frozenIndirectionTable.Some? ==> forall r | r in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs ::
-          IS.IIndirectionTable(s.frozenIndirectionTable.value).locs[r].addr != loc.value.addr);
-      assume old(forall id | id in s.outstandingBlockWrites ::
-          s.outstandingBlockWrites[id].loc.addr != loc.value.addr);
+      /* (doc) assert BC.ValidAllocation(old(IS.IVars(s)), loc.value); */
 
       AssignRefToLBA(s.ephemeralIndirectionTable, ref, loc.value);
       assert IS.IIndirectionTable(s.ephemeralIndirectionTable) ==
