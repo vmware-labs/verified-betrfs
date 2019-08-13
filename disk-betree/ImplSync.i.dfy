@@ -1504,13 +1504,11 @@ module ImplSync {
       }
     } else {
       var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
-      s' := s.(frozenIndirectionTable := Some(clonedEphemeralIndirectionTable))
-          .(syncReqs := BC.syncReqs3to2(s.syncReqs));
+      assert IS.IIndirectionTable(clonedEphemeralIndirectionTable) == IS.IIndirectionTable(s.ephemeralIndirectionTable); // observe
 
-      // TODO
-      assume IS.IVars(s') == old(IS.IVars(s))
-          .(frozenIndirectionTable := Some(old(IS.IVars(s)).ephemeralIndirectionTable))
-          .(syncReqs := BC.syncReqs3to2(old(IS.IVars(s)).syncReqs));
+      s' := s
+          .(frozenIndirectionTable := Some(clonedEphemeralIndirectionTable))
+          .(syncReqs := BC.syncReqs3to2(s.syncReqs));
 
       assert BC.Freeze(Ik(k), old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
       assert BBC.BlockCacheMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, ImplADM.M.IDiskOp(io.diskOp()), BC.FreezeStep);
@@ -1579,15 +1577,16 @@ module ImplSync {
 
       // TODO
       assume reqWriteLoc.addr != BC.IndirectionTableLBA();
+
       assert BC.ValidLocationForNode(reqWriteLoc);
 
       // TODO
-      assume old(forall ref | ref in IS.IIndirectionTable(s.persistentIndirectionTable).locs ::
-          IS.IIndirectionTable(s.persistentIndirectionTable).locs[ref].addr != reqWriteLoc.addr);
-      assume old(forall ref | ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs ::
-          IS.IIndirectionTable(s.ephemeralIndirectionTable).locs[ref].addr != reqWriteLoc.addr);
-      assume old(s.frozenIndirectionTable.Some? ==> forall ref | ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs ::
-          IS.IIndirectionTable(s.frozenIndirectionTable.value).locs[ref].addr != reqWriteLoc.addr);
+      assume old(forall r | r in IS.IIndirectionTable(s.persistentIndirectionTable).locs ::
+          IS.IIndirectionTable(s.persistentIndirectionTable).locs[r].addr != reqWriteLoc.addr);
+      assume old(forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs ::
+          IS.IIndirectionTable(s.ephemeralIndirectionTable).locs[r].addr != reqWriteLoc.addr);
+      assume old(s.frozenIndirectionTable.Some? ==> forall r | r in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs ::
+          IS.IIndirectionTable(s.frozenIndirectionTable.value).locs[r].addr != reqWriteLoc.addr);
       assume old(forall id | id in s.outstandingBlockWrites ::
           s.outstandingBlockWrites[id].loc.addr != reqWriteLoc.addr);
 
@@ -1613,6 +1612,7 @@ module ImplSync {
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
+  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   {
     if (s.Unready?) {
       // TODO we could just do nothing here instead

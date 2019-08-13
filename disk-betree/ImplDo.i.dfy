@@ -61,6 +61,7 @@ module ImplDo {
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
+  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
