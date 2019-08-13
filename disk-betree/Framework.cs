@@ -205,6 +205,9 @@ class Application {
     if (key.Count > (int)Lexicographic_Byte_Order_Compile.__default.MaxLen()) {
       throw new Exception("Insert: key is too long");
     }
+    if (val.Count > (int)ValueWithDefault_Compile.__default.MaxLen()) {
+      throw new Exception("Insert: value is too long");
+    }
 
     for (int i = 0; i < 50; i++) {
       bool success = __default.handleInsert(k, hs, io, key, val);

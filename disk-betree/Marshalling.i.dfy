@@ -89,13 +89,7 @@ module Marshalling {
   function method CapNumBuckets() : uint64 { 8 }
   function method CapBucketNumEntries() : uint64 { 500 }
   function method CapKeySize() : uint64 { Keyspace.MaxLen() }
-  function method CapValueSize() : uint64 { 1024 }
-
-  predicate method CappedMessage(msg: Message)
-  requires msg != M.IdentityMessage()
-  {
-    |msg.value| <= CapValueSize() as int
-  }
+  function method CapValueSize() : uint64 { ValueWithDefault.MaxLen() }
 
   function method MessageSize(msg: Message) : int
   {
@@ -106,7 +100,6 @@ module Marshalling {
   {
     && |kmt.keys| <= CapBucketNumEntries() as int
     && (forall i | 0 <= i < |kmt.keys| :: |kmt.keys[i]| <= CapKeySize() as int)
-    && (forall i | 0 <= i < |kmt.values| :: MessageSize(kmt.values[i]) <= CapValueSize() as int)
   }
 
   predicate method CappedBuckets(buckets: seq<KMTable.KMTable>)
@@ -403,16 +396,23 @@ module Marshalling {
     }
   }
 
-  function method {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : seq<Message>)
+  function method {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : Option<seq<Message>>)
   requires ValidVal(v)
   requires ValInGrammar(v, GArray(GByteArray))
-  ensures forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
-  ensures |s| == |v.a|
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i] != M.IdentityMessage()
+  ensures s.Some? ==> |s.value| == |v.a|
   decreases |v.a|
   {
-    if |v.a| == 0 then [] else (
+    if |v.a| == 0 then Some([]) else (
       assert ValInGrammar(Last(v.a), GByteArray);
-      valToMessageSeq(VArray(DropLast(v.a))) + [M.Define(Last(v.a).b)]
+      var pref := valToMessageSeq(VArray(DropLast(v.a)));
+      if pref.Some? && |Last(v.a).b| <= ValueWithDefault.MaxLen() as int then (
+        var val : ValueWithDefault.Value := Last(v.a).b;
+        var msg := M.Define(val);
+        Some(pref.value + [msg])
+      ) else (
+        None
+      )
     )
   }
 
@@ -425,8 +425,8 @@ module Marshalling {
     var keys := valToStrictlySortedKeySeq(v.t[0]);
     var values := valToMessageSeq(v.t[1]);
 
-    if keys.Some? then (
-      var kmt := KMTable.KMTable(keys.value, values);
+    if keys.Some? && values.Some? then (
+      var kmt := KMTable.KMTable(keys.value, values.value);
 
       if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) && |keys.value| < KMTable.MaxNumKeys() as int then
         Some(KMTable.I(kmt))
@@ -465,7 +465,12 @@ module Marshalling {
     }
 
     var values := valToMessageSeq(v.t[1]);
-    var kmt := KMTable.KMTable(keys.value, values);
+
+    if values.None? {
+      return None;
+    }
+
+    var kmt := KMTable.KMTable(keys.value, values.value);
 
     var wf := KMTable.IsWF(kmt);
     if !wf {
@@ -875,7 +880,7 @@ module Marshalling {
   ensures ValInGrammar(v, GArray(GByteArray))
   ensures SizeOfV(v) <= 8 + (8 + CapValueSize()) as int * CapBucketNumEntries() as int
   ensures |v.a| == |s|
-  ensures valToMessageSeq(v) == s
+  ensures valToMessageSeq(v) == Some(s)
   {
     var ar := new V[|s| as uint64];
     var i: uint64 := 0;
@@ -883,7 +888,7 @@ module Marshalling {
     invariant 0 <= i <= |s| as uint64
     invariant ValidVal(VArray(ar[..i]))
     invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant valToMessageSeq(VArray(ar[..i])) == s[..i]
+    invariant valToMessageSeq(VArray(ar[..i])) == Some(s[..i])
     invariant SizeOfV(VArray(ar[..i])) <= 8 + (8 + CapValueSize()) as int * i as int
     {
       ar[i] := VByteArray(s[i].value);
@@ -892,12 +897,14 @@ module Marshalling {
       assert s[..i+1][..i] == s[..i];
       assert ar[..i+1][..i] == ar[..i];
       assert ar[..i+1] == ar[..i] + [ar[i]];
+      assert s[..i] + [s[i]] == s[..i+1];
 
       i := i + 1;
     }
     v := VArray(ar[..]);
 
     assert ar[..i] == ar[..];
+    assert s[..i] == s;
   }
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
