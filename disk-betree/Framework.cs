@@ -46,11 +46,13 @@ namespace MainDiskIOHandler_Compile {
         throw new Exception("writeSync not implemented for these arguments");
       }
 
+      //Native_Compile.BenchmarkingUtil.start();
       using (FileStream fs = new FileStream(getFilename(addr), FileMode.OpenOrCreate, FileAccess.Write))
       {
         //fs.Seek(0, SeekOrigin.Begin);
         fs.Write(sector, 0, sector.Length);
       }
+      //Native_Compile.BenchmarkingUtil.end();
     }
 
     public void readSync(ulong addr, ulong len, out byte[] sector) {
@@ -381,12 +383,12 @@ namespace Native_Compile {
   public partial class @Arrays
   {
       public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-          // Someone who knows C# better than me can maybe do this faster
-          var els = src.Elements;
-          for (int i = 0; i < (int)len; i++) {
-            dst[(int)dstIndex + i] = els[(int)srcIndex + i];
-          }
-          //System.Array.Copy(src.Elements, (long)srcIndex, dst, (long)dstIndex, (long)len);
+          //Native_Compile.BenchmarkingUtil.start();
+
+          ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
+          System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
+
+          //Native_Compile.BenchmarkingUtil.end();
       }
 
       /*public static void @ByteSeqCmpByteSeq(
@@ -405,14 +407,14 @@ namespace Crypto_Compile {
   public partial class __default {
     public static Dafny.Sequence<byte> Sha256(Dafny.Sequence<byte> seq)
     {
-      Native_Compile.BenchmarkingUtil.start();
+      //Native_Compile.BenchmarkingUtil.start();
       using (SHA256 mySHA256 = SHA256.Create()) {
         IList<byte> ilist = seq.Elements;
         byte[] bytes = new byte[ilist.Count];
         ilist.CopyTo(bytes, 0);
 
         byte[] hash = mySHA256.ComputeHash(bytes);
-        Native_Compile.BenchmarkingUtil.end();
+        //Native_Compile.BenchmarkingUtil.end();
         return new Dafny.Sequence<byte>(hash);
       }
     }
