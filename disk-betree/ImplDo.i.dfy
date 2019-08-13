@@ -58,6 +58,9 @@ module ImplDo {
   modifies io
   ensures IS.WFVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
+  // NOALIAS statically enforced no-aliasing would probably help here
+  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
   {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;

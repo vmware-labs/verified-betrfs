@@ -100,6 +100,22 @@ module {:extern} ImplState {
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
+  predicate WFVarsReady(vars: Variables)
+  requires vars.Ready?
+  reads {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
+      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {})
+  reads VariablesReadSet(vars)
+  {
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) := vars;
+    && WFCache(cache)
+    && TTT.TTTree(rootBucket)
+    && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
+    && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
+    && (rootBucket != TTT.EmptyTree ==> BT.G.Root() in cache)
+    && persistentIndirectionTable.Inv()
+    && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
+    && ephemeralIndirectionTable.Inv()
+  }
   predicate WFVars(vars: Variables)
   reads if vars.Ready? then (
       {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
@@ -109,16 +125,7 @@ module {:extern} ImplState {
   {
     && VarsReprInv(vars)
     && match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) => (
-        && WFCache(cache)
-        && TTT.TTTree(rootBucket)
-        && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
-        && (forall key | key in TTT.I(rootBucket) :: TTT.I(rootBucket)[key] != Messages.IdentityMessage())
-        && (rootBucket != TTT.EmptyTree ==> BT.G.Root() in cache)
-        && persistentIndirectionTable.Inv()
-        && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
-        && ephemeralIndirectionTable.Inv()
-      )
+      case Ready(_, _, _, _, _, _, _, _, _) => WFVarsReady(vars)
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
