@@ -589,7 +589,8 @@ module Byte_Order refines Total_Order {
 abstract module Lexicographic_Order refines Total_Order {
   import Base_Order : Total_Order
 
-  type Bounded = s : seq<Base_Order.Element> | |s| < 0x1_0000_0000_0000_0000
+  function method MaxLen() : uint64 { 1024 }
+  type Bounded = s : seq<Base_Order.Element> | |s| <= 1024
 
   type Element = Bounded
 
@@ -664,7 +665,7 @@ abstract module Lexicographic_Order refines Total_Order {
   }
 }
 
-module Lexicographic_Byte_Order refines Lexicographic_Order {
+module {:extern} Lexicographic_Byte_Order refines Lexicographic_Order {
   import Base_Order = Byte_Order
 
   method cmp(a: Element, b: Element) returns (c: int32)

@@ -208,6 +208,10 @@ class Application {
   }
 
   public void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
+    if (key.Count > (int)Lexicographic_Byte_Order_Compile.__default.MaxLen()) {
+      throw new Exception("Insert: key is too long");
+    }
+
     for (int i = 0; i < 50; i++) {
       bool success = __default.handleInsert(k, hs, io, key, val);
       this.maybeDoResponse();
@@ -245,6 +249,10 @@ class Application {
 
   public IList<byte> Query(Dafny.Sequence<byte> key) {
     if (verbose) log("Query \"" + key + "\"");
+
+    if (key.Count > (int)Lexicographic_Byte_Order_Compile.__default.MaxLen()) {
+      throw new Exception("Query: key is too long");
+    }
 
     for (int i = 0; i < 50; i++) {
       var result = __default.handleQuery(k, hs, io, key);

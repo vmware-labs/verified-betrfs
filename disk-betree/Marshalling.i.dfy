@@ -88,22 +88,13 @@ module Marshalling {
   // will fit on a disk block).
   function method CapNumBuckets() : uint64 { 8 }
   function method CapBucketNumEntries() : uint64 { 500 }
-  function method CapKeySize() : uint64 { 1024 }
+  function method CapKeySize() : uint64 { Keyspace.MaxLen() }
   function method CapValueSize() : uint64 { 1024 }
-
-  predicate method CappedKey(key: Key) {
-    |key| <= CapKeySize() as int
-  }
 
   predicate method CappedMessage(msg: Message)
   requires msg != M.IdentityMessage()
   {
     |msg.value| <= CapValueSize() as int
-  }
-
-  predicate method CappedPivotTable(pivots: seq<Key>)
-  {
-    forall i | 0 <= i < |pivots| :: CappedKey(pivots[i])
   }
 
   function method MessageSize(msg: Message) : int
@@ -127,7 +118,6 @@ module Marshalling {
   requires ImplState.WFNode(node)
   {
     && |node.buckets| <= CapNumBuckets() as int
-    && CappedPivotTable(node.pivotTable)
     && CappedBuckets(node.buckets)
   }
 
@@ -296,16 +286,26 @@ module Marshalling {
     v.ua
   }
 
-  function method valToKeySeq(v: V) : (s : seq<Key>)
+  function method valToKeySeq(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
   requires ValInGrammar(v, GArray(GByteArray))
-  ensures |s| == |v.a|
+  ensures s.Some? ==> |s.value| == |v.a|
   decreases |v.a|
   {
-    if |v.a| == 0 then [] else (
+    if |v.a| == 0 then Some([]) else (
       assert ValInGrammar(Last(v.a), GByteArray);
       assert ValidVal(Last(v.a));
-      valToKeySeq(VArray(DropLast(v.a))) + [Last(v.a).b]
+      if |Last(v.a).b| <= Keyspace.MaxLen() as int then (
+        var pref : Option<seq<Key>> := valToKeySeq(VArray(DropLast(v.a)));
+        if pref.Some? then (
+          var l : Key := Last(v.a).b;
+          Some(pref.value + [l])
+        ) else (
+          None
+        )
+      ) else (
+        None
+      )
     )
   }
 
@@ -331,12 +331,16 @@ module Marshalling {
     var keys := valToKeySeq(v.t[0]);
     var values := valToMessageSeq(v.t[1]);
 
-    var kmt := KMTable.KMTable(keys, values);
+    if keys.Some? then (
+      var kmt := KMTable.KMTable(keys.value, values);
 
-    if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) && |keys| < KMTable.MaxNumKeys() as int then
-      Some(KMTable.I(kmt))
-    else
+      if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) && |keys.value| < KMTable.MaxNumKeys() as int then
+        Some(KMTable.I(kmt))
+      else
+        None
+    ) else (
       None
+    )
   }
 
   function IKMTableOpt(table : Option<KMTable.KMTable>): Option<map<Key, Message>>
@@ -361,8 +365,13 @@ module Marshalling {
     }
 
     var keys := valToKeySeq(v.t[0]);
+
+    if keys.None? {
+      return None;
+    }
+
     var values := valToMessageSeq(v.t[1]);
-    var kmt := KMTable.KMTable(keys, values);
+    var kmt := KMTable.KMTable(keys.value, values);
 
     var wf := KMTable.IsWF(kmt);
     if !wf {
@@ -405,13 +414,6 @@ module Marshalling {
     s := Some(kmt);
   }
 
-  function method valToKey(v: V) : Key
-  requires ValInGrammar(v, GByteArray)
-  requires ValidVal(v)
-  {
-    v.b
-  }
-
   function method valToPivots(a: seq<V>) : Option<seq<Key>>
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GByteArray)
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
@@ -423,14 +425,16 @@ module Marshalling {
       match valToPivots(DropLast(a)) {
         case None => None
         case Some(pref) => (
-          var key := valToKey(Last(a));
+          var key := Last(a).b;
 
-          if (|key| != 0 && (|pref| > 0 ==> Keyspace.lt(Last(pref), key))) then (
+          if (|key| != 0 && |key| <= Keyspace.MaxLen() as int && (|pref| > 0 ==> Keyspace.lt(Last(pref), key))) then (
             Keyspace.reveal_seq_lte();
             Keyspace.IsNotMinimum([], key);
             Keyspace.StrictlySortedAugment(pref, key);
 
-            Some(pref + [key])
+            var k : Key := key;
+
+            Some(pref + [k])
           ) else (
             None
           )
@@ -738,7 +742,7 @@ module Marshalling {
   ensures ValInGrammar(v, GArray(GByteArray))
   ensures SizeOfV(v) <= 8 + (8 + CapKeySize()) as int * CapBucketNumEntries() as int
   ensures |v.a| == |s|
-  ensures valToKeySeq(v) == s
+  ensures valToKeySeq(v) == Some(s)
   {
     var ar := new V[|s| as uint64];
     var i: uint64 := 0;
@@ -746,7 +750,7 @@ module Marshalling {
     invariant 0 <= i <= |s| as uint64
     invariant ValidVal(VArray(ar[..i]))
     invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant valToKeySeq(VArray(ar[..i])) == s[..i]
+    invariant valToKeySeq(VArray(ar[..i])) == Some(s[..i])
     invariant SizeOfV(VArray(ar[..i])) <= 8 + (8 + CapKeySize()) as int * i as int
     {
       ar[i] := VByteArray(s[i]);
@@ -755,12 +759,19 @@ module Marshalling {
       assert s[..i+1][..i] == s[..i];
       assert ar[..i+1][..i] == ar[..i];
       assert ar[..i+1] == ar[..i] + [ar[i]];
+      assert s[..i] + [s[i]] == s[..i+1];
+
+      assert valToKeySeq(VArray(ar[..i+1]))
+          == Some(valToKeySeq(VArray(ar[..i])).value + [s[i]])
+          == Some(s[..i] + [s[i]])
+          == Some(s[..i+1]);
 
       i := i + 1;
     }
     v := VArray(ar[..]);
 
     assert ar[..i] == ar[..];
+    assert s[..i] == s;
   }
 
   method messageSeqToVal(s: seq<Message>) returns (v : V)
@@ -878,7 +889,6 @@ module Marshalling {
 
   method pivotsToVal(pivots: seq<Key>) returns (v : V)
   requires Pivots.WFPivots(pivots)
-  requires CappedPivotTable(pivots)
   requires |pivots| <= CapNumBuckets() as int - 1
   ensures ValidVal(v)
   ensures SizeOfV(v) <= 8 + |pivots| * (8 + CapKeySize() as int)
