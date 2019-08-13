@@ -1008,8 +1008,6 @@ module ImplSync {
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
-    assume false; // timing out
-
     if s.frozenIndirectionTable.Some? {
       var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
       if lbaGraph.Some? {
@@ -1079,6 +1077,7 @@ module ImplSync {
       print "giving up; could not get ref\n";
       return;
     }
+    ghost var s1Interpreted := IS.IVars(s1);
 
     var newparent := IS.Node(
         node.pivotTable,
@@ -1106,7 +1105,7 @@ module ImplSync {
     assert BT.ValidFlush(flushStep);
     ghost var step := BT.BetreeFlush(flushStep);
     assert IS.INode(newparent) == BT.FlushOps(flushStep)[1].node;
-    BC.MakeTransaction2(k, old(IS.IVars(s)), IS.IVars(s1), IS.IVars(s'), BT.BetreeStepOps(step));
+    BC.MakeTransaction2(k, old(IS.IVars(s)), s1Interpreted, IS.IVars(s'), BT.BetreeStepOps(step));
     assert stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, step);
   }
 
@@ -1125,8 +1124,6 @@ module ImplSync {
   ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   modifies s.ephemeralIndirectionTable.Repr
   {
-    assume false; // timing out
-
     if (ref !in s.cache) {
       s' := PageInReq(k, s, io, ref);
       return;
@@ -1190,6 +1187,8 @@ module ImplSync {
 
         var buckets' := KMTable.SplitOnPivots(joined, pivots);
         var newnode := IS.Node(pivots, None, buckets');
+
+        KMTable.WFImpliesWFBucket(joined);
 
         WFSplitBucketOnPivots(KMTable.I(joined), pivots);
         s' := write(k, s, ref, newnode);

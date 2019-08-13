@@ -80,6 +80,22 @@ module KMTable {
     assume false;
   }
 
+  lemma WFImpliesWFBucket(kmt: KMTable)
+  requires WF(kmt)
+  ensures WFBucket(I(kmt))
+  decreases |kmt.keys|
+  {
+    reveal_I();
+    reveal_WFBucket();
+    if |kmt.keys| == 0 {
+    } else {
+      ghost var km' := KMTable(DropLast(kmt.keys), DropLast(kmt.values));
+      WFPrefix(kmt, |kmt.keys| - 1);
+      assert WF(km');
+      WFImpliesWFBucket(km');
+    }
+  }
+
   /////////////////////////
   //// Flush
   /////////////////////////
