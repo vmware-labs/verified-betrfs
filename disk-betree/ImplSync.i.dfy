@@ -1386,33 +1386,44 @@ module ImplSync {
   method FindRefNotPointingToRefInEphemeral(s: ImplVariables, ref: IS.Reference) returns (result: IS.Reference)
   requires IS.WFVars(s)
   requires s.Ready?
-  requires exists r :: !(r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==>
-      ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[r])
-  ensures !(result in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==>
-      ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[result])
+  requires exists r :: r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph && 
+      ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[r]
+  ensures result in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph && 
+      ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[result]
   {
-    assume s.ephemeralIndirectionTable.Inv();
+    assert s.ephemeralIndirectionTable.Inv();
     var ephemeralTable := s.ephemeralIndirectionTable.ToMap();
-    var ephemeralRefs := SetToSeq(set k | k in ephemeralTable);
+
+    var ephemeralRefs := SetToSeq(ephemeralTable.Keys);
+    assert forall k | k in ephemeralRefs :: k in ephemeralTable; // TODO
+
+    assert forall k | k in ephemeralRefs :: k in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph; // TODO
+
+    // TODO how do we deal with this?
     assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
+
     var i: uint64 := 0;
-    while i as int < |ephemeralRefs|
-    invariant i as int <= |ephemeralRefs|
+    while i as nat < |ephemeralRefs|
+    invariant i as nat <= |ephemeralRefs|
+    invariant forall k : nat | k < i as nat :: (
+        || ephemeralRefs[k] !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
+        || ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[ephemeralRefs[k]])
     {
       var eRef := ephemeralRefs[i];
-      assume eRef in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph;
+      assert eRef in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph;
+
       var lbaGraph := s.ephemeralIndirectionTable.Get(eRef);
       assert lbaGraph.Some?;
+
       var (_, graph) := lbaGraph.value;
       if ref in graph {
-        assume !(eRef in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph ==>
-            result in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph &&
-            ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[result]); // TODO check this assume
+        assert eRef in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph && 
+            ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[eRef];
         return eRef;
       }
+
       i := i + 1;
     }
-    assume false;
     assert false;
   }
 
