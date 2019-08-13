@@ -420,13 +420,10 @@ namespace Crypto_Compile {
     public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
     {
       using (var crc32 = DamienG.Security.Cryptography.Crc32.Create()) {
-        IList<byte> ilist = seq.Elements;
-        byte[] bytes = new byte[ilist.Count];
-
-        ilist.CopyTo(bytes, 0);
+        ArraySegment<byte> seg = (ArraySegment<byte>) seq.Elements;
 
         //Native_Compile.BenchmarkingUtil.start();
-        byte[] hash = crc32.ComputeHash(bytes);
+        byte[] hash = crc32.ComputeHash(seg.Array, seg.Offset, seg.Count);
         //Native_Compile.BenchmarkingUtil.end();
 
 				// Pad to 32 bytes
