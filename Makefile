@@ -6,7 +6,7 @@ include $(ROOT)/tools/Makefile.template
 BUNDLE_SOURCE=build/Bundle.cs
 $(BUNDLE_SOURCE): $(shell find . -name '*.dfy')
 	mkdir -p build
-	dafny disk-betree/Bundle.i.dfy /spillTargetCode:3 /noVerify /compile:0 /out:build/Bundle.cs /countVerificationErrors:0
+	$(DAFNY_CMD) disk-betree/Bundle.i.dfy /spillTargetCode:3 /noVerify /compile:0 /out:build/Bundle.cs /countVerificationErrors:0
 
 FRAMEWORK_SOURCES=disk-betree/Framework.cs disk-betree/Benchmarks.cs disk-betree/Crc32.cs
 build/Veribetrfs.exe: $(FRAMEWORK_SOURCES) $(BUNDLE_SOURCE)

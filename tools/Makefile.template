@@ -1,5 +1,6 @@
 TOOLS=$(dir $(abspath $(filter %/Makefile.template,$(MAKEFILE_LIST))))
 ROOT=$(abspath $(TOOLS)/..)/
+DAFNY_CMD="dafny"
 
 BUILD_DIR=$(ROOT)build
 export ROOT
@@ -55,9 +56,9 @@ include $(TARGET_DEPS)
 TIME=time
 
 $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
-	$(TIME) dafny /compile:0 $(NOVERIFY) $<
+	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
 	touch $@
 
 $(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy | $$(@D)/.
-	$(TIME) dafny /compile:0 $(NOVERIFY) $<
+	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
 	touch $@
