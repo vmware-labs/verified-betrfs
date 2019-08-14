@@ -25,13 +25,12 @@ abstract class Benchmark {
   abstract protected void Prepare(Application app);
   abstract protected void Go(Application app);
 
-  protected List<byte[]> RandomKeys(int n, int seed) {
+  protected List<byte[]> RandomSeqs(int n, int seed, int len) {
     Random rand = new Random(seed);
 
     List<byte[]> l = new List<byte[]>();
     for (int i = 0; i < n; i++) {
-      int sz = rand.Next(1, 1024 + 1);
-      byte[] bytes = new byte[sz];
+      byte[] bytes = new byte[len];
       rand.NextBytes(bytes);
       l.Add(bytes);
     }
@@ -39,8 +38,12 @@ abstract class Benchmark {
     return l;
   }
 
+  protected List<byte[]> RandomKeys(int n, int seed) {
+    return RandomSeqs(n, seed, 20);
+  }
+
   protected List<byte[]> RandomValues(int n, int seed) {
-    return RandomKeys(n, seed);
+    return RandomSeqs(n, seed, 400);
   }
 
   protected List<byte[]> RandomSortedKeys(int n, int seed) {
@@ -79,8 +82,7 @@ abstract class Benchmark {
     for (int i = 0; i < n; i++) {
       if (rand.Next(0, 2) == 0) {
         // Min length 20 so probability of collision is miniscule
-        int sz = rand.Next(20, 1024 + 1);
-        byte[] bytes = new byte[sz];
+        byte[] bytes = new byte[20];
         rand.NextBytes(bytes);
         queryKeys.Add(bytes);
         queryValues.Add(emptyBytes);
@@ -102,8 +104,8 @@ class BenchmarkRandomInserts : Benchmark {
   public BenchmarkRandomInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomKeys(20000, seed1);
-    values = RandomValues(20000, seed2);
+    keys = RandomKeys(100000, seed1);
+    values = RandomValues(100000, seed2);
   }
 
   override protected void Prepare(Application app) {
