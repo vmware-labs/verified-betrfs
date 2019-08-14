@@ -8,3 +8,5 @@
 *.output
 .build_info
 /build/
+
+/.veribetrfs-storage/
