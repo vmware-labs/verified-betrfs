@@ -14,3 +14,5 @@ build/Veribetrfs.exe: $(FRAMEWORK_SOURCES) $(BUNDLE_SOURCE)
 
 build/roslyn-veribetrfs.exe: $(FRAMEWORK_SOURCES) $(BUNDLE_SOURCE)
 	./tools/roslyn-csc.sh $(BUNDLE_SOURCE) $(FRAMEWORK_SOURCES) /optimize /nowarn:CS0162 /nowarn:CS0164 /t:exe /out:build/roslyn-veribetrfs.exe
+	./tools/roslyn-write-runtimeconfig.sh > build/roslyn-veribetrfs.runtimeconfig.json
+
