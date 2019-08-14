@@ -69,7 +69,11 @@ module KMTable {
   ensures 0 <= i < |kmt.keys|
   ensures kmt.keys[i] == key
   {
-    assume false;
+    reveal_I();
+    if key == Last(kmt.keys) {
+    } else {
+      i := IndexOfKey(KMTable(DropLast(kmt.keys), DropLast(kmt.values)), key);
+    }
   }
 
   lemma Imaps(kmt: KMTable, i: int)
@@ -77,7 +81,13 @@ module KMTable {
   requires 0 <= i < |kmt.keys|
   ensures MapsTo(I(kmt), kmt.keys[i], kmt.values[i])
   {
-    assume false;
+    reveal_I();
+    if (i == |kmt.keys| - 1) {
+    } else {
+      Imaps(KMTable(DropLast(kmt.keys), DropLast(kmt.values)));
+      Keyspace.reveal_IsStrictlySorted();
+      assert kmt.keys[|kmt.keys| - 1] != kmt.keys[i];
+    }
   }
 
   lemma WFImpliesWFBucket(kmt: KMTable)
@@ -804,8 +814,12 @@ module KMTable {
   lemma LenSumPrefixLe(kmts: seq<KMTable>, i: int)
   requires 0 <= i <= |kmts|
   ensures LenSum(kmts, i) <= LenSum(kmts, |kmts|)
+
+  decreases |kmts| - i
   {
-    assume false;
+    if (i < |kmts|) {
+      LenSumPrefixLe(kmts, i+1);
+    }
   }
 
   lemma joinEqJoinBucketList(kmts: seq<KMTable>, pivots: seq<Key>)
