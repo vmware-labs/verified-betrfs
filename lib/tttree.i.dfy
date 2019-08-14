@@ -287,19 +287,17 @@ module TwoThreeTree {
         ensures ValidInsertionResult(result, tree, key, value);
     {
       reveal_TreeIsOrdered();
-      if tree.key == key {
-          result := DidntSplit(Leaf(key, value));
+      var c := Keyspace.cmp(tree.key, key);
+      if c == 0 {
+        result := DidntSplit(Leaf(key, value));
+      } else if c < 0 {
+        var newright := Leaf(key, value);
+        var newtree := mkTwoNode(tree, key, newright);
+        result := Split(newtree);
       } else {
-        var c := Keyspace.cmp(tree.key, key);
-        if c < 0 {
-          var newright := Leaf(key, value);
-          var newtree := mkTwoNode(tree, key, newright);
-          result := Split(newtree);
-        } else {
-          var newleft := Leaf(key, value);
-          var newtree := mkTwoNode(newleft, tree.key, tree);
-          result := Split(newtree);
-        }
+        var newleft := Leaf(key, value);
+        var newtree := mkTwoNode(newleft, tree.key, tree);
+        result := Split(newtree);
       }
     }
 

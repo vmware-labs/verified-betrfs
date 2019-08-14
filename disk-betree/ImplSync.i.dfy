@@ -17,6 +17,7 @@ module ImplSync {
   import opened BucketsLib
 
   import opened NativeTypes
+  import Native
 
   method getFreeRef(s: ImplVariables)
   returns (ref : Option<BT.G.Reference>)
@@ -1370,8 +1371,13 @@ module ImplSync {
         && (ephemeralRefs[k] !in s.cache || Marshalling.CappedNode(s.cache[ephemeralRefs[k]])))
     {
       var ref := ephemeralRefs[i];
-      if ref in s.cache && !Marshalling.CappedNode(s.cache[ref]) {
-        return Some(ref);
+      if ref in s.cache {
+        Native.BenchmarkingUtil.start();
+        var capped := Marshalling.CappedNode(s.cache[ref]);
+        Native.BenchmarkingUtil.end();
+        if !capped {
+          return Some(ref);
+        }
       }
       i := i + 1;
     }
@@ -1541,7 +1547,10 @@ module ImplSync {
     assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if (!Marshalling.CappedNode(s.cache[ref])) {
+    Native.BenchmarkingUtil.start();
+    var capped := Marshalling.CappedNode(s.cache[ref]);
+    Native.BenchmarkingUtil.end();
+    if (!capped) {
       // TODO we should be able to prove this is impossible by adding an invariant
       // about frozenIndirectionTable (that is, we should never be freezing a table
       // with too-big nodes in it)
