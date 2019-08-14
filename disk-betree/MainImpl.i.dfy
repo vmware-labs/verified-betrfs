@@ -6,6 +6,7 @@ include "Marshalling.i.dfy"
 
 include "Impl.i.dfy"
 include "ImplDo.i.dfy"
+include "ImplQuery.i.dfy"
 
 module {:extern} MainImpl refines Main { 
 
@@ -13,6 +14,7 @@ module {:extern} MainImpl refines Main {
   import opened ImplDo
   import opened ImplIO
   import opened ImplSync
+  import opened ImplQuery
 
   //  ---   dep graph   ---
   //
