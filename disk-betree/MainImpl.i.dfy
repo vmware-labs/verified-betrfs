@@ -12,6 +12,7 @@ module {:extern} MainImpl refines Main {
   import opened Impl
   import opened ImplDo
   import opened ImplIO
+  import opened ImplSync
 
   //  ---   dep graph   ---
   //

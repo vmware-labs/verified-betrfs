@@ -22,58 +22,6 @@ module ImplDo {
 
   import opened PBS = PivotBetreeSpec`Spec
 
-  // == pushSync ==
-
-  method freeId<A>(syncReqs: map<int, A>) returns (id: int)
-  ensures id !in syncReqs
-  {
-    var s := syncReqs.Keys;
-    if (|s| == 0) {
-      id := 0;
-    } else {
-      var maxId := maximumInt(syncReqs.Keys);
-      id := maxId + 1;
-    }
-  }
-
-  method pushSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables, id: int)
-  requires io.initialized()
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.PushSyncOp(id), io.diskOp())
-  {
-    id := freeId(s.syncReqs);
-    s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
-    assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.PushSyncOp(id), io, BC.PushSyncReqStep(id));
-  }
-
-  // == popSync ==
-
-  method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
-  returns (s': ImplVariables, success: bool)
-  requires io.initialized()
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
-  {
-    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
-      success := true;
-      s' := s.(syncReqs := MapRemove1(s.syncReqs, id));
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.PopSyncOp(id), io, BC.PopSyncReqStep(id));
-    } else {
-      success := false;
-      s' := sync(k, s, io);
-    }
-  }
-
   // == query ==
 
   method TryRootBucketLookup(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
