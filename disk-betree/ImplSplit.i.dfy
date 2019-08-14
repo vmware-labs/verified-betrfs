@@ -128,8 +128,10 @@ module ImplSplit {
     Pivots.WFSuffix(child.pivotTable, num_children_left);
     KMTable.Islice(child.buckets, 0, num_children_left);
     KMTable.Isuffix(child.buckets, num_children_left);
-    assume IS.WFNode(SplitChildRight(child, num_children_left));
-    assume IS.WFNode(SplitChildLeft(child, num_children_left));
+    WFBucketListSplitLeft(KMTable.ISeq(child.buckets), child.pivotTable, num_children_left);
+    WFBucketListSplitRight(KMTable.ISeq(child.buckets), child.pivotTable, num_children_left);
+    assert IS.WFNode(SplitChildRight(child, num_children_left));
+    assert IS.WFNode(SplitChildLeft(child, num_children_left));
   }
 
   // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
