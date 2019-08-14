@@ -43,6 +43,10 @@ namespace DamienG.Security.Cryptography
             this.seed = hash = seed;
         }
 
+        public static new HashAlgorithm Create() {
+            return new Crc32();
+        }
+
         public override void Initialize()
         {
             hash = seed;
