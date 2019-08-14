@@ -20,7 +20,7 @@ abstract class Benchmark {
     int opCount = OpCount(app);
     sw.Stop();
 
-    Console.WriteLine("Benchmark " + Name + ": " + (opCount / (sw.ElapsedMilliseconds / 1000)).ToString() + " ops/s" + ", " + sw.ElapsedMilliseconds.ToString() + " ms" + ", " + opCount.ToString() + " ops");
+    Console.WriteLine("Benchmark " + Name + ": " + (((double) opCount) / (((double) sw.ElapsedMilliseconds) / 1000)).ToString() + " ops/s" + ", " + sw.ElapsedMilliseconds.ToString() + " ms" + ", " + opCount.ToString() + " ops");
   }
 
   abstract protected void Prepare(Application app);

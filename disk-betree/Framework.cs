@@ -422,6 +422,21 @@ namespace Crypto_Compile {
 
     public static Dafny.Sequence<byte> padded_crc32(byte[] ar, int start, int len)
     {
+      // fake hash
+      //
+      // uint hash = (uint) 242409458;
+      // for (int i = start; i < (len + start); i += 8)
+      //   hash += ar[i];
+      // byte[] byteHash = System.BitConverter.GetBytes(hash);
+	  // // Pad to 32 bytes
+	  // byte[] padded = new byte[32];
+	  // padded[0] = byteHash[0];
+	  // padded[1] = byteHash[1];
+	  // padded[2] = byteHash[2];
+	  // padded[3] = byteHash[3];
+	  // for (int i = 4; i < 32; i++) padded[i] = 0;
+      // return new Dafny.Sequence<byte>(padded);
+
       using (var crc32 = DamienG.Security.Cryptography.Crc32.Create()) {
         byte[] hash = crc32.ComputeHash(ar, start, len);
 
