@@ -19,6 +19,7 @@ module ImplQuery {
   import opened Sequences
 
   import opened BucketsLib
+  import PivotsLib
 
   import opened PBS = PivotBetreeSpec`Spec
 
@@ -103,12 +104,12 @@ module ImplQuery {
   requires IS.WFNode(node)
   requires TTT.TTTree(rootBucket)
   requires key !in TTT.I(rootBucket)
-  requires BT.WFNode(IS.INode(node)) || BT.WFNode(IS.INodeRoot(node, rootBucket))
-  ensures BT.WFNode(IS.INode(node))
+  requires BT.WFNode(IS.INode(node))
   ensures BT.WFNode(IS.INodeRoot(node, rootBucket))
   ensures BT.NodeLookup(IS.INode(node), key) == BT.NodeLookup(IS.INodeRoot(node, rootBucket), key)
   {
-    assume false;
+    WFBucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable);
+    GetBucketListFlushEqMerge(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable, key);
   }
 
   method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
