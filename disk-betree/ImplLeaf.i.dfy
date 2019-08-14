@@ -61,7 +61,7 @@ module ImplLeaf {
   requires node.children.None?
   requires 0 <= slot < |s.cache[ref].buckets|
   requires io.initialized()
-  requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this unless we're flushing the root
+  requires ref != BT.G.Root()
   requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
       ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs
   modifies io
@@ -81,6 +81,8 @@ module ImplLeaf {
       print "giving up; stuff too big to call Join\n";
       return;
     }
+
+    //assert MapsTo(IS.IVars(s).cache, ref, IS.INode(node));
 
     forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in KMTable.I(node.buckets[i]) && key2 in KMTable.I(node.buckets[j])
     ensures MS.Keyspace.lt(key1, key2)
@@ -116,6 +118,8 @@ module ImplLeaf {
     assert |BT.BetreeStepOps(step)| == 1; // TODO
     assert BC.OpStep(k, old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(step)[0]);
     BC.MakeTransaction1(k, old(IS.IVars(s)), IS.IVars(s'), BT.BetreeStepOps(step));
-    assume stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, step);
+    //assert BC.ReadStep(k, old(IS.IVars(s)), BT.BetreeStepReads(step)[0]);
+    //assert BBC.BetreeMove(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, SD.NoDiskOp, step);
+    assert stepsBetree(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, step);
   }
 }

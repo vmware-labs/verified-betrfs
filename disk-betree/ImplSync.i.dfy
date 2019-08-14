@@ -42,6 +42,7 @@ module ImplSync {
   requires parentref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[parentref]
   requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this I think
+  requires ref != BT.G.Root()
   requires io.initialized()
   modifies io
   ensures IS.WFVars(s')
@@ -64,7 +65,7 @@ module ImplSync {
           assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
           assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
-          print "giving up; fixBigRoot can't run because frozen isn't written";
+          print "giving up; fixBigNode can't run because frozen isn't written";
           return;
         }
       }
@@ -235,7 +236,8 @@ module ImplSync {
     assert false;
   }
 
-  method {:fuel BC.GraphClosed,0} syncNotFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method {:fuel BC.GraphClosed,0} {:fueld BC.CacheConsistentWithSuccessors,0}
+  syncNotFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires io.initialized()
   modifies io
