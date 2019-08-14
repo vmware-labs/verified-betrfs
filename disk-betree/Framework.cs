@@ -420,36 +420,26 @@ namespace Crypto_Compile {
       }
     }
 
-    public static Dafny.Sequence<byte> padded_crc32(byte[] ar, int start, int len)
+    private static readonly Force.Crc32.Crc32Algo _crc32algo = new Force.Crc32.Crc32Algo();
+
+    public static Dafny.Sequence<byte> padded_crc32(byte[] ar, int offset, int length)
     {
-      // fake hash
-      //
-      // uint hash = (uint) 242409458;
-      // for (int i = start; i < (len + start); i += 8)
-      //   hash += ar[i];
-      // byte[] byteHash = System.BitConverter.GetBytes(hash);
-	  // // Pad to 32 bytes
-	  // byte[] padded = new byte[32];
-	  // padded[0] = byteHash[0];
-	  // padded[1] = byteHash[1];
-	  // padded[2] = byteHash[2];
-	  // padded[3] = byteHash[3];
-	  // for (int i = 4; i < 32; i++) padded[i] = 0;
-      // return new Dafny.Sequence<byte>(padded);
+      uint currentCrc = 0;
 
-      using (var crc32 = DamienG.Security.Cryptography.Crc32.Create()) {
-        byte[] hash = crc32.ComputeHash(ar, start, len);
-
-				// Pad to 32 bytes
-				byte[] padded = new byte[32];
-				padded[0] = hash[0];
-				padded[1] = hash[1];
-				padded[2] = hash[2];
-				padded[3] = hash[3];
-				for (int i = 4; i < 32; i++) padded[i] = 0;
-
-        return new Dafny.Sequence<byte>(padded);
+      if (length > 0) {
+          _crc32algo.Append(currentCrc, ar, offset, length);
       }
+
+      byte[] hash = System.BitConverter.GetBytes(currentCrc);
+      // Pad to 32 bytes
+      byte[] padded = new byte[32];
+      padded[0] = hash[0];
+      padded[1] = hash[1];
+      padded[2] = hash[2];
+      padded[3] = hash[3];
+      for (int i = 4; i < 32; i++) padded[i] = 0;
+
+      return new Dafny.Sequence<byte>(padded);
     }
 
     public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
