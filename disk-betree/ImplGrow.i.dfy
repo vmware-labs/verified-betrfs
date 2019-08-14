@@ -11,8 +11,6 @@ module ImplGrow {
   import opened Sequences
   import opened Sets
 
-  import opened BucketsLib
-
   import opened NativeTypes
 
   /// The root was found to be too big: grow
