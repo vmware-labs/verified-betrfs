@@ -1,4 +1,5 @@
 include "Impl.i.dfy"
+include "ImplIO.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -7,6 +8,7 @@ include "../lib/Sets.i.dfy"
 
 module ImplSync { 
   import opened Impl
+  import opened ImplIO
 
   import opened Options
   import opened MainDiskIOHandler
@@ -32,48 +34,6 @@ module ImplSync {
       ref := Some(r);
     } else {
       ref := None;
-    }
-  }
-
-  method getFreeLba(s: ImplVariables, len: uint64)
-  returns (loc : Option<BC.Location>)
-  requires s.Ready?
-  requires IS.WFVars(s)
-  requires len <= LBAType.BlockSize()
-  ensures loc.Some? ==> BC.ValidLocationForNode(loc.value)
-  ensures loc.Some? ==> BC.ValidAllocation(IS.IVars(s), loc.value)
-  ensures loc.Some? ==> loc.value.len == len
-  {
-    var persistent': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
-    var persistent: map<uint64, BC.Location> := map ref | ref in persistent' && persistent'[ref].0.Some? :: persistent'[ref].0.value;
-
-    var ephemeral': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
-    var ephemeral := map ref | ref in ephemeral' && ephemeral'[ref].0.Some? :: ephemeral'[ref].0.value;
-
-    var frozen: Option<map<uint64, BC.Location>> := None;
-    if (s.frozenIndirectionTable.Some?) {
-      var m := s.frozenIndirectionTable.value.ToMap();
-      var frozen' := m;
-      frozen := Some(map ref | ref in frozen' && frozen'[ref].0.Some? :: frozen'[ref].0.value);
-    }
-
-    if i: uint64 :| (
-      && i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
-      && var l := i * LBAType.BlockSize();
-      && BC.ValidLBAForNode(l)
-      && (forall ref | ref in persistent :: persistent[ref].addr != l)
-      && (forall ref | ref in ephemeral :: ephemeral[ref].addr != l)
-      && (frozen.Some? ==> (forall ref | ref in frozen.value :: frozen.value[ref].addr != l))
-      && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != l)
-    ) {
-      loc := Some(LBAType.Location(i * LBAType.BlockSize(), len));
-
-      assert IS.IVars(s).persistentIndirectionTable.locs == persistent;
-      assert IS.IVars(s).ephemeralIndirectionTable.locs == ephemeral;
-      assert IS.IVars(s).frozenIndirectionTable.Some? ==>
-          IS.IVars(s).frozenIndirectionTable.value.locs == frozen.value;
-    } else {
-      loc := None;
     }
   }
 
@@ -109,74 +69,6 @@ module ImplSync {
 
     s' := s.(cache := s.cache[ref := node]);
     assert BC.Dirty(k, old(IS.IVars(s)), IS.IVars(s'), ref, IS.INode(node));
-  }
-
-  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
-  returns (id: Option<D.ReqId>)
-  requires IS.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
-  requires io.initialized()
-  requires LBAType.ValidLocation(loc)
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc, IS.ISector(sector)))
-  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
-  {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
-
-    var bytes := Marshalling.MarshallCheckedSector(sector);
-    if (bytes == null || bytes.Length as uint64 != loc.len) {
-      id := None;
-    } else {
-      var i := io.write(loc.addr, bytes);
-      id := Some(i);
-
-      //assert ImplADM.M.ValidReqWrite(io.diskOp().reqWrite);
-    }
-  }
-
-  method FindLocationAndRequestWrite(s: ImplVariables, io: DiskIOHandler, sector: IS.Sector)
-  returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
-  requires IS.WFVars(s)
-  requires s.Ready?
-  requires IS.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
-  requires io.initialized()
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> loc.Some?
-  ensures id.Some? ==> LBAType.ValidLocation(loc.value)
-  ensures id.Some? ==> BC.ValidAllocation(old(IS.IVars(s)), loc.value)
-  ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, IS.ISector(sector)))
-  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
-  {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
-
-    var bytes := Marshalling.MarshallCheckedSector(sector);
-    if (bytes == null) {
-      id := None;
-      loc := None;
-    } else {
-      var len := bytes.Length as uint64;
-      loc := getFreeLba(s, len);
-      if (loc.Some?) {
-        var i := io.write(loc.value.addr, bytes);
-        id := Some(i);
-      } else {
-        id := None;
-      }
-    }
   }
 
   method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)

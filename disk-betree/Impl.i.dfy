@@ -51,17 +51,6 @@ module Impl {
     }
   }
 
-  method RequestRead(io: DiskIOHandler, loc: LBAType.Location)
-  returns (id: D.ReqId)
-  requires io.initialized()
-  requires LBAType.ValidLocation(loc)
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(loc))
-  {
-    id := io.read(loc.addr, loc.len);
-  }
-
   predicate stepsBetree(k: ImplConstants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, step: BT.BetreeStep)
   {
     ImplADM.M.NextStep(Ik(k), s, s', uiop, D.NoDiskOp, ImplADM.M.Step(BBC.BetreeMoveStep(step)))
@@ -77,96 +66,4 @@ module Impl {
   {
     ImplADM.M.NextStep(Ik(k), s, s', UI.NoOp, D.NoDiskOp, ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)))
   }
-
-  lemma LemmaIndirectionTableLBAValid()
-  ensures ImplADM.M.ValidAddr(BC.IndirectionTableLBA())
-  {
-    LBAType.reveal_ValidAddr();
-    assert BC.IndirectionTableLBA() as int == 0 * ImplADM.M.BlockSize();
-  }
-
-  method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
-  requires IS.WFVars(s)
-  requires io.initialized();
-  requires s.Unready?
-  modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
-  {
-    if (s.outstandingIndirectionTableRead.None?) {
-      LemmaIndirectionTableLBAValid();
-      var id := RequestRead(io, BC.IndirectionTableLocation());
-      s' := IS.Unready(Some(id), s.syncReqs);
-
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableReqStep);
-    } else {
-      s' := s;
-      assert noop(k, IS.IVars(s), IS.IVars(s'));
-      print "PageInIndirectionTableReq: request already out\n";
-    }
-  }
-
-  method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
-  returns (s': ImplVariables)
-  requires io.initialized();
-  requires s.Ready?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
-  requires ref !in s.cache
-  modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
-  {
-    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
-      s' := s;
-      assert noop(k, IS.IVars(s), IS.IVars(s'));
-      print "giving up; already an outstanding read for this ref\n";
-    } else {
-      var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-      assert lbaGraph.Some?;
-      var (lba, _) := lbaGraph.value;
-      assert lba.Some?;
-      assert BC.ValidLocationForNode(lba.value);
-      var id := RequestRead(io, lba.value);
-      s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
-
-      assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInReqStep(ref));
-    }
-  }
-
-  lemma INodeRootEqINodeForEmptyRootBucket(node: IS.Node)
-  requires IS.WFNode(node)
-  ensures IS.INodeRoot(node, TTT.EmptyTree) == IS.INode(node);
-  {
-    assume false;
-  }
-  /*{
-    assert BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
-          map[]) == SSTable.ISeq(node.buckets);
-  }*/
-
-  /*lemma LemmaPageInBlockCacheSet(s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
-  requires IS.WFVars(s)
-  requires s.Ready?
-  requires ref !in s.cache
-  requires IS.WFNode(node)
-  ensures IS.ICache(s.cache, s.rootBucket)[ref := IS.INode(node)]
-       == IS.ICache(s.cache[ref := node], s.rootBucket);
-  {
-    if (ref == BT.G.Root()) {
-      //assert TTT.I(rootBucket) == map[];
-      //assert BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
-      //    map[]) == IS.INode(node).buckets;
-      INodeRootEqINodeForEmptyRootBucket(node);
-      assert IS.INodeRoot(node, s.rootBucket) == IS.INode(node);
-    }
-    assert IS.INodeForRef(s.cache[ref := node], ref, s.rootBucket) == IS.INode(node);
-    assert IS.ICache(s.cache[ref := node], s.rootBucket)[ref] == IS.INode(node);
-  }*/
-
-
-
 }

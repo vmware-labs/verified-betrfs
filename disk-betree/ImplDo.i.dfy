@@ -10,6 +10,7 @@ include "PivotBetreeSpec.i.dfy"
 module ImplDo { 
   import opened Impl
   import opened ImplSync
+  import opened ImplIO
 
   import opened Options
   import opened MainDiskIOHandler
