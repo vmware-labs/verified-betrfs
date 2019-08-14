@@ -1,3 +1,5 @@
+include "ImplCache.i.dfy"
+
 module ImplFlushRootBucket { 
   import opened Impl
   import opened ImplIO
@@ -10,12 +12,6 @@ module ImplFlushRootBucket {
   import opened Sets
 
   import opened BucketsLib
-
-  lemma WFNodeRootImpliesWFRootBase(node: IS.Node, rootBucket: IS.TreeMap)
-  requires IS.WFNode(node)
-  requires TTT.TTTree(rootBucket)
-  requires BT.WFNode(IS.INodeRoot(node, rootBucket))
-  ensures BT.WFNode(IS.INode(node))
 
   method {:fuel BC.GraphClosed,0} flushRootBucket(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
@@ -57,7 +53,6 @@ module ImplFlushRootBucket {
       return;
     }
 
-    WFNodeRootImpliesWFRootBase(oldroot, s.rootBucket);
     forall i, key | 0 <= i < |oldroot.buckets| && key in KMTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
     {
       //assert BT.NodeHasWFBucketAt(IS.INode(oldroot), i);
