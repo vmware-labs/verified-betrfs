@@ -17,13 +17,16 @@ abstract class Benchmark {
 
     Stopwatch sw = Stopwatch.StartNew();
     Go(app);
+    int opCount = OpCount(app);
     sw.Stop();
 
-    Console.WriteLine("Benchmark " + Name + " " + sw.ElapsedMilliseconds.ToString() + " ms");
+    Console.WriteLine("Benchmark " + Name + ": " + (opCount / (sw.ElapsedMilliseconds / 1000)).ToString() + " ops/s" + ", " + sw.ElapsedMilliseconds.ToString() + " ms" + ", " + opCount.ToString() + " ops");
   }
 
   abstract protected void Prepare(Application app);
   abstract protected void Go(Application app);
+
+  abstract protected int OpCount(Application app);
 
   protected List<byte[]> RandomSeqs(int n, int seed, int len) {
     Random rand = new Random(seed);
@@ -101,14 +104,20 @@ class BenchmarkRandomInserts : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
 
+  int count = 500000;
+
   public BenchmarkRandomInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomKeys(100000, seed1);
-    values = RandomValues(100000, seed2);
+    keys = RandomKeys(count, seed1);
+    values = RandomValues(count, seed2);
   }
 
   override protected void Prepare(Application app) {
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
@@ -127,13 +136,15 @@ class BenchmarkRandomQueries : Benchmark {
   List<byte[]> query_keys;
   List<byte[]> query_values;
 
+  int count = 500000;
+
   public BenchmarkRandomQueries() {
     int seed1 = 1234;
     int seed2 = 527;
     int seed3 = 19232;
-    keys = RandomKeys(20000, seed1);
-    values = RandomValues(20000, seed2);
-    RandomQueryKeysAndValues(20000, seed3, keys, values, out query_keys, out query_values);
+    keys = RandomKeys(count, seed1);
+    values = RandomValues(count, seed2);
+    RandomQueryKeysAndValues(count, seed3, keys, values, out query_keys, out query_values);
   }
 
   override protected void Prepare(Application app) {
@@ -142,6 +153,10 @@ class BenchmarkRandomQueries : Benchmark {
     }
     app.Sync();
     app.crash();
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
@@ -157,14 +172,20 @@ class BenchmarkSequentialInserts : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
 
+  int count = 500000;
+
   public BenchmarkSequentialInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomSortedKeys(20000, seed1);
-    values = RandomValues(20000, seed2);
+    keys = RandomSortedKeys(count, seed1);
+    values = RandomValues(count, seed2);
   }
 
   override protected void Prepare(Application app) {
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
@@ -181,11 +202,13 @@ class BenchmarkSequentialQueries : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
 
+  int count = 500000;
+
   public BenchmarkSequentialQueries() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomSortedKeys(20000, seed1);
-    values = RandomValues(20000, seed2);
+    keys = RandomSortedKeys(count, seed1);
+    values = RandomValues(count, seed2);
   }
 
   override protected void Prepare(Application app) {
@@ -194,6 +217,10 @@ class BenchmarkSequentialQueries : Benchmark {
     }
     app.Sync();
     app.crash();
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
@@ -210,6 +237,8 @@ class Hashing : Benchmark {
 
   byte[] b;
   //byte[] a;
+  
+  int count = 10;
 
   public Hashing() {
   }
@@ -218,8 +247,12 @@ class Hashing : Benchmark {
     b = new byte[size];
   }
 
+  override protected int OpCount(Application app) {
+    return count;
+  }
+
   override protected void Go(Application app) {
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < count; i++) {
       Crypto_Compile.__default.Crc32(new Dafny.Sequence<byte>(b));
       /*a = new byte[size];
       for (int j = 0; j < size; j++) {
