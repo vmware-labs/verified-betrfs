@@ -12,6 +12,7 @@ module ImplSplit {
   import opened Sets
 
   import opened BucketsLib
+  import PivotsLib
 
   import opened NativeTypes
 
@@ -151,18 +152,23 @@ module ImplSplit {
   requires IS.WFNode(fused_parent)
   requires BT.WFNode(IS.INode(fused_parent))
   requires 0 <= slot_idx < |fused_parent.buckets|
+  requires PivotsLib.PivotInsertable(fused_parent.pivotTable, slot_idx, pivot)
   requires fused_parent.children.Some?
   ensures IS.WFNode(res)
   ensures IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref)
   {
+    var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
+    var buckets := replace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx);
     res := IS.Node(
-      Sequences.insert(fused_parent.pivotTable, pivot, slot_idx),
+      pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
-      replace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx)
+      buckets
     );
+
     KMTable.Ireplace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx);
-    assume IS.WFNode(res);
-    assume IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
+    WFBucketListReplace1with2(KMTable.ISeq(fused_parent.buckets), fused_parent.pivotTable, slot_idx, pivot);
+    assert IS.WFNode(res);
+    assert IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
   }
 
 
@@ -330,6 +336,10 @@ module ImplSplit {
   ensures receipt.Some? ==> receipt.value.graph == graph
   ensures receipt.Some? ==> BC.BlockPointsToValidReferences(IS.INode(receipt.value.left_child), receipt.value.graph)
   ensures receipt.Some? ==> BC.BlockPointsToValidReferences(IS.INode(receipt.value.right_child), receipt.value.graph)
+  ensures receipt.Some? ==> PivotsLib.PivotInsertable(
+      receipt.value.fused_parent.pivotTable,
+      receipt.value.slot,
+      receipt.value.pivot)
   {
     reveal_SplitNodesReceiptValid();
 
@@ -383,6 +393,8 @@ module ImplSplit {
     assert right_child == SplitChildRight(cutoff_child, num_children_left);
 
     assert SplitNodesReceiptValid(receipt.value);
+
+    PivotsLib.PivotNotMinimum(cutoff_child.pivotTable, num_children_left - 1);
   }
 
   method doSplit(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)

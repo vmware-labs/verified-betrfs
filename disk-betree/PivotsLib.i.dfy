@@ -99,12 +99,18 @@ module PivotsLib {
     }
   }
 
+  predicate PivotInsertable(pt: PivotTable, idx: int, key: Key)
+  requires WFPivots(pt)
+  {
+    && 0 <= idx <= |pt|
+    && Route(pt, key) == idx
+    && (idx > 0 ==> key != pt[idx - 1])
+    && (idx == 0 ==> Keyspace.NotMinimum(key))
+  }
+
   lemma WFPivotsInsert(pt: PivotTable, idx: int, key: Key)
   requires WFPivots(pt)
-  requires 0 <= idx <= |pt|
-  requires Route(pt, key) == idx
-  requires idx > 0 ==> key != pt[idx - 1]
-  requires idx == 0 ==> Keyspace.NotMinimum(key)
+  requires PivotInsertable(pt, idx, key);
   ensures WFPivots(insert(pt, key, idx))
   {
     var pt' := insert(pt, key, idx);
