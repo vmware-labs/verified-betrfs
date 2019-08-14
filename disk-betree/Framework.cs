@@ -420,14 +420,10 @@ namespace Crypto_Compile {
       }
     }
 
-    public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
+    public static Dafny.Sequence<byte> padded_crc32(byte[] ar, int start, int len)
     {
       using (var crc32 = DamienG.Security.Cryptography.Crc32.Create()) {
-        ArraySegment<byte> seg = (ArraySegment<byte>) seq.Elements;
-
-        //Native_Compile.BenchmarkingUtil.start();
-        byte[] hash = crc32.ComputeHash(seg.Array, seg.Offset, seg.Count);
-        //Native_Compile.BenchmarkingUtil.end();
+        byte[] hash = crc32.ComputeHash(ar, start, len);
 
 				// Pad to 32 bytes
 				byte[] padded = new byte[32];
@@ -441,5 +437,15 @@ namespace Crypto_Compile {
       }
     }
 
+    public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
+    {
+      ArraySegment<byte> seg = (ArraySegment<byte>) seq.Elements;
+      return padded_crc32(seg.Array, seg.Offset, seg.Count);
+    }
+
+    public static Dafny.Sequence<byte> Crc32Array(byte[] ar, ulong start, ulong len)
+    {
+      return padded_crc32(ar, (int)start, (int)len);
+    }
   }
 }

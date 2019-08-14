@@ -1133,7 +1133,9 @@ module Marshalling {
           reveal_parseSector();
           reveal_parseCheckedSector();
 
-          var hash := Crypto.Crc32(data[32..]);
+          var hash := Crypto.Crc32Array(data, 32, data.Length as uint64 - 32);
+          assert data[32..] == data[32..data.Length];
+          assert hash == Crypto.Crc32(data[32..]);
           ghost var data_suffix := data[32..];
           Native.Arrays.CopySeqIntoArray(hash, 0, data, 0, 32);
           assert data_suffix == data[32..];
