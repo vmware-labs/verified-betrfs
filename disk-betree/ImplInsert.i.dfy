@@ -7,7 +7,7 @@ include "PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplDo { 
+module ImplInsert { 
   import opened Impl
   import opened ImplSync
   import opened ImplIO
