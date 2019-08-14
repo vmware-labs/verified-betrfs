@@ -11,4 +11,4 @@
 /build/
 
 /.veribetrfs-storage/
-/perf.data
+/perf.data*
