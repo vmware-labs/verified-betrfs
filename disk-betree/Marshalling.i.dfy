@@ -99,7 +99,6 @@ module Marshalling {
   predicate method CappedBucket(kmt: KMTable.KMTable)
   {
     && |kmt.keys| <= CapBucketNumEntries() as int
-    && (forall i | 0 <= i < |kmt.keys| :: |kmt.keys[i]| <= CapKeySize() as int)
   }
 
   predicate method CappedBuckets(buckets: seq<KMTable.KMTable>)
