@@ -21,7 +21,7 @@ make build/roslyn-veribetrfs.exe
 echo "==== starting benchmark ===="
 echo "flags: $@"
 
-COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe --benchmark $@ &
+COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe $@ &
 PID=$!
 sleep 3
 perf record -p $PID -g
