@@ -576,4 +576,37 @@ module BucketsLib {
       assert WFBucketAt(blist[i], pivots, i);
     }
   }
+
+  lemma WFBucketListSplitLeft(blist: BucketList, pivots: PivotTable, i: int)
+  requires WFBucketList(blist, pivots)
+  requires 1 <= i <= |blist|
+  ensures WFBucketList(blist[.. i], pivots[.. i-1])
+  {
+    WFSlice(pivots, 0, i-1);
+    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist[.. i], pivots[.. i-1], 0, i-1, 0);
+  }
+
+  lemma WFBucketListSplitRight(blist: BucketList, pivots: PivotTable, i: int)
+  requires WFBucketList(blist, pivots)
+  requires 0 <= i < |blist|
+  ensures WFBucketList(blist[i ..], pivots[i ..])
+  {
+    WFSuffix(pivots, i);
+    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist[i..], pivots[i..], 0, |blist|-i-1, -i);
+  }
+
+  lemma WFBucketListReplace1with2(blist: BucketList, pivots: PivotTable, i: int, pivot: Key)
+  requires WFBucketList(blist, pivots)
+  requires PivotInsertable(pivots, i, pivot)
+  ensures WFBucketList(
+      replace1with2(blist, map[], map[], i),
+      insert(pivots, pivot, i))
+  {
+    var blist' := replace1with2(blist, map[], map[], i);
+    var pivots' := insert(pivots, pivot, i);
+    WFPivotsInsert(pivots, i, pivot);
+
+    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, i-1, 0);
+    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', i+2, |blist'|-1, 1);
+  }
 }

@@ -2,9 +2,13 @@
 *.mdb
 *.dll
 *.exe
+*.pdb
 
 *.deps
 *.includes
 *.output
 .build_info
 /build/
+
+/.veribetrfs-storage/
+/perf.data*

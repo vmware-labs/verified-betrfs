@@ -80,6 +80,22 @@ module KMTable {
     assume false;
   }
 
+  lemma WFImpliesWFBucket(kmt: KMTable)
+  requires WF(kmt)
+  ensures WFBucket(I(kmt))
+  decreases |kmt.keys|
+  {
+    reveal_I();
+    reveal_WFBucket();
+    if |kmt.keys| == 0 {
+    } else {
+      ghost var km' := KMTable(DropLast(kmt.keys), DropLast(kmt.values));
+      WFPrefix(kmt, |kmt.keys| - 1);
+      assert WF(km');
+      WFImpliesWFBucket(km');
+    }
+  }
+
   /////////////////////////
   //// Flush
   /////////////////////////
@@ -912,6 +928,7 @@ module KMTable {
   method IsWF(kmt: KMTable) returns (b: bool)
   requires |kmt.keys| < 0x1_0000_0000_0000_0000
   requires |kmt.values| < 0x1_0000_0000_0000_0000
+  requires IsStrictlySorted(kmt.keys)
   requires forall i | 0 <= i < |kmt.values| :: kmt.values[i] != IdentityMessage()
   ensures b == WF(kmt)
   {
@@ -920,6 +937,7 @@ module KMTable {
       return false;
     }
 
+    /*
     reveal_IsStrictlySorted();
 
     var k: uint64 := 1;
@@ -933,6 +951,7 @@ module KMTable {
       }
       k := k + 1;
     }
+    */
 
     return true;
   }
@@ -1011,13 +1030,18 @@ module KMTable {
   lemma Ireplace1with2(kmts: seq<KMTable>, kmt1: KMTable, kmt2: KMTable, slot: int)
   requires WF(kmt1)
   requires WF(kmt2)
+  requires Bounded(kmt1)
+  requires Bounded(kmt2)
   requires 0 <= slot < |kmts|
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  requires forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
+  ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: Bounded(replace1with2(kmts, kmt1, kmt2, slot)[i])
   ensures ISeq(replace1with2(kmts, kmt1, kmt2, slot)) == replace1with2(ISeq(kmts), I(kmt1), I(kmt2), slot)
   {
     forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)|
     ensures WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
+    ensures Bounded(replace1with2(kmts, kmt1, kmt2, slot)[i])
     {
       if i < slot {
         assert replace1with2(kmts, kmt1, kmt2, slot)[i] == kmts[i];

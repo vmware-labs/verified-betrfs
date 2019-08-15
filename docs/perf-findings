@@ -1,0 +1,57 @@
+# CappedNode quantifiers, big int
+
+```
+-   13.82%     0.00%  dotnet   perf-904.map                                 [.] bool [roslyn-veribetrfs] _245_Marshalling_Compile.__default::CappedNode(class ImplState_Compile.Node)                                                                                                               ▒
+   - 13.82% bool [roslyn-veribetrfs] _245_Marshalling_Compile.__default::CappedNode(class ImplState_Compile.Node)                                                                                                                                                                                   ▒
+      - 13.82% bool [roslyn-veribetrfs] _245_Marshalling_Compile.__default::CappedBuckets(class Dafny.Sequence`1<class _216_KMTable_Compile.KMTable>)                                                                                                                                               ▒
+         - 13.82% bool [roslyn-veribetrfs] Dafny.Helpers::Quantifier(class [netstandard]System.Collections.Generic.IEnumerable`1<!!0>,bool,class [netstandard]System.Predicate`1<!!0>)                                                                                                              ▒
+            - 13.80% instance bool [roslyn-veribetrfs] _245_Marshalling_Compile.__default+<>c__DisplayClass11_0::<CappedBuckets>b__0(valuetype [netstandard]System.Numerics.BigInteger)                                                                                                             ▒
+               - 13.77% bool [roslyn-veribetrfs] _245_Marshalling_Compile.__default::CappedBucket(class _216_KMTable_Compile.KMTable)                                                                                                                                                               ▒
+                  - 13.60% bool [roslyn-veribetrfs] Dafny.Helpers::Quantifier(class [netstandard]System.Collections.Generic.IEnumerable`1<!!0>,bool,class [netstandard]System.Predicate`1<!!0>)                                                                                                     ▒
+                     - 9.23% instance bool [roslyn-veribetrfs] _245_Marshalling_Compile.__default+<>c__DisplayClass10_0::<CappedBucket>b__0(valuetype [netstandard]System.Numerics.BigInteger)                                                                                                      ▒
+                        - 4.01% instance !0 [roslyn-veribetrfs] Dafny.Sequence`1[System.__Canon]::Select(valuetype [netstandard]System.Numerics.BigInteger)                                                                                                                                         ▒
+                           + 3.24% instance class [netstandard]System.Collections.Generic.IList`1<!0> [roslyn-veribetrfs] Dafny.Sequence`1[System.__Canon]::get_Elements()                                                                                                                          ▒
+                          0.31% instance int32 [roslyn-veribetrfs] Dafny.Sequence`1[System.__Canon]::get_Count()                                                                                                                                                                                    ▒
+                          0.25% instance int32 [roslyn-veribetrfs] Dafny.Sequence`1[System.Byte]::get_Count()                                                                                                                                                                                       ▒
+                          0.14% stub<854> GenerateDispatchStub<GenerateDispatchStub>                                                                                                                                                                                                                ▒
+                     + 2.26% instance bool [roslyn-veribetrfs] Dafny.Helpers+<IntegerRange>d__9::MoveNext()                                                                                                                                                                                         ▒
+                       0.22% 0x1ee4a                                                                                                                                                                                                                                                                ▒
+                       0.22% 0x1edfa                                                                                                                                                                                                                                                                ▒
+                       0.21% instance valuetype [netstandard]System.Numerics.BigInteger [roslyn-veribetrfs] Dafny.Helpers+<IntegerRange>d__9::System.Collections.Generic.IEnumerator<System.Numerics.BigInteger>.get_Current()                                                                      ▒
+                       0.13% instance !0 [System.Private.CoreLib] System.Nullable`1[System.Numerics.BigInteger]::GetValueOrDefault()                                                                                                                                                                ▒
+                       0.11% 0x1ee60
+```
+
+# reference count
+
+```
+-    6.12%  dotnet   perf-1887.map                                [.] instance class _System.Tuple2`2<uint64,!0>[] [roslyn-veribetrfs] _228_MutableMap_Compile.ResizingHashMap`1[System.__Canon]::ToArray()    ▒
+     instance class _System.Tuple2`2<uint64,!0>[] [roslyn-veribetrfs] _228_MutableMap_Compile.ResizingHashMap`1[System.__Canon]::ToArray()                                                                     ▒
+   - instance class Dafny.Map`2<uint64,!0> [roslyn-veribetrfs] _228_MutableMap_Compile.ResizingHashMap`1[System.__Canon]::ToMap()                                                                              ▒
+      - 5.27% bool [roslyn-veribetrfs] _381_ImplSync_Compile.__default::Deallocable(class ImplState_Compile.Variables,uint64)                                                                                  ▒
+           class _2_Options_Compile.Option`1<uint64> [roslyn-veribetrfs] _381_ImplSync_Compile.__default::FindDeallocable(class ImplState_Compile.Variables)                                                   ▒
+           class ImplState_Compile.Variables [roslyn-veribetrfs] _381_ImplSync_Compile.__default::syncNotFrozen(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskI▒
+           class ImplState_Compile.Variables [roslyn-veribetrfs] _381_ImplSync_Compile.__default::sync(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskIOHandler_▒
+           void [roslyn-veribetrfs] _390_ImplDo_Compile.__default::popSync(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskIOHandler_Compile.DiskIOHandler,valuet▒
+           instance void [roslyn-veribetrfs] Application::Sync()                                                                                                                                               ▒
+           instance void [roslyn-veribetrfs] Benchmark::Run()                                                                                                                                                  ▒
+           void [roslyn-veribetrfs] Framework::Main(string[])                                                                                                                                                  ▒
+           CallDescrWorkerInternal                                                                                                                                                                             ▒
+           MethodDescCallSite::CallTargetWorker                                                                                                                                                                ▒
+           RunMain                                                                                                                                                                                             ▒
+           Assembly::ExecuteMainMethod                                                                                                                                                                         ▒
+           CorHost2::ExecuteAssembly                                                                                                                                                                           ▒
+           coreclr_execute_assembly                                                                                                                                                                            ▒
+           0x6096d                                                                                                                                                                                             ▒
+           0x53422                                                                                                                                                                                             ▒
+           corehost_main                                                                                                                                                                                       ▒
+           0x589cf                                                                                                                                                                                             ▒
+           0x63f8c                                                                                                                                                                                             ▒
+           0x650e5                                                                                                                                                                                             ▒
+           0x64659                                                                                                                                                                                             ▒
+           hostfxr_main_startupinfo                                                                                                                                                                            ▒
+           0xac74                                                                                                                                                                                              ▒
+           0xaf05                                                                                                                                                                                              ▒
+           __libc_start_main                                                                                                                                                                                   ▒
+           0x41d589495541f689
+```

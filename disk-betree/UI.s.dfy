@@ -1,10 +1,11 @@
 include "../lib/NativeTypes.s.dfy"
 include "../lib/total_order.s.dfy"
 
-module ValueWithDefault {
+module {:extern} ValueWithDefault {
   import NativeTypes
 
-  type Value(==,!new) = seq<NativeTypes.byte>
+  function method MaxLen() : NativeTypes.uint64 { 1024 }
+  type Value(==,!new) = s : seq<NativeTypes.byte> | |s| <= 1024
 	function method DefaultValue() : Value { [] }
 
 	export S provides Value, DefaultValue

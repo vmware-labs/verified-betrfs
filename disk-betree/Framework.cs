@@ -46,17 +46,14 @@ namespace MainDiskIOHandler_Compile {
         throw new Exception("writeSync not implemented for these arguments");
       }
 
-      byte[] fileData = new byte[BLOCK_SIZE];
-      string filename = getFilename(addr);
-      if (File.Exists(filename)) {
-        readFile(filename, fileData);
+      //Native_Compile.BenchmarkingUtil.start();
+      using (FileStream fs = new FileStream(getFilename(addr), FileMode.OpenOrCreate, FileAccess.Write))
+      {
+        //fs.Seek(0, SeekOrigin.Begin);
+        fs.Write(sector, 0, sector.Length);
+        fs.Flush(true);
       }
-
-      for (int i = 0; i < sector.Length; i++) {
-        fileData[i] = sector[i];
-      }
-
-      File.WriteAllBytes(getFilename(addr), sector);
+      //Native_Compile.BenchmarkingUtil.end();
     }
 
     public void readSync(ulong addr, ulong len, out byte[] sector) {
@@ -208,6 +205,13 @@ class Application {
   }
 
   public void Insert(Dafny.Sequence<byte> key, Dafny.Sequence<byte> val) {
+    if (key.Count > (int)Lexicographic_Byte_Order_Compile.__default.MaxLen()) {
+      throw new Exception("Insert: key is too long");
+    }
+    if (val.Count > (int)ValueWithDefault_Compile.__default.MaxLen()) {
+      throw new Exception("Insert: value is too long");
+    }
+
     for (int i = 0; i < 50; i++) {
       bool success = __default.handleInsert(k, hs, io, key, val);
       this.maybeDoResponse();
@@ -245,6 +249,10 @@ class Application {
 
   public IList<byte> Query(Dafny.Sequence<byte> key) {
     if (verbose) log("Query \"" + key + "\"");
+
+    if (key.Count > (int)Lexicographic_Byte_Order_Compile.__default.MaxLen()) {
+      throw new Exception("Query: key is too long");
+    }
 
     for (int i = 0; i < 50; i++) {
       var result = __default.handleQuery(k, hs, io, key);
@@ -376,12 +384,12 @@ namespace Native_Compile {
   public partial class @Arrays
   {
       public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-          // Someone who knows C# better than me can maybe do this faster
-          var els = src.Elements;
-          for (int i = 0; i < (int)len; i++) {
-            dst[(int)dstIndex + i] = els[(int)srcIndex + i];
-          }
-          //System.Array.Copy(src.Elements, (long)srcIndex, dst, (long)dstIndex, (long)len);
+          //Native_Compile.BenchmarkingUtil.start();
+
+          ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
+          System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
+
+          //Native_Compile.BenchmarkingUtil.end();
       }
 
       /*public static void @ByteSeqCmpByteSeq(
@@ -400,41 +408,49 @@ namespace Crypto_Compile {
   public partial class __default {
     public static Dafny.Sequence<byte> Sha256(Dafny.Sequence<byte> seq)
     {
-      Native_Compile.BenchmarkingUtil.start();
+      //Native_Compile.BenchmarkingUtil.start();
       using (SHA256 mySHA256 = SHA256.Create()) {
         IList<byte> ilist = seq.Elements;
         byte[] bytes = new byte[ilist.Count];
         ilist.CopyTo(bytes, 0);
 
         byte[] hash = mySHA256.ComputeHash(bytes);
-        Native_Compile.BenchmarkingUtil.end();
+        //Native_Compile.BenchmarkingUtil.end();
         return new Dafny.Sequence<byte>(hash);
       }
     }
 
-    public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
+    private static readonly Force.Crc32.Crc32Algo _crc32algo = new Force.Crc32.Crc32Algo();
+
+    public static Dafny.Sequence<byte> padded_crc32(byte[] ar, int offset, int length)
     {
-      using (var crc32 = DamienG.Security.Cryptography.Crc32.Create()) {
-        IList<byte> ilist = seq.Elements;
-        byte[] bytes = new byte[ilist.Count];
+      uint currentCrc = 0;
 
-        ilist.CopyTo(bytes, 0);
-
-        //Native_Compile.BenchmarkingUtil.start();
-        byte[] hash = crc32.ComputeHash(bytes);
-        //Native_Compile.BenchmarkingUtil.end();
-
-				// Pad to 32 bytes
-				byte[] padded = new byte[32];
-				padded[0] = hash[0];
-				padded[1] = hash[1];
-				padded[2] = hash[2];
-				padded[3] = hash[3];
-				for (int i = 4; i < 32; i++) padded[i] = 0;
-
-        return new Dafny.Sequence<byte>(padded);
+      if (length > 0) {
+          _crc32algo.Append(currentCrc, ar, offset, length);
       }
+
+      byte[] hash = System.BitConverter.GetBytes(currentCrc);
+      // Pad to 32 bytes
+      byte[] padded = new byte[32];
+      padded[0] = hash[0];
+      padded[1] = hash[1];
+      padded[2] = hash[2];
+      padded[3] = hash[3];
+      for (int i = 4; i < 32; i++) padded[i] = 0;
+
+      return new Dafny.Sequence<byte>(padded);
     }
 
+    public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
+    {
+      ArraySegment<byte> seg = (ArraySegment<byte>) seq.Elements;
+      return padded_crc32(seg.Array, seg.Offset, seg.Count);
+    }
+
+    public static Dafny.Sequence<byte> Crc32Array(byte[] ar, ulong start, ulong len)
+    {
+      return padded_crc32(ar, (int)start, (int)len);
+    }
   }
 }

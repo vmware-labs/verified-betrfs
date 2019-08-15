@@ -5,12 +5,16 @@ include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 
 include "Impl.i.dfy"
-include "ImplDo.i.dfy"
+include "ImplInsert.i.dfy"
+include "ImplQuery.i.dfy"
 
 module {:extern} MainImpl refines Main { 
 
   import opened Impl
-  import opened ImplDo
+  import opened ImplIO
+  import opened ImplInsert
+  import opened ImplQuery
+  import opened ImplSync
 
   //  ---   dep graph   ---
   //

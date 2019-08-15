@@ -262,14 +262,28 @@ abstract module Total_Order {
     result := new Element[|run1| + |run2|](_ => run1[0]);
     var i1 := 0;
     var i2 := 0;
-    assert multiset(result[0..i1+i2]) == multiset(run1[0..i1]) + multiset(run2[0..i2]);
+
+    // This awkward way of writing the expression is to work around a dafny bug:
+    // https://github.com/dafny-lang/dafny/issues/353
+    assert (
+      var a := result[0..i1+i2];
+      var b := run1[0..i1];
+      var c := run2[0..i2];
+      multiset(a) == multiset(b) + multiset(c)
+    );
     while i1 < |run1| || i2 < |run2|
       invariant 0 <= i1 <= |run1|;
       invariant 0 <= i2 <= |run2|;
       invariant forall i, j :: 0 <= i < i1 + i2 && i1 <= j < |run1| ==> lte(result[i], run1[j]);
       invariant forall i, j :: 0 <= i < i1 + i2 && i2 <= j < |run2| ==> lte(result[i], run2[j]);
       invariant IsSorted(result[0..i1 + i2]);
-      invariant multiset(result[0..i1+i2]) == multiset(run1[0..i1]) + multiset(run2[0..i2]);
+      invariant (
+        var a := result[0..i1+i2];
+        var b := run1[0..i1];
+        var c := run2[0..i2];
+        multiset(a) == multiset(b) + multiset(c)
+      );
+
       decreases |run1| + |run2| - i1 - i2;
     {
       if i1 < |run1| && i2 < |run2| {
@@ -308,7 +322,8 @@ abstract module Total_Order {
       result := new Element[|run|](i => run[0]);
     } else {
       var i := |run| / 2;
-      assert |multiset(run[..i])| > 0; // OBSERVE
+      ghost var run_prefix := run[..i];
+      assert |multiset(run_prefix)| > 0; // OBSERVE
       assert run == run[..i] + run[i..]; // OBSERVE
       var a1 := MergeSort(run[..i]);
       var a2 := MergeSort(run[i..]);
@@ -573,7 +588,11 @@ module Byte_Order refines Total_Order {
 
 abstract module Lexicographic_Order refines Total_Order {
   import Base_Order : Total_Order
-  type Element = seq<Base_Order.Element>
+
+  function method MaxLen() : uint64 { 1024 }
+  type Bounded = s : seq<Base_Order.Element> | |s| <= 1024
+
+  type Element = Bounded
 
   function SomeElement() : Element { [] }
 
@@ -646,7 +665,7 @@ abstract module Lexicographic_Order refines Total_Order {
   }
 }
 
-module Lexicographic_Byte_Order refines Lexicographic_Order {
+module {:extern} Lexicographic_Byte_Order refines Lexicographic_Order {
   import Base_Order = Byte_Order
 
   method cmp(a: Element, b: Element) returns (c: int32)
@@ -655,11 +674,11 @@ module Lexicographic_Byte_Order refines Lexicographic_Order {
     Base_Order.reveal_lte();
     Base_Order.reveal_ltedef();
 
-    var i := 0;
-    var m := if |a| < |b| then |a| else |b|;
+    var i: uint64 := 0;
+    var m: uint64 := if |a| as uint64 < |b| as uint64 then |a| as uint64 else |b| as uint64;
     while i < m
-    invariant i <= |a|
-    invariant i <= |b|
+    invariant i as int <= |a|
+    invariant i as int <= |b|
     invariant lt(a[i..], b[i..]) ==> lt(a, b)
     invariant lt(b[i..], a[i..]) ==> lt(b, a)
     invariant a[..i] == b[..i]
@@ -673,8 +692,8 @@ module Lexicographic_Byte_Order refines Lexicographic_Order {
       }
     }
 
-    if i == |a| {
-      if i == |b| {
+    if i == |a| as uint64 {
+      if i == |b| as uint64 {
         return 0;
       } else {
         return -1;
