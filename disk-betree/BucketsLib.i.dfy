@@ -609,4 +609,25 @@ module BucketsLib {
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, i-1, 0);
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', i+2, |blist'|-1, 1);
   }
+
+  lemma BucketListInsertBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable, key: Key, msg: Message)
+  requires WFBucketList(children, pivots)
+  ensures WFBucketList(BucketListFlush(parent, children, pivots), pivots)
+  ensures BucketListInsert(BucketListFlush(parent, children, pivots), pivots, key, msg)
+      == BucketListFlush(BucketInsert(parent, key, msg), children, pivots)
+  {
+    WFBucketListFlush(parent, children, pivots);
+
+    var a := BucketListInsert(BucketListFlush(parent, children, pivots), pivots, key, msg);
+    var b := BucketListFlush(BucketInsert(parent, key, msg), children, pivots);
+
+    assert |a| == |b|;
+    forall i | 0 <= i < |a|
+    ensures a[i] == b[i]
+    {
+      BucketListFlushAt(parent, children, pivots, i);
+      BucketListFlushAt(BucketInsert(parent, key, msg), children, pivots, i);
+      MergeIsAssociative(msg, BucketGet(parent, key), BucketGet(children[i], key));
+    }
+  }
 }
