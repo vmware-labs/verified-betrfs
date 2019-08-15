@@ -32,7 +32,7 @@ fi
 
 mkdir bin
 echo "#! /bin/bash" > bin/dafny
-echo "mono `pwd`/dafny/Binaries/Dafny.exe $@" >> bin/dafny
+echo "mono `pwd`/dafny/Binaries/Dafny.exe \$@" >> bin/dafny
 chmod +x bin/dafny
 cd ..
 
