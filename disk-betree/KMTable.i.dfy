@@ -1191,4 +1191,41 @@ module KMTable {
 
     kmt := KMTable(keys[..], values[..]);
   }
+
+  /////////////////////////
+  //// Weight stuff
+  /////////////////////////
+
+  function WeightKey(key: Key) : int
+  {
+    8 + |key|
+  }
+
+  function WeightKeySeq(keys: seq<Key>) : int
+  {
+    if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(msgs))
+  }
+
+  function WeightMessage(msg: Message) : int
+  {
+    match msg {
+      Define(value) => |value|
+      Update(delta) => 0
+    }
+  }
+
+  function WeightMessageSeq(msgs: seq<Message>) : int
+  {
+    if |msgs| == 0 then 0 else WeightMessageSeq(DropLast(msgs)) + WeightMessage(Last(msgs))
+  }
+
+  function Weight(kmt: KMTable) : int
+  {
+    WeightKeySeq(kmt.keys) + WeightMessageSeq(kmt.values)
+  }
+
+  function WeightSeq(kmts: seq<KMTable>) : int
+  {
+    if |kmts| == 0 then WeightSeq(DropLast(kmts)) + Weight(Last(kmts))
+  }
 }
