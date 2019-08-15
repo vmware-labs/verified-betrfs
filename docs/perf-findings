@@ -55,3 +55,21 @@
            __libc_start_main                                                                                                                                                                                   ▒
            0x41d589495541f689
 ```
+
+# reference count, after 1_000_000 inserts
+
+```
+-   95.85%     0.00%  dotnet   perf-871.map                 [.] class ImplState_Compile.Variables [roslyn-veribetrfs] _471_ImplSync_Compile.__default::sync(class BetreeGraphBlockCache_Compile.Con▒
+   - class ImplState_Compile.Variables [roslyn-veribetrfs] _471_ImplSync_Compile.__default::sync(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskIOHa▒
+      - 80.24% class ImplState_Compile.Variables [roslyn-veribetrfs] _471_ImplSync_Compile.__default::syncNotFrozen(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables▒
+         - 65.26% class _2_Options_Compile.Option`1<uint64> [roslyn-veribetrfs] _439_ImplDealloc_Compile.__default::FindDeallocable(class ImplState_Compile.Variables)                             ▒
+            - 58.32% bool [roslyn-veribetrfs] _439_ImplDealloc_Compile.__default::Deallocable(class ImplState_Compile.Variables,uint64)                                                            ▒
+               - 33.51% instance class Dafny.Map`2<uint64,!0> [roslyn-veribetrfs] _228_MutableMap_Compile.ResizingHashMap`1[System.__Canon]::ToMap()                                               ▒
+                  - 26.18% instance class _System.Tuple2`2<uint64,!0>[] [roslyn-veribetrfs] _228_MutableMap_Compile.ResizingHashMap`1[System.__Canon]::ToArray()                                   ▒
+                       4.06% 0x1cccf                                                                                                                                                               ▒
+                       2.90% 0x1cd39                                                                                                                                                               ▒
+                       0.64% instance class _System.Tuple2`2<uint64,!0> [roslyn-veribetrfs] _228_MutableMap_Compile.ResizingHashMap`1+<>c__DisplayClass4_0[System.__Canon]::<ToArray>b__1(valuetype▒
+                       0.63% 0x1cd20                                                                                                                                                               ▒
+                       0.62% 0x1ce46                                                                                                                                                               ▒
+                       0.40% 0x1cd41
+```

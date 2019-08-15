@@ -131,10 +131,12 @@ class BenchmarkRandomInserts : Benchmark {
 }
 
 // 50_000_000 random inserts
+//
+// This harness can generate ~2_300_000 ops/s on my machine (only generating keys and values, not calling Insert/Sync)
 class LongBenchmarkRandomInserts : Benchmark {
   public override string Name { get { return "LongRandomInserts"; } }
 
-  int count = 50_000_000;
+  int count = 5_000_000;
 
   override protected int OpCount(Application app) {
     return count;
@@ -146,29 +148,41 @@ class LongBenchmarkRandomInserts : Benchmark {
   override protected void Prepare(Application app) {
   }
 
-  override protected void Go(Application app) {
+  uint rngState = 198432;
+
+  protected uint NextPseudoRandom() {
+    rngState = (uint) (((ulong) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  unsafe override protected void Go(Application app) {
+
     for (uint i = 0; i < this.count; i++) {
       byte[] keyBytes = new byte[20];
-      for (uint j = 0; j < 20; j++) {
-        byte k = (byte) (((i * 20 + j) * 1073741827) % 256);
-        keyBytes[j] = k;
+      for (uint j = 0; j < 20; j += 4) {
+        fixed (byte* ptr = &keyBytes[j]) {
+          uint* intPtr = (uint*) ptr;
+          *intPtr = NextPseudoRandom();
+        }
       }
-      uint valueSize = (((i * 2) * 16777213) % 1024) + 1;
       byte[] valueBytes = new byte[400];
-      for (uint j = 0; j < 400; j++) {
-        byte v = (byte) (((i * 400 + j) * 2147483647) % 256);
-        valueBytes[j] = v;
+      for (uint j = 0; j < 400; j += 4) {
+        fixed (byte* ptr = &valueBytes[j]) {
+          uint* intPtr = (uint*) ptr;
+          *intPtr = NextPseudoRandom();
+        }
       }
+      // Console.Error.WriteLine("KEY " + BitConverter.ToString(keyBytes));
       app.Insert(keyBytes, valueBytes);
-      if (i % 1000000 == 0) {
+      if (i % 1000000 == 0 && i != 0) {
         Console.Error.Write("? sync at " + i.ToString() + " ");
-        app.Sync();
+         app.Sync();
         Console.Error.WriteLine("done");
       }
     }
     Console.Error.Write("? sync at " + this.count + " ");
     app.Sync();
-    Console.Error.WriteLine("done");
+    Console.WriteLine("done");
   }
 }
 
