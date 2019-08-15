@@ -68,28 +68,29 @@ module KMTable {
   requires key in I(kmt)
   ensures 0 <= i < |kmt.keys|
   ensures kmt.keys[i] == key
+  decreases |kmt.keys|
   {
-    assume false;
-    /*reveal_I();
+    reveal_I();
     if key == Last(kmt.keys) {
+      i := |kmt.keys| - 1;
     } else {
       i := IndexOfKey(KMTable(DropLast(kmt.keys), DropLast(kmt.values)), key);
-    }*/
+    }
   }
 
   lemma Imaps(kmt: KMTable, i: int)
   requires WF(kmt)
   requires 0 <= i < |kmt.keys|
   ensures MapsTo(I(kmt), kmt.keys[i], kmt.values[i])
+  decreases |kmt.keys|
   {
-    /*reveal_I();
+    reveal_I();
     if (i == |kmt.keys| - 1) {
     } else {
-      Imaps(KMTable(DropLast(kmt.keys), DropLast(kmt.values)));
-      Keyspace.reveal_IsStrictlySorted();
+      reveal_IsStrictlySorted();
+      Imaps(KMTable(DropLast(kmt.keys), DropLast(kmt.values)), i);
       assert kmt.keys[|kmt.keys| - 1] != kmt.keys[i];
-    }*/
-    assume false;
+    }
   }
 
   lemma WFImpliesWFBucket(kmt: KMTable)
