@@ -51,6 +51,7 @@ include $(TARGET_DEPS)
 #rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 #include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 
+# This was cool until someone tried to run it on MacOS.
 #TIME=time -f "real %es cpu %Us"
 TIME=time
 
