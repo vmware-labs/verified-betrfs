@@ -1,5 +1,8 @@
 #! /bin/bash
 
+set -x
+set -e
+
 apt-get update
 apt-get install -y tmux locales
 
@@ -10,7 +13,9 @@ locale-gen en_US.UTF-8
 
 cd /veribetrfs
 
+set +e
 rm build/roslyn-veribetrfs.exe
+set -e
 make build/roslyn-veribetrfs.exe
 
 echo "==== starting benchmark ===="
