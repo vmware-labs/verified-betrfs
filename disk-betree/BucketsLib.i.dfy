@@ -135,6 +135,15 @@ module BucketsLib {
     [SplitBucketRight(blist[cRight], key)] + blist[cRight + 1 ..]
   }
 
+  function {:opaque} SplitBucketInList(blist: BucketList, slot: int, pivot: Key) : BucketList
+  requires 0 <= slot < |blist|
+  {
+    replace1with2(blist,
+        SplitBucketLeft(blist[slot], pivot),
+        SplitBucketRight(blist[slot], pivot),
+        slot)
+  }
+
   lemma WFSplitBucketLeft(bucket: Bucket, pivot: Key, pivots: seq<Key>, i: int)
   requires 0 <= i <= |pivots|
   requires WFPivots(pivots)
@@ -201,6 +210,25 @@ module BucketsLib {
         RouteIs(pivots[cRight..], key, i);
       }
     }
+  }
+
+  lemma WFSplitBucketInList(blist: BucketList, slot: int, pivot: Key, pivots: PivotTable)
+  requires WFBucketList(blist, pivots)
+  requires 0 <= slot < |blist|
+  requires PivotInsertable(pivots, slot, pivot)
+  ensures WFPivots(insert(pivots, pivot, slot))
+  ensures WFBucketList(SplitBucketInList(blist, slot, pivot), insert(pivots, pivot, slot))
+  {
+    reveal_SplitBucketInList();
+
+    var blist' := SplitBucketInList(blist, slot, pivot);
+    var pivots' := insert(pivots, pivot, slot);
+    WFPivotsInsert(pivots, slot, pivot);
+
+    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, slot-1, 0);
+    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', slot+2, |blist'|-1, 1);
+    assert WFBucketAt(blist'[slot], pivots', slot);
+    assert WFBucketAt(blist'[slot+1], pivots', slot+1);
   }
 
   // This is useful for proving NodeHasWFBuckets(node')

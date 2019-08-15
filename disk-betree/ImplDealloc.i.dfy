@@ -1,3 +1,5 @@
+include "ImplCache.i.dfy"
+
 module ImplDealloc { 
   import opened Impl
   import opened ImplIO
