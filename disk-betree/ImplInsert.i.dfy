@@ -2,6 +2,7 @@ include "Impl.i.dfy"
 include "ImplIO.i.dfy"
 include "ImplCache.i.dfy"
 include "ImplModelInsert.i.dfy"
+include "ImplFlushPolicy.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -15,15 +16,21 @@ module ImplInsert {
   import opened ImplCache
   import opened ImplModelInsert
   import opened ImplState
+  import opened ImplFlushPolicy
 
   import opened Options
   import opened Maps
   import opened Sets
   import opened Sequences
+  import opened NativeTypes
 
   import opened BucketsLib
+  import opened BucketWeights
+  import opened Bounds
 
   import opened PBS = PivotBetreeSpec`Spec
+
+  import Native
 
   method RemoveLBAFromIndirectionTable(table: IS.MutIndirectionTable, ref: IS.Reference)
   requires table.Inv()
@@ -75,7 +82,10 @@ module ImplInsert {
 
     RemoveLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root());
 
-    s' := s.(rootBucket := newRootBucket);
+    var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
+
+    s' := s.(rootBucket := newRootBucket)
+          .(rootBucketWeightBound := newW);
     success := true;
   }
 
@@ -102,6 +112,18 @@ module ImplInsert {
       return;
     }
 
-    s', success := InsertKeyValue(k, s, key, value);
+    Native.BenchmarkingUtil.start();
+    var weightSeq := KMTable.computeWeightKMTSeq(s.cache[BT.G.Root()].buckets);
+    Native.BenchmarkingUtil.end();
+
+    if WeightKey(key) + WeightMessage(Messages.Define(value)) +
+        s.rootBucketWeightBound as int +
+        weightSeq as int
+        <= MaxTotalBucketWeight() {
+      s', success := InsertKeyValue(k, s, key, value);
+    } else {
+      s' := runFlushPolicy(k, s, io);
+      success := false;
+    }
   }
 }

@@ -11,20 +11,23 @@ module ImplModelLeaf {
   import opened Sets
 
   import opened BucketsLib
+  import opened BucketWeights
+  import opened Bounds
   import PivotsLib
 
   import opened NativeTypes
 
-  function GetNewPivots(bucket: KMTable.KMTable) : (pivots : seq<MS.Key>)
+  function GetNewPivots(bucket: KMTable.KMT) : (pivots : seq<MS.Key>)
+  ensures |pivots| < MaxNumChildren()
 
-  lemma WFGetNewPivots(bucket: KMTable.KMTable)
+  lemma WFGetNewPivots(bucket: KMTable.KMT)
   requires KMTable.WF(bucket)
   ensures PivotsLib.WFPivots(GetNewPivots(bucket))
   {
     assume false;
   }
 
-  function {:opaque} repivotLeaf(k: Constants, s: Variables, ref: BT.G.Reference, slot: int, node: Node)
+  function {:opaque} repivotLeaf(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   : (s': Variables)
   requires Inv(k, s)
   requires s.Ready?
@@ -32,59 +35,41 @@ module ImplModelLeaf {
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
-  requires 0 <= slot < |s.cache[ref].buckets|
   requires ref != BT.G.Root()
-  requires s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
-      ref in IIndirectionTable(s.frozenIndirectionTable.value).locs
   {
-    if (!(
-      && |node.buckets| < 0x8000_0000
-      && (forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000)
-    )) then (
+    if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) then (
       s
     ) else (
-      var joined := KMTable.join(node.buckets);
-      KMTable.joinEqJoinBucketList(node.buckets, node.pivotTable);
+      var joined := KMTable.join(node.buckets, node.pivotTable);
 
       var pivots := GetNewPivots(joined);
-      if (!(|pivots| < 0x7fff_ffff_ffff_ffff)) then (
-        s
-      ) else (
-        assume KMTable.Bounded(joined);
-        var buckets' := KMTable.splitOnPivots(joined, pivots);
-        var newnode := Node(pivots, None, buckets');
-        var s' := write(k, s, ref, newnode);
-        s'
-      )
+      WFGetNewPivots(joined);
+
+      var buckets' := KMTable.splitOnPivots(joined, pivots);
+      var newnode := Node(pivots, None, buckets');
+      var s' := write(k, s, ref, newnode);
+      s'
     )
   }
 
-  lemma repivotLeafCorrect(k: Constants, s: Variables, ref: BT.G.Reference, slot: int, node: Node)
+  lemma repivotLeafCorrect(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
-  requires 0 <= slot < |s.cache[ref].buckets|
   requires ref != BT.G.Root()
-  requires s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
-      ref in IIndirectionTable(s.frozenIndirectionTable.value).locs
-  ensures var s' := repivotLeaf(k, s, ref, slot, node);
+  ensures var s' := repivotLeaf(k, s, ref, node);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
   {
     reveal_repivotLeaf();
 
-    if (!(
-      && |node.buckets| < 0x8000_0000
-      && (forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000)
-    )) {
+    if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) {
       assert noop(k, IVars(s), IVars(s));
       return;
     }
-
-    //assert MapsTo(IVars(s).cache, ref, INode(node));
 
     forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in KMTable.I(node.buckets[i]) && key2 in KMTable.I(node.buckets[j])
     ensures MS.Keyspace.lt(key1, key2)
@@ -96,22 +81,18 @@ module ImplModelLeaf {
       MS.Keyspace.IsStrictlySortedImpliesLte(node.pivotTable, i, j-1);
     }
 
-    var joined := KMTable.join(node.buckets);
-    KMTable.joinEqJoinBucketList(node.buckets, node.pivotTable);
-    assume KMTable.Bounded(joined);
+    var joined := KMTable.join(node.buckets, node.pivotTable);
 
     var pivots := GetNewPivots(joined);
     WFGetNewPivots(joined);
-
-    if (!(|pivots| < 0x7fff_ffff_ffff_ffff)) {
-      assert noop(k, IVars(s), IVars(s));
-      return;
-    }
 
     var buckets' := KMTable.splitOnPivots(joined, pivots);
     var newnode := Node(pivots, None, buckets');
 
     KMTable.WFImpliesWFBucket(joined);
+
+    WeightJoinBucketList(KMTable.ISeq(node.buckets));
+    WeightSplitBucketOnPivots(KMTable.I(joined), pivots);
 
     WFSplitBucketOnPivots(KMTable.I(joined), pivots);
     var s' := write(k, s, ref, newnode);
@@ -119,7 +100,7 @@ module ImplModelLeaf {
     reveal_write();
 
     //assert BT.ValidRepivot(BT.Repivot(ref, node, pivots));
-    ghost var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));
+    var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));
     assert BT.ValidBetreeStep(step);
     assert |BT.BetreeStepOps(step)| == 1; // TODO
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(step)[0]);

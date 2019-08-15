@@ -1,16 +1,21 @@
 include "ImplModelCache.i.dfy"
+include "ImplModelFlushPolicy.i.dfy"
 
 module ImplModelInsert { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
+  import opened ImplModelFlushPolicy
 
   import opened Options
   import opened Maps
   import opened Sets
   import opened Sequences
+  import opened NativeTypes
 
+  import opened BucketWeights
   import opened BucketsLib
+  import opened Bounds
 
   import PBS = PivotBetreeSpec`Spec
 
@@ -44,7 +49,10 @@ module ImplModelInsert {
       var msg := Messages.Define(value);
       var newRootBucket := s.rootBucket[key := msg];
 
+      var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
+
       var s' := s.(rootBucket := newRootBucket)
+          .(rootBucketWeightBound := newW)
           .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
       (s', true)
     )
@@ -68,6 +76,10 @@ module ImplModelInsert {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
+      s.rootBucketWeightBound as int +
+      WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+      <= MaxTotalBucketWeight()
   ensures var (s', success) := InsertKeyValue(k, s, key, value);
       && WFVars(s')
       && M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
@@ -88,6 +100,8 @@ module ImplModelInsert {
 
     var msg := Messages.Define(value);
 
+    WeightBucketPut(s.rootBucket, key, msg);
+
     var baseroot := s.cache[BT.G.Root()];
 
     var r := Pivots.Route(baseroot.pivotTable, key);
@@ -97,7 +111,10 @@ module ImplModelInsert {
 
     var newRootBucket := s.rootBucket[key := msg];
 
+    var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
+
     var s' := s.(rootBucket := newRootBucket)
+        .(rootBucketWeightBound := newW)
         .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
 
     var oldroot := INodeRoot(baseroot, s.rootBucket);
@@ -108,10 +125,16 @@ module ImplModelInsert {
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
+    WeightBucketListFlush(s.rootBucket, KMTable.ISeq(baseroot.buckets), oldroot.pivotTable);
+
     var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
+    assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
+
+    assert WFVars(s');
 
     assert BC.Dirty(Ik(k), IVars(s), IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
+    assert BT.ValidBetreeStep(btStep);
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(btStep)[0]);
     assert BC.OpTransaction(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(btStep));
     assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, btStep);
@@ -132,9 +155,15 @@ module ImplModelInsert {
     ) else if (BT.G.Root() !in s.cache) then (
       var (s', io') := PageInReq(k, s, io, BT.G.Root());
       (s', false, io')
-    ) else (
+    ) else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
+        s.rootBucketWeightBound as int +
+        WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+        <= MaxTotalBucketWeight() then (
       var (s', success) := InsertKeyValue(k, s, key, value);
       (s', success, io)
+    ) else (
+      var (s', io') := runFlushPolicy(k, s, io);
+      (s', false, io')
     )
   }
 
@@ -153,8 +182,14 @@ module ImplModelInsert {
       PageInIndirectionTableReqCorrect(k, s, io);
     } else if (BT.G.Root() !in s.cache) {
       PageInReqCorrect(k, s, io, BT.G.Root());
-    } else {
+    } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
+        s.rootBucketWeightBound as int +
+        WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+        <= MaxTotalBucketWeight() {
       InsertKeyValueCorrect(k, s, key, value);
+    } else {
+      runFlushPolicyCorrect(k, s, io);
     }
   }
+
 }

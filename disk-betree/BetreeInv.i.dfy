@@ -462,9 +462,9 @@ module BetreeInv {
   ensures PreservesLookups(k, s, s')
   {
     var f := flush;
-    var newbuffer := imap k :: (if k in f.movedKeys then G.M.Merge(f.parent.buffer[k], f.child.buffer[k]) else f.child.buffer[k]);
+    var newbuffer := imap k :: (if k in f.flushedKeys then G.M.Merge(f.parent.buffer[k], f.child.buffer[k]) else f.child.buffer[k]);
     var newchild := Node(f.child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in f.movedKeys then G.M.Update(G.M.NopDelta()) else f.parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in f.flushedKeys then G.M.Update(G.M.NopDelta()) else f.parent.buffer[k]);
     var newparentchildren := imap k | k in f.parent.children :: (if k in f.movedKeys then f.newchildref else f.parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
 
@@ -476,6 +476,11 @@ module BetreeInv {
           var lookup' := lookup[parentLayer := ReadOp(f.parentref, newparent)];
           forall j | 0 <= j < |lookup'|
           ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
+            if (j == parentLayer) {
+              assert IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node);
+            } else {
+              assert IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node);
+            }
           }
           assert lookup[..parentLayer] + [lookup[parentLayer]] + lookup[parentLayer+1..] == lookup; // observe
           assert lookup'[..parentLayer] + [lookup'[parentLayer]] + lookup'[parentLayer+1..] == lookup'; // observe
@@ -516,13 +521,18 @@ module BetreeInv {
             assert lookup[..parentLayer] == lookup'[..parentLayer];
             assert lookup[parentLayer+2..] == lookup'[parentLayer+2..];
 
-            assert InterpretLookup([lookup'[parentLayer]], key) == G.M.Update(G.M.NopDelta());
-
             assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer);    // Handles the j==parentLayer+1 case; connects middle[1] to f.child.
             forall j | 0 <= j < |lookup'|-1
               ensures LookupFollowsChildRefAtLayer(key, lookup', j)
             {
               assert LookupFollowsChildRefAtLayer(key, lookup, j);
+            }
+
+            if (key in flush.flushedKeys) {
+              assert InterpretLookup([lookup'[parentLayer]], key) == G.M.Update(G.M.NopDelta());
+              assert InterpretLookup(middle, key) == InterpretLookup(middle', key);
+            } else {
+              assert InterpretLookup(middle, key) == InterpretLookup(middle', key);
             }
 
             PropagateInterperetation(lookup, lookup', parentLayer, middle, middle', key);

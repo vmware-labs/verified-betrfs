@@ -1,13 +1,9 @@
 include "Impl.i.dfy"
 include "ImplIO.i.dfy"
-include "ImplSplit.i.dfy"
-include "ImplFlush.i.dfy"
-include "ImplFlushRootBucket.i.dfy"
-include "ImplGrow.i.dfy"
 include "ImplDealloc.i.dfy"
-include "ImplLeaf.i.dfy"
 include "ImplModelSync.i.dfy"
 include "ImplModelCache.i.dfy"
+include "ImplFlushRootBucket.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -17,13 +13,9 @@ include "../lib/Sets.i.dfy"
 module ImplSync { 
   import opened Impl
   import opened ImplIO
-  import opened ImplSplit
   import opened ImplCache
-  import opened ImplFlush
-  import opened ImplFlushRootBucket
   import opened ImplDealloc
-  import opened ImplGrow
-  import opened ImplLeaf
+  import opened ImplFlushRootBucket
   import ImplModelSync
   import ImplModelCache
   import ImplModelDealloc
@@ -37,80 +29,6 @@ module ImplSync {
   import opened BucketsLib
 
   import opened NativeTypes
-
-  method {:fuel JoinBucketList,0} fixBigNode(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
-  returns (s': ImplVariables)
-  requires Inv(k, s)
-  requires s.Ready?
-  requires ref in s.cache
-  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
-  requires ref in IIndirectionTable(s.ephemeralIndirectionTable)[parentref].1
-  requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this I think
-  requires ref != BT.G.Root()
-  requires io.initialized()
-  modifies io
-  ensures WVars(s')
-  ensures (IVars(s'), IIO(io)) == ImplModelSync.fixBigNode(Ic(k), old(IVars(s)), old(IIO(io)), ref, parentref)
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  modifies s.ephemeralIndirectionTable.Repr
-  {
-    ImplModelSync.reveal_fixBigNode();
-
-    if (ref !in s.cache) {
-      s' := PageInReq(k, s, io, ref);
-      return;
-    }
-
-    if s.frozenIndirectionTable.Some? {
-      var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
-      if lbaGraph.Some? {
-        var (lba, _) := lbaGraph.value;
-        if lba.None? {
-          s' := s;
-          print "giving up; fixBigNode can't run because frozen isn't written";
-          return;
-        }
-      }
-    }
-
-    ImplModelCache.lemmaGraphChildInGraph(Ic(k), IVars(s), parentref, ref);
-    assert IIndirectionTable(s.ephemeralIndirectionTable)[parentref].1
-        == IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph[parentref];
-
-    var node := s.cache[ref];
-
-    var i := ImplModelSync.getUncappedBucket(node.buckets, 0);
-    if i.Some? {
-      if (node.children.Some?) {
-        // internal node case: flush
-        s' := flush(k, s, io, ref, i.value);
-        return;
-      } else {
-        // leaf case
-        s' := repivotLeaf(k, s, ref, i.value, node);
-        return;
-      }
-    } else if |node.buckets| > IMM.CapNumBuckets() as int {
-      if (parentref !in s.cache) {
-        ImplModelSync.lemmaRefHasLoc(Ic(k), IVars(s), parentref);
-        s' := PageInReq(k, s, io, parentref);
-        return;
-      }
-
-      var parent := s.cache[parentref];
-
-      assert ref in BT.G.Successors(IM.INode(parent));
-      var j := SeqIndex(parent.children.value, ref);
-
-      s' := doSplit(k, s, parentref, ref, j.value);
-      return;
-    } else {
-      s' := s;
-      print "giving up; fixBigNode\n";
-      return;
-    }
-  }
 
   method AssignRefToLoc(table: MutIndirectionTable, ref: Reference, loc: BC.Location)
   requires table.Inv()
@@ -129,35 +47,6 @@ module ImplSync {
     }
     //assert IIndirectionTable(table) ==
     //    old(BC.assignRefToLocation(IIndirectionTable(table), ref, loc));
-  }
-
-  method FindUncappedNodeInCache(s: ImplVariables) returns (ref: Option<Reference>)
-  requires WFVars(s)
-  requires s.Ready?
-  ensures ref == ImplModelSync.FindUncappedNodeInCache(IVars(s))
-  {
-    assume false;
-    // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var ephemeralTable := s.ephemeralIndirectionTable.ToMap();
-    var ephemeralRefs := SetToSeq(ephemeralTable.Keys);
-
-    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-
-    var i: uint64 := 0;
-    while i as int < |ephemeralRefs|
-    invariant i as int <= |ephemeralRefs|
-    invariant forall k : nat | k < i as nat :: (
-        && ephemeralRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
-        && (ephemeralRefs[k] !in s.cache || IMM.CappedNode(s.cache[ephemeralRefs[k]])))
-    {
-      var ref := ephemeralRefs[i];
-      if ref in s.cache && !IMM.CappedNode(s.cache[ref]) {
-        return Some(ref);
-      }
-      i := i + 1;
-    }
-    assert forall r | r in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph :: r !in s.cache || IMM.CappedNode(s.cache[r]);
-    return None;
   }
 
   method FindRefInFrozenWithNoLoc(s: ImplVariables) returns (ref: Option<Reference>)
@@ -194,48 +83,6 @@ module ImplSync {
     return None;
   }
 
-  method FindParentRef(s: ImplVariables, ref: Reference) returns (result: Reference)
-  requires WFVars(s)
-  requires s.Ready?
-  ensures result == ImplModelSync.FindParentRef(IVars(s), ref)
-  {
-    assume false;
-    assert s.ephemeralIndirectionTable.Inv();
-    var ephemeralTable := s.ephemeralIndirectionTable.ToMap();
-
-    var ephemeralRefs := SetToSeq(ephemeralTable.Keys);
-    assert forall k | k in ephemeralRefs :: k in ephemeralTable;
-
-    assert forall k | k in ephemeralRefs :: k in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph; // TODO
-
-    // TODO how do we deal with this?
-    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-
-    var i: uint64 := 0;
-    while i as nat < |ephemeralRefs|
-    invariant i as nat <= |ephemeralRefs|
-    invariant forall k : nat | k < i as nat :: (
-        || ephemeralRefs[k] !in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
-        || ref !in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph[ephemeralRefs[k]])
-    {
-      var eRef := ephemeralRefs[i];
-      assert eRef in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph;
-
-      var lbaGraph := s.ephemeralIndirectionTable.Get(eRef);
-      assert lbaGraph.Some?;
-
-      var (_, graph) := lbaGraph.value;
-      if ref in graph {
-        assert eRef in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph && 
-            ref in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph[eRef];
-        return eRef;
-      }
-
-      i := i + 1;
-    }
-    assert false;
-  }
-
   method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
@@ -260,29 +107,14 @@ module ImplSync {
       s' := Dealloc(k, s, io, foundDeallocable.value);
       return;
     }
-    var foundUncapped := FindUncappedNodeInCache(s);
-    ImplModelSync.FindUncappedNodeInCacheCorrect(IVars(s));
-    if foundUncapped.Some? {
-      var ref := foundUncapped.value;
-      if (ref == BT.G.Root()) {
-        s' := fixBigRoot(k, s, io);
-        return;
-      } else {
-        var r := FindParentRef(s, ref);
-        ImplModelSync.FindParentRefCorrect(IVars(s), ref);
 
-        s' := fixBigNode(k, s, io, ref, r);
-        return;
-      }
-    } else {
-      var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
+    var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
 
-      s' := s
-          .(frozenIndirectionTable := Some(clonedEphemeralIndirectionTable))
-          .(syncReqs := BC.syncReqs3to2(s.syncReqs));
+    s' := s
+        .(frozenIndirectionTable := Some(clonedEphemeralIndirectionTable))
+        .(syncReqs := BC.syncReqs3to2(s.syncReqs));
 
-      return;
-    }
+    return;
   }
 
   method {:fuel BC.GraphClosed,0} syncFoundInFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: Reference)
@@ -305,15 +137,6 @@ module ImplSync {
   {
     assert ref in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).graph;
     assert ref !in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).locs;
-
-    if (!IMM.CappedNode(s.cache[ref])) {
-      // TODO we should be able to prove this is impossible by adding an invariant
-      // about frozenIndirectionTable (that is, we should never be freezing a table
-      // with too-big nodes in it)
-      s' := s;
-      print "sync: giving up; frozen table has big node rip (TODO we should prove this case impossible)\n";
-      return;
-    }
 
     var ephemeralRef := s.ephemeralIndirectionTable.Get(ref);
     if ephemeralRef.Some? && ephemeralRef.value.0.Some? {

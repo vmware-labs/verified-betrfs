@@ -14,14 +14,21 @@ module ImplFlushRootBucket {
   import opened Sets
 
   import opened BucketsLib
+  import opened BucketWeights
+
+  import TTT = TwoThreeTree
+
+  import MS = MapSpec
+  import Keyspace = MS.Keyspace
 
   method {:fuel BC.GraphClosed,0} flushRootBucket(k: ImplConstants, s: ImplVariables)
   returns (s': ImplVariables)
   requires Inv(k, s)
   requires s.Ready?
-  requires s.rootBucket != TTT.EmptyTree
+  requires BT.G.Root() in s.cache
   ensures WVars(s')
   ensures IVars(s') == ImplModelFlushRootBucket.flushRootBucket(Ic(k), old(IVars(s)))
+  ensures s.ephemeralIndirectionTable == s'.ephemeralIndirectionTable
   {
     ImplModelFlushRootBucket.reveal_flushRootBucket();
 
@@ -29,34 +36,18 @@ module ImplFlushRootBucket {
 
     var rootBucketSeq := TTT.AsSeq(s.rootBucket);
 
-    if (!(
-        && |rootBucketSeq| < 0x800_0000_0000
-        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].0| < 0x1_000)
-        && (forall i | 0 <= i < |rootBucketSeq| :: rootBucketSeq[i].1 != Messages.IdentityMessage())
-        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].1.value| < 0x1_000)))
-    {
-      s' := s;
-      print "giving up; rootBucketSeq too big\n";
-      return;
-    }
+    ghost var IrootBucket := TTT.I(s.rootBucket);
+    Keyspace.lenSortedSeqForMap(rootBucketSeq, IrootBucket);
+    LenLeWeight(IrootBucket);
+    var kmt := KMTable.KmtOfSeq(rootBucketSeq, IrootBucket);
 
-    var kmt := KMTable.KMTableOfSeq(rootBucketSeq, TTT.I(s.rootBucket));
-
-    if (!(
-      && |kmt.keys| < 0x4000_0000_0000_0000
-      && |oldroot.buckets| < 0x1_0000_0000_0000_0000
-      && (forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].keys| < 0x4000_0000_0000_0000)
-    )) {
-      s' := s;
-      print "giving up; kmt/oldroot.buckets too big\n";
-      return;
-    }
-
+    assume WeightBucket(KMTable.I(kmt)) + WeightBucketList(KMTable.ISeq(oldroot.buckets)) < 0x8000_0000_0000_0000;
     var newbuckets := KMTable.Flush(kmt, oldroot.buckets, oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);
 
     s' := s.(rootBucket := TTT.EmptyTree)
+           .(rootBucketWeightBound := 0)
         .(cache := s.cache[BT.G.Root() := newroot]);
   }
 

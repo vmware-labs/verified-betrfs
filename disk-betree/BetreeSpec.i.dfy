@@ -146,13 +146,14 @@ module BetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>)
+  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>, flushedKeys: iset<Key>)
 
   predicate ValidFlush(flush: NodeFlush)
   {
     && WFNode(flush.parent)
     && WFNode(flush.child)
-    && (forall key :: key in flush.movedKeys ==> IMapsTo(flush.parent.children, key, flush.childref))
+    && (forall key | key in flush.flushedKeys :: key in flush.movedKeys)
+    && (forall key | key in flush.movedKeys :: IMapsTo(flush.parent.children, key, flush.childref))
   }
 
   function FlushReads(flush: NodeFlush) : seq<ReadOp>
@@ -173,9 +174,9 @@ module BetreeSpec {
     var childref := flush.childref;
     var child := flush.child;
     var newchildref := flush.newchildref;
-    var newbuffer := imap k :: (if k in flush.movedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
+    var newbuffer := imap k :: (if k in flush.flushedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in flush.movedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in flush.flushedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in flush.movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
     var allocop := G.AllocOp(newchildref, newchild);

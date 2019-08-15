@@ -14,6 +14,7 @@ module ImplSplit {
   import opened Sets
 
   import opened BucketsLib
+  import opened BucketWeights
   import PivotsLib
 
   import opened NativeTypes
@@ -27,6 +28,7 @@ module ImplSplit {
     var cLeft := Pivots.ComputeCutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
+    WeightBucketLeBucketList(KMTable.ISeq(node.buckets), cLeft);
     var splitBucket := KMTable.SplitLeft(node.buckets[cLeft], pivot);
     var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
     node' := IM.Node(leftPivots, leftChildren, leftBuckets);
@@ -41,6 +43,7 @@ module ImplSplit {
     var cRight := Pivots.ComputeCutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
+    WeightBucketLeBucketList(KMTable.ISeq(node.buckets), cRight);
     var splitBucket := KMTable.SplitRight(node.buckets[cRight], pivot);
     var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
     node' := IM.Node(rightPivots, rightChildren, rightBuckets);
@@ -86,7 +89,8 @@ module ImplSplit {
   ensures res == ImplModelSplit.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref)
   {
     var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    var buckets := KMTable.SplitKMTableInList(fused_parent.buckets, slot_idx, pivot);
+    WeightBucketLeBucketList(KMTable.ISeq(fused_parent.buckets), slot_idx);
+    var buckets := KMTable.SplitKMTInList(fused_parent.buckets, slot_idx as uint64, pivot);
     res := IM.Node(
       pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),

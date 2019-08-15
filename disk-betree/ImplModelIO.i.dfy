@@ -6,6 +6,8 @@ module ImplModelIO {
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import opened Bounds
+  import opened BucketWeights
   import IMM = ImplMarshallingModel
   import Marshalling = Marshalling
   import LBAType
@@ -93,7 +95,7 @@ module ImplModelIO {
     )
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= IMM.BlockSize() as int
+      && |bytes| <= BlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes) == Some(sector)
 
@@ -108,7 +110,6 @@ module ImplModelIO {
       id: Option<D.ReqId>, io': IO)
   requires WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block)
   requires LBAType.ValidLocation(loc)
   requires RequestWrite(io, loc, sector, id, io');
   ensures M.ValidDiskOp(diskOp(io'))
@@ -137,7 +138,7 @@ module ImplModelIO {
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= IMM.BlockSize() as int
+      && |bytes| <= BlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes) == Some(sector)
 
@@ -156,7 +157,6 @@ module ImplModelIO {
   requires s.Ready?
   requires WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block)
   requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures M.ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
@@ -279,7 +279,9 @@ module ImplModelIO {
   }
 
   lemma INodeRootEqINodeForEmptyRootBucket(node: Node)
-  requires WFNode(node)
+  requires WFBuckets(node.buckets)
+  requires Pivots.WFPivots(node.pivotTable)
+  requires BucketsLib.WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
   ensures INodeRoot(node, map[]) == INode(node);
   {
     BucketsLib.BucketListFlushParentEmpty(KMTable.ISeq(node.buckets), node.pivotTable);
@@ -334,14 +336,14 @@ module ImplModelIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], map[])
+      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], map[], 0)
     ) else (
       s
     )
   }
 
   lemma PageInIndirectionTableRespCorrect(k: Constants, s: Variables, io: IO)
-  requires WFVars(s)
+  requires Inv(k, s)
   requires diskOp(io).RespReadOp?
   requires s.Unready?
   ensures var s' := PageInIndirectionTableResp(k, s, io);
@@ -357,6 +359,7 @@ module ImplModelIO {
 
     var s' := PageInIndirectionTableResp(k, s, io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
+      WeightBucketEmpty();
       assert WFVars(s');
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
@@ -441,7 +444,9 @@ module ImplModelIO {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
         INodeRootEqINodeForEmptyRootBucket(node);
+        WeightBucketEmpty();
 
+        assert WFVars(s');
         assert BC.PageInResp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
         assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInRespStep);
       } else {
@@ -465,8 +470,7 @@ module ImplModelIO {
 
   lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
   requires diskOp(io).RespReadOp?
-  requires WFVars(s)
-  requires BBC.Inv(Ik(k), IVars(s))
+  requires Inv(k, s)
   ensures var s' := readResponse(k, s, io);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))

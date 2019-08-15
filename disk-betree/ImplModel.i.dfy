@@ -31,6 +31,8 @@ module ImplModel {
   import SD = AsyncSectorDisk
   import D = AsyncDisk
   import opened BucketsLib
+  import opened BucketWeights
+  import opened Bounds
   import UI
 
   import ReferenceType`Internal
@@ -45,7 +47,7 @@ module ImplModel {
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<Reference>>,
-      buckets: seq<KMTable.KMTable>
+      buckets: seq<KMTable.KMT>
     )
   datatype Constants = Constants()
   datatype Variables =
@@ -59,22 +61,24 @@ module ImplModel {
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
         syncReqs: map<int, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
-        rootBucket: map<Key, Message>)
+        rootBucket: map<Key, Message>,
+        rootBucketWeightBound: uint64)
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
 
-  predicate WFBuckets(buckets: seq<KMTable.KMTable>)
+  predicate WFBuckets(buckets: seq<KMTable.KMT>)
   {
     && (forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i]))
-    && (forall i | 0 <= i < |buckets| :: KMTable.Bounded(buckets[i]))
   }
   predicate WFNode(node: Node)
   {
     && WFBuckets(node.buckets)
     && WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
     && (node.children.Some? ==> |node.buckets| == |node.children.value|)
+    && |node.buckets| <= MaxNumChildren()
+    && WeightBucketList(KMTable.ISeq(node.buckets)) <= MaxTotalBucketWeight()
   }
   predicate WFCache(cache: map<Reference, Node>)
   {
@@ -84,11 +88,23 @@ module ImplModel {
   predicate WFVarsReady(vars: Variables)
   requires vars.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) := vars;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) := vars;
     && WFCache(cache)
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (rootBucket != map[] ==> BT.G.Root() in cache)
+    && (rootBucketWeightBound != 0 ==> BT.G.Root() in cache)
+    && (BT.G.Root() in cache ==>
+        rootBucketWeightBound as int + WeightBucketList(KMTable.ISeq(cache[BT.G.Root()].buckets))
+          <= MaxTotalBucketWeight())
+
+    // TODO this is an <= rather than an == for convenience
+    // so that when we update the rootBucket, we don't have to do an extra
+    // query into the rootBucket first to figure out the amount to subtract.
+    // When deltas become a thing we'll need to do queries ANYWAY so we should just
+    // make a way to do a query-and-update to the in-memory rootBucket without traversing
+    // the tree twice.
+    && WeightBucket(rootBucket) <= rootBucketWeightBound as int
   }
   predicate WFVars(vars: Variables)
   {
@@ -110,7 +126,9 @@ module ImplModel {
     BT.G.Node(node.pivotTable, node.children, KMTable.ISeq(node.buckets))
   }
   function INodeRoot(node: Node, rootBucket: map<Key, Message>) : BT.G.Node
-  requires WFNode(node)
+  requires WFBuckets(node.buckets)
+  requires Pivots.WFPivots(node.pivotTable)
+  requires |node.buckets| == |node.pivotTable| + 1
   {
     BT.G.Node(node.pivotTable, node.children,
       BucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable))
@@ -154,7 +172,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache, rootBucket))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }

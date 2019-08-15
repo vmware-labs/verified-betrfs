@@ -17,6 +17,7 @@ include "PivotBetree.i.dfy"
 module PivotBetreeInvAndRefinement {
   import opened PivotBetreeSpec`Spec
   import opened Sequences
+  import opened BucketWeights
   import PB = PivotBetree
   import PBI = PivotBetreeBlockInterface
   import B = Betree
@@ -254,6 +255,8 @@ module PivotBetreeInvAndRefinement {
     ensures Inv(k, s)
     ensures B.Init(Ik(k), I(k, s))
   {
+    reveal_WeightBucketList();
+    reveal_WeightBucket();
     assert SpecRef.INode(PB.EmptyNode()) == B.EmptyNode();
     BInv.InitImpliesInv(Ik(k), I(k, s));
   }

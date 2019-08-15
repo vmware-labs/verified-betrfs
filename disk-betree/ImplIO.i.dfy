@@ -82,7 +82,6 @@ module ImplIO {
   returns (id: Option<D.ReqId>)
   requires IS.WFSector(sector)
   requires IM.WFSector(IS.ISector(sector))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
   requires io.initialized()
   modifies io
   ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
@@ -106,7 +105,6 @@ module ImplIO {
   requires s.Ready?
   requires IS.WFSector(sector)
   requires IM.WFSector(IS.ISector(sector))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
   requires io.initialized()
   modifies io
   ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))
@@ -224,7 +222,7 @@ module ImplIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
-      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
+      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree, 0);
     } else {
       s' := s;
       print "giving up; did not get indirectionTable when reading\n";

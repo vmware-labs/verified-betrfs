@@ -109,6 +109,24 @@ module BucketsLib {
     map key | key in bucket && Route(pivots, key) == i :: bucket[key]
   }
 
+  function {:opaque} BucketIntersect(bucket: Bucket, keys: set<Key>) : Bucket
+  {
+    map key | key in bucket && key in keys :: bucket[key]
+  }
+
+  function {:opaque} BucketComplement(bucket: Bucket, keys: set<Key>) : Bucket
+  {
+    map key | key in bucket && key !in keys :: bucket[key]
+  }
+
+  lemma WFBucketIntersect(bucket: Bucket, keys: set<Key>)
+  requires WFBucket(bucket)
+  ensures WFBucket(BucketIntersect(bucket, keys))
+
+  lemma WFBucketComplement(bucket: Bucket, keys: set<Key>)
+  requires WFBucket(bucket)
+  ensures WFBucket(BucketComplement(bucket, keys))
+
   ///// Splitting stuff
 
   function SplitBucketLeft(bucket: Bucket, pivot: Key) : Bucket
@@ -141,6 +159,20 @@ module BucketsLib {
     replace1with2(blist,
         SplitBucketLeft(blist[slot], pivot),
         SplitBucketRight(blist[slot], pivot),
+        slot)
+  }
+
+  function {:opaque} MergeBuckets(left: Bucket, right: Bucket) : Bucket
+  {
+    MapUnionPreferA(left, right)
+  }
+
+  function {:opaque} MergeBucketsInList(blist: BucketList, slot: int) : (blist' : BucketList)
+  requires 0 <= slot < |blist| - 1
+  ensures |blist'| == |blist| - 1
+  {
+    replace2with1(blist,
+        MergeBuckets(blist[slot], blist[slot+1]),
         slot)
   }
 
@@ -266,6 +298,17 @@ module BucketsLib {
       }
     }
   }
+
+  lemma WFMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
+  requires 0 <= slot < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures WFBucketList(MergeBucketsInList(blist, slot), remove(pivots, slot))
+
+  lemma SplitOfMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
+  requires 0 <= slot < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures SplitBucketLeft(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot]
+  ensures SplitBucketRight(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot+1]
 
   ///// Other lemmas
 
@@ -623,21 +666,6 @@ module BucketsLib {
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist[i..], pivots[i..], 0, |blist|-i-1, -i);
   }
 
-  lemma WFBucketListReplace1with2(blist: BucketList, pivots: PivotTable, i: int, pivot: Key)
-  requires WFBucketList(blist, pivots)
-  requires PivotInsertable(pivots, i, pivot)
-  ensures WFBucketList(
-      replace1with2(blist, map[], map[], i),
-      insert(pivots, pivot, i))
-  {
-    var blist' := replace1with2(blist, map[], map[], i);
-    var pivots' := insert(pivots, pivot, i);
-    WFPivotsInsert(pivots, i, pivot);
-
-    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, i-1, 0);
-    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', i+2, |blist'|-1, 1);
-  }
-
   lemma BucketListInsertBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable, key: Key, msg: Message)
   requires WFBucketList(children, pivots)
   ensures WFBucketList(BucketListFlush(parent, children, pivots), pivots)
@@ -658,4 +686,20 @@ module BucketsLib {
       MergeIsAssociative(msg, BucketGet(parent, key), BucketGet(children[i], key));
     }
   }
+
+  lemma BucketListFlushSplitInList(parent: Bucket, children: BucketList, pivots: PivotTable, slot: int, pivot: Key)
+  requires WFPivots(pivots)
+  requires WFBucketList(children, pivots)
+  requires PivotInsertable(pivots, slot, pivot)
+  requires |children| == |pivots| + 1
+  ensures WFPivots(insert(pivots, pivot, slot))
+  ensures
+      BucketListFlush(
+        parent,
+        SplitBucketInList(children, slot, pivot),
+        insert(pivots, pivot, slot))
+      == SplitBucketInList(
+        BucketListFlush(parent, children, pivots),
+        slot,
+        pivot)
 }
