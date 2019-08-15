@@ -359,19 +359,25 @@ class Framework {
 
   public static void Main(string[] args) {
     bool mkfs = false;
-    bool benchmark = false;
+    bool allBenchmarks = false;
+    String benchmark = null;
     foreach (string arg in args) {
       if (arg.Equals("--mkfs")) {
         mkfs = true;
       }
-      if (arg.Equals("--benchmark")) {
-        benchmark = true;
+      if (arg.Equals("--all-benchmarks")) {
+        allBenchmarks = true;
+      } else if (arg.StartsWith("--benchmark=")) {
+        benchmark = arg.Substring(12);
       }
     }
 
-    if (benchmark) {
+    if (allBenchmarks) {
       Benchmarks b = new Benchmarks();
       b.RunAllBenchmarks();
+    } else if (benchmark != null) {
+      Benchmarks b = new Benchmarks();
+      b.RunBenchmark(benchmark);
     } else if (mkfs) {
       FSUtil.Mkfs();
     } else {

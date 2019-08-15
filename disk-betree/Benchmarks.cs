@@ -272,6 +272,24 @@ class Benchmarks {
 
     Native_Compile.BenchmarkingUtil.dump();
   }
+
+  static Dictionary<string, Func<Benchmark>> _benchmarks = new Dictionary<string, Func<Benchmark>>
+  {
+    { "random-queries", () => new BenchmarkRandomQueries() }, 
+    { "random-inserts", () => new BenchmarkRandomInserts() }, 
+    { "sequential-queries", () => new BenchmarkSequentialQueries() }, 
+    { "sequential-inserts", () => new BenchmarkSequentialInserts() }, 
+  };
+
+  public void RunBenchmark(String name) {
+    if (!_benchmarks.ContainsKey(name)) {
+        Console.WriteLine("invalid benchmark, either use --all-benchmarks or choose one of the following with --benchmark=name:");
+        foreach (var k in _benchmarks.Keys) {
+            Console.WriteLine("    " + k);
+        }
+    }
+    (_benchmarks[name])().Run();
+  }
 }
 
 namespace Native_Compile {
