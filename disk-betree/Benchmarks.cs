@@ -124,7 +124,51 @@ class BenchmarkRandomInserts : Benchmark {
     for (int i = 0; i < keys.Count; i++) {
       app.Insert(keys[i], values[i]);
     }
+    Console.Error.Write("? sync ");
     app.Sync();
+    Console.Error.WriteLine("done");
+  }
+}
+
+// 50_000_000 random inserts
+class LongBenchmarkRandomInserts : Benchmark {
+  public override string Name { get { return "LongRandomInserts"; } }
+
+  int count = 50_000_000;
+
+  override protected int OpCount(Application app) {
+    return count;
+  }
+
+  public LongBenchmarkRandomInserts() {
+  }
+
+  override protected void Prepare(Application app) {
+  }
+
+  override protected void Go(Application app) {
+    for (uint i = 0; i < this.count; i++) {
+      byte[] keyBytes = new byte[20];
+      for (uint j = 0; j < 20; j++) {
+        byte k = (byte) (((i * 20 + j) * 1073741827) % 256);
+        keyBytes[j] = k;
+      }
+      uint valueSize = (((i * 2) * 16777213) % 1024) + 1;
+      byte[] valueBytes = new byte[400];
+      for (uint j = 0; j < 400; j++) {
+        byte v = (byte) (((i * 400 + j) * 2147483647) % 256);
+        valueBytes[j] = v;
+      }
+      app.Insert(keyBytes, valueBytes);
+      if (i % 1000000 == 0) {
+        Console.Error.Write("? sync at " + i.ToString() + " ");
+        app.Sync();
+        Console.Error.WriteLine("done");
+      }
+    }
+    Console.Error.Write("? sync at " + this.count + " ");
+    app.Sync();
+    Console.Error.WriteLine("done");
   }
 }
 
@@ -268,7 +312,7 @@ class Benchmarks {
     new BenchmarkRandomInserts().Run();
     new BenchmarkSequentialQueries().Run();
     new BenchmarkSequentialInserts().Run();
-    //new Hashing().Run();
+    // new Hashing().Run();
 
     Native_Compile.BenchmarkingUtil.dump();
   }
@@ -279,6 +323,7 @@ class Benchmarks {
     { "random-inserts", () => new BenchmarkRandomInserts() }, 
     { "sequential-queries", () => new BenchmarkSequentialQueries() }, 
     { "sequential-inserts", () => new BenchmarkSequentialInserts() }, 
+    { "long-random-inserts", () => new LongBenchmarkRandomInserts() }, 
   };
 
   public void RunBenchmark(String name) {
