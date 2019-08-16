@@ -1,12 +1,12 @@
 include "../lib/MutableMap.i.dfy"
-include "ImplImm.i.dfy"
+include "ImplModel.i.dfy"
 
 module {:extern} ImplState {
   import opened Options
   import opened Sequences
   import opened NativeTypes
   import TTT = TwoThreeTree
-  import II = ImplImm
+  import IM = ImplModel
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -28,7 +28,7 @@ module {:extern} ImplState {
 
   type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.Location>, seq<Reference>)>
 
-  type Node = II.Node
+  type Node = IM.Node
   datatype Variables =
     | Ready(
         persistentIndirectionTable: MutIndirectionTable,
@@ -104,12 +104,12 @@ module {:extern} ImplState {
     && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
   }
 
-  function JIndirectionTable(table: MutIndirectionTable) : (result: II.IndirectionTable)
+  function JIndirectionTable(table: MutIndirectionTable) : (result: IM.IndirectionTable)
   reads table, table.Repr
   {
     table.Contents
   }
-  function JIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<II.IndirectionTable>)
+  function JIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<IM.IndirectionTable>)
   reads if table.Some? then {table.value} + table.value.Repr else {}
   {
     if table.Some? then
@@ -117,23 +117,23 @@ module {:extern} ImplState {
     else
       None
   }
-  function JVars(vars: Variables) : II.Variables
+  function JVars(vars: Variables) : IM.Variables
   requires WVars(vars)
   reads VariablesReadSet(vars)
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) =>
-        II.Ready(JIndirectionTable(persistentIndirectionTable), JIndirectionTableOpt(frozenIndirectionTable), JIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket)
-      case Unready(outstandingIndirectionTableRead, syncReqs) => II.Unready(outstandingIndirectionTableRead, syncReqs)
+        IM.Ready(JIndirectionTable(persistentIndirectionTable), JIndirectionTableOpt(frozenIndirectionTable), JIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, TTT.I(rootBucket))
+      case Unready(outstandingIndirectionTableRead, syncReqs) => IM.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }
-  function ISector(sector: Sector) : II.Sector
+  function ISector(sector: Sector) : IM.Sector
   requires WFSector(sector)
   reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   {
     match sector {
-      case SectorBlock(node) => II.SectorBlock(node)
-      case SectorIndirectionTable(indirectionTable) => II.SectorIndirectionTable(JIndirectionTable(indirectionTable))
+      case SectorBlock(node) => IM.SectorBlock(node)
+      case SectorIndirectionTable(indirectionTable) => IM.SectorIndirectionTable(JIndirectionTable(indirectionTable))
     }
   }
 
@@ -145,6 +145,6 @@ module {:extern} ImplState {
   reads VariablesReadSet(vars)
   {
     && WVars(vars)
-    && ImplImm.WFVars(JVars(vars))
+    && IM.WFVars(JVars(vars))
   }
 }

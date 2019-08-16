@@ -53,8 +53,8 @@ module ImplIO {
     getFreeLocIterate(s, len, 0)
   }
 
-  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
-  returns (id: Option<D.ReqId>)
+  function RequestWrite(loc: LBAType.Location, sector: IS.Sector)
+  returns (id: Option<D.ReqId>, diskOp: DiskOp)
   requires IS.WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
   requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
@@ -71,14 +71,12 @@ module ImplIO {
     ImplADM.M.reveal_Parse();
     D.reveal_ChecksumChecksOut();
 
-    var bytes := Marshalling.MarshallCheckedSector(sector);
+    var bytes: seq<byte> := MarshallingModel.MarshallCheckedSector(sector);
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
     } else {
       var i := io.write(loc.addr, bytes);
       id := Some(i);
-
-      //assert ImplADM.M.ValidReqWrite(io.diskOp().reqWrite);
     }
   }
 
