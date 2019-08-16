@@ -141,7 +141,7 @@ module ImplMarshallingModel {
 
   function method {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<map<uint64, (Option<Location>, seq<Reference>)>>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-  ensures s.Some? ==> forall v | v in s.value.Values && v.0.Some? :: BC.ValidLocationForNode(v.0.value)
+  ensures s.Some? ==> forall v | v in s.value.Values :: v.0.Some? && BC.ValidLocationForNode(v.0.value)
   {
     if |a| == 0 then
       Some(map[])
@@ -300,7 +300,7 @@ module ImplMarshallingModel {
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i]) && WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -329,6 +329,8 @@ module ImplMarshallingModel {
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValidVal(v)
   requires ValInGrammar(v, PivotNodeGrammar())
+  // Pivots.NumBuckets(node.pivotTable) == |node.buckets|
+  ensures s.Some? ==> IM.WFNode(s.value)
   ensures s.Some? ==> BT.WFNode(IM.INode(s.value))
   {
     assert ValidVal(v.t[0]);
@@ -393,6 +395,7 @@ module ImplMarshallingModel {
   /////// Marshalling and de-marshalling
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
+  ensures s.Some? ==> IM.WFSector(s.value)
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -407,6 +410,7 @@ module ImplMarshallingModel {
   /////// Marshalling and de-marshalling with checksums
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
+  ensures s.Some? ==> IM.WFSector(s.value)
   {
     if |data| >= 32 && Crypto.Crc32(data[32..]) == data[..32] then
       parseSector(data[32..])

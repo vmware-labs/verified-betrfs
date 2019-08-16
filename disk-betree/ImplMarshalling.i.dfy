@@ -5,10 +5,13 @@ include "KMTable.i.dfy"
 include "../lib/Option.s.dfy"
 
 include "Marshalling.i.dfy"
+include "ImplMarshallingModel.i.dfy"
 
 module ImplMarshalling {
   import IM = ImplModel
-  import IMM = Marshalling
+  import IS = ImplState
+  import Marshalling
+  import IMM = ImplMarshallingModel
   import opened GenericMarshalling
   import opened Options
   import opened NativeTypes
@@ -35,7 +38,7 @@ module ImplMarshalling {
   type Reference = IMM.Reference
   type LBA = IMM.LBA
   type Location = IMM.Location
-  type Sector = IMM.Sector
+  type Sector = IS.Sector
   type Message = IMM.Message
   type Key = IMM.Key
   type Node = IMM.Node
@@ -43,13 +46,8 @@ module ImplMarshalling {
   /////// Conversion to PivotNode
 
   method {:fuel ValInGrammar,3} ValToLBAsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
-  requires IMM.valToLBAsAndSuccs.requires(a)
-  ensures (
-      && var table := IM.IIndirectionTableOpt(if s.Some? then Some(s.value.Contents) else None);
-      && var inter := IMM.valToLBAsAndSuccs(a);
-      && if table.Some?
-         then (inter.Some? && table.value.locs == inter.value.0 && table.value.graph == inter.value.1)
-         else inter.None?)
+  requires IMM.valToLocsAndSuccs.requires(a)
+  ensures MapOption(s, (x: ImplState.MutIndirectionTable) => x.Contents) == IMM.valToLocsAndSuccs(a)
   ensures s.Some? ==> s.value.Inv()
   ensures s.Some? ==> s.value.Count as nat == |a|
   ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
@@ -105,7 +103,7 @@ module ImplMarshalling {
 
   method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
   requires IMM.valToIndirectionTable.requires(v)
-  ensures IM.IIndirectionTableOpt(if s.Some? then Some(s.value.Contents) else None) == IMM.valToIndirectionTable(v)
+  ensures MapOption(s, (x: ImplState.MutIndirectionTable) => x.Contents) == IMM.valToIndirectionTable(v)
   ensures s.Some? ==> s.value.Inv()
   {
     var res := ValToLBAsAndSuccs(v.a);
@@ -198,7 +196,7 @@ module ImplMarshalling {
   ensures s.Some? ==> KMTable.WF(s.value)
   ensures s.Some? ==> KMTable.Bounded(s.value)
   ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
-  ensures IMM.IKMTableOpt(s) == IMM.valToBucket(v, pivotTable, i)
+  ensures s == IMM.valToBucket(v, pivotTable, i)
   {
     assert ValidVal(v.t[0]);
     if (|v.t[0].a| as uint64 >= KMTable.MaxNumKeys()) {
@@ -278,7 +276,7 @@ module ImplMarshalling {
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMTable>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   ensures s.Some? ==> IM.WFBuckets(s.value)
-  ensures IMM.ISeqKMTableOpt(s) == IMM.valToBuckets(a, pivotTable)
+  ensures s == IMM.valToBuckets(a, pivotTable)
   {
     var ar := new KMTable.KMTable[|a|];
 
@@ -289,7 +287,7 @@ module ImplMarshalling {
     invariant forall k: nat | k < i :: KMTable.Bounded(ar[k])
     invariant forall k: nat | k < i :: WFBucketAt(KMTable.I(ar[k]), pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
-    invariant Apply(KMTable.I, ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
+    // TODO invariant Apply(KMTable.I, ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
     {
       var b := ValToBucket(a[i], pivotTable, i);
       if (b.None?) {
@@ -311,7 +309,7 @@ module ImplMarshalling {
     assert ar[..|a|] == ar[..];
 
     assert IMM.valToBuckets(a[..], pivotTable).Some?;
-    assert Apply(KMTable.I, ar[..]) == IMM.valToBuckets(a, pivotTable).value;
+    // TODO assert Apply(KMTable.I, ar[..]) == IMM.valToBuckets(a, pivotTable).value;
 
     s := Some(ar[..]);
   }
@@ -349,7 +347,7 @@ module ImplMarshalling {
 
     assert IMM.valToNode(v).Some?;
     assert IM.WFBuckets(node.buckets);
-    assert IM.INode(node) == IMM.valToNode(v).value;
+    assert node == IMM.valToNode(v).value;
     return Some(node);
   }
 
@@ -369,7 +367,7 @@ module ImplMarshalling {
   requires IMM.valToSector.requires(v)
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
-  ensures IMM.ISectorOpt(s) == IMM.valToSector(v)
+  ensures MapOption(s, IS.ISector) == IMM.valToSector(v)
   {
     if v.c == 0 {
       var mutMap := ValToIndirectionTable(v.val);

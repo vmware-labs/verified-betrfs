@@ -73,7 +73,9 @@ module Marshalling {
   ensures s.Some? ==> |s.value| == |a|
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(s.value[i], pivotTable, i)
   {
-    MapOption(IMM.valToBuckets(a, pivotTable), bkts => Apply(KMTable.I, bkts))
+    MapOption(IMM.valToBuckets(a, pivotTable),
+      bkts requires forall i: nat | i < |bkts| :: KMTable.WF(bkts[i])
+      => Apply(KMTable.I, bkts))
   }
 
 

@@ -101,7 +101,7 @@ module ImplModel {
     }
   }
 
-  function INode(node: Node) : BT.G.Node
+  function INode(node: Node) : (result: BT.G.Node)
   requires WFBuckets(node.buckets)
   {
     BT.G.Node(node.pivotTable, node.children, KMTable.ISeq(node.buckets))
