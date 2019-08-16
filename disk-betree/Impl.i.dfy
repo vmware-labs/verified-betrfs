@@ -47,14 +47,6 @@ module Impl {
   function Ik(k: ImplConstants) : ImplADM.M.Constants { k }
   // </deduplicate>
 
-  predicate WFSector(sector: BC.Sector)
-  {
-    match sector {
-      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(indirectionTable)
-      case SectorBlock(node) => BT.WFNode(node)
-    }
-  }
-
   predicate stepsBetree(k: ImplConstants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, step: BT.BetreeStep)
   {
     ImplADM.M.NextStep(Ik(k), s, s', uiop, D.NoDiskOp, ImplADM.M.Step(BBC.BetreeMoveStep(step)))

@@ -2,6 +2,7 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "Message.i.dfy"
 include "ImplState.i.dfy"
+include "ImplImm.i.dfy"
 include "KMTable.i.dfy"
 include "../lib/Crypto.s.dfy"
 include "../lib/Option.s.dfy"
@@ -16,6 +17,7 @@ module Marshalling {
   import opened BucketsLib
   import BC = BetreeGraphBlockCache
   import ImplState
+  import ImplImm
   import KMTable
   import Crypto
   import Native
@@ -107,7 +109,7 @@ module Marshalling {
   }
 
   predicate method CappedNode(node: ImplState.Node)
-  requires ImplState.WFNode(node)
+  requires ImplImm.WFNode(node)
   {
     && |node.buckets| <= CapNumBuckets() as int
     && CappedBuckets(node.buckets)
@@ -175,7 +177,7 @@ module Marshalling {
   method {:fuel ValInGrammar,3} ValToLBAsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
   requires valToLBAsAndSuccs.requires(a)
   ensures (
-      && var table := ImplState.IIndirectionTableOpt(s);
+      && var table := ImplImm.IIndirectionTableOpt(ImplState.IIndirectionTableOpt(s));
       && var inter := valToLBAsAndSuccs(a);
       && if table.Some?
          then (inter.Some? && table.value.locs == inter.value.0 && table.value.graph == inter.value.1)
@@ -242,8 +244,8 @@ module Marshalling {
 
   method GraphClosed(table: ImplState.MutIndirectionTable) returns (result: bool)
     requires table.Inv()
-    requires BC.GraphClosed.requires(ImplState.IIndirectionTable(table).graph)
-    ensures BC.GraphClosed(ImplState.IIndirectionTable(table).graph) == result
+    requires BC.GraphClosed.requires(ImplImm.IIndirectionTable(ImplState.IIndirectionTable(table)).graph)
+    ensures BC.GraphClosed(ImplImm.IIndirectionTable(ImplState.IIndirectionTable(table)).graph) == result
   {
     var m := table.ToMap();
     var m' := map ref | ref in m :: m[ref].1;
@@ -252,7 +254,7 @@ module Marshalling {
 
   method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
   requires valToIndirectionTable.requires(v)
-  ensures ImplState.IIndirectionTableOpt(s) == valToIndirectionTable(v)
+  ensures ImplImm.IIndirectionTableOpt(ImplState.IIndirectionTableOpt(s)) == valToIndirectionTable(v)
   ensures s.Some? ==> s.value.Inv()
   {
     var res := ValToLBAsAndSuccs(v.a);
@@ -562,7 +564,7 @@ module Marshalling {
 
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMTable>>)
   requires valToBuckets.requires(a, pivotTable)
-  ensures s.Some? ==> ImplState.WFBuckets(s.value)
+  ensures s.Some? ==> ImplImm.WFBuckets(s.value)
   ensures ISeqKMTableOpt(s) == valToBuckets(a, pivotTable)
   {
     var ar := new KMTable.KMTable[|a|];
@@ -632,17 +634,17 @@ module Marshalling {
   }
 
   function INodeOpt(s : Option<ImplState.Node>): Option<Node>
-  requires s.Some? ==> ImplState.WFNode(s.value)
+  requires s.Some? ==> ImplImm.WFNode(s.value)
   {
     if s.Some? then
-      Some(ImplState.INode(s.value))
+      Some(ImplImm.INode(s.value))
     else
       None
   }
 
   method ValToNode(v: V) returns (s : Option<ImplState.Node>)
   requires valToNode.requires(v)
-  ensures s.Some? ==> ImplState.WFNode(s.value)
+  ensures s.Some? ==> ImplImm.WFNode(s.value)
   ensures INodeOpt(s) == valToNode(v)
   {
     assert ValidVal(v.t[0]);
@@ -669,11 +671,11 @@ module Marshalling {
     }
     var buckets := bucketsOpt.value;
 
-    var node := ImplState.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+    var node := ImplImm.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
 
     assert valToNode(v).Some?;
-    assert ImplState.WFBuckets(node.buckets);
-    assert ImplState.INode(node) == valToNode(v).value;
+    assert ImplImm.WFBuckets(node.buckets);
+    assert ImplImm.INode(node) == valToNode(v).value;
     return Some(node);
   }
 
@@ -696,10 +698,11 @@ module Marshalling {
 
   function ISectorOpt(s : Option<ImplState.Sector>): Option<BC.Sector>
   requires s.Some? ==> ImplState.WFSector(s.value)
+  requires s.Some? ==> ImplImm.WFSector(ImplState.ISector(s.value))
   reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
   {
     if s.Some? then
-      Some(ImplState.ISector(s.value))
+      Some(ImplImm.ISector(ImplState.ISector(s.value)))
     else
       None
   }
@@ -707,6 +710,7 @@ module Marshalling {
   method ValToSector(v: V) returns (s : Option<ImplState.Sector>)
   requires valToSector.requires(v)
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures s.Some? ==> ImplImm.WFSector(ImplState.ISector(s.value))
   ensures ISectorOpt(s) == valToSector(v)
   {
     if v.c == 0 {
@@ -959,8 +963,8 @@ module Marshalling {
   }
 
   method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
-  requires ImplState.WFNode(node)
-  requires BT.WFNode(ImplState.INode(node))
+  requires ImplImm.WFNode(node)
+  requires BT.WFNode(ImplImm.INode(node))
   requires CappedNode(node)
   ensures ValidVal(v)
   ensures SizeOfV(v) <= 
@@ -985,15 +989,16 @@ module Marshalling {
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
     assert valToNode(v).Some?;
-    assert valToNode(v).value == ImplState.INode(node);
+    assert valToNode(v).value == ImplImm.INode(node);
   }
 
   method sectorToVal(sector: ImplState.Sector) returns (v : Option<V>)
   requires ImplState.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
+  requires ImplImm.WFSector(ImplState.ISector(sector))
+  requires sector.SectorBlock? ==> BT.WFNode(ImplImm.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
   requires sector.SectorIndirectionTable? ==>
-      BC.WFCompleteIndirectionTable(ImplState.IIndirectionTable(sector.indirectionTable))
+      BC.WFCompleteIndirectionTable(ImplImm.IIndirectionTable(ImplState.IIndirectionTable(sector.indirectionTable)))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, SectorGrammar());
   ensures v.Some? ==> valToSector(v.value) == ISectorOpt(Some(sector))
@@ -1007,7 +1012,7 @@ module Marshalling {
         var lbas := map k | k in table && table[k].0.Some? :: table[k].0.value;
         var graph := map k | k in table :: table[k].1;
         assert table == mutMap.Contents;
-        ghost var indirectionTable := ImplState.IIndirectionTable(mutMap);
+        ghost var indirectionTable := ImplImm.IIndirectionTable(ImplState.IIndirectionTable(mutMap));
         assert lbas == indirectionTable.locs;
         assert graph == indirectionTable.graph;
         assert lbas.Keys == graph.Keys;
@@ -1045,8 +1050,9 @@ module Marshalling {
   method ParseSector(data: seq<byte>, start: uint64) returns (s : Option<Sector>)
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures s.Some? ==> ImplImm.WFSector(ImplState.ISector(s.value))
   ensures ISectorOpt(s) == parseSector(data[start..])
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplImm.INode(s.value.block))
   {
     reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, SectorGrammar());
@@ -1088,8 +1094,9 @@ module Marshalling {
   method ParseCheckedSector(data: seq<byte>) returns (s : Option<Sector>)
   requires |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures s.Some? ==> ImplImm.WFSector(ImplState.ISector(s.value))
   ensures ISectorOpt(s) == parseCheckedSector(data[..])
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplState.INode(s.value.block))
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(ImplImm.INode(s.value.block))
   {
     s := None;
 
@@ -1105,7 +1112,8 @@ module Marshalling {
 
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires ImplState.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(ImplState.INode(sector.block))
+  requires ImplImm.WFSector(ImplState.ISector(sector))
+  requires sector.SectorBlock? ==> BT.WFNode(ImplImm.INode(sector.block))
   requires sector.SectorBlock? ==> CappedNode(sector.block);
   ensures data != null ==> parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
   ensures data != null ==> data.Length <= BlockSize() as int
