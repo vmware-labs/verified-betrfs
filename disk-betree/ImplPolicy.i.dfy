@@ -3,6 +3,7 @@ include "Bounds.i.dfy"
 
 module ImplPolicy {
   import opened Bounds
+  import opened NativeTypes
 
   datatype Action =
     | ActionPageIn(ref: Reference)
@@ -11,8 +12,23 @@ module ImplPolicy {
     | ActionEvict
     | ActionFail
 
-  function biggestSlot(node: Node) : (slot : int)
-  ensures 0 <= slot < |node.buckets|
+  function WeightBucket(bucket: Bucket) : int
+  function WeightBucketList(bucket: BucketList) : int
+
+  function biggestSlot(buckets: BucketList) : (res : (int, int))
+  ensures 0 <= res.0 < |buckets|
+  {
+    if |buckets| == 0 then 0 else (
+      var m := biggestSlot(DropLast(buckets));
+      var w := m.1;
+      var w' := WeightBucket(Last(buckets));
+      if w' > w then (
+        (|buckets| - 1, w')
+      ) else (
+        m
+      )
+    )
+  }
 
   function getActionToPageIn(cache: map<Reference, Node>, ref: Reference)
   {
@@ -34,8 +50,9 @@ module ImplPolicy {
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
         ActionSplit(ref)
       ) else (
-        var slot := biggestSlot(node);
-        var slotWeight := WeightBucket(node.buckets[slot]);
+        var biggestSlot := biggestSlot(node.buckets);
+        var slot := biggestSlot.0;
+        var slotWeight := biggestSlot.1;
         if slotWeight >= FlushTriggerWeight() then (
           var childref := node.children[slot];
           if childref in cache then (
@@ -56,5 +73,14 @@ module ImplPolicy {
     ) else (
       getActionToPageIn(cache, ref)
     )
+  }
+
+  method BiggestSlot(buckets: seq<KMTable>)
+  returns (slot: uint64, weight: uint64)
+  requires |buckets| <= MaxNumChildren()
+  requires WeightBucketList(buckets) <= MaxTotalBucketWeight()
+  ensures (slot as int, weight as int) == biggestSlot(KMTable.ISeq(buckets))
+  {
+    
   }
 }

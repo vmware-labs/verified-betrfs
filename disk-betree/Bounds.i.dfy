@@ -15,9 +15,6 @@ module Bounds {
   // Minimum weight a bucket needs to have before we consider flushing it.
   function FlushTriggerWeight() : int { MaxTotalBucketWeight() / 8 }
 
-  function WeightBucket(bucket: Bucket) : int
-  function WeightBucketList(bucket: BucketList) : int
-
   predicate NodeInBounds(node: BT.G.Node)
   {
     && |node.buckets| <= MaxNumChildren()
