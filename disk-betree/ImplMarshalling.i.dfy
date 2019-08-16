@@ -319,7 +319,7 @@ module ImplMarshalling {
   method ValToNode(v: V) returns (s : Option<ImplState.Node>)
   requires IMM.valToNode.requires(v)
   ensures s.Some? ==> IM.WFNode(s.value)
-  ensures IMM.INodeOpt(s) == IMM.valToNode(v)
+  ensures INodeOpt(s) == IMM.valToNode(v)
   {
     assert ValidVal(v.t[0]);
     var pivotsOpt := ValToPivots(v.t[0]);
@@ -351,6 +351,18 @@ module ImplMarshalling {
     assert IM.WFBuckets(node.buckets);
     assert IM.INode(node) == IMM.valToNode(v).value;
     return Some(node);
+  }
+
+
+  function ISectorOpt(s : Option<Sector>): Option<BC.Sector>
+  requires s.Some? ==> ImplState.WFSector(s.value)
+  requires s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
+  reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
+  {
+    if s.Some? then
+      Some(IM.ISector(ImplState.ISector(s.value)))
+    else
+      None
   }
 
   method ValToSector(v: V) returns (s : Option<ImplState.Sector>)
@@ -594,6 +606,15 @@ module ImplMarshalling {
     }
   }
 
+  function INodeOpt(s : Option<Node>): Option<IMM.Node>
+  requires s.Some? ==> IM.WFNode(s.value)
+  {
+    if s.Some? then
+      Some(IM.INode(s.value))
+    else
+      None
+  }
+
   method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
   requires IM.WFNode(node)
   requires BT.WFNode(IM.INode(node))
@@ -604,7 +625,7 @@ module ImplMarshalling {
       8 + (IMM.CapNumBuckets() as int - 1) * (8 + IMM.CapKeySize() as int) +
       8 + IMM.CapNumBuckets() as int * 8
   ensures ValInGrammar(v, IMM.PivotNodeGrammar())
-  ensures IMM.valToNode(v) == IMM.INodeOpt(Some(node))
+  ensures IMM.valToNode(v) == INodeOpt(Some(node))
   {
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
