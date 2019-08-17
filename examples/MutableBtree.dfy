@@ -250,7 +250,11 @@ abstract module MutableBtree {
       ensures MapsTo(oldint, key, newint[key])
     {
       if Keys.lt(key, pivot) {
+        var llte := Keys.LargestLte(leftindex.pivots, key);
+        assert oldindex.children[llte+1] == leftindex.children[llte+1];
       } else {
+        var llte := Keys.LargestLte(rightindex.pivots, key);
+        assert oldindex.children[|leftindex.children| + llte + 1] == rightindex.children[llte+1];
       }
     }
     
