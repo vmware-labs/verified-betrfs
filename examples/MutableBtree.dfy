@@ -265,6 +265,17 @@ abstract module MutableBtree {
     || SplitLeaf(oldnode, leftnode, rightnode, pivot)
     || SplitIndex(oldnode, leftnode, rightnode, pivot)
   }
+
+  lemma SplitNodeInterpretation(oldnode: ImmutableNode, leftnode: ImmutableNode, rightnode: ImmutableNode, pivot: Key)
+    requires SplitNode(oldnode, leftnode, rightnode, pivot)
+    ensures InterpretNode(oldnode) == Keys.MapPivotedUnion(InterpretNode(leftnode), pivot, InterpretNode(rightnode))
+  {
+    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
+      SplitLeafInterpretation(oldnode, leftnode, rightnode, pivot);
+    } else {
+      SplitIndexInterpretation(oldnode, leftnode, rightnode, pivot);
+    }
+  }
   
   predicate SplitChildOfIndex(oldindex: ImmutableNode, newindex: ImmutableNode, childidx: int)
   {
@@ -287,67 +298,50 @@ abstract module MutableBtree {
   {
     var newint := InterpretNode(newindex);
     var oldint := InterpretNode(oldindex);
-    
-    assert WFIndex(oldindex); // WTF?  Dafny can't see these (from emacs flycheck mode)
-    assert WFIndex(newindex);
 
+    // WTF?  Dafny can't see these (from emacs flycheck mode)
+    assert WFIndex(oldindex);
+    assert WFIndex(newindex);
+    assert oldint == InterpretIndex(oldindex);
+    assert newint == InterpretIndex(newindex);
+    
+    var oldchild := oldindex.children[childidx];
+    var leftchild := newindex.children[childidx];
+    var rightchild := newindex.children[childidx+1];
+    var pivot := newindex.pivots[childidx];
+    SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);        
+    
     forall key | key in oldint
       ensures key in newint && newint[key] == oldint[key]
     {
-      assert key in InterpretIndex(oldindex);
       var llte := Keys.LargestLte(oldindex.pivots, key);
-      var oldchild := oldindex.children[llte+1];
-      var oldchildint := InterpretNode(oldchild);
-      assert key in oldchildint;
-      assert oldint[key] == oldchildint[key];
       if llte + 1 < childidx {
-        var newllte := llte;
-        assert newllte == Keys.LargestLte(newindex.pivots, key);
-        var newchildint := InterpretNode(newindex.children[newllte+1]);
-        assert newindex.children[newllte+1] == oldindex.children[llte+1];
-        assert newchildint == oldchildint;
-        assert key in newchildint;
-        assert key in AllKeysNode(newindex);
-        assert newint == InterpretIndex(newindex);
-        assert key in newint;
-        assert newint[key] == newchildint[key];
+        assert llte == Keys.LargestLte(newindex.pivots, key);
       } else if llte + 1 == childidx {
-        assert key in AllKeysNode(oldchild);
-        var leftchild := newindex.children[childidx];
-        var rightchild := newindex.children[childidx+1];
-        assert key in AllKeysNode(leftchild) + AllKeysNode(rightchild);
-        if Keys.lt(key, newindex.pivots[childidx]) {
-          var newllte := llte;
-          assert newllte == Keys.LargestLte(newindex.pivots, key);
-          var newchild := leftchild;
-          var newchildint := InterpretNode(newchild);
-          assert key in AllKeysNode(newchild);
-          assert key in newchildint;
-          assert key in newint;
-          assert newint[key] == newchildint[key];
-        } else {
-          var newllte := llte + 1;
-          assert newllte == Keys.LargestLte(newindex.pivots, key);
-          assume false;
-        }
       } else {
         var newllte := llte + 1;
         assert newllte == Keys.LargestLte(newindex.pivots, key);
-        var newchildint := InterpretNode(newindex.children[newllte+1]);
         assert newindex.children[newllte+1] == oldindex.children[llte+1];
-        assert newchildint == oldchildint;
-        assert key in newchildint;
-        assert key in AllKeysNode(newindex);
-        assert newint == InterpretIndex(newindex);
-        assert key in newint;
-        assert newint[key] == newchildint[key];
       }
     }
 
     forall key | key in newint
       ensures key in oldint
     {
-      assume false;
+      var llte := Keys.LargestLte(newindex.pivots, key);
+      if llte + 1 < childidx {
+        assert llte == Keys.LargestLte(oldindex.pivots, key);
+      } else if llte + 1 == childidx {
+        var oldllte := llte;
+        assert oldllte == Keys.LargestLte(oldindex.pivots, key);
+        assert key in InterpretNode(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+      } else if llte + 1 == childidx + 1 {
+        var oldllte := llte - 1;
+        assert oldllte == Keys.LargestLte(oldindex.pivots, key);
+        assert key in InterpretNode(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+      } else {
+        assert llte - 1 == Keys.LargestLte(oldindex.pivots, key);
+      }
     }
   }
     
