@@ -1,5 +1,6 @@
 include "PivotBetreeSpec.i.dfy"
 include "Message.i.dfy"
+include "AsyncDiskModel.s.dfy"
 include "../lib/Option.s.dfy"
 include "KMTable.i.dfy"
 include "BetreeBlockCache.i.dfy"
@@ -25,9 +26,10 @@ module ImplModel {
   import MS = MapSpec
   import Pivots = PivotsLib
   import BC = BetreeGraphBlockCache
-  import M = BetreeBlockCache
+  import BBC = BetreeBlockCache
   import KMTable = KMTable
   import SD = AsyncSectorDisk
+  import D = AsyncDisk
   import opened BucketsLib
 
   import ReferenceType`Internal
@@ -35,7 +37,7 @@ module ImplModel {
   type Reference = BT.G.Reference
   type Key = MS.Key
   type Message = Messages.Message
-  type DiskOp = M.DiskOp
+  type DiskOp = BBC.DiskOp
 
   type IndirectionTable = map<uint64, (Option<BC.Location>, seq<Reference>)>
 
@@ -147,7 +149,7 @@ module ImplModel {
     else
       None
   }
-  function IVars(vars: Variables) : M.Variables
+  function IVars(vars: Variables) : BBC.Variables
   requires WFVars(vars)
   {
     match vars {
@@ -165,9 +167,39 @@ module ImplModel {
     }
   }
 
+  function Ik(k: Constants) : BBC.Constants
+  {
+    BC.Constants()
+  }
+
+  function I(k: Constants, s: Variables) : BBC.Variables
+  requires WFVars(s)
+  {
+    IVars(s)
+  }
+
   predicate Inv(k: Constants, s: Variables)
   {
     && WFVars(s)
-    && M.Inv(BC.Constants(), IVars(s))
+    && BBC.Inv(Ik(k), IVars(s))
+  }
+
+  // Functional model of the DiskIOHandler
+
+  datatype IO =
+    | IOInit(id: uint64)
+    | IOReqRead(id: uint64, reqRead: D.ReqRead)
+    | IOReqWrite(id: uint64, reqWrite: D.ReqWrite)
+    | IORespRead(id: uint64, respRead: D.RespRead)
+    | IORespWrite(id: uint64, respWrite: D.RespWrite)
+
+  function diskOp(io: IO) : D.DiskOp {
+    match io {
+      case IOInit(id) => D.NoDiskOp
+      case IOReqRead(id, reqRead) => D.ReqReadOp(id, reqRead)
+      case IOReqWrite(id, reqWrite) => D.ReqWriteOp(id, reqWrite)
+      case IORespRead(id, respRead) => D.RespReadOp(id, respRead)
+      case IORespWrite(id, respWrite) => D.RespWriteOp(id, respWrite)
+    }
   }
 }

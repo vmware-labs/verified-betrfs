@@ -1,31 +1,40 @@
 include "ImplModel.i.dfy"
+include "ByteBetreeBlockCache.i.dfy"
 
 module ImplIO { 
   import opened ImplModel
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import IMM = ImplMarshallingModel
+  import Marshalling = Marshalling
+  import LBAType
   import BucketsLib
+  import M = ByteBetreeBlockCache
+  import UI
 
-  predicate LocAvailable(k: Constants, s: Variables, loc: BC.Location, len: uint64)
+  predicate LocAvailable(s: Variables, loc: BC.Location, len: uint64)
   {
     && s.Ready?
     && BC.ValidLocationForNode(loc)
-    && BC.ValidAllocation(I(k, s), loc)
+    && BC.ValidAllocation(IVars(s), loc)
     && loc.len == len
   }
 
   predicate addrNotUsedInIndirectionTable(addr: uint64, indirectionTable: IndirectionTable)
   {
     && (forall ref | ref in indirectionTable && indirectionTable[ref].0.Some?  ::
-          indirectionTable[ref].0.addr != addr)
+          indirectionTable[ref].0.value.addr != addr)
   }
 
   function getFreeLocIterate(s: Variables, len: uint64, i: uint64)
+  : (loc : Option<BC.Location>)
   requires s.Ready?
-  requires IS.WFVars(s)
+  requires WFVars(s)
   requires len <= LBAType.BlockSize()
   requires i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
+  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
+  decreases 0x1_0000_0000_0000_0000 - i as int
   {
     if (
       && var addr := i * LBAType.BlockSize();
@@ -36,117 +45,143 @@ module ImplIO {
       && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr)
     ) then (
       Some(LBAType.Location(i * LBAType.BlockSize(), len))
-    ) else if i >= 0x1_0000_0000_0000_0000 / LBAType.BlockSize()
+    ) else if (i+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int then (
       None
     ) else (
-      getFreeLocIterate(s, i+1)
+      getFreeLocIterate(s, len, i+1)
     )
   }
 
-  function {:opaque} getFreeLoc(s: ImplVariables, len: uint64)
+  function {:opaque} getFreeLoc(s: Variables, len: uint64)
   : (loc : Option<BC.Location>)
   requires s.Ready?
-  requires IS.WFVars(s)
+  requires WFVars(s)
   requires len <= LBAType.BlockSize()
-  ensures loc.Some? ==> LocAvailable(k, s, loc.value, len)
+  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
   {
     getFreeLocIterate(s, len, 0)
   }
 
-  function RequestWrite(loc: LBAType.Location, sector: IS.Sector)
-  returns (id: Option<D.ReqId>, diskOp: DiskOp)
-  requires IS.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
-  requires io.initialized()
-  requires LBAType.ValidLocation(loc)
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc, IS.ISector(sector)))
-  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
+  predicate RequestWrite(loc: LBAType.Location, sector: Sector, id: Option<D.ReqId>, dop: D.DiskOp)
   {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
+    && (dop.NoDiskOp? || dop.ReqWriteOp?)
+    && (dop.NoDiskOp? ==> id == None)
+    && (dop.ReqWriteOp? ==> (
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      && |bytes| <= IMM.BlockSize() as int
+      && 32 <= |bytes|
+      && IMM.parseCheckedSector(bytes) == Some(sector)
 
-    var bytes: seq<byte> := MarshallingModel.MarshallCheckedSector(sector);
-    if (bytes == null || bytes.Length as uint64 != loc.len) {
-      id := None;
-    } else {
-      var i := io.write(loc.addr, bytes);
-      id := Some(i);
-    }
+      && |bytes| == loc.len as int
+      && id == Some(dop.id)
+      && dop == D.ReqWriteOp(id.value, D.ReqWrite(loc.addr, bytes))
+    ))
   }
 
-  method FindLocationAndRequestWrite(s: ImplVariables, io: DiskIOHandler, sector: IS.Sector)
-  returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
-  requires IS.WFVars(s)
+  lemma RequestWriteCorrect(loc: LBAType.Location, sector: Sector, id: Option<D.ReqId>, dop: D.DiskOp)
+  requires WFSector(sector)
+  requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
+  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block)
+  requires LBAType.ValidLocation(loc)
+  requires RequestWrite(loc, sector, id, dop);
+  ensures M.ValidDiskOp(dop)
+  ensures id.Some? ==> M.IDiskOp(dop) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc, ISector(sector)))
+  ensures id.None? ==> M.IDiskOp(dop) == SD.NoDiskOp
+  {
+    IMM.reveal_parseCheckedSector();
+    M.reveal_IBytes();
+    M.reveal_ValidCheckedBytes();
+    M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+    Marshalling.reveal_parseSector();
+  }
+
+  predicate FindLocationAndRequestWrite(s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, dop: D.DiskOp)
   requires s.Ready?
-  requires IS.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
-  requires io.initialized()
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
+  requires WFVars(s)
+  {
+    && (dop.NoDiskOp? || dop.ReqWriteOp?)
+    && (dop.NoDiskOp? ==> id == None && loc == None)
+    && (dop.ReqWriteOp? ==> (
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      && |bytes| <= IMM.BlockSize() as int
+      && 32 <= |bytes|
+      && IMM.parseCheckedSector(bytes) == Some(sector)
+
+      && var len := |bytes| as uint64;
+      && loc == getFreeLoc(s, len)
+      && loc.Some?
+
+      && id == Some(dop.id)
+      && dop == D.ReqWriteOp(id.value, D.ReqWrite(loc.value.addr, bytes))
+    ))
+  }
+
+  lemma FindLocationAndRequestWriteCorrect(s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, dop: D.DiskOp)
+  requires WFVars(s)
+  requires s.Ready?
+  requires WFSector(sector)
+  requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
+  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block)
+  requires FindLocationAndRequestWrite(s, sector, id, loc, dop)
+  ensures M.ValidDiskOp(dop)
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> LBAType.ValidLocation(loc.value)
-  ensures id.Some? ==> BC.ValidAllocation(old(IS.IVars(s)), loc.value)
+  ensures id.Some? ==> BC.ValidAllocation(IVars(s), loc.value)
   ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, IS.ISector(sector)))
-  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
+  ensures id.Some? ==> M.IDiskOp(dop) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, ISector(sector)))
+  ensures id.None? ==> M.IDiskOp(dop) == SD.NoDiskOp
   {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
+    IMM.reveal_parseCheckedSector();
+    M.reveal_IBytes();
+    M.reveal_ValidCheckedBytes();
+    M.reveal_Parse();
     D.reveal_ChecksumChecksOut();
-
-    var bytes := Marshalling.MarshallCheckedSector(sector);
-    if (bytes == null) {
-      id := None;
-      loc := None;
-    } else {
-      var len := bytes.Length as uint64;
-      loc := getFreeLba(s, len);
-      if (loc.Some?) {
-        var i := io.write(loc.value.addr, bytes);
-        id := Some(i);
-      } else {
-        id := None;
-      }
-    }
+    Marshalling.reveal_parseSector();
   }
 
-  method RequestRead(io: DiskIOHandler, loc: LBAType.Location)
-  returns (id: D.ReqId)
-  requires io.initialized()
+  function RequestRead(io: IO, loc: LBAType.Location)
+  : (res : (D.ReqId, IO))
+  requires io.IOInit?
   requires LBAType.ValidLocation(loc)
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(loc))
+  ensures var (id, io) := res;
+    && M.ValidDiskOp(diskOp(io))
+    && M.IDiskOp(diskOp(io)) == SD.ReqReadOp(id, SD.ReqRead(loc))
   {
-    id := io.read(loc.addr, loc.len);
+    (io.id, IOReqRead(io.id, D.ReqRead(loc.addr, loc.len)))
   }
 
   lemma LemmaIndirectionTableLBAValid()
-  ensures ImplADM.M.ValidAddr(BC.IndirectionTableLBA())
+  ensures M.ValidAddr(BC.IndirectionTableLBA())
   {
     LBAType.reveal_ValidAddr();
-    assert BC.IndirectionTableLBA() as int == 0 * ImplADM.M.BlockSize();
+    assert BC.IndirectionTableLBA() as int == 0 * M.BlockSize();
   }
 
-  method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
-  requires IS.WFVars(s)
-  requires io.initialized();
+  function PageInIndirectionTableReq(k: Constants, s: Variables, io: IO)
+  : (res : (Variables, IO))
+  requires io.IOInit?
   requires s.Unready?
-  modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    if (s.outstandingIndirectionTableRead.None?) {
+    if (s.outstandingIndirectionTableRead.None?) then (
+      LemmaIndirectionTableLBAValid();
+      var (id, io') := RequestRead(io, BC.IndirectionTableLocation());
+      var s' := Unready(Some(id), s.syncReqs);
+      (s', io')
+    ) else (
+      (s, io)
+    )
+  }
+
+  lemma PageInIndirectionTableReqCorrect(k: Constants, s: Variables, io: IO)
+  requires WFVars(s)
+  requires io.IOInit?
+  requires s.Unready?
+  ensures var (s', io') := PageInIndirectionTableReq(k, s, io);
+    && WFVars(s')
+    && M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, diskOp(io'))
+  {
+    /*if (s.outstandingIndirectionTableRead.None?) {
       LemmaIndirectionTableLBAValid();
       var id := RequestRead(io, BC.IndirectionTableLocation());
       s' := IS.Unready(Some(id), s.syncReqs);
@@ -156,11 +191,12 @@ module ImplIO {
       s' := s;
       assert noop(k, IS.IVars(s), IS.IVars(s'));
       print "PageInIndirectionTableReq: request already out\n";
-    }
+    }*/
+    assume false;
   }
 
-  method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
-  returns (s': ImplVariables)
+  /*method PageInReq(k: ImplConstants, s: Variables, io: DiskIOHandler, ref: BC.Reference)
+  returns (s': Variables)
   requires io.initialized();
   requires s.Ready?
   requires IS.WFVars(s)
@@ -187,8 +223,9 @@ module ImplIO {
       assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
       assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInReqStep(ref));
     }
-  }
+  }*/
 
+  /*
   lemma INodeRootEqINodeForEmptyRootBucket(node: IS.Node)
   requires IS.WFNode(node)
   ensures IS.INodeRoot(node, TTT.EmptyTree) == IS.INode(node);
@@ -196,7 +233,7 @@ module ImplIO {
     BucketsLib.BucketListFlushParentEmpty(KMTable.ISeq(node.buckets), node.pivotTable);
   }
 
-  /*lemma LemmaPageInBlockCacheSet(s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
+  /*lemma LemmaPageInBlockCacheSet(s: Variables, ref: BT.G.Reference, node: IS.Node)
   requires IS.WFVars(s)
   requires s.Ready?
   requires ref !in s.cache
@@ -249,8 +286,8 @@ module ImplIO {
     }
   }
 
-  method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
+  method PageInIndirectionTableResp(k: ImplConstants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
   requires IS.WFVars(s)
   requires io.diskOp().RespReadOp?
   requires s.Unready?
@@ -273,8 +310,8 @@ module ImplIO {
     }
   }
 
-  method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
+  method PageInResp(k: ImplConstants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
   requires io.diskOp().RespReadOp?
   requires s.Ready?
   requires IS.WFVars(s)
@@ -330,8 +367,8 @@ module ImplIO {
     }
   }
 
-  method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
+  method readResponse(k: ImplConstants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
   requires io.diskOp().RespReadOp?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
@@ -347,8 +384,8 @@ module ImplIO {
 
   // == writeResponse ==
 
-  method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
+  method writeResponse(k: ImplConstants, s: Variables, io: DiskIOHandler)
+  returns (s': Variables)
   requires io.diskOp().RespWriteOp?
   requires IS.WFVars(s)
   requires BBC.Inv(k, IS.IVars(s))
@@ -370,4 +407,5 @@ module ImplIO {
       assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
+  */
 }

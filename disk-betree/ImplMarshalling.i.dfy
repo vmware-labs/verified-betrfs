@@ -404,7 +404,7 @@ module ImplMarshalling {
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.IndirectionTableGrammar());
   ensures v.Some? ==> |v.value.a| == |locs|
-  ensures v.Some? ==> IMM.valToLBAsAndSuccs(v.value.a) == Some((locs, graph));
+  ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some((locs, graph));
   {
     if (|locs| == 0) {
       assert locs == map[];
@@ -431,7 +431,7 @@ module ImplMarshalling {
           //assert !(ref in MapRemove(graph, {ref}));
           assert BC.ValidLocationForNode(loc);
           //assert !(lba == 0);
-          //assert valToLBAsAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
+          //assert valToLocssAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
           assert ValidVal(tuple);
 
           return Some(VArray(vpref.a + [tuple]));
