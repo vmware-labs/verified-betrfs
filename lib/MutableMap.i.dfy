@@ -1068,6 +1068,7 @@ module MutableMap {
       ensures Contents == result
       ensures Repr == old(Repr)
     {
+      assume false;
       var asArray := ToArray();
       result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
     }
