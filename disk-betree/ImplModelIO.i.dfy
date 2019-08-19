@@ -350,13 +350,9 @@ module ImplIO {
     var (id, sector) := ReadSector(io);
     ReadSectorCorrect(io);
 
-    Marshalling.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();
-    IMM.reveal_parseCheckedSector();
     M.reveal_IBytes();
-    M.reveal_ValidCheckedBytes();
     M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
 
     var s' := PageInIndirectionTableResp(k, s, io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
@@ -421,13 +417,9 @@ module ImplIO {
     var (id, sector) := ReadSector(io);
     ReadSectorCorrect(io);
 
-    Marshalling.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();
-    IMM.reveal_parseCheckedSector();
     M.reveal_IBytes();
-    M.reveal_ValidCheckedBytes();
     M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
 
     if (id !in s.outstandingBlockReads) {
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
@@ -459,47 +451,68 @@ module ImplIO {
     }
   }
 
-  /*
+  function readResponse(k: Constants, s: Variables, io: IO)
+  : (s': Variables)
+  requires diskOp(io).RespReadOp?
+  {
+    if (s.Unready?) then (
+      PageInIndirectionTableResp(k, s, io)
+    ) else (
+      PageInResp(k, s, io)
+    )
+  }
 
-  method readResponse(k: Constants, s: Variables, io: IO)
-  returns (s': Variables)
+  lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
   requires diskOp(io).RespReadOp?
   requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  requires BBC.Inv(Ik(k), IVars(s))
+  ensures var s' := readResponse(k, s, io);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
     if (s.Unready?) {
-      s' := PageInIndirectionTableResp(k, s, io);
+      PageInIndirectionTableRespCorrect(k, s, io);
     } else {
-      s' := PageInResp(k, s, io);
+      PageInRespCorrect(k, s, io);
     }
   }
 
   // == writeResponse ==
 
-  method writeResponse(k: Constants, s: Variables, io: IO)
-  returns (s': Variables)
+  function writeResponse(k: Constants, s: Variables, io: IO)
+  : (s': Variables)
   requires diskOp(io).RespWriteOp?
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  requires s.Ready? && s.outstandingIndirectionTableWrite.Some? ==> s.frozenIndirectionTable.Some?
   {
-    var id := io.getWriteResult();
-    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
-      s' := s.(outstandingIndirectionTableWrite := None)
+    var id := io.id;
+    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) then (
+      s.(outstandingIndirectionTableWrite := None)
              .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
-             .(syncReqs := BC.syncReqs2to1(s.syncReqs));
+             .(syncReqs := BC.syncReqs2to1(s.syncReqs))
+    ) else if (s.Ready? && id in s.outstandingBlockWrites) then (
+      s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
+    ) else (
+      s
+    )
+  }
+
+  lemma writeResponseCorrect(k: Constants, s: Variables, io: IO)
+  requires diskOp(io).RespWriteOp?
+  requires WFVars(s)
+  requires BBC.Inv(Ik(k), IVars(s))
+  ensures var s' := writeResponse(k, s, io);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  {
+    var id := io.id;
+    var s' := writeResponse(k, s, io);
+    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
-      s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackRespStep);
     } else {
-      s' := s;
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
-  */
 }
