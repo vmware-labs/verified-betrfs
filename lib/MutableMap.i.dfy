@@ -181,6 +181,28 @@ module MutableMap {
       && CantEquivocateStorageKey(elements)
     }
 
+    predicate EntryInSlotMatchesContents(slot: Slot) // hide triggers
+    requires ValidSlot(Storage.Length, slot)
+    requires Storage[slot.slot].Entry?
+    reads this
+    reads this.Storage
+    {
+      && var item := Storage[slot.slot];
+      && item.key in Contents
+      && Contents[item.key] == Some(item.value)
+    }
+
+    predicate TombstoneInSlotMatchesContents(slot: Slot) // hide triggers
+    requires ValidSlot(Storage.Length, slot)
+    requires Storage[slot.slot].Tombstone?
+    reads this
+    reads this.Storage
+    {
+      && var item := Storage[slot.slot];
+      && item.key in Contents
+      && Contents[item.key].None?
+    }
+
     predicate Inv()
       reads this, this.Repr
       ensures Inv() ==> this in Repr && this.Storage in Repr
@@ -194,14 +216,9 @@ module MutableMap {
 
       && |Contents| == (Count as nat)
       && SeqMatchesContentKeys(Storage[..], Contents)
-      && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry? ==>
-          && var item := Storage[slot.slot];
-          && item.key in Contents
-          && Contents[item.key] == Some(item.value))
+      && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry? ==> EntryInSlotMatchesContents(slot))
       && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone? ==>
-          && var item := Storage[slot.slot];
-          && item.key in Contents
-          && Contents[item.key].None?)
+          TombstoneInSlotMatchesContents(slot))
     }
 
     function IndexSetThrough(elements: seq<Item<V>>, through: nat): set<int>
@@ -371,8 +388,6 @@ module MutableMap {
       ensures Storage[slotIdx].Empty? ==> key !in Contents
       ensures Repr == old(Repr)
     {
-      assume false; // TODO timing out again
-
       slotIdx := Uint64SlotForKey(key);
       startSlotIdx := slotIdx;
       ghost var startSlot := Slot(startSlotIdx as nat);
@@ -867,9 +882,13 @@ module MutableMap {
     method ToArray() returns (result: array<(uint64, V)>)
       requires Inv()
       ensures Contents == old(Contents)
+      ensures Count == old(Count)
+      ensures result.Length == Count as nat
       ensures forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
           ==> i == j
-      ensures Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1
+      // ??? ensures Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1
+      ensures forall i: nat | i < result.Length :: result[i].0 in Contents && Contents[result[i].0] == result[i].1
+      ensures forall k | k in Contents :: exists i: nat :: i < result.Length && result[i] == (k, Contents[k])
       ensures Repr == old(Repr)
     {
       if Count == 0 {
@@ -907,7 +926,8 @@ module MutableMap {
 
       assert storagePos < Underlying.Storage.Length;
       var firstEntry := Underlying.Storage[storagePos];
-      assume firstEntry.key in Contents;
+      assert Underlying.EntryInSlotMatchesContents(Slot(storagePos));
+      assert firstEntry.key in Contents;
       // -- mutation --
       result := new [Count] (_ => (firstEntry.key, firstEntry.value));
       transferredContents := transferredContents[firstEntry.key := firstEntry.value];
@@ -921,16 +941,25 @@ module MutableMap {
       storagePos := storagePos + 1;
       // ---------------
 
+      // assert transferredContents == map[firstEntry.key := firstEntry.value];
+      assert result[0] == (firstEntry.key, firstEntry.value); // observe
+
       assert MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents;
 
       var resultPos := 1;
+      assert forall k | k in transferredContents :: exists i: nat :: i < resultPos && result[i] == (k, transferredContents[k]);
       while storagePos < Underlying.Storage.Length
         invariant 0 <= storagePos <= Underlying.Storage.Length
         invariant result.Length == Count as nat
         invariant resultPos == |transferredContents|
+        invariant resultPos <= result.Length
         invariant transferredContents.Keys <= Contents.Keys
+        invariant forall k | k in transferredContents :: transferredContents[k] == Contents[k]
         invariant MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents
         invariant MapFromStorage(Underlying.Storage[..]) == Contents
+        invariant forall i: nat | i < resultPos :: result[i].0 in transferredContents && transferredContents[result[i].0] == result[i].1
+        invariant forall i: nat, j: nat :: i < resultPos && j < resultPos && result[i].0 == result[j].0 ==> i == j
+        invariant forall k | k in transferredContents :: exists i: nat :: i < resultPos && result[i] == (k, transferredContents[k])
       {
         var item := Underlying.Storage[storagePos];
 
@@ -942,34 +971,75 @@ module MutableMap {
             SetInclusionImpliesSmallerCardinality(transferredContents.Keys, Contents.Keys);
             assert false;
           } else if resultPos == result.Length {
-            assume false;
+            // TODO minimize
             assert |transferredContents| == |Contents|;
             assert |transferredContents.Keys| == |Contents.Keys|;
             SetInclusionAndEqualCardinalityImpliesSetEquality(transferredContents.Keys, Contents.Keys);
             assert transferredContents.Keys == Contents.Keys;
             assert transferredContents == Contents;
-            MapFromStorageProperties(Underlying.Storage[..], Contents);
-            assert exists slot :: (
-                && ValidSlot(Underlying.Storage.Length, slot)
-                && slot.slot < storagePos
-                && Underlying.FilledWithEntryKey(Underlying.Storage[..], slot, item.key));
+            ghost var thisSlot := Slot(storagePos);
+            assert MapFromStorage(Underlying.Storage[..storagePos]) == MapFromStorage(Underlying.Storage[..]);
+            assert Underlying.EntryInSlotMatchesContents(thisSlot);
+            assert item.key in Underlying.Contents;
+            assert item.key in Contents;
+            CantEquivocateMapFromStorageKey(Underlying);
+            MapFromStorageProperties(Underlying.Storage[..storagePos], Contents);
+            ghost var previousSlot :| (
+                && ValidSlot(Underlying.Storage.Length, previousSlot)
+                && previousSlot.slot < storagePos
+                && Underlying.FilledWithEntryKey(Underlying.Storage[..], previousSlot, item.key));
+            assert Underlying.FilledWithEntryKey(Underlying.Storage[..], thisSlot, item.key);
+            assert Underlying.TwoNonEmptyValidSlotsWithSameKey(Underlying.Storage[..], previousSlot, thisSlot);
+            assert Underlying.CantEquivocateStorageKey(Underlying.Storage[..]);
+            assert Underlying.SameSlot(Underlying.Storage.Length, previousSlot, thisSlot);
+            assert false;
           }
           assert resultPos < result.Length;
+
+          if item.key in transferredContents {
+            // TODO minimize
+            CantEquivocateMapFromStorageKey(Underlying);
+            MapFromStorageProperties(Underlying.Storage[..storagePos], transferredContents);
+            ghost var previousSlot :| (
+                && ValidSlot(Underlying.Storage.Length, previousSlot)
+                && previousSlot.slot < storagePos
+                && Underlying.FilledWithEntryKey(Underlying.Storage[..], previousSlot, item.key));
+            ghost var thisSlot := Slot(storagePos);
+            assert Underlying.FilledWithEntryKey(Underlying.Storage[..], thisSlot, item.key);
+            assert Underlying.TwoNonEmptyValidSlotsWithSameKey(Underlying.Storage[..], previousSlot, thisSlot);
+            assert Underlying.CantEquivocateStorageKey(Underlying.Storage[..]);
+            assert Underlying.SameSlot(Underlying.Storage.Length, previousSlot, thisSlot);
+            assert false;
+          }
+          assert item.key !in transferredContents;
+
+          assert Underlying.EntryInSlotMatchesContents(Slot(storagePos)); // observe
+
+          ghost var transferredContentsBefore := transferredContents;
+          ghost var resultBefore := result[..];
+
           // -- mutation --
           result[resultPos] := (item.key, item.value);
-          // --------------
-
-          assume item.key !in transferredContents;
-
-          // -- mutation --
           transferredContents := transferredContents[item.key := item.value];
           resultPos := resultPos + 1;
           // --------------
 
+          forall k | k in transferredContents
+          ensures exists i: nat :: i < resultPos && result[i] == (k, transferredContents[k])
+          {
+            if k == item.key {
+            } else {
+              // TODO minimize
+              assert exists i: nat :: i < (resultPos - 1) && resultBefore[i] == (k, transferredContentsBefore[k]);
+              assert resultBefore[..(resultPos - 1)] == result[..(resultPos - 1)];
+              assert exists i: nat :: i < (resultPos - 1) && result[i] == (k, transferredContentsBefore[k]);
+              assert exists i: nat :: i < (resultPos - 1) && result[i] == (k, transferredContents[k]);
+              assert exists i: nat :: i < resultPos && result[i] == (k, transferredContents[k]);
+            }
+          }
+
           assert resultPos == |transferredContents|;
         }
-
-        assume false;
 
         assert DropLast(Underlying.Storage[..storagePos+1]) == Underlying.Storage[..storagePos];
 
@@ -977,13 +1047,19 @@ module MutableMap {
         storagePos := storagePos + 1;
         // ---------------
 
+        assert transferredContents.Keys <= Contents.Keys;
+        assert forall k | k in transferredContents :: transferredContents[k] == Contents[k];
         assert resultPos == |transferredContents|;
       }
 
-      assume false;
+      assert Underlying.Storage[..storagePos] == Underlying.Storage[..];
+      assert Contents == transferredContents;
+
       assert forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
           ==> i == j;
-      assert Contents == map i | 0 <= i < result.Length :: result[i].0 := result[i].1;
+      assert result.Length == Count as nat;
+      assert forall i: nat | i < result.Length :: result[i].0 in Contents && Contents[result[i].0] == result[i].1;
+      assert forall k | k in Contents :: exists i: nat :: i < result.Length && result[i] == (k, Contents[k]);
     }
 
     method ToMap() returns (result: map<uint64, V>)
@@ -1008,18 +1084,15 @@ module MutableMap {
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
       modifies this
     {
-      assume false; // TODO timing out, again
-
       assert |Contents| == Count as nat;
 
       var newSize: uint64 := (128 + Count) * 4;
-      print "(debug) MutableMap: Count ", Count, ", Realloc ", newSize, "\n";
+      print "(debug) MutableMap.Realloc: Count ", Count, ", Realloc ", newSize, "\n";
 
       var newUnderlying := new FixedSizeHashMap(newSize);
       assert fresh(newUnderlying) && fresh(newUnderlying.Storage);
       
       assert newUnderlying.Storage.Length == newSize as nat;
-      // assert newUnderlying.Storage.Length == (Underlying.Storage.Length as uint64 * 2) as nat;
 
       assert MapFromStorage(Underlying.Storage[..]) == Contents;
       UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, map[]);
@@ -1042,7 +1115,6 @@ module MutableMap {
         invariant Underlying.Count == old(Underlying.Count)
         invariant Underlying.Storage.Length == old(Underlying.Storage.Length)
         invariant newUnderlying.Storage.Length == newSize as nat
-        // invariant newUnderlying.Storage.Length == (Underlying.Storage.Length as uint64 * 2) as nat
 
         invariant |transferredContents| == newUnderlying.Count as nat
         invariant transferredContents.Keys <= Contents.Keys
