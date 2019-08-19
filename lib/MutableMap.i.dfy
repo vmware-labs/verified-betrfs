@@ -201,26 +201,36 @@ module MutableMap {
       && CantEquivocateStorageKey(elements)
     }
 
-    predicate EntryInSlotMatchesContents(elements: seq<Item<V>>, slot: Slot, contents: map<uint64, Option<V>>) // hide triggers
+    static predicate EntryInSlotMatchesContents(elements: seq<Item<V>>, slot: Slot, contents: map<uint64, Option<V>>) // hide triggers
     requires ValidSlot(|elements|, slot)
     requires SlotIsEntry(elements, slot)
-    reads this
-    reads this.Storage
     {
       && var item := elements[slot.slot];
-      && item.key in Contents
-      && Contents[item.key] == Some(item.value)
+      && item.key in contents
+      && contents[item.key] == Some(item.value)
     }
 
-    predicate TombstoneInSlotMatchesContents(elements: seq<Item<V>>, slot: Slot, contents: map<uint64, Option<V>>) // hide triggers
+    static predicate TombstoneInSlotMatchesContents(elements: seq<Item<V>>, slot: Slot, contents: map<uint64, Option<V>>) // hide triggers
     requires ValidSlot(|elements|, slot)
     requires SlotIsTombstone(elements, slot)
-    reads this
-    reads this.Storage
     {
       && var item := elements[slot.slot];
-      && item.key in Contents
-      && Contents[item.key].None?
+      && item.key in contents
+      && contents[item.key].None?
+    }
+
+    static predicate EntriesMatchContentValue(elements: seq<Item<V>>, contents: map<uint64, Option<V>>) // hide triggers
+    requires ValidElements(elements)
+    {
+      forall slot :: ValidSlot(|elements|, slot) && SlotIsEntry(elements, slot)
+          ==> EntryInSlotMatchesContents(elements, slot, contents)
+    }
+
+    static predicate TombstonesMatchContentValue(elements: seq<Item<V>>, contents: map<uint64, Option<V>>) // hide triggers
+    requires ValidElements(elements)
+    {
+      forall slot :: ValidSlot(|elements|, slot) && SlotIsTombstone(elements, slot)
+          ==> TombstoneInSlotMatchesContents(elements, slot, contents)
     }
 
     predicate Inv()
@@ -236,10 +246,8 @@ module MutableMap {
 
       && |Contents| == (Count as nat)
       && SeqMatchesContentKeys(Storage[..], Contents)
-      && (forall slot :: ValidSlot(Storage.Length, slot) && SlotIsEntry(Storage[..], slot)
-          ==> EntryInSlotMatchesContents(Storage[..], slot, Contents))
-      && (forall slot :: ValidSlot(Storage.Length, slot) && SlotIsTombstone(Storage[..], slot)
-          ==> TombstoneInSlotMatchesContents(Storage[..], slot, Contents))
+      && EntriesMatchContentValue(Storage[..], Contents)
+      && TombstonesMatchContentValue(Storage[..], Contents)
     }
 
     function IndexSetThrough(elements: seq<Item<V>>, through: nat): set<int>
