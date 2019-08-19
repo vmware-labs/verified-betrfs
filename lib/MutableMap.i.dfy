@@ -20,7 +20,6 @@ module MutableMap {
     slot.slot < elementsLength
   }
 
-  // FIXME(alattuada) reduce proofs!
   class FixedSizeHashMap<V(==)> {
     var Storage: array<Item<V>>;
     var Count: uint64;
@@ -28,30 +27,38 @@ module MutableMap {
     ghost var Contents: map<uint64, Option<V>>;
     ghost var Repr: set<object>;
 
+    function I(): (contents: map<uint64, Option<V>>)
+    requires Inv()
+    ensures contents == this.Contents
+    reads this, this.Repr
+    {
+      this.Contents
+    }
+
     static predicate ValidElements(elements: seq<Item<V>>)
     {
       && 0 < |elements| < 0x10000000000000000
     }
 
     static function SlotForKey(elementsLength: nat, key: uint64): (result: Slot)
-      requires 0 < elementsLength
-      ensures ValidSlot(elementsLength, result)
+    requires 0 < elementsLength
+    ensures ValidSlot(elementsLength, result)
     {
       Slot((key as nat) % elementsLength)
     }
 
     function method Uint64SlotForKey(key: uint64): (result: uint64)
-      requires 0 < Storage.Length < 0x10000000000000000
-      ensures ValidSlot(Storage.Length, Slot(result as nat))
-      ensures Slot(result as nat) == SlotForKey(Storage.Length, key)
-      reads this, this.Storage
+    requires 0 < Storage.Length < 0x10000000000000000
+    ensures ValidSlot(Storage.Length, Slot(result as nat))
+    ensures Slot(result as nat) == SlotForKey(Storage.Length, key)
+    reads this, this.Storage
     {
       key % (Storage.Length as uint64)
     }
 
     static function SlotSuccessor(elementsLength: nat, slot: Slot): (nextSlot: Slot)
-      requires ValidSlot(elementsLength, slot)
-      ensures ValidSlot(elementsLength, nextSlot)
+    requires ValidSlot(elementsLength, slot)
+    ensures ValidSlot(elementsLength, nextSlot)
     {
       Slot(if slot.slot == elementsLength - 1 then
         0
@@ -70,6 +77,15 @@ module MutableMap {
         SlotSuccessor(elementsLength, KthSlotSuccessor(elementsLength, slot, k - 1))
     }
 
+    //   0 - - - - - - - - - - -   length = 12
+    //                 @           slot = 7
+    //                 | > > *     k = 3; (slot + k) mod length is slot 10 == 7 + 3
+
+    //   0 - - - - - - - - - - -   length = 12
+    //                 @           slot = 7
+    //                 | > > > >   k = 8
+    //   > > > *                   (slot + k) mod length is slot 3 == 8 - (12 - 7) == 8 - 5 == 3
+
     static lemma KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
       requires 0 <= k < elementsLength
       requires ValidSlot(elementsLength, slot)
@@ -79,27 +95,35 @@ module MutableMap {
             KthSlotSuccessor(elementsLength, slot, k).slot == k - (elementsLength - slot.slot)
       decreases k
     {
-      var elementsInRightSlice := elementsLength - slot.slot;
-      if k < elementsInRightSlice {
-        assert KthSlotSuccessor(elementsLength, slot, k).slot == slot.slot + k;
-      } else { // k >= elementsInRightSlice
-        assert KthSlotSuccessor(elementsLength, slot, elementsInRightSlice).slot == 0;
-        var firstSlot := KthSlotSuccessor(elementsLength, slot, elementsInRightSlice);
-        assert firstSlot.slot == 0;
-        var idx: nat := k - elementsInRightSlice;
-        assert k == elementsInRightSlice + idx;
-        KthSlotSuccessorWrapsAround(elementsLength, firstSlot, idx);
-        assert KthSlotSuccessor(elementsLength, firstSlot, idx).slot == idx;
-        assert KthSlotSuccessor(elementsLength, slot, elementsInRightSlice + idx).slot == idx;
-      }
+      /* (doc)
+        var elementsInRightSlice := elementsLength - slot.slot;
+        if k < elementsInRightSlice {
+        } else {
+          var firstSlot := KthSlotSuccessor(elementsLength, slot, elementsInRightSlice);
+          var idx: nat := k - elementsInRightSlice;
+          KthSlotSuccessorWrapsAround(elementsLength, firstSlot, idx);
+        }
+      */
+    }
+
+    static predicate SlotIsEntry(elements: seq<Item<V>>, slot: Slot) // hide trigger
+    requires ValidSlot(|elements|, slot)
+    {
+      elements[slot.slot].Entry?
+    }
+
+    static predicate SlotIsTombstone(elements: seq<Item<V>>, slot: Slot) // hide trigger
+    requires ValidSlot(|elements|, slot)
+    {
+      elements[slot.slot].Tombstone?
     }
 
     static predicate FilledWithOtherKey(elements: seq<Item<V>>, slot: Slot, excludingKey: uint64)
       requires ValidElements(elements)
       requires ValidSlot(|elements|, slot)
     {
-      || (elements[slot.slot].Tombstone? && elements[slot.slot].key != excludingKey)
-      || (elements[slot.slot].Entry? && elements[slot.slot].key != excludingKey)
+      || (SlotIsTombstone(elements, slot) && elements[slot.slot].key != excludingKey)
+      || (SlotIsEntry(elements, slot) && elements[slot.slot].key != excludingKey)
     }
 
     static predicate FilledWithOtherKeys(elements: seq<Item<V>>, start: Slot, count: nat, excludingKey: uint64)
@@ -114,19 +138,19 @@ module MutableMap {
       requires ValidElements(elements)
       requires ValidSlot(|elements|, slot)
     {
-      (elements[slot.slot].Entry? || elements[slot.slot].Tombstone?) && elements[slot.slot].key == key
+      (SlotIsEntry(elements, slot) || SlotIsTombstone(elements, slot)) && elements[slot.slot].key == key
     }
 
     static predicate FilledWithEntryKey(elements: seq<Item<V>>, slot: Slot, key: uint64)
       requires ValidElements(elements)
       requires ValidSlot(|elements|, slot)
     {
-      && elements[slot.slot].Entry?
+      && SlotIsEntry(elements, slot)
       && elements[slot.slot].key == key
     }
 
     static predicate SlotExplainsKey(elements: seq<Item<V>>, skips: nat, key: uint64)
-      requires ValidElements(elements)
+    requires ValidElements(elements)
     {
       var foundSlot := KthSlotSuccessor(|elements|, SlotForKey(|elements|, key), skips);
       && ValidSlot(|elements|, foundSlot)
@@ -136,19 +160,19 @@ module MutableMap {
 
     // hide forall trigger
     static predicate TwoNonEmptyValidSlotsWithSameKey(elements: seq<Item<V>>, slot1: Slot, slot2: Slot)
-      requires ValidElements(elements)
+    requires ValidElements(elements)
     {
       && ValidSlot(|elements|, slot1)
       && ValidSlot(|elements|, slot2)
-      && (elements[slot1.slot].Entry? || elements[slot1.slot].Tombstone?)
-      && (elements[slot2.slot].Entry? || elements[slot2.slot].Tombstone?)
+      && (SlotIsEntry(elements, slot1) || SlotIsTombstone(elements, slot1))
+      && (SlotIsEntry(elements, slot2) || SlotIsTombstone(elements, slot2))
       && elements[slot1.slot].key == elements[slot2.slot].key
     }
 
     // hide forall trigger
     static predicate SameSlot(elementsLength: nat, slot1: Slot, slot2: Slot)
-      requires ValidSlot(elementsLength, slot1)
-      requires ValidSlot(elementsLength, slot2)
+    requires ValidSlot(elementsLength, slot1)
+    requires ValidSlot(elementsLength, slot2)
     {
       slot1 == slot2
     }
@@ -160,45 +184,41 @@ module MutableMap {
           ==> SameSlot(|elements|, slot1, slot2)
     }
 
-    static predicate SlotIsEntryOrTombstone(elements: seq<Item<V>>, slot: Slot)
-    {
-      ValidSlot(|elements|, slot) && (elements[slot.slot].Entry? || elements[slot.slot].Tombstone?)
-    }
-
     static predicate KeyInSlotIsInContents(elements: seq<Item<V>>, contents: map<uint64, Option<V>>, slot: Slot)
-      requires SlotIsEntryOrTombstone(elements, slot)
+    requires ValidSlot(|elements|, slot)
+    requires SlotIsEntry(elements, slot) || SlotIsTombstone(elements, slot)
     {
       && var key := elements[slot.slot].key;
       && key in contents
     }
 
     static predicate SeqMatchesContentKeys(elements: seq<Item<V>>, contents: map<uint64, Option<V>>)
-      requires ValidElements(elements)
+    requires ValidElements(elements)
     {
       && (forall key :: key in contents ==> exists skips :: SlotExplainsKey(elements, skips, key))
-      && (forall slot :: SlotIsEntryOrTombstone(elements, slot)
+      && (forall slot :: ValidSlot(|elements|, slot) && (SlotIsEntry(elements, slot) || SlotIsTombstone(elements, slot))
           ==> KeyInSlotIsInContents(elements, contents, slot))
       && CantEquivocateStorageKey(elements)
     }
 
-    predicate EntryInSlotMatchesContents(slot: Slot) // hide triggers
-    requires ValidSlot(Storage.Length, slot)
-    requires Storage[slot.slot].Entry?
+    predicate EntryInSlotMatchesContents(elements: seq<Item<V>>, slot: Slot, contents: map<uint64, Option<V>>) // hide triggers
+    requires ValidSlot(|elements|, slot)
+    requires SlotIsEntry(elements, slot)
     reads this
     reads this.Storage
     {
-      && var item := Storage[slot.slot];
+      && var item := elements[slot.slot];
       && item.key in Contents
       && Contents[item.key] == Some(item.value)
     }
 
-    predicate TombstoneInSlotMatchesContents(slot: Slot) // hide triggers
-    requires ValidSlot(Storage.Length, slot)
-    requires Storage[slot.slot].Tombstone?
+    predicate TombstoneInSlotMatchesContents(elements: seq<Item<V>>, slot: Slot, contents: map<uint64, Option<V>>) // hide triggers
+    requires ValidSlot(|elements|, slot)
+    requires SlotIsTombstone(elements, slot)
     reads this
     reads this.Storage
     {
-      && var item := Storage[slot.slot];
+      && var item := elements[slot.slot];
       && item.key in Contents
       && Contents[item.key].None?
     }
@@ -216,9 +236,10 @@ module MutableMap {
 
       && |Contents| == (Count as nat)
       && SeqMatchesContentKeys(Storage[..], Contents)
-      && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry? ==> EntryInSlotMatchesContents(slot))
-      && (forall slot :: ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone? ==>
-          TombstoneInSlotMatchesContents(slot))
+      && (forall slot :: ValidSlot(Storage.Length, slot) && SlotIsEntry(Storage[..], slot)
+          ==> EntryInSlotMatchesContents(Storage[..], slot, Contents))
+      && (forall slot :: ValidSlot(Storage.Length, slot) && SlotIsTombstone(Storage[..], slot)
+          ==> TombstoneInSlotMatchesContents(Storage[..], slot, Contents))
     }
 
     function IndexSetThrough(elements: seq<Item<V>>, through: nat): set<int>
@@ -279,7 +300,7 @@ module MutableMap {
       {
         var slot := Slot(a);
         assert ValidSlot(|elements|, slot);
-        assert SlotIsEntryOrTombstone(elements, slot);
+        assert SlotIsEntry(elements, slot) || SlotIsTombstone(elements, slot);
       }
       forall a1, a2, b | a1 in setA && a2 in setA && b in setB && (a1, b) in relation && (a2, b) in relation
       ensures a1 == a2
@@ -405,7 +426,7 @@ module MutableMap {
       forall dist: nat | dist < Storage.Length
       ensures Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist]
       {
-        KthSlotSuccessorWrapsAround(Storage.Length, startSlot, dist);
+        KthSlotSuccessorWrapsAround(Storage.Length, startSlot, dist); // observe
         if dist < Storage.Length-(startSlotIdx as int) {
           assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == startSlotIdx as int + (dist as int);
           assert Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
@@ -435,6 +456,7 @@ module MutableMap {
         if Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key) {
           return;
         } else if Storage[slotIdx].key == key {
+          assert EntryInSlotMatchesContents(Storage[..], Slot(slotIdx as nat), Contents); // observe
           return;
         }
         assert Storage[slotIdx].Entry? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key != key);
@@ -926,7 +948,7 @@ module MutableMap {
 
       assert storagePos < Underlying.Storage.Length;
       var firstEntry := Underlying.Storage[storagePos];
-      assert Underlying.EntryInSlotMatchesContents(Slot(storagePos));
+      assert Underlying.EntryInSlotMatchesContents(Underlying.Storage[..], Slot(storagePos), Underlying.Contents);
       assert firstEntry.key in Contents;
       // -- mutation --
       result := new [Count] (_ => (firstEntry.key, firstEntry.value));
@@ -979,7 +1001,7 @@ module MutableMap {
             assert transferredContents == Contents;
             ghost var thisSlot := Slot(storagePos);
             assert MapFromStorage(Underlying.Storage[..storagePos]) == MapFromStorage(Underlying.Storage[..]);
-            assert Underlying.EntryInSlotMatchesContents(thisSlot);
+            assert Underlying.EntryInSlotMatchesContents(Underlying.Storage[..], thisSlot, Underlying.Contents);
             assert item.key in Underlying.Contents;
             assert item.key in Contents;
             CantEquivocateMapFromStorageKey(Underlying);
@@ -1013,7 +1035,7 @@ module MutableMap {
           }
           assert item.key !in transferredContents;
 
-          assert Underlying.EntryInSlotMatchesContents(Slot(storagePos)); // observe
+          assert Underlying.EntryInSlotMatchesContents(Underlying.Storage[..], Slot(storagePos), Underlying.Contents); // observe
 
           ghost var transferredContentsBefore := transferredContents;
           ghost var resultBefore := result[..];
