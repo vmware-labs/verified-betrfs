@@ -31,6 +31,7 @@ module ImplModel {
   import SD = AsyncSectorDisk
   import D = AsyncDisk
   import opened BucketsLib
+  import UI
 
   import ReferenceType`Internal
 
