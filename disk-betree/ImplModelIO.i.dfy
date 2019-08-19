@@ -324,95 +324,150 @@ module ImplIO {
     D.reveal_ChecksumChecksOut();
   }
 
-  /*
-  method PageInIndirectionTableResp(k: ImplConstants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
-  requires IS.WFVars(s)
-  requires io.diskOp().RespReadOp?
+  function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
+  : (s' : Variables)
+  requires diskOp(io).RespReadOp?
   requires s.Unready?
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    var id, sector := ReadSector(io);
+    var (id, sector) := ReadSector(io);
+    if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
+      var persistentIndirectionTable := sector.value.indirectionTable;
+      var ephemeralIndirectionTable := sector.value.indirectionTable;
+      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], map[])
+    ) else (
+      s
+    )
+  }
+
+  lemma PageInIndirectionTableRespCorrect(k: Constants, s: Variables, io: IO)
+  requires WFVars(s)
+  requires diskOp(io).RespReadOp?
+  requires s.Unready?
+  ensures var s' := PageInIndirectionTableResp(k, s, io);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  {
+    var (id, sector) := ReadSector(io);
+    ReadSectorCorrect(io);
+
+    Marshalling.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    IMM.reveal_parseCheckedSector();
+    M.reveal_IBytes();
+    M.reveal_ValidCheckedBytes();
+    M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+
+    var s' := PageInIndirectionTableResp(k, s, io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
-      var persistentIndirectionTable := sector.value.indirectionTable.Clone();
-      var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
-      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
-      assert IS.WFVars(s');
-      assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
-      assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
+      assert WFVars(s');
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
+      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     } else {
-      s' := s;
-      assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
-      assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
-      print "giving up; did not get indirectionTable when reading\n";
+      assert s == s';
+      assert BC.NoOp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
+      assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s), UI.NoOp, M.IDiskOp(diskOp(io)), BC.NoOpStep);
+      assert M.NextStep(Ik(k), IVars(s), IVars(s), UI.NoOp, diskOp(io), M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
+      assert stepsBC(k, IVars(s), IVars(s), UI.NoOp, io, BC.NoOpStep);
     }
   }
 
-  method PageInResp(k: ImplConstants, s: Variables, io: DiskIOHandler)
-  returns (s': Variables)
-  requires io.diskOp().RespReadOp?
+  function PageInResp(k: Constants, s: Variables, io: IO)
+  : (s': Variables)
+  requires diskOp(io).RespReadOp?
   requires s.Ready?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
   {
-    var id, sector := ReadSector(io);
+    var (id, sector) := ReadSector(io);
+
+    if (id !in s.outstandingBlockReads) then (
+      s
+    ) else (
+      // TODO we should probably remove the id from outstandingBlockReads
+      // even in the case we don't do anything with it
+
+      var ref := s.outstandingBlockReads[id].ref;
+
+      var locGraph := MapLookupOption(s.ephemeralIndirectionTable, ref);
+      if (locGraph.None? || locGraph.value.0.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
+        s
+      ) else (
+        var graph := locGraph.value.1;
+        if (sector.Some? && sector.value.SectorBlock?) then (
+          var node := sector.value.block;
+          if (graph == (if node.children.Some? then node.children.value else [])) then (
+            s.(cache := s.cache[ref := sector.value.block])
+             .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id))
+          ) else (
+            s
+          )
+        ) else (
+          s
+        )
+      )
+    )
+  }
+
+  lemma PageInRespCorrect(k: Constants, s: Variables, io: IO)
+  requires diskOp(io).RespReadOp?
+  requires s.Ready?
+  requires WFVars(s)
+  requires BBC.Inv(Ik(k), IVars(s))
+  ensures var s' := PageInResp(k, s, io);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  {
+    var s' := PageInResp(k, s, io);
+
+    var (id, sector) := ReadSector(io);
+    ReadSectorCorrect(io);
+
+    Marshalling.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    IMM.reveal_parseCheckedSector();
+    M.reveal_IBytes();
+    M.reveal_ValidCheckedBytes();
+    M.reveal_Parse();
+    D.reveal_ChecksumChecksOut();
 
     if (id !in s.outstandingBlockReads) {
-      s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
-      print "PageInResp: unrecognized id from Read\n";
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
       return;
     }
-
-    // TODO we should probably remove the id from outstandingBlockReads
-    // even in the case we don't do anything with it
 
     var ref := s.outstandingBlockReads[id].ref;
     
-    var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-    if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
-      s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
-      print "PageInResp: ref !in lbas or ref in s.cache\n";
+    var locGraph := MapLookupOption(s.ephemeralIndirectionTable, ref);
+    if (locGraph.None? || locGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
       return;
     }
 
-    assert lbaGraph.Some? && lbaGraph.value.0.Some?;
-    var lba := lbaGraph.value.0.value;
-    var graph := lbaGraph.value.1;
+    var graph := locGraph.value.1;
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
-        s' := s.(cache := s.cache[ref := sector.value.block])
-               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
-
         INodeRootEqINodeForEmptyRootBucket(node);
 
-        assert BC.PageInResp(k, old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
-        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInRespStep);
+        assert BC.PageInResp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
+        assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInRespStep);
       } else {
-        s' := s;
-        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
-        print "giving up; block does not match graph\n";
+        assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
       }
     } else {
-      s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
-      print "giving up; block read in was not block\n";
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
 
-  method readResponse(k: ImplConstants, s: Variables, io: DiskIOHandler)
+  /*
+
+  method readResponse(k: Constants, s: Variables, io: IO)
   returns (s': Variables)
-  requires io.diskOp().RespReadOp?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  requires diskOp(io).RespReadOp?
+  requires WFVars(s)
+  requires BBC.Inv(k, IVars(s))
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
     if (s.Unready?) {
       s' := PageInIndirectionTableResp(k, s, io);
@@ -423,13 +478,13 @@ module ImplIO {
 
   // == writeResponse ==
 
-  method writeResponse(k: ImplConstants, s: Variables, io: DiskIOHandler)
+  method writeResponse(k: Constants, s: Variables, io: IO)
   returns (s': Variables)
-  requires io.diskOp().RespWriteOp?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  requires diskOp(io).RespWriteOp?
+  requires WFVars(s)
+  requires BBC.Inv(k, IVars(s))
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
     var id := io.getWriteResult();
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
@@ -437,13 +492,13 @@ module ImplIO {
              .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
              .(syncReqs := BC.syncReqs2to1(s.syncReqs));
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
       s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackRespStep);
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackRespStep);
     } else {
       s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
   */
