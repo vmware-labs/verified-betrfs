@@ -17,17 +17,6 @@ module ImplModelFlush {
   import opened NativeTypes
   import D = AsyncDisk
 
-  lemma lemmaChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
-  requires s.Ready?
-  requires Inv(k, s)
-  requires ref in s.cache
-  requires ref in s.ephemeralIndirectionTable
-  requires childref in BT.G.Successors(INode(s.cache[ref]))
-  ensures childref in s.ephemeralIndirectionTable
-  {
-    assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
-  }
-
   function flush(k: Constants, s: Variables, io: IO, parentref: BT.G.Reference, slot: int)
   : (Variables, IO)
   requires Inv(k, s)
