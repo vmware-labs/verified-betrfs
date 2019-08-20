@@ -2,8 +2,7 @@ include "ImplCache.i.dfy"
 
 module ImplFlush { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
+  //import opened ImplCache
 
   import opened Options
   import opened MainDiskIOHandler

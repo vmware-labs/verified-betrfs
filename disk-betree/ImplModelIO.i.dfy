@@ -47,28 +47,28 @@ module ImplModelIO {
           indirectionTable[ref].0.value.addr != addr)
   }
 
-  function getFreeLocIterate(s: Variables, len: uint64, i: uint64)
+  function getFreeLocIterate(s: Variables, len: uint64, tryOffset: uint64)
   : (loc : Option<BC.Location>)
   requires s.Ready?
   requires WFVars(s)
   requires len <= LBAType.BlockSize()
-  requires i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
+  requires tryOffset as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
   ensures loc.Some? ==> LocAvailable(s, loc.value, len)
-  decreases 0x1_0000_0000_0000_0000 - i as int
+  decreases 0x1_0000_0000_0000_0000 - tryOffset as int
   {
     if (
-      && var addr := i * LBAType.BlockSize();
+      && var addr := tryOffset * LBAType.BlockSize();
       && BC.ValidLBAForNode(addr)
       && addrNotUsedInIndirectionTable(addr, s.persistentIndirectionTable)
       && addrNotUsedInIndirectionTable(addr, s.ephemeralIndirectionTable)
       && (s.frozenIndirectionTable.Some? ==> addrNotUsedInIndirectionTable(addr, s.frozenIndirectionTable.value))
       && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr)
     ) then (
-      Some(LBAType.Location(i * LBAType.BlockSize(), len))
-    ) else if (i+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int then (
+      Some(LBAType.Location(tryOffset * LBAType.BlockSize(), len))
+    ) else if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int then (
       None
     ) else (
-      getFreeLocIterate(s, len, i+1)
+      getFreeLocIterate(s, len, tryOffset+1)
     )
   }
 

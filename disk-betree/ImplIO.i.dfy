@@ -1,4 +1,6 @@
 include "Impl.i.dfy"
+include "ImplState.i.dfy"
+include "ImplModelIO.i.dfy"
 
 module ImplIO { 
   import opened Impl
@@ -6,9 +8,72 @@ module ImplIO {
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import ImplModel
+  import ImplModelIO
   import BucketsLib
   import IS = ImplState
 
+  method addrUsedInIndirectionTable(addr: uint64, indirectionTable:IS.MutIndirectionTable) returns (used:bool)
+    ensures !used == ImplModelIO.addrNotUsedInIndirectionTable(addr, IS.IIndirectionTable(indirectionTable))
+  {
+  }
+
+  method addrUsedInOutstandingBlockWrites(s: ImplVariables, addr: uint64) returns (used:bool)
+    requires s.Ready?
+    ensures forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr
+  {
+  }
+
+  function method MaxOffset() : (maxOffset:uint64)
+    ensures maxOffset as int * LBAType.BlockSize() as int == 0x1_0000_0000_0000_0000;
+  {
+    // TODO I suspect we constructed a BigInteger to assign this.
+    var maxOffset:uint64 := (0x1_0000_0000_0000_0000 / LBAType.BlockSize() as int) as uint64;
+    maxOffset
+  }
+
+    // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
+  method getFreeLoc(s: ImplVariables, len: uint64)
+  returns (loc : Option<BC.Location>)
+  requires s.Ready?
+  requires IS.WFVars(s)
+  requires len <= LBAType.BlockSize()
+  ensures loc == ImplModelIO.getFreeLoc(IS.IVars(s), len)
+  {
+    ImplModelIO.reveal_getFreeLoc();
+    var maxOffset := MaxOffset();
+    var tryOffset:uint64 := 0;
+    while (tryOffset < maxOffset)
+        invariant tryOffset as int * LBAType.BlockSize() as int <= 0x1_0000_0000_0000_0000
+        invariant forall offset :: 0 <= offset < tryOffset
+            ==> ImplModelIO.getFreeLocIterate(IS.IVars(s), len, offset).None?
+    {
+        var addr : uint64 := tryOffset * LBAType.BlockSize();
+        var persistentUsed := addrUsedInIndirectionTable(addr, s.persistentIndirectionTable);
+        var ephemeralUsed := addrUsedInIndirectionTable(addr, s.ephemeralIndirectionTable);
+        var frozenUsed := false;
+        if s.frozenIndirectionTable.Some? {
+          frozenUsed := addrUsedInIndirectionTable(addr, s.frozenIndirectionTable.value);
+        }
+        var outstandingUsed := addrUsedInOutstandingBlockWrites(s, addr);
+        if (
+            && BC.ValidLBAForNode(addr)
+            && !persistentUsed
+            && !ephemeralUsed
+            && !frozenUsed
+            && !outstandingUsed
+          ) {
+            var result := Some(LBAType.Location(addr, len));
+            assert result == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset);
+            return result;
+          }
+      assert ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset).None?;
+      tryOffset := tryOffset + 1;     
+    }
+    return None;
+  }
+
+/*
   method getFreeLba(s: ImplVariables, len: uint64)
   returns (loc : Option<BC.Location>)
   requires s.Ready?
@@ -370,4 +435,5 @@ module ImplIO {
       assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
+*/
 }

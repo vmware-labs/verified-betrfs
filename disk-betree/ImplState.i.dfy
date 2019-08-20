@@ -104,26 +104,26 @@ module {:extern} ImplState {
     && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
   }
 
-  function JIndirectionTable(table: MutIndirectionTable) : (result: IM.IndirectionTable)
+  function IIndirectionTable(table: MutIndirectionTable) : (result: IM.IndirectionTable)
   reads table, table.Repr
   {
     table.Contents
   }
-  function JIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<IM.IndirectionTable>)
+  function IIndirectionTableOpt(table: Option<MutIndirectionTable>) : (result: Option<IM.IndirectionTable>)
   reads if table.Some? then {table.value} + table.value.Repr else {}
   {
     if table.Some? then
-      Some(JIndirectionTable(table.value))
+      Some(IIndirectionTable(table.value))
     else
       None
   }
-  function JVars(vars: Variables) : IM.Variables
+  function IVars(vars: Variables) : IM.Variables
   requires WVars(vars)
   reads VariablesReadSet(vars)
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) =>
-        IM.Ready(JIndirectionTable(persistentIndirectionTable), JIndirectionTableOpt(frozenIndirectionTable), JIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, TTT.I(rootBucket))
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, TTT.I(rootBucket))
       case Unready(outstandingIndirectionTableRead, syncReqs) => IM.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }
@@ -133,7 +133,7 @@ module {:extern} ImplState {
   {
     match sector {
       case SectorBlock(node) => IM.SectorBlock(node)
-      case SectorIndirectionTable(indirectionTable) => IM.SectorIndirectionTable(JIndirectionTable(indirectionTable))
+      case SectorIndirectionTable(indirectionTable) => IM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 
@@ -145,6 +145,6 @@ module {:extern} ImplState {
   reads VariablesReadSet(vars)
   {
     && WVars(vars)
-    && IM.WFVars(JVars(vars))
+    && IM.WFVars(IVars(vars))
   }
 }
