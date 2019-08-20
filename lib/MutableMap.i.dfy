@@ -510,65 +510,53 @@ module MutableMap {
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
-      assert FilledWithOtherKeys(Storage[..], SlotForKey(Storage.Length, key), probeSkips as nat, key);
-      assert slotIdx as nat == KthSlotSuccessor(Storage.Length, SlotForKey(Storage.Length, key), probeSkips as nat).slot;
-
+      /* (doc)
       assert forall explainedKey :: explainedKey in Contents ==>
-          exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+        exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+      */
 
       // -- mutation --
       if Storage[slotIdx].Empty? {
-        assert key !in Contents;
         Count := Count + 1;
         replaced := None;
       } else if Storage[slotIdx].Tombstone? {
-        assert key in Contents;
         replaced := None;
       } else {
-        assert key in Contents;
         replaced := Some(Storage[slotIdx].value);
       }
       Storage[slotIdx] := Entry(key, value);
       Contents := Contents[key := Some(value)];
       // --------------
 
-      assert |Contents| == (Count as nat);
+      /* (doc)
       assert FilledWithOtherKeys(Storage[..], SlotForKey(Storage.Length, key), probeSkips as nat, key);
       assert FilledWithKey(Storage[..], Slot(slotIdx as nat), key);
       assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
-
       assert key in Contents;
+      */
+
       forall explainedKey | explainedKey in Contents
       ensures exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey)
       {
         if key == explainedKey {
-          assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
-          assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+          assert SlotExplainsKey(Storage[..], probeSkips as nat, key); // observe
         } else {
           var oldSkips :| SlotExplainsKey(old(Storage[..]), oldSkips, explainedKey);
-          assert SlotExplainsKey(Storage[..], oldSkips, explainedKey);
-          assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
+          assert SlotExplainsKey(Storage[..], oldSkips, explainedKey); // observe
         }
       }
-
-      assert CantEquivocateStorageKey(Storage[..]);
-      assert Count as nat < Storage.Length;
 
       forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry?
       ensures && var item := Storage[slot.slot];
               && Contents[item.key] == Some(item.value)
       {
         var item := Storage[slot.slot];
-        if slot == Slot(slotIdx as nat) {
-          assert Contents[item.key] == Some(item.value);
-        } else {
-          assert Storage[slot.slot] == old(Storage[slot.slot]);
+        if slot != Slot(slotIdx as nat) {
           if item.key == key {
-            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
+            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat)); // observe
+            assert SameSlot(Storage.Length, slot, Slot(slotIdx as nat)); // observe
             assert false;
           }
-          assert item.key != key;
-          assert Contents[item.key] == Some(item.value);
         }
       }
       forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone?
@@ -576,15 +564,12 @@ module MutableMap {
               && Contents[item.key].None?
       {
         var item := Storage[slot.slot];
-        if slot == Slot(slotIdx as nat) {
-          assert Contents[item.key].None?;
-        } else {
+        if slot != Slot(slotIdx as nat) {
           if item.key == key {
-            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
+            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat)); // observe
+            assert SameSlot(Storage.Length, slot, Slot(slotIdx as nat)); // observe
             assert false;
           }
-          assert item.key != key;
-          assert Contents[item.key].None?;
         }
       }
     }
