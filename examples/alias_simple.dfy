@@ -118,10 +118,15 @@ module FunctionalGraph /* refines GraphSpec */ {
     Variables(map[S.Root() := GraphValue({}, 0)], map[], 1)
   }
 
+  predicate AllocRequires(k: Constants, s: Variables)
+  {
+    && s.nextRef as nat < 0x1_0000_0000_0000_0000 - 1
+  }
+
   datatype AllocResult = AllocResult(s': Variables, ref: Reference)
   function Alloc(k: Constants, s: Variables): (result: AllocResult)
   requires Inv(k, s)
-  requires s.nextRef as nat < 0x1_0000_0000_0000_0000 - 1
+  requires AllocRequires(k, s)
   // ensures S.Alloc(Ik(k), I(k, s), I(k, result.s'), result.ref)
   {
     AllocResult(
@@ -133,7 +138,7 @@ module FunctionalGraph /* refines GraphSpec */ {
 
   lemma RefinesAlloc(k: Constants, s: Variables, s': Variables) returns (ref: Reference)
   requires Inv(k, s)
-  requires s.nextRef as nat < 0x1_0000_0000_0000_0000 - 1
+  requires AllocRequires(k, s)
   requires s' == Alloc(k, s).s'
   ensures ref == Alloc(k, s).ref
   ensures Inv(k, s')
@@ -152,10 +157,15 @@ module FunctionalGraph /* refines GraphSpec */ {
     assert S.Alloc(Ik(k), I(k, s), I(k, s'), Alloc(k, s).ref);
   }
 
+  predicate DeallocRequires(k: Constants, s: Variables, ref: Reference)
+  {
+    && ref in s.graph
+    && 0 in s.invRc && ref in s.invRc[0]
+  }
+
   function Dealloc(k: Constants, s: Variables, ref: Reference): (s': Variables)
   requires Inv(k, s)
-  requires ref in s.graph
-  requires 0 in s.invRc && ref in s.invRc[0]
+  requires DeallocRequires(k, s, ref)
   // ensures S.Dealloc(Ik(k), I(k, s), I(k, s'), ref)
   {
     s
@@ -165,8 +175,7 @@ module FunctionalGraph /* refines GraphSpec */ {
 
   lemma RefinesDealloc(k: Constants, s: Variables, s': Variables, ref: Reference)
   requires Inv(k, s)
-  requires ref in s.graph
-  requires 0 in s.invRc && ref in s.invRc[0]
+  requires DeallocRequires(k, s, ref)
   requires s' == Dealloc(k, s, ref)
   ensures Inv(k, s')
   ensures S.Dealloc(Ik(k), I(k, s), I(k, s'), ref)
@@ -183,11 +192,16 @@ module FunctionalGraph /* refines GraphSpec */ {
     assert S.Dealloc(Ik(k), I(k, s), I(k, s'), ref);
   }
 
+  predicate AttachRequires(k: Constants, s: Variables, parent: Reference, ref: Reference)
+  {
+    && parent in s.graph
+    && ref in s.graph
+    && ref !in s.graph[parent].adjList
+  }
+
   function Attach(k: Constants, s: Variables, parent: Reference, ref: Reference): (s': Variables)
   requires Inv(k, s)
-  requires parent in s.graph
-  requires ref in s.graph
-  requires ref !in s.graph[parent].adjList
+  requires AttachRequires(k, s, parent, ref)
   // ensures S.Attach(Ik(k), I(k, s), I(k, s'), parent, ref)
   {
     var rc := s.graph[ref].rc;
@@ -204,9 +218,7 @@ module FunctionalGraph /* refines GraphSpec */ {
 
   lemma RefinesAttach(k: Constants, s: Variables, s': Variables, parent: Reference, ref: Reference)
   requires Inv(k, s)
-  requires parent in s.graph
-  requires ref in s.graph
-  requires ref !in s.graph[parent].adjList
+  requires AttachRequires(k, s, parent, ref)
   requires s' == Attach(k, s, parent, ref)
   ensures Inv(k, s')
   ensures S.Attach(Ik(k), I(k, s), I(k, s'), parent, ref)
@@ -223,11 +235,16 @@ module FunctionalGraph /* refines GraphSpec */ {
     assert S.Attach(Ik(k), I(k, s), I(k, s'), parent, ref);
   }
 
+  predicate DetachRequires(k: Constants, s: Variables, parent: Reference, ref: Reference)
+  {
+    && parent in s.graph
+    && ref in s.graph
+    && ref in s.graph[parent].adjList
+  }
+
   function Detach(k: Constants, s: Variables, parent: Reference, ref: Reference): (s': Variables)
   requires Inv(k, s)
-  requires parent in s.graph
-  requires ref in s.graph
-  requires ref in s.graph[parent].adjList
+  requires DetachRequires(k, s, parent, ref)
   // ensures S.Detach(Ik(k), I(k, s), I(k, s'), parent, ref)
   {
     var rc := s.graph[ref].rc;
@@ -244,9 +261,7 @@ module FunctionalGraph /* refines GraphSpec */ {
 
   lemma RefinesDetach(k: Constants, s: Variables, s': Variables, parent: Reference, ref: Reference)
   requires Inv(k, s)
-  requires parent in s.graph
-  requires ref in s.graph
-  requires ref in s.graph[parent].adjList
+  requires DetachRequires(k, s, parent, ref)
   requires s' == Detach(k, s, parent, ref)
   ensures Inv(k, s')
   ensures S.Detach(Ik(k), I(k, s), I(k, s'), parent, ref)
@@ -269,33 +284,20 @@ module FunctionalGraph /* refines GraphSpec */ {
     | AttachStep(parent: Reference, ref: Reference)
     | DetachStep(parent: Reference, ref: Reference)
 
-  predicate Admissible(k: Constants, s: Variables, step: Step)
+  predicate NextStepRequires(k: Constants, s: Variables, step: Step)
   {
     match step {
-      case AllocStep() => (
-        && s.nextRef as nat < 0x1_0000_0000_0000_0000 - 1
-      )
-      case DeallocStep(ref) => (
-        && ref in s.graph
-        && 0 in s.invRc && ref in s.invRc[0]
-      )
-      case AttachStep(parent, ref) => (
-        && parent in s.graph
-        && ref in s.graph
-        && ref !in s.graph[parent].adjList
-      )
-      case DetachStep(parent, ref) => (
-        && parent in s.graph
-        && ref in s.graph
-        && ref in s.graph[parent].adjList
-      )
+      case AllocStep() => AllocRequires(k, s)
+      case DeallocStep(ref) => DeallocRequires(k, s, ref)
+      case AttachStep(parent, ref) => AttachRequires(k, s, parent, ref)
+      case DetachStep(parent, ref) => DetachRequires(k, s, parent, ref)
     }
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
   {
     && Inv(k, s)
-    && Admissible(k, s, step)
+    && NextStepRequires(k, s, step)
     && s' == match step {
       case AllocStep() => Alloc(k, s).s'
       case DeallocStep(ref) => Dealloc(k, s, ref)
@@ -343,5 +345,33 @@ module FunctionalGraph /* refines GraphSpec */ {
   {
     var step :| NextStep(k, s, s', step);
     RefinesNextStep(k, s, s', step);
+  }
+}
+
+module ImperativeGraph /* refines FunctionalGraph */ {
+  import MutableMap
+  import F = FunctionalGraph
+
+  type HashMap<V(==)> = MutableMap.ResizingHashMap<V>
+  type GraphValue = F.GraphValue
+  type Reference = F.Reference
+
+  class State {
+    var graph: HashMap<GraphValue>;
+    var invRc: HashMap<set<Reference>>;
+    var nextRef: int;
+
+    ghost var Repr: set<object>;
+
+    constructor()
+    {
+      graph := new MutableMap.ResizingHashMap<GraphValue>(1024);
+      invRc := new MutableMap.ResizingHashMap<set<Reference>>(256);
+      nextRef := 1;
+
+      new;
+
+      Repr := graph.Repr + invRc.Repr;
+    }
   }
 }
