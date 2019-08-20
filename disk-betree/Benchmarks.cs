@@ -124,7 +124,65 @@ class BenchmarkRandomInserts : Benchmark {
     for (int i = 0; i < keys.Count; i++) {
       app.Insert(keys[i], values[i]);
     }
+    Console.Error.Write("? sync ");
     app.Sync();
+    Console.Error.WriteLine("done");
+  }
+}
+
+// 50_000_000 random inserts
+//
+// This harness can generate ~2_300_000 ops/s on my machine (only generating keys and values, not calling Insert/Sync)
+class LongBenchmarkRandomInserts : Benchmark {
+  public override string Name { get { return "LongRandomInserts"; } }
+
+  int count = 5_000_000;
+
+  override protected int OpCount(Application app) {
+    return count;
+  }
+
+  public LongBenchmarkRandomInserts() {
+  }
+
+  override protected void Prepare(Application app) {
+  }
+
+  uint rngState = 198432;
+
+  protected uint NextPseudoRandom() {
+    rngState = (uint) (((ulong) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  unsafe override protected void Go(Application app) {
+
+    for (uint i = 0; i < this.count; i++) {
+      byte[] keyBytes = new byte[20];
+      for (uint j = 0; j < 20; j += 4) {
+        fixed (byte* ptr = &keyBytes[j]) {
+          uint* intPtr = (uint*) ptr;
+          *intPtr = NextPseudoRandom();
+        }
+      }
+      byte[] valueBytes = new byte[400];
+      for (uint j = 0; j < 400; j += 4) {
+        fixed (byte* ptr = &valueBytes[j]) {
+          uint* intPtr = (uint*) ptr;
+          *intPtr = NextPseudoRandom();
+        }
+      }
+      // Console.Error.WriteLine("KEY " + BitConverter.ToString(keyBytes));
+      app.Insert(keyBytes, valueBytes);
+      if (i % 1000000 == 0 && i != 0) {
+        Console.Error.Write("? sync at " + i.ToString() + " ");
+         app.Sync();
+        Console.Error.WriteLine("done");
+      }
+    }
+    Console.Error.Write("? sync at " + this.count + " ");
+    app.Sync();
+    Console.WriteLine("done");
   }
 }
 
@@ -268,9 +326,28 @@ class Benchmarks {
     new BenchmarkRandomInserts().Run();
     new BenchmarkSequentialQueries().Run();
     new BenchmarkSequentialInserts().Run();
-    //new Hashing().Run();
+    // new Hashing().Run();
 
     Native_Compile.BenchmarkingUtil.dump();
+  }
+
+  static Dictionary<string, Func<Benchmark>> _benchmarks = new Dictionary<string, Func<Benchmark>>
+  {
+    { "random-queries", () => new BenchmarkRandomQueries() }, 
+    { "random-inserts", () => new BenchmarkRandomInserts() }, 
+    { "sequential-queries", () => new BenchmarkSequentialQueries() }, 
+    { "sequential-inserts", () => new BenchmarkSequentialInserts() }, 
+    { "long-random-inserts", () => new LongBenchmarkRandomInserts() }, 
+  };
+
+  public void RunBenchmark(String name) {
+    if (!_benchmarks.ContainsKey(name)) {
+        Console.WriteLine("invalid benchmark, either use --all-benchmarks or choose one of the following with --benchmark=name:");
+        foreach (var k in _benchmarks.Keys) {
+            Console.WriteLine("    " + k);
+        }
+    }
+    (_benchmarks[name])().Run();
   }
 }
 

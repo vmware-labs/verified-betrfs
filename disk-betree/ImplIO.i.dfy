@@ -6,6 +6,7 @@ module ImplIO {
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import BucketsLib
   import IS = ImplState
 
   method getFreeLba(s: ImplVariables, len: uint64)
@@ -192,12 +193,8 @@ module ImplIO {
   requires IS.WFNode(node)
   ensures IS.INodeRoot(node, TTT.EmptyTree) == IS.INode(node);
   {
-    assume false;
+    BucketsLib.BucketListFlushParentEmpty(KMTable.ISeq(node.buckets), node.pivotTable);
   }
-  /*{
-    assert BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
-          map[]) == SSTable.ISeq(node.buckets);
-  }*/
 
   /*lemma LemmaPageInBlockCacheSet(s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
   requires IS.WFVars(s)

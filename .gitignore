@@ -12,3 +12,4 @@
 
 /.veribetrfs-storage/
 /perf.data*
+/.dafny

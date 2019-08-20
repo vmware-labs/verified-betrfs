@@ -34,7 +34,7 @@ module PivotBetreeSpecRefinement {
   requires P.WFNode(node);
   {
     if node.children.Some? then (
-      imap key :: node.children.value[Route(node.pivotTable, key)]
+      imap key:Key :: node.children.value[Route(node.pivotTable, key)]
     ) else (
       imap[]
     )
@@ -43,13 +43,13 @@ module PivotBetreeSpecRefinement {
   function IBufferInternal(node: PNode) : Buffer
   requires P.WFNode(node);
   {
-    imap key :: BucketListGet(node.buckets, node.pivotTable, key)
+    imap key:Key :: BucketListGet(node.buckets, node.pivotTable, key)
   }
 
   function IBufferLeaf(node: PNode) : Buffer
   requires P.WFNode(node);
   {
-    imap key :: M.Merge(
+    imap key:Key :: M.Merge(
       BucketListGet(node.buckets, node.pivotTable, key),
       M.DefineDefault()
     )
@@ -502,9 +502,11 @@ module PivotBetreeSpecRefinement {
   requires |node'.buckets| == |node.buckets| + 1
   requires 0 <= idx < |node.buckets|
   requires forall i | 0 <= i < idx :: node.buckets[i] == node'.buckets[i]
-  requires node.buckets[idx] == map[]
-  requires node'.buckets[idx] == map[]
-  requires node'.buckets[idx+1] == map[]
+  //requires node.buckets[idx] == map[]
+  //requires node'.buckets[idx] == map[]
+  //requires node'.buckets[idx+1] == map[]
+  requires node'.buckets[idx] == SplitBucketLeft(node.buckets[idx], node'.pivotTable[idx])
+  requires node'.buckets[idx+1] == SplitBucketRight(node.buckets[idx], node'.pivotTable[idx])
   requires forall i | idx + 2 <= i < |node'.buckets| :: node'.buckets[i] == node.buckets[i-1]
   requires forall i | 0 <= i < idx :: node.pivotTable[i] == node'.pivotTable[i]
   requires forall i | idx < i < |node'.pivotTable| :: node'.pivotTable[i] == node.pivotTable[i-1]
@@ -513,10 +515,10 @@ module PivotBetreeSpecRefinement {
   requires forall i | 0 <= i < idx :: node.children.value[i] == node'.children.value[i]
   requires forall i | idx + 2 <= i < |node'.buckets| :: node'.children.value[i] == node.children.value[i-1]
   ensures IBuffer(node) == IBuffer(node')
-  ensures forall key | key !in PivotTableBucketKeySet(node.pivotTable, idx) ::
+  ensures forall key:Key | key !in PivotTableBucketKeySet(node.pivotTable, idx) ::
       IChildren(node)[key] == IChildren(node')[key]
   {
-    forall key
+    forall key:Key
     ensures IBuffer(node)[key] == IBuffer(node')[key]
     ensures key !in PivotTableBucketKeySet(node.pivotTable, idx) ==> IChildren(node)[key] == IChildren(node')[key]
 
@@ -532,8 +534,6 @@ module PivotBetreeSpecRefinement {
           assert node'.pivotTable[idx+1] == node.pivotTable[idx];
         }
         RouteIs(node.pivotTable, key, idx);
-        assert node'.buckets[i] == map[];
-        assert node.buckets[i] == map[];
         assert IBuffer(node)[key] == IBuffer(node')[key];
         assert key in PivotTableBucketKeySet(node.pivotTable, idx);
       } else if (i == idx + 1) {
@@ -541,8 +541,6 @@ module PivotBetreeSpecRefinement {
           assert node'.pivotTable[idx+1] == node.pivotTable[idx];
         }
         RouteIs(node.pivotTable, key, idx);
-        assert node'.buckets[i] == map[];
-        assert node.buckets[idx] == map[];
         assert IBuffer(node)[key] == IBuffer(node')[key];
         assert key in PivotTableBucketKeySet(node.pivotTable, idx);
       } else {
@@ -621,7 +619,7 @@ module PivotBetreeSpecRefinement {
     assert redirect.old_children[f.left_childref] == INode(f.left_child);
     assert redirect.old_children[f.right_childref] == INode(f.right_child);
 
-    forall key | key in redirect.keys * redirect.old_parent.children.Keys
+    forall key:Key | key in redirect.keys * redirect.old_parent.children.Keys
     ensures redirect.old_parent.children[key] in redirect.old_children
     ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].buffer, redirect.old_children[redirect.old_parent.children[key]].buffer, key)
     ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].children, redirect.old_children[redirect.old_parent.children[key]].children, key)
@@ -695,13 +693,14 @@ module PivotBetreeSpecRefinement {
       assert IMapRestrict(r.old_parent.children, r.keys)[key] == ref;
     }
 
+    reveal_SplitBucketInList();
     SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
 
     var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
     var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
     var ch := P.CutoffNode(f.fused_child, lbound, ubound);
 
-    forall key | key in r.keys * r.old_parent.children.Keys
+    forall key:Key | key in r.keys * r.old_parent.children.Keys
     ensures r.old_parent.children[key] in r.old_children
     ensures r.new_parent.children[key] in r.new_children
     ensures IMapsAgreeOnKey(
@@ -839,7 +838,7 @@ module PivotBetreeSpecRefinement {
     var newroot := P.AddMessageToNode(ins.oldroot, ins.key, ins.msg);
     var newroot' := B.AddMessageToNode(INode(ins.oldroot), ins.key, ins.msg);
 
-    forall key
+    forall key:Key
     ensures INode(newroot).buffer[key] == newroot'.buffer[key]
     {
       if (key == ins.key) {
@@ -907,10 +906,10 @@ module PivotBetreeSpecRefinement {
     var childref := flush'.childref;
     var child := flush'.child;
     var newchildref := flush'.newchildref;
-    var newbuffer := imap k :: (if k in flush'.movedKeys then B.G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
+    var newbuffer := imap k:Key :: (if k in flush'.movedKeys then B.G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild' := B.G.Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in flush'.movedKeys then B.G.M.Update(B.G.M.NopDelta()) else parent.buffer[k]);
-    var newparentchildren := imap k | k in parent.children :: (if k in flush'.movedKeys then newchildref else parent.children[k]);
+    var newparentbuffer := imap k:Key :: (if k in flush'.movedKeys then B.G.M.Update(B.G.M.NopDelta()) else parent.buffer[k]);
+    var newparentchildren := imap k:Key | k in parent.children :: (if k in flush'.movedKeys then newchildref else parent.children[k]);
     var newparent' := B.G.Node(newparentchildren, newparentbuffer);
     var allocop' := B.G.AllocOp(newchildref, newchild');
     var writeop' := B.G.WriteOp(parentref, newparent');
@@ -1095,7 +1094,7 @@ module PivotBetreeSpecRefinement {
   requires P.WFNode(node)
   ensures IBufferLeaf(node) == imap key :: M.Merge(BucketGet(JoinBucketList(node.buckets), key), M.DefineDefault())
   {
-    forall key
+    forall key:Key
     ensures IBufferLeaf(node)[key] == M.Merge(BucketGet(JoinBucketList(node.buckets), key), M.DefineDefault())
     {
       forall i | 0 <= i < |node.buckets| ensures WFBucketAt(node.buckets[i], node.pivotTable, i)
@@ -1123,7 +1122,7 @@ module PivotBetreeSpecRefinement {
     WFSplitBucketOnPivots(joined, r.pivots);
 
     forall i | 0 <= i < |buckets1|
-    ensures forall key | key in buckets1[i] :: buckets1[i][key] != M.IdentityMessage()
+    ensures forall key:Key | key in buckets1[i] :: buckets1[i][key] != M.IdentityMessage()
     {
       //assert P.NodeHasWFBucketAt(r.leaf, i);
     }

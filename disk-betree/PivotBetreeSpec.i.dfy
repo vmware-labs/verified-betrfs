@@ -409,7 +409,7 @@ module PivotBetreeSpec {
     Node(
       insert(fused_parent.pivotTable, pivot, slot_idx),
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
-      replace1with2(fused_parent.buckets, map[], map[], slot_idx)
+      Buckets.SplitBucketInList(fused_parent.buckets, slot_idx, pivot)
     )
   }
 
@@ -431,9 +431,6 @@ module PivotBetreeSpec {
     && Pivots.Route(f.fused_parent.pivotTable, f.pivot) == f.slot_idx
 
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
-
-    // We require buffer to already be flushed.
-    && f.fused_parent.buckets[f.slot_idx] == map[]
 
     && f.split_parent == SplitParent(f.fused_parent, f.pivot, f.slot_idx, f.left_childref, f.right_childref)
 
@@ -685,8 +682,7 @@ module PivotBetreeSpecWFNodes {
     Pivots.PivotNotMinimum(child.pivotTable, f.num_children_left - 1);
     Pivots.WFPivotsInsert(fused_parent.pivotTable, slot_idx, pivot);
 
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(fused_parent.buckets, fused_parent.pivotTable, split_parent.buckets, split_parent.pivotTable, 0, slot_idx - 1, 0);
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(fused_parent.buckets, fused_parent.pivotTable, split_parent.buckets, split_parent.pivotTable, slot_idx + 2, |split_parent.buckets| - 1, 1);
+    Buckets.WFSplitBucketInList(fused_parent.buckets, slot_idx, pivot, fused_parent.pivotTable);
 
     assert WFNode(split_parent);
 

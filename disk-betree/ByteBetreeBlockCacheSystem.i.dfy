@@ -247,8 +247,16 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     } else {
       assert loc'.addr as int + loc'.len as int <= loc.addr as int;
 
-      assert bytes[loc'.addr .. loc'.addr as int + loc'.len as int]
-          == D.splice(bytes, loc.addr as int, ins)[loc'.addr .. loc'.addr as int + loc'.len as int];
+      var a := bytes[loc'.addr .. loc'.addr as int + loc'.len as int];
+      var b := D.splice(bytes, loc.addr as int, ins)[loc'.addr .. loc'.addr as int + loc'.len as int];
+
+      assert |a| == |b|;
+      forall i | 0 <= i < |a|
+      ensures a[i] == b[i]
+      {
+      }
+
+      assert a == b;
     }
   }
 

@@ -6,6 +6,10 @@ include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 
+include "PivotBetree_Refines_Map.i.dfy"
+include "ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"
+include "BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree.i.dfy"
+
 // See dependency graph in MainImpl.dfy
 
 module Impl { 

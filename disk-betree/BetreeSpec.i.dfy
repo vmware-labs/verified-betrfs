@@ -47,8 +47,8 @@ module BetreeSpec {
   }
   
   predicate WFNode(node: Node) {
-    && (forall k :: k in node.buffer)
-    && (forall k :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
+    && (forall k:Key :: k in node.buffer)
+    && (forall k:Key :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
   // Now we define the state machine

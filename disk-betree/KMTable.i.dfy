@@ -68,16 +68,29 @@ module KMTable {
   requires key in I(kmt)
   ensures 0 <= i < |kmt.keys|
   ensures kmt.keys[i] == key
+  decreases |kmt.keys|
   {
-    assume false;
+    reveal_I();
+    if key == Last(kmt.keys) {
+      i := |kmt.keys| - 1;
+    } else {
+      i := IndexOfKey(KMTable(DropLast(kmt.keys), DropLast(kmt.values)), key);
+    }
   }
 
   lemma Imaps(kmt: KMTable, i: int)
   requires WF(kmt)
   requires 0 <= i < |kmt.keys|
   ensures MapsTo(I(kmt), kmt.keys[i], kmt.values[i])
+  decreases |kmt.keys|
   {
-    assume false;
+    reveal_I();
+    if (i == |kmt.keys| - 1) {
+    } else {
+      reveal_IsStrictlySorted();
+      Imaps(KMTable(DropLast(kmt.keys), DropLast(kmt.values)), i);
+      assert kmt.keys[|kmt.keys| - 1] != kmt.keys[i];
+    }
   }
 
   lemma WFImpliesWFBucket(kmt: KMTable)
@@ -782,6 +795,23 @@ module KMTable {
     assert a == b;
   }
 
+  method SplitKMTableInList(buckets: seq<KMTable>, slot: int, pivot: Key)
+  returns (buckets' : seq<KMTable>)
+  requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
+  requires forall i | 0 <= i < |buckets| :: Bounded(buckets[i])
+  requires 0 <= slot < |buckets|
+  ensures |buckets'| == |buckets| + 1
+  ensures forall i | 0 <= i < |buckets'| :: WF(buckets'[i])
+  ensures forall i | 0 <= i < |buckets'| :: Bounded(buckets'[i])
+  ensures ISeq(buckets') == SplitBucketInList(ISeq(buckets), slot, pivot)
+  {
+    var l := SplitLeft(buckets[slot], pivot);
+    var r := SplitRight(buckets[slot], pivot);
+    buckets' := replace1with2(buckets, l, r, slot);
+    reveal_SplitBucketInList();
+    Ireplace1with2(buckets, l, r, slot);
+  }
+
   /////////////////////////
   //// Joining
   /////////////////////////
@@ -804,8 +834,12 @@ module KMTable {
   lemma LenSumPrefixLe(kmts: seq<KMTable>, i: int)
   requires 0 <= i <= |kmts|
   ensures LenSum(kmts, i) <= LenSum(kmts, |kmts|)
+
+  decreases |kmts| - i
   {
-    assume false;
+    if (i < |kmts|) {
+      LenSumPrefixLe(kmts, i+1);
+    }
   }
 
   lemma joinEqJoinBucketList(kmts: seq<KMTable>, pivots: seq<Key>)

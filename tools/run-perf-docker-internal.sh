@@ -1,5 +1,8 @@
 #! /bin/bash
 
+set -x
+set -e
+
 apt-get update
 apt-get install -y tmux locales
 
@@ -10,16 +13,23 @@ locale-gen en_US.UTF-8
 
 cd /veribetrfs
 
+set +e
 rm build/roslyn-veribetrfs.exe
+set -e
 make build/roslyn-veribetrfs.exe
 
 echo "==== starting benchmark ===="
 echo "flags: $@"
 
-COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe --benchmark $@ &
+COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe $@ &
 PID=$!
-sleep 3
-perf record -p $PID -g
+read -n 1 -s -r -p "Press any key to start recording with perf (preferably before veribetrfs exits)"
+perf record -p $PID -g &
+PERF_PID=$!
+sleep 1
+read -n 1 -s -r -p "Press any key to stop recording"
+kill $PID
+sleep 2
 
 echo "==== starting benchmark ===="
 

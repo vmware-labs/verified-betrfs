@@ -158,15 +158,14 @@ module ImplSplit {
   ensures IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref)
   {
     var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    var buckets := replace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx);
+    var buckets := KMTable.SplitKMTableInList(fused_parent.buckets, slot_idx, pivot);
     res := IS.Node(
       pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
       buckets
     );
 
-    KMTable.Ireplace1with2(fused_parent.buckets, KMTable.Empty(), KMTable.Empty(), slot_idx);
-    WFBucketListReplace1with2(KMTable.ISeq(fused_parent.buckets), fused_parent.pivotTable, slot_idx, pivot);
+    WFSplitBucketInList(KMTable.ISeq(fused_parent.buckets), slot_idx, pivot, fused_parent.pivotTable);
     assert IS.WFNode(res);
     assert IS.INode(res) == BT.SplitParent(IS.INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
   }
@@ -312,7 +311,6 @@ module ImplSplit {
     && (receipt.ubound == (if receipt.slot < |receipt.fused_parent.pivotTable| then Some(receipt.fused_parent.pivotTable[receipt.slot]) else None))
     && (0 <= receipt.slot < |receipt.fused_parent.buckets|)
     && (|receipt.fused_parent.buckets[receipt.slot].keys| == |receipt.fused_parent.buckets[receipt.slot].values|)
-    && (KMTable.I(receipt.fused_parent.buckets[receipt.slot]) == map[])
   }
 
   method splitNodes(
@@ -349,13 +347,6 @@ module ImplSplit {
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
     var cutoff_child := CutoffNode(fused_child, lbound, ubound);
-
-    if !KMTable.IsEmpty(fused_parent.buckets[slot]) {
-      receipt := None;
-      print "giving up; trying to split but parent has non-empty buffer\n";
-      return;
-    }
-    assert KMTable.IsEmpty(fused_parent.buckets[slot]);
 
     if (|cutoff_child.pivotTable| == 0) {
       receipt := None;

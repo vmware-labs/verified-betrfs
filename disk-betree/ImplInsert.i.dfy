@@ -30,9 +30,14 @@ module ImplInsert {
   requires TTT.TTTree(rootBucket')
   requires TTT.I(rootBucket') == TTT.I(rootBucket)[key := msg]
   requires BT.WFNode(IS.INodeRoot(node, rootBucket))
+  requires msg.Define?
   ensures IS.INodeRoot(node, rootBucket') == BT.AddMessageToNode(IS.INodeRoot(node, rootBucket), key, msg)
   {
-    assume false;
+    BucketListInsertBucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable, key, msg);
+    /*assert BucketListFlush(TTT.I(rootBucket'), KMTable.ISeq(node.buckets), node.pivotTable)
+        == BucketListFlush(TTT.I(rootBucket)[key := msg], KMTable.ISeq(node.buckets), node.pivotTable)
+        == BucketListFlush(BucketInsert(TTT.I(rootBucket), key, msg), KMTable.ISeq(node.buckets), node.pivotTable)
+        == BucketListInsert(BucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable), node.pivotTable, key, msg);*/
   }
 
   method RemoveLBAFromIndirectionTable(table: IS.MutIndirectionTable, ref: IS.Reference)
