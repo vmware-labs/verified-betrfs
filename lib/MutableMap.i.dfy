@@ -108,6 +108,12 @@ module MutableMap {
       */
     }
 
+    static predicate SlotIsEmpty(elements: seq<Item<V>>, slot: Slot) // hide trigger
+    requires ValidSlot(|elements|, slot)
+    {
+      elements[slot.slot].Empty?
+    }
+
     static predicate SlotIsEntry(elements: seq<Item<V>>, slot: Slot) // hide trigger
     requires ValidSlot(|elements|, slot)
     {
@@ -315,7 +321,7 @@ module MutableMap {
     constructor (size: uint64)
     requires 128 <= size
     ensures Inv()
-    ensures forall slot :: ValidSlot(Storage.Length, slot) ==> Storage[slot.slot].Empty?
+    ensures forall slot :: ValidSlot(Storage.Length, slot) ==> SlotIsEmpty(Storage[..], slot)
     ensures Contents == map[]
     ensures size as nat == Storage.Length
     ensures fresh(this)
@@ -575,43 +581,40 @@ module MutableMap {
     }
 
     method Get(key: uint64) returns (found: Option<V>)
-      requires Inv()
-      ensures Inv()
-      ensures Contents == old(Contents)
-      ensures Count == old(Count)
-      ensures Repr == old(Repr)
-      ensures if key in Contents && Contents[key].Some? then found == Some(Contents[key].value) else found.None?
+    requires Inv()
+    ensures Inv()
+    ensures Contents == old(Contents)
+    ensures Count == old(Count)
+    ensures Repr == old(Repr)
+    ensures if key in Contents && Contents[key].Some? then found == Some(Contents[key].value) else found.None?
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
       if Storage[slotIdx].Entry? {
-        assert key in Contents;
+        /* (doc) assert key in Contents; */
         found := Some(Storage[slotIdx].value);
-        assert found == Contents[key];
       } else if Storage[slotIdx].Tombstone? {
-        assert key in Contents && Contents[key].None?;
+        /* (doc) assert key in Contents && Contents[key].None?; */
         found := None;
-        assert found.None?;
       } else {
-        assert key !in Contents;
+        /* (doc) assert key !in Contents; */
         found := None;
-        assert found.None?;
       }
     }
 
     method Remove(key: uint64) returns (removed: Option<V>)
-      requires Inv()
-      // requires Count as nat < Storage.Length - 1
-      ensures Inv()
-      ensures Contents == if key in old(Contents)
-          then old(Contents[key := None])
-          else old(Contents)
-      ensures removed == if old(key in Contents) && old(Contents[key].Some?)
-          then Some(old(Contents[key].value))
-          else None
-      ensures Count == old(Count)
-      ensures Repr == old(Repr)
-      modifies Repr
+    requires Inv()
+    // requires Count as nat < Storage.Length - 1
+    ensures Inv()
+    ensures Contents == if key in old(Contents)
+        then old(Contents[key := None])
+        else old(Contents)
+    ensures removed == if old(key in Contents) && old(Contents[key].Some?)
+        then Some(old(Contents[key].value))
+        else None
+    ensures Count == old(Count)
+    ensures Repr == old(Repr)
+    modifies Repr
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
