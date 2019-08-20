@@ -604,7 +604,6 @@ module MutableMap {
 
     method Remove(key: uint64) returns (removed: Option<V>)
     requires Inv()
-    // requires Count as nat < Storage.Length - 1
     ensures Inv()
     ensures Contents == if key in old(Contents)
         then old(Contents[key := None])
@@ -619,8 +618,6 @@ module MutableMap {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
       if Storage[slotIdx].Entry? {
-        assert key in Contents;
-
         // -- mutation --
         removed := Some(Storage[slotIdx].value);
         Storage[slotIdx] := Tombstone(key);
@@ -632,39 +629,27 @@ module MutableMap {
         {
           if key == explainedKey {
             assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
-            assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
           } else {
             var oldSkips :| SlotExplainsKey(old(Storage[..]), oldSkips, explainedKey);
             assert SlotExplainsKey(Storage[..], oldSkips, explainedKey);
-            assert exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
           }
         }
-
-        assert Storage[slotIdx].key == old(Storage[slotIdx].key) == key;
-        assert CantEquivocateStorageKey(Storage[..]);
 
         forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry?
         ensures && var item := Storage[slot.slot];
                 && Contents[item.key] == Some(item.value)
         {
           var item := Storage[slot.slot];
-          if slot == Slot(slotIdx as nat) {
-          } else {
+          if slot != Slot(slotIdx as nat) {
             if item.key == key {
+              assert CantEquivocateStorageKey(Storage[..]);
               assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
               assert false;
             }
-            assert item.key != key;
           }
         }
-        assert Inv();
       } else {
         removed := None;
-        assert removed == if old(key in Contents) && old(Contents[key].Some?)
-            then Some(old(Contents[key].value))
-            else None;
-        assert key !in Contents || (key in Contents && Contents[key].None?);
-        assert Inv();
       }
     }
 
