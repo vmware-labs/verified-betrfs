@@ -124,11 +124,11 @@ module ImplModelIO {
     Marshalling.reveal_parseSector();
   }
 
-  predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
+  predicate FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires s.Ready?
   requires WFVars(s)
   {
-    && var dop := diskOp(io);
+    && var dop := diskOp(io');
     && (dop.NoDiskOp? || dop.ReqWriteOp?)
     && (dop.NoDiskOp? ==> (
       && id == None

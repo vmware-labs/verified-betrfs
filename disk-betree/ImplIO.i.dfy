@@ -98,6 +98,36 @@ module ImplIO {
     }
   }
 
+  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: IS.Sector)
+  returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
+  requires IS.WFVars(s)
+  requires s.Ready?
+  requires IS.WFSector(sector)
+  requires IM.WFSector(IS.ISector(sector))
+  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
+  requires io.initialized()
+  modifies io
+  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))
+  {
+
+    var bytes := ImplMarshalling.MarshallCheckedSector(sector);
+    if (bytes == null) {
+      id := None;
+      loc := None;
+    } else {
+      var len := bytes.Length as uint64;
+      loc := getFreeLoc(s, len);
+      if (loc.Some?) {
+        var i := io.write(loc.value.addr, bytes);
+        id := Some(i);
+      } else {
+        id := None;
+      }
+    }
+  }
+
+
+
 /*
   method FindLocationAndRequestWrite(s: ImplVariables, io: DiskIOHandler, sector: IS.Sector)
   returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
