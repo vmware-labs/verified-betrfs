@@ -1,5 +1,6 @@
 include "../lib/MutableMap.i.dfy"
 include "ImplModel.i.dfy"
+include "MainDiskIOHandler.s.dfy"
 
 module {:extern} ImplState {
   import opened Options
@@ -16,6 +17,7 @@ module {:extern} ImplState {
   import M = BetreeBlockCache
   import KMTable = KMTable
   import D = AsyncSectorDisk
+  import MainDiskIOHandler
   import opened BucketsLib
 
   import MM = MutableMap
@@ -146,5 +148,17 @@ module {:extern} ImplState {
   {
     && WVars(vars)
     && IM.WFVars(IVars(vars))
+  }
+
+  function IIO(io: MainDiskIOHandler.DiskIOHandler) : IM.IO
+  reads io
+  {
+    match io.diskOp() {
+      case NoDiskOp => IM.IOInit(io.reservedId())
+      case ReqReadOp(id, reqRead) => IM.IOReqRead(id, reqRead)
+      case ReqWriteOp(id, reqWrite) => IM.IOReqWrite(id, reqWrite)
+      case RespReadOp(id, respRead) => IM.IORespRead(id, respRead)
+      case RespWriteOp(id, respWrite) => IM.IORespWrite(id, respWrite)
+    }
   }
 }

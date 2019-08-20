@@ -1,17 +1,21 @@
 include "Impl.i.dfy"
 include "ImplState.i.dfy"
 include "ImplModelIO.i.dfy"
+include "ImplMarshalling.i.dfy"
 
 module ImplIO { 
   import opened Impl
-  import opened MainDiskIOHandler
+  import MainDiskIOHandler
   import opened NativeTypes
   import opened Options
   import opened Maps
   import ImplModel
+  import ImplMarshalling
   import ImplModelIO
   import BucketsLib
-  import IS = ImplState
+  import opened IS = ImplState
+
+  type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
   method addrUsedInIndirectionTable(addr: uint64, indirectionTable:IS.MutIndirectionTable) returns (used:bool)
     ensures !used == ImplModelIO.addrNotUsedInIndirectionTable(addr, IS.IIndirectionTable(indirectionTable))
@@ -73,49 +77,20 @@ module ImplIO {
     return None;
   }
 
-/*
-  method getFreeLba(s: ImplVariables, len: uint64)
-  returns (loc : Option<BC.Location>)
-  requires s.Ready?
-  requires IS.WFVars(s)
-  requires len <= LBAType.BlockSize()
-  ensures loc.Some? ==> BC.ValidLocationForNode(loc.value)
-  ensures loc.Some? ==> BC.ValidAllocation(IS.IVars(s), loc.value)
-  ensures loc.Some? ==> loc.value.len == len
+  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
+  returns (id: Option<D.ReqId>)
+  ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
   {
-    var persistent': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.persistentIndirectionTable.ToMap();
-    var persistent: map<uint64, BC.Location> := map ref | ref in persistent' && persistent'[ref].0.Some? :: persistent'[ref].0.value;
-
-    var ephemeral': map<uint64, (Option<BC.Location>, seq<IS.Reference>)> := s.ephemeralIndirectionTable.ToMap();
-    var ephemeral := map ref | ref in ephemeral' && ephemeral'[ref].0.Some? :: ephemeral'[ref].0.value;
-
-    var frozen: Option<map<uint64, BC.Location>> := None;
-    if (s.frozenIndirectionTable.Some?) {
-      var m := s.frozenIndirectionTable.value.ToMap();
-      var frozen' := m;
-      frozen := Some(map ref | ref in frozen' && frozen'[ref].0.Some? :: frozen'[ref].0.value);
-    }
-
-    if i: uint64 :| (
-      && i as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
-      && var l := i * LBAType.BlockSize();
-      && BC.ValidLBAForNode(l)
-      && (forall ref | ref in persistent :: persistent[ref].addr != l)
-      && (forall ref | ref in ephemeral :: ephemeral[ref].addr != l)
-      && (frozen.Some? ==> (forall ref | ref in frozen.value :: frozen.value[ref].addr != l))
-      && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != l)
-    ) {
-      loc := Some(LBAType.Location(i * LBAType.BlockSize(), len));
-
-      assert IS.IVars(s).persistentIndirectionTable.locs == persistent;
-      assert IS.IVars(s).ephemeralIndirectionTable.locs == ephemeral;
-      assert IS.IVars(s).frozenIndirectionTable.Some? ==>
-          IS.IVars(s).frozenIndirectionTable.value.locs == frozen.value;
+    var bytes := ImplMarshalling.MarshallCheckedSector(sector);
+    if (bytes == null || bytes.Length as uint64 != loc.len) {
+      id := None;
     } else {
-      loc := None;
+      var i := io.write(loc.addr, bytes);
+      id := Some(i);
     }
   }
 
+/*
   method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
   returns (id: Option<D.ReqId>)
   requires IS.WFSector(sector)
