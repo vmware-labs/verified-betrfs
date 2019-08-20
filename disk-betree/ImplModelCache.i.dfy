@@ -102,4 +102,15 @@ module ImplModelCache {
       INodeRootEqINodeForEmptyRootBucket(node);
     }
   }
+
+  lemma lemmaChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
+  requires s.Ready?
+  requires Inv(k, s)
+  requires ref in s.cache
+  requires ref in s.ephemeralIndirectionTable
+  requires childref in BT.G.Successors(INode(s.cache[ref]))
+  ensures childref in s.ephemeralIndirectionTable
+  {
+    assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
+  }
 }
