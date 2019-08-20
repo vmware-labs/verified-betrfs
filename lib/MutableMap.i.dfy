@@ -408,28 +408,26 @@ module MutableMap {
       ViewsHaveConsistentCounts(Storage[..], viewFromStartSlot, startSlotIdx as nat);
       CountFilledMatchesIndexSet(Storage[..]);
       IndexSetMatchesContents(Storage[..], Contents);
-      assert CountFilled(Storage[..]) == CountFilled(viewFromStartSlot) == |Contents|;
 
-      assert Storage[startSlotIdx..] + Storage[..startSlotIdx] == viewFromStartSlot;
-      assert Storage[startSlotIdx..] + Storage[..startSlotIdx] ==
+      /* (doc)
+      calc {
+        viewFromStartSlot;
+        Storage[startSlotIdx..] + Storage[..startSlotIdx];
         viewFromStartSlot[..Storage.Length-(startSlotIdx as int)] + viewFromStartSlot[Storage.Length-(startSlotIdx as int)..];
-      assert Storage[startSlotIdx..] == viewFromStartSlot[..Storage.Length-(startSlotIdx as int)];
-      assert Storage[..startSlotIdx] == viewFromStartSlot[Storage.Length-(startSlotIdx as int)..];
+      }
+      */
       forall dist: nat | dist < Storage.Length
       ensures Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist]
       {
         KthSlotSuccessorWrapsAround(Storage.Length, startSlot, dist); // observe
+        /* (doc)
         if dist < Storage.Length-(startSlotIdx as int) {
           assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == startSlotIdx as int + (dist as int);
-          assert Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
         } else {
           assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == (dist as int) - (Storage.Length-(startSlotIdx as int));
-          assert Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
         }
+        */
       }
-
-      assert forall dist: nat :: dist < Storage.Length ==>
-          Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist];
 
       var skips := 0;
       ghostSkips := 0;
@@ -451,10 +449,12 @@ module MutableMap {
           assert EntryInSlotMatchesContents(Storage[..], Slot(slotIdx as nat), Contents); // observe
           return;
         }
+        /* (doc)
         assert Storage[slotIdx].Entry? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key != key);
         assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
         assert Storage[slotIdx] == viewFromStartSlot[skips];
         assert slotIdx as nat == KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot;
+        */
 
         ghost var slotIdxBefore := slotIdx;
         ghost var skipsBefore := skips;
@@ -465,50 +465,48 @@ module MutableMap {
         ghostSkips := skips;
         // ---------------
 
-        if skips < (Storage.Length as uint64) {
-          assert Storage[KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot] == viewFromStartSlot[skips];
-          assert Storage[slotIdx] == viewFromStartSlot[skips];
-        }
+        /* (doc)
+        assert skips < (Storage.Length as uint64) ==> Storage[slotIdx] == viewFromStartSlot[skips];
         assert CountFilled(viewFromStartSlot[..skipsBefore]) == skipsBefore as nat;
         assert viewFromStartSlot[skipsBefore].Entry? || viewFromStartSlot[skipsBefore].Tombstone?;
-        assert viewFromStartSlot[..skips] == viewFromStartSlot[..skipsBefore] + [viewFromStartSlot[skipsBefore]];
-        assert CountFilled([viewFromStartSlot[skipsBefore]]) == 1;
+        */
+        assert viewFromStartSlot[..skips] == viewFromStartSlot[..skipsBefore] + [viewFromStartSlot[skipsBefore]]; // observe
         CountFilledAdditive(viewFromStartSlot[..skipsBefore], [viewFromStartSlot[skipsBefore]]);
-        assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
-        assert FilledWithOtherKeys(Storage[..], startSlot, skips as nat, key);
       }
 
-      assert viewFromStartSlot[..skips] == viewFromStartSlot;
       forall ensures false
       {
         calc {
           Storage.Length;
           skips as nat;
           CountFilled(viewFromStartSlot[..skips]);
+            { assert viewFromStartSlot[..skips] == viewFromStartSlot; } // observe
           CountFilled(viewFromStartSlot);
           |Contents|;
           Count as nat;
           < Storage.Length;
         }
-        assert Storage.Length < Storage.Length; // adding this line makes the proof work,
+        /* (doc)
+        assert Storage.Length < Storage.Length; // at some point adding this line made the proof work,
                                                 // which is surprising because it's the output of the calc
+        */
       }
     }
 
     method Insert(key: uint64, value: V) returns (replaced: Option<V>)
-      requires Inv()
-      requires Count as nat < Storage.Length - 1
-      ensures Inv()
-      ensures Contents == old(Contents[key := Some(value)])
-      ensures old(key in Contents) ==> replaced == old(Contents[key])
-      ensures replaced.Some? ==> old(key in Contents)
-      ensures old(key !in Contents) ==> replaced.None?
-      ensures old(Count as nat) <= Count as nat <= old(Count as nat) + (if replaced.Some? then 0 else 1)
-      ensures old(key !in Contents) ==> Count as nat == old(Count as nat) + 1
-      ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
-      ensures Storage.Length == old(Storage.Length)
-      ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-      modifies Repr
+    requires Inv()
+    requires Count as nat < Storage.Length - 1
+    ensures Inv()
+    ensures Contents == old(Contents[key := Some(value)])
+    ensures old(key in Contents) ==> replaced == old(Contents[key])
+    ensures replaced.Some? ==> old(key in Contents)
+    ensures old(key !in Contents) ==> replaced.None?
+    ensures old(Count as nat) <= Count as nat <= old(Count as nat) + (if replaced.Some? then 0 else 1)
+    ensures old(key !in Contents) ==> Count as nat == old(Count as nat) + 1
+    ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
+    ensures Storage.Length == old(Storage.Length)
+    ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
+    modifies Repr
     {
       var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
 
