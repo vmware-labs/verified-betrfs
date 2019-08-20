@@ -937,6 +937,16 @@ module KMTable {
     if n == 0 then [] else EmptySeq(n-1) + [KMTable([],[])]
   }
 
+  function splitOnPivots(kmt: KMTable, pivots: seq<Key>)
+  : (kmts : seq<KMTable>)
+  requires WF(kmt)
+  requires Bounded(kmt)
+  requires |pivots| < 0x7fff_ffff_ffff_ffff
+  ensures forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
+  ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
+  ensures |kmts| == |pivots| + 1
+
   method SplitOnPivots(kmt: KMTable, pivots: seq<Key>)
   returns (kmts : seq<KMTable>)
   requires WF(kmt)
