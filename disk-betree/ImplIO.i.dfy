@@ -156,37 +156,30 @@ module ImplIO {
     }
   }
 
-  /*
   method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   returns (s': ImplVariables)
   requires io.initialized();
   requires s.Ready?
   requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
-  requires ref !in s.cache
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable)
+  requires IS.IIndirectionTable(s.ephemeralIndirectionTable)[ref].0.Some?
   modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures IS.WVars(s')
+  ensures (IVars(s'), IIO(io)) == ImplModelIO.PageInReq(Ic(k), old(IVars(s)), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       s' := s;
-      assert noop(k, IS.IVars(s), IS.IVars(s'));
       print "giving up; already an outstanding read for this ref\n";
     } else {
       var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
       assert lbaGraph.Some?;
       var (lba, _) := lbaGraph.value;
-      assert lba.Some?;
-      assert BC.ValidLocationForNode(lba.value);
       var id := RequestRead(io, lba.value);
       s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
-
-      assert BC.PageInReq(k, IS.IVars(s), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()), ref);
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInReqStep(ref));
     }
   }
 
+  /*
   // == readResponse ==
 
   function ISectorOpt(sector: Option<IS.Sector>) : Option<BC.Sector>
