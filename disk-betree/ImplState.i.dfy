@@ -150,6 +150,11 @@ module {:extern} ImplState {
     && IM.WFVars(IVars(vars))
   }
 
+  function Ic(k: M.Constants) : IM.Constants
+  {
+    IM.Constants()
+  }
+
   function IIO(io: MainDiskIOHandler.DiskIOHandler) : IM.IO
   reads io
   {

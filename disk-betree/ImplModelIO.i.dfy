@@ -198,7 +198,7 @@ module ImplModelIO {
     assert BC.IndirectionTableLBA() as int == 0 * M.BlockSize();
   }
 
-  function PageInIndirectionTableReq(k: Constants, s: Variables, io: IO)
+  function {:opaque} PageInIndirectionTableReq(k: Constants, s: Variables, io: IO)
   : (res : (Variables, IO))
   requires io.IOInit?
   requires s.Unready?
@@ -221,6 +221,7 @@ module ImplModelIO {
     && WFVars(s')
     && M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, diskOp(io'))
   {
+    reveal_PageInIndirectionTableReq();
     var (s', io') := PageInIndirectionTableReq(k, s, io);
     if (s.outstandingIndirectionTableRead.None?) {
       LemmaIndirectionTableLBAValid();

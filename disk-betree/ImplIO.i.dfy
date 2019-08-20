@@ -136,32 +136,27 @@ module ImplIO {
     id := io.read(loc.addr, loc.len);
   }
 
-
-
-/*
-
   method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires IS.WFVars(s)
   requires io.initialized();
   requires s.Unready?
   modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), IS.IVars(s), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures IS.WVars(s')
+  ensures (IVars(s'), IIO(io)) == ImplModelIO.PageInIndirectionTableReq(Ic(k), old(IVars(s)), old(IIO(io)))
   {
+    ImplModelIO.reveal_PageInIndirectionTableReq();
+
     if (s.outstandingIndirectionTableRead.None?) {
-      LemmaIndirectionTableLBAValid();
       var id := RequestRead(io, BC.IndirectionTableLocation());
       s' := IS.Unready(Some(id), s.syncReqs);
-
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableReqStep);
     } else {
       s' := s;
-      assert noop(k, IS.IVars(s), IS.IVars(s'));
       print "PageInIndirectionTableReq: request already out\n";
     }
   }
 
+  /*
   method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   returns (s': ImplVariables)
   requires io.initialized();
