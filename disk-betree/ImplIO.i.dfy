@@ -179,11 +179,9 @@ module ImplIO {
     }
   }
 
-  /*
   // == readResponse ==
 
-  function ISectorOpt(sector: Option<IS.Sector>) : Option<BC.Sector>
-  requires sector.Some? ==> IS.WFSector(sector.value)
+  function ISectorOpt(sector: Option<IS.Sector>) : Option<IM.Sector>
   reads if sector.Some? && sector.value.SectorIndirectionTable? then sector.value.indirectionTable.Repr else {}
   {
     match sector {
@@ -196,24 +194,19 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
+  ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(IIO(io))
   {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
-
     var id1, bytes := io.getReadResult();
     id := id1;
     if |bytes| <= ImplADM.M.BlockSize() {
-      var sectorOpt := Marshalling.ParseCheckedSector(bytes);
+      var sectorOpt := ImplMarshalling.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {
       sector := None;
     }
   }
 
+  /*
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires IS.WFVars(s)
