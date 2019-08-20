@@ -352,13 +352,13 @@ module ImplMarshalling {
   }
 
 
-  function ISectorOpt(s : Option<Sector>): Option<BC.Sector>
+  function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
   requires s.Some? ==> ImplState.WFSector(s.value)
   requires s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
   {
     if s.Some? then
-      Some(IM.ISector(ImplState.ISector(s.value)))
+      Some(ImplState.ISector(s.value))
     else
       None
   }
@@ -397,15 +397,15 @@ module ImplMarshalling {
     return VUint64Array(children);
   }
 
-  method {:fuel ValInGrammar,2} lbasSuccsToVal(locs: map<Reference, Location>, graph: map<Reference, seq<Reference>>) returns (v: Option<V>)
-  requires locs.Keys == graph.Keys
-  requires forall loc | loc in locs.Values :: BC.ValidLocationForNode(loc)
-  requires |locs| < 0x1_0000_0000_0000_0000 / 8
+  method {:fuel ValInGrammar,2} lbasSuccsToVal(indirectionTable: map<Reference, (Option<Location>, seq<Reference>)>) returns (v: Option<V>)
+  requires forall ref | ref in indirectionTable :: indirectionTable[ref].0.Some?
+  requires forall ref | ref in indirectionTable :: BC.ValidLocationForNode(indirectionTable[ref].0.value)
+  requires |indirectionTable| < 0x1_0000_0000_0000_0000 / 8
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.IndirectionTableGrammar());
-  ensures v.Some? ==> |v.value.a| == |locs|
-  ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some((locs, graph));
-  {
+  ensures v.Some? ==> |v.value.a| == |indirectionTable|
+  ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some(indirectionTable)
+  /*{
     if (|locs| == 0) {
       assert locs == map[];
       assert graph == map[];
@@ -438,7 +438,7 @@ module ImplMarshalling {
         }
       }
     }
-  }
+  }*/
 
   method {:fuel ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
   requires |a| < 0x1_0000_0000_0000_0000
@@ -563,7 +563,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, IMM.BucketGrammar())
   ensures SizeOfV(v) <= (8 + (8+IMM.CapKeySize() as int) * IMM.CapBucketNumEntries() as int) + (8 + (8+IMM.CapValueSize() as int) * IMM.CapBucketNumEntries() as int)
   ensures ValidVal(v)
-  ensures IMM.valToBucket(v, pivotTable, i) == IMM.IKMTableOpt(Some(bucket))
+  ensures IMM.valToBucket(v, pivotTable, i) == Some(bucket)
   {
     var keys := strictlySortedKeySeqToVal(bucket.keys);
     var values := messageSeqToVal(bucket.values);
@@ -587,7 +587,7 @@ module ImplMarshalling {
   ensures SizeOfV(v) <= 8 + |buckets| * ((8 + (8+IMM.CapKeySize()) as int * IMM.CapBucketNumEntries() as int) + (8 + (8+IMM.CapValueSize()) as int * IMM.CapBucketNumEntries() as int))
   ensures ValInGrammar(v, GArray(IMM.BucketGrammar()))
   ensures |v.a| == |buckets|
-  ensures IMM.valToBuckets(v.a, pivotTable) == IMM.ISeqKMTableOpt(Some(buckets))
+  ensures IMM.valToBuckets(v.a, pivotTable) == Some(buckets)
   {
     if |buckets| == 0 {
       return VArray([]);
@@ -598,8 +598,8 @@ module ImplMarshalling {
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
-      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == Apply(KMTable.I, buckets); // observe
-      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == IMM.ISeqKMTableOpt(Some(buckets)); // observe (reduces verification time)
+      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == buckets; // observe
+      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(buckets); // observe (reduces verification time)
       return VArray(pref.a + [bucketVal]);
     }
   }
@@ -608,7 +608,7 @@ module ImplMarshalling {
   requires s.Some? ==> IM.WFNode(s.value)
   {
     if s.Some? then
-      Some(IM.INode(s.value))
+      Some(s.value)
     else
       None
   }
@@ -640,7 +640,7 @@ module ImplMarshalling {
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
     assert IMM.valToNode(v).Some?;
-    assert IMM.valToNode(v).value == IM.INode(node);
+    assert IMM.valToNode(v).value == node;
   }
 
   method sectorToVal(sector: ImplState.Sector) returns (v : Option<V>)
@@ -652,7 +652,7 @@ module ImplMarshalling {
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.SectorGrammar());
-  ensures v.Some? ==> IMM.valToSector(v.value) == IMM.ISectorOpt(Some(sector))
+  ensures v.Some? ==> IMM.valToSector(v.value) == ISectorOpt(Some(sector))
   ensures sector.SectorBlock? ==> v.Some?
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= IMM.BlockSize() as int - 32
   {
@@ -668,7 +668,7 @@ module ImplMarshalling {
         assert graph == indirectionTable.graph;
         assert lbas.Keys == graph.Keys;
         if |lbas| < 0x1_0000_0000_0000_0000 / 8 {
-          var w := lbasSuccsToVal(lbas, graph);
+          var w := lbasSuccsToVal(table);
           match w {
             case Some(v) => return Some(VCase(0, v));
             case None => return None;
@@ -690,7 +690,7 @@ module ImplMarshalling {
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
-  ensures IMM.ISectorOpt(s) == IMM.parseSector(data[start..])
+  ensures ISectorOpt(s) == IMM.parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block))
   {
     IMM.reveal_parseSector();
@@ -726,7 +726,7 @@ module ImplMarshalling {
   requires |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
-  ensures IMM.ISectorOpt(s) == IMM.parseCheckedSector(data[..])
+  ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block))
   {
     s := None;
@@ -746,7 +746,7 @@ module ImplMarshalling {
   requires IM.WFSector(ImplState.ISector(sector))
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block))
   requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
-  ensures data != null ==> IMM.parseCheckedSector(data[..]) == IMM.ISectorOpt(Some(sector))
+  ensures data != null ==> IMM.parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
   ensures data != null ==> data.Length <= IMM.BlockSize() as int
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length == IMM.BlockSize() as int
