@@ -16,20 +16,6 @@ module ImplInsert {
 
   // == insert ==
 
-  lemma LemmaInsertToRootBucket(node: Node, rootBucket: map<Key, Message>, rootBucket': map<Key, Message>, key: Key, msg: Message)
-  requires WFNode(node)
-  requires BT.WFNode(INodeRoot(node, rootBucket))
-  requires msg.Define?
-  ensures INodeRoot(node, rootBucket') == BT.AddMessageToNode(INodeRoot(node, rootBucket), key, msg)
-  {
-    BucketListInsertBucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable, key, msg);
-    assume false;
-    /*assert BucketListFlush(TTT.I(rootBucket'), KMTable.ISeq(node.buckets), node.pivotTable)
-        == BucketListFlush(TTT.I(rootBucket)[key := msg], KMTable.ISeq(node.buckets), node.pivotTable)
-        == BucketListFlush(BucketInsert(TTT.I(rootBucket), key, msg), KMTable.ISeq(node.buckets), node.pivotTable)
-        == BucketListInsert(BucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable), node.pivotTable, key, msg);*/
-  }
-
   function removeLBAFromIndirectionTable(table: IndirectionTable, ref: BT.G.Reference) : IndirectionTable
   {
     if ref in table then (
@@ -41,7 +27,7 @@ module ImplInsert {
     )
   }
 
-  function InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
+  function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   : (Variables, bool)
   requires Inv(k, s)
   requires s.Ready?
@@ -64,6 +50,20 @@ module ImplInsert {
     )
   }
 
+  lemma LemmaInsertToRootBucket(node: Node, rootBucket: map<Key, Message>, rootBucket': map<Key, Message>, key: Key, msg: Message)
+  requires WFNode(node)
+  requires BT.WFNode(INodeRoot(node, rootBucket))
+  requires rootBucket' == rootBucket[key := msg]
+  requires msg.Define?
+  ensures INodeRoot(node, rootBucket') == BT.AddMessageToNode(INodeRoot(node, rootBucket), key, msg)
+  {
+    BucketListInsertBucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable, key, msg);
+    /*assert BucketListFlush(TTT.I(rootBucket'), KMTable.ISeq(node.buckets), node.pivotTable)
+        == BucketListFlush(TTT.I(rootBucket)[key := msg], KMTable.ISeq(node.buckets), node.pivotTable)
+        == BucketListFlush(BucketInsert(TTT.I(rootBucket), key, msg), KMTable.ISeq(node.buckets), node.pivotTable)
+        == BucketListInsert(BucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable), node.pivotTable, key, msg);*/
+  }
+
   lemma InsertKeyValueCorrect(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   requires Inv(k, s)
   requires s.Ready?
@@ -72,6 +72,7 @@ module ImplInsert {
       && WFVars(s')
       && M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   {
+    reveal_InsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
       && BT.G.Root() in s.frozenIndirectionTable.value
@@ -120,35 +121,40 @@ module ImplInsert {
         M.Step(BBC.BetreeMoveStep(btStep)));
   }
 
-  /*
-  method insert(k: Constants, s: Variables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
-  returns (s': Variables, success: bool)
-  requires io.initialized()
-  modifies io
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'),
-    if success then UI.PutOp(key, value) else UI.NoOp,
-    io.diskOp())
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
+  function {:opaque} insert(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value)
+  : (Variables, bool, IO)
+  requires io.IOInit?
+  requires Inv(k, s)
   {
-    if (s.Unready?) {
-      s' := PageInIndirectionTableReq(k, s, io);
-      success := false;
-      return;
-    }
-
-    if (BT.G.Root() !in s.cache) {
-      s' := PageInReq(k, s, io, BT.G.Root());
-      success := false;
-      return;
-    }
-
-    s', success := InsertKeyValue(k, s, key, value);
-    assert M.Next(Ik(k), IVars(s), IVars(s'),
-      if success then UI.PutOp(key, value) else UI.NoOp,
-      io.diskOp());
+    if (s.Unready?) then (
+      var (s', io') := PageInIndirectionTableReq(k, s, io);
+      (s', false, io')
+    ) else if (BT.G.Root() !in s.cache) then (
+      var (s', io') := PageInReq(k, s, io, BT.G.Root());
+      (s', false, io')
+    ) else (
+      var (s', success) := InsertKeyValue(k, s, key, value);
+      (s', success, io)
+    )
   }
-  */
+
+  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value)
+  requires io.IOInit?
+  requires Inv(k, s)
+  ensures var (s', success, io') := insert(k, s, io, key, value);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'),
+        if success then UI.PutOp(key, value) else UI.NoOp,
+        diskOp(io'))
+  {
+    reveal_insert();
+
+    if (s.Unready?) {
+      PageInIndirectionTableReqCorrect(k, s, io);
+    } else if (BT.G.Root() !in s.cache) {
+      PageInReqCorrect(k, s, io, BT.G.Root());
+    } else {
+      InsertKeyValueCorrect(k, s, key, value);
+    }
+  }
 }
