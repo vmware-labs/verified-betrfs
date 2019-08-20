@@ -11,6 +11,7 @@ module ImplIO {
   import opened Maps
   import ImplModel
   import ImplMarshalling
+  import IMM = ImplMarshallingModel
   import ImplModelIO
   import BucketsLib
   import opened IS = ImplState
@@ -79,8 +80,15 @@ module ImplIO {
 
   method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
   returns (id: Option<D.ReqId>)
+  requires IS.WFSector(sector)
+  requires IM.WFSector(IS.ISector(sector))
+  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
+  requires io.initialized()
+  modifies io
   ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
   {
+    ImplModelIO.reveal_RequestWrite();
+
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
@@ -91,35 +99,6 @@ module ImplIO {
   }
 
 /*
-  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
-  returns (id: Option<D.ReqId>)
-  requires IS.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
-  requires io.initialized()
-  requires LBAType.ValidLocation(loc)
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc, IS.ISector(sector)))
-  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
-  {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
-
-    var bytes := Marshalling.MarshallCheckedSector(sector);
-    if (bytes == null || bytes.Length as uint64 != loc.len) {
-      id := None;
-    } else {
-      var i := io.write(loc.addr, bytes);
-      id := Some(i);
-
-      //assert ImplADM.M.ValidReqWrite(io.diskOp().reqWrite);
-    }
-  }
-
   method FindLocationAndRequestWrite(s: ImplVariables, io: DiskIOHandler, sector: IS.Sector)
   returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
   requires IS.WFVars(s)
