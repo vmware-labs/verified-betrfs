@@ -206,45 +206,37 @@ module ImplIO {
     }
   }
 
-  /*
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
-  requires IS.WFVars(s)
+  requires IS.WVars(s)
   requires io.diskOp().RespReadOp?
   requires s.Unready?
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures IS.WVars(s')
+  ensures IS.IVars(s') == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(IS.IVars(s)), IIO(io))
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
       s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
-      assert IS.WFVars(s');
-      assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
-      assert ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp());
     } else {
       s' := s;
-      assert ImplADM.M.NextStep(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp(), ImplADM.M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
-      assert stepsBC(k, old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
 
   method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
+  requires IS.WVars(s)
   requires io.diskOp().RespReadOp?
   requires s.Ready?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures IS.WVars(s')
+  ensures IS.IVars(s') == ImplModelIO.PageInResp(Ic(k), old(IS.IVars(s)), IIO(io))
   {
     var id, sector := ReadSector(io);
 
     if (id !in s.outstandingBlockReads) {
       s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: unrecognized id from Read\n";
       return;
     }
@@ -257,12 +249,10 @@ module ImplIO {
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
       s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "PageInResp: ref !in lbas or ref in s.cache\n";
       return;
     }
 
-    assert lbaGraph.Some? && lbaGraph.value.0.Some?;
     var lba := lbaGraph.value.0.value;
     var graph := lbaGraph.value.1;
 
@@ -271,22 +261,17 @@ module ImplIO {
       if (graph == (if node.children.Some? then node.children.value else [])) {
         s' := s.(cache := s.cache[ref := sector.value.block])
                .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
-
-        INodeRootEqINodeForEmptyRootBucket(node);
-
-        assert BC.PageInResp(k, old(IS.IVars(s)), IS.IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
-        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInRespStep);
       } else {
         s' := s;
-        assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
         print "giving up; block does not match graph\n";
       }
     } else {
       s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
       print "giving up; block read in was not block\n";
     }
   }
+
+  /*
 
   method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
