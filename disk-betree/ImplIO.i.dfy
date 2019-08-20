@@ -109,6 +109,7 @@ module ImplIO {
   modifies io
   ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))
   {
+    ImplModelIO.reveal_FindLocationAndRequestWrite();
 
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
     if (bytes == null) {
@@ -126,65 +127,18 @@ module ImplIO {
     }
   }
 
-
-
-/*
-  method FindLocationAndRequestWrite(s: ImplVariables, io: DiskIOHandler, sector: IS.Sector)
-  returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
-  requires IS.WFVars(s)
-  requires s.Ready?
-  requires IS.WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> Marshalling.CappedNode(sector.block)
-  requires io.initialized()
-  modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures id.Some? ==> loc.Some?
-  ensures id.Some? ==> LBAType.ValidLocation(loc.value)
-  ensures id.Some? ==> BC.ValidAllocation(old(IS.IVars(s)), loc.value)
-  ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
-  ensures id.Some? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, IS.ISector(sector)))
-  ensures id.None? ==> ImplADM.M.IDiskOp(io.diskOp()) == SD.NoDiskOp
-  {
-    Marshalling.reveal_parseCheckedSector();
-    ImplADM.M.reveal_IBytes();
-    ImplADM.M.reveal_ValidCheckedBytes();
-    ImplADM.M.reveal_Parse();
-    D.reveal_ChecksumChecksOut();
-
-    var bytes := Marshalling.MarshallCheckedSector(sector);
-    if (bytes == null) {
-      id := None;
-      loc := None;
-    } else {
-      var len := bytes.Length as uint64;
-      loc := getFreeLba(s, len);
-      if (loc.Some?) {
-        var i := io.write(loc.value.addr, bytes);
-        id := Some(i);
-      } else {
-        id := None;
-      }
-    }
-  }
-
   method RequestRead(io: DiskIOHandler, loc: LBAType.Location)
   returns (id: D.ReqId)
   requires io.initialized()
-  requires LBAType.ValidLocation(loc)
   modifies io
-  ensures ImplADM.M.ValidDiskOp(io.diskOp())
-  ensures ImplADM.M.IDiskOp(io.diskOp()) == SD.ReqReadOp(id, SD.ReqRead(loc))
+  ensures (id, IIO(io)) == ImplModelIO.RequestRead(old(IIO(io)), loc)
   {
     id := io.read(loc.addr, loc.len);
   }
 
-  lemma LemmaIndirectionTableLBAValid()
-  ensures ImplADM.M.ValidAddr(BC.IndirectionTableLBA())
-  {
-    LBAType.reveal_ValidAddr();
-    assert BC.IndirectionTableLBA() as int == 0 * ImplADM.M.BlockSize();
-  }
+
+
+/*
 
   method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
@@ -237,32 +191,6 @@ module ImplIO {
       assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.PageInReqStep(ref));
     }
   }
-
-  lemma INodeRootEqINodeForEmptyRootBucket(node: IS.Node)
-  requires IS.WFNode(node)
-  ensures IS.INodeRoot(node, TTT.EmptyTree) == IS.INode(node);
-  {
-    BucketsLib.BucketListFlushParentEmpty(KMTable.ISeq(node.buckets), node.pivotTable);
-  }
-
-  /*lemma LemmaPageInBlockCacheSet(s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
-  requires IS.WFVars(s)
-  requires s.Ready?
-  requires ref !in s.cache
-  requires IS.WFNode(node)
-  ensures IS.ICache(s.cache, s.rootBucket)[ref := IS.INode(node)]
-       == IS.ICache(s.cache[ref := node], s.rootBucket);
-  {
-    if (ref == BT.G.Root()) {
-      //assert TTT.I(rootBucket) == map[];
-      //assert BT.AddMessagesToBuckets(node.pivotTable, |node.buckets|, SSTable.ISeq(node.buckets),
-      //    map[]) == IS.INode(node).buckets;
-      INodeRootEqINodeForEmptyRootBucket(node);
-      assert IS.INodeRoot(node, s.rootBucket) == IS.INode(node);
-    }
-    assert IS.INodeForRef(s.cache[ref := node], ref, s.rootBucket) == IS.INode(node);
-    assert IS.ICache(s.cache[ref := node], s.rootBucket)[ref] == IS.INode(node);
-  }*/
 
   // == readResponse ==
 

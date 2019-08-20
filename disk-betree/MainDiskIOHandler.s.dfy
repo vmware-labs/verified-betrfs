@@ -12,13 +12,13 @@ module {:extern} MainDiskIOHandler {
     modifies this;
     requires diskOp() == D.NoDiskOp;
     ensures diskOp() == D.ReqWriteOp(id, D.ReqWrite(addr, bytes[..]));
-    ensures id == reservedId()
+    ensures id == old(reservedId())
 
     method {:axiom} read(addr: uint64, len: uint64) returns (id: D.ReqId)
     modifies this
     requires diskOp() == D.NoDiskOp
     ensures diskOp() == D.ReqReadOp(id, D.ReqRead(addr, len))
-    ensures id == reservedId()
+    ensures id == old(reservedId())
 
     method {:axiom} getWriteResult() returns (id : D.ReqId)
     requires diskOp().RespWriteOp?
