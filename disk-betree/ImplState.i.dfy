@@ -86,6 +86,7 @@ module {:extern} ImplState {
     && vars.persistentIndirectionTable.Inv()
     && (vars.frozenIndirectionTable.Some? ==> vars.frozenIndirectionTable.value.Inv())
     && vars.ephemeralIndirectionTable.Inv()
+    && TTT.TTTree(vars.rootBucket)
   }
   predicate WVars(vars: Variables)
   reads if vars.Ready? then (
@@ -148,6 +149,17 @@ module {:extern} ImplState {
   {
     && WVars(vars)
     && IM.WFVars(IVars(vars))
+  }
+
+  predicate Inv(k: M.Constants, vars: Variables)
+  reads if vars.Ready? then (
+      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
+      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+      else {}
+  reads VariablesReadSet(vars)
+  {
+    && WVars(vars)
+    && IM.Inv(Ic(k), IVars(vars))
   }
 
   function Ic(k: M.Constants) : IM.Constants

@@ -271,15 +271,13 @@ module ImplIO {
     }
   }
 
-  /*
 
   method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires io.diskOp().RespReadOp?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  requires IS.WVars(s)
+  ensures IS.WVars(s')
+  ensures IS.IVars(s') == ImplModelIO.readResponse(Ic(k), old(IS.IVars(s)), IIO(io))
   {
     if (s.Unready?) {
       s' := PageInIndirectionTableResp(k, s, io);
@@ -293,25 +291,20 @@ module ImplIO {
   method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires io.diskOp().RespWriteOp?
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  requires IS.Inv(k, s)
+  ensures IS.WVars(s')
+  ensures IS.IVars(s') == ImplModelIO.writeResponse(Ic(k), old(IS.IVars(s)), IIO(io))
   {
     var id := io.getWriteResult();
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
       s' := s.(outstandingIndirectionTableWrite := None)
-             .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
+             .(frozenIndirectionTable := None)
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
              .(syncReqs := BC.syncReqs2to1(s.syncReqs));
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
       s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.WriteBackRespStep);
     } else {
       s' := s;
-      assert stepsBC(k, IS.IVars(s), IS.IVars(s'), UI.NoOp, io, BC.NoOpStep);
     }
   }
-*/
 }
