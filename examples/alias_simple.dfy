@@ -77,6 +77,7 @@ module GraphSpec {
     exists step: Step :: NextStep(k, s, s', step)
   }
 }
+
 module FunctionalGraph /* refines GraphSpec */ {
   import S = GraphSpec
 
@@ -130,6 +131,27 @@ module FunctionalGraph /* refines GraphSpec */ {
       s.nextRef)
   }
 
+  lemma RefinesAlloc(k: Constants, s: Variables, s': Variables) returns (ref: Reference)
+  requires Inv(k, s)
+  requires s.nextRef as nat < 0x1_0000_0000_0000_0000 - 1
+  requires s' == Alloc(k, s).s'
+  ensures ref == Alloc(k, s).ref
+  ensures Inv(k, s')
+  ensures S.Alloc(Ik(k), I(k, s), I(k, s'), ref)
+  {
+    ref := Alloc(k, s).ref;
+    assume S.Inv(Ik(k), I(k, s'));
+    assume (forall r | r in s'.graph :: (
+      && var c := s'.graph[r].rc;
+      && c in s'.invRc
+      && r in s'.invRc[c]));
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: r in s'.graph;
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: s'.graph[r].rc == c;
+    assert Inv(k, s');
+    assume ref !in s.graph;
+    assert S.Alloc(Ik(k), I(k, s), I(k, s'), Alloc(k, s).ref);
+  }
+
   function Dealloc(k: Constants, s: Variables, ref: Reference): (s': Variables)
   requires Inv(k, s)
   requires ref in s.graph
@@ -139,6 +161,26 @@ module FunctionalGraph /* refines GraphSpec */ {
     s
       .(graph := map r | r in s.graph && r != ref :: r := s.graph[r])
       .(invRc := s.invRc[0 := s.invRc[0] - {ref}])
+  }
+
+  lemma RefinesDealloc(k: Constants, s: Variables, s': Variables, ref: Reference)
+  requires Inv(k, s)
+  requires ref in s.graph
+  requires 0 in s.invRc && ref in s.invRc[0]
+  requires s' == Dealloc(k, s, ref)
+  ensures Inv(k, s')
+  ensures S.Dealloc(Ik(k), I(k, s), I(k, s'), ref)
+  {
+    assume S.Inv(Ik(k), I(k, s'));
+    assume (forall r | r in s'.graph :: (
+      && var c := s'.graph[r].rc;
+      && c in s'.invRc
+      && r in s'.invRc[c]));
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: r in s'.graph;
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: s'.graph[r].rc == c;
+    assert Inv(k, s');
+    assume forall r | r in I(k, s).graph :: ref !in I(k, s).graph[r];
+    assert S.Dealloc(Ik(k), I(k, s), I(k, s'), ref);
   }
 
   function Attach(k: Constants, s: Variables, parent: Reference, ref: Reference): (s': Variables)
@@ -160,6 +202,27 @@ module FunctionalGraph /* refines GraphSpec */ {
       )
   }
 
+  lemma RefinesAttach(k: Constants, s: Variables, s': Variables, parent: Reference, ref: Reference)
+  requires Inv(k, s)
+  requires parent in s.graph
+  requires ref in s.graph
+  requires ref !in s.graph[parent].adjList
+  requires s' == Attach(k, s, parent, ref)
+  ensures Inv(k, s')
+  ensures S.Attach(Ik(k), I(k, s), I(k, s'), parent, ref)
+  {
+    assume S.Inv(Ik(k), I(k, s'));
+    assume (forall r | r in s'.graph :: (
+      && var c := s'.graph[r].rc;
+      && c in s'.invRc
+      && r in s'.invRc[c]));
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: r in s'.graph;
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: s'.graph[r].rc == c;
+    assert Inv(k, s');
+    assume I(k, s').graph == I(k, s).graph[parent := (I(k, s).graph[parent] + {ref})];
+    assert S.Attach(Ik(k), I(k, s), I(k, s'), parent, ref);
+  }
+
   function Detach(k: Constants, s: Variables, parent: Reference, ref: Reference): (s': Variables)
   requires Inv(k, s)
   requires parent in s.graph
@@ -177,6 +240,27 @@ module FunctionalGraph /* refines GraphSpec */ {
         [rc := s.invRc[rc] - {ref}]
         [(rc - 1) := (if (rc - 1) in s.invRc then s.invRc[rc - 1] else {}) + {ref}]
       )
+  }
+
+  lemma RefinesDetach(k: Constants, s: Variables, s': Variables, parent: Reference, ref: Reference)
+  requires Inv(k, s)
+  requires parent in s.graph
+  requires ref in s.graph
+  requires ref in s.graph[parent].adjList
+  requires s' == Detach(k, s, parent, ref)
+  ensures Inv(k, s')
+  ensures S.Detach(Ik(k), I(k, s), I(k, s'), parent, ref)
+  {
+    assume S.Inv(Ik(k), I(k, s'));
+    assume (forall r | r in s'.graph :: (
+      && var c := s'.graph[r].rc;
+      && c in s'.invRc
+      && r in s'.invRc[c]));
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: r in s'.graph;
+    assume forall c | c in s'.invRc :: forall r | r in s'.invRc[c] :: s'.graph[r].rc == c;
+    assert Inv(k, s');
+    assume I(k, s').graph == I(k, s).graph[parent := (I(k, s).graph[parent] - {ref})];
+    assert S.Detach(Ik(k), I(k, s), I(k, s'), parent, ref);
   }
 
   datatype Step =
@@ -208,15 +292,11 @@ module FunctionalGraph /* refines GraphSpec */ {
     }
   }
 
-  function NextStep(k: Constants, s: Variables, step: Step): (s': Variables)
-  requires Inv(k, s)
-  requires Admissible(k, s, step)
-  requires step.AllocStep? ==> Inv(k, s)
-  requires step.DeallocStep? ==> Inv(k, s)
-  requires step.AttachStep? ==> Inv(k, s)
-  requires step.DetachStep? ==> Inv(k, s)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, step: Step)
   {
-    match step {
+    && Inv(k, s)
+    && Admissible(k, s, step)
+    && s' == match step {
       case AllocStep() => Alloc(k, s).s'
       case DeallocStep(ref) => Dealloc(k, s, ref)
       case AttachStep(parent, ref) => Attach(k, s, parent, ref)
@@ -225,8 +305,43 @@ module FunctionalGraph /* refines GraphSpec */ {
   }
 
   predicate Next(k: Constants, s: Variables, s': Variables)
-  requires Inv(k, s)
   {
-    exists step: Step :: Admissible(k, s, step) && s' == NextStep(k, s, step)
+    exists step: Step :: NextStep(k, s, s', step)
+  }
+
+  lemma RefinesNextStep(k: Constants, s: Variables, s': Variables, step: Step)
+  requires Inv(k, s)
+  requires NextStep(k, s, s', step)
+  ensures Inv(k, s')
+  ensures S.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    match step {
+      case AllocStep() => {
+        var ref := RefinesAlloc(k, s, s');
+        assert S.NextStep(Ik(k), I(k, s), I(k, s'), S.AllocStep(ref));
+      }
+      case DeallocStep(ref) => {
+        RefinesDealloc(k, s, s', ref);
+        assert S.NextStep(Ik(k), I(k, s), I(k, s'), S.DeallocStep(ref));
+      }
+      case AttachStep(parent, ref) => {
+        RefinesAttach(k, s, s', parent, ref);
+        assert S.NextStep(Ik(k), I(k, s), I(k, s'), S.AttachStep(parent, ref));
+      }
+      case DetachStep(parent, ref) => {
+        RefinesDetach(k, s, s', parent, ref);
+        assert S.NextStep(Ik(k), I(k, s), I(k, s'), S.DetachStep(parent, ref));
+      }
+    }
+  }
+
+  lemma RefinesNext(k: Constants, s: Variables, s': Variables)
+  requires Inv(k, s)
+  requires Next(k, s, s')
+  ensures Inv(k, s')
+  ensures S.Next(Ik(k), I(k, s), I(k, s'))
+  {
+    var step :| NextStep(k, s, s', step);
+    RefinesNextStep(k, s, s', step);
   }
 }
