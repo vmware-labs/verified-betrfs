@@ -439,8 +439,7 @@ module ImperativeGraph /* refines FunctionalGraph */ {
   requires F.AllocRequires(Ik(impl), I(impl))
   requires Inv(impl)
   ensures WFImpl(impl)
-  ensures Inv(impl)
-  ensures F.Next(old(Ik(impl)), old(I(impl)), I(impl))
+  ensures F.AllocResult(I(impl), ref) == F.Alloc(old(Ik(impl)), old(I(impl)))
   modifies impl.Repr
   {
     ref := impl.nextRef;
@@ -453,10 +452,6 @@ module ImperativeGraph /* refines FunctionalGraph */ {
     var _ := impl.invRc.Insert(0, invRc0);
 
     impl.Repr := {impl} + impl.graph.Repr + impl.invRc.Repr;
-
-    ghost var ghostRef := F.RefinesAlloc(old(Ik(impl)), old(I(impl)), I(impl));
-    assert ref == ghostRef;
-    assert F.NextStep(old(Ik(impl)), old(I(impl)), I(impl), F.AllocStep());
   }
 
   method Dealloc(impl: Impl, ref: Reference)
@@ -464,8 +459,7 @@ module ImperativeGraph /* refines FunctionalGraph */ {
   requires F.DeallocRequires(Ik(impl), I(impl), ref)
   requires Inv(impl)
   ensures WFImpl(impl)
-  ensures Inv(impl)
-  ensures F.Next(old(Ik(impl)), old(I(impl)), I(impl))
+  ensures I(impl) == F.Dealloc(old(Ik(impl)), old(I(impl)), ref)
   modifies impl.Repr
   {
     var _ := impl.graph.Remove(ref);
@@ -476,9 +470,6 @@ module ImperativeGraph /* refines FunctionalGraph */ {
     var _ := impl.invRc.Insert(0, invRc0);
 
     impl.Repr := {impl} + impl.graph.Repr + impl.invRc.Repr;
-
-    F.RefinesDealloc(old(Ik(impl)), old(I(impl)), I(impl), ref);
-    assert F.NextStep(old(Ik(impl)), old(I(impl)), I(impl), F.DeallocStep(ref));
   }
 
   method Attach(impl: Impl, parent: Reference, ref: Reference)
@@ -486,8 +477,7 @@ module ImperativeGraph /* refines FunctionalGraph */ {
   requires F.AttachRequires(Ik(impl), I(impl), parent, ref)
   requires Inv(impl)
   ensures WFImpl(impl)
-  ensures Inv(impl)
-  ensures F.Next(old(Ik(impl)), old(I(impl)), I(impl))
+  ensures I(impl) == F.Attach(old(Ik(impl)), old(I(impl)), parent, ref)
   modifies impl.Repr
   {
     assert impl.graph.Repr !! impl.invRc.Repr;
@@ -519,10 +509,6 @@ module ImperativeGraph /* refines FunctionalGraph */ {
     CountBoundedByMemory(impl.invRc);
     var _ := impl.invRc.Insert(refEl.value.rc + 1, invRcB);
     impl.Repr := {impl} + impl.graph.Repr + impl.invRc.Repr;
-
-    assert I(impl) == F.Attach(old(Ik(impl)), old(I(impl)), parent, ref);
-    F.RefinesAttach(old(Ik(impl)), old(I(impl)), I(impl), parent, ref);
-    assert F.NextStep(old(Ik(impl)), old(I(impl)), I(impl), F.AttachStep(parent, ref));
   }
 
   method Detach(impl: Impl, parent: Reference, ref: Reference)
@@ -530,8 +516,7 @@ module ImperativeGraph /* refines FunctionalGraph */ {
   requires F.DetachRequires(Ik(impl), I(impl), parent, ref)
   requires Inv(impl)
   ensures WFImpl(impl)
-  ensures Inv(impl)
-  ensures F.Next(old(Ik(impl)), old(I(impl)), I(impl))
+  ensures I(impl) == F.Detach(old(Ik(impl)), old(I(impl)), parent, ref)
   modifies impl.Repr
   {
     assert impl.graph.Repr !! impl.invRc.Repr;
@@ -563,9 +548,5 @@ module ImperativeGraph /* refines FunctionalGraph */ {
     CountBoundedByMemory(impl.invRc);
     var _ := impl.invRc.Insert(refEl.value.rc - 1, invRcB);
     impl.Repr := {impl} + impl.graph.Repr + impl.invRc.Repr;
-
-    assert I(impl) == F.Detach(old(Ik(impl)), old(I(impl)), parent, ref);
-    F.RefinesDetach(old(Ik(impl)), old(I(impl)), I(impl), parent, ref);
-    assert F.NextStep(old(Ik(impl)), old(I(impl)), I(impl), F.DetachStep(parent, ref));
   }
 }
