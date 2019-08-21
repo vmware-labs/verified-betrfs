@@ -94,6 +94,7 @@ abstract module BtreeSpec {
   lemma AllKeysIsConsistentWithInterpretation(node: Node, key: Key)
     requires WF(node)
     requires key in InterpretNode(node)
+    ensures node.Index? ==> Keys.IsSorted(node.pivots); // Weirdly this helps dafny
     ensures node.Index? ==> key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
   {
     if node.Index? {
@@ -104,6 +105,7 @@ abstract module BtreeSpec {
   lemma AllKeysIsConsistentWithInterpretationUniversal(node: Node)
     requires WF(node)
     requires node.Index?
+    ensures Keys.IsSorted(node.pivots); // Weirdly this helps dafny
     ensures forall key :: key in InterpretNode(node) ==> key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
   {
     forall key | key in InterpretNode(node)
@@ -131,12 +133,12 @@ abstract module BtreeSpec {
 
   lemma SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
     requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
-    ensures InterpretLeaf(oldleaf) == MapDisjointUnion(InterpretLeaf(leftleaf), InterpretLeaf(rightleaf))
+    ensures InterpretLeaf(oldleaf) == Keys.MapPivotedUnion(InterpretLeaf(leftleaf), pivot, InterpretLeaf(rightleaf))
   {
     var oldint := InterpretLeaf(oldleaf);
     var leftint := InterpretLeaf(leftleaf);
     var rightint := InterpretLeaf(rightleaf);
-    var newint := MapDisjointUnion(leftint, rightint);
+    var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
 
     forall key | key in oldint
       ensures newint[key] == oldint[key]
