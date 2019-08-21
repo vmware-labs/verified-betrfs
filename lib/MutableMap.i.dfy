@@ -681,6 +681,14 @@ module MutableMap {
     ghost var Contents: map<uint64, V>;
     ghost var Repr: set<object>;
 
+    static function I(self: ResizingHashMap<V>): (contents: map<uint64, V>)
+    requires self.Inv()
+    ensures contents == self.Contents
+    reads self, self.Repr
+    {
+      self.Contents
+    }
+
     static function MapFromStorage(elements: seq<Item<V>>): (result: map<uint64, V>)
     {
       if |elements| == 0 then
