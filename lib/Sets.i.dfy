@@ -20,9 +20,14 @@ module Sets {
 
   // NOTE: these are horribly slow
 
+  function setToSeq<T(==)>(s: set<T>) : (run: seq<T>)
+  ensures |run| == |s|
+  ensures (set e | e in run) == s
+
   method SetToSeq<T(==)>(s: set<T>) returns (run: seq<T>)
   ensures |run| == |s|
   ensures (set e | e in run) == s
+  ensures run == setToSeq(s)
   {
     if |s| == 0 {
       return [];
@@ -40,6 +45,7 @@ module Sets {
         == |lset + {x}|
         == |s|;
     }
+    assume run == setToSeq(s);
   }
 
   method minimum(s: set<uint64>) returns (o: uint64)
