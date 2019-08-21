@@ -437,7 +437,7 @@ module ImplModelSplit {
             assert left_childref.value != right_childref.value;
             assert BT.ValidSplit(splitStep);
             var step := BT.BetreeSplit(splitStep);
-            ghost var ops := [
+            var ops := [
               BT.G.AllocOp(left_childref.value, INode(left_child)),
               BT.G.AllocOp(right_childref.value, INode(right_child)),
               BT.G.WriteOp(parentref, INode(split_parent))

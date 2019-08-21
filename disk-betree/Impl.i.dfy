@@ -38,7 +38,6 @@ module Impl {
   import UI
 
   // TODO <deduplicate>
-  type Key = MS.Key
   type Message = Messages.Message
 
   type ImplConstants = ImplADM.M.Constants
