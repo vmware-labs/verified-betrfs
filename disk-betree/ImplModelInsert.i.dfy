@@ -1,6 +1,6 @@
 include "ImplModelCache.i.dfy"
 
-module ImplInsert { 
+module ImplModelInsert { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
