@@ -1,6 +1,6 @@
 include "ImplModelCache.i.dfy"
 
-module ImplLeaf { 
+module ImplModelLeaf { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache

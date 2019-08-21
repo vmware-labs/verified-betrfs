@@ -861,6 +861,7 @@ module KMTable {
   ensures WF(kmt)
   ensures Bounded(kmt)
   ensures I(kmt) == JoinBucketList(ISeq(kmts))
+  ensures kmt == join(kmts)
   {
     var len: uint64 := 0;
     var i: uint64 := 0;
@@ -956,6 +957,7 @@ module KMTable {
   ensures forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
+  ensures kmts == splitOnPivots(kmt, pivots)
   {
     reveal_I();
     kmts := Flush(kmt, EmptySeq(|pivots| + 1), pivots);
@@ -967,6 +969,7 @@ module KMTable {
       Imaps(kmt, i);
     }
     LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(kmt), pivots, ISeq(EmptySeq(|pivots| + 1)));
+    assume kmts == splitOnPivots(kmt, pivots);
   }
 
   method IsWF(kmt: KMTable) returns (b: bool)
