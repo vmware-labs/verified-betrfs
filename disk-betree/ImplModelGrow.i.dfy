@@ -1,6 +1,6 @@
 include "ImplModelCache.i.dfy"
 
-module ImplGrow { 
+module ImplModelGrow { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
@@ -13,7 +13,7 @@ module ImplGrow {
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  function fixBigRoot(k: Constants, s: Variables, io: IO)
+  function {:opaque} fixBigRoot(k: Constants, s: Variables, io: IO)
   : (Variables, IO)
   requires Inv(k, s)
   requires s.Ready?
@@ -55,6 +55,8 @@ module ImplGrow {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
+    reveal_fixBigRoot();
+
     if (BT.G.Root() !in s.cache) {
       PageInReqCorrect(k, s, io, BT.G.Root());
       return;
