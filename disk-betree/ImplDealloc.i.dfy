@@ -13,19 +13,9 @@ module ImplDealloc {
 
   import opened NativeTypes
 
-  predicate deallocable(s: ImplVariables, ref: BT.G.Reference)
-  reads if s.Ready? then {s.ephemeralIndirectionTable} else {} // TODO necessary?
-  reads if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  {
-    && s.Ready?
-    && ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
-    && ref != BT.G.Root()
-    && forall r | r in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph :: ref !in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[r]
-  }
-
   method Deallocable(s: ImplVariables, ref: BT.G.Reference) returns (result: bool)
   requires s.Ready? ==> s.ephemeralIndirectionTable.Inv()
-  ensures result == deallocable(s, ref)
+  ensures result == ImplModelDealloc.deallocable(s, ref)
   {
     if ref == BT.G.Root() {
       return false;
