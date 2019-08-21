@@ -1112,11 +1112,20 @@ module KMTable {
     reveal_replace1with2();
   }
 
+  function kmtableOfSeq(s: seq<(Key, Message)>) : (kmt: KMTable)
+  requires |s| < 0x1_0000_0000_0000_0000
+  ensures WF(kmt)
+
+  lemma kmtableOfSeqRes(s: seq<(Key, Message)>, m: map<Key, Message>)
+  requires |s| < 0x1_0000_0000_0000_0000
+  requires SortedSeqForMap(s, m)
+  ensures WF(kmtableOfSeq(s))
+  ensures I(kmtableOfSeq(s)) == m
+
   method KMTableOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (kmt: KMTable)
   requires SortedSeqForMap(s, m)
   requires |s| < 0x1_0000_0000_0000_0000
-  ensures WF(kmt)
-  ensures I(kmt) == m
+  ensures kmt == kmtableOfSeq(s)
   {
     assume false;
 

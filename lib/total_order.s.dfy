@@ -468,6 +468,9 @@ abstract module Total_Order {
     && (forall i | 0 <= i < |s| :: s[i].0 in m && m[s[i].0] == s[i].1)
     && (forall key | key in m :: exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key])
   }
+
+  function getSortedSeqForMap<V>(m : map<Element, V>) : (s: seq<(Element, V)>)
+  ensures SortedSeqForMap(s, m)
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {
