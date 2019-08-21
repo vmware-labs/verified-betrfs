@@ -45,6 +45,32 @@ module ImplModelCache {
     getFreeRefIterate(s, 1)
   }
 
+  function getFreeRef2Iterate(s: Variables, avoid: BT.G.Reference, i: uint64) 
+  : (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  requires i >= 1
+  ensures ref.Some? ==> RefAvailable(s, ref.value)
+  ensures ref.Some? ==> ref.value != avoid
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  {
+    if i != avoid && i !in s.ephemeralIndirectionTable && i !in s.cache then (
+      Some(i)
+    ) else if i == 0xffff_ffff_ffff_ffff then (
+      None
+    ) else (
+      getFreeRef2Iterate(s, avoid, i+1) 
+    )
+  }
+
+  function {:opaque} getFreeRef2(s: Variables, avoid: BT.G.Reference)
+  : (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  ensures ref.Some? ==> RefAvailable(s, ref.value)
+  ensures ref.Some? ==> ref.value != avoid
+  {
+    getFreeRef2Iterate(s, avoid, 1)
+  }
+
   function {:opaque} write(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   : (s': Variables)
   requires s.Ready?
@@ -103,6 +129,19 @@ module ImplModelCache {
     }
   }
 
+  lemma writeNewRefIsAlloc(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
+  requires s.Ready?
+  requires WFVars(s)
+  requires RefAvailable(s, ref)
+  requires WFNode(node)
+  requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  ensures var s' := write(k, s, ref, node);
+    && WFVars(s')
+    && BC.Alloc(Ik(k), IVars(s), IVars(s'), ref, INode(node))
+  {
+    reveal_write();
+  }
+
   lemma lemmaChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
   requires s.Ready?
   requires Inv(k, s)
@@ -112,5 +151,20 @@ module ImplModelCache {
   ensures childref in s.ephemeralIndirectionTable
   {
     assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
+  }
+
+  lemma lemmaBlockPointsToValidReferences(k: Constants, s: Variables, ref: BT.G.Reference)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires ref in s.cache
+  requires ref in s.ephemeralIndirectionTable
+  ensures BC.BlockPointsToValidReferences(INode(s.cache[ref]), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+  {
+    var node := INode(s.cache[ref]);
+    var graph := IIndirectionTable(s.ephemeralIndirectionTable).graph;
+    forall r | r in BT.G.Successors(node) ensures r in graph
+    {
+      lemmaChildInGraph(k, s, ref, r);
+    }
   }
 }

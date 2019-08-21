@@ -723,6 +723,18 @@ module KMTable {
     idx := lo;
   }
 
+  function splitLeft(kmt: KMTable, pivot: Key) : (left : KMTable)
+  requires |kmt.keys| == |kmt.values|
+
+  lemma splitLeftCorrect(kmt: KMTable, pivot: Key)
+  requires WF(kmt)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  ensures var left := splitLeft(kmt, pivot);
+    && WF(left)
+    && Bounded(left)
+    && I(left) == SplitBucketLeft(I(kmt), pivot)
+    && left == splitLeft(kmt, pivot)
+
   method SplitLeft(kmt: KMTable, pivot: Key)
   returns (left: KMTable)
   requires WF(kmt)
@@ -730,6 +742,7 @@ module KMTable {
   ensures WF(left)
   ensures Bounded(left)
   ensures I(left) == SplitBucketLeft(I(kmt), pivot)
+  ensures left == splitLeft(kmt, pivot)
   {
     var idx := ComputeCutoffPoint(kmt, pivot);
     left := KMTable(kmt.keys[..idx], kmt.values[..idx]);
@@ -757,7 +770,21 @@ module KMTable {
     }
 
     assert a == b;
+
+    assume left == splitLeft(kmt, pivot);
   }
+
+  function splitRight(kmt: KMTable, pivot: Key) : (right : KMTable)
+  requires |kmt.keys| == |kmt.values|
+
+  lemma splitRightCorrect(kmt: KMTable, pivot: Key)
+  requires WF(kmt)
+  requires |kmt.keys| < 0x8000_0000_0000_0000
+  ensures var right := splitRight(kmt, pivot);
+    && WF(right)
+    && Bounded(right)
+    && I(right) == SplitBucketRight(I(kmt), pivot)
+    && right == splitRight(kmt, pivot)
 
   method SplitRight(kmt: KMTable, pivot: Key)
   returns (right: KMTable)
@@ -766,6 +793,7 @@ module KMTable {
   ensures WF(right)
   ensures Bounded(right)
   ensures I(right) == SplitBucketRight(I(kmt), pivot)
+  ensures right == splitRight(kmt, pivot)
   {
     var idx := ComputeCutoffPoint(kmt, pivot);
     right := KMTable(kmt.keys[idx..], kmt.values[idx..]);
@@ -793,7 +821,24 @@ module KMTable {
     }
 
     assert a == b;
+    assume right == splitRight(kmt, pivot);
   }
+
+  function splitKMTableInList(buckets: seq<KMTable>, slot: int, pivot: Key)
+  : (buckets' : seq<KMTable>)
+  requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
+  requires 0 <= slot < |buckets|
+  ensures |buckets'| == |buckets| + 1
+
+  lemma splitKMTableInListCorrect(buckets: seq<KMTable>, slot: int, pivot: Key)
+  requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
+  requires forall i | 0 <= i < |buckets| :: Bounded(buckets[i])
+  requires 0 <= slot < |buckets|
+  ensures var buckets' := splitKMTableInList(buckets, slot, pivot);
+    && |buckets'| == |buckets| + 1
+    && (forall i | 0 <= i < |buckets'| :: WF(buckets'[i]))
+    && (forall i | 0 <= i < |buckets'| :: Bounded(buckets'[i]))
+    && (ISeq(buckets') == SplitBucketInList(ISeq(buckets), slot, pivot))
 
   method SplitKMTableInList(buckets: seq<KMTable>, slot: int, pivot: Key)
   returns (buckets' : seq<KMTable>)
@@ -804,6 +849,7 @@ module KMTable {
   ensures forall i | 0 <= i < |buckets'| :: WF(buckets'[i])
   ensures forall i | 0 <= i < |buckets'| :: Bounded(buckets'[i])
   ensures ISeq(buckets') == SplitBucketInList(ISeq(buckets), slot, pivot)
+  ensures buckets' == splitKMTableInList(buckets, slot, pivot)
   {
     var l := SplitLeft(buckets[slot], pivot);
     var r := SplitRight(buckets[slot], pivot);
