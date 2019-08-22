@@ -45,9 +45,9 @@ module ImplMarshalling {
 
   /////// Conversion to PivotNode
 
-  method {:fuel ValInGrammar,3} ValToLBAsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
+  method {:fuel ValInGrammar,3} ValToLocsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
   requires IMM.valToLocsAndSuccs.requires(a)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) => x.Contents) == IMM.valToLocsAndSuccs(a)
+  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToLocsAndSuccs(a)
   ensures s.Some? ==> s.value.Inv()
   ensures s.Some? ==> s.value.Count as nat == |a|
   ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
@@ -58,7 +58,7 @@ module ImplMarshalling {
       s := Some(newHashMap);
       assume s.value.Count as nat == |a|;
     } else {
-      var res := ValToLBAsAndSuccs(DropLast(a));
+      var res := ValToLocsAndSuccs(DropLast(a));
       match res {
         case Some(mutMap) => {
           var tuple := Last(a);
@@ -103,10 +103,10 @@ module ImplMarshalling {
 
   method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
   requires IMM.valToIndirectionTable.requires(v)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) => x.Contents) == IMM.valToIndirectionTable(v)
+  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToIndirectionTable(v)
   ensures s.Some? ==> s.value.Inv()
   {
-    var res := ValToLBAsAndSuccs(v.a);
+    var res := ValToLocsAndSuccs(v.a);
     match res {
       case Some(res) => {
         var rootRef := res.Get(BT.G.Root());
@@ -287,7 +287,7 @@ module ImplMarshalling {
     invariant forall k: nat | k < i :: KMTable.Bounded(ar[k])
     invariant forall k: nat | k < i :: WFBucketAt(KMTable.I(ar[k]), pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
-    // TODO invariant Apply(KMTable.I, ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
+    invariant ar[..i] == IMM.valToBuckets(a[..i], pivotTable).value
     {
       var b := ValToBucket(a[i], pivotTable, i);
       if (b.None?) {
@@ -307,9 +307,6 @@ module ImplMarshalling {
 
     assert a[..|a|] == a;
     assert ar[..|a|] == ar[..];
-
-    assert IMM.valToBuckets(a[..], pivotTable).Some?;
-    // TODO assert Apply(KMTable.I, ar[..]) == IMM.valToBuckets(a, pivotTable).value;
 
     s := Some(ar[..]);
   }

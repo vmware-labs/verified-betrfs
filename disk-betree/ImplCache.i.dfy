@@ -21,6 +21,12 @@ module ImplCache {
   requires IS.WVars(s)
   ensures ref == ImplModelCache.getFreeRef(IS.IVars(s))
 
+  method getFreeRef2(s: ImplVariables, avoid: BT.G.Reference)
+  returns (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  requires IS.WVars(s)
+  ensures ref == ImplModelCache.getFreeRef2(IS.IVars(s), avoid)
+
   method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
   returns (s': ImplVariables)
   requires s.Ready?
