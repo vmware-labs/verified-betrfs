@@ -1,4 +1,8 @@
+include "Option.s.dfy"
+
 module Sequences {
+  import opened Options
+
   function method Last<E>(run: seq<E>) : E
     requires |run| > 0;
   {
@@ -172,4 +176,8 @@ module Sequences {
         == (a + b)[..|c|]
         == a[..|c|];
   }
+
+  function method {:opaque} SeqIndex<A(==)>(run: seq<A>, needle: A) : (res : Option<int>)
+  ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
+  ensures res.None? ==> forall i | 0 <= i < |run| :: run[i] != needle
 }

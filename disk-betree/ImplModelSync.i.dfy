@@ -46,6 +46,17 @@ module ImplModelSync {
     assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
   }
 
+  function method getUncappedBucket(buckets: seq<KMTable.KMTable>, i: int) : (res: Option<int>)
+  requires 0 <= i <= |buckets|
+  ensures res.Some? ==> i <= res.value < |buckets| && !IMM.CappedBucket(buckets[res.value])
+  ensures res.None? ==> forall j | i <= j < |buckets| :: IMM.CappedBucket(buckets[j])
+  decreases |buckets| - i
+  {
+    if i == |buckets| then None else (
+      if !IMM.CappedBucket(buckets[i]) then Some(i) else getUncappedBucket(buckets, i + 1)
+    )
+  }
+
   function {:fuel JoinBucketList,0} fixBigNode(k: Constants, s: Variables, io: IO, ref: BT.G.Reference, parentref: BT.G.Reference)
   : (Variables, IO)
   requires Inv(k, s)
@@ -71,13 +82,14 @@ module ImplModelSync {
           == IIndirectionTable(s.ephemeralIndirectionTable).graph[parentref];
 
       var node := s.cache[ref];
-      if i :| 0 <= i < |node.buckets| && !IMM.CappedBucket(node.buckets[i]) then (
+      var i := getUncappedBucket(node.buckets, 0);
+      if i.Some? then (
         if (node.children.Some?) then (
           // internal node case: flush
-          flush(k, s, io, ref, i)
+          flush(k, s, io, ref, i.value)
         ) else (
           // leaf case
-          var s' := repivotLeaf(k, s, ref, i, node);
+          var s' := repivotLeaf(k, s, ref, i.value, node);
           (s', io)
         )
       ) else if |node.buckets| > IMM.CapNumBuckets() as int then (
@@ -89,8 +101,8 @@ module ImplModelSync {
 
           assert ref in BT.G.Successors(INode(parent));
 
-          var i :| 0 <= i < |parent.children.value| && parent.children.value[i] == ref;
-          var s' := doSplit(k, s, parentref, ref, i);
+          var j := SeqIndex(parent.children.value, ref);
+          var s' := doSplit(k, s, parentref, ref, j.value);
           (s', io)
         )
       ) else (
@@ -125,6 +137,7 @@ module ImplModelSync {
       && loc.None?
     ) {
       assert noop(k, IVars(s), IVars(s));
+      return;
     }
 
     lemmaGraphChildInGraph(k, s, parentref, ref);
@@ -135,11 +148,12 @@ module ImplModelSync {
 
     INodeRootEqINodeForEmptyRootBucket(node);
 
-    if i :| 0 <= i < |node.buckets| && !IMM.CappedBucket(node.buckets[i]) {
+    var i := getUncappedBucket(node.buckets, 0);
+    if i.Some? {
       if (node.children.Some?) {
-        flushCorrect(k, s, io, ref, i);
+        flushCorrect(k, s, io, ref, i.value);
       } else {
-        repivotLeafCorrect(k, s, ref, i, node);
+        repivotLeafCorrect(k, s, ref, i.value, node);
       }
     } else if |node.buckets| > IMM.CapNumBuckets() as int {
       if (parentref !in s.cache) {
@@ -153,9 +167,8 @@ module ImplModelSync {
       INodeRootEqINodeForEmptyRootBucket(parent);
 
       assert ref in BT.G.Successors(INode(parent));
-      var i :| 0 <= i < |parent.children.value| && parent.children.value[i] == ref
-          && s' == doSplit(k, s, parentref, ref, i);
-      doSplitCorrect(k, s, parentref, ref, i);
+      var j := SeqIndex(parent.children.value, ref);
+      doSplitCorrect(k, s, parentref, ref, j.value);
 
       return;
     } else {

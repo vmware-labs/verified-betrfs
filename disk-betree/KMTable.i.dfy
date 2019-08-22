@@ -531,6 +531,7 @@ module KMTable {
   ensures forall i | 0 <= i < |f| :: WF(f[i])
   ensures forall i | 0 <= i < |f| :: Bounded(f[i])
   ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
+  ensures f == flush(parent, children, pivots)
   {
     assert |children[0].keys| + |parent.keys| < 0x8000_0000_0000_0000;
 
