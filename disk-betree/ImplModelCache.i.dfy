@@ -153,6 +153,13 @@ module ImplModelCache {
     assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
   }
 
+  lemma lemmaGraphChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
+  requires s.Ready?
+  requires Inv(k, s)
+  requires ref in s.ephemeralIndirectionTable
+  requires childref in s.ephemeralIndirectionTable[ref].1
+  ensures childref in s.ephemeralIndirectionTable
+
   lemma lemmaBlockPointsToValidReferences(k: Constants, s: Variables, ref: BT.G.Reference)
   requires Inv(k, s)
   requires s.Ready?
