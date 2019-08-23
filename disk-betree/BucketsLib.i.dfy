@@ -144,6 +144,20 @@ module BucketsLib {
         slot)
   }
 
+  function {:opaque} MergeBuckets(left: Bucket, right: Bucket) : Bucket
+  {
+    MapUnionPreferA(left, right)
+  }
+
+  function {:opaque} MergeBucketsInList(blist: BucketList, slot: int) : (blist' : BucketList)
+  requires 0 <= slot < |blist| - 1
+  ensures |blist'| == |blist| - 1
+  {
+    replace2with1(blist,
+        MergeBuckets(blist[slot], blist[slot+1]),
+        slot)
+  }
+
   lemma WFSplitBucketLeft(bucket: Bucket, pivot: Key, pivots: seq<Key>, i: int)
   requires 0 <= i <= |pivots|
   requires WFPivots(pivots)
@@ -266,6 +280,17 @@ module BucketsLib {
       }
     }
   }
+
+  lemma WFMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
+  requires 0 <= slot < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures WFBucketList(MergeBucketsInList(blist, slot), remove(pivots, slot))
+
+  lemma SplitOfMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
+  requires 0 <= slot < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures SplitBucketLeft(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot]
+  ensures SplitBucketRight(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot+1]
 
   ///// Other lemmas
 
@@ -621,21 +646,6 @@ module BucketsLib {
   {
     WFSuffix(pivots, i);
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist[i..], pivots[i..], 0, |blist|-i-1, -i);
-  }
-
-  lemma WFBucketListReplace1with2(blist: BucketList, pivots: PivotTable, i: int, pivot: Key)
-  requires WFBucketList(blist, pivots)
-  requires PivotInsertable(pivots, i, pivot)
-  ensures WFBucketList(
-      replace1with2(blist, map[], map[], i),
-      insert(pivots, pivot, i))
-  {
-    var blist' := replace1with2(blist, map[], map[], i);
-    var pivots' := insert(pivots, pivot, i);
-    WFPivotsInsert(pivots, i, pivot);
-
-    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, i-1, 0);
-    BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', i+2, |blist'|-1, 1);
   }
 
   lemma BucketListInsertBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable, key: Key, msg: Message)

@@ -1,10 +1,4 @@
-include "ImplState.i.dfy"
-
 module Bounds {
-  import IS = ImplState
-  import BT = PivotBetreeSpec
-  import opened BucketList
-
   function BlockSize() : int { 8 * 1024 * 1024 }
 
   function MaxNumChildren() : int { 32 }
@@ -14,10 +8,4 @@ module Bounds {
 
   // Minimum weight a bucket needs to have before we consider flushing it.
   function FlushTriggerWeight() : int { MaxTotalBucketWeight() / 8 }
-
-  predicate NodeInBounds(node: BT.G.Node)
-  {
-    && |node.buckets| <= MaxNumChildren()
-    && WeightBucketList(node.buckets) <= MaxTotalBucketWeight()
-  }
 }

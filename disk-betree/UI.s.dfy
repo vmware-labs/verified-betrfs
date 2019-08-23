@@ -8,7 +8,9 @@ module {:extern} ValueWithDefault {
   type Value(==,!new) = s : seq<NativeTypes.byte> | |s| <= 1024
 	function method DefaultValue() : Value { [] }
 
-	export S provides Value, DefaultValue
+	function Len(v: Value) : int { |v| }
+
+	export S provides Value, DefaultValue, Len
 	export Internal reveals *
 	export extends S
 }

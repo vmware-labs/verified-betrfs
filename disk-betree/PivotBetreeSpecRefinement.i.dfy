@@ -609,6 +609,8 @@ module PivotBetreeSpecRefinement {
       }
     }
 
+    reveal_MergeBucketsInList();
+    SplitOfMergeBucketsInList(f.split_parent.buckets, f.slot_idx, f.split_parent.pivotTable);
     SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
 
     var lb := (if f.slot_idx > 0 then Some(f.split_parent.pivotTable[f.slot_idx - 1]) else None);
