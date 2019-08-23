@@ -2,6 +2,7 @@ include "Message.i.dfy"
 include "../lib/sequences.s.dfy"
 include "../lib/Maps.s.dfy"
 include "BucketsLib.i.dfy"
+include "BucketWeights.i.dfy"
 include "../lib/Marshalling/Seqs.i.dfy"
 
 module KMTable {
@@ -11,6 +12,7 @@ module KMTable {
   import opened Options
   import opened Maps
   import opened BucketsLib
+  import opened BucketWeights
   import opened NativeTypes
   import Native
   import P = PivotsLib
@@ -23,12 +25,6 @@ module KMTable {
     && |kmt.keys| == |kmt.values|
     && IsStrictlySorted(kmt.keys)
     && (forall i | 0 <= i < |kmt.values| :: kmt.values[i] != IdentityMessage())
-  }
-
-  function method MaxNumKeys() : uint64 { 0x8000_0000_0000_0000 }
-
-  predicate Bounded(kmt: KMTable) {
-    |kmt.keys| < 0x8000_0000_0000_0000
   }
 
   function {:opaque} I(kmt: KMTable) : Bucket
@@ -529,7 +525,6 @@ module KMTable {
   requires |children| < 0x1_0000_0000_0000_0000
   requires forall i | 0 <= i < |children| :: |children[i].keys| + |parent.keys| < 0x8000_0000_0000_0000
   ensures forall i | 0 <= i < |f| :: WF(f[i])
-  ensures forall i | 0 <= i < |f| :: Bounded(f[i])
   ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   ensures f == flush(parent, children, pivots)
   {
@@ -568,7 +563,6 @@ module KMTable {
     invariant childrenIdx as int == |children| ==> cur_idx == 0
     invariant flushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, KMTable(cur_keys[..cur_idx], cur_values[..cur_idx]))
         == flush(parent, children, pivots)
-    invariant forall i | 0 <= i < |acc| :: Bounded(acc[i])
     decreases |children| - childrenIdx as int
     decreases |parent.keys| - parentIdx as int +
         (if childrenIdx as int < |children| then |children[childrenIdx].keys| - childIdx as int else 0)
@@ -732,7 +726,6 @@ module KMTable {
   requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures var left := splitLeft(kmt, pivot);
     && WF(left)
-    && Bounded(left)
     && I(left) == SplitBucketLeft(I(kmt), pivot)
     && left == splitLeft(kmt, pivot)
 
@@ -741,7 +734,6 @@ module KMTable {
   requires WF(kmt)
   requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures WF(left)
-  ensures Bounded(left)
   ensures I(left) == SplitBucketLeft(I(kmt), pivot)
   ensures left == splitLeft(kmt, pivot)
   {
@@ -783,7 +775,6 @@ module KMTable {
   requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures var right := splitRight(kmt, pivot);
     && WF(right)
-    && Bounded(right)
     && I(right) == SplitBucketRight(I(kmt), pivot)
     && right == splitRight(kmt, pivot)
 
@@ -792,7 +783,6 @@ module KMTable {
   requires WF(kmt)
   requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures WF(right)
-  ensures Bounded(right)
   ensures I(right) == SplitBucketRight(I(kmt), pivot)
   ensures right == splitRight(kmt, pivot)
   {
@@ -833,22 +823,19 @@ module KMTable {
 
   lemma splitKMTableInListCorrect(buckets: seq<KMTable>, slot: int, pivot: Key)
   requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
-  requires forall i | 0 <= i < |buckets| :: Bounded(buckets[i])
   requires 0 <= slot < |buckets|
   ensures var buckets' := splitKMTableInList(buckets, slot, pivot);
     && |buckets'| == |buckets| + 1
     && (forall i | 0 <= i < |buckets'| :: WF(buckets'[i]))
-    && (forall i | 0 <= i < |buckets'| :: Bounded(buckets'[i]))
     && (ISeq(buckets') == SplitBucketInList(ISeq(buckets), slot, pivot))
 
   method SplitKMTableInList(buckets: seq<KMTable>, slot: int, pivot: Key)
   returns (buckets' : seq<KMTable>)
   requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
-  requires forall i | 0 <= i < |buckets| :: Bounded(buckets[i])
   requires 0 <= slot < |buckets|
+  requires |buckets[slot].keys| < 0x8000_0000_0000_0000
   ensures |buckets'| == |buckets| + 1
   ensures forall i | 0 <= i < |buckets'| :: WF(buckets'[i])
-  ensures forall i | 0 <= i < |buckets'| :: Bounded(buckets'[i])
   ensures ISeq(buckets') == SplitBucketInList(ISeq(buckets), slot, pivot)
   ensures buckets' == splitKMTableInList(buckets, slot, pivot)
   {
@@ -907,7 +894,6 @@ module KMTable {
   requires |kmts| < 0x8000_0000
   requires forall i | 0 <= i < |kmts| :: |kmts[i].keys| < 0x1_0000_0000
   ensures WF(kmt)
-  ensures Bounded(kmt)
   ensures I(kmt) == JoinBucketList(ISeq(kmts))
   ensures kmt == join(kmts)
   {
@@ -989,21 +975,18 @@ module KMTable {
   function splitOnPivots(kmt: KMTable, pivots: seq<Key>)
   : (kmts : seq<KMTable>)
   requires WF(kmt)
-  requires Bounded(kmt)
   requires |pivots| < 0x7fff_ffff_ffff_ffff
   ensures forall i | 0 <= i < |kmts| :: WF(kmts[i])
-  ensures forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
   ensures |kmts| == |pivots| + 1
 
   method SplitOnPivots(kmt: KMTable, pivots: seq<Key>)
   returns (kmts : seq<KMTable>)
   requires WF(kmt)
-  requires Bounded(kmt)
   requires P.WFPivots(pivots)
   requires |pivots| < 0x7fff_ffff_ffff_ffff
+  requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures forall i | 0 <= i < |kmts| :: WF(kmts[i])
-  ensures forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures ISeq(kmts) == SplitBucketOnPivots(I(kmt), pivots)
   ensures kmts == splitOnPivots(kmt, pivots)
   {
@@ -1058,7 +1041,6 @@ module KMTable {
   function method {:opaque} Empty() : (kmt : KMTable)
   ensures WF(kmt)
   ensures I(kmt) == map[]
-  ensures Bounded(kmt)
   {
     reveal_I();
     KMTable([],[])
@@ -1125,18 +1107,13 @@ module KMTable {
   lemma Ireplace1with2(kmts: seq<KMTable>, kmt1: KMTable, kmt2: KMTable, slot: int)
   requires WF(kmt1)
   requires WF(kmt2)
-  requires Bounded(kmt1)
-  requires Bounded(kmt2)
   requires 0 <= slot < |kmts|
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
-  requires forall i | 0 <= i < |kmts| :: Bounded(kmts[i])
   ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
-  ensures forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)| :: Bounded(replace1with2(kmts, kmt1, kmt2, slot)[i])
   ensures ISeq(replace1with2(kmts, kmt1, kmt2, slot)) == replace1with2(ISeq(kmts), I(kmt1), I(kmt2), slot)
   {
     forall i | 0 <= i < |replace1with2(kmts, kmt1, kmt2, slot)|
     ensures WF(replace1with2(kmts, kmt1, kmt2, slot)[i])
-    ensures Bounded(replace1with2(kmts, kmt1, kmt2, slot)[i])
     {
       if i < slot {
         assert replace1with2(kmts, kmt1, kmt2, slot)[i] == kmts[i];
@@ -1196,6 +1173,16 @@ module KMTable {
   //// Weight stuff
   /////////////////////////
 
+  function WeightKeySeq(keys: seq<Key>) : int
+  {
+    if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(keys))
+  }
+
+  function WeightMessageSeq(msgs: seq<Message>) : int
+  {
+    if |msgs| == 0 then 0 else WeightMessageSeq(DropLast(msgs)) + WeightMessage(Last(msgs))
+  }
+
   function Weight(kmt: KMTable) : int
   {
     WeightKeySeq(kmt.keys) + WeightMessageSeq(kmt.values)
@@ -1203,6 +1190,28 @@ module KMTable {
 
   function WeightSeq(kmts: seq<KMTable>) : int
   {
-    if |kmts| == 0 then WeightSeq(DropLast(kmts)) + Weight(Last(kmts))
+    if |kmts| == 0 then 0 else WeightSeq(DropLast(kmts)) + Weight(Last(kmts))
   }
+
+  function WeightKMTable(kmt: KMTable) : int
+  {
+    WeightKeySeq(kmt.keys) + WeightMessageSeq(kmt.values)
+  }
+
+  function WeightKMTableSeq(kmts: seq<KMTable>) : int
+  {
+    if |kmts| == 0 then 0 else WeightKMTableSeq(DropLast(kmts)) + WeightKMTable(Last(kmts))
+  }
+
+  method computeWeightKMTable(kmt: KMTable)
+  returns (weight: uint64)
+  requires WF(kmt)
+  requires WeightKMTable(kmt) < 0x1_0000_0000_0000_0000
+  ensures weight as int == WeightBucket(I(kmt))
+
+  method computeWeightKMTableSeq(kmts: seq<KMTable>)
+  returns (weight: uint64)
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  requires WeightKMTableSeq(kmts) < 0x1_0000_0000_0000_0000
+  ensures weight as int == WeightBucketList(ISeq(kmts))
 }

@@ -68,7 +68,6 @@ module ImplModel {
   predicate WFBuckets(buckets: seq<KMTable.KMTable>)
   {
     && (forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i]))
-    && (forall i | 0 <= i < |buckets| :: KMTable.Bounded(buckets[i]))
   }
   predicate WFNode(node: Node)
   {
