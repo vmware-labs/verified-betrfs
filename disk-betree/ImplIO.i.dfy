@@ -110,7 +110,7 @@ module ImplIO {
   requires io.initialized()
   modifies io
   ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))
-  ensures id.Some? ==> loc.Some?
+  ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
   {
     ImplModelIO.reveal_FindLocationAndRequestWrite();
