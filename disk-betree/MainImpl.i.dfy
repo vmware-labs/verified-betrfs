@@ -7,6 +7,9 @@ include "Marshalling.i.dfy"
 include "Impl.i.dfy"
 include "ImplInsert.i.dfy"
 include "ImplQuery.i.dfy"
+include "ImplModelInsert.i.dfy"
+include "ImplModelQuery.i.dfy"
+include "ImplModelSync.i.dfy"
 
 module {:extern} MainImpl refines Main { 
 
@@ -15,19 +18,9 @@ module {:extern} MainImpl refines Main {
   import opened ImplInsert
   import opened ImplQuery
   import opened ImplSync
-
-  //  ---   dep graph   ---
-  //
-  //       MainImpl
-  //      /       \
-  //    ImplDo    |
-  //      |  \----+
-  //      |       |
-  //   ImplSync   |
-  //      |       |
-  //      \---+---/
-  //          |
-  //        Impl
+  import ImplModelInsert
+  import ImplModelQuery
+  import ImplModelSync
 
   import ADM = Impl.ImplADM
 
