@@ -875,6 +875,7 @@ module MutableMap {
       requires Inv()
       ensures Contents == old(Contents)
       ensures Count == old(Count)
+      ensures Count as nat == |Contents|
       ensures result.Length == Count as nat
       ensures forall i: nat, j: nat :: i < result.Length && j < result.Length && result[i].0 == result[j].0
           ==> i == j

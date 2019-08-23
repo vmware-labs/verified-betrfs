@@ -88,14 +88,30 @@ abstract module BlockCache refines Transactable {
     && GraphClosed(indirectionTable.graph)
   }
 
+  // TODO this may be necessary for an assume in Marshalling, but may be solved by the weights branch
+  // predicate IndirectionTableGraphHasUniqueRefsInAdjList(graph: map<Reference, seq<Reference>>)
+  // {
+  //   && (forall ref | ref in graph :: forall i: nat, j: nat | i <= j < |graph[ref]| :: graph[i] == graph[j] ==> i == j)
+  // }
+
   // WF IndirectionTable which might not have all LBAs filled in
   predicate WFIndirectionTable(indirectionTable: IndirectionTable)
   {
     && (forall loc | loc in indirectionTable.locs.Values :: ValidLocationForNode(loc))
     && indirectionTable.locs.Keys <= indirectionTable.graph.Keys
+    // TODO this may be necessary for an assume in Marshalling, but may be solved by the weights branch
+    // && IndirectionTableGraphHasUniqueRefsInAdjList(indirectionTable.graph)
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
   }
+
+  // TODO this may be necessary for an assume in Marshalling, but may be solved by the weights branch
+  // lemma GraphClosedImpliesSuccsContainedInGraphKeys(graph: map<Reference, seq<Reference>>)
+  // requires GraphClosed(graph)
+  // requires IndirectionTableGraphHasUniqueRefsInAdjList(graph)
+  // ensures forall ref | ref in graph :: (set r | r in graph[ref]) <= graph.Keys
+  // {
+  // }
 
   predicate ValidAllocation(s: Variables, loc: Location)
   requires s.Ready?

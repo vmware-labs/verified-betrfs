@@ -17,6 +17,7 @@ module ImplMarshalling {
   import opened NativeTypes
   import opened Sequences
   import opened Maps
+  import opened Sets
   import opened BucketsLib
   import BC = BetreeGraphBlockCache
   import ImplState
@@ -394,6 +395,7 @@ module ImplMarshalling {
     return VUint64Array(children);
   }
 
+  // TODO(alattuada) remove?
   method {:fuel ValInGrammar,2} lbasSuccsToVal(indirectionTable: map<Reference, (Option<Location>, seq<Reference>)>) returns (v: Option<V>)
   requires forall ref | ref in indirectionTable :: indirectionTable[ref].0.Some?
   requires forall ref | ref in indirectionTable :: BC.ValidLocationForNode(indirectionTable[ref].0.value)
@@ -647,30 +649,63 @@ module ImplMarshalling {
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.SectorGrammar());
-  ensures v.Some? ==> IMM.valToSector(v.value) == ISectorOpt(Some(sector))
+  ensures v.Some? ==> IMM.valToSector(v.value) == Some(ImplState.ISector(sector))
   ensures sector.SectorBlock? ==> v.Some?
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= IMM.BlockSize() as int - 32
   {
     match sector {
       case SectorIndirectionTable(mutMap) => {
-        var table := mutMap.ToMap();
-        // TODO(alattuada) extract to method
-        assert table == mutMap.Contents;
-        ghost var indirectionTable := IM.IIndirectionTable(mutMap.Contents);
-        if |table| < 0x1_0000_0000_0000_0000 / 8 {
-          forall ref | ref in table
-          ensures table[ref].0.Some?
-          ensures BC.ValidLocationForNode(table[ref].0.value)
+        assert forall r | r in mutMap.Contents :: r in IM.IIndirectionTable(sector.indirectionTable.Contents).locs
+            ==> mutMap.Contents[r].0.Some? && BC.ValidLocationForNode(mutMap.Contents[r].0.value);
+        var table := mutMap.ToArray();
+        ghost var tableSeq := table[..];
+        /* (doc) assert mutMap.Contents.Values == set i | 0 <= i < |tableSeq| :: tableSeq[i].1; */
+        assert forall i: nat | i < |tableSeq| :: tableSeq[i].1 == mutMap.Contents[tableSeq[i].0];
+        assert forall i: nat, j: nat | i <= j < |tableSeq| :: tableSeq[i].0 == tableSeq[j].0 ==> i == j;
+        if table.Length < 0x1_0000_0000_0000_0000 / 8 {
+          assert forall i: nat | i < |tableSeq| :: tableSeq[i].1.0.Some?;
+          // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
+          assume forall i: nat | i < |tableSeq| :: |tableSeq[i].1.1| < |tableSeq|;
+          /* (doc) assert table.Length == |mutMap.Contents.Keys| == |mutMap.Contents|; */
+          var a: array<V> := new [table.Length] (_ => VUint64(0)); // temporary placeholder
+          var i: uint64 := 0;
+          ghost var partial := map[];
+          while i < table.Length as uint64
+          invariant i <= table.Length as uint64
+          invariant forall j | j < i :: ValidVal(a[j])
+          invariant forall j | j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+          // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
+          invariant table[..] == tableSeq
+          invariant IMM.valToLocsAndSuccs(a[..i]).Some?
+          invariant IMM.valToLocsAndSuccs(a[..i]).value == partial
+          invariant |partial.Keys| == i as nat
+          invariant partial.Keys <= mutMap.Contents.Keys
+          invariant forall r | r in partial :: r in mutMap.Contents && partial[r] == mutMap.Contents[r]
+          // NOALIAS/CONST mutMap doesn't need to be mutable, if we could say so we wouldn't need this
+          invariant mutMap.Contents == old(mutMap.Contents)
+          invariant forall r | r in partial :: exists j: nat | j < i as nat :: table[j].0 == r
           {
-            assert ref in indirectionTable.graph;
-            assert ref in indirectionTable.locs;
-          }
+            // TODO I'd use a seq comprehension, but I don't know how to extract properties of the elements
 
-          var w := lbasSuccsToVal(table);
-          match w {
-            case Some(v) => return Some(VCase(0, v));
-            case None => return None;
+            var (ref, (locOpt, graph)) := table[i];
+            var loc := locOpt.value;
+            var childrenVal := VUint64Array(graph);
+
+            // == mutation ==
+            partial := partial[ref := (locOpt, graph)];
+            a[i] := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]);
+            i := i + 1;
+            // ==============
+
+            assert a[..i-1] == DropLast(a[..i]); // observe
           }
+          /* (doc) assert |partial.Keys| == |mutMap.Contents.Keys|; */
+          SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.Contents.Keys);
+
+          assert partial == ImplState.IIndirectionTable(mutMap); // observe
+          assert a[..i] == a[..]; // observe
+          v := Some(VCase(0, VArray(a[..])));
+          return;
         } else {
           return None;
         }
