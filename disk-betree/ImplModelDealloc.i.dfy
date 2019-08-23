@@ -38,8 +38,8 @@ module ImplModelDealloc {
       (s, io)
     ) else (
       var s' := s
-        .(ephemeralIndirectionTable := MapRemove1(s.ephemeralIndirectionTable, ref))
-        .(cache := MapRemove1(s.cache, ref));
+        .(ephemeralIndirectionTable := MapRemove(s.ephemeralIndirectionTable, {ref}))
+        .(cache := MapRemove(s.cache, {ref}));
       (s', io)
     )
   }
