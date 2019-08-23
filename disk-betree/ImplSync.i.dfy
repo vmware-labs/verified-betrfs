@@ -1,11 +1,12 @@
 include "Impl.i.dfy"
 include "ImplIO.i.dfy"
 include "ImplSplit.i.dfy"
-include "ImplFlush.i.dfy"
+//include "ImplFlush.i.dfy"
 include "ImplFlushRootBucket.i.dfy"
 include "ImplGrow.i.dfy"
 include "ImplDealloc.i.dfy"
 include "ImplLeaf.i.dfy"
+include "ImplModelSync.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -17,14 +18,14 @@ module ImplSync {
   import opened ImplIO
   import opened ImplSplit
   import opened ImplCache
-  import opened ImplFlush
+  //import opened ImplFlush
   import opened ImplFlushRootBucket
   import opened ImplDealloc
   import opened ImplGrow
   import opened ImplLeaf
+  import ImplModelSync
 
   import opened Options
-  import opened MainDiskIOHandler
   import opened Maps
   import opened Sequences
   import opened Sets
@@ -35,18 +36,16 @@ module ImplSync {
 
   method {:fuel JoinBucketList,0} fixBigNode(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference, parentref: BT.G.Reference)
   returns (s': ImplVariables)
-  requires IS.WFVars(s)
-  requires BBC.Inv(k, IS.IVars(s))
+  requires Inv(k, s)
   requires s.Ready?
   requires ref in s.cache
-  requires parentref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).graph[parentref]
+  requires parentref in IS.IIndirectionTable(s.ephemeralIndirectionTable)
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable)[parentref].1
   requires s.rootBucket == TTT.EmptyTree // FIXME we don't actually need this I think
   requires ref != BT.G.Root()
   requires io.initialized()
   modifies io
-  ensures IS.WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IS.IVars(s)), IS.IVars(s'), UI.NoOp, io.diskOp())
+  ensures IS.WVars(s')
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
@@ -59,12 +58,9 @@ module ImplSync {
     if s.frozenIndirectionTable.Some? {
       var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
       if lbaGraph.Some? {
-        assert ref in IS.IIndirectionTable(s.frozenIndirectionTable.value).graph;
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          assert ref !in IS.IIndirectionTable(s.frozenIndirectionTable.value).locs;
           s' := s;
-          assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
           print "giving up; fixBigNode can't run because frozen isn't written";
           return;
         }
@@ -73,16 +69,15 @@ module ImplSync {
 
     var node := s.cache[ref];
 
-    INodeRootEqINodeForEmptyRootBucket(node);
-
-    if i :| 0 <= i < |node.buckets| && !Marshalling.CappedBucket(node.buckets[i]) {
+    var i := getUncappedBucket(node.buckets, 0);
+    if i.Some? {
       if (node.children.Some?) {
         // internal node case: flush
-        s' := flush(k, s, io, ref, i);
+        s' := flush(k, s, io, ref, i.value);
         return;
       } else {
         // leaf case
-        s' := repivotLeaf(k, s, io, ref, i, node);
+        s' := repivotLeaf(k, s, io, ref, i.value, node);
         return;
       }
     } else if |node.buckets| > Marshalling.CapNumBuckets() as int {
@@ -93,21 +88,19 @@ module ImplSync {
 
       var parent := s.cache[parentref];
 
-      INodeRootEqINodeForEmptyRootBucket(parent);
-
       assert ref in BT.G.Successors(IS.INode(parent));
-      var i :| 0 <= i < |parent.children.value| && parent.children.value[i] == ref;
+      var j := SeqIndex(parent.children.value, ref);
 
-      s' := doSplit(k, s, io, parentref, ref, i);
+      s' := doSplit(k, s, io, parentref, ref, j.value);
       return;
     } else {
       s' := s;
-      assert noop(k, old(IS.IVars(s)), IS.IVars(s'));
       print "giving up; fixBigNode\n";
       return;
     }
   }
 
+  /*
   method AssignRefToLBA(table: IS.MutIndirectionTable, ref: IS.Reference, loc: BC.Location)
   requires table.Inv()
   ensures table.Inv()
@@ -490,5 +483,5 @@ module ImplSync {
       s' := sync(k, s, io);
     }
   }
-
+  */
 }
