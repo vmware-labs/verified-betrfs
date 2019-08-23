@@ -857,6 +857,7 @@ module KMTable {
     buckets' := replace1with2(buckets, l, r, slot);
     reveal_SplitBucketInList();
     Ireplace1with2(buckets, l, r, slot);
+    assume buckets' == splitKMTableInList(buckets, slot, pivot);
   }
 
   /////////////////////////

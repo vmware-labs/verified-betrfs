@@ -300,7 +300,7 @@ module ImplMarshallingModel {
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i]) && WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i]) && KMTable.Bounded(s.value[i]) && WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
   {
     if |a| == 0 then
       Some([])

@@ -186,6 +186,8 @@ module ImplIO {
   // == readResponse ==
 
   function ISectorOpt(sector: Option<IS.Sector>) : Option<IM.Sector>
+  requires sector.Some? ==> IS.WFSector(sector.value)
+  reads if sector.Some? && sector.value.SectorIndirectionTable? then {sector.value.indirectionTable} else {}
   reads if sector.Some? && sector.value.SectorIndirectionTable? then sector.value.indirectionTable.Repr else {}
   {
     match sector {
