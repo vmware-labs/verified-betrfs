@@ -346,9 +346,9 @@ module ImplModelSync {
         && s' == s
         && io' == io
       ) else (
-        if diskOp(io').ReqWriteOp? && s'.Ready? && ref in s'.ephemeralIndirectionTable && s'.ephemeralIndirectionTable[ref].0.Some? then (
+        if diskOp(io').ReqWriteOp? && s'.Ready? && s'.frozenIndirectionTable.Some? && ref in s'.frozenIndirectionTable.value && s'.frozenIndirectionTable.value[ref].0.Some? then (
           var id := Some(diskOp(io').id);
-          var loc := s'.ephemeralIndirectionTable[ref].0;
+          var loc := s'.frozenIndirectionTable.value[ref].0;
           && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
 
           && s' == s
@@ -397,9 +397,9 @@ module ImplModelSync {
 
     INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
 
-    if diskOp(io').ReqWriteOp? && s'.Ready? && ref in s'.ephemeralIndirectionTable && s'.ephemeralIndirectionTable[ref].0.Some? {
+    if diskOp(io').ReqWriteOp? && s'.Ready? && s'.frozenIndirectionTable.Some? && ref in s'.frozenIndirectionTable.value && s'.frozenIndirectionTable.value[ref].0.Some? {
       var id := Some(diskOp(io').id);
-      var loc := s'.ephemeralIndirectionTable[ref].0;
+      var loc := s'.frozenIndirectionTable.value[ref].0;
       FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), id, loc, io');
 
       AssignRefToLocCorrect(s.ephemeralIndirectionTable, ref, loc.value);

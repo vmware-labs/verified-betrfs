@@ -127,6 +127,7 @@ module ImplModelIO {
   predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires s.Ready?
   requires WFVars(s)
+  ensures id.Some? ==> io'.IOReqWrite? && io'.id == id.value 
   {
     && var dop := diskOp(io');
     && (dop.NoDiskOp? || dop.ReqWriteOp?)
