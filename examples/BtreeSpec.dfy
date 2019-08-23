@@ -34,81 +34,52 @@ abstract module BtreeSpec {
     }    
   }
   
-  predicate WFLeaf(leaf: Node)
-    requires leaf.Leaf?
-  {
-    && |leaf.keys| == |leaf.values|
-    && Keys.IsStrictlySorted(leaf.keys)
-  }
-
-  predicate WFIndex(index: Node)
-    requires index.Index?
-    decreases index, 0
-  {
-    && |index.pivots| == |index.children| - 1
-    && Keys.IsStrictlySorted(index.pivots)
-    && (forall i :: 0 <= i < |index.children| ==> WF(index.children[i]))
-    && (forall i :: 0 <= i < |index.children| ==> LocalKeys(index.children[i]) != {})
-    && (forall i, key :: 0 <= i < |index.children|-1 && key in LocalKeys(index.children[i]) ==> Keys.lt(key, index.pivots[i]))
-    && (forall i, key :: 0 < i < |index.children|   && key in LocalKeys(index.children[i]) ==> Keys.lte(index.pivots[i-1], key))
-  }
-
   predicate WF(node: Node)
     decreases node, 1
   {
-    match node {
-      case Leaf(_, _) =>  WFLeaf(node)
-      case Index(_, _) => WFIndex(node)
-    }
+    if node.Leaf? then
+      && |node.keys| == |node.values|
+      && Keys.IsStrictlySorted(node.keys)
+    else
+      && |node.pivots| == |node.children| - 1
+      && Keys.IsStrictlySorted(node.pivots)
+      && (forall i :: 0 <= i < |node.children| ==> WF(node.children[i]))
+      && (forall i :: 0 <= i < |node.children| ==> LocalKeys(node.children[i]) != {})
+      && (forall i, key :: 0 <= i < |node.children|-1 && key in LocalKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i]))
+      && (forall i, key :: 0 < i < |node.children|   && key in LocalKeys(node.children[i]) ==> Keys.lte(node.pivots[i-1], key))
   }
 
-  function InterpretLeaf(leaf: Node) : map<Key, Value>
-    requires leaf.Leaf?
-    requires WFLeaf(leaf)
-  {
-    Keys.PosEqLargestLteForAllElts(leaf.keys);
-    map k | (k in leaf.keys) :: leaf.values[Keys.LargestLte(leaf.keys, k)]
-  }
-
-  function InterpretIndex(index: Node) : map<Key, Value>
-    requires index.Index?
-    requires WFIndex(index)
-    decreases index, 0
-  {
-    map key |
-      && key in AllKeys(index)
-      && key in InterpretNode(index.children[Keys.LargestLte(index.pivots, key) + 1])
-      :: InterpretNode(index.children[Keys.LargestLte(index.pivots, key) + 1])[key]
-  }
-
-  function InterpretNode(node: Node) : map<Key, Value>
+  function Interpretation(node: Node) : map<Key, Value>
     requires WF(node)
-    decreases node, 1
+    decreases node
   {
-    match node {
-      case Leaf(_, _) => InterpretLeaf(node)
-      case Index(_, _) => InterpretIndex(node)
-    }
+    if node.Leaf? then
+      Keys.PosEqLargestLteForAllElts(node.keys);
+      map k | (k in node.keys) :: node.values[Keys.LargestLte(node.keys, k)]
+    else 
+      map key |
+      && key in AllKeys(node)
+      && key in Interpretation(node.children[Keys.LargestLte(node.pivots, key) + 1])
+      :: Interpretation(node.children[Keys.LargestLte(node.pivots, key) + 1])[key]
   }
 
   lemma AllKeysIsConsistentWithInterpretation(node: Node, key: Key)
     requires WF(node)
-    requires key in InterpretNode(node)
-    ensures node.Index? ==> Keys.IsSorted(node.pivots); // Weirdly this helps dafny
-    ensures node.Index? ==> key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
+    requires key in Interpretation(node)
+    ensures node.Index? ==> WF(node) && key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
   {
     if node.Index? {
-      assert key in InterpretNode(node.children[Keys.LargestLte(node.pivots, key) + 1]);
+      assert key in Interpretation(node.children[Keys.LargestLte(node.pivots, key) + 1]);
     }
   }
   
   lemma AllKeysIsConsistentWithInterpretationUniversal(node: Node)
     requires WF(node)
     requires node.Index?
-    ensures Keys.IsSorted(node.pivots); // Weirdly this helps dafny
-    ensures forall key :: key in InterpretNode(node) ==> key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
+    ensures WF(node)
+    ensures forall key :: key in Interpretation(node) ==> key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
   {
-    forall key | key in InterpretNode(node)
+    forall key | key in Interpretation(node)
       ensures key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
     {
       AllKeysIsConsistentWithInterpretation(node, key);
@@ -120,9 +91,9 @@ abstract module BtreeSpec {
     && oldleaf.Leaf?
     && leftleaf.Leaf?
     && rightleaf.Leaf?
-    && WFLeaf(oldleaf)
-    && WFLeaf(leftleaf)
-    && WFLeaf(rightleaf)
+    && WF(oldleaf)
+    && WF(leftleaf)
+    && WF(rightleaf)
     && 0 < |leftleaf.keys|
     && 0 < |rightleaf.keys|
     && oldleaf.keys == leftleaf.keys + rightleaf.keys
@@ -133,11 +104,11 @@ abstract module BtreeSpec {
 
   lemma SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
     requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
-    ensures InterpretLeaf(oldleaf) == Keys.MapPivotedUnion(InterpretLeaf(leftleaf), pivot, InterpretLeaf(rightleaf))
+    ensures Interpretation(oldleaf) == Keys.MapPivotedUnion(Interpretation(leftleaf), pivot, Interpretation(rightleaf))
   {
-    var oldint := InterpretLeaf(oldleaf);
-    var leftint := InterpretLeaf(leftleaf);
-    var rightint := InterpretLeaf(rightleaf);
+    var oldint := Interpretation(oldleaf);
+    var leftint := Interpretation(leftleaf);
+    var rightint := Interpretation(rightleaf);
     var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
 
     forall key | key in oldint
@@ -158,29 +129,31 @@ abstract module BtreeSpec {
     && oldindex.Index?
     && leftindex.Index?
     && rightindex.Index?
-    && WFIndex(oldindex)
-    && WFIndex(leftindex)
-    && WFIndex(rightindex)
+    && WF(oldindex)
+    && WF(leftindex)
+    && WF(rightindex)
     && oldindex.pivots == leftindex.pivots + [pivot] + rightindex.pivots
     && oldindex.children == leftindex.children + rightindex.children
   }
 
   lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires SplitIndex(oldindex, leftindex, rightindex, pivot)
-    ensures InterpretIndex(oldindex) == Keys.MapPivotedUnion(InterpretIndex(leftindex), pivot, InterpretIndex(rightindex))
+    ensures Interpretation(oldindex) == Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
   {
-    var oldint := InterpretIndex(oldindex);
-    var leftint := InterpretIndex(leftindex);
-    var rightint := InterpretIndex(rightindex);
+    var oldint := Interpretation(oldindex);
+    var leftint := Interpretation(leftindex);
+    var rightint := Interpretation(rightindex);
     var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
 
-    Keys.reveal_IsStrictlySorted();
     Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
     
     forall key | key in oldint
       ensures MapsTo(newint, key, oldint[key])
     {
       AllKeysIsConsistentWithInterpretation(oldindex, key);
+      if Keys.lt(key, pivot) { // This speeds up dafny a bit
+      } else {
+      }
     }
 
     forall key | key in newint
@@ -207,7 +180,7 @@ abstract module BtreeSpec {
 
   lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires SplitNode(oldnode, leftnode, rightnode, pivot)
-    ensures InterpretNode(oldnode) == Keys.MapPivotedUnion(InterpretNode(leftnode), pivot, InterpretNode(rightnode))
+    ensures Interpretation(oldnode) == Keys.MapPivotedUnion(Interpretation(leftnode), pivot, Interpretation(rightnode))
   {
     if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
       SplitLeafInterpretation(oldnode, leftnode, rightnode, pivot);
@@ -255,8 +228,8 @@ abstract module BtreeSpec {
     requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures AllKeys(newindex) == AllKeys(oldindex)
   {
-    assert WFIndex(oldindex);
-    assert WFIndex(newindex);
+    assert WF(oldindex);
+    assert WF(newindex);
     
     forall key | key in AllKeys(oldindex)
       ensures key in AllKeys(newindex)
@@ -286,16 +259,16 @@ abstract module BtreeSpec {
   
   lemma SplitChildOfIndexPreservesInterpretation(oldindex: Node, newindex: Node, childidx: int)
     requires SplitChildOfIndex(oldindex, newindex, childidx)
-    ensures InterpretNode(newindex) == InterpretNode(oldindex)
+    ensures Interpretation(newindex) == Interpretation(oldindex)
   {
-    var newint := InterpretNode(newindex);
-    var oldint := InterpretNode(oldindex);
+    var newint := Interpretation(newindex);
+    var oldint := Interpretation(oldindex);
 
     // WTF?  Dafny can't see these (from emacs flycheck mode)
-    assert WFIndex(oldindex);
-    assert WFIndex(newindex);
-    assert oldint == InterpretIndex(oldindex);
-    assert newint == InterpretIndex(newindex);
+    assert WF(oldindex);
+    assert WF(newindex);
+    assert oldint == Interpretation(oldindex);
+    assert newint == Interpretation(newindex);
     
     var oldchild := oldindex.children[childidx];
     var leftchild := newindex.children[childidx];
@@ -327,11 +300,11 @@ abstract module BtreeSpec {
       } else if llte + 1 == childidx {
         var oldllte := llte;
         assert oldllte == Keys.LargestLte(oldindex.pivots, key);
-        assert key in InterpretNode(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+        assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
       } else if llte + 1 == childidx + 1 {
         var oldllte := llte - 1;
         assert oldllte == Keys.LargestLte(oldindex.pivots, key);
-        assert key in InterpretNode(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+        assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
       } else {
         assert llte - 1 == Keys.LargestLte(oldindex.pivots, key);
       }
@@ -340,9 +313,9 @@ abstract module BtreeSpec {
     
   function InsertLeaf(leaf: Node, key: Key, value: Value) : (result: Node)
     requires leaf.Leaf?
-    requires WFLeaf(leaf)
+    requires WF(leaf)
     ensures result.Leaf?
-    ensures WFLeaf(result)
+    ensures WF(result)
   {
     var llte := Keys.LargestLte(leaf.keys, key);
     if 0 <= llte && leaf.keys[llte] == key then
@@ -354,17 +327,17 @@ abstract module BtreeSpec {
 
   lemma InsertLeafIsCorrect(leaf: Node, key: Key, value: Value, result: Node)
     requires leaf.Leaf?
-    requires WFLeaf(leaf)
+    requires WF(leaf)
     requires result == InsertLeaf(leaf, key, value)
-    ensures InterpretNode(result) == InterpretNode(leaf)[key := value]
+    ensures Interpretation(result) == Interpretation(leaf)[key := value]
   {
     var llte := Keys.LargestLte(leaf.keys, key);
     if 0 <= llte && leaf.keys[llte] == key {
-      assert InterpretNode(result) == InterpretNode(leaf)[key := value];
+      assert Interpretation(result) == Interpretation(leaf)[key := value];
     } else {
       Keys.reveal_IsStrictlySorted();
-      forall k | k in InterpretNode(result).Keys
-        ensures k in InterpretNode(leaf).Keys + {key}
+      forall k | k in Interpretation(result).Keys
+        ensures k in Interpretation(leaf).Keys + {key}
       {
         var kpos := IndexOf(result.keys, k);
         if llte + 1 < kpos {
