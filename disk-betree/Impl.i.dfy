@@ -5,6 +5,7 @@ include "../lib/Option.s.dfy"
 include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 include "MainDiskIOHandler.s.dfy"
+include "ImplState.i.dfy"
 
 include "PivotBetree_Refines_Map.i.dfy"
 include "ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"
@@ -38,7 +39,6 @@ module Impl {
   import UI
 
   // TODO <deduplicate>
-  type Key = MS.Key
   type Message = Messages.Message
 
   type ImplConstants = ImplADM.M.Constants
@@ -46,14 +46,6 @@ module Impl {
 
   function Ik(k: ImplConstants) : ImplADM.M.Constants { k }
   // </deduplicate>
-
-  predicate WFSector(sector: BC.Sector)
-  {
-    match sector {
-      case SectorIndirectionTable(indirectionTable) => BC.WFCompleteIndirectionTable(indirectionTable)
-      case SectorBlock(node) => BT.WFNode(node)
-    }
-  }
 
   predicate stepsBetree(k: ImplConstants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, step: BT.BetreeStep)
   {

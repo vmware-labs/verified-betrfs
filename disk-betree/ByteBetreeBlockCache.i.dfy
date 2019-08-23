@@ -8,7 +8,6 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
 
   import BBC = BetreeBlockCache
   import Marshalling
-  import IS = ImplState
 
   import SD = AsyncSectorDisk
   import LBAType
