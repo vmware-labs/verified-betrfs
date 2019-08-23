@@ -520,55 +520,69 @@ module ImplModelSync {
     }
   }
 
-  /*
-
   // == pushSync ==
 
-  method freeId<A>(syncReqs: map<int, A>) returns (id: int)
+  function {:opaque} freeId<A>(syncReqs: map<int, A>) : (id: int)
   ensures id !in syncReqs
   {
     var s := syncReqs.Keys;
-    if (|s| == 0) {
-      id := 0;
-    } else {
+    if (|s| == 0) then (
+      0
+    ) else (
       var maxId := maximumInt(syncReqs.Keys);
-      id := maxId + 1;
-    }
+      maximumIntCorrect(syncReqs.Keys);
+      maxId + 1
+    )
   }
 
-  method pushSync(k: Constants, s: Variables, io: IO)
-  returns (s': Variables, id: int)
-  requires io.initialized()
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.PushSyncOp(id), io.diskOp())
+  function pushSync(k: Constants, s: Variables)
+  : (Variables, int)
+  requires Inv(k,s )
   {
-    id := freeId(s.syncReqs);
-    s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
-    assert stepsBC(k, IVars(s), IVars(s'), UI.PushSyncOp(id), io, BC.PushSyncReqStep(id));
+    var id := freeId(s.syncReqs);
+    var s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
+    (s', id)
+  }
+
+  lemma pushSyncCorrect(k: Constants, s: Variables)
+  requires Inv(k,s )
+  ensures var (s', id) := pushSync(k, s);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'), UI.PushSyncOp(id), D.NoDiskOp)
+  {
+    var (s', id) := pushSync(k, s);
+    assert M.NextStep(Ik(k), IVars(s), IVars(s'), UI.PushSyncOp(id), D.NoDiskOp, M.Step(BBC.BlockCacheMoveStep(BC.PushSyncReqStep(id))));
   }
 
   // == popSync ==
 
-  method popSync(k: Constants, s: Variables, io: IO, id: int)
-  returns (s': Variables, success: bool)
-  requires io.initialized()
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  modifies io
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
+  predicate popSync(k: Constants, s: Variables, io: IO, id: int,
+      s': Variables, success: bool, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
   {
-    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
-      success := true;
-      s' := s.(syncReqs := MapRemove1(s.syncReqs, id));
-      assert stepsBC(k, IVars(s), IVars(s'), UI.PopSyncOp(id), io, BC.PopSyncReqStep(id));
-    } else {
-      success := false;
-      s' := sync(k, s, io);
-    }
+    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) then (
+      && success == true
+      && s' == s.(syncReqs := MapRemove1(s.syncReqs, id))
+      && io' == io
+    ) else (
+      && success == false
+      && sync(k, s, io, s', io')
+    )
   }
 
-*/
+  lemma popSyncCorrect(k: Constants, s: Variables, io: IO, id: int,
+      s': Variables, success: bool, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
+  requires popSync(k, s, io, id, s', success, io')
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, diskOp(io'))
+  {
+    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
+      assert stepsBC(k, IVars(s), IVars(s'), UI.PopSyncOp(id), io', BC.PopSyncReqStep(id));
+    } else {
+      syncCorrect(k, s, io, s', io');
+    }
+  }
 }
