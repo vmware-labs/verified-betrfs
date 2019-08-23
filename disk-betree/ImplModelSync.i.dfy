@@ -413,75 +413,114 @@ module ImplModelSync {
     }
   }
 
-
-
-  /*
-
-  method {:fuel BC.GraphClosed,0} sync(k: Constants, s: Variables, io: IO)
-  returns (s': Variables)
-  requires io.initialized()
-  modifies io
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
-  ensures Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, io.diskOp())
+  predicate {:opaque} {:fuel BC.GraphClosed,0} sync(k: Constants, s: Variables, io: IO,
+      s': Variables, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
   {
-    if (s.Unready?) {
+    if (s.Unready?) then (
       // TODO we could just do nothing here instead
-      s' := PageInIndirectionTableReq(k, s, io);
-      return;
-    }
+      (s', io') == PageInIndirectionTableReq(k, s, io)
+    ) else (
+      if (s.outstandingIndirectionTableWrite.Some?) then (
+        && s' == s
+        && io' == io
+      ) else (
+        if (s.rootBucket != map[]) then (
+          && s' == flushRootBucket(k, s)
+          && io' == io
+        ) else (
+          // Plan:
+          // - If the indirection table is not frozen then:
+          //    - If anything can be unalloc'ed, do it
+          //    - If any node is too big, do split/flush/whatever to shrink it
+          //    - Freeze the indirection table
+          // - Otherwise:
+          //    - If any block in the frozen table doesn't have an LBA, Write it to disk
+          //    - Write the frozenIndirectionTable to disk
 
-    if (s.outstandingIndirectionTableWrite.Some?) {
-      s' := s;
-      assert noop(k, IVars(s), IVars(s'));
-      print "sync: giving up; frozen table is currently being written\n";
-      return;
-    }
+          if (s.frozenIndirectionTable.None?) then (
+            (s', io') == syncNotFrozen(k, s, io)
+          ) else (
+            var foundInFrozen := FindRefInFrozenWithNoLoc(s);
+            FindRefInFrozenWithNoLocCorrect(s);
+            if foundInFrozen.Some? then (
+              syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
+            ) else if (s.outstandingBlockWrites != map[]) then (
+              && s' == s
+              && io' == io
+            ) else (
+              if (diskOp(io').ReqWriteOp?) then (
+                var id := Some(diskOp(io').id);
+                && RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io')
+                && s' == s.(outstandingIndirectionTableWrite := id)
+              ) else (
+                && s' == s
+                && io' == io
+              )
+            )
+          )
+        )
+      )
+    )
+  }
 
-    if (s.rootBucket != TTT.EmptyTree) {
-      s' := flushRootBucket(k, s, io);
-      return;
-    }
+  lemma {:fuel BC.GraphClosed,0} syncCorrect(k: Constants, s: Variables, io: IO,
+      s': Variables, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
 
-    // Plan:
-    // - If the indirection table is not frozen then:
-    //    - If anything can be unalloc'ed, do it
-    //    - If any node is too big, do split/flush/whatever to shrink it
-    //    - Freeze the indirection table
-    // - Otherwise:
-    //    - If any block in the frozen table doesn't have an LBA, Write it to disk
-    //    - Write the frozenIndirectionTable to disk
+  requires sync(k, s, io, s', io')
 
-    if (s.frozenIndirectionTable.None?) {
-      s' := syncNotFrozen(k, s, io);
-      return;
-    }
-    var foundInFrozen := FindRefInFrozenWithNoLba(s);
-    if foundInFrozen.Some? {
-      s' := syncFoundInFrozen(k, s, io, foundInFrozen.value);
-      return;
-    } else if (s.outstandingBlockWrites != map[]) {
-      s' := s;
-      assert noop(k, IVars(s), IVars(s'));
-      print "sync: giving up; blocks are still being written\n";
-      return;
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  {
+    reveal_sync();
+    if (s.Unready?) {
+      PageInIndirectionTableReqCorrect(k, s, io);
     } else {
-      LBAType.reveal_ValidAddr();
-      var id := RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value));
-      if (id.Some?) {
-        s' := s.(outstandingIndirectionTableWrite := id);
-        assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(io.diskOp()));
-        assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableReqStep);
-        return;
+      if (s.outstandingIndirectionTableWrite.Some?) {
+        assert noop(k, IVars(s), IVars(s));
       } else {
-        s' := s;
-        assert noop(k, IVars(s), IVars(s'));
-        print "sync: giving up; write back indirection table failed (no id)\n";
-        return;
+        if (s.rootBucket != map[]) {
+          flushRootBucketCorrect(k, s);
+        } else {
+          // Plan:
+          // - If the indirection table is not frozen then:
+          //    - If anything can be unalloc'ed, do it
+          //    - If any node is too big, do split/flush/whatever to shrink it
+          //    - Freeze the indirection table
+          // - Otherwise:
+          //    - If any block in the frozen table doesn't have an LBA, Write it to disk
+          //    - Write the frozenIndirectionTable to disk
+
+          if (s.frozenIndirectionTable.None?) {
+            syncNotFrozenCorrect(k, s, io);
+          } else {
+            var foundInFrozen := FindRefInFrozenWithNoLoc(s);
+            FindRefInFrozenWithNoLocCorrect(s);
+            if foundInFrozen.Some? {
+              syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
+            } else if (s.outstandingBlockWrites != map[]) {
+              assert noop(k, IVars(s), IVars(s));
+            } else {
+              if (diskOp(io').ReqWriteOp?) {
+                var id := Some(diskOp(io').id);
+                LBAType.reveal_ValidAddr();
+                RequestWriteCorrect(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io');
+                assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
+                assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
+              } else {
+                assert noop(k, IVars(s), IVars(s));
+              }
+            }
+          }
+        }
       }
     }
   }
+
+  /*
 
   // == pushSync ==
 
