@@ -340,7 +340,7 @@ module ImplSync {
     }
   }
 
-  method {:fuel BC.GraphClosed,0} rsync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires io.initialized()
   modifies io
@@ -398,33 +398,30 @@ module ImplSync {
     }
   }
 
-  /*
-
   // == pushSync ==
 
   method freeId<A>(syncReqs: map<int, A>) returns (id: int)
-  ensures id !in syncReqs
+  ensures id == ImplModelSync.freeId(syncReqs)
   {
+    ImplModelSync.reveal_freeId();
+
     var s := syncReqs.Keys;
     if (|s| == 0) {
       id := 0;
     } else {
-      var maxId := maximumInt(syncReqs.Keys);
+      var maxId := MaximumInt(syncReqs.Keys);
       id := maxId + 1;
     }
   }
 
-  method pushSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method pushSync(k: ImplConstants, s: ImplVariables)
   returns (s': ImplVariables, id: int)
-  requires io.initialized()
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
+  requires Inv(k, s)
   ensures WVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IVars(s)), IVars(s'), UI.PushSyncOp(id), io.diskOp())
+  ensures (IVars(s'), id) == ImplModelSync.pushSync(Ic(k), old(IVars(s)))
   {
     id := freeId(s.syncReqs);
     s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
-    assert stepsBC(k, IVars(s), IVars(s'), UI.PushSyncOp(id), io, BC.PushSyncReqStep(id));
   }
 
   // == popSync ==
@@ -432,11 +429,10 @@ module ImplSync {
   method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
   returns (s': ImplVariables, success: bool)
   requires io.initialized()
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
+  requires Inv(k, s)
   modifies io
   ensures WVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IVars(s)), IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
+  ensures ImplModelSync.popSync(Ic(k), old(IVars(s)), old(IIO(io)), id, IVars(s'), success, IIO(io))
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
@@ -445,11 +441,9 @@ module ImplSync {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
       s' := s.(syncReqs := MapRemove1(s.syncReqs, id));
-      assert stepsBC(k, IVars(s), IVars(s'), UI.PopSyncOp(id), io, BC.PopSyncReqStep(id));
     } else {
       success := false;
       s' := sync(k, s, io);
     }
   }
-  */
 }
