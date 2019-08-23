@@ -252,11 +252,18 @@ module ImplModelQuery {
   lemma queryCorrect(k: Constants, s: Variables, io: IO, key: MS.Key)
   requires io.IOInit?
   requires Inv(k, s)
+  ensures var (s', res, io') := query(k, s, io, key);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'),
+          if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+          diskOp(io'))
   {
+    reveal_query();
     if (s.Unready?) {
       PageInIndirectionTableReqCorrect(k, s, io);
     } else {
       var rootLookup := TryRootBucketLookup(k, s, key);
+      TryRootBucketLookupCorrect(k, s, key);
       if (rootLookup.Some?) {
         assert noop(k, IVars(s), IVars(s));
       } else {

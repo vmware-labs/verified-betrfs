@@ -177,7 +177,21 @@ module Sequences {
         == a[..|c|];
   }
 
+  function method {:opaque} SeqIndexIterate<A(==)>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
+  requires 0 <= i <= |run|
+  ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
+  ensures res.None? ==> forall j | i <= j < |run| :: run[j] != needle
+  decreases |run| - i
+  {
+    if i == |run| then None
+    else if run[i] == needle then Some(i)
+    else SeqIndexIterate(run, needle, i+1)
+  }
+
   function method {:opaque} SeqIndex<A(==)>(run: seq<A>, needle: A) : (res : Option<int>)
   ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
   ensures res.None? ==> forall i | 0 <= i < |run| :: run[i] != needle
+  {
+    SeqIndexIterate(run, needle, 0)
+  }
 }
