@@ -236,7 +236,7 @@ module ImplSync {
     assert false;
   }
 
-  method {:fuel BC.GraphClosed,0} {:fueld BC.CacheConsistentWithSuccessors,0}
+  method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires io.initialized()

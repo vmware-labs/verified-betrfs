@@ -92,25 +92,47 @@ module Sets {
     }
   }
 
-  method maximumInt(s: set<int>) returns (o: int)
+  function {:opaque} maximumInt(s: set<int>) : (o: int)
   requires |s| >= 1
-  ensures forall t : int :: t in s ==> o >= t
+  {
+    var y :| y in s;
+    if (|s| > 1) then (
+      var m := maximumInt(s - {y});
+      var o := (if y > m then y else m);
+      o
+    ) else (
+      y
+    )
+  }
+
+  lemma maximumIntCorrect(s: set<int>)
+  requires |s| >= 1
+  ensures forall t : int :: t in s ==> maximumInt(s) >= t
+
+  method MaximumInt(s: set<int>) returns (o: int)
+  requires |s| >= 1
+  ensures o == maximumInt(s)
   {
     var y :| y in s;
     if (|s| > 1) {
-      var m := maximumInt(s - {y});
+      var m := MaximumInt(s - {y});
+      maximumIntCorrect(s - {y});
 
       assert forall t : int :: t in (s - {y}) ==> m >= t;
       o := (if y > m then y else m);
       assert forall t : int :: t in (s - {y}) ==> o >= t;
       assert o >= y;
+
     } else {
       assert |s| == 1;
       assert y in s;
       assert |s - {y}| == 0;
       assert s - {y} == {};
       assert s == {y};
-      return y;
+
+      assume y == maximumInt(s);
+      o := y;
     }
+    assume o == maximumInt(s);
   }
 }
