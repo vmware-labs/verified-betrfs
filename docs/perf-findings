@@ -73,3 +73,23 @@
                        0.62% 0x1ce46                                                                                                                                                               ▒
                        0.40% 0x1cd41
 ```
+
+# getFreeLoc with MutableMap::ToMap
+
+```
+-   55.57%     0.00%  dotnet   perf-872.map                   [.] instance void [roslyn-veribetrfs] Application::Sync()                                                                                                                                                                                ▒
+   - instance void [roslyn-veribetrfs] Application::Sync()                                                                                                                                                                                                                                             ▒
+      - 55.34% void [roslyn-veribetrfs] _665_ImplSync_Compile.__default::popSync(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskIOHandler_Compile.DiskIOHandler,valuetype [netstandard]System.Numerics.BigInteger,class ImplState_Compile.Variables&,boo▒
+         - 55.29% class ImplState_Compile.Variables [roslyn-veribetrfs] _665_ImplSync_Compile.__default::sync(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskIOHandler_Compile.DiskIOHandler)                                                           ▒
+            - 29.50% class ImplState_Compile.Variables [roslyn-veribetrfs] _665_ImplSync_Compile.__default::syncFoundInFrozen(class BetreeGraphBlockCache_Compile.Constants,class ImplState_Compile.Variables,class MainDiskIOHandler_Compile.DiskIOHandler,uint64)                                    ▒
+               - 29.46% void [roslyn-veribetrfs] _450_ImplIO_Compile.__default::FindLocationAndRequestWrite(class MainDiskIOHandler_Compile.DiskIOHandler,class ImplState_Compile.Variables,class ImplState_Compile.Sector,class _2_Options_Compile.Option`1<uint64>&,class _2_Options_Compile.Option`1▒
+                  - 21.23% class _2_Options_Compile.Option`1<class _72_LBAType_Compile.Location> [roslyn-veribetrfs] _450_ImplIO_Compile.__default::getFreeLoc(class ImplState_Compile.Variables,uint64)                                                                                               ▒
+                     - 20.85% bool [roslyn-veribetrfs] _450_ImplIO_Compile.__default::addrUsedInIndirectionTable(uint64,class _238_MutableMap_Compile.ResizingHashMap`1<class _System.Tuple2`2<class _2_Options_Compile.Option`1<class _72_LBAType_Compile.Location>,class Dafny.Sequence`1<uint64>>>) ▒
+                        + 15.82% instance class Dafny.Map`2<uint64,!0> [roslyn-veribetrfs] _238_MutableMap_Compile.ResizingHashMap`1[System.__Canon]::ToMap()                                                                                                                                          ▒
+                        + 3.10% instance class Dafny.Map`2<uint64,!0> [roslyn-veribetrfs] _238_MutableMap_Compile.ResizingHashMap`1+<>c__DisplayClass5_0[System.__Canon]::<ToMap>b__0()                                                                                                                ▒
+                          0.68% bool [roslyn-veribetrfs] Dafny.Helpers::Quantifier(class [netstandard]System.Collections.Generic.IEnumerable`1<!!0>,bool,class [netstandard]System.Predicate`1<!!0>)                                                                                                   ▒
+                        + 0.67% instance class Dafny.Set`1<!0> [roslyn-veribetrfs] Dafny.Map`2[System.UInt64,System.__Canon]::get_Keys()                                                                                                                                                               ▒
+                  + 3.70% uint8[] [roslyn-veribetrfs] _433_ImplMarshalling_Compile.__default::MarshallIntoFixedSize(class _0_GenericMarshalling_Compile.V,class _0_GenericMarshalling_Compile.G,uint64,uint64)                                                                                         ▒
+                  + 3.02% uint8[] [roslyn-veribetrfs] _433_ImplMarshalling_Compile.__default::MarshallCheckedSector(class ImplState_Compile.Sector)                                                                                                                                                    ▒
+                  + 1.49% instance uint64 [roslyn-veribetrfs] MainDiskIOHandler_Compile.DiskIOHandler::write(uint64,uint8[])
+```
