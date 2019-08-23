@@ -687,7 +687,9 @@ module ImplMarshalling {
           {
             // TODO I'd use a seq comprehension, but I don't know how to extract properties of the elements
 
-            var (ref, (locOpt, graph)) := table[i];
+            var (ref, locOptGraph: (Option<LBAType.Location>, seq<Reference>)) := table[i];
+            // NOTE: deconstructing in two steps to work around c# translation bug
+            var (locOpt, graph) := locOptGraph;
             var loc := locOpt.value;
             var childrenVal := VUint64Array(graph);
 
