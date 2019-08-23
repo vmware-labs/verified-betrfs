@@ -14,6 +14,7 @@ module ImplMarshallingModel {
   import opened Sequences
   import opened Maps
   import opened BucketsLib
+  import opened BucketWeights
   import opened Bounds
   import BC = BetreeGraphBlockCache
   import IM = ImplModel
@@ -313,7 +314,10 @@ module ImplMarshallingModel {
               match valToBuckets(v.t[2].a, pivots) {
                 case None => None
                 case Some(buckets) => (
-                  if WeightBucketList(KMTable.ISeq(kmt)) <= MaxTotalBucketWeight() then (
+                  if
+                    && |buckets| <= MaxNumChildren()
+                    && WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
+                  then (
                     var node := IM.Node(pivots, if |children| == 0 then None else Some(children), buckets);
                     Some(node)
                   ) else (

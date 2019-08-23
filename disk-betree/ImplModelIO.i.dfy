@@ -6,6 +6,7 @@ module ImplModelIO {
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import opened Bounds
   import IMM = ImplMarshallingModel
   import Marshalling = Marshalling
   import LBAType
@@ -93,7 +94,7 @@ module ImplModelIO {
     )
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= IMM.BlockSize() as int
+      && |bytes| <= BlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes) == Some(sector)
 
@@ -108,7 +109,6 @@ module ImplModelIO {
       id: Option<D.ReqId>, io': IO)
   requires WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block)
   requires LBAType.ValidLocation(loc)
   requires RequestWrite(io, loc, sector, id, io');
   ensures M.ValidDiskOp(diskOp(io'))
@@ -137,7 +137,7 @@ module ImplModelIO {
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= IMM.BlockSize() as int
+      && |bytes| <= BlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes) == Some(sector)
 
@@ -156,7 +156,6 @@ module ImplModelIO {
   requires s.Ready?
   requires WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block)
   requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures M.ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?

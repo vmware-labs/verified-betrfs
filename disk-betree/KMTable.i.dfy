@@ -723,7 +723,6 @@ module KMTable {
 
   lemma splitLeftCorrect(kmt: KMTable, pivot: Key)
   requires WF(kmt)
-  requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures var left := splitLeft(kmt, pivot);
     && WF(left)
     && I(left) == SplitBucketLeft(I(kmt), pivot)
@@ -772,7 +771,6 @@ module KMTable {
 
   lemma splitRightCorrect(kmt: KMTable, pivot: Key)
   requires WF(kmt)
-  requires |kmt.keys| < 0x8000_0000_0000_0000
   ensures var right := splitRight(kmt, pivot);
     && WF(right)
     && I(right) == SplitBucketRight(I(kmt), pivot)

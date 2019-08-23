@@ -11,6 +11,7 @@ module ImplModelSplit {
   import opened Sets
 
   import opened BucketsLib
+  import opened BucketWeights
   import PivotsLib
 
   import opened NativeTypes
@@ -47,6 +48,7 @@ module ImplModelSplit {
     KMTable.Islice(node.buckets, 0, cLeft);
     KMTable.IPopBack(node.buckets[.. cLeft], splitBucket);
     WFSplitBucketListLeft(KMTable.ISeq(node.buckets), node.pivotTable, cLeft, pivot);
+    WeightSplitBucketListLeft(KMTable.ISeq(node.buckets), node.pivotTable, cLeft, pivot);
   }
 
   function {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key)
@@ -82,6 +84,7 @@ module ImplModelSplit {
     KMTable.Isuffix(node.buckets, cRight + 1);
     KMTable.IPopFront(splitBucket, node.buckets[cRight + 1 ..]);
     WFSplitBucketListRight(KMTable.ISeq(node.buckets), node.pivotTable, cRight, pivot);
+    WeightSplitBucketListRight(KMTable.ISeq(node.buckets), node.pivotTable, cRight, pivot);
   }
 
   function {:opaque} CutoffNode(node: Node, lbound: Option<Key>, rbound: Option<Key>)
@@ -192,6 +195,8 @@ module ImplModelSplit {
     KMTable.Isuffix(child.buckets, num_children_left);
     WFBucketListSplitLeft(KMTable.ISeq(child.buckets), child.pivotTable, num_children_left);
     WFBucketListSplitRight(KMTable.ISeq(child.buckets), child.pivotTable, num_children_left);
+    WeightBucketListSlice(KMTable.ISeq(child.buckets), 0, num_children_left);
+    WeightBucketListSuffix(KMTable.ISeq(child.buckets), num_children_left);
     assert WFNode(SplitChildRight(child, num_children_left));
     assert WFNode(SplitChildLeft(child, num_children_left));
   }
@@ -237,6 +242,7 @@ module ImplModelSplit {
     KMTable.splitKMTableInListCorrect(fused_parent.buckets, slot_idx, pivot);
     var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
     WFSplitBucketInList(KMTable.ISeq(fused_parent.buckets), slot_idx, pivot, fused_parent.pivotTable);
+    WeightSplitBucketInList(KMTable.ISeq(fused_parent.buckets), slot_idx, pivot);
     assert WFNode(res);
     assert INode(res) == BT.SplitParent(INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
   }

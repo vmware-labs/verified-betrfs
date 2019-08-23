@@ -31,6 +31,8 @@ module ImplModel {
   import SD = AsyncSectorDisk
   import D = AsyncDisk
   import opened BucketsLib
+  import opened BucketWeights
+  import opened Bounds
   import UI
 
   import ReferenceType`Internal
@@ -74,6 +76,8 @@ module ImplModel {
     && WFBuckets(node.buckets)
     && WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
     && (node.children.Some? ==> |node.buckets| == |node.children.value|)
+    && |node.buckets| <= MaxNumChildren()
+    && WeightBucketList(KMTable.ISeq(node.buckets)) <= MaxTotalBucketWeight()
   }
   predicate WFCache(cache: map<Reference, Node>)
   {
