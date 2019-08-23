@@ -814,7 +814,6 @@ module MutableMap {
 
     predicate ReprInv()
       reads this, this.Repr
-      ensures ReprInv() ==> this in Repr && this.Underlying in Repr
     {
       && { this, this.Underlying } <= Repr
       && { this, this.Underlying } + this.Underlying.Repr == Repr
@@ -822,8 +821,8 @@ module MutableMap {
     }
 
     protected predicate Inv()
-      reads this, this.Repr
       ensures Inv() ==> ReprInv() // make ReprInv transparent
+      reads this, this.Repr
     {
       && ReprInv()
 
