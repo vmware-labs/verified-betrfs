@@ -19,14 +19,12 @@ module ImplIO {
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
   method addrUsedInIndirectionTable(addr: uint64, indirectionTable:IS.MutIndirectionTable) returns (used:bool)
+    requires indirectionTable.Inv()
     ensures !used == ImplModelIO.addrNotUsedInIndirectionTable(addr, IS.IIndirectionTable(indirectionTable))
   {
-  }
-
-  method addrUsedInOutstandingBlockWrites(s: ImplVariables, addr: uint64) returns (used:bool)
-    requires s.Ready?
-    ensures forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr
-  {
+    var table := indirectionTable.ToMap();
+    return !(forall ref | ref in table && table[ref].0.Some?  ::
+          table[ref].0.value.addr != addr);
   }
 
   function method MaxOffset() : (maxOffset:uint64)
@@ -46,36 +44,38 @@ module ImplIO {
   ensures loc == ImplModelIO.getFreeLoc(IS.IVars(s), len)
   {
     ImplModelIO.reveal_getFreeLoc();
-    var maxOffset := MaxOffset();
     var tryOffset:uint64 := 0;
-    while (tryOffset < maxOffset)
-        invariant tryOffset as int * LBAType.BlockSize() as int <= 0x1_0000_0000_0000_0000
-        invariant forall offset :: 0 <= offset < tryOffset
-            ==> ImplModelIO.getFreeLocIterate(IS.IVars(s), len, offset).None?
+    while true
+        invariant tryOffset as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
+        invariant ImplModelIO.getFreeLoc(IS.IVars(s), len)
+               == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset)
+        decreases 0x1_0000_0000_0000_0000 - tryOffset as int
     {
-        var addr : uint64 := tryOffset * LBAType.BlockSize();
-        var persistentUsed := addrUsedInIndirectionTable(addr, s.persistentIndirectionTable);
-        var ephemeralUsed := addrUsedInIndirectionTable(addr, s.ephemeralIndirectionTable);
-        var frozenUsed := false;
-        if s.frozenIndirectionTable.Some? {
-          frozenUsed := addrUsedInIndirectionTable(addr, s.frozenIndirectionTable.value);
-        }
-        var outstandingUsed := addrUsedInOutstandingBlockWrites(s, addr);
-        if (
-            && BC.ValidLBAForNode(addr)
-            && !persistentUsed
-            && !ephemeralUsed
-            && !frozenUsed
-            && !outstandingUsed
-          ) {
-            var result := Some(LBAType.Location(addr, len));
-            assert result == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset);
-            return result;
-          }
-      assert ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset).None?;
+      var addr : uint64 := tryOffset * LBAType.BlockSize();
+      var persistentUsed := addrUsedInIndirectionTable(addr, s.persistentIndirectionTable);
+      var ephemeralUsed := addrUsedInIndirectionTable(addr, s.ephemeralIndirectionTable);
+      var frozenUsed := false;
+      if s.frozenIndirectionTable.Some? {
+        frozenUsed := addrUsedInIndirectionTable(addr, s.frozenIndirectionTable.value);
+      }
+      var outstandingUsed := !(forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr);
+      if (
+          && BC.ValidLBAForNode(addr)
+          && !persistentUsed
+          && !ephemeralUsed
+          && !frozenUsed
+          && !outstandingUsed
+        ) {
+        var result := Some(LBAType.Location(addr, len));
+        assert result == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset);
+        return result;
+      }
+      if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int {
+        return None;
+      }
+
       tryOffset := tryOffset + 1;     
     }
-    return None;
   }
 
   method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
