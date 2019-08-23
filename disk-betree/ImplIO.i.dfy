@@ -86,6 +86,8 @@ module ImplIO {
   requires io.initialized()
   modifies io
   ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
+  ensures id.Some? ==> io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
+  ensures id.None? ==> old(IIO(io)) == IIO(io)
   {
     ImplModelIO.reveal_RequestWrite();
 

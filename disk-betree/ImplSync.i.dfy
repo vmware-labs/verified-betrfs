@@ -296,7 +296,7 @@ module ImplSync {
   requires s.frozenIndirectionTable.Some?
   requires ref in s.frozenIndirectionTable.value.Contents
   requires s.frozenIndirectionTable.value.Contents[ref].0.None?
-  ensures WFVars(s')
+  ensures WVars(s')
   ensures ImplModelSync.syncFoundInFrozen(Ic(k), old(IVars(s)), old(IIO(io)), ref, IVars(s'), IIO(io))
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
@@ -340,21 +340,20 @@ module ImplSync {
     }
   }
 
-  /*
-
-  method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method {:fuel BC.GraphClosed,0} rsync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
   requires io.initialized()
   modifies io
-  requires WFVars(s)
-  requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
-  ensures ImplADM.M.Next(Ik(k), old(IVars(s)), IVars(s'), UI.NoOp, io.diskOp())
+  requires Inv(k, s)
+  ensures WVars(s')
+  ensures ImplModelSync.sync(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
   modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   {
+    ImplModelSync.reveal_sync();
+
     if (s.Unready?) {
       // TODO we could just do nothing here instead
       s' := PageInIndirectionTableReq(k, s, io);
@@ -363,54 +362,43 @@ module ImplSync {
 
     if (s.outstandingIndirectionTableWrite.Some?) {
       s' := s;
-      assert noop(k, old(IVars(s)), IVars(s'));
       print "sync: giving up; frozen table is currently being written\n";
       return;
     }
 
     if (s.rootBucket != TTT.EmptyTree) {
-      s' := flushRootBucket(k, s, io);
+      s' := flushRootBucket(k, s);
       return;
     }
-
-    // Plan:
-    // - If the indirection table is not frozen then:
-    //    - If anything can be unalloc'ed, do it
-    //    - If any node is too big, do split/flush/whatever to shrink it
-    //    - Freeze the indirection table
-    // - Otherwise:
-    //    - If any block in the frozen table doesn't have an LBA, Write it to disk
-    //    - Write the frozenIndirectionTable to disk
 
     if (s.frozenIndirectionTable.None?) {
       s' := syncNotFrozen(k, s, io);
       return;
     }
-    var foundInFrozen := FindRefInFrozenWithNoLba(s);
+    var foundInFrozen := FindRefInFrozenWithNoLoc(s);
+    ImplModelSync.FindRefInFrozenWithNoLocCorrect(IVars(s));
+
     if foundInFrozen.Some? {
       s' := syncFoundInFrozen(k, s, io, foundInFrozen.value);
       return;
     } else if (s.outstandingBlockWrites != map[]) {
       s' := s;
-      assert noop(k, old(IVars(s)), IVars(s'));
       print "sync: giving up; blocks are still being written\n";
       return;
     } else {
-      LBAType.reveal_ValidAddr();
       var id := RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value));
       if (id.Some?) {
         s' := s.(outstandingIndirectionTableWrite := id);
-        assert BC.WriteBackIndirectionTableReq(Ik(k), old(IVars(s)), IVars(s'), ImplADM.M.IDiskOp(io.diskOp()));
-        assert stepsBC(k, old(IVars(s)), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableReqStep);
         return;
       } else {
         s' := s;
-        assert noop(k, old(IVars(s)), IVars(s'));
         print "sync: giving up; write back indirection table failed (no id)\n";
         return;
       }
     }
   }
+
+  /*
 
   // == pushSync ==
 
@@ -431,7 +419,7 @@ module ImplSync {
   requires io.initialized()
   requires WFVars(s)
   requires BBC.Inv(k, IVars(s))
-  ensures WFVars(s')
+  ensures WVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IVars(s)), IVars(s'), UI.PushSyncOp(id), io.diskOp())
   {
     id := freeId(s.syncReqs);
@@ -447,7 +435,7 @@ module ImplSync {
   requires WFVars(s)
   requires BBC.Inv(k, IVars(s))
   modifies io
-  ensures WFVars(s')
+  ensures WVars(s')
   ensures ImplADM.M.Next(Ik(k), old(IVars(s)), IVars(s'), if success then UI.PopSyncOp(id) else UI.NoOp, io.diskOp())
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
