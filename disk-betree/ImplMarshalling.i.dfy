@@ -402,26 +402,24 @@ module ImplMarshalling {
   ensures v.Some? ==> ValInGrammar(v.value, IMM.IndirectionTableGrammar());
   ensures v.Some? ==> |v.value.a| == |indirectionTable|
   ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some(indirectionTable)
-  /*{
-    if (|locs| == 0) {
-      assert locs == map[];
-      assert graph == map[];
+  {
+    if (|indirectionTable| == 0) {
       return Some(VArray([]));
     } else {
-      var ref :| ref in locs.Keys;
-      var vpref := lbasSuccsToVal(MapRemove(locs, {ref}), MapRemove(graph, {ref}));
+      var ref :| ref in indirectionTable.Keys;
+      var vpref := lbasSuccsToVal(MapRemove(indirectionTable, {ref}));
       match vpref {
         case None => return None;
         case Some(vpref) => {
-          var loc := locs[ref];
-          if (|graph[ref]| >= 0x1_0000_0000_0000_0000) {
+          var loc := indirectionTable[ref].0.value;
+          if (|indirectionTable[ref].1| >= 0x1_0000_0000_0000_0000) {
             return None;
           }
-          var succs := childrenToVal(graph[ref]);
-          var tuple := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), succs]);
+          var succs := indirectionTable[ref].1;
+          var succsV := childrenToVal(indirectionTable[ref].1);
+          var tuple := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), succsV]);
 
-          assert MapRemove(locs, {ref})[ref := loc] == locs;
-          assert MapRemove(graph, {ref})[ref := graph[ref]] == graph;
+          assert MapRemove(indirectionTable, {ref})[ref := (Some(loc), succs)] == indirectionTable;
 
           //assert ref == valToReference(tuple.t[0]);
           //assert lba == valToReference(tuple.t[1]);
@@ -435,7 +433,7 @@ module ImplMarshalling {
         }
       }
     }
-  }*/
+  }
 
   method {:fuel ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
   requires |a| < 0x1_0000_0000_0000_0000
@@ -657,14 +655,17 @@ module ImplMarshalling {
       case SectorIndirectionTable(mutMap) => {
         var table := mutMap.ToMap();
         // TODO(alattuada) extract to method
-        var lbas := map k | k in table && table[k].0.Some? :: table[k].0.value;
-        var graph := map k | k in table :: table[k].1;
         assert table == mutMap.Contents;
         ghost var indirectionTable := IM.IIndirectionTable(mutMap.Contents);
-        assert lbas == indirectionTable.locs;
-        assert graph == indirectionTable.graph;
-        assert lbas.Keys == graph.Keys;
-        if |lbas| < 0x1_0000_0000_0000_0000 / 8 {
+        if |table| < 0x1_0000_0000_0000_0000 / 8 {
+          forall ref | ref in table
+          ensures table[ref].0.Some?
+          ensures BC.ValidLocationForNode(table[ref].0.value)
+          {
+            assert ref in indirectionTable.graph;
+            assert ref in indirectionTable.locs;
+          }
+
           var w := lbasSuccsToVal(table);
           match w {
             case Some(v) => return Some(VCase(0, v));

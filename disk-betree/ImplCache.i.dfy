@@ -20,12 +20,50 @@ module ImplCache {
   requires s.Ready?
   requires IS.WVars(s)
   ensures ref == ImplModelCache.getFreeRef(IS.IVars(s))
+  {
+    ImplModelCache.reveal_getFreeRef();
+    var i := 1;
+    while true
+    invariant i >= 1
+    invariant ImplModelCache.getFreeRefIterate(IS.IVars(s), i)
+           == ImplModelCache.getFreeRef(IS.IVars(s))
+    decreases 0x1_0000_0000_0000_0000 - i as int
+    {
+      var lookup := s.ephemeralIndirectionTable.Get(i);
+      if lookup.None? && i !in s.cache {
+        return Some(i);
+      } else if i == 0xffff_ffff_ffff_ffff {
+        return None;
+      } else {
+        i := i + 1;
+      }
+    }
+  }
 
   method getFreeRef2(s: ImplVariables, avoid: BT.G.Reference)
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires IS.WVars(s)
   ensures ref == ImplModelCache.getFreeRef2(IS.IVars(s), avoid)
+  {
+    ImplModelCache.reveal_getFreeRef2();
+    var i := 1;
+    while true
+    invariant i >= 1
+    invariant ImplModelCache.getFreeRef2Iterate(IS.IVars(s), avoid, i)
+           == ImplModelCache.getFreeRef2(IS.IVars(s), avoid)
+    decreases 0x1_0000_0000_0000_0000 - i as int
+    {
+      var lookup := s.ephemeralIndirectionTable.Get(i);
+      if lookup.None? && i != avoid && i !in s.cache {
+        return Some(i);
+      } else if i == 0xffff_ffff_ffff_ffff {
+        return None;
+      } else {
+        i := i + 1;
+      }
+    }
+  }
 
   method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
   returns (s': ImplVariables)
