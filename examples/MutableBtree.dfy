@@ -417,14 +417,18 @@ abstract module MutableBtree {
     right := Index(rightrepr, node.nchildren - boundary, rightpivots, rightchildren);
     pivot := rightpivots[0];
     
-    BS.Keys.reveal_IsStrictlySorted();
     forall i: int, j: int | 0 <= i < j < left.nchildren as int
       ensures DisjointSubtrees(left, i, j)
     {
       assert DisjointSubtrees(node, i, j);
     }
     assert WFShape(left);
-    assert WFIndex(left);
+
+    BS.Keys.StrictlySortedSubsequence(node.pivots[..nchildren-1], 0, boundary as int - 1);
+    // assert BS.Keys.IsStrictlySorted(node.pivots[..node.nchildren-1][0..boundary - 1]);
+    // assert left.pivots[..left.nchildren-1] == node.pivots[0..boundary-1];
+    assert node.pivots[0..boundary-1] == node.pivots[..node.nchildren-1][0..boundary-1];
+    // assert BS.Keys.IsStrictlySorted(left.pivots[..left.nchildren-1]);
     assert WF(left);
     
     forall i: int, j: int | 0 <= i < j < left.nchildren as int
