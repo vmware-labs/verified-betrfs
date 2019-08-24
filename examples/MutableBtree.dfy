@@ -9,12 +9,12 @@ abstract module MutableBtree {
   import opened NativeTypes
   import opened Seq = Sequences
   import opened Maps
+  import Arrays
   import BS : BtreeSpec
   
   type Key = BS.Keys.Element
   type Value = BS.Value
 
-    
   function method MaxKeysPerLeaf() : uint64
     ensures 1 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 2
 
@@ -25,35 +25,15 @@ abstract module MutableBtree {
   function method DefaultKey() : Key
 
   datatype Node =
+    | NotInUse // For entries in children arrays that are not currently in use
     | Leaf(ghost repr: set<object>, nkeys: uint64, keys: array<Key>, values: array<Value>)
     | Index(ghost repr: set<object>, nchildren: uint64, pivots: array<Key>, children: array<Node>)
 
-  predicate WFShape(node: Node)
-    reads node.repr
-    decreases node.repr
-  {
-    match node {
-      case Leaf(repr, nkeys, keys, values) =>
-        && keys in repr
-        && values in repr
-        && 0 <= nkeys as int <= MaxKeysPerLeaf() as int == keys.Length
-        && values.Length == keys.Length
-      case Index(repr, nchildren, pivots, children) =>
-        && pivots in repr
-        && children in repr
-        && 0 < nchildren as int <= MaxChildren() as int == children.Length
-        && pivots.Length == MaxChildren() as int - 1
-        && (forall i :: 0 <= i < nchildren ==> children[i].repr < repr)
-        && (forall i {:trigger children[i].repr} :: 0 <= i < nchildren as int ==> pivots !in children[i].repr)
-        && (forall i {:trigger children[i].repr} :: 0 <= i < nchildren as int ==> children !in children[i].repr)
-        && (forall i, j {:trigger children[i].repr, children[j].repr} :: 0 <= i < j < nchildren as int ==> children[i].repr !! children[j].repr)
-        && (forall i :: 0 <= i < nchildren ==> WFShape(children[i]))
-    }
-  }
-
   function LocalKeys(node: Node) : set<Key>
-    requires WFShape(node)
-    reads node.repr
+    requires !node.NotInUse?
+    requires node.Leaf? ==> 0 <= node.nkeys as int <= node.keys.Length
+    requires node.Index? ==> 0 < node.nchildren as int <= node.pivots.Length + 1
+    reads if node.Leaf? then node.keys else node.pivots
   {
     match node {
       case Leaf(_, nkeys, keys, _) => set k | k in keys[..nkeys]
@@ -61,58 +41,151 @@ abstract module MutableBtree {
     }    
   }
   
-  predicate WFLeaf(node: Node)
-    requires WFShape(node)
-    requires node.Leaf?
-    reads node.repr
+  predicate DisjointSubtrees(node: Node, i: int, j: int)
+    requires node.Index?
+    requires 0 <= i < node.children.Length
+    requires 0 <= j < node.children.Length
+    requires !node.children[i].NotInUse?
+    requires !node.children[j].NotInUse?
+    requires i != j
+    reads node.children
   {
-    && BS.Keys.IsStrictlySorted(node.keys[..node.nkeys])
+    node.children[i].repr !! node.children[j].repr
   }
 
-  predicate WFIndex(node: Node)
+  predicate {:fuel 3} WFShape(node: Node)
+    reads if node.NotInUse? then {} else node.repr
+    decreases if node.NotInUse? then {} else node.repr
+  {
+    if node.NotInUse? then false
+    else if node.Leaf? then
+      && node.repr == { node.keys, node.values }
+      && 0 <= node.nkeys as int <= MaxKeysPerLeaf() as int == node.keys.Length
+      && node.values.Length == node.keys.Length
+    else 
+      && node.pivots in node.repr
+      && node.children in node.repr
+      && 0 < node.nchildren as int <= MaxChildren() as int == node.children.Length
+      && node.pivots.Length == MaxChildren() as int - 1
+      && (forall i :: 0 <= i < node.nchildren ==> !node.children[i].NotInUse?)
+      && (forall i :: 0 <= i < node.nchildren ==> node.children[i].repr < node.repr)
+      && (forall i :: 0 <= i < node.nchildren as int ==> node.pivots !in node.children[i].repr)
+      && (forall i :: 0 <= i < node.nchildren as int ==> node.children !in node.children[i].repr)
+      && (forall i, j :: 0 <= i < j < node.nchildren as int ==> DisjointSubtrees(node, i, j))
+      && (forall i :: 0 <= i < node.nchildren ==> WFShape(node.children[i]))
+  }
+
+  predicate {:fuel 3} WF(node: Node)
+    requires WFShape(node)
+    reads node.repr
+    decreases node.repr
+  {
+    if node.NotInUse? then true
+    else if node.Leaf? then
+      && BS.Keys.IsStrictlySorted(node.keys[..node.nkeys])
+    else
+      && BS.Keys.IsStrictlySorted(node.pivots[..node.nchildren-1])
+      && (forall i :: 0 <= i < node.nchildren ==> LocalKeys(node.children[i]) != {})
+      && (forall i, key :: 0 <= i < node.nchildren-1 && key in LocalKeys(node.children[i]) ==> BS.Keys.lt(key, node.pivots[i]))
+      && (forall i, key :: 0 < i < node.nchildren   && key in LocalKeys(node.children[i]) ==> BS.Keys.lte(node.pivots[i-1], key))
+      && (forall i :: 0 <= i < node.nchildren ==> WF(node.children[i]))
+  }
+
+  predicate ObjectIsInSubtree(node: Node, o: object, i: int)
     requires WFShape(node)
     requires node.Index?
+    requires 0 <= i < node.nchildren as int
     reads node.repr
-    decreases node.repr, 0
   {
-    && BS.Keys.IsStrictlySorted(node.pivots[..node.nchildren-1])
-    && (forall i :: 0 <= i < node.nchildren ==> WF(node.children[i]))
-    && (forall i :: 0 <= i < node.nchildren ==> LocalKeys(node.children[i]) != {})
-    && (forall i, key :: 0 <= i < node.nchildren-1 && key in LocalKeys(node.children[i]) ==> BS.Keys.lt(key, node.pivots[i]))
-    && (forall i, key :: 0 < i < node.nchildren   && key in LocalKeys(node.children[i]) ==> BS.Keys.lte(node.pivots[i-1], key))
+    o in node.children[i].repr
   }
 
-  predicate WF(node: Node)
+  function {:opaque} PrefixRepr(node: Node, newnchildren: int) : (result: set<object>)
     requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < node.nchildren
+    requires 0 <= newnchildren <= node.nchildren as int
     reads node.repr
-    decreases node.repr, 1
   {
-    match node {
-      case Leaf(_, _, _, _) => WFLeaf(node)
-      case Index(_, _, _, _) => WFIndex(node)
+    var result := {node.pivots} + {node.children} + set i: int, o | 0 <= i < newnchildren as int && o in node.repr && ObjectIsInSubtree(node, o, i) :: o;
+    result
+  }
+
+  lemma PrefixReprFits(node: Node, newnchildren: int)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < node.nchildren
+    requires 0 <= newnchildren <= node.nchildren as int
+    ensures PrefixRepr(node, newnchildren) <= node.repr
+    ensures node.pivots in PrefixRepr(node, newnchildren)
+    ensures node.children in PrefixRepr(node, newnchildren)
+    ensures newnchildren < node.nchildren as int ==> PrefixRepr(node, newnchildren) < node.repr
+    ensures forall i :: 0 <= i < newnchildren ==> node.children[i].repr < PrefixRepr(node, newnchildren)
+  {
+    var prefixrepr := PrefixRepr(node, newnchildren);
+    var nchildren := node.nchildren;
+    var children := node.children;
+    
+    reveal_PrefixRepr();
+    if newnchildren < nchildren as int {
+      assert children[nchildren-1].repr < node.repr;
+      assert children[nchildren-1].repr != {};
+      forall o | o in prefixrepr
+        ensures o !in children[nchildren-1].repr
+      {
+        if o == node.pivots {
+        } else if o == children {
+        } else {
+          var i :| 0 <= i < newnchildren && o in node.repr && ObjectIsInSubtree(node, o, i);
+          assert DisjointSubtrees(node, i, nchildren as int - 1);
+        }
+      }
+      assert children[nchildren-1].repr !! prefixrepr;
+    }
+    forall i | 0 <= i < newnchildren
+      ensures children[i].repr < prefixrepr
+    {
+      forall o | o in children[i].repr
+        ensures o in prefixrepr
+      {
+        assert ObjectIsInSubtree(node, o, i);
+      }
     }
   }
-
-  function IndexPrefix(node: Node) : (result: Node)
+  
+  function IndexPrefix(node: Node, newnchildren: uint64) : (result: Node)
     requires WFShape(node)
     requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
+    requires 0 <= newnchildren <= node.nchildren
     reads node.repr
   {
-    Index(node.repr - node.children[node.nchildren-1].repr, node.nchildren-1, node.pivots, node.children)
+    Index(PrefixRepr(node, newnchildren as int), newnchildren, node.pivots, node.children)
   }
 
-  lemma IndexPrefixWF(node: Node)
+  lemma IndexPrefixWF(node: Node, newnchildren: uint64)
     requires WFShape(node)
     requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
-    ensures WF(IndexPrefix(node))
+    requires 0 < newnchildren <= node.nchildren
+    ensures WFShape(IndexPrefix(node, newnchildren))
+    ensures WF(IndexPrefix(node, newnchildren))
+    ensures newnchildren < node.nchildren ==> IndexPrefix(node, newnchildren).repr < node.repr
   {
     BS.Keys.reveal_IsStrictlySorted();
+    var pnode := IndexPrefix(node, newnchildren);
+    forall i: int, j: int | 0 <= i < j < pnode.nchildren as int
+      ensures DisjointSubtrees(pnode, i, j)
+    {
+      assert DisjointSubtrees(node, i, j);
+    }
+    PrefixReprFits(node, newnchildren as int);
   }
-  
+
   function ToImmutableNode(node: Node) : (result: BS.Node)
     requires WFShape(node)
     requires WF(node)
@@ -122,12 +195,11 @@ abstract module MutableBtree {
     match node {
       case Leaf(_, nkeys, keys, values) => BS.Leaf(keys[..nkeys], values[..nkeys])
       case Index(repr, nchildren, pivots, children) =>
-        assert WFIndex(node); // FIXME: WFT?  Dafny can't see this in emacs
         if nchildren == 1 then
           BS.Index([], [ToImmutableNode(children[0])])
         else
-          IndexPrefixWF(node);
-          var imprefix := ToImmutableNode(IndexPrefix(node));
+          IndexPrefixWF(node, node.nchildren-1);
+          var imprefix := ToImmutableNode(IndexPrefix(node, node.nchildren-1));
           var imlastchild := ToImmutableNode(children[nchildren-1]);
           BS.Index(imprefix.pivots + [pivots[nchildren-2]], imprefix.children + [imlastchild])
     }
@@ -137,7 +209,6 @@ abstract module MutableBtree {
     requires WFShape(node)
     requires WF(node)
     ensures BS.WF(ToImmutableNode(node))
-    ensures node.Index? ==> BS.AllKeys(ToImmutableNode(node)) != {}
     ensures node.Index? ==> ToImmutableNode(node).pivots == node.pivots[..node.nchildren-1]
     decreases node.repr
   {
@@ -150,9 +221,9 @@ abstract module MutableBtree {
         ImmutableWF(node.children[0]);
       }
     } else {
-      IndexPrefixWF(node);
-      var imprefix := ToImmutableNode(IndexPrefix(node));
-      ImmutableWF(IndexPrefix(node));
+      IndexPrefixWF(node, node.nchildren-1);
+      var imprefix := ToImmutableNode(IndexPrefix(node, node.nchildren-1));
+      ImmutableWF(IndexPrefix(node, node.nchildren-1));
       var imlastchild := ToImmutableNode(node.children[node.nchildren-1]);
       var imnode := BS.Index(imprefix.pivots + [node.pivots[node.nchildren-2]], imprefix.children + [imlastchild]);
       assert imnode.pivots == node.pivots[..node.nchildren-1];
@@ -160,138 +231,218 @@ abstract module MutableBtree {
     }
   }
 
-  lemma ImmutableChildIndices(node: Node)
-    requires WFShape(node)
-    requires WF(node)
-    requires node.Index?
-    ensures |ToImmutableNode(node).children| == node.nchildren as int
-    ensures forall i :: 0 <= i < node.nchildren ==>
-           ToImmutableNode(node).children[i] == ToImmutableNode(node.children[i])
-    decreases node.repr
-  {
-    if node.nchildren == 1 {
-    } else {
-      IndexPrefixWF(node);
-    }
-  }
-  
-  function Interpretation(node: Node) : map<Key, Value>
-    requires WFShape(node)
-    requires WF(node)
-    reads node.repr
-    decreases node.repr
-  {
-    ImmutableWF(node);
-    BS.InterpretNode(ToImmutableNode(node))
-  }
-  
-  method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
-    requires WFShape(node)
-    requires WF(node)
-    requires node.Leaf?
-    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == BS.NotFound
-    decreases node.repr, 0
-  {
-    var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
-    if 1 <= posplus1 && node.keys[posplus1-1] == needle {
-      result := BS.Found(node.values[posplus1-1]);
-    } else {
-      result := BS.NotFound;
-    }
-  }
-
-  method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
-    requires WFShape(node)
-    requires WF(node)
-    requires node.Index?
-    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == BS.NotFound
-    decreases node.repr, 0
-  {
-    var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
-    result := Query(node.children[posplus1], needle);
-
-    ghost var imnode := ToImmutableNode(node);
-    ImmutableWF(node);
-    ImmutableChildIndices(node);
-    if needle in Interpretation(node) {
-      //assert needle in BS.InterpretNode(imnode);
-      //assert imnode.Index?;
-      assert needle in BS.InterpretIndex(imnode);
-      //assert posplus1 as int == BS.Keys.LargestLte(imnode.pivots, needle) + 1;
-      //assert needle in BS.InterpretNode(imnode.children[posplus1]);
-      //assert BS.InterpretNode(imnode)[needle] == BS.InterpretNode(imnode.children[posplus1])[needle];
-      //assert imnode.children[posplus1] == ToImmutableNode(node.children[posplus1]);
-      //assert needle in Interpretation(node.children[posplus1]);
-    } else {
-      assert needle !in BS.InterpretIndex(imnode);
-      //assert needle !in BS.AllKeys(imnode) || needle !in BS.InterpretNode(imnode.children[posplus1]);
-      //BS.AllKeysIsConsistentWithInterpretationUniversal(imnode);
-      if needle !in BS.AllKeys(imnode) {
-        assert needle !in BS.AllKeys(imnode.children[posplus1]);
-      }
-      assert needle !in BS.InterpretNode(imnode.children[posplus1]);
-    }
-  }
-
-  method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
-    requires WFShape(node)
-    requires WF(node)
-    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == BS.NotFound
-    decreases node.repr, 1
-  {
-    match node {
-      case Leaf(_, _, _, _) => result := QueryLeaf(node, needle);
-      case Index(_, _, _, _) => result := QueryIndex(node, needle);
-    }
-  }
-    
-  // predicate method Full()
-  //   requires WF()
-  //   reads this, subtreeObjects
+  // lemma ImmutableChildIndices(node: Node)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   requires node.Index?
+  //   ensures |ToImmutableNode(node).children| == node.nchildren as int
+  //   ensures forall i :: 0 <= i < node.nchildren ==>
+  //          ToImmutableNode(node).children[i] == ToImmutableNode(node.children[i])
+  //   decreases node.repr
   // {
-  //   nchildren == MaxChildren()
+  //   if node.nchildren == 1 {
+  //   } else {
+  //     IndexPrefixWF(node, node.nchildren-1);
+  //   }
+  // }
+  
+  // function Interpretation(node: Node) : map<Key, Value>
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   reads node.repr
+  //   decreases node.repr
+  // {
+  //   ImmutableWF(node);
+  //   BS.InterpretNode(ToImmutableNode(node))
+  // }
+  
+  // method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   requires node.Leaf?
+  //   ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
+  //   ensures needle !in Interpretation(node) ==> result == BS.NotFound
+  //   decreases node.repr, 0
+  // {
+  //   var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
+  //   if 1 <= posplus1 && node.keys[posplus1-1] == needle {
+  //     result := BS.Found(node.values[posplus1-1]);
+  //   } else {
+  //     result := BS.NotFound;
+  //   }
   // }
 
-  //   // predicate method Full()
-  //   //   requires WF()
-  //   //   reads this, subtreeObjects
-  //   // {
-  //   //   nkeys >= MaxKeysPerLeaf()
-  //   // }
-    
-  //   // method Split() returns (pivot: Key, rightnode: Node)
-  //   //   requires WF()
-  //   //   requires Full()
-  //   //   ensures WF()
-  //   //   ensures rightnode.WF()
-  //   //   ensures SplitNode(old(ToImmutableNode()), ToImmutableNode(), rightnode.ToImmutableNode(), pivot)
-  //   //   ensures !Full()
-  //   //   ensures !rightnode.Full()
-  //   //   ensures subtreeObjects <= old(subtreeObjects)
-  //   //   ensures subtreeObjects !! rightnode.subtreeObjects
-  //   //   ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
-  //   //   modifies this
-  //   // {
-  //   //   var right := new Leaf();
-  //   //   var boundary := nkeys/2;
-  //   //   Arrays.Memcpy(right.keys, 0, keys[boundary..nkeys]); // FIXME: remove conversion to seq
-  //   //   Arrays.Memcpy(right.values, 0, values[boundary..nkeys]); // FIXME: remove conversion to seq
-  //   //   right.nkeys := nkeys - boundary;
-  //   //   nkeys := boundary;
-  //   //   pivot := right.keys[0];
-  //   //   rightnode := right;
+  // method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   requires node.Index?
+  //   ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
+  //   ensures needle !in Interpretation(node) ==> result == BS.NotFound
+  //   decreases node.repr, 0
+  // {
+  //   var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
+  //   result := Query(node.children[posplus1], needle);
 
-  //   //   assert keys[..nkeys] == old(keys[..nkeys])[..nkeys];
-  //   //   Keys.StrictlySortedSubsequence(old(keys[..nkeys]), 0, nkeys as int);
-  //   //   assert right.keys[..right.nkeys] == old(keys[..nkeys])[boundary..old(nkeys)];
-  //   //   Keys.StrictlySortedSubsequence(old(keys[..nkeys]), boundary as int, old(nkeys) as int);
-  //   //   Keys.reveal_IsStrictlySorted();
-  //   //   assert SplitLeaf(old(ToImmutableNode()), ToImmutableNode(), rightnode.ToImmutableNode(), pivot);
-  //   // }
-      
+  //   ghost var imnode := ToImmutableNode(node);
+  //   ImmutableWF(node);
+  //   ImmutableChildIndices(node);
+  //   if needle in Interpretation(node) {
+  //     //assert needle in BS.InterpretNode(imnode);
+  //     //assert imnode.Index?;
+  //     assert needle in BS.InterpretIndex(imnode);
+  //     //assert posplus1 as int == BS.Keys.LargestLte(imnode.pivots, needle) + 1;
+  //     //assert needle in BS.InterpretNode(imnode.children[posplus1]);
+  //     //assert BS.InterpretNode(imnode)[needle] == BS.InterpretNode(imnode.children[posplus1])[needle];
+  //     //assert imnode.children[posplus1] == ToImmutableNode(node.children[posplus1]);
+  //     //assert needle in Interpretation(node.children[posplus1]);
+  //   } else {
+  //     assert needle !in BS.InterpretIndex(imnode);
+  //     //assert needle !in BS.AllKeys(imnode) || needle !in BS.InterpretNode(imnode.children[posplus1]);
+  //     //BS.AllKeysIsConsistentWithInterpretationUniversal(imnode);
+  //     if needle !in BS.AllKeys(imnode) {
+  //       assert needle !in BS.AllKeys(imnode.children[posplus1]);
+  //     }
+  //     assert needle !in BS.InterpretNode(imnode.children[posplus1]);
+  //   }
+  // }
+
+  // method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
+  //   ensures needle !in Interpretation(node) ==> result == BS.NotFound
+  //   decreases node.repr, 1
+  // {
+  //   match node {
+  //     case Leaf(_, _, _, _) => result := QueryLeaf(node, needle);
+  //     case Index(_, _, _, _) => result := QueryIndex(node, needle);
+  //   }
+  // }
+
+  // predicate method Full(node: Node)
+  //   requires !node.NotInUse?
+  // {
+  //   match node {
+  //     case Leaf(_, nkeys, _, _) => nkeys == MaxKeysPerLeaf()
+  //     case Index(_, nchildren, _, _) => nchildren == MaxChildren()
+  //   }
+  // }
+
+  // method SplitLeaf(node: Node) returns (left: Node, pivot: Key, right: Node)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   requires node.Leaf?
+  //   requires Full(node)
+  //   ensures WFShape(left)
+  //   ensures WFShape(right)
+  //   ensures WF(left)
+  //   ensures WF(right)
+  //   ensures BS.SplitLeaf(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
+  // {
+  //   var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
+  //   var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
+  //   var boundary := node.nkeys / 2;
+  //   Arrays.Memcpy(rightkeys, 0, node.keys[boundary..node.nkeys]); // FIXME: remove conversion to seq
+  //   Arrays.Memcpy(rightvalues, 0, node.values[boundary..node.nkeys]); // FIXME: remove conversion to seq
+  //   left := Leaf(node.repr, boundary, node.keys, node.values);
+  //   right := Leaf({rightkeys, rightvalues}, node.nkeys - boundary, rightkeys, rightvalues);
+  //   pivot := right.keys[0];
+    
+  //   BS.Keys.reveal_IsStrictlySorted();
+  // }
+
+  // method RightIndex(node: Node) returns (right: Node)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   requires node.Index?
+  //   requires Full(node)
+  //   ensures WFShape(right)
+  //   ensures WF(right)
+  // {
+  //   var boundary: uint64 := node.nchildren/2;
+  //   var rightpivots := new Key[MaxChildren()-1]
+  //     (i
+  //     requires 0 <= i <= (MaxChildren()-1) as int
+  //     reads node.pivots
+  //     =>
+  //     if i < (node.nchildren - boundary - 1) as int then node.pivots[boundary as int + i]
+  //     else DefaultKey());
+  //   var rightchildren := new Node[MaxChildren()]
+  //     (i
+  //     requires 0 <= i <= MaxChildren() as int
+  //     reads node.children
+  //     =>
+  //     if i < (node.nchildren - boundary) as int then node.children[boundary as int + i]
+  //     else NotInUse);
+    
+  
+  // method SplitIndex(node: Node) returns (left: Node, pivot: Key, right: Node)
+  //   requires WFShape(node)
+  //   requires WF(node)
+  //   requires node.Index?
+  //   requires Full(node)
+  //   ensures WFShape(left)
+  //   ensures WFShape(right)
+  //   ensures WF(left)
+  //   ensures WF(right)
+  //   ensures BS.SplitIndex(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
+  // {
+  //   ghost var nchildren := node.nchildren;
+  //   var boundary: uint64 := node.nchildren/2;
+  //   var rightpivots := new Key[MaxChildren()-1]
+  //     (i
+  //     requires 0 <= i <= (MaxChildren()-1) as int
+  //     reads node.pivots
+  //     =>
+  //     if i < (node.nchildren - boundary - 1) as int then node.pivots[boundary as int + i]
+  //     else DefaultKey());
+  //   var rightchildren := new Node[MaxChildren()]
+  //     (i
+  //     requires 0 <= i <= MaxChildren() as int
+  //     reads node.children
+  //     =>
+  //     if i < (node.nchildren - boundary) as int then node.children[boundary as int + i]
+  //     else NotInUse);
+
+  //   ghost var leftrepr := {node.pivots, node.children} +
+  //       (set i, o | 0 <= i < boundary && o in node.children[i].repr :: o);
+  //   ghost var rightrepr: set<object> := 
+  //       (set i, o | 0 <= i < node.nchildren - boundary && o in rightchildren[i].repr :: o);
+  //   rightrepr := rightrepr + {rightpivots};
+  //   rightrepr := rightrepr + {rightchildren};
+
+  //   left := Index(leftrepr, boundary, node.pivots, node.children);
+  //   right := Index(rightrepr, node.nchildren - boundary, rightpivots, rightchildren);
+  //   pivot := rightpivots[0];
+    
+  //   BS.Keys.reveal_IsStrictlySorted();
+  //   forall i: int, j: int | 0 <= i < j < left.nchildren as int
+  //     ensures DisjointSubtrees(left, i, j)
+  //   {
+  //     assert DisjointSubtrees(node, i, j);
+  //   }
+  //   assert WFShape(left);
+  //   assert WFIndex(left);
+  //   assert WF(left);
+    
+  //   forall i: int, j: int | 0 <= i < j < left.nchildren as int
+  //     ensures DisjointSubtrees(right, i, j)
+  //   {
+  //     assert DisjointSubtrees(node, boundary as int + i, boundary as int + j);
+  //   }
+  //   assert WFShape(right);
+  //   assert right.pivots[..right.nchildren-1] == node.pivots[boundary..nchildren-1];
+  //   BS.Keys.StrictlySortedSubsequence(node.pivots[..nchildren-1], boundary as int, (nchildren-1) as int);
+  //   forall i | 0 <= i < right.nchildren
+  //     ensures LocalKeys(right.children[i]) != {}
+  //   {
+  //     assert right.children[i] == node.children[i - boundary];
+  //     assert LocalKeys(node.children[i - boundary]) != {};
+  //   }
+  //   assert WFIndex(right);
+  //   assert WF(right);
+  // }
+
   //   // method Insert(key: Key, value: Value)
   //   //   requires WF()
   //   //   requires !Full()
@@ -476,38 +627,6 @@ abstract module MutableBtree {
   //   //   set o, i | 0 <= i < nchildren && o in children[i].node.subtreeObjects :: o
   //   // }
     
-  //   // method Split() returns (pivot: Key, rightnode: Node)
-  //   //   requires WF()
-  //   //   requires Full()
-  //   //   ensures WF()
-  //   //   ensures rightnode.WF()
-  //   //   ensures SplitNode(old(ToImmutableNode()), ToImmutableNode(), rightnode.ToImmutableNode(), pivot)
-  //   //   ensures !Full()
-  //   //   ensures !rightnode.Full()
-  //   //   ensures subtreeObjects <= old(subtreeObjects)
-  //   //   ensures subtreeObjects !! rightnode.subtreeObjects
-  //   //   ensures fresh(rightnode.subtreeObjects - old(subtreeObjects))
-  //   //   modifies this      
-  //   // {
-  //   //   var right := new Index();
-  //   //   var boundary := nchildren/2;
-  //   //   Arrays.Memcpy(right.pivots, 0, pivots[boundary..nchildren-1]); // FIXME: remove conversion to seq
-  //   //   Arrays.Memcpy(right.children, 0, children[boundary..nchildren]); // FIXME: remove conversion to seq
-  //   //   right.nchildren := nchildren - boundary;
-  //   //   nchildren := boundary;
-  //   //   subtreeObjects := {this, pivots, children} + UnionSubtreeObjects();
-  //   //   right.subtreeObjects := right.subtreeObjects + right.UnionSubtreeObjects();
-
-  //   //   pivot := pivots[boundary-1];
-
-  //   //   rightnode := right;
-      
-  //   //   // Keys.reveal_IsStrictlySorted();
-  //   //   // assert WF();
-  //   //   // assert rightnode.WF();
-  //   //   // assert MergeMaps(Interpretation(), pivot, rightnode.Interpretation()) == old(Interpretation());
-  //   // }
-
   //   // // method Insert(key: Key, value: Value)
   //   // //   requires WF()
   //   // //   requires !Full()
