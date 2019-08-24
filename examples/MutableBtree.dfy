@@ -231,125 +231,127 @@ abstract module MutableBtree {
     }
   }
 
-  // lemma ImmutableChildIndices(node: Node)
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   ensures |ToImmutableNode(node).children| == node.nchildren as int
-  //   ensures forall i :: 0 <= i < node.nchildren ==>
-  //          ToImmutableNode(node).children[i] == ToImmutableNode(node.children[i])
-  //   decreases node.repr
-  // {
-  //   if node.nchildren == 1 {
-  //   } else {
-  //     IndexPrefixWF(node, node.nchildren-1);
-  //   }
-  // }
+  lemma ImmutableChildIndices(node: Node)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    ensures |ToImmutableNode(node).children| == node.nchildren as int
+    ensures forall i :: 0 <= i < node.nchildren ==>
+           ToImmutableNode(node).children[i] == ToImmutableNode(node.children[i])
+    decreases node.repr
+  {
+    if node.nchildren == 1 {
+    } else {
+      IndexPrefixWF(node, node.nchildren-1);
+    }
+  }
   
-  // function Interpretation(node: Node) : map<Key, Value>
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   reads node.repr
-  //   decreases node.repr
-  // {
-  //   ImmutableWF(node);
-  //   BS.InterpretNode(ToImmutableNode(node))
-  // }
+  function Interpretation(node: Node) : map<Key, Value>
+    requires WFShape(node)
+    requires WF(node)
+    reads node.repr
+    decreases node.repr
+  {
+    ImmutableWF(node);
+    BS.Interpretation(ToImmutableNode(node))
+  }
   
-  // method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   requires node.Leaf?
-  //   ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-  //   ensures needle !in Interpretation(node) ==> result == BS.NotFound
-  //   decreases node.repr, 0
-  // {
-  //   var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
-  //   if 1 <= posplus1 && node.keys[posplus1-1] == needle {
-  //     result := BS.Found(node.values[posplus1-1]);
-  //   } else {
-  //     result := BS.NotFound;
-  //   }
-  // }
+  method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Leaf?
+    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
+    ensures needle !in Interpretation(node) ==> result == BS.NotFound
+    decreases node.repr, 0
+  {
+    var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
+    if 1 <= posplus1 && node.keys[posplus1-1] == needle {
+      result := BS.Found(node.values[posplus1-1]);
+    } else {
+      result := BS.NotFound;
+    }
+  }
 
-  // method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-  //   ensures needle !in Interpretation(node) ==> result == BS.NotFound
-  //   decreases node.repr, 0
-  // {
-  //   var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
-  //   result := Query(node.children[posplus1], needle);
+  method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
+    ensures needle !in Interpretation(node) ==> result == BS.NotFound
+    decreases node.repr, 0
+  {
+    var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
+    result := Query(node.children[posplus1], needle);
 
-  //   ghost var imnode := ToImmutableNode(node);
-  //   ImmutableWF(node);
-  //   ImmutableChildIndices(node);
-  //   if needle in Interpretation(node) {
-  //     //assert needle in BS.InterpretNode(imnode);
-  //     //assert imnode.Index?;
-  //     assert needle in BS.InterpretIndex(imnode);
-  //     //assert posplus1 as int == BS.Keys.LargestLte(imnode.pivots, needle) + 1;
-  //     //assert needle in BS.InterpretNode(imnode.children[posplus1]);
-  //     //assert BS.InterpretNode(imnode)[needle] == BS.InterpretNode(imnode.children[posplus1])[needle];
-  //     //assert imnode.children[posplus1] == ToImmutableNode(node.children[posplus1]);
-  //     //assert needle in Interpretation(node.children[posplus1]);
-  //   } else {
-  //     assert needle !in BS.InterpretIndex(imnode);
-  //     //assert needle !in BS.AllKeys(imnode) || needle !in BS.InterpretNode(imnode.children[posplus1]);
-  //     //BS.AllKeysIsConsistentWithInterpretationUniversal(imnode);
-  //     if needle !in BS.AllKeys(imnode) {
-  //       assert needle !in BS.AllKeys(imnode.children[posplus1]);
-  //     }
-  //     assert needle !in BS.InterpretNode(imnode.children[posplus1]);
-  //   }
-  // }
+    ghost var imnode := ToImmutableNode(node);
+    ImmutableWF(node);
+    ImmutableChildIndices(node);
+    if needle in Interpretation(node) {
+      //assert needle in BS.InterpretNode(imnode);
+      //assert imnode.Index?;
+      assert needle in BS.Interpretation(imnode);
+      //assert posplus1 as int == BS.Keys.LargestLte(imnode.pivots, needle) + 1;
+      //assert needle in BS.InterpretNode(imnode.children[posplus1]);
+      //assert BS.InterpretNode(imnode)[needle] == BS.InterpretNode(imnode.children[posplus1])[needle];
+      //assert imnode.children[posplus1] == ToImmutableNode(node.children[posplus1]);
+      //assert needle in Interpretation(node.children[posplus1]);
+    } else {
+      assert needle !in BS.Interpretation(imnode);
+      //assert needle !in BS.AllKeys(imnode) || needle !in BS.InterpretNode(imnode.children[posplus1]);
+      //BS.AllKeysIsConsistentWithInterpretationUniversal(imnode);
+      if needle !in BS.AllKeys(imnode) {
+        assert needle !in BS.AllKeys(imnode.children[posplus1]);
+      }
+      assert needle !in BS.Interpretation(imnode.children[posplus1]);
+    }
+  }
 
-  // method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-  //   ensures needle !in Interpretation(node) ==> result == BS.NotFound
-  //   decreases node.repr, 1
-  // {
-  //   match node {
-  //     case Leaf(_, _, _, _) => result := QueryLeaf(node, needle);
-  //     case Index(_, _, _, _) => result := QueryIndex(node, needle);
-  //   }
-  // }
+  method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
+    requires WFShape(node)
+    requires WF(node)
+    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
+    ensures needle !in Interpretation(node) ==> result == BS.NotFound
+    decreases node.repr, 1
+  {
+    match node {
+      case Leaf(_, _, _, _) => result := QueryLeaf(node, needle);
+      case Index(_, _, _, _) => result := QueryIndex(node, needle);
+    }
+  }
 
-  // predicate method Full(node: Node)
-  //   requires !node.NotInUse?
-  // {
-  //   match node {
-  //     case Leaf(_, nkeys, _, _) => nkeys == MaxKeysPerLeaf()
-  //     case Index(_, nchildren, _, _) => nchildren == MaxChildren()
-  //   }
-  // }
+  predicate method Full(node: Node)
+    requires !node.NotInUse?
+  {
+    match node {
+      case Leaf(_, nkeys, _, _) => nkeys == MaxKeysPerLeaf()
+      case Index(_, nchildren, _, _) => nchildren == MaxChildren()
+    }
+  }
 
-  // method SplitLeaf(node: Node) returns (left: Node, pivot: Key, right: Node)
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   requires node.Leaf?
-  //   requires Full(node)
-  //   ensures WFShape(left)
-  //   ensures WFShape(right)
-  //   ensures WF(left)
-  //   ensures WF(right)
-  //   ensures BS.SplitLeaf(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
-  // {
-  //   var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
-  //   var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
-  //   var boundary := node.nkeys / 2;
-  //   Arrays.Memcpy(rightkeys, 0, node.keys[boundary..node.nkeys]); // FIXME: remove conversion to seq
-  //   Arrays.Memcpy(rightvalues, 0, node.values[boundary..node.nkeys]); // FIXME: remove conversion to seq
-  //   left := Leaf(node.repr, boundary, node.keys, node.values);
-  //   right := Leaf({rightkeys, rightvalues}, node.nkeys - boundary, rightkeys, rightvalues);
-  //   pivot := right.keys[0];
+  method SplitLeaf(node: Node) returns (left: Node, pivot: Key, right: Node)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Leaf?
+    requires Full(node)
+    ensures WFShape(left)
+    ensures WFShape(right)
+    ensures WF(left)
+    ensures WF(right)
+    ensures BS.SplitLeaf(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
+  {
+    var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
+    var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
+    var boundary := node.nkeys / 2;
+    Arrays.Memcpy(rightkeys, 0, node.keys[boundary..node.nkeys]); // FIXME: remove conversion to seq
+    Arrays.Memcpy(rightvalues, 0, node.values[boundary..node.nkeys]); // FIXME: remove conversion to seq
+    left := Leaf(node.repr, boundary, node.keys, node.values);
+    right := Leaf({rightkeys, rightvalues}, node.nkeys - boundary, rightkeys, rightvalues);
+    pivot := right.keys[0];
     
-  //   BS.Keys.reveal_IsStrictlySorted();
-  // }
+    BS.Keys.reveal_IsStrictlySorted();
+    ghost var imright := ToImmutableNode(right);
+    assert BS.WF(imright);
+  }
 
   // method RightIndex(node: Node) returns (right: Node)
   //   requires WFShape(node)

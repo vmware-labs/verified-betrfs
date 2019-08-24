@@ -136,7 +136,7 @@ abstract module BtreeSpec {
     && oldindex.children == leftindex.children + rightindex.children
   }
 
-  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  lemma {:timeLimitMultiplier 2} SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures Interpretation(oldindex) == Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
   {
