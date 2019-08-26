@@ -37,13 +37,8 @@ module Bitmap {
 
     static predicate {:opaque} BitsMatchesContents(bitsSeq: seq<bv64>, contents: set<uint64>)
     {
-      && (forall c: nat | c < 0x1_0000_0000_0000_0000 && (c as uint64) in contents && c / 64 < |bitsSeq| :: BitsSetAtC(bitsSeq, c))
-    }
-
-    static predicate {:opaque} ContentsMatchesBits(bitsSeq: seq<bv64>, contents: set<uint64>)
-    {
-      && (forall i: nat, b: nat | i < |bitsSeq| && ITimes64WithinUint64(i) && b < 64 && BitsSetAtIB(bitsSeq, i, b) ::
-          (((i * 64) + b) as uint64) in contents)
+      && (forall c: nat | c < 0x1_0000_0000_0000_0000 && c / 64 < |bitsSeq| ::
+          c as uint64 in contents <==> BitsSetAtC(bitsSeq, c))
     }
 
     predicate ReprInv()
@@ -59,8 +54,6 @@ module Bitmap {
       && ReprInv()
 
       && BitsMatchesContents(bits[..], Contents)
-
-      && ContentsMatchesBits(bits[..], Contents)
     }
 
     constructor (max: uint64)
@@ -77,7 +70,7 @@ module Bitmap {
       Repr := { this, this.bits };
 
       reveal_BitsMatchesContents();
-      reveal_ContentsMatchesBits();
+      // reveal_ContentsMatchesBits();
     }
 
     static lemma SetABit(before: seq<bv64>, after: seq<bv64>, i: nat, b: nat)
@@ -116,43 +109,24 @@ module Bitmap {
 
       Contents := Contents + {c};
 
-      forall c': nat | c' < 0x1_0000_0000_0000_0000 && (c' as uint64) in Contents && c' / 64 < bits.Length
-      ensures BitsSetAtC(bits[..], c') {
+      forall c': nat | c' < 0x1_0000_0000_0000_0000 && c' / 64 < bits.Length
+      ensures c' as uint64 in Contents <==> BitsSetAtC(bits[..], c')
+      {
         var i' := c' / 64;
         var b' := c' % 64;
         if i' == i as nat {
           if b' == b as nat {
           } else {
             reveal_BitsMatchesContents();
-            assert BitsSetAtC(old(bits[..]), c'); // observe
-            assert BitsSetAtIB(old(bits[..]), i', b'); // observe
-            assert old(BitBSet(bits[i'], b')); // observe
-            assert BitBSet(bits[i], b'); // observe
-            assert BitsSetAtIB(bits[..], i', b'); // observe
+            assert old(c' as uint64 in Contents) <==> BitsSetAtC(old(bits[..]), c'); // observe
           }
         } else {
           reveal_BitsMatchesContents();
-          assert BitsSetAtC(old(bits[..]), c');
+          assert old(c' as uint64 in Contents) <==> BitsSetAtC(old(bits[..]), c'); // observe
           /* (doc) assert this.bits[c' / 64] == old(this.bits[c' / 64]); */
         }
       }
-      forall i': nat, b': nat | i' < bits.Length && ITimes64WithinUint64(i') && b' < 64 && BitsSetAtIB(bits[..], i', b')
-      ensures (((i' * 64) + b') as uint64) in Contents
-      {
-        var c' := (i' * 64) + b';
-        if i' == i as nat {
-          if b' == b as nat {
-          } else {
-            reveal_ContentsMatchesBits();
-            assert old(BitsSetAtIB(bits[..], i', b')); // observe
-          }
-        } else {
-          reveal_ContentsMatchesBits();
-          assert old(BitsSetAtIB(bits[..], i', b')); // observe
-        }
-      }
       reveal_BitsMatchesContents();
-      reveal_ContentsMatchesBits();
     }
 
     static lemma ClearABit(before: seq<bv64>, after: seq<bv64>, i: nat, b: nat)
@@ -183,43 +157,45 @@ module Bitmap {
 
       Contents := Contents - {c};
 
-      forall c': nat | c' < 0x1_0000_0000_0000_0000 && (c' as uint64) in Contents && c' / 64 < bits.Length
-      ensures BitsSetAtC(bits[..], c') {
+      forall c': nat | c' < 0x1_0000_0000_0000_0000 && c' / 64 < bits.Length
+      ensures c' as uint64 in Contents <==> BitsSetAtC(bits[..], c') {
         var i' := c' / 64;
         var b' := c' % 64;
         if i' == i as nat {
           if b' == b as nat {
-            assert c' == c as nat; // observe
-            /* (doc) assert c !in Contents; */
-            assert false;
+            assert c' == c as nat;
+            assert c !in Contents;
           } else {
             reveal_BitsMatchesContents();
-            assert BitsSetAtC(old(bits[..]), c'); // observe
+            assert old(c' as uint64 in Contents) <==> BitsSetAtC(old(bits[..]), c'); // observe
           }
         } else {
           reveal_BitsMatchesContents();
-          assert BitsSetAtC(old(bits[..]), c');
+          assert old(c' as uint64 in Contents) <==> BitsSetAtC(old(bits[..]), c'); // observe
           /* (doc) assert this.bits[c' / 64] == old(this.bits[c' / 64]); */
         }
       }
-      forall i': nat, b': nat | i' < bits.Length && ITimes64WithinUint64(i') && b' < 64 && BitsSetAtIB(bits[..], i', b')
-      ensures (((i' * 64) + b') as uint64) in Contents
-      {
-        var c' := (i' * 64) + b';
-        if i' == i as nat {
-          if b' == b as nat {
-            assert false;
-          } else {
-            reveal_ContentsMatchesBits();
-            assert old(BitsSetAtIB(bits[..], i', b')); // observe
-          }
-        } else {
-          reveal_ContentsMatchesBits();
-          assert old(BitsSetAtIB(bits[..], i', b')); // observe
-        }
-      }
       reveal_BitsMatchesContents();
-      reveal_ContentsMatchesBits();
+    }
+
+    method IsSet(c: uint64) returns (result: bool)
+    requires c as nat / 64 < bits.Length
+    requires Inv()
+    ensures Inv()
+    ensures result <==> old(c in Contents)
+    {
+      var i: uint64 := c / 64;
+      var b: uint64 := c % 64;
+
+      result := this.bits[i] & (1 << b) != 0;
+
+      if c in Contents {
+        reveal_BitsMatchesContents();
+        assert BitsSetAtC(this.bits[..], c as nat);
+      } else {
+        reveal_BitsMatchesContents();
+        assert !BitsSetAtC(this.bits[..], c as nat);
+      }
     }
   }
 }
