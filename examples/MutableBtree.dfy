@@ -53,7 +53,7 @@ abstract module MutableBtree {
     node.children[i].repr !! node.children[j].repr
   }
 
-  predicate {:fuel 3} WFShape(node: Node)
+  predicate {:fuel 2} WFShape(node: Node)
     reads if node.NotInUse? then {} else node.repr
     decreases if node.NotInUse? then {} else node.repr
   {
@@ -75,7 +75,7 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < node.nchildren ==> WFShape(node.children[i]))
   }
 
-  predicate {:fuel 3} WF(node: Node)
+  predicate {:fuel 2} WF(node: Node)
     requires WFShape(node)
     reads node.repr
     decreases node.repr
@@ -253,6 +253,19 @@ abstract module MutableBtree {
     }
   }
 
+  function ToImmutableWFNode(node: Node) : (result: BS.Node)
+    requires WFShape(node)
+    requires WF(node)
+    ensures node.Leaf? ==> result.Leaf?
+    ensures node.Index? ==> result.Index?
+    ensures BS.WF(result)
+    ensures node.Index? ==> result.pivots == node.pivots[..node.nchildren-1]
+    reads node.repr
+  {
+    ImmutableWF(node);
+    ToImmutableNode(node)
+  }
+  
   lemma ImmutableChildIndices(node: Node)
     requires WFShape(node)
     requires WF(node)
@@ -376,9 +389,7 @@ abstract module MutableBtree {
     ensures WFShape(subnode)
     ensures WF(subnode)
     ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode.pivots, subnode.children}
-    ensures subnode.nchildren == to - from
-    ensures subnode.pivots[..subnode.nchildren-1] == node.pivots[from..to-1]
-    ensures subnode.children[..subnode.nchildren] == node.children[from..to]
+    ensures ToImmutableNode(subnode) == BS.SubIndex(ToImmutableWFNode(node), from as int, to as int)
     ensures fresh(subnode.pivots)
     ensures fresh(subnode.children)
   {
@@ -422,7 +433,6 @@ abstract module MutableBtree {
     ImmutableChildIndices(node);
     ImmutableChildIndices(subnode);
     assert imsubnode.children == imnode.children[from..to];
-    assert ToImmutableNode(subnode) == BS.SubIndex(ToImmutableNode(node), from as int, to as int);
   }
 
   
