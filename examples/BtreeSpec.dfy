@@ -123,6 +123,14 @@ abstract module BtreeSpec {
       }
     }
   }
+
+  function SubIndex(node: Node, from: int, to: int) : Node
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= from < to <= |node.children|
+  {
+    Index(node.pivots[from..to-1], node.children[from..to])
+  }
   
   predicate SplitIndex(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
   {
