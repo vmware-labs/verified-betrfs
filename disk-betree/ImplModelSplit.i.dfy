@@ -12,6 +12,7 @@ module ImplModelSplit {
 
   import opened BucketsLib
   import opened BucketWeights
+  import opened Bounds
   import PivotsLib
 
   import opened NativeTypes
@@ -234,6 +235,7 @@ module ImplModelSplit {
   requires BT.WFNode(INode(fused_parent))
   requires 0 <= slot_idx < |fused_parent.buckets|
   requires PivotsLib.PivotInsertable(fused_parent.pivotTable, slot_idx, pivot)
+  requires |fused_parent.buckets| <= MaxNumChildren() - 1
   requires fused_parent.children.Some?
   ensures var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
     && WFNode(res)
@@ -344,6 +346,7 @@ module ImplModelSplit {
   requires ref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
+  requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == ref
   requires s.rootBucket == map[] // FIXME we don't actually need this unless paretnref is root

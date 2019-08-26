@@ -471,6 +471,10 @@ abstract module Total_Order {
 
   function getSortedSeqForMap<V>(m : map<Element, V>) : (s: seq<(Element, V)>)
   ensures SortedSeqForMap(s, m)
+
+  lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
+  requires SortedSeqForMap(s, m)
+  ensures |s| == |m|
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {

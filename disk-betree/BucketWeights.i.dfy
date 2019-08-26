@@ -9,17 +9,20 @@ module BucketWeights {
   import opened Sequences
   import opened BucketsLib
 
-  function WeightKey(key: Key) : int
+  function WeightKey(key: Key) : (w:int)
+  ensures w >= 0
   {
     8 + |key|
   }
  
-  function WeightKeySeq(keys: seq<Key>) : int
+  function WeightKeySeq(keys: seq<Key>) : (w:int)
+  ensures w >= 0
   {
     if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(keys))
   }
 
-  function WeightMessage(msg: Message) : int
+  function WeightMessage(msg: Message) : (w:int)
+  ensures w >= 0
   {
     match msg {
       case Define(value) => ValueWithDefault.Len(value)
@@ -27,7 +30,8 @@ module BucketWeights {
     }
   }
 
-  function WeightMessageSeq(msgs: seq<Message>) : int
+  function WeightMessageSeq(msgs: seq<Message>) : (w:int)
+  ensures w >= 0
   {
     if |msgs| == 0 then 0 else WeightMessageSeq(DropLast(msgs)) + WeightMessage(Last(msgs))
   }
@@ -40,7 +44,8 @@ module BucketWeights {
     key
   }
 
-  function {:opaque} WeightBucket(bucket: Bucket) : int
+  function {:opaque} WeightBucket(bucket: Bucket) : (w:int)
+  ensures w >= 0
   {
     if |bucket| == 0 then 0 else (
       var key := ChooseKey(bucket);
@@ -49,7 +54,8 @@ module BucketWeights {
     )
   }
 
-  function {:opaque} WeightBucketList(buckets: BucketList) : int
+  function {:opaque} WeightBucketList(buckets: BucketList) : (w:int)
+  ensures w >= 0
   {
     if |buckets| == 0 then 0 else (
       WeightBucketList(DropLast(buckets)) + WeightBucket(Last(buckets))
@@ -70,6 +76,13 @@ module BucketWeights {
   requires WFPivots(pivots)
   ensures WeightBucketList(BucketListFlush(parent, children, pivots))
       <= WeightBucket(parent) + WeightBucketList(children)
+
+  lemma WeightBucketListItemFlush(parent: Bucket, children: BucketList, pivots: PivotTable, i: int)
+  requires WFPivots(pivots)
+  requires 0 <= i < |children|
+  ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
+      <= WeightBucket(parent) + WeightBucket(children[i])
+
 
   lemma WeightBucketListClearEntry(blist: BucketList, i: int)
   requires 0 <= i < |blist|
@@ -102,4 +115,16 @@ module BucketWeights {
 
   lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
   ensures WeightBucketList(SplitBucketOnPivots(bucket, pivots)) == WeightBucket(bucket)
+
+  // This is far weaker than it could be, but it's probably good enough.
+  // Weight is on the order of a few million, and I plan on using this lemma
+  // to show that numbers fit within 64 bits.
+  lemma LenLeWeight(bucket: Bucket)
+  ensures |bucket| <= WeightBucket(bucket)
+
+  lemma WeightBucketEmpty()
+  ensures WeightBucket(map[]) == 0
+  {
+    reveal_WeightBucket();
+  }
 }

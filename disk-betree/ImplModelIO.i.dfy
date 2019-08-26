@@ -278,7 +278,9 @@ module ImplModelIO {
   }
 
   lemma INodeRootEqINodeForEmptyRootBucket(node: Node)
-  requires WFNode(node)
+  requires WFBuckets(node.buckets)
+  requires Pivots.WFPivots(node.pivotTable)
+  requires BucketsLib.WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
   ensures INodeRoot(node, map[]) == INode(node);
   {
     BucketsLib.BucketListFlushParentEmpty(KMTable.ISeq(node.buckets), node.pivotTable);
@@ -340,7 +342,7 @@ module ImplModelIO {
   }
 
   lemma PageInIndirectionTableRespCorrect(k: Constants, s: Variables, io: IO)
-  requires WFVars(s)
+  requires Inv(k, s)
   requires diskOp(io).RespReadOp?
   requires s.Unready?
   ensures var s' := PageInIndirectionTableResp(k, s, io);
@@ -464,8 +466,7 @@ module ImplModelIO {
 
   lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
   requires diskOp(io).RespReadOp?
-  requires WFVars(s)
-  requires BBC.Inv(Ik(k), IVars(s))
+  requires Inv(k, s)
   ensures var s' := readResponse(k, s, io);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))

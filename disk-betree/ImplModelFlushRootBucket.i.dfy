@@ -11,6 +11,7 @@ module ImplModelFlushRootBucket {
   import opened Sets
 
   import opened BucketsLib
+  import opened BucketWeights
 
   import MS = MapSpec
   import Keyspace = MS.Keyspace
@@ -19,46 +20,34 @@ module ImplModelFlushRootBucket {
   : (s': Variables)
   requires Inv(k, s)
   requires s.Ready?
-  requires s.rootBucket != map[]
+  requires BT.G.Root() in s.cache
+  ensures s'.Ready?
   {
     var oldroot := s.cache[BT.G.Root()];
 
     var rootBucketSeq := Keyspace.getSortedSeqForMap(s.rootBucket);
 
-    if (!(
-        && |rootBucketSeq| < 0x800_0000_0000
-        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].0| < 0x1_000)
-        && (forall i | 0 <= i < |rootBucketSeq| :: rootBucketSeq[i].1 != Messages.IdentityMessage())
-        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].1.value| < 0x1_000)
-    )) then (
-      s
-    ) else (
-      var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
-      if (!(
-        && |kmt.keys| < 0x4000_0000_0000_0000
-        && |oldroot.buckets| < 0x1_0000_0000_0000_0000
-        && (forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].keys| < 0x4000_0000_0000_0000)
-      )) then (
-        s
-      ) else (
-        var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
-        var newroot := oldroot.(buckets := newbuckets);
+    Keyspace.lenSortedSeqForMap(rootBucketSeq, s.rootBucket);
+    LenLeWeight(s.rootBucket);
+    
+    var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
+    var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
+    var newroot := oldroot.(buckets := newbuckets);
 
-        var s' := s.(rootBucket := map[])
-            .(cache := s.cache[BT.G.Root() := newroot]);
+    var s' := s.(rootBucket := map[])
+        .(cache := s.cache[BT.G.Root() := newroot]);
 
-        s'
-      )
-    )
+    s'
   }
 
   lemma {:fuel BC.GraphClosed,0} flushRootBucketCorrect(k: Constants, s: Variables)
   requires Inv(k, s)
   requires s.Ready?
-  requires s.rootBucket != map[]
+  requires BT.G.Root() in s.cache
   ensures var s' := flushRootBucket(k, s);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
+    && Inv(k, s')
+    && IVars(s) == IVars(s')
+    && s'.rootBucket == map[]
   {
     reveal_flushRootBucket();
     var s' := flushRootBucket(k, s);
@@ -67,27 +56,11 @@ module ImplModelFlushRootBucket {
 
     var rootBucketSeq := Keyspace.getSortedSeqForMap(s.rootBucket);
 
-    if (!(
-        && |rootBucketSeq| < 0x800_0000_0000
-        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].0| < 0x1_000)
-        && (forall i | 0 <= i < |rootBucketSeq| :: rootBucketSeq[i].1 != Messages.IdentityMessage())
-        && (forall i | 0 <= i < |rootBucketSeq| :: |rootBucketSeq[i].1.value| < 0x1_000)))
-    {
-      assert noop(k, IVars(s), IVars(s'));
-      return;
-    }
+    Keyspace.lenSortedSeqForMap(rootBucketSeq, s.rootBucket);
+    LenLeWeight(s.rootBucket);
 
     var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
     KMTable.kmtableOfSeqRes(rootBucketSeq, s.rootBucket);
-
-    if (!(
-      && |kmt.keys| < 0x4000_0000_0000_0000
-      && |oldroot.buckets| < 0x1_0000_0000_0000_0000
-      && (forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].keys| < 0x4000_0000_0000_0000)
-    )) {
-      assert noop(k, IVars(s), IVars(s'));
-      return;
-    }
 
     forall i, key | 0 <= i < |oldroot.buckets| && key in KMTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
     {
@@ -97,7 +70,7 @@ module ImplModelFlushRootBucket {
     var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
     KMTable.flushRes(kmt, oldroot.buckets, oldroot.pivotTable);
     WFBucketListFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
-    assume forall i | 0 <= i < |newbuckets| :: KMTable.Bounded(newbuckets[i]);
+    WeightBucketListFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);
 
@@ -105,6 +78,55 @@ module ImplModelFlushRootBucket {
     assert INodeRoot(oldroot, s.rootBucket) == INodeRoot(newroot, map[]);
     assert ICache(s.cache, s.rootBucket) == ICache(s'.cache, map[]);
 
-    assert noop(k, IVars(s), IVars(s'));
+    WeightBucketEmpty();
+
+    assert WFVars(s');
+
+    assert IVars(s) == IVars(s');
+    assert Inv(k, s');
+  }
+
+  lemma {:fuel BC.GraphClosed,0} flushRootBucketWeight(k: Constants, s: Variables, slot: int)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires BT.G.Root() in s.cache
+  requires 0 <= slot < |s.cache[BT.G.Root()].buckets|
+  ensures var s' := flushRootBucket(k, s);
+    && Inv(k, s')
+    && IVars(s) == IVars(s')
+    && s'.rootBucket == map[]
+    && WeightBucket(KMTable.I(s'.cache[BT.G.Root()].buckets[slot])) <=
+         WeightBucket(KMTable.I(s.cache[BT.G.Root()].buckets[slot])) +
+         WeightBucket(s.rootBucket);
+  {
+    reveal_flushRootBucket();
+    flushRootBucketCorrect(k, s);
+
+    var s' := flushRootBucket(k, s);
+    var oldroot := s.cache[BT.G.Root()];
+    var rootBucketSeq := Keyspace.getSortedSeqForMap(s.rootBucket);
+
+    Keyspace.lenSortedSeqForMap(rootBucketSeq, s.rootBucket);
+    LenLeWeight(s.rootBucket);
+
+    var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
+    KMTable.kmtableOfSeqRes(rootBucketSeq, s.rootBucket);
+
+    var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
+    KMTable.flushRes(kmt, oldroot.buckets, oldroot.pivotTable);
+
+    WeightBucketListItemFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable, slot);
+    BucketListFlushAt(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable, slot);
+  }
+
+  lemma {:fuel BC.GraphClosed,0} flushRootBucketFrozen(k: Constants, s: Variables)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires BT.G.Root() in s.cache
+  ensures var s' := flushRootBucket(k, s);
+    && s'.Ready?
+    && s'.frozenIndirectionTable == s.frozenIndirectionTable
+  {
+    reveal_flushRootBucket();
   }
 }

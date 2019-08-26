@@ -92,6 +92,9 @@ module ImplModel {
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (rootBucket != map[] ==> BT.G.Root() in cache)
+    && (BT.G.Root() in cache ==>
+        WeightBucket(rootBucket) + WeightBucketList(KMTable.ISeq(cache[BT.G.Root()].buckets))
+          <= MaxTotalBucketWeight())
   }
   predicate WFVars(vars: Variables)
   {
@@ -113,7 +116,9 @@ module ImplModel {
     BT.G.Node(node.pivotTable, node.children, KMTable.ISeq(node.buckets))
   }
   function INodeRoot(node: Node, rootBucket: map<Key, Message>) : BT.G.Node
-  requires WFNode(node)
+  requires WFBuckets(node.buckets)
+  requires Pivots.WFPivots(node.pivotTable)
+  requires |node.buckets| == |node.pivotTable| + 1
   {
     BT.G.Node(node.pivotTable, node.children,
       BucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable))

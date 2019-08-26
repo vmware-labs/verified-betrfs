@@ -1212,4 +1212,11 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   requires WeightKMTableSeq(kmts) < 0x1_0000_0000_0000_0000
   ensures weight as int == WeightBucketList(ISeq(kmts))
+
+  // This is far weaker than it could be, but it's probably good enough.
+  // Weight is on the order of a few million, and I plan on using this lemma
+  // to show that numbers fit within 64 bits.
+  lemma lenKeysLeWeight(kmt: KMTable)
+  requires WF(kmt)
+  ensures |kmt.keys| <= WeightBucket(I(kmt))
 }
