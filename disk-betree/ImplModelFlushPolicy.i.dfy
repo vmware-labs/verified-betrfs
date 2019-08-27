@@ -318,7 +318,7 @@ module ImplModelFlushPolicy {
   }
 
 
-  function runFlushPolicy(k: Constants, s: Variables, io: IO)
+  function {:opaque} runFlushPolicy(k: Constants, s: Variables, io: IO)
   : (Variables, IO)
   requires Inv(k, s)
   requires io.IOInit?
@@ -370,6 +370,8 @@ module ImplModelFlushPolicy {
   {
     var action := getActionToFlush(k, s, [BT.G.Root()], []);
     getActionToFlushValidAction(k, s, [BT.G.Root()], []);
+
+    reveal_runFlushPolicy();
 
     match action {
       case ActionPageIn(ref) => {

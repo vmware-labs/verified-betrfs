@@ -18,6 +18,8 @@ module ImplModelQuery {
   import opened NativeTypes
 
   import opened BucketsLib
+  import opened BucketWeights
+  import opened Bounds
   import PivotsLib
 
   import PBS = PivotBetreeSpec`Spec
@@ -121,10 +123,12 @@ module ImplModelQuery {
   requires WFNode(node)
   requires key !in rootBucket
   requires BT.WFNode(INode(node))
+  requires WeightBucket(rootBucket) + WeightBucketList(KMTable.ISeq(node.buckets)) <= MaxTotalBucketWeight()
   ensures BT.WFNode(INodeRoot(node, rootBucket))
   ensures BT.NodeLookup(INode(node), key) == BT.NodeLookup(INodeRoot(node, rootBucket), key)
   {
     WFBucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable);
+    WeightBucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable);
     GetBucketListFlushEqMerge(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable, key);
   }
 

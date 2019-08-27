@@ -129,6 +129,10 @@ module ImplModelCache {
     if (ref == BT.G.Root()) {
       INodeRootEqINodeForEmptyRootBucket(node);
     }
+    WeightBucketEmpty();
+
+    var s' := write(k, s, ref, node);
+    assert WFVars(s');
   }
  
   lemma writeCorrectWithRootBucket(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)

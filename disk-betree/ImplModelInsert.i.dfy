@@ -150,7 +150,7 @@ module ImplModelInsert {
       (s', success, io)
     ) else (
       var (s', io') := runFlushPolicy(k, s, io);
-      (s', false, io)
+      (s', false, io')
     )
   }
 
@@ -175,7 +175,8 @@ module ImplModelInsert {
         <= MaxTotalBucketWeight() {
       InsertKeyValueCorrect(k, s, key, value);
     } else {
-      
+      runFlushPolicyCorrect(k, s, io);
     }
   }
+
 }

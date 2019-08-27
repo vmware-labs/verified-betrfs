@@ -7,6 +7,7 @@ module ImplModelIO {
   import opened Options
   import opened Maps
   import opened Bounds
+  import opened BucketWeights
   import IMM = ImplMarshallingModel
   import Marshalling = Marshalling
   import LBAType
@@ -442,7 +443,9 @@ module ImplModelIO {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
         INodeRootEqINodeForEmptyRootBucket(node);
+        WeightBucketEmpty();
 
+        assert WFVars(s');
         assert BC.PageInResp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
         assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInRespStep);
       } else {
