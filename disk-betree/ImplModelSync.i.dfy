@@ -69,17 +69,6 @@ module ImplModelSync {
     && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value
         :: s.frozenIndirectionTable.value[r].0.Some?)
 
-  function {:opaque} FindParentRef(s: Variables, ref: Reference) : (parentref: Reference)
-  requires WFVars(s)
-  requires s.Ready?
-
-  lemma FindParentRefCorrect(s: Variables, ref: Reference)
-  requires WFVars(s)
-  requires s.Ready?
-  ensures var parentref := FindParentRef(s, ref);
-    && parentref in IIndirectionTable(s.ephemeralIndirectionTable).graph
-    && ref in IIndirectionTable(s.ephemeralIndirectionTable).graph[parentref]
-
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: Constants, s: Variables, io: IO)
   : (res: (Variables, IO))

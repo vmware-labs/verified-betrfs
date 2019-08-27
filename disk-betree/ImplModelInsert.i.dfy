@@ -1,9 +1,11 @@
 include "ImplModelCache.i.dfy"
+include "ImplModelFlushPolicy.i.dfy"
 
 module ImplModelInsert { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
+  import opened ImplModelFlushPolicy
 
   import opened Options
   import opened Maps
@@ -147,7 +149,7 @@ module ImplModelInsert {
       var (s', success) := InsertKeyValue(k, s, key, value);
       (s', success, io)
     ) else (
-      var (s', io') := ImplModelFlushPolicy.runFlushPolicy(k, s);
+      var (s', io') := runFlushPolicy(k, s, io);
       (s', false, io)
     )
   }
@@ -167,8 +169,13 @@ module ImplModelInsert {
       PageInIndirectionTableReqCorrect(k, s, io);
     } else if (BT.G.Root() !in s.cache) {
       PageInReqCorrect(k, s, io, BT.G.Root());
-    } else {
+    } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
+        WeightBucket(s.rootBucket) +
+        WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+        <= MaxTotalBucketWeight() {
       InsertKeyValueCorrect(k, s, key, value);
+    } else {
+      
     }
   }
 }

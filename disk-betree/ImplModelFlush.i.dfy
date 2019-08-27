@@ -21,10 +21,9 @@ module ImplModelFlush {
   import opened NativeTypes
   import D = AsyncDisk
 
-  function flush(k: Constants, s: Variables, io: IO, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
-  : (Variables, IO)
+  function flush(k: Constants, s: Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  : Variables
   requires Inv(k, s)
-  requires io.IOInit?
   requires s.Ready?
 
   requires parentref in s.ephemeralIndirectionTable
@@ -45,7 +44,7 @@ module ImplModelFlush {
       && var (loc, _) := entry;
       && loc.None?
     ) then (
-      (s, io)
+      s
     ) else (
       var s1 := if parentref == BT.G.Root() then (
         flushRootBucketCorrect(k, s);
@@ -60,7 +59,7 @@ module ImplModelFlush {
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := alloc(k, s1, newchild);
       if newchildref.None? then (
-        (s2, io)
+        s2
       ) else (
         var newparent := Node(
           parent.pivotTable,
@@ -68,13 +67,13 @@ module ImplModelFlush {
           parent.buckets[slot := KMTable.Empty()]
         );
         var s' := write(k, s2, parentref, newparent);
-        (s', io)
+        s'
       )
     )
   }
 
-  lemma flushCorrect(k: Constants, s: Variables, io: IO, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
-  requires flush.requires(k, s, io, parentref, slot, childref, child)
+  lemma flushCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  requires flush.requires(k, s, parentref, slot, childref, child)
   requires WeightBucketList(KMTable.ISeq(child.buckets)) +
       WeightBucket(KMTable.I(s.cache[parentref].buckets[slot])) <= MaxTotalBucketWeight()
   requires parentref == BT.G.Root() ==>
@@ -82,9 +81,9 @@ module ImplModelFlush {
       WeightBucketList(KMTable.ISeq(child.buckets)) +
       WeightBucket(KMTable.I(s.cache[parentref].buckets[slot])) <= MaxTotalBucketWeight()
   ensures
-      var (s', io') := flush(k, s, io, parentref, slot, childref, child);
+      var s' := flush(k, s, parentref, slot, childref, child);
       && WFVars(s')
-      && M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, diskOp(io'))
+      && M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, D.NoDiskOp)
   {
     if (
       && s.frozenIndirectionTable.Some?

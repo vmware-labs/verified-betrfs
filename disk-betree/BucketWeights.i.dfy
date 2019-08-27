@@ -131,4 +131,8 @@ module BucketWeights {
   lemma WeightBucketPut(bucket: Bucket, key: Key, msg: Message)
   ensures WeightBucket(bucket[key := msg]) <=
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
+
+  lemma WeightBucketLeBucketList(blist: BucketList, i: int)
+  requires 0 <= i < |blist|
+  ensures WeightBucket(blist[i]) <= WeightBucketList(blist)
 }
