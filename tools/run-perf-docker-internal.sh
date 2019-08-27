@@ -28,6 +28,8 @@ perf record -p $PID -g &
 PERF_PID=$!
 sleep 1
 read -n 1 -s -r -p "Press any key to stop recording"
+
+set +e
 kill $PID
 sleep 2
 
