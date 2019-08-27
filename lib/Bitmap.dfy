@@ -1,3 +1,4 @@
+// NOTE: requires /noNLarith
 
 include "NativeTypes.s.dfy"
 
@@ -6,25 +7,25 @@ module Bitmap {
 
 
   class Bitmap {
-    var bits: array<bv64>;
+    var bits: array<uint64>;
 
     ghost var Contents: set<uint64>;
     ghost var Repr: set<object>;
 
-    static predicate BitBSet(word: bv64, b: nat)
+    static predicate {:opaque} BitBSet(word: uint64, b: nat)
     requires b < 64
     {
-      && word & (1 << b) != 0
+      && (word as bv64) & (1 << b) != 0
     }
 
-    static predicate BitsSetAtIB(bitsSeq: seq<bv64>, i: nat, b: nat)
+    static predicate BitsSetAtIB(bitsSeq: seq<uint64>, i: nat, b: nat)
     requires i < |bitsSeq|
     requires b < 64
     {
       && BitBSet(bitsSeq[i], b)
     }
 
-    static predicate BitsSetAtC(bitsSeq: seq<bv64>, c: nat)
+    static predicate BitsSetAtC(bitsSeq: seq<uint64>, c: nat)
     requires c / 64 < |bitsSeq|
     {
       && BitsSetAtIB(bitsSeq, c / 64, c % 64)
@@ -35,7 +36,7 @@ module Bitmap {
       && i * 64 < 0x1_0000_0000_0000_0000
     }
 
-    static predicate {:opaque} BitsMatchesContents(bitsSeq: seq<bv64>, contents: set<uint64>)
+    static predicate {:opaque} BitsMatchesContents(bitsSeq: seq<uint64>, contents: set<uint64>)
     {
       && (forall c: nat | c < 0x1_0000_0000_0000_0000 && c / 64 < |bitsSeq| ::
           c as uint64 in contents <==> BitsSetAtC(bitsSeq, c))
@@ -70,28 +71,53 @@ module Bitmap {
       Repr := { this, this.bits };
 
       reveal_BitsMatchesContents();
-      // reveal_ContentsMatchesBits();
+      reveal_BitBSet();
     }
 
-    static lemma SetABit(before: seq<bv64>, after: seq<bv64>, i: nat, b: nat)
-    requires |after| == |before|
-    requires i < |before|
+    static function method {:opaque} SetBit(word: uint64, b: uint64) : uint64
     requires b < 64
-    requires forall i': nat | i' < |before| && i' != i :: after[i'] == before[i']
-    requires after[i] == before[i] | (1 << b)
-    ensures BitBSet(after[i], b as nat)
-    ensures forall b': nat | b' != b as nat && b' < 64 :: BitBSet(after[i], b') <==> BitBSet(before[i], b')
     {
-      // TODO ???
-      assume BitBSet(after[i], b as nat);
-
-      forall b': nat | b' != b as nat && b' < 64
-      ensures BitBSet(after[i], b') <==> BitBSet(before[i], b')
-      {
-        // TODO ???
-        assume after[i] & (1 << b') == before[i] & (1 << b');
-      }
+      (word as bv64 | (1 << b)) as uint64
     }
+
+    // TODO ???
+    static lemma SetBitProperties(before: uint64, after: uint64, b: uint64)
+    requires b < 64
+    requires after == SetBit(before, b)
+    ensures BitBSet(after, b as nat)
+    ensures forall b': nat | b' != b as nat && b' < 64 :: BitBSet(after, b') <==> BitBSet(before, b')
+    {
+      assume false;
+    }
+
+    //== SetBitProperties attempts ==
+    //{
+    //  var beforeBV := before as bv64;
+    //  var afterBV := after as bv64;
+
+    //  forall ensures afterBV & (1 << b) != 0
+    //  {
+    //    reveal_SetBit();
+    //    assert before as nat < 0x1_0000_0000_0000_0000;
+    //    assert after as nat < 0x1_0000_0000_0000_0000;
+    //    assert after == (before as bv64 | (1 << b)) as uint64;
+    //    // TODO ???
+    //    assume afterBV == (beforeBV | (1 << b));
+    //    assume afterBV & (1 << b) != 0;
+    //  }
+    //  reveal_BitBSet();
+    //  assert BitBSet(after, b as nat);
+
+    //  forall b': nat | b' != b as nat && b' < 64
+    //  ensures BitBSet(after, b') <==> BitBSet(before, b')
+    //  {
+    //    assume false;
+    //    // TODO ???
+    //    if BitBSet(before, b') {
+    //    } else {
+    //    }
+    //  }
+    //}
 
     method Set(c: uint64)
     requires c as nat / 64 < bits.Length
@@ -104,8 +130,8 @@ module Bitmap {
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
-      this.bits[i] := this.bits[i] | (1 << b);
-      SetABit(old(this.bits[..]), this.bits[..], i as nat, b as nat);
+      this.bits[i] := SetBit(this.bits[i], b);
+      SetBitProperties(old(this.bits[i]), this.bits[i], b);
 
       Contents := Contents + {c};
 
@@ -129,14 +155,17 @@ module Bitmap {
       reveal_BitsMatchesContents();
     }
 
-    static lemma ClearABit(before: seq<bv64>, after: seq<bv64>, i: nat, b: nat)
-    requires |after| == |before|
-    requires i < |before|
+    static function method {:opaque} ClearBit(word: uint64, b: uint64) : uint64
     requires b < 64
-    requires forall i': nat | i' < |before| && i' != i :: after[i'] == before[i']
-    requires after[i] == before[i] & (0xffff_ffff_ffff_ffff ^ (1 << b))
-    ensures !BitBSet(after[i], b as nat)
-    ensures forall b': nat | b' != b as nat && b' < 64 :: BitBSet(after[i], b') <==> BitBSet(before[i], b')
+    {
+      (word as bv64 & (0xffff_ffff_ffff_ffff ^ (1 << b))) as uint64
+    }
+
+    static lemma ClearBitProperties(before: uint64, after: uint64, b: uint64)
+    requires b < 64
+    requires after == ClearBit(before, b)
+    ensures !BitBSet(after, b as nat)
+    ensures forall b': nat | b' != b as nat && b' < 64 :: BitBSet(after, b') <==> BitBSet(before, b')
     {
       assume false;
     }
@@ -152,8 +181,8 @@ module Bitmap {
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
-      this.bits[i] := this.bits[i] & (0xffff_ffff_ffff_ffff ^ (1 << b));
-      ClearABit(old(this.bits[..]), this.bits[..], i as nat, b as nat);
+      this.bits[i] := ClearBit(this.bits[i], b);
+      ClearBitProperties(old(this.bits[i]), this.bits[i], b);
 
       Contents := Contents - {c};
 
@@ -187,14 +216,16 @@ module Bitmap {
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
-      result := this.bits[i] & (1 << b) != 0;
+      result := this.bits[i] as bv64 & (1 << b) != 0;
 
       if c in Contents {
         reveal_BitsMatchesContents();
         assert BitsSetAtC(this.bits[..], c as nat);
+        reveal_BitBSet();
       } else {
         reveal_BitsMatchesContents();
         assert !BitsSetAtC(this.bits[..], c as nat);
+        reveal_BitBSet();
       }
     }
   }
