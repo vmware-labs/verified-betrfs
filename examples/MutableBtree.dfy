@@ -206,6 +206,21 @@ abstract module MutableBtree {
     SubReprFits(node, 0, newnchildren);
   }
 
+  function WFIndexPrefix(node: Node, newnchildren: int) : (result: Node)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < node.nchildren
+    requires 0 <= newnchildren <= node.nchildren as int
+    ensures WFShape(result)
+    ensures WF(result)
+    reads node.repr
+  {
+    IndexPrefixWF(node, newnchildren);
+    IndexPrefix(node, newnchildren)
+  }
+    
+  
   function ToImmutableNode(node: Node) : (result: BS.Node)
     requires WFShape(node)
     requires WF(node)
@@ -280,7 +295,32 @@ abstract module MutableBtree {
       IndexPrefixWF(node, node.nchildren as int - 1);
     }
   }
-  
+
+  lemma IndexPrefixIsSubIndex(node: Node, newnchildren: int)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < node.nchildren
+    requires 0 < newnchildren <= node.nchildren as int
+    ensures BS.SubIndex(ToImmutableWFNode(node), 0, newnchildren) == ToImmutableNode(WFIndexPrefix(node, newnchildren))
+  {
+    var imnode := ToImmutableWFNode(node);
+    var subimnode := BS.SubIndex(imnode, 0, newnchildren);
+    var prefix := WFIndexPrefix(node, newnchildren);
+    var imprefix := ToImmutableWFNode(prefix);
+
+    assert subimnode.Index?;
+    assert imprefix.Index?;
+    assert |subimnode.pivots| == |imprefix.pivots|;
+    assert subimnode.pivots == imprefix.pivots;
+    assert |subimnode.children| == |imprefix.children|;
+
+    ImmutableChildIndices(node);
+    ImmutableChildIndices(prefix);
+    assert subimnode.children == imprefix.children;
+    assert subimnode == imprefix;
+  }
+    
   function Interpretation(node: Node) : map<Key, Value>
     requires WFShape(node)
     requires WF(node)
