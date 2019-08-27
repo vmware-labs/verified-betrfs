@@ -140,11 +140,13 @@ abstract module BtreeSpec {
     && WF(oldindex)
     && WF(leftindex)
     && WF(rightindex)
-    && oldindex.pivots == leftindex.pivots + [pivot] + rightindex.pivots
-    && oldindex.children == leftindex.children + rightindex.children
+    && 0 < |leftindex.children| < |oldindex.children|-1
+    && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
+    && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
+    && pivot == oldindex.pivots[|leftindex.pivots|]
   }
 
-  lemma {:timeLimitMultiplier 2} SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures Interpretation(oldindex) == Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
   {
@@ -159,8 +161,15 @@ abstract module BtreeSpec {
       ensures MapsTo(newint, key, oldint[key])
     {
       AllKeysIsConsistentWithInterpretation(oldindex, key);
-      if Keys.lt(key, pivot) { // This speeds up dafny a bit
+      var llte := Keys.LargestLte(oldindex.pivots, key);
+      if Keys.lt(key, pivot) { 
+        assert llte < |leftindex.pivots|;
+        assert llte == Keys.LargestLte(leftindex.pivots, key);
+        assert key in Interpretation(oldindex.children[llte+1]);
+        assert oldint[key] == Interpretation(oldindex.children[llte+1])[key];
+        assert leftindex.children[llte+1] == oldindex.children[llte+1];
       } else {
+        assert rightindex.children[llte - |leftindex.children| + 1] == oldindex.children[llte + 1];
       }
     }
 
@@ -177,7 +186,6 @@ abstract module BtreeSpec {
         assert oldindex.children[|leftindex.children| + llte + 1] == rightindex.children[llte+1];
       }
     }
-    
   }
   
   predicate SplitNode(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
