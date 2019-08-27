@@ -10,7 +10,9 @@ module ImplModelInsert {
   import opened Sets
   import opened Sequences
 
+  import opened BucketWeights
   import opened BucketsLib
+  import opened Bounds
 
   import PBS = PivotBetreeSpec`Spec
 
@@ -68,6 +70,10 @@ module ImplModelInsert {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
+      WeightBucket(s.rootBucket) +
+      WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+      <= MaxTotalBucketWeight()
   ensures var (s', success) := InsertKeyValue(k, s, key, value);
       && WFVars(s')
       && M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
@@ -87,6 +93,8 @@ module ImplModelInsert {
     }
 
     var msg := Messages.Define(value);
+
+    WeightBucketPut(s.rootBucket, key, msg);
 
     var baseroot := s.cache[BT.G.Root()];
 
@@ -132,9 +140,15 @@ module ImplModelInsert {
     ) else if (BT.G.Root() !in s.cache) then (
       var (s', io') := PageInReq(k, s, io, BT.G.Root());
       (s', false, io')
-    ) else (
+    ) else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
+        WeightBucket(s.rootBucket) +
+        WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+        <= MaxTotalBucketWeight() then (
       var (s', success) := InsertKeyValue(k, s, key, value);
       (s', success, io)
+    ) else (
+      var (s', io') := ImplModelFlushPolicy.runFlushPolicy(k, s);
+      (s', false, io)
     )
   }
 

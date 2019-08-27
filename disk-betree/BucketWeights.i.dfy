@@ -127,4 +127,8 @@ module BucketWeights {
   {
     reveal_WeightBucket();
   }
+
+  lemma WeightBucketPut(bucket: Bucket, key: Key, msg: Message)
+  ensures WeightBucket(bucket[key := msg]) <=
+      WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
 }
