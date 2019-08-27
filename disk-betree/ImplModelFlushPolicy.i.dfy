@@ -92,6 +92,9 @@ module ImplModelFlushPolicy {
       && s.cache[action.parentref].children.value[action.slot] in s.cache
       && s.cache[action.parentref].children.value[action.slot] in s.ephemeralIndirectionTable
     ))
+    && (action.ActionSplit? ==> (
+      |s.cache[s.cache[action.parentref].children.value[action.slot]].buckets| >= 2
+    ))
     && (action.ActionRepivot? ==> (
       && action.ref != BT.G.Root()
       && action.ref in s.ephemeralIndirectionTable
@@ -120,7 +123,7 @@ module ImplModelFlushPolicy {
       ActionGrow
     else (
       if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 then (
-        if |s.cache[stack[i]].buckets| as uint64 == 0 then (
+        if |s.cache[stack[i]].buckets| as uint64 == 1 then (
           ActionRepivot(stack[i])
         ) else (
           ActionSplit(stack[i-1], slots[i-1])
@@ -131,7 +134,7 @@ module ImplModelFlushPolicy {
     )
   }
 
-  function getActionToFlush(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (action : Action)
+  function {:opaque} getActionToFlush(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (action : Action)
   requires |stack| <= 40
   requires ValidStackSlots(k, s, stack, slots)
   requires WFVars(s)
@@ -146,7 +149,11 @@ module ImplModelFlushPolicy {
         getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
       ) else (
         var (slot, slotWeight) := biggestSlot(node.buckets);
-        if slotWeight >= FlushTriggerWeight() as uint64 then (
+        // TODO partial flushes
+        // with partial flushes, we can ensure that the node will either have a lot of children
+        // or will have a flushable node.
+        // As it stands, we'll just flush in the event of a small node.
+        if slotWeight >= FlushTriggerWeight() as uint64 || |node.children.value| as uint64 < 2 then (
           var childref := node.children.value[slot];
           if childref in s.cache then (
             var child := s.cache[childref];
@@ -167,12 +174,81 @@ module ImplModelFlushPolicy {
     )
   }
 
+  lemma getActionToSplitValidAction(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
+  requires 0 <= i as int < |stack|
+  requires Inv(k, s)
+  requires ValidStackSlots(k, s, stack, slots)
+  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
+  requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
+  requires forall j | 1 <= j < |stack| :: stack[j] != BT.G.Root()
+  requires s.cache[stack[|stack| - 1]].children.Some? ==> |s.cache[stack[|stack| - 1]].buckets| >= 2
+  requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
+  ensures ValidAction(k, s, getActionToSplit(k, s, stack, slots, i))
+  {
+    reveal_getActionToSplit();
+    var action := getActionToSplit(k, s, stack, slots, i);
+
+    if i == 0 {
+      //assert ValidAction(k, s, action);
+    } else {
+      if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 {
+        /*if |s.cache[stack[i]].buckets| as uint64 == 1 {
+          assert ValidAction(k, s, action);
+        } else {
+          assert ValidAction(k, s, action);
+        }*/
+      } else {
+        getActionToSplitValidAction(k, s, stack, slots, i-1);
+      }
+    }
+  }
+
   lemma getActionToFlushValidAction(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   requires |stack| <= 40
   requires ValidStackSlots(k, s, stack, slots)
-  requires WFVars(s)
+  requires Inv(k, s)
+  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
+  requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
+  requires forall j | 1 <= j < |stack| :: stack[j] != BT.G.Root()
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures ValidAction(k, s, getActionToFlush(k, s, stack, slots))
+  {
+    reveal_getActionToFlush();
+    var action := getActionToFlush(k, s, stack, slots);
+
+    if |stack| as uint64 == 40 {
+    } else {
+      var ref := stack[|stack| as uint64 - 1];
+      var node := s.cache[ref];
+      if node.children.None? || |node.buckets| == MaxNumChildren() {
+        getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
+      } else {
+        var (slot, slotWeight) := biggestSlot(node.buckets);
+        if slotWeight >= FlushTriggerWeight() as uint64 || |node.children.value| as uint64 < 2 {
+          var childref := node.children.value[slot];
+          lemmaChildInGraph(k, s, ref, childref);
+          if childref in s.cache {
+            var child := s.cache[childref];
+            var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
+            var extraRootWeight: uint64 := if ref == BT.G.Root() then WeightBucket(s.rootBucket) as uint64 else 0;
+            if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 {
+              assert ValidAction(k, s, action);
+            } else {
+              assume childref != BT.G.Root(); // TODO we need a way to show this
+              getActionToFlushValidAction(k, s, stack + [childref], slots + [slot]);
+            }
+          } else {
+            assert childref !in IVars(s).cache;
+            assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
+            assert childref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
+            assert ValidAction(k, s, action);
+          }
+        } else {
+          getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
+        }
+      }
+    }
+  }
 
   function runFlushPolicy(k: Constants, s: Variables, io: IO)
   : (Variables, IO)
