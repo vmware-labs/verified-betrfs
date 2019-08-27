@@ -230,16 +230,20 @@ module ImplModelSplit {
     )
   }
 
-  lemma SplitParentCorrect(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+  lemma SplitParentCorrect(rootBucket: Bucket, parentref: BT.G.Reference, fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
   requires WFNode(fused_parent)
   requires BT.WFNode(INode(fused_parent))
   requires 0 <= slot_idx < |fused_parent.buckets|
   requires PivotsLib.PivotInsertable(fused_parent.pivotTable, slot_idx, pivot)
   requires |fused_parent.buckets| <= MaxNumChildren() - 1
   requires fused_parent.children.Some?
-  ensures var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
+  ensures
+    && var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
     && WFNode(res)
-    && INode(res) == BT.SplitParent(INode(fused_parent), pivot, slot_idx, left_childref, right_childref)
+    && var inode := if parentref == BT.G.Root() then INodeRoot(fused_parent, rootBucket) else INode(fused_parent);
+    && var inode' := if parentref == BT.G.Root() then INodeRoot(res, rootBucket) else INode(res);
+    && inode' == BT.SplitParent(inode, pivot, slot_idx, left_childref, right_childref)
+    && WeightBucketList(KMTable.ISeq(res.buckets)) == WeightBucketList(KMTable.ISeq(fused_parent.buckets))
   {
     KMTable.splitKMTableInListCorrect(fused_parent.buckets, slot_idx, pivot);
     var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
@@ -247,6 +251,15 @@ module ImplModelSplit {
     WeightSplitBucketInList(KMTable.ISeq(fused_parent.buckets), slot_idx, pivot);
     assert WFNode(res);
     assert INode(res) == BT.SplitParent(INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
+
+    if (parentref == BT.G.Root()) {
+      BucketListFlushSplitInList(
+        rootBucket,
+        KMTable.ISeq(fused_parent.buckets),
+        fused_parent.pivotTable,
+        slot_idx,
+        pivot);
+    }
   }
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -280,17 +293,17 @@ module ImplModelSplit {
     }
   }
 
-  function {:opaque} doSplit(k: Constants, s: Variables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  function {:opaque} doSplit(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   : (s': Variables)
   requires s.Ready?
   requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable
+  requires childref in s.ephemeralIndirectionTable
   requires parentref in s.ephemeralIndirectionTable
-  requires ref in s.cache
+  requires childref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
-  requires s.cache[parentref].children.value[slot] == ref
+  requires s.cache[parentref].children.value[slot] == childref
   {
     if (
       && s.frozenIndirectionTable.Some?
@@ -302,7 +315,7 @@ module ImplModelSplit {
       s
     ) else (
       var fused_parent := s.cache[parentref];
-      var fused_child := s.cache[ref];
+      var fused_child := s.cache[childref];
 
       var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
       var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
@@ -338,19 +351,18 @@ module ImplModelSplit {
     )
   }
 
-  lemma doSplitCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  lemma doSplitCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires s.Ready?
   requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable
+  requires childref in s.ephemeralIndirectionTable
   requires parentref in s.ephemeralIndirectionTable
-  requires ref in s.cache
+  requires childref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
-  requires s.cache[parentref].children.value[slot] == ref
-  requires s.rootBucket == map[] // FIXME we don't actually need this unless paretnref is root
-  ensures var s' := doSplit(k, s, parentref, ref, slot);
+  requires s.cache[parentref].children.value[slot] == childref
+  ensures var s' := doSplit(k, s, parentref, childref, slot);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
   {
@@ -366,10 +378,9 @@ module ImplModelSplit {
       assert noop(k, IVars(s), IVars(s));
     } else {
       var fused_parent := s.cache[parentref];
-      var fused_child := s.cache[ref];
+      var fused_child := s.cache[childref];
 
-      INodeRootEqINodeForEmptyRootBucket(fused_parent);
-      INodeRootEqINodeForEmptyRootBucket(fused_child);
+      assume childref != BT.G.Root(); // TODO
 
       var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
       var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
@@ -403,20 +414,23 @@ module ImplModelSplit {
             var s' := write(k, s2, parentref, split_parent);
 
             lemmaSplitChild(child, num_children_left);
-            SplitParentCorrect(fused_parent, pivot, slot, left_childref.value, right_childref.value);
+            SplitParentCorrect(s.rootBucket, parentref, fused_parent, pivot, slot, left_childref.value, right_childref.value);
 
-            lemmaBlockPointsToValidReferences(k, s, ref);
+            lemmaBlockPointsToValidReferences(k, s, childref);
             assert BC.BlockPointsToValidReferences(INode(fused_child), IIndirectionTable(s.ephemeralIndirectionTable).graph);
             lemmaSplitChildValidReferences(INode(fused_child), INode(child), num_children_left, IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
 
             writeNewRefIsAlloc(k, s, left_childref.value, left_child);
             writeNewRefIsAlloc(k, s1, right_childref.value, right_child);
 
-            lemmaBlockPointsToValidReferences(k, s, parentref);
-            assert BC.BlockPointsToValidReferences(INode(fused_parent), IIndirectionTable(s2.ephemeralIndirectionTable).graph);
-            lemmaSplitParentValidReferences(INode(fused_parent), pivot, slot, left_childref.value, right_childref.value, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+            var inodeFusedParent := if parentref == BT.G.Root() then INodeRoot(fused_parent, s.rootBucket) else INode(fused_parent);
+            var inodeSplitParent := if parentref == BT.G.Root() then INodeRoot(split_parent, s.rootBucket) else INode(split_parent);
 
-            writeCorrect(k, s2, parentref, split_parent);
+            lemmaBlockPointsToValidReferences(k, s, parentref);
+            assert BC.BlockPointsToValidReferences(inodeFusedParent, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+            lemmaSplitParentValidReferences(inodeFusedParent, pivot, slot, left_childref.value, right_childref.value, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+
+            writeCorrectWithRootBucket(k, s2, parentref, split_parent);
           
             reveal_SplitChildLeft();
             reveal_SplitChildRight();
@@ -427,11 +441,11 @@ module ImplModelSplit {
 
             var splitStep := BT.NodeFusion(
               parentref,
-              ref,
+              childref,
               left_childref.value,
               right_childref.value,
-              INode(fused_parent),
-              INode(split_parent),
+              inodeFusedParent,
+              inodeSplitParent,
               INode(fused_child),
               INode(left_child),
               INode(right_child),
@@ -449,7 +463,7 @@ module ImplModelSplit {
             var ops := [
               BT.G.AllocOp(left_childref.value, INode(left_child)),
               BT.G.AllocOp(right_childref.value, INode(right_child)),
-              BT.G.WriteOp(parentref, INode(split_parent))
+              BT.G.WriteOp(parentref, inodeSplitParent)
             ];
             assert ops == BT.BetreeStepOps(step);
             BC.MakeTransaction3(Ik(k), IVars(s), IVars(s1), IVars(s2), IVars(s'), ops);

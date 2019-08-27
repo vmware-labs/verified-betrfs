@@ -11,6 +11,9 @@ module ImplModelCache {
   import opened Sequences
   import opened Sets
 
+  import opened BucketWeights
+  import KMTable
+
   import opened NativeTypes
 
   predicate RefAvailable(s: Variables, ref: Reference)
@@ -76,7 +79,6 @@ module ImplModelCache {
   requires s.Ready?
   ensures s'.Ready?
   {
-    // TODO how do we deal with this?
     var eph := s.ephemeralIndirectionTable[ref := (None, if node.children.Some? then node.children.value else [])];
     s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
   }
@@ -126,6 +128,30 @@ module ImplModelCache {
     reveal_write();
     if (ref == BT.G.Root()) {
       INodeRootEqINodeForEmptyRootBucket(node);
+    }
+  }
+ 
+  lemma writeCorrectWithRootBucket(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
+  requires s.Ready?
+  requires WFVars(s)
+  requires ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
+  requires ref in s.cache
+  requires WFNode(node)
+  requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value ==> s.frozenIndirectionTable.value[ref].0.Some?
+  requires WeightBucketList(KMTable.ISeq(s.cache[ref].buckets))
+      == WeightBucketList(KMTable.ISeq(node.buckets))
+  ensures var s' := write(k, s, ref, node);
+    && WFVars(s')
+    && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, if ref == BT.G.Root() then INodeRoot(node, s.rootBucket) else INode(node))
+  {
+    reveal_write();
+    var s' := write(k, s, ref, node);
+
+    if (ref == BT.G.Root()) {
+      assert WFVars(s');
+      var inode := INodeRoot(node, s.rootBucket);
+      assert BC.BlockPointsToValidReferences(inode, IIndirectionTable(s.ephemeralIndirectionTable).graph);
     }
   }
 

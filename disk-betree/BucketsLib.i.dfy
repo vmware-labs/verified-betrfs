@@ -668,4 +668,20 @@ module BucketsLib {
       MergeIsAssociative(msg, BucketGet(parent, key), BucketGet(children[i], key));
     }
   }
+
+  lemma BucketListFlushSplitInList(parent: Bucket, children: BucketList, pivots: PivotTable, slot: int, pivot: Key)
+  requires WFPivots(pivots)
+  requires WFBucketList(children, pivots)
+  requires PivotInsertable(pivots, slot, pivot)
+  requires |children| == |pivots| + 1
+  ensures WFPivots(insert(pivots, pivot, slot))
+  ensures
+      BucketListFlush(
+        parent,
+        SplitBucketInList(children, slot, pivot),
+        insert(pivots, pivot, slot))
+      == SplitBucketInList(
+        BucketListFlush(parent, children, pivots),
+        slot,
+        pivot)
 }
