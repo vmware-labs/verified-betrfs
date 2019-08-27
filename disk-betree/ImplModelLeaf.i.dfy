@@ -60,8 +60,6 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
-  requires s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==>
-      ref in IIndirectionTable(s.frozenIndirectionTable.value).locs
   ensures var s' := repivotLeaf(k, s, ref, node);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
