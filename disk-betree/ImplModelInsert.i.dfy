@@ -118,10 +118,14 @@ module ImplModelInsert {
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
+    WeightBucketListFlush(s.rootBucket, KMTable.ISeq(baseroot.buckets), oldroot.pivotTable);
+
     var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
+    assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
 
     assert BC.Dirty(Ik(k), IVars(s), IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
+    assert BT.ValidBetreeStep(btStep);
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(btStep)[0]);
     assert BC.OpTransaction(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(btStep));
     assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.PutOp(key, value), SD.NoDiskOp, btStep);

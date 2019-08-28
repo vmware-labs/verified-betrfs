@@ -163,6 +163,9 @@ module ImplMarshalling {
 
       ar[i] := v.a[i].b;
 
+      assert DropLast(v.a[..i+1]) == v.a[..i];
+      assert ar[..i+1] == ar[..i] + [ar[i]];
+
       if (i > 0) {
         var c := Keyspace.cmp(ar[i-1], ar[i]);
         if (c >= 0) {
@@ -172,9 +175,6 @@ module ImplMarshalling {
           return None;
         }
       }
-
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
 
       i := i + 1;
     }

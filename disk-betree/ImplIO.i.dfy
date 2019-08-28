@@ -82,7 +82,6 @@ module ImplIO {
   returns (id: Option<D.ReqId>)
   requires IS.WFSector(sector)
   requires IM.WFSector(IS.ISector(sector))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
   requires io.initialized()
   modifies io
   ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
@@ -106,7 +105,6 @@ module ImplIO {
   requires s.Ready?
   requires IS.WFSector(sector)
   requires IM.WFSector(IS.ISector(sector))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
   requires io.initialized()
   modifies io
   ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))

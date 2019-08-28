@@ -128,6 +128,9 @@ module BucketWeights {
     reveal_WeightBucket();
   }
 
+  lemma WeightBucketListOneEmpty()
+  ensures WeightBucketList([map[]]) == 0
+
   lemma WeightBucketPut(bucket: Bucket, key: Key, msg: Message)
   ensures WeightBucket(bucket[key := msg]) <=
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
@@ -135,4 +138,9 @@ module BucketWeights {
   lemma WeightBucketLeBucketList(blist: BucketList, i: int)
   requires 0 <= i < |blist|
   ensures WeightBucket(blist[i]) <= WeightBucketList(blist)
+
+  lemma WeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
+  requires WFBucketList(blist, pivots)
+  ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
+      WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
 }

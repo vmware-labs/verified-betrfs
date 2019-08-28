@@ -31,7 +31,9 @@ module PivotBetreeSpecRefinement {
   type Buffer = B.G.Buffer
 
   function IChildren(node: PNode) : imap<Key, Reference>
-  requires P.WFNode(node);
+  requires (node.children.Some? ==> |node.buckets| == |node.children.value|)
+  requires WFPivots(node.pivotTable)
+  requires NumBuckets(node.pivotTable) == |node.buckets|
   {
     if node.children.Some? then (
       imap key:Key :: node.children.value[Route(node.pivotTable, key)]
@@ -41,13 +43,13 @@ module PivotBetreeSpecRefinement {
   }
 
   function IBufferInternal(node: PNode) : Buffer
-  requires P.WFNode(node);
+  requires WFBucketList(node.buckets, node.pivotTable)
   {
     imap key:Key :: BucketListGet(node.buckets, node.pivotTable, key)
   }
 
   function IBufferLeaf(node: PNode) : Buffer
-  requires P.WFNode(node);
+  requires WFBucketList(node.buckets, node.pivotTable)
   {
     imap key:Key :: M.Merge(
       BucketListGet(node.buckets, node.pivotTable, key),
@@ -56,7 +58,7 @@ module PivotBetreeSpecRefinement {
   }
 
   function IBuffer(node: PNode) : Buffer
-  requires P.WFNode(node);
+  requires WFBucketList(node.buckets, node.pivotTable)
   {
     if node.children.Some? then
       IBufferInternal(node)
@@ -65,7 +67,8 @@ module PivotBetreeSpecRefinement {
   }
 
   function INode(node: PNode) : Node
-  requires P.WFNode(node);
+  requires (node.children.Some? ==> |node.buckets| == |node.children.value|)
+  requires WFBucketList(node.buckets, node.pivotTable)
   {
     B.G.Node(IChildren(node), IBuffer(node))
   }
@@ -837,6 +840,8 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.InsertionOps(ins)[i].node)
   ensures IOps(P.InsertionOps(ins)) == B.InsertionOps(IInsertion(ins))
   {
+    PivotBetreeSpecWFNodes.ValidInsertWritesWFNodes(ins);
+
     var newroot := P.AddMessageToNode(ins.oldroot, ins.key, ins.msg);
     var newroot' := B.AddMessageToNode(INode(ins.oldroot), ins.key, ins.msg);
 
@@ -872,6 +877,7 @@ module PivotBetreeSpecRefinement {
   lemma AddMessagesToNodeResult(node: PNode, bucket: map<Key, M.Message>, node': PNode, key: Key)
   requires P.WFNode(node)
   requires node' == P.AddMessagesToNode(node, bucket);
+  ensures WFBucketList(node'.buckets, node'.pivotTable);
   ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
   ensures key in bucket ==> P.NodeLookup(node', key) == M.Merge(bucket[key], P.NodeLookup(node, key))
   {
@@ -885,6 +891,8 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.FlushOps(flush)[i].node)
   ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
   {
+    PivotBetreeSpecWFNodes.ValidFlushWritesWFNodes(flush);
+
     var newparent := P.G.Node(
         flush.parent.pivotTable,
         Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
@@ -894,6 +902,9 @@ module PivotBetreeSpecRefinement {
     var newchild := P.AddMessagesToNode(flush.child, bucket);
     var allocop := P.G.AllocOp(flush.newchildref, newchild);
     var writeop := P.G.WriteOp(flush.parentref, newparent);
+
+    assert P.WFNode(newchild);
+    assert P.WFNode(newparent);
 
     /*
     assert |newchild.buckets| == |flush.child.buckets|;
@@ -991,6 +1002,8 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.GrowOps(growth)[i].node)
   ensures IOps(P.GrowOps(growth)) == B.GrowOps(IGrow(growth))
   {
+    PivotBetreeSpecWFNodes.ValidGrowWritesWFNodes(growth);
+
     var newroot := P.G.Node([], Some([growth.newchildref]), [map[]]);
     var newroot' := B.G.Node(
         imap key | MS.InDomain(key) :: IGrow(growth).newchildref,

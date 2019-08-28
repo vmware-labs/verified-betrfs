@@ -143,7 +143,7 @@ module PivotBetreeSpec {
   }
 
   function NodeLookup(node: Node, key: Key) : Message
-  requires WFNode(node)
+  requires Buckets.WFBucketList(node.buckets, node.pivotTable)
   {
     Buckets.BucketListGet(node.buckets, node.pivotTable, key)
   }
@@ -194,6 +194,8 @@ module PivotBetreeSpec {
 
   predicate ValidInsertion(ins: MessageInsertion) {
     && WFNode(ins.oldroot)
+    && WeightBucketList(ins.oldroot.buckets) + WeightKey(ins.key) + WeightMessage(ins.msg)
+        <= MaxTotalBucketWeight()
   }
 
   function InsertionReads(ins: MessageInsertion): seq<ReadOp>
@@ -656,6 +658,8 @@ module PivotBetreeSpecWFNodes {
   lemma ValidFlushWritesWFNodes(flush: NodeFlush)
   requires ValidFlush(flush)
   ensures forall i | 0 <= i < |FlushOps(flush)| :: WFNode(FlushOps(flush)[i].node)
+  ensures WFNode(FlushOps(flush)[0].node)
+  ensures WFNode(FlushOps(flush)[1].node)
   {
     var newparent := G.Node(
         flush.parent.pivotTable,
@@ -782,6 +786,26 @@ module PivotBetreeSpecWFNodes {
     WFApplyRepivot(r.leaf, r.pivots);
   }
 
+  lemma ValidInsertWritesWFNodes(ins: MessageInsertion)
+  requires ValidInsertion(ins)
+  ensures forall i | 0 <= i < |InsertionOps(ins)| :: WFNode(InsertionOps(ins)[i].node)
+  {
+    var newroot := AddMessageToNode(ins.oldroot, ins.key, ins.msg);
+    WeightBucketListInsert(ins.oldroot.buckets, ins.oldroot.pivotTable, ins.key, ins.msg);
+    assert WFNode(newroot);
+  }
+
+  lemma ValidGrowWritesWFNodes(g: RootGrowth)
+  requires ValidGrow(g)
+  ensures forall i | 0 <= i < |GrowOps(g)| :: WFNode(GrowOps(g)[i].node)
+  ensures WFNode(GrowOps(g)[0].node)
+  ensures WFNode(GrowOps(g)[1].node)
+  {
+    var newroot := G.Node([], Some([g.newchildref]), [map[]]);
+    WeightBucketListOneEmpty();
+    assert WFNode(newroot);
+  }
+
   // This lemma is useful for BetreeBlockCache
   lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
   requires ValidBetreeStep(betreeStep)
@@ -789,11 +813,15 @@ module PivotBetreeSpecWFNodes {
   {
     match betreeStep {
       case BetreeQuery(q) => {}
-      case BetreeInsert(ins) => {}
+      case BetreeInsert(ins) => {
+        ValidInsertWritesWFNodes(ins);
+      }
       case BetreeFlush(flush) => {
         ValidFlushWritesWFNodes(flush);
       }
-      case BetreeGrow(growth) => {}
+      case BetreeGrow(growth) => {
+        ValidGrowWritesWFNodes(growth);
+      }
       case BetreeSplit(fusion) => {
         ValidSplitWritesWFNodes(fusion);
       }
