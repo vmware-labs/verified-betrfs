@@ -244,9 +244,9 @@ abstract module BtreeSpec {
     && |newindex.children| == |oldindex.children| + 1 // FIXME: WTF?  Dafny can't get these from WF?
     && |newindex.pivots| == |oldindex.pivots| + 1
     && |oldindex.pivots| == |oldindex.children| - 1
-    && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
     && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
-    && newindex.children == replace1with2(oldindex.children, newindex.children[childidx], newindex.children[childidx+1], childidx)
+    && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
+    && newindex.children == Seq.replace1with2(oldindex.children, newindex.children[childidx], newindex.children[childidx+1], childidx)
     //oldindex.children[..childidx] + [newindex.children[childidx], newindex.children[childidx+1]] + oldindex.children[childidx+1..]
   }
 

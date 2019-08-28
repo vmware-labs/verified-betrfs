@@ -425,13 +425,17 @@ abstract module MutableBtree {
     modifies node.pivots, node.children
   {
     var left, right, pivot := SplitNode(node.children[childidx]);
-    node.children[childidx] := left;
-    Arrays.Insert(node.children, node.nchildren, right, childidx + 1);
+    Arrays.replace1with2(node.children, node.nchildren, left, right, childidx);
     Arrays.Insert(node.pivots, node.nchildren-1, pivot, childidx);
     newnode := Index(node.repr + right.repr, node.nchildren + 1, node.pivots, node.children);
 
-    ghost var oldchildren := old(node.children[..node.nchildren]);
-    assert newnode.children[..newnode.nchildren] == replace1with2(oldchildren[..node.nchildren], left, right, childidx as int);
+    // ghost var oldchildren := old(node.children[..node.nchildren]);
+    // ghost var newchildren := newnode.children[..newnode.nchildren];
+    // assert forall i :: 0 <= i < childidx ==> newchildren[i] == oldchildren[i];
+    // assert newchildren[childidx] == left;
+    // assert newchildren[childidx+1] == right;
+    // assert forall i :: childidx as int + 2 <= i < |newchildren| ==> newchildren[i] == oldchildren[i-1];
+    // assert newnode.children[..newnode.nchildren] == replace1with2(oldchildren[..node.nchildren], left, right, childidx as int);
     //oldchildren[..childidx] + [left, right] + oldchildren[childidx+1..node.nchildren];
     //Seq.insert(oldchildren[childidx as int := left], right, childidx as int + 1);
     
