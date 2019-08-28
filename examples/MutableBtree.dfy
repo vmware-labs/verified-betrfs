@@ -418,11 +418,11 @@ abstract module MutableBtree {
     requires 0 <= childidx < node.nchildren
     requires Full(node.children[childidx]);
     ensures WFShape(newnode)
-    // ensures BS.SplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
+    //ensures BS.SplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
     ensures newnode.Index?
     ensures newnode.pivots == node.pivots
     ensures newnode.children == node.children
-    //ensures fresh(newnode.repr - node.repr)
+    ensures fresh(newnode.repr - node.repr)
     modifies node.pivots, node.children
   {
     var left, right, pivot := SplitNode(node.children[childidx]);
@@ -470,6 +470,12 @@ abstract module MutableBtree {
       } else {
         assert old(DisjointSubtrees(node, i-1, j-1));
       }
+    }
+    
+    forall o | o in newnode.repr - node.repr
+      ensures fresh(o)
+    {
+      assert o in right.repr - node.repr;
     }
   //   BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
   }
