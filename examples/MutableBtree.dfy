@@ -29,18 +29,6 @@ abstract module MutableBtree {
     | Leaf(ghost repr: set<object>, nkeys: uint64, keys: array<Key>, values: array<Value>)
     | Index(ghost repr: set<object>, nchildren: uint64, pivots: array<Key>, children: array<Node>)
 
-  function LocalKeys(node: Node) : set<Key>
-    requires !node.NotInUse?
-    requires node.Leaf? ==> 0 <= node.nkeys as int <= node.keys.Length
-    requires node.Index? ==> 0 < node.nchildren as int <= node.pivots.Length + 1
-    reads if node.Leaf? then node.keys else node.pivots
-  {
-    match node {
-      case Leaf(_, nkeys, keys, _) => set k | k in keys[..nkeys]
-      case Index(_, nchildren, pivots, _) => set i | 0 <= i < nchildren-1 :: pivots[i]
-    }    
-  }
-  
   predicate DisjointSubtrees(node: Node, i: int, j: int)
     requires node.Index?
     requires 0 <= i < node.children.Length
@@ -75,22 +63,6 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < node.nchildren ==> WFShape(node.children[i]))
   }
 
-  predicate {:fuel 2} WF(node: Node)
-    requires WFShape(node)
-    reads node.repr
-    decreases node.repr
-  {
-    if node.NotInUse? then true
-    else if node.Leaf? then
-      && BS.Keys.IsStrictlySorted(node.keys[..node.nkeys])
-    else
-      && BS.Keys.IsStrictlySorted(node.pivots[..node.nchildren-1])
-      && (forall i :: 0 <= i < node.nchildren ==> LocalKeys(node.children[i]) != {})
-      && (forall i, key :: 0 <= i < node.nchildren-1 && key in LocalKeys(node.children[i]) ==> BS.Keys.lt(key, node.pivots[i]))
-      && (forall i, key :: 0 < i < node.nchildren   && key in LocalKeys(node.children[i]) ==> BS.Keys.lte(node.pivots[i-1], key))
-      && (forall i :: 0 <= i < node.nchildren ==> WF(node.children[i]))
-  }
-
   predicate ObjectIsInSubtree(node: Node, o: object, i: int)
     requires WFShape(node)
     requires node.Index?
@@ -102,7 +74,6 @@ abstract module MutableBtree {
 
   function {:opaque} SubRepr(node: Node, from: int, to: int) : (result: set<object>)
     requires WFShape(node)
-    requires WF(node)
     requires node.Index?
     requires 0 <= from <= to <= node.nchildren as int
     reads node.repr
@@ -112,7 +83,6 @@ abstract module MutableBtree {
 
   lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
     requires WFShape(node)
-    requires WF(node)
     requires node.Index?
     requires 0 <= from1 <= to1 <= from2 <= to2 <= node.nchildren as int
     ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
@@ -131,7 +101,6 @@ abstract module MutableBtree {
   
   lemma SubReprFits(node: Node, from: int, to: int)
     requires WFShape(node)
-    requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 <= from <= to <= node.nchildren as int
@@ -196,7 +165,6 @@ abstract module MutableBtree {
   
   function method IndexPrefix(node: Node, newnchildren: int) : (result: Node)
     requires WFShape(node)
-    requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 <= newnchildren <= node.nchildren as int
@@ -205,17 +173,14 @@ abstract module MutableBtree {
     Index(SubRepr(node, 0, newnchildren) + {node.pivots, node.children}, newnchildren as uint64, node.pivots, node.children)
   }
 
-  lemma IndexPrefixWF(node: Node, newnchildren: int)
+  lemma IndexPrefixWFShape(node: Node, newnchildren: int)
     requires WFShape(node)
-    requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 < newnchildren <= node.nchildren as int
     ensures WFShape(IndexPrefix(node, newnchildren))
-    ensures WF(IndexPrefix(node, newnchildren))
     ensures newnchildren < node.nchildren as int ==> IndexPrefix(node, newnchildren).repr < node.repr
   {
-    BS.Keys.reveal_IsStrictlySorted();
     var pnode := IndexPrefix(node, newnchildren);
     forall i: int, j: int | 0 <= i < j < pnode.nchildren as int
       ensures DisjointSubtrees(pnode, i, j)
@@ -225,26 +190,26 @@ abstract module MutableBtree {
     SubReprFits(node, 0, newnchildren);
   }
 
-  function WFIndexPrefix(node: Node, newnchildren: int) : (result: Node)
+  function WFShapeIndexPrefix(node: Node, newnchildren: int) : (result: Node)
     requires WFShape(node)
-    requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 < newnchildren <= node.nchildren as int
     ensures WFShape(result)
-    ensures WF(result)
     reads node.repr
   {
-    IndexPrefixWF(node, newnchildren);
+    IndexPrefixWFShape(node, newnchildren);
     IndexPrefix(node, newnchildren)
   }
-    
   
-  function ToImmutableNode(node: Node) : (result: BS.Node)
+  function I(node: Node) : (result: BS.Node)
     requires WFShape(node)
-    requires WF(node)
     ensures node.Leaf? ==> result.Leaf?
     ensures node.Index? ==> result.Index?
+    ensures node.Index? ==> result.pivots == node.pivots[..node.nchildren-1]
+    ensures node.Index? ==> |result.children| == node.nchildren as int
+    ensures node.Index? ==> forall i :: 0 <= i < node.nchildren ==>
+           result.children[i] == I(node.children[i])
     reads node.repr
     decreases node.repr
   {
@@ -252,110 +217,31 @@ abstract module MutableBtree {
       case Leaf(_, nkeys, keys, values) => BS.Leaf(keys[..nkeys], values[..nkeys])
       case Index(repr, nchildren, pivots, children) =>
         if nchildren == 1 then
-          BS.Index([], [ToImmutableNode(children[0])])
+          BS.Index([], [I(children[0])])
         else
-          IndexPrefixWF(node, node.nchildren as int - 1);
-          var imprefix := ToImmutableNode(IndexPrefix(node, node.nchildren as int - 1));
-          var imlastchild := ToImmutableNode(children[nchildren-1]);
+          IndexPrefixWFShape(node, node.nchildren as int - 1);
+          var imprefix := I(IndexPrefix(node, node.nchildren as int - 1));
+          var imlastchild := I(children[nchildren-1]);
           BS.Index(imprefix.pivots + [pivots[nchildren-2]], imprefix.children + [imlastchild])
-    }
-  }
-
-  lemma ImmutableWF(node: Node)
-    requires WFShape(node)
-    requires WF(node)
-    ensures BS.WF(ToImmutableNode(node))
-    ensures node.Index? ==> ToImmutableNode(node).pivots == node.pivots[..node.nchildren-1]
-    decreases node.repr
-  {
-    if node.Leaf? {
-    } else if node.nchildren == 1 {
-      var imnode := ToImmutableNode(node);
-      if imnode.children[0].Leaf? {
-        assert imnode.children[0].keys[0] in BS.AllKeys(imnode.children[0]);
-      } else {
-        ImmutableWF(node.children[0]);
-      }
-    } else {
-      IndexPrefixWF(node, node.nchildren as int - 1);
-      var imprefix := ToImmutableNode(IndexPrefix(node, node.nchildren as int - 1));
-      ImmutableWF(IndexPrefix(node, node.nchildren as int - 1));
-      var imlastchild := ToImmutableNode(node.children[node.nchildren-1]);
-      var imnode := BS.Index(imprefix.pivots + [node.pivots[node.nchildren-2]], imprefix.children + [imlastchild]);
-      assert imnode.pivots == node.pivots[..node.nchildren-1];
-      assert BS.LocalKeys(Last(imnode.children)) == LocalKeys(node.children[node.nchildren-1]);
-    }
-  }
-
-  function ToImmutableWFNode(node: Node) : (result: BS.Node)
-    requires WFShape(node)
-    requires WF(node)
-    ensures node.Leaf? ==> result.Leaf?
-    ensures node.Index? ==> result.Index?
-    ensures BS.WF(result)
-    ensures node.Index? ==> result.pivots == node.pivots[..node.nchildren-1]
-    reads node.repr
-  {
-    ImmutableWF(node);
-    ToImmutableNode(node)
-  }
-  
-  lemma ImmutableChildIndices(node: Node)
-    requires WFShape(node)
-    requires WF(node)
-    requires node.Index?
-    ensures |ToImmutableNode(node).children| == node.nchildren as int
-    ensures forall i :: 0 <= i < node.nchildren ==>
-           ToImmutableNode(node).children[i] == ToImmutableNode(node.children[i])
-    decreases node.repr
-  {
-    if node.nchildren == 1 {
-    } else {
-      IndexPrefixWF(node, node.nchildren as int - 1);
     }
   }
 
   lemma IndexPrefixIsSubIndex(node: Node, newnchildren: int)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 < newnchildren <= node.nchildren as int
-    ensures BS.SubIndex(ToImmutableWFNode(node), 0, newnchildren) == ToImmutableNode(WFIndexPrefix(node, newnchildren))
+    ensures I(WFShapeIndexPrefix(node, newnchildren)) == BS.SubIndex(I(node), 0, newnchildren)
   {
-    var imnode := ToImmutableWFNode(node);
-    var subimnode := BS.SubIndex(imnode, 0, newnchildren);
-    var prefix := WFIndexPrefix(node, newnchildren);
-    var imprefix := ToImmutableWFNode(prefix);
-
-    assert subimnode.Index?;
-    assert imprefix.Index?;
-    assert |subimnode.pivots| == |imprefix.pivots|;
-    assert subimnode.pivots == imprefix.pivots;
-    assert |subimnode.children| == |imprefix.children|;
-
-    ImmutableChildIndices(node);
-    ImmutableChildIndices(prefix);
-    assert subimnode.children == imprefix.children;
-    assert subimnode == imprefix;
   }
     
-  function Interpretation(node: Node) : map<Key, Value>
-    requires WFShape(node)
-    requires WF(node)
-    reads node.repr
-    decreases node.repr
-  {
-    ImmutableWF(node);
-    BS.Interpretation(ToImmutableNode(node))
-  }
-  
   method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Leaf?
-    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == BS.NotFound
+    ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
+    ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
     decreases node.repr, 0
   {
     var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
@@ -368,34 +254,29 @@ abstract module MutableBtree {
 
   method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Index?
-    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == BS.NotFound
+    ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
+    ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
     decreases node.repr, 0
   {
     var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
     result := Query(node.children[posplus1], needle);
 
-    ghost var imnode := ToImmutableNode(node);
-    ImmutableWF(node);
-    ImmutableChildIndices(node);
-    if needle in Interpretation(node) {
-      assert needle in BS.Interpretation(imnode);
-    } else {
-      assert needle !in BS.Interpretation(imnode);
-      if needle !in BS.AllKeys(imnode) {
-        assert needle !in BS.AllKeys(imnode.children[posplus1]);
+    if needle !in BS.Interpretation(I(node)) {
+      assert needle !in BS.Interpretation(I(node));
+      if needle !in BS.AllKeys(I(node)) {
+        assert needle !in BS.AllKeys(I(node).children[posplus1]);
       }
-      assert needle !in BS.Interpretation(imnode.children[posplus1]);
+      assert needle !in BS.Interpretation(I(node).children[posplus1]);
     }
   }
 
   method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
     requires WFShape(node)
-    requires WF(node)
-    ensures needle in Interpretation(node) ==> result == BS.Found(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == BS.NotFound
+    requires BS.WF(I(node))
+    ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
+    ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
     decreases node.repr, 1
   {
     match node {
@@ -415,14 +296,12 @@ abstract module MutableBtree {
 
   method SplitLeaf(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Leaf?
     requires Full(node)
     ensures WFShape(left)
     ensures WFShape(right)
-    ensures WF(left)
-    ensures WF(right)
-    ensures BS.SplitLeaf(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
+    ensures BS.SplitLeaf(I(node), I(left), I(right), pivot)
     ensures left.keys == node.keys
     ensures left.values == node.values
     ensures fresh(right.keys)
@@ -438,21 +317,17 @@ abstract module MutableBtree {
     pivot := right.keys[0];
     
     BS.Keys.reveal_IsStrictlySorted();
-    ghost var imright := ToImmutableNode(right);
-    assert BS.WF(imright);
   }
 
   method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 <= from < to <= node.nchildren
-    ensures subnode.Index?
     ensures WFShape(subnode)
-    ensures WF(subnode)
+    ensures I(subnode) == BS.SubIndex(I(node), from as int, to as int)
     ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode.pivots, subnode.children}
-    ensures ToImmutableNode(subnode) == BS.SubIndex(ToImmutableWFNode(node), from as int, to as int)
     ensures fresh(subnode.pivots)
     ensures fresh(subnode.children)
   {
@@ -482,33 +357,19 @@ abstract module MutableBtree {
       assert subnode.children[j] == node.children[from as int + j];
       assert DisjointSubtrees(node, from as int + i, from as int + j);
     }
-    BS.Keys.StrictlySortedSubsequence(node.pivots[..node.nchildren-1], from as int, (to-1) as int);
-    assert subnode.pivots[..subnode.nchildren-1] == node.pivots[from..to-1];
-    assert node.pivots[from..to-1] == node.pivots[..node.nchildren-1][from..to-1];
-    
-    ImmutableWF(node);
-    ImmutableWF(subnode);
-    ghost var imnode := ToImmutableNode(node);
-    ghost var imsubnode := ToImmutableNode(subnode);
-    assert imsubnode.pivots == imnode.pivots[from..to-1];
-    assert subnode.children[..subnode.nchildren] == node.children[from..to];
-    assert node.children[from..to] == node.children[..node.nchildren][from..to];
-    ImmutableChildIndices(node);
-    ImmutableChildIndices(subnode);
-    assert imsubnode.children == imnode.children[from..to];
+
+    assert I(subnode).pivots == I(node).pivots[from..to-1];
   }
 
   
   method SplitIndex(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Index?
     requires Full(node)
     ensures WFShape(left)
-    ensures WF(left)
     ensures WFShape(right)
-    ensures WF(right)
-    ensures BS.SplitIndex(ToImmutableWFNode(node), ToImmutableWFNode(left), ToImmutableWFNode(right), pivot)
+    ensures BS.SplitIndex(I(node), I(left), I(right), pivot)
     ensures left.pivots == node.pivots
     ensures left.children == node.children
     ensures fresh(right.pivots)
@@ -522,8 +383,10 @@ abstract module MutableBtree {
     right := SubIndex(node, boundary, node.nchildren);
     pivot := node.pivots[boundary-1];
 
-    IndexPrefixWF(node, boundary as int);
+    IndexPrefixWFShape(node, boundary as int);
     IndexPrefixIsSubIndex(node, boundary as int);
+    BS.WFSubIndexWF(I(node), 0, boundary as int);
+    BS.WFSubIndexWF(I(node), boundary as int, node.nchildren as int);
     SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.nchildren as int);
     SubReprFits(node, 0, boundary as int);
     SubReprFits(node, boundary as int, node.nchildren as int);
@@ -531,13 +394,11 @@ abstract module MutableBtree {
 
   method SplitNode(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires Full(node)
     ensures WFShape(left)
-    ensures WF(left)
     ensures WFShape(right)
-    ensures WF(right)
-    ensures BS.SplitNode(ToImmutableWFNode(node), ToImmutableWFNode(left), ToImmutableWFNode(right), pivot)
+    ensures BS.SplitNode(I(node), I(left), I(right), pivot)
     ensures left.repr <= node.repr
     ensures fresh(right.repr - node.repr)
     ensures left.repr !! right.repr
@@ -551,14 +412,13 @@ abstract module MutableBtree {
   
   method SplitChildOfIndex(node: Node, childidx: uint64) returns (newnode: Node)
     requires WFShape(node)
-    requires WF(node)
+    requires BS.WF(I(node))
     requires node.Index?
     requires !Full(node)
     requires 0 <= childidx < node.nchildren
     requires Full(node.children[childidx]);
     ensures WFShape(newnode)
-    ensures WF(newnode)
-    ensures BS.SplitChildOfIndex(old(ToImmutableWFNode(node)), ToImmutableWFNode(newnode), childidx as int)
+    ensures BS.SplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
     ensures newnode.pivots == node.pivots
     ensures newnode.children == node.children
     ensures fresh(newnode.repr - node.repr)
@@ -593,7 +453,7 @@ abstract module MutableBtree {
       }
     }
 
-    BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
+  //   BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
   }
   
   //   // method Insert(key: Key, value: Value)
@@ -868,20 +728,20 @@ abstract module MutableBtree {
   // // }
 }
 
-module TestBtreeSpec refines BtreeSpec {
-  import Keys = Integer_Order
-  type Value = int
-}
+// module TestBtreeSpec refines BtreeSpec {
+//   import Keys = Integer_Order
+//   type Value = int
+// }
 
-module TestMutableBtree refines MutableBtree {
-  import BS = TestBtreeSpec
+// module TestMutableBtree refines MutableBtree {
+//   import BS = TestBtreeSpec
     
-  function method MaxKeysPerLeaf() : uint64 { 64 }
-  function method MaxChildren() : uint64 { 64 }
+//   function method MaxKeysPerLeaf() : uint64 { 64 }
+//   function method MaxChildren() : uint64 { 64 }
 
-  function method DefaultValue() : Value { 0 }
-  function method DefaultKey() : Key { 0 }
-}
+//   function method DefaultValue() : Value { 0 }
+//   function method DefaultKey() : Key { 0 }
+// }
 
 // module MainModule {
 //   import opened NativeTypes

@@ -131,6 +131,15 @@ abstract module BtreeSpec {
   {
     Index(node.pivots[from..to-1], node.children[from..to])
   }
+
+  lemma WFSubIndexWF(node: Node, from: int, to: int)
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= from < to <= |node.children|
+    ensures WF(SubIndex(node, from, to))
+  {
+    Keys.StrictlySortedSubsequence(node.pivots, from, to-1);
+  }
   
   predicate SplitIndex(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
   {
