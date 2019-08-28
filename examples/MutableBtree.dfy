@@ -110,6 +110,25 @@ abstract module MutableBtree {
     set i: int, o | 0 <= from <= i < to && o in node.repr && ObjectIsInSubtree(node, o, i) :: o
   }
 
+  lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= from1 <= to1 <= from2 <= to2 <= node.nchildren as int
+    ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
+  {
+    var subrepr1 := SubRepr(node, from1, to1);
+    var subrepr2 := SubRepr(node, from2, to2);
+
+    if o :| o in subrepr1 && o in subrepr2 {
+      reveal_SubRepr();
+      var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && ObjectIsInSubtree(node, o, i1);
+      var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && ObjectIsInSubtree(node, o, i2);
+      assert i1 < i2;
+      assert DisjointSubtrees(node, i1, i2);
+    }
+  }
+  
   lemma SubReprFits(node: Node, from: int, to: int)
     requires WFShape(node)
     requires WF(node)
@@ -211,7 +230,7 @@ abstract module MutableBtree {
     requires WF(node)
     requires node.Index?
     requires 1 < node.nchildren
-    requires 0 <= newnchildren <= node.nchildren as int
+    requires 0 < newnchildren <= node.nchildren as int
     ensures WFShape(result)
     ensures WF(result)
     reads node.repr
@@ -394,7 +413,7 @@ abstract module MutableBtree {
     }
   }
 
-  method SplitLeaf(node: Node) returns (left: Node, pivot: Key, right: Node)
+  method SplitLeaf(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
     requires WF(node)
     requires node.Leaf?
@@ -404,6 +423,10 @@ abstract module MutableBtree {
     ensures WF(left)
     ensures WF(right)
     ensures BS.SplitLeaf(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
+    ensures left.keys == node.keys
+    ensures left.values == node.values
+    ensures fresh(right.keys)
+    ensures fresh(right.values)
   {
     var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
     var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
@@ -476,94 +499,107 @@ abstract module MutableBtree {
   }
 
   
-  // method SplitIndex(node: Node) returns (left: Node, pivot: Key, right: Node)
-  //   requires WFShape(node)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   requires Full(node)
-  //   ensures left.Index?
-  //   ensures left.nchildren == node.nchildren/2;
-  //   ensures left.pivots == node.pivots
-  //   ensures left.children == node.children
-  //   ensures WFShape(left)
-  //   ensures WF(left)
-  //   ensures right.Index?
-  //   ensures right.nchildren == node.nchildren - node.nchildren/2;
-  //   ensures fresh (right.pivots)
-  //   ensures fresh(right.children)
-  //   ensures WFShape(right)
-  //   ensures WF(right)
-  //   ensures right.pivots[..right.nchildren-1] == node.pivots[node.nchildren/2..node.nchildren-1];
-  //   ensures right.children[..right.nchildren] == node.children[node.nchildren/2..node.nchildren];
-  //   ensures left.repr !! right.repr
-  //   // ensures BS.SplitIndex(ToImmutableNode(node), ToImmutableNode(left), ToImmutableNode(right), pivot)
-  // {
-  //   ghost var oldnchildren := node.nchildren;
-  //   var boundary: uint64 := node.nchildren/2;
-  //   var rightpivots := new Key[MaxChildren()-1]
-  //     (i
-  //     requires 0 <= i <= (MaxChildren()-1) as int
-  //     reads node.pivots
-  //     =>
-  //     if i < (node.nchildren - boundary - 1) as int then node.pivots[boundary as int + i]
-  //     else DefaultKey());
-  //   var rightchildren := new Node[MaxChildren()]
-  //     (i
-  //     requires 0 <= i <= MaxChildren() as int
-  //     reads node.children
-  //     =>
-  //     if i < (node.nchildren - boundary) as int then node.children[boundary as int + i]
-  //     else NotInUse);
+  method SplitIndex(node: Node) returns (left: Node, right: Node, pivot: Key)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires Full(node)
+    ensures WFShape(left)
+    ensures WF(left)
+    ensures WFShape(right)
+    ensures WF(right)
+    ensures BS.SplitIndex(ToImmutableWFNode(node), ToImmutableWFNode(left), ToImmutableWFNode(right), pivot)
+    ensures left.pivots == node.pivots
+    ensures left.children == node.children
+    ensures fresh(right.pivots)
+    ensures fresh(right.children)
+    ensures left.repr !! right.repr
+    ensures left.repr <= node.repr
+    ensures right.repr <= node.repr + {right.pivots, right.children}
+  {
+    var boundary := node.nchildren/2;
+    left := IndexPrefix(node, boundary as int);
+    right := SubIndex(node, boundary, node.nchildren);
+    pivot := node.pivots[boundary-1];
 
-  //   ghost var leftrepr := {node.pivots, node.children} +
-  //       (set i, o | 0 <= i < boundary && o in node.children[i].repr :: o);
-  //   ghost var rightrepr: set<object> := 
-  //       (set i, o | 0 <= i < node.nchildren - boundary && o in rightchildren[i].repr :: o);
-  //   rightrepr := rightrepr + {rightpivots};
-  //   rightrepr := rightrepr + {rightchildren};
+    IndexPrefixWF(node, boundary as int);
+    IndexPrefixIsSubIndex(node, boundary as int);
+    SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.nchildren as int);
+    SubReprFits(node, 0, boundary as int);
+    SubReprFits(node, boundary as int, node.nchildren as int);
+  }
 
-  //   left := Index(leftrepr, boundary, node.pivots, node.children);
-  //   right := Index(rightrepr, node.nchildren - boundary, rightpivots, rightchildren);
-  //   pivot := node.pivots[boundary - 1];
+  method SplitNode(node: Node) returns (left: Node, right: Node, pivot: Key)
+    requires WFShape(node)
+    requires WF(node)
+    requires Full(node)
+    ensures WFShape(left)
+    ensures WF(left)
+    ensures WFShape(right)
+    ensures WF(right)
+    ensures BS.SplitNode(ToImmutableWFNode(node), ToImmutableWFNode(left), ToImmutableWFNode(right), pivot)
+    ensures left.repr <= node.repr
+    ensures fresh(right.repr - node.repr)
+    ensures left.repr !! right.repr
+  {
+    if node.Leaf? {
+      left, right, pivot := SplitLeaf(node);
+    } else {
+      left, right, pivot := SplitIndex(node);
+    }
+  }
+  
+  method SplitChildOfIndex(node: Node, childidx: uint64) returns (newnode: Node)
+    requires WFShape(node)
+    requires WF(node)
+    requires node.Index?
+    requires !Full(node)
+    requires 0 <= childidx < node.nchildren
+    requires Full(node.children[childidx]);
+    ensures WFShape(newnode)
+    ensures WF(newnode)
+    ensures BS.SplitChildOfIndex(old(ToImmutableWFNode(node)), ToImmutableWFNode(newnode), childidx as int)
+    ensures newnode.pivots == node.pivots
+    ensures newnode.children == node.children
+    ensures fresh(newnode.repr - node.repr)
+    modifies node.pivots, node.children
+  {
+    var left, right, pivot := SplitNode(node.children[childidx]);
+    node.children[childidx] := left;
+    Arrays.Insert(node.children, node.nchildren, right, childidx + 1);
+    Arrays.Insert(node.pivots, node.nchildren-1, pivot, childidx);
+    newnode := Index(node.repr + right.repr, node.nchildren + 1, node.pivots, node.children);
 
-  //   forall i, j | 0 <= i < j < left.nchildren as int
-  //     ensures DisjointSubtrees(left, i, j)
-  //   {
-  //     assert DisjointSubtrees(node, i, j);
-  //   }
-  //   forall i, j | 0 <= i < j < right.nchildren as int
-  //     ensures DisjointSubtrees(right, i, j)
-  //   {
-  //     assert right.children[i] == node.children[boundary as int + i];
-  //     assert right.children[j] == node.children[boundary as int + j];
-  //     assert DisjointSubtrees(node, boundary as int + i, boundary as int + j);
-  //   }
-  //   assert WFShape(left);
-  //   assert WFShape(right);
-    
-  //   BS.Keys.StrictlySortedSubsequence(node.pivots[..oldnchildren-1], 0, boundary as int - 1);
-  //   assert node.pivots[0..boundary-1] == node.pivots[..node.nchildren-1][0..boundary-1];
-  //   BS.Keys.StrictlySortedSubsequence(node.pivots[..oldnchildren-1], boundary as int, (oldnchildren-1) as int);
-  //   assert right.pivots[..right.nchildren-1] == node.pivots[..oldnchildren-1][boundary..oldnchildren-1];
-  //   assert WF(left);
-  //   assert WF(right);
-    
-  //   // ImmutableWF(node);
-  //   // ImmutableWF(left);
-  //   // ImmutableWF(right);
-    
-  //   // ghost var imnode := ToImmutableNode(node);
-  //   // ghost var imleft := ToImmutableNode(left);
-  //   // ghost var imright := ToImmutableNode(right);
+    ghost var oldchildren := old(node.children[..node.nchildren]);
+    assert newnode.children[..newnode.nchildren] == Seq.insert(oldchildren[childidx as int := left], right, childidx as int + 1);
+    forall i | 0 <= i < newnode.nchildren
+      ensures !newnode.children[i].NotInUse?
+    {
+      if i < childidx {
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
+      }
+    }
+    forall i | 0 <= i < newnode.nchildren
+      ensures newnode.children[i].repr < newnode.repr
+    {
+      if i < childidx {
+        assert newnode.children[i].repr < newnode.repr;
+      } else if i == childidx {
+        assert newnode.children[i].repr < newnode.repr;
+      } else if i == childidx + 1 {
+        assert newnode.children[i].repr < newnode.repr;
+      } else {
+        assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
+        assert newnode.children[i].repr < newnode.repr;
+      }
+    }
 
-  //   // assert node.pivots[..oldnchildren - 1] ==
-  //   //   node.pivots[..oldnchildren - 1][0..boundary - 1]
-  //   //   + [pivot]
-  //   //   + node.pivots[..oldnchildren-1][boundary..oldnchildren-1];
-      
-  //   // assert BS.SplitIndex(imnode, imleft, imright, pivot);
-  // }
-
+    BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
+  }
+  
   //   // method Insert(key: Key, value: Value)
   //   //   requires WF()
   //   //   requires !Full()
