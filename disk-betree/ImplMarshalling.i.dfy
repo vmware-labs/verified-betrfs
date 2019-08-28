@@ -655,7 +655,7 @@ module ImplMarshalling {
 
     assert SizeOfV(pivots) <= 320000;
     assert SizeOfV(children) <= 264;
-    KMTable.kmtableWeightEq(node.buckets);
+    KMTable.kmtableSeqWeightEq(node.buckets);
     assert SizeOfV(buckets) <= 8068312;
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);

@@ -1193,7 +1193,11 @@ module KMTable {
   requires WeightKMTableSeq(kmts) < 0x1_0000_0000_0000_0000
   ensures weight as int == WeightBucketList(ISeq(kmts))
 
-  lemma kmtableWeightEq(kmts: seq<KMTable>)
+  lemma kmtableWeightEq(kmt: KMTable)
+  requires WF(kmt)
+  ensures WeightKMTable(kmt) == WeightBucket(I(kmt))
+
+  lemma kmtableSeqWeightEq(kmts: seq<KMTable>)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   ensures WeightKMTableSeq(kmts) == WeightBucketList(ISeq(kmts))
 

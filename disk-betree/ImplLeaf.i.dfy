@@ -29,13 +29,7 @@ module ImplLeaf {
 
     var n := |bucket.keys|;
 
-    var m := (n + IMM.CapNumBuckets() as int) / IMM.CapNumBuckets() as int;
-    if m > 500 {
-      m := 500;
-    }
-    if m < 1 {
-      m := 1;
-    }
+    var m := 500;
 
     MS.Keyspace.reveal_IsStrictlySorted();
     var r := [];
@@ -53,10 +47,15 @@ module ImplLeaf {
     }
 
     pivots := r;
+
+    if |pivots| < 1 {
+      print "warning: GetNewPivots didn't make any pivots\n";
+    }
+
     assume pivots == ImplModelLeaf.GetNewPivots(bucket);
   }
 
-  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, slot: int, node: IS.Node)
+  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
   returns (s': ImplVariables)
   requires Inv(k, s)
   requires s.Ready?
@@ -64,39 +63,23 @@ module ImplLeaf {
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
-  requires 0 <= slot < |s.cache[ref].buckets|
   requires ref != BT.G.Root()
   requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value) ==>
       IS.IIndirectionTable(s.frozenIndirectionTable.value)[ref].0.Some?
   ensures IS.WVars(s')
-  ensures IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, slot, node);
+  ensures IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, node);
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
   modifies s.ephemeralIndirectionTable.Repr
   {
     ImplModelLeaf.reveal_repivotLeaf();
 
-    if (!(
-      && |node.buckets| < 0x8000_0000
-      && (forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000)
-    )) {
-      s' := s;
-      print "giving up; stuff too big to call Join\n";
-
-  assert IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, slot, node);
-      return;
-    }
-
+    assume forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000; // should follow from node bounds
     var joined := KMTable.Join(node.buckets, node.pivotTable);
 
     var pivots := GetNewPivots(joined);
 
-    if (!(|pivots| < 0x7fff_ffff_ffff_ffff)) {
-      s' := s;
-      print "giving up; stuff too big to call Split\n";
-  assert IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, slot, node);
-      return;
-    }
+    assume |joined.keys| < 0x8000_0000_0000_0000; // should follow from node bounds
 
     var buckets' := KMTable.SplitOnPivots(joined, pivots);
     var newnode := IM.Node(pivots, None, buckets');
@@ -105,6 +88,6 @@ module ImplLeaf {
     WFSplitBucketOnPivots(KMTable.I(joined), pivots);
 
     s' := write(k, s, ref, newnode);
-  assert IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, slot, node);
+  assert IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, node);
   }
 }
