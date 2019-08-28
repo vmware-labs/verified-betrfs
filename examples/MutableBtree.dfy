@@ -419,9 +419,10 @@ abstract module MutableBtree {
     requires Full(node.children[childidx]);
     ensures WFShape(newnode)
     // ensures BS.SplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
-    // ensures newnode.pivots == node.pivots
-    // ensures newnode.children == node.children
-    // ensures fresh(newnode.repr - node.repr)
+    ensures newnode.Index?
+    ensures newnode.pivots == node.pivots
+    ensures newnode.children == node.children
+    //ensures fresh(newnode.repr - node.repr)
     modifies node.pivots, node.children
   {
     var left, right, pivot := SplitNode(node.children[childidx]);
@@ -431,7 +432,8 @@ abstract module MutableBtree {
 
     ghost var oldchildren := old(node.children[..node.nchildren]);
     ghost var newchildren := newnode.children[..newnode.nchildren];
-    assert newchildren == Seq.replace1with2(oldchildren, left, right, childidx as int);
+    ghost var ichildidx := childidx as int;
+    assert newchildren == Seq.replace1with2(oldchildren, left, right, ichildidx);
     
     forall i | 0 <= i < newnode.nchildren
       ensures !newchildren[i].NotInUse?
@@ -444,11 +446,10 @@ abstract module MutableBtree {
       } else if i == childidx {
       } else if i == childidx + 1 {
       } else {
-        assert newchildren[i] == oldchildren[childidx as int := left][i-1];
+        assert newchildren[i] == oldchildren[ichildidx := left][i-1];
       }
     }
 
-    ghost var ichildidx := childidx as int;
     forall i: int, j: int | 0 <= i < j < newnode.nchildren as int
       ensures DisjointSubtrees(newnode, i, j)
     {
