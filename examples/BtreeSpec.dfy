@@ -246,7 +246,8 @@ abstract module BtreeSpec {
     && |oldindex.pivots| == |oldindex.children| - 1
     && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
     && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
-    && newindex.children == oldindex.children[..childidx] + [newindex.children[childidx], newindex.children[childidx+1]] + oldindex.children[childidx+1..]
+    && newindex.children == replace1with2(oldindex.children, newindex.children[childidx], newindex.children[childidx+1], childidx)
+    //oldindex.children[..childidx] + [newindex.children[childidx], newindex.children[childidx+1]] + oldindex.children[childidx+1..]
   }
 
   lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int)
@@ -278,6 +279,7 @@ abstract module BtreeSpec {
       } else if i == childidx + 1 {
         SplitNodeAllKeys(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
       } else {
+        assert newindex.children[i] == oldindex.children[i-1];
       }
     }
   }

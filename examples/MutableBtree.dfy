@@ -431,27 +431,30 @@ abstract module MutableBtree {
     newnode := Index(node.repr + right.repr, node.nchildren + 1, node.pivots, node.children);
 
     ghost var oldchildren := old(node.children[..node.nchildren]);
-    assert newnode.children[..newnode.nchildren] == Seq.insert(oldchildren[childidx as int := left], right, childidx as int + 1);
-    forall i | 0 <= i < newnode.nchildren
-      ensures !newnode.children[i].NotInUse?
-    {
-      if i < childidx {
-      } else if i == childidx {
-      } else if i == childidx + 1 {
-      } else {
-        assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
-      }
-    }
-    forall i | 0 <= i < newnode.nchildren
-      ensures newnode.children[i].repr < newnode.repr
-    {
-      if i < childidx {
-      } else if i == childidx {
-      } else if i == childidx + 1 {
-      } else {
-        assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
-      }
-    }
+    assert newnode.children[..newnode.nchildren] == replace1with2(oldchildren[..node.nchildren], left, right, childidx as int);
+    //oldchildren[..childidx] + [left, right] + oldchildren[childidx+1..node.nchildren];
+    //Seq.insert(oldchildren[childidx as int := left], right, childidx as int + 1);
+    
+    // forall i | 0 <= i < newnode.nchildren
+    //   ensures !newnode.children[i].NotInUse?
+    // {
+    //   if i < childidx {
+    //   } else if i == childidx {
+    //   } else if i == childidx + 1 {
+    //   } else {
+    //     assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
+    //   }
+    // }
+    // forall i | 0 <= i < newnode.nchildren
+    //   ensures newnode.children[i].repr < newnode.repr
+    // {
+    //   if i < childidx {
+    //   } else if i == childidx {
+    //   } else if i == childidx + 1 {
+    //   } else {
+    //     assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
+    //   }
+    // }
 
   //   BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
   }
