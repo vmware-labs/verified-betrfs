@@ -25,7 +25,7 @@ module BucketWeights {
   ensures w >= 0
   {
     match msg {
-      case Define(value) => ValueWithDefault.Len(value)
+      case Define(value) => 8 + ValueWithDefault.Len(value)
       case Update(delta) => 0
     }
   }

@@ -18,6 +18,8 @@ module ImplMarshalling {
   import opened Sequences
   import opened Maps
   import opened BucketsLib
+  import opened BucketWeights
+  import opened Bounds
   import BC = BetreeGraphBlockCache
   import ImplState
   import KMTable
@@ -26,6 +28,7 @@ module ImplMarshalling {
 
   import BT = PivotBetreeSpec`Internal
 
+  import ValueWithDefault`Internal
   import M = ValueMessage`Internal
   import LBAType
 
@@ -194,14 +197,10 @@ module ImplMarshalling {
   method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMTable>)
   requires IMM.valToBucket.requires(v, pivotTable, i)
   ensures s.Some? ==> KMTable.WF(s.value)
-  ensures s.Some? ==> KMTable.Bounded(s.value)
   ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
   ensures s == IMM.valToBucket(v, pivotTable, i)
   {
     assert ValidVal(v.t[0]);
-    if (|v.t[0].a| as uint64 >= KMTable.MaxNumKeys()) {
-      return None;
-    }
 
     var keys := ValToStrictlySortedKeySeq(v.t[0]);
 
@@ -284,7 +283,6 @@ module ImplMarshalling {
     while i < |a|
     invariant 0 <= i <= |a|
     invariant forall k: nat | k < i :: KMTable.WF(ar[k])
-    invariant forall k: nat | k < i :: KMTable.Bounded(ar[k])
     invariant forall k: nat | k < i :: WFBucketAt(KMTable.I(ar[k]), pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
     invariant ar[..i] == IMM.valToBuckets(a[..i], pivotTable).value
@@ -340,6 +338,16 @@ module ImplMarshalling {
     }
     var buckets := bucketsOpt.value;
 
+    if |buckets| as uint64 > MaxNumChildren() as uint64 {
+      return None;
+    }
+
+    assume KMTable.WeightKMTableSeq(buckets) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
+    var w: uint64 := KMTable.computeWeightKMTableSeq(buckets);
+    if (w > MaxTotalBucketWeight() as uint64) {
+      return None;
+    }
+
     var node := IM.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
 
     assert IMM.valToNode(v).Some?;
@@ -390,6 +398,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, GUint64Array)
   ensures IMM.valToChildren(v) == Some(children)
   ensures |v.ua| == |children|
+  ensures SizeOfV(v) == 8 + 8 * |children|
   {
     return VUint64Array(children);
   }
@@ -450,19 +459,21 @@ module ImplMarshalling {
   requires Keyspace.IsStrictlySorted(keys)
   requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
-  ensures SizeOfV(v) <= 8 + |keys| * (8 + IMM.CapKeySize() as int)
   ensures ValInGrammar(v, GArray(GByteArray))
   ensures |v.a| == |keys|
   ensures IMM.valToStrictlySortedKeySeq(v) == Some(keys)
+  ensures SizeOfV(v) <= 8 + |keys| * (8 + Keyspace.MaxLen() as int)
+  ensures SizeOfV(v) == 8 + WeightKeySeq(keys)
   {
     var ar := new V[|keys| as uint64];
     var i: uint64 := 0;
     while i < |keys| as uint64
     invariant i as int <= |keys|
     invariant ValidVal(VArray(ar[..i]))
-    invariant SizeOfV(VArray(ar[..i])) as int <= 8 + i as int * (8 + IMM.CapKeySize() as int)
     invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
     invariant IMM.valToStrictlySortedKeySeq(VArray(ar[..i])) == Some(keys[..i])
+    invariant SizeOfV(VArray(ar[..i])) <= 8 + i as int * (8 + Keyspace.MaxLen() as int)
+    invariant SizeOfV(VArray(ar[..i])) == 8 + WeightKeySeq(keys[..i])
     {
       ar[i] := VByteArray(keys[i]);
 
@@ -498,29 +509,28 @@ module ImplMarshalling {
 
   method pivotsToVal(pivots: seq<Key>) returns (v : V)
   requires Pivots.WFPivots(pivots)
-  requires |pivots| <= IMM.CapNumBuckets() as int - 1
+  requires |pivots| <= MaxNumChildren() as int - 1
   ensures ValidVal(v)
-  ensures SizeOfV(v) <= 8 + |pivots| * (8 + IMM.CapKeySize() as int)
   ensures ValInGrammar(v, GArray(GByteArray))
   ensures |v.a| == |pivots|
   ensures IMM.valToPivots(v) == Some(pivots)
+  ensures SizeOfV(v) <= 8 + |pivots| * (8 + Keyspace.MaxLen() as int)
   {
     v := strictlySortedKeySeqToVal(pivots);
 
-    if |pivots| > 0 {
+    if |pivots| as uint64 > 0 {
       KeyInPivotsIsNonempty(pivots);
     }
   }
 
   method messageSeqToVal(s: seq<Message>) returns (v : V)
-  requires |s| <= IMM.CapBucketNumEntries() as int
   requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
-  requires forall i | 0 <= i < |s| :: IMM.MessageSize(s[i]) <= IMM.CapValueSize() as int
+  requires |s| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(GByteArray))
-  ensures SizeOfV(v) <= 8 + (8 + IMM.CapValueSize()) as int * IMM.CapBucketNumEntries() as int
   ensures |v.a| == |s|
   ensures IMM.valToMessageSeq(v) == Some(s)
+  ensures SizeOfV(v) == 8 + WeightMessageSeq(s)
   {
     var ar := new V[|s| as uint64];
     var i: uint64 := 0;
@@ -529,7 +539,7 @@ module ImplMarshalling {
     invariant ValidVal(VArray(ar[..i]))
     invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
     invariant IMM.valToMessageSeq(VArray(ar[..i])) == Some(s[..i])
-    invariant SizeOfV(VArray(ar[..i])) <= 8 + (8 + IMM.CapValueSize()) as int * i as int
+    invariant SizeOfV(VArray(ar[..i])) == 8 + WeightMessageSeq(s[..i])
     {
       ar[i] := VByteArray(s[i].value);
 
@@ -538,6 +548,9 @@ module ImplMarshalling {
       assert ar[..i+1][..i] == ar[..i];
       assert ar[..i+1] == ar[..i] + [ar[i]];
       assert s[..i] + [s[i]] == s[..i+1];
+
+      assert WeightMessage(s[i])
+          == SizeOfV(ar[i]);
 
       i := i + 1;
     }
@@ -552,17 +565,20 @@ module ImplMarshalling {
   bucketToVal(bucket: KMTable.KMTable, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires KMTable.WF(bucket)
+  requires WeightBucket(KMTable.I(bucket)) <= MaxTotalBucketWeight()
   requires WFBucketAt(KMTable.I(bucket), pivotTable, i)
-  requires IMM.CappedBucket(bucket)
   requires 0 <= i <= |pivotTable|
   ensures ValInGrammar(v, IMM.BucketGrammar())
-  ensures SizeOfV(v) <= (8 + (8+IMM.CapKeySize() as int) * IMM.CapBucketNumEntries() as int) + (8 + (8+IMM.CapValueSize() as int) * IMM.CapBucketNumEntries() as int)
   ensures ValidVal(v)
   ensures IMM.valToBucket(v, pivotTable, i) == Some(bucket)
+  ensures SizeOfV(v) == KMTable.WeightKMTable(bucket) + 16
   {
+    KMTable.lenKeysLeWeight(bucket);
     var keys := strictlySortedKeySeqToVal(bucket.keys);
     var values := messageSeqToVal(bucket.values);
     v := VTuple([keys, values]);
+
+    assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(values);
 
     // FIXME dafny goes nuts with trigger loops here some unknown reason
     // without these obvious asserts.
@@ -575,27 +591,35 @@ module ImplMarshalling {
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
   requires forall i | 0 <= i < |buckets| :: WFBucketAt(KMTable.I(buckets[i]), pivotTable, i)
-  requires IMM.CappedBuckets(buckets)
-  requires |buckets| <= IMM.CapNumBuckets() as int
+  requires |buckets| <= MaxNumChildren() as int
   requires |buckets| <= |pivotTable| + 1
+  requires WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
-  ensures SizeOfV(v) <= 8 + |buckets| * ((8 + (8+IMM.CapKeySize()) as int * IMM.CapBucketNumEntries() as int) + (8 + (8+IMM.CapValueSize()) as int * IMM.CapBucketNumEntries() as int))
   ensures ValInGrammar(v, GArray(IMM.BucketGrammar()))
   ensures |v.a| == |buckets|
   ensures IMM.valToBuckets(v.a, pivotTable) == Some(buckets)
+  ensures SizeOfV(v) <= 8 + KMTable.WeightKMTableSeq(buckets) + |buckets| * 16
   {
     if |buckets| == 0 {
-      return VArray([]);
+      v := VArray([]);
     } else {
+      WeightBucketListSlice(KMTable.ISeq(buckets), 0, |buckets| - 1);
+      WeightBucketLeBucketList(KMTable.ISeq(buckets), |buckets| - 1);
+      KMTable.Islice(buckets, 0, |buckets| - 1);
+
       var pref := bucketsToVal(DropLast(buckets), pivotTable);
       var bucket := Last(buckets);
+
       var bucketVal := bucketToVal(bucket, pivotTable, |buckets| - 1);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == buckets; // observe
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(buckets); // observe (reduces verification time)
-      return VArray(pref.a + [bucketVal]);
+
+      assert buckets == DropLast(buckets) + [Last(buckets)];
+
+      v := VArray(pref.a + [bucketVal]);
     }
   }
 
@@ -611,14 +635,10 @@ module ImplMarshalling {
   method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
   requires IM.WFNode(node)
   requires BT.WFNode(IM.INode(node))
-  requires IMM.CappedNode(node)
   ensures ValidVal(v)
-  ensures SizeOfV(v) <= 
-      8 + IMM.CapNumBuckets() as int * ((8 + (8+IMM.CapKeySize()) as int * IMM.CapBucketNumEntries() as int) + (8 + (8+IMM.CapValueSize()) as int * IMM.CapBucketNumEntries() as int)) +
-      8 + (IMM.CapNumBuckets() as int - 1) * (8 + IMM.CapKeySize() as int) +
-      8 + IMM.CapNumBuckets() as int * 8
   ensures ValInGrammar(v, IMM.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
+  ensures SizeOfV(v) <= BlockSize() - 32 - 8
   {
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
@@ -630,8 +650,13 @@ module ImplMarshalling {
     } else {
       children := VUint64Array([]);
     }
-      
+
     v := VTuple([pivots, children, buckets]);
+
+    assert SizeOfV(pivots) <= 320000;
+    assert SizeOfV(children) <= 264;
+    KMTable.kmtableWeightEq(node.buckets);
+    assert SizeOfV(buckets) <= 8068312;
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
     assert IMM.valToNode(v).Some?;
@@ -642,14 +667,13 @@ module ImplMarshalling {
   requires ImplState.WFSector(sector)
   requires IM.WFSector(ImplState.ISector(sector))
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.SectorGrammar());
   ensures v.Some? ==> IMM.valToSector(v.value) == ISectorOpt(Some(sector))
   ensures sector.SectorBlock? ==> v.Some?
-  ensures sector.SectorBlock? ==> SizeOfV(v.value) <= IMM.BlockSize() as int - 32
+  ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
   {
     match sector {
       case SectorIndirectionTable(mutMap) => {
@@ -743,22 +767,21 @@ module ImplMarshalling {
   requires ImplState.WFSector(sector)
   requires IM.WFSector(ImplState.ISector(sector))
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block))
-  requires sector.SectorBlock? ==> IMM.CappedNode(sector.block);
   ensures data != null ==> IMM.parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
-  ensures data != null ==> data.Length <= IMM.BlockSize() as int
+  ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length
-  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == IMM.BlockSize() as int
+  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == BlockSize() as int
   ensures sector.SectorBlock? ==> data != null;
   {
     var v := sectorToVal(sector);
     match v {
       case None => return null;
       case Some(v) => {
-        if (SizeOfV(v) <= IMM.BlockSize() as int - 32) {
+        if (SizeOfV(v) <= BlockSize() as int - 32) {
           //Native.BenchmarkingUtil.start();
           var size: uint64;
           if (sector.SectorIndirectionTable?) {
-            size := IMM.BlockSize();
+            size := BlockSize() as uint64;
           } else {
             var computedSize := GenericMarshalling.ComputeSizeOf(v);
             size := 32 + computedSize;

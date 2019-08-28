@@ -1171,26 +1171,6 @@ module KMTable {
   //// Weight stuff
   /////////////////////////
 
-  function WeightKeySeq(keys: seq<Key>) : int
-  {
-    if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(keys))
-  }
-
-  function WeightMessageSeq(msgs: seq<Message>) : int
-  {
-    if |msgs| == 0 then 0 else WeightMessageSeq(DropLast(msgs)) + WeightMessage(Last(msgs))
-  }
-
-  function Weight(kmt: KMTable) : int
-  {
-    WeightKeySeq(kmt.keys) + WeightMessageSeq(kmt.values)
-  }
-
-  function WeightSeq(kmts: seq<KMTable>) : int
-  {
-    if |kmts| == 0 then 0 else WeightSeq(DropLast(kmts)) + Weight(Last(kmts))
-  }
-
   function WeightKMTable(kmt: KMTable) : int
   {
     WeightKeySeq(kmt.keys) + WeightMessageSeq(kmt.values)
@@ -1212,6 +1192,10 @@ module KMTable {
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   requires WeightKMTableSeq(kmts) < 0x1_0000_0000_0000_0000
   ensures weight as int == WeightBucketList(ISeq(kmts))
+
+  lemma kmtableWeightEq(kmts: seq<KMTable>)
+  requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
+  ensures WeightKMTableSeq(kmts) == WeightBucketList(ISeq(kmts))
 
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
