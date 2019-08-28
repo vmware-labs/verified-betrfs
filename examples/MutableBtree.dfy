@@ -457,15 +457,15 @@ abstract module MutableBtree {
       } else if                     j == ichildidx {
         assert old(DisjointSubtrees(node, i, j));
       } else if i < ichildidx     && j == ichildidx+1 {
-        assume false;
+        assert old(DisjointSubtrees(node, i, j-1));
       } else if i == ichildidx    && j == ichildidx+1 {
-        assume false;
+        // Disjointness comes from SplitNode
       } else if i < ichildidx     &&      ichildidx+1 < j {
         assert old(DisjointSubtrees(node, i, j-1));
       } else if i == ichildidx    &&      ichildidx+1 < j {
         assert old(DisjointSubtrees(node, i, j-1));
       } else if i == ichildidx+1  &&      ichildidx+1 < j {
-        assume false;
+        assert old(DisjointSubtrees(node, i-1, j-1));
       } else {
         assert old(DisjointSubtrees(node, i-1, j-1));
       }
