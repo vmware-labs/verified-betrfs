@@ -96,6 +96,7 @@ module ImplModelFlush {
     } else {
       var s1 := if parentref == BT.G.Root() then flushRootBucket(k, s) else s;
       if parentref == BT.G.Root() {
+        flushRootBucketCorrect(k, s);
         flushRootBucketWeight(k, s, slot);
         flushRootBucketFrozen(k, s);
       }
@@ -157,6 +158,11 @@ module ImplModelFlush {
 
         assume KMTable.ISeq(parent.buckets[slot := KMTable.Empty()])
             == KMTable.ISeq(parent.buckets)[slot := map[]];
+
+        if (parentref == BT.G.Root()) {
+          assert s1.rootBucketWeightBound == 0;
+          assert s2.rootBucketWeightBound == 0;
+        }
 
         allocCorrect(k, s1, newchild);
         writeCorrect(k, s2, parentref, newparent);

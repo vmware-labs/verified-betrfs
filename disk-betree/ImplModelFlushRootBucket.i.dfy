@@ -35,6 +35,7 @@ module ImplModelFlushRootBucket {
     var newroot := oldroot.(buckets := newbuckets);
 
     var s' := s.(rootBucket := map[])
+        .(rootBucketWeightBound := 0)
         .(cache := s.cache[BT.G.Root() := newroot]);
 
     s'
@@ -48,6 +49,7 @@ module ImplModelFlushRootBucket {
     && Inv(k, s')
     && IVars(s) == IVars(s')
     && s'.rootBucket == map[]
+    && s'.rootBucketWeightBound == 0
   {
     reveal_flushRootBucket();
     var s' := flushRootBucket(k, s);

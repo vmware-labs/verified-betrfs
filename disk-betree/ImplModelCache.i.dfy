@@ -117,7 +117,7 @@ module ImplModelCache {
   requires WFVars(s)
   requires ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in s.cache
-  requires ref == BT.G.Root() ==> s.rootBucket == map[]
+  requires ref == BT.G.Root() ==> s.rootBucket == map[] && s.rootBucketWeightBound == 0
   requires WFNode(node)
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value ==> s.frozenIndirectionTable.value[ref].0.Some?

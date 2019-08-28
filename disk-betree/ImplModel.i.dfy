@@ -61,7 +61,8 @@ module ImplModel {
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
         syncReqs: map<int, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
-        rootBucket: map<Key, Message>)
+        rootBucket: map<Key, Message>,
+        rootBucketWeightBound: uint64)
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
@@ -87,14 +88,23 @@ module ImplModel {
   predicate WFVarsReady(vars: Variables)
   requires vars.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) := vars;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) := vars;
     && WFCache(cache)
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (rootBucket != map[] ==> BT.G.Root() in cache)
+    && (rootBucketWeightBound != 0 ==> BT.G.Root() in cache)
     && (BT.G.Root() in cache ==>
-        WeightBucket(rootBucket) + WeightBucketList(KMTable.ISeq(cache[BT.G.Root()].buckets))
+        rootBucketWeightBound as int + WeightBucketList(KMTable.ISeq(cache[BT.G.Root()].buckets))
           <= MaxTotalBucketWeight())
+
+    // TODO this is an <= rather than an == for convenience
+    // so that when we update the rootBucket, we don't have to do an extra
+    // query into the rootBucket first to figure out the amount to subtract.
+    // When deltas become a thing we'll need to do queries ANYWAY so we should just
+    // make a way to do a query-and-update to the in-memory rootBucket without traversing
+    // the tree twice.
+    && WeightBucket(rootBucket) <= rootBucketWeightBound as int
   }
   predicate WFVars(vars: Variables)
   {
@@ -162,7 +172,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache, rootBucket))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }

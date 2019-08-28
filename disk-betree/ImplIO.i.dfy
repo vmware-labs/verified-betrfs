@@ -222,7 +222,7 @@ module ImplIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
-      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree);
+      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree, 0);
     } else {
       s' := s;
       print "giving up; did not get indirectionTable when reading\n";

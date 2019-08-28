@@ -9,7 +9,7 @@ module BucketWeights {
   import opened Sequences
   import opened BucketsLib
 
-  function WeightKey(key: Key) : (w:int)
+  function method WeightKey(key: Key) : (w:int)
   ensures w >= 0
   {
     8 + |key|
@@ -21,7 +21,7 @@ module BucketWeights {
     if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(keys))
   }
 
-  function WeightMessage(msg: Message) : (w:int)
+  function method WeightMessage(msg: Message) : (w:int)
   ensures w >= 0
   {
     match msg {

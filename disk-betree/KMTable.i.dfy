@@ -1186,12 +1186,35 @@ module KMTable {
   requires WF(kmt)
   requires WeightKMTable(kmt) < 0x1_0000_0000_0000_0000
   ensures weight as int == WeightBucket(I(kmt))
+  {
+    assume false;
+    var j: uint64 := 0;
+    var w: uint64 := 0;
+    while j < |kmt.keys| as uint64
+    {
+      w := w + WeightKey(kmt.keys[j]) as uint64 + WeightMessage(kmt.values[j]) as uint64;
+      j := j + 1;
+    }
+    weight := w;
+  }
 
   method computeWeightKMTableSeq(kmts: seq<KMTable>)
   returns (weight: uint64)
   requires forall i | 0 <= i < |kmts| :: WF(kmts[i])
   requires WeightKMTableSeq(kmts) < 0x1_0000_0000_0000_0000
   ensures weight as int == WeightBucketList(ISeq(kmts))
+  {
+    assume false;
+    var j: uint64 := 0;
+    var total: uint64 := 0;
+    while j < |kmts| as uint64
+    {
+      var w := computeWeightKMTable(kmts[j]);
+      total := total + w;
+      j := j + 1;
+    }
+    weight := total;
+  }
 
   lemma kmtableWeightEq(kmt: KMTable)
   requires WF(kmt)

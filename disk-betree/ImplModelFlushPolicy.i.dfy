@@ -163,7 +163,7 @@ module ImplModelFlushPolicy {
           if childref in s.cache then (
             var child := s.cache[childref];
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then WeightBucket(s.rootBucket) as uint64 else 0;
+            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound else 0;
             if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 then (
               ActionFlush(ref, slot)
             ) else (
@@ -237,7 +237,7 @@ module ImplModelFlushPolicy {
           if childref in s.cache {
             var child := s.cache[childref];
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then WeightBucket(s.rootBucket) as uint64 else 0;
+            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound as uint64 else 0;
             if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 {
               assert ValidAction(k, s, action);
             } else {
@@ -292,10 +292,10 @@ module ImplModelFlushPolicy {
           if childref in s.cache {
             var child := s.cache[childref];
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then WeightBucket(s.rootBucket) as uint64 else 0;
+            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound as uint64 else 0;
             if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 {
 
-              assert extraRootWeight as int == (if action.parentref == BT.G.Root() then WeightBucket(s.rootBucket) else 0);
+              assert extraRootWeight as int >= (if action.parentref == BT.G.Root() then WeightBucket(s.rootBucket) else 0);
               assert childTotalWeight as int == WeightBucketList(KMTable.ISeq(child.buckets));
               assert slotWeight as int == WeightBucket(KMTable.I(node.buckets[action.slot]));
 

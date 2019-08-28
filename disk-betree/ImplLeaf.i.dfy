@@ -64,8 +64,6 @@ module ImplLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
-  requires s.frozenIndirectionTable.Some? && ref in IS.IIndirectionTable(s.frozenIndirectionTable.value) ==>
-      IS.IIndirectionTable(s.frozenIndirectionTable.value)[ref].0.Some?
   ensures IS.WVars(s')
   ensures IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, node);
   // NOALIAS statically enforced no-aliasing would probably help here
@@ -73,6 +71,18 @@ module ImplLeaf {
   modifies s.ephemeralIndirectionTable.Repr
   {
     ImplModelLeaf.reveal_repivotLeaf();
+
+    if s.frozenIndirectionTable.Some? {
+      var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
+      if lbaGraph.Some? {
+        var (lba, _) := lbaGraph.value;
+        if lba.None? {
+          s' := s;
+          print "giving up; flush can't run because frozen isn't written";
+          return;
+        }
+      }
+    }
 
     assume forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000; // should follow from node bounds
     var joined := KMTable.Join(node.buckets, node.pivotTable);

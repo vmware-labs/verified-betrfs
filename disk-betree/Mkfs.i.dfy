@@ -27,8 +27,9 @@ module {:extern} MkfsImpl {
   // TODO prove that this always returns an answer (that is, marshalling always succeeds)
   method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
   {
-    assume IMM.CappedNode(IS.SectorBlock(IM.Node([], None, [KMTable.Empty()])).block);
-    var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(IM.Node([], None, [KMTable.Empty()])));
+    var node := IM.Node([], None, [KMTable.Empty()]);
+    assume IM.WFNode(node);
+    var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));
 
     var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number
     assume sectorIndirectionTable.Count == 0;

@@ -336,7 +336,7 @@ module ImplModelIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], map[])
+      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], map[], 0)
     ) else (
       s
     )
@@ -359,6 +359,7 @@ module ImplModelIO {
 
     var s' := PageInIndirectionTableResp(k, s, io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
+      WeightBucketEmpty();
       assert WFVars(s');
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));

@@ -48,6 +48,7 @@ module ImplFlushRootBucket {
     var newroot := oldroot.(buckets := newbuckets);
 
     s' := s.(rootBucket := TTT.EmptyTree)
+           .(rootBucketWeightBound := 0)
         .(cache := s.cache[BT.G.Root() := newroot]);
   }
 

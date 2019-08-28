@@ -11,6 +11,7 @@ module ImplModelInsert {
   import opened Maps
   import opened Sets
   import opened Sequences
+  import opened NativeTypes
 
   import opened BucketWeights
   import opened BucketsLib
@@ -48,7 +49,10 @@ module ImplModelInsert {
       var msg := Messages.Define(value);
       var newRootBucket := s.rootBucket[key := msg];
 
+      var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
+
       var s' := s.(rootBucket := newRootBucket)
+          .(rootBucketWeightBound := newW)
           .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
       (s', true)
     )
@@ -73,7 +77,7 @@ module ImplModelInsert {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
-      WeightBucket(s.rootBucket) +
+      s.rootBucketWeightBound as int +
       WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
       <= MaxTotalBucketWeight()
   ensures var (s', success) := InsertKeyValue(k, s, key, value);
@@ -107,7 +111,10 @@ module ImplModelInsert {
 
     var newRootBucket := s.rootBucket[key := msg];
 
+    var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
+
     var s' := s.(rootBucket := newRootBucket)
+        .(rootBucketWeightBound := newW)
         .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
 
     var oldroot := INodeRoot(baseroot, s.rootBucket);
@@ -122,6 +129,8 @@ module ImplModelInsert {
 
     var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
     assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
+
+    assert WFVars(s');
 
     assert BC.Dirty(Ik(k), IVars(s), IVars(s'), BT.G.Root(), newroot);
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.G.WriteOp(BT.G.Root(), newroot));
@@ -147,7 +156,7 @@ module ImplModelInsert {
       var (s', io') := PageInReq(k, s, io, BT.G.Root());
       (s', false, io')
     ) else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
-        WeightBucket(s.rootBucket) +
+        s.rootBucketWeightBound as int +
         WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
         <= MaxTotalBucketWeight() then (
       var (s', success) := InsertKeyValue(k, s, key, value);
@@ -174,7 +183,7 @@ module ImplModelInsert {
     } else if (BT.G.Root() !in s.cache) {
       PageInReqCorrect(k, s, io, BT.G.Root());
     } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
-        WeightBucket(s.rootBucket) +
+        s.rootBucketWeightBound as int +
         WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
         <= MaxTotalBucketWeight() {
       InsertKeyValueCorrect(k, s, key, value);
