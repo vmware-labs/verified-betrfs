@@ -586,14 +586,10 @@ abstract module MutableBtree {
       ensures newnode.children[i].repr < newnode.repr
     {
       if i < childidx {
-        assert newnode.children[i].repr < newnode.repr;
       } else if i == childidx {
-        assert newnode.children[i].repr < newnode.repr;
       } else if i == childidx + 1 {
-        assert newnode.children[i].repr < newnode.repr;
       } else {
         assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
-        assert newnode.children[i].repr < newnode.repr;
       }
     }
 
