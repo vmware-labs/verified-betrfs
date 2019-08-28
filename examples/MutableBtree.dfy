@@ -418,10 +418,10 @@ abstract module MutableBtree {
     requires 0 <= childidx < node.nchildren
     requires Full(node.children[childidx]);
     ensures WFShape(newnode)
-    ensures BS.SplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
-    ensures newnode.pivots == node.pivots
-    ensures newnode.children == node.children
-    ensures fresh(newnode.repr - node.repr)
+    // ensures BS.SplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
+    // ensures newnode.pivots == node.pivots
+    // ensures newnode.children == node.children
+    // ensures fresh(newnode.repr - node.repr)
     modifies node.pivots, node.children
   {
     var left, right, pivot := SplitNode(node.children[childidx]);
@@ -429,37 +429,54 @@ abstract module MutableBtree {
     Arrays.Insert(node.pivots, node.nchildren-1, pivot, childidx);
     newnode := Index(node.repr + right.repr, node.nchildren + 1, node.pivots, node.children);
 
-    // ghost var oldchildren := old(node.children[..node.nchildren]);
-    // ghost var newchildren := newnode.children[..newnode.nchildren];
-    // assert forall i :: 0 <= i < childidx ==> newchildren[i] == oldchildren[i];
-    // assert newchildren[childidx] == left;
-    // assert newchildren[childidx+1] == right;
-    // assert forall i :: childidx as int + 2 <= i < |newchildren| ==> newchildren[i] == oldchildren[i-1];
-    // assert newnode.children[..newnode.nchildren] == replace1with2(oldchildren[..node.nchildren], left, right, childidx as int);
-    //oldchildren[..childidx] + [left, right] + oldchildren[childidx+1..node.nchildren];
-    //Seq.insert(oldchildren[childidx as int := left], right, childidx as int + 1);
+    ghost var oldchildren := old(node.children[..node.nchildren]);
+    ghost var newchildren := newnode.children[..newnode.nchildren];
+    assert newchildren == Seq.replace1with2(oldchildren, left, right, childidx as int);
     
-    // forall i | 0 <= i < newnode.nchildren
-    //   ensures !newnode.children[i].NotInUse?
-    // {
-    //   if i < childidx {
-    //   } else if i == childidx {
-    //   } else if i == childidx + 1 {
-    //   } else {
-    //     assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
-    //   }
-    // }
-    // forall i | 0 <= i < newnode.nchildren
-    //   ensures newnode.children[i].repr < newnode.repr
-    // {
-    //   if i < childidx {
-    //   } else if i == childidx {
-    //   } else if i == childidx + 1 {
-    //   } else {
-    //     assert newnode.children[i] == oldchildren[childidx as int := left][i-1];
-    //   }
-    // }
+    forall i | 0 <= i < newnode.nchildren
+      ensures !newchildren[i].NotInUse?
+      ensures newchildren[i].repr < newnode.repr
+      ensures newnode.pivots !in newchildren[i].repr
+      ensures newnode.children !in newchildren[i].repr
+      ensures WFShape(newchildren[i])
+    {
+      if i < childidx {
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert newchildren[i] == oldchildren[childidx as int := left][i-1];
+      }
+    }
 
+    ghost var ichildidx := childidx as int;
+    forall i: int, j: int | 0 <= i < j < newnode.nchildren as int
+      ensures DisjointSubtrees(newnode, i, j)
+    {
+      if                            j <  ichildidx {
+        // assert newchildren[i] == oldchildren[i];
+        // assert newchildren[j] == oldchildren[j];
+        assert old(DisjointSubtrees(node, i, j));
+        //assume false;
+      } else if                     j == ichildidx {
+        //assert old(DisjointSubtrees(node, i, j));
+        assume false;
+      } else if i < ichildidx     && j == ichildidx+1 {
+        assume false;
+      } else if i == ichildidx    && j == ichildidx+1 {
+        assume false;
+      } else if i < ichildidx     &&      ichildidx+1 < j {
+        //assert old(DisjointSubtrees(node, i, j-1));
+        assume false;
+      } else if i == ichildidx    &&      ichildidx+1 < j {
+        //assert old(DisjointSubtrees(node, i, j-1));
+        assume false;
+      } else if i == ichildidx+1  &&      ichildidx+1 < j {
+        assume false;
+      } else {
+        //assert old(DisjointSubtrees(node, i-1, j-1));
+        assume false;
+      }
+    }
   //   BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
   }
   
