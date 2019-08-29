@@ -29,7 +29,13 @@ module ImplLeaf {
 
     var n := |bucket.keys|;
 
-    var m := 500;
+    var m := (n + 8 as int) / 8 as int;
+    if m > 500 {
+      m := 500;
+    }
+    if m < 1 {
+      m := 1;
+    }
 
     MS.Keyspace.reveal_IsStrictlySorted();
     var r := [];
@@ -49,6 +55,8 @@ module ImplLeaf {
     pivots := r;
 
     if |pivots| < 1 {
+      //print n; print "\n";
+      //print |pivots|; print "\n";
       print "warning: GetNewPivots didn't make any pivots\n";
     }
 
