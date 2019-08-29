@@ -109,6 +109,24 @@ module BucketsLib {
     map key | key in bucket && Route(pivots, key) == i :: bucket[key]
   }
 
+  function {:opaque} BucketIntersect(bucket: Bucket, keys: set<Key>) : Bucket
+  {
+    map key | key in bucket && key in keys :: bucket[key]
+  }
+
+  function {:opaque} BucketComplement(bucket: Bucket, keys: set<Key>) : Bucket
+  {
+    map key | key in bucket && key !in keys :: bucket[key]
+  }
+
+  lemma WFBucketIntersect(bucket: Bucket, keys: set<Key>)
+  requires WFBucket(bucket)
+  ensures WFBucket(BucketIntersect(bucket, keys))
+
+  lemma WFBucketComplement(bucket: Bucket, keys: set<Key>)
+  requires WFBucket(bucket)
+  ensures WFBucket(BucketComplement(bucket, keys))
+
   ///// Splitting stuff
 
   function SplitBucketLeft(bucket: Bucket, pivot: Key) : Bucket

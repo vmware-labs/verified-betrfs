@@ -233,7 +233,7 @@ module ImplMarshallingModel {
     )
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KMTable.KMTable>)
+  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KMTable.KMT>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
@@ -243,7 +243,7 @@ module ImplMarshallingModel {
     var values := valToMessageSeq(v.t[1]);
 
     if keys.Some? && values.Some? then (
-      var kmt := KMTable.KMTable(keys.value, values.value);
+      var kmt := KMTable.KMT(keys.value, values.value);
 
       if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) then
         Some(kmt)
@@ -254,7 +254,7 @@ module ImplMarshallingModel {
     )
   }
 
-  function IKMTableOpt(table : Option<KMTable.KMTable>): Option<map<Key, Message>>
+  function IKMTableOpt(table : Option<KMTable.KMT>): Option<map<Key, Message>>
   requires table.Some? ==> KMTable.WF(table.value)
   {
     if table.Some? then
@@ -263,7 +263,7 @@ module ImplMarshallingModel {
       None
   }
 
-  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<KMTable.KMTable>>)
+  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<KMTable.KMT>>)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
@@ -286,7 +286,7 @@ module ImplMarshallingModel {
     )
   }
 
-  function ISeqKMTableOpt(s : Option<seq<KMTable.KMTable>>): Option<seq<map<Key, Message>>>
+  function ISeqKMTableOpt(s : Option<seq<KMTable.KMT>>): Option<seq<map<Key, Message>>>
   requires s.Some? ==> forall i: nat :: i < |s.value| ==> KMTable.WF(s.value[i])
   {
     if s.Some? then

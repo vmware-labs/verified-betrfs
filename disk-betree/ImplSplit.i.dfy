@@ -93,7 +93,7 @@ module ImplSplit {
     var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
     WeightBucketLeBucketList(KMTable.ISeq(fused_parent.buckets), slot_idx);
     KMTable.lenKeysLeWeight(fused_parent.buckets[slot_idx]);
-    var buckets := KMTable.SplitKMTableInList(fused_parent.buckets, slot_idx, pivot);
+    var buckets := KMTable.SplitKMTInList(fused_parent.buckets, slot_idx, pivot);
     res := IM.Node(
       pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),

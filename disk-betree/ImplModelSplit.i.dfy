@@ -222,7 +222,7 @@ module ImplModelSplit {
   requires fused_parent.children.Some?
   {
     var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    var buckets := KMTable.splitKMTableInList(fused_parent.buckets, slot_idx, pivot);
+    var buckets := KMTable.splitKMTInList(fused_parent.buckets, slot_idx, pivot);
     Node(
       pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
@@ -245,7 +245,7 @@ module ImplModelSplit {
     && inode' == BT.SplitParent(inode, pivot, slot_idx, left_childref, right_childref)
     && WeightBucketList(KMTable.ISeq(res.buckets)) == WeightBucketList(KMTable.ISeq(fused_parent.buckets))
   {
-    KMTable.splitKMTableInListCorrect(fused_parent.buckets, slot_idx, pivot);
+    KMTable.splitKMTInListCorrect(fused_parent.buckets, slot_idx, pivot);
     var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
     WFSplitBucketInList(KMTable.ISeq(fused_parent.buckets), slot_idx, pivot, fused_parent.pivotTable);
     WeightSplitBucketInList(KMTable.ISeq(fused_parent.buckets), slot_idx, pivot);

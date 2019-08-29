@@ -111,7 +111,7 @@ module ImplInsert {
     }
 
     KMTable.kmtableSeqWeightEq(s.cache[BT.G.Root()].buckets);
-    var weightSeq := KMTable.computeWeightKMTableSeq(s.cache[BT.G.Root()].buckets);
+    var weightSeq := KMTable.computeWeightKMTSeq(s.cache[BT.G.Root()].buckets);
 
     if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         s.rootBucketWeightBound as int +

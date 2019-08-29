@@ -23,7 +23,7 @@ module ImplFlushPolicy {
   import opened BucketWeights
   import KMTable
 
-  method biggestSlot(buckets: seq<KMTable.KMTable>) returns (res : (uint64, uint64))
+  method biggestSlot(buckets: seq<KMTable.KMT>) returns (res : (uint64, uint64))
   requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
   requires ImplModelFlushPolicy.biggestSlot.requires(buckets)
   ensures res == ImplModelFlushPolicy.biggestSlot(buckets)
@@ -32,14 +32,14 @@ module ImplFlushPolicy {
     KMTable.kmtableWeightEq(buckets[0]);
     var j := 1;
     var bestIdx := 0;
-    var bestWeight := KMTable.computeWeightKMTable(buckets[0]);
+    var bestWeight := KMTable.computeWeightKMT(buckets[0]);
     while j < |buckets| as uint64
     invariant ImplModelFlushPolicy.biggestSlotIterate.requires(buckets, j, bestIdx, bestWeight)
     invariant ImplModelFlushPolicy.biggestSlotIterate(buckets, j, bestIdx, bestWeight) == ImplModelFlushPolicy.biggestSlot(buckets)
     {
       KMTable.kmtableWeightEq(buckets[j]);
       WeightBucketLeBucketList(KMTable.ISeq(buckets), j as int);
-      var w := KMTable.computeWeightKMTable(buckets[j]);
+      var w := KMTable.computeWeightKMT(buckets[j]);
       if w > bestWeight {
         bestIdx := j;
         bestWeight := w;
@@ -93,22 +93,16 @@ module ImplFlushPolicy {
       } else {
         var bs := biggestSlot(node.buckets);
         var (slot, slotWeight) := bs;
-        // TODO partial flushes
-        // with partial flushes, we can ensure that the node will either have a lot of children
-        // or will have a flushable node.
-        // As it stands, we'll always just flush.
-
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
+        if |node.buckets| < 8 {
           var childref := node.children.value[slot];
           if childref in s.cache {
             var child := s.cache[childref];
 
             KMTable.kmtableSeqWeightEq(child.buckets);
-            var childTotalWeight: uint64 := KMTable.computeWeightKMTableSeq(child.buckets);
+            var childTotalWeight: uint64 := KMTable.computeWeightKMTSeq(child.buckets);
 
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound else 0;
-
-            if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 {
+            if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               action := ImplModelFlushPolicy.ActionFlush(ref, slot);
             } else {
               action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
@@ -116,9 +110,9 @@ module ImplFlushPolicy {
           } else {
             action := ImplModelFlushPolicy.getActionToPageIn(s.cache, childref);
           }
-        //) else (
-        //  getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
-        //)
+        } else {
+          action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
+        }
       }
     }
   }

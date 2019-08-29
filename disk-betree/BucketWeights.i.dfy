@@ -83,6 +83,10 @@ module BucketWeights {
   ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
       <= WeightBucket(parent) + WeightBucket(children[i])
 
+  lemma WeightBucketListShrinkEntry(blist: BucketList, i: int, bucket: Bucket)
+  requires 0 <= i < |blist|
+  requires WeightBucket(bucket) <= WeightBucket(blist[i])
+  ensures WeightBucketList(blist[i := bucket]) <= WeightBucketList(blist)
 
   lemma WeightBucketListClearEntry(blist: BucketList, i: int)
   requires 0 <= i < |blist|
@@ -143,4 +147,13 @@ module BucketWeights {
   requires WFBucketList(blist, pivots)
   ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
       WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
+
+  lemma WeightBucketIntersect(bucket: Bucket, keys: set<Key>)
+  ensures WeightBucket(BucketIntersect(bucket, keys)) <= WeightBucket(bucket)
+
+  lemma WeightBucketComplement(bucket: Bucket, keys: set<Key>)
+  ensures WeightBucket(BucketComplement(bucket, keys)) <= WeightBucket(bucket)
+
+  lemma WeightMessageBound(msg: Message)
+  ensures WeightMessage(msg) <= 8 + 1024
 }

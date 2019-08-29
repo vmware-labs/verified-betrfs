@@ -30,7 +30,7 @@ module ImplModelFlushPolicy {
     | ActionEvict
     | ActionFail
 
-  function biggestSlotIterate(buckets: seq<KMTable.KMTable>, j: uint64, bestIdx: uint64, bestWeight: uint64) : (res : (uint64, uint64))
+  function biggestSlotIterate(buckets: seq<KMTable.KMT>, j: uint64, bestIdx: uint64, bestWeight: uint64) : (res : (uint64, uint64))
   requires 0 <= bestIdx as int < |buckets|
   requires 0 <= bestWeight as int <= MaxTotalBucketWeight()
   requires 1 <= j as int <= |buckets| <= MaxNumChildren()
@@ -56,7 +56,7 @@ module ImplModelFlushPolicy {
     )
   }
 
-  function biggestSlot(buckets: seq<KMTable.KMTable>) : (res : (uint64, uint64))
+  function biggestSlot(buckets: seq<KMTable.KMT>) : (res : (uint64, uint64))
   requires |buckets| > 0
   requires |buckets| <= MaxNumChildren()
   requires forall i | 0 <= i < |buckets| :: |buckets[i].keys| == |buckets[i].values|
@@ -152,19 +152,18 @@ module ImplModelFlushPolicy {
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
         getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
       ) else (
+        // TODO:
         var (slot, slotWeight) := biggestSlot(node.buckets);
-        // TODO partial flushes
-        // with partial flushes, we can ensure that the node will either have a lot of children
-        // or will have a flushable node.
-        // As it stands, we'll always just flush.
-
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
+        if |node.buckets| < 8 then (
           var childref := node.children.value[slot];
           if childref in s.cache then (
             var child := s.cache[childref];
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound else 0;
-            if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 then (
+            if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 then (
+              // If there's room for FlushTriggerWeight() worth of stuff, then
+              // we flush. We flush as much as we can (which will end up being at least
+              // FlushTriggerWeight - max key weight - max message weight).
               ActionFlush(ref, slot)
             ) else (
               getActionToFlush(k, s, stack + [childref], slots + [slot])
@@ -172,9 +171,9 @@ module ImplModelFlushPolicy {
           ) else (
             getActionToPageIn(s.cache, childref)
           )
-        //) else (
-        //  getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
-        //)
+        ) else (
+          getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
+        )
       )
     )
   }
@@ -231,14 +230,14 @@ module ImplModelFlushPolicy {
         getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
         var (slot, slotWeight) := biggestSlot(node.buckets);
-        //if slotWeight >= FlushTriggerWeight() as uint64 || |node.children.value| as uint64 < 2 {
+        //if slotWeight >= FlushTriggerWeight() as uint64 {
+        if |node.buckets| < 8 {
           var childref := node.children.value[slot];
           lemmaChildInGraph(k, s, ref, childref);
           if childref in s.cache {
             var child := s.cache[childref];
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound as uint64 else 0;
-            if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 {
+            if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               assert ValidAction(k, s, action);
             } else {
               assume childref != BT.G.Root(); // TODO we need a way to show this
@@ -250,73 +249,12 @@ module ImplModelFlushPolicy {
             assert childref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
             assert ValidAction(k, s, action);
           }
-        //} else {
-        //  getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
-        //}
+        } else {
+          getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
+        }
       }
     }
   }
-
-  lemma getActionToFlushWeightBounds(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
-  requires |stack| <= 40
-  requires ValidStackSlots(k, s, stack, slots)
-  requires Inv(k, s)
-  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
-  requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
-  requires forall j | 1 <= j < |stack| :: stack[j] != BT.G.Root()
-  decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures var action := getActionToFlush(k, s, stack, slots);
-      && ValidAction(k, s, action)
-      && (action.ActionFlush? ==>
-        && var parent := s.cache[action.parentref];
-        && var child := s.cache[parent.children.value[action.slot]];
-        (if action.parentref == BT.G.Root() then WeightBucket(s.rootBucket) else 0) +
-        WeightBucketList(KMTable.ISeq(child.buckets)) +
-        WeightBucket(KMTable.I(parent.buckets[action.slot])) <= MaxTotalBucketWeight()
-      )
-  {
-    reveal_getActionToFlush();
-    var action := getActionToFlush(k, s, stack, slots);
-
-    if |stack| as uint64 == 40 {
-    } else {
-      var ref := stack[|stack| as uint64 - 1];
-      var node := s.cache[ref];
-      if node.children.None? || |node.buckets| == MaxNumChildren() {
-        getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
-      } else {
-        var (slot, slotWeight) := biggestSlot(node.buckets);
-        //if slotWeight >= FlushTriggerWeight() as uint64 || |node.children.value| as uint64 < 2 {
-          var childref := node.children.value[slot];
-          lemmaChildInGraph(k, s, ref, childref);
-          if childref in s.cache {
-            var child := s.cache[childref];
-            var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
-            var extraRootWeight: uint64 := if ref == BT.G.Root() then s.rootBucketWeightBound as uint64 else 0;
-            if slotWeight + childTotalWeight + extraRootWeight <= MaxTotalBucketWeight() as uint64 {
-
-              assert extraRootWeight as int >= (if action.parentref == BT.G.Root() then WeightBucket(s.rootBucket) else 0);
-              assert childTotalWeight as int == WeightBucketList(KMTable.ISeq(child.buckets));
-              assert slotWeight as int == WeightBucket(KMTable.I(node.buckets[action.slot]));
-
-              assert ValidAction(k, s, action);
-            } else {
-              assume childref != BT.G.Root(); // TODO we need a way to show this
-              getActionToFlushValidAction(k, s, stack + [childref], slots + [slot]);
-            }
-          } else {
-            assert childref !in IVars(s).cache;
-            assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
-            assert childref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
-            assert ValidAction(k, s, action);
-          }
-        //} else {
-        //  getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
-        //}
-      }
-    }
-  }
-
 
   function {:opaque} runFlushPolicy(k: Constants, s: Variables, io: IO)
   : (Variables, IO)
@@ -384,7 +322,6 @@ module ImplModelFlushPolicy {
         repivotLeafCorrect(k, s, ref, s.cache[ref]);
       }
       case ActionFlush(parentref, slot) => {
-        getActionToFlushWeightBounds(k, s, [BT.G.Root()], []);
         flushCorrect(k, s, parentref, slot as int, 
             s.cache[parentref].children.value[slot],
             s.cache[s.cache[parentref].children.value[slot]]);

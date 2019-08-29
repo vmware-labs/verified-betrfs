@@ -105,16 +105,22 @@ module PivotBetreeSpecRefinement {
     B.MessageInsertion(ins.key, ins.msg, INode(ins.oldroot))
   }
 
-  function KeysForSlot(node: PNode, slotIndex: int) : iset<Key>
+  function MovedKeys(node: PNode, slotIndex: int) : iset<Key>
   requires WFPivots(node.pivotTable)
   {
     iset key | Route(node.pivotTable, key) == slotIndex
   }
 
+  function FlushedKeys(node: PNode, slotIndex: int, keys: set<Key>) : iset<Key>
+  requires WFPivots(node.pivotTable)
+  {
+    iset key | Route(node.pivotTable, key) == slotIndex && key in keys
+  }
+
   function IFlush(flush: P.NodeFlush) : B.NodeFlush
   requires P.ValidFlush(flush)
   {
-    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref, KeysForSlot(flush.parent, flush.slotIndex))
+    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref, MovedKeys(flush.parent, flush.slotIndex), FlushedKeys(flush.parent, flush.slotIndex, flush.keys))
   }
 
   function IGrow(growth: P.RootGrowth) : B.RootGrowth
@@ -893,13 +899,15 @@ module PivotBetreeSpecRefinement {
   {
     PivotBetreeSpecWFNodes.ValidFlushWritesWFNodes(flush);
 
+    var comp := BucketComplement(flush.parent.buckets[flush.slotIndex], flush.keys);
+    var isec := BucketIntersect(flush.parent.buckets[flush.slotIndex], flush.keys);
+
     var newparent := P.G.Node(
         flush.parent.pivotTable,
         Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
-        flush.parent.buckets[flush.slotIndex := map[]]
+        flush.parent.buckets[flush.slotIndex := comp]
       );
-    var bucket := flush.parent.buckets[flush.slotIndex];
-    var newchild := P.AddMessagesToNode(flush.child, bucket);
+    var newchild := P.AddMessagesToNode(flush.child, isec);
     var allocop := P.G.AllocOp(flush.newchildref, newchild);
     var writeop := P.G.WriteOp(flush.parentref, newparent);
 
@@ -919,34 +927,37 @@ module PivotBetreeSpecRefinement {
     var childref := flush'.childref;
     var child := flush'.child;
     var newchildref := flush'.newchildref;
-    var newbuffer := imap k:Key :: (if k in flush'.movedKeys then B.G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
+    var newbuffer := imap k:Key :: (if k in flush'.flushedKeys then B.G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild' := B.G.Node(child.children, newbuffer);
-    var newparentbuffer := imap k:Key :: (if k in flush'.movedKeys then B.G.M.Update(B.G.M.NopDelta()) else parent.buffer[k]);
+    var newparentbuffer := imap k:Key :: (if k in flush'.flushedKeys then B.G.M.Update(B.G.M.NopDelta()) else parent.buffer[k]);
     var newparentchildren := imap k:Key | k in parent.children :: (if k in flush'.movedKeys then newchildref else parent.children[k]);
     var newparent' := B.G.Node(newparentchildren, newparentbuffer);
     var allocop' := B.G.AllocOp(newchildref, newchild');
     var writeop' := B.G.WriteOp(parentref, newparent');
 
+    reveal_BucketIntersect();
+    reveal_BucketComplement();
+
     forall k: Key
     ensures IBuffer(newchild)[k] == newbuffer[k]
     {
-      AddMessagesToNodeResult(flush.child, bucket, newchild, k);
-      if (k in flush'.movedKeys) {
+      AddMessagesToNodeResult(flush.child, isec, newchild, k);
+      if (k in flush'.flushedKeys) {
         //RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
         if (newchild.children.Some?) {
           assert IBuffer(newchild)[k] == newbuffer[k];
         } else {
-          M.MergeIsAssociative(BucketGet(bucket, k), P.NodeLookup(flush.child, k), M.DefineDefault());
+          M.MergeIsAssociative(BucketGet(isec, k), P.NodeLookup(flush.child, k), M.DefineDefault());
           /*
           assert IBuffer(newchild)[k]
               == M.Merge(P.NodeLookup(newchild, k), M.DefineDefault())
-              == M.Merge(M.Merge(BucketGet(bucket, k), P.NodeLookup(flush.child, k)), M.DefineDefault())
-              == M.Merge(BucketGet(bucket, k), M.Merge(P.NodeLookup(flush.child, k), M.DefineDefault()))
+              == M.Merge(M.Merge(BucketGet(isec, k), P.NodeLookup(flush.child, k)), M.DefineDefault())
+              == M.Merge(BucketGet(isec, k), M.Merge(P.NodeLookup(flush.child, k), M.DefineDefault()))
               == newbuffer[k];*/
         }
       } else {
         //assert P.NodeHasWFBucketAt(flush.parent, flush.slotIndex);
-        //assert k !in bucket;
+        //assert k !in isec;
         /*
         if (newchild.children.Some?) {
           assert flush.child.children.Some?;
@@ -970,26 +981,24 @@ module PivotBetreeSpecRefinement {
     //assert IChildren(newchild) == newchild'.children;
     //assert IBuffer(newchild) == newbuffer;
 
-    /*
     forall k: Key
     ensures IChildren(newparent)[k] == newparent'.children[k]
     {
-      if (k in flush'.movedKeys) {
+      if (k in flush'.flushedKeys) {
         RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
+        assert IChildren(newparent)[k] == newparent'.children[k];
+      } else if k in flush'.movedKeys {
         assert IChildren(newparent)[k] == newparent'.children[k];
       } else {
         assert IChildren(newparent)[k] == newparent'.children[k];
       }
     }
-    */
 
-    /*
     assert IChildren(newparent) == newparent'.children;
     assert IBuffer(newparent) == newparentbuffer;
 
     assert INode(newchild) == newchild';
     assert INode(newparent) == newparent';
-    */
 
     assert IOp(allocop) == allocop';
     assert IOp(writeop) == writeop';

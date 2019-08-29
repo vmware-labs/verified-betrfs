@@ -18,7 +18,7 @@ module ImplLeaf {
 
   import opened NativeTypes
 
-  method GetNewPivots(bucket: KMTable.KMTable)
+  method GetNewPivots(bucket: KMTable.KMT)
   returns (pivots : seq<MS.Key>)
   requires KMTable.WF(bucket)
   ensures Pivots.WFPivots(pivots)

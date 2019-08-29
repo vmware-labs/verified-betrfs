@@ -47,7 +47,7 @@ module ImplModel {
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<Reference>>,
-      buckets: seq<KMTable.KMTable>
+      buckets: seq<KMTable.KMT>
     )
   datatype Constants = Constants()
   datatype Variables =
@@ -68,7 +68,7 @@ module ImplModel {
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
 
-  predicate WFBuckets(buckets: seq<KMTable.KMTable>)
+  predicate WFBuckets(buckets: seq<KMTable.KMT>)
   {
     && (forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i]))
   }

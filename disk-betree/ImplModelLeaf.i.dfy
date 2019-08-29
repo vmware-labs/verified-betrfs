@@ -17,10 +17,10 @@ module ImplModelLeaf {
 
   import opened NativeTypes
 
-  function GetNewPivots(bucket: KMTable.KMTable) : (pivots : seq<MS.Key>)
+  function GetNewPivots(bucket: KMTable.KMT) : (pivots : seq<MS.Key>)
   ensures |pivots| < MaxNumChildren()
 
-  lemma WFGetNewPivots(bucket: KMTable.KMTable)
+  lemma WFGetNewPivots(bucket: KMTable.KMT)
   requires KMTable.WF(bucket)
   ensures PivotsLib.WFPivots(GetNewPivots(bucket))
   {

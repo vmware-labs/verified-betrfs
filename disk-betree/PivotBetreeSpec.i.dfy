@@ -214,38 +214,41 @@ module PivotBetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, newchild: Node, slotIndex: int)
+  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, newchild: Node, slotIndex: int, keys: set<Key>)
 
-  predicate ValidFlush(flush: NodeFlush)
+  predicate ValidFlush(f: NodeFlush)
   {
-    && WFNode(flush.parent)
-    && WFNode(flush.child)
-    && 0 <= flush.slotIndex < |flush.parent.buckets|
-    && flush.parent.children.Some?
-    && flush.parent.children.value[flush.slotIndex] == flush.childref
-    && WeightBucketList(flush.child.buckets) + WeightBucket(flush.parent.buckets[flush.slotIndex]) <= MaxTotalBucketWeight()
+    && WFNode(f.parent)
+    && WFNode(f.child)
+    && 0 <= f.slotIndex < |f.parent.buckets|
+    && f.parent.children.Some?
+    && f.parent.children.value[f.slotIndex] == f.childref
+    && WeightBucketList(Buckets.BucketListFlush(Buckets.BucketIntersect(
+        f.parent.buckets[f.slotIndex], f.keys),
+        f.child.buckets,
+        f.child.pivotTable)) <= MaxTotalBucketWeight()
   }
 
-  function FlushReads(flush: NodeFlush) : seq<ReadOp>
-  requires ValidFlush(flush)
+  function FlushReads(f: NodeFlush) : seq<ReadOp>
+  requires ValidFlush(f)
   {
     [
-      G.ReadOp(flush.parentref, flush.parent),
-      G.ReadOp(flush.childref, flush.child)
+      G.ReadOp(f.parentref, f.parent),
+      G.ReadOp(f.childref, f.child)
     ]
   }
 
-  function FlushOps(flush: NodeFlush) : seq<Op>
-  requires ValidFlush(flush)
+  function FlushOps(f: NodeFlush) : seq<Op>
+  requires ValidFlush(f)
   {
     var newparent := Node(
-        flush.parent.pivotTable,
-        Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
-        flush.parent.buckets[flush.slotIndex := map[]]
+        f.parent.pivotTable,
+        Some(f.parent.children.value[f.slotIndex := f.newchildref]),
+        f.parent.buckets[f.slotIndex := Buckets.BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
       );
-    var newchild := AddMessagesToNode(flush.child, flush.parent.buckets[flush.slotIndex]);
-    var allocop := G.AllocOp(flush.newchildref, newchild);
-    var writeop := G.WriteOp(flush.parentref, newparent);
+    var newchild := AddMessagesToNode(f.child, Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
+    var allocop := G.AllocOp(f.newchildref, newchild);
+    var writeop := G.WriteOp(f.parentref, newparent);
     [allocop, writeop]
   }
 
@@ -655,32 +658,40 @@ module PivotBetreeSpecWFNodes {
   import Keyspace = MS.Keyspace
   type Key = Keyspace.Element
 
-  lemma ValidFlushWritesWFNodes(flush: NodeFlush)
-  requires ValidFlush(flush)
-  ensures forall i | 0 <= i < |FlushOps(flush)| :: WFNode(FlushOps(flush)[i].node)
-  ensures WFNode(FlushOps(flush)[0].node)
-  ensures WFNode(FlushOps(flush)[1].node)
+  lemma ValidFlushWritesWFNodes(f: NodeFlush)
+  requires ValidFlush(f)
+  ensures forall i | 0 <= i < |FlushOps(f)| :: WFNode(FlushOps(f)[i].node)
+  ensures WFNode(FlushOps(f)[0].node)
+  ensures WFNode(FlushOps(f)[1].node)
   {
     var newparent := G.Node(
-        flush.parent.pivotTable,
-        Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
-        flush.parent.buckets[flush.slotIndex := map[]]
+        f.parent.pivotTable,
+        Some(f.parent.children.value[f.slotIndex := f.newchildref]),
+        f.parent.buckets[f.slotIndex := Buckets.BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
       );
-    WFBucketListFlush(flush.parent.buckets[flush.slotIndex], flush.child.buckets, flush.child.pivotTable);
-    WeightBucketListFlush(flush.parent.buckets[flush.slotIndex], flush.child.buckets, flush.child.pivotTable);
-    WeightBucketListClearEntry(flush.parent.buckets, flush.slotIndex);
-    var newchild := AddMessagesToNode(flush.child, flush.parent.buckets[flush.slotIndex]);
+    var newchild := AddMessagesToNode(f.child, Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
+
+    WFBucketsOfWFBucketList(f.parent.buckets, f.parent.pivotTable);
+    WFBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
+    WFBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
+    WeightBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
+    WeightBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
+    WFBucketListFlush(Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
+    WeightBucketListFlush(Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
+    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, Buckets.BucketComplement(f.parent.buckets[f.slotIndex], f.keys));
 
     /*forall i | 0 <= i < |newparent.buckets|
     ensures NodeHasWFBucketAt(newparent, i)
     {
-      //if (i == flush.slotIndex) {
+      //if (i == f.slotIndex) {
       //  assert NodeHasWFBucketAt(newparent, i);
       //} else {
-      assert NodeHasWFBucketAt(flush.parent, i);
+      assert NodeHasWFBucketAt(f.parent, i);
       //  assert NodeHasWFBucketAt(newparent, i);
       //}
     }*/
+
+    Buckets.reveal_BucketComplement();
 
     assert WFNode(newparent);
     assert WFNode(newchild);

@@ -15,12 +15,14 @@ module ImplFlush {
   import opened Sets
 
   import opened BucketsLib
+  import opened BucketWeights
 
   import opened NativeTypes
   import ImplModel
   import ImplModelCache
   import ImplModelFlush
   import ImplModelFlushRootBucket
+  import opened KMTablePartialFlush
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: ImplModel.Node)
   returns (s': ImplVariables)
@@ -68,9 +70,9 @@ module ImplFlush {
     var node := s1.cache[parentref];
     var childref := node.children.value[slot];
 
-    assume forall i | 0 <= i < |child.buckets| :: |child.buckets[i].keys| + |node.buckets[slot].keys| < 0x8000_0000_0000_0000; // TODO should follow from node weight bound
+    WeightBucketLeBucketList(KMTable.ISeq(node.buckets), slot);
 
-    var newbuckets := KMTable.Flush(node.buckets[slot], child.buckets, child.pivotTable);
+    var newparentBucket, newbuckets := PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
     var newchild := child.(buckets := newbuckets);
     var s2, newchildref := alloc(k, s1, newchild);
     if newchildref.None? {
@@ -82,7 +84,7 @@ module ImplFlush {
     var newparent := IM.Node(
         node.pivotTable,
         Some(node.children.value[slot := newchildref.value]),
-        node.buckets[slot := KMTable.Empty()]
+        node.buckets[slot := newparentBucket]
       );
 
     s' := write(k, s2, parentref, newparent);

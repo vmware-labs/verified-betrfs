@@ -194,7 +194,7 @@ module ImplMarshalling {
     }
   }
 
-  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMTable>)
+  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMT>)
   requires IMM.valToBucket.requires(v, pivotTable, i)
   ensures s.Some? ==> KMTable.WF(s.value)
   ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
@@ -214,7 +214,7 @@ module ImplMarshalling {
       return None;
     }
 
-    var kmt := KMTable.KMTable(keys.value, values.value);
+    var kmt := KMTable.KMT(keys.value, values.value);
 
     var wf := KMTable.IsWF(kmt);
     if !wf {
@@ -272,12 +272,12 @@ module ImplMarshalling {
     }
   }
 
-  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMTable>>)
+  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMT>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   ensures s.Some? ==> IM.WFBuckets(s.value)
   ensures s == IMM.valToBuckets(a, pivotTable)
   {
-    var ar := new KMTable.KMTable[|a|];
+    var ar := new KMTable.KMT[|a|];
 
     var i := 0;
     while i < |a|
@@ -342,8 +342,8 @@ module ImplMarshalling {
       return None;
     }
 
-    assume KMTable.WeightKMTableSeq(buckets) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
-    var w: uint64 := KMTable.computeWeightKMTableSeq(buckets);
+    assume WeightBucketList(KMTable.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
+    var w: uint64 := KMTable.computeWeightKMTSeq(buckets);
     if (w > MaxTotalBucketWeight() as uint64) {
       return None;
     }
@@ -562,7 +562,7 @@ module ImplMarshalling {
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel SizeOfV,3}
-  bucketToVal(bucket: KMTable.KMTable, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
+  bucketToVal(bucket: KMTable.KMT, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires KMTable.WF(bucket)
   requires WeightBucket(KMTable.I(bucket)) <= MaxTotalBucketWeight()
@@ -571,7 +571,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, IMM.BucketGrammar())
   ensures ValidVal(v)
   ensures IMM.valToBucket(v, pivotTable, i) == Some(bucket)
-  ensures SizeOfV(v) == KMTable.WeightKMTable(bucket) + 16
+  ensures SizeOfV(v) == KMTable.WeightKMT(bucket) + 16
   {
     KMTable.lenKeysLeWeight(bucket);
     var keys := strictlySortedKeySeqToVal(bucket.keys);
@@ -587,7 +587,7 @@ module ImplMarshalling {
     assert ValInGrammar(v, IMM.BucketGrammar());
   }
 
-  method bucketsToVal(buckets: seq<KMTable.KMTable>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
+  method bucketsToVal(buckets: seq<KMTable.KMT>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
   requires forall i | 0 <= i < |buckets| :: WFBucketAt(KMTable.I(buckets[i]), pivotTable, i)
@@ -598,7 +598,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, GArray(IMM.BucketGrammar()))
   ensures |v.a| == |buckets|
   ensures IMM.valToBuckets(v.a, pivotTable) == Some(buckets)
-  ensures SizeOfV(v) <= 8 + KMTable.WeightKMTableSeq(buckets) + |buckets| * 16
+  ensures SizeOfV(v) <= 8 + KMTable.WeightKMTSeq(buckets) + |buckets| * 16
   {
     if |buckets| == 0 {
       v := VArray([]);

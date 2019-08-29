@@ -2,6 +2,7 @@ include "ImplModelCache.i.dfy"
 include "ImplModelIO.i.dfy"
 include "ImplModelFlushRootBucket.i.dfy"
 include "AsyncDiskModel.s.dfy"
+include "KMTablePartialFlush.i.dfy"
 
 module ImplModelFlush { 
   import opened ImplModel
@@ -17,6 +18,7 @@ module ImplModelFlush {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import opened KMTablePartialFlush
 
   import opened NativeTypes
   import D = AsyncDisk
@@ -55,7 +57,7 @@ module ImplModelFlush {
 
       var parent := s1.cache[parentref];
 
-      var newbuckets := KMTable.flush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var (newparentBucket, newbuckets) := partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := alloc(k, s1, newchild);
       if newchildref.None? then (
@@ -64,7 +66,7 @@ module ImplModelFlush {
         var newparent := Node(
           parent.pivotTable,
           Some(parent.children.value[slot := newchildref.value]),
-          parent.buckets[slot := KMTable.Empty()]
+          parent.buckets[slot := newparentBucket]
         );
         var s' := write(k, s2, parentref, newparent);
         s'
@@ -74,12 +76,6 @@ module ImplModelFlush {
 
   lemma flushCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
   requires flush.requires(k, s, parentref, slot, childref, child)
-  requires WeightBucketList(KMTable.ISeq(child.buckets)) +
-      WeightBucket(KMTable.I(s.cache[parentref].buckets[slot])) <= MaxTotalBucketWeight()
-  requires parentref == BT.G.Root() ==>
-      WeightBucket(s.rootBucket) +
-      WeightBucketList(KMTable.ISeq(child.buckets)) +
-      WeightBucket(KMTable.I(s.cache[parentref].buckets[slot])) <= MaxTotalBucketWeight()
   ensures
       var s' := flush(k, s, parentref, slot, childref, child);
       && WFVars(s')
@@ -105,10 +101,18 @@ module ImplModelFlush {
       INodeRootEqINodeForEmptyRootBucket(parent);
       INodeRootEqINodeForEmptyRootBucket(child);
 
-      var newbuckets := KMTable.flush(parent.buckets[slot], child.buckets, child.pivotTable);
-      KMTable.flushRes(parent.buckets[slot], child.buckets, child.pivotTable);
-      assume WFBuckets(newbuckets); // at the moment, only the KMTable.Flush method proves this.
-      WFBucketListFlush(KMTable.I(parent.buckets[slot]), KMTable.ISeq(child.buckets), child.pivotTable);
+      var (newparentBucket, newbuckets) := partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var flushedKeys := partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
+
+      WFBucketsOfWFBucketList(KMTable.ISeq(parent.buckets), parent.pivotTable);
+      WFBucketIntersect(KMTable.I(parent.buckets[slot]), flushedKeys);
+      WFBucketComplement(KMTable.I(parent.buckets[slot]), flushedKeys);
+      WeightBucketComplement(KMTable.I(parent.buckets[slot]), flushedKeys);
+      WFBucketListFlush(
+        BucketIntersect(KMTable.I(parent.buckets[slot]), flushedKeys),
+        KMTable.ISeq(child.buckets),
+        child.pivotTable);
+      WeightBucketListShrinkEntry(KMTable.ISeq(parent.buckets), slot, KMTable.I(newparentBucket));
 
       // TODO these are actually kind of annoying right now
       assume childref in s1.cache;
@@ -132,8 +136,9 @@ module ImplModelFlush {
         var newparent := Node(
           parent.pivotTable,
           Some(parent.children.value[slot := newchildref.value]),
-          parent.buckets[slot := KMTable.Empty()]
+          parent.buckets[slot := newparentBucket]
         );
+        reveal_BucketComplement();
         INodeRootEqINodeForEmptyRootBucket(newparent);
 
         var s' := write(k, s2, parentref, newparent);
@@ -156,8 +161,8 @@ module ImplModelFlush {
         WeightBucketListFlush(KMTable.I(parent.buckets[slot]), KMTable.ISeq(child.buckets), child.pivotTable);
         WeightBucketListClearEntry(KMTable.ISeq(parent.buckets), slot);
 
-        assume KMTable.ISeq(parent.buckets[slot := KMTable.Empty()])
-            == KMTable.ISeq(parent.buckets)[slot := map[]];
+        assume KMTable.ISeq(parent.buckets[slot := newparentBucket])
+            == KMTable.ISeq(parent.buckets)[slot := KMTable.I(newparentBucket)];
 
         if (parentref == BT.G.Root()) {
           assert s1.rootBucketWeightBound == 0;
@@ -167,7 +172,7 @@ module ImplModelFlush {
         allocCorrect(k, s1, newchild);
         writeCorrect(k, s2, parentref, newparent);
 
-        var flushStep := BT.NodeFlush(parentref, INode(parent), childref, INode(child), newchildref.value, INode(newchild), slot);
+        var flushStep := BT.NodeFlush(parentref, INode(parent), childref, INode(child), newchildref.value, INode(newchild), slot, flushedKeys);
         assert BT.ValidFlush(flushStep);
         var step := BT.BetreeFlush(flushStep);
         assert INode(newparent) == BT.FlushOps(flushStep)[1].node;
