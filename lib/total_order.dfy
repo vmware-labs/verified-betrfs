@@ -143,6 +143,14 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma IsSortedImpliesLte(run: seq<Element>, i: int, j: int)
+  requires IsSorted(run)
+  requires 0 <= i <= j < |run|
+  ensures lte(run[i], run[j])
+  {
+    reveal_IsSorted();
+  }
+
   lemma IsStrictlySortedImpliesLte(run: seq<Element>, i: int, j: int)
   requires IsStrictlySorted(run)
   requires 0 <= i <= j < |run|
@@ -222,7 +230,7 @@ abstract module Total_Order {
     ensures LargestLte(run, smaller) <= LargestLte(run, larger)
   {
   }
-  
+
   lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
     requires IsSorted(run)
     requires -1 <= pos < |run|
@@ -242,7 +250,55 @@ abstract module Total_Order {
       assert false;
     }
   }
+
+  lemma LargestLteIsUnique2(run: seq<Element>, needle: Element, pos: int)
+    requires IsSorted(run)
+    requires -1 <= pos < |run|
+    requires 0 <= pos ==> lte(run[pos], needle)
+    requires pos < |run|-1 ==> lt(needle, run[pos+1])
+    ensures pos == LargestLte(run, needle)
+  {
+    forall i | 0 <= i <= pos
+      ensures lte(run[i], needle)
+    {
+      IsSortedImpliesLte(run, i, pos);
+    }
+    forall i | pos < i < |run|
+      ensures lt(needle, run[i])
+    {
+      IsSortedImpliesLte(run, pos+1, i);
+    }
+    LargestLteIsUnique(run, needle, pos);
+  }
+  
+  lemma LargestLteSubsequence(run: seq<Element>, needle: Element, from: int, to: int)
+    requires IsSorted(run)
+    requires 0 <= from <= to <= |run|
+    ensures from-1 <= LargestLte(run, needle) < to ==> LargestLte(run, needle) == from + LargestLte(run[from..to], needle)
+    ensures 0 <= LargestLte(run[from..to], needle) < to - from - 1 ==> LargestLte(run, needle) == from + LargestLte(run[from..to], needle)
+  {
+    var sub := run[from..to];
+    var runllte := LargestLte(run, needle);
+    var subllte := LargestLte(sub, needle);
     
+    if from-1 <= runllte < to {
+      if from <= runllte {
+        assert lte(sub[runllte-from], needle);
+      }
+      if runllte < to-1 {
+        assert lt(needle, sub[runllte+1-from]);
+      }
+      LargestLteIsUnique2(sub, needle, runllte-from);
+    }
+
+    if 0 <= subllte < |sub|-1 {
+      assert lte(run[from + subllte], needle);
+      assert lt(needle, sub[subllte+1]);
+      assert lt(needle, run[from + subllte + 1]);
+      LargestLteIsUnique2(run, needle, from + subllte);
+    }
+  }
+  
   function method LargestLt(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLt(run, needle) < |run|;
