@@ -198,7 +198,7 @@ assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenI
       } else {
         if childIdx == |child.keys| as uint64 {
           if childrenIdx == |children| as uint64 - 1 {
-            var w := WeightKey(parent.keys[parentIdx]) as uint64 + WeightMessage(parent.values[parentIdx]) as uint64;
+            var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.values[parentIdx]);
             if w <= weightSlack {
               cur_keys[cur_idx] := parent.keys[parentIdx];
               cur_values[cur_idx] := parent.values[parentIdx];
@@ -220,7 +220,7 @@ assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenI
           } else {
             var c := cmp(parent.keys[parentIdx], pivots[childrenIdx]);
             if c < 0 {
-              var w := WeightKey(parent.keys[parentIdx]) as uint64 + WeightMessage(parent.values[parentIdx]) as uint64;
+              var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.values[parentIdx]);
               if w <= weightSlack {
                 cur_keys[cur_idx] := parent.keys[parentIdx];
                 cur_values[cur_idx] := parent.values[parentIdx];
@@ -252,7 +252,7 @@ assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenI
           if c == 0 {
             var m := Merge(parent.values[parentIdx], child.values[childIdx]);
             if m == IdentityMessage() {
-              weightSlack := weightSlack + WeightKey(child.keys[childIdx]) as uint64 + WeightMessage(child.values[childIdx]) as uint64;
+              weightSlack := weightSlack + WeightKeyUint64(child.keys[childIdx]) + WeightMessageUint64(child.values[childIdx]);
               parentIdx := parentIdx + 1;
               childIdx := childIdx + 1;
 assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
@@ -260,11 +260,11 @@ assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenI
               assume weightSlack <= 0x1_0000_0000;
               WeightMessageBound(m);
 
-              if weightSlack + WeightMessage(child.values[childIdx]) as uint64 >= WeightMessage(m) as uint64 {
+              if weightSlack + WeightMessageUint64(child.values[childIdx]) >= WeightMessageUint64(m) {
                 cur_keys[cur_idx] := parent.keys[parentIdx];
                 cur_values[cur_idx] := m;
                 assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], m) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
-                weightSlack := (weightSlack + WeightMessage(child.values[childIdx]) as uint64) - WeightMessage(m) as uint64;
+                weightSlack := (weightSlack + WeightMessageUint64(child.values[childIdx])) - WeightMessageUint64(m);
                 cur_idx := cur_idx + 1;
                 parentIdx := parentIdx + 1;
                 childIdx := childIdx + 1;
@@ -294,7 +294,7 @@ assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenI
             cur_idx := cur_idx + 1;
 assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
           } else {
-            var w := WeightKey(parent.keys[parentIdx]) as uint64 + WeightMessage(parent.values[parentIdx]) as uint64;
+            var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.values[parentIdx]);
             if w <= weightSlack {
               cur_keys[cur_idx] := parent.keys[parentIdx];
               cur_values[cur_idx] := parent.values[parentIdx];

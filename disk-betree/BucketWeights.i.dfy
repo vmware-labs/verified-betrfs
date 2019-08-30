@@ -4,12 +4,13 @@ module BucketWeights {
   import opened PivotsLib
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
-  import ValueWithDefault
+  import ValueWithDefault`Internal
   import opened Maps
   import opened Sequences
   import opened BucketsLib
+  import opened NativeTypes
 
-  function method WeightKey(key: Key) : (w:int)
+  function WeightKey(key: Key) : (w:int)
   ensures w >= 0
   {
     8 + |key|
@@ -21,11 +22,26 @@ module BucketWeights {
     if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(keys))
   }
 
-  function method WeightMessage(msg: Message) : (w:int)
+  function WeightMessage(msg: Message) : (w:int)
   ensures w >= 0
   {
     match msg {
       case Define(value) => 8 + ValueWithDefault.Len(value)
+      case Update(delta) => 0
+    }
+  }
+
+  function method WeightKeyUint64(key: Key) : (w:uint64)
+  ensures w as int == WeightKey(key)
+  {
+    8 + |key| as uint64
+  }
+
+  function method WeightMessageUint64(msg: Message) : (w:uint64)
+  ensures w as int == WeightMessage(msg)
+  {
+    match msg {
+      case Define(value) => 8 + |value| as uint64
       case Update(delta) => 0
     }
   }

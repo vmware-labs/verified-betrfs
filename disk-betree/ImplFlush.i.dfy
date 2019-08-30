@@ -23,6 +23,8 @@ module ImplFlush {
   import ImplModelFlush
   import ImplModelFlushRootBucket
 
+  import Native
+
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: ImplModel.Node)
   returns (s': ImplVariables)
   requires Inv(k, s)
@@ -66,6 +68,8 @@ module ImplFlush {
       s1 := s;
     }
 
+    Native.BenchmarkingUtil.start();
+
     var node := s1.cache[parentref];
     var childref := node.children.value[slot];
 
@@ -87,5 +91,7 @@ module ImplFlush {
       );
 
     s' := write(k, s2, parentref, newparent);
+
+    Native.BenchmarkingUtil.end();
   }
 }

@@ -82,7 +82,7 @@ module ImplInsert {
 
     RemoveLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root());
 
-    var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
+    var newW := s.rootBucketWeightBound + WeightKeyUint64(key) + WeightMessageUint64(msg);
 
     s' := s.(rootBucket := newRootBucket)
           .(rootBucketWeightBound := newW);
@@ -116,10 +116,10 @@ module ImplInsert {
     var weightSeq := KMTable.computeWeightKMTSeq(s.cache[BT.G.Root()].buckets);
     Native.BenchmarkingUtil.end();
 
-    if WeightKey(key) + WeightMessage(Messages.Define(value)) +
-        s.rootBucketWeightBound as int +
-        weightSeq as int
-        <= MaxTotalBucketWeight() {
+    if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) +
+        s.rootBucketWeightBound +
+        weightSeq
+        <= MaxTotalBucketWeight() as uint64 {
       s', success := InsertKeyValue(k, s, key, value);
     } else {
       s' := runFlushPolicy(k, s, io);

@@ -524,7 +524,7 @@ module KMTable {
     {
       keys[i] := s[i].0;
       values[i] := s[i].1;
-      weight := weight + WeightKey(keys[i]) as uint64 + WeightMessage(values[i]) as uint64;
+      weight := weight + WeightKeyUint64(keys[i]) + WeightMessageUint64(values[i]);
       i := i + 1;
     }
 

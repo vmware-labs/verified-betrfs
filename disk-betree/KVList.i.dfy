@@ -1192,7 +1192,7 @@ module KVList {
     var w: uint64 := 0;
     while j < |kvl.keys| as uint64
     {
-      w := w + WeightKey(kvl.keys[j]) as uint64 + WeightMessage(kvl.values[j]) as uint64;
+      w := w + WeightKeyUint64(kvl.keys[j]) + WeightMessageUint64(kvl.values[j]);
       j := j + 1;
     }
     weight := w;

@@ -348,6 +348,8 @@ class Benchmarks {
         }
     }
     (_benchmarks[name])().Run();
+
+    Native_Compile.BenchmarkingUtil.dump();
   }
 }
 
