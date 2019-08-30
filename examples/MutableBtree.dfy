@@ -672,92 +672,33 @@ abstract module MutableBtree {
     }
   }
   
-  //   // // method Insert(key: Key, value: Value)
-  //   // //   requires WF()
-  //   // //   requires !Full()
-  //   // //   ensures WF()
-  //   // //   ensures Interpretation() == old(Interpretation())[key := value]
-  //   // //   ensures allKeys == old(allKeys) + {key}
-  //   // //   ensures fresh(subtreeObjects - old(subtreeObjects))
-  //   // //   modifies this, subtreeObjects
-  //   // //   decreases allKeys
-  //   // // {
-  //   // //   var posplus1 := Keys.ArrayLargestLtePlus1(pivots, 0, nchildren - 1, key);
-  //   // //   var childidx := (posplus1) as uint64;
-  //   // //   if children[posplus1].node.Full() {
-  //   // //     childidx := SplitChild(key, childidx);
-  //   // //   }
-  //   // //   //AllKeysStrictlyDecreasing();
-  //   // //   children[childidx].node.Insert(key, value);
-  //   // //   subtreeObjects := subtreeObjects + children[childidx].node.subtreeObjects;
-  //   // //   allKeys := allKeys + {key};
-  //   // //   forall key' | key' in old(Interpretation()) && key' != key
-  //   // //     ensures key' in Interpretation() && Interpretation()[key'] == old(Interpretation()[key'])
-  //   // //   {
-  //   // //     var i :| 0 <= i < old(nchildren) && key' in old(children[i].node.Interpretation());
-  //   // //   }
+    // method Insert(key: Key, value: Value)
+    //   requires WF()
+    //   requires !Full()
+    //   ensures WF()
+    //   ensures Interpretation() == old(Interpretation())[key := value]
+    //   ensures allKeys == old(allKeys) + {key}
+    //   ensures fresh(subtreeObjects - old(subtreeObjects))
+    //   modifies this, subtreeObjects
+    //   decreases allKeys
+    // {
+    //   var posplus1 := Keys.ArrayLargestLtePlus1(pivots, 0, nchildren - 1, key);
+    //   var childidx := (posplus1) as uint64;
+    //   if children[posplus1].node.Full() {
+    //     childidx := SplitChild(key, childidx);
+    //   }
+    //   //AllKeysStrictlyDecreasing();
+    //   children[childidx].node.Insert(key, value);
+    //   subtreeObjects := subtreeObjects + children[childidx].node.subtreeObjects;
+    //   allKeys := allKeys + {key};
+    //   forall key' | key' in old(Interpretation()) && key' != key
+    //     ensures key' in Interpretation() && Interpretation()[key'] == old(Interpretation()[key'])
+    //   {
+    //     var i :| 0 <= i < old(nchildren) && key' in old(children[i].node.Interpretation());
+    //   }
       
-  //   // // }
+    // }
 
-  //   // constructor()
-  //   //   ensures nchildren == 0
-  //   //   ensures pivots.Length == (MaxChildren() as int)-1
-  //   //   ensures children.Length == (MaxChildren() as int)
-  //   //   ensures forall i :: 0 <= i < children.Length ==> children[i].node == null
-  //   //   ensures subtreeObjects == {this, pivots, children}
-  //   //   ensures fresh(pivots)
-  //   //   ensures fresh(children)
-  //   // {
-  //   //   pivots := new Key[MaxChildren()-1](_ => DefaultKey());
-  //   //   children := new NodeBox[MaxChildren()](_ => NodeBox(null));
-  //   //   nchildren := 0;
-  //   //   subtreeObjects := {this, pivots, children};
-  //   // }
-  // }
-
-  // // class MutableBtree {
-  // //   var root: Node
-
-  // //   function Interpretation() : map<Key, Value>
-  // //     requires root.WF()
-  // //     reads this, root, root.subtreeObjects
-  // //   {
-  // //     root.Interpretation()
-  // //   }
-
-  // //   method Query(needle: Key) returns (result: QueryResult)
-  // //     requires root.WF()
-  // //     ensures result == NotFound ==> needle !in Interpretation()
-  // //     ensures result.Found? ==> needle in Interpretation() && Interpretation()[needle] == result.value
-  // //   {
-  // //     result := root.Query(needle);
-  // //   }
-
-  // //   method Insert(key: Key, value: Value)
-  // //     requires root.WF()
-  // //     ensures root.WF()
-  // //     ensures Interpretation() == old(Interpretation())[key := value]
-  // //     modifies this, root, root.subtreeObjects
-  // //   {
-  // //     if root.Full() {
-  // //       var newroot := new Index();
-  // //       newroot.children[0] := NodeBox(root);
-  // //       newroot.nchildren := 1;
-  // //       newroot.subtreeObjects := newroot.subtreeObjects + root.subtreeObjects;
-  // //       newroot.allKeys := root.allKeys;
-  // //       root := newroot;
-  // //     }
-  // //     AssumeFalse();
-  // //     root.Insert(key, value);
-  // //   }
-    
-  // //   constructor()
-  // //     ensures root.WF()
-  // //     ensures Interpretation() == map[]
-  // //   {
-  // //     root := new Leaf();
-  // //   }
-  // // }
 }
 
 // module TestBtreeSpec refines BtreeSpec {
