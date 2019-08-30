@@ -21,7 +21,7 @@ module KMTable {
 
   datatype KMT = KMT(kvl: Kvl, weight: uint64)
 
-	export S provides WF, I, ISeq, flush, Flush, partialFlush, partialFlushRes, PartialFlush, Query, splitLeft, SplitLeft, splitRight, SplitRight, splitKMTInList, SplitKMTInList, join, Join, splitOnPivots, SplitOnPivots, KMT, computeWeightKMTSeq, computeWeightKMT, kmtOfSeq, kmtOfSeqRes, KmtOfSeq, Empty,
+	export S provides WF, I, ISeq, flush, Flush, partialFlush, partialFlushRes, PartialFlush, Query, splitLeft, SplitLeft, splitRight, SplitRight, splitKMTInList, SplitKMTInList, join, Join, splitOnPivots, SplitOnPivots, KMT, computeWeightKMTSeq, computeWeightKMT, kmtOfSeq, kmtOfSeqRes, KmtOfSeq, Empty, WFImpliesWFBucket, Islice, Isuffix, IPopBack, IPopFront,
 	    BucketsLib, ValueMessage, Options, NativeTypes, BucketWeights, Pivots, Bounds, Lexicographic_Byte_Order
 	    reveals Key
 	export Internal reveals *

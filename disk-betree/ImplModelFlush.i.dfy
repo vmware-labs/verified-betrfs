@@ -55,6 +55,8 @@ module ImplModelFlush {
 
       var parent := s1.cache[parentref];
 
+      WeightBucketLeBucketList(KMTable.ISeq(parent.buckets), slot);
+
       var (newparentBucket, newbuckets) := KMTable.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := alloc(k, s1, newchild);
@@ -99,8 +101,10 @@ module ImplModelFlush {
       INodeRootEqINodeForEmptyRootBucket(parent);
       INodeRootEqINodeForEmptyRootBucket(child);
 
-      var (newparentBucket, newbuckets) := partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      var flushedKeys := partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
+      WeightBucketLeBucketList(KMTable.ISeq(parent.buckets), slot);
+
+      var (newparentBucket, newbuckets) := KMTable.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var flushedKeys := KMTable.partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
 
       WFBucketsOfWFBucketList(KMTable.ISeq(parent.buckets), parent.pivotTable);
       WFBucketIntersect(KMTable.I(parent.buckets[slot]), flushedKeys);

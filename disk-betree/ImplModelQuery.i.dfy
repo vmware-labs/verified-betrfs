@@ -201,48 +201,45 @@ module ImplModelQuery {
         var node := s.cache[ref];
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
-        if |bucket.keys| >= 0x8000_0000_0000_0000 {
-          assert noop(k, IVars(s), IVars(s));
+
+        var kmtMsg := MapLookupOption(KMTable.I(bucket), key);
+        var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
+
+        var lookupMsg := if kmtMsg.Some? then kmtMsg.value else Messages.IdentityMessage();
+        assert newmsg == Messages.Merge(msg, lookupMsg);
+
+        NodeLookupIfNotInRootBucket(s.cache[BT.G.Root()], s.rootBucket, key);
+        var inode := INodeForRef(s.cache, ref, s.rootBucket);
+        assert lookupMsg == BT.NodeLookup(inode, key);
+
+        var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s.cache, s.rootBucket), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+
+        if newmsg.Define? {
+          assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
+          assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'),
+            UI.GetOp(key, res.value),
+            M.IDiskOp(diskOp(io)),
+            BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+          assert stepsBetree(k, IVars(s), IVars(s'),
+            if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+            BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
         } else {
-          var kmtMsg := MapLookupOption(KMTable.I(bucket), key);
-          var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
+          if node.children.Some? {
+            lemmaChildInGraph(k, s, ref, node.children.value[r]);
+            queryIterateCorrect(k, s, key, newmsg, node.children.value[r], io, counter - 1,
+                newlookup);
+          } else {
+            assert BC.OpTransaction(Ik(k), IVars(s), IVars(s'),
+              PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
 
-          var lookupMsg := if kmtMsg.Some? then kmtMsg.value else Messages.IdentityMessage();
-          assert newmsg == Messages.Merge(msg, lookupMsg);
-
-          NodeLookupIfNotInRootBucket(s.cache[BT.G.Root()], s.rootBucket, key);
-          var inode := INodeForRef(s.cache, ref, s.rootBucket);
-          assert lookupMsg == BT.NodeLookup(inode, key);
-
-          var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s.cache, s.rootBucket), IIndirectionTable(s.ephemeralIndirectionTable).graph);
-
-          if newmsg.Define? {
-            assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
             assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'),
-              UI.GetOp(key, res.value),
+              if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
               M.IDiskOp(diskOp(io)),
               BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+
             assert stepsBetree(k, IVars(s), IVars(s'),
               if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
               BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
-          } else {
-            if node.children.Some? {
-              lemmaChildInGraph(k, s, ref, node.children.value[r]);
-              queryIterateCorrect(k, s, key, newmsg, node.children.value[r], io, counter - 1,
-                  newlookup);
-            } else {
-              assert BC.OpTransaction(Ik(k), IVars(s), IVars(s'),
-                PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
-
-              assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'),
-                if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-                M.IDiskOp(diskOp(io)),
-                BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
-
-              assert stepsBetree(k, IVars(s), IVars(s'),
-                if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-                BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
-            }
           }
         }
       }

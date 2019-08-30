@@ -31,6 +31,7 @@ module ImplModelFlushRootBucket {
     LenLeWeight(s.rootBucket);
     
     var kmt := KMTable.kmtOfSeq(rootBucketSeq);
+    assume WeightBucket(KMTable.I(kmt)) + WeightBucketList(KMTable.ISeq(oldroot.buckets)) < 0x8000_0000_0000_0000;
     var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
     var newroot := oldroot.(buckets := newbuckets);
 
@@ -70,7 +71,6 @@ module ImplModelFlushRootBucket {
     }
 
     var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
-    KMTable.flushRes(kmt, oldroot.buckets, oldroot.pivotTable);
     WFBucketListFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
     WeightBucketListFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable);
 
@@ -115,7 +115,6 @@ module ImplModelFlushRootBucket {
     KMTable.kmtOfSeqRes(rootBucketSeq, s.rootBucket);
 
     var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
-    KMTable.flushRes(kmt, oldroot.buckets, oldroot.pivotTable);
 
     WeightBucketListItemFlush(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable, slot);
     BucketListFlushAt(KMTable.I(kmt), KMTable.ISeq(oldroot.buckets), oldroot.pivotTable, slot);

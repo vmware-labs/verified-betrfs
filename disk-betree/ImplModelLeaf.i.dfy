@@ -43,6 +43,7 @@ module ImplModelLeaf {
       var joined := KMTable.join(node.buckets, node.pivotTable);
 
       var pivots := GetNewPivots(joined);
+      WFGetNewPivots(joined);
 
       var buckets' := KMTable.splitOnPivots(joined, pivots);
       var newnode := Node(pivots, None, buckets');
@@ -80,8 +81,7 @@ module ImplModelLeaf {
       MS.Keyspace.IsStrictlySortedImpliesLte(node.pivotTable, i, j-1);
     }
 
-    var joined := KMTable.join(node.buckets);
-    KMTable.joinEqJoinBucketList(node.buckets, node.pivotTable);
+    var joined := KMTable.join(node.buckets, node.pivotTable);
 
     var pivots := GetNewPivots(joined);
     WFGetNewPivots(joined);

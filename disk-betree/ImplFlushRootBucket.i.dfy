@@ -41,6 +41,7 @@ module ImplFlushRootBucket {
     LenLeWeight(IrootBucket);
     var kmt := KMTable.KmtOfSeq(rootBucketSeq, IrootBucket);
 
+    assume WeightBucket(KMTable.I(kmt)) + WeightBucketList(KMTable.ISeq(oldroot.buckets)) < 0x8000_0000_0000_0000;
     var newbuckets := KMTable.Flush(kmt, oldroot.buckets, oldroot.pivotTable);
 
     var newroot := oldroot.(buckets := newbuckets);
