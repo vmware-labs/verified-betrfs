@@ -173,7 +173,7 @@ abstract module MutableBtree {
     Index(SubRepr(node, 0, newnchildren) + {node.pivots, node.children}, newnchildren as uint64, node.pivots, node.children)
   }
 
-  lemma IndexPrefixWFShape(node: Node, newnchildren: int)
+  lemma IndexPrefixPreservesWFShape(node: Node, newnchildren: int)
     requires WFShape(node)
     requires node.Index?
     requires 1 < node.nchildren
@@ -198,7 +198,7 @@ abstract module MutableBtree {
     ensures WFShape(result)
     reads node.repr
   {
-    IndexPrefixWFShape(node, newnchildren);
+    IndexPrefixPreservesWFShape(node, newnchildren);
     IndexPrefix(node, newnchildren)
   }
   
@@ -219,131 +219,107 @@ abstract module MutableBtree {
         if nchildren == 1 then
           BS.Index([], [I(children[0])])
         else
-          IndexPrefixWFShape(node, node.nchildren as int - 1);
+          IndexPrefixPreservesWFShape(node, node.nchildren as int - 1);
           var imprefix := I(IndexPrefix(node, node.nchildren as int - 1));
           var imlastchild := I(children[nchildren-1]);
           BS.Index(imprefix.pivots + [pivots[nchildren-2]], imprefix.children + [imlastchild])
     }
   }
 
-  predicate {:opaque} BSWF(node: Node)
-    requires WFShape(node)
-    reads node.repr
+  predicate {:opaque} BSWF(node: BS.Node)
   {
-    BS.WF(I(node))
+    BS.WF(node)
   }
 
-  lemma BSWFImpliesChildBSWF(node: Node, childidx: int)
-    requires WFShape(node)
+  lemma BSWFImpliesChildBSWF(node: BS.Node, childidx: int)
     requires BSWF(node)
     requires node.Index?
-    requires 0 <= childidx < node.nchildren as int
+    requires 0 <= childidx < |node.children|
     ensures BSWF(node.children[childidx])
   {
     reveal_BSWF();
   }
   
-  function {:opaque} BSSubIndex(node: Node, from: int, to: int) : BS.Node
-    requires WFShape(node)
+  function {:opaque} BSSubIndex(node: BS.Node, from: int, to: int) : BS.Node
     requires BSWF(node)
     requires node.Index?
-    requires 0 <= from < to <= node.nchildren as int
-    reads node.repr
+    requires 0 <= from < to <= |node.children|
   {
     reveal_BSWF();
-    BS.SubIndex(I(node), from, to)
+    BS.SubIndex(node, from, to)
   }
 
-  function {:opaque} BSInterpretation(node: Node) : map<Key, Value>
-    requires WFShape(node)
+  function {:opaque} BSInterpretation(node: BS.Node) : map<Key, Value>
     requires BSWF(node)
-    reads node.repr
   {
     reveal_BSWF();
-    BS.Interpretation(I(node))
+    BS.Interpretation(node)
   }
   
-  function {:opaque} BSInterpretationOfChild(node: Node, childidx: int) : map<Key, Value>
-    requires WFShape(node)
+  function {:opaque} BSInterpretationOfChild(node: BS.Node, childidx: int) : map<Key, Value>
     requires BSWF(node)
     requires node.Index?
-    requires 0 <= childidx < node.nchildren as int
-    reads node.repr
+    requires 0 <= childidx < |node.children|
   {
     reveal_BSWF();
-    BS.Interpretation(I(node).children[childidx])
+    BS.Interpretation(node.children[childidx])
   }
 
-  function {:opaque} BSAllKeys(node: Node) : set<Key>
-    requires WFShape(node)
-    reads node.repr
+  function {:opaque} BSAllKeys(node: BS.Node) : set<Key>
   {
-    BS.AllKeys(I(node))
+    BS.AllKeys(node)
   }
   
-  function {:opaque} BSAllKeysOfChild(node: Node, childidx: int) : set<Key>
-    requires WFShape(node)
+  function {:opaque} BSAllKeysOfChild(node: BS.Node, childidx: int) : set<Key>
     requires node.Index?
-    requires 0 <= childidx < node.nchildren as int
-    reads node.repr
+    requires 0 <= childidx < |node.children|
   {
-    BS.AllKeys(I(node).children[childidx])
+    BS.AllKeys(node.children[childidx])
   }
 
-  predicate {:opaque} BSSplitLeaf(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
-    requires WFShape(oldleaf)
-    requires WFShape(leftleaf)
-    requires WFShape(rightleaf)
-    reads oldleaf.repr, leftleaf.repr, rightleaf.repr
+  predicate {:opaque} BSSplitLeaf(oldleaf: BS.Node, leftleaf: BS.Node, rightleaf: BS.Node, pivot: Key)
   {
-    BS.SplitLeaf(I(oldleaf), I(leftleaf), I(rightleaf), pivot)
+    BS.SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
   }
     
-  predicate {:opaque} BSSplitIndex(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
-    requires WFShape(oldleaf)
-    requires WFShape(leftleaf)
-    requires WFShape(rightleaf)
-    reads oldleaf.repr, leftleaf.repr, rightleaf.repr
+  predicate {:opaque} BSSplitIndex(oldleaf: BS.Node, leftleaf: BS.Node, rightleaf: BS.Node, pivot: Key)
   {
-    BS.SplitIndex(I(oldleaf), I(leftleaf), I(rightleaf), pivot)
+    BS.SplitIndex(oldleaf, leftleaf, rightleaf, pivot)
   }
     
-  predicate {:opaque} BSSplitNode(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
-    requires WFShape(oldleaf)
-    requires WFShape(leftleaf)
-    requires WFShape(rightleaf)
-    reads oldleaf.repr, leftleaf.repr, rightleaf.repr
+  predicate {:opaque} BSSplitNode(oldleaf: BS.Node, leftleaf: BS.Node, rightleaf: BS.Node, pivot: Key)
   {
-    BS.SplitNode(I(oldleaf), I(leftleaf), I(rightleaf), pivot)
+    BS.SplitNode(oldleaf, leftleaf, rightleaf, pivot)
   }
     
-  predicate {:opaque} BSSplitChildOfIndex(oldindex:BS.Node, newindex: Node, childidx: int)
-    requires WFShape(newindex)
+  predicate {:opaque} BSSplitChildOfIndex(oldindex: BS.Node, newindex: BS.Node, childidx: int)
     requires oldindex.Index?
     requires 0 <= childidx < |oldindex.children|
-    reads newindex.repr
   {
-    BS.SplitChildOfIndex(oldindex, I(newindex), childidx)
+    BS.SplitChildOfIndex(oldindex, newindex, childidx)
   }
     
   lemma IndexPrefixIsSubIndex(node: Node, newnchildren: int)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 < newnchildren <= node.nchildren as int
-    ensures I(WFShapeIndexPrefix(node, newnchildren)) == BSSubIndex(node, 0, newnchildren)
+    ensures I(WFShapeIndexPrefix(node, newnchildren)) == BSSubIndex(I(node), 0, newnchildren)
   {
+    reveal_BSSubIndex();
   }
     
   method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Leaf?
-    ensures needle in BSInterpretation(node) ==> result == BS.Found(BSInterpretation(node)[needle])
-    ensures needle !in BSInterpretation(node) ==> result == BS.NotFound
+    ensures needle in BSInterpretation(I(node)) ==> result == BS.Found(BSInterpretation(I(node))[needle])
+    ensures needle !in BSInterpretation(I(node)) ==> result == BS.NotFound
     decreases node.repr, 0
   {
+    reveal_BSWF();
+    reveal_BSInterpretation();
     var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
     if 1 <= posplus1 && node.keys[posplus1-1] == needle {
       result := BS.Found(node.values[posplus1-1]);
@@ -354,29 +330,31 @@ abstract module MutableBtree {
 
   method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Index?
-    ensures needle in BSInterpretation(node) ==> result == BS.Found(BSInterpretation(node)[needle])
-    ensures needle !in BSInterpretation(node) ==> result == BS.NotFound
+    ensures needle in BSInterpretation(I(node)) ==> result == BS.Found(BSInterpretation(I(node))[needle])
+    ensures needle !in BSInterpretation(I(node)) ==> result == BS.NotFound
     decreases node.repr, 0
   {
+    reveal_BSWF();
+    reveal_BSInterpretation();
     var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
     result := Query(node.children[posplus1], needle);
 
-    if needle !in BSInterpretation(node) {
-      assert needle !in BSInterpretation(node);
-      if needle !in BSAllKeys(node) {
-        assert needle !in BSAllKeysOfChild(node, posplus1 as int);
+    if needle !in BSInterpretation(I(node)) {
+      assert needle !in BSInterpretation(I(node));
+      if needle !in BSAllKeys(I(node)) {
+        assert needle !in BSAllKeysOfChild(I(node), posplus1 as int);
       }
-      assert needle !in BSInterpretationOfChild(node, posplus1 as int);
+      assert needle !in BSInterpretationOfChild(I(node), posplus1 as int);
     }
   }
 
   method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
     requires WFShape(node)
-    requires BSWF(node)
-    ensures needle in BSInterpretation(node) ==> result == BS.Found(BSInterpretation(node)[needle])
-    ensures needle !in BSInterpretation(node) ==> result == BS.NotFound
+    requires BSWF(I(node))
+    ensures needle in BSInterpretation(I(node)) ==> result == BS.Found(BSInterpretation(I(node))[needle])
+    ensures needle !in BSInterpretation(I(node)) ==> result == BS.NotFound
     decreases node.repr, 1
   {
     match node {
@@ -396,12 +374,12 @@ abstract module MutableBtree {
 
   method SplitLeaf(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Leaf?
     requires Full(node)
     ensures WFShape(left)
     ensures WFShape(right)
-    ensures BSSplitLeaf(node, left, right, pivot)
+    ensures BSSplitLeaf(I(node), I(left), I(right), pivot)
     ensures left.keys == node.keys
     ensures left.values == node.values
     ensures fresh(right.keys)
@@ -421,12 +399,12 @@ abstract module MutableBtree {
 
   method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Index?
     requires 1 < node.nchildren
     requires 0 <= from < to <= node.nchildren
     ensures WFShape(subnode)
-    ensures I(subnode) == BSSubIndex(node, from as int, to as int)
+    ensures I(subnode) == BSSubIndex(I(node), from as int, to as int)
     ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode.pivots, subnode.children}
     ensures fresh(subnode.pivots)
     ensures fresh(subnode.children)
@@ -464,12 +442,12 @@ abstract module MutableBtree {
   
   method SplitIndex(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Index?
     requires Full(node)
     ensures WFShape(left)
     ensures WFShape(right)
-    ensures BSSplitIndex(node, left, right, pivot)
+    ensures BSSplitIndex(I(node), I(left), I(right), pivot)
     ensures left.pivots == node.pivots
     ensures left.children == node.children
     ensures fresh(right.pivots)
@@ -483,10 +461,10 @@ abstract module MutableBtree {
     right := SubIndex(node, boundary, node.nchildren);
     pivot := node.pivots[boundary-1];
 
-    IndexPrefixWFShape(node, boundary as int);
+    IndexPrefixPreservesWFShape(node, boundary as int);
     IndexPrefixIsSubIndex(node, boundary as int);
-    BS.WFSubIndexWF(I(node), 0, boundary as int);
-    BS.WFSubIndexWF(I(node), boundary as int, node.nchildren as int);
+    BS.SubIndexPreservesWF(I(node), 0, boundary as int);
+    BS.SubIndexPreservesWF(I(node), boundary as int, node.nchildren as int);
     SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.nchildren as int);
     SubReprFits(node, 0, boundary as int);
     SubReprFits(node, boundary as int, node.nchildren as int);
@@ -494,11 +472,11 @@ abstract module MutableBtree {
 
   method SplitNode(node: Node) returns (left: Node, right: Node, pivot: Key)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires Full(node)
     ensures WFShape(left)
     ensures WFShape(right)
-    ensures BSSplitNode(node, left, right, pivot)
+    ensures BSSplitNode(I(node), I(left), I(right), pivot)
     ensures left.repr <= node.repr
     ensures fresh(right.repr - node.repr)
     ensures left.repr !! right.repr
@@ -510,34 +488,28 @@ abstract module MutableBtree {
     }
   }
 
-  lemma SplitChildOfIndexIsCorrect(oldnode: BS.Node, newnode: Node, childidx: int, pivot: Key)
-    //requires BS.WF(oldnode)
-    requires oldnode.Index?
-    requires WFShape(newnode)
-    requires newnode.Index?
-    requires BSWF(newnode)
-    requires 0 <= childidx < |oldnode.children|
-    requires newnode.nchildren as int == |oldnode.children| + 1
-    requires newnode.pivots[..newnode.nchildren-1] == Seq.insert(oldnode.pivots, pivot, childidx)
-    requires I(newnode).children == Seq.replace1with2(oldnode.children, I(newnode).children[childidx], I(newnode).children[childidx+1], childidx)
-    ensures BSSplitChildOfIndex(oldnode, newnode, childidx)
-    
-  method SplitChildOfIndex(node: Node, childidx: uint64) returns (newnode: Node)
+  method SplitChildOfIndexHelper(node: Node, childidx: uint64) returns (newnode: Node)
     requires WFShape(node)
-    requires BSWF(node)
+    requires BSWF(I(node))
     requires node.Index?
     requires !Full(node)
     requires 0 <= childidx < node.nchildren
     requires Full(node.children[childidx]);
     ensures WFShape(newnode)
-    ensures BSSplitChildOfIndex(old(I(node)), newnode, childidx as int)
-    ensures newnode.Index?
-    ensures newnode.pivots == node.pivots
-    ensures newnode.children == node.children
     ensures fresh(newnode.repr - node.repr)
+    //ensures newnode.pivots == node.pivots
+    //ensures newnode.children == node.children
+    //ensures BSSplitChildOfIndex(old(I(node)), newnode, childidx as int)
+    ensures newnode.Index?
+    ensures newnode.pivots[..newnode.nchildren-1] == Seq.insert(old(node.pivots[..node.nchildren-1]), newnode.pivots[childidx], childidx as int)
+    ensures newnode.children[..newnode.nchildren] == Seq.replace1with2(old(node.children[..node.nchildren]), newnode.children[childidx], newnode.children[childidx+1], childidx as int)
+    ensures old(WFShape(node.children[childidx]));
+    ensures WFShape(newnode.children[childidx]);
+    ensures WFShape(newnode.children[childidx+1]);
+    ensures BSSplitNode(old(I(node.children[childidx])), I(newnode.children[childidx]), I(newnode.children[childidx+1]), newnode.pivots[childidx])
     modifies node.pivots, node.children
   {
-    BSWFImpliesChildBSWF(node, childidx as int);
+    BSWFImpliesChildBSWF(I(node), childidx as int);
     var left, right, pivot := SplitNode(node.children[childidx]);
     Arrays.replace1with2(node.children, node.nchildren, left, right, childidx);
     Arrays.Insert(node.pivots, node.nchildren-1, pivot, childidx);
@@ -548,16 +520,12 @@ abstract module MutableBtree {
     ghost var ichildidx := childidx as int;
     assert newchildren == Seq.replace1with2(oldchildren, left, right, ichildidx);
 
-    forall
-      ensures WFShape(newnode)
-      ensures fresh(newnode.repr - node.repr)
-    {
-      forall i | 0 <= i < newnode.nchildren
-        ensures !newchildren[i].NotInUse?
-        ensures newchildren[i].repr < newnode.repr
-        ensures newnode.pivots !in newchildren[i].repr
-        ensures newnode.children !in newchildren[i].repr
-        ensures WFShape(newchildren[i])
+    forall i | 0 <= i < newnode.nchildren
+      ensures !newchildren[i].NotInUse?
+      ensures newchildren[i].repr < newnode.repr
+      ensures newnode.pivots !in newchildren[i].repr
+      ensures newnode.children !in newchildren[i].repr
+      ensures WFShape(newchildren[i])
     {
       if i < childidx {
       } else if i == childidx {
@@ -569,52 +537,83 @@ abstract module MutableBtree {
 
     forall i: int, j: int | 0 <= i < j < newnode.nchildren as int
       ensures DisjointSubtrees(newnode, i, j)
-      {
-        if                            j <  ichildidx {
-          assert old(DisjointSubtrees(node, i, j));
-        } else if                     j == ichildidx {
-          assert old(DisjointSubtrees(node, i, j));
-        } else if i < ichildidx     && j == ichildidx+1 {
-          assert old(DisjointSubtrees(node, i, j-1));
-        } else if i == ichildidx    && j == ichildidx+1 {
-          assert newnode.children[i] == left;
-          assert newnode.children[j] == right;
-        } else if i < ichildidx     &&      ichildidx+1 < j {
-          assert old(DisjointSubtrees(node, i, j-1));
-        } else if i == ichildidx    &&      ichildidx+1 < j {
-          assert old(DisjointSubtrees(node, i, j-1));
-        } else if i == ichildidx+1  &&      ichildidx+1 < j {
-          assert old(DisjointSubtrees(node, i-1, j-1));
-        } else {
-          assert old(DisjointSubtrees(node, i-1, j-1));
-        }
-      }
-      forall o | o in newnode.repr - node.repr
-        ensures fresh(o)
-      {
-        assert o in right.repr - node.repr;
+    {
+      if                            j <  ichildidx {
+        assert old(DisjointSubtrees(node, i, j));
+      } else if                     j == ichildidx {
+        assert old(DisjointSubtrees(node, i, j));
+      } else if i < ichildidx     && j == ichildidx+1 {
+        assert old(DisjointSubtrees(node, i, j-1));
+      } else if i == ichildidx    && j == ichildidx+1 {
+        assert newnode.children[i] == left;
+        assert newnode.children[j] == right;
+      } else if i < ichildidx     &&      ichildidx+1 < j {
+        assert old(DisjointSubtrees(node, i, j-1));
+      } else if i == ichildidx    &&      ichildidx+1 < j {
+        assert old(DisjointSubtrees(node, i, j-1));
+      } else if i == ichildidx+1  &&      ichildidx+1 < j {
+        assert old(DisjointSubtrees(node, i-1, j-1));
+      } else {
+        assert old(DisjointSubtrees(node, i-1, j-1));
       }
     }
-
-    SplitChildOfIndexIsCorrect(old(I(node)), newnode, ichildidx, pivot);
-    // ghost var oldindex := old(I(node));
-    // ghost var newindex := I(newnode);
-    // assert oldindex.Index?;
-    // assert newindex.Index?;
-    // assert BS.WF(oldindex);
-    // //assert BS.WF(newindex);
-    // assert 0 <= ichildidx < |oldindex.children|;
-    // assert |newindex.children| == |oldindex.children| + 1;
-    // assert |newindex.pivots| == |oldindex.pivots| + 1;
-    // assert |oldindex.pivots| == |oldindex.children| - 1;
-    // //assert BS.SplitNode(oldindex.children[ichildidx], newindex.children[ichildidx], newindex.children[ichildidx+1], newindex.pivots[ichildidx]);
-    // assert newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], ichildidx);
-    // //assert newindex.children == Seq.replace1with2(oldindex.children, newindex.children[ichildidx], newindex.children[ichildidx+1], ichildidx);
-
       
-  //   BS.Keys.LargestLteIsUnique(old(node.pivots[..node.nchildren-1]), pivot, childidx as int);
+    forall o | o in newnode.repr - node.repr
+      ensures fresh(o)
+    {
+      assert o in right.repr - node.repr;
+    }
   }
   
+  lemma SplitChildOfIndexIsBSSplitChildOfIndex(oldnode: BS.Node, newnode: BS.Node, childidx: int)
+    requires BSWF(oldnode)
+    requires oldnode.Index?
+    requires newnode.Index?
+    requires 0 <= childidx < |oldnode.children|
+    requires |oldnode.pivots| == |oldnode.children|-1 // redundant, but necessary
+    requires |newnode.children| == |oldnode.children| + 1
+    requires |newnode.pivots| == |oldnode.pivots| + 1
+    requires newnode.pivots == Seq.insert(oldnode.pivots, newnode.pivots[childidx], childidx)
+    requires newnode.children == Seq.replace1with2(oldnode.children, newnode.children[childidx], newnode.children[childidx+1], childidx)
+    requires BSSplitNode(oldnode.children[childidx], newnode.children[childidx], newnode.children[childidx+1], newnode.pivots[childidx])
+    ensures BSSplitChildOfIndex(oldnode, newnode, childidx)
+  {
+    reveal_BSWF();
+    reveal_BSSplitNode();
+    reveal_BSSplitChildOfIndex();
+  }
+    
+  method SplitChildOfIndex(node: Node, childidx: uint64) returns (newnode: Node)
+    requires WFShape(node)
+    requires BSWF(I(node))
+    requires node.Index?
+    requires !Full(node)
+    requires 0 <= childidx < node.nchildren
+    requires Full(node.children[childidx]);
+    ensures WFShape(newnode)
+    ensures fresh(newnode.repr - node.repr)
+    ensures BSSplitChildOfIndex(old(I(node)), I(newnode), childidx as int)
+    modifies node.pivots, node.children
+  {
+    newnode := SplitChildOfIndexHelper(node, childidx);
+    assert newnode.children[..newnode.nchildren] == Seq.replace1with2(old(node.children[..node.nchildren]), newnode.children[childidx], newnode.children[childidx+1], childidx as int);
+
+    ghost var ioldnode := old(I(node));
+    ghost var inewnode := I(newnode);
+    ghost var replaced := Seq.replace1with2(ioldnode.children, inewnode.children[childidx], inewnode.children[childidx+1], childidx as int);
+    forall i | 0 <= i < |inewnode.children|
+      ensures inewnode.children[i] == replaced[i]
+    {
+      if i < childidx as int {
+      } else if i == childidx as int {
+      } else if i == childidx as int + 1 {
+      } else {
+        assert newnode.children[i] == old(node.children[i-1]);
+      }
+    }
+    SplitChildOfIndexIsBSSplitChildOfIndex(old(I(node)), I(newnode), childidx as int);
+  }
+   
   //   // method Insert(key: Key, value: Value)
   //   //   requires WF()
   //   //   requires !Full()
