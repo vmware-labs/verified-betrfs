@@ -34,7 +34,7 @@ module ImplModelFlushPolicy {
   requires 0 <= bestIdx as int < |buckets|
   requires 0 <= bestWeight as int <= MaxTotalBucketWeight()
   requires 1 <= j as int <= |buckets| <= MaxNumChildren()
-  requires forall i | 0 <= i < |buckets| :: |buckets[i].keys| == |buckets[i].values|
+  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
   requires WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
   requires WeightBucket(KMTable.I(buckets[bestIdx])) == bestWeight as int
   ensures 0 <= res.0 as int < |buckets|
@@ -59,7 +59,7 @@ module ImplModelFlushPolicy {
   function biggestSlot(buckets: seq<KMTable.KMT>) : (res : (uint64, uint64))
   requires |buckets| > 0
   requires |buckets| <= MaxNumChildren()
-  requires forall i | 0 <= i < |buckets| :: |buckets[i].keys| == |buckets[i].values|
+  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
   requires WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
   ensures 0 <= res.0 as int < |buckets|
   ensures 0 <= res.1 as int <= MaxTotalBucketWeight()

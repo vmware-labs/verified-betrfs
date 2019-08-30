@@ -22,7 +22,6 @@ module ImplFlush {
   import ImplModelCache
   import ImplModelFlush
   import ImplModelFlushRootBucket
-  import opened KMTablePartialFlush
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: ImplModel.Node)
   returns (s': ImplVariables)
@@ -72,7 +71,7 @@ module ImplFlush {
 
     WeightBucketLeBucketList(KMTable.ISeq(node.buckets), slot);
 
-    var newparentBucket, newbuckets := PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
+    var newparentBucket, newbuckets := KMTable.PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
     var newchild := child.(buckets := newbuckets);
     var s2, newchildref := alloc(k, s1, newchild);
     if newchildref.None? {

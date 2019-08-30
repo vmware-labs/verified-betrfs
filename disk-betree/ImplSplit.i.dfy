@@ -29,7 +29,6 @@ module ImplSplit {
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
     WeightBucketLeBucketList(KMTable.ISeq(node.buckets), cLeft);
-    KMTable.lenKeysLeWeight(node.buckets[cLeft]);
     var splitBucket := KMTable.SplitLeft(node.buckets[cLeft], pivot);
     var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
     node' := IM.Node(leftPivots, leftChildren, leftBuckets);
@@ -45,7 +44,6 @@ module ImplSplit {
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
     WeightBucketLeBucketList(KMTable.ISeq(node.buckets), cRight);
-    KMTable.lenKeysLeWeight(node.buckets[cRight]);
     var splitBucket := KMTable.SplitRight(node.buckets[cRight], pivot);
     var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
     node' := IM.Node(rightPivots, rightChildren, rightBuckets);
@@ -92,8 +90,7 @@ module ImplSplit {
   {
     var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
     WeightBucketLeBucketList(KMTable.ISeq(fused_parent.buckets), slot_idx);
-    KMTable.lenKeysLeWeight(fused_parent.buckets[slot_idx]);
-    var buckets := KMTable.SplitKMTInList(fused_parent.buckets, slot_idx, pivot);
+    var buckets := KMTable.SplitKMTInList(fused_parent.buckets, slot_idx as uint64, pivot);
     res := IM.Node(
       pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),

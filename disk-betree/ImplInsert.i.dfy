@@ -30,6 +30,8 @@ module ImplInsert {
 
   import opened PBS = PivotBetreeSpec`Spec
 
+  import Native
+
   method RemoveLBAFromIndirectionTable(table: IS.MutIndirectionTable, ref: IS.Reference)
   requires table.Inv()
   ensures table.Inv()
@@ -110,8 +112,9 @@ module ImplInsert {
       return;
     }
 
-    KMTable.kmtableSeqWeightEq(s.cache[BT.G.Root()].buckets);
+    Native.BenchmarkingUtil.start();
     var weightSeq := KMTable.computeWeightKMTSeq(s.cache[BT.G.Root()].buckets);
+    Native.BenchmarkingUtil.end();
 
     if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         s.rootBucketWeightBound as int +

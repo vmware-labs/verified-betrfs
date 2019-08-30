@@ -22,7 +22,8 @@ module ImplMarshalling {
   import opened Bounds
   import BC = BetreeGraphBlockCache
   import ImplState
-  import KMTable
+  import KMTable`Internal
+  import KVList
   import Crypto
   import Native
 
@@ -214,46 +215,50 @@ module ImplMarshalling {
       return None;
     }
 
-    var kmt := KMTable.KMT(keys.value, values.value);
+    var kvl := KVList.Kvl(keys.value, values.value);
 
-    var wf := KMTable.IsWF(kmt);
+    var wf := KVList.IsWF(kvl);
     if !wf {
       return None;
     }
 
-    // Check that it fits in the desired bucket
-    if |kmt.keys| > 0 {
+    // Check that the keys fit in the desired bucket
+    if |kvl.keys| > 0 {
       if i > 0 {
-        var c := Keyspace.cmp(pivotTable[i-1], kmt.keys[0]);
+        var c := Keyspace.cmp(pivotTable[i-1], kvl.keys[0]);
         if (c > 0) {
-          KMTable.Imaps(kmt, 0);
+          KVList.Imaps(kvl, 0);
           return None;
         }
       }
 
       if i < |pivotTable| {
-        var c := Keyspace.cmp(pivotTable[i], kmt.keys[|kmt.keys| - 1]);
+        var c := Keyspace.cmp(pivotTable[i], kvl.keys[|kvl.keys| - 1]);
         if (c <= 0) {
-          KMTable.Imaps(kmt, |kmt.keys| - 1);
+          KVList.Imaps(kvl, |kvl.keys| - 1);
           return None;
         }
       }
     }
 
-    forall key | key in KMTable.I(kmt)
+    forall key | key in KVList.I(kvl)
     ensures Pivots.Route(pivotTable, key) == i
-    ensures KMTable.I(kmt)[key] != M.IdentityMessage()
+    ensures KVList.I(kvl)[key] != M.IdentityMessage()
     {
-      var j := KMTable.IndexOfKey(kmt, key);
-      KMTable.Imaps(kmt, j);
-      if |kmt.keys| > 0 {
-        Keyspace.IsStrictlySortedImpliesLte(kmt.keys, 0, j);
-        Keyspace.IsStrictlySortedImpliesLte(kmt.keys, j, |kmt.keys| - 1);
+      var j := KVList.IndexOfKey(kvl, key);
+      KVList  .Imaps(kvl, j);
+      if |kvl.keys| > 0 {
+        Keyspace.IsStrictlySortedImpliesLte(kvl.keys, 0, j);
+        Keyspace.IsStrictlySortedImpliesLte(kvl.keys, j, |kvl.keys| - 1);
       }
       Pivots.RouteIs(pivotTable, key, i);
     }
 
-    assert WFBucketAt(KMTable.I(kmt), pivotTable, i);
+    assert WFBucketAt(KVList.I(kvl), pivotTable, i);
+
+    assume WeightBucket(KVList.I(kvl)) < 0x1_0000_0000_0000_0000;
+    var kmt := KMTable.ToKmt(kvl);
+
     s := Some(kmt);
   }
 
@@ -571,11 +576,13 @@ module ImplMarshalling {
   ensures ValInGrammar(v, IMM.BucketGrammar())
   ensures ValidVal(v)
   ensures IMM.valToBucket(v, pivotTable, i) == Some(bucket)
-  ensures SizeOfV(v) == KMTable.WeightKMT(bucket) + 16
+  ensures SizeOfV(v) == WeightBucket(KMTable.I(bucket)) + 16
   {
-    KMTable.lenKeysLeWeight(bucket);
-    var keys := strictlySortedKeySeqToVal(bucket.keys);
-    var values := messageSeqToVal(bucket.values);
+    var kvl := bucket.kvl;
+    KVList.kvlWeightEq(kvl);
+    KVList.lenKeysLeWeight(kvl);
+    var keys := strictlySortedKeySeqToVal(kvl.keys);
+    var values := messageSeqToVal(kvl.values);
     v := VTuple([keys, values]);
 
     assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(values);
@@ -598,7 +605,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, GArray(IMM.BucketGrammar()))
   ensures |v.a| == |buckets|
   ensures IMM.valToBuckets(v.a, pivotTable) == Some(buckets)
-  ensures SizeOfV(v) <= 8 + KMTable.WeightKMTSeq(buckets) + |buckets| * 16
+  ensures SizeOfV(v) <= 8 + WeightBucketList(KMTable.ISeq(buckets)) + |buckets| * 16
   {
     if |buckets| == 0 {
       v := VArray([]);
@@ -618,6 +625,10 @@ module ImplMarshalling {
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(buckets); // observe (reduces verification time)
 
       assert buckets == DropLast(buckets) + [Last(buckets)];
+
+      reveal_WeightBucketList();
+      assert WeightBucketList(KMTable.ISeq(buckets))
+          == WeightBucketList(KMTable.ISeq(DropLast(buckets))) + WeightBucket(KMTable.I(Last(buckets)));
 
       v := VArray(pref.a + [bucketVal]);
     }
@@ -655,7 +666,6 @@ module ImplMarshalling {
 
     assert SizeOfV(pivots) <= 320000;
     assert SizeOfV(children) <= 264;
-    KMTable.kmtableSeqWeightEq(node.buckets);
     assert SizeOfV(buckets) <= 8068312;
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);

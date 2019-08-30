@@ -94,13 +94,6 @@ module ImplQuery {
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var bucket := node.buckets[r];
 
-          if |bucket.keys| >= 0x8000_0000_0000_0000 {
-            s' := s;
-            res := None;
-            print "giving up; kmgMsg too big\n";
-            return;
-          }
-
           var kmtMsg := KMTable.Query(bucket, key);
           var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
 

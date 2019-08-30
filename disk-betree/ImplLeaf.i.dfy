@@ -18,6 +18,8 @@ module ImplLeaf {
 
   import opened NativeTypes
 
+  import KMTable = KMTable`Internal
+
   method GetNewPivots(bucket: KMTable.KMT)
   returns (pivots : seq<MS.Key>)
   requires KMTable.WF(bucket)
@@ -27,7 +29,8 @@ module ImplLeaf {
     // try to split the keys evenly, but don't let any bucket
     // be larger than the cap
 
-    var n := |bucket.keys|;
+    var kvl := bucket.kvl;
+    var n := |kvl.keys|;
 
     var m := (n + 8 as int) / 8 as int;
     if m > 500 {
@@ -42,13 +45,13 @@ module ImplLeaf {
     var i := m;
     while i < n
     invariant MS.Keyspace.IsStrictlySorted(r);
-    invariant |r| > 0 ==> 0 <= i-m < n && r[|r|-1] == bucket.keys[i - m];
+    invariant |r| > 0 ==> 0 <= i-m < n && r[|r|-1] == kvl.keys[i - m];
     invariant |r| > 0 ==> MS.Keyspace.NotMinimum(r[0]);
     invariant i > 0
     {
-      MS.Keyspace.IsNotMinimum(bucket.keys[0], bucket.keys[i]);
+      MS.Keyspace.IsNotMinimum(kvl.keys[0], kvl.keys[i]);
 
-      r := r + [bucket.keys[i]];
+      r := r + [kvl.keys[i]];
       i := i + m;
     }
 
@@ -92,12 +95,8 @@ module ImplLeaf {
       }
     }
 
-    assume forall i | 0 <= i < |node.buckets| :: |node.buckets[i].keys| < 0x1_0000_0000; // should follow from node bounds
     var joined := KMTable.Join(node.buckets, node.pivotTable);
-
     var pivots := GetNewPivots(joined);
-
-    assume |joined.keys| < 0x8000_0000_0000_0000; // should follow from node bounds
 
     var buckets' := KMTable.SplitOnPivots(joined, pivots);
     var newnode := IM.Node(pivots, None, buckets');

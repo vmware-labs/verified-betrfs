@@ -30,7 +30,7 @@ module ImplModelFlushRootBucket {
     Keyspace.lenSortedSeqForMap(rootBucketSeq, s.rootBucket);
     LenLeWeight(s.rootBucket);
     
-    var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
+    var kmt := KMTable.kmtOfSeq(rootBucketSeq);
     var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
     var newroot := oldroot.(buckets := newbuckets);
 
@@ -61,8 +61,8 @@ module ImplModelFlushRootBucket {
     Keyspace.lenSortedSeqForMap(rootBucketSeq, s.rootBucket);
     LenLeWeight(s.rootBucket);
 
-    var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
-    KMTable.kmtableOfSeqRes(rootBucketSeq, s.rootBucket);
+    var kmt := KMTable.kmtOfSeq(rootBucketSeq);
+    KMTable.kmtOfSeqRes(rootBucketSeq, s.rootBucket);
 
     forall i, key | 0 <= i < |oldroot.buckets| && key in KMTable.I(oldroot.buckets[i]) ensures Pivots.Route(oldroot.pivotTable, key) == i
     {
@@ -111,8 +111,8 @@ module ImplModelFlushRootBucket {
     Keyspace.lenSortedSeqForMap(rootBucketSeq, s.rootBucket);
     LenLeWeight(s.rootBucket);
 
-    var kmt := KMTable.kmtableOfSeq(rootBucketSeq);
-    KMTable.kmtableOfSeqRes(rootBucketSeq, s.rootBucket);
+    var kmt := KMTable.kmtOfSeq(rootBucketSeq);
+    KMTable.kmtOfSeqRes(rootBucketSeq, s.rootBucket);
 
     var newbuckets := KMTable.flush(kmt, oldroot.buckets, oldroot.pivotTable);
     KMTable.flushRes(kmt, oldroot.buckets, oldroot.pivotTable);

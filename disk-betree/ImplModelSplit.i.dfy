@@ -222,7 +222,7 @@ module ImplModelSplit {
   requires fused_parent.children.Some?
   {
     var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    var buckets := KMTable.splitKMTInList(fused_parent.buckets, slot_idx, pivot);
+    var buckets := KMTable.splitKMTInList(fused_parent.buckets, slot_idx as uint64, pivot);
     Node(
       pivots,
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),

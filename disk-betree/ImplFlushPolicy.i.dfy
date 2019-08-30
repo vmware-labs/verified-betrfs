@@ -29,7 +29,6 @@ module ImplFlushPolicy {
   ensures res == ImplModelFlushPolicy.biggestSlot(buckets)
   {
     WeightBucketLeBucketList(KMTable.ISeq(buckets), 0);
-    KMTable.kmtableWeightEq(buckets[0]);
     var j := 1;
     var bestIdx := 0;
     var bestWeight := KMTable.computeWeightKMT(buckets[0]);
@@ -37,7 +36,6 @@ module ImplFlushPolicy {
     invariant ImplModelFlushPolicy.biggestSlotIterate.requires(buckets, j, bestIdx, bestWeight)
     invariant ImplModelFlushPolicy.biggestSlotIterate(buckets, j, bestIdx, bestWeight) == ImplModelFlushPolicy.biggestSlot(buckets)
     {
-      KMTable.kmtableWeightEq(buckets[j]);
       WeightBucketLeBucketList(KMTable.ISeq(buckets), j as int);
       var w := KMTable.computeWeightKMT(buckets[j]);
       if w > bestWeight {
@@ -99,7 +97,6 @@ module ImplFlushPolicy {
           if childref in s.cache {
             var child := s.cache[childref];
 
-            KMTable.kmtableSeqWeightEq(child.buckets);
             var childTotalWeight: uint64 := KMTable.computeWeightKMTSeq(child.buckets);
 
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {

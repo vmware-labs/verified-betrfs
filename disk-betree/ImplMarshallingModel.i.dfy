@@ -18,7 +18,8 @@ module ImplMarshallingModel {
   import opened Bounds
   import BC = BetreeGraphBlockCache
   import IM = ImplModel
-  import KMTable
+  import KMTable`Internal
+  import KVList
   import Crypto
   import Native
 
@@ -243,9 +244,11 @@ module ImplMarshallingModel {
     var values := valToMessageSeq(v.t[1]);
 
     if keys.Some? && values.Some? then (
-      var kmt := KMTable.KMT(keys.value, values.value);
+      var kvl := KVList.Kvl(keys.value, values.value);
 
-      if KMTable.WF(kmt) && WFBucketAt(KMTable.I(kmt), pivotTable, i) then
+      if KVList.WF(kvl) && WFBucketAt(KVList.I(kvl), pivotTable, i) then
+        assume WeightBucket(KVList.I(kvl)) < 0x1_0000_0000_0000_0000;
+        var kmt := KMTable.toKmt(kvl);
         Some(kmt)
       else
         None

@@ -2,7 +2,6 @@ include "ImplModelCache.i.dfy"
 include "ImplModelIO.i.dfy"
 include "ImplModelFlushRootBucket.i.dfy"
 include "AsyncDiskModel.s.dfy"
-include "KMTablePartialFlush.i.dfy"
 
 module ImplModelFlush { 
   import opened ImplModel
@@ -18,7 +17,6 @@ module ImplModelFlush {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import opened KMTablePartialFlush
 
   import opened NativeTypes
   import D = AsyncDisk
@@ -57,7 +55,7 @@ module ImplModelFlush {
 
       var parent := s1.cache[parentref];
 
-      var (newparentBucket, newbuckets) := partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var (newparentBucket, newbuckets) := KMTable.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := alloc(k, s1, newchild);
       if newchildref.None? then (

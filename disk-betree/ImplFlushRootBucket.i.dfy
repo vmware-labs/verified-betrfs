@@ -39,9 +39,7 @@ module ImplFlushRootBucket {
     ghost var IrootBucket := TTT.I(s.rootBucket);
     Keyspace.lenSortedSeqForMap(rootBucketSeq, IrootBucket);
     LenLeWeight(IrootBucket);
-    var kmt := KMTable.KMTOfSeq(rootBucketSeq, IrootBucket);
-
-    assume forall i | 0 <= i < |oldroot.buckets| :: |oldroot.buckets[i].keys| + |kmt.keys| < 0x8000_0000_0000_0000; // should follow from node bounds
+    var kmt := KMTable.KmtOfSeq(rootBucketSeq, IrootBucket);
 
     var newbuckets := KMTable.Flush(kmt, oldroot.buckets, oldroot.pivotTable);
 

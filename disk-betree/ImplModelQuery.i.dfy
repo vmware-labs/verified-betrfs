@@ -81,20 +81,16 @@ module ImplModelQuery {
         var node := s.cache[ref];
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
-        if |bucket.keys| >= 0x8000_0000_0000_0000 then (
-          (s, None, io)
+        var kmtMsg := MapLookupOption(KMTable.I(bucket), key);
+        var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
+        if newmsg.Define? then (
+          (s, Some(newmsg.value), io)
         ) else (
-          var kmtMsg := MapLookupOption(KMTable.I(bucket), key);
-          var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
-          if newmsg.Define? then (
-            (s, Some(newmsg.value), io)
+          if node.children.Some? then (
+            lemmaChildInGraph(k, s, ref, node.children.value[r]);
+            queryIterate(k, s, key, newmsg, node.children.value[r], io, counter - 1)
           ) else (
-            if node.children.Some? then (
-              lemmaChildInGraph(k, s, ref, node.children.value[r]);
-              queryIterate(k, s, key, newmsg, node.children.value[r], io, counter - 1)
-            ) else (
-              (s, Some(MS.V.DefaultValue()), io)
-            )
+            (s, Some(MS.V.DefaultValue()), io)
           )
         )
       )

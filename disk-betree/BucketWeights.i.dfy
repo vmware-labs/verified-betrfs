@@ -62,6 +62,12 @@ module BucketWeights {
     )
   }
 
+  lemma WeightSplitBucketLeft(bucket: Bucket, key: Key)
+  ensures WeightBucket(SplitBucketLeft(bucket, key)) <= WeightBucket(bucket)
+
+  lemma WeightSplitBucketRight(bucket: Bucket, key: Key)
+  ensures WeightBucket(SplitBucketRight(bucket, key)) <= WeightBucket(bucket)
+
   lemma WeightSplitBucketListLeft(blist: BucketList, pivots: seq<Key>, cLeft: int, key: Key)
   requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
   ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
