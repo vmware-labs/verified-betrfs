@@ -445,6 +445,7 @@ abstract module MutableBtree {
 
     ghost var inode := I(node);
     ghost var isubnode := I(subnode);
+    assert subnode.pivots[..subnode.nchildren-1] == node.pivots[from..to-1];
     assert isubnode.pivots == inode.pivots[from..to-1];
     assert isubnode.children == inode.children[from..to];
     reveal_BSWF();
