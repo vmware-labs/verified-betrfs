@@ -342,7 +342,7 @@ abstract module MutableBtree {
     result := Query(node.children[posplus1], needle);
 
     if needle !in BSInterpretation(I(node)) {
-      assert needle !in BSInterpretation(I(node));
+      //assert needle !in BSInterpretation(I(node));
       if needle !in BSAllKeys(I(node)) {
         assert needle !in BSAllKeysOfChild(I(node), posplus1 as int);
       }
@@ -380,6 +380,8 @@ abstract module MutableBtree {
     ensures WFShape(left)
     ensures WFShape(right)
     ensures BSSplitLeaf(I(node), I(left), I(right), pivot)
+    ensures left.Leaf?
+    ensures right.Leaf?
     ensures left.keys == node.keys
     ensures left.values == node.values
     ensures fresh(right.keys)
@@ -395,6 +397,7 @@ abstract module MutableBtree {
     pivot := right.keys[0];
     
     BS.Keys.reveal_IsStrictlySorted();
+    reveal_BSSplitLeaf();
   }
 
   method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
@@ -404,6 +407,7 @@ abstract module MutableBtree {
     requires 1 < node.nchildren
     requires 0 <= from < to <= node.nchildren
     ensures WFShape(subnode)
+    ensures subnode.Index?
     ensures I(subnode) == BSSubIndex(I(node), from as int, to as int)
     ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode.pivots, subnode.children}
     ensures fresh(subnode.pivots)
@@ -436,7 +440,12 @@ abstract module MutableBtree {
       assert DisjointSubtrees(node, from as int + i, from as int + j);
     }
 
-    assert I(subnode).pivots == I(node).pivots[from..to-1];
+    ghost var inode := I(node);
+    ghost var isubnode := I(subnode);
+    assert isubnode.pivots == inode.pivots[from..to-1];
+    assert isubnode.children == inode.children[from..to];
+    reveal_BSWF();
+    reveal_BSSubIndex();
   }
 
   
@@ -447,6 +456,8 @@ abstract module MutableBtree {
     requires Full(node)
     ensures WFShape(left)
     ensures WFShape(right)
+    ensures left.Index?
+    ensures right.Index?
     ensures BSSplitIndex(I(node), I(left), I(right), pivot)
     ensures left.pivots == node.pivots
     ensures left.children == node.children
@@ -463,11 +474,15 @@ abstract module MutableBtree {
 
     IndexPrefixPreservesWFShape(node, boundary as int);
     IndexPrefixIsSubIndex(node, boundary as int);
+    reveal_BSWF();
     BS.SubIndexPreservesWF(I(node), 0, boundary as int);
     BS.SubIndexPreservesWF(I(node), boundary as int, node.nchildren as int);
     SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.nchildren as int);
     SubReprFits(node, 0, boundary as int);
     SubReprFits(node, boundary as int, node.nchildren as int);
+
+    reveal_BSSubIndex();
+    reveal_BSSplitIndex();
   }
 
   method SplitNode(node: Node) returns (left: Node, right: Node, pivot: Key)
@@ -481,6 +496,9 @@ abstract module MutableBtree {
     ensures fresh(right.repr - node.repr)
     ensures left.repr !! right.repr
   {
+    reveal_BSSplitNode();
+    reveal_BSSplitLeaf();
+    reveal_BSSplitIndex();
     if node.Leaf? {
       left, right, pivot := SplitLeaf(node);
     } else {
