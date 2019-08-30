@@ -338,6 +338,9 @@ abstract module MutableBtree {
   {
     reveal_BSWF();
     reveal_BSInterpretation();
+    reveal_BSAllKeys();
+    reveal_BSAllKeysOfChild();
+    reveal_BSInterpretationOfChild();
     var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
     result := Query(node.children[posplus1], needle);
 
