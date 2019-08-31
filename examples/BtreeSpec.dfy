@@ -77,7 +77,7 @@ abstract module BtreeSpec {
     && oldleaf.keys == leftleaf.keys + rightleaf.keys
     && oldleaf.values == leftleaf.values + rightleaf.values
     && pivot == rightleaf.keys[0]
-    && pivot == leftleaf.keys[0]
+    && wit == leftleaf.keys[0]
   }
 
   lemma SplitLeafPreservesWF(oldleaf: Node, leftleaf: Node, rightleaf: Node, wit: Key, pivot: Key)
@@ -264,6 +264,12 @@ abstract module BtreeSpec {
       {
         var i :| 0 <= i < |leftnode.keys| && key == leftnode.keys[i];
         Keys.IsStrictlySortedImpliesLt(oldnode.keys, i, |leftnode.keys|);
+      }
+      forall key | key in AllKeys(rightnode)
+        ensures Keys.lte(pivot, key)
+      {
+        var i :| 0 <= i < |rightnode.keys| && key == rightnode.keys[i];
+        Keys.IsSortedImpliesLte(oldnode.keys, |leftnode.keys|, |leftnode.keys| + i);
       }
 
     } else {
