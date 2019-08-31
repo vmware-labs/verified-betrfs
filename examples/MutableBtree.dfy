@@ -309,6 +309,15 @@ abstract module MutableBtree {
     reveal_BSWF();
     BS.InsertLeaf(leaf, key, value)
   }
+
+  function {:opaque} BSChildFor(node: BS.Node, key: Key) : (childidx: int)
+    requires node.Index?
+    requires BSWF(node)
+    ensures 0 <= childidx < |node.children|
+  {
+    reveal_BSWF();
+    BS.Keys.LargestLte(node.pivots, key) + 1
+  }
   
   lemma IndexPrefixIsSubIndex(node: Node, newnchildren: int)
     requires WFShape(node)
@@ -655,12 +664,14 @@ abstract module MutableBtree {
     ensures WFShape(result)
     ensures result.repr == node.repr
     ensures result.Leaf?
-    ensures I(result) == BSInsertLeaf(old(I(node)), key, value)
+    ensures BSWF(I(result))
+    ensures BSInterpretation(I(result)) == BSInterpretation(old(I(node)))[key := value]
     modifies node.keys, node.values
   {
     reveal_BSWF();
     reveal_BSInsertLeaf();
-
+    reveal_BSInterpretation();
+    
     var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, key);
     if 1 <= posplus1 && node.keys[posplus1-1] == key {
       node.values[posplus1-1] := value;
@@ -670,8 +681,163 @@ abstract module MutableBtree {
       Arrays.Insert(node.values, node.nkeys, value, posplus1);
       result := node.(nkeys := node.nkeys + 1);
     }
+    assert I(result) == BSInsertLeaf(old(I(node)), key, value);
+    BS.InsertLeafIsCorrect(old(I(node)), key, value);
+  }
+
+  method InsertIndexChildIsNotFullHelper(node: Node, key: Key, value: Value, childidx: uint64) returns (result: Node)
+    requires WFShape(node)
+    requires BSWF(I(node))
+    requires node.Index?
+    requires childidx as int == BSChildFor(I(node), key)
+    requires BSWF(I(node).children[childidx])
+    requires !Full(node.children[childidx])
+    ensures WFShape(result)
+    ensures fresh(result.repr - node.repr)
+    ensures result.Index?
+    ensures result.nchildren == node.nchildren
+    ensures result.pivots == node.pivots
+    ensures result.children == node.children
+    ensures forall i :: 0 <= i < result.nchildren && i != childidx ==> result.children[i] == old(node.children[i])
+    ensures BSWF(I(result.children[childidx]))
+    ensures BSInterpretation(I(result.children[childidx])) == old(BSInterpretation(I(node).children[childidx]))[key := value]
+    //ensures BSWF(I(result))
+    //ensures BSInterpretation(I(result)) == BSInterpretation(old(I(node)))[key := value]
+    modifies node.children, node.children[childidx].repr
+  {
+    reveal_BSWF();
+    node.children[childidx] := InsertNode(node.children[childidx], key, value);
+    result := node.(repr := node.repr + node.children[childidx].repr);
+
+    ghost var ichildidx := childidx as int;
+    forall i: int, j: int | 0 <= i < j < result.nchildren as int
+      ensures DisjointSubtrees(result, i, j)
+    {
+      if                        j  < ichildidx {
+        assert result.children[i] == old(node.children[i]);
+        assert result.children[j] == old(node.children[j]);
+        assert old(DisjointSubtrees(node, i, j));
+        assert DisjointSubtrees(result, i, j);
+      } else if                 j == ichildidx {
+        assert result.children[i] == old(node.children[i]);
+        assert old(DisjointSubtrees(node, i, j));
+        assert DisjointSubtrees(result, i, j);
+      } else if i  < ichildidx                 {
+        assert result.children[i] == old(node.children[i]);
+        assert result.children[j] == old(node.children[j]);
+        assert old(DisjointSubtrees(node, i, j));
+        assert DisjointSubtrees(result, i, j);
+      } else if i == ichildidx                 {
+        assert result.children[j] == old(node.children[j]);
+        assert old(DisjointSubtrees(node, i, j));
+        assert DisjointSubtrees(result, i, j);
+      } else                                   {
+        assert result.children[i] == old(node.children[i]);
+        assert result.children[j] == old(node.children[j]);
+        assert old(DisjointSubtrees(node, i, j));
+        assert DisjointSubtrees(result, i, j);
+      }
+    }
+
+    forall i | 0 <= i < result.nchildren
+      ensures WFShape(result.children[i])
+    {
+      if i < childidx {
+        assert old(DisjointSubtrees(node, i as int, childidx as int));
+      } else if i == childidx {
+      } else {
+        assert old(DisjointSubtrees(node, childidx as int, i as int));
+      }
+    }
+  }
+
+  method InsertIndexChildIsNotFull(oldnode: Node, key: Key, value: Value, childidx: uint64) returns (result: Node)
+    requires WFShape(oldnode)
+    requires BSWF(I(oldnode))
+    requires oldnode.Index?
+    requires childidx as int == BSChildFor(I(oldnode), key)
+    requires !Full(oldnode.children[childidx])
+    ensures WFShape(result)
+    ensures fresh(result.repr - oldnode.repr)
+    //ensures BSWF(I(result))
+    //ensures BSInterpretation(I(result)) == BSInterpretation(old(I(node)))[key := value]
+    modifies oldnode.children, oldnode.children[childidx].repr
+  {
+    ghost var node := I(oldnode);
+    ghost var pos := childidx as int;
+
+    reveal_BSWF();
+    assert BSWF(I(oldnode).children[childidx]);
+    result := InsertIndexChildIsNotFullHelper(oldnode, key, value, childidx);
+
+    ghost var newnode := I(result);
+    ghost var newchild := I(result.children[childidx]);
+    reveal_BSChildFor();
+    reveal_BSInterpretation();
+    assert BS.WF(node);
+    assert node.Index?;
+    assert BS.WF(newchild);
+    assert pos == BS.Keys.LargestLte(node.pivots, key)+1;
+    assert BS.Interpretation(newchild) == BS.Interpretation(node.children[pos])[key := value];
+    assert newnode.pivots == node.pivots;
+    forall i | 0 <= i < |newnode.children|
+      ensures newnode.children[i] == node.children[pos := newchild][i]
+    {
+      if i < pos {
+        assert old(DisjointSubtrees(oldnode, i, pos));
+      } else if i == pos {
+      } else {
+        assert old(DisjointSubtrees(oldnode, pos, i));
+      }
+    }
+    assert newnode.children == node.children[pos := newchild];
+    assert newnode == node.(children := node.children[pos := newchild]);
+    // assert pos < |node.children|-1 ==> (forall key :: key in BS.PotentialPivots(newchild) ==> BS.Keys.lt(key, node.pivots[pos]));
+    // assert 0 < pos ==> (forall key :: key in BS.PotentialPivots(newchild) ==> BS.Keys.lt(node.pivots[pos-1], key));
+    //BS.RecursiveInsertIsCorrect(node, key, value, ichildidx, newnode, newchild);
   }
   
+  method InsertIndex(node: Node, key: Key, value: Value) returns (result: Node)
+    requires WFShape(node)
+    requires BSWF(I(node))
+    requires node.Index?
+    requires !Full(node)
+    ensures WFShape(result)
+    ensures fresh(result.repr - node.repr)
+    ensures BSWF(I(result))
+    ensures BSInterpretation(I(result)) == BSInterpretation(old(I(node)))[key := value]
+    modifies node.repr
+  // {
+  //   reveal_BSWF();
+    
+  //   var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, key);
+  //   if Full(node.children[posplus1]) {
+  //     result := SplitChildOfIndex(node, posplus1);
+  //     if BS.Keys.lte(result.pivots[posplus1], key) {
+  //       posplus1 := posplus1 + 1;
+  //     }
+  //     result := InsertNode(result.children[posplus1], key, value);
+  //   } else {
+  //     result := InsertNode(result.children[posplus1], key, value);
+  //   }
+  // }
+
+  method InsertNode(node: Node, key: Key, value: Value) returns (result: Node)
+    requires WFShape(node)
+    requires BSWF(I(node))
+    requires !Full(node)
+    ensures WFShape(result)
+    ensures fresh(result.repr - node.repr)
+    ensures BSWF(I(result))
+    ensures BSInterpretation(I(result)) == BSInterpretation(old(I(node)))[key := value]
+    modifies node.repr
+  {
+    if node.Leaf? {
+      result := InsertLeaf(node, key, value);
+    } else {
+      result := InsertIndex(node, key, value);
+    }
+  }
     // method Insert(key: Key, value: Value)
     //   requires WF()
     //   requires !Full()
