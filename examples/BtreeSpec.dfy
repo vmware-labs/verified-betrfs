@@ -39,6 +39,7 @@ abstract module BtreeSpec {
       && |node.pivots| == |node.children| - 1
       && Keys.IsStrictlySorted(node.pivots)
       && (forall i :: 0 <= i < |node.children| ==> WF(node.children[i]))
+      && (forall i :: 0 <= i < |node.children| ==> AllKeys(node.children[i]) != {})
       && (forall i, key :: 0 <= i < |node.children|-1 && key in AllKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i]))
       && (forall i, key :: 0 < i < |node.children|   && key in AllKeys(node.children[i]) ==> Keys.lte(node.pivots[i-1], key))
   }
@@ -57,9 +58,26 @@ abstract module BtreeSpec {
       :: Interpretation(node.children[Keys.LargestLte(node.pivots, key) + 1])[key]
   }
 
+  lemma InterpretationInheritance(node: Node, key: Key)
+    requires WF(node)
+    requires node.Index?
+    requires key in Interpretation(node)
+    ensures MapsTo(Interpretation(node.children[Keys.LargestLte(node.pivots, key)+1]), key, Interpretation(node)[key])
+  {
+  }
+
+  lemma InterpretationDelegation(node: Node, key: Key)
+    requires WF(node)
+    requires node.Index?
+    requires key in Interpretation(node.children[Keys.LargestLte(node.pivots, key)+1])
+    ensures MapsTo(Interpretation(node), key, Interpretation(node)[key])
+  {
+  }
+  
   lemma AllKeysIsConsistentWithInterpretation(node: Node, key: Key)
     requires WF(node)
     requires key in Interpretation(node)
+    ensures key in AllKeys(node)
     ensures node.Index? ==> WF(node) && key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
   {
     if node.Index? {
@@ -183,7 +201,7 @@ abstract module BtreeSpec {
     var rightint := Interpretation(rightindex);
     var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
 
-    Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
+    //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
     
     forall key | key in oldint
       ensures MapsTo(newint, key, oldint[key])
@@ -196,6 +214,8 @@ abstract module BtreeSpec {
       } else {
         Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
         assert rightindex.children[llte - |leftindex.children| + 1] == oldindex.children[llte + 1];
+        InterpretationInheritance(oldindex, key);
+        InterpretationDelegation(rightindex, key);
       }
     }
 
@@ -207,6 +227,7 @@ abstract module BtreeSpec {
         var llte := Keys.LargestLte(leftindex.pivots, key);
         Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
         assert oldindex.children[llte+1] == leftindex.children[llte+1];
+        InterpretationInheritance(leftindex, key);
       } else {
         AllKeysIsConsistentWithInterpretation(rightindex, key);
         var llte := Keys.LargestLte(rightindex.pivots, key);
@@ -255,6 +276,8 @@ abstract module BtreeSpec {
     ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
     ensures wit in AllKeys(oldnode)
     ensures Keys.lt(wit, pivot)
+    ensures AllKeys(leftnode) != {}
+    ensures AllKeys(rightnode) != {}
     ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
     ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
   {
@@ -327,6 +350,7 @@ abstract module BtreeSpec {
 
     forall i | 0 <= i < |newindex.children|
       ensures WF(newindex.children[i])
+      ensures AllKeys(newindex.children[i]) != {}
     {
       if i < childidx {
       } else if i == childidx {
@@ -504,6 +528,7 @@ abstract module BtreeSpec {
     ensures Interpretation(newnode) == Interpretation(node)[key := value]
   {
     var oldint := Interpretation(node);
+    AllKeysIsConsistentWithInterpretation(newchild, key);
     var newint := Interpretation(newnode);
 
     forall key' | key' in oldint && key' != key

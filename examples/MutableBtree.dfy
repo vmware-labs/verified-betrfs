@@ -495,8 +495,16 @@ abstract module MutableBtree {
     var boundary := node.nchildren/2;
     left := IndexPrefix(node, boundary as int);
     right := SubIndex(node, boundary, node.nchildren);
+    if node.children[0].Leaf? {
+      wit := node.children[0].keys[0];
+      assert 0 < node.children[0].nkeys;
+      assert wit in BS.AllKeys(I(node.children[0]));
+    } else {
+      wit := node.children[0].pivots[0];
+      assert wit in BS.AllKeys(I(node.children[0]));
+    }
     pivot := node.pivots[boundary-1];
-
+    
     IndexPrefixPreservesWFShape(node, boundary as int);
     IndexPrefixIsSubIndex(node, boundary as int);
     reveal_BSWF();
@@ -508,6 +516,8 @@ abstract module MutableBtree {
 
     reveal_BSSubIndex();
     reveal_BSSplitIndex();
+
+    assert BS.SplitIndex(I(node), I(left), I(right), wit, pivot);
   }
 
   method SplitNode(node: Node) returns (left: Node, right: Node, ghost wit: Key, pivot: Key)
