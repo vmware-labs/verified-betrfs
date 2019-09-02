@@ -32,7 +32,7 @@ module ImplInsert {
 
   import Native
 
-  method RemoveLBAFromIndirectionTable(table: IS.MutIndirectionTable, ref: IS.Reference)
+  method RemoveLBAFromIndirectionTable(table: MutIndirectionTable, ref: Reference)
   requires table.Inv()
   ensures table.Inv()
   ensures table.Contents == ImplModelInsert.removeLBAFromIndirectionTable(old(table.Contents), ref)
@@ -51,11 +51,11 @@ module ImplInsert {
 
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (s': ImplVariables, success: bool)
-  requires IS.Inv(k, s)
+  requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  ensures IS.WVars(s')
-  ensures (IS.IVars(s'), success) == ImplModelInsert.InsertKeyValue(IS.Ic(k), old(IS.IVars(s)), key, value)
+  ensures WVars(s')
+  ensures (IVars(s'), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(IVars(s)), key, value)
   modifies s.ephemeralIndirectionTable.Repr
   {
     ImplModelInsert.reveal_InsertKeyValue();
@@ -92,11 +92,12 @@ module ImplInsert {
   method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
   returns (s': ImplVariables, success: bool)
   requires io.initialized()
-  requires IS.Inv(k, s)
-  ensures IS.WVars(s')
-  ensures (IS.IVars(s'), success, IS.IIO(io)) == ImplModelInsert.insert(Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key, value)
+  requires Inv(k, s)
+  ensures WVars(s')
+  ensures ImplModelInsert.insert(Ic(k), old(IVars(s)), old(IIO(io)), key, value, IVars(s'), success, IIO(io))
   modifies io
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
+  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   {
     ImplModelInsert.reveal_insert();
 
@@ -107,8 +108,14 @@ module ImplInsert {
     }
 
     if (BT.G.Root() !in s.cache) {
-      s' := PageInReq(k, s, io, BT.G.Root());
-      success := false;
+      if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+        s' := PageInReq(k, s, io, BT.G.Root());
+        success := false;
+      } else {
+        print "insert: root not in cache, but cache is full\n";
+        s' := s;
+        success := false;
+      }
       return;
     }
 

@@ -68,7 +68,7 @@ module ImplFlush {
       s1 := s;
     }
 
-    Native.BenchmarkingUtil.start();
+    //Native.BenchmarkingUtil.start();
 
     var node := s1.cache[parentref];
     var childref := node.children.value[slot];
@@ -92,6 +92,6 @@ module ImplFlush {
 
     s' := write(k, s2, parentref, newparent);
 
-    Native.BenchmarkingUtil.end();
+    //Native.BenchmarkingUtil.end();
   }
 }

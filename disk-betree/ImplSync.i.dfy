@@ -39,11 +39,13 @@ module ImplSync {
   ensures table.Contents == ImplModelSync.AssignRefToLoc(old(table.Contents), ref, loc)
   {
     ImplModelSync.reveal_AssignRefToLoc();
-    var locGraph := table.Remove(ref);
+    var locGraph := table.Get(ref);
     if locGraph.Some? {
-      var (_, graph) := locGraph.value;
-      assume table.Count as nat < 0x10000000000000000 / 8;
-      var _ := table.Insert(ref, (Some(loc), graph));
+      var (oldloc, succ) := locGraph.value;
+      if oldloc.None? {
+        assume table.Count as nat < 0x10000000000000000 / 8;
+        var _ := table.Insert(ref, (Some(loc), succ));
+      }
     }
     //assert IIndirectionTable(table) ==
     //    old(BC.assignRefToLocation(IIndirectionTable(table), ref, loc));
@@ -117,6 +119,38 @@ module ImplSync {
     return;
   }
 
+  method TryToWriteBlock(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  returns (s': ImplVariables)
+  requires s.Ready?
+  requires Inv(k, s)
+  requires io.initialized()
+  requires ref in s.cache
+  ensures WVars(s')
+  ensures ImplModelSync.TryToWriteBlock(Ic(k), old(IVars(s)), old(IIO(io)), ref, IVars(s'), IIO(io))
+  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
+  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
+  modifies io
+  {
+    var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]));
+
+    if (id.Some?) {
+      AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value);
+      if (s.frozenIndirectionTable.Some?) {
+        AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc.value);
+      }
+      s' := s
+        .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)]);
+    } else {
+      s' := s;
+      print "sync: giving up; write req failed\n";
+    }
+
+    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(IVars(s)), ISector(SectorBlock(s.cache[ref])), id, loc, IIO(io));
+    assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(IVars(s)), ref, id, loc, IVars(s'));
+  }
+
+  // TODO fix the name of this method
   method {:fuel BC.GraphClosed,0} syncFoundInFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: Reference)
   returns (s': ImplVariables)
   requires io.initialized()
@@ -146,21 +180,7 @@ module ImplSync {
       return;
     }
 
-    var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]));
-
-    if (id.Some?) {
-      AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value);
-      AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc.value);
-      s' := s
-        .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)]);
-
-      assert id == Some(io.diskOp().id);
-      ImplModelSync.reveal_AssignRefToLoc();
-      assert loc == s'.frozenIndirectionTable.value.Contents[ref].0;
-    } else {
-      s' := s;
-      print "sync: giving up; write req failed\n";
-    }
+    s' := TryToWriteBlock(k, s, io, ref);
   }
 
   method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)

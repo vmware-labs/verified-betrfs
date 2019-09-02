@@ -18,6 +18,7 @@ module {:extern} ImplState {
   import KMTable = KMTable
   import D = AsyncSectorDisk
   import MainDiskIOHandler
+  import LruModel
   import opened BucketsLib
 
   import MM = MutableMap
@@ -41,6 +42,7 @@ module {:extern} ImplState {
         outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
         syncReqs: map<int, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
+        lru: LruModel.LruQueue,
         rootBucket: TreeMap,
         rootBucketWeightBound: uint64)
     | Unready(outstandingIndirectionTableRead: Option<D.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
@@ -69,7 +71,7 @@ module {:extern} ImplState {
   reads VariablesReadSet(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, _, _, _, _, _, _, _) => (
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, _, _, _, _, _, _, _, _) => (
         // NOALIAS statically enforced no-aliasing would probably help here
         && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
         && (frozenIndirectionTable.Some? ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
@@ -98,7 +100,7 @@ module {:extern} ImplState {
   {
     && VarsReprInv(vars)
     && match vars {
-      case Ready(_, _, _, _, _, _, _, _, _, _) => WVarsReady(vars)
+      case Ready(_, _, _, _, _, _, _, _, _, _, _) => WVarsReady(vars)
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
@@ -126,8 +128,8 @@ module {:extern} ImplState {
   reads VariablesReadSet(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) =>
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, TTT.I(rootBucket), rootBucketWeightBound)
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, rootBucket, rootBucketWeightBound) =>
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, TTT.I(rootBucket), rootBucketWeightBound)
       case Unready(outstandingIndirectionTableRead, syncReqs) => IM.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }

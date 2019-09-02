@@ -51,6 +51,7 @@ module ImplModelFlushRootBucket {
     && IVars(s) == IVars(s')
     && s'.rootBucket == map[]
     && s'.rootBucketWeightBound == 0
+    && TotalCacheSize(s') == TotalCacheSize(s)
   {
     reveal_flushRootBucket();
     var s' := flushRootBucket(k, s);

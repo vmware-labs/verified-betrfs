@@ -6,6 +6,7 @@ module ImplCache {
   import opened ImplIO
   import opened ImplState
   import ImplModelCache
+  import LruModel
 
   import opened Options
   import opened MainDiskIOHandler
@@ -85,7 +86,8 @@ module ImplCache {
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
     var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if node.children.Some? then node.children.value else []));
 
-    s' := s.(cache := s.cache[ref := node]);
+    s' := s.(cache := s.cache[ref := node])
+        .(lru := LruModel.Use(s.lru, ref));
   }
 
   method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)

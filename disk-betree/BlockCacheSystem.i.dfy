@@ -532,7 +532,6 @@ abstract module BlockCacheSystem {
     requires WFIndirectionTableWrtDiskQueue(indirectionTable, s.disk)
     requires indirectionTable' == M.assignRefToLocation(indirectionTable, ref, dop.reqWrite.loc)
     requires M.IndirectionTableCacheConsistent(indirectionTable, s.machine.cache)
-    requires ref !in indirectionTable.locs
     requires dop.reqWrite.loc !in indirectionTable.locs.Values
 
     ensures M.WFIndirectionTable(indirectionTable')
@@ -545,7 +544,7 @@ abstract module BlockCacheSystem {
     forall r | r in indirectionTable'.locs
     ensures WFIndirectionTableRefWrtDiskQueue(indirectionTable', s'.disk, r)
     {
-      if (r == ref) {
+      if (r == ref && ref !in indirectionTable.locs) {
         assert s'.disk.reqWrites[dop.id].loc == dop.reqWrite.loc;
         //assert indirectionTable'.locs[ref] == dop.reqWrite.loc;
         //assert QueueLookupIdByLocation(s'.disk.reqWrites, indirectionTable'.locs[ref]).Some?;

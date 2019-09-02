@@ -40,7 +40,7 @@ module ImplModelSync {
 
   function {:opaque} AssignRefToLoc(table: IndirectionTable, ref: Reference, loc: BC.Location) : IndirectionTable
   {
-    if (ref in table) then (
+    if (ref in table && table[ref].0.None?) then (
       table[ref := (Some(loc), table[ref].1)]
     ) else (
       table
@@ -126,6 +126,70 @@ module ImplModelSync {
     return;
   }
 
+  predicate WriteBlockUpdateState(k: Constants, s: Variables, ref: BT.G.Reference,
+      id: Option<D.ReqId>, loc: Option<LBAType.Location>, s': Variables)
+  requires s.Ready?
+  requires Inv(k, s)
+  requires ref in s.cache
+  {
+    if id.Some? then (
+      && loc.Some?
+      && s' == s
+        .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)])
+        .(ephemeralIndirectionTable := AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value))
+        .(frozenIndirectionTable := if s.frozenIndirectionTable.Some?
+            then Some(AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc.value))
+            else None)
+    ) else (
+      && s' == s
+    )
+  }
+
+  predicate TryToWriteBlock(k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
+      s': Variables, io': IO)
+  requires s.Ready?
+  requires Inv(k, s)
+  requires io.IOInit?
+  requires ref in s.cache
+  {
+    exists id, loc ::
+      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
+      && WriteBlockUpdateState(k, s, ref, id, loc, s')
+  }
+
+  lemma TryToWriteBlockCorrect(k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
+      s': Variables, io': IO)
+  requires io.IOInit?
+  requires TryToWriteBlock.requires(k, s, io, ref, s', io')
+  requires TryToWriteBlock(k, s, io, ref, s', io')
+  requires ref == BT.G.Root() ==> s.rootBucket == map[]
+  requires s.outstandingIndirectionTableWrite.None?
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  {
+    INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
+
+    var id, loc :| 
+      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
+      && WriteBlockUpdateState(k, s, ref, id, loc, s');
+
+    FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), id, loc, io');
+
+    if id.Some? {
+      AssignRefToLocCorrect(s.ephemeralIndirectionTable, ref, loc.value);
+      if (s.frozenIndirectionTable.Some?) {
+        AssignRefToLocCorrect(s.frozenIndirectionTable.value, ref, loc.value);
+      }
+
+      assert BC.ValidLocationForNode(M.IDiskOp(diskOp(io')).reqWrite.loc);
+      assert BC.WriteBackReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')), ref);
+      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackReqStep(ref));
+    } else {
+      assert io == io';
+      assert noop(k, IVars(s), IVars(s));
+    }
+  }
+
   predicate {:fuel BC.GraphClosed,0} syncFoundInFrozen(k: Constants, s: Variables, io: IO, ref: Reference,
       s': Variables, io': IO)
   requires io.IOInit?
@@ -145,19 +209,7 @@ module ImplModelSync {
       && s' == s
       && io' == io
     ) else (
-      if diskOp(io').ReqWriteOp? && s'.Ready? && s'.frozenIndirectionTable.Some? && ref in s'.frozenIndirectionTable.value && s'.frozenIndirectionTable.value[ref].0.Some? then (
-        var id := Some(diskOp(io').id);
-        var loc := s'.frozenIndirectionTable.value[ref].0;
-        && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
-
-        && s' == s
-          .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)])
-          .(ephemeralIndirectionTable := AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value))
-          .(frozenIndirectionTable := Some(AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc.value)))
-      ) else (
-        && s' == s
-        && io' == io
-      )
+      TryToWriteBlock(k, s, io, ref, s', io')
     )
   }
 
@@ -183,26 +235,8 @@ module ImplModelSync {
     if ref in s.ephemeralIndirectionTable && s.ephemeralIndirectionTable[ref].0.Some? {
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert noop(k, IVars(s), IVars(s));
-      return;
-    }
-
-    assert ref !in IIndirectionTable(s.ephemeralIndirectionTable).locs;
-
-    INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
-
-    if diskOp(io').ReqWriteOp? && s'.Ready? && s'.frozenIndirectionTable.Some? && ref in s'.frozenIndirectionTable.value && s'.frozenIndirectionTable.value[ref].0.Some? {
-      var id := Some(diskOp(io').id);
-      var loc := s'.frozenIndirectionTable.value[ref].0;
-      FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), id, loc, io');
-
-      AssignRefToLocCorrect(s.ephemeralIndirectionTable, ref, loc.value);
-      AssignRefToLocCorrect(s.frozenIndirectionTable.value, ref, loc.value);
-
-      assert BC.ValidLocationForNode(M.IDiskOp(diskOp(io')).reqWrite.loc);
-      assert BC.WriteBackReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')), ref);
-      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackReqStep(ref));
     } else {
-      assert noop(k, IVars(s), IVars(s));
+      TryToWriteBlockCorrect(k, s, io, ref, s', io');
     }
   }
 

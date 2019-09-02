@@ -12,6 +12,7 @@ module ImplModelGrow {
   import opened Sequences
   import opened Sets
   import opened BucketWeights
+  import opened Bounds
 
   import opened NativeTypes
 
@@ -56,6 +57,7 @@ module ImplModelGrow {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures var s' := grow(k, s);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)

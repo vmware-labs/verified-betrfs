@@ -147,7 +147,7 @@ abstract module BlockCache refines Transactable {
   function method assignRefToLocation(indirectionTable: IndirectionTable, ref: Reference, loc: Location) : IndirectionTable
   {
     IndirectionTable(
-      if ref in indirectionTable.graph then indirectionTable.locs[ref := loc] else indirectionTable.locs,
+      if ref in indirectionTable.graph && ref !in indirectionTable.locs then indirectionTable.locs[ref := loc] else indirectionTable.locs,
       indirectionTable.graph
     )
   }
@@ -167,17 +167,16 @@ abstract module BlockCache refines Transactable {
     && s'.Ready?
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
+    // TODO I don't think we really need this.
     && s.outstandingIndirectionTableWrite.None?
 
     && ValidAllocation(s, dop.reqWrite.loc)
 
-    && ref !in s.ephemeralIndirectionTable.locs
     && s'.ephemeralIndirectionTable == assignRefToLocation(s.ephemeralIndirectionTable, ref, dop.reqWrite.loc)
 
     && (s.frozenIndirectionTable.Some? ==> (
-      && ref !in s.frozenIndirectionTable.value.locs
-      && s'.frozenIndirectionTable == Some(assignRefToLocation(s.frozenIndirectionTable.value, ref, dop.reqWrite.loc))
-    ))
+      s'.frozenIndirectionTable == Some(assignRefToLocation(s.frozenIndirectionTable.value, ref, dop.reqWrite.loc)))
+    )
     && (s.frozenIndirectionTable.None? ==> s'.frozenIndirectionTable.None?)
 
     && s'.cache == s.cache

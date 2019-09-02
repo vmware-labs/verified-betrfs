@@ -51,7 +51,8 @@ module Maps {
     ensures forall j :: j in m' ==> j in m && j != k
     ensures forall j :: j in m' ==> m'[j] == m[j]
     ensures |m'.Keys| <= |m.Keys|
-    ensures |m'| <= |m|
+    ensures k in m ==> |m'| == |m| - 1
+    ensures k !in m ==> |m'| == |m|
   {
     var m' := map j | j in m && j != k :: m[j];
     assert m'.Keys == m.Keys - {k};

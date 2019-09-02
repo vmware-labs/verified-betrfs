@@ -106,7 +106,7 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     var s', succ := insert(k, s, io, key, value);
-    ImplModelInsert.insertCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key, value);
+    ImplModelInsert.insertCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key, value, IS.IVars(s'), succ, IS.IIO(io));
     var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';

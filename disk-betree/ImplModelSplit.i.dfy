@@ -359,6 +359,7 @@ module ImplModelSplit {
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
+  requires TotalCacheSize(s) <= MaxCacheSize() - 2
   ensures var s' := doSplit(k, s, parentref, childref, slot);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)

@@ -728,6 +728,7 @@ module PivotBetreeSpecWFNodes {
     Pivots.WFSuffix(child.pivotTable, f.num_children_left);
 
     Buckets.BucketListHasWFBucketAtIdenticalSlice(child.buckets, child.pivotTable, left_child.buckets, left_child.pivotTable, 0, |left_child.buckets| - 1, 0);
+    assert child.buckets[f.num_children_left..] == f.right_child.buckets;
     Buckets.BucketListHasWFBucketAtIdenticalSlice(child.buckets, child.pivotTable, right_child.buckets, right_child.pivotTable, 0, |right_child.buckets| - 1, -f.num_children_left);
 
     WeightBucketListSlice(child.buckets, 0, f.num_children_left);

@@ -6,6 +6,7 @@ include "KMTable.i.dfy"
 include "BetreeBlockCache.i.dfy"
 include "../lib/tttree.i.dfy"
 include "../lib/NativeTypes.s.dfy"
+include "../lib/LRU.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -33,6 +34,7 @@ module ImplModel {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import LruModel
   import UI
 
   import ReferenceType`Internal
@@ -61,6 +63,7 @@ module ImplModel {
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
         syncReqs: map<int, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
+        lru: LruModel.LruQueue,
         rootBucket: map<Key, Message>,
         rootBucketWeightBound: uint64)
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
@@ -85,10 +88,16 @@ module ImplModel {
     forall ref | ref in cache :: WFNode(cache[ref])
   }
 
-  predicate WFVarsReady(vars: Variables)
-  requires vars.Ready?
+  function TotalCacheSize(s: Variables) : int
+  requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) := vars;
+    |s.cache| + |s.outstandingBlockReads|
+  }
+
+  predicate WFVarsReady(s: Variables)
+  requires s.Ready?
+  {
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, rootBucket, rootBucketWeightBound) := s;
     && WFCache(cache)
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
     && (forall key | key in rootBucket :: rootBucket[key] != Messages.IdentityMessage())
@@ -105,6 +114,10 @@ module ImplModel {
     // make a way to do a query-and-update to the in-memory rootBucket without traversing
     // the tree twice.
     && WeightBucket(rootBucket) <= rootBucketWeightBound as int
+
+    && LruModel.WF(lru)
+    && LruModel.I(lru) == cache.Keys
+    && TotalCacheSize(s) <= MaxCacheSize()
   }
   predicate WFVars(vars: Variables)
   {
@@ -172,7 +185,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, rootBucket, rootBucketWeightBound) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, rootBucket, rootBucketWeightBound) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache, rootBucket))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }

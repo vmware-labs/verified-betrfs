@@ -15,6 +15,7 @@ module ImplIO {
   import ImplModelIO
   import BucketsLib
   import opened IS = ImplState
+  import Native
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
@@ -43,6 +44,8 @@ module ImplIO {
   requires len <= LBAType.BlockSize()
   ensures loc == ImplModelIO.getFreeLoc(IS.IVars(s), len)
   {
+    Native.BenchmarkingUtil.start();
+
     ImplModelIO.reveal_getFreeLoc();
     var tryOffset:uint64 := 0;
     while true
@@ -68,9 +71,12 @@ module ImplIO {
         ) {
         var result := Some(LBAType.Location(addr, len));
         assert result == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset);
+
+        Native.BenchmarkingUtil.end();
         return result;
       }
       if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int {
+        Native.BenchmarkingUtil.end();
         return None;
       }
 
@@ -222,7 +228,7 @@ module ImplIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
-      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], TTT.EmptyTree, 0);
+      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), TTT.EmptyTree, 0);
     } else {
       s' := s;
       print "giving up; did not get indirectionTable when reading\n";
@@ -264,7 +270,8 @@ module ImplIO {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
         s' := s.(cache := s.cache[ref := sector.value.block])
-               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
+               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id))
+               .(lru := LruModel.Use(s.lru, ref));
       } else {
         s' := s;
         print "giving up; block does not match graph\n";

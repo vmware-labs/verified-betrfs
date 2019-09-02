@@ -144,35 +144,43 @@ module ImplModelInsert {
         M.Step(BBC.BetreeMoveStep(btStep)));
   }
 
-  function {:opaque} insert(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value)
-  : (Variables, bool, IO)
+  predicate {:opaque} insert(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value,
+      s': Variables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
   {
     if (s.Unready?) then (
-      var (s', io') := PageInIndirectionTableReq(k, s, io);
-      (s', false, io')
+      && (s', io') == PageInIndirectionTableReq(k, s, io)
+      && success == false
     ) else if (BT.G.Root() !in s.cache) then (
-      var (s', io') := PageInReq(k, s, io, BT.G.Root());
-      (s', false, io')
+      if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+        && (s', io') == PageInReq(k, s, io, BT.G.Root())
+        && success == false
+      ) else (
+        // TODO rule out this case?
+        && s' == s
+        && io' == io
+        && success == false
+      )
     ) else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         s.rootBucketWeightBound as int +
         WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
         <= MaxTotalBucketWeight() then (
-      var (s', success) := InsertKeyValue(k, s, key, value);
-      (s', success, io)
+      && (s', success) == InsertKeyValue(k, s, key, value)
+      && io' == io
     ) else (
-      var (s', io') := runFlushPolicy(k, s, io);
-      (s', false, io')
+      && runFlushPolicy(k, s, io, s', io')
+      && success == false
     )
   }
 
-  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value)
+  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value,
+      s': Variables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
-  ensures var (s', success, io') := insert(k, s, io, key, value);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'),
+  requires insert(k, s, io, key, value, s', success, io');
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'),
         if success then UI.PutOp(key, value) else UI.NoOp,
         diskOp(io'))
   {
@@ -181,14 +189,18 @@ module ImplModelInsert {
     if (s.Unready?) {
       PageInIndirectionTableReqCorrect(k, s, io);
     } else if (BT.G.Root() !in s.cache) {
-      PageInReqCorrect(k, s, io, BT.G.Root());
+      if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+        PageInReqCorrect(k, s, io, BT.G.Root());
+      } else {
+        assert noop(k, IVars(s), IVars(s));
+      }
     } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         s.rootBucketWeightBound as int +
         WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
         <= MaxTotalBucketWeight() {
       InsertKeyValueCorrect(k, s, key, value);
     } else {
-      runFlushPolicyCorrect(k, s, io);
+      runFlushPolicyCorrect(k, s, io, s', io');
     }
   }
 

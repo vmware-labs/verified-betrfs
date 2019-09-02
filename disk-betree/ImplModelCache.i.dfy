@@ -12,7 +12,9 @@ module ImplModelCache {
   import opened Sets
 
   import opened BucketWeights
+  import opened Bounds
   import KMTable
+  import LruModel
 
   import opened NativeTypes
 
@@ -81,6 +83,7 @@ module ImplModelCache {
   {
     var eph := s.ephemeralIndirectionTable[ref := (None, if node.children.Some? then node.children.value else [])];
     s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
+        .(lru := LruModel.Use(s.lru, ref))
   }
 
   function {:opaque} alloc(k: Constants, s: Variables, node: Node)
@@ -102,14 +105,19 @@ module ImplModelCache {
   requires WFVars(s)
   requires WFNode(node)
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures var (s', ref) := alloc(k, s, node);
     && WFVars(s')
     && (ref.Some? ==> BC.Alloc(Ik(k), IVars(s), IVars(s'), ref.value, INode(node)))
     && (ref.None? ==> s' == s)
+    && (ref.Some? ==> TotalCacheSize(s') == TotalCacheSize(s) + 1)
   {
     reveal_alloc();
     reveal_write();
     var ref := getFreeRef(s);
+    if ref.Some? {
+      LruModel.LruUse(s.lru, ref.value);
+    }
   }
   
   lemma writeCorrect(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
@@ -124,12 +132,15 @@ module ImplModelCache {
   ensures var s' := write(k, s, ref, node);
     && WFVars(s')
     && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, INode(node))
+    && TotalCacheSize(s') == TotalCacheSize(s)
   {
     reveal_write();
     if (ref == BT.G.Root()) {
       INodeRootEqINodeForEmptyRootBucket(node);
     }
     WeightBucketEmpty();
+
+    LruModel.LruUse(s.lru, ref);
 
     var s' := write(k, s, ref, node);
     assert WFVars(s');
@@ -148,9 +159,12 @@ module ImplModelCache {
   ensures var s' := write(k, s, ref, node);
     && WFVars(s')
     && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, if ref == BT.G.Root() then INodeRoot(node, s.rootBucket) else INode(node))
+    && TotalCacheSize(s') == TotalCacheSize(s)
   {
     reveal_write();
     var s' := write(k, s, ref, node);
+
+    LruModel.LruUse(s.lru, ref);
 
     if (ref == BT.G.Root()) {
       assert WFVars(s');
@@ -164,12 +178,15 @@ module ImplModelCache {
   requires WFVars(s)
   requires RefAvailable(s, ref)
   requires WFNode(node)
+  requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   ensures var s' := write(k, s, ref, node);
     && WFVars(s')
     && BC.Alloc(Ik(k), IVars(s), IVars(s'), ref, INode(node))
+    && TotalCacheSize(s') == TotalCacheSize(s) + 1
   {
     reveal_write();
+    LruModel.LruUse(s.lru, ref);
   }
 
   lemma lemmaChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)

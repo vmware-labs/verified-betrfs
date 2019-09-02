@@ -12,6 +12,8 @@ module ImplModelDealloc {
 
   import opened NativeTypes
 
+  import LruModel
+
   predicate deallocable(s: Variables, ref: BT.G.Reference)
   {
     && s.Ready?
@@ -39,7 +41,8 @@ module ImplModelDealloc {
     ) else (
       var s' := s
         .(ephemeralIndirectionTable := MapRemove(s.ephemeralIndirectionTable, {ref}))
-        .(cache := MapRemove(s.cache, {ref}));
+        .(cache := MapRemove(s.cache, {ref}))
+        .(lru := LruModel.Remove(s.lru, ref));
       (s', io)
     )
   }
@@ -54,6 +57,8 @@ module ImplModelDealloc {
   {
     reveal_Dealloc();
     var (s', io') := Dealloc(k, s, io, ref);
+
+    LruModel.LruRemove(s.lru, ref);
 
     if (
       && s.frozenIndirectionTable.Some?

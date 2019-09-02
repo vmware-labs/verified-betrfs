@@ -13,6 +13,8 @@ module ImplDealloc {
   import opened Sequences
   import opened Sets
 
+  import LruModel
+
   import opened NativeTypes
 
   method Deallocable(s: ImplVariables, ref: BT.G.Reference) returns (result: bool)
@@ -77,7 +79,8 @@ module ImplDealloc {
     var _ := s.ephemeralIndirectionTable.Remove(ref);
 
     s' := s
-      .(cache := MapRemove(s.cache, {ref}));
+      .(cache := MapRemove(s.cache, {ref}))
+      .(lru := LruModel.Remove(s.lru, ref));
 
     assume s'.ephemeralIndirectionTable.Contents
         == MapRemove(old(s'.ephemeralIndirectionTable.Contents), {ref});

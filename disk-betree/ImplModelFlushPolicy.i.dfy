@@ -2,6 +2,7 @@ include "ImplModelFlush.i.dfy"
 include "ImplModelGrow.i.dfy"
 include "ImplModelSplit.i.dfy"
 include "ImplModelLeaf.i.dfy"
+include "ImplModelEvict.i.dfy"
 include "Bounds.i.dfy"
 
 module ImplModelFlushPolicy {
@@ -12,6 +13,7 @@ module ImplModelFlushPolicy {
   import opened ImplModelGrow
   import opened ImplModelSplit
   import opened ImplModelLeaf
+  import opened ImplModelEvict
 
   import opened Sequences
 
@@ -86,6 +88,7 @@ module ImplModelFlushPolicy {
       && action.ref in s.ephemeralIndirectionTable
       && action.ref !in s.cache
       && s.ephemeralIndirectionTable[action.ref].0.Some?
+      && TotalCacheSize(s) <= MaxCacheSize() - 1
     ))
     && ((action.ActionSplit? || action.ActionFlush?) ==> (
       && action.parentref in s.ephemeralIndirectionTable
@@ -98,6 +101,13 @@ module ImplModelFlushPolicy {
     && (action.ActionSplit? ==> (
       && |s.cache[s.cache[action.parentref].children.value[action.slot]].buckets| >= 2
       && |s.cache[action.parentref].buckets| <= MaxNumChildren() - 1
+      && TotalCacheSize(s) <= MaxCacheSize() - 2
+    ))
+    && (action.ActionFlush? ==> (
+      && TotalCacheSize(s) <= MaxCacheSize() - 1
+    ))
+    && (action.ActionGrow? ==> (
+      && TotalCacheSize(s) <= MaxCacheSize() - 1
     ))
     && (action.ActionRepivot? ==> (
       && action.ref != BT.G.Root()
@@ -107,16 +117,6 @@ module ImplModelFlushPolicy {
     ))
   }
 
-  function method getActionToPageIn(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference) : Action
-  {
-    // TODO eviction
-    /*
-    if |cache| >= MaxCacheSize() then
-      ActionEvict
-    else*/
-      ActionPageIn(ref)
-  }
-
   function {:opaque} getActionToSplit(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
   requires 0 <= i as int < |stack|
   requires WFVars(s)
@@ -124,13 +124,21 @@ module ImplModelFlushPolicy {
   {
     if i == 0 then
       // Can't split root until we grow it.
-      ActionGrow
+      if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+        ActionGrow
+      ) else (
+        ActionEvict
+      )
     else (
       if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 then (
         if |s.cache[stack[i]].buckets| as uint64 == 1 then (
           ActionRepivot(stack[i])
         ) else (
-          ActionSplit(stack[i-1], slots[i-1])
+          if TotalCacheSize(s) <= MaxCacheSize() - 2 then (
+            ActionSplit(stack[i-1], slots[i-1])
+          ) else (
+            ActionEvict
+          )
         )
       ) else (
         getActionToSplit(k, s, stack, slots, i-1)
@@ -138,19 +146,19 @@ module ImplModelFlushPolicy {
     )
   }
 
-  function {:opaque} getActionToFlush(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (action : Action)
+  function {:opaque} getActionToFlush(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (Variables, Action)
   requires |stack| <= 40
   requires ValidStackSlots(k, s, stack, slots)
   requires WFVars(s)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   {
     if |stack| as uint64 == 40 then (
-      ActionFail
+      (s, ActionFail)
     ) else (
       var ref := stack[|stack| as uint64 - 1];
       var node := s.cache[ref];
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
-        getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
+        (s, getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1))
       ) else (
         // TODO:
         var (slot, slotWeight) := biggestSlot(node.buckets);
@@ -159,20 +167,32 @@ module ImplModelFlushPolicy {
           var childref := node.children.value[slot];
           if childref in s.cache then (
             var child := s.cache[childref];
+            var s1 := s.(lru := LruModel.Use(s.lru, childref));
+            LruModel.LruUse(s.lru, childref);
+            assert IVars(s) == IVars(s1);
+
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 then (
               // If there's room for FlushTriggerWeight() worth of stuff, then
               // we flush. We flush as much as we can (which will end up being at least
               // FlushTriggerWeight - max key weight - max message weight).
-              ActionFlush(ref, slot)
+              if TotalCacheSize(s1) <= MaxCacheSize() - 1 then (
+                (s1, ActionFlush(ref, slot))
+              ) else (
+                (s1, ActionEvict)
+              )
             ) else (
-              getActionToFlush(k, s, stack + [childref], slots + [slot])
+              getActionToFlush(k, s1, stack + [childref], slots + [slot])
             )
           ) else (
-            getActionToPageIn(s.cache, childref)
+            if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+              (s, ActionPageIn(childref))
+            ) else (
+              (s, ActionEvict)
+            )
           )
         ) else (
-          getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1)
+          (s, getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1))
         )
       )
     )
@@ -189,7 +209,7 @@ module ImplModelFlushPolicy {
   requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
   ensures ValidAction(k, s, getActionToSplit(k, s, stack, slots, i))
   ensures var action := getActionToSplit(k, s, stack, slots, i);
-      action.ActionGrow? || action.ActionRepivot? || action.ActionSplit?
+      action.ActionGrow? || action.ActionRepivot? || action.ActionSplit? || action.ActionEvict?
   {
     reveal_getActionToSplit();
     var action := getActionToSplit(k, s, stack, slots, i);
@@ -217,10 +237,13 @@ module ImplModelFlushPolicy {
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   requires forall j | 1 <= j < |stack| :: stack[j] != BT.G.Root()
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures ValidAction(k, s, getActionToFlush(k, s, stack, slots))
+  ensures var (s', action) := getActionToFlush(k, s, stack, slots);
+    && WFVars(s')
+    && IVars(s) == IVars(s')
+    && ValidAction(k, s', action)
   {
     reveal_getActionToFlush();
-    var action := getActionToFlush(k, s, stack, slots);
+    var action := getActionToFlush(k, s, stack, slots).1;
 
     if |stack| as uint64 == 40 {
     } else {
@@ -236,12 +259,14 @@ module ImplModelFlushPolicy {
           lemmaChildInGraph(k, s, ref, childref);
           if childref in s.cache {
             var child := s.cache[childref];
+            var s1 := s.(lru := LruModel.Use(s.lru, childref));
+            LruModel.LruUse(s.lru, childref);
             var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
-              assert ValidAction(k, s, action);
+              assert ValidAction(k, s1, action);
             } else {
               assume childref != BT.G.Root(); // TODO we need a way to show this
-              getActionToFlushValidAction(k, s, stack + [childref], slots + [slot]);
+              getActionToFlushValidAction(k, s1, stack + [childref], slots + [slot]);
             }
           } else {
             assert childref !in IVars(s).cache;
@@ -256,84 +281,92 @@ module ImplModelFlushPolicy {
     }
   }
 
-  function {:opaque} runFlushPolicy(k: Constants, s: Variables, io: IO)
-  : (Variables, IO)
+  predicate {:opaque} runFlushPolicy(k: Constants, s: Variables, io: IO,
+      s': Variables, io': IO)
   requires Inv(k, s)
   requires io.IOInit?
   requires s.Ready?
   requires BT.G.Root() in s.cache
   {
-    var action := getActionToFlush(k, s, [BT.G.Root()], []);
-    getActionToFlushValidAction(k, s, [BT.G.Root()], []);
+    var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
+    LruModel.LruUse(s.lru, BT.G.Root());
+    assert IVars(s0) == IVars(s);
+
+    var (s1, action) := getActionToFlush(k, s0, [BT.G.Root()], []);
+    getActionToFlushValidAction(k, s0, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => (
-        PageInReq(k, s, io, ref)
+        (s', io') == PageInReq(k, s1, io, ref)
       )
       case ActionSplit(parentref, slot) => (
-        var s' := doSplit(k, s, parentref, s.cache[parentref].children.value[slot], slot as int);
-        (s', io)
+        && s' == doSplit(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int)
+        && io' == io
       )
       case ActionRepivot(ref) => (
-        var s' := repivotLeaf(k, s, ref, s.cache[ref]);
-        (s', io)
+        && s' == repivotLeaf(k, s1, ref, s1.cache[ref])
+        && io' == io
       )
       case ActionFlush(parentref, slot) => (
-        var s' := flush(k, s, parentref, slot as int, 
-            s.cache[parentref].children.value[slot],
-            s.cache[s.cache[parentref].children.value[slot]]);
-        (s', io)
+        && s' == flush(k, s1, parentref, slot as int, 
+            s1.cache[parentref].children.value[slot],
+            s1.cache[s1.cache[parentref].children.value[slot]])
+        && io' == io
       )
       case ActionGrow => (
-        var s' := grow(k, s);
-        (s', io)
+        && s' == grow(k, s1)
+        && io' == io
       )
       case ActionEvict => (
-        (s, io) // TODO
+        EvictOrDealloc(k, s1, io, s', io')
       )
       case ActionFail => (
-        (s, io)
+        && s' == s1
+        && io' == io
       )
     }
   }
 
-  lemma runFlushPolicyCorrect(k: Constants, s: Variables, io: IO)
+  lemma runFlushPolicyCorrect(k: Constants, s: Variables, io: IO, s': Variables, io': IO)
   requires Inv(k, s)
   requires io.IOInit?
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  ensures var (s', io') := runFlushPolicy(k, s, io);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  requires runFlushPolicy(k, s, io, s', io')
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
-    var action := getActionToFlush(k, s, [BT.G.Root()], []);
-    getActionToFlushValidAction(k, s, [BT.G.Root()], []);
+    var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
+    LruModel.LruUse(s.lru, BT.G.Root());
+    assert IVars(s0) == IVars(s);
+    var (s1, action) := getActionToFlush(k, s0, [BT.G.Root()], []);
+    getActionToFlushValidAction(k, s0, [BT.G.Root()], []);
 
     reveal_runFlushPolicy();
 
     match action {
       case ActionPageIn(ref) => {
-        PageInReqCorrect(k, s, io, ref);
+        PageInReqCorrect(k, s1, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        doSplitCorrect(k, s, parentref, s.cache[parentref].children.value[slot], slot as int);
+        doSplitCorrect(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
       }
       case ActionRepivot(ref) => {
-        repivotLeafCorrect(k, s, ref, s.cache[ref]);
+        repivotLeafCorrect(k, s1, ref, s1.cache[ref]);
       }
       case ActionFlush(parentref, slot) => {
-        flushCorrect(k, s, parentref, slot as int, 
-            s.cache[parentref].children.value[slot],
-            s.cache[s.cache[parentref].children.value[slot]]);
+        flushCorrect(k, s1, parentref, slot as int, 
+            s1.cache[parentref].children.value[slot],
+            s1.cache[s1.cache[parentref].children.value[slot]]);
       }
       case ActionGrow => {
-        growCorrect(k, s);
+        growCorrect(k, s1);
       }
       case ActionEvict => {
-        assert noop(k, IVars(s), IVars(s));
+        EvictOrDeallocCorrect(k, s1, io, s', io');
       }
       case ActionFail => {
-        assert noop(k, IVars(s), IVars(s));
+        assert noop(k, IVars(s), IVars(s1));
       }
     }
   }

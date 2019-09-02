@@ -73,24 +73,33 @@ module ImplModelQuery {
       (s, None, io)
     ) else (
       if (ref !in s.cache) then (
-        assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
+        if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+          assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
 
-        var (s', io') := PageInReq(k, s, io, ref);
-        (s', None, io')
+          var (s', io') := PageInReq(k, s, io, ref);
+          (s', None, io')
+        ) else (
+          (s, None, io)
+        )
       ) else (
         var node := s.cache[ref];
+
+        var s' := s.(lru := LruModel.Use(s.lru, ref));
+        LruModel.LruUse(s.lru, ref);
+        assert IVars(s') == IVars(s);
+
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
         var kmtMsg := MapLookupOption(KMTable.I(bucket), key);
         var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
         if newmsg.Define? then (
-          (s, Some(newmsg.value), io)
+          (s', Some(newmsg.value), io)
         ) else (
           if node.children.Some? then (
-            lemmaChildInGraph(k, s, ref, node.children.value[r]);
-            queryIterate(k, s, key, newmsg, node.children.value[r], io, counter - 1)
+            lemmaChildInGraph(k, s', ref, node.children.value[r]);
+            queryIterate(k, s', key, newmsg, node.children.value[r], io, counter - 1)
           ) else (
-            (s, Some(MS.V.DefaultValue()), io)
+            (s', Some(MS.V.DefaultValue()), io)
           )
         )
       )
@@ -196,9 +205,18 @@ module ImplModelQuery {
       assert noop(k, IVars(s), IVars(s));
     } else {
       if (ref !in s.cache) {
-        PageInReqCorrect(k, s, io, ref);
+        if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+          PageInReqCorrect(k, s, io, ref);
+        } else {
+          assert noop(k, IVars(s), IVars(s));
+        }
       } else {
         var node := s.cache[ref];
+
+        var s' := s.(lru := LruModel.Use(s.lru, ref));
+        LruModel.LruUse(s.lru, ref);
+        assert IVars(s') == IVars(s);
+
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
 
@@ -208,11 +226,11 @@ module ImplModelQuery {
         var lookupMsg := if kmtMsg.Some? then kmtMsg.value else Messages.IdentityMessage();
         assert newmsg == Messages.Merge(msg, lookupMsg);
 
-        NodeLookupIfNotInRootBucket(s.cache[BT.G.Root()], s.rootBucket, key);
-        var inode := INodeForRef(s.cache, ref, s.rootBucket);
+        NodeLookupIfNotInRootBucket(s'.cache[BT.G.Root()], s'.rootBucket, key);
+        var inode := INodeForRef(s'.cache, ref, s'.rootBucket);
         assert lookupMsg == BT.NodeLookup(inode, key);
 
-        var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s.cache, s.rootBucket), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+        var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s'.cache, s'.rootBucket), IIndirectionTable(s'.ephemeralIndirectionTable).graph);
 
         if newmsg.Define? {
           assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
@@ -225,8 +243,8 @@ module ImplModelQuery {
             BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
         } else {
           if node.children.Some? {
-            lemmaChildInGraph(k, s, ref, node.children.value[r]);
-            queryIterateCorrect(k, s, key, newmsg, node.children.value[r], io, counter - 1,
+            lemmaChildInGraph(k, s', ref, node.children.value[r]);
+            queryIterateCorrect(k, s', key, newmsg, node.children.value[r], io, counter - 1,
                 newlookup);
           } else {
             assert BC.OpTransaction(Ik(k), IVars(s), IVars(s'),

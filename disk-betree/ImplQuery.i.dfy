@@ -22,6 +22,7 @@ module ImplQuery {
   import opened Sets
   import opened Sequences
 
+  import opened Bounds
   import opened BucketsLib
   import PivotsLib
 
@@ -43,14 +44,16 @@ module ImplQuery {
     }
   }
 
-  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
+  method query(k: ImplConstants, s0: ImplVariables, io: DiskIOHandler, key: MS.Key)
   returns (s': ImplVariables, res: Option<MS.Value>)
   requires io.initialized()
-  requires Inv(k, s)
+  requires Inv(k, s0)
   modifies io
   ensures WVars(s')
-  ensures (IVars(s'), res, IIO(io)) == ImplModelQuery.query(Ic(k), old(IVars(s)), old(IIO(io)), key)
+  ensures (IVars(s'), res, IIO(io)) == ImplModelQuery.query(Ic(k), old(IVars(s0)), old(IIO(io)), key)
   {
+    var s := s0;
+
     ImplModelQuery.reveal_query();
     ImplModelQuery.reveal_queryIterate();
 
@@ -70,10 +73,11 @@ module ImplQuery {
       var counter: uint64 := 40;
 
       while true
-      invariant WVars(s)
+      invariant Inv(k, s)
+      invariant s.Ready?
       invariant ref in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
       invariant io.initialized()
-      invariant ImplModelQuery.query(Ic(k), old(IVars(s)), old(IIO(io)), key)
+      invariant ImplModelQuery.query(Ic(k), old(IVars(s0)), old(IIO(io)), key)
              == ImplModelQuery.queryIterate(Ic(k), IVars(s), key, msg, ref, IIO(io), counter)
       invariant counter as int >= 0
       decreases counter as int
@@ -85,11 +89,22 @@ module ImplQuery {
         }
 
         if (ref !in s.cache) {
-          s' := PageInReq(k, s, io, ref);
-          res := None;
-          return;
+          if |s.cache| + |s.outstandingBlockReads| <= MaxCacheSize() - 1 {
+            s' := PageInReq(k, s, io, ref);
+            res := None;
+            return;
+          } else {
+            s' := s;
+            res := None;
+            return;
+          }
         } else {
           var node := s.cache[ref];
+
+          var s1 := s.(lru := LruModel.Use(s.lru, ref));
+          LruModel.LruUse(s.lru, ref);
+          assert IM.IVars(IVars(s1)) == IM.IVars(IVars(s));
+          s := s1;
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var bucket := node.buckets[r];

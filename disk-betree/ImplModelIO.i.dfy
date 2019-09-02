@@ -12,6 +12,7 @@ module ImplModelIO {
   import Marshalling = Marshalling
   import LBAType
   import BucketsLib
+  import LruModel
   import M = ByteBetreeBlockCache
   import UI
 
@@ -164,7 +165,7 @@ module ImplModelIO {
   ensures id.Some? ==> BC.ValidAllocation(IVars(s), loc.value)
   ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
   ensures id.Some? ==> M.IDiskOp(diskOp(io')) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, ISector(sector)))
-  ensures id.None? ==> M.IDiskOp(diskOp(io')) == SD.NoDiskOp
+  ensures id.None? ==> io' == io
   {
     reveal_FindLocationAndRequestWrite();
     IMM.reveal_parseCheckedSector();
@@ -260,6 +261,7 @@ module ImplModelIO {
   requires ref in s.ephemeralIndirectionTable;
   requires s.ephemeralIndirectionTable[ref].0.Some?;
   requires ref !in s.cache
+  requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures var (s', io') := PageInReq(k, s, io, ref);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
@@ -336,7 +338,7 @@ module ImplModelIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], map[], 0)
+      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), map[], 0)
     ) else (
       s
     )
@@ -394,9 +396,11 @@ module ImplModelIO {
         var graph := locGraph.value.1;
         if (sector.Some? && sector.value.SectorBlock?) then (
           var node := sector.value.block;
-          if (graph == (if node.children.Some? then node.children.value else [])) then (
+          if (graph == (if node.children.Some? then node.children.value else [])
+              && id in s.outstandingBlockReads) then (
             s.(cache := s.cache[ref := sector.value.block])
              .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id))
+             .(lru := LruModel.Use(s.lru, ref))
           ) else (
             s
           )
@@ -442,9 +446,15 @@ module ImplModelIO {
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
-      if (graph == (if node.children.Some? then node.children.value else [])) {
+      if (graph == (if node.children.Some? then node.children.value else [])
+          && id in s.outstandingBlockReads) {
         INodeRootEqINodeForEmptyRootBucket(node);
         WeightBucketEmpty();
+
+        LruModel.LruUse(s.lru, ref);
+
+        assert |s'.cache| == |s.cache| + 1;
+        assert |s'.outstandingBlockReads| == |s.outstandingBlockReads| - 1;
 
         assert WFVars(s');
         assert BC.PageInResp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));

@@ -76,6 +76,7 @@ module ImplModelFlush {
 
   lemma flushCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
   requires flush.requires(k, s, parentref, slot, childref, child)
+  requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures
       var s' := flush(k, s, parentref, slot, childref, child);
       && WFVars(s')
