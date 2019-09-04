@@ -822,6 +822,7 @@ module MutableMap {
 
     protected predicate Inv()
       ensures Inv() ==> ReprInv() // make ReprInv transparent
+      ensures Inv() ==> |Contents| == Count as nat
       reads this, this.Repr
     {
       && ReprInv()
