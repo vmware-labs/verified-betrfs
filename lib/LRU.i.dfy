@@ -76,7 +76,7 @@ module LruModel {
   ensures I(Remove(q, x)) == I(q) - {x}
 }
 
-module Lru {
+module MutableLru {
   import opened NativeTypes
   import opened Sequences
   import opened LruModel`Internal
@@ -154,6 +154,8 @@ module Lru {
 
     protected predicate Inv()
     reads this, Repr
+    ensures Inv() ==> this in Repr
+    ensures Inv() ==> WF(Queue)
     {
       && nodemap in Repr
       && nodemap.Repr <= Repr
@@ -184,6 +186,7 @@ module Lru {
     constructor ()
     ensures Inv()
     ensures Queue == Empty()
+    ensures fresh(Repr)
     {
       var m := new MutableMap.ResizingHashMap<Node>(128);
 
@@ -355,6 +358,11 @@ module Lru {
               assert nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]];
             }
           }
+
+          forall i | 0 <= i < |Queue| - 1
+          ensures nodemap.Contents[Queue[i]] == nodemap.Contents[Queue[i+1]].prev
+          {
+          }
         } else {
           Repr := {this} + nodemap.Repr + nodemap.Contents.Values;
           Queue := LruModel.Remove(Queue, x) + [x];
@@ -390,6 +398,8 @@ module Lru {
           }
         }
       }
+
+      LruUse(oldQueue, x);
     }
 
     method Next()

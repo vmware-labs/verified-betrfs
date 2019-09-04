@@ -35,7 +35,7 @@ module {:extern} MainImpl refines Main {
   {
     // TODO this is gross, what can we do about it?
     && (if hs.s.Ready? then (
-        {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable} +
+        {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable, hs.s.lru} +
         (if hs.s.frozenIndirectionTable.Some? then {hs.s.frozenIndirectionTable.value} else {}))
         else {}) <= HeapSet(hs)
     && IS.VariablesReadSet(hs.s) <= HeapSet(hs)
@@ -53,17 +53,29 @@ module {:extern} MainImpl refines Main {
     BBC.InitImpliesInv(Ik(k), I(k, hs));
   }
 
+  lemma ioAndHsNotInReadSet(s: ImplVariables, io: DiskIOHandler, hs: HeapState)
+  requires IS.WVars(s)
+  ensures io !in IS.VariablesReadSet(s)
+  ensures hs !in IS.VariablesReadSet(s)
+  // TODO I think this should just follow from the types of the objects
+  // in the Repr
+
   ////////// Top-level handlers
 
   method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
   returns (id: int)
   {
     var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
     ImplModelSync.pushSyncCorrect(IS.Ic(k), IS.IVars(s));
     var s', id1 := pushSync(k, s);
+    ioAndHsNotInReadSet(s', io, hs);
     id := id1;
     var uiop := UI.PushSyncOp(id);
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
+
+    assert hs !in IS.VariablesReadSet(s');
+
     hs.s := s';
     hs.Repr := IS.VariablesReadSet(s');
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp()); // observe
@@ -73,8 +85,10 @@ module {:extern} MainImpl refines Main {
   returns (success: bool)
   {
     var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
     var s', succ := popSync(k, s, io, id);
     ImplModelSync.popSyncCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), id, IS.IVars(s'), succ, IS.IIO(io));
+    ioAndHsNotInReadSet(s', io, hs);
     success := succ;
     var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -89,8 +103,10 @@ module {:extern} MainImpl refines Main {
   returns (v: Option<MS.Value>)
   {
     var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
     var s', value := query(k, s, io, key);
     ImplModelQuery.queryCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key);
+    ioAndHsNotInReadSet(s', io, hs);
     var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
@@ -105,8 +121,10 @@ module {:extern} MainImpl refines Main {
   returns (success: bool)
   {
     var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
     var s', succ := insert(k, s, io, key, value);
     ImplModelInsert.insertCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key, value, IS.IVars(s'), succ, IS.IIO(io));
+    ioAndHsNotInReadSet(s', io, hs);
     var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
@@ -120,8 +138,10 @@ module {:extern} MainImpl refines Main {
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
     var s' := ImplIO.readResponse(k, s, io);
     ImplModelIO.readResponseCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)));
+    ioAndHsNotInReadSet(s', io, hs);
     var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';
@@ -132,8 +152,10 @@ module {:extern} MainImpl refines Main {
   method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
     var s' := ImplIO.writeResponse(k, s, io);
     ImplModelIO.writeResponseCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)));
+    ioAndHsNotInReadSet(s', io, hs);
     var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.s := s';

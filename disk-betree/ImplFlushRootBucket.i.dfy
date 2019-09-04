@@ -29,6 +29,7 @@ module ImplFlushRootBucket {
   ensures WVars(s')
   ensures IVars(s') == ImplModelFlushRootBucket.flushRootBucket(Ic(k), old(IVars(s)))
   ensures s.ephemeralIndirectionTable == s'.ephemeralIndirectionTable
+  ensures s.lru == s'.lru
   {
     ImplModelFlushRootBucket.reveal_flushRootBucket();
 

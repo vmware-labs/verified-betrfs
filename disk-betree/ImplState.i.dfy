@@ -19,6 +19,7 @@ module {:extern} ImplState {
   import D = AsyncSectorDisk
   import MainDiskIOHandler
   import LruModel
+  import MutableLru
   import opened BucketsLib
 
   import MM = MutableMap
@@ -42,7 +43,7 @@ module {:extern} ImplState {
         outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
         syncReqs: map<int, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
-        lru: LruModel.LruQueue,
+        lru: MutableLru.MutableLruQueue,
         rootBucket: TreeMap,
         rootBucketWeightBound: uint64)
     | Unready(outstandingIndirectionTableRead: Option<D.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
@@ -55,52 +56,58 @@ module {:extern} ImplState {
       {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
       (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {}))
       else {}
+  reads if s.Ready? then {s.lru} else {}
   {
     if s.Ready? then
       s.persistentIndirectionTable.Repr +
       s.ephemeralIndirectionTable.Repr +
-      (if s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {})
+      (if s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}) +
+      s.lru.Repr
     else
       {}
   }
-  predicate VarsReprInv(vars: Variables)
-  reads if vars.Ready? then (
-      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
-      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+  predicate VarsReprInv(s: Variables)
+  reads if s.Ready? then (
+      {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
+      (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {}))
       else {}
-  reads VariablesReadSet(vars)
+  reads if s.Ready? then {s.lru} else {}
+  reads VariablesReadSet(s)
   {
-    match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, _, _, _, _, _, _, _, _) => (
+    (s.Ready? ==> (
         // NOALIAS statically enforced no-aliasing would probably help here
-        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
-        && (frozenIndirectionTable.Some? ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
-        && (frozenIndirectionTable.Some? ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.value.Repr)
-      )
-      case Unready(outstandingIndirectionTableRead, syncReqs) => true
-    }
+        && s.persistentIndirectionTable.Repr !! s.ephemeralIndirectionTable.Repr
+        && (s.frozenIndirectionTable.Some? ==> s.persistentIndirectionTable.Repr !! s.frozenIndirectionTable.value.Repr)
+        && (s.frozenIndirectionTable.Some? ==> s.ephemeralIndirectionTable.Repr !! s.frozenIndirectionTable.value.Repr)
+        && s.persistentIndirectionTable.Repr !! s.lru.Repr
+        && s.ephemeralIndirectionTable.Repr !! s.lru.Repr
+        && (s.frozenIndirectionTable.Some? ==> s.frozenIndirectionTable.value.Repr !! s.lru.Repr)
+    ))
   }
-  predicate WVarsReady(vars: Variables)
-  requires vars.Ready?
-  reads {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
-      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {})
-  reads VariablesReadSet(vars)
+  predicate WVarsReady(s: Variables)
+  requires s.Ready?
+  reads {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
+      (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {})
+  reads if s.Ready? then {s.lru} else {}
+  reads VariablesReadSet(s)
   {
-    && vars.persistentIndirectionTable.Inv()
-    && (vars.frozenIndirectionTable.Some? ==> vars.frozenIndirectionTable.value.Inv())
-    && vars.ephemeralIndirectionTable.Inv()
-    && TTT.TTTree(vars.rootBucket)
+    && s.persistentIndirectionTable.Inv()
+    && (s.frozenIndirectionTable.Some? ==> s.frozenIndirectionTable.value.Inv())
+    && s.ephemeralIndirectionTable.Inv()
+    && TTT.TTTree(s.rootBucket)
+    && s.lru.Inv()
   }
-  predicate WVars(vars: Variables)
-  reads if vars.Ready? then (
-      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
-      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+  predicate WVars(s: Variables)
+  reads if s.Ready? then (
+      {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
+      (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {}))
       else {}
-  reads VariablesReadSet(vars)
+  reads if s.Ready? then {s.lru} else {}
+  reads VariablesReadSet(s)
   {
-    && VarsReprInv(vars)
-    && match vars {
-      case Ready(_, _, _, _, _, _, _, _, _, _, _) => WVarsReady(vars)
+    && VarsReprInv(s)
+    && match s {
+      case Ready(_, _, _, _, _, _, _, _, _, _, _) => WVarsReady(s)
       case Unready(outstandingIndirectionTableRead, syncReqs) => true
     }
   }
@@ -123,13 +130,13 @@ module {:extern} ImplState {
     else
       None
   }
-  function IVars(vars: Variables) : IM.Variables
-  requires WVars(vars)
-  reads VariablesReadSet(vars)
+  function IVars(s: Variables) : IM.Variables
+  requires WVars(s)
+  reads VariablesReadSet(s)
   {
-    match vars {
+    match s {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, rootBucket, rootBucketWeightBound) =>
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, TTT.I(rootBucket), rootBucketWeightBound)
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru.Queue, TTT.I(rootBucket), rootBucketWeightBound)
       case Unready(outstandingIndirectionTableRead, syncReqs) => IM.Unready(outstandingIndirectionTableRead, syncReqs)
     }
   }
@@ -143,26 +150,28 @@ module {:extern} ImplState {
     }
   }
 
-  predicate WFVars(vars: Variables)
-  reads if vars.Ready? then (
-      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
-      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+  predicate WFVars(s: Variables)
+  reads if s.Ready? then (
+      {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
+      (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {}))
       else {}
-  reads VariablesReadSet(vars)
+  reads if s.Ready? then {s.lru} else {}
+  reads VariablesReadSet(s)
   {
-    && WVars(vars)
-    && IM.WFVars(IVars(vars))
+    && WVars(s)
+    && IM.WFVars(IVars(s))
   }
 
-  predicate Inv(k: M.Constants, vars: Variables)
-  reads if vars.Ready? then (
-      {vars.persistentIndirectionTable, vars.ephemeralIndirectionTable} +
-      (if vars.frozenIndirectionTable.Some? then {vars.frozenIndirectionTable.value} else {}))
+  predicate Inv(k: M.Constants, s: Variables)
+  reads if s.Ready? then (
+      {s.persistentIndirectionTable, s.ephemeralIndirectionTable} +
+      (if s.frozenIndirectionTable.Some? then {s.frozenIndirectionTable.value} else {}))
       else {}
-  reads VariablesReadSet(vars)
+  reads if s.Ready? then {s.lru} else {}
+  reads VariablesReadSet(s)
   {
-    && WVars(vars)
-    && IM.Inv(Ic(k), IVars(vars))
+    && WVars(s)
+    && IM.Inv(Ic(k), IVars(s))
   }
 
   function Ic(k: M.Constants) : IM.Constants

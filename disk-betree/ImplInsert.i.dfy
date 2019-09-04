@@ -93,9 +93,11 @@ module ImplInsert {
   returns (s': ImplVariables, success: bool)
   requires io.initialized()
   requires Inv(k, s)
+  requires io !in VariablesReadSet(s)
   ensures WVars(s')
   ensures ImplModelInsert.insert(Ic(k), old(IVars(s)), old(IIO(io)), key, value, IVars(s'), success, IIO(io))
   modifies io
+  modifies if s.Ready? then s.lru.Repr else {}
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
   modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   {

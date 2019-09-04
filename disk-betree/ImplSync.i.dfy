@@ -95,6 +95,8 @@ module ImplSync {
   requires s.outstandingIndirectionTableWrite.None?
   requires s.rootBucket == TTT.EmptyTree
   requires s.frozenIndirectionTable.None?
+  requires io !in VariablesReadSet(s)
+  modifies s.lru.Repr
   ensures WVars(s')
   ensures (IVars(s'), IIO(io)) == ImplModelSync.syncNotFrozen(Ic(k), old(IVars(s)), old(IIO(io)))
   // NOALIAS statically enforced no-aliasing would probably help here
@@ -125,9 +127,12 @@ module ImplSync {
   requires Inv(k, s)
   requires io.initialized()
   requires ref in s.cache
+  requires io !in VariablesReadSet(s)
   ensures WVars(s')
+  ensures s'.Ready?
   ensures ImplModelSync.TryToWriteBlock(Ic(k), old(IVars(s)), old(IIO(io)), ref, IVars(s'), IIO(io))
-  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
   modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   modifies io
@@ -162,6 +167,7 @@ module ImplSync {
   requires s.frozenIndirectionTable.Some?
   requires ref in s.frozenIndirectionTable.value.Contents
   requires s.frozenIndirectionTable.value.Contents[ref].0.None?
+  requires io !in VariablesReadSet(s)
   ensures WVars(s')
   ensures ImplModelSync.syncFoundInFrozen(Ic(k), old(IVars(s)), old(IIO(io)), ref, IVars(s'), IIO(io))
   // NOALIAS statically enforced no-aliasing would probably help here
@@ -185,9 +191,11 @@ module ImplSync {
 
   method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   returns (s': ImplVariables)
+  requires Inv(k, s)
   requires io.initialized()
   modifies io
-  requires Inv(k, s)
+  requires io !in VariablesReadSet(s)
+  modifies if s.Ready? then s.lru.Repr else {}
   ensures WVars(s')
   ensures ImplModelSync.sync(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
   // NOALIAS statically enforced no-aliasing would probably help here
@@ -271,8 +279,10 @@ module ImplSync {
 
   method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
   returns (s': ImplVariables, success: bool)
-  requires io.initialized()
   requires Inv(k, s)
+  requires io.initialized()
+  requires io !in VariablesReadSet(s)
+  modifies if s.Ready? then s.lru.Repr else {}
   modifies io
   ensures WVars(s')
   ensures ImplModelSync.popSync(Ic(k), old(IVars(s)), old(IIO(io)), id, IVars(s'), success, IIO(io))

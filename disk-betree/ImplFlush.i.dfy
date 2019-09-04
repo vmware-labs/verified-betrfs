@@ -43,10 +43,13 @@ module ImplFlush {
   requires s.cache[childref] == child
 
   ensures WVars(s')
+  ensures s'.Ready?
   ensures ImplModelFlush.flush(Ic(k), old(IVars(s)), parentref, slot, childref, child) == IVars(s')
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     if s.frozenIndirectionTable.Some? {
       var lbaGraph := s.frozenIndirectionTable.value.Get(parentref);

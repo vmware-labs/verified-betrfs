@@ -25,10 +25,13 @@ module ImplGrow {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   ensures IS.WVars(s')
+  ensures s'.Ready?
   ensures IVars(s') == ImplModelGrow.grow(Ic(k), old(IVars(s)))
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     ImplModelGrow.reveal_grow();
 

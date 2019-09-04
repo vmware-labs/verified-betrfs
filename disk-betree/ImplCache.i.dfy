@@ -74,11 +74,13 @@ module ImplCache {
   ensures s'.ephemeralIndirectionTable == s.ephemeralIndirectionTable
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
 
   ensures IS.WVars(s')
   ensures IS.IVars(s') == ImplModelCache.write(Ic(k), old(IS.IVars(s)), ref, node)
 
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     ImplModelCache.reveal_write();
 
@@ -86,8 +88,9 @@ module ImplCache {
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
     var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if node.children.Some? then node.children.value else []));
 
-    s' := s.(cache := s.cache[ref := node])
-        .(lru := LruModel.Use(s.lru, ref));
+    assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+    s.lru.Use(ref);
+    s' := s.(cache := s.cache[ref := node]);
   }
 
   method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)
@@ -100,11 +103,13 @@ module ImplCache {
   ensures s'.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
 
   ensures IS.WVars(s')
   ensures (IS.IVars(s'), ref) == ImplModelCache.alloc(Ic(k), old(IS.IVars(s)), node)
 
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     ImplModelCache.reveal_alloc();
     

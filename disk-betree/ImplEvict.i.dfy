@@ -26,10 +26,13 @@ module ImplEvict {
   requires s.Ready?
   requires ref in s.cache
   ensures WVars(s')
+  ensures s'.Ready?
   ensures IVars(s') == ImplModelEvict.Evict(Ic(k), old(IVars(s)), ref)
+  modifies s.lru.Repr
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   {
-    s' := s.(cache := MapRemove1(s.cache, ref))
-     .(lru := LruModel.Remove(s.lru, ref));
+    s.lru.Remove(ref);
+    s' := s.(cache := MapRemove1(s.cache, ref));
   }
 
   method NeedToWrite(s: ImplVariables, ref: BT.G.Reference)
@@ -75,12 +78,16 @@ module ImplEvict {
   requires s.Ready?
   requires io.initialized()
   requires |s.cache| > 0
+  requires io !in VariablesReadSet(s)
   ensures WVars(s')
+  ensures s'.Ready?
   ensures ImplModelEvict.EvictOrDealloc(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies io
   modifies s.ephemeralIndirectionTable.Repr
   modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
+  modifies s.lru.Repr
   {
     var ref := FindDeallocable(s);
     ImplModelDealloc.FindDeallocableCorrect(IVars(s));
@@ -88,7 +95,7 @@ module ImplEvict {
     if ref.Some? {
       s' := Dealloc(k, s, io, ref.value);
     } else {
-      var ref := LruModel.Next(s.lru);
+      var ref := s.lru.Next();
       if ref == BT.G.Root() {
         s' := s;
       } else {

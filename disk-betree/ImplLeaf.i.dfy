@@ -76,10 +76,13 @@ module ImplLeaf {
   requires node.children.None?
   requires ref != BT.G.Root()
   ensures IS.WVars(s')
+  ensures s'.Ready?
   ensures IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, node);
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     ImplModelLeaf.reveal_repivotLeaf();
 

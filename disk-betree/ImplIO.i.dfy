@@ -14,6 +14,8 @@ module ImplIO {
   import IMM = ImplMarshallingModel
   import ImplModelIO
   import BucketsLib
+  import LruModel
+  import MutableLru
   import opened IS = ImplState
   import Native
 
@@ -113,6 +115,8 @@ module ImplIO {
   requires IM.WFSector(IS.ISector(sector))
   requires io.initialized()
   modifies io
+  requires io !in VariablesReadSet(s)
+  ensures WVars(s)
   ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
@@ -150,6 +154,7 @@ module ImplIO {
   requires io.initialized();
   requires s.Unready?
   modifies io
+  requires io !in VariablesReadSet(s)
   ensures IS.WVars(s')
   ensures (IVars(s'), IIO(io)) == ImplModelIO.PageInIndirectionTableReq(Ic(k), old(IVars(s)), old(IIO(io)))
   {
@@ -172,8 +177,11 @@ module ImplIO {
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable)
   requires IS.IIndirectionTable(s.ephemeralIndirectionTable)[ref].0.Some?
   modifies io
+  requires io !in VariablesReadSet(s)
   ensures IS.WVars(s')
+  ensures s'.Ready?
   ensures (IVars(s'), IIO(io)) == ImplModelIO.PageInReq(Ic(k), old(IVars(s)), old(IIO(io)), ref)
+  ensures s'.lru == s.lru
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       s' := s;
@@ -228,7 +236,8 @@ module ImplIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
-      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), TTT.EmptyTree, 0);
+      var lru := new MutableLru.MutableLruQueue();
+      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], lru, TTT.EmptyTree, 0);
     } else {
       s' := s;
       print "giving up; did not get indirectionTable when reading\n";
@@ -240,6 +249,8 @@ module ImplIO {
   requires IS.WVars(s)
   requires io.diskOp().RespReadOp?
   requires s.Ready?
+  requires io !in VariablesReadSet(s)
+  modifies s.lru.Repr
   ensures IS.WVars(s')
   ensures IS.IVars(s') == ImplModelIO.PageInResp(Ic(k), old(IS.IVars(s)), IIO(io))
   {
@@ -269,9 +280,12 @@ module ImplIO {
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
+
+        assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+        s.lru.Use(ref);
+
         s' := s.(cache := s.cache[ref := sector.value.block])
-               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id))
-               .(lru := LruModel.Use(s.lru, ref));
+               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
       } else {
         s' := s;
         print "giving up; block does not match graph\n";
@@ -287,6 +301,8 @@ module ImplIO {
   returns (s': ImplVariables)
   requires io.diskOp().RespReadOp?
   requires IS.WVars(s)
+  requires io !in VariablesReadSet(s)
+  modifies if s.Ready? then s.lru.Repr else {}
   ensures IS.WVars(s')
   ensures IS.IVars(s') == ImplModelIO.readResponse(Ic(k), old(IS.IVars(s)), IIO(io))
   {

@@ -110,10 +110,13 @@ module ImplSplit {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == ref
   ensures WVars(s')
+  ensures s'.Ready?
   ensures IVars(s') == ImplModelSplit.doSplit(Ic(k), old(IVars(s)), parentref, ref, slot);
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     ImplModelSplit.reveal_doSplit();
 

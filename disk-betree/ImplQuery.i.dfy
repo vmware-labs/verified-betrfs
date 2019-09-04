@@ -44,16 +44,16 @@ module ImplQuery {
     }
   }
 
-  method query(k: ImplConstants, s0: ImplVariables, io: DiskIOHandler, key: MS.Key)
+  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
   returns (s': ImplVariables, res: Option<MS.Value>)
   requires io.initialized()
-  requires Inv(k, s0)
+  requires Inv(k, s)
+  requires io !in VariablesReadSet(s)
   modifies io
+  modifies if s.Ready? then s.lru.Repr else {}
   ensures WVars(s')
-  ensures (IVars(s'), res, IIO(io)) == ImplModelQuery.query(Ic(k), old(IVars(s0)), old(IIO(io)), key)
+  ensures (IVars(s'), res, IIO(io)) == ImplModelQuery.query(Ic(k), old(IVars(s)), old(IIO(io)), key)
   {
-    var s := s0;
-
     ImplModelQuery.reveal_query();
     ImplModelQuery.reveal_queryIterate();
 
@@ -77,9 +77,11 @@ module ImplQuery {
       invariant s.Ready?
       invariant ref in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
       invariant io.initialized()
-      invariant ImplModelQuery.query(Ic(k), old(IVars(s0)), old(IIO(io)), key)
+      invariant ImplModelQuery.query(Ic(k), old(IVars(s)), old(IIO(io)), key)
              == ImplModelQuery.queryIterate(Ic(k), IVars(s), key, msg, ref, IIO(io), counter)
       invariant counter as int >= 0
+      invariant io !in VariablesReadSet(s)
+      invariant forall r | r in s.lru.Repr :: r in old(s.lru.Repr) || fresh(r)
       decreases counter as int
       {
         if counter == 0 {
@@ -101,10 +103,10 @@ module ImplQuery {
         } else {
           var node := s.cache[ref];
 
-          var s1 := s.(lru := LruModel.Use(s.lru, ref));
-          LruModel.LruUse(s.lru, ref);
-          assert IM.IVars(IVars(s1)) == IM.IVars(IVars(s));
-          s := s1;
+          ghost var oldIVars := IVars(s);
+          LruModel.LruUse(s.lru.Queue, ref);
+          s.lru.Use(ref);
+          assert IM.IVars(oldIVars) == IM.IVars(IVars(s));
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var bucket := node.buckets[r];

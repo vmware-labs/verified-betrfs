@@ -98,6 +98,8 @@ module ImplFlushPolicy {
   ensures s'.ephemeralIndirectionTable == s.ephemeralIndirectionTable
   ensures s'.frozenIndirectionTable == s.frozenIndirectionTable
   ensures (IVars(s'), action) == ImplModelFlushPolicy.getActionToFlush(Ic(k), old(IVars(s)), stack, slots)
+  modifies s.lru.Repr
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   {
     ImplModelFlushPolicy.reveal_getActionToFlush();
 
@@ -119,21 +121,21 @@ module ImplFlushPolicy {
           if childref in s.cache {
             var child := s.cache[childref];
 
-            var s1 := s.(lru := LruModel.Use(s.lru, childref));
-            LruModel.LruUse(s.lru, childref);
+            s.lru.Use(childref);
+            LruModel.LruUse(old(s.lru.Queue), childref);
 
             var childTotalWeight: uint64 := KMTable.computeWeightKMTSeq(child.buckets);
 
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
-              if TotalCacheSize(s1) <= MaxCacheSize() - 1 {
+              if TotalCacheSize(s) <= MaxCacheSize() - 1 {
                 action := ImplModelFlushPolicy.ActionFlush(ref, slot);
-                s' := s1;
+                s' := s;
               } else {
                 action := ImplModelFlushPolicy.ActionEvict;
-                s' := s1;
+                s' := s;
               }
             } else {
-              s', action := getActionToFlush(k, s1, stack + [childref], slots + [slot]);
+              s', action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
             }
           } else {
             if TotalCacheSize(s) <= MaxCacheSize() - 1 {
@@ -158,21 +160,25 @@ module ImplFlushPolicy {
   requires io.initialized()
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires io !in VariablesReadSet(s)
   modifies io
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
   ensures WVars(s')
+  ensures s'.Ready?
   ensures ImplModelFlushPolicy.runFlushPolicy(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   {
     ImplModelFlushPolicy.reveal_runFlushPolicy();
 
-    var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
-    LruModel.LruUse(s.lru, BT.G.Root());
-    assert IM.IVars(IVars(s0)) == IM.IVars(IVars(s));
+    LruModel.LruUse(s.lru.Queue, BT.G.Root());
+    s.lru.Use(BT.G.Root());
+    assert IM.IVars(IVars(s)) == old(IM.IVars(IVars(s)));
 
-    var s1, action := getActionToFlush(k, s0, [BT.G.Root()], []);
-    ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), IVars(s0), [BT.G.Root()], []);
+    ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), IVars(s), [BT.G.Root()], []);
+    var s1, action := getActionToFlush(k, s, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => {

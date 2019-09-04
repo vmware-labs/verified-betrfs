@@ -46,15 +46,19 @@ module ImplDealloc {
   requires Inv(k, s)
   requires io.initialized()
   requires ImplModelDealloc.deallocable(IVars(s), ref)
+  requires io !in VariablesReadSet(s)
   modifies io
   ensures WVars(s')
+  ensures s'.Ready?
   ensures (IVars(s'), IIO(io)) == ImplModelDealloc.Dealloc(Ic(k), old(IVars(s)), old(IIO(io)), ref);
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures s'.Ready?
   ensures s'.ephemeralIndirectionTable.Repr == s.ephemeralIndirectionTable.Repr
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
+  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.lru.Repr
   {
     ImplModelDealloc.reveal_Dealloc();
 
@@ -78,9 +82,9 @@ module ImplDealloc {
 
     var _ := s.ephemeralIndirectionTable.Remove(ref);
 
+    s.lru.Remove(ref);
     s' := s
-      .(cache := MapRemove(s.cache, {ref}))
-      .(lru := LruModel.Remove(s.lru, ref));
+      .(cache := MapRemove(s.cache, {ref}));
 
     assume s'.ephemeralIndirectionTable.Contents
         == MapRemove(old(s'.ephemeralIndirectionTable.Contents), {ref});
