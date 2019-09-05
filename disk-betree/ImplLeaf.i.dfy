@@ -67,31 +67,25 @@ module ImplLeaf {
   }
 
   method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
-  returns (s': ImplVariables)
   requires Inv(k, s)
-  requires s.Ready?
+  requires s.ready
   requires ref in s.ephemeralIndirectionTable.Contents
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
-  ensures IS.WVars(s')
-  ensures s'.Ready?
-  ensures IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, node);
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.lru.Repr
+  modifies s.Repr()
+  ensures s.ready
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelLeaf.repivotLeaf(Ic(k), old(s.I()), ref, node);
   {
     ImplModelLeaf.reveal_repivotLeaf();
 
-    if s.frozenIndirectionTable.Some? {
-      var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
+    if s.frozenIndirectionTable != null {
+      var lbaGraph := s.frozenIndirectionTable.Get(ref);
       if lbaGraph.Some? {
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          s' := s;
           print "giving up; flush can't run because frozen isn't written";
           return;
         }
@@ -107,7 +101,6 @@ module ImplLeaf {
     KMTable.WFImpliesWFBucket(joined);
     WFSplitBucketOnPivots(KMTable.I(joined), pivots);
 
-    s' := write(k, s, ref, newnode);
-  assert IVars(s') == ImplModelLeaf.repivotLeaf(Ic(k), old(IVars(s)), ref, node);
+    write(k, s, ref, newnode);
   }
 }

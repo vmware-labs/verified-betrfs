@@ -22,14 +22,12 @@ module ImplFlushRootBucket {
   import Keyspace = MS.Keyspace
 
   method {:fuel BC.GraphClosed,0} flushRootBucket(k: ImplConstants, s: ImplVariables)
-  returns (s': ImplVariables)
   requires Inv(k, s)
-  requires s.Ready?
+  requires s.ready
   requires BT.G.Root() in s.cache
-  ensures WVars(s')
-  ensures IVars(s') == ImplModelFlushRootBucket.flushRootBucket(Ic(k), old(IVars(s)))
-  ensures s.ephemeralIndirectionTable == s'.ephemeralIndirectionTable
-  ensures s.lru == s'.lru
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelFlushRootBucket.flushRootBucket(Ic(k), old(s.I()))
   {
     ImplModelFlushRootBucket.reveal_flushRootBucket();
 
@@ -47,9 +45,9 @@ module ImplFlushRootBucket {
 
     var newroot := oldroot.(buckets := newbuckets);
 
-    s' := s.(rootBucket := TTT.EmptyTree)
-           .(rootBucketWeightBound := 0)
-        .(cache := s.cache[BT.G.Root() := newroot]);
+    s.rootBucket := TTT.EmptyTree;
+    s.rootBucketWeightBound := 0;
+    s.cache := s.cache[BT.G.Root() := newroot];
   }
 
 }

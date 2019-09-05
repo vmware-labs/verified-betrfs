@@ -52,14 +52,14 @@ module ImplSync {
   }
 
   method FindRefInFrozenWithNoLoc(s: ImplVariables) returns (ref: Option<Reference>)
-  requires WFVars(s)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
-  ensures ref == ImplModelSync.FindRefInFrozenWithNoLoc(IVars(s))
+  requires s.WF()
+  requires s.ready
+  requires s.frozenIndirectionTable != null
+  ensures ref == ImplModelSync.FindRefInFrozenWithNoLoc(s.I())
   {
     assume false;
     // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var frozenTable := s.frozenIndirectionTable.value.ToMap();
+    var frozenTable := s.frozenIndirectionTable.ToMap();
     var frozenRefs := SetToSeq(frozenTable.Keys);
 
     assume |frozenRefs| < 0x1_0000_0000_0000_0000;
@@ -68,11 +68,11 @@ module ImplSync {
     while i as int < |frozenRefs|
     invariant i as int <= |frozenRefs|
     invariant forall k : nat | k < i as nat :: (
-        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).graph
-        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).locs)
+        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
+        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs)
     {
       var ref := frozenRefs[i];
-      var lbaGraph := s.frozenIndirectionTable.value.Get(ref);
+      var lbaGraph := s.frozenIndirectionTable.Get(ref);
       assert lbaGraph.Some?;
       var (lba, _) := lbaGraph.value;
       if lba.None? {
@@ -80,169 +80,145 @@ module ImplSync {
       }
       i := i + 1;
     }
-    assert forall r | r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).graph
-        :: r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).locs;
+    assert forall r | r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
+        :: r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
     return None;
   }
 
   method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
   requires io.initialized()
   modifies io
   requires Inv(k, s)
-  requires s.Ready?
+  requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
   requires s.rootBucket == TTT.EmptyTree
-  requires s.frozenIndirectionTable.None?
-  requires io !in VariablesReadSet(s)
-  modifies s.lru.Repr
-  ensures WVars(s')
-  ensures (IVars(s'), IIO(io)) == ImplModelSync.syncNotFrozen(Ic(k), old(IVars(s)), old(IIO(io)))
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
+  requires s.frozenIndirectionTable == null
+  requires io !in s.Repr()
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures (s.I(), IIO(io)) == ImplModelSync.syncNotFrozen(Ic(k), old(s.I()), old(IIO(io)))
   {
     var ephemeralTable := s.ephemeralIndirectionTable.ToMap();
     var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
     var foundDeallocable := FindDeallocable(s);
-    ImplModelDealloc.FindDeallocableCorrect(IVars(s));
+    ImplModelDealloc.FindDeallocableCorrect(s.I());
     if foundDeallocable.Some? {
-      s' := Dealloc(k, s, io, foundDeallocable.value);
+      Dealloc(k, s, io, foundDeallocable.value);
       return;
     }
 
     var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
 
-    s' := s
-        .(frozenIndirectionTable := Some(clonedEphemeralIndirectionTable))
-        .(syncReqs := BC.syncReqs3to2(s.syncReqs));
+    s.frozenIndirectionTable := clonedEphemeralIndirectionTable;
+    s.syncReqs := BC.syncReqs3to2(s.syncReqs);
 
     return;
   }
 
   method TryToWriteBlock(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  returns (s': ImplVariables)
-  requires s.Ready?
+  requires s.ready
   requires Inv(k, s)
   requires io.initialized()
   requires ref in s.cache
-  requires io !in VariablesReadSet(s)
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures ImplModelSync.TryToWriteBlock(Ic(k), old(IVars(s)), old(IIO(io)), ref, IVars(s'), IIO(io))
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
+  requires io !in s.Repr()
+  modifies s.Repr()
   modifies io
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures ImplModelSync.TryToWriteBlock(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]));
 
     if (id.Some?) {
       AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value);
-      if (s.frozenIndirectionTable.Some?) {
-        AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc.value);
+      if (s.frozenIndirectionTable != null) {
+        AssignRefToLoc(s.frozenIndirectionTable, ref, loc.value);
       }
-      s' := s
-        .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)]);
+      s.outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)];
     } else {
-      s' := s;
       print "sync: giving up; write req failed\n";
     }
 
-    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(IVars(s)), ISector(SectorBlock(s.cache[ref])), id, loc, IIO(io));
-    assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(IVars(s)), ref, id, loc, IVars(s'));
+    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), ISector(SectorBlock(s.cache[ref])), id, loc, IIO(io));
+    assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
   }
 
   // TODO fix the name of this method
   method {:fuel BC.GraphClosed,0} syncFoundInFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: Reference)
-  returns (s': ImplVariables)
   requires io.initialized()
-  modifies io
   requires Inv(k, s)
-  requires s.Ready?
+  requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
   requires s.rootBucket == TTT.EmptyTree
-  requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value.Contents
-  requires s.frozenIndirectionTable.value.Contents[ref].0.None?
-  requires io !in VariablesReadSet(s)
-  ensures WVars(s')
-  ensures ImplModelSync.syncFoundInFrozen(Ic(k), old(IVars(s)), old(IIO(io)), ref, IVars(s'), IIO(io))
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  modifies if s.Ready? then s.frozenIndirectionTable.value.Repr else {}
+  requires s.frozenIndirectionTable != null
+  requires ref in s.frozenIndirectionTable.Contents
+  requires s.frozenIndirectionTable.Contents[ref].0.None?
+  requires io !in s.Repr()
+  modifies io
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures ImplModelSync.syncFoundInFrozen(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    assert ref in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).graph;
-    assert ref !in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable.value)).locs;
+    assert ref in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
+    assert ref !in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
 
     var ephemeralRef := s.ephemeralIndirectionTable.Get(ref);
     if ephemeralRef.Some? && ephemeralRef.value.0.Some? {
       // TODO we should be able to prove this is impossible as well
-      s' := s;
       print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
       return;
     }
 
-    s' := TryToWriteBlock(k, s, io, ref);
+    TryToWriteBlock(k, s, io, ref);
   }
 
   method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
   requires Inv(k, s)
   requires io.initialized()
+  requires io !in s.Repr()
   modifies io
-  requires io !in VariablesReadSet(s)
-  modifies if s.Ready? then s.lru.Repr else {}
-  ensures WVars(s')
-  ensures ImplModelSync.sync(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures ImplModelSync.sync(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     ImplModelSync.reveal_sync();
 
-    if (s.Unready?) {
+    if (!s.ready) {
       // TODO we could just do nothing here instead
-      s' := PageInIndirectionTableReq(k, s, io);
+      PageInIndirectionTableReq(k, s, io);
       return;
     }
 
     if (s.outstandingIndirectionTableWrite.Some?) {
-      s' := s;
       print "sync: giving up; frozen table is currently being written\n";
       return;
     }
 
     if (s.rootBucket != TTT.EmptyTree) {
-      s' := flushRootBucket(k, s);
+      flushRootBucket(k, s);
       return;
     }
 
-    if (s.frozenIndirectionTable.None?) {
-      s' := syncNotFrozen(k, s, io);
+    if (s.frozenIndirectionTable == null) {
+      syncNotFrozen(k, s, io);
       return;
     }
     var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-    ImplModelSync.FindRefInFrozenWithNoLocCorrect(IVars(s));
+    ImplModelSync.FindRefInFrozenWithNoLocCorrect(s.I());
 
     if foundInFrozen.Some? {
-      s' := syncFoundInFrozen(k, s, io, foundInFrozen.value);
+      syncFoundInFrozen(k, s, io, foundInFrozen.value);
       return;
     } else if (s.outstandingBlockWrites != map[]) {
-      s' := s;
       print "sync: giving up; blocks are still being written\n";
       return;
     } else {
-      var id := RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value));
+      var id := RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable));
       if (id.Some?) {
-        s' := s.(outstandingIndirectionTableWrite := id);
+        s.outstandingIndirectionTableWrite := id;
         return;
       } else {
-        s' := s;
         print "sync: giving up; write back indirection table failed (no id)\n";
         return;
       }
@@ -266,37 +242,34 @@ module ImplSync {
   }
 
   method pushSync(k: ImplConstants, s: ImplVariables)
-  returns (s': ImplVariables, id: int)
+  returns (id: int)
   requires Inv(k, s)
-  ensures WVars(s')
-  ensures (IVars(s'), id) == ImplModelSync.pushSync(Ic(k), old(IVars(s)))
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures (s.I(), id) == ImplModelSync.pushSync(Ic(k), old(s.I()))
   {
     id := freeId(s.syncReqs);
-    s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
+    s.syncReqs := s.syncReqs[id := BC.State3];
   }
 
   // == popSync ==
 
   method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
-  returns (s': ImplVariables, success: bool)
+  returns (success: bool)
   requires Inv(k, s)
   requires io.initialized()
-  requires io !in VariablesReadSet(s)
-  modifies if s.Ready? then s.lru.Repr else {}
+  requires io !in s.Repr()
   modifies io
-  ensures WVars(s')
-  ensures ImplModelSync.popSync(Ic(k), old(IVars(s)), old(IIO(io)), id, IVars(s'), success, IIO(io))
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures s.Ready? ==> forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures ImplModelSync.popSync(Ic(k), old(s.I()), old(IIO(io)), id, s.I(), success, IIO(io))
   {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
-      s' := s.(syncReqs := MapRemove1(s.syncReqs, id));
+      s.syncReqs := MapRemove1(s.syncReqs, id);
     } else {
       success := false;
-      s' := sync(k, s, io);
+      sync(k, s, io);
     }
   }
 }

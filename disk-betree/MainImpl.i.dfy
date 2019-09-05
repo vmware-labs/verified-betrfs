@@ -34,29 +34,31 @@ module {:extern} MainImpl refines Main {
   predicate Inv(k: Constants, hs: HeapState)
   {
     // TODO this is gross, what can we do about it?
-    && (if hs.s.Ready? then (
+    && hs.s in HeapSet(hs)
+    && (
         {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable, hs.s.lru} +
-        (if hs.s.frozenIndirectionTable.Some? then {hs.s.frozenIndirectionTable.value} else {}))
-        else {}) <= HeapSet(hs)
-    && IS.VariablesReadSet(hs.s) <= HeapSet(hs)
+        (if hs.s.frozenIndirectionTable != null then {hs.s.frozenIndirectionTable} else {})
+       ) <= HeapSet(hs)
+    && hs.s.Repr() <= HeapSet(hs)
     && IS.Inv(k, hs.s)
   }
 
-  function I(k: Constants, hs: HeapState) : ADM.M.Variables { IM.IVars(IS.IVars(hs.s)) }
+  function I(k: Constants, hs: HeapState) : ADM.M.Variables { IM.IVars(hs.s.I()) }
 
   method InitState() returns (k: Constants, hs: HeapState)
   {
     k := BC.Constants();
-    var s := IS.Unready(None, map[]);
+    var s := new Variables();
     hs := new HeapState(s, {});
-
+    hs.Repr := s.Repr() + {s};
+    assert Inv(k, hs);
     BBC.InitImpliesInv(Ik(k), I(k, hs));
   }
 
   lemma ioAndHsNotInReadSet(s: ImplVariables, io: DiskIOHandler, hs: HeapState)
-  requires IS.WVars(s)
-  ensures io !in IS.VariablesReadSet(s)
-  ensures hs !in IS.VariablesReadSet(s)
+  requires s.W()
+  ensures io !in s.Repr()
+  ensures hs !in s.Repr()
   // TODO I think this should just follow from the types of the objects
   // in the Repr
 
@@ -67,17 +69,13 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    ImplModelSync.pushSyncCorrect(IS.Ic(k), IS.IVars(s));
-    var s', id1 := pushSync(k, s);
-    ioAndHsNotInReadSet(s', io, hs);
+    ImplModelSync.pushSyncCorrect(IS.Ic(k), s.I());
+    var id1 := pushSync(k, s);
+    ioAndHsNotInReadSet(s, io, hs);
     id := id1;
     var uiop := UI.PushSyncOp(id);
-    BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
-
-    assert hs !in IS.VariablesReadSet(s');
-
-    hs.s := s';
-    hs.Repr := IS.VariablesReadSet(s');
+    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp()); // observe
   }
 
@@ -86,14 +84,13 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var s', succ := popSync(k, s, io, id);
-    ImplModelSync.popSyncCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), id, IS.IVars(s'), succ, IS.IIO(io));
-    ioAndHsNotInReadSet(s', io, hs);
+    var succ := popSync(k, s, io, id);
+    ImplModelSync.popSyncCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), id, s.I(), succ, IS.IIO(io));
+    ioAndHsNotInReadSet(s, io, hs);
     success := succ;
     var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    hs.Repr := IS.VariablesReadSet(s');
+    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
         if success then UI.PopSyncOp(id) else UI.NoOp,
         io.diskOp());
@@ -104,13 +101,12 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var s', value := query(k, s, io, key);
-    ImplModelQuery.queryCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key);
-    ioAndHsNotInReadSet(s', io, hs);
+    var value := query(k, s, io, key);
+    ImplModelQuery.queryCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key);
+    ioAndHsNotInReadSet(s, io, hs);
     var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    hs.Repr := IS.VariablesReadSet(s');
+    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
     v := value;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
         if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
@@ -122,13 +118,12 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var s', succ := insert(k, s, io, key, value);
-    ImplModelInsert.insertCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)), key, value, IS.IVars(s'), succ, IS.IIO(io));
-    ioAndHsNotInReadSet(s', io, hs);
+    var succ := insert(k, s, io, key, value);
+    ImplModelInsert.insertCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key, value, s.I(), succ, IS.IIO(io));
+    ioAndHsNotInReadSet(s, io, hs);
     var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    hs.Repr := IS.VariablesReadSet(s');
+    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
     success := succ;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
         if success then UI.PutOp(key, value) else UI.NoOp,
@@ -139,13 +134,12 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var s' := ImplIO.readResponse(k, s, io);
-    ImplModelIO.readResponseCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)));
-    ioAndHsNotInReadSet(s', io, hs);
+    ImplIO.readResponse(k, s, io);
+    ImplModelIO.readResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
+    ioAndHsNotInReadSet(s, io, hs);
     var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    hs.Repr := IS.VariablesReadSet(s');
+    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
 
@@ -153,13 +147,12 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var s' := ImplIO.writeResponse(k, s, io);
-    ImplModelIO.writeResponseCorrect(IS.Ic(k), old(IS.IVars(s)), old(IS.IIO(io)));
-    ioAndHsNotInReadSet(s', io, hs);
+    ImplIO.writeResponse(k, s, io);
+    ImplModelIO.writeResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
+    ioAndHsNotInReadSet(s, io, hs);
     var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(IS.IVars(s))), IM.IVars(IS.IVars(s')), uiop, ADM.M.IDiskOp(io.diskOp()));
-    hs.s := s';
-    hs.Repr := IS.VariablesReadSet(s');
+    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
 }

@@ -50,24 +50,23 @@ module ImplInsert {
   }
 
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
-  returns (s': ImplVariables, success: bool)
+  returns (success: bool)
   requires Inv(k, s)
-  requires s.Ready?
+  requires s.ready
   requires BT.G.Root() in s.cache
-  ensures WVars(s')
-  ensures (IVars(s'), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(IVars(s)), key, value)
-  modifies s.ephemeralIndirectionTable.Repr
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures (s.I(), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(s.I()), key, value)
   {
     ImplModelInsert.reveal_InsertKeyValue();
 
-    if s.frozenIndirectionTable.Some? {
-      var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.Get(BT.G.Root());
+    if s.frozenIndirectionTable != null {
+      var rootInFrozenLbaGraph := s.frozenIndirectionTable.Get(BT.G.Root());
       if (
-        && (s.frozenIndirectionTable.Some? && rootInFrozenLbaGraph.Some?)
+        && rootInFrozenLbaGraph.Some?
         && rootInFrozenLbaGraph.value.0.None?
       ) {
         // TODO write out the root here instead of giving up
-        s' := s;
         success := false;
         print "giving up; can't dirty root when frozen is not written yet\n";
         return;
@@ -84,38 +83,35 @@ module ImplInsert {
 
     var newW := s.rootBucketWeightBound + WeightKeyUint64(key) + WeightMessageUint64(msg);
 
-    s' := s.(rootBucket := newRootBucket)
-          .(rootBucketWeightBound := newW);
+    s.rootBucket := newRootBucket;
+    s.rootBucketWeightBound := newW;
     success := true;
   }
 
   method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
-  returns (s': ImplVariables, success: bool)
+  returns (success: bool)
   requires io.initialized()
   requires Inv(k, s)
-  requires io !in VariablesReadSet(s)
-  ensures WVars(s')
-  ensures ImplModelInsert.insert(Ic(k), old(IVars(s)), old(IIO(io)), key, value, IVars(s'), success, IIO(io))
+  requires io !in s.Repr()
+  modifies s.Repr()
   modifies io
-  modifies if s.Ready? then s.lru.Repr else {}
-  modifies if s.Ready? then s.ephemeralIndirectionTable.Repr else {}
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
+  ensures WellUpdated(s)
+  ensures ImplModelInsert.insert(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), success, IIO(io))
   {
     ImplModelInsert.reveal_insert();
 
-    if (s.Unready?) {
-      s' := PageInIndirectionTableReq(k, s, io);
+    if (!s.ready) {
+      PageInIndirectionTableReq(k, s, io);
       success := false;
       return;
     }
 
     if (BT.G.Root() !in s.cache) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
-        s' := PageInReq(k, s, io, BT.G.Root());
+        PageInReq(k, s, io, BT.G.Root());
         success := false;
       } else {
         print "insert: root not in cache, but cache is full\n";
-        s' := s;
         success := false;
       }
       return;
@@ -129,9 +125,9 @@ module ImplInsert {
         s.rootBucketWeightBound +
         weightSeq
         <= MaxTotalBucketWeight() as uint64 {
-      s', success := InsertKeyValue(k, s, key, value);
+      success := InsertKeyValue(k, s, key, value);
     } else {
-      s' := runFlushPolicy(k, s, io);
+      runFlushPolicy(k, s, io);
       success := false;
     }
   }

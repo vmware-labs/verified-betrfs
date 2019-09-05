@@ -41,10 +41,10 @@ module ImplIO {
     // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(s: ImplVariables, len: uint64)
   returns (loc : Option<BC.Location>)
-  requires s.Ready?
-  requires IS.WFVars(s)
+  requires s.ready
+  requires s.WF()
   requires len <= LBAType.BlockSize()
-  ensures loc == ImplModelIO.getFreeLoc(IS.IVars(s), len)
+  ensures loc == ImplModelIO.getFreeLoc(s.I(), len)
   {
     Native.BenchmarkingUtil.start();
 
@@ -52,16 +52,16 @@ module ImplIO {
     var tryOffset:uint64 := 0;
     while true
         invariant tryOffset as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
-        invariant ImplModelIO.getFreeLoc(IS.IVars(s), len)
-               == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset)
+        invariant ImplModelIO.getFreeLoc(s.I(), len)
+               == ImplModelIO.getFreeLocIterate(s.I(), len, tryOffset)
         decreases 0x1_0000_0000_0000_0000 - tryOffset as int
     {
       var addr : uint64 := tryOffset * LBAType.BlockSize();
       var persistentUsed := addrUsedInIndirectionTable(addr, s.persistentIndirectionTable);
       var ephemeralUsed := addrUsedInIndirectionTable(addr, s.ephemeralIndirectionTable);
       var frozenUsed := false;
-      if s.frozenIndirectionTable.Some? {
-        frozenUsed := addrUsedInIndirectionTable(addr, s.frozenIndirectionTable.value);
+      if s.frozenIndirectionTable != null {
+        frozenUsed := addrUsedInIndirectionTable(addr, s.frozenIndirectionTable);
       }
       var outstandingUsed := !(forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr);
       if (
@@ -72,7 +72,7 @@ module ImplIO {
           && !outstandingUsed
         ) {
         var result := Some(LBAType.Location(addr, len));
-        assert result == ImplModelIO.getFreeLocIterate(IS.IVars(s), len, tryOffset);
+        assert result == ImplModelIO.getFreeLocIterate(s.I(), len, tryOffset);
 
         Native.BenchmarkingUtil.end();
         return result;
@@ -109,15 +109,16 @@ module ImplIO {
 
   method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: IS.Sector)
   returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
-  requires IS.WFVars(s)
-  requires s.Ready?
+  requires s.WF()
+  requires s.ready
   requires IS.WFSector(sector)
   requires IM.WFSector(IS.ISector(sector))
   requires io.initialized()
+  requires io !in s.Repr()
   modifies io
-  requires io !in VariablesReadSet(s)
-  ensures WVars(s)
-  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), IS.IVars(s), ISector(sector), id, loc, IIO(io))
+  ensures s.W()
+  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), ISector(sector), id, loc, IIO(io))
+  ensures old(s.I()) == s.I();
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
   {
@@ -149,49 +150,46 @@ module ImplIO {
   }
 
   method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
-  requires IS.WFVars(s)
+  requires s.WF()
   requires io.initialized();
-  requires s.Unready?
+  requires !s.ready
+  requires io !in s.Repr()
   modifies io
-  requires io !in VariablesReadSet(s)
-  ensures IS.WVars(s')
-  ensures (IVars(s'), IIO(io)) == ImplModelIO.PageInIndirectionTableReq(Ic(k), old(IVars(s)), old(IIO(io)))
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures (s.I(), IIO(io)) == ImplModelIO.PageInIndirectionTableReq(Ic(k), old(s.I()), old(IIO(io)))
   {
     ImplModelIO.reveal_PageInIndirectionTableReq();
 
     if (s.outstandingIndirectionTableRead.None?) {
       var id := RequestRead(io, BC.IndirectionTableLocation());
-      s' := IS.Unready(Some(id), s.syncReqs);
+      s.outstandingIndirectionTableRead := Some(id);
     } else {
-      s' := s;
       print "PageInIndirectionTableReq: request already out\n";
     }
   }
 
   method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
-  returns (s': ImplVariables)
   requires io.initialized();
-  requires s.Ready?
-  requires IS.WFVars(s)
+  requires s.ready
+  requires s.WF()
   requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable)
   requires IS.IIndirectionTable(s.ephemeralIndirectionTable)[ref].0.Some?
+  requires io !in s.Repr()
   modifies io
-  requires io !in VariablesReadSet(s)
-  ensures IS.WVars(s')
-  ensures s'.Ready?
-  ensures (IVars(s'), IIO(io)) == ImplModelIO.PageInReq(Ic(k), old(IVars(s)), old(IIO(io)), ref)
-  ensures s'.lru == s.lru
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures (s.I(), IIO(io)) == ImplModelIO.PageInReq(Ic(k), old(s.I()), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
-      s' := s;
       print "giving up; already an outstanding read for this ref\n";
     } else {
       var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
       assert lbaGraph.Some?;
       var (lba, _) := lbaGraph.value;
       var id := RequestRead(io, lba.value);
-      s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+      s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
     }
   }
 
@@ -225,39 +223,47 @@ module ImplIO {
   }
 
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
-  requires IS.WVars(s)
+  requires s.W()
   requires io.diskOp().RespReadOp?
-  requires s.Unready?
-  ensures IS.WVars(s')
-  ensures IS.IVars(s') == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(IS.IVars(s)), IIO(io))
+  requires !s.ready
+  requires io !in s.Repr()
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(s.I()), IIO(io))
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
-      var ephemeralIndirectionTable := sector.value.indirectionTable.Clone();
-      var lru := new MutableLru.MutableLruQueue();
-      s' := IS.Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], lru, TTT.EmptyTree, 0);
+      var ephemeralIndirectionTable := sector.value.indirectionTable.Clone(); // TODO one of these clones is not necessary, we just need to shhow that sector.value.indirectionTable is fresh
+
+      s.ready := true;
+      s.persistentIndirectionTable := persistentIndirectionTable;
+      s.frozenIndirectionTable := null;
+      s.ephemeralIndirectionTable := ephemeralIndirectionTable;
+      s.outstandingIndirectionTableWrite := None;
+      s.outstandingBlockWrites := map[];
+      s.outstandingBlockReads := map[];
+      s.cache := map[];
+      s.lru := new MutableLru.MutableLruQueue();
+      s.rootBucket := TTT.EmptyTree;
+      s.rootBucketWeightBound := 0;
     } else {
-      s' := s;
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
 
   method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
-  requires IS.WVars(s)
+  requires s.W()
   requires io.diskOp().RespReadOp?
-  requires s.Ready?
-  requires io !in VariablesReadSet(s)
-  modifies s.lru.Repr
-  ensures IS.WVars(s')
-  ensures IS.IVars(s') == ImplModelIO.PageInResp(Ic(k), old(IS.IVars(s)), IIO(io))
+  requires s.ready
+  requires io !in s.Repr()
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io))
   {
     var id, sector := ReadSector(io);
 
     if (id !in s.outstandingBlockReads) {
-      s' := s;
       print "PageInResp: unrecognized id from Read\n";
       return;
     }
@@ -269,7 +275,6 @@ module ImplIO {
     
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
-      s' := s;
       print "PageInResp: ref !in lbas or ref in s.cache\n";
       return;
     }
@@ -284,54 +289,51 @@ module ImplIO {
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
         s.lru.Use(ref);
 
-        s' := s.(cache := s.cache[ref := sector.value.block])
-               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id));
+        s.cache := s.cache[ref := sector.value.block];
+        s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
       } else {
-        s' := s;
         print "giving up; block does not match graph\n";
       }
     } else {
-      s' := s;
       print "giving up; block read in was not block\n";
     }
   }
 
 
   method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
   requires io.diskOp().RespReadOp?
-  requires IS.WVars(s)
-  requires io !in VariablesReadSet(s)
-  modifies if s.Ready? then s.lru.Repr else {}
-  ensures IS.WVars(s')
-  ensures IS.IVars(s') == ImplModelIO.readResponse(Ic(k), old(IS.IVars(s)), IIO(io))
+  requires s.W()
+  requires io !in s.Repr()
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelIO.readResponse(Ic(k), old(s.I()), IIO(io))
   {
-    if (s.Unready?) {
-      s' := PageInIndirectionTableResp(k, s, io);
+    if (!s.ready) {
+      PageInIndirectionTableResp(k, s, io);
     } else {
-      s' := PageInResp(k, s, io);
+      PageInResp(k, s, io);
     }
   }
 
   // == writeResponse ==
 
   method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
   requires io.diskOp().RespWriteOp?
   requires IS.Inv(k, s)
-  ensures IS.WVars(s')
-  ensures IS.IVars(s') == ImplModelIO.writeResponse(Ic(k), old(IS.IVars(s)), IIO(io))
+  requires io !in s.Repr()
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelIO.writeResponse(Ic(k), old(s.I()), IIO(io))
   {
     var id := io.getWriteResult();
-    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
-      s' := s.(outstandingIndirectionTableWrite := None)
-             .(frozenIndirectionTable := None)
-             .(persistentIndirectionTable := s.frozenIndirectionTable.value)
-             .(syncReqs := BC.syncReqs2to1(s.syncReqs));
-    } else if (s.Ready? && id in s.outstandingBlockWrites) {
-      s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id));
+    if (s.ready && s.outstandingIndirectionTableWrite == Some(id)) {
+      s.outstandingIndirectionTableWrite := None;
+      s.persistentIndirectionTable := s.frozenIndirectionTable;
+      s.frozenIndirectionTable := null;
+      s.syncReqs := BC.syncReqs2to1(s.syncReqs);
+    } else if (s.ready && id in s.outstandingBlockWrites) {
+      s.outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id);
     } else {
-      s' := s;
     }
   }
 }

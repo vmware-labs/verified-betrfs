@@ -26,10 +26,8 @@ module ImplFlush {
   import Native
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: ImplModel.Node)
-  returns (s': ImplVariables)
   requires Inv(k, s)
-  requires WFVars(s)
-  requires s.Ready?
+  requires s.ready
 
   requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
   requires parentref in s.cache
@@ -42,47 +40,39 @@ module ImplFlush {
   requires childref in s.cache
   requires s.cache[childref] == child
 
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures ImplModelFlush.flush(Ic(k), old(IVars(s)), parentref, slot, childref, child) == IVars(s')
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.lru.Repr
+  modifies s.Repr()
+
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, child) == s.I()
   {
-    if s.frozenIndirectionTable.Some? {
-      var lbaGraph := s.frozenIndirectionTable.value.Get(parentref);
+    if s.frozenIndirectionTable != null {
+      var lbaGraph := s.frozenIndirectionTable.Get(parentref);
       if lbaGraph.Some? {
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          s' := s;
           print "giving up; flush can't run because frozen isn't written";
           return;
         }
       }
     }
 
-    var s1;
     if parentref == BT.G.Root() {
-      ImplModelFlushRootBucket.flushRootBucketCorrect(Ic(k), IVars(s));
-      s1 := flushRootBucket(k, s);
-    } else {
-      s1 := s;
+      ImplModelFlushRootBucket.flushRootBucketCorrect(Ic(k), s.I());
+      flushRootBucket(k, s);
     }
 
     //Native.BenchmarkingUtil.start();
 
-    var node := s1.cache[parentref];
+    var node := s.cache[parentref];
     var childref := node.children.value[slot];
 
     WeightBucketLeBucketList(KMTable.ISeq(node.buckets), slot);
 
     var newparentBucket, newbuckets := KMTable.PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
     var newchild := child.(buckets := newbuckets);
-    var s2, newchildref := alloc(k, s1, newchild);
+    var newchildref := alloc(k, s, newchild);
     if newchildref.None? {
-      s' := s2;
       print "giving up; could not get parentref\n";
       return;
     }
@@ -93,7 +83,7 @@ module ImplFlush {
         node.buckets[slot := newparentBucket]
       );
 
-    s' := write(k, s2, parentref, newparent);
+    write(k, s, parentref, newparent);
 
     //Native.BenchmarkingUtil.end();
   }

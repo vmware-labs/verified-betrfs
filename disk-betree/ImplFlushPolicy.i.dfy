@@ -51,7 +51,8 @@ module ImplFlushPolicy {
   }
 
   function method TotalCacheSize(s: ImplVariables) : (res : int)
-  requires s.Ready?
+  reads s
+  requires s.ready
   {
     |s.cache| + |s.outstandingBlockReads|
   }
@@ -59,8 +60,8 @@ module ImplFlushPolicy {
   method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : ImplModelFlushPolicy.Action)
   requires 0 <= i as int < |stack|
   requires Inv(k, s)
-  requires ImplModelFlushPolicy.ValidStackSlots(Ic(k), IVars(s), stack, slots)
-  ensures action == ImplModelFlushPolicy.getActionToSplit(Ic(k), IVars(s), stack, slots, i)
+  requires ImplModelFlushPolicy.ValidStackSlots(Ic(k), s.I(), stack, slots)
+  ensures action == ImplModelFlushPolicy.getActionToSplit(Ic(k), s.I(), stack, slots, i)
   {
     ImplModelFlushPolicy.reveal_getActionToSplit();
 
@@ -88,30 +89,25 @@ module ImplFlushPolicy {
     }
   }
 
-  method getActionToFlush(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) returns (s': ImplVariables, action : ImplModelFlushPolicy.Action)
+  method getActionToFlush(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) returns (action : ImplModelFlushPolicy.Action)
   requires |stack| <= 40
   requires Inv(k, s)
-  requires ImplModelFlushPolicy.ValidStackSlots(Ic(k), IVars(s), stack, slots)
+  requires ImplModelFlushPolicy.ValidStackSlots(Ic(k), s.I(), stack, slots)
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures s'.ephemeralIndirectionTable == s.ephemeralIndirectionTable
-  ensures s'.frozenIndirectionTable == s.frozenIndirectionTable
-  ensures (IVars(s'), action) == ImplModelFlushPolicy.getActionToFlush(Ic(k), old(IVars(s)), stack, slots)
-  modifies s.lru.Repr
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures (s.I(), action) == ImplModelFlushPolicy.getActionToFlush(Ic(k), old(s.I()), stack, slots)
   {
     ImplModelFlushPolicy.reveal_getActionToFlush();
 
     if |stack| as uint64 == 40 {
       action := ImplModelFlushPolicy.ActionFail;
-      s' := s;
     } else {
       var ref := stack[|stack| as uint64 - 1];
       var node := s.cache[ref];
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
-        s' := s;
       } else {
         var bs := biggestSlot(node.buckets);
         var (slot, slotWeight) := bs;
@@ -129,81 +125,70 @@ module ImplFlushPolicy {
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               if TotalCacheSize(s) <= MaxCacheSize() - 1 {
                 action := ImplModelFlushPolicy.ActionFlush(ref, slot);
-                s' := s;
               } else {
                 action := ImplModelFlushPolicy.ActionEvict;
-                s' := s;
               }
             } else {
-              s', action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
+              action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
             }
           } else {
             if TotalCacheSize(s) <= MaxCacheSize() - 1 {
               action := ImplModelFlushPolicy.ActionPageIn(childref);
-              s' := s;
             } else {
               action := ImplModelFlushPolicy.ActionEvict;
-              s' := s;
             }
           }
         } else {
           action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
-          s' := s;
         }
       }
     }
   }
 
   method runFlushPolicy(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s' : Variables)
   requires Inv(k, s)
   requires io.initialized()
-  requires s.Ready?
+  requires s.ready
   requires BT.G.Root() in s.cache
-  requires io !in VariablesReadSet(s)
+  requires io !in s.Repr()
   modifies io
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.lru.Repr
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures ImplModelFlushPolicy.runFlushPolicy(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures ImplModelFlushPolicy.runFlushPolicy(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     ImplModelFlushPolicy.reveal_runFlushPolicy();
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
-    assert IM.IVars(IVars(s)) == old(IM.IVars(IVars(s)));
+    assert IM.IVars(s.I()) == old(IM.IVars(s.I()));
 
-    ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), IVars(s), [BT.G.Root()], []);
-    var s1, action := getActionToFlush(k, s, [BT.G.Root()], []);
+    ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
+    var action := getActionToFlush(k, s, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => {
-        s' := PageInReq(k, s1, io, ref);
+        PageInReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        s' := doSplit(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
+        doSplit(k, s, parentref, s.cache[parentref].children.value[slot], slot as int);
       }
       case ActionRepivot(ref) => {
-        s' := repivotLeaf(k, s1, ref, s1.cache[ref]);
+        repivotLeaf(k, s, ref, s.cache[ref]);
       }
       case ActionFlush(parentref, slot) => {
-        s' := flush(k, s1, parentref, slot as int, 
-            s1.cache[parentref].children.value[slot],
-            s1.cache[s1.cache[parentref].children.value[slot]]);
+        flush(k, s, parentref, slot as int, 
+            s.cache[parentref].children.value[slot],
+            s.cache[s.cache[parentref].children.value[slot]]);
       }
       case ActionGrow => {
-        s' := grow(k, s1);
+        grow(k, s);
       }
       case ActionEvict => {
-        s' := EvictOrDealloc(k, s1, io);
+        EvictOrDealloc(k, s, io);
       }
       case ActionFail => {
         print "ActionFail\n";
-        s' := s1;
       }
     }
   }

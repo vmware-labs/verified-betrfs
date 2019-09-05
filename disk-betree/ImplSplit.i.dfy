@@ -99,8 +99,7 @@ module ImplSplit {
   }
 
   method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
-  returns (s': Variables)
-  requires s.Ready?
+  requires s.ready
   requires Inv(k, s)
   requires ref in s.ephemeralIndirectionTable.Contents
   requires parentref in s.ephemeralIndirectionTable.Contents
@@ -109,23 +108,18 @@ module ImplSplit {
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == ref
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures IVars(s') == ImplModelSplit.doSplit(Ic(k), old(IVars(s)), parentref, ref, slot);
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.lru.Repr
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures s.I() == ImplModelSplit.doSplit(Ic(k), old(s.I()), parentref, ref, slot);
   {
     ImplModelSplit.reveal_doSplit();
 
-    if s.frozenIndirectionTable.Some? {
-      var lbaGraph := s.frozenIndirectionTable.value.Get(parentref);
+    if s.frozenIndirectionTable != null {
+      var lbaGraph := s.frozenIndirectionTable.Get(parentref);
       if lbaGraph.Some? {
         var (lba, _) := lbaGraph.value;
         if lba.None? {
-          s' := s;
           print "giving up; doSplit can't run because frozen isn't written";
           return;
         }
@@ -142,21 +136,18 @@ module ImplSplit {
     if (|child.pivotTable| == 0) {
       // TODO there should be an operation which just
       // cuts off the node and doesn't split it.
-      s' := s;
       print "giving up; doSplit can't run because child.pivots == 0\n";
       return;
     }
 
     var left_childref := getFreeRef(s);
     if left_childref.None? {
-      s' := s;
       print "giving up; doSplit can't allocate left_childref\n";
       return;
     }
 
     var right_childref := getFreeRef2(s, left_childref.value);
     if right_childref.None? {
-      s' := s;
       print "giving up; doSplit can't allocate right_childref\n";
       return;
     }
@@ -168,8 +159,8 @@ module ImplSplit {
     var right_child := ImplModelSplit.SplitChildRight(child, num_children_left);
     var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
 
-    var s1 := write(k, s, left_childref.value, left_child);
-    var s2 := write(k, s1, right_childref.value, right_child);
-    s' := write(k, s2, parentref, split_parent);
+    write(k, s, left_childref.value, left_child);
+    write(k, s, right_childref.value, right_child);
+    write(k, s, parentref, split_parent);
   }
 }

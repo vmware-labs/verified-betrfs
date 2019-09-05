@@ -21,33 +21,31 @@ module ImplEvict {
   import LruModel
 
   method Evict(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
-  returns (s' : ImplVariables)
-  requires WFVars(s)
-  requires s.Ready?
+  requires s.WF()
+  requires s.ready
   requires ref in s.cache
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures IVars(s') == ImplModelEvict.Evict(Ic(k), old(IVars(s)), ref)
-  modifies s.lru.Repr
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures s.I() == ImplModelEvict.Evict(Ic(k), old(s.I()), ref)
   {
     s.lru.Remove(ref);
-    s' := s.(cache := MapRemove1(s.cache, ref));
+    s.cache := MapRemove1(s.cache, ref);
   }
 
   method NeedToWrite(s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
-  requires WFVars(s)
-  requires s.Ready?
-  ensures b == ImplModelEvict.NeedToWrite(IVars(s), ref)
+  requires s.WF()
+  requires s.ready
+  ensures b == ImplModelEvict.NeedToWrite(s.I(), ref)
   {
     var eph := s.ephemeralIndirectionTable.Get(ref);
     if eph.Some? && eph.value.0.None? {
       return true;
     }
 
-    if (s.frozenIndirectionTable.Some?) {
-      var fro := s.frozenIndirectionTable.value.Get(ref);
+    if (s.frozenIndirectionTable != null) {
+      var fro := s.frozenIndirectionTable.Get(ref);
       if fro.Some? && fro.value.0.None? {
         return true;
       }
@@ -58,11 +56,11 @@ module ImplEvict {
 
   method CanEvict(s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
-  requires WFVars(s)
-  requires s.Ready?
+  requires s.WF()
+  requires s.ready
   requires ref in s.ephemeralIndirectionTable.Contents ==>
       s.ephemeralIndirectionTable.Contents[ref].0.Some?
-  ensures b == ImplModelEvict.CanEvict(IVars(s), ref)
+  ensures b == ImplModelEvict.CanEvict(s.I(), ref)
   {
     var eph := s.ephemeralIndirectionTable.Get(ref);
     if (eph.Some?) {
@@ -73,45 +71,37 @@ module ImplEvict {
   }
 
   method EvictOrDealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (s': ImplVariables)
   requires Inv(k, s)
-  requires s.Ready?
+  requires s.ready
   requires io.initialized()
   requires |s.cache| > 0
-  requires io !in VariablesReadSet(s)
-  ensures WVars(s')
-  ensures s'.Ready?
-  ensures ImplModelEvict.EvictOrDealloc(Ic(k), old(IVars(s)), old(IIO(io)), IVars(s'), IIO(io))
-  ensures forall r | r in s.ephemeralIndirectionTable.Repr :: fresh(r) || r in old(s.ephemeralIndirectionTable.Repr)
-  ensures forall r | r in s'.lru.Repr :: fresh(r) || r in old(s.lru.Repr)
+  requires io !in s.Repr()
   modifies io
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies if s.Ready? && s.frozenIndirectionTable.Some? then s.frozenIndirectionTable.value.Repr else {}
-  modifies s.lru.Repr
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures ImplModelEvict.EvictOrDealloc(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     var ref := FindDeallocable(s);
-    ImplModelDealloc.FindDeallocableCorrect(IVars(s));
+    ImplModelDealloc.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
-      s' := Dealloc(k, s, io, ref.value);
+      Dealloc(k, s, io, ref.value);
     } else {
       var ref := s.lru.Next();
       if ref == BT.G.Root() {
-        s' := s;
       } else {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
-            s' := TryToWriteBlock(k, s, io, ref);
+            TryToWriteBlock(k, s, io, ref);
           } else {
-            s' := s;
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
-            s' := Evict(k, s, ref);
+            Evict(k, s, ref);
           } else {
-            s' := s;
           }
         }
       }
