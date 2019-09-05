@@ -186,6 +186,55 @@ module ImplMarshalling {
     s := Some(ar[..]);
   }
 
+  lemma valToMessageSeqPrefixNone(v: V, i: int)
+  requires IMM.valToMessageSeq.requires(v)
+  requires 0 <= i <= |v.a|
+  ensures IMM.valToMessageSeq(VArray(v.a[..i])) == None
+      ==> IMM.valToMessageSeq(v) == None
+  decreases |v.a| - i
+  {
+    if (i < |v.a|) {
+      valToMessageSeqPrefixNone(v, i+1);
+      assert DropLast(v.a[..i+1]) == v.a[..i];
+    } else {
+      assert v.a[..i] == v.a;
+    }
+  }
+
+  method ValToMessageSeq(v: V) returns (s : Option<seq<Message>>)
+  requires IMM.valToMessageSeq.requires(v)
+  ensures s == IMM.valToMessageSeq(v)
+  {
+    var ar := new Message[|v.a| as uint64];
+
+    var i: uint64 := 0;
+    while i < |v.a| as uint64
+    invariant 0 <= i as int <= |v.a|
+    invariant IMM.valToMessageSeq(VArray(v.a[..i])) == Some(ar[..i])
+    {
+      assert ValInGrammar(v.a[i], GByteArray);
+      assert ValidVal(v.a[i]);
+
+      valToMessageSeqPrefixNone(v, i as int + 1);
+
+      if |v.a[i].b| as uint64 > ValueWithDefault.MaxLen() {
+        return None;
+      }
+
+      ar[i] := M.Define(v.a[i].b);
+
+      assert DropLast(v.a[..i+1]) == v.a[..i];
+      assert ar[..i+1] == ar[..i] + [ar[i]];
+
+      i := i + 1;
+    }
+
+    assert v.a[..i] == v.a;
+    assert ar[..i] == ar[..];
+    s := Some(ar[..]);
+  }
+
+
   method ValToPivots(v: V) returns (s : Option<seq<Key>>)
   requires IMM.valToPivots.requires(v)
   ensures s == IMM.valToPivots(v)
@@ -210,7 +259,7 @@ module ImplMarshalling {
       return None;
     }
 
-    var values := IMM.valToMessageSeq(v.t[1]);
+    var values := ValToMessageSeq(v.t[1]);
 
     if values.None? {
       return None;

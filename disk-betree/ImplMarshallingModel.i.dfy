@@ -214,7 +214,7 @@ module ImplMarshallingModel {
     )
   }
 
-  function method {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : Option<seq<Message>>)
+  function {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : Option<seq<Message>>)
   requires ValidVal(v)
   requires ValInGrammar(v, GArray(GByteArray))
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i] != M.IdentityMessage()
