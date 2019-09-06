@@ -176,6 +176,7 @@ module ImplSync {
   }
 
   method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (wait: bool)
   requires Inv(k, s)
   requires io.initialized()
   requires io !in s.Repr()
@@ -185,6 +186,7 @@ module ImplSync {
   ensures ImplModelSync.sync(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     ImplModelSync.reveal_sync();
+    wait := false;
 
     if (!s.ready) {
       // TODO we could just do nothing here instead
@@ -194,6 +196,7 @@ module ImplSync {
 
     if (s.outstandingIndirectionTableWrite.Some?) {
       print "sync: giving up; frozen table is currently being written\n";
+      wait := true;
       return;
     }
 
@@ -213,7 +216,8 @@ module ImplSync {
       syncFoundInFrozen(k, s, io, foundInFrozen.value);
       return;
     } else if (s.outstandingBlockWrites != map[]) {
-      print "sync: giving up; blocks are still being written\n";
+      print "sync: waiting; blocks are still being written\n";
+      wait := true;
       return;
     } else {
       var id := RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable));
@@ -221,7 +225,7 @@ module ImplSync {
         s.outstandingIndirectionTableWrite := id;
         return;
       } else {
-        print "sync: giving up; write back indirection table failed (no id)\n";
+        print "sync: waiting; write back indirection table failed (no id)\n";
         return;
       }
     }
@@ -257,7 +261,7 @@ module ImplSync {
   // == popSync ==
 
   method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
-  returns (success: bool)
+  returns (wait: bool, success: bool)
   requires Inv(k, s)
   requires io.initialized()
   requires io !in s.Repr()
@@ -268,10 +272,11 @@ module ImplSync {
   {
     if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
       success := true;
+      wait := false;
       s.syncReqs := MapRemove1(s.syncReqs, id);
     } else {
       success := false;
-      sync(k, s, io);
+      wait := sync(k, s, io);
     }
   }
 }

@@ -125,7 +125,9 @@ class BenchmarkRandomInserts : Benchmark {
       app.Insert(keys[i], values[i]);
     }
     Console.Error.Write("? sync ");
+    //Native_Compile.BenchmarkingUtil.start();
     app.Sync();
+    //Native_Compile.BenchmarkingUtil.end();
     Console.Error.WriteLine("done");
   }
 }
@@ -136,7 +138,7 @@ class BenchmarkRandomInserts : Benchmark {
 class LongBenchmarkRandomInserts : Benchmark {
   public override string Name { get { return "LongRandomInserts"; } }
 
-  int count = 4_000_000;
+  int count = 3_000_000;
 
   override protected int OpCount(Application app) {
     return count;
@@ -175,12 +177,12 @@ class LongBenchmarkRandomInserts : Benchmark {
       // Console.Error.WriteLine("KEY " + BitConverter.ToString(keyBytes));
       app.Insert(keyBytes, valueBytes);
       if (i % 1000000 == 0 && i != 0) {
-        Console.Error.Write("? sync at " + i.ToString() + " ");
-         //app.Sync();
-        Console.Error.WriteLine("done");
+        Console.Error.WriteLine("? at " + i.ToString() + " ");
+        //app.Sync();
+        //Console.Error.WriteLine("done");
       }
     }
-    Console.Error.Write("? sync at " + this.count + " ");
+    Console.Error.WriteLine("? sync at " + this.count + " ");
     app.Sync();
     Console.WriteLine("done");
   }

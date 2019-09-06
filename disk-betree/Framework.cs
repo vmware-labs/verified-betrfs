@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 
 namespace MainDiskIOHandler_Compile {
   // TODO make this actually async lol
@@ -12,11 +13,11 @@ namespace MainDiskIOHandler_Compile {
     const int BLOCK_SIZE = 8*1024*1024;
 
     ulong curId = 0;
-    HashSet<ulong> writeReqs;
+    Dictionary<ulong, Task> writeReqs;
     Dictionary<ulong, byte[]> readReqs;
 
     public DiskIOHandler() {
-      writeReqs = new HashSet<ulong>();
+      writeReqs = new Dictionary<ulong, Task>();
       readReqs = new Dictionary<ulong, byte[]>();
     }
 
@@ -72,13 +73,31 @@ namespace MainDiskIOHandler_Compile {
       sector = bytes;
     }
 
+    static async Task WriteTextAsync(string filePath, byte[] data)
+    {
+      using (FileStream fs = new FileStream(filePath,
+        FileMode.OpenOrCreate, FileAccess.Write, FileShare.None,
+        bufferSize: 4096, useAsync: true))
+      {
+        await fs.WriteAsync(data, 0, data.Length);
+        await fs.FlushAsync();
+      };
+    }
+
     public ulong write(ulong addr, byte[] sector) {
-      writeSync(addr, sector);
+      byte[] copied = new byte[sector.Length];
+      Array.Copy(sector, 0, copied, 0, sector.Length);
 
       ulong id = this.curId;
       this.curId++;
 
-      this.writeReqs.Add(id);
+      if (sector.Length > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
+        Console.WriteLine(addr);
+        Console.WriteLine(sector.Length);
+        throw new Exception("writeSync not implemented for these arguments");
+      }
+      Task writeTask = WriteTextAsync(getFilename(addr), copied);
+      writeReqs[id] = writeTask;
 
       return id;
     }
@@ -117,19 +136,41 @@ namespace MainDiskIOHandler_Compile {
 
     ulong writeResponseId;
     public bool prepareWriteResponse() {
-      if (this.writeReqs.Count > 0) {
-        foreach (ulong id in this.writeReqs) {
-          writeResponseId = id;
+      bool found = false;
+      foreach (var p in this.writeReqs) {
+        ulong id = p.Key;
+        Task task = p.Value;
+        if (task.IsCompleted) {
+          this.writeResponseId = id;
+          found = true;
           break;
         }
-        writeReqs.Remove(writeResponseId);
+      }
+      if (found) {
+        writeReqs.Remove(this.writeResponseId);
         return true;
       } else {
         return false;
       }
     }
     public ulong getWriteResult() {
-      return writeResponseId;
+      return this.writeResponseId;
+    }
+    public void completeWriteTasks() {
+      foreach (var p in this.writeReqs) {
+        Task task = p.Value;
+        task.Wait();
+      }
+    }
+    public void waitForOne() {
+      Task[] tasks = new Task[this.writeReqs.Count];
+      int i = 0;
+      foreach (var p in this.writeReqs) {
+        tasks[i] = p.Value;
+        i++;
+      }
+      if (tasks.Length == 0) throw new Exception("waitForOne called with no tasks\n");
+      Task.WaitAny(tasks);
     }
 
     private string getFilename(ulong lba) {
@@ -175,12 +216,15 @@ class Application {
     log("doing push sync...");
 
     for (int i = 0; i < 5000; i++) {
-      bool success = __default.handlePopSync(k, hs, io, id);
-      this.maybeDoResponse();
+      while (this.maybeDoResponse()) { }
+      __default.handlePopSync(k, hs, io, id, out bool wait, out bool success);
       if (success) {
         log("doing sync... success!");
         log("");
         return;
+      } else if (wait) {
+        log("doing wait...");
+        io.waitForOne();
       } else {
         log("doing sync...");
       }
@@ -214,6 +258,8 @@ class Application {
 
     for (int i = 0; i < 50; i++) {
       bool success = __default.handleInsert(k, hs, io, key, val);
+      // TODO remove this to enable more asyncronocity:
+      io.completeWriteTasks();
       this.maybeDoResponse();
       if (success) {
         log("doing insert... success!");
@@ -270,14 +316,19 @@ class Application {
     throw new Exception("operation didn't finish");
   }
 
-  public void maybeDoResponse() {
+  public bool maybeDoResponse() {
     if (io.prepareReadResponse()) {
       __default.handleReadResponse(k, hs, io);
       log("doing read response...");
+      return true;
     }
     else if (io.prepareWriteResponse()) {
       __default.handleWriteResponse(k, hs, io);
       log("doing write response...");
+      return true;
+    }
+    else {
+      return false;
     }
   }
 
@@ -350,9 +401,9 @@ class Framework {
     app.Query("abc");
     app.Query("xyq");
 
-    for (int i = 0; i < 520; i++) {
-      app.Insert("num" + i.ToString(), "llama");
-    }
+    //for (int i = 0; i < 520; i++) {
+    //  app.Insert("num" + i.ToString(), "llama");
+    //}
 
     app.Sync();
   }

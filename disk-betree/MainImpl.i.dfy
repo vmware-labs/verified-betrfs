@@ -80,14 +80,15 @@ module {:extern} MainImpl refines Main {
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
-  returns (success: bool)
+  returns (wait: bool, success: bool)
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var succ := popSync(k, s, io, id);
+    var w, succ := popSync(k, s, io, id);
     ImplModelSync.popSyncCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), id, s.I(), succ, IS.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     success := succ;
+    wait := w;
     var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
     BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
