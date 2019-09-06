@@ -46,14 +46,14 @@ namespace MainDiskIOHandler_Compile {
         throw new Exception("writeSync not implemented for these arguments");
       }
 
-      Native_Compile.BenchmarkingUtil.start();
+      //Native_Compile.BenchmarkingUtil.start();
       using (FileStream fs = new FileStream(getFilename(addr), FileMode.OpenOrCreate, FileAccess.Write))
       {
         //fs.Seek(0, SeekOrigin.Begin);
         fs.Write(sector, 0, sector.Length);
         fs.Flush(true);
       }
-      Native_Compile.BenchmarkingUtil.end();
+      //Native_Compile.BenchmarkingUtil.end();
     }
 
     public void readSync(ulong addr, ulong len, out byte[] sector) {

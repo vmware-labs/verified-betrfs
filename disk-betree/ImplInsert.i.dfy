@@ -118,9 +118,7 @@ module ImplInsert {
       return;
     }
 
-    Native.BenchmarkingUtil.start();
     var weightSeq := KMTable.computeWeightKMTSeq(rootLookup.value.buckets);
-    Native.BenchmarkingUtil.end();
 
     if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) +
         s.rootBucketWeightBound +

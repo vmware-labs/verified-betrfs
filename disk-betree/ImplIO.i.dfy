@@ -47,8 +47,6 @@ module ImplIO {
   requires len <= LBAType.BlockSize()
   ensures loc == ImplModelIO.getFreeLoc(s.I(), len)
   {
-    Native.BenchmarkingUtil.start();
-
     ImplModelIO.reveal_getFreeLoc();
     var tryOffset:uint64 := 0;
     while true
@@ -75,11 +73,9 @@ module ImplIO {
         var result := Some(LBAType.Location(addr, len));
         assert result == ImplModelIO.getFreeLocIterate(s.I(), len, tryOffset);
 
-        Native.BenchmarkingUtil.end();
         return result;
       }
       if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int {
-        Native.BenchmarkingUtil.end();
         return None;
       }
 
