@@ -1081,7 +1081,7 @@ module MutableMap {
       assert |Contents| == Count as nat;
 
       var newSize: uint64 := (128 + Count) * 4;
-      print "(debug) MutableMap.Realloc: Count ", Count, ", Realloc ", newSize, "\n";
+      //print "(debug) MutableMap.Realloc: Count ", Count, ", Realloc ", newSize, "\n";
 
       var newUnderlying := new FixedSizeHashMap(newSize);
       assert fresh(newUnderlying) && fresh(newUnderlying.Storage);

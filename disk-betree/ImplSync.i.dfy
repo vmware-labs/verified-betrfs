@@ -195,7 +195,7 @@ module ImplSync {
     }
 
     if (s.outstandingIndirectionTableWrite.Some?) {
-      print "sync: giving up; frozen table is currently being written\n";
+      //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
       return;
     }
@@ -216,7 +216,7 @@ module ImplSync {
       syncFoundInFrozen(k, s, io, foundInFrozen.value);
       return;
     } else if (s.outstandingBlockWrites != map[]) {
-      print "sync: waiting; blocks are still being written\n";
+      //print "sync: waiting; blocks are still being written\n";
       wait := true;
       return;
     } else {
@@ -225,7 +225,7 @@ module ImplSync {
         s.outstandingIndirectionTableWrite := id;
         return;
       } else {
-        print "sync: waiting; write back indirection table failed (no id)\n";
+        print "sync: giving up; write back indirection table failed (no id)\n";
         return;
       }
     }
