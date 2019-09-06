@@ -24,14 +24,15 @@ module ImplFlushRootBucket {
   method {:fuel BC.GraphClosed,0} flushRootBucket(k: ImplConstants, s: ImplVariables)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache
+  requires BT.G.Root() in s.cache.Contents
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.I() == ImplModelFlushRootBucket.flushRootBucket(Ic(k), old(s.I()))
   {
     ImplModelFlushRootBucket.reveal_flushRootBucket();
 
-    var oldroot := s.cache[BT.G.Root()];
+    var oldrootOpt := s.cache.Get(BT.G.Root());
+    var oldroot := oldrootOpt.value;
 
     var rootBucketSeq := TTT.AsSeq(s.rootBucket);
 
@@ -47,7 +48,7 @@ module ImplFlushRootBucket {
 
     s.rootBucket := TTT.EmptyTree;
     s.rootBucketWeightBound := 0;
-    s.cache := s.cache[BT.G.Root() := newroot];
+    var _ := s.cache.Insert(BT.G.Root(), newroot);
   }
 
 }

@@ -22,7 +22,7 @@ module ImplGrow {
   method grow(k: ImplConstants, s: ImplVariables)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache
+  requires BT.G.Root() in s.cache.Contents
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
@@ -44,7 +44,8 @@ module ImplGrow {
     ImplModelFlushRootBucket.flushRootBucketCorrect(Ic(k), s.I());
     flushRootBucket(k, s);
 
-    var oldroot := s.cache[BT.G.Root()];
+    var oldrootOpt := s.cache.Get(BT.G.Root());
+    var oldroot := oldrootOpt.value;
     var newref := alloc(k, s, oldroot);
 
     match newref {

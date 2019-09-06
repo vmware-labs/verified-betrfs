@@ -88,8 +88,9 @@ module ImplQuery {
           return;
         }
 
-        if (ref !in s.cache) {
-          if |s.cache| + |s.outstandingBlockReads| <= MaxCacheSize() - 1 {
+        var nodeOpt := s.cache.Get(ref);
+        if (nodeOpt.None?) {
+          if s.cache.Count as int + |s.outstandingBlockReads| <= MaxCacheSize() - 1 {
             PageInReq(k, s, io, ref);
             res := None;
             return;
@@ -98,7 +99,7 @@ module ImplQuery {
             return;
           }
         } else {
-          var node := s.cache[ref];
+          var node := nodeOpt.value;
 
           ghost var oldIVars := s.I();
           LruModel.LruUse(s.lru.Queue, ref);

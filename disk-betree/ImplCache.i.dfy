@@ -13,8 +13,9 @@ module ImplCache {
   import opened Maps
   import opened Sequences
   import opened Sets
-
   import opened NativeTypes
+
+  import opened Bounds
 
   method getFreeRef(s: ImplVariables)
   returns (ref : Option<BT.G.Reference>)
@@ -31,9 +32,14 @@ module ImplCache {
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       var lookup := s.ephemeralIndirectionTable.Get(i);
-      if lookup.None? && i !in s.cache {
-        return Some(i);
-      } else if i == 0xffff_ffff_ffff_ffff {
+      if lookup.None? {
+        var cacheLookup := s.cache.Get(i);
+        if cacheLookup.None? {
+          return Some(i);
+        }
+      }
+      
+      if i == 0xffff_ffff_ffff_ffff {
         return None;
       } else {
         i := i + 1;
@@ -55,10 +61,17 @@ module ImplCache {
            == ImplModelCache.getFreeRef2(s.I(), avoid)
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
-      var lookup := s.ephemeralIndirectionTable.Get(i);
-      if lookup.None? && i != avoid && i !in s.cache {
-        return Some(i);
-      } else if i == 0xffff_ffff_ffff_ffff {
+      if i != avoid {
+        var lookup := s.ephemeralIndirectionTable.Get(i);
+        if lookup.None? {
+          var cacheLookup := s.cache.Get(i);
+          if cacheLookup.None? {
+            return Some(i);
+          }
+        }
+      }
+      
+      if i == 0xffff_ffff_ffff_ffff {
         return None;
       } else {
         i := i + 1;
@@ -81,8 +94,10 @@ module ImplCache {
     var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if node.children.Some? then node.children.value else []));
 
     assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+    assume |s.cache.Contents| <= MaxCacheSize();
+
     s.lru.Use(ref);
-    s.cache := s.cache[ref := node];
+    var _ := s.cache.Insert(ref, node);
   }
 
   method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)

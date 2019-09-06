@@ -136,7 +136,7 @@ class BenchmarkRandomInserts : Benchmark {
 class LongBenchmarkRandomInserts : Benchmark {
   public override string Name { get { return "LongRandomInserts"; } }
 
-  int count = 5_000_000;
+  int count = 4_000_000;
 
   override protected int OpCount(Application app) {
     return count;
@@ -176,7 +176,7 @@ class LongBenchmarkRandomInserts : Benchmark {
       app.Insert(keyBytes, valueBytes);
       if (i % 1000000 == 0 && i != 0) {
         Console.Error.Write("? sync at " + i.ToString() + " ");
-         app.Sync();
+         //app.Sync();
         Console.Error.WriteLine("done");
       }
     }

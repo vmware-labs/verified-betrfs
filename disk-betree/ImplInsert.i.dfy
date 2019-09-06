@@ -53,7 +53,7 @@ module ImplInsert {
   returns (success: bool)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache
+  requires BT.G.Root() in s.cache.Contents
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(s.I()), key, value)
@@ -106,7 +106,8 @@ module ImplInsert {
       return;
     }
 
-    if (BT.G.Root() !in s.cache) {
+    var rootLookup := s.cache.Get(BT.G.Root());
+    if (rootLookup.None?) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
         PageInReq(k, s, io, BT.G.Root());
         success := false;
@@ -118,7 +119,7 @@ module ImplInsert {
     }
 
     Native.BenchmarkingUtil.start();
-    var weightSeq := KMTable.computeWeightKMTSeq(s.cache[BT.G.Root()].buckets);
+    var weightSeq := KMTable.computeWeightKMTSeq(rootLookup.value.buckets);
     Native.BenchmarkingUtil.end();
 
     if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) +

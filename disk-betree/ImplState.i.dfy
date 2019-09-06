@@ -32,6 +32,7 @@ module {:extern} ImplState {
 
   type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.Location>, seq<Reference>)>
   type MutIndirectionTableNullable = MM.ResizingHashMap?<(Option<BC.Location>, seq<Reference>)>
+  type MutCache = MM.ResizingHashMap<Node>
 
   type Node = IM.Node
 
@@ -50,6 +51,13 @@ module {:extern} ImplState {
   {
     table.Contents
   }
+ 
+  function ICache(table: MutCache) : (result: map<BT.G.Reference, Node>)
+  reads table, table.Repr
+  {
+    table.Contents
+  }
+
  
   function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<IM.IndirectionTable>)
   reads if table != null then {table} + table.Repr else {}
@@ -82,7 +90,7 @@ module {:extern} ImplState {
     var outstandingIndirectionTableWrite: Option<BC.ReqId>;
     var outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>;
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
-    var cache: map<Reference, Node>;
+    var cache: MutCache;
     var lru: MutableLru.MutableLruQueue;
     var rootBucket: TreeMap;
     var rootBucketWeightBound: uint64;
@@ -92,18 +100,19 @@ module {:extern} ImplState {
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru
+        frozenIndirectionTable, lru, cache
     {
       {this} +
       persistentIndirectionTable.Repr +
       ephemeralIndirectionTable.Repr +
       (if frozenIndirectionTable != null then frozenIndirectionTable.Repr else {}) +
-      lru.Repr
+      lru.Repr +
+      cache.Repr
     }
 
     predicate ReprInv()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru
+        frozenIndirectionTable, lru, cache
     reads Repr()
     {
         // NOALIAS statically enforced no-aliasing would probably help here
@@ -113,15 +122,21 @@ module {:extern} ImplState {
         && persistentIndirectionTable.Repr !! lru.Repr
         && ephemeralIndirectionTable.Repr !! lru.Repr
         && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! lru.Repr)
+        && cache.Repr !! ephemeralIndirectionTable.Repr
+        && cache.Repr !! persistentIndirectionTable.Repr
+        && (frozenIndirectionTable != null ==> cache.Repr !! frozenIndirectionTable.Repr)
+        && cache.Repr !! lru.Repr
+
         && this !in ephemeralIndirectionTable.Repr
         && this !in persistentIndirectionTable.Repr
         && (frozenIndirectionTable != null ==> this !in frozenIndirectionTable.Repr)
         && this !in lru.Repr
+        && this !in cache.Repr
     }
 
     predicate W()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru
+        frozenIndirectionTable, lru, cache
     reads Repr()
     {
       && ReprInv()
@@ -130,16 +145,17 @@ module {:extern} ImplState {
       && ephemeralIndirectionTable.Inv()
       && TTT.TTTree(rootBucket)
       && lru.Inv()
+      && cache.Inv()
     }
 
     function I() : IM.Variables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru
+        frozenIndirectionTable, lru, cache
     reads Repr()
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru.Queue, TTT.I(rootBucket), rootBucketWeightBound)
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache), lru.Queue, TTT.I(rootBucket), rootBucketWeightBound)
       ) else (
         IM.Unready(outstandingIndirectionTableRead, syncReqs)
       )
@@ -147,7 +163,7 @@ module {:extern} ImplState {
 
     predicate WF()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru
+        frozenIndirectionTable, lru, cache
     reads Repr()
     {
       && W()
@@ -171,12 +187,13 @@ module {:extern} ImplState {
       persistentIndirectionTable := new MM.ResizingHashMap(128);
       frozenIndirectionTable := null;
       rootBucket := TTT.EmptyTree;
+      cache := new MM.ResizingHashMap(128);
     }
   }
 
   predicate Inv(k: M.Constants, s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru
+      s.frozenIndirectionTable, s.lru, s.cache
   reads s.Repr()
   {
     && s.W()
@@ -202,7 +219,7 @@ module {:extern} ImplState {
 
   twostate predicate WellUpdated(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru
+      s.frozenIndirectionTable, s.lru, s.cache
   reads s.Repr()
   {
     && s.W()

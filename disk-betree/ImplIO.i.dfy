@@ -16,6 +16,7 @@ module ImplIO {
   import BucketsLib
   import LruModel
   import MutableLru
+  import opened Bounds
   import opened IS = ImplState
   import Native
 
@@ -243,7 +244,7 @@ module ImplIO {
       s.outstandingIndirectionTableWrite := None;
       s.outstandingBlockWrites := map[];
       s.outstandingBlockReads := map[];
-      s.cache := map[];
+      s.cache := new MM.ResizingHashMap(128);
       s.lru := new MutableLru.MutableLruQueue();
       s.rootBucket := TTT.EmptyTree;
       s.rootBucketWeightBound := 0;
@@ -274,8 +275,13 @@ module ImplIO {
     var ref := s.outstandingBlockReads[id].ref;
     
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-    if (lbaGraph.None? || lbaGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
-      print "PageInResp: ref !in lbas or ref in s.cache\n";
+    if (lbaGraph.None? || lbaGraph.value.0.None?) {
+      print "PageInResp: ref !in lbas\n";
+      return;
+    }
+    var cacheLookup := s.cache.Get(ref);
+    if cacheLookup.Some? {
+      print "PageInResp: ref in s.cache\n";
       return;
     }
 
@@ -289,7 +295,8 @@ module ImplIO {
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
         s.lru.Use(ref);
 
-        s.cache := s.cache[ref := sector.value.block];
+        assume |s.cache.Contents| <= MaxCacheSize();
+        var _ := s.cache.Insert(ref, sector.value.block);
         s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
       } else {
         print "giving up; block does not match graph\n";

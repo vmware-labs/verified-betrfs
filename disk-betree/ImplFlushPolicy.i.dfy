@@ -51,10 +51,10 @@ module ImplFlushPolicy {
   }
 
   function method TotalCacheSize(s: ImplVariables) : (res : int)
-  reads s
+  reads s, s.cache
   requires s.ready
   {
-    |s.cache| + |s.outstandingBlockReads|
+    s.cache.Count as int + |s.outstandingBlockReads|
   }
 
   method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : ImplModelFlushPolicy.Action)
@@ -73,8 +73,10 @@ module ImplFlushPolicy {
         action := ImplModelFlushPolicy.ActionEvict;
       }
     } else {
-      if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 {
-        if |s.cache[stack[i]].buckets| as uint64 == 1 {
+      var nodePrev := s.cache.Get(stack[i-1]);
+      if |nodePrev.value.children.value| as uint64 < MaxNumChildren() as uint64 {
+        var nodeThis := s.cache.Get(stack[i]);
+        if |nodeThis.value.buckets| as uint64 == 1 {
           action := ImplModelFlushPolicy.ActionRepivot(stack[i]);
         } else {
           if TotalCacheSize(s) <= MaxCacheSize() - 2 {
@@ -105,7 +107,8 @@ module ImplFlushPolicy {
       action := ImplModelFlushPolicy.ActionFail;
     } else {
       var ref := stack[|stack| as uint64 - 1];
-      var node := s.cache[ref];
+      var nodeOpt := s.cache.Get(ref);
+      var node := nodeOpt.value;
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
@@ -114,9 +117,9 @@ module ImplFlushPolicy {
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
         if |node.buckets| < 8 {
           var childref := node.children.value[slot];
-          if childref in s.cache {
-            var child := s.cache[childref];
-
+          var childOpt := s.cache.Get(childref);
+          if childOpt.Some? {
+            var child := childOpt.value;
             s.lru.Use(childref);
             LruModel.LruUse(old(s.lru.Queue), childref);
 
@@ -149,7 +152,7 @@ module ImplFlushPolicy {
   requires Inv(k, s)
   requires io.initialized()
   requires s.ready
-  requires BT.G.Root() in s.cache
+  requires BT.G.Root() in s.cache.Contents
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -171,15 +174,20 @@ module ImplFlushPolicy {
         PageInReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        doSplit(k, s, parentref, s.cache[parentref].children.value[slot], slot as int);
+        var parent := s.cache.Get(parentref);
+        doSplit(k, s, parentref, parent.value.children.value[slot], slot as int);
       }
       case ActionRepivot(ref) => {
-        repivotLeaf(k, s, ref, s.cache[ref]);
+        var node := s.cache.Get(ref);
+        repivotLeaf(k, s, ref, node.value);
       }
       case ActionFlush(parentref, slot) => {
+        var parent := s.cache.Get(parentref);
+        var childref := parent.value.children.value[slot];
+        var child := s.cache.Get(childref);
         flush(k, s, parentref, slot as int, 
-            s.cache[parentref].children.value[slot],
-            s.cache[s.cache[parentref].children.value[slot]]);
+            parent.value.children.value[slot],
+            child.value);
       }
       case ActionGrow => {
         grow(k, s);

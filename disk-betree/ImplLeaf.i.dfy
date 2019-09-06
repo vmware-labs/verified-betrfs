@@ -70,8 +70,8 @@ module ImplLeaf {
   requires Inv(k, s)
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.Contents
-  requires ref in s.cache
-  requires node == s.cache[ref]
+  requires ref in s.cache.Contents
+  requires node == s.cache.Contents[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
   modifies s.Repr()

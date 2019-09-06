@@ -73,10 +73,13 @@ module ImplDealloc {
     var _ := s.ephemeralIndirectionTable.Remove(ref);
 
     s.lru.Remove(ref);
-    s.cache := MapRemove(s.cache, {ref});
+
+    var _ := s.cache.Remove(ref);
 
     assume s.ephemeralIndirectionTable.Contents
         == MapRemove(old(s.ephemeralIndirectionTable.Contents), {ref});
+    assume s.cache.Contents
+        == MapRemove(old(s.cache.Contents), {ref});
   }
 
   method FindDeallocable(s: ImplVariables) returns (ref: Option<Reference>)

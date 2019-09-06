@@ -30,15 +30,15 @@ module ImplFlush {
   requires s.ready
 
   requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
-  requires parentref in s.cache
+  requires parentref in s.cache.Contents
 
-  requires s.cache[parentref].children.Some?
-  requires 0 <= slot < |s.cache[parentref].buckets|
-  requires s.cache[parentref].children.value[slot] == childref
+  requires s.cache.Contents[parentref].children.Some?
+  requires 0 <= slot < |s.cache.Contents[parentref].buckets|
+  requires s.cache.Contents[parentref].children.value[slot] == childref
 
   requires childref in IIndirectionTable(s.ephemeralIndirectionTable)
-  requires childref in s.cache
-  requires s.cache[childref] == child
+  requires childref in s.cache.Contents
+  requires s.cache.Contents[childref] == child
 
   modifies s.Repr()
 
@@ -64,7 +64,8 @@ module ImplFlush {
 
     //Native.BenchmarkingUtil.start();
 
-    var node := s.cache[parentref];
+    var nodeOpt := s.cache.Get(parentref);
+    var node := nodeOpt.value;
     var childref := node.children.value[slot];
 
     WeightBucketLeBucketList(KMTable.ISeq(node.buckets), slot);

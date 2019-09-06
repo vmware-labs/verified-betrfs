@@ -36,7 +36,7 @@ module {:extern} MainImpl refines Main {
     // TODO this is gross, what can we do about it?
     && hs.s in HeapSet(hs)
     && (
-        {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable, hs.s.lru} +
+        {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable, hs.s.lru, hs.s.cache} +
         (if hs.s.frozenIndirectionTable != null then {hs.s.frozenIndirectionTable} else {})
        ) <= HeapSet(hs)
     && hs.s.Repr() <= HeapSet(hs)

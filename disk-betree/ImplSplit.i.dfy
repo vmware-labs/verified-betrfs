@@ -103,11 +103,11 @@ module ImplSplit {
   requires Inv(k, s)
   requires ref in s.ephemeralIndirectionTable.Contents
   requires parentref in s.ephemeralIndirectionTable.Contents
-  requires ref in s.cache
-  requires parentref in s.cache
-  requires s.cache[parentref].children.Some?
-  requires 0 <= slot < |s.cache[parentref].children.value|
-  requires s.cache[parentref].children.value[slot] == ref
+  requires ref in s.cache.Contents
+  requires parentref in s.cache.Contents
+  requires s.cache.Contents[parentref].children.Some?
+  requires 0 <= slot < |s.cache.Contents[parentref].children.value|
+  requires s.cache.Contents[parentref].children.value[slot] == ref
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
@@ -126,8 +126,10 @@ module ImplSplit {
       }
     }
 
-    var fused_parent := s.cache[parentref];
-    var fused_child := s.cache[ref];
+    var fused_parent_opt := s.cache.Get(parentref);
+    var fused_parent := fused_parent_opt.value;
+    var fused_child_opt := s.cache.Get(ref);
+    var fused_child := fused_child_opt.value;
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
