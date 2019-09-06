@@ -873,7 +873,7 @@ module ImplMarshalling {
     match v {
       case None => return null;
       case Some(v) => {
-        if (SizeOfV(v) <= BlockSize() as int - 32) {
+        if (sector.SectorBlock? || SizeOfV(v) <= BlockSize() as int - 32) {
           //Native.BenchmarkingUtil.start();
           var size: uint64;
           if (sector.SectorIndirectionTable?) {
