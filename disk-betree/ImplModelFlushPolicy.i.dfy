@@ -21,7 +21,6 @@ module ImplModelFlushPolicy {
   import opened NativeTypes
   import opened BucketsLib
   import opened BucketWeights
-  import KMTable
 
   datatype Action =
     | ActionPageIn(ref: BT.G.Reference)
@@ -32,24 +31,24 @@ module ImplModelFlushPolicy {
     | ActionEvict
     | ActionFail
 
-  function biggestSlotIterate(buckets: seq<KMTable.KMT>, j: uint64, bestIdx: uint64, bestWeight: uint64) : (res : (uint64, uint64))
+  function biggestSlotIterate(buckets: seq<Bucket>, j: uint64, bestIdx: uint64, bestWeight: uint64) : (res : (uint64, uint64))
   requires 0 <= bestIdx as int < |buckets|
   requires 0 <= bestWeight as int <= MaxTotalBucketWeight()
   requires 1 <= j as int <= |buckets| <= MaxNumChildren()
-  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
-  requires WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
-  requires WeightBucket(KMTable.I(buckets[bestIdx])) == bestWeight as int
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  requires WeightBucketList(buckets) <= MaxTotalBucketWeight()
+  requires WeightBucket(buckets[bestIdx]) == bestWeight as int
   ensures 0 <= res.0 as int < |buckets|
   ensures 0 <= res.1 as int <= MaxTotalBucketWeight()
-  ensures WeightBucket(KMTable.I(buckets[res.0])) == res.1 as int
+  ensures WeightBucket(buckets[res.0]) == res.1 as int
   decreases |buckets| - j as int
   {
     if j == |buckets| as uint64 then (
       (bestIdx, bestWeight)
     ) else (
-      WeightBucketLeBucketList(KMTable.ISeq(buckets), j as int);
+      WeightBucketLeBucketList(buckets, j as int);
 
-      var w := WeightBucket(KMTable.I(buckets[j])) as uint64;
+      var w := WeightBucket(buckets[j]) as uint64;
       if w > bestWeight then (
         biggestSlotIterate(buckets, j+1, j, w)
       ) else (
@@ -58,17 +57,17 @@ module ImplModelFlushPolicy {
     )
   }
 
-  function biggestSlot(buckets: seq<KMTable.KMT>) : (res : (uint64, uint64))
+  function biggestSlot(buckets: seq<Bucket>) : (res : (uint64, uint64))
   requires |buckets| > 0
   requires |buckets| <= MaxNumChildren()
-  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
-  requires WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  requires WeightBucketList(buckets) <= MaxTotalBucketWeight()
   ensures 0 <= res.0 as int < |buckets|
   ensures 0 <= res.1 as int <= MaxTotalBucketWeight()
-  ensures WeightBucket(KMTable.I(buckets[res.0])) == res.1 as int
+  ensures WeightBucket(buckets[res.0]) == res.1 as int
   {
-    WeightBucketLeBucketList(KMTable.ISeq(buckets), 0);
-    biggestSlotIterate(buckets, 1, 0, WeightBucket(KMTable.I(buckets[0])) as uint64)
+    WeightBucketLeBucketList(buckets, 0);
+    biggestSlotIterate(buckets, 1, 0, WeightBucket(buckets[0]) as uint64)
   }
 
   predicate ValidStackSlots(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
@@ -114,6 +113,7 @@ module ImplModelFlushPolicy {
       && action.ref in s.ephemeralIndirectionTable
       && action.ref in s.cache
       && s.cache[action.ref].children.None?
+      && |s.cache[action.ref].buckets| == 1
     ))
   }
 
@@ -160,8 +160,9 @@ module ImplModelFlushPolicy {
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
         (s, getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1))
       ) else (
-        // TODO:
+        WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
         var (slot, slotWeight) := biggestSlot(node.buckets);
+        // TODO:
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
         if |node.buckets| < 8 then (
           var childref := node.children.value[slot];
@@ -171,7 +172,7 @@ module ImplModelFlushPolicy {
             LruModel.LruUse(s.lru, childref);
             assert IVars(s) == IVars(s1);
 
-            var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
+            var childTotalWeight: uint64 := WeightBucketList(child.buckets) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 then (
               // If there's room for FlushTriggerWeight() worth of stuff, then
               // we flush. We flush as much as we can (which will end up being at least
@@ -252,6 +253,7 @@ module ImplModelFlushPolicy {
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
+        WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
         var (slot, slotWeight) := biggestSlot(node.buckets);
         //if slotWeight >= FlushTriggerWeight() as uint64 {
         if |node.buckets| < 8 {
@@ -261,7 +263,7 @@ module ImplModelFlushPolicy {
             var child := s.cache[childref];
             var s1 := s.(lru := LruModel.Use(s.lru, childref));
             LruModel.LruUse(s.lru, childref);
-            var childTotalWeight: uint64 := WeightBucketList(KMTable.ISeq(child.buckets)) as uint64;
+            var childTotalWeight: uint64 := WeightBucketList(child.buckets) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               assert ValidAction(k, s1, action);
             } else {

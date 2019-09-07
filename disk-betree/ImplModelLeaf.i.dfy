@@ -14,18 +14,10 @@ module ImplModelLeaf {
   import opened BucketWeights
   import opened Bounds
   import PivotsLib
+  import KVList
+  import PivotBetreeSpec`Internal
 
   import opened NativeTypes
-
-  function GetNewPivots(bucket: KMTable.KMT) : (pivots : seq<MS.Key>)
-  ensures |pivots| < MaxNumChildren()
-
-  lemma WFGetNewPivots(bucket: KMTable.KMT)
-  requires KMTable.WF(bucket)
-  ensures PivotsLib.WFPivots(GetNewPivots(bucket))
-  {
-    assume false;
-  }
 
   function {:opaque} repivotLeaf(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   : (s': Variables)
@@ -36,18 +28,25 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
+  requires |node.buckets| == 1
   {
     if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) then (
       s
     ) else (
-      var joined := KMTable.join(node.buckets, node.pivotTable);
+      WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
 
-      var pivots := GetNewPivots(joined);
-      WFGetNewPivots(joined);
+      var pivot := KVList.getMiddleKey(node.buckets[0]);
+      var pivots := [pivot];
 
-      var buckets' := KMTable.splitOnPivots(joined, pivots);
+      assume PivotsLib.WFPivots(pivots);
+
+      var buckets' := [
+          SplitBucketLeft(node.buckets[0], pivot),
+          SplitBucketRight(node.buckets[0], pivot)
+      ];
       var newnode := Node(pivots, None, buckets');
-      var s' := write(k, s, ref, newnode);
+      var s1 := writeBookkeeping(k, s, ref, None);
+      var s' := s1.(cache := s1.cache[ref := newnode]);
       s'
     )
   }
@@ -60,49 +59,58 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
+  requires |node.buckets| == 1
   ensures var s' := repivotLeaf(k, s, ref, node);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
   {
+    var s' := repivotLeaf(k, s, ref, node);
+
     reveal_repivotLeaf();
 
     if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) {
+      assert s' == s;
+      assert WFVars(s');
       assert noop(k, IVars(s), IVars(s));
       return;
     }
 
-    forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in KMTable.I(node.buckets[i]) && key2 in KMTable.I(node.buckets[j])
-    ensures MS.Keyspace.lt(key1, key2)
-    {
-      //assert BT.NodeHasWFBucketAt(INode(node), i);
-      //assert BT.NodeHasWFBucketAt(INode(node), j);
-      assert Pivots.Route(node.pivotTable, key1) == i;
-      assert Pivots.Route(node.pivotTable, key2) == j;
-      MS.Keyspace.IsStrictlySortedImpliesLte(node.pivotTable, i, j-1);
-    }
+    WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
 
-    var joined := KMTable.join(node.buckets, node.pivotTable);
+    var pivot := KVList.getMiddleKey(node.buckets[0]);
+    var pivots := [pivot];
 
-    var pivots := GetNewPivots(joined);
-    WFGetNewPivots(joined);
+    assume PivotsLib.WFPivots(pivots);
 
-    var buckets' := KMTable.splitOnPivots(joined, pivots);
+    var buckets' := [
+        SplitBucketLeft(node.buckets[0], pivot),
+        SplitBucketRight(node.buckets[0], pivot)
+    ];
     var newnode := Node(pivots, None, buckets');
+    var s1 := writeWithNode(k, s, ref, newnode);
+    reveal_writeBookkeeping();
 
-    KMTable.WFImpliesWFBucket(joined);
+    assert s1 == s';
 
-    WeightJoinBucketList(KMTable.ISeq(node.buckets));
-    WeightSplitBucketOnPivots(KMTable.I(joined), pivots);
+    WeightBucketLeBucketList(node.buckets, 0);
+    WeightSplitBucketAdditive(node.buckets[0], pivot);
+    WeightBucketList2(
+        SplitBucketLeft(node.buckets[0], pivot),
+        SplitBucketRight(node.buckets[0], pivot));
 
-    WFSplitBucketOnPivots(KMTable.I(joined), pivots);
-    var s' := write(k, s, ref, newnode);
+    assert WFNode(newnode);
     writeCorrect(k, s, ref, newnode);
-    reveal_write();
+    assert WFVars(s');
 
-    //assert BT.ValidRepivot(BT.Repivot(ref, node, pivots));
+    //assert IVars(s1).cache == IVars(s).cache[ref := INode(newnode)];
+
+    assume PivotBetreeSpec.ApplyRepivot(INode(node), [pivot]) == INode(newnode);
+
+    assert BT.ValidRepivot(BT.Repivot(ref, INode(node), pivots));
     var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));
     assert BT.ValidBetreeStep(step);
     assert |BT.BetreeStepOps(step)| == 1; // TODO
+    assert BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, INode(newnode));
     assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(step)[0]);
     BC.MakeTransaction1(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(step));
     //assert BC.ReadStep(k, IVars(s), BT.BetreeStepReads(step)[0]);

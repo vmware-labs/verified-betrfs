@@ -813,7 +813,7 @@ module KVList {
     assume right == splitRight(kvl, pivot);
   }
 
-  function splitKvlInList(buckets: seq<Kvl>, slot: int, pivot: Key)
+  /*function splitKvlInList(buckets: seq<Kvl>, slot: int, pivot: Key)
   : (buckets' : seq<Kvl>)
   requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
   requires 0 <= slot < |buckets|
@@ -843,7 +843,7 @@ module KVList {
     reveal_SplitBucketInList();
     Ireplace1with2(buckets, l, r, slot);
     assume buckets' == splitKvlInList(buckets, slot, pivot);
-  }
+  }*/
 
   /////////////////////////
   //// Joining
@@ -1234,4 +1234,50 @@ module KVList {
   lemma lenKeysLeWeightOver8(kvl: Kvl)
   requires WF(kvl)
   ensures 8*|kvl.keys| <= WeightBucket(I(kvl))
+
+  function toKvl(bucket: Bucket) : (kvl: Kvl)
+  requires WFBucket(bucket)
+  ensures WF(kvl)
+  ensures I(kvl) == bucket
+
+  function toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  ensures |kvls| == |buckets|
+  ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
+  ensures ISeq(kvls) == buckets
+
+  function getMiddleKey(bucket: Bucket) : Key
+  requires WFBucket(bucket)
+  {
+    var kvl := toKvl(bucket);
+    if |kvl.keys| == 0 then
+      [0] // Just pick an arbitary key
+    else (
+      var key := kvl.keys[|kvl.keys| / 2];
+      if |key| == 0 then 
+        [0]
+      else
+        key
+    )
+  }
+
+  method GetMiddleKey(kvl: Kvl) returns (res: Key)
+  requires WF(kvl)
+  ensures WFBucket(I(kvl))
+  ensures getMiddleKey(I(kvl)) == res
+  {
+    WFImpliesWFBucket(kvl); 
+    assume kvl == toKvl(I(kvl));
+    if |kvl.keys| == 0 {
+      return [0];
+    } else {
+      var key := kvl.keys[|kvl.keys| / 2];
+      if |key| == 0 {
+        return [0];
+      } else {
+        return key;
+      }
+    }
+  }
+
 }

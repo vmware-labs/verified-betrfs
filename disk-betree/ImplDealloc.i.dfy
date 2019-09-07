@@ -73,13 +73,25 @@ module ImplDealloc {
     var _ := s.ephemeralIndirectionTable.Remove(ref);
 
     s.lru.Remove(ref);
-
-    var _ := s.cache.Remove(ref);
+    s.cache.Remove(ref);
 
     assume s.ephemeralIndirectionTable.Contents
         == MapRemove(old(s.ephemeralIndirectionTable.Contents), {ref});
-    assume s.cache.Contents
-        == MapRemove(old(s.cache.Contents), {ref});
+    assume s.cache.I()
+        == MapRemove(old(s.cache.I()), {ref});
+
+    ghost var s1 := s.I();
+    ghost var s2 := ImplModelDealloc.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref).0;
+
+    //assert s1.persistentIndirectionTable == s2.persistentIndirectionTable;
+    //assert s1.frozenIndirectionTable == s2.frozenIndirectionTable;
+    //assert s1.ephemeralIndirectionTable == s2.ephemeralIndirectionTable;
+    //assert s1.outstandingIndirectionTableWrite == s2.outstandingIndirectionTableWrite;
+    //assert s1.outstandingBlockWrites == s2.outstandingBlockWrites;
+    //assert s1.outstandingBlockReads == s2.outstandingBlockReads;
+    assert s1.cache == s2.cache;
+    //assert s1.lru == s2.lru;
+    //assert s1 == s2;
   }
 
   method FindDeallocable(s: ImplVariables) returns (ref: Option<Reference>)

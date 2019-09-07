@@ -280,15 +280,6 @@ module ImplModelIO {
     }
   }
 
-  lemma INodeRootEqINodeForEmptyRootBucket(node: Node)
-  requires WFBuckets(node.buckets)
-  requires Pivots.WFPivots(node.pivotTable)
-  requires BucketsLib.WFBucketList(KMTable.ISeq(node.buckets), node.pivotTable)
-  ensures INodeRoot(node, map[]) == INode(node);
-  {
-    BucketsLib.BucketListFlushParentEmpty(KMTable.ISeq(node.buckets), node.pivotTable);
-  }
-
   // == readResponse ==
 
   function ISectorOpt(sector: Option<Sector>) : Option<BC.Sector>
@@ -338,7 +329,7 @@ module ImplModelIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), map[], 0)
+      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty())
     ) else (
       s
     )
@@ -448,7 +439,6 @@ module ImplModelIO {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])
           && id in s.outstandingBlockReads) {
-        INodeRootEqINodeForEmptyRootBucket(node);
         WeightBucketEmpty();
 
         LruModel.LruUse(s.lru, ref);

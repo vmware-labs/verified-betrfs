@@ -7,6 +7,8 @@ module ImplLeaf {
   import opened ImplCache
   import opened ImplModelLeaf
   import opened ImplState
+  import opened ImplNode
+  import opened MutableBucket
   import IMM = ImplMarshallingModel
 
   import opened Options
@@ -18,66 +20,19 @@ module ImplLeaf {
 
   import opened NativeTypes
 
-  import KMTable = KMTable`Internal
-
-  method GetNewPivots(bucket: KMTable.KMT)
-  returns (pivots : seq<MS.Key>)
-  requires KMTable.WF(bucket)
-  ensures Pivots.WFPivots(pivots)
-  ensures pivots == ImplModelLeaf.GetNewPivots(bucket)
-  {
-    // try to split the keys evenly, but don't let any bucket
-    // be larger than the cap
-
-    var kvl := bucket.kvl;
-    var n := |kvl.keys|;
-
-    var m := (n + 8 as int) / 8 as int;
-    if m > 500 {
-      m := 500;
-    }
-    if m < 1 {
-      m := 1;
-    }
-
-    MS.Keyspace.reveal_IsStrictlySorted();
-    var r := [];
-    var i := m;
-    while i < n
-    invariant MS.Keyspace.IsStrictlySorted(r);
-    invariant |r| > 0 ==> 0 <= i-m < n && r[|r|-1] == kvl.keys[i - m];
-    invariant |r| > 0 ==> MS.Keyspace.NotMinimum(r[0]);
-    invariant i > 0
-    {
-      MS.Keyspace.IsNotMinimum(kvl.keys[0], kvl.keys[i]);
-
-      r := r + [kvl.keys[i]];
-      i := i + m;
-    }
-
-    pivots := r;
-
-    if |pivots| < 1 {
-      //print n; print "\n";
-      //print |pivots|; print "\n";
-      print "warning: GetNewPivots didn't make any pivots\n";
-    }
-
-    assume pivots == ImplModelLeaf.GetNewPivots(bucket);
-  }
-
-  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
+  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.Contents
-  requires ref in s.cache.Contents
-  requires node == s.cache.Contents[ref]
+  requires s.cache.ptr(ref) == Some(node)
+  requires node.Inv()
   requires node.children.None?
   requires ref != BT.G.Root()
+  requires |node.buckets| == 1
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelLeaf.repivotLeaf(Ic(k), old(s.I()), ref, node);
+  ensures s.I() == ImplModelLeaf.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
   {
     ImplModelLeaf.reveal_repivotLeaf();
 
@@ -92,15 +47,34 @@ module ImplLeaf {
       }
     }
 
-    var joined := KMTable.Join(node.buckets, node.pivotTable);
-    var pivots := GetNewPivots(joined);
+    var kvl := node.buckets[0].GetKvl();
+    var pivot := KVList.GetMiddleKey(kvl);
 
-    var buckets' := KMTable.SplitOnPivots(joined, pivots);
-    var newnode := IM.Node(pivots, None, buckets');
+    var pivots := [pivot];
 
-    KMTable.WFImpliesWFBucket(joined);
-    WFSplitBucketOnPivots(KMTable.I(joined), pivots);
+    var left, right := node.buckets[0].SplitLeftRight(pivot);
 
-    write(k, s, ref, newnode);
+    var buckets' := [left, right];
+    MutBucket.ReprSeqDisjointOfLen2(buckets');
+    MutBucket.ListReprOfLen2(buckets');
+    var newnode := new Node(pivots, None, buckets');
+
+    writeBookkeeping(k, s, ref, None);
+
+    newnode.LemmaRepr();
+    assert fresh(newnode.Repr);
+    assert s.cache.Repr !! newnode.Repr;
+    s.cache.Insert(ref, newnode);
+
+    assert s.W();
+
+    ghost var a := s.I();
+    ghost var b := ImplModelLeaf.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
+    assert newnode.I() == old(IM.Node(pivots, None, [
+          SplitBucketLeft(node.I().buckets[0], pivot),
+          SplitBucketRight(node.I().buckets[0], pivot)
+        ]));
+      
+    assert a.cache == b.cache;
   }
 }

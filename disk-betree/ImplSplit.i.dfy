@@ -7,6 +7,7 @@ module ImplSplit {
   import opened ImplCache
   import ImplModelSplit
   import opened ImplState
+  import opened ImplNode
 
   import opened Options
   import opened Maps
@@ -19,83 +20,92 @@ module ImplSplit {
 
   import opened NativeTypes
 
-  method CutoffNodeAndKeepLeft(node: Node, pivot: Key)
-  returns (node': Node)
-  requires IM.WFNode(node)
-  ensures node' == ImplModelSplit.CutoffNodeAndKeepLeft(node, pivot)
+  method splitBookkeeping(k: ImplConstants, s: ImplVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: uint64)
+  requires Inv(k, s)
+  requires 0 <= slot as int < |fused_parent_children|
+  requires left_child.Inv()
+  requires right_child.Inv()
+  requires left_child.Repr !! s.Repr()
+  requires right_child.Repr !! s.Repr()
+  requires s.ready
+  modifies s.lru.Repr
+  modifies s.ephemeralIndirectionTable.Repr
+  ensures s.ready
+  ensures s.W()
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures s.I() == ImplModelSplit.splitBookkeeping(Ic(k), old(s.I()), left_childref, right_childref, parentref, fused_parent_children, left_child.I(), right_child.I(), slot as int);
   {
-    ImplModelSplit.reveal_CutoffNodeAndKeepLeft();
-    var cLeft := Pivots.ComputeCutoffForLeft(node.pivotTable, pivot);
-    var leftPivots := node.pivotTable[.. cLeft];
-    var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
-    WeightBucketLeBucketList(KMTable.ISeq(node.buckets), cLeft);
-    var splitBucket := KMTable.SplitLeft(node.buckets[cLeft], pivot);
-    var leftBuckets := node.buckets[.. cLeft] + [splitBucket];
-    node' := IM.Node(leftPivots, leftChildren, leftBuckets);
+    ImplModelSplit.reveal_splitBookkeeping();
+    writeBookkeeping(k, s, left_childref, left_child.children);
+    writeBookkeeping(k, s, right_childref, right_child.children);
+    writeBookkeeping(k, s, parentref, Some(replace1with2(fused_parent_children, left_childref, right_childref, slot as int)));
   }
 
-  method CutoffNodeAndKeepRight(node: Node, pivot: Key)
-  returns (node': Node)
-  requires IM.WFNode(node)
-  ensures node' == ImplModelSplit.CutoffNodeAndKeepRight(node, pivot)
+  method splitCacheChanges(s: ImplVariables, left_childref: BT.G.Reference,
+      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: uint64, num_children_left: uint64, pivot: Key, left_child: Node, right_child: Node)
+  requires s.ready
+  requires s.W()
+  requires s.cache.ptr(parentref).Some?
+  requires IM.WFNode(s.cache.ptr(parentref).value.I())
+  requires s.cache.ptr(parentref).value.I().children.Some?
+  requires 0 <= slot as int < |s.cache.ptr(parentref).value.I().children.value|
+  requires left_child.Inv()
+  requires right_child.Inv()
+  requires left_child.Repr !! s.Repr()
+  requires right_child.Repr !! s.Repr()
+  requires left_child.Repr !! right_child.Repr
+  requires |s.cache.I()| <= 0x10000 - 2
+  requires left_childref != parentref
+  requires right_childref != parentref
+  modifies s.Repr()
+  modifies left_child.Repr // not really but it's easier to include this
+  modifies right_child.Repr
+  ensures s.W()
+  ensures (forall o | o in s.Repr() :: o in old(s.Repr()) || o in old(left_child.Repr) || o in old(right_child.Repr) || fresh(o))
+  ensures s.I() == ImplModelSplit.splitCacheChanges(old(s.I()), left_childref, right_childref, parentref, slot as int, num_children_left as int, pivot, old(left_child.I()), old(right_child.I()))
+  ensures s.ready
   {
-    ImplModelSplit.reveal_CutoffNodeAndKeepRight();
-    var cRight := Pivots.ComputeCutoffForRight(node.pivotTable, pivot);
-    var rightPivots := node.pivotTable[cRight ..];
-    var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
-    WeightBucketLeBucketList(KMTable.ISeq(node.buckets), cRight);
-    var splitBucket := KMTable.SplitRight(node.buckets[cRight], pivot);
-    var rightBuckets := [splitBucket] + node.buckets[cRight + 1 ..];
-    node' := IM.Node(rightPivots, rightChildren, rightBuckets);
+    ImplModelSplit.reveal_splitCacheChanges();
+    s.cache.Insert(left_childref, left_child);
+    s.cache.Insert(right_childref, right_child);
+    s.cache.SplitParent(parentref, slot as uint64, pivot, left_childref, right_childref);
   }
 
-  method CutoffNode(node: Node, lbound: Option<Key>, rbound: Option<Key>)
-  returns (node' : Node)
-  requires IM.WFNode(node)
-  ensures node' == ImplModelSplit.CutoffNode(node, lbound, rbound)
-  {
-    ImplModelSplit.reveal_CutoffNode();
+  method splitDoChanges(k: ImplConstants, s: ImplVariables, child: Node,
+      left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
+      fused_parent_children: seq<BT.G.Reference>, slot: uint64)
+  requires Inv(k, s)
+  requires child.Inv()
 
-    match lbound {
-      case None => {
-        match rbound {
-          case None => {
-            node' := node;
-          }
-          case Some(rbound) => {
-            node' := CutoffNodeAndKeepLeft(node, rbound);
-          }
-        }
-      }
-      case Some(lbound) => {
-        match rbound {
-          case None => {
-            node' := CutoffNodeAndKeepRight(node, lbound);
-          }
-          case Some(rbound) => {
-            var node1 := CutoffNodeAndKeepLeft(node, rbound);
-            ImplModelSplit.CutoffNodeAndKeepLeftCorrect(node, rbound);
-            node' := CutoffNodeAndKeepRight(node1, lbound);
-          }
-        }
-      }
-    }
-  }
+  requires s.ready
+  requires parentref in s.cache.I()
+  requires IM.WFNode(s.cache.I()[parentref]);
+  requires IM.WFNode(child.I());
+  requires s.cache.I()[parentref].children.Some?
+  requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
+  requires 0 <= slot as int < |fused_parent_children|
+  requires left_childref != parentref
+  requires right_childref != parentref
+  requires |child.buckets| >= 2
 
-  method SplitParent(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference) returns (res : Node)
-  requires IM.WFNode(fused_parent)
-  requires 0 <= slot_idx < |fused_parent.buckets|
-  requires fused_parent.children.Some?
-  ensures res == ImplModelSplit.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref)
+  modifies s.Repr()
+
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSplit.splitDoChanges(Ic(k), old(s.I()), old(child.I()), left_childref, right_childref, parentref, fused_parent_children, slot as int)
+  ensures s.ready
   {
-    var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    WeightBucketLeBucketList(KMTable.ISeq(fused_parent.buckets), slot_idx);
-    var buckets := KMTable.SplitKMTInList(fused_parent.buckets, slot_idx as uint64, pivot);
-    res := IM.Node(
-      pivots,
-      Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
-      buckets
-    );
+    var num_children_left := |child.buckets| as uint64 / 2;
+    assume 0 <= num_children_left < 0x100;
+    var pivot := child.pivotTable[num_children_left - 1];
+
+    var left_child := child.SplitChildLeft(num_children_left as uint64);
+    var right_child := child.SplitChildRight(num_children_left as uint64);
+
+    splitBookkeeping(k, s, left_childref, right_childref, parentref, fused_parent_children, left_child, right_child, slot as uint64);
+    splitCacheChanges(s, left_childref, right_childref, parentref, slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
+
+    ImplModelSplit.reveal_splitDoChanges();
   }
 
   method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
@@ -103,11 +113,11 @@ module ImplSplit {
   requires Inv(k, s)
   requires ref in s.ephemeralIndirectionTable.Contents
   requires parentref in s.ephemeralIndirectionTable.Contents
-  requires ref in s.cache.Contents
-  requires parentref in s.cache.Contents
-  requires s.cache.Contents[parentref].children.Some?
-  requires 0 <= slot < |s.cache.Contents[parentref].children.value|
-  requires s.cache.Contents[parentref].children.value[slot] == ref
+  requires s.cache.ptr(ref).Some?
+  requires s.cache.ptr(parentref).Some?
+  requires s.cache.I()[parentref].children.Some?
+  requires 0 <= slot < |s.cache.I()[parentref].children.value|
+  requires s.cache.I()[parentref].children.value[slot] == ref
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
@@ -126,14 +136,17 @@ module ImplSplit {
       }
     }
 
-    var fused_parent_opt := s.cache.Get(parentref);
+    var fused_parent_opt := s.cache.GetOpt(parentref);
     var fused_parent := fused_parent_opt.value;
-    var fused_child_opt := s.cache.Get(ref);
+    var fused_child_opt := s.cache.GetOpt(ref);
     var fused_child := fused_child_opt.value;
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
-    var child := CutoffNode(fused_child, lbound, ubound);
+
+    ImplModelSplit.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
+    var child := fused_child.CutoffNode(lbound, ubound);
+    assert IM.WFNode(child.I());
 
     if (|child.pivotTable| == 0) {
       // TODO there should be an operation which just
@@ -154,15 +167,11 @@ module ImplSplit {
       return;
     }
 
-    var num_children_left := |child.buckets| / 2;
-    var pivot := child.pivotTable[num_children_left - 1];
+    assume left_childref.value != right_childref.value;
+    assume parentref != left_childref.value;
+    assume parentref != right_childref.value;
 
-    var left_child := ImplModelSplit.SplitChildLeft(child, num_children_left);
-    var right_child := ImplModelSplit.SplitChildRight(child, num_children_left);
-    var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
-
-    write(k, s, left_childref.value, left_child);
-    write(k, s, right_childref.value, right_child);
-    write(k, s, parentref, split_parent);
+    splitDoChanges(k, s, child, left_childref.value, right_childref.value,
+        parentref, fused_parent.children.value, slot as uint64);
   }
 }

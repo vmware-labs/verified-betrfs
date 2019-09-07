@@ -1,11 +1,9 @@
 include "ImplModelCache.i.dfy"
-include "ImplModelFlushRootBucket.i.dfy"
 
 module ImplModelGrow { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
-  import opened ImplModelFlushRootBucket
 
   import opened Options
   import opened Maps
@@ -32,26 +30,24 @@ module ImplModelGrow {
     ) then (
       s
     ) else (
-      var s0 := flushRootBucket(k, s);
-      flushRootBucketCorrect(k, s);
-
-      var oldroot := s0.cache[BT.G.Root()];
-      var (s1, newref) := alloc(k, s0, oldroot);
+      var oldroot := s.cache[BT.G.Root()];
+      var (s1, newref) := allocBookkeeping(k, s, oldroot.children);
       match newref {
         case None => (
           s1
         )
         case Some(newref) => (
-          var newroot := Node([], Some([newref]), [KMTable.Empty()]);
-          var s0' := write(k, s1, BT.G.Root(), newroot);
-          s0'
+          var newroot := Node([], Some([newref]), [map[]]);
+          var s2 := writeBookkeeping(k, s1, BT.G.Root(), newroot.children);
+          var s' := s2.(cache := s2.cache[newref := oldroot][BT.G.Root() := newroot]);
+          s'
         )
       }
     )
   }
 
-  lemma WeightOneEmptyKMTable()
-  ensures WeightBucketList(KMTable.ISeq([KMTable.Empty()])) == 0
+  lemma WeightOneEmpty()
+  ensures WeightBucketList([map[]]) == 0
 
   lemma growCorrect(k: Constants, s: Variables)
   requires Inv(k, s)
@@ -64,6 +60,8 @@ module ImplModelGrow {
   {
     reveal_grow();
 
+    var s' := grow(k, s);
+
     if (
       && s.frozenIndirectionTable.Some?
       && BT.G.Root() in s.frozenIndirectionTable.value
@@ -75,46 +73,36 @@ module ImplModelGrow {
       return;
     }
 
-    var s0 := flushRootBucket(k, s);
-    flushRootBucketCorrect(k, s);
-    reveal_flushRootBucket();
-
-    var oldroot := s0.cache[BT.G.Root()];
-    var (s1, newref) := alloc(k, s0, oldroot);
-    reveal_alloc();
-    reveal_write();
+    var oldroot := s.cache[BT.G.Root()];
+    var (s1, newref) := allocWithNode(k, s, oldroot);
+    reveal_allocBookkeeping();
+    reveal_writeBookkeeping();
 
     match newref {
       case None => {
-        assert noop(k, IVars(s0), IVars(s1));
+        assert noop(k, IVars(s), IVars(s1));
       }
       case Some(newref) => {
-        var newroot := Node([], Some([newref]), [KMTable.Empty()]);
-        WeightOneEmptyKMTable();
+        var newroot := Node([], Some([newref]), [map[]]);
+        WeightOneEmpty();
 
-        assert BT.G.Root() in s0.cache;
-        assert BT.G.Root() in ICache(s0.cache, s0.rootBucket);
-        assert BT.G.Root() in ICache(s1.cache, s1.rootBucket);
+        assert BT.G.Root() in s.cache;
+        assert BT.G.Root() in ICache(s.cache);
+        assert BT.G.Root() in ICache(s1.cache);
         assert BT.G.Root() in s1.cache;
 
-        INodeRootEqINodeForEmptyRootBucket(oldroot);
-        assert INodeRoot(s.cache[BT.G.Root()], s.rootBucket)
-            == IVars(s).cache[BT.G.Root()]
-            == IVars(s0).cache[BT.G.Root()]
-            == INodeRoot(oldroot, s0.rootBucket)
-            == INode(oldroot);
+        var s2 := writeWithNode(k, s1, BT.G.Root(), newroot);
+        assert s2 == s';
 
-        var s' := write(k, s1, BT.G.Root(), newroot);
-
-        allocCorrect(k, s0, oldroot);
+        allocCorrect(k, s, oldroot);
         writeCorrect(k, s1, BT.G.Root(), newroot);
 
         var growth := BT.RootGrowth(INode(oldroot), newref);
         assert INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [map[]]);
         var step := BT.BetreeGrow(growth);
-        BC.MakeTransaction2(Ik(k), IVars(s0), IVars(s1), IVars(s'), BT.BetreeStepOps(step));
-        assert BBC.BetreeMove(Ik(k), IVars(s0), IVars(s'), UI.NoOp, M.IDiskOp(D.NoDiskOp), step);
-        assert stepsBetree(k, IVars(s0), IVars(s'), UI.NoOp, step);
+        BC.MakeTransaction2(Ik(k), IVars(s), IVars(s1), IVars(s'), BT.BetreeStepOps(step));
+        assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, M.IDiskOp(D.NoDiskOp), step);
+        assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
         assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
       }
     }

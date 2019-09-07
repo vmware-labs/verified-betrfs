@@ -84,6 +84,13 @@ module BucketWeights {
   lemma WeightSplitBucketRight(bucket: Bucket, key: Key)
   ensures WeightBucket(SplitBucketRight(bucket, key)) <= WeightBucket(bucket)
 
+  lemma WeightSplitBucketAdditive(bucket: Bucket, key: Key)
+  ensures WeightBucket(SplitBucketLeft(bucket, key)) +
+          WeightBucket(SplitBucketRight(bucket, key)) == WeightBucket(bucket)
+
+  lemma WeightBucketList2(a: Bucket, b: Bucket)
+  ensures WeightBucketList([a,b]) == WeightBucket(a) + WeightBucket(b)
+
   lemma WeightSplitBucketListLeft(blist: BucketList, pivots: seq<Key>, cLeft: int, key: Key)
   requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
   ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))

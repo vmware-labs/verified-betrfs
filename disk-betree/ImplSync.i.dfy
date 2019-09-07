@@ -3,7 +3,6 @@ include "ImplIO.i.dfy"
 include "ImplDealloc.i.dfy"
 include "ImplModelSync.i.dfy"
 include "ImplModelCache.i.dfy"
-include "ImplFlushRootBucket.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -15,7 +14,6 @@ module ImplSync {
   import opened ImplIO
   import opened ImplCache
   import opened ImplDealloc
-  import opened ImplFlushRootBucket
   import ImplModelSync
   import ImplModelCache
   import ImplModelDealloc
@@ -92,7 +90,6 @@ module ImplSync {
   requires Inv(k, s)
   requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == TTT.EmptyTree
   requires s.frozenIndirectionTable == null
   requires io !in s.Repr()
   modifies s.Repr()
@@ -120,7 +117,7 @@ module ImplSync {
   requires s.ready
   requires Inv(k, s)
   requires io.initialized()
-  requires ref in s.cache.Contents
+  requires ref in s.cache.I()
   requires io !in s.Repr()
   modifies s.Repr()
   modifies io
@@ -128,8 +125,10 @@ module ImplSync {
   ensures s.ready
   ensures ImplModelSync.TryToWriteBlock(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    var nodeOpt := s.cache.Get(ref);
+    var nodeOpt := s.cache.GetOpt(ref);
     var node := nodeOpt.value;
+
+    assert node.I() == s.cache.I()[ref];
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
 
     if (id.Some?) {
@@ -142,7 +141,7 @@ module ImplSync {
       print "sync: giving up; write req failed\n";
     }
 
-    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(SectorBlock(s.cache.Contents[ref]))), id, loc, IIO(io));
+    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(IM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
     assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
   }
 
@@ -152,7 +151,6 @@ module ImplSync {
   requires Inv(k, s)
   requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == TTT.EmptyTree
   requires s.frozenIndirectionTable != null
   requires ref in s.frozenIndirectionTable.Contents
   requires s.frozenIndirectionTable.Contents[ref].0.None?
@@ -197,11 +195,6 @@ module ImplSync {
     if (s.outstandingIndirectionTableWrite.Some?) {
       //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
-      return;
-    }
-
-    if (s.rootBucket != TTT.EmptyTree) {
-      flushRootBucket(k, s);
       return;
     }
 

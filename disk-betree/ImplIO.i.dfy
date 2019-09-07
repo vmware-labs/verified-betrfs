@@ -9,6 +9,8 @@ module ImplIO {
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import opened ImplNode
+  import opened ImplMutCache
   import ImplModel
   import ImplMarshalling
   import IMM = ImplMarshallingModel
@@ -89,7 +91,7 @@ module ImplIO {
   requires IM.WFSector(IS.ISector(sector))
   requires io.initialized()
   modifies io
-  ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
+  ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, old(ISector(sector)), id, IIO(io))
   ensures id.Some? ==> io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> old(IIO(io)) == IIO(io)
   {
@@ -114,7 +116,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies io
   ensures s.W()
-  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), ISector(sector), id, loc, IIO(io))
+  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
   ensures old(s.I()) == s.I();
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
@@ -193,9 +195,9 @@ module ImplIO {
   // == readResponse ==
 
   function ISectorOpt(sector: Option<IS.Sector>) : Option<IM.Sector>
+  reads if sector.Some? then SectorObjectSet(sector.value) else {}
+  reads if sector.Some? then SectorRepr(sector.value) else {}
   requires sector.Some? ==> IS.WFSector(sector.value)
-  reads if sector.Some? && sector.value.SectorIndirectionTable? then {sector.value.indirectionTable} else {}
-  reads if sector.Some? && sector.value.SectorIndirectionTable? then sector.value.indirectionTable.Repr else {}
   {
     match sector {
       case None => None
@@ -207,7 +209,8 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(IIO(io))
+  ensures sector.Some? ==> fresh(SectorRepr(sector.value))
+  ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(old(IIO(io)))
   {
     var id1, bytes := io.getReadResult();
     id := id1;
@@ -226,7 +229,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
@@ -240,10 +243,8 @@ module ImplIO {
       s.outstandingIndirectionTableWrite := None;
       s.outstandingBlockWrites := map[];
       s.outstandingBlockReads := map[];
-      s.cache := new MM.ResizingHashMap(128);
+      s.cache := new MutCache();
       s.lru := new MutableLru.MutableLruQueue();
-      s.rootBucket := TTT.EmptyTree;
-      s.rootBucketWeightBound := 0;
     } else {
       print "giving up; did not get indirectionTable when reading\n";
     }
@@ -256,9 +257,11 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
+    assert sector.Some? ==> IS.WFSector(sector.value);
+    assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
     if (id !in s.outstandingBlockReads) {
       print "PageInResp: unrecognized id from Read\n";
@@ -269,17 +272,20 @@ module ImplIO {
     // even in the case we don't do anything with it
 
     var ref := s.outstandingBlockReads[id].ref;
-    
+
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if (lbaGraph.None? || lbaGraph.value.0.None?) {
       print "PageInResp: ref !in lbas\n";
       return;
     }
-    var cacheLookup := s.cache.Get(ref);
+    var cacheLookup := s.cache.GetOpt(ref);
     if cacheLookup.Some? {
       print "PageInResp: ref in s.cache\n";
       return;
     }
+
+    assert sector.Some? ==> IS.WFSector(sector.value);
+    assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
     var lba := lbaGraph.value.0.value;
     var graph := lbaGraph.value.1;
@@ -287,12 +293,17 @@ module ImplIO {
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
-
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+        assert sector.Some? ==> IS.WFSector(sector.value);
+        assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
         s.lru.Use(ref);
 
-        assume |s.cache.Contents| <= MaxCacheSize();
-        var _ := s.cache.Insert(ref, sector.value.block);
+        assert sector.Some? ==> IS.WFSector(sector.value);
+        assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
+
+        assume |s.cache.I()| <= MaxCacheSize();
+        s.cache.Insert(ref, sector.value.block);
+
         s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
       } else {
         print "giving up; block does not match graph\n";

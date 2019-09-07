@@ -33,7 +33,7 @@ module ImplCache {
     {
       var lookup := s.ephemeralIndirectionTable.Get(i);
       if lookup.None? {
-        var cacheLookup := s.cache.Get(i);
+        var cacheLookup := s.cache.GetOpt(i);
         if cacheLookup.None? {
           return Some(i);
         }
@@ -64,7 +64,7 @@ module ImplCache {
       if i != avoid {
         var lookup := s.ephemeralIndirectionTable.Get(i);
         if lookup.None? {
-          var cacheLookup := s.cache.Get(i);
+          var cacheLookup := s.cache.GetOpt(i);
           if cacheLookup.None? {
             return Some(i);
           }
@@ -79,41 +79,49 @@ module ImplCache {
     }
   }
 
-  method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
+  method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires s.ready
   requires s.W()
-  modifies s.Repr()
+  modifies s.lru.Repr
+  modifies s.ephemeralIndirectionTable.Repr
   ensures s.ready
-  ensures WellUpdated(s)
-  ensures s.I() == ImplModelCache.write(Ic(k), old(s.I()), ref, node)
+  ensures s.W()
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures s.I() == ImplModelCache.writeBookkeeping(Ic(k), old(s.I()), ref, children)
+  //ensures s.cache.I() == old(s.cache.I())
   {
-    ImplModelCache.reveal_write();
+    ImplModelCache.reveal_writeBookkeeping();
 
     // TODO how do we deal with this?
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
-    var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if node.children.Some? then node.children.value else []));
+    var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if children.Some? then children.value else []));
 
     assume |LruModel.I(s.lru.Queue)| <= 0x10000;
-    assume |s.cache.Contents| <= MaxCacheSize();
+    assume |s.cache.I()| <= MaxCacheSize();
 
     s.lru.Use(ref);
-    var _ := s.cache.Insert(ref, node);
   }
 
-  method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)
+  method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<BT.G.Reference>>)
   returns (ref: Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
-  modifies s.Repr()
+  //modifies s.Repr()
+  modifies s.lru.Repr
+  modifies s.ephemeralIndirectionTable.Repr
   ensures s.ready
-  ensures WellUpdated(s)
-  ensures (s.I(), ref) == ImplModelCache.alloc(Ic(k), old(s.I()), node)
+  ensures s.W()
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures (s.I(), ref) == ImplModelCache.allocBookkeeping(Ic(k), old(s.I()), children)
+  //ensures s.cache.I() == old(s.cache.I())
   {
-    ImplModelCache.reveal_alloc();
+    ImplModelCache.reveal_allocBookkeeping();
     
     ref := getFreeRef(s);
     if (ref.Some?) {
-      write(k, s, ref.value, node);
+      writeBookkeeping(k, s, ref.value, children);
     }
   }
 }

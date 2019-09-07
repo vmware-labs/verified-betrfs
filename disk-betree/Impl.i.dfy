@@ -27,7 +27,6 @@ module Impl {
   import Messages = ValueMessage
   import Pivots = PivotsLib
   import opened BucketsLib
-  import KMTable = KMTable
   import LBAType = LBAType
   import opened Sets
   import IS = ImplState

@@ -1,6 +1,8 @@
 include "../lib/MutableMap.i.dfy"
 include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
+include "MutableBucket.i.dfy"
+include "ImplNodes.i.dfy"
 
 module {:extern} ImplState {
   import opened Options
@@ -8,6 +10,8 @@ module {:extern} ImplState {
   import opened NativeTypes
   import TTT = TwoThreeTree
   import IM = ImplModel
+  import opened ImplNode
+  import opened ImplMutCache
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -15,11 +19,12 @@ module {:extern} ImplState {
   import Pivots = PivotsLib
   import BC = BetreeGraphBlockCache
   import M = BetreeBlockCache
-  import KMTable = KMTable
   import D = AsyncSectorDisk
   import MainDiskIOHandler
   import LruModel
   import MutableLru
+  import MutableBucket
+  import opened Bounds
   import opened BucketsLib
 
   import MM = MutableMap
@@ -30,34 +35,43 @@ module {:extern} ImplState {
   type Message = Messages.Message
   type TreeMap = TTT.Tree<Message>
 
-  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.Location>, seq<Reference>)>
+  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.Location>, seq<BT.G.Reference>)>
   type MutIndirectionTableNullable = MM.ResizingHashMap?<(Option<BC.Location>, seq<Reference>)>
-  type MutCache = MM.ResizingHashMap<Node>
-
-  type Node = IM.Node
 
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
- 
-  predicate WFSector(sector: Sector)
-  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} + sector.indirectionTable.Repr else {}
+
+  function SectorObjectSet(sector: Sector) : set<object>
   {
-    && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
+    match sector {
+      case SectorIndirectionTable(indirectionTable) => {indirectionTable}
+      case SectorBlock(block) => {block}
+    }
+  }
+
+  function SectorRepr(sector: Sector) : set<object>
+  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {sector.block}
+  {
+    match sector {
+      case SectorIndirectionTable(indirectionTable) => {indirectionTable} + indirectionTable.Repr
+      case SectorBlock(block) => block.Repr
+    }
   }
  
+  predicate WFSector(sector: Sector)
+  reads SectorObjectSet(sector)
+  reads SectorRepr(sector)
+  {
+    && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
+    && (sector.SectorBlock? ==> sector.block.Inv())
+  }
+
   function IIndirectionTable(table: MutIndirectionTable) : (result: IM.IndirectionTable)
   reads table, table.Repr
   {
     table.Contents
   }
- 
-  function ICache(table: MutCache) : (result: map<BT.G.Reference, Node>)
-  reads table, table.Repr
-  {
-    table.Contents
-  }
-
  
   function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<IM.IndirectionTable>)
   reads if table != null then {table} + table.Repr else {}
@@ -70,10 +84,11 @@ module {:extern} ImplState {
  
   function ISector(sector: Sector) : IM.Sector
   requires WFSector(sector)
-  reads if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
+  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {sector.block}
+  reads SectorRepr(sector)
   {
     match sector {
-      case SectorBlock(node) => IM.SectorBlock(node)
+      case SectorBlock(node) => IM.SectorBlock(node.I())
       case SectorIndirectionTable(indirectionTable) => IM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
@@ -92,8 +107,6 @@ module {:extern} ImplState {
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
     var cache: MutCache;
     var lru: MutableLru.MutableLruQueue;
-    var rootBucket: TreeMap;
-    var rootBucketWeightBound: uint64;
 
     // Unready
     var outstandingIndirectionTableRead: Option<D.ReqId>;
@@ -116,6 +129,7 @@ module {:extern} ImplState {
     reads Repr()
     {
         // NOALIAS statically enforced no-aliasing would probably help here
+
         && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
         && (frozenIndirectionTable != null ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.Repr)
         && (frozenIndirectionTable != null ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.Repr)
@@ -143,7 +157,6 @@ module {:extern} ImplState {
       && persistentIndirectionTable.Inv()
       && (frozenIndirectionTable != null ==> frozenIndirectionTable.Inv())
       && ephemeralIndirectionTable.Inv()
-      && TTT.TTTree(rootBucket)
       && lru.Inv()
       && cache.Inv()
     }
@@ -155,7 +168,7 @@ module {:extern} ImplState {
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache), lru.Queue, TTT.I(rootBucket), rootBucketWeightBound)
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, cache.I(), lru.Queue)
       ) else (
         IM.Unready(outstandingIndirectionTableRead, syncReqs)
       )
@@ -186,14 +199,13 @@ module {:extern} ImplState {
       ephemeralIndirectionTable := new MM.ResizingHashMap(128);
       persistentIndirectionTable := new MM.ResizingHashMap(128);
       frozenIndirectionTable := null;
-      rootBucket := TTT.EmptyTree;
-      cache := new MM.ResizingHashMap(128);
+      cache := new MutCache();
     }
   }
 
   predicate Inv(k: M.Constants, s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru, s.cache
+        s.frozenIndirectionTable, s.lru, s.cache
   reads s.Repr()
   {
     && s.W()

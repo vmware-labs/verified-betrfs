@@ -74,7 +74,7 @@ module {:extern} MainImpl refines Main {
     ioAndHsNotInReadSet(s, io, hs);
     id := id1;
     var uiop := UI.PushSyncOp(id);
-    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp()); // observe
   }
@@ -90,7 +90,7 @@ module {:extern} MainImpl refines Main {
     success := succ;
     wait := w;
     var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
         if success then UI.PopSyncOp(id) else UI.NoOp,
@@ -106,7 +106,7 @@ module {:extern} MainImpl refines Main {
     ImplModelQuery.queryCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key);
     ioAndHsNotInReadSet(s, io, hs);
     var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     v := value;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
@@ -123,7 +123,7 @@ module {:extern} MainImpl refines Main {
     ImplModelInsert.insertCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key, value, s.I(), succ, IS.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     success := succ;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
@@ -139,7 +139,7 @@ module {:extern} MainImpl refines Main {
     ImplModelIO.readResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
@@ -152,7 +152,7 @@ module {:extern} MainImpl refines Main {
     ImplModelIO.writeResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     var uiop := UI.NoOp;
-    BBC.NextPreservesInv(k, old(IM.IVars(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }

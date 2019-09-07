@@ -17,6 +17,7 @@ module ImplInsert {
   import opened ImplModelInsert
   import opened ImplState
   import opened ImplFlushPolicy
+  import opened MutableBucket
 
   import opened Options
   import opened Maps
@@ -53,7 +54,7 @@ module ImplInsert {
   returns (success: bool)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache.Contents
+  requires BT.G.Root() in s.cache.I()
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(s.I()), key, value)
@@ -74,17 +75,13 @@ module ImplInsert {
     }
 
     var msg := Messages.Define(value);
-    var newRootBucket := TTT.Insert(s.rootBucket, key, msg);
+    s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
     // TODO how do we deal with this?
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
 
     RemoveLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root());
 
-    var newW := s.rootBucketWeightBound + WeightKeyUint64(key) + WeightMessageUint64(msg);
-
-    s.rootBucket := newRootBucket;
-    s.rootBucketWeightBound := newW;
     success := true;
   }
 
@@ -106,7 +103,7 @@ module ImplInsert {
       return;
     }
 
-    var rootLookup := s.cache.Get(BT.G.Root());
+    var rootLookup := s.cache.GetOpt(BT.G.Root());
     if (rootLookup.None?) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
         PageInReq(k, s, io, BT.G.Root());
@@ -118,11 +115,9 @@ module ImplInsert {
       return;
     }
 
-    var weightSeq := KMTable.computeWeightKMTSeq(rootLookup.value.buckets);
+    var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.buckets);
 
-    if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) +
-        s.rootBucketWeightBound +
-        weightSeq
+    if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) + weightSeq
         <= MaxTotalBucketWeight() as uint64 {
       success := InsertKeyValue(k, s, key, value);
     } else {

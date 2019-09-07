@@ -15,6 +15,7 @@ module ImplQuery {
   import ImplModelQuery
   import ImplModelCache
   import opened ImplState
+  import opened MutableBucket
 
   import opened Options
   import opened NativeTypes
@@ -29,20 +30,6 @@ module ImplQuery {
   import opened PBS = PivotBetreeSpec`Spec
 
   // == query ==
-
-  method TryRootBucketLookup(k: ImplConstants, s: ImplVariables, key: MS.Key)
-  returns (res: Option<MS.Value>)
-  requires Inv(k, s)
-  requires s.ready
-  ensures res == ImplModelQuery.TryRootBucketLookup(Ic(k), s.I(), key)
-  {
-    var qres := TTT.Query(s.rootBucket, key);
-    if (qres.ValueForKey?) {
-      res := Some(qres.value.value);
-    } else {
-      res := None;
-    }
-  }
 
   method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
   returns (res: Option<MS.Value>)
@@ -61,12 +48,6 @@ module ImplQuery {
       PageInIndirectionTableReq(k, s, io);
       res := None;
     } else {
-      var rootLookup := TryRootBucketLookup(k, s, key);
-      if (rootLookup.Some?) {
-        res := rootLookup;
-        return;
-      }
-
       var ref := BT.G.Root();
       var msg := Messages.IdentityMessage();
       var counter: uint64 := 40;
@@ -88,9 +69,9 @@ module ImplQuery {
           return;
         }
 
-        var nodeOpt := s.cache.Get(ref);
+        var nodeOpt := s.cache.GetOpt(ref);
         if (nodeOpt.None?) {
-          if s.cache.Count as int + |s.outstandingBlockReads| <= MaxCacheSize() - 1 {
+          if s.cache.Count() as int + |s.outstandingBlockReads| <= MaxCacheSize() - 1 {
             PageInReq(k, s, io, ref);
             res := None;
             return;
@@ -101,6 +82,10 @@ module ImplQuery {
         } else {
           var node := nodeOpt.value;
 
+          assume MutBucket.ReprSeq(node.buckets) <= node.Repr;
+          s.cache.LemmaNodeReprLeRepr(ref);
+          MutBucket.reveal_ReprSeq();
+
           ghost var oldIVars := s.I();
           LruModel.LruUse(s.lru.Queue, ref);
           s.lru.Use(ref);
@@ -109,7 +94,7 @@ module ImplQuery {
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var bucket := node.buckets[r];
 
-          var kmtMsg := KMTable.Query(bucket, key);
+          var kmtMsg := bucket.Query(key);
           var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
 
           if (newmsg.Define?) {

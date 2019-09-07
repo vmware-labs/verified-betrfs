@@ -2,10 +2,10 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "Message.i.dfy"
 include "ImplModel.i.dfy"
-include "KMTable.i.dfy"
 include "../lib/Crypto.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/MutableMap.i.dfy"
+include "KVList.i.dfy"
 
 module ImplMarshallingModel {
   import opened GenericMarshalling
@@ -18,7 +18,6 @@ module ImplMarshallingModel {
   import opened Bounds
   import BC = BetreeGraphBlockCache
   import IM = ImplModel
-  import KMTable`Internal
   import KVList
   import Crypto
   import Native
@@ -234,7 +233,7 @@ module ImplMarshallingModel {
     )
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KMTable.KMT>)
+  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KVList.Kvl>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
@@ -247,9 +246,7 @@ module ImplMarshallingModel {
       var kvl := KVList.Kvl(keys.value, values.value);
 
       if KVList.WF(kvl) && WFBucketAt(KVList.I(kvl), pivotTable, i) then
-        assume WeightBucket(KVList.I(kvl)) < 0x1_0000_0000_0000_0000;
-        var kmt := KMTable.toKmt(kvl);
-        Some(kmt)
+        Some(kvl)
       else
         None
     ) else (
@@ -257,22 +254,22 @@ module ImplMarshallingModel {
     )
   }
 
-  function IKMTableOpt(table : Option<KMTable.KMT>): Option<map<Key, Message>>
-  requires table.Some? ==> KMTable.WF(table.value)
+  function IKVListOpt(table : Option<KVList.Kvl>): Option<map<Key, Message>>
+  requires table.Some? ==> KVList.WF(table.value)
   {
     if table.Some? then
-      Some(KMTable.I(table.value))
+      Some(KVList.I(table.value))
     else
       None
   }
 
-  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<KMTable.KMT>>)
+  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<Bucket>>)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
   requires |a| <= |pivotTable| + 1
   ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: KMTable.WF(s.value[i]) && WFBucketAt(KMTable.I(s.value[i]), pivotTable, i)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(s.value[i], pivotTable, i)
   {
     if |a| == 0 then
       Some([])
@@ -281,21 +278,12 @@ module ImplMarshallingModel {
         case None => None
         case Some(pref) => (
           match valToBucket(Last(a), pivotTable, |pref|) {
-            case Some(bucket) => Some(pref + [bucket])
+            case Some(bucket) => Some(pref + [KVList.I(bucket)])
             case None => None
           }
         )
       }
     )
-  }
-
-  function ISeqKMTableOpt(s : Option<seq<KMTable.KMT>>): Option<seq<map<Key, Message>>>
-  requires s.Some? ==> forall i: nat :: i < |s.value| ==> KMTable.WF(s.value[i])
-  {
-    if s.Some? then
-      Some(Apply(KMTable.I, s.value))
-    else
-      None
   }
 
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
@@ -319,7 +307,7 @@ module ImplMarshallingModel {
                 case Some(buckets) => (
                   if
                     && |buckets| <= MaxNumChildren()
-                    && WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
+                    && WeightBucketList(buckets) <= MaxTotalBucketWeight()
                   then (
                     var node := IM.Node(pivots, if |children| == 0 then None else Some(children), buckets);
                     Some(node)
