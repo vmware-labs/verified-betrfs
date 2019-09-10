@@ -1,6 +1,7 @@
 include "ImplModelCache.i.dfy"
 include "ImplModelIO.i.dfy"
 include "AsyncDiskModel.s.dfy"
+include "KVListPartialFlush.i.dfy"
 
 module ImplModelFlush { 
   import opened ImplModel
@@ -29,7 +30,7 @@ module ImplModelFlush {
   requires parentref in s.cache
 
   requires s.cache[parentref].children.Some?
-  requires 0 <= slot < |s.cache[parentref].buckets|
+  requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
 
   requires childref in s.ephemeralIndirectionTable

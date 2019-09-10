@@ -10,7 +10,10 @@ module {:extern} MkfsImpl {
   import opened Options
   import opened NativeTypes
   import opened Impl
+  import opened BucketWeights
   import IM = ImplModel
+  import MutableBucket
+  import KVList
 
   import BT = PivotBetreeSpec
   import BC = BetreeGraphBlockCache
@@ -27,8 +30,11 @@ module {:extern} MkfsImpl {
   // TODO prove that this always returns an answer (that is, marshalling always succeeds)
   method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
   {
-    var node := IM.Node([], None, [KMTable.Empty()]);
-    assume IM.WFNode(node);
+    assume WeightBucket(KVList.I(KVList.Kvl([],[]))) < 0x1_0000_0000_0000_0000;
+    var empty := new MutableBucket.MutBucket(KVList.Kvl([], []));
+    var node := IS.Node([], None, [empty]);
+    assume IS.WFNode(node);
+    assume IM.WFNode(IS.INode(node));
     var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));
 
     var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number

@@ -327,6 +327,8 @@ module ImplMarshalling {
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<MutableBucket.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
+  ensures s.Some? ==> IS.BucketListReprInv(s.value)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
   ensures s.Some? ==> Some(MutableBucket.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
   {
@@ -335,7 +337,11 @@ module ImplMarshalling {
     var i := 0;
     while i < |a|
     invariant 0 <= i <= |a|
+    invariant forall k: nat | k < i :: ar[k] != null;
     invariant forall k: nat | k < i :: ar[k].Inv()
+    invariant forall k: nat | k < i :: ar !in ar[k].Repr
+    invariant forall j, k | 0 <= j < i && 0 <= k < i && j != k :: ar[j].Repr !! ar[k].Repr
+    invariant forall k: nat | k < i :: fresh(ar[k].Repr)
     invariant forall k: nat | k < i :: WFBucketAt(ar[k].Bucket, pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
     invariant MutableBucket.MutBucket.ISeq(ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
@@ -348,8 +354,13 @@ module ImplMarshalling {
         return;
       }
 
+      assume WeightBucket(KVList.I(b.value)) < 0x1_0000_0000_0000_0000;
       var bucket := new MutableBucket.MutBucket(b.value);
+      assert forall k: nat | k < i :: ar[k].Inv();
       ar[i] := bucket;
+      assert forall k: nat | k < i :: ar[k].Inv();
+      assert ar[i].Inv();
+      assert forall k: nat | k < i+1 :: ar[k].Inv();
 
       assert DropLast(a[..i+1]) == a[..i];
       assert ar[..i+1] == ar[..i] + [bucket];
@@ -366,6 +377,8 @@ module ImplMarshalling {
   method ValToNode(v: V) returns (s : Option<ImplState.Node>)
   requires IMM.valToNode.requires(v)
   ensures s.Some? ==> IS.WFNode(s.value)
+  ensures s.Some? ==> IS.BucketListReprInv(s.value.buckets)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value.buckets| :: fresh(s.value.buckets[i].Repr)
   ensures INodeOpt(s) == IMM.valToNode(v)
   {
     assert ValidVal(v.t[0]);
@@ -412,6 +425,12 @@ module ImplMarshalling {
   requires s.Some? ==> ImplState.WFSector(s.value)
   requires s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
+  reads if s.Some? && s.value.SectorBlock?
+      then set i | 0 <= i < |s.value.block.buckets| :: s.value.block.buckets[i]
+      else {}
+  reads if s.Some? && s.value.SectorBlock?
+      then set i, o | 0 <= i < |s.value.block.buckets| && o in s.value.block.buckets[i].Repr :: o
+      else {}
   {
     if s.Some? then
       Some(ImplState.ISector(s.value))
@@ -422,6 +441,7 @@ module ImplMarshalling {
   method ValToSector(v: V) returns (s : Option<ImplState.Sector>)
   requires IMM.valToSector.requires(v)
   ensures s.Some? ==> ImplState.WFSector(s.value)
+  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   ensures MapOption(s, IS.ISector) == IMM.valToSector(v)
   {
@@ -626,7 +646,7 @@ module ImplMarshalling {
   ensures KVList.I(IMM.valToBucket(v, pivotTable, i).value) == bucket.Bucket
   ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 16
   {
-    var kvl := bucket.kvl;
+    var kvl := bucket.GetKvl();
     KVList.kvlWeightEq(kvl);
     KVList.lenKeysLeWeight(kvl);
     var keys := strictlySortedKeySeqToVal(kvl.keys);
@@ -683,6 +703,8 @@ module ImplMarshalling {
   }
 
   function INodeOpt(s : Option<IS.Node>): Option<IMM.Node>
+  reads if s.Some? then IS.NodeObjectSet(s.value) else {}
+  reads if s.Some? then IS.NodeRepr(s.value) else {}
   requires s.Some? ==> IS.WFNode(s.value)
   {
     if s.Some? then
@@ -807,6 +829,7 @@ module ImplMarshalling {
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
+  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(IS.INode(s.value.block))
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(s.value.block)))

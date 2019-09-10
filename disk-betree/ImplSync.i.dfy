@@ -90,7 +90,6 @@ module ImplSync {
   requires Inv(k, s)
   requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == TTT.EmptyTree
   requires s.frozenIndirectionTable == null
   requires io !in s.Repr()
   modifies s.Repr()
@@ -128,6 +127,8 @@ module ImplSync {
   {
     var nodeOpt := s.cache.Get(ref);
     var node := nodeOpt.value;
+
+    assert INode(node) == ICache(s.cache)[ref];
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
 
     if (id.Some?) {
@@ -150,7 +151,6 @@ module ImplSync {
   requires Inv(k, s)
   requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == TTT.EmptyTree
   requires s.frozenIndirectionTable != null
   requires ref in s.frozenIndirectionTable.Contents
   requires s.frozenIndirectionTable.Contents[ref].0.None?
@@ -195,11 +195,6 @@ module ImplSync {
     if (s.outstandingIndirectionTableWrite.Some?) {
       //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
-      return;
-    }
-
-    if (s.rootBucket != TTT.EmptyTree) {
-      flushRootBucket(k, s);
       return;
     }
 

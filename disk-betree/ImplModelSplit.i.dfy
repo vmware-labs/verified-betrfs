@@ -434,6 +434,9 @@ module ImplModelSplit {
               pivot
             );
 
+            LruModel.LruUse(s2.lru, parentref);
+            assert LruModel.WF(s'.lru);
+
             assert splitStep.num_children_left == num_children_left;
             assert splitStep.fused_child == INode(fused_child);
 

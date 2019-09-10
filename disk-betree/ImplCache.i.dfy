@@ -173,7 +173,7 @@ module ImplCache {
   requires s.ready
   requires s.W()
   modifies s.Repr()
-  requires s.Repr() !! NodeRepr(node)
+  requires forall i | 0 <= i < |node.buckets| :: node.buckets[i].Repr !! s.Repr()
   requires BucketListReprInv(node.buckets)
   requires forall i | 0 <= i < |node.buckets| :: node.buckets[i].Inv()
   ensures s.ready

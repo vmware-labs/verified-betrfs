@@ -32,6 +32,7 @@ module ImplEvict {
     s.lru.Remove(ref);
     var _ := s.cache.Remove(ref);
     assume s.cache.Contents == MapRemove1(old(s.cache.Contents), ref);
+    assert s.I().cache == ImplModelEvict.Evict(Ic(k), old(s.I()), ref).cache;
   }
 
   method NeedToWrite(s: ImplVariables, ref: BT.G.Reference)
@@ -75,7 +76,7 @@ module ImplEvict {
   requires Inv(k, s)
   requires s.ready
   requires io.initialized()
-  requires |s.cache.Contents| > 0
+  requires |ICache(s.cache)| > 0
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()

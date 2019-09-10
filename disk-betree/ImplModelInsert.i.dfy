@@ -47,29 +47,17 @@ module ImplModelInsert {
       (s, false)
     ) else (
       var msg := Messages.Define(value);
-      var newRootBucket := s.rootBucket[key := msg];
+      var root := s.cache[BT.G.Root()];
+      var r := Pivots.Route(root.pivotTable, key);
+      var bucket := root.buckets[r];
+      var newBucket := bucket[key := msg];
+      var newRoot := root.(buckets := root.buckets[r := newBucket]);
+      var newCache := s.cache[BT.G.Root() := newRoot];
 
-      var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
-
-      var s' := s.(rootBucket := newRootBucket)
-          .(rootBucketWeightBound := newW)
+      var s' := s.(cache := newCache)
           .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
       (s', true)
     )
-  }
-
-  lemma LemmaInsertToRootBucket(node: Node, rootBucket: map<Key, Message>, rootBucket': map<Key, Message>, key: Key, msg: Message)
-  requires WFNode(node)
-  requires BT.WFNode(INodeRoot(node, rootBucket))
-  requires rootBucket' == rootBucket[key := msg]
-  requires msg.Define?
-  ensures INodeRoot(node, rootBucket') == BT.AddMessageToNode(INodeRoot(node, rootBucket), key, msg)
-  {
-    BucketListInsertBucketListFlush(rootBucket, KMTable.ISeq(node.buckets), node.pivotTable, key, msg);
-    /*assert BucketListFlush(TTT.I(rootBucket'), KMTable.ISeq(node.buckets), node.pivotTable)
-        == BucketListFlush(TTT.I(rootBucket)[key := msg], KMTable.ISeq(node.buckets), node.pivotTable)
-        == BucketListFlush(BucketInsert(TTT.I(rootBucket), key, msg), KMTable.ISeq(node.buckets), node.pivotTable)
-        == BucketListInsert(BucketListFlush(TTT.I(rootBucket), KMTable.ISeq(node.buckets), node.pivotTable), node.pivotTable, key, msg);*/
   }
 
   lemma InsertKeyValueCorrect(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
@@ -77,8 +65,7 @@ module ImplModelInsert {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
-      s.rootBucketWeightBound as int +
-      WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+      WeightBucketList(s.cache[BT.G.Root()].buckets) 
       <= MaxTotalBucketWeight()
   ensures var (s', success) := InsertKeyValue(k, s, key, value);
       && WFVars(s')
@@ -99,37 +86,31 @@ module ImplModelInsert {
     }
 
     var msg := Messages.Define(value);
+    var root := s.cache[BT.G.Root()];
+    var r := Pivots.Route(root.pivotTable, key);
+    var bucket := root.buckets[r];
+    var newBucket := bucket[key := msg];
+    var newRoot := root.(buckets := root.buckets[r := newBucket]);
+    var newCache := s.cache[BT.G.Root() := newRoot];
 
-    WeightBucketPut(s.rootBucket, key, msg);
+    WeightBucketListInsert(root.buckets, root.pivotTable, key, msg);
 
-    var baseroot := s.cache[BT.G.Root()];
+    assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
-    var r := Pivots.Route(baseroot.pivotTable, key);
-    var bucket := baseroot.buckets[r];
-
-    assert BC.BlockPointsToValidReferences(INodeRoot(baseroot, s.rootBucket), IIndirectionTable(s.ephemeralIndirectionTable).graph);
-
-    var newRootBucket := s.rootBucket[key := msg];
-
-    var newW := s.rootBucketWeightBound + WeightKey(key) as uint64 + WeightMessage(msg) as uint64;
-
-    var s' := s.(rootBucket := newRootBucket)
-        .(rootBucketWeightBound := newW)
+    var s' := s.(cache := newCache)
         .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
 
-    var oldroot := INodeRoot(baseroot, s.rootBucket);
-    var newroot := INodeRoot(baseroot, newRootBucket);
+    var oldroot := INode(root);
+    var newroot := INode(newRoot);
 
-    LemmaInsertToRootBucket(baseroot, s.rootBucket, newRootBucket, key, msg);
     assert newroot == BT.AddMessageToNode(oldroot, key, msg);
 
     assert BT.G.Successors(newroot) == BT.G.Successors(oldroot);
 
-    WeightBucketListFlush(s.rootBucket, KMTable.ISeq(baseroot.buckets), oldroot.pivotTable);
-
     var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
     assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
 
+    assert WFNode(newRoot);
     assert WFVars(s');
 
     assert BC.Dirty(Ik(k), IVars(s), IVars(s'), BT.G.Root(), newroot);
@@ -163,8 +144,7 @@ module ImplModelInsert {
         && success == false
       )
     ) else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
-        s.rootBucketWeightBound as int +
-        WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+        WeightBucketList(s.cache[BT.G.Root()].buckets) 
         <= MaxTotalBucketWeight() then (
       && (s', success) == InsertKeyValue(k, s, key, value)
       && io' == io
@@ -195,8 +175,7 @@ module ImplModelInsert {
         assert noop(k, IVars(s), IVars(s));
       }
     } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
-        s.rootBucketWeightBound as int +
-        WeightBucketList(KMTable.ISeq(s.cache[BT.G.Root()].buckets)) 
+        WeightBucketList(s.cache[BT.G.Root()].buckets) 
         <= MaxTotalBucketWeight() {
       InsertKeyValueCorrect(k, s, key, value);
     } else {

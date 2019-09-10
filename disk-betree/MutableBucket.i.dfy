@@ -5,6 +5,7 @@ include "Bounds.i.dfy"
 module MutableBucket {
   import TTT = TwoThreeTree
   import KVList
+  import KVListPartialFlush
   import opened ValueMessage`Internal
   import opened Lexicographic_Byte_Order
   import opened Sequences
@@ -111,6 +112,7 @@ module MutableBucket {
     requires WeightBucket(KVList.I(kv)) < 0x1_0000_0000_0000_0000
     ensures Bucket == KVList.I(kv)
     ensures Inv()
+    ensures fresh(Repr)
     {
       this.is_tree := false;
       this.kvl := kv;
@@ -119,6 +121,18 @@ module MutableBucket {
       this.Weight := w;
       this.Bucket := KVList.I(kv);
       KVList.WFImpliesWFBucket(kv);
+    }
+
+    method GetKvl() returns (kv: Kvl)
+    requires Inv()
+    ensures KVList.WF(kv)
+    ensures KVList.I(kv) == Bucket
+    {
+      if (is_tree) {
+        kv := tree_to_kvl(tree);
+      } else {
+        kv := kvl;
+      }
     }
 
     static function ReprSeq(s: seq<MutBucket>) : set<object>
@@ -160,9 +174,14 @@ module MutableBucket {
     ensures InvSeq(newChildren)
     ensures fresh(newParent.Repr)
     ensures forall i | 0 <= i < |newChildren| :: fresh(newChildren[i].Repr)
+    ensures forall i | 0 <= i < |newChildren| :: newChildren[i].Repr !! newParent.Repr
+    ensures forall i, j | 0 <= i < |newChildren| && 0 <= j < |newChildren| && i != j :: newChildren[i].Repr !! newChildren[j].Repr
+    ensures KVListPartialFlush.bucketPartialFlush(parent.Bucket, ISeq(children), pivots)
+        == (newParent.Bucket, ISeq(newChildren))
 
     method Insert(key: Key, value: Message)
     requires Inv()
+    requires Weight as int + WeightKey(key) + WeightMessage(value) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv()
     ensures Bucket == BucketInsert(old(Bucket), key, value)
@@ -174,9 +193,20 @@ module MutableBucket {
         kvl := KVList.Kvl([], []); // not strictly necessary, but frees memory
       }
 
+      assume false;
+
       if value.Define? {
+        // TODO reduce this to just one lookup
+        var cur := TTT.Query(tree, key);
         tree := TTT.Insert(tree, key, value);
+        if (cur.ValueForKey?) {
+          Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
+        } else {
+          Weight := Weight + WeightKeyUint64(key) + WeightMessageUint64(value);
+        }
       }
+
+      Bucket := TTT.I(tree);
     }
 
     method Query(key: Key)

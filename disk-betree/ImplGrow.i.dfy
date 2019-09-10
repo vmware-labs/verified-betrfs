@@ -8,6 +8,9 @@ module ImplGrow {
   import opened ImplState
   import ImplModelGrow
 
+  import KVList
+  import MutableBucket
+
   import opened Options
   import opened Maps
   import opened Sequences
@@ -38,19 +41,21 @@ module ImplGrow {
       }
     }
 
-    ImplModelFlushRootBucket.flushRootBucketCorrect(Ic(k), s.I());
-    flushRootBucket(k, s);
-
     var oldrootOpt := s.cache.Get(BT.G.Root());
     var oldroot := oldrootOpt.value;
+    assert INode(oldroot) == ICache(s.cache)[BT.G.Root()];
     var newref := alloc(k, s, oldroot);
+
+    assume false;
 
     match newref {
       case None => {
         print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
-        var newroot := IM.Node([], Some([newref]), [KMTable.Empty()]);
+        var emptyKvl := KVList.Empty();
+        var mutbucket := new MutableBucket.MutBucket(emptyKvl);
+        var newroot := IS.Node([], Some([newref]), [mutbucket]);
 
         write(k, s, BT.G.Root(), newroot);
       }
