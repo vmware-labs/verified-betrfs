@@ -13,7 +13,6 @@ module ImplModelCache {
 
   import opened BucketWeights
   import opened Bounds
-  import KMTable
   import LruModel
 
   import opened NativeTypes
@@ -125,7 +124,6 @@ module ImplModelCache {
   requires WFVars(s)
   requires ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in s.cache
-  requires ref == BT.G.Root() ==> s.rootBucket == map[] && s.rootBucketWeightBound == 0
   requires WFNode(node)
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value ==> s.frozenIndirectionTable.value[ref].0.Some?
@@ -135,9 +133,6 @@ module ImplModelCache {
     && TotalCacheSize(s') == TotalCacheSize(s)
   {
     reveal_write();
-    if (ref == BT.G.Root()) {
-      INodeRootEqINodeForEmptyRootBucket(node);
-    }
     WeightBucketEmpty();
 
     LruModel.LruUse(s.lru, ref);
@@ -146,33 +141,6 @@ module ImplModelCache {
     assert WFVars(s');
   }
  
-  lemma writeCorrectWithRootBucket(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
-  requires s.Ready?
-  requires WFVars(s)
-  requires ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
-  requires ref in s.cache
-  requires WFNode(node)
-  requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
-  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value ==> s.frozenIndirectionTable.value[ref].0.Some?
-  requires WeightBucketList(KMTable.ISeq(s.cache[ref].buckets))
-      == WeightBucketList(KMTable.ISeq(node.buckets))
-  ensures var s' := write(k, s, ref, node);
-    && WFVars(s')
-    && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, if ref == BT.G.Root() then INodeRoot(node, s.rootBucket) else INode(node))
-    && TotalCacheSize(s') == TotalCacheSize(s)
-  {
-    reveal_write();
-    var s' := write(k, s, ref, node);
-
-    LruModel.LruUse(s.lru, ref);
-
-    if (ref == BT.G.Root()) {
-      assert WFVars(s');
-      var inode := INodeRoot(node, s.rootBucket);
-      assert BC.BlockPointsToValidReferences(inode, IIndirectionTable(s.ephemeralIndirectionTable).graph);
-    }
-  }
-
   lemma writeNewRefIsAlloc(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   requires s.Ready?
   requires WFVars(s)

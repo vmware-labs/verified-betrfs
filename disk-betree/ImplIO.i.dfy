@@ -89,7 +89,7 @@ module ImplIO {
   requires IM.WFSector(IS.ISector(sector))
   requires io.initialized()
   modifies io
-  ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, ISector(sector), id, IIO(io))
+  ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, old(ISector(sector)), id, IIO(io))
   ensures id.Some? ==> io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> old(IIO(io)) == IIO(io)
   {
@@ -114,7 +114,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies io
   ensures s.W()
-  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), ISector(sector), id, loc, IIO(io))
+  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
   ensures old(s.I()) == s.I();
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
@@ -196,6 +196,8 @@ module ImplIO {
   requires sector.Some? ==> IS.WFSector(sector.value)
   reads if sector.Some? && sector.value.SectorIndirectionTable? then {sector.value.indirectionTable} else {}
   reads if sector.Some? && sector.value.SectorIndirectionTable? then sector.value.indirectionTable.Repr else {}
+  reads if sector.Some? && sector.value.SectorBlock? then set i | 0 <= i < |sector.value.block.buckets| :: sector.value.block.buckets[i] else {}
+  reads if sector.Some? && sector.value.SectorBlock? then set i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: o else {}
   {
     match sector {
       case None => None
@@ -207,6 +209,8 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
+  //ensures sector.Some? ==> forall o | o in IS.SectorRepr(sector.value) :: fresh(o)
+  ensures sector.Some? && sector.value.SectorBlock? ==> forall i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: fresh(o)
   ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(IIO(io))
   {
     var id1, bytes := io.getReadResult();
@@ -226,7 +230,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
@@ -242,8 +246,8 @@ module ImplIO {
       s.outstandingBlockReads := map[];
       s.cache := new MM.ResizingHashMap(128);
       s.lru := new MutableLru.MutableLruQueue();
-      s.rootBucket := TTT.EmptyTree;
-      s.rootBucketWeightBound := 0;
+
+      assert ICache(s.cache) == map[];
     } else {
       print "giving up; did not get indirectionTable when reading\n";
     }
@@ -259,6 +263,17 @@ module ImplIO {
   ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io))
   {
     var id, sector := ReadSector(io);
+
+    /*if (sector.Some? && sector.value.SectorBlock?) {
+      /*assert fresh(IS.SectorRepr(sector.value));
+      assert forall o | o in IS.SectorRepr(sector.value) :: fresh(o);
+      assert IS.SectorRepr(sector.value) == NodeRepr(sector.value.block);
+      assert fresh(NodeRepr(sector.value.block));
+      assert fresh(set i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: o);*/
+      //assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
+      assert forall i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: fresh(o);
+    }
+    assume false;*/
 
     if (id !in s.outstandingBlockReads) {
       print "PageInResp: unrecognized id from Read\n";
@@ -291,9 +306,17 @@ module ImplIO {
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
         s.lru.Use(ref);
 
+        assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
+
         assume |s.cache.Contents| <= MaxCacheSize();
         var _ := s.cache.Insert(ref, sector.value.block);
+
+        assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
+        assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
+
         s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
+
+        assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io)).cache;
       } else {
         print "giving up; block does not match graph\n";
       }

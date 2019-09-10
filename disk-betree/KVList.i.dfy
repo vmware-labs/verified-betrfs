@@ -1234,4 +1234,25 @@ module KVList {
   lemma lenKeysLeWeightOver8(kvl: Kvl)
   requires WF(kvl)
   ensures 8*|kvl.keys| <= WeightBucket(I(kvl))
+
+  function toKvl(bucket: Bucket) : (kvl: Kvl)
+  requires WFBucket(bucket)
+  ensures WF(kvl)
+  ensures I(kvl) == bucket
+
+  function toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  ensures |kvls| == |buckets|
+  ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
+  ensures ISeq(kvls) == buckets
+
+  function getMiddleKey(bucket: Bucket) : Key
+  requires WFBucket(bucket)
+  {
+    var kvl := toKvl(bucket);
+    if |kvl.keys| == 0 then
+      [0] // Just pick an arbitary key
+    else 
+      kvl.keys[|kvl.keys| / 2]
+  }
 }

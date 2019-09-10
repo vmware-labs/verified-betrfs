@@ -134,7 +134,7 @@ module MutableBucket {
       forall i | 0 <= i < |s| :: s[i].Inv()
     }
 
-    static protected function I(s: MutBucket) : Bucket
+    static function I(s: MutBucket) : Bucket
     reads s
     {
       s.Bucket
@@ -175,7 +175,6 @@ module MutableBucket {
       }
 
       if value.Define? {
-        cur_value := TTT.Que
         tree := TTT.Insert(tree, key, value);
       }
     }
@@ -245,5 +244,36 @@ module MutableBucket {
     returns (buckets' : seq<MutBucket>)
     requires splitKMTInList.requires(buckets, slot, pivot)
     ensures buckets' == splitKMTInList(buckets, slot, pivot)*/
+
+    static method computeWeightOfSeq(s: seq<MutBucket>)
+    returns (weight: uint64)
+    requires forall i | 0 <= i < |s| :: s[i].Inv()
+    requires WeightBucketList(ISeq(s)) < 0x1_0000_0000_0000_0000
+    ensures weight as int == WeightBucketList(ISeq(s))
+
+    static lemma Islice(buckets: seq<MutBucket>, a: int, b: int)
+    requires 0 <= a <= b <= |buckets|
+    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    ensures forall i | 0 <= i < |buckets[a..b]| :: buckets[a..b][i].Inv()
+    ensures ISeq(buckets[a..b]) == ISeq(buckets)[a..b]
+    {
+      if b == |buckets| {
+        if (a == b) {
+        } else {
+          Islice(DropLast(buckets), a, b - 1);
+        }
+      } else {
+        Islice(DropLast(buckets), a, b);
+      }
+    }
+
+    static lemma Isuffix(buckets: seq<MutBucket>, a: int)
+    requires 0 <= a <= |buckets|
+    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    ensures forall i | 0 <= i < |buckets[a..]| :: buckets[a..][i].Inv()
+    ensures ISeq(buckets[a..]) == ISeq(buckets)[a..]
+    {
+      Islice(buckets, a, |buckets|);
+    }
   }
 }

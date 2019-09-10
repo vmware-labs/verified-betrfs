@@ -14,18 +14,9 @@ module ImplModelLeaf {
   import opened BucketWeights
   import opened Bounds
   import PivotsLib
+  import KVList
 
   import opened NativeTypes
-
-  function GetNewPivots(bucket: KMTable.KMT) : (pivots : seq<MS.Key>)
-  ensures |pivots| < MaxNumChildren()
-
-  lemma WFGetNewPivots(bucket: KMTable.KMT)
-  requires KMTable.WF(bucket)
-  ensures PivotsLib.WFPivots(GetNewPivots(bucket))
-  {
-    assume false;
-  }
 
   function {:opaque} repivotLeaf(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   : (s': Variables)
@@ -36,16 +27,22 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
+  requires |node.buckets| == 1
   {
     if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) then (
       s
     ) else (
-      var joined := KMTable.join(node.buckets, node.pivotTable);
+      WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
 
-      var pivots := GetNewPivots(joined);
-      WFGetNewPivots(joined);
+      var pivot := KVList.getMiddleKey(node.buckets[0]);
+      var pivots := [pivot];
 
-      var buckets' := KMTable.splitOnPivots(joined, pivots);
+      assume PivotsLib.WFPivots(pivots);
+
+      var buckets' := [
+          SplitBucketLeft(node.buckets[0], pivot),
+          SplitBucketRight(node.buckets[0], pivot)
+      ];
       var newnode := Node(pivots, None, buckets');
       var s' := write(k, s, ref, newnode);
       s'
@@ -60,18 +57,24 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
+  requires |node.buckets| == 1
   ensures var s' := repivotLeaf(k, s, ref, node);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
   {
     reveal_repivotLeaf();
+    var s' := repivotLeaf(k, s, ref, node);
 
     if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) {
+      assert s' == s;
+      assert WFVars(s');
       assert noop(k, IVars(s), IVars(s));
       return;
     }
 
-    forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in KMTable.I(node.buckets[i]) && key2 in KMTable.I(node.buckets[j])
+    assume false;
+
+    /*forall i, j, key1, key2 | 0 <= i < j < |node.buckets| && key1 in node.buckets[i] && key2 in node.buckets[j]
     ensures MS.Keyspace.lt(key1, key2)
     {
       //assert BT.NodeHasWFBucketAt(INode(node), i);
@@ -107,6 +110,6 @@ module ImplModelLeaf {
     BC.MakeTransaction1(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(step));
     //assert BC.ReadStep(k, IVars(s), BT.BetreeStepReads(step)[0]);
     //assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, SD.NoDiskOp, step);
-    assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
+    assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);*/
   }
 }

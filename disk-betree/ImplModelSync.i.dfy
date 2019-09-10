@@ -1,6 +1,5 @@
 include "ImplModel.i.dfy"
 include "ImplModelIO.i.dfy"
-include "ImplModelFlushRootBucket.i.dfy"
 include "ImplModelDealloc.i.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -11,7 +10,6 @@ module ImplModelSync {
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
-  import opened ImplModelFlushRootBucket
   import opened ImplModelDealloc
 
   import IMM = ImplMarshallingModel
@@ -76,7 +74,6 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == map[]
   requires s.frozenIndirectionTable.None?
   {
     var ephemeralTable := s.ephemeralIndirectionTable;
@@ -101,7 +98,6 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == map[]
   requires s.frozenIndirectionTable.None?
 
   ensures var (s', io') := syncNotFrozen(k, s, io);
@@ -162,13 +158,10 @@ module ImplModelSync {
   requires io.IOInit?
   requires TryToWriteBlock.requires(k, s, io, ref, s', io')
   requires TryToWriteBlock(k, s, io, ref, s', io')
-  requires ref == BT.G.Root() ==> s.rootBucket == map[]
   requires s.outstandingIndirectionTableWrite.None?
   ensures WFVars(s')
   ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
-    INodeRootEqINodeForEmptyRootBucket(s.cache[ref]);
-
     var id, loc :| 
       && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
       && WriteBlockUpdateState(k, s, ref, id, loc, s');
@@ -196,7 +189,6 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == map[]
   requires s.frozenIndirectionTable.Some?
   requires ref in s.frozenIndirectionTable.value
   requires s.frozenIndirectionTable.value[ref].0.None?
@@ -219,7 +211,6 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
-  requires s.rootBucket == map[]
   requires s.frozenIndirectionTable.Some?
   requires ref in s.frozenIndirectionTable.value
   requires s.frozenIndirectionTable.value[ref].0.None?
@@ -253,36 +244,31 @@ module ImplModelSync {
         && s' == s
         && io' == io
       ) else (
-        if (s.rootBucket != map[]) then (
-          && s' == flushRootBucket(k, s)
-          && io' == io
-        ) else (
-          // Plan:
-          // - If the indirection table is not frozen then:
-          //    - If anything can be unalloc'ed, do it
-          // - Otherwise:
-          //    - If any block in the frozen table doesn't have an LBA, Write it to disk
-          //    - Write the frozenIndirectionTable to disk
+        // Plan:
+        // - If the indirection table is not frozen then:
+        //    - If anything can be unalloc'ed, do it
+        // - Otherwise:
+        //    - If any block in the frozen table doesn't have an LBA, Write it to disk
+        //    - Write the frozenIndirectionTable to disk
 
-          if (s.frozenIndirectionTable.None?) then (
-            (s', io') == syncNotFrozen(k, s, io)
+        if (s.frozenIndirectionTable.None?) then (
+          (s', io') == syncNotFrozen(k, s, io)
+        ) else (
+          var foundInFrozen := FindRefInFrozenWithNoLoc(s);
+          FindRefInFrozenWithNoLocCorrect(s);
+          if foundInFrozen.Some? then (
+            syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
+          ) else if (s.outstandingBlockWrites != map[]) then (
+            && s' == s
+            && io' == io
           ) else (
-            var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-            FindRefInFrozenWithNoLocCorrect(s);
-            if foundInFrozen.Some? then (
-              syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
-            ) else if (s.outstandingBlockWrites != map[]) then (
+            if (diskOp(io').ReqWriteOp?) then (
+              var id := Some(diskOp(io').id);
+              && RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io')
+              && s' == s.(outstandingIndirectionTableWrite := id)
+            ) else (
               && s' == s
               && io' == io
-            ) else (
-              if (diskOp(io').ReqWriteOp?) then (
-                var id := Some(diskOp(io').id);
-                && RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io')
-                && s' == s.(outstandingIndirectionTableWrite := id)
-              ) else (
-                && s' == s
-                && io' == io
-              )
             )
           )
         )
@@ -307,29 +293,24 @@ module ImplModelSync {
       if (s.outstandingIndirectionTableWrite.Some?) {
         assert noop(k, IVars(s), IVars(s));
       } else {
-        if (s.rootBucket != map[]) {
-          flushRootBucketCorrect(k, s);
-          assert noop(k, IVars(s), IVars(s));
+        if (s.frozenIndirectionTable.None?) {
+          syncNotFrozenCorrect(k, s, io);
         } else {
-          if (s.frozenIndirectionTable.None?) {
-            syncNotFrozenCorrect(k, s, io);
+          var foundInFrozen := FindRefInFrozenWithNoLoc(s);
+          FindRefInFrozenWithNoLocCorrect(s);
+          if foundInFrozen.Some? {
+            syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
+          } else if (s.outstandingBlockWrites != map[]) {
+            assert noop(k, IVars(s), IVars(s));
           } else {
-            var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-            FindRefInFrozenWithNoLocCorrect(s);
-            if foundInFrozen.Some? {
-              syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
-            } else if (s.outstandingBlockWrites != map[]) {
-              assert noop(k, IVars(s), IVars(s));
+            if (diskOp(io').ReqWriteOp?) {
+              var id := Some(diskOp(io').id);
+              LBAType.reveal_ValidAddr();
+              RequestWriteCorrect(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io');
+              assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
+              assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
             } else {
-              if (diskOp(io').ReqWriteOp?) {
-                var id := Some(diskOp(io').id);
-                LBAType.reveal_ValidAddr();
-                RequestWriteCorrect(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io');
-                assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
-                assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
-              } else {
-                assert noop(k, IVars(s), IVars(s));
-              }
+              assert noop(k, IVars(s), IVars(s));
             }
           }
         }

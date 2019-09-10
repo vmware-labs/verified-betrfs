@@ -1,13 +1,12 @@
 include "ImplModelCache.i.dfy"
 include "ImplModelIO.i.dfy"
-include "ImplModelFlushRootBucket.i.dfy"
 include "AsyncDiskModel.s.dfy"
 
 module ImplModelFlush { 
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
-  import opened ImplModelFlushRootBucket
+  import KVListPartialFlush
 
   import opened Options
   import opened Maps
@@ -46,20 +45,15 @@ module ImplModelFlush {
     ) then (
       s
     ) else (
-      var s1 := if parentref == BT.G.Root() then (
-        flushRootBucketCorrect(k, s);
-        flushRootBucket(k, s)
-      ) else (
-        s
-      );
+      var parent := s.cache[parentref];
 
-      var parent := s1.cache[parentref];
+      WeightBucketLeBucketList(parent.buckets, slot);
+      WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
+      WFBucketsOfWFBucketList(child.buckets, child.pivotTable);
 
-      WeightBucketLeBucketList(KMTable.ISeq(parent.buckets), slot);
-
-      var (newparentBucket, newbuckets) := KMTable.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := alloc(k, s1, newchild);
+      var (s2, newchildref) := alloc(k, s, newchild);
       if newchildref.None? then (
         s2
       ) else (
@@ -91,47 +85,37 @@ module ImplModelFlush {
     ) {
       assert noop(k, IVars(s), IVars(s));
     } else {
-      var s1 := if parentref == BT.G.Root() then flushRootBucket(k, s) else s;
-      if parentref == BT.G.Root() {
-        flushRootBucketCorrect(k, s);
-        flushRootBucketWeight(k, s, slot);
-        flushRootBucketFrozen(k, s);
-      }
-      var parent := s1.cache[parentref];
+      var parent := s.cache[parentref];
 
-      INodeRootEqINodeForEmptyRootBucket(parent);
-      INodeRootEqINodeForEmptyRootBucket(child);
+      WeightBucketLeBucketList(parent.buckets, slot);
+      WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
+      WFBucketsOfWFBucketList(child.buckets, child.pivotTable);
 
-      WeightBucketLeBucketList(KMTable.ISeq(parent.buckets), slot);
+      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var flushedKeys := KVListPartialFlush.bucketPartialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
 
-      var (newparentBucket, newbuckets) := KMTable.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      var flushedKeys := KMTable.partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
-
-      WFBucketsOfWFBucketList(KMTable.ISeq(parent.buckets), parent.pivotTable);
-      WFBucketIntersect(KMTable.I(parent.buckets[slot]), flushedKeys);
-      WFBucketComplement(KMTable.I(parent.buckets[slot]), flushedKeys);
-      WeightBucketComplement(KMTable.I(parent.buckets[slot]), flushedKeys);
+      WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
+      WFBucketIntersect(parent.buckets[slot], flushedKeys);
+      WFBucketComplement(parent.buckets[slot], flushedKeys);
+      WeightBucketComplement(parent.buckets[slot], flushedKeys);
       WFBucketListFlush(
-        BucketIntersect(KMTable.I(parent.buckets[slot]), flushedKeys),
-        KMTable.ISeq(child.buckets),
+        BucketIntersect(parent.buckets[slot], flushedKeys),
+        child.buckets,
         child.pivotTable);
-      WeightBucketListShrinkEntry(KMTable.ISeq(parent.buckets), slot, KMTable.I(newparentBucket));
+      WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
 
       // TODO these are actually kind of annoying right now
-      assume childref in s1.cache;
-      assume childref in s1.ephemeralIndirectionTable;
-      assume child == s1.cache[childref];
+      assume childref in s.cache;
+      assume childref in s.ephemeralIndirectionTable;
+      assume child == s.cache[childref];
       assume childref != BT.G.Root();
 
-      assert parentref in s1.cache;
-      assert parentref in s1.ephemeralIndirectionTable;
-      assert parent == s1.cache[parentref];
+      assert parentref in s.cache;
+      assert parentref in s.ephemeralIndirectionTable;
+      assert parent == s.cache[parentref];
 
-      assert INodeForRef(s1.cache, childref, s1.rootBucket) == INode(child);
-      assert INodeForRef(s1.cache, parentref, s1.rootBucket) == INode(parent);
-      
       var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := alloc(k, s1, newchild);
+      var (s2, newchildref) := alloc(k, s, newchild);
       reveal_alloc();
       if newchildref.None? {
         assert noop(k, IVars(s), IVars(s2));
@@ -142,7 +126,6 @@ module ImplModelFlush {
           parent.buckets[slot := newparentBucket]
         );
         reveal_BucketComplement();
-        INodeRootEqINodeForEmptyRootBucket(newparent);
 
         var s' := write(k, s2, parentref, newparent);
         reveal_write();
@@ -161,29 +144,24 @@ module ImplModelFlush {
           lemmaChildInGraph(k, s, childref, ref);
         }
 
-        WeightBucketListFlush(KMTable.I(parent.buckets[slot]), KMTable.ISeq(child.buckets), child.pivotTable);
-        WeightBucketListClearEntry(KMTable.ISeq(parent.buckets), slot);
+        WeightBucketListFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+        WeightBucketListClearEntry(parent.buckets, slot);
 
-        assume KMTable.ISeq(parent.buckets[slot := newparentBucket])
-            == KMTable.ISeq(parent.buckets)[slot := KMTable.I(newparentBucket)];
+        assume parent.buckets[slot := newparentBucket]
+            == parent.buckets[slot := newparentBucket];
 
-        if (parentref == BT.G.Root()) {
-          assert s1.rootBucketWeightBound == 0;
-          assert s2.rootBucketWeightBound == 0;
-        }
-
-        allocCorrect(k, s1, newchild);
+        allocCorrect(k, s, newchild);
         writeCorrect(k, s2, parentref, newparent);
 
         var flushStep := BT.NodeFlush(parentref, INode(parent), childref, INode(child), newchildref.value, INode(newchild), slot, flushedKeys);
         assert BT.ValidFlush(flushStep);
         var step := BT.BetreeFlush(flushStep);
         assert INode(newparent) == BT.FlushOps(flushStep)[1].node;
-        assert BC.Alloc(Ik(k), IVars(s1), IVars(s2), newchildref.value, INode(newchild));
+        assert BC.Alloc(Ik(k), IVars(s), IVars(s2), newchildref.value, INode(newchild));
         assert BC.Dirty(Ik(k), IVars(s2), IVars(s'), parentref, INode(newparent));
-        BC.MakeTransaction2(Ik(k), IVars(s1), IVars(s2), IVars(s'), BT.BetreeStepOps(step));
-        assert BBC.BetreeMove(Ik(k), IVars(s1), IVars(s'), UI.NoOp, M.IDiskOp(D.NoDiskOp), step);
-        assert stepsBetree(k, IVars(s1), IVars(s'), UI.NoOp, step);
+        BC.MakeTransaction2(Ik(k), IVars(s), IVars(s2), IVars(s'), BT.BetreeStepOps(step));
+        assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, M.IDiskOp(D.NoDiskOp), step);
+        assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
         assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
       }
     }

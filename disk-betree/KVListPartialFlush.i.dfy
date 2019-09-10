@@ -93,8 +93,7 @@ module KVListPartialFlush {
     partialFlushIterate(parent, children, pivots, 0, 0, 0, [], Kvl([], []), Kvl([], []), MaxTotalBucketWeight() - WeightKvlSeq(children))
   }
 
-  lemma partialFlushRes(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
-  returns (flushedKeys: set<Key>)
+  lemma partialFlushWF(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
   requires WF(parent)
   requires Pivots.WFPivots(pivots)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -103,10 +102,34 @@ module KVListPartialFlush {
   ensures var (newParent, newChildren) := partialFlush(parent, children, pivots);
       && WF(newParent)
       && (forall i | 0 <= i < |newChildren| :: WF(newChildren[i]))
-      && I(newParent) == BucketComplement(I(parent), flushedKeys)
-      && ISeq(newChildren) == BucketListFlush(BucketIntersect(I(parent), flushedKeys), ISeq(children), pivots)
-      && WeightBucket(I(newParent)) <= WeightBucket(I(parent))
-      && WeightBucketList(ISeq(newChildren)) <= MaxTotalBucketWeight()
+
+  function bucketPartialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>) : (res:(Bucket, seq<Bucket>))
+  requires WFBucket(parent)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| + 1 == |children|
+  requires WeightBucketList(children) <= MaxTotalBucketWeight()
+  requires forall i | 0 <= i < |children| :: WFBucket(children[i])
+  {
+    partialFlushWF(toKvl(parent), toKvlSeq(children), pivots);
+
+    var (newParent, newChildren) := partialFlush(toKvl(parent), toKvlSeq(children), pivots);
+    (I(newParent), ISeq(newChildren))
+  }
+
+  lemma bucketPartialFlushRes(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>)
+  returns (flushedKeys: set<Key>)
+  requires WFBucket(parent)
+  requires Pivots.WFPivots(pivots)
+  requires forall i | 0 <= i < |children| :: WFBucket(children[i])
+  requires |pivots| + 1 == |children|
+  requires WeightBucketList(children) <= MaxTotalBucketWeight()
+  ensures var (newParent, newChildren) := bucketPartialFlush(parent, children, pivots);
+      && WFBucket(newParent)
+      && (forall i | 0 <= i < |newChildren| :: WFBucket(newChildren[i]))
+      && newParent == BucketComplement(parent, flushedKeys)
+      && newChildren == BucketListFlush(BucketIntersect(parent, flushedKeys), children, pivots)
+      && WeightBucket(newParent) <= WeightBucket(parent)
+      && WeightBucketList(newChildren) <= MaxTotalBucketWeight()
 
   method PartialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
   returns (newParent: Kvl, newChildren: seq<Kvl>)

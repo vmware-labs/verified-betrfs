@@ -3,7 +3,6 @@ include "ImplIO.i.dfy"
 include "ImplDealloc.i.dfy"
 include "ImplModelSync.i.dfy"
 include "ImplModelCache.i.dfy"
-include "ImplFlushRootBucket.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/Sets.i.dfy"
@@ -15,7 +14,6 @@ module ImplSync {
   import opened ImplIO
   import opened ImplCache
   import opened ImplDealloc
-  import opened ImplFlushRootBucket
   import ImplModelSync
   import ImplModelCache
   import ImplModelDealloc

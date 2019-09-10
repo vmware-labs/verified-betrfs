@@ -1,13 +1,3 @@
-// include "../lib/Marshalling/GenericMarshalling.i.dfy"
-// include "PivotBetreeSpec.i.dfy"
-// include "Message.i.dfy"
-// include "ImplState.i.dfy"
-// include "ImplModel.i.dfy"
-// include "KMTable.i.dfy"
-// include "../lib/Crypto.s.dfy"
-// include "../lib/Option.s.dfy"
-// include "../lib/MutableMap.i.dfy"
-
 include "ImplMarshallingModel.i.dfy"
 
 module Marshalling {
@@ -17,27 +7,12 @@ module Marshalling {
   import opened Options
   import opened NativeTypes
   import opened Sequences
-  // import opened Maps
   import opened BucketsLib
   import BC = BetreeGraphBlockCache
-  // import ImplState
-  // import IM = ImplModel
-  import KMTable
-  // import Crypto
-  // import Native
-
   import BT = PivotBetreeSpec`Internal
-
   import M = ValueMessage`Internal
-  // import ReferenceType`Internal
-  // import LBAType
-  // import ValueWithDefault`Internal
-
   import Pivots = PivotsLib
-  // import MS = MapSpec
-  // import Keyspace = MS.Keyspace
-
-  // import MM = MutableMap
+  import KVList
 
   type Reference = BC.Reference
   type LBA = BC.LBA
@@ -62,7 +37,7 @@ module Marshalling {
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |pivotTable|
   {
-    MapOption(IMM.valToBucket(v, pivotTable, i), KMTable.I)
+    MapOption(IMM.valToBucket(v, pivotTable, i), KVList.I)
   }
 
   function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<map<Key, Message>>>)
@@ -73,11 +48,8 @@ module Marshalling {
   ensures s.Some? ==> |s.value| == |a|
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(s.value[i], pivotTable, i)
   {
-    MapOption(IMM.valToBuckets(a, pivotTable),
-      bkts requires forall i: nat | i < |bkts| :: KMTable.WF(bkts[i])
-      => Apply(KMTable.I, bkts))
+    IMM.valToBuckets(a, pivotTable)
   }
-
 
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValidVal(v)

@@ -1,12 +1,10 @@
 include "ImplCache.i.dfy"
 include "ImplModelFlush.i.dfy"
-include "ImplFlushRootBucket.i.dfy"
 
 module ImplFlush { 
   import opened Impl
   import opened ImplCache
   import opened ImplState
-  import opened ImplFlushRootBucket
 
   import opened Options
   import opened MainDiskIOHandler

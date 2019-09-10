@@ -1,7 +1,7 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "ImplState.i.dfy"
 include "ImplModel.i.dfy"
-include "KMTable.i.dfy"
+include "MutableBucket.i.dfy"
 include "../lib/Option.s.dfy"
 
 include "Marshalling.i.dfy"
@@ -21,9 +21,9 @@ module ImplMarshalling {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import MutableBucket
   import BC = BetreeGraphBlockCache
   import ImplState
-  import KMTable`Internal
   import KVList
   import Crypto
   import Native
@@ -245,10 +245,10 @@ module ImplMarshalling {
     }
   }
 
-  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KMTable.KMT>)
+  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KVList.Kvl>)
   requires IMM.valToBucket.requires(v, pivotTable, i)
-  ensures s.Some? ==> KMTable.WF(s.value)
-  ensures s.Some? ==> WFBucketAt(KMTable.I(s.value), pivotTable, i)
+  ensures s.Some? ==> KVList.WF(s.value)
+  ensures s.Some? ==> WFBucketAt(KVList.I(s.value), pivotTable, i)
   ensures s == IMM.valToBucket(v, pivotTable, i)
   {
     assert ValidVal(v.t[0]);
@@ -306,10 +306,7 @@ module ImplMarshalling {
 
     assert WFBucketAt(KVList.I(kvl), pivotTable, i);
 
-    assume WeightBucket(KVList.I(kvl)) < 0x1_0000_0000_0000_0000;
-    var kmt := KMTable.ToKmt(kvl);
-
-    s := Some(kmt);
+    s := Some(kvl);
   }
 
   lemma LemmaValToBucketNone(a: seq<V>, pivotTable: seq<Key>, i: int)
@@ -327,20 +324,21 @@ module ImplMarshalling {
     }
   }
 
-  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<KMTable.KMT>>)
+  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<MutableBucket.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
-  ensures s.Some? ==> IM.WFBuckets(s.value)
-  ensures s == IMM.valToBuckets(a, pivotTable)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
+  ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
+  ensures s.Some? ==> Some(MutableBucket.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
   {
-    var ar := new KMTable.KMT[|a|];
+    var ar := new MutableBucket.MutBucket?[|a|];
 
     var i := 0;
     while i < |a|
     invariant 0 <= i <= |a|
-    invariant forall k: nat | k < i :: KMTable.WF(ar[k])
-    invariant forall k: nat | k < i :: WFBucketAt(KMTable.I(ar[k]), pivotTable, k)
+    invariant forall k: nat | k < i :: ar[k].Inv()
+    invariant forall k: nat | k < i :: WFBucketAt(ar[k].Bucket, pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
-    invariant ar[..i] == IMM.valToBuckets(a[..i], pivotTable).value
+    invariant MutableBucket.MutBucket.ISeq(ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
     {
       var b := ValToBucket(a[i], pivotTable, i);
       if (b.None?) {
@@ -350,10 +348,11 @@ module ImplMarshalling {
         return;
       }
 
-      ar[i] := b.value;
+      var bucket := new MutableBucket.MutBucket(b.value);
+      ar[i] := bucket;
 
       assert DropLast(a[..i+1]) == a[..i];
-      assert ar[..i+1] == ar[..i] + [b.value];
+      assert ar[..i+1] == ar[..i] + [bucket];
 
       i := i + 1;
     }
@@ -366,7 +365,7 @@ module ImplMarshalling {
 
   method ValToNode(v: V) returns (s : Option<ImplState.Node>)
   requires IMM.valToNode.requires(v)
-  ensures s.Some? ==> IM.WFNode(s.value)
+  ensures s.Some? ==> IS.WFNode(s.value)
   ensures INodeOpt(s) == IMM.valToNode(v)
   {
     assert ValidVal(v.t[0]);
@@ -397,17 +396,14 @@ module ImplMarshalling {
       return None;
     }
 
-    assume WeightBucketList(KMTable.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
-    var w: uint64 := KMTable.computeWeightKMTSeq(buckets);
+    assume WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
+    var w: uint64 := MutableBucket.MutBucket.computeWeightOfSeq(buckets);
     if (w > MaxTotalBucketWeight() as uint64) {
       return None;
     }
 
-    var node := IM.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+    var node := IS.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
 
-    assert IMM.valToNode(v).Some?;
-    assert IM.WFBuckets(node.buckets);
-    assert node == IMM.valToNode(v).value;
     return Some(node);
   }
 
@@ -618,16 +614,17 @@ module ImplMarshalling {
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel SizeOfV,3}
-  bucketToVal(bucket: KMTable.KMT, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
+  bucketToVal(bucket: MutableBucket.MutBucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
-  requires KMTable.WF(bucket)
-  requires WeightBucket(KMTable.I(bucket)) <= MaxTotalBucketWeight()
-  requires WFBucketAt(KMTable.I(bucket), pivotTable, i)
+  requires bucket.Inv()
+  requires WeightBucket(bucket.Bucket) <= MaxTotalBucketWeight()
+  requires WFBucketAt(bucket.Bucket, pivotTable, i)
   requires 0 <= i <= |pivotTable|
   ensures ValInGrammar(v, IMM.BucketGrammar())
   ensures ValidVal(v)
-  ensures IMM.valToBucket(v, pivotTable, i) == Some(bucket)
-  ensures SizeOfV(v) == WeightBucket(KMTable.I(bucket)) + 16
+  ensures IMM.valToBucket(v, pivotTable, i).Some?;
+  ensures KVList.I(IMM.valToBucket(v, pivotTable, i).value) == bucket.Bucket
+  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 16
   {
     var kvl := bucket.kvl;
     KVList.kvlWeightEq(kvl);
@@ -645,25 +642,25 @@ module ImplMarshalling {
     assert ValInGrammar(v, IMM.BucketGrammar());
   }
 
-  method bucketsToVal(buckets: seq<KMTable.KMT>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
+  method bucketsToVal(buckets: seq<MutableBucket.MutBucket>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
-  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
-  requires forall i | 0 <= i < |buckets| :: WFBucketAt(KMTable.I(buckets[i]), pivotTable, i)
+  requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+  requires forall i | 0 <= i < |buckets| :: WFBucketAt(buckets[i].Bucket, pivotTable, i)
   requires |buckets| <= MaxNumChildren() as int
   requires |buckets| <= |pivotTable| + 1
-  requires WeightBucketList(KMTable.ISeq(buckets)) <= MaxTotalBucketWeight()
+  requires WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(IMM.BucketGrammar()))
   ensures |v.a| == |buckets|
-  ensures IMM.valToBuckets(v.a, pivotTable) == Some(buckets)
-  ensures SizeOfV(v) <= 8 + WeightBucketList(KMTable.ISeq(buckets)) + |buckets| * 16
+  ensures IMM.valToBuckets(v.a, pivotTable) == Some(MutableBucket.MutBucket.ISeq(buckets))
+  ensures SizeOfV(v) <= 8 + WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) + |buckets| * 16
   {
     if |buckets| == 0 {
       v := VArray([]);
     } else {
-      WeightBucketListSlice(KMTable.ISeq(buckets), 0, |buckets| - 1);
-      WeightBucketLeBucketList(KMTable.ISeq(buckets), |buckets| - 1);
-      KMTable.Islice(buckets, 0, |buckets| - 1);
+      WeightBucketListSlice(MutableBucket.MutBucket.ISeq(buckets), 0, |buckets| - 1);
+      WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(buckets), |buckets| - 1);
+      MutableBucket.MutBucket.Islice(buckets, 0, |buckets| - 1);
 
       var pref := bucketsToVal(DropLast(buckets), pivotTable);
       var bucket := Last(buckets);
@@ -672,31 +669,32 @@ module ImplMarshalling {
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
-      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == buckets; // observe
-      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(buckets); // observe (reduces verification time)
+      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == MutableBucket.MutBucket.ISeq(buckets); // observe
+      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(MutableBucket.MutBucket.ISeq(buckets)); // observe (reduces verification time)
 
       assert buckets == DropLast(buckets) + [Last(buckets)];
 
       reveal_WeightBucketList();
-      assert WeightBucketList(KMTable.ISeq(buckets))
-          == WeightBucketList(KMTable.ISeq(DropLast(buckets))) + WeightBucket(KMTable.I(Last(buckets)));
+      assert WeightBucketList(MutableBucket.MutBucket.ISeq(buckets))
+          == WeightBucketList(MutableBucket.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(MutableBucket.MutBucket.I(Last(buckets)));
 
       v := VArray(pref.a + [bucketVal]);
     }
   }
 
-  function INodeOpt(s : Option<Node>): Option<IMM.Node>
-  requires s.Some? ==> IM.WFNode(s.value)
+  function INodeOpt(s : Option<IS.Node>): Option<IMM.Node>
+  requires s.Some? ==> IS.WFNode(s.value)
   {
     if s.Some? then
-      Some(s.value)
+      Some(IS.INode(s.value))
     else
       None
   }
 
   method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
-  requires IM.WFNode(node)
-  requires BT.WFNode(IM.INode(node))
+  requires IS.WFNode(node)
+  requires IM.WFNode(IS.INode(node))
+  requires BT.WFNode(IM.INode(IS.INode(node)))
   ensures ValidVal(v)
   ensures ValInGrammar(v, IMM.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
@@ -720,14 +718,15 @@ module ImplMarshalling {
     assert SizeOfV(buckets) <= 8068312;
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
-    assert IMM.valToNode(v).Some?;
-    assert IMM.valToNode(v).value == node;
+    //assert IMM.valToNode(v).Some?;
+    //assert IMM.valToNode(v).value == IS.INode(node);
   }
 
   method sectorToVal(sector: ImplState.Sector) returns (v : Option<V>)
   requires ImplState.WFSector(sector)
   requires IM.WFSector(ImplState.ISector(sector))
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block))
+  requires sector.SectorBlock? ==> IM.WFNode(IS.INode(sector.block))
+  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(sector.block)))
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
   ensures v.Some? ==> ValidVal(v.value)
@@ -809,7 +808,8 @@ module ImplMarshalling {
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block))
+  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(IS.INode(s.value.block))
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(s.value.block)))
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, IMM.SectorGrammar());
@@ -845,7 +845,9 @@ module ImplMarshalling {
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block))
+  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(IS.INode(s.value.block))
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(s.value.block)))
+  ensures s.Some? ==> fresh(IS.SectorRepr(s.value))
   {
     s := None;
 
@@ -862,7 +864,8 @@ module ImplMarshalling {
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires ImplState.WFSector(sector)
   requires IM.WFSector(ImplState.ISector(sector))
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block))
+  requires sector.SectorBlock? ==> IM.WFNode(IS.INode(sector.block))
+  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(sector.block)))
   ensures data != null ==> IMM.parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
   ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length
