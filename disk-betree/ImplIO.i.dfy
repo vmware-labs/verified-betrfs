@@ -209,8 +209,7 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  //ensures sector.Some? ==> forall o | o in IS.SectorRepr(sector.value) :: fresh(o)
-  ensures sector.Some? && sector.value.SectorBlock? ==> forall i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: fresh(o)
+  ensures sector.Some? && sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
   ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(IIO(io))
   {
     var id1, bytes := io.getReadResult();
@@ -265,12 +264,12 @@ module ImplIO {
     var id, sector := ReadSector(io);
 
     /*if (sector.Some? && sector.value.SectorBlock?) {
-      /*assert fresh(IS.SectorRepr(sector.value));
-      assert forall o | o in IS.SectorRepr(sector.value) :: fresh(o);
-      assert IS.SectorRepr(sector.value) == NodeRepr(sector.value.block);
-      assert fresh(NodeRepr(sector.value.block));
-      assert fresh(set i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: o);*/
-      //assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
+      //assert forall o | o in IS.SectorRepr(sector.value) :: fresh(o);
+      //assert forall o | o in IS.SectorRepr(sector.value) :: fresh(o);
+      //assert IS.SectorRepr(sector.value) == NodeRepr(sector.value.block);
+      assert forall o | o in NodeRepr(sector.value.block) :: fresh(o);
+      assert fresh(set i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: o);
+      assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
       assert forall i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: fresh(o);
     }
     assume false;*/

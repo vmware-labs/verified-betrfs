@@ -82,10 +82,14 @@ module ImplCache {
   method write(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: IS.Node)
   requires s.ready
   requires s.W()
+  requires s.Repr() !! NodeRepr(node)
+  requires BucketListReprInv(node.buckets)
+  requires forall i | 0 <= i < |node.buckets| :: node.buckets[i].Inv()
   modifies s.Repr()
   ensures s.ready
-  ensures WellUpdated(s)
-  ensures s.I() == ImplModelCache.write(Ic(k), old(s.I()), ref, node)
+  ensures s.W()
+  ensures (forall o | o in s.Repr() :: o in old(s.Repr()) || o in NodeRepr(node) || fresh(o))
+  ensures s.I() == ImplModelCache.write(Ic(k), old(s.I()), ref, INode(node))
   {
     ImplModelCache.reveal_write();
 
@@ -96,8 +100,71 @@ module ImplCache {
     assume |LruModel.I(s.lru.Queue)| <= 0x10000;
     assume |s.cache.Contents| <= MaxCacheSize();
 
+    ghost var blah := s.cache.Repr;
+
     s.lru.Use(ref);
     var _ := s.cache.Insert(ref, node);
+
+    forall o | o in CacheRepr(s.cache.Contents)
+    ensures o in old(CacheRepr(s.cache.Contents)) || o in old(NodeRepr(node));
+    {
+      var r: BT.G.Reference, i: int :| r in s.cache.Contents && 0 <= i < |s.cache.Contents[r].buckets| && o in s.cache.Contents[r].buckets[i].Repr;
+      if (r == ref) {
+        assert o in old(NodeRepr(node));
+      } else {
+        assert o in old(CacheRepr(s.cache.Contents));
+      }
+    }
+
+    forall r, i | r in s.cache.Contents && 0 <= i < |s.cache.Contents[r].buckets|
+    ensures s.cache.Contents[r].buckets[i].Inv()
+    {
+      if (r == ref) {
+        assert s.cache.Contents[r].buckets[i].Inv();
+      } else {
+        assert s.cache.Contents[r].buckets[i]
+            == old(s.cache.Contents[r].buckets[i]);
+        assert old(s.cache.Contents[r].buckets[i].Inv());
+        assert s.cache.Contents[r].buckets[i].Repr <= old(CacheRepr(s.cache.Contents));
+        assert s.cache.Contents[r].buckets[i].Repr !! old(s.cache.Repr);
+        assert old(CacheRepr(s.cache.Contents)) !! old(s.ephemeralIndirectionTable.Repr);
+        assert s.cache.Contents[r].buckets[i].Repr !! old(s.ephemeralIndirectionTable.Repr);
+        assert s.cache.Contents[r].buckets[i].Repr !! old(s.lru.Repr);
+        assert s.cache.Contents[r].buckets[i].Repr !! blah;
+        assert s.cache.Contents[r].buckets[i].Inv();
+      }
+    }
+
+    forall ref1, i1, ref2, i2 | ref1 in s.cache.Contents && ref2 in s.cache.Contents
+          && 0 <= i1 < |s.cache.Contents[ref1].buckets|
+          && 0 <= i2 < |s.cache.Contents[ref2].buckets|
+          && (ref1 != ref2 || i1 != i2) ensures
+          s.cache.Contents[ref1].buckets[i1].Repr !! s.cache.Contents[ref2].buckets[i2].Repr
+    {
+      if (ref1 == ref) {
+        assert s.cache.Contents[ref1].buckets[i1].Repr <= NodeRepr(node);
+      }
+      if (ref2 == ref) {
+        assert s.cache.Contents[ref2].buckets[i2].Repr <= NodeRepr(node);
+      }
+
+      if (ref1 == ref) {
+        if (ref2 == ref) {
+          assert s.cache.Contents[ref1].buckets[i1].Repr !! s.cache.Contents[ref2].buckets[i2].Repr;
+        } else {
+          assert s.cache.Contents[ref1].buckets[i1].Repr !! s.cache.Contents[ref2].buckets[i2].Repr;
+        }
+      } else {
+        if (ref2 == ref) {
+          assert s.cache.Contents[ref1].buckets[i1].Repr !! s.cache.Contents[ref2].buckets[i2].Repr;
+        } else {
+          assert s.cache.Contents[ref1].buckets[i1].Repr !! s.cache.Contents[ref2].buckets[i2].Repr;
+        }
+      }
+    }
+
+    assert s.W();
+    assert s.I().cache == ImplModelCache.write(Ic(k), old(s.I()), ref, INode(node)).cache;
   }
 
   method alloc(k: ImplConstants, s: ImplVariables, node: IS.Node)
@@ -105,9 +172,13 @@ module ImplCache {
   requires s.ready
   requires s.W()
   modifies s.Repr()
+  requires s.Repr() !! NodeRepr(node)
+  requires BucketListReprInv(node.buckets)
+  requires forall i | 0 <= i < |node.buckets| :: node.buckets[i].Inv()
   ensures s.ready
-  ensures WellUpdated(s)
-  ensures (s.I(), ref) == ImplModelCache.alloc(Ic(k), old(s.I()), node)
+  ensures s.W()
+  ensures (forall o | o in s.Repr() :: o in old(s.Repr()) || o in NodeRepr(node) || fresh(o))
+  ensures (s.I(), ref) == ImplModelCache.alloc(Ic(k), old(s.I()), INode(node))
   {
     ImplModelCache.reveal_alloc();
     

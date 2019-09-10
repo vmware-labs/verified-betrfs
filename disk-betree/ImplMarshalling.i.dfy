@@ -847,7 +847,7 @@ module ImplMarshalling {
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(IS.INode(s.value.block))
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(s.value.block)))
-  ensures s.Some? ==> fresh(IS.SectorRepr(s.value))
+  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   {
     s := None;
 

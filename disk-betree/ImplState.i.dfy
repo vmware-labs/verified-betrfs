@@ -226,7 +226,7 @@ module {:extern} ImplState {
 
         && persistentIndirectionTable.Repr !! CacheRepr(cache.Contents)
         && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! CacheRepr(cache.Contents))
-        && persistentIndirectionTable.Repr !! CacheRepr(cache.Contents)
+        && ephemeralIndirectionTable.Repr !! CacheRepr(cache.Contents)
         && cache.Repr !! CacheRepr(cache.Contents)
         && lru.Repr !! CacheRepr(cache.Contents)
         && CacheReprInv()
