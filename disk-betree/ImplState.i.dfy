@@ -21,6 +21,7 @@ module {:extern} ImplState {
   import LruModel
   import MutableLru
   import MutableBucket
+  import opened Bounds
   import opened BucketsLib
 
   import MM = MutableMap
@@ -428,4 +429,24 @@ module {:extern} ImplState {
   ensures CacheRepr(s.cache.Contents) !! s.NonBucketsRepr()
   ensures CacheReprInv_(s.cache.Contents, CacheObjectSet(s.cache.Contents))
   ensures BucketsInv_(s.cache.Contents, CacheObjectSet(s.cache.Contents), CacheRepr(s.cache.Contents))
+
+  method CacheInsert(k: M.Constants, s: Variables, ref: BT.G.Reference, node: Node)
+  requires s.W()
+  requires s.ready
+  requires NodeRepr(node) !! s.Repr()
+  requires |s.cache.Contents| <= MaxCacheSize();
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == old(s.I()).(cache := old(s.I()).cache[ref := INode(node)])
+  {
+    var _ := s.cache.Insert(ref, node);
+
+    s.BucketObjects := CacheObjectSet(s.cache.Contents);
+    s.BucketRepr := CacheRepr(s.cache.Contents);
+
+    reveal_BucketListReprInv();
+    reveal_CacheRepr();
+    reveal_Cache_();
+    reveal_CacheReprInv_();
+  }
 }
