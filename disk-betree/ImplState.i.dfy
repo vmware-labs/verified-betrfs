@@ -53,7 +53,7 @@ module {:extern} ImplState {
     set i, o | 0 <= i < |s| && o in s[i].Repr :: o
   }
 
-  predicate BucketListReprInv(buckets: seq<MutableBucket.MutBucket>)
+  predicate {:opaque} BucketListReprInv(buckets: seq<MutableBucket.MutBucket>)
   reads BucketListObjectSet(buckets)
   {
     forall i, j | 0 <= i < |buckets| && 0 <= j < |buckets| && i != j ::
@@ -76,7 +76,7 @@ module {:extern} ImplState {
     set ref, i | ref in cache && 0 <= i < |cache[ref].buckets| :: cache[ref].buckets[i]
   }
 
-  function CacheRepr(cache: map<BT.G.Reference, Node>) : set<object>
+  function {:opaque} CacheRepr(cache: map<BT.G.Reference, Node>) : set<object>
   reads CacheObjectSet(cache)
   {
     set ref, i, o | ref in cache && 0 <= i < |cache[ref].buckets| && o in cache[ref].buckets[i].Repr :: o
@@ -132,14 +132,13 @@ module {:extern} ImplState {
     table.Contents
   }
  
-  function ICache(table: MutCache) : (result: map<BT.G.Reference, IM.Node>)
+  /*function ICache(table: MutCache) : (result: map<BT.G.Reference, IM.Node>)
   reads table, table.Repr
   reads set ref, i | ref in table.Contents && 0 <= i < |table.Contents[ref].buckets| :: table.Contents[ref].buckets[i]
   reads set ref, i, o | ref in table.Contents && 0 <= i < |table.Contents[ref].buckets| && o in table.Contents[ref].buckets[i].Repr :: o
   {
-    map ref | ref in table.Contents :: INode(table.Contents[ref])
-  }
-
+      map ref | ref in table.Contents :: INode(table.Contents[ref])
+  }*/
  
   function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<IM.IndirectionTable>)
   reads if table != null then {table} + table.Repr else {}
@@ -166,7 +165,46 @@ module {:extern} ImplState {
     }
   }
 
+  // These functions are all pulled out so that we can avoid having `reads this` on them.
+
+  predicate {:opaque} BucketsInv_(contents: map<BT.G.Reference, Node>, BucketObjects: set<object>, BucketRepr: set<object>)
+  reads BucketObjects, BucketRepr
+  requires BucketObjects == CacheObjectSet(contents)
+  requires BucketRepr == CacheRepr(contents)
+  {
+    reveal_CacheRepr();
+    (forall ref, i | ref in contents && 0 <= i < |contents[ref].buckets| ::
+      && contents[ref].buckets[i].Inv())
+  }
+
+  function {:opaque} Cache_(cache: MutCache, BucketObjects: set<object>, BucketRepr: set<object>) : map<BT.G.Reference, IM.Node>
+  reads cache, BucketObjects, BucketRepr
+  requires BucketObjects == CacheObjectSet(cache.Contents)
+  requires BucketRepr == CacheRepr(cache.Contents)
+  ensures forall ref | ref in cache.Contents :: ref in Cache_(cache, BucketObjects, BucketRepr)
+  ensures forall ref | ref in cache.Contents :: 
+      Cache_(cache, BucketObjects, BucketRepr)[ref] == INode(cache.Contents[ref])
+  {
+    reveal_CacheRepr();
+    map ref | ref in cache.Contents :: INode(cache.Contents[ref])
+  }
+
+  predicate {:opaque} CacheReprInv_(contents: map<BT.G.Reference, Node>, BucketObjects: set<object>) 
+  reads BucketObjects
+  requires BucketObjects == CacheObjectSet(contents)
+  {
+    && (forall ref1, i1, ref2, i2 | ref1 in contents && ref2 in contents
+        && 0 <= i1 < |contents[ref1].buckets|
+        && 0 <= i2 < |contents[ref2].buckets|
+        && (ref1 != ref2 || i1 != i2) ::
+        contents[ref1].buckets[i1].Repr !! contents[ref2].buckets[i2].Repr)
+  }
+
+
   class Variables {
+    ghost var BucketObjects: set<object>;
+    ghost var BucketRepr: set<object>;
+
     var ready: bool;
 
     var syncReqs: map<int, BC.SyncReqStatus>;
@@ -185,18 +223,27 @@ module {:extern} ImplState {
     var outstandingIndirectionTableRead: Option<D.ReqId>;
 
     predicate CacheReprInv() 
-    reads this, cache, CacheObjectSet(cache.Contents)
+    reads this, cache, BucketObjects
+    requires BucketObjects == CacheObjectSet(cache.Contents)
     {
-      && (forall ref1, i1, ref2, i2 | ref1 in cache.Contents && ref2 in cache.Contents
-          && 0 <= i1 < |cache.Contents[ref1].buckets|
-          && 0 <= i2 < |cache.Contents[ref2].buckets|
-          && (ref1 != ref2 || i1 != i2) ::
-          cache.Contents[ref1].buckets[i1].Repr !! cache.Contents[ref2].buckets[i2].Repr)
+      CacheReprInv_(cache.Contents, BucketObjects)
+    }
+
+    function NonBucketsRepr() : set<object>
+    reads this, persistentIndirectionTable, ephemeralIndirectionTable,
+        frozenIndirectionTable, lru, cache
+    {
+      {this} +
+      persistentIndirectionTable.Repr +
+      ephemeralIndirectionTable.Repr +
+      (if frozenIndirectionTable != null then frozenIndirectionTable.Repr else {}) +
+      lru.Repr +
+      cache.Repr
     }
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, CacheObjectSet(cache.Contents)
+        frozenIndirectionTable, lru, cache, BucketObjects
     {
       {this} +
       persistentIndirectionTable.Repr +
@@ -204,15 +251,19 @@ module {:extern} ImplState {
       (if frozenIndirectionTable != null then frozenIndirectionTable.Repr else {}) +
       lru.Repr +
       cache.Repr +
-      CacheRepr(cache.Contents)
+      BucketRepr
     }
 
     predicate ReprInv()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, CacheObjectSet(cache.Contents)
+        frozenIndirectionTable, lru, cache, BucketObjects
     reads Repr()
     {
         // NOALIAS statically enforced no-aliasing would probably help here
+        && BucketObjects == CacheObjectSet(cache.Contents)
+        && BucketRepr == CacheRepr(cache.Contents)
+        && BucketObjects <= BucketRepr
+
         && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
         && (frozenIndirectionTable != null ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.Repr)
         && (frozenIndirectionTable != null ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.Repr)
@@ -224,11 +275,11 @@ module {:extern} ImplState {
         && (frozenIndirectionTable != null ==> cache.Repr !! frozenIndirectionTable.Repr)
         && cache.Repr !! lru.Repr
 
-        && persistentIndirectionTable.Repr !! CacheRepr(cache.Contents)
-        && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! CacheRepr(cache.Contents))
-        && ephemeralIndirectionTable.Repr !! CacheRepr(cache.Contents)
-        && cache.Repr !! CacheRepr(cache.Contents)
-        && lru.Repr !! CacheRepr(cache.Contents)
+        && persistentIndirectionTable.Repr !! BucketRepr
+        && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! BucketObjects)
+        && ephemeralIndirectionTable.Repr !! BucketObjects
+        && cache.Repr !! BucketObjects
+        && lru.Repr !! BucketObjects
         && CacheReprInv()
 
         && this !in ephemeralIndirectionTable.Repr
@@ -236,12 +287,21 @@ module {:extern} ImplState {
         && (frozenIndirectionTable != null ==> this !in frozenIndirectionTable.Repr)
         && this !in lru.Repr
         && this !in cache.Repr
-        && this !in CacheRepr(cache.Contents)
+        && this !in BucketRepr
+    }
+
+    predicate BucketsInv()
+    reads this, cache
+    reads BucketObjects, BucketRepr
+    requires BucketObjects == CacheObjectSet(cache.Contents)
+    requires BucketRepr == CacheRepr(cache.Contents)
+    {
+      BucketsInv_(cache.Contents, BucketObjects, BucketRepr)
     }
 
     predicate W()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, CacheObjectSet(cache.Contents)
+        frozenIndirectionTable, lru, cache, BucketObjects
     reads Repr()
     {
       && ReprInv()
@@ -250,18 +310,26 @@ module {:extern} ImplState {
       && ephemeralIndirectionTable.Inv()
       && lru.Inv()
       && cache.Inv()
-      && (forall ref, i | ref in cache.Contents && 0 <= i < |cache.Contents[ref].buckets| ::
-          && cache.Contents[ref].buckets[i].Inv())
+      && BucketsInv()
+    }
+
+    function Cache() : map<BT.G.Reference, IM.Node>
+    reads this, cache
+    reads BucketObjects, BucketRepr
+    requires BucketObjects == CacheObjectSet(cache.Contents)
+    requires BucketRepr == CacheRepr(cache.Contents)
+    {
+      Cache_(cache, BucketObjects, BucketRepr)
     }
 
     function I() : IM.Variables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, CacheObjectSet(cache.Contents)
+        frozenIndirectionTable, lru, cache, BucketObjects
     reads Repr()
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache), lru.Queue)
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, Cache(), lru.Queue)
       ) else (
         IM.Unready(outstandingIndirectionTableRead, syncReqs)
       )
@@ -269,7 +337,7 @@ module {:extern} ImplState {
 
     predicate WF()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, CacheObjectSet(cache.Contents)
+        frozenIndirectionTable, lru, cache, BucketObjects
     reads Repr()
     {
       && W()
@@ -293,12 +361,20 @@ module {:extern} ImplState {
       persistentIndirectionTable := new MM.ResizingHashMap(128);
       frozenIndirectionTable := null;
       cache := new MM.ResizingHashMap(128);
+
+      new;
+
+      BucketObjects := CacheObjectSet(cache.Contents);
+      BucketRepr := CacheRepr(cache.Contents);
+
+      reveal_CacheRepr();
+      reveal_CacheReprInv_();
     }
   }
 
   predicate Inv(k: M.Constants, s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-        s.frozenIndirectionTable, s.lru, s.cache, CacheObjectSet(s.cache.Contents)
+        s.frozenIndirectionTable, s.lru, s.cache, s.BucketObjects
   reads s.Repr()
   {
     && s.W()
@@ -324,10 +400,32 @@ module {:extern} ImplState {
 
   twostate predicate WellUpdated(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru, s.cache, CacheObjectSet(s.cache.Contents)
+      s.frozenIndirectionTable, s.lru, s.cache, s.BucketObjects
   reads s.Repr()
   {
     && s.W()
     && (forall o | o in s.Repr() :: o in old(s.Repr()) || fresh(o))
   }
+
+  // Some helpful lemmas
+
+  lemma LemmaCacheObjectSetLeRepr(cache: map<BT.G.Reference, Node>)
+  requires BucketsInv_(cache, CacheObjectSet(cache), CacheRepr(cache))
+  ensures CacheObjectSet(cache) <= CacheRepr(cache)
+  {
+    reveal_BucketsInv_();
+    reveal_Cache_();
+    reveal_CacheRepr();
+  }
+
+  lemma LemmaReprCacheInsert(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, node: Node, s: Variables)
+  requires s.cache.Contents == cache[ref := node]
+  requires CacheRepr(cache) !! NodeRepr(node)
+  requires CacheRepr(cache) !! s.NonBucketsRepr()
+  requires NodeRepr(node) !! s.NonBucketsRepr()
+  requires CacheReprInv_(cache, CacheObjectSet(cache))
+  requires BucketListReprInv(node.buckets)
+  ensures CacheRepr(s.cache.Contents) !! s.NonBucketsRepr()
+  ensures CacheReprInv_(s.cache.Contents, CacheObjectSet(s.cache.Contents))
+  ensures BucketsInv_(s.cache.Contents, CacheObjectSet(s.cache.Contents), CacheRepr(s.cache.Contents))
 }

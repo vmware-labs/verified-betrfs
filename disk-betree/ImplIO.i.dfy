@@ -209,7 +209,9 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures sector.Some? && sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
+  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeRepr(sector.value.block))
+  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeObjectSet(sector.value.block))
+  //ensures sector.Some? ==> FreshSector(sector.value&& sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
   ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(IIO(io))
   {
     var id1, bytes := io.getReadResult();
@@ -246,7 +248,11 @@ module ImplIO {
       s.cache := new MM.ResizingHashMap(128);
       s.lru := new MutableLru.MutableLruQueue();
 
-      assert ICache(s.cache) == map[];
+      s.BucketObjects := CacheObjectSet(s.cache.Contents);
+      s.BucketRepr := CacheRepr(s.cache.Contents);
+      reveal_CacheReprInv_();
+
+      assert s.Cache() == map[];
     } else {
       print "giving up; did not get indirectionTable when reading\n";
     }
@@ -305,15 +311,23 @@ module ImplIO {
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
         s.lru.Use(ref);
 
-        assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
+        //assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
 
         assume |s.cache.Contents| <= MaxCacheSize();
         var _ := s.cache.Insert(ref, sector.value.block);
 
-        assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
-        assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
+        //assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
+        //assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
 
         s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
+
+        s.BucketObjects := CacheObjectSet(s.cache.Contents);
+        s.BucketRepr := CacheRepr(s.cache.Contents);
+
+        LemmaReprCacheInsert(old(s.cache.Contents), ref, sector.value.block, s);
+        LemmaCacheObjectSetLeRepr(s.cache.Contents);
+
+        assert s.W();
 
         assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io)).cache;
       } else {
