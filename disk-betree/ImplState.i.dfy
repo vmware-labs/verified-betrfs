@@ -277,10 +277,10 @@ module {:extern} ImplState {
         && cache.Repr !! lru.Repr
 
         && persistentIndirectionTable.Repr !! BucketRepr
-        && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! BucketObjects)
-        && ephemeralIndirectionTable.Repr !! BucketObjects
-        && cache.Repr !! BucketObjects
-        && lru.Repr !! BucketObjects
+        && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! BucketRepr)
+        && ephemeralIndirectionTable.Repr !! BucketRepr
+        && cache.Repr !! BucketRepr
+        && lru.Repr !! BucketRepr
         && CacheReprInv()
 
         && this !in ephemeralIndirectionTable.Repr
@@ -436,7 +436,8 @@ module {:extern} ImplState {
   requires NodeRepr(node) !! s.Repr()
   requires |s.cache.Contents| <= MaxCacheSize();
   modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.W()
+  ensures forall o | o in s.Repr() :: fresh(o) || o in old(s.Repr()) || o in old(NodeRepr(node))
   ensures s.I() == old(s.I()).(cache := old(s.I()).cache[ref := INode(node)])
   {
     var _ := s.cache.Insert(ref, node);

@@ -210,9 +210,9 @@ module ImplIO {
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
   ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeRepr(sector.value.block))
-  //ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeObjectSet(sector.value.block))
+  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeObjectSet(sector.value.block))
   //ensures sector.Some? ==> FreshSector(sector.value&& sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
-  ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(IIO(io))
+  ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(old(IIO(io)))
   {
     var id1, bytes := io.getReadResult();
     id := id1;
@@ -265,7 +265,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
 
@@ -289,12 +289,15 @@ module ImplIO {
     // even in the case we don't do anything with it
 
     var ref := s.outstandingBlockReads[id].ref;
+
+    assert s.W();
     
     var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
     if (lbaGraph.None? || lbaGraph.value.0.None?) {
       print "PageInResp: ref !in lbas\n";
       return;
     }
+    assert s.W();
     var cacheLookup := s.cache.Get(ref);
     if cacheLookup.Some? {
       print "PageInResp: ref in s.cache\n";
@@ -303,22 +306,36 @@ module ImplIO {
 
     var lba := lbaGraph.value.0.value;
     var graph := lbaGraph.value.1;
+    assert s.W();
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
+        assert fresh(NodeRepr(sector.value.block));
 
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+        assert s.W();
         s.lru.Use(ref);
 
         //assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
 
         assume |s.cache.Contents| <= MaxCacheSize();
+        assert fresh(NodeRepr(sector.value.block));
+
+        assert s.W();
+
+        assert s.I().cache == old(s.I().cache);
+
         CacheInsert(k, s, ref, sector.value.block);
         //var _ := s.cache.Insert(ref, sector.value.block);
 
         //assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
         //assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
+        //assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io)).cache;
+        //assert s.I().cache == old(s.I()).cache[ref := INode(node)];
+        assert ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io))).cache
+            == old(s.I()).cache[ref := INode(node)];
+        assume false;
 
         s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
 
@@ -327,7 +344,9 @@ module ImplIO {
 
         assert s.W();
 
-        assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io)).cache;
+        assume false;
+
+        assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io))).cache;
       } else {
         print "giving up; block does not match graph\n";
       }
