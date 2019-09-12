@@ -10,6 +10,8 @@ include "ImplMarshallingModel.i.dfy"
 module ImplMarshalling {
   import IM = ImplModel
   import IS = ImplState
+  import opened ImplNode
+  import opened ImplMutCache
   import Marshalling
   import IMM = ImplMarshallingModel
   import opened GenericMarshalling
@@ -46,7 +48,6 @@ module ImplMarshalling {
   type Sector = IS.Sector
   type Message = IMM.Message
   type Key = IMM.Key
-  type Node = IMM.Node
 
   /////// Conversion to PivotNode
 
@@ -327,7 +328,7 @@ module ImplMarshalling {
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<MutableBucket.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
-  ensures s.Some? ==> IS.BucketListReprInv(s.value)
+  ensures s.Some? ==> BucketListReprDisjoint(s.value)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
   ensures s.Some? ==> Some(MutableBucket.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
@@ -372,12 +373,14 @@ module ImplMarshalling {
     assert ar[..|a|] == ar[..];
 
     s := Some(ar[..]);
+
+    reveal_BucketListReprDisjoint();
   }
 
-  method ValToNode(v: V) returns (s : Option<ImplState.Node>)
+  method ValToNode(v: V) returns (s : Option<Node>)
   requires IMM.valToNode.requires(v)
-  ensures s.Some? ==> IS.WFNode(s.value)
-  ensures s.Some? ==> IS.BucketListReprInv(s.value.buckets)
+  ensures s.Some? ==> s.value.Inv()
+  ensures s.Some? ==> BucketListReprDisjoint(s.value.buckets)
   ensures s.Some? ==> forall i | 0 <= i < |s.value.buckets| :: fresh(s.value.buckets[i].Repr)
   ensures INodeOpt(s) == IMM.valToNode(v)
   {
@@ -415,7 +418,7 @@ module ImplMarshalling {
       return None;
     }
 
-    var node := IS.Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+    var node := new Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
 
     return Some(node);
   }
@@ -702,21 +705,21 @@ module ImplMarshalling {
     }
   }
 
-  function INodeOpt(s : Option<IS.Node>): Option<IMM.Node>
-  reads if s.Some? then IS.NodeObjectSet(s.value) else {}
-  reads if s.Some? then IS.NodeRepr(s.value) else {}
-  requires s.Some? ==> IS.WFNode(s.value)
+  function INodeOpt(s : Option<Node>): Option<IMM.Node>
+  reads if s.Some? then {s.value} else {}
+  reads if s.Some? then s.value.Repr else {}
+  requires s.Some? ==> s.value.Inv()
   {
     if s.Some? then
-      Some(IS.INode(s.value))
+      Some(s.value.I())
     else
       None
   }
 
-  method {:fuel SizeOfV,4} nodeToVal(node: ImplState.Node) returns (v : V)
-  requires IS.WFNode(node)
-  requires IM.WFNode(IS.INode(node))
-  requires BT.WFNode(IM.INode(IS.INode(node)))
+  method {:fuel SizeOfV,4} nodeToVal(node: Node) returns (v : V)
+  requires node.Inv()
+  requires IM.WFNode(node.I())
+  requires BT.WFNode(IM.INode(node.I()))
   ensures ValidVal(v)
   ensures ValInGrammar(v, IMM.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
@@ -741,14 +744,14 @@ module ImplMarshalling {
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
     //assert IMM.valToNode(v).Some?;
-    //assert IMM.valToNode(v).value == IS.INode(node);
+    //assert IMM.valToNode(v).value == node.I();
   }
 
   method sectorToVal(sector: ImplState.Sector) returns (v : Option<V>)
   requires ImplState.WFSector(sector)
   requires IM.WFSector(ImplState.ISector(sector))
-  requires sector.SectorBlock? ==> IM.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(sector.block)))
+  requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
+  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
   ensures v.Some? ==> ValidVal(v.value)
@@ -831,8 +834,8 @@ module ImplMarshalling {
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
-  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(IS.INode(s.value.block))
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(s.value.block)))
+  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, IMM.SectorGrammar());
@@ -868,8 +871,8 @@ module ImplMarshalling {
   ensures s.Some? ==> ImplState.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
-  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(IS.INode(s.value.block))
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(s.value.block)))
+  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
+  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
   ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   {
     s := None;
@@ -887,8 +890,8 @@ module ImplMarshalling {
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires ImplState.WFSector(sector)
   requires IM.WFSector(ImplState.ISector(sector))
-  requires sector.SectorBlock? ==> IM.WFNode(IS.INode(sector.block))
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(IS.INode(sector.block)))
+  requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
+  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
   ensures data != null ==> IMM.parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
   ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length

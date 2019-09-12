@@ -13,14 +13,14 @@ module MutableMap {
 
   datatype Slot = Slot(slot: nat)
 
-  datatype Item<V(==)> = Empty | Entry(key: uint64, value: V) | Tombstone(key: uint64)
+  datatype Item<V> = Empty | Entry(key: uint64, value: V) | Tombstone(key: uint64)
 
   predicate ValidSlot(elementsLength: nat, slot: Slot)
   {
     slot.slot < elementsLength
   }
 
-  class FixedSizeHashMap<V(==)> {
+  class FixedSizeHashMap<V> {
     var Storage: array<Item<V>>;
     var Count: uint64;
 
@@ -674,7 +674,7 @@ module MutableMap {
     }
   }
 
-  class ResizingHashMap<V(==)> {
+  class ResizingHashMap<V> {
     var Underlying: FixedSizeHashMap<V>;
     var Count: uint64;
 

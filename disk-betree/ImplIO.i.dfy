@@ -9,6 +9,8 @@ module ImplIO {
   import opened NativeTypes
   import opened Options
   import opened Maps
+  import opened ImplNode
+  import opened ImplMutCache
   import ImplModel
   import ImplMarshalling
   import IMM = ImplMarshallingModel
@@ -209,8 +211,7 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeRepr(sector.value.block))
-  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(NodeObjectSet(sector.value.block))
+  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(sector.value.block.Repr)
   //ensures sector.Some? ==> FreshSector(sector.value&& sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
   ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(old(IIO(io)))
   {
@@ -245,14 +246,8 @@ module ImplIO {
       s.outstandingIndirectionTableWrite := None;
       s.outstandingBlockWrites := map[];
       s.outstandingBlockReads := map[];
-      s.cache := new MM.ResizingHashMap(128);
+      s.cache := new MutCache();
       s.lru := new MutableLru.MutableLruQueue();
-
-      s.BucketObjects := CacheObjectSet(s.cache.Contents);
-      s.BucketRepr := CacheRepr(s.cache.Contents);
-      reveal_CacheReprInv_();
-
-      assert s.Cache() == map[];
     } else {
       print "giving up; did not get indirectionTable when reading\n";
     }
@@ -298,7 +293,7 @@ module ImplIO {
       return;
     }
     assert s.W();
-    var cacheLookup := s.cache.Get(ref);
+    var cacheLookup := s.cache.GetOpt(ref);
     if cacheLookup.Some? {
       print "PageInResp: ref in s.cache\n";
       return;
@@ -311,22 +306,25 @@ module ImplIO {
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
-        assert fresh(NodeRepr(sector.value.block));
+        assert fresh(sector.value.block.Repr);
 
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
         assert s.W();
+        assert s.cache.Inv();
         s.lru.Use(ref);
+        assert s.cache.Inv();
 
         //assert forall o | o in CacheRepr(s.cache.Contents) :: o in old(CacheRepr(s.cache.Contents)) || fresh(o);
 
-        assume |s.cache.Contents| <= MaxCacheSize();
-        assert fresh(NodeRepr(sector.value.block));
+        assume |s.cache.I()| <= MaxCacheSize();
+        assert fresh(sector.value.block.Repr);
 
         assert s.W();
 
         assert s.I().cache == old(s.I().cache);
 
-        CacheInsert(k, s, ref, sector.value.block);
+        //CacheInsert(k, s, ref, sector.value.block);
+        s.cache.Insert(ref, sector.value.block);
         //var _ := s.cache.Insert(ref, sector.value.block);
 
         //assert forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr);
@@ -334,8 +332,7 @@ module ImplIO {
         //assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), IIO(io)).cache;
         //assert s.I().cache == old(s.I()).cache[ref := INode(node)];
         assert ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io))).cache
-            == old(s.I()).cache[ref := INode(node)];
-        assume false;
+            == old(s.I()).cache[ref := node.I()];
 
         s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
 
@@ -343,8 +340,6 @@ module ImplIO {
         //LemmaCacheObjectSetLeRepr(s.cache.Contents);
 
         assert s.W();
-
-        assume false;
 
         assert s.I().cache == ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io))).cache;
       } else {
