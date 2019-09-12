@@ -181,6 +181,20 @@ module ImplMutCache {
 
       assert Inv();
     }
+
+    method Remove(ref: BT.G.Reference)
+    requires Inv()
+    modifies Repr
+    ensures Inv()
+    ensures I() == MapRemove1(I(), ref)
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
+    {
+      LemmaSizeEqCount();
+      var _ := cache.Remove(ref);
+      Repr := {this} + cache.Repr + MutCacheBucketRepr();
+
+      assert Inv();
+    }
   }
 
   // Some helpful lemmas

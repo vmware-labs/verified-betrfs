@@ -195,11 +195,9 @@ module ImplIO {
   // == readResponse ==
 
   function ISectorOpt(sector: Option<IS.Sector>) : Option<IM.Sector>
+  reads if sector.Some? then SectorObjectSet(sector.value) else {}
+  reads if sector.Some? then SectorRepr(sector.value) else {}
   requires sector.Some? ==> IS.WFSector(sector.value)
-  reads if sector.Some? && sector.value.SectorIndirectionTable? then {sector.value.indirectionTable} else {}
-  reads if sector.Some? && sector.value.SectorIndirectionTable? then sector.value.indirectionTable.Repr else {}
-  reads if sector.Some? && sector.value.SectorBlock? then set i | 0 <= i < |sector.value.block.buckets| :: sector.value.block.buckets[i] else {}
-  reads if sector.Some? && sector.value.SectorBlock? then set i, o | 0 <= i < |sector.value.block.buckets| && o in sector.value.block.buckets[i].Repr :: o else {}
   {
     match sector {
       case None => None
@@ -211,7 +209,7 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(sector.value.block.Repr)
+  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(SectorRepr(sector.value))
   //ensures sector.Some? ==> FreshSector(sector.value&& sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
   ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(old(IIO(io)))
   {
