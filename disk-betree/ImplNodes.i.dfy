@@ -24,6 +24,34 @@ module ImplNode {
         buckets[i].Repr !! buckets[j].Repr
   }
 
+  lemma BucketListReprDisjointOfLen1(buckets: seq<MutableBucket.MutBucket>)
+  requires |buckets| <= 1
+  ensures BucketListReprDisjoint(buckets)
+  {
+    reveal_BucketListReprDisjoint();
+  }
+
+  lemma BucketListReprDisjointOfLen2(buckets: seq<MutableBucket.MutBucket>)
+  requires |buckets| == 2
+  requires buckets[0].Repr !! buckets[1].Repr
+  ensures BucketListReprDisjoint(buckets)
+  {
+    reveal_BucketListReprDisjoint();
+  }
+
+  function {:opaque} MutBucketListRepr(buckets: seq<MutableBucket.MutBucket>) : set<object>
+  reads buckets
+  {
+    set o, i | 0 <= i < |buckets| && o in buckets[i].Repr :: o
+  }
+
+  lemma MutBucketListReprOfLen2(buckets: seq<MutableBucket.MutBucket>)
+  requires |buckets| == 2
+  ensures MutBucketListRepr(buckets) == buckets[0].Repr + buckets[1].Repr
+  {
+    reveal_MutBucketListRepr();
+  }
+
   class Node
   {
     var pivotTable: Pivots.PivotTable;
@@ -41,6 +69,7 @@ module ImplNode {
     ensures this.children == children;
     ensures this.buckets == buckets;
     ensures Inv();
+    ensures forall o | o in Repr :: fresh(o) || o in old(MutBucketListRepr(buckets))
     {
       this.pivotTable := pivotTable;
       this.children := children;
@@ -48,16 +77,9 @@ module ImplNode {
 
       new;
 
-      this.Repr := {this} + ComputeRepr();
+      this.Repr := {this} + MutBucketListRepr(buckets);
+      reveal_MutBucketListRepr();
     }
-
-    protected function ComputeRepr() : set<object>
-    reads this
-    reads set i | 0 <= i < |buckets| :: buckets[i]
-    {
-      set i, o | 0 <= i < |buckets| && o in buckets[i].Repr :: o
-    }
-
 
     protected predicate Inv()
     reads this, Repr
@@ -66,10 +88,16 @@ module ImplNode {
       forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     {
       && (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
-      && Repr == {this} + ComputeRepr()
+      && Repr == {this} + MutBucketListRepr(buckets)
       && BucketListReprDisjoint(buckets)
 
       && (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
+    }
+
+    lemma LemmaRepr()
+    requires Inv()
+    ensures Repr == {this} + MutBucketListRepr(buckets)
+    {
     }
 
     function I() : IM.Node
@@ -154,6 +182,7 @@ module ImplMutCache {
     }
 
     lemma LemmaSizeEqCount()
+    requires Inv()
     ensures |I()| == |cache.Contents|
 
     method Insert(ref: BT.G.Reference, node: Node)
@@ -183,6 +212,48 @@ module ImplMutCache {
     {
       LemmaSizeEqCount();
       var _ := cache.Remove(ref);
+      Repr := {this} + cache.Repr + MutCacheBucketRepr();
+
+      assert Inv();
+    }
+
+    // This is used for the 'grow' operation.
+    method MoveAndReplace(oldref: BT.G.Reference, newref: BT.G.Reference, node: Node)
+    requires Inv()
+    requires node.Inv()
+    requires Repr !! node.Repr
+    requires |I()| <= 0x10000
+    requires oldref in I()
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I()[newref := I()[oldref]][oldref := node.I()])
+    ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
+    {
+      LemmaSizeEqCount();
+      var oldnodeOpt := cache.Get(oldref);
+      var oldnode := oldnodeOpt.value;
+      var _ := cache.Insert(newref, oldnode);
+      var _ := cache.Insert(oldref, node);
+
+      Repr := {this} + cache.Repr + MutCacheBucketRepr();
+      assert Inv();
+    }
+
+    // Like Insert, but with slightly different requires
+    method Overwrite(ref: BT.G.Reference, node: Node)
+    requires Inv()
+    requires node.Inv()
+    requires ref in I()
+    requires forall o | o in node.Repr :: o in cache.Contents[ref].Repr || o !in Repr
+    requires |I()| <= 0x10000
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I()[ref := node.I()])
+    ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
+    {
+      LemmaSizeEqCount();
+      var _ := cache.Insert(ref, node);
+      assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();

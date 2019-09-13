@@ -117,7 +117,7 @@ module ImplSync {
   requires s.ready
   requires Inv(k, s)
   requires io.initialized()
-  requires ref in s.cache.Contents
+  requires ref in s.cache.I()
   requires io !in s.Repr()
   modifies s.Repr()
   modifies io
@@ -125,10 +125,10 @@ module ImplSync {
   ensures s.ready
   ensures ImplModelSync.TryToWriteBlock(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    var nodeOpt := s.cache.Get(ref);
+    var nodeOpt := s.cache.GetOpt(ref);
     var node := nodeOpt.value;
 
-    assert INode(node) == ICache(s.cache)[ref];
+    assert node.I() == s.cache.I()[ref];
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
 
     if (id.Some?) {
@@ -141,7 +141,7 @@ module ImplSync {
       print "sync: giving up; write req failed\n";
     }
 
-    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(SectorBlock(s.cache.Contents[ref]))), id, loc, IIO(io));
+    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(IM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
     assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
   }
 

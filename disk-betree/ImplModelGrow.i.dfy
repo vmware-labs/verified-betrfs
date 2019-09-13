@@ -31,14 +31,15 @@ module ImplModelGrow {
       s
     ) else (
       var oldroot := s.cache[BT.G.Root()];
-      var (s1, newref) := alloc(k, s, oldroot);
+      var (s1, newref) := allocBookkeeping(k, s, oldroot.children);
       match newref {
         case None => (
           s1
         )
         case Some(newref) => (
           var newroot := Node([], Some([newref]), [map[]]);
-          var s' := write(k, s1, BT.G.Root(), newroot);
+          var s2 := writeBookkeeping(k, s1, BT.G.Root(), newroot.children);
+          var s' := s2.(cache := s2.cache[newref := oldroot][BT.G.Root() := newroot]);
           s'
         )
       }
@@ -59,6 +60,8 @@ module ImplModelGrow {
   {
     reveal_grow();
 
+    var s' := grow(k, s);
+
     if (
       && s.frozenIndirectionTable.Some?
       && BT.G.Root() in s.frozenIndirectionTable.value
@@ -71,9 +74,9 @@ module ImplModelGrow {
     }
 
     var oldroot := s.cache[BT.G.Root()];
-    var (s1, newref) := alloc(k, s, oldroot);
-    reveal_alloc();
-    reveal_write();
+    var (s1, newref) := allocWithNode(k, s, oldroot);
+    reveal_allocBookkeeping();
+    reveal_writeBookkeeping();
 
     match newref {
       case None => {
@@ -88,7 +91,8 @@ module ImplModelGrow {
         assert BT.G.Root() in ICache(s1.cache);
         assert BT.G.Root() in s1.cache;
 
-        var s' := write(k, s1, BT.G.Root(), newroot);
+        var s2 := writeWithNode(k, s1, BT.G.Root(), newroot);
+        assert s2 == s';
 
         allocCorrect(k, s, oldroot);
         writeCorrect(k, s1, BT.G.Root(), newroot);

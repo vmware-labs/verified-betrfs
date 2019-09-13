@@ -1252,7 +1252,32 @@ module KVList {
     var kvl := toKvl(bucket);
     if |kvl.keys| == 0 then
       [0] // Just pick an arbitary key
-    else 
-      kvl.keys[|kvl.keys| / 2]
+    else (
+      var key := kvl.keys[|kvl.keys| / 2];
+      if |key| == 0 then 
+        [0]
+      else
+        key
+    )
   }
+
+  method GetMiddleKey(kvl: Kvl) returns (res: Key)
+  requires WF(kvl)
+  ensures WFBucket(I(kvl))
+  ensures getMiddleKey(I(kvl)) == res
+  {
+    WFImpliesWFBucket(kvl); 
+    assume kvl == toKvl(I(kvl));
+    if |kvl.keys| == 0 {
+      return [0];
+    } else {
+      var key := kvl.keys[|kvl.keys| / 2];
+      if |key| == 0 {
+        return [0];
+      } else {
+        return key;
+      }
+    }
+  }
+
 }

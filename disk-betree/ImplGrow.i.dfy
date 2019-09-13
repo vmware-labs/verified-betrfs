@@ -6,6 +6,7 @@ module ImplGrow {
   import opened ImplIO
   import opened ImplCache
   import opened ImplState
+  import opened ImplNode
   import ImplModelGrow
 
   import KVList
@@ -15,6 +16,7 @@ module ImplGrow {
   import opened Maps
   import opened Sequences
   import opened Sets
+  import opened BucketWeights
 
   import opened NativeTypes
 
@@ -22,7 +24,7 @@ module ImplGrow {
   method grow(k: ImplConstants, s: ImplVariables)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache.Contents
+  requires BT.G.Root() in s.cache.I()
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
@@ -41,12 +43,9 @@ module ImplGrow {
       }
     }
 
-    var oldrootOpt := s.cache.Get(BT.G.Root());
+    var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
-    assert INode(oldroot) == ICache(s.cache)[BT.G.Root()];
-    var newref := alloc(k, s, oldroot);
-
-    assume false;
+    var newref := allocBookkeeping(k, s, oldroot.children);
 
     match newref {
       case None => {
@@ -54,12 +53,26 @@ module ImplGrow {
       }
       case Some(newref) => {
         var emptyKvl := KVList.Empty();
-        var mutbucket := new MutableBucket.MutBucket(emptyKvl);
-        var newroot := IS.Node([], Some([newref]), [mutbucket]);
+        WeightBucketEmpty();
 
-        write(k, s, BT.G.Root(), newroot);
+        var mutbucket := new MutableBucket.MutBucket(emptyKvl);
+
+        BucketListReprDisjointOfLen1([mutbucket]);
+        var newroot := new Node([], Some([newref]), [mutbucket]);
+        
+        assert newroot.I() == IM.Node([], Some([newref]), [map[]]);
+        assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
+
+        writeBookkeeping(k, s, BT.G.Root(), newroot.children);
+
+        s.cache.MoveAndReplace(BT.G.Root(), newref, newroot);
+
+        ghost var a := s.I();
+        ghost var b := ImplModelGrow.grow(Ic(k), old(s.I()));
+        assert a.cache == b.cache;
+        assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
+        assert a.lru == b.lru;
       }
     }
   }
-
 }

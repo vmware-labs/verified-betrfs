@@ -73,13 +73,12 @@ module ImplDealloc {
     var _ := s.ephemeralIndirectionTable.Remove(ref);
 
     s.lru.Remove(ref);
-
-    var _ := s.cache.Remove(ref);
+    s.cache.Remove(ref);
 
     assume s.ephemeralIndirectionTable.Contents
         == MapRemove(old(s.ephemeralIndirectionTable.Contents), {ref});
-    assume s.cache.Contents
-        == MapRemove(old(s.cache.Contents), {ref});
+    assume s.cache.I()
+        == MapRemove(old(s.cache.I()), {ref});
 
     ghost var s1 := s.I();
     ghost var s2 := ImplModelDealloc.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref).0;

@@ -271,6 +271,21 @@ module MutableBucket {
       right := new MutBucket(kvlRight);
     }
 
+    method SplitLeftRight(pivot: Key)
+    returns (left: MutBucket, right: MutBucket)
+    requires Inv()
+    ensures left.Inv()
+    ensures right.Inv()
+    ensures left.Bucket == SplitBucketLeft(Bucket, pivot)
+    ensures right.Bucket == SplitBucketRight(Bucket, pivot)
+    ensures fresh(left.Repr)
+    ensures fresh(right.Repr)
+    ensures left.Repr !! right.Repr
+    {
+      left := SplitLeft(pivot);
+      right := SplitRight(pivot);
+    }
+
     /*method SplitOneInList(buckets: seq<MutBucket>, slot: uint64, pivot: Key)
     returns (buckets' : seq<MutBucket>)
     requires splitKMTInList.requires(buckets, slot, pivot)
