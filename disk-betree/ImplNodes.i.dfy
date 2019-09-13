@@ -7,21 +7,12 @@ module ImplNode {
   import opened Options
   import opened Sequences
   import opened NativeTypes
-  import TTT = TwoThreeTree
-  import IM = ImplModel
 
+  import IM = ImplModel
   import BT = PivotBetreeSpec`Internal
-  import Messages = ValueMessage
-  import MS = MapSpec
   import Pivots = PivotsLib
-  import BC = BetreeGraphBlockCache
-  import D = AsyncSectorDisk
-  import MainDiskIOHandler
-  import LruModel
-  import MutableLru
   import MutableBucket
   import opened Bounds
-  import opened BucketsLib
 
   import MM = MutableMap
   import ReferenceType`Internal
@@ -94,6 +85,7 @@ module ImplNode {
 module ImplMutCache {
   import opened ImplNode
   import opened Options
+  import opened Maps
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -196,39 +188,4 @@ module ImplMutCache {
       assert Inv();
     }
   }
-
-  // Some helpful lemmas
-
-  /*lemma LemmaReprCacheInsert(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, node: Node, s: Variables)
-  requires s.cache.Contents == cache[ref := node]
-  requires CacheRepr(cache) !! node.Repr
-  requires CacheRepr(cache) !! s.NonBucketsRepr()
-  requires node.Repr !! s.NonBucketsRepr()
-  requires CacheReprInv_(cache)
-  requires BucketListReprInv(node.buckets)
-  ensures CacheRepr(s.cache.Contents) !! s.NonBucketsRepr()
-  ensures CacheReprInv_(s.cache.Contents)
-  ensures BucketsInv_(s.cache.Contents, CacheRepr(s.cache.Contents))*/
-
-  /*method CacheInsert(k: M.Constants, s: Variables, ref: BT.G.Reference, node: Node)
-  requires s.W()
-  requires s.ready
-  requires node.Repr !! s.Repr()
-  requires WFNode(node)
-  requires |s.cache.Contents| <= MaxCacheSize();
-  modifies s.Repr()
-  ensures s.W()
-  ensures forall o | o in s.Repr() :: fresh(o) || o in old(s.Repr()) || o in old(node.Repr)
-  ensures s.I() == old(s.I()).(cache := old(s.I()).cache[ref := INode(node)])
-  {
-    var _ := s.cache.Insert(ref, node);
-
-    s.uucketRepr := CacheRepr(s.cache.Contents);
-
-    reveal_BucketListReprInv();
-    reveal_CacheRepr();
-    reveal_Cache_();
-    reveal_CacheReprInv_();
-  }*/
-
 }
