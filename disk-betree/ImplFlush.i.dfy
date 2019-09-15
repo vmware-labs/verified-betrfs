@@ -5,6 +5,7 @@ module ImplFlush {
   import opened Impl
   import opened ImplCache
   import opened ImplState
+  import opened ImplNode
 
   import opened Options
   import opened MainDiskIOHandler
@@ -26,23 +27,26 @@ module ImplFlush {
   requires Inv(k, s)
   requires s.ready
 
-  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
-  requires parentref in s.cache.Contents
+  requires child.Inv()
 
-  requires s.cache.Contents[parentref].children.Some?
-  requires 0 <= slot < |s.cache.Contents[parentref].children.value|
-  requires s.cache.Contents[parentref].children.value[slot] == childref
+  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
+  requires parentref in s.cache.I()
+
+  requires s.cache.I()[parentref].children.Some?
+  requires 0 <= slot < |s.cache.I()[parentref].children.value|
+  requires s.cache.I()[parentref].children.value[slot] == childref
 
   requires childref in IIndirectionTable(s.ephemeralIndirectionTable)
-  requires childref in s.cache.Contents
-  requires s.cache.Contents[childref] == child
-  requires ICache(s.cache)[childref] == INode(child)
+  requires childref in s.cache.I()
+  requires childref in s.cache.cache.Contents
+  requires s.cache.cache.Contents[childref] == child
+  requires s.cache.I()[childref] == child.I()
 
   modifies s.Repr()
 
   ensures WellUpdated(s)
   ensures s.ready
-  ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, old(INode(child))) == s.I()
+  ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, old(child.I())) == s.I()
   {
     if s.frozenIndirectionTable != null {
       var lbaGraph := s.frozenIndirectionTable.Get(parentref);
@@ -57,49 +61,26 @@ module ImplFlush {
 
     //Native.BenchmarkingUtil.start();
 
-    var nodeOpt := s.cache.Get(parentref);
+    var nodeOpt := s.cache.GetOpt(parentref);
     var node := nodeOpt.value;
-    assert INode(node) == ICache(s.cache)[parentref];
     var childref := node.children.value[slot];
-
-    assert BucketListReprInv(node.buckets);
 
     WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(node.buckets), slot);
 
     var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
-    var newchild := child.(buckets := newbuckets);
-    var newchildref := alloc(k, s, newchild);
+    var newchild := new Node(child.pivotTable, child.children, newbuckets);
+    var newchildref := allocBookkeeping(k, s, newchild.children);
     if newchildref.None? {
       print "giving up; could not get parentref\n";
       return;
     }
 
-    assert BucketListReprInv(node.buckets);
+    var newparent_children := node.children.value[slot := newchildref.value];
 
-    var newparent := IS.Node(
-        node.pivotTable,
-        Some(node.children.value[slot := newchildref.value]),
-        node.buckets[slot := newparentBucket]
-      );
+    writeBookkeeping(k, s, parentref, Some(newparent_children));
 
-    forall i, j | 0 <= i < |newparent.buckets| && 0 <= j < |newparent.buckets| && i != j ensures
-        newparent.buckets[i].Repr !! newparent.buckets[j].Repr
-    {
-      if i == slot {
-        assert newparent.buckets[i].Repr !! newparent.buckets[j].Repr;
-      }
-      else if j == slot {
-        assert newparent.buckets[i].Repr !! newparent.buckets[j].Repr;
-      } else {
-        assert newparent.buckets[i].Repr !! newparent.buckets[j].Repr;
-      }
-    }
-
-    assert BucketListReprInv(newparent.buckets);
-
-    assume false;
-
-    write(k, s, parentref, newparent);
+    s.cache.Insert(newchildref.value, newchild);
+    s.cache.UpdateNodeSlot(parentref, slot as uint64, newparentBucket, newchildref.value);
 
     //Native.BenchmarkingUtil.end();
   }

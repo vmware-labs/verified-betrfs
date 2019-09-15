@@ -11,46 +11,11 @@ module ImplNode {
   import IM = ImplModel
   import BT = PivotBetreeSpec`Internal
   import Pivots = PivotsLib
-  import MutableBucket
   import opened Bounds
+  import opened MutableBucket
 
   import MM = MutableMap
   import ReferenceType`Internal
-
-  predicate {:opaque} BucketListReprDisjoint(buckets: seq<MutableBucket.MutBucket>)
-  reads set i | 0 <= i < |buckets| :: buckets[i]
-  {
-    forall i, j | 0 <= i < |buckets| && 0 <= j < |buckets| && i != j ::
-        buckets[i].Repr !! buckets[j].Repr
-  }
-
-  lemma BucketListReprDisjointOfLen1(buckets: seq<MutableBucket.MutBucket>)
-  requires |buckets| <= 1
-  ensures BucketListReprDisjoint(buckets)
-  {
-    reveal_BucketListReprDisjoint();
-  }
-
-  lemma BucketListReprDisjointOfLen2(buckets: seq<MutableBucket.MutBucket>)
-  requires |buckets| == 2
-  requires buckets[0].Repr !! buckets[1].Repr
-  ensures BucketListReprDisjoint(buckets)
-  {
-    reveal_BucketListReprDisjoint();
-  }
-
-  function {:opaque} MutBucketListRepr(buckets: seq<MutableBucket.MutBucket>) : set<object>
-  reads buckets
-  {
-    set o, i | 0 <= i < |buckets| && o in buckets[i].Repr :: o
-  }
-
-  lemma MutBucketListReprOfLen2(buckets: seq<MutableBucket.MutBucket>)
-  requires |buckets| == 2
-  ensures MutBucketListRepr(buckets) == buckets[0].Repr + buckets[1].Repr
-  {
-    reveal_MutBucketListRepr();
-  }
 
   class Node
   {
@@ -64,12 +29,12 @@ module ImplNode {
       children: Option<seq<BT.G.Reference>>,
       buckets: seq<MutableBucket.MutBucket>)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
-    requires BucketListReprDisjoint(buckets)
+    requires MutBucket.ReprSeqDisjoint(buckets)
     ensures this.pivotTable == pivotTable;
     ensures this.children == children;
     ensures this.buckets == buckets;
     ensures Inv();
-    ensures forall o | o in Repr :: fresh(o) || o in old(MutBucketListRepr(buckets))
+    ensures forall o | o in Repr :: fresh(o) || o in old(MutBucket.ReprSeq(buckets))
     {
       this.pivotTable := pivotTable;
       this.children := children;
@@ -77,8 +42,8 @@ module ImplNode {
 
       new;
 
-      this.Repr := {this} + MutBucketListRepr(buckets);
-      reveal_MutBucketListRepr();
+      this.Repr := {this} + MutBucket.ReprSeq(buckets);
+      MutBucket.reveal_ReprSeq();
     }
 
     protected predicate Inv()
@@ -88,15 +53,19 @@ module ImplNode {
       forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     {
       && (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
-      && Repr == {this} + MutBucketListRepr(buckets)
-      && BucketListReprDisjoint(buckets)
+      && Repr == {this} + MutBucket.ReprSeq(buckets)
+      && MutBucket.ReprSeqDisjoint(buckets)
 
-      && (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
+      && (
+        MutBucket.reveal_ReprSeq();
+        && (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
+        && (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
+      )
     }
 
     lemma LemmaRepr()
     requires Inv()
-    ensures Repr == {this} + MutBucketListRepr(buckets)
+    ensures Repr == {this} + MutBucket.ReprSeq(buckets)
     {
     }
 
@@ -107,6 +76,32 @@ module ImplNode {
       IM.Node(pivotTable, children,
         MutableBucket.MutBucket.ISeq(buckets))
     }
+
+    method UpdateSlot(slot: uint64, bucket: MutableBucket.MutBucket, childref: BT.G.Reference)
+    requires Inv()
+    requires bucket.Inv()
+    requires children.Some?
+    requires 0 <= slot as int < |children.value|
+    requires 0 <= slot as int < |buckets|
+    requires bucket.Repr !! Repr
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(IM.Node(
+        I().pivotTable,
+        Some(I().children.value[slot as int := childref]),
+        I().buckets[slot as int := bucket.Bucket]
+      ))
+    ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o);
+    {
+      buckets := buckets[slot as int := bucket];
+      children := Some(children.value[slot as int := childref]);
+
+      MutBucket.reveal_ReprSeq();
+      MutBucket.reveal_ReprSeqDisjoint();
+
+      Repr := {this} + MutBucket.ReprSeq(buckets);
+      assert Inv();
+    }
   }
 }
 
@@ -114,6 +109,8 @@ module ImplMutCache {
   import opened ImplNode
   import opened Options
   import opened Maps
+  import opened NativeTypes
+  import MutableBucket
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -256,6 +253,32 @@ module ImplMutCache {
       assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
+      assert Inv();
+    }
+
+    method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutableBucket.MutBucket, childref: BT.G.Reference)
+    requires Inv()
+    requires bucket.Inv()
+    requires ref in I()
+    requires I()[ref].children.Some?
+    requires 0 <= slot as int < |I()[ref].children.value|
+    requires 0 <= slot as int < |I()[ref].buckets|
+    requires bucket.Repr !! Repr
+    requires |I()| <= 0x10000
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I()[ref := IM.Node(
+        I()[ref].pivotTable,
+        Some(I()[ref].children.value[slot as int := childref]),
+        I()[ref].buckets[slot as int := bucket.Bucket]
+      )])
+    ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o)
+    {
+      var nodeOpt := cache.Get(ref);
+      var node := nodeOpt.value;
+      node.UpdateSlot(slot, bucket, childref);
+
+      Repr := {this} + cache.Repr + MutCacheBucketRepr();
       assert Inv();
     }
   }

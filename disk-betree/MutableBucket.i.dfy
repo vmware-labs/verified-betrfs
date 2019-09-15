@@ -136,14 +136,14 @@ module MutableBucket {
       }
     }
 
-    static function ReprSeq(s: seq<MutBucket>) : set<object>
-    reads set i | 0 <= i < |s| :: s[i]
+    static function {:opaque} ReprSeq(s: seq<MutBucket>) : set<object>
+    reads s
     {
       set i, o | 0 <= i < |s| && o in s[i].Repr :: o
     }
 
     static predicate InvSeq(s: seq<MutBucket>)
-    reads set i | 0 <= i < |s| :: s[i]
+    reads s
     reads ReprSeq(s)
     {
       forall i | 0 <= i < |s| :: s[i].Inv()
@@ -164,6 +164,35 @@ module MutableBucket {
       if |s| == 0 then [] else ISeq(DropLast(s)) + [I(Last(s))]
     }
 
+    static predicate {:opaque} ReprSeqDisjoint(buckets: seq<MutBucket>)
+    reads set i | 0 <= i < |buckets| :: buckets[i]
+    {
+      forall i, j | 0 <= i < |buckets| && 0 <= j < |buckets| && i != j ::
+          buckets[i].Repr !! buckets[j].Repr
+    }
+
+    lemma ReprSeqDisjointOfLen1(buckets: seq<MutBucket>)
+    requires |buckets| <= 1
+    ensures ReprSeqDisjoint(buckets)
+    {
+      reveal_ReprSeqDisjoint();
+    }
+
+    lemma ReprSeqDisjointOfLen2(buckets: seq<MutBucket>)
+    requires |buckets| == 2
+    requires buckets[0].Repr !! buckets[1].Repr
+    ensures ReprSeqDisjoint(buckets)
+    {
+      reveal_ReprSeqDisjoint();
+    }
+
+    lemma MutBucketListReprOfLen2(buckets: seq<MutBucket>)
+    requires |buckets| == 2
+    ensures ReprSeq(buckets) == buckets[0].Repr + buckets[1].Repr
+    {
+      reveal_ReprSeq();
+    }
+
     static method PartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)
     returns (newParent: MutBucket, newChildren: seq<MutBucket>)
     requires parent.Inv()
@@ -174,9 +203,9 @@ module MutableBucket {
     ensures newParent.Inv()
     ensures InvSeq(newChildren)
     ensures fresh(newParent.Repr)
-    ensures forall i | 0 <= i < |newChildren| :: fresh(newChildren[i].Repr)
-    ensures forall i | 0 <= i < |newChildren| :: newChildren[i].Repr !! newParent.Repr
-    ensures forall i, j | 0 <= i < |newChildren| && 0 <= j < |newChildren| && i != j :: newChildren[i].Repr !! newChildren[j].Repr
+    ensures fresh(ReprSeq(newChildren))
+    ensures newParent.Repr !! ReprSeq(newChildren)
+    ensures ReprSeqDisjoint(newChildren)
     ensures KVListPartialFlush.bucketPartialFlush(parent.Bucket, ISeq(children), pivots)
         == (newParent.Bucket, ISeq(newChildren))
 

@@ -54,7 +54,7 @@ module ImplModelFlush {
 
       var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := alloc(k, s, newchild);
+      var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
       if newchildref.None? then (
         s2
       ) else (
@@ -63,7 +63,8 @@ module ImplModelFlush {
           Some(parent.children.value[slot := newchildref.value]),
           parent.buckets[slot := newparentBucket]
         );
-        var s' := write(k, s2, parentref, newparent);
+        var s2 := writeBookkeeping(k, s2, parentref, newparent.children);
+        var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
         s'
       )
     )
@@ -77,6 +78,8 @@ module ImplModelFlush {
       && WFVars(s')
       && M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, D.NoDiskOp)
   {
+    var s' := flush(k, s, parentref, slot, childref, child);
+
     if (
       && s.frozenIndirectionTable.Some?
       && parentref in s.frozenIndirectionTable.value
@@ -116,8 +119,8 @@ module ImplModelFlush {
       assert parent == s.cache[parentref];
 
       var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := alloc(k, s, newchild);
-      reveal_alloc();
+      var (s2, newchildref) := allocWithNode(k, s, newchild);
+      reveal_allocBookkeeping();
       if newchildref.None? {
         assert noop(k, IVars(s), IVars(s2));
       } else {
@@ -128,8 +131,9 @@ module ImplModelFlush {
         );
         reveal_BucketComplement();
 
-        var s' := write(k, s2, parentref, newparent);
-        reveal_write();
+        var s3 := writeWithNode(k, s2, parentref, newparent);
+        reveal_writeBookkeeping();
+        assert s3 == s';
 
         forall ref | ref in BT.G.Successors(INode(newparent)) ensures ref in IIndirectionTable(s2.ephemeralIndirectionTable).graph {
           if (ref == newchildref.value) {
