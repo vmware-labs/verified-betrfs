@@ -149,7 +149,7 @@ module ImplModelSplit {
     }
   }
 
-  function method {:opaque} SplitChildLeft(child: Node, num_children_left: int) : Node
+  function {:opaque} SplitChildLeft(child: Node, num_children_left: int) : Node
   requires 0 <= num_children_left - 1 <= |child.pivotTable|
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|
@@ -161,7 +161,7 @@ module ImplModelSplit {
     )
   }
 
-  function method {:opaque} SplitChildRight(child: Node, num_children_left: int) : Node
+  function {:opaque} SplitChildRight(child: Node, num_children_left: int) : Node
   requires 0 <= num_children_left <= |child.pivotTable|
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|

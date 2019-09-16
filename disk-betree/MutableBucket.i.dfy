@@ -360,5 +360,19 @@ module MutableBucket {
     {
       Islice(buckets, a, |buckets|);
     }
+
+    method Clone() returns (bucket': MutBucket)
+    requires Inv()
+    ensures bucket'.Inv()
+    ensures fresh(bucket'.Repr)
+    ensures this.Bucket == bucket'.Bucket
+
+    static method CloneSeq(buckets: seq<MutBucket>) returns (buckets': seq<MutBucket>)
+    requires InvSeq(buckets)
+    ensures InvSeq(buckets')
+    ensures fresh(ReprSeq(buckets'))
+    ensures |buckets'| == |buckets|
+    ensures ISeq(buckets) == ISeq(buckets')
+    ensures ReprSeqDisjoint(buckets')
   }
 }
