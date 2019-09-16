@@ -207,7 +207,7 @@ module ImplModelSplit {
   {
   }
 
-  function SplitParent(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+  function {:opaque} SplitParent(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
   : (res : Node)
   requires WFNode(fused_parent)
   requires 0 <= slot_idx < |fused_parent.buckets|
@@ -237,6 +237,7 @@ module ImplModelSplit {
     && inode' == BT.SplitParent(inode, pivot, slot_idx, left_childref, right_childref)
     && WeightBucketList(res.buckets) == WeightBucketList(fused_parent.buckets)
   {
+    reveal_SplitParent();
     var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
     WFSplitBucketInList(fused_parent.buckets, slot_idx, pivot, fused_parent.pivotTable);
     WeightSplitBucketInList(fused_parent.buckets, slot_idx, pivot);
@@ -323,9 +324,13 @@ module ImplModelSplit {
             var right_child := SplitChildRight(child, num_children_left);
             var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
 
-            var s1 := write(k, s, left_childref.value, left_child);
-            var s2 := write(k, s1, right_childref.value, right_child);
-            var s' := write(k, s2, parentref, split_parent);
+            var s1 := writeBookkeeping(k, s, left_childref.value, left_child.children);
+            var s2 := writeBookkeeping(k, s1, right_childref.value, right_child.children);
+            var s3 := writeBookkeeping(k, s2, parentref, split_parent.children);
+            var s' := s3.(cache := s.cache
+                [left_childref.value := left_child]
+                [right_childref.value := right_child]
+                [parentref := split_parent]);
             s'
           )
         )
@@ -349,6 +354,7 @@ module ImplModelSplit {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
   {
+    var s' := doSplit(k, s, parentref, childref, slot);
     reveal_doSplit();
 
     if (
@@ -390,11 +396,13 @@ module ImplModelSplit {
             var left_child := SplitChildLeft(child, num_children_left);
             var right_child := SplitChildRight(child, num_children_left);
             var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
+            reveal_SplitParent();
 
-            reveal_write();
-            var s1 := write(k, s, left_childref.value, left_child);
-            var s2 := write(k, s1, right_childref.value, right_child);
-            var s' := write(k, s2, parentref, split_parent);
+            reveal_writeBookkeeping();
+            var s1 := writeWithNode(k, s, left_childref.value, left_child);
+            var s2 := writeWithNode(k, s1, right_childref.value, right_child);
+            var s3 := writeWithNode(k, s2, parentref, split_parent);
+            assert s' == s3;
 
             lemmaSplitChild(child, num_children_left);
             SplitParentCorrect(parentref, fused_parent, pivot, slot, left_childref.value, right_childref.value);

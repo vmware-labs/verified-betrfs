@@ -1,7 +1,7 @@
 // A LRU-queue.
 
 include "NativeTypes.s.dfy"
-include "Sequences.s.dfy"
+include "sequences.s.dfy"
 include "MutableMap.i.dfy"
 
 module LruModel {

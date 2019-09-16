@@ -2,6 +2,7 @@ include "../lib/MutableMap.i.dfy"
 include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "MutableBucket.i.dfy"
+include "ImplModelSplit.i.dfy"
 
 module ImplNode {
   import opened Options
@@ -13,6 +14,8 @@ module ImplNode {
   import Pivots = PivotsLib
   import opened Bounds
   import opened MutableBucket
+  import opened BucketsLib
+  import ImplModelSplit
 
   import MM = MutableMap
   import ReferenceType`Internal
@@ -102,6 +105,89 @@ module ImplNode {
       Repr := {this} + MutBucket.ReprSeq(buckets);
       assert Inv();
     }
+
+    lemma LemmaReprFacts()
+    requires Repr == {this} + MutBucket.ReprSeq(buckets);
+    requires (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
+    ensures (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
+    ensures (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
+    {
+      MutBucket.reveal_ReprSeq();
+    }
+
+    twostate lemma SplitParentReprSeqFacts(new s: seq<MutBucket>)
+    requires forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr
+    requires forall o | o in MutBucket.ReprSeq(s) :: o in MutBucket.ReprSeq(buckets) || fresh(o)
+    ensures forall i | 0 <= i < |s| :: this !in s[i].Repr;
+    ensures this !in MutBucket.ReprSeq(s);
+    ensures forall o :: o in MutBucket.ReprSeq(s) ==> allocated(o);
+    {
+      MutBucket.reveal_ReprSeq();
+      forall i | 0 <= i < |s| ensures this !in s[i].Repr
+      {
+        if this in s[i].Repr {
+          assert this in MutBucket.ReprSeq(s);
+        }
+      }
+    }
+
+    method SplitParent(slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+    requires Inv()
+    requires IM.WFNode(I())
+    requires children.Some?
+    requires 0 <= slot as int < |children.value|
+    requires 0 <= slot as int < |buckets|
+    requires children.Some?
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(ImplModelSplit.SplitParent(I(), pivot, slot as int, left_childref, right_childref))
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
+    {
+      ghost var b := ImplModelSplit.SplitParent(I(), pivot, slot as int, left_childref, right_childref);
+      ImplModelSplit.reveal_SplitParent();
+      assert SplitBucketInList(I().buckets, slot as int, pivot)
+          == b.buckets;
+
+      this.pivotTable := Sequences.insert(this.pivotTable, pivot, slot as int);
+
+      ghost var node2 := I();
+
+      var bucks := MutBucket.SplitOneInList(this.buckets, slot, pivot);
+      assert forall o | o in MutBucket.ReprSeq(bucks) :: o in MutBucket.ReprSeq(this.buckets) || fresh(o);
+      //MutBucket.reveal_ReprSeq();
+      assert MutBucket.ISeq(bucks) == SplitBucketInList(node2.buckets, slot as int, pivot);
+      assert node2.buckets == old(I()).buckets;
+      assert MutBucket.ISeq(bucks) == SplitBucketInList(old(I()).buckets, slot as int, pivot);
+      SplitParentReprSeqFacts(bucks);
+      assert forall o :: o in MutBucket.ReprSeq(bucks) ==> allocated(o);
+      assert forall i | 0 <= i < |bucks| :: bucks[i].Inv();
+      assert forall i | 0 <= i < |bucks| :: this !in bucks[i].Repr;
+      assert this !in MutBucket.ReprSeq(bucks);
+
+      this.buckets := bucks;
+
+      this.children := Some(replace1with2(children.value, left_childref, right_childref, slot as int));
+
+      Repr := {this} + MutBucket.ReprSeq(buckets);
+      LemmaReprFacts();
+      assert Inv();
+      assert forall o | o in Repr :: o in old(Repr) || fresh(o);
+      ghost var a := I();
+      assert a.buckets
+          == SplitBucketInList(old(I()).buckets, slot as int, pivot)
+          == b.buckets;
+      assert a.children == b.children;
+      assert a.pivotTable == b.pivotTable;
+      assert a == b;
+    }
+
+    /*method CutoffNode(lbound: Option<Key>, rbound: Option<Key>) returns (node: Node)
+    requires Inv()
+    ensures node.Inv()
+    ensures fresh(node.Repr)
+    ensures 
+    {
+    }*/
   }
 }
 
@@ -110,7 +196,7 @@ module ImplMutCache {
   import opened Options
   import opened Maps
   import opened NativeTypes
-  import MutableBucket
+  import opened MutableBucket
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -167,16 +253,27 @@ module ImplMutCache {
       map ref | ref in cache.Contents :: cache.Contents[ref].I()
     }
 
+    protected function ptr(ref: BT.G.Reference) : Option<Node>
+    ensures ptr(ref).None? ==> ref !in I()
+    ensures ptr(ref).Some? ==>
+        && ref in I()
+        && ptr(ref).value.Inv()
+        && I()[ref] == ptr(ref).value.I()
+    {
+      if ref in cache.Contents then Some(cache.Contents[ref]) else None
+    }
+
     method GetOpt(ref: BT.G.Reference)
     returns (node: Option<Node>)
     requires Inv()
-    ensures node.Some? ==> node.value.Inv()
-    ensures node.Some? ==> ref in I()
-    ensures node.Some? ==> node.value.I() == I()[ref]
-    ensures node.None? ==> ref !in I()
+    ensures node == ptr(ref)
     {
       node := cache.Get(ref);
     }
+
+    lemma LemmaNodeReprLeRepr(ref: BT.G.Reference)
+    requires Inv()
+    ensures ptr(ref).Some? ==> ptr(ref).value.Repr <= Repr
 
     lemma LemmaSizeEqCount()
     requires Inv()
@@ -256,7 +353,7 @@ module ImplMutCache {
       assert Inv();
     }
 
-    method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutableBucket.MutBucket, childref: BT.G.Reference)
+    method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()
     requires ref in I()
@@ -281,5 +378,26 @@ module ImplMutCache {
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
       assert Inv();
     }
+
+    /*method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+    requires Inv()
+    requires ref in I()
+    requires IM.WFNode(I()[ref])
+    requires I()[ref].children.Some?
+    requires 0 <= slot as int < |I()[ref].children.value|
+    requires 0 <= slot as int < |I()[ref].buckets|
+    requires |I()| <= 0x10000
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I()[ref := ImplModelSplit.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
+    {
+      var nodeOpt := GetOpt(ref);
+      var node := nodeOpt.value;
+      node.SplitParent(slot, pivot, left_childref, right_childref);
+
+      Repr := {this} + cache.Repr + MutCacheBucketRepr();
+      assert Inv();
+    }*/
   }
 }

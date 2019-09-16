@@ -82,11 +82,14 @@ module ImplCache {
   method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires s.ready
   requires s.W()
-  modifies s.Repr()
+  modifies s.lru.Repr
+  modifies s.ephemeralIndirectionTable.Repr
   ensures s.ready
-  ensures WellUpdated(s)
+  ensures s.W()
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures s.I() == ImplModelCache.writeBookkeeping(Ic(k), old(s.I()), ref, children)
-  ensures s.cache.I() == old(s.cache.I())
+  //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_writeBookkeeping();
 
@@ -104,11 +107,15 @@ module ImplCache {
   returns (ref: Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
-  modifies s.Repr()
+  //modifies s.Repr()
+  modifies s.lru.Repr
+  modifies s.ephemeralIndirectionTable.Repr
   ensures s.ready
-  ensures WellUpdated(s)
+  ensures s.W()
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures (s.I(), ref) == ImplModelCache.allocBookkeeping(Ic(k), old(s.I()), children)
-  ensures s.cache.I() == old(s.cache.I())
+  //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_allocBookkeeping();
     

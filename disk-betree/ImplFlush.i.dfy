@@ -29,7 +29,7 @@ module ImplFlush {
   requires Inv(k, s)
   requires s.ready
 
-  requires child.Inv()
+  requires Some(child) == s.cache.ptr(childref)
 
   requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
   requires parentref in s.cache.I()
@@ -39,10 +39,6 @@ module ImplFlush {
   requires s.cache.I()[parentref].children.value[slot] == childref
 
   requires childref in IIndirectionTable(s.ephemeralIndirectionTable)
-  requires childref in s.cache.I()
-  requires childref in s.cache.cache.Contents
-  requires s.cache.cache.Contents[childref] == child
-  requires s.cache.I()[childref] == child.I()
 
   modifies s.Repr()
 
@@ -64,16 +60,21 @@ module ImplFlush {
     //Native.BenchmarkingUtil.start();
 
     var nodeOpt := s.cache.GetOpt(parentref);
-    var node := nodeOpt.value;
-    var childref := node.children.value[slot];
+    var parent := nodeOpt.value;
+    ghost var parentI := parent.I();
+    var childref := parent.children.value[slot];
 
-    WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(node.buckets), slot);
+    assert s.I().cache[parentref] == parent.I();
+    assert parent.I().children == s.I().cache[parentref].children;
+    s.cache.LemmaNodeReprLeRepr(parentref);
+
+    WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(parent.buckets), slot);
 
     assert WeightBucketList(s.I().cache[childref].buckets) <= MaxTotalBucketWeight();
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
-    var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
+    var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
     var newchildref := allocBookkeeping(k, s, newchild.children);
     if newchildref.None? {
@@ -81,13 +82,36 @@ module ImplFlush {
       return;
     }
 
-    var newparent_children := node.children.value[slot := newchildref.value];
+    assert parent.I().children == s.I().cache[parentref].children;
+
+    var newparent_children := parent.children.value[slot := newchildref.value];
 
     writeBookkeeping(k, s, parentref, Some(newparent_children));
 
+    assume parentref != newchildref.value;
+
+    ghost var c1 := s.cache.I();
+
     s.cache.Insert(newchildref.value, newchild);
+
+    ghost var c2 := s.cache.I();
+    assert c2 == c1[newchildref.value := newchild.I()];
+    ghost var newParentBucketI := newparentBucket.Bucket;
+
     s.cache.UpdateNodeSlot(parentref, slot as uint64, newparentBucket, newchildref.value);
 
+    ghost var c3 := s.cache.I();
+
     //Native.BenchmarkingUtil.end();
+
+    assert c3 == c2[parentref := IM.Node(
+          parentI.pivotTable,
+          Some(parentI.children.value[slot := newchildref.value]),
+          parentI.buckets[slot := newParentBucketI]
+        )];
+
+    ghost var a := ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, old(child.I()));
+    ghost var b := s.I();
+    assert a.cache == b.cache;
   }
 }

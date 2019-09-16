@@ -142,10 +142,14 @@ module MutableBucket {
       set i, o | 0 <= i < |s| && o in s[i].Repr :: o
     }
 
-    static predicate InvSeq(s: seq<MutBucket>)
+    static predicate {:opaque} InvSeq(s: seq<MutBucket>)
     reads s
     reads ReprSeq(s)
+    // Yes this is dumb, to opaque the function and then specify it here anyway,
+    // but this keeps the reveal_ReprSeq() from escaping
+    ensures InvSeq(s) == (forall i | 0 <= i < |s| :: s[i].Inv())
     {
+      reveal_ReprSeq();
       forall i | 0 <= i < |s| :: s[i].Inv()
     }
 
@@ -156,11 +160,13 @@ module MutableBucket {
     }
 
     static protected function ISeq(s: seq<MutBucket>) : (bs : seq<Bucket>)
-    reads set i | 0 <= i < |s| :: s[i]
+    reads s
     reads ReprSeq(s)
     ensures |bs| == |s|
     ensures forall i | 0 <= i < |s| :: bs[i] == s[i].Bucket
+    decreases |s|
     {
+      reveal_ReprSeq();
       if |s| == 0 then [] else ISeq(DropLast(s)) + [I(Last(s))]
     }
 
@@ -315,10 +321,14 @@ module MutableBucket {
       right := SplitRight(pivot);
     }
 
-    /*method SplitOneInList(buckets: seq<MutBucket>, slot: uint64, pivot: Key)
+    static method SplitOneInList(buckets: seq<MutBucket>, slot: uint64, pivot: Key)
     returns (buckets' : seq<MutBucket>)
-    requires splitKMTInList.requires(buckets, slot, pivot)
-    ensures buckets' == splitKMTInList(buckets, slot, pivot)*/
+    requires InvSeq(buckets)
+    requires 0 <= slot as int < |buckets|
+    ensures InvSeq(buckets')
+    ensures ReprSeqDisjoint(buckets')
+    ensures ISeq(buckets') == old(SplitBucketInList(ISeq(buckets), slot as int, pivot))
+    ensures forall o | o in ReprSeq(buckets') :: o in old(ReprSeq(buckets)) || fresh(o)
 
     static method computeWeightOfSeq(s: seq<MutBucket>)
     returns (weight: uint64)

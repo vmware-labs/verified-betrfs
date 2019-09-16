@@ -82,22 +82,6 @@ module ImplSplit {
     }
   }
 
-  method SplitParent(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference) returns (res : Node)
-  requires IM.WFNode(fused_parent)
-  requires 0 <= slot_idx < |fused_parent.buckets|
-  requires fused_parent.children.Some?
-  ensures res == ImplModelSplit.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref)
-  {
-    var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    WeightBucketLeBucketList(KMTable.ISeq(fused_parent.buckets), slot_idx);
-    var buckets := KMTable.SplitKMTInList(fused_parent.buckets, slot_idx as uint64, pivot);
-    res := IM.Node(
-      pivots,
-      Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
-      buckets
-    );
-  }
-
   method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
   requires s.ready
   requires Inv(k, s)
@@ -153,6 +137,10 @@ module ImplSplit {
       print "giving up; doSplit can't allocate right_childref\n";
       return;
     }
+
+    assert left_childref != right_childref;
+    assert parentref != left_childref;
+    assert parentref != right_childref;
 
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
