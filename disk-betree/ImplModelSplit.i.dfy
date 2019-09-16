@@ -207,66 +207,66 @@ module ImplModelSplit {
   {
   }
 
-  function {:opaque} SplitParent(fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+  function {:opaque} SplitParent(fused_parent: Node, pivot: Key, slot: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
   : (res : Node)
   requires WFNode(fused_parent)
-  requires 0 <= slot_idx < |fused_parent.buckets|
+  requires 0 <= slot < |fused_parent.buckets|
   requires fused_parent.children.Some?
   {
-    var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot_idx);
-    var buckets := SplitBucketInList(fused_parent.buckets, slot_idx, pivot);
+    var pivots := Sequences.insert(fused_parent.pivotTable, pivot, slot);
+    var buckets := SplitBucketInList(fused_parent.buckets, slot, pivot);
     Node(
       pivots,
-      Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
+      Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot)),
       buckets
     )
   }
 
-  lemma SplitParentCorrect(parentref: BT.G.Reference, fused_parent: Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+  lemma SplitParentCorrect(parentref: BT.G.Reference, fused_parent: Node, pivot: Key, slot: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
   requires WFNode(fused_parent)
   requires BT.WFNode(INode(fused_parent))
-  requires 0 <= slot_idx < |fused_parent.buckets|
-  requires PivotsLib.PivotInsertable(fused_parent.pivotTable, slot_idx, pivot)
+  requires 0 <= slot < |fused_parent.buckets|
+  requires PivotsLib.PivotInsertable(fused_parent.pivotTable, slot, pivot)
   requires |fused_parent.buckets| <= MaxNumChildren() - 1
   requires fused_parent.children.Some?
   ensures
-    && var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
+    && var res := SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
     && WFNode(res)
     && var inode := INode(fused_parent);
     && var inode' := INode(res);
-    && inode' == BT.SplitParent(inode, pivot, slot_idx, left_childref, right_childref)
+    && inode' == BT.SplitParent(inode, pivot, slot, left_childref, right_childref)
     && WeightBucketList(res.buckets) == WeightBucketList(fused_parent.buckets)
   {
     reveal_SplitParent();
-    var res := SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
-    WFSplitBucketInList(fused_parent.buckets, slot_idx, pivot, fused_parent.pivotTable);
-    WeightSplitBucketInList(fused_parent.buckets, slot_idx, pivot);
+    var res := SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
+    WFSplitBucketInList(fused_parent.buckets, slot, pivot, fused_parent.pivotTable);
+    WeightSplitBucketInList(fused_parent.buckets, slot, pivot);
     assert WFNode(res);
-    assert INode(res) == BT.SplitParent(INode(fused_parent), pivot, slot_idx, left_childref, right_childref);
+    assert INode(res) == BT.SplitParent(INode(fused_parent), pivot, slot, left_childref, right_childref);
   }
 
-  lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot_idx: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
   requires BT.WFNode(fused_parent)
-  requires 0 <= slot_idx < |fused_parent.buckets|
+  requires 0 <= slot < |fused_parent.buckets|
   requires fused_parent.children.Some?
   requires BC.BlockPointsToValidReferences(fused_parent, graph);
   requires left_childref in graph
   requires right_childref in graph
-  ensures BC.BlockPointsToValidReferences(BT.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref), graph);
+  ensures BC.BlockPointsToValidReferences(BT.SplitParent(fused_parent, pivot, slot, left_childref, right_childref), graph);
   {
-    var split_parent := BT.SplitParent(fused_parent, pivot, slot_idx, left_childref, right_childref);
+    var split_parent := BT.SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
     forall r | r in BT.G.Successors(split_parent)
     ensures r in graph
     {
       assert BC.BlockPointsToValidReferences(fused_parent, graph);
       var idx :| 0 <= idx < |split_parent.children.value| && split_parent.children.value[idx] == r;
-      if (idx < slot_idx) {
+      if (idx < slot) {
         assert r == fused_parent.children.value[idx];
         assert r in graph;
-      } else if (idx == slot_idx) {
+      } else if (idx == slot) {
         assert r == left_childref;
         assert r in graph;
-      } else if (idx == slot_idx + 1) {
+      } else if (idx == slot + 1) {
         assert r == right_childref;
         assert r in graph;
       } else {
@@ -326,7 +326,7 @@ module ImplModelSplit {
 
             var s1 := writeBookkeeping(k, s, left_childref.value, left_child.children);
             var s2 := writeBookkeeping(k, s1, right_childref.value, right_child.children);
-            var s3 := writeBookkeeping(k, s2, parentref, split_parent.children);
+            var s3 := writeBookkeeping(k, s2, parentref, Some(replace1with2(fused_parent.children.value, left_childref.value, right_childref.value, slot)));
             var s' := s3.(cache := s.cache
                 [left_childref.value := left_child]
                 [right_childref.value := right_child]
