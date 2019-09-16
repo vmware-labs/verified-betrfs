@@ -328,7 +328,7 @@ module ImplMarshalling {
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<MutableBucket.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
-  ensures s.Some? ==> BucketListReprDisjoint(s.value)
+  ensures s.Some? ==> MutableBucket.MutBucket.ReprSeqDisjoint(s.value)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
   ensures s.Some? ==> Some(MutableBucket.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
@@ -374,13 +374,13 @@ module ImplMarshalling {
 
     s := Some(ar[..]);
 
-    reveal_BucketListReprDisjoint();
+    MutableBucket.MutBucket.reveal_ReprSeqDisjoint();
   }
 
   method ValToNode(v: V) returns (s : Option<Node>)
   requires IMM.valToNode.requires(v)
   ensures s.Some? ==> s.value.Inv()
-  ensures s.Some? ==> BucketListReprDisjoint(s.value.buckets)
+  ensures s.Some? ==> MutableBucket.MutBucket.ReprSeqDisjoint(s.value.buckets)
   ensures s.Some? ==> forall i | 0 <= i < |s.value.buckets| :: fresh(s.value.buckets[i].Repr)
   ensures INodeOpt(s) == IMM.valToNode(v)
   {

@@ -15,6 +15,8 @@ module ImplFlush {
 
   import opened BucketsLib
   import opened BucketWeights
+  import opened Bounds
+  import opened MutableBucket
 
   import opened NativeTypes
   import ImplModel
@@ -66,6 +68,10 @@ module ImplFlush {
     var childref := node.children.value[slot];
 
     WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(node.buckets), slot);
+
+    assert WeightBucketList(s.I().cache[childref].buckets) <= MaxTotalBucketWeight();
+    assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
+    assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
     var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(node.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
