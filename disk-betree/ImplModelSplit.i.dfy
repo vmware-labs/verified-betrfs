@@ -288,7 +288,7 @@ module ImplModelSplit {
     s3
   }
 
-  function {:opaque} splitCacheChanges(s: Variables, child: Node, left_childref: BT.G.Reference,
+  function {:opaque} splitCacheChanges(s: Variables, left_childref: BT.G.Reference,
       right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: int, num_children_left: int, pivot: Key, left_child: Node, right_child: Node) : (s': Variables)
   requires s.Ready?
   requires parentref in s.cache
@@ -304,24 +304,26 @@ module ImplModelSplit {
         [parentref := split_parent])
   }
 
-  function {:opaque} splitDoChanges(k: Constants, s: Variables, child: Node, num_children_left: int,
+  function {:opaque} splitDoChanges(k: Constants, s: Variables, child: Node,
       left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
-      fused_parent_children: seq<BT.G.Reference>, slot: int, pivot: Key) : (s': Variables)
+      fused_parent_children: seq<BT.G.Reference>, slot: int) : (s': Variables)
   requires s.Ready?
   requires parentref in s.cache
   requires WFNode(s.cache[parentref]);
+  requires WFNode(child);
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires 0 <= slot < |fused_parent_children|
-  requires 1 <= num_children_left <= |child.pivotTable|
-  requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
-  requires 0 <= num_children_left <= |child.buckets|
+  requires |child.buckets| >= 2
   {
+    var num_children_left := |child.buckets| / 2;
+    var pivot := child.pivotTable[num_children_left - 1];
+
     var left_child := SplitChildLeft(child, num_children_left);
     var right_child := SplitChildRight(child, num_children_left);
 
     var s3 := splitBookkeeping(k, s, left_childref, right_childref, parentref, fused_parent_children, left_child, right_child, slot);
-    var s' := splitCacheChanges(s3, child, left_childref, right_childref, parentref, slot, num_children_left, pivot, left_child, right_child);
+    var s' := splitCacheChanges(s3, left_childref, right_childref, parentref, slot, num_children_left, pivot, left_child, right_child);
     s'
   }
 
@@ -366,11 +368,9 @@ module ImplModelSplit {
           if right_childref.None? then (
             s
           ) else (
-            var num_children_left := |child.buckets| / 2;
-            var pivot := child.pivotTable[num_children_left - 1];
-            splitDoChanges(k, s, child, num_children_left, left_childref.value,
+            splitDoChanges(k, s, child, left_childref.value,
                 right_childref.value, parentref, fused_parent.children.value,
-                slot, pivot)
+                slot)
           )
         )
       )

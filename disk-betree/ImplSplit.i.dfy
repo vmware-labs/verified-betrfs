@@ -42,7 +42,7 @@ module ImplSplit {
     writeBookkeeping(k, s, parentref, Some(replace1with2(fused_parent_children, left_childref, right_childref, slot as int)));
   }
 
-  method splitCacheChanges(s: ImplVariables, child: Node, left_childref: BT.G.Reference,
+  method splitCacheChanges(s: ImplVariables, left_childref: BT.G.Reference,
       right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: uint64, num_children_left: uint64, pivot: Key, left_child: Node, right_child: Node)
   requires s.ready
   requires s.W()
@@ -50,7 +50,6 @@ module ImplSplit {
   requires IM.WFNode(s.cache.ptr(parentref).value.I())
   requires s.cache.ptr(parentref).value.I().children.Some?
   requires 0 <= slot as int < |s.cache.ptr(parentref).value.I().children.value|
-  requires child.Inv()
   requires left_child.Inv()
   requires right_child.Inv()
   requires left_child.Repr !! s.Repr()
@@ -64,7 +63,7 @@ module ImplSplit {
   modifies right_child.Repr
   ensures s.W()
   ensures (forall o | o in s.Repr() :: o in old(s.Repr()) || o in old(left_child.Repr) || o in old(right_child.Repr) || fresh(o))
-  ensures s.I() == ImplModelSplit.splitCacheChanges(old(s.I()), old(child.I()), left_childref, right_childref, parentref, slot as int, num_children_left as int, pivot, old(left_child.I()), old(right_child.I()))
+  ensures s.I() == ImplModelSplit.splitCacheChanges(old(s.I()), left_childref, right_childref, parentref, slot as int, num_children_left as int, pivot, old(left_child.I()), old(right_child.I()))
   ensures s.ready
   {
     ImplModelSplit.reveal_splitCacheChanges();
@@ -73,37 +72,38 @@ module ImplSplit {
     s.cache.SplitParent(parentref, slot as uint64, pivot, left_childref, right_childref);
   }
 
-  method splitDoChanges(k: ImplConstants, s: ImplVariables, child: Node, num_children_left: uint64,
+  method splitDoChanges(k: ImplConstants, s: ImplVariables, child: Node,
       left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
-      fused_parent_children: seq<BT.G.Reference>, slot: uint64, pivot: Key)
+      fused_parent_children: seq<BT.G.Reference>, slot: uint64)
   requires Inv(k, s)
   requires child.Inv()
-  requires child.Repr !! s.Repr()
 
   requires s.ready
   requires parentref in s.cache.I()
   requires IM.WFNode(s.cache.I()[parentref]);
+  requires IM.WFNode(child.I());
   requires s.cache.I()[parentref].children.Some?
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires 0 <= slot as int < |fused_parent_children|
-  requires 1 <= num_children_left as int <= |child.pivotTable|
-  requires child.children.Some? ==> 0 <= num_children_left as int <= |child.children.value|
-  requires 0 <= num_children_left as int <= |child.buckets|
   requires left_childref != parentref
   requires right_childref != parentref
+  requires |child.buckets| >= 2
 
   modifies s.Repr()
-  modifies child.Repr
 
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelSplit.splitDoChanges(Ic(k), old(s.I()), old(child.I()), num_children_left as int, left_childref, right_childref, parentref, fused_parent_children, slot as int, pivot)
+  ensures s.I() == ImplModelSplit.splitDoChanges(Ic(k), old(s.I()), old(child.I()), left_childref, right_childref, parentref, fused_parent_children, slot as int)
   ensures s.ready
   {
+    var num_children_left := |child.buckets| as uint64 / 2;
+    assume 0 <= num_children_left < 0x100;
+    var pivot := child.pivotTable[num_children_left - 1];
+
     var left_child := child.SplitChildLeft(num_children_left as uint64);
     var right_child := child.SplitChildRight(num_children_left as uint64);
 
     splitBookkeeping(k, s, left_childref, right_childref, parentref, fused_parent_children, left_child, right_child, slot as uint64);
-    splitCacheChanges(s, child, left_childref, right_childref, parentref, slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
+    splitCacheChanges(s, left_childref, right_childref, parentref, slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
 
     ImplModelSplit.reveal_splitDoChanges();
   }
@@ -143,7 +143,10 @@ module ImplSplit {
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
+
+    ImplModelSplit.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
     var child := fused_child.CutoffNode(lbound, ubound);
+    assert IM.WFNode(child.I());
 
     if (|child.pivotTable| == 0) {
       // TODO there should be an operation which just
@@ -168,11 +171,7 @@ module ImplSplit {
     assume parentref != left_childref.value;
     assume parentref != right_childref.value;
 
-    var num_children_left := |child.buckets| / 2;
-    assume 0 <= num_children_left < 0x100;
-    var pivot := child.pivotTable[num_children_left - 1];
-
-    splitDoChanges(k, s, child, num_children_left as uint64, left_childref.value, right_childref.value,
-        parentref, fused_parent.children.value, slot as uint64, pivot);
+    splitDoChanges(k, s, child, left_childref.value, right_childref.value,
+        parentref, fused_parent.children.value, slot as uint64);
   }
 }
