@@ -113,7 +113,7 @@ module ImplNode {
     requires Repr == {this} + MutBucket.ReprSeq(buckets);
     requires (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
     ensures (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
-    ensures (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
+    //ensures (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
     {
       MutBucket.reveal_ReprSeq();
     }
@@ -462,6 +462,8 @@ module ImplMutCache {
     }
 
     protected function ptr(ref: BT.G.Reference) : Option<Node>
+    reads Repr
+    requires Inv()
     ensures ptr(ref).None? ==> ref !in I()
     ensures ptr(ref).Some? ==>
         && ref in I()
