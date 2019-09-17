@@ -8,6 +8,7 @@ module ImplLeaf {
   import opened ImplModelLeaf
   import opened ImplState
   import opened ImplNode
+  import opened MutableBucket
   import IMM = ImplMarshallingModel
 
   import opened Options
@@ -23,10 +24,8 @@ module ImplLeaf {
   requires Inv(k, s)
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.Contents
-  requires ref in s.cache.I()
-  requires ref in s.cache.cache.Contents
+  requires s.cache.ptr(ref) == Some(node)
   requires node.Inv()
-  requires node == s.cache.cache.Contents[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
   requires |node.buckets| == 1
@@ -56,8 +55,8 @@ module ImplLeaf {
     var left, right := node.buckets[0].SplitLeftRight(pivot);
 
     var buckets' := [left, right];
-    BucketListReprDisjointOfLen2(buckets');
-    MutBucketListReprOfLen2(buckets');
+    MutBucket.ReprSeqDisjointOfLen2(buckets');
+    MutBucket.ListReprOfLen2(buckets');
     var newnode := new Node(pivots, None, buckets');
 
     writeBookkeeping(k, s, ref, None);

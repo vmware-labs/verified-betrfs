@@ -177,14 +177,14 @@ module MutableBucket {
           buckets[i].Repr !! buckets[j].Repr
     }
 
-    lemma ReprSeqDisjointOfLen1(buckets: seq<MutBucket>)
+    static lemma ReprSeqDisjointOfLen1(buckets: seq<MutBucket>)
     requires |buckets| <= 1
     ensures ReprSeqDisjoint(buckets)
     {
       reveal_ReprSeqDisjoint();
     }
 
-    lemma ReprSeqDisjointOfLen2(buckets: seq<MutBucket>)
+    static lemma ReprSeqDisjointOfLen2(buckets: seq<MutBucket>)
     requires |buckets| == 2
     requires buckets[0].Repr !! buckets[1].Repr
     ensures ReprSeqDisjoint(buckets)
@@ -192,12 +192,16 @@ module MutableBucket {
       reveal_ReprSeqDisjoint();
     }
 
-    lemma MutBucketListReprOfLen2(buckets: seq<MutBucket>)
+    static lemma ListReprOfLen2(buckets: seq<MutBucket>)
     requires |buckets| == 2
     ensures ReprSeq(buckets) == buckets[0].Repr + buckets[1].Repr
     {
       reveal_ReprSeq();
     }
+
+    static lemma LemmaReprBucketLeReprSeq(buckets: seq<MutBucket>, i: int)
+    requires 0 <= i < |buckets|
+    ensures buckets[i].Repr <= ReprSeq(buckets)
 
     static method PartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)
     returns (newParent: MutBucket, newChildren: seq<MutBucket>)

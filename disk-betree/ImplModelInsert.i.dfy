@@ -32,6 +32,22 @@ module ImplModelInsert {
     )
   }
 
+  function {:opaque} NodeInsertKeyValue(node: Node, key: MS.Key, msg: Message) : Node
+  requires WFNode(node)
+  {
+    var r := Pivots.Route(node.pivotTable, key);
+    var bucket := node.buckets[r];
+    var newBucket := bucket[key := msg];
+    node.(buckets := node.buckets[r := newBucket])
+  }
+
+  function {:opaque} CacheInsertKeyValue(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, key: MS.Key, msg: Message) : map<BT.G.Reference, Node>
+  requires ref in cache
+  requires WFNode(cache[ref])
+  {
+    cache[ref := NodeInsertKeyValue(cache[ref], key, msg)]
+  }
+
   function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
   : (Variables, bool)
   requires Inv(k, s)
@@ -47,12 +63,7 @@ module ImplModelInsert {
       (s, false)
     ) else (
       var msg := Messages.Define(value);
-      var root := s.cache[BT.G.Root()];
-      var r := Pivots.Route(root.pivotTable, key);
-      var bucket := root.buckets[r];
-      var newBucket := bucket[key := msg];
-      var newRoot := root.(buckets := root.buckets[r := newBucket]);
-      var newCache := s.cache[BT.G.Root() := newRoot];
+      var newCache := CacheInsertKeyValue(s.cache, BT.G.Root(), key, msg);
 
       var s' := s.(cache := newCache)
           .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
@@ -72,6 +83,8 @@ module ImplModelInsert {
       && M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PutOp(key, value) else UI.NoOp, D.NoDiskOp)
   {
     reveal_InsertKeyValue();
+    reveal_CacheInsertKeyValue();
+    reveal_NodeInsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
       && BT.G.Root() in s.frozenIndirectionTable.value

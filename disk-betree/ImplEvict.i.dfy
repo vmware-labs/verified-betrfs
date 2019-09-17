@@ -23,15 +23,14 @@ module ImplEvict {
   method Evict(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
   requires s.WF()
   requires s.ready
-  requires ref in s.cache.Contents
+  requires ref in s.cache.I()
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
   ensures s.I() == ImplModelEvict.Evict(Ic(k), old(s.I()), ref)
   {
     s.lru.Remove(ref);
-    var _ := s.cache.Remove(ref);
-    assume s.cache.Contents == MapRemove1(old(s.cache.Contents), ref);
+    s.cache.Remove(ref);
     assert s.I().cache == ImplModelEvict.Evict(Ic(k), old(s.I()), ref).cache;
   }
 
@@ -76,7 +75,7 @@ module ImplEvict {
   requires Inv(k, s)
   requires s.ready
   requires io.initialized()
-  requires |ICache(s.cache)| > 0
+  requires |s.cache.I()| > 0
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()

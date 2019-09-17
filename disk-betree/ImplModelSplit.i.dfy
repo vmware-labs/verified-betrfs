@@ -353,6 +353,8 @@ module ImplModelSplit {
 
       var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
       var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
+      
+      CutoffNodeCorrect(fused_child, lbound, ubound);
       var child := CutoffNode(fused_child, lbound, ubound);
 
       if (|child.pivotTable| == 0) then (

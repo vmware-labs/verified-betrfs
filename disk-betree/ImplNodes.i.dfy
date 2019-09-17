@@ -3,6 +3,7 @@ include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "MutableBucket.i.dfy"
 include "ImplModelSplit.i.dfy"
+include "ImplModelInsert.i.dfy"
 
 module ImplNode {
   import opened Options
@@ -17,6 +18,7 @@ module ImplNode {
   import opened BucketsLib
   import opened BucketWeights
   import ImplModelSplit
+  import ImplModelInsert
 
   import MM = MutableMap
   import ReferenceType`Internal
@@ -339,6 +341,60 @@ module ImplNode {
         slice
       );
     }
+
+    twostate lemma ReprSeqDisjointAfterUpdate(buckets: seq<MutBucket>, r: int)
+    requires 0 <= r < |buckets|
+    requires old(MutBucket.ReprSeqDisjoint(buckets))
+    requires forall o | o in buckets[r].Repr :: o in old(buckets[r].Repr) || fresh(o)
+    requires forall i | 0 <= i < |buckets| && i != r :: buckets[i].Repr == old(buckets[i].Repr)
+    ensures MutBucket.ReprSeqDisjoint(buckets)
+    {
+      MutBucket.reveal_ReprSeqDisjoint();
+      MutBucket.reveal_ReprSeq();
+    }
+
+    twostate lemma ReprSeqReplace(buckets: seq<MutBucket>, r: int)
+    requires 0 <= r < |buckets|
+    requires forall i | 0 <= i < |buckets| && i != r :: buckets[i].Repr == old(buckets[i].Repr)
+    ensures MutBucket.ReprSeq(buckets) <= old(MutBucket.ReprSeq(buckets)) + buckets[r].Repr
+    {
+      MutBucket.reveal_ReprSeq();
+    }
+
+    method InsertKeyValue(key: Key, value: IM.Message)
+    requires Inv();
+    requires IM.WFNode(I())
+    requires WeightBucketList(MutBucket.ISeq(buckets)) + WeightKey(key) + WeightMessage(value) < 0x1_0000_0000_0000_0000
+    modifies Repr
+    ensures Inv();
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
+    ensures I() == ImplModelInsert.NodeInsertKeyValue(old(I()), key, value)
+    {
+      ImplModelInsert.reveal_NodeInsertKeyValue();
+
+      var r := Pivots.ComputeRoute(pivotTable, key);
+
+      MutBucket.LemmaReprBucketLeReprSeq(buckets, r);
+      WeightBucketLeBucketList(MutBucket.ISeq(buckets), r);
+
+      buckets[r].Insert(key, value);
+
+      forall i | 0 <= i < |buckets|
+      ensures buckets[i].Inv()
+      ensures i != r ==> buckets[i].Bucket == old(buckets[i].Bucket)
+      ensures i != r ==> buckets[i].Repr == old(buckets[i].Repr)
+      ensures this !in buckets[i].Repr
+      {
+        MutBucket.reveal_ReprSeqDisjoint();
+      }
+      ReprSeqDisjointAfterUpdate(buckets, r);
+      ReprSeqReplace(buckets, r);
+
+      Repr := {this} + MutBucket.ReprSeq(buckets);
+      LemmaReprFacts();
+      assert Inv();
+      assert I().buckets == ImplModelInsert.NodeInsertKeyValue(old(I()), key, value).buckets;
+    }
   }
 }
 
@@ -430,6 +486,15 @@ module ImplMutCache {
     requires Inv()
     ensures |I()| == |cache.Contents|
 
+    protected function method Count() : (c : uint64)
+    reads this, Repr
+    requires Inv()
+    ensures c as int == |I()|
+    {
+      LemmaSizeEqCount();
+      cache.Count
+    }
+
     method Insert(ref: BT.G.Reference, node: Node)
     requires Inv()
     requires node.Inv()
@@ -452,7 +517,7 @@ module ImplMutCache {
     requires Inv()
     modifies Repr
     ensures Inv()
-    ensures I() == MapRemove1(I(), ref)
+    ensures I() == MapRemove1(old(I()), ref)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       LemmaSizeEqCount();

@@ -82,6 +82,7 @@ module ImplModelCache {
   : (s': Variables)
   requires s.Ready?
   ensures s'.Ready?
+  ensures s'.cache == s.cache
   {
     var eph := s.ephemeralIndirectionTable[ref := (None, if children.Some? then children.value else [])];
     s.(ephemeralIndirectionTable := eph)

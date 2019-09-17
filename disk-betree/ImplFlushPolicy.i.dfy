@@ -16,6 +16,7 @@ module ImplFlushPolicy {
   import opened ImplEvict
   import ImplModelFlushPolicy
   import opened ImplState
+  import opened MutableBucket
 
   import opened Sequences
 
@@ -23,23 +24,25 @@ module ImplFlushPolicy {
   import opened NativeTypes
   import opened BucketsLib
   import opened BucketWeights
-  import KMTable
 
-  method biggestSlot(buckets: seq<KMTable.KMT>) returns (res : (uint64, uint64))
-  requires forall i | 0 <= i < |buckets| :: KMTable.WF(buckets[i])
-  requires ImplModelFlushPolicy.biggestSlot.requires(buckets)
-  ensures res == ImplModelFlushPolicy.biggestSlot(buckets)
+  method biggestSlot(buckets: seq<MutBucket>) returns (res : (uint64, uint64))
+  requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+  requires ImplModelFlushPolicy.biggestSlot.requires(MutBucket.ISeq(buckets))
+  ensures res == ImplModelFlushPolicy.biggestSlot(old(MutBucket.ISeq(buckets)))
   {
-    WeightBucketLeBucketList(KMTable.ISeq(buckets), 0);
+    // It's in the reads clause of ISeq:
+    MutBucket.reveal_ReprSeq();
+
+    WeightBucketLeBucketList(MutBucket.ISeq(buckets), 0);
     var j := 1;
     var bestIdx := 0;
-    var bestWeight := KMTable.computeWeightKMT(buckets[0]);
+    var bestWeight := buckets[0].Weight;
     while j < |buckets| as uint64
-    invariant ImplModelFlushPolicy.biggestSlotIterate.requires(buckets, j, bestIdx, bestWeight)
-    invariant ImplModelFlushPolicy.biggestSlotIterate(buckets, j, bestIdx, bestWeight) == ImplModelFlushPolicy.biggestSlot(buckets)
+    invariant ImplModelFlushPolicy.biggestSlotIterate.requires(MutBucket.ISeq(buckets), j, bestIdx, bestWeight)
+    invariant ImplModelFlushPolicy.biggestSlotIterate(MutBucket.ISeq(buckets), j, bestIdx, bestWeight) == ImplModelFlushPolicy.biggestSlot(MutBucket.ISeq(buckets))
     {
-      WeightBucketLeBucketList(KMTable.ISeq(buckets), j as int);
-      var w := KMTable.computeWeightKMT(buckets[j]);
+      WeightBucketLeBucketList(MutBucket.ISeq(buckets), j as int);
+      var w := buckets[j].Weight;
       if w > bestWeight {
         bestIdx := j;
         bestWeight := w;
@@ -51,10 +54,10 @@ module ImplFlushPolicy {
   }
 
   function method TotalCacheSize(s: ImplVariables) : (res : int)
-  reads s, s.cache
-  requires s.ready
+  reads s, s.cache, s.cache.Repr
+  requires s.cache.Inv()
   {
-    s.cache.Count as int + |s.outstandingBlockReads|
+    s.cache.Count() as int + |s.outstandingBlockReads|
   }
 
   method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : ImplModelFlushPolicy.Action)
@@ -73,9 +76,9 @@ module ImplFlushPolicy {
         action := ImplModelFlushPolicy.ActionEvict;
       }
     } else {
-      var nodePrev := s.cache.Get(stack[i-1]);
+      var nodePrev := s.cache.GetOpt(stack[i-1]);
       if |nodePrev.value.children.value| as uint64 < MaxNumChildren() as uint64 {
-        var nodeThis := s.cache.Get(stack[i]);
+        var nodeThis := s.cache.GetOpt(stack[i]);
         if |nodeThis.value.buckets| as uint64 == 1 {
           action := ImplModelFlushPolicy.ActionRepivot(stack[i]);
         } else {
@@ -107,7 +110,7 @@ module ImplFlushPolicy {
       action := ImplModelFlushPolicy.ActionFail;
     } else {
       var ref := stack[|stack| as uint64 - 1];
-      var nodeOpt := s.cache.Get(ref);
+      var nodeOpt := s.cache.GetOpt(ref);
       var node := nodeOpt.value;
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
@@ -117,13 +120,13 @@ module ImplFlushPolicy {
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
         if |node.buckets| < 8 {
           var childref := node.children.value[slot];
-          var childOpt := s.cache.Get(childref);
+          var childOpt := s.cache.GetOpt(childref);
           if childOpt.Some? {
             var child := childOpt.value;
             s.lru.Use(childref);
             LruModel.LruUse(old(s.lru.Queue), childref);
 
-            var childTotalWeight: uint64 := KMTable.computeWeightKMTSeq(child.buckets);
+            var childTotalWeight: uint64 := MutBucket.computeWeightOfSeq(child.buckets);
 
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               if TotalCacheSize(s) <= MaxCacheSize() - 1 {
@@ -152,7 +155,7 @@ module ImplFlushPolicy {
   requires Inv(k, s)
   requires io.initialized()
   requires s.ready
-  requires BT.G.Root() in s.cache.Contents
+  requires BT.G.Root() in s.cache.I()
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -174,17 +177,17 @@ module ImplFlushPolicy {
         PageInReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        var parent := s.cache.Get(parentref);
+        var parent := s.cache.GetOpt(parentref);
         doSplit(k, s, parentref, parent.value.children.value[slot], slot as int);
       }
       case ActionRepivot(ref) => {
-        var node := s.cache.Get(ref);
+        var node := s.cache.GetOpt(ref);
         repivotLeaf(k, s, ref, node.value);
       }
       case ActionFlush(parentref, slot) => {
-        var parent := s.cache.Get(parentref);
+        var parent := s.cache.GetOpt(parentref);
         var childref := parent.value.children.value[slot];
-        var child := s.cache.Get(childref);
+        var child := s.cache.GetOpt(childref);
         flush(k, s, parentref, slot as int, 
             parent.value.children.value[slot],
             child.value);

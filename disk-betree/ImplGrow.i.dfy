@@ -7,10 +7,10 @@ module ImplGrow {
   import opened ImplCache
   import opened ImplState
   import opened ImplNode
+  import opened MutableBucket
   import ImplModelGrow
 
   import KVList
-  import MutableBucket
 
   import opened Options
   import opened Maps
@@ -55,9 +55,9 @@ module ImplGrow {
         var emptyKvl := KVList.Empty();
         WeightBucketEmpty();
 
-        var mutbucket := new MutableBucket.MutBucket(emptyKvl);
+        var mutbucket := new MutBucket(emptyKvl);
 
-        BucketListReprDisjointOfLen1([mutbucket]);
+        MutBucket.ReprSeqDisjointOfLen1([mutbucket]);
         var newroot := new Node([], Some([newref]), [mutbucket]);
         
         assert newroot.I() == IM.Node([], Some([newref]), [map[]]);
