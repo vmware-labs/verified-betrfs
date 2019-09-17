@@ -12,7 +12,8 @@ module {:extern} MkfsImpl {
   import opened Impl
   import opened BucketWeights
   import IM = ImplModel
-  import MutableBucket
+  import opened MutableBucket
+  import opened ImplNode
   import KVList
 
   import BT = PivotBetreeSpec
@@ -31,10 +32,11 @@ module {:extern} MkfsImpl {
   method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
   {
     assume WeightBucket(KVList.I(KVList.Kvl([],[]))) < 0x1_0000_0000_0000_0000;
-    var empty := new MutableBucket.MutBucket(KVList.Kvl([], []));
-    var node := IS.Node([], None, [empty]);
-    assume IS.WFNode(node);
-    assume IM.WFNode(IS.INode(node));
+    var empty := new MutBucket(KVList.Kvl([], []));
+    MutBucket.ReprSeqDisjointOfLen1([empty]);
+    var node := new Node([], None, [empty]);
+    assume node.Inv();
+    assume IM.WFNode(node.I());
     var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));
 
     var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number

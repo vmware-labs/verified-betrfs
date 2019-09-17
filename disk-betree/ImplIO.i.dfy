@@ -209,8 +209,7 @@ module ImplIO {
   returns (id: D.ReqId, sector: Option<IS.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
-  ensures sector.Some? && sector.value.SectorBlock? ==> fresh(SectorRepr(sector.value))
-  //ensures sector.Some? ==> FreshSector(sector.value&& sector.value.SectorBlock? ==> forall i | 0 <= i < |sector.value.block.buckets| :: fresh(sector.value.block.buckets[i].Repr)
+  ensures sector.Some? ==> fresh(SectorRepr(sector.value))
   ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(old(IIO(io)))
   {
     var id1, bytes := io.getReadResult();
@@ -261,6 +260,8 @@ module ImplIO {
   ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
+    assert sector.Some? ==> IS.WFSector(sector.value);
+    assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
     if (id !in s.outstandingBlockReads) {
       print "PageInResp: unrecognized id from Read\n";
@@ -283,6 +284,9 @@ module ImplIO {
       return;
     }
 
+    assert sector.Some? ==> IS.WFSector(sector.value);
+    assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
+
     var lba := lbaGraph.value.0.value;
     var graph := lbaGraph.value.1;
 
@@ -290,7 +294,12 @@ module ImplIO {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+        assert sector.Some? ==> IS.WFSector(sector.value);
+        assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
         s.lru.Use(ref);
+
+        assert sector.Some? ==> IS.WFSector(sector.value);
+        assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
         assume |s.cache.I()| <= MaxCacheSize();
         s.cache.Insert(ref, sector.value.block);
