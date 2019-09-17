@@ -59,6 +59,8 @@ module ImplFlush {
 
     //Native.BenchmarkingUtil.start();
 
+    MutBucket.reveal_ReprSeq();
+
     var nodeOpt := s.cache.GetOpt(parentref);
     var parent := nodeOpt.value;
     ghost var parentI := parent.I();
@@ -91,11 +93,13 @@ module ImplFlush {
     assume parentref != newchildref.value;
 
     ghost var c1 := s.cache.I();
+    assert c1 == old(s.cache.I());
 
     s.cache.Insert(newchildref.value, newchild);
 
     ghost var c2 := s.cache.I();
     assert c2 == c1[newchildref.value := newchild.I()];
+    //assert newchild.I() == old(child.I()).(buckets := MutBucket.ISeq(newbuckets));
     ghost var newParentBucketI := newparentBucket.Bucket;
 
     s.cache.UpdateNodeSlot(parentref, slot as uint64, newparentBucket, newchildref.value);
@@ -109,9 +113,22 @@ module ImplFlush {
           Some(parentI.children.value[slot := newchildref.value]),
           parentI.buckets[slot := newParentBucketI]
         )];
+    //assert parentI == old(s.I()).cache[parentref];
+
+    //assert c2 == old(s.I()).cache
+    //      [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))];
 
     ghost var a := ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, old(child.I()));
     ghost var b := s.I();
-    assert a.cache == b.cache;
+    assert a.cache
+        /*== old(s.I()).cache
+                  [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))]
+                  [parentref := IM.Node(
+                    parentI.pivotTable,
+                    Some(parentI.children.value[slot := newchildref.value]),
+                    parentI.buckets[slot := newParentBucketI]
+                  )]*/
+        == c3
+        == b.cache;
   }
 }

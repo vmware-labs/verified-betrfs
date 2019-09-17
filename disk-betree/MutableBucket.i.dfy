@@ -196,6 +196,13 @@ module MutableBucket {
       reveal_ReprSeqDisjoint();
     }
 
+    static lemma ListReprOfLen1(buckets: seq<MutBucket>)
+    requires |buckets| == 1
+    ensures ReprSeq(buckets) == buckets[0].Repr
+    {
+      reveal_ReprSeq();
+    }
+
     static lemma ListReprOfLen2(buckets: seq<MutBucket>)
     requires |buckets| == 2
     ensures ReprSeq(buckets) == buckets[0].Repr + buckets[1].Repr

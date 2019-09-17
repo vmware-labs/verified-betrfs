@@ -57,11 +57,13 @@ module ImplGrow {
 
         var mutbucket := new MutBucket(emptyKvl);
 
+        MutBucket.ListReprOfLen1([mutbucket]);
         MutBucket.ReprSeqDisjointOfLen1([mutbucket]);
         var newroot := new Node([], Some([newref]), [mutbucket]);
         
         assert newroot.I() == IM.Node([], Some([newref]), [map[]]);
         assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
+        assert fresh(newroot.Repr);
 
         writeBookkeeping(k, s, BT.G.Root(), newroot.children);
 
