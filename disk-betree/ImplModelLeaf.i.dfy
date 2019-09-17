@@ -25,6 +25,7 @@ module ImplModelLeaf {
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable
   requires ref in s.cache
+  requires node == s.cache[ref]
   requires node.children.None?
   requires ref != BT.G.Root()
   requires |node.buckets| == 1
