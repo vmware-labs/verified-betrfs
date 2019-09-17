@@ -408,6 +408,8 @@ module ImplMarshalling {
     }
     var buckets := bucketsOpt.value;
 
+    assume forall o | o in MutableBucket.MutBucket.ReprSeq(buckets) :: allocated(o);
+
     if |buckets| as uint64 > MaxNumChildren() as uint64 {
       return None;
     }
@@ -427,13 +429,8 @@ module ImplMarshalling {
   function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
   requires s.Some? ==> ImplState.WFSector(s.value)
   requires s.Some? ==> IM.WFSector(ImplState.ISector(s.value))
-  reads if s.Some? && s.value.SectorIndirectionTable? then s.value.indirectionTable.Repr else {}
-  reads if s.Some? && s.value.SectorBlock?
-      then set i | 0 <= i < |s.value.block.buckets| :: s.value.block.buckets[i]
-      else {}
-  reads if s.Some? && s.value.SectorBlock?
-      then set i, o | 0 <= i < |s.value.block.buckets| && o in s.value.block.buckets[i].Repr :: o
-      else {}
+  reads if s.Some? then (if s.value.SectorIndirectionTable? then {s.value.indirectionTable} else {s.value.block}) else {}
+  reads if s.Some? then IS.SectorRepr(s.value) else {}
   {
     if s.Some? then
       Some(ImplState.ISector(s.value))
@@ -698,6 +695,7 @@ module ImplMarshalling {
       assert buckets == DropLast(buckets) + [Last(buckets)];
 
       reveal_WeightBucketList();
+      MutableBucket.MutBucket.ISeqInduction(buckets);
       assert WeightBucketList(MutableBucket.MutBucket.ISeq(buckets))
           == WeightBucketList(MutableBucket.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(MutableBucket.MutBucket.I(Last(buckets)));
 
@@ -725,6 +723,7 @@ module ImplMarshalling {
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
   ensures SizeOfV(v) <= BlockSize() - 32 - 8
   {
+    assume forall o | o in MutableBucket.MutBucket.ReprSeq(node.buckets) :: allocated(o);
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
     var pivots := pivotsToVal(node.pivotTable);
@@ -873,7 +872,7 @@ module ImplMarshalling {
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
-  ensures s.Some? && fresh(IS.SectorRepr(s.value))
+  ensures s.Some? ==> fresh(IS.SectorRepr(s.value))
   {
     s := None;
 
@@ -885,6 +884,8 @@ module ImplMarshalling {
     }
 
     IMM.reveal_parseCheckedSector();
+
+    assume s.Some? ==> fresh(IS.SectorRepr(s.value));
   }
 
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)

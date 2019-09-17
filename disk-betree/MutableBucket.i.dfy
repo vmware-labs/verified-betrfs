@@ -170,6 +170,10 @@ module MutableBucket {
       if |s| == 0 then [] else ISeq(DropLast(s)) + [I(Last(s))]
     }
 
+    static lemma ISeqInduction(s: seq<MutBucket>)
+    requires |s| > 0
+    ensures ISeq(s) == ISeq(DropLast(s)) + [I(Last(s))]
+
     static predicate {:opaque} ReprSeqDisjoint(buckets: seq<MutBucket>)
     reads set i | 0 <= i < |buckets| :: buckets[i]
     {
