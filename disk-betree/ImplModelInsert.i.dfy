@@ -37,7 +37,7 @@ module ImplModelInsert {
   {
     var r := Pivots.Route(node.pivotTable, key);
     var bucket := node.buckets[r];
-    var newBucket := bucket[key := msg];
+    var newBucket := BucketInsert(bucket, key, msg);
     node.(buckets := node.buckets[r := newBucket])
   }
 

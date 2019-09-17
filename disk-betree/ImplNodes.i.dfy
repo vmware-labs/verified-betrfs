@@ -404,6 +404,7 @@ module ImplMutCache {
   import opened Maps
   import opened NativeTypes
   import opened MutableBucket
+  import opened BucketWeights
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -611,6 +612,26 @@ module ImplMutCache {
       var nodeOpt := GetOpt(ref);
       var node := nodeOpt.value;
       node.SplitParent(slot, pivot, left_childref, right_childref);
+
+      Repr := {this} + cache.Repr + MutCacheBucketRepr();
+      assert Inv();
+    }
+
+    method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: IM.Message)
+    requires Inv()
+    requires ref in I()
+    requires IM.WFNode(I()[ref])
+    requires WeightBucketList(I()[ref].buckets) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(ImplModelInsert.CacheInsertKeyValue(I(), ref, key, msg))
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
+    {
+      ImplModelInsert.reveal_CacheInsertKeyValue();
+
+      var nodeOpt := GetOpt(ref);
+      var node := nodeOpt.value;
+      node.InsertKeyValue(key, msg);
 
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
       assert Inv();
