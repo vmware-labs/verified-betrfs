@@ -276,6 +276,34 @@ module ImplModelSplit {
     }
   }
 
+  function {:opaque} splitBookkeeping(k: Constants, s: Variables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': Variables)
+  requires 0 <= slot < |fused_parent_children|
+  requires s.Ready?
+  ensures s'.Ready?
+  ensures s'.cache == s.cache
+  {
+    var s1 := writeBookkeeping(k, s, left_childref, left_child.children);
+    var s2 := writeBookkeeping(k, s1, right_childref, right_child.children);
+    var s3 := writeBookkeeping(k, s2, parentref, Some(replace1with2(fused_parent_children, left_childref, right_childref, slot)));
+    s3
+  }
+
+  function {:opaque} splitCacheChanges(s: Variables, child: Node, left_childref: BT.G.Reference,
+      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: int, num_children_left: int, pivot: Key, left_child: Node, right_child: Node) : (s': Variables)
+  requires s.Ready?
+  requires parentref in s.cache
+  requires WFNode(s.cache[parentref]);
+  requires s.cache[parentref].children.Some?
+  requires 0 <= slot < |s.cache[parentref].children.value|
+  {
+    var fused_parent := s.cache[parentref];
+    var split_parent := SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
+    s.(cache := s.cache
+        [left_childref := left_child]
+        [right_childref := right_child]
+        [parentref := split_parent])
+  }
+
   function {:opaque} doSplit(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   : (s': Variables)
   requires s.Ready?
@@ -322,15 +350,9 @@ module ImplModelSplit {
 
             var left_child := SplitChildLeft(child, num_children_left);
             var right_child := SplitChildRight(child, num_children_left);
-            var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
 
-            var s1 := writeBookkeeping(k, s, left_childref.value, left_child.children);
-            var s2 := writeBookkeeping(k, s1, right_childref.value, right_child.children);
-            var s3 := writeBookkeeping(k, s2, parentref, Some(replace1with2(fused_parent.children.value, left_childref.value, right_childref.value, slot)));
-            var s' := s3.(cache := s.cache
-                [left_childref.value := left_child]
-                [right_childref.value := right_child]
-                [parentref := split_parent]);
+            var s3 := splitBookkeeping(k, s, left_childref.value, right_childref.value, parentref, fused_parent.children.value, left_child, right_child, slot);
+            var s' := splitCacheChanges(s3, child, left_childref.value, right_childref.value, parentref, slot, num_children_left, pivot, left_child, right_child);
             s'
           )
         )
@@ -399,6 +421,8 @@ module ImplModelSplit {
             reveal_SplitParent();
 
             reveal_writeBookkeeping();
+            reveal_splitCacheChanges();
+            reveal_splitBookkeeping();
             var s1 := writeWithNode(k, s, left_childref.value, left_child);
             var s2 := writeWithNode(k, s1, right_childref.value, right_child);
             var s3 := writeWithNode(k, s2, parentref, split_parent);
