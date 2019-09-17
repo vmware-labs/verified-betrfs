@@ -182,14 +182,6 @@ module ImplNode {
       assert a == b;
     }
 
-    /*method CutoffNode(lbound: Option<Key>, rbound: Option<Key>) returns (node: Node)
-    requires Inv()
-    ensures node.Inv()
-    ensures fresh(node.Repr)
-    ensures 
-    {
-    }*/
-
     lemma ReprSeqDisjointAppend(s: seq<MutBucket>, t: MutBucket)
     requires MutBucket.ReprSeqDisjoint(s)
     requires MutBucket.ReprSeq(s) !! t.Repr
