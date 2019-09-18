@@ -349,7 +349,7 @@ module MutableBucket {
     returns (weight: uint64)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     requires WeightBucketList(ISeq(buckets)) < 0x1_0000_0000_0000_0000
-    ensures weight as int == WeightBucketList(ISeq(buckets))
+    ensures weight as int == WeightBucketList(old(ISeq(buckets)))
     {
       assume false;
       var w := 0;
