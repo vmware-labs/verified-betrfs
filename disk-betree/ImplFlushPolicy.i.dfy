@@ -112,6 +112,7 @@ module ImplFlushPolicy {
       var ref := stack[|stack| as uint64 - 1];
       var nodeOpt := s.cache.GetOpt(ref);
       var node := nodeOpt.value;
+      MutBucket.reveal_ReprSeq();
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
@@ -122,8 +123,13 @@ module ImplFlushPolicy {
           var childref := node.children.value[slot];
           var childOpt := s.cache.GetOpt(childref);
           if childOpt.Some? {
+            s.cache.LemmaNodeReprLeRepr(childref);
             var child := childOpt.value;
+            assume MutBucket.ReprSeq(child.buckets) <= child.Repr;
+            //assert forall i | 0 <= i < |child.buckets| ensures child.buckets[i].Repr !! s.lru.Repr;
+            assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
             s.lru.Use(childref);
+            assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
             LruModel.LruUse(old(s.lru.Queue), childref);
 
             var childTotalWeight: uint64 := MutBucket.computeWeightOfSeq(child.buckets);

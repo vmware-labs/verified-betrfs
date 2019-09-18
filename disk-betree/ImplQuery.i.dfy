@@ -15,6 +15,7 @@ module ImplQuery {
   import ImplModelQuery
   import ImplModelCache
   import opened ImplState
+  import opened MutableBucket
 
   import opened Options
   import opened NativeTypes
@@ -80,6 +81,10 @@ module ImplQuery {
           }
         } else {
           var node := nodeOpt.value;
+
+          assume MutBucket.ReprSeq(node.buckets) <= node.Repr;
+          s.cache.LemmaNodeReprLeRepr(ref);
+          MutBucket.reveal_ReprSeq();
 
           ghost var oldIVars := s.I();
           LruModel.LruUse(s.lru.Queue, ref);

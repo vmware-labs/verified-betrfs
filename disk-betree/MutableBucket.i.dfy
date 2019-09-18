@@ -345,11 +345,22 @@ module MutableBucket {
     ensures ISeq(buckets') == old(SplitBucketInList(ISeq(buckets), slot as int, pivot))
     ensures forall o | o in ReprSeq(buckets') :: o in old(ReprSeq(buckets)) || fresh(o)
 
-    static method computeWeightOfSeq(s: seq<MutBucket>)
+    static method computeWeightOfSeq(buckets: seq<MutBucket>)
     returns (weight: uint64)
-    requires forall i | 0 <= i < |s| :: s[i].Inv()
-    requires WeightBucketList(ISeq(s)) < 0x1_0000_0000_0000_0000
-    ensures weight as int == WeightBucketList(ISeq(s))
+    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    requires WeightBucketList(ISeq(buckets)) < 0x1_0000_0000_0000_0000
+    ensures weight as int == WeightBucketList(ISeq(buckets))
+    {
+      assume false;
+      var w := 0;
+      var j: uint64 := 0;
+      while j < |buckets| as uint64
+      {
+        w := w + buckets[j].Weight;
+        j := j + 1;
+      }
+      return w;
+    }
 
     static lemma Islice(buckets: seq<MutBucket>, a: int, b: int)
     requires 0 <= a <= b <= |buckets|
@@ -381,6 +392,15 @@ module MutableBucket {
     ensures bucket'.Inv()
     ensures fresh(bucket'.Repr)
     ensures this.Bucket == bucket'.Bucket
+    {
+      var kv;
+      if is_tree {
+        kv := tree_to_kvl(tree);
+      } else {
+        kv := kvl;
+      }
+      bucket' := new MutBucket(kv);
+    }
 
     static method CloneSeq(buckets: seq<MutBucket>) returns (buckets': seq<MutBucket>)
     requires InvSeq(buckets)
@@ -389,5 +409,16 @@ module MutableBucket {
     ensures |buckets'| == |buckets|
     ensures ISeq(buckets) == ISeq(buckets')
     ensures ReprSeqDisjoint(buckets')
+    {
+      assume false;
+      var ar := new MutBucket?[|buckets| as uint64];
+      var j: uint64 := 0;
+      while j < |buckets| as uint64
+      {
+        ar[j] := buckets[j].Clone();
+        j := j + 1;
+      }
+      buckets' := ar[..];
+    }
   }
 }
