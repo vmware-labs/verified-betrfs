@@ -813,7 +813,7 @@ module KVList {
     assume right == splitRight(kvl, pivot);
   }
 
-  function splitKvlInList(buckets: seq<Kvl>, slot: int, pivot: Key)
+  /*function splitKvlInList(buckets: seq<Kvl>, slot: int, pivot: Key)
   : (buckets' : seq<Kvl>)
   requires forall i | 0 <= i < |buckets| :: WF(buckets[i])
   requires 0 <= slot < |buckets|
@@ -843,7 +843,7 @@ module KVList {
     reveal_SplitBucketInList();
     Ireplace1with2(buckets, l, r, slot);
     assume buckets' == splitKvlInList(buckets, slot, pivot);
-  }
+  }*/
 
   /////////////////////////
   //// Joining

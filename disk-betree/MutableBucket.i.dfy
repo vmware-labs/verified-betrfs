@@ -214,6 +214,36 @@ module MutableBucket {
     requires 0 <= i < |buckets|
     ensures buckets[i].Repr <= ReprSeq(buckets)
 
+    static method kvlSeqToMutBucketSeq(kvls: seq<Kvl>)
+    returns (buckets : seq<MutBucket>)
+    requires |kvls| < 0x1_0000_0000_0000_0000
+    {
+      assume false;
+      var ar := new MutBucket?[|kvls| as uint64];
+      var j: uint64 := 0;
+      while j < |kvls| as uint64
+      {
+        ar[j] := new MutBucket(kvls[j]);
+        j := j + 1;
+      }
+      return ar[..];
+    }
+
+    static method mutBucketSeqToKvlSeq(buckets: seq<MutBucket>)
+    returns (kvls : seq<Kvl>)
+    requires |buckets| < 0x1_0000_0000_0000_0000
+    {
+      assume false;
+      var ar := new Kvl[|buckets| as uint64];
+      var j: uint64 := 0;
+      while j < |buckets| as uint64
+      {
+        ar[j] := buckets[j].GetKvl();
+        j := j + 1;
+      }
+      return ar[..];
+    }
+
     static method PartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)
     returns (newParent: MutBucket, newChildren: seq<MutBucket>)
     requires parent.Inv()
@@ -229,6 +259,14 @@ module MutableBucket {
     ensures ReprSeqDisjoint(newChildren)
     ensures KVListPartialFlush.bucketPartialFlush(parent.Bucket, ISeq(children), pivots)
         == (newParent.Bucket, ISeq(newChildren))
+    {
+      assume false;
+      var kvlParent := parent.GetKvl();
+      var kvlChildren := mutBucketSeqToKvlSeq(children);
+      var kvlNewParent, kvlNewChildren := KVListPartialFlush.PartialFlush(kvlParent, kvlChildren, pivots);
+      newParent := new MutBucket(kvlNewParent);
+      newChildren := kvlSeqToMutBucketSeq(kvlNewChildren);
+    }
 
     method Insert(key: Key, value: Message)
     requires Inv()
@@ -344,6 +382,11 @@ module MutableBucket {
     ensures ReprSeqDisjoint(buckets')
     ensures ISeq(buckets') == old(SplitBucketInList(ISeq(buckets), slot as int, pivot))
     ensures forall o | o in ReprSeq(buckets') :: o in old(ReprSeq(buckets)) || fresh(o)
+    {
+      assume false;
+      var l, r := buckets[slot].SplitLeftRight(pivot);
+      buckets' := replace1with2(buckets, l, r, slot as int);
+    }
 
     static method computeWeightOfSeq(buckets: seq<MutBucket>)
     returns (weight: uint64)
