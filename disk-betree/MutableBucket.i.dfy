@@ -55,17 +55,17 @@ module MutableBucket {
     while len > 1 {
       var k := 0;
       var newlen := 0;
-      while k < len - 4 {
+      while k + 4 < len {
         ar[newlen] := (ar[k].0, TTT.ThreeNode(ar[k].1, ar[k+1].0, ar[k+1].1, ar[k+2].0, ar[k+2].1));
         k := k + 3;
         newlen := newlen + 1;
       }
-      if (k == len - 4) {
+      if (k + 4 == len) {
         ar[newlen] := (ar[k].0, TTT.TwoNode(ar[k].1, ar[k+1].0, ar[k+1].1));
         newlen := newlen + 1;
         ar[newlen] := (ar[k+2].0, TTT.TwoNode(ar[k+2].1, ar[k+3].0, ar[k+3].1));
         newlen := newlen + 1;
-      } else if (k == len - 3) {
+      } else if (k + 3 == len) {
         ar[newlen] := (ar[k].0, TTT.ThreeNode(ar[k].1, ar[k+1].0, ar[k+1].1, ar[k+2].0, ar[k+2].1));
         newlen := newlen + 1;
       } else {
