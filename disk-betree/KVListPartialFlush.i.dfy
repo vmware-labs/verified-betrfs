@@ -131,7 +131,7 @@ module KVListPartialFlush {
       && WeightBucket(newParent) <= WeightBucket(parent)
       && WeightBucketList(newChildren) <= MaxTotalBucketWeight()
 
-  method PartialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
+  method PartialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>, childrenWeight: uint64)
   returns (newParent: Kvl, newChildren: seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -139,6 +139,7 @@ module KVListPartialFlush {
   requires |children| <= MaxNumChildren()
   requires WeightBucket(I(parent)) <= MaxTotalBucketWeight()
   requires WeightBucketList(ISeq(children)) <= MaxTotalBucketWeight()
+  requires childrenWeight as int == WeightKvlSeq(children)
   ensures (newParent, newChildren) == partialFlush(parent, children, pivots)
   {
     reveal_partialFlush();
@@ -178,7 +179,7 @@ module KVListPartialFlush {
     var newParent_values := new Message[|parent.keys| as uint64]((i) => defaultMessage);
     var newParent_idx: uint64 := 0;
 
-    var initChildrenWeight := computeWeightKvlSeq(children);
+    var initChildrenWeight := childrenWeight;
     kvlSeqWeightEq(children);
     var weightSlack: uint64 := MaxTotalBucketWeight() as uint64 - initChildrenWeight;
 

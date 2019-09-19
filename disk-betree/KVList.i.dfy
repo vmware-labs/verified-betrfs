@@ -1198,24 +1198,6 @@ module KVList {
     weight := w;
   }
 
-  method computeWeightKvlSeq(kvls: seq<Kvl>)
-  returns (weight: uint64)
-  requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
-  requires WeightBucketList(ISeq(kvls)) < 0x1_0000_0000_0000_0000
-  ensures weight as int == WeightBucketList(ISeq(kvls))
-  {
-    assume false;
-    var j: uint64 := 0;
-    var total: uint64 := 0;
-    while j < |kvls| as uint64
-    {
-      var w := computeWeightKvl(kvls[j]);
-      total := total + w;
-      j := j + 1;
-    }
-    weight := total;
-  }
-
   lemma kvlWeightEq(kvl: Kvl)
   requires WF(kvl)
   ensures WeightKvl(kvl) == WeightBucket(I(kvl))
