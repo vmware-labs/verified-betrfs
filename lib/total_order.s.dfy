@@ -371,49 +371,6 @@ abstract module Total_Order {
     b :| lt(b, a);
   }
 
-  // note this is terrrrrrribly slow (but probably best we can do with dafny's built-in set)
-  method SortedSeqOfSet(s: set<Element>) returns (run: seq<Element>)
-  ensures IsStrictlySorted(run)
-  ensures |run| == |s|
-  ensures (set e | e in run) == s
-  {
-    if |s| == 0 {
-      return [];
-    } else {
-      var x :| x in s;
-      var lset := set t | t in s && lt(t, x);
-      var rset := set t | t in s && lt(x, t);
-      var l := SortedSeqOfSet(lset);
-      var r := SortedSeqOfSet(rset);
-      run := l + [x] + r;
-
-      assert lset !! {x};
-      assert rset !! {x};
-      assert lset !! rset;
-
-      assert lset + {x} + rset == s;
-
-      assert |run| == |l| + 1 + |r|
-        == |lset| + |{x}| + |rset|
-        == |lset + {x} + rset|
-        == |s|;
-
-      reveal_IsStrictlySorted();
-      forall i, j | 0 <= i < j < |run|
-      ensures lt(run[i], run[j])
-      {
-        if i < |l| { }
-        if i == |l| { }
-        if j < |l| { }
-        if j == |l| { }
-        if (run[i] in lset) { }
-        if (run[j] in lset) { }
-        if (run[i] in rset) { }
-        if (run[j] in rset) { }
-      }
-    }
-  }
-
   method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int64)
     requires |run| < 0x4000_0000_0000_0000
     requires IsSorted(run)
