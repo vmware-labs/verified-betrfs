@@ -414,16 +414,18 @@ abstract module Total_Order {
     }
   }
 
-  method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int)
+  method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int64)
+    requires |run| < 0x4000_0000_0000_0000
     requires IsSorted(run)
-    ensures res == LargestLte(run, needle)
+    ensures res as int == LargestLte(run, needle)
   {
-    var lo := 0;
-    var hi := |run|;
+    var lo: int64 := 0;
+    var hi: int64 := |run| as int64;
     while lo < hi
-    invariant 0 <= lo <= hi <= |run|
-    invariant 1 <= lo ==> lte(run[lo-1], needle)
-    invariant hi < |run| ==> lt(needle, run[hi])
+    invariant 0 <= lo as int <= hi as int <= |run|
+    invariant 1 <= lo as int ==> lte(run[lo-1], needle)
+    invariant hi as int < |run| ==> lt(needle, run[hi])
+    invariant lo <= hi
     decreases hi - lo
     {
       var mid := (lo + hi) / 2;
@@ -438,16 +440,17 @@ abstract module Total_Order {
     return lo - 1;
   }
 
-  method ComputeLargestLt(run: seq<Element>, needle: Element) returns (res : int)
+  method ComputeLargestLt(run: seq<Element>, needle: Element) returns (res : int64)
+    requires |run| < 0x4000_0000_0000_0000
     requires IsSorted(run)
-    ensures res == LargestLt(run, needle)
+    ensures res as int == LargestLt(run, needle)
   {
-    var lo := 0;
-    var hi := |run|;
+    var lo: int64 := 0;
+    var hi: int64 := |run| as int64;
     while lo < hi
-    invariant 0 <= lo <= hi <= |run|
-    invariant 1 <= lo ==> lt(run[lo-1], needle)
-    invariant hi < |run| ==> lte(needle, run[hi])
+    invariant 0 <= lo as int <= hi as int <= |run|
+    invariant 1 <= lo as int ==> lt(run[lo-1], needle)
+    invariant hi as int < |run| ==> lte(needle, run[hi])
     decreases hi - lo
     {
       var mid := (lo + hi) / 2;

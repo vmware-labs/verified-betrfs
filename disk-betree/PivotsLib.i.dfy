@@ -3,6 +3,7 @@ include "../lib/sequences.s.dfy"
 
 module PivotsLib {
   import opened Sequences
+  import opened NativeTypes
 
   import MS = MapSpec
   import Keyspace = MS.Keyspace
@@ -36,12 +37,13 @@ module PivotsLib {
     Keyspace.LargestLte(pt, key) + 1
   }
 
-  method ComputeRoute(pt: PivotTable, key: Key) returns (i: int)
+  method ComputeRoute(pt: PivotTable, key: Key) returns (i: uint64)
+  requires |pt| < 0x4000_0000_0000_0000
   requires WFPivots(pt)
-  ensures i == Route(pt, key)
+  ensures i as int == Route(pt, key)
   {
-    i := Keyspace.ComputeLargestLte(pt, key);
-    i := i + 1;
+    var j := Keyspace.ComputeLargestLte(pt, key);
+    i := (j + 1) as uint64;
   }
 
   // Quick lemma for proving that Route(pt, key) == idx
@@ -226,13 +228,14 @@ module PivotsLib {
     Keyspace.LargestLt(pivots, pivot) + 1
   }
 
-  method ComputeCutoffForLeft(pivots: PivotTable, pivot: Key) returns (i: int)
+  method ComputeCutoffForLeft(pivots: PivotTable, pivot: Key) returns (i: uint64)
+  requires |pivots| < 0x4000_0000_0000_0000
   requires WFPivots(pivots)
-  ensures i == CutoffForLeft(pivots, pivot)
+  ensures i as int == CutoffForLeft(pivots, pivot)
   {
     reveal_CutoffForLeft();
-    i := Keyspace.ComputeLargestLt(pivots, pivot);
-    i := i + 1;
+    var j := Keyspace.ComputeLargestLt(pivots, pivot);
+    i := (j + 1) as uint64;
   }
 
   function {:opaque} CutoffForRight(pivots: PivotTable, pivot: Key) : int
@@ -244,9 +247,10 @@ module PivotsLib {
     Route(pivots, pivot)
   }
 
-  method ComputeCutoffForRight(pivots: PivotTable, pivot: Key) returns (i: int)
+  method ComputeCutoffForRight(pivots: PivotTable, pivot: Key) returns (i: uint64)
+  requires |pivots| < 0x4000_0000_0000_0000
   requires WFPivots(pivots)
-  ensures i == CutoffForRight(pivots, pivot)
+  ensures i as int == CutoffForRight(pivots, pivot)
   {
     reveal_CutoffForRight();
     i := ComputeRoute(pivots, pivot);

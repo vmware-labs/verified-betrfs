@@ -224,7 +224,7 @@ module ImplNode {
       var cLeft := Pivots.ComputeCutoffForLeft(this.pivotTable, pivot);
       var leftPivots := this.pivotTable[.. cLeft];
       var leftChildren := if this.children.Some? then Some(this.children.value[.. cLeft + 1]) else None;
-      WeightBucketLeBucketList(MutBucket.ISeq(this.buckets), cLeft);
+      WeightBucketLeBucketList(MutBucket.ISeq(this.buckets), cLeft as int);
       var splitBucket := this.buckets[cLeft].SplitLeft(pivot);
       var slice := MutBucket.CloneSeq(this.buckets[.. cLeft]); // TODO clone not necessary?
       //var slice := this.buckets[.. cLeft];
@@ -257,7 +257,7 @@ module ImplNode {
       var cRight := Pivots.ComputeCutoffForRight(this.pivotTable, pivot);
       var rightPivots := this.pivotTable[cRight ..];
       var rightChildren := if this.children.Some? then Some(this.children.value[cRight ..]) else None;
-      WeightBucketLeBucketList(MutBucket.ISeq(this.buckets), cRight);
+      WeightBucketLeBucketList(MutBucket.ISeq(this.buckets), cRight as int);
       var splitBucket := this.buckets[cRight].SplitRight(pivot);
       var slice := MutBucket.CloneSeq(this.buckets[cRight + 1 ..]);
       //var slice := this.buckets[cRight + 1 ..];
@@ -375,21 +375,21 @@ module ImplNode {
 
       var r := Pivots.ComputeRoute(pivotTable, key);
 
-      MutBucket.LemmaReprBucketLeReprSeq(buckets, r);
-      WeightBucketLeBucketList(MutBucket.ISeq(buckets), r);
+      MutBucket.LemmaReprBucketLeReprSeq(buckets, r as int);
+      WeightBucketLeBucketList(MutBucket.ISeq(buckets), r as int);
 
       buckets[r].Insert(key, value);
 
       forall i | 0 <= i < |buckets|
       ensures buckets[i].Inv()
-      ensures i != r ==> buckets[i].Bucket == old(buckets[i].Bucket)
-      ensures i != r ==> buckets[i].Repr == old(buckets[i].Repr)
+      ensures i != r as int ==> buckets[i].Bucket == old(buckets[i].Bucket)
+      ensures i != r as int ==> buckets[i].Repr == old(buckets[i].Repr)
       ensures this !in buckets[i].Repr
       {
         MutBucket.reveal_ReprSeqDisjoint();
       }
-      ReprSeqDisjointAfterUpdate(buckets, r);
-      ReprSeqReplace(buckets, r);
+      ReprSeqDisjointAfterUpdate(buckets, r as int);
+      ReprSeqReplace(buckets, r as int);
 
       Repr := {this} + MutBucket.ReprSeq(buckets);
       LemmaReprFacts();
