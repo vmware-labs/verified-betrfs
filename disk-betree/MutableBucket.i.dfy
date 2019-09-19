@@ -276,14 +276,12 @@ module MutableBucket {
         == (newParent.Bucket, ISeq(newChildren))
     {
       assume false;
-      Native.BenchmarkingUtil.start();
       var kvlParent := parent.GetKvl();
       var kvlChildren := mutBucketSeqToKvlSeq(children);
       var childrenWeight := computeWeightOfSeq(children);
       var kvlNewParent, kvlNewChildren := KVListPartialFlush.PartialFlush(kvlParent, kvlChildren, pivots, childrenWeight);
       newParent := new MutBucket(kvlNewParent);
       newChildren := kvlSeqToMutBucketSeq(kvlNewChildren);
-      Native.BenchmarkingUtil.end();
     }
 
     method Insert(key: Key, value: Message)
