@@ -285,9 +285,8 @@ module MutableBucket {
       assume false;
 
       if value.Define? {
-        // TODO reduce this to just one lookup
-        var cur := TTT.Query(tree, key);
-        tree := TTT.Insert(tree, key, value);
+        var cur;
+        tree, cur := TTT.Insert(tree, key, value);
         if (cur.ValueForKey?) {
           Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {

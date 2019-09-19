@@ -281,15 +281,19 @@ module TwoThreeTree {
     }
 
     method InsertIntoLeaf<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-        returns (result: InsertionResult<Value>)
+        returns (result: InsertionResult<Value>, q : QueryResult<Value>)
         requires TTSubtree(tree);
         requires tree.Leaf?;
         ensures ValidInsertionResult(result, tree, key, value);
+        ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+        ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
     {
       reveal_TreeIsOrdered();
       if tree.key == key {
           result := DidntSplit(Leaf(key, value));
+          q := ValueForKey(tree.value);
       } else {
+        q := KeyDoesNotExist;
         var c := Keyspace.cmp(tree.key, key);
         if c < 0 {
           var newright := Leaf(key, value);
@@ -304,16 +308,19 @@ module TwoThreeTree {
     }
 
     method InsertIntoTwoNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-        returns (result: InsertionResult<Value>)
+        returns (result: InsertionResult<Value>, q : QueryResult<Value>)
         requires TTSubtree(tree);
         requires tree.TwoNode?;
         requires Keyspace.lt(key, tree.pivot);
         ensures ValidInsertionResult(result, tree, key, value);
+        ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+        ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
         decreases tree, 0;
     {
         childrenAreSubtrees(tree);
         childrenAreBalanced(tree);
-        var subresult := InsertIntoSubtree(tree.left, key, value);
+        var subresult;
+        subresult, q := InsertIntoSubtree(tree.left, key, value);
         if !subresult.Split? {
             result := DidntSplit(mkTwoNode(subresult.tree, tree.pivot, tree.right));
         } else {
@@ -326,16 +333,19 @@ module TwoThreeTree {
     }
 
     method InsertIntoTwoNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-        returns (result: InsertionResult<Value>)
+        returns (result: InsertionResult<Value>, q : QueryResult<Value>)
         requires TTSubtree(tree);
         requires tree.TwoNode?;
         requires key == tree.pivot || Keyspace.lt(tree.pivot, key);
         ensures ValidInsertionResult(result, tree, key, value);
+        ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+        ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
         decreases tree, 0;
     {
         childrenAreSubtrees(tree);
         childrenAreBalanced(tree);
-        var subresult := InsertIntoSubtree(tree.right, key, value);
+        var subresult;
+        subresult, q := InsertIntoSubtree(tree.right, key, value);
         if !subresult.Split? {
             result := DidntSplit(mkTwoNode(tree.left, tree.pivot, subresult.tree));
         } else {
@@ -348,31 +358,36 @@ module TwoThreeTree {
     }
 
     method InsertIntoTwoNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-     returns (result: InsertionResult<Value>)
+     returns (result: InsertionResult<Value>, q : QueryResult<Value>)
      requires TTSubtree(tree);
      requires tree.TwoNode?;
      ensures ValidInsertionResult(result, tree, key, value);
+     ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+     ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
      decreases tree, 1;
     {
         var c := Keyspace.cmp(key, tree.pivot);
         if c < 0 {
-            result := InsertIntoTwoNodeLeft(tree, key, value);
+            result, q := InsertIntoTwoNodeLeft(tree, key, value);
         } else {
-            result := InsertIntoTwoNodeRight(tree, key, value);
+            result, q := InsertIntoTwoNodeRight(tree, key, value);
         }
     }
     
     method InsertIntoThreeNodeLeft<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-     returns (result: InsertionResult<Value>)
+     returns (result: InsertionResult<Value>, q : QueryResult<Value>)
      requires TTSubtree(tree);
      requires tree.ThreeNode?;
      requires Keyspace.lt(key, tree.pivota);
      ensures ValidInsertionResult(result, tree, key, value);
+     ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+     ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
      decreases tree, 0;
     {
         childrenAreSubtrees(tree);
         childrenAreBalanced(tree);
-        var subresult := InsertIntoSubtree(tree.left, key, value);
+        var subresult;
+        subresult, q := InsertIntoSubtree(tree.left, key, value);
         if !subresult.Split? {
             result := DidntSplit(mkThreeNode(subresult.tree, tree.pivota,
                                             tree.middle, tree.pivotb,
@@ -385,17 +400,20 @@ module TwoThreeTree {
     }
 
     method InsertIntoThreeNodeMiddle<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-     returns (result: InsertionResult<Value>)
+     returns (result: InsertionResult<Value>, q : QueryResult<Value>)
      requires TTSubtree(tree);
      requires tree.ThreeNode?;
      requires (tree.pivota == key || Keyspace.lt(tree.pivota, key));
      requires Keyspace.lt(key, tree.pivotb);
      ensures ValidInsertionResult(result, tree, key, value);
+     ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+     ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
      decreases tree, 0;
     {
         childrenAreSubtrees(tree);
         childrenAreBalanced(tree);
-        var subresult := InsertIntoSubtree(tree.middle, key, value);
+        var subresult;
+        subresult, q := InsertIntoSubtree(tree.middle, key, value);
         if !subresult.Split? {
             result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
                                           subresult.tree, tree.pivotb,
@@ -411,16 +429,19 @@ module TwoThreeTree {
     }
 
     method InsertIntoThreeNodeRight<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-     returns (result: InsertionResult<Value>)
+     returns (result: InsertionResult<Value>, q : QueryResult<Value>)
      requires TTSubtree(tree);
      requires tree.ThreeNode?;
      requires tree.pivotb == key || Keyspace.lt(tree.pivotb, key);
      ensures ValidInsertionResult(result, tree, key, value);
+     ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+     ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
      decreases tree, 0;
     {
         childrenAreSubtrees(tree);
         childrenAreBalanced(tree);
-        var subresult := InsertIntoSubtree(tree.right, key, value);
+        var subresult;
+        subresult, q := InsertIntoSubtree(tree.right, key, value);
         if !subresult.Split? {
             result := DidntSplit(mkThreeNode(tree.left, tree.pivota,
                                   tree.middle, tree.pivotb,
@@ -433,37 +454,41 @@ module TwoThreeTree {
     }
 
     method InsertIntoThreeNode<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-     returns (result: InsertionResult<Value>)
+     returns (result: InsertionResult<Value>, q : QueryResult<Value>)
      requires TTSubtree(tree);
      requires tree.ThreeNode?;
      ensures ValidInsertionResult(result, tree, key, value);
+     ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+     ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
      decreases tree, 1;
     {
       var c := Keyspace.cmp(key, tree.pivota);
       if c < 0 {
-        result := InsertIntoThreeNodeLeft(tree, key, value);
+        result, q := InsertIntoThreeNodeLeft(tree, key, value);
       } else {
         var d := Keyspace.cmp(key, tree.pivotb);
         if d < 0 {
-          result := InsertIntoThreeNodeMiddle(tree, key, value);
+          result, q := InsertIntoThreeNodeMiddle(tree, key, value);
         } else {
-          result := InsertIntoThreeNodeRight(tree, key, value);
+          result, q := InsertIntoThreeNodeRight(tree, key, value);
         }
       }
     }
     
     method InsertIntoSubtree<Value>(tree: Node<Value>, key: Keyspace.Element, value: Value)
-     returns (result: InsertionResult<Value>)
+     returns (result: InsertionResult<Value>, q : QueryResult<Value>)
      requires TTSubtree(tree);
      ensures ValidInsertionResult(result, tree, key, value);
+     ensures q == KeyDoesNotExist <==> (key !in SubtreeI(tree));
+     ensures q.ValueForKey? <==> (key in SubtreeI(tree) && SubtreeI(tree)[key] == q.value);
      decreases tree, 3;
     {
         if tree.Leaf? {
-            result := InsertIntoLeaf(tree, key, value);
+            result, q := InsertIntoLeaf(tree, key, value);
         } else if tree.TwoNode? {
-            result := InsertIntoTwoNode(tree, key, value);
+            result, q := InsertIntoTwoNode(tree, key, value);
         } else {
-            result := InsertIntoThreeNode(tree, key, value);
+            result, q := InsertIntoThreeNode(tree, key, value);
         }
     }
     
@@ -824,17 +849,23 @@ module TwoThreeTree {
         }
     }
 
-    method Insert<Value>(tree: Tree<Value>, key: Keyspace.Element, value: Value) returns (newtree: Tree<Value>)
+    method Insert<Value>(tree: Tree<Value>, key: Keyspace.Element, value: Value) returns (newtree: Tree<Value>, q : QueryResult<Value>)
         requires TTTree(tree);
         ensures TTTree(newtree);
         ensures I(newtree) == I(tree)[key := value];
         ensures newtree.NonEmptyTree?;
+        ensures q == KeyDoesNotExist <==>
+            (key !in I(tree));
+        ensures q.ValueForKey? <==>
+            (key in I(tree) && I(tree)[key] == q.value);
     {
         //Native.BenchmarkingUtil.start();
         if tree.EmptyTree? {
             newtree := NonEmptyTree(Leaf(key, value));
+            q := KeyDoesNotExist;
         } else {
-            var result := InsertIntoSubtree(tree.root, key, value);
+            var result;
+            result, q := InsertIntoSubtree(tree.root, key, value);
             newtree := NonEmptyTree(result.tree);
         }
         //Native.BenchmarkingUtil.end();
