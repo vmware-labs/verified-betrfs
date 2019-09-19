@@ -242,26 +242,26 @@ module ImplMarshalling {
   ensures s == IMM.valToPivots(v)
   {
     s := ValToStrictlySortedKeySeq(v);
-    if (s.Some? && |s.value| as uint64 > 0 && |s.value[0]| as uint64 == 0) {
+    if (s.Some? && |s.value| as uint64 > 0 && |s.value[0 as uint64]| as uint64 == 0) {
       s := None;
     }
   }
 
-  method ValToBucket(v: V, pivotTable: seq<Key>, i: int) returns (s : Option<KVList.Kvl>)
-  requires IMM.valToBucket.requires(v, pivotTable, i)
+  method ValToBucket(v: V, pivotTable: seq<Key>, i: uint64) returns (s : Option<KVList.Kvl>)
+  requires IMM.valToBucket.requires(v, pivotTable, i as int)
   ensures s.Some? ==> KVList.WF(s.value)
-  ensures s.Some? ==> WFBucketAt(KVList.I(s.value), pivotTable, i)
-  ensures s == IMM.valToBucket(v, pivotTable, i)
+  ensures s.Some? ==> WFBucketAt(KVList.I(s.value), pivotTable, i as int)
+  ensures s == IMM.valToBucket(v, pivotTable, i as int)
   {
     assert ValidVal(v.t[0]);
 
-    var keys := ValToStrictlySortedKeySeq(v.t[0]);
+    var keys := ValToStrictlySortedKeySeq(v.t[0 as uint64]);
 
     if keys.None? {
       return None;
     }
 
-    var values := ValToMessageSeq(v.t[1]);
+    var values := ValToMessageSeq(v.t[1 as uint64]);
 
     if values.None? {
       return None;
@@ -275,17 +275,19 @@ module ImplMarshalling {
     }
 
     // Check that the keys fit in the desired bucket
-    if |kvl.keys| > 0 {
+    if |kvl.keys| as uint64 > 0 {
       if i > 0 {
-        var c := Keyspace.cmp(pivotTable[i-1], kvl.keys[0]);
+        var c := Keyspace.cmp(pivotTable[i-1], kvl.keys[0 as uint64]);
         if (c > 0) {
           KVList.Imaps(kvl, 0);
           return None;
         }
       }
 
-      if i < |pivotTable| {
-        var c := Keyspace.cmp(pivotTable[i], kvl.keys[|kvl.keys| - 1]);
+      assume |pivotTable| < 0x1_0000_0000_0000_0000;
+
+      if i < |pivotTable| as uint64 {
+        var c := Keyspace.cmp(pivotTable[i], kvl.keys[|kvl.keys| as uint64 - 1]);
         if (c <= 0) {
           KVList.Imaps(kvl, |kvl.keys| - 1);
           return None;
@@ -294,7 +296,7 @@ module ImplMarshalling {
     }
 
     forall key | key in KVList.I(kvl)
-    ensures Pivots.Route(pivotTable, key) == i
+    ensures Pivots.Route(pivotTable, key) == i as int
     ensures KVList.I(kvl)[key] != M.IdentityMessage()
     {
       var j := KVList.IndexOfKey(kvl, key);
@@ -303,10 +305,10 @@ module ImplMarshalling {
         Keyspace.IsStrictlySortedImpliesLte(kvl.keys, 0, j);
         Keyspace.IsStrictlySortedImpliesLte(kvl.keys, j, |kvl.keys| - 1);
       }
-      Pivots.RouteIs(pivotTable, key, i);
+      Pivots.RouteIs(pivotTable, key, i as int);
     }
 
-    assert WFBucketAt(KVList.I(kvl), pivotTable, i);
+    assert WFBucketAt(KVList.I(kvl), pivotTable, i as int);
 
     s := Some(kvl);
   }
@@ -334,17 +336,19 @@ module ImplMarshalling {
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
   ensures s.Some? ==> Some(MutableBucket.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
   {
-    var ar := new MutableBucket.MutBucket?[|a|];
+    assume |a| < 0x1_0000_0000_0000_0000;
 
-    var i := 0;
-    while i < |a|
-    invariant 0 <= i <= |a|
-    invariant forall k: nat | k < i :: ar[k] != null;
-    invariant forall k: nat | k < i :: ar[k].Inv()
-    invariant forall k: nat | k < i :: ar !in ar[k].Repr
-    invariant forall j, k | 0 <= j < i && 0 <= k < i && j != k :: ar[j].Repr !! ar[k].Repr
-    invariant forall k: nat | k < i :: fresh(ar[k].Repr)
-    invariant forall k: nat | k < i :: WFBucketAt(ar[k].Bucket, pivotTable, k)
+    var ar := new MutableBucket.MutBucket?[|a| as uint64];
+
+    var i: uint64 := 0;
+    while i < |a| as uint64
+    invariant 0 <= i as int <= |a|
+    invariant forall k: nat | k < i as int :: ar[k] != null;
+    invariant forall k: nat | k < i as int :: ar[k].Inv()
+    invariant forall k: nat | k < i as int :: ar !in ar[k].Repr
+    invariant forall j, k | 0 <= j < i as int && 0 <= k < i as int && j != k :: ar[j].Repr !! ar[k].Repr
+    invariant forall k: nat | k < i as int :: fresh(ar[k].Repr)
+    invariant forall k: nat | k < i as int :: WFBucketAt(ar[k].Bucket, pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
     invariant MutableBucket.MutBucket.ISeq(ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
     {
@@ -352,17 +356,17 @@ module ImplMarshalling {
       if (b.None?) {
         s := None;
 
-        LemmaValToBucketNone(a, pivotTable, i);
+        LemmaValToBucketNone(a, pivotTable, i as int);
         return;
       }
 
       assume WeightBucket(KVList.I(b.value)) < 0x1_0000_0000_0000_0000;
       var bucket := new MutableBucket.MutBucket(b.value);
-      assert forall k: nat | k < i :: ar[k].Inv();
+      assert forall k: nat | k < i as int :: ar[k].Inv();
       ar[i] := bucket;
-      assert forall k: nat | k < i :: ar[k].Inv();
-      assert ar[i].Inv();
-      assert forall k: nat | k < i+1 :: ar[k].Inv();
+      assert forall k: nat | k < i as int :: ar[k].Inv();
+      assert ar[i as int].Inv();
+      assert forall k: nat | k < i as int + 1 :: ar[k].Inv();
 
       assert DropLast(a[..i+1]) == a[..i];
       assert ar[..i+1] == ar[..i] + [bucket];
@@ -398,7 +402,11 @@ module ImplMarshalling {
     }
     var children := childrenOpt.value;
 
-    if (!((|children| as uint64 == 0 || |children| as uint64 == |pivots| as uint64 + 1) && |v.t[2].a| as uint64 == |pivots| as uint64 + 1)) {
+    assume |children| < 0x8000_0000_0000_0000;
+    assume |pivots| < 0x8000_0000_0000_0000;
+    assume |v.t[2 as uint64].a| < 0x1_0000_0000_0000_0000;
+
+    if (!((|children| as uint64 == 0 || |children| as uint64 == |pivots| as uint64 + 1) && |v.t[2 as uint64].a| as uint64 == |pivots| as uint64 + 1)) {
       return None;
     }
 
@@ -905,7 +913,7 @@ module ImplMarshalling {
     match v {
       case None => return null;
       case Some(v) => {
-        if (sector.SectorBlock? || SizeOfV(v) <= BlockSizeUint64() as int) {
+        if (sector.SectorBlock? || SizeOfV(v) <= BlockSizeUint64() as int - 32) {
           //Native.BenchmarkingUtil.start();
           var size: uint64;
           if (sector.SectorIndirectionTable?) {
