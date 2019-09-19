@@ -36,7 +36,7 @@ module ImplFlushPolicy {
     WeightBucketLeBucketList(MutBucket.ISeq(buckets), 0);
     var j := 1;
     var bestIdx := 0;
-    var bestWeight := buckets[0].Weight;
+    var bestWeight := buckets[0 as uint64].Weight;
     while j < |buckets| as uint64
     invariant ImplModelFlushPolicy.biggestSlotIterate.requires(MutBucket.ISeq(buckets), j, bestIdx, bestWeight)
     invariant ImplModelFlushPolicy.biggestSlotIterate(MutBucket.ISeq(buckets), j, bestIdx, bestWeight) == ImplModelFlushPolicy.biggestSlot(MutBucket.ISeq(buckets))
@@ -120,7 +120,7 @@ module ImplFlushPolicy {
         var bs := biggestSlot(node.buckets);
         var (slot, slotWeight) := bs;
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
-        if |node.buckets| < 8 {
+        if |node.buckets| as uint64 < 8 {
           var childref := node.children.value[slot];
           var childOpt := s.cache.GetOpt(childref);
           if childOpt.Some? {

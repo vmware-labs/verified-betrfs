@@ -112,7 +112,7 @@ abstract module Total_Order {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  method ComputeIsSorted(run: seq<Element>)
+  /*method ComputeIsSorted(run: seq<Element>)
   returns (b: bool)
   ensures b == IsSorted(run)
   {
@@ -128,7 +128,7 @@ abstract module Total_Order {
       k := k + 1;
     }
     return true;
-  }
+  }*/
 
   predicate {:opaque} IsStrictlySorted(run: seq<Element>)
   ensures IsStrictlySorted(run) ==> IsSorted(run)
