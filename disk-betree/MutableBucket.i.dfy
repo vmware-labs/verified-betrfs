@@ -124,6 +124,21 @@ module MutableBucket {
       KVList.WFImpliesWFBucket(kv);
     }
 
+    constructor InitWithWeight(kv: Kvl, w: uint64)
+    requires KVList.WF(kv)
+    requires WeightBucket(KVList.I(kv)) == w as int
+    ensures Bucket == KVList.I(kv)
+    ensures Inv()
+    ensures fresh(Repr)
+    {
+      this.is_tree := false;
+      this.kvl := kv;
+      this.Repr := {this};
+      this.Weight := w;
+      this.Bucket := KVList.I(kv);
+      KVList.WFImpliesWFBucket(kv);
+    }
+
     method GetKvl() returns (kv: Kvl)
     requires Inv()
     ensures KVList.WF(kv)
@@ -441,7 +456,7 @@ module MutableBucket {
       } else {
         kv := kvl;
       }
-      bucket' := new MutBucket(kv);
+      bucket' := new MutBucket.InitWithWeight(kv, this.Weight);
     }
 
     static method CloneSeq(buckets: seq<MutBucket>) returns (buckets': seq<MutBucket>)
