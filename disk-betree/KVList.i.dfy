@@ -549,8 +549,7 @@ module KVList {
     var acc := [];
     var cur_keys := new Key[maxChildLen + |parent.keys| as uint64];
 
-    var defaultMessage := IdentityMessage();
-    var cur_values := new Message[maxChildLen + |parent.keys| as uint64]((i) => defaultMessage);
+    var cur_values := new Message[maxChildLen + |parent.keys| as uint64];
 
     var cur_idx: uint64 := 0;
 
@@ -911,8 +910,7 @@ module KVList {
     assert kvls == kvls[..i];
     assert len as int == LenSum(kvls, |kvls|);
     var keys := new Key[len];
-    var defaultMessage := IdentityMessage();
-    var values := new Message[len]((i) => defaultMessage);
+    var values := new Message[len];
 
     var j: uint64 := 0;
     var pos: uint64 := 0;
@@ -1153,8 +1151,7 @@ module KVList {
     assume false;
 
     var keys := new Key[|s| as uint64];
-    var defaultMessage := IdentityMessage();
-    var values := new Message[|s| as uint64]((i) => defaultMessage);
+    var values := new Message[|s| as uint64];
 
     var i := 0;
     while i < |s| as uint64

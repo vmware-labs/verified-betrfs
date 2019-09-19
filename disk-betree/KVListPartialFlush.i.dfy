@@ -169,14 +169,12 @@ module KVListPartialFlush {
     var childIdx: uint64 := 0;
     var acc := [];
 
-    var defaultMessage := IdentityMessage();
-
     var cur_keys := new Key[maxChildLen + |parent.keys| as uint64];
-    var cur_values := new Message[maxChildLen + |parent.keys| as uint64]((i) => defaultMessage);
+    var cur_values := new Message[maxChildLen + |parent.keys| as uint64];
     var cur_idx: uint64 := 0;
 
     var newParent_keys := new Key[|parent.keys| as uint64];
-    var newParent_values := new Message[|parent.keys| as uint64]((i) => defaultMessage);
+    var newParent_values := new Message[|parent.keys| as uint64];
     var newParent_idx: uint64 := 0;
 
     var initChildrenWeight := childrenWeight;

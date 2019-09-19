@@ -232,7 +232,8 @@ module ImplSync {
     ImplModelSync.reveal_freeId();
 
     var s := syncReqs.Keys;
-    if (|s| == 0) {
+    assume |s| < 0x1_0000_0000_0000_0000;
+    if (|s| as uint64 == 0) {
       id := 1;
     } else {
       var maxId := MaximumInt(syncReqs.Keys);

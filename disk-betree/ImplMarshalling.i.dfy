@@ -783,7 +783,7 @@ module ImplMarshalling {
           // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
           assume forall i: nat | i < |tableSeq| :: |tableSeq[i].1.1| < |tableSeq|;
           /* (doc) assert table.Length == |mutMap.Contents.Keys| == |mutMap.Contents|; */
-          var a: array<V> := new [table.Length as uint64] (_ => VUint64(0 as uint64)); // temporary placeholder
+          var a: array<V> := new V[table.Length as uint64];
           var i: uint64 := 0;
           ghost var partial := map[];
           while i < table.Length as uint64
