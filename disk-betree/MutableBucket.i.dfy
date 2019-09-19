@@ -400,7 +400,7 @@ module MutableBucket {
     {
       assume false;
       var l, r := buckets[slot].SplitLeftRight(pivot);
-      buckets' := replace1with2(buckets, l, r, slot as int);
+      buckets' := Replace1with2(buckets, l, r, slot);
     }
 
     static method computeWeightOfSeq(buckets: seq<MutBucket>)

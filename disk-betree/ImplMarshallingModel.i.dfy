@@ -96,19 +96,13 @@ module ImplMarshallingModel {
     v.u
   }
 
-  function method valToInt(v: V) : int
-  requires ValInGrammar(v, GUint64)
-  {
-    v.u as int
-  }
-
   function method valToChildren(v: V) : Option<seq<Reference>>
   requires ValInGrammar(v, GUint64Array)
   {
     Some(v.ua)
   }
 
-  function method {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<map<uint64, (Option<Location>, seq<Reference>)>>)
+  function {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<map<uint64, (Option<Location>, seq<Reference>)>>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> forall v | v in s.value.Values :: v.0.Some? && BC.ValidLocationForNode(v.0.value)
   {

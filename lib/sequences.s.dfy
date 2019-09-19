@@ -1,25 +1,27 @@
 include "Option.s.dfy"
+include "NativeTypes.s.dfy"
 
 module Sequences {
   import opened Options
+  import opened NativeTypes
 
-  function method Last<E>(run: seq<E>) : E
+  function Last<E>(run: seq<E>) : E
     requires |run| > 0;
   {
     run[|run|-1]
   }
 
-  function method DropLast<E>(run: seq<E>) : seq<E>
+  function DropLast<E>(run: seq<E>) : seq<E>
     requires |run| > 0;
   {
     run[..|run|-1]
   }
 
-  function method Set<T>(run: seq<T>) : set<T> {
+  function Set<T>(run: seq<T>) : set<T> {
     set x : T | x in multiset(run)
   }
   
-  function method ISet<T>(run: seq<T>) : iset<T> {
+  function ISet<T>(run: seq<T>) : iset<T> {
     iset x : T | x in multiset(run)
   }
   
@@ -50,7 +52,7 @@ module Sequences {
     i
   }
 
-  function method {:opaque} Range(n: int) : seq<int>
+  function {:opaque} Range(n: int) : seq<int>
     requires n >= 0
     ensures |Range(n)| == n
     ensures forall i | 0 <= i < n :: Range(n)[i] == i
@@ -58,7 +60,7 @@ module Sequences {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
   
-  function method Apply<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+  function Apply<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
@@ -68,7 +70,7 @@ module Sequences {
     else  [f(run[0])] + Apply(f, run[1..])
   }
 
-  function method Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
+  function Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| <= |run|
     ensures forall i: nat :: i < |result| && f.requires(result[i]) ==> f(result[i])
@@ -78,19 +80,19 @@ module Sequences {
     else ((if f(run[0]) then [run[0]] else []) + Filter(f, run[1..]))
   }
   
-  function method FoldLeft<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
+  function FoldLeft<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
   {
     if |run| == 0 then init
     else FoldLeft(f, f(init, run[0]), run[1..])
   }
 
-  function method FoldRight<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
+  function FoldRight<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
   {
     if |run| == 0 then init
     else f(FoldRight(f, init, run[1..]), run[0])
   }
 
-  function method {:opaque} remove<A>(s: seq<A>, pos: int) : seq<A>
+  function {:opaque} remove<A>(s: seq<A>, pos: int) : seq<A>
   requires 0 <= pos < |s|
   ensures |remove(s, pos)| == |s| - 1
   ensures forall i | 0 <= i < pos :: remove(s, pos)[i] == s[i]
@@ -99,7 +101,7 @@ module Sequences {
     s[.. pos] + s[pos + 1 ..]
   }
 
-  function method {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>
+  function {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>
   requires 0 <= pos <= |s|;
   ensures |insert(s,a,pos)| == |s| + 1;
   ensures forall i :: 0 <= i < pos ==> insert(s, a, pos)[i] == s[i];
@@ -109,7 +111,14 @@ module Sequences {
     s[..pos] + [a] + s[pos..]
   }
 
-  function method {:opaque} replace1with2<A>(s: seq<A>, a: A, b: A, pos: int) : seq<A>
+  method Insert<A>(s: seq<A>, a: A, pos: uint64) returns (res: seq<A>)
+  requires 0 <= pos as int <= |s|;
+  ensures res == insert(s, a, pos as int);
+  {
+    return s[..pos] + [a] + s[pos..];
+  }
+
+  function {:opaque} replace1with2<A>(s: seq<A>, a: A, b: A, pos: int) : seq<A>
   requires 0 <= pos < |s|;
   ensures |replace1with2(s,a,b,pos)| == |s| + 1;
   ensures forall i :: 0 <= i < pos ==> replace1with2(s, a, b, pos)[i] == s[i];
@@ -120,7 +129,15 @@ module Sequences {
     s[..pos] + [a, b] + s[pos+1..]
   }
 
-  function method {:opaque} replace2with1<A>(s: seq<A>, a: A, pos: int) : seq<A>
+  method Replace1with2<A>(s: seq<A>, a: A, b: A, pos: uint64) returns (res:seq<A>)
+  requires 0 <= pos as int < |s|;
+  requires pos < 0xffff_ffff_ffff_ffff
+  ensures res == replace1with2(s, a, b, pos as int)
+  {
+    return s[..pos] + [a, b] + s[pos+1..];
+  }
+
+  function {:opaque} replace2with1<A>(s: seq<A>, a: A, pos: int) : seq<A>
   requires 0 <= pos < |s| - 1;
   ensures |replace2with1(s,a,pos)| == |s| - 1;
   ensures forall i :: 0 <= i < pos ==> replace2with1(s, a, pos)[i] == s[i];
@@ -130,7 +147,7 @@ module Sequences {
     s[..pos] + [a] + s[pos+2..]
   }
 
-  function method {:opaque} concat<A>(a: seq<A>, b: seq<A>) : seq<A>
+  function {:opaque} concat<A>(a: seq<A>, b: seq<A>) : seq<A>
   ensures |concat(a,b)| == |a| + |b|
   ensures forall i :: 0 <= i < |a| ==> a[i] == concat(a,b)[i];
   ensures forall i :: 0 <= i < |b| ==> b[i] == concat(a,b)[|a| + i];
@@ -138,7 +155,7 @@ module Sequences {
     a + b
   }
 
-  function method {:opaque} concat3<A>(a: seq<A>, b: A, c: seq<A>) : seq<A>
+  function {:opaque} concat3<A>(a: seq<A>, b: A, c: seq<A>) : seq<A>
   ensures |concat3(a,b,c)| == |a| + |c| + 1
   ensures forall i :: 0 <= i < |a| ==> a[i] == concat3(a,b,c)[i];
   ensures concat3(a,b,c)[|a|] == b;
@@ -147,12 +164,12 @@ module Sequences {
     a + [b] + c
   }
 
-  predicate method {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
+  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
     && |a| <= |b|
     && a == b[..|a|]
   }
 
-  predicate method {:opaque} IsSuffix<A(==)>(a: seq<A>, b: seq<A>) {
+  predicate {:opaque} IsSuffix<A(==)>(a: seq<A>, b: seq<A>) {
     && |a| <= |b|
     && a == b[|b|-|a|..]
   }
@@ -177,7 +194,7 @@ module Sequences {
         == a[..|c|];
   }
 
-  function method {:opaque} SeqIndexIterate<A(==)>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
+  function {:opaque} SeqIndexIterate<A(==)>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
   requires 0 <= i <= |run|
   ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
   ensures res.None? ==> forall j | i <= j < |run| :: run[j] != needle
@@ -188,7 +205,7 @@ module Sequences {
     else SeqIndexIterate(run, needle, i+1)
   }
 
-  function method {:opaque} SeqIndex<A(==)>(run: seq<A>, needle: A) : (res : Option<int>)
+  function {:opaque} SeqIndex<A(==)>(run: seq<A>, needle: A) : (res : Option<int>)
   ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
   ensures res.None? ==> forall i | 0 <= i < |run| :: run[i] != needle
   {

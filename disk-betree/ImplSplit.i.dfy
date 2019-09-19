@@ -39,7 +39,8 @@ module ImplSplit {
     ImplModelSplit.reveal_splitBookkeeping();
     writeBookkeeping(k, s, left_childref, left_child.children);
     writeBookkeeping(k, s, right_childref, right_child.children);
-    writeBookkeeping(k, s, parentref, Some(replace1with2(fused_parent_children, left_childref, right_childref, slot as int)));
+    var rep := Replace1with2(fused_parent_children, left_childref, right_childref, slot);
+    writeBookkeeping(k, s, parentref, Some(rep));
   }
 
   method splitCacheChanges(s: ImplVariables, left_childref: BT.G.Reference,

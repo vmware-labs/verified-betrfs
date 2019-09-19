@@ -56,18 +56,19 @@ module ImplMarshalling {
   ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToLocsAndSuccs(a)
   ensures s.Some? ==> s.value.Inv()
   ensures s.Some? ==> s.value.Count as nat == |a|
-  ensures s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8
+  ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
   ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
   {
-    if |a| == 0 {
+    assume |a| < 0x1_0000_0000_0000_0000;
+    if |a| as uint64 == 0 {
       var newHashMap := new MM.ResizingHashMap<(Option<Location>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
       s := Some(newHashMap);
       assume s.value.Count as nat == |a|;
     } else {
-      var res := ValToLocsAndSuccs(DropLast(a));
+      var res := ValToLocsAndSuccs(a[..|a| as uint64 - 1]);
       match res {
         case Some(mutMap) => {
-          var tuple := Last(a);
+          var tuple := a[|a| as uint64 - 1];
           var ref := IMM.valToReference(tuple.t[0]);
           var lba := IMM.valToLBA(tuple.t[1]);
           var len := tuple.t[2].u;
@@ -682,8 +683,8 @@ module ImplMarshalling {
       WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(buckets), |buckets| - 1);
       MutableBucket.MutBucket.Islice(buckets, 0, |buckets| - 1);
 
-      var pref := bucketsToVal(DropLast(buckets), pivotTable);
-      var bucket := Last(buckets);
+      var pref := bucketsToVal(buckets[..|buckets| as uint64 - 1], pivotTable);
+      var bucket := buckets[|buckets| as uint64 - 1];
 
       var bucketVal := bucketToVal(bucket, pivotTable, |buckets| - 1);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe

@@ -151,7 +151,7 @@ module ImplNode {
       //assert SplitBucketInList(I().buckets, slot as int, pivot)
       //    == b.buckets;
 
-      this.pivotTable := Sequences.insert(this.pivotTable, pivot, slot as int);
+      this.pivotTable := Sequences.Insert(this.pivotTable, pivot, slot);
 
       ghost var node2 := I();
 
@@ -169,7 +169,8 @@ module ImplNode {
 
       this.buckets := bucks;
 
-      this.children := Some(replace1with2(children.value, left_childref, right_childref, slot as int));
+      var childrenReplaced := Replace1with2(children.value, left_childref, right_childref, slot);
+      this.children := Some(childrenReplaced);
 
       Repr := {this} + MutBucket.ReprSeq(buckets);
       LemmaReprFacts();

@@ -32,7 +32,7 @@ module LruModel {
     set x | x in q
   }
 
-  function method Empty() : (q : LruQueue)
+  function Empty() : (q : LruQueue)
   ensures I(q) == {}
   ensures WF(q)
   {
@@ -40,26 +40,26 @@ module LruModel {
     []
   }
 
-  function method Remove(q: LruQueue, x: uint64) : LruQueue
+  function Remove(q: LruQueue, x: uint64) : LruQueue
   {
     if |q| == 0 then [] else (
       if Last(q) == x then Remove(DropLast(q), x) else Remove(DropLast(q), x) + [Last(q)]
     )
   }
 
-  function method Use(q: LruQueue, x: uint64) : LruQueue
+  function Use(q: LruQueue, x: uint64) : LruQueue
   {
     Remove(q, x) + [x]
   }
 
-  function method Next(q: LruQueue) : (x : uint64)
+  function Next(q: LruQueue) : (x : uint64)
   requires |I(q)| > 0
   ensures x in I(q)
   {
     q[0]
   }
 
-  function method Pop(q: LruQueue) : (LruQueue, uint64)
+  function Pop(q: LruQueue) : (LruQueue, uint64)
   requires |I(q)| > 0
   {
     (q[1..], q[0])
