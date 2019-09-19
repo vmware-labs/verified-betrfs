@@ -9,6 +9,7 @@ abstract module BlockCacheSystem {
   import opened Sequences
   import opened Options
   import opened AsyncSectorDiskModelTypes
+  import opened NativeTypes
 
   type LBA = M.LBA
   type Location = M.Location
@@ -996,7 +997,7 @@ abstract module BlockCacheSystem {
     FreezeStepPreservesGraphs(k, s, s', dop);
   }
 
-  lemma PushSyncReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  lemma PushSyncReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
     requires Inv(k, s)
     requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, id)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
@@ -1007,7 +1008,7 @@ abstract module BlockCacheSystem {
   {
   }
 
-  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
     requires Inv(k, s)
     requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, id)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
@@ -1016,7 +1017,7 @@ abstract module BlockCacheSystem {
     PushSyncReqStepPreservesGraphs(k, s, s', dop, id);
   }
 
-  lemma PopSyncReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  lemma PopSyncReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
     requires Inv(k, s)
     requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, id)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
@@ -1027,7 +1028,7 @@ abstract module BlockCacheSystem {
   {
   }
 
-  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
     requires Inv(k, s)
     requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, id)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);

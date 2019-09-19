@@ -47,8 +47,8 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step) {
     && !step.TransactionStep?
-    && (step.PushSyncReqStep? ==> uiop.PushSyncOp? && step.id == uiop.id)
-    && (step.PopSyncReqStep? ==> uiop.PopSyncOp? && step.id == uiop.id)
+    && (step.PushSyncReqStep? ==> uiop.PushSyncOp? && step.id as int == uiop.id)
+    && (step.PopSyncReqStep? ==> uiop.PopSyncOp? && step.id as int == uiop.id)
     && (!step.PushSyncReqStep? && !step.PopSyncReqStep? ==> uiop.NoOp?)
 
     && BC.NextStep(k, s, s', dop, step)

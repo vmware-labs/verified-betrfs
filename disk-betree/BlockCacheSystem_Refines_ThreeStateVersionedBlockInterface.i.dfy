@@ -16,6 +16,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   import opened Maps
   import opened Sequences
   import opened Options
+  import opened NativeTypes
 
   import BC = BetreeGraphBlockCache
   import BI = PivotBetreeBlockInterface
@@ -74,7 +75,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   function {:opaque} SyncReqs(k: BCS.Constants, s: BCS.Variables) : map<int, ThreeState.SyncReqStatus>
   requires BCS.Inv(k, s)
   {
-    map id | id in s.machine.syncReqs :: SyncReqState(k, s, s.machine.syncReqs[id])
+    map id | 0 <= id < 0x1_0000_0000_0000_0000 && id as uint64 in s.machine.syncReqs :: SyncReqState(k, s, s.machine.syncReqs[id as uint64])
   }
 
   predicate IsPersistStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
@@ -274,12 +275,12 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   ensures IsPersistStep(k, s, step) ==> SyncReqs(k, s') == ThreeState.SyncReqs2to1(SyncReqs(k, s))
   ensures IsFreezeStep(step) ==> SyncReqs(k, s') == ThreeState.SyncReqs3to2(SyncReqs(k, s))
   ensures step.MachineStep? && step.machineStep.PushSyncReqStep? ==>
-      && step.machineStep.id !in SyncReqs(k, s)
-      && SyncReqs(k, s') == SyncReqs(k, s)[step.machineStep.id := ThreeState.State3]
+      && step.machineStep.id as int !in SyncReqs(k, s)
+      && SyncReqs(k, s') == SyncReqs(k, s)[step.machineStep.id as int := ThreeState.State3]
   ensures step.MachineStep? && step.machineStep.PopSyncReqStep? ==>
-      && step.machineStep.id in SyncReqs(k, s)
-      && SyncReqs(k, s)[step.machineStep.id] == ThreeState.State1
-      && SyncReqs(k, s') == MapRemove1(SyncReqs(k, s), step.machineStep.id)
+      && step.machineStep.id as int in SyncReqs(k, s)
+      && SyncReqs(k, s)[step.machineStep.id as int] == ThreeState.State1
+      && SyncReqs(k, s') == MapRemove1(SyncReqs(k, s), step.machineStep.id as int)
   ensures step.CrashStep? ==> SyncReqs(k, s') == map[]
   ensures
     && !IsPersistStep(k, s, step)

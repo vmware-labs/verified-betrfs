@@ -226,34 +226,40 @@ module ImplSync {
 
   // == pushSync ==
 
-  method freeId<A>(syncReqs: map<int, A>) returns (id: int)
+  method freeId<A>(syncReqs: map<uint64, A>) returns (id: uint64)
   ensures id == ImplModelSync.freeId(syncReqs)
   {
     ImplModelSync.reveal_freeId();
 
     var s := syncReqs.Keys;
     if (|s| == 0) {
-      id := 0;
+      id := 1;
     } else {
       var maxId := MaximumInt(syncReqs.Keys);
-      id := maxId + 1;
+      if maxId == 0xffff_ffff_ffff_ffff {
+        id := 0;
+      } else {
+        id := maxId + 1;
+      }
     }
   }
 
   method pushSync(k: ImplConstants, s: ImplVariables)
-  returns (id: int)
+  returns (id: uint64)
   requires Inv(k, s)
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), id) == ImplModelSync.pushSync(Ic(k), old(s.I()))
   {
     id := freeId(s.syncReqs);
-    s.syncReqs := s.syncReqs[id := BC.State3];
+    if id != 0 {
+      s.syncReqs := s.syncReqs[id := BC.State3];
+    }
   }
 
   // == popSync ==
 
-  method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: int)
+  method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: uint64)
   returns (wait: bool, success: bool)
   requires Inv(k, s)
   requires io.initialized()

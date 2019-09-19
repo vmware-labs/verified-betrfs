@@ -59,11 +59,11 @@ module ImplModel {
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
-        syncReqs: map<int, BC.SyncReqStatus>,
+        syncReqs: map<uint64, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue
       )
-    | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<int, BC.SyncReqStatus>)
+    | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)

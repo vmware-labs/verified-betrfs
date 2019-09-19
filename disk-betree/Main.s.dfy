@@ -58,15 +58,17 @@ abstract module Main {
   // Implementation of the state transitions
 
   method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
-  returns (id: int)
+  returns (id: uint64)
   requires io.initialized()
   requires Inv(k, hs)
   modifies hs, HeapSet(hs)
   modifies io
   ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp())
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+      if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
+      io.diskOp())
 
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
+  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64)
   returns (wait: bool, success: bool)
   requires io.initialized()
   requires Inv(k, hs)
@@ -74,7 +76,7 @@ abstract module Main {
   modifies io
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
-      if success then UI.PopSyncOp(id) else UI.NoOp,
+      if success then UI.PopSyncOp(id as int) else UI.NoOp,
       io.diskOp())
 
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)

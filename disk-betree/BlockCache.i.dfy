@@ -47,12 +47,12 @@ abstract module BlockCache refines Transactable {
         outstandingIndirectionTableWrite: Option<ReqId>,
         outstandingBlockWrites: map<ReqId, OutstandingWrite>,
         outstandingBlockReads: map<ReqId, OutstandingRead>,
-        syncReqs: map<int, SyncReqStatus>,
+        syncReqs: map<uint64, SyncReqStatus>,
 
         cache: map<Reference, Node>)
     | Unready(
         outstandingIndirectionTableRead: Option<ReqId>,
-        syncReqs: map<int, SyncReqStatus>
+        syncReqs: map<uint64, SyncReqStatus>
         )
 
   predicate IsAllocated(s: Variables, ref: Reference)
@@ -139,8 +139,8 @@ abstract module BlockCache refines Transactable {
     | PageInIndirectionTableRespStep
     | EvictStep(ref: Reference)
     | FreezeStep
-    | PushSyncReqStep(id: int)
-    | PopSyncReqStep(id: int)
+    | PushSyncReqStep(id: uint64)
+    | PopSyncReqStep(id: uint64)
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
@@ -208,12 +208,12 @@ abstract module BlockCache refines Transactable {
     && s' == s.(outstandingIndirectionTableWrite := Some(dop.id))
   }
 
-  function method syncReqs3to2(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus>
+  function method syncReqs3to2(syncReqs: map<uint64, SyncReqStatus>) : map<uint64, SyncReqStatus>
   {
     map id | id in syncReqs :: (if syncReqs[id] == State3 then State2 else syncReqs[id])
   }
 
-  function method syncReqs2to1(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus>
+  function method syncReqs2to1(syncReqs: map<uint64, SyncReqStatus>) : map<uint64, SyncReqStatus>
   {
     map id | id in syncReqs :: (if syncReqs[id] == State2 then State1 else syncReqs[id])
   }
@@ -335,14 +335,14 @@ abstract module BlockCache refines Transactable {
          .(syncReqs := syncReqs3to2(s.syncReqs))
   }
 
-  predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
   {
     && dop.NoDiskOp?
     && id !in s.syncReqs
     && s' == s.(syncReqs := s.syncReqs[id := State3])
   }
 
-  predicate PopSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  predicate PopSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
   {
     && dop.NoDiskOp?
     && id in s.syncReqs
@@ -457,8 +457,8 @@ abstract module BlockCache refines Transactable {
       case PageInIndirectionTableRespStep => PageInIndirectionTableResp(k, s, s', dop)
       case EvictStep(ref) => Evict(k, s, s', dop, ref)
       case FreezeStep => Freeze(k, s, s', dop)
-      case PushSyncReqStep(id: int) => PushSyncReq(k, s, s', dop, id)
-      case PopSyncReqStep(id: int) => PopSyncReq(k, s, s', dop, id)
+      case PushSyncReqStep(id: uint64) => PushSyncReq(k, s, s', dop, id)
+      case PopSyncReqStep(id: uint64) => PopSyncReq(k, s, s', dop, id)
       case NoOpStep => NoOp(k, s, s', dop)
       case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
     }
@@ -698,7 +698,7 @@ abstract module BlockCache refines Transactable {
     }
   }
 
-  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
     requires Inv(k, s)
     requires PushSyncReq(k, s, s', dop, id)
     ensures Inv(k, s')
@@ -708,7 +708,7 @@ abstract module BlockCache refines Transactable {
     }
   }
 
-  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: int)
+  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
     requires Inv(k, s)
     requires PopSyncReq(k, s, s', dop, id)
     ensures Inv(k, s')

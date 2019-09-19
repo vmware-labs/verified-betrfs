@@ -12,7 +12,6 @@ include "ImplModelQuery.i.dfy"
 include "ImplModelSync.i.dfy"
 
 module {:extern} MainImpl refines Main { 
-
   import opened Impl
   import IM = ImplModel
   import ImplIO
@@ -65,7 +64,7 @@ module {:extern} MainImpl refines Main {
   ////////// Top-level handlers
 
   method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
-  returns (id: int)
+  returns (id: uint64)
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
@@ -73,13 +72,13 @@ module {:extern} MainImpl refines Main {
     var id1 := pushSync(k, s);
     ioAndHsNotInReadSet(s, io, hs);
     id := id1;
-    var uiop := UI.PushSyncOp(id);
+    ghost var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
     BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
-    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.PushSyncOp(id), io.diskOp()); // observe
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), uiop, io.diskOp()); // observe
   }
 
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: int)
+  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64)
   returns (wait: bool, success: bool)
   {
     var s := hs.s;
@@ -89,11 +88,11 @@ module {:extern} MainImpl refines Main {
     ioAndHsNotInReadSet(s, io, hs);
     success := succ;
     wait := w;
-    var uiop := if succ then UI.PopSyncOp(id) else UI.NoOp;
+    ghost var uiop := if succ then UI.PopSyncOp(id as int) else UI.NoOp;
     BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
-        if success then UI.PopSyncOp(id) else UI.NoOp,
+        uiop,
         io.diskOp());
   }
 
@@ -105,7 +104,7 @@ module {:extern} MainImpl refines Main {
     var value := query(k, s, io, key);
     ImplModelQuery.queryCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key);
     ioAndHsNotInReadSet(s, io, hs);
-    var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
+    ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     v := value;
@@ -122,7 +121,7 @@ module {:extern} MainImpl refines Main {
     var succ := insert(k, s, io, key, value);
     ImplModelInsert.insertCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key, value, s.I(), succ, IS.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
-    var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
+    ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     success := succ;
@@ -138,7 +137,7 @@ module {:extern} MainImpl refines Main {
     ImplIO.readResponse(k, s, io);
     ImplModelIO.readResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
-    var uiop := UI.NoOp;
+    ghost var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
@@ -151,7 +150,7 @@ module {:extern} MainImpl refines Main {
     ImplIO.writeResponse(k, s, io);
     ImplModelIO.writeResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
-    var uiop := UI.NoOp;
+    ghost var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe

@@ -96,7 +96,7 @@ module {:extern} ImplState {
   class Variables {
     var ready: bool;
 
-    var syncReqs: map<int, BC.SyncReqStatus>;
+    var syncReqs: map<uint64, BC.SyncReqStatus>;
 
     // Ready
     var persistentIndirectionTable: MutIndirectionTable;

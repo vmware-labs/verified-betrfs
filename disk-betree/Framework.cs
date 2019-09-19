@@ -213,6 +213,9 @@ class Application {
     log("Sync");
 
     var id = __default.handlePushSync(k, hs, io);
+    if (id == 0) {
+      throw new Exception("pushSync failed to allocate id");
+    }
     log("doing push sync...");
 
     for (int i = 0; i < 5000; i++) {
