@@ -69,10 +69,10 @@ module ImplMarshalling {
       match res {
         case Some(mutMap) => {
           var tuple := a[|a| as uint64 - 1];
-          var ref := IMM.valToReference(tuple.t[0]);
-          var lba := IMM.valToLBA(tuple.t[1]);
-          var len := tuple.t[2].u;
-          var succs := IMM.valToChildren(tuple.t[3]);
+          var ref := IMM.valToReference(tuple.t[0 as uint64]);
+          var lba := IMM.valToLBA(tuple.t[1 as uint64]);
+          var len := tuple.t[2 as uint64].u;
+          var succs := IMM.valToChildren(tuple.t[3 as uint64]);
           match succs {
             case None => {
               s := None;

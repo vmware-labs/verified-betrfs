@@ -1,6 +1,6 @@
 module Mathematics {
 
-	function method min(a: int, b: int) : int
+	function min(a: int, b: int) : int
 	{
 		if a < b
 			then a
@@ -8,7 +8,7 @@ module Mathematics {
 			b
 	}
 
-	function method max(a: int, b: int) : int
+	function max(a: int, b: int) : int
 	{
 		if a < b
 			then b

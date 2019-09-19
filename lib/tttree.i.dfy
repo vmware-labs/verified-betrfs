@@ -209,7 +209,7 @@ module TwoThreeTree {
         reveal_TreeIsOrdered();
     }
 
-    function method Height(tree: Node) : int
+    function Height(tree: Node) : int
         requires balanced(tree);
         ensures Height(tree) == minHeight(tree);
     {

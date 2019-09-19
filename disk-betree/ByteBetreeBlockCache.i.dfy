@@ -16,7 +16,7 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   type Variables = BBC.Variables
   type Location = LBAType.Location
 
-  function method BlockSize() : int { 8 * 1024 * 1024 }
+  function BlockSize() : int { 8 * 1024 * 1024 }
 
   predicate ValidAddr(addr: uint64)
   {

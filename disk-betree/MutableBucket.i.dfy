@@ -74,7 +74,7 @@ module MutableBucket {
       }
       len := newlen;
     }
-    tree := TTT.NonEmptyTree(ar[0].1);
+    tree := TTT.NonEmptyTree(ar[0 as uint64].1);
   }
 
   class MutBucket {
