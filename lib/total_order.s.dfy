@@ -251,7 +251,7 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
   
-  method MergeRuns(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
+  /*method MergeRuns(run1: seq<Element>, run2: seq<Element>) returns (result: array<Element>)
     requires 0 < |run1|;
     requires IsSorted(run1);
     requires IsSorted(run2);
@@ -329,7 +329,7 @@ abstract module Total_Order {
       var a2 := MergeSort(run[i..]);
       result :=  MergeRuns(a1[..], a2[..]);
     }
-  }
+  }*/
 
   predicate SetAllLte(a: set<Element>, b: set<Element>) {
     forall x, y :: x in a && y in b ==> lte(x, y)
