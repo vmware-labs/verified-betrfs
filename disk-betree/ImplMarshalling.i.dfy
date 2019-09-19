@@ -410,13 +410,13 @@ module ImplMarshalling {
 
     assume forall o | o in MutableBucket.MutBucket.ReprSeq(buckets) :: allocated(o);
 
-    if |buckets| as uint64 > MaxNumChildren() as uint64 {
+    if |buckets| as uint64 > MaxNumChildrenUint64() {
       return None;
     }
 
     assume WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
     var w: uint64 := MutableBucket.MutBucket.computeWeightOfSeq(buckets);
-    if (w > MaxTotalBucketWeight() as uint64) {
+    if (w > MaxTotalBucketWeightUint64()) {
       return None;
     }
 
@@ -903,11 +903,11 @@ module ImplMarshalling {
     match v {
       case None => return null;
       case Some(v) => {
-        if (sector.SectorBlock? || SizeOfV(v) <= BlockSize() as int - 32) {
+        if (sector.SectorBlock? || SizeOfV(v) <= BlockSizeUint64() as int) {
           //Native.BenchmarkingUtil.start();
           var size: uint64;
           if (sector.SectorIndirectionTable?) {
-            size := BlockSize() as uint64;
+            size := BlockSizeUint64();
           } else {
             var computedSize := GenericMarshalling.ComputeSizeOf(v);
             size := 32 + computedSize;

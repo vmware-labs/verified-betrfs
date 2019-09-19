@@ -105,7 +105,7 @@ module ImplInsert {
 
     var rootLookup := s.cache.GetOpt(BT.G.Root());
     if (rootLookup.None?) {
-      if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+      if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
         PageInReq(k, s, io, BT.G.Root());
         success := false;
       } else {
@@ -118,7 +118,7 @@ module ImplInsert {
     var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.buckets);
 
     if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) + weightSeq
-        <= MaxTotalBucketWeight() as uint64 {
+        <= MaxTotalBucketWeightUint64() {
       success := InsertKeyValue(k, s, key, value);
     } else {
       runFlushPolicy(k, s, io);

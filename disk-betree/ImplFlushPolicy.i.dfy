@@ -53,11 +53,12 @@ module ImplFlushPolicy {
     return (bestIdx, bestWeight);
   }
 
-  function method TotalCacheSize(s: ImplVariables) : (res : int)
+  function method TotalCacheSize(s: ImplVariables) : (res : uint64)
   reads s, s.cache, s.cache.Repr
   requires s.cache.Inv()
+  requires |s.cache.I()| + |s.outstandingBlockReads| < 0x1_0000_0000_0000_0000
   {
-    s.cache.Count() as int + |s.outstandingBlockReads|
+    s.cache.Count() + (|s.outstandingBlockReads| as uint64)
   }
 
   method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : ImplModelFlushPolicy.Action)
@@ -70,19 +71,19 @@ module ImplFlushPolicy {
 
     if i == 0 {
       // Can't split root until we grow it.
-      if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+      if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
         action := ImplModelFlushPolicy.ActionGrow;
       } else {
         action := ImplModelFlushPolicy.ActionEvict;
       }
     } else {
       var nodePrev := s.cache.GetOpt(stack[i-1]);
-      if |nodePrev.value.children.value| as uint64 < MaxNumChildren() as uint64 {
+      if |nodePrev.value.children.value| as uint64 < MaxNumChildrenUint64() {
         var nodeThis := s.cache.GetOpt(stack[i]);
         if |nodeThis.value.buckets| as uint64 == 1 {
           action := ImplModelFlushPolicy.ActionRepivot(stack[i]);
         } else {
-          if TotalCacheSize(s) <= MaxCacheSize() - 2 {
+          if TotalCacheSize(s) <= MaxCacheSizeUint64() - 2 {
             action := ImplModelFlushPolicy.ActionSplit(stack[i-1], slots[i-1]);
           } else {
             action := ImplModelFlushPolicy.ActionEvict;
@@ -113,7 +114,7 @@ module ImplFlushPolicy {
       var nodeOpt := s.cache.GetOpt(ref);
       var node := nodeOpt.value;
       MutBucket.reveal_ReprSeq();
-      if node.children.None? || |node.buckets| == MaxNumChildren() {
+      if node.children.None? || |node.buckets| as uint64 == MaxNumChildrenUint64() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
         var bs := biggestSlot(node.buckets);
@@ -134,8 +135,8 @@ module ImplFlushPolicy {
 
             var childTotalWeight: uint64 := MutBucket.computeWeightOfSeq(child.buckets);
 
-            if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
-              if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+            if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
+              if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
                 action := ImplModelFlushPolicy.ActionFlush(ref, slot);
               } else {
                 action := ImplModelFlushPolicy.ActionEvict;
@@ -144,7 +145,7 @@ module ImplFlushPolicy {
               action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
             }
           } else {
-            if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+            if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
               action := ImplModelFlushPolicy.ActionPageIn(childref);
             } else {
               action := ImplModelFlushPolicy.ActionEvict;
@@ -173,7 +174,7 @@ module ImplFlushPolicy {
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
-    assert IM.IVars(s.I()) == old(IM.IVars(s.I()));
+    assert IM.IVars(s.I()) == IM.IVars(old(s.I()));
 
     ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(k, s, [BT.G.Root()], []);

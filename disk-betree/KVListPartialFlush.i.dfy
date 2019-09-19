@@ -181,7 +181,7 @@ module KVListPartialFlush {
 
     var initChildrenWeight := childrenWeight;
     kvlSeqWeightEq(children);
-    var weightSlack: uint64 := MaxTotalBucketWeight() as uint64 - initChildrenWeight;
+    var weightSlack: uint64 := MaxTotalBucketWeightUint64() - initChildrenWeight;
 
     while childrenIdx < |children| as uint64
     invariant 0 <= parentIdx as int <= |parent.keys|

@@ -71,7 +71,7 @@ module ImplQuery {
 
         var nodeOpt := s.cache.GetOpt(ref);
         if (nodeOpt.None?) {
-          if s.cache.Count() as int + |s.outstandingBlockReads| <= MaxCacheSize() - 1 {
+          if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
             PageInReq(k, s, io, ref);
             res := None;
             return;
