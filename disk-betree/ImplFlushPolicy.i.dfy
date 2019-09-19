@@ -185,7 +185,7 @@ module ImplFlushPolicy {
       }
       case ActionSplit(parentref, slot) => {
         var parent := s.cache.GetOpt(parentref);
-        doSplit(k, s, parentref, parent.value.children.value[slot], slot as int);
+        doSplit(k, s, parentref, parent.value.children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
         var node := s.cache.GetOpt(ref);
@@ -195,7 +195,7 @@ module ImplFlushPolicy {
         var parent := s.cache.GetOpt(parentref);
         var childref := parent.value.children.value[slot];
         var child := s.cache.GetOpt(childref);
-        flush(k, s, parentref, slot as int, 
+        flush(k, s, parentref, slot, 
             parent.value.children.value[slot],
             child.value);
       }

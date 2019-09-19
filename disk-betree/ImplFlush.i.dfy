@@ -25,7 +25,7 @@ module ImplFlush {
 
   import Native
 
-  method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)
   requires s.ready
 
@@ -35,7 +35,7 @@ module ImplFlush {
   requires parentref in s.cache.I()
 
   requires s.cache.I()[parentref].children.Some?
-  requires 0 <= slot < |s.cache.I()[parentref].children.value|
+  requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
 
   requires childref in IIndirectionTable(s.ephemeralIndirectionTable)
@@ -44,7 +44,7 @@ module ImplFlush {
 
   ensures WellUpdated(s)
   ensures s.ready
-  ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, old(child.I())) == s.I()
+  ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
   {
     if s.frozenIndirectionTable != null {
       var lbaGraph := s.frozenIndirectionTable.Get(parentref);
@@ -70,7 +70,7 @@ module ImplFlush {
     assert parent.I().children == s.I().cache[parentref].children;
     s.cache.LemmaNodeReprLeRepr(parentref);
 
-    WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(parent.buckets), slot);
+    WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(parent.buckets), slot as int);
 
     assert WeightBucketList(s.I().cache[childref].buckets) <= MaxTotalBucketWeight();
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
@@ -86,7 +86,7 @@ module ImplFlush {
 
     assert parent.I().children == s.I().cache[parentref].children;
 
-    var newparent_children := parent.children.value[slot := newchildref.value];
+    var newparent_children := parent.children.value[slot as int := newchildref.value];
 
     writeBookkeeping(k, s, parentref, Some(newparent_children));
 
@@ -102,7 +102,7 @@ module ImplFlush {
     //assert newchild.I() == old(child.I()).(buckets := MutBucket.ISeq(newbuckets));
     ghost var newParentBucketI := newparentBucket.Bucket;
 
-    s.cache.UpdateNodeSlot(parentref, slot as uint64, newparentBucket, newchildref.value);
+    s.cache.UpdateNodeSlot(parentref, slot, newparentBucket, newchildref.value);
 
     ghost var c3 := s.cache.I();
 
@@ -110,15 +110,15 @@ module ImplFlush {
 
     assert c3 == c2[parentref := IM.Node(
           parentI.pivotTable,
-          Some(parentI.children.value[slot := newchildref.value]),
-          parentI.buckets[slot := newParentBucketI]
+          Some(parentI.children.value[slot as int := newchildref.value]),
+          parentI.buckets[slot as int := newParentBucketI]
         )];
     //assert parentI == old(s.I()).cache[parentref];
 
     //assert c2 == old(s.I()).cache
     //      [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))];
 
-    ghost var a := ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot, childref, old(child.I()));
+    ghost var a := ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
     ghost var b := s.I();
     assert a.cache
         /*== old(s.I()).cache

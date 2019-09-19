@@ -108,7 +108,7 @@ module ImplSplit {
     ImplModelSplit.reveal_splitDoChanges();
   }
 
-  method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: int)
+  method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: uint64)
   requires s.ready
   requires Inv(k, s)
   requires ref in s.ephemeralIndirectionTable.Contents
@@ -116,12 +116,12 @@ module ImplSplit {
   requires s.cache.ptr(ref).Some?
   requires s.cache.ptr(parentref).Some?
   requires s.cache.I()[parentref].children.Some?
-  requires 0 <= slot < |s.cache.I()[parentref].children.value|
+  requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == ref
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures s.I() == ImplModelSplit.doSplit(Ic(k), old(s.I()), parentref, ref, slot);
+  ensures s.I() == ImplModelSplit.doSplit(Ic(k), old(s.I()), parentref, ref, slot as int);
   {
     ImplModelSplit.reveal_doSplit();
 
@@ -142,7 +142,7 @@ module ImplSplit {
     var fused_child := fused_child_opt.value;
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
-    var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
+    var ubound := (if slot < |fused_parent.pivotTable| as uint64 then Some(fused_parent.pivotTable[slot]) else None);
 
     ImplModelSplit.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
     var child := fused_child.CutoffNode(lbound, ubound);
