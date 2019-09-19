@@ -386,24 +386,24 @@ module ImplMarshalling {
   ensures INodeOpt(s) == IMM.valToNode(v)
   {
     assert ValidVal(v.t[0]);
-    var pivotsOpt := ValToPivots(v.t[0]);
+    var pivotsOpt := ValToPivots(v.t[0 as uint64]);
     if (pivotsOpt.None?) {
       return None;
     }
     var pivots := pivotsOpt.value;
 
-    var childrenOpt := IMM.valToChildren(v.t[1]);
+    var childrenOpt := IMM.valToChildren(v.t[1 as uint64]);
     if (childrenOpt.None?) {
       return None;
     }
     var children := childrenOpt.value;
 
-    if (!((|children| == 0 || |children| == |pivots| + 1) && |v.t[2].a| == |pivots| + 1)) {
+    if (!((|children| as uint64 == 0 || |children| as uint64 == |pivots| as uint64 + 1) && |v.t[2].a| as uint64 == |pivots| as uint64 + 1)) {
       return None;
     }
 
     assert ValidVal(v.t[2]);
-    var bucketsOpt := ValToBuckets(v.t[2].a, pivots);
+    var bucketsOpt := ValToBuckets(v.t[2 as uint64].a, pivots);
     if (bucketsOpt.None?) {
       return None;
     }
@@ -421,7 +421,7 @@ module ImplMarshalling {
       return None;
     }
 
-    var node := new Node(pivots, if |children| == 0 then None else childrenOpt, buckets);
+    var node := new Node(pivots, if |children| as uint64 == 0 then None else childrenOpt, buckets);
 
     return Some(node);
   }
@@ -485,7 +485,7 @@ module ImplMarshalling {
   ensures v.Some? ==> |v.value.a| == |indirectionTable|
   ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some(indirectionTable)
   {
-    if (|indirectionTable| == 0) {
+    if (|indirectionTable| as uint64 == 0) {
       return Some(VArray([]));
     } else {
       var ref :| ref in indirectionTable.Keys;
@@ -494,9 +494,10 @@ module ImplMarshalling {
         case None => return None;
         case Some(vpref) => {
           var loc := indirectionTable[ref].0.value;
-          if (|indirectionTable[ref].1| >= 0x1_0000_0000_0000_0000) {
-            return None;
-          }
+          assume |indirectionTable[ref].1| < 0x1_0000_0000_0000_0000;
+          //if (|indirectionTable[ref].1| >= 0x1_0000_0000_0000_0000) {
+          //  return None;
+          //}
           var succs := indirectionTable[ref].1;
           var succsV := childrenToVal(indirectionTable[ref].1);
           var tuple := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), succsV]);
@@ -676,7 +677,7 @@ module ImplMarshalling {
   ensures IMM.valToBuckets(v.a, pivotTable) == Some(MutableBucket.MutBucket.ISeq(buckets))
   ensures SizeOfV(v) <= 8 + WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) + |buckets| * 16
   {
-    if |buckets| == 0 {
+    if |buckets| as uint64 == 0 {
       v := VArray([]);
     } else {
       WeightBucketListSlice(MutableBucket.MutBucket.ISeq(buckets), 0, |buckets| - 1);
@@ -769,12 +770,12 @@ module ImplMarshalling {
         /* (doc) assert mutMap.Contents.Values == set i | 0 <= i < |tableSeq| :: tableSeq[i].1; */
         assert forall i: nat | i < |tableSeq| :: tableSeq[i].1 == mutMap.Contents[tableSeq[i].0];
         assert forall i: nat, j: nat | i <= j < |tableSeq| :: tableSeq[i].0 == tableSeq[j].0 ==> i == j;
-        if table.Length < 0x1_0000_0000_0000_0000 / 8 {
+        if table.Length as uint64 < 0x2000_0000_0000_0000 {
           assert forall i: nat | i < |tableSeq| :: tableSeq[i].1.0.Some?;
           // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
           assume forall i: nat | i < |tableSeq| :: |tableSeq[i].1.1| < |tableSeq|;
           /* (doc) assert table.Length == |mutMap.Contents.Keys| == |mutMap.Contents|; */
-          var a: array<V> := new [table.Length] (_ => VUint64(0)); // temporary placeholder
+          var a: array<V> := new [table.Length as uint64] (_ => VUint64(0 as uint64)); // temporary placeholder
           var i: uint64 := 0;
           ghost var partial := map[];
           while i < table.Length as uint64
@@ -878,8 +879,8 @@ module ImplMarshalling {
     s := None;
 
     if |data| as uint64 >= 32 {
-      var hash := Crypto.Crc32(data[32..]);
-      if hash == data[..32] {
+      var hash := Crypto.Crc32(data[32 as uint64..]);
+      if hash == data[..32 as uint64] {
         s := ParseSector(data, 32);
       }
     }

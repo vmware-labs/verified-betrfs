@@ -47,12 +47,12 @@ module ImplLeaf {
       }
     }
 
-    var kvl := node.buckets[0].GetKvl();
+    var kvl := node.buckets[0 as uint64].GetKvl();
     var pivot := KVList.GetMiddleKey(kvl);
 
     var pivots := [pivot];
 
-    var left, right := node.buckets[0].SplitLeftRight(pivot);
+    var left, right := node.buckets[0 as uint64].SplitLeftRight(pivot);
 
     var buckets' := [left, right];
     MutBucket.ReprSeqDisjointOfLen2(buckets');

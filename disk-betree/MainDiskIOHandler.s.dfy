@@ -27,6 +27,7 @@ module {:extern} MainDiskIOHandler {
     method {:axiom} getReadResult() returns (id : D.ReqId, bytes: seq<byte>)
     requires diskOp().RespReadOp?
     ensures diskOp() == D.RespReadOp(id, D.RespRead(bytes))
+    ensures |bytes| < 0x1_0000_0000_0000_0000
 
     function {:axiom} diskOp() : D.DiskOp
     reads this

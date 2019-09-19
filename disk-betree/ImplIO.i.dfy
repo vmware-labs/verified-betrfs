@@ -33,15 +33,7 @@ module ImplIO {
           table[ref].0.value.addr != addr);
   }
 
-  function method MaxOffset() : (maxOffset:uint64)
-    ensures maxOffset as int * LBAType.BlockSize() as int == 0x1_0000_0000_0000_0000;
-  {
-    // TODO I suspect we constructed a BigInteger to assign this.
-    var maxOffset:uint64 := (0x1_0000_0000_0000_0000 / LBAType.BlockSize() as int) as uint64;
-    maxOffset
-  }
-
-    // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
+  // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(s: ImplVariables, len: uint64)
   returns (loc : Option<BC.Location>)
   requires s.ready
@@ -77,7 +69,8 @@ module ImplIO {
 
         return result;
       }
-      if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int {
+      // Hardcoding this value because this is the easiest way to avoid bigint logic
+      if tryOffset >= 2199023255551 {
         return None;
       }
 
@@ -214,7 +207,7 @@ module ImplIO {
   {
     var id1, bytes := io.getReadResult();
     id := id1;
-    if |bytes| <= ImplADM.M.BlockSize() {
+    if |bytes| as uint64 <= BlockSizeUint64() {
       var sectorOpt := ImplMarshalling.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {

@@ -108,7 +108,7 @@ module ImplDealloc {
     assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
 
     var i: uint64 := 0;
-    while i as int < |ephemeralRefs|
+    while i < |ephemeralRefs| as uint64
     invariant 0 <= i as int <= |ephemeralRefs|
     invariant ImplModelDealloc.FindDeallocableIterate(s.I(), ephemeralRefs, i)
            == ImplModelDealloc.FindDeallocable(s.I())

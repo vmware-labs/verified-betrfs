@@ -63,7 +63,7 @@ module ImplSync {
     assume |frozenRefs| < 0x1_0000_0000_0000_0000;
 
     var i: uint64 := 0;
-    while i as int < |frozenRefs|
+    while i < |frozenRefs| as uint64
     invariant i as int <= |frozenRefs|
     invariant forall k : nat | k < i as nat :: (
         && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph

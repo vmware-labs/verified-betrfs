@@ -149,7 +149,7 @@ module ImplSplit {
     var child := fused_child.CutoffNode(lbound, ubound);
     assert IM.WFNode(child.I());
 
-    if (|child.pivotTable| == 0) {
+    if (|child.pivotTable| as uint64 == 0) {
       // TODO there should be an operation which just
       // cuts off the node and doesn't split it.
       print "giving up; doSplit can't run because child.pivots == 0\n";
