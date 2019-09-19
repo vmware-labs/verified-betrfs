@@ -122,10 +122,18 @@ module BucketsLib {
   lemma WFBucketIntersect(bucket: Bucket, keys: set<Key>)
   requires WFBucket(bucket)
   ensures WFBucket(BucketIntersect(bucket, keys))
+  {
+    reveal_WFBucket();
+    reveal_BucketIntersect();
+  }
 
   lemma WFBucketComplement(bucket: Bucket, keys: set<Key>)
   requires WFBucket(bucket)
   ensures WFBucket(BucketComplement(bucket, keys))
+  {
+    reveal_WFBucket();
+    reveal_BucketComplement();
+  }
 
   ///// Splitting stuff
 
@@ -303,6 +311,18 @@ module BucketsLib {
   requires 0 <= slot < |blist| - 1
   requires WFBucketList(blist, pivots)
   ensures WFBucketList(MergeBucketsInList(blist, slot), remove(pivots, slot))
+  {
+    reveal_MergeBucketsInList();
+    WFPivotsRemoved(pivots, slot);
+    var blist' := MergeBucketsInList(blist, slot);
+    var pivots' := remove(pivots, slot);
+    BucketListHasWFBucketAtIdenticalSlice(
+        blist, pivots, blist', pivots', 0, slot-1, 0);
+    BucketListHasWFBucketAtIdenticalSlice(
+        blist, pivots, blist', pivots', slot+1, |blist'|-1, -1);
+    reveal_MergeBuckets();
+    assert WFBucketAt(blist'[slot], pivots', slot);
+  }
 
   lemma SplitOfMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
   requires 0 <= slot < |blist| - 1
