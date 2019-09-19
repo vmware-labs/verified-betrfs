@@ -52,7 +52,7 @@ abstract module Total_Order {
   {
   }
 
-  method SeqMinIndex(run: seq<Element>) returns (pos: int)
+  /*method SeqMinIndex(run: seq<Element>) returns (pos: int)
     requires 0 < |run|;
     ensures 0 <= pos < |run|;
     ensures forall i {:trigger lte(run[pos], run[i]) } :: 0 <= i < |run| ==> lte(run[pos], run[i]);
@@ -106,7 +106,7 @@ abstract module Total_Order {
   {
     var index := SeqMaxIndex(run);
     elt := run[index];
-  }
+  }*/
   
   predicate {:opaque} IsSorted(run: seq<Element>) {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
@@ -456,7 +456,7 @@ abstract module Total_Order {
   }
 }*/
 
-module Integer_Order refines Total_Order {
+/*module Integer_Order refines Total_Order {
   type Element = int
 
   function SomeElement() : Element { 0 }
@@ -474,7 +474,7 @@ module Integer_Order refines Total_Order {
   {
     return if a < b then -1 else if a > b then 1 else 0;
   }
-}
+}*/
 
 module Uint64_Order refines Total_Order {
   type Element = uint64
