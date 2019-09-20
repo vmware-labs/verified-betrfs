@@ -1065,7 +1065,7 @@ module MutableMap {
     {
       assume false;
       var asArray := ToArray();
-      result := map i: uint64 | i < asArray.Length as uint64 :: asArray[i].0 := asArray[i].1;
+      result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
     }
 
     method Realloc()

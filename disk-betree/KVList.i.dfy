@@ -717,23 +717,12 @@ module KVList {
     idx := lo;
   }
 
-  function splitLeft(kvl: Kvl, pivot: Key) : (left : Kvl)
-  requires |kvl.keys| == |kvl.values|
-
-  lemma splitLeftCorrect(kvl: Kvl, pivot: Key)
-  requires WF(kvl)
-  ensures var left := splitLeft(kvl, pivot);
-    && WF(left)
-    && I(left) == SplitBucketLeft(I(kvl), pivot)
-    && left == splitLeft(kvl, pivot)
-
   method SplitLeft(kvl: Kvl, pivot: Key)
   returns (left: Kvl)
   requires WF(kvl)
   requires |kvl.keys| < 0x8000_0000_0000_0000
   ensures WF(left)
   ensures I(left) == SplitBucketLeft(I(kvl), pivot)
-  ensures left == splitLeft(kvl, pivot)
   {
     var idx := ComputeCutoffPoint(kvl, pivot);
     left := Kvl(kvl.keys[..idx], kvl.values[..idx]);
@@ -761,19 +750,7 @@ module KVList {
     }
 
     assert a == b;
-
-    assume left == splitLeft(kvl, pivot);
   }
-
-  function splitRight(kvl: Kvl, pivot: Key) : (right : Kvl)
-  requires |kvl.keys| == |kvl.values|
-
-  lemma splitRightCorrect(kvl: Kvl, pivot: Key)
-  requires WF(kvl)
-  ensures var right := splitRight(kvl, pivot);
-    && WF(right)
-    && I(right) == SplitBucketRight(I(kvl), pivot)
-    && right == splitRight(kvl, pivot)
 
   method SplitRight(kvl: Kvl, pivot: Key)
   returns (right: Kvl)
@@ -781,7 +758,6 @@ module KVList {
   requires |kvl.keys| < 0x8000_0000_0000_0000
   ensures WF(right)
   ensures I(right) == SplitBucketRight(I(kvl), pivot)
-  ensures right == splitRight(kvl, pivot)
   {
     var idx := ComputeCutoffPoint(kvl, pivot);
     right := Kvl(kvl.keys[idx..], kvl.values[idx..]);
@@ -809,7 +785,6 @@ module KVList {
     }
 
     assert a == b;
-    assume right == splitRight(kvl, pivot);
   }
 
   /*function splitKvlInList(buckets: seq<Kvl>, slot: int, pivot: Key)
@@ -848,7 +823,7 @@ module KVList {
   //// Joining
   /////////////////////////
 
-  function join(kvls: seq<Kvl>) : Kvl
+  /*function join(kvls: seq<Kvl>) : Kvl
   {
     if |kvls| == 0 then Kvl([], []) else (
       var j := join(DropLast(kvls));
@@ -953,7 +928,7 @@ module KVList {
     assert values[..] == values[..LenSum(kvls, j as int)];
     assert kvls[..j] == kvls;
     joinEqJoinBucketList(kvls, pivots);
-  }
+  }*/
 
   /////////////////////////
   //// Splitting
@@ -968,7 +943,7 @@ module KVList {
     if n == 0 then [] else EmptySeq(n-1) + [Kvl([],[])]
   }
 
-  function splitOnPivots(kvl: Kvl, pivots: seq<Key>)
+  /*function splitOnPivots(kvl: Kvl, pivots: seq<Key>)
   : (kvls : seq<Kvl>)
   requires WF(kvl)
   requires |pivots| < 0x7fff_ffff_ffff_ffff
@@ -997,7 +972,7 @@ module KVList {
     }
     LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(I(kvl), pivots, ISeq(EmptySeq(|pivots| + 1)));
     assume kvls == splitOnPivots(kvl, pivots);
-  }
+  }*/
 
   method IsWF(kvl: Kvl) returns (b: bool)
   requires |kvl.keys| < 0x1_0000_0000_0000_0000
@@ -1178,30 +1153,62 @@ module KVList {
     if |kvls| == 0 then 0 else WeightKvlSeq(DropLast(kvls)) + WeightKvl(Last(kvls))
   }
 
-  method computeWeightKvl(kvl: Kvl)
-  returns (weight: uint64)
-  requires WF(kvl)
-  requires WeightBucket(I(kvl)) < 0x1_0000_0000_0000_0000
-  ensures weight as int == WeightBucket(I(kvl))
-  {
-    assume false;
-    var j: uint64 := 0;
-    var w: uint64 := 0;
-    while j < |kvl.keys| as uint64
-    {
-      w := w + WeightKeyUint64(kvl.keys[j]) + WeightMessageUint64(kvl.values[j]);
-      j := j + 1;
-    }
-    weight := w;
-  }
-
   lemma kvlWeightEq(kvl: Kvl)
   requires WF(kvl)
   ensures WeightKvl(kvl) == WeightBucket(I(kvl))
+  decreases |kvl.keys|
+  {
+    reveal_I();
+    if |kvl.keys| == 0 {
+      WeightBucketEmpty();
+    } else {
+      WFPrefix(kvl, |kvl.keys| - 1);
+      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.values)));
+      if Last(kvl.keys) in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values))) {
+        var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.values)), Last(kvl.keys));
+        reveal_IsStrictlySorted();
+      }
+      WeightBucketInduct(I(Kvl(DropLast(kvl.keys), DropLast(kvl.values))), Last(kvl.keys), Last(kvl.values));
+      assert WeightKvl(kvl)
+          == WeightKvl(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))
+              + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.values))
+          == WeightBucket(I(Kvl(DropLast(kvl.keys), DropLast(kvl.values))))
+              + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.values));
+    }
+  }
 
-  lemma kvlSeqWeightEq(kvls: seq<Kvl>)
-  requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
-  ensures WeightKvlSeq(kvls) == WeightBucketList(ISeq(kvls))
+  lemma kvlWeightPrefixLe(kvl: Kvl, j: int)
+  requires WF(kvl)
+  requires 0 <= j <= |kvl.keys|
+  ensures WeightKvl(prefix(kvl, j)) <= WeightKvl(kvl);
+  decreases |kvl.keys|
+  {
+    if j == |kvl.keys| {
+      assert prefix(kvl, j) == kvl;
+    } else {
+      WFPrefix(kvl, |kvl.keys| - 1);
+      kvlWeightPrefixLe(Kvl(DropLast(kvl.keys), DropLast(kvl.values)), j);
+      assert prefix(kvl, j) == prefix(Kvl(DropLast(kvl.keys), DropLast(kvl.values)), j);
+      assert WeightKvl(prefix(kvl, j))
+          == WeightKvl(prefix(Kvl(DropLast(kvl.keys), DropLast(kvl.values)), j))
+          <= WeightKvl(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))
+          <= WeightKvl(kvl);
+    }
+  }
+
+  lemma lenKeysLeWeightOver8(kvl: Kvl)
+  requires WF(kvl)
+  ensures 8*|kvl.keys| <= WeightBucket(I(kvl))
+  decreases |kvl.keys|
+  {
+    if |kvl.keys| == 0 {
+    } else {
+      WFPrefix(kvl, |kvl.keys| - 1);
+      lenKeysLeWeightOver8(Kvl(DropLast(kvl.keys), DropLast(kvl.values)));
+      kvlWeightEq(kvl);
+      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.values)));
+    }
+  }
 
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
@@ -1209,10 +1216,42 @@ module KVList {
   lemma lenKeysLeWeight(kvl: Kvl)
   requires WF(kvl)
   ensures |kvl.keys| <= WeightBucket(I(kvl))
+  {
+    lenKeysLeWeightOver8(kvl);
+  }
 
-  lemma lenKeysLeWeightOver8(kvl: Kvl)
+  lemma WeightKvlInduct(kvl: Kvl, j: int)
   requires WF(kvl)
-  ensures 8*|kvl.keys| <= WeightBucket(I(kvl))
+  requires 0 <= j < |kvl.keys|
+  ensures WeightKvl(prefix(kvl, j as int)) +
+      WeightKey(kvl.keys[j]) + WeightMessage(kvl.values[j])
+          == WeightKvl(prefix(kvl, j as int + 1));
+
+  method computeWeightKvl(kvl: Kvl)
+  returns (weight: uint64)
+  requires WF(kvl)
+  requires WeightBucket(I(kvl)) < 0x1_0000_0000_0000_0000
+  ensures weight as int == WeightBucket(I(kvl))
+  {
+    kvlWeightEq(kvl);
+    lenKeysLeWeight(kvl);
+
+    var j: uint64 := 0;
+    var w: uint64 := 0;
+    while j < |kvl.keys| as uint64
+    invariant 0 <= j as int <= |kvl.keys|
+    invariant w as int == WeightKvl(prefix(kvl, j as int))
+    {
+      WeightKvlInduct(kvl, j as int);
+      kvlWeightPrefixLe(kvl, j as int + 1);
+
+      w := w + WeightKeyUint64(kvl.keys[j]) + WeightMessageUint64(kvl.values[j]);
+      j := j + 1;
+    }
+    weight := w;
+
+    assert prefix(kvl, |kvl.keys|) == kvl;
+  }
 
   function toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)

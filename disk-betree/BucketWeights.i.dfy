@@ -78,6 +78,10 @@ module BucketWeights {
     )
   }
 
+  lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
+  requires key !in bucket
+  ensures WeightBucket(bucket[key := msg]) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
+
   lemma WeightSplitBucketLeft(bucket: Bucket, key: Key)
   ensures WeightBucket(SplitBucketLeft(bucket, key)) <= WeightBucket(bucket)
 

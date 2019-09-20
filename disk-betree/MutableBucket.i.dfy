@@ -346,7 +346,6 @@ module MutableBucket {
         kv := kvl;
       }
 
-      KVList.splitLeftCorrect(kv, pivot);
       WeightSplitBucketLeft(Bucket, pivot);
       KVList.lenKeysLeWeightOver8(kv);
       var kvlLeft := KVList.SplitLeft(kv, pivot);
@@ -367,7 +366,6 @@ module MutableBucket {
         kv := kvl;
       }
 
-      KVList.splitRightCorrect(kv, pivot);
       WeightSplitBucketRight(Bucket, pivot);
       KVList.lenKeysLeWeightOver8(kv);
       var kvlRight := KVList.SplitRight(kv, pivot);
