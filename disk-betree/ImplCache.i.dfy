@@ -83,6 +83,7 @@ module ImplCache {
   method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires s.ready
   requires s.W()
+  requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   ensures s.ready
@@ -90,6 +91,7 @@ module ImplCache {
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures s.I() == ImplModelCache.writeBookkeeping(Ic(k), old(s.I()), ref, children)
+  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(s.lru.Queue)| + 1
   //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_writeBookkeeping();
@@ -98,9 +100,6 @@ module ImplCache {
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
     var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if children.Some? then children.value else []));
 
-    assume |LruModel.I(s.lru.Queue)| <= 0x10000;
-    assume |s.cache.I()| <= MaxCacheSize();
-
     s.lru.Use(ref);
   }
 
@@ -108,6 +107,7 @@ module ImplCache {
   returns (ref: Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
+  requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   //modifies s.Repr()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
@@ -116,6 +116,7 @@ module ImplCache {
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures (s.I(), ref) == ImplModelCache.allocBookkeeping(Ic(k), old(s.I()), children)
+  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(s.lru.Queue)| + 1
   //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_allocBookkeeping();

@@ -411,7 +411,7 @@ module MutableLru {
 
     method Use(x: uint64)
     requires Inv()
-    requires |I(Queue)| <= 0x10000
+    requires |I(Queue)| <= 0x1_0000_0000
     ensures Inv()
     ensures Queue == LruModel.Use(old(Queue), x)
     ensures forall x | x in Repr :: x in old(Repr) || fresh(x)
