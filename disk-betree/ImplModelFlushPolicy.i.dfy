@@ -109,7 +109,6 @@ module ImplModelFlushPolicy {
       && TotalCacheSize(s) <= MaxCacheSize() - 1
     ))
     && (action.ActionRepivot? ==> (
-      && action.ref != BT.G.Root()
       && action.ref in s.ephemeralIndirectionTable
       && action.ref in s.cache
       && s.cache[action.ref].children.None?
@@ -205,7 +204,6 @@ module ImplModelFlushPolicy {
   requires ValidStackSlots(k, s, stack, slots)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
-  requires forall j | 1 <= j < |stack| :: stack[j] != BT.G.Root()
   requires s.cache[stack[|stack| - 1]].children.Some? ==> |s.cache[stack[|stack| - 1]].buckets| >= 2
   requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
   ensures ValidAction(k, s, getActionToSplit(k, s, stack, slots, i))
@@ -236,7 +234,6 @@ module ImplModelFlushPolicy {
   requires Inv(k, s)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
-  requires forall j | 1 <= j < |stack| :: stack[j] != BT.G.Root()
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures var (s', action) := getActionToFlush(k, s, stack, slots);
     && WFVars(s')
@@ -267,7 +264,6 @@ module ImplModelFlushPolicy {
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               assert ValidAction(k, s1, action);
             } else {
-              assume childref != BT.G.Root(); // TODO we need a way to show this
               getActionToFlushValidAction(k, s1, stack + [childref], slots + [slot]);
             }
           } else {

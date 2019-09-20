@@ -27,7 +27,6 @@ module ImplModelLeaf {
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
-  requires ref != BT.G.Root()
   requires |node.buckets| == 1
   {
     if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) then (
@@ -58,7 +57,6 @@ module ImplModelLeaf {
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
-  requires ref != BT.G.Root()
   requires |node.buckets| == 1
   ensures var s' := repivotLeaf(k, s, ref, node);
     && WFVars(s')

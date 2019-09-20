@@ -410,8 +410,6 @@ module ImplModelSplit {
       var fused_parent := s.cache[parentref];
       var fused_child := s.cache[childref];
 
-      assume childref != BT.G.Root(); // TODO
-
       var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
       var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
       var child := CutoffNode(fused_child, lbound, ubound);
