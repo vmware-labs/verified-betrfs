@@ -605,6 +605,22 @@ module ImplMarshalling {
     }
   }
 
+  lemma lemmaArrayDecomp<T>(ar: array<T>, i: uint64)
+  requires 0 <= i as int < ar.Length
+  requires ar.Length < 0x1_0000_0000_0000_0000
+  ensures ar[..i+1][..i] == ar[..i];
+  ensures ar[..i+1] == ar[..i] + [ar[i]];
+  {
+  }
+
+  lemma lemmaSeqDecomp<T>(s: seq<T>, i: uint64)
+  requires 0 <= i as int < |s|
+  requires |s| < 0x1_0000_0000_0000_0000
+  ensures s[..i+1][..i] == s[..i];
+  ensures s[..i+1] == s[..i] + [s[i]];
+  {
+  }
+
   method messageSeqToVal(s: seq<Message>) returns (v : V)
   requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
   requires |s| < 0x1_0000_0000_0000_0000
@@ -626,13 +642,10 @@ module ImplMarshalling {
       ar[i] := VByteArray(s[i].value);
 
       lemma_SeqSum_prefix(ar[..i], VByteArray(s[i].value));
-      assert s[..i+1][..i] == s[..i];
-      assert ar[..i+1][..i] == ar[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-      assert s[..i] + [s[i]] == s[..i+1];
+      lemmaArrayDecomp(ar, i);
+      lemmaSeqDecomp(s, i);
 
-      assert WeightMessage(s[i])
-          == SizeOfV(ar[i]);
+      assert WeightMessage(s[i]) == SizeOfV(ar[i]);
 
       i := i + 1;
     }
