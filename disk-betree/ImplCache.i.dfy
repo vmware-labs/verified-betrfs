@@ -91,7 +91,7 @@ module ImplCache {
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures s.I() == ImplModelCache.writeBookkeeping(Ic(k), old(s.I()), ref, children)
-  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(s.lru.Queue)| + 1
+  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
   //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_writeBookkeeping();
@@ -101,6 +101,12 @@ module ImplCache {
     var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if children.Some? then children.value else []));
 
     s.lru.Use(ref);
+
+    LruModel.LruUse(old(s.lru.Queue), ref);
+    assert LruModel.I(s.lru.Queue) == LruModel.I(old(s.lru.Queue)) + {ref};
+    assert |LruModel.I(s.lru.Queue)| == |LruModel.I(old(s.lru.Queue)) + {ref}|
+        <= |LruModel.I(old(s.lru.Queue))| + |{ref}|
+        == |LruModel.I(old(s.lru.Queue))| + 1;
   }
 
   method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<BT.G.Reference>>)
@@ -116,7 +122,7 @@ module ImplCache {
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures (s.I(), ref) == ImplModelCache.allocBookkeeping(Ic(k), old(s.I()), children)
-  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(s.lru.Queue)| + 1
+  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
   //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_allocBookkeeping();
