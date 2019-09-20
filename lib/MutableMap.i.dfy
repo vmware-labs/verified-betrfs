@@ -942,7 +942,7 @@ module MutableMap {
 
       var resultPos: uint64 := 1;
       assert forall k | k in transferredContents :: exists i: nat :: i < resultPos as int && result[i] == (k, transferredContents[k]);
-      while storagePos as int < Underlying.Storage.Length
+      while storagePos < Underlying.Storage.Length as uint64
         invariant 0 <= storagePos as int <= Underlying.Storage.Length
         invariant result.Length == Count as nat
         invariant resultPos as int == |transferredContents|
