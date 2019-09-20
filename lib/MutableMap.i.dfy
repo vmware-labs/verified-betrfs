@@ -911,9 +911,8 @@ module MutableMap {
         storagePos := storagePos + 1;
         // ---------------
       }
-      if storagePos as int == Underlying.Storage.Length {
-        assert false;
-      }
+
+      assert storagePos as int != Underlying.Storage.Length;
 
       ghost var transferredContents := map[];
       assert MapFromStorage(Underlying.Storage[..storagePos]) == transferredContents;

@@ -934,14 +934,14 @@ module KVList {
   //// Splitting
   /////////////////////////
 
-  function method EmptySeq(n: int) : (s : seq<Kvl>)
+  /*function method EmptySeq(n: int) : (s : seq<Kvl>)
   requires n >= 0
   ensures |s| == n
   ensures forall i | 0 <= i < n :: WF(s[i])
   ensures forall i | 0 <= i < n :: s[i] == Kvl([],[])
   {
     if n == 0 then [] else EmptySeq(n-1) + [Kvl([],[])]
-  }
+  }*/
 
   /*function splitOnPivots(kvl: Kvl, pivots: seq<Key>)
   : (kvls : seq<Kvl>)
@@ -1015,19 +1015,6 @@ module KVList {
   {
     reveal_I();
     Kvl([],[])
-  }
-
-  predicate method {:opaque} IsEmpty(kvl: Kvl)
-  requires WF(kvl)
-  ensures IsEmpty(kvl) == (I(kvl) == map[])
-  {
-    reveal_I();
-    assert |kvl.keys| > 0 ==> Last(kvl.keys) in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))[Last(kvl.keys) := Last(kvl.values)];
-    var emp : Bucket := map[];
-    assert |kvl.keys| > 0 ==> Last(kvl.keys) !in emp;
-    assert |kvl.keys| > 0 ==> I(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))[Last(kvl.keys) := Last(kvl.values)] != map[];
-
-    |kvl.keys| == 0
   }
 
   lemma Islice(kvls: seq<Kvl>, a: int, b: int)
@@ -1177,6 +1164,10 @@ module KVList {
     }
   }
 
+  lemma kvlSeqWeightEq(kvls: seq<Kvl>)
+  requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
+  ensures WeightKvlSeq(kvls) == WeightBucketList(ISeq(kvls))
+
   lemma kvlWeightPrefixLe(kvl: Kvl, j: int)
   requires WF(kvl)
   requires 0 <= j <= |kvl.keys|
@@ -1281,16 +1272,18 @@ module KVList {
 
   method GetMiddleKey(kvl: Kvl) returns (res: Key)
   requires WF(kvl)
+  requires WeightBucket(I(kvl)) < 0x1_0000_0000_0000_0000
   ensures WFBucket(I(kvl))
   ensures getMiddleKey(I(kvl)) == res
   {
     WFImpliesWFBucket(kvl); 
+    lenKeysLeWeight(kvl);
     assume kvl == toKvl(I(kvl));
-    if |kvl.keys| == 0 {
+    if |kvl.keys| as uint64 == 0 {
       return [0];
     } else {
-      var key := kvl.keys[|kvl.keys| / 2];
-      if |key| == 0 {
+      var key := kvl.keys[|kvl.keys| as uint64 / 2];
+      if |key| as uint64 == 0 {
         return [0];
       } else {
         return key;
