@@ -135,7 +135,7 @@ method ParseUint64(data:seq<byte>, index:uint64) returns (success:bool, v:V, res
     }
 }
 
-function method {:opaque} parse_Array_contents(data:seq<byte>, eltType:G, len:uint64) : (Option<seq<V>>, seq<byte>)
+function {:opaque} parse_Array_contents(data:seq<byte>, eltType:G, len:uint64) : (Option<seq<V>>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(eltType);
     decreases eltType, 1, len;
@@ -295,7 +295,7 @@ method{:timeLimitMultiplier 2} ParseArrayContents(data:seq<byte>, index:uint64, 
     lemma_ArrayContents_helper(data[index..], eltType, len, v, trace);
 }
 
-function method parse_Array(data:seq<byte>, eltType:G) : (Option<V>, seq<byte>)
+function parse_Array(data:seq<byte>, eltType:G) : (Option<V>, seq<byte>)
     requires ValidGrammar(eltType);
     requires |data| < 0x1_0000_0000_0000_0000;
     decreases eltType;
@@ -344,7 +344,7 @@ method ParseArray(data:seq<byte>, index:uint64, eltType:G) returns (success:bool
 }
 
 
-function method {:opaque} parse_Tuple_contents(data:seq<byte>, eltTypes:seq<G>) : (Option<seq<V>>, seq<byte>)
+function {:opaque} parse_Tuple_contents(data:seq<byte>, eltTypes:seq<G>) : (Option<seq<V>>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires |eltTypes| < 0x1_0000_0000_0000_0000;
     requires forall elt :: elt in eltTypes ==> ValidGrammar(elt);
@@ -507,7 +507,7 @@ method{:timeLimitMultiplier 2} ParseTupleContents(data:seq<byte>, index:uint64, 
     lemma_TupleContents_helper(data[index..], eltTypes, v, trace);
 }
 
-function method parse_Tuple(data:seq<byte>, eltTypes:seq<G>) : (Option<V>, seq<byte>)
+function parse_Tuple(data:seq<byte>, eltTypes:seq<G>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires |eltTypes| < 0x1_0000_0000_0000_0000;
     requires forall elt :: elt in eltTypes ==> ValidGrammar(elt);
@@ -581,14 +581,14 @@ method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, 
     }
 }
 
-function method SeqByteToSeqUint64(bytes: seq<byte>, l: int) : (us : seq<uint64>)
+function SeqByteToSeqUint64(bytes: seq<byte>, l: int) : (us : seq<uint64>)
   requires |bytes| == Uint64Size() as int * l
   ensures |us| == l
 {
   if l == 0 then [] else SeqByteToSeqUint64(bytes[0 .. (l-1) * Uint64Size() as int], l-1) + [SeqByteToUint64(bytes[(l-1) * Uint64Size() as int .. ])]
 }
 
-function method parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
+function parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
 {
     var (len, rest) := parse_Uint64(data);
@@ -660,7 +660,7 @@ method ParseUint64Array(data:seq<byte>, index: uint64) returns (success:bool, v:
     }
 }
 
-function method parse_Case(data:seq<byte>, cases:seq<G>) : (Option<V>, seq<byte>)
+function parse_Case(data:seq<byte>, cases:seq<G>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires |cases| < 0x1_0000_0000_0000_0000;
     requires forall elt :: elt in cases ==> ValidGrammar(elt);
@@ -710,7 +710,7 @@ method ParseCase(data:seq<byte>, index:uint64, cases:seq<G>) returns (success:bo
     }
 }
 
-function method {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
+function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(grammar);
     decreases grammar, 0;
