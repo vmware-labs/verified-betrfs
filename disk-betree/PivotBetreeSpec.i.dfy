@@ -354,6 +354,10 @@ module PivotBetreeSpec {
           == node1.pivotTable[|node1.pivotTable| - |node2.pivotTable|];
       Keyspace.IsStrictlySortedImpliesLte(node1.pivotTable, 0, |node1.pivotTable| - |node2.pivotTable|);
     }
+    assert |node2.pivotTable| > 0 ==> Keyspace.lt(lpivot, node2.pivotTable[0]);
+    assert |node2.pivotTable| > 0 ==> Keyspace.lt(Last(node2.pivotTable), rpivot);
+    assert forall key | key in node2.buckets[0] :: Keyspace.lte(lpivot, key);
+    assert forall key | key in Last(node2.buckets) :: Keyspace.lt(key, rpivot);
   }
 
   function {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
