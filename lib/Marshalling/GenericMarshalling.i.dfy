@@ -1384,6 +1384,8 @@ method MarshallUint64(n:uint64, data:array<byte>, index:uint64)
     {
       assert data[i] == data[..index][i] == old(data[..index])[i] == old(data[i]);
     }
+
+    assert |data[index .. index+(Uint64Size() as uint64)]| == 8;
 }
 
 lemma lemma_marshall_array_contents(contents:seq<V>, eltType:G, marshalled_bytes:seq<byte>, trace:seq<seq<byte>>)
