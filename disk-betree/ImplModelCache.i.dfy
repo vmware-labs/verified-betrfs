@@ -218,4 +218,15 @@ module ImplModelCache {
       lemmaChildInGraph(k, s, ref, r);
     }
   }
+
+  lemma getFreeRefDoesntEqual(s: Variables, ref: BT.G.Reference)
+  requires s.Ready?
+  requires ref in s.cache
+  ensures getFreeRef(s) != Some(ref)
+
+  lemma getFreeRef2DoesntEqual(s: Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
+  requires s.Ready?
+  requires ref in s.cache
+  ensures getFreeRef2(s, avoid) != Some(ref)
+
 }

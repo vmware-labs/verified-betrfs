@@ -52,6 +52,7 @@ module ImplCache {
   requires s.ready
   requires s.W()
   ensures ref == ImplModelCache.getFreeRef2(s.I(), avoid)
+  ensures ref.Some? ==> ref.value != avoid;
   {
     ImplModelCache.reveal_getFreeRef2();
     var i := 1;

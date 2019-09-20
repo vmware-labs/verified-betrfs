@@ -97,7 +97,6 @@ module ImplSplit {
   ensures s.ready
   {
     var num_children_left := |child.buckets| as uint64 / 2;
-    assume 0 <= num_children_left < 0x100;
     var pivot := child.pivotTable[num_children_left - 1];
 
     var left_child := child.SplitChildLeft(num_children_left as uint64);
@@ -156,21 +155,21 @@ module ImplSplit {
       return;
     }
 
+    ImplModelCache.getFreeRefDoesntEqual(s.I(), parentref);
+
     var left_childref := getFreeRef(s);
     if left_childref.None? {
       print "giving up; doSplit can't allocate left_childref\n";
       return;
     }
 
+    ImplModelCache.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref);
+
     var right_childref := getFreeRef2(s, left_childref.value);
     if right_childref.None? {
       print "giving up; doSplit can't allocate right_childref\n";
       return;
     }
-
-    assume left_childref.value != right_childref.value;
-    assume parentref != left_childref.value;
-    assume parentref != right_childref.value;
 
     splitDoChanges(k, s, child, left_childref.value, right_childref.value,
         parentref, fused_parent.children.value, slot as uint64);
