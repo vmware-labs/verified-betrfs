@@ -104,9 +104,9 @@ module BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree {
         assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move2to3Step);
         assert TSV.Next(Ik(k), I(k, s), I(k, s'), uiop);
       } else if (step.PushSyncReqStep?) {
-        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.PushSyncStep(step.id));
+        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.PushSyncStep(step.id as int));
       } else if (step.PopSyncReqStep?) {
-        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.PopSyncStep(step.id));
+        assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.PopSyncStep(step.id as int));
       } else {
         // everything else is a no-op
         assert BT.NextStep(Ik(k).k, I(k, s).s3, I(k, s').s3, uiop, BT.StutterStep);
