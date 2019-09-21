@@ -82,7 +82,7 @@ module ImplQuery {
         } else {
           var node := nodeOpt.value;
 
-          assume MutBucket.ReprSeq(node.buckets) <= node.Repr;
+          node.LemmaReprSeqBucketsLeRepr();
           s.cache.LemmaNodeReprLeRepr(ref);
           MutBucket.reveal_ReprSeq();
 

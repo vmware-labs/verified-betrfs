@@ -126,7 +126,7 @@ module ImplFlushPolicy {
           if childOpt.Some? {
             s.cache.LemmaNodeReprLeRepr(childref);
             var child := childOpt.value;
-            assume MutBucket.ReprSeq(child.buckets) <= child.Repr;
+            child.LemmaReprSeqBucketsLeRepr();
             //assert forall i | 0 <= i < |child.buckets| ensures child.buckets[i].Repr !! s.lru.Repr;
             assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
             s.lru.Use(childref);

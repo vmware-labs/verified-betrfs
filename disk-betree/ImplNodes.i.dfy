@@ -396,6 +396,12 @@ module ImplNode {
       assert Inv();
       assert I().buckets == ImplModelInsert.NodeInsertKeyValue(old(I()), key, value).buckets;
     }
+
+    lemma LemmaReprSeqBucketsLeRepr()
+    requires Inv()
+    ensures MutBucket.ReprSeq(buckets) <= Repr
+    {
+    }
   }
 }
 
