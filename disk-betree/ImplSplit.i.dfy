@@ -16,6 +16,7 @@ module ImplSplit {
 
   import opened BucketsLib
   import opened BucketWeights
+  import opened Bounds
   import PivotsLib
 
   import opened NativeTypes
@@ -23,6 +24,7 @@ module ImplSplit {
   method splitBookkeeping(k: ImplConstants, s: ImplVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: uint64)
   requires Inv(k, s)
   requires 0 <= slot as int < |fused_parent_children|
+  requires slot as int < MaxNumChildren()
   requires left_child.Inv()
   requires right_child.Inv()
   requires left_child.Repr !! s.Repr()
