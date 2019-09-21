@@ -27,7 +27,6 @@ module ImplLeaf {
   requires s.cache.ptr(ref) == Some(node)
   requires node.Inv()
   requires node.children.None?
-  requires ref != BT.G.Root()
   requires |node.buckets| == 1
   modifies s.Repr()
   ensures s.ready
