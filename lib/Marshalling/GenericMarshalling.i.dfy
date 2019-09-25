@@ -6,6 +6,8 @@ include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 include "Native.s.dfy"
 include "../Math/bases.i.dfy"
+include "../total_order.s.dfy"
+include "../../disk-betree/Message.i.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -19,25 +21,38 @@ import opened Libraries__base_s
 //import opened Math__power2_i
 import opened Native
 import opened Math
+import Lexicographic_Byte_Order
+import ValueMessage`Internal
+import ValueWithDefault`Internal
 
 export S
   provides NativeTypes, MissingLibrary, parse_Val, ParseVal, Marshall, Demarshallable,
-      ComputeSizeOf, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix
-  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum
+      ComputeSizeOf, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
+      Lexicographic_Byte_Order, ValueMessage, ValueWithDefault
+  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, SeqSumMessageLens
 
 export extends S
+
+type Key = Lexicographic_Byte_Order.Element
+type Message = ValueMessage.Message
 
 datatype G = GUint64
            | GArray(elt:G)
            | GTuple(t:seq<G>)
            | GByteArray
+           | GMessage
            | GUint64Array
+           | GKeyArray
+           | GMessageArray
            | GTaggedUnion(cases:seq<G>)
 
 datatype V = VUint64(u:uint64)
            | VArray(a:seq<V>)
            | VTuple(t:seq<V>)
            | VByteArray(b:seq<byte>)
+           | VMessage(m:Message)
+           | VKeyArray(baa:seq<Key>)
+           | VMessageArray(ma:seq<Message>)
            | VUint64Array(ua:seq<uint64>)
            | VCase(c:uint64, val:V)
 
@@ -49,6 +64,9 @@ predicate ValInGrammar(val:V, grammar:G)
         case VTuple(t)  => grammar.GTuple? && |t| == |grammar.t|
                               && forall i :: 0 <= i < |t| ==> ValInGrammar(t[i], grammar.t[i])
         case VByteArray(b) => grammar.GByteArray?
+        case VMessage(b) => grammar.GMessage?
+        case VKeyArray(b) => grammar.GKeyArray?
+        case VMessageArray(b) => grammar.GMessageArray?
         case VUint64Array(ua) => grammar.GUint64Array?
         case VCase(c, v) => grammar.GTaggedUnion? && (c as int) < |grammar.cases| && ValInGrammar(v, grammar.cases[c])
 }
@@ -61,8 +79,16 @@ predicate ValidGrammar(grammar:G)
         case GArray(elt) => ValidGrammar(elt)
         case GTuple(t) => |t| < 0x1_0000_0000_0000_0000 && (forall g :: g in t ==> ValidGrammar(g))
         case GByteArray => true
+        case GMessage => true
+        case GKeyArray => true
+        case GMessageArray => true
         case GUint64Array => true
         case GTaggedUnion(cases) => |cases| < 0x1_0000_0000_0000_0000 && (forall g :: g in cases ==> ValidGrammar(g))
+}
+
+predicate ValidMessage(m: Message)
+{
+  m != ValueMessage.IdentityMessage()
 }
 
 // We can't encode values that are not valid
@@ -73,6 +99,9 @@ predicate ValidVal(val:V)
         case VArray(a)     => |a| < 0x1_0000_0000_0000_0000 && forall v :: v in a ==> ValidVal(v)
         case VTuple(t)     => |t| < 0x1_0000_0000_0000_0000 && forall v :: v in t ==> ValidVal(v)
         case VByteArray(b) => |b| < 0x1_0000_0000_0000_0000
+        case VKeyArray(baa) => |baa| < 0x1_0000_0000_0000_0000
+        case VMessage(m) => ValidMessage(m)
+        case VMessageArray(ma) => |ma| < 0x1_0000_0000_0000_0000 && forall v :: v in ma ==> ValidMessage(v)
         case VUint64Array(ua) => |ua| < 0x1_0000_0000_0000_0000
         case VCase(c, v) => ValidVal(v)
 
@@ -85,6 +114,26 @@ function method {:opaque} SeqSum(t:seq<V>) : int
     else SizeOfV(t[0]) + SeqSum(t[1..])
 }
 
+function method {:opaque} SeqSumLens(t:seq<Key>) : int
+    ensures SeqSumLens(t) >= 0;
+{
+    if |t| == 0 then 0
+    else Uint64Size() as int + |t[0]| + SeqSumLens(t[1..])
+}
+
+function method {:opaque} MessageSize(m:Message) : int
+ensures MessageSize(m) >= 0
+{
+  if m.Define? then Uint64Size() as int + |m.value| else 0
+}
+
+function method {:opaque} SeqSumMessageLens(t:seq<Message>) : int
+    ensures SeqSumMessageLens(t) >= 0;
+{
+    if |t| == 0 then 0
+    else MessageSize(t[0]) + SeqSumMessageLens(t[1..])
+}
+
 function method SizeOfV(val:V) : int
     ensures SizeOfV(val) >= 0;
 {
@@ -93,6 +142,9 @@ function method SizeOfV(val:V) : int
         case VArray(a)      => 8 + SeqSum(a)     // 8 bytes for length
         case VTuple(t)      => SeqSum(t)
         case VByteArray(b)  => 8 + |b|          // 8 bytes for a length field
+        case VKeyArray(b)  => 8 + SeqSumLens(b)
+        case VMessage(m)  => MessageSize(m)
+        case VMessageArray(b)  => 8 + SeqSumMessageLens(b)
         case VUint64Array(b)  => 8 + 8*|b|          // 8 bytes for a length field
         case VCase(c, v)  => 8 + SizeOfV(v)     // 8 bytes for the case identifier
 }
@@ -343,6 +395,211 @@ method ParseArray(data:seq<byte>, index:uint64, eltType:G) returns (success:bool
     }
 }
 
+function {:opaque} parse_KeyArray_contents(data:seq<byte>, len:uint64) : (Option<seq<Key>>, seq<byte>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    decreases len
+    ensures var (opt_seq, rest) := parse_KeyArray_contents(data, len);
+            |rest| <= |data| && (opt_seq.Some? ==>
+            && |opt_seq.value| == len as int
+            && (forall i :: 0 <= i < |opt_seq.value| ==> ValidVal(VByteArray(opt_seq.value[i])))
+            )
+{
+   if len == 0 then
+       (Some([]), data)
+   else
+       var (val, rest1) := parse_ByteArray(data);
+       var (others, rest2) := parse_KeyArray_contents(rest1, len - 1);
+       if !val.None? && !others.None? && |val.value.b| as uint64 <= Lexicographic_Byte_Order.MaxLen() then
+           var key : Key := val.value.b;
+           (Some([key] + others.value), rest2)
+       else
+           (None, [])
+}
+
+datatype KeyArray_ContentsTraceStep = KeyArray_ContentsTraceStep(data:seq<byte>, val:Option<seq<byte>>)
+
+lemma lemma_KeyArrayContents_helper(data:seq<byte>, len:uint64, v:seq<Key>, trace:seq<KeyArray_ContentsTraceStep>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires |trace| == (len as int) + 1;
+    requires |v| == (len as int);
+    requires forall j :: 0 <= j < |trace| ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
+    requires trace[0].data == data;
+    requires forall j :: 0 < j < |trace| ==> trace[j].val.Some?;
+    requires forall j :: 0 < j < (len as int)+1 ==> 
+                    Some(VByteArray(trace[j].val.value)) == parse_ByteArray(trace[j-1].data).0
+                 && trace[j].data == parse_ByteArray(trace[j-1].data).1;
+    requires forall j :: 0 < j < |trace| ==> v[j-1] == trace[j].val.value;
+    //requires v == ExtractValues(trace[1..]);
+    decreases len;
+    ensures  var (v', rest') := parse_KeyArray_contents(data, len);
+             var v_opt := Some(v);
+             v_opt == v' && trace[|trace|-1].data == rest';
+{
+    reveal_parse_KeyArray_contents();
+    if len == 0 {
+    } else {
+        var tuple := parse_ByteArray(data);
+        var val, rest1 := tuple.0, tuple.1;
+        assert trace[1].data == rest1;
+        assert val.Some?;
+        assert trace[1].val == Some(val.value.b);
+        lemma_KeyArrayContents_helper(rest1, len-1, v[1..], trace[1..]);
+        var tuple'' := parse_KeyArray_contents(rest1, len-1);
+        var v'', rest'' := tuple''.0, tuple''.1;
+        var v_opt'' := Some(v[1..]);
+        assert v_opt'' == v'' && trace[1..][|trace[1..]|-1].data == rest'';
+
+        var tuple' := parse_KeyArray_contents(data, len);
+        var v', rest' := tuple'.0, tuple'.1;
+        calc { 
+            v'; 
+            Some([val.value.b] + v''.value);
+            Some([val.value.b] + v[1..]);
+            Some([v[0]] + v[1..]);
+                { assert v == [v[0]] + v[1..]; }
+            Some(v);
+        }
+        assert rest' == rest'';
+    }
+}
+
+lemma lemma_KeyArrayContents_helper_bailout(data:seq<byte>, len:uint64, trace:seq<KeyArray_ContentsTraceStep>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires 1 < |trace| <= (len as int) + 1;
+    //requires |v| == (len as int);
+    requires forall j :: 0 <= j < |trace| ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
+    requires trace[0].data == data;
+    requires forall j :: 0 < j < |trace| ==> 
+                    (trace[j].val.None? ==> parse_ByteArray(trace[j-1].data).0.None?)
+                 && (trace[j].val.Some? ==> parse_ByteArray(trace[j-1].data).0.Some? && trace[j].val.value  == parse_ByteArray(trace[j-1].data).0.value.b)
+                 && trace[j].data == parse_ByteArray(trace[j-1].data).1;
+    requires forall j :: 0 < j < |trace| - 1 ==> trace[j].val.Some?;
+    //requires forall j :: 0 < j < |trace| - 1 ==> v[j-1] == trace[j].val.value;
+    requires trace[|trace|-1].val.None? || |trace[|trace|-1].val.value| > Lexicographic_Byte_Order.MaxLen() as int
+    //requires v == ExtractValues(trace[1..]);
+    decreases len;
+    ensures  var (v', rest') := parse_KeyArray_contents(data, len);
+             v'.None? && rest' == [];
+{
+    reveal_parse_KeyArray_contents();
+    
+    var tuple := parse_ByteArray(data);
+    var val, rest1 := tuple.0, tuple.1;
+    if |trace| == 2 {
+      if (trace[|trace|-1].val.None?) {
+        assert val.None?;
+      }
+        
+      assert val.None? || !(|val.value.b| as uint64 <= Lexicographic_Byte_Order.MaxLen());
+      var tuple' := parse_KeyArray_contents(data, len);
+      var v', rest' := tuple'.0, tuple'.1;
+      assert v'.None?;
+      assert rest' == [];
+    } else {
+      lemma_KeyArrayContents_helper_bailout(rest1, len-1, trace[1..]);
+    }
+}
+
+method{:timeLimitMultiplier 2} ParseKeyArrayContents(data:seq<byte>, index:uint64, len:uint64) 
+       returns (success:bool, v:seq<Key>, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
+    ensures  var (v', rest') := parse_KeyArray_contents(data[index..], len);
+             var v_opt := if success then Some(v) else None();
+             v_opt == v' && data[rest_index..] == rest';
+    ensures  success ==> ValidVal(VKeyArray(v));
+{
+    reveal_parse_KeyArray_contents();
+    var vArr := new Key[len];
+    ghost var g_v := [];
+    success := true;
+    var i:uint64 := 0;
+    var next_val_index:uint64 := index;
+    ghost var trace := [KeyArray_ContentsTraceStep(data[index..], None())];
+
+    while i < len
+        invariant 0 <= i <= len;
+        invariant index <= next_val_index <= (|data| as uint64);
+        invariant |trace| == (i as int) + 1;
+        invariant |g_v| == (i as int);
+        invariant vArr[..i] == g_v;
+        invariant trace[0].data == data[index..];
+        invariant forall j :: 0 <= j < (i as int)+1 ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
+        invariant trace[i].data == data[next_val_index..];
+        invariant forall j :: 0 < j <= i ==> trace[j].val.Some?;
+        invariant forall j :: 0 < j <= i ==> g_v[j-1] == trace[j].val.value;
+        invariant forall j :: 0 < j < (i as int)+1 ==> 
+            Some(VByteArray(trace[j].val.value)) == parse_ByteArray(trace[j-1].data).0
+         && trace[j].data == parse_ByteArray(trace[j-1].data).1
+        invariant ValidVal(VKeyArray(vArr[..i]));
+    {
+        var some1, val, rest1 := ParseByteArray(data, next_val_index);
+        ghost var step := KeyArray_ContentsTraceStep(data[rest1..], if some1 then Some(val) else None());
+        ghost var old_trace := trace;
+        trace := trace + [step];
+        if !some1 || |val| as uint64 > Lexicographic_Byte_Order.MaxLen() {
+            success := false;
+            rest_index := (|data| as uint64);
+            lemma_KeyArrayContents_helper_bailout(data[index..], len, trace);
+            return;
+        }
+        g_v := g_v + [val];
+        vArr[i] := val;
+        next_val_index := rest1;
+
+        i := i + 1;
+    }
+
+    success := true;
+    rest_index := next_val_index;
+    v := vArr[..];               
+    lemma_KeyArrayContents_helper(data[index..], len, v, trace);
+}
+
+function parse_KeyArray(data:seq<byte>) : (Option<V>, seq<byte>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures var (opt_val, rest) := parse_KeyArray(data);
+            |rest| <= |data| && (opt_val.Some? ==>
+              && ValidVal(opt_val.value)
+              && ValInGrammar(opt_val.value, GKeyArray));
+{
+    var (len, rest) := parse_Uint64(data);
+    if !len.None? then
+        var (contents, remainder) := parse_KeyArray_contents(rest, len.value.u);
+        if !contents.None? then
+            (Some(VKeyArray(contents.value)), remainder)
+        else
+            (None, [])
+    else
+        (None, [])
+}
+
+method ParseKeyArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
+    ensures  var (v', rest') := parse_KeyArray(data[index..]);
+             var v_opt := if success then Some(v) else None();
+             v_opt == v' && data[rest_index..] == rest';
+    ensures  success ==> ValidVal(v);
+{
+    var some1, len, rest := ParseUint64(data, index);
+    if some1 {
+        var some2, contents, remainder := ParseKeyArrayContents(data, rest, len.u);
+        if some2 {
+            success := true;
+            v := VKeyArray(contents);
+            rest_index := remainder;
+        } else {
+            success := false;
+            rest_index := (|data| as uint64);
+        }
+    } else {
+        success := false;
+        rest_index := (|data| as uint64);
+    }
+}
 
 function {:opaque} parse_Tuple_contents(data:seq<byte>, eltTypes:seq<G>) : (Option<seq<V>>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
@@ -546,8 +803,9 @@ method ParseTuple(data:seq<byte>, index:uint64, eltTypes:seq<G>) returns (succes
     }
 }
 
-function method parse_ByteArray(data:seq<byte>) : (Option<V>, seq<byte>)
+function method parse_ByteArray(data:seq<byte>) : (res: (Option<V>, seq<byte>))
     requires |data| < 0x1_0000_0000_0000_0000;
+    ensures |res.1| < 0x1_0000_0000_0000_0000;
 {
     var (len, rest) := parse_Uint64(data);
     if !len.None? && len.value.u <= (|rest| as uint64) then
@@ -556,12 +814,12 @@ function method parse_ByteArray(data:seq<byte>) : (Option<V>, seq<byte>)
         (None, [])
 }
 
-method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
+method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:seq<byte>, rest_index:uint64)
     requires (index as int) <= |data|;
     requires |data| < 0x1_0000_0000_0000_0000;
     ensures  (rest_index as int) <= |data|;
     ensures  var (v', rest') := parse_ByteArray(data[index..]);
-             var v_opt := if success then Some(v) else None();
+             var v_opt := if success then Some(VByteArray(v)) else None();
              v_opt == v' && data[rest_index..] == rest';
 {
     var some, len, rest := ParseUint64(data, index);
@@ -573,7 +831,7 @@ method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, 
             data[rest..rest + len.u];
         }
         success := true;
-        v := VByteArray(data[rest..rest + len.u]);
+        v := data[rest..rest + len.u];
         rest_index := rest + len.u;
     } else {
         success := false;
@@ -722,7 +980,13 @@ function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
         case GArray(elt)         => parse_Array(data, elt)
         case GTuple(t)           => parse_Tuple(data, t)
         case GByteArray          => parse_ByteArray(data)
-        case GUint64Array          => parse_Uint64Array(data)
+        case GMessage            => (
+          var (v, rest) := parse_Message(data);
+          (if v.Some? then Some(VMessage(v.value)) else None, rest)
+        )
+        case GUint64Array        => parse_Uint64Array(data)
+        case GKeyArray           => parse_KeyArray(data)
+        case GMessageArray       => parse_MessageArray(data)
         case GTaggedUnion(cases) => parse_Case(data, cases)
 }
 
@@ -743,8 +1007,19 @@ method ParseVal(data:seq<byte>, index:uint64, grammar:G) returns (success:bool, 
         case GUint64             => success, v, rest_index := ParseUint64(data, index);
         case GArray(elt)         => success, v, rest_index := ParseArray(data, index, elt);
         case GTuple(t)           => success, v, rest_index := ParseTuple(data, index, t);
-        case GByteArray          => success, v, rest_index := ParseByteArray(data, index);
+        case GByteArray          => {
+          var v';
+          success, v', rest_index := ParseByteArray(data, index);
+          v := VByteArray(v'); 
+        }
+        case GMessage            => {
+          var v';
+          success, v', rest_index := ParseMessage(data, index);
+          v := VMessage(v'); 
+        }
         case GUint64Array          => success, v, rest_index := ParseUint64Array(data, index);
+        case GKeyArray           => success, v, rest_index := ParseKeyArray(data, index);
+        case GMessageArray       => success, v, rest_index := ParseMessageArray(data, index);
         case GTaggedUnion(cases) => success, v, rest_index := ParseCase(data, index, cases);
     }
 }
@@ -825,6 +1100,18 @@ lemma lemma_parse_Val_view_ByteArray(data:seq<byte>, v:V, grammar:G, index:int)
              parse_ByteArray(data[index..bound]).0 == Some(v) ==> parse_ByteArray(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
 }
 
+lemma lemma_parse_Val_view_Message(data:seq<byte>, v:V, grammar:G, index:int)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires ValInGrammar(v, grammar);
+    requires ValidGrammar(grammar);
+    requires grammar.GMessage?;
+    requires 0 <= index <= |data|;
+    requires 0 <= index + SizeOfV(v) <= |data|;
+    ensures  forall bound :: Trigger(bound) ==> (index+SizeOfV(v) <= bound <= |data| ==>
+             ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m))));
+    ensures  forall bound :: index+SizeOfV(v) <= bound <= |data| ==>
+             parse_Message(data[index..bound]).0 == Some(v.m) ==> parse_Message(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+
 lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires ValInGrammar(v, grammar);
@@ -862,6 +1149,43 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
   }
 }
 
+lemma lemma_SeqSumLens_prefix(s:seq<Key>, v:Key)
+    ensures SeqSumLens(s + [v]) == SeqSumLens(s) + 8 + |v|
+{
+    reveal_SeqSumLens();
+    if |s| == 0 {
+    } else {
+        calc {
+            SeqSumLens(s + [v]);
+                { assert (s + [v])[0] == s[0];  
+                  assert (s + [v])[1..] == s[1..]+[v]; }
+            8 + |s[0]| + SeqSumLens(s[1..] + [v]);
+                { lemma_SeqSumLens_prefix(s[1..], v); }
+            8 + |s[0]| + SeqSumLens(s[1..]) + 8 + |v|;
+            SeqSumLens(s) + 8 + |v|;
+        }
+    }
+}
+
+lemma lemma_SeqSumMessageLens_prefix(s:seq<Message>, v:Message)
+    ensures SeqSumMessageLens(s + [v]) == SeqSumMessageLens(s) + MessageSize(v)
+{
+    reveal_SeqSumMessageLens();
+    if |s| == 0 {
+    } else {
+        calc {
+            SeqSumMessageLens(s + [v]);
+                { assert (s + [v])[0] == s[0];  
+                  assert (s + [v])[1..] == s[1..]+[v]; }
+            MessageSize(s[0]) + SeqSumMessageLens(s[1..] + [v]);
+                { lemma_SeqSumMessageLens_prefix(s[1..], v); }
+            MessageSize(s[0]) + SeqSumMessageLens(s[1..]) + MessageSize(v);
+            SeqSumMessageLens(s) + MessageSize(v);
+        }
+    }
+}
+
+
 lemma lemma_SeqSum_prefix(s:seq<V>, v:V)
     ensures SeqSum(s + [v]) == SeqSum(s) + SizeOfV(v);
 {
@@ -880,6 +1204,33 @@ lemma lemma_SeqSum_prefix(s:seq<V>, v:V)
     }
 }
 
+lemma lemma_SeqSumLens_bound(s:seq<Key>, bound:int)
+    requires SeqSumLens(s) < bound;
+    ensures  forall v :: v in s ==> 8 + |v| < bound;
+{
+    reveal_SeqSumLens();
+    if |s| == 0 {
+    } else {
+        assert 8 + |s[0]| + SeqSumLens(s[1..]) < bound;
+        assert 8 + |s[0]| < bound;
+        lemma_SeqSumLens_bound(s[1..], bound);
+    }
+}
+
+lemma lemma_SeqSumMessageLens_bound(s:seq<Message>, bound:int)
+    requires SeqSumMessageLens(s) < bound;
+    ensures  forall v :: v in s ==> MessageSize(v) < bound;
+{
+    reveal_MessageSize();
+    reveal_SeqSumMessageLens();
+    if |s| == 0 {
+    } else {
+        assert MessageSize(s[0]) + SeqSumMessageLens(s[1..]) < bound;
+        assert MessageSize(s[0]) < bound;
+        lemma_SeqSumMessageLens_bound(s[1..], bound);
+    }
+}
+
 lemma lemma_SeqSum_bound(s:seq<V>, bound:int)
     requires SeqSum(s) < bound;
     ensures  forall v :: v in s ==> SizeOfV(v) < bound;
@@ -892,6 +1243,32 @@ lemma lemma_SeqSum_bound(s:seq<V>, bound:int)
         lemma_SeqSum_bound(s[1..], bound);
     }
 }
+
+lemma lemma_SeqSumLens_bound_prefix(s:seq<Key>, prefix:seq<Key>, index:int)
+    requires 0 <= index <= |s|;
+    requires prefix == s[..index];
+    ensures  SeqSumLens(prefix) <= SeqSumLens(s);
+{
+    reveal_SeqSumLens();
+    if |prefix| == 0 {
+    } else {
+        lemma_SeqSumLens_bound_prefix(s[1..], prefix[1..], index - 1);
+    }
+}
+
+lemma lemma_SeqSumMessageLens_bound_prefix(s:seq<Message>, prefix:seq<Message>, index:int)
+    requires 0 <= index <= |s|;
+    requires prefix == s[..index];
+    ensures  SeqSumMessageLens(prefix) <= SeqSumMessageLens(s);
+{
+    reveal_SeqSumMessageLens();
+    if |prefix| == 0 {
+    } else {
+        lemma_SeqSumMessageLens_bound_prefix(s[1..], prefix[1..], index - 1);
+    }
+}
+
+
 
 lemma lemma_SeqSum_bound_prefix(s:seq<V>, prefix:seq<V>, index:int)
     requires 0 <= index <= |s|;
@@ -1053,6 +1430,169 @@ lemma lemma_parse_Val_view_Array(data:seq<byte>, v:V, grammar:G, index:int, boun
         assert parse_Array_contents(narrow_len_tuple.1, grammar.elt, narrow_len_tuple.0.value.u).0 == Some(v.a);   // OBSERVE
         lemma_parse_Array_contents_len(narrow_len_tuple.1, grammar.elt, narrow_len_tuple.0.value.u);
         lemma_parse_Val_view_Array_contents(data, v.a, grammar.elt, index+8, bound, narrow_len_tuple.0.value.u);
+    }
+}
+
+lemma lemma_parse_KeyArray_contents_len(data:seq<byte>, len:uint64)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires len >= 0;
+    requires !parse_KeyArray_contents(data, len).0.None?;
+    decreases len;
+    ensures  (len as int) == |parse_KeyArray_contents(data, len).0.value|;
+{
+    reveal_parse_KeyArray_contents();
+    if len == 0 {
+    } else {
+       var tuple1 := parse_ByteArray(data);
+       var val   := tuple1.0;
+       var rest1 := tuple1.1;
+       var tuple2 := parse_KeyArray_contents(rest1, len - 1);
+       var others := tuple2.0;
+       var rest2  := tuple2.1;
+       assert !val.None? && !others.None?;
+       lemma_parse_KeyArray_contents_len(rest1, len - 1);
+    }
+}
+
+lemma lemma_parse_KeyArray_contents_first(data:seq<byte>, len: uint64, vs: seq<Key>)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires parse_KeyArray_contents(data, len).0 == Some(vs)
+requires len > 0
+ensures parse_ByteArray(data).0.Some?
+ensures parse_ByteArray(data).0.value == VByteArray(vs[0])
+{
+  reveal_parse_KeyArray_contents();
+}
+
+lemma {:fuel parse_ByteArray,0} lemma_parse_Val_view_KeyArray_contents(data:seq<byte>, vs:seq<Key>, index:int, bound:int, len:uint64)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires (len as int) == |vs|;
+    requires 0 <= index <= |data|;
+    requires 0 <= index + SeqSumLens(vs) <= |data|;
+    requires index+SeqSumLens(vs) <= bound <= |data|;
+    decreases len;
+    //decreases |vs|;
+    ensures  (parse_KeyArray_contents(data[index..bound], len).0 == Some(vs)) <==> (parse_KeyArray_contents(data[index..index+SeqSumLens(vs)], len).0 == Some(vs));
+    ensures  parse_KeyArray_contents(data[index..bound], len).0 == Some(vs) ==> parse_KeyArray_contents(data[index..bound], len).1 == data[index+SeqSumLens(vs)..bound];
+{
+    reveal_parse_KeyArray_contents();
+    if len == 0 {
+        reveal_SeqSumLens();
+    } else {
+        var narrow_tuple := parse_KeyArray_contents(data[index..index+SeqSumLens(vs)], len);
+        var bound_tuple := parse_KeyArray_contents(data[index..bound], len);
+        var narrow_val_tuple := parse_ByteArray(data[index..index+SeqSumLens(vs)]);
+        var bound_val_tuple := parse_ByteArray(data[index..bound]);
+        var narrow_contents_tuple := parse_KeyArray_contents(narrow_val_tuple.1, len - 1);
+        var bound_contents_tuple := parse_KeyArray_contents(bound_val_tuple.1, len - 1);
+
+
+        if narrow_tuple.0 == Some(vs) {
+            assert !narrow_val_tuple.0.None? && !narrow_contents_tuple.0.None?;
+            calc {
+                index + SeqSumLens(vs) <= |data|;
+                SeqSumLens(vs) <= |data| - index;
+                SeqSumLens(vs) < |data| - index + 1;
+            }
+            lemma_SeqSumLens_bound(vs, |data| - index + 1);
+            lemma_parse_Val_view_ByteArray(data, VByteArray(vs[0]), GByteArray, index);
+
+            lemma_SeqSumLens_bound(vs, SeqSumLens(vs) + 1);
+            assert index+SizeOfV(VByteArray(vs[0])) <= bound <= |data|;
+            assert (parse_ByteArray(data[index..index+SeqSumLens(vs)]).0 == Some(VByteArray(vs[0]))) <==> (parse_ByteArray(data[index..index+SizeOfV(VByteArray(vs[0]))]).0 == Some(VByteArray(vs[0])));
+            lemma_SeqSumLens_bound(vs, bound - index + 1);
+            assert index+SizeOfV(VByteArray(vs[0])) <= bound <= |data|;     // OBSERVE (trigger on forall?)
+            assert (parse_ByteArray(data[index..bound]).0 == Some(VByteArray(vs[0]))) <==> (parse_ByteArray(data[index..index+SizeOfV(VByteArray(vs[0]))]).0 == Some(VByteArray(vs[0])));
+            lemma_parse_KeyArray_contents_first(data[index..index+SeqSumLens(vs)], len, vs);
+            assert narrow_val_tuple.0.value == VByteArray(vs[0])
+                == bound_val_tuple.0.value;
+
+            var new_index := index + SizeOfV(narrow_val_tuple.0.value);
+            calc {
+                SizeOfV(narrow_val_tuple.0.value) + SeqSumLens(vs[1..]);
+                    { reveal_SeqSumLens(); }
+                SeqSumLens(vs);
+            }
+            assert new_index+SeqSumLens(vs[1..]) <= bound;
+
+            lemma_parse_Val_view_KeyArray_contents(data, vs[1..], new_index, bound, len - 1);
+
+            assert (parse_KeyArray_contents(data[new_index..bound], len - 1).0 == Some(vs[1..])) <==> (parse_KeyArray_contents(data[new_index..new_index+SeqSumLens(vs[1..])], len - 1).0 == Some(vs[1..]));
+            assert data[new_index..new_index+SeqSumLens(vs[1..])] == narrow_val_tuple.1;
+            assert data[new_index..bound] == bound_val_tuple.1;
+
+            assert bound_tuple.0 == Some([vs[0]] + vs[1..]) == Some(vs);
+        } else if bound_tuple.0 == Some(vs) {
+            assert !bound_val_tuple.0.None? && !bound_contents_tuple.0.None?;
+
+            lemma_SeqSumLens_bound(vs, |data| - index + 1);
+            lemma_parse_Val_view_ByteArray(data, VByteArray(vs[0]), GByteArray, index);
+            // This is exactly the ensures of the lemma above
+            assert forall bound' :: index+SizeOfV(VByteArray(vs[0])) <= bound' <= |data| ==>
+                   ((parse_ByteArray(data[index..bound']).0 == Some(VByteArray(vs[0]))) <==> (parse_ByteArray(data[index..index+SizeOfV(VByteArray(vs[0]))]).0 == Some(VByteArray(vs[0]))));
+
+            lemma_SeqSumLens_bound(vs, bound - index + 1);
+            lemma_SeqSumLens_bound(vs, SeqSumLens(vs) + 1);
+            assert index+SizeOfV(VByteArray(vs[0])) <= index+SeqSumLens(vs) <= |data|;
+            assert (parse_ByteArray(data[index..index+SeqSumLens(vs)]).0 == Some(VByteArray(vs[0]))) <==> (parse_ByteArray(data[index..index+SizeOfV(VByteArray(vs[0]))]).0 == Some(VByteArray(vs[0])));
+            assert (parse_ByteArray(data[index..bound]).0 == Some(VByteArray(vs[0]))) <==> (parse_ByteArray(data[index..index+SizeOfV(VByteArray(vs[0]))]).0 == Some(VByteArray(vs[0])));
+            lemma_parse_KeyArray_contents_first(data[index..bound], len, vs);
+            assert narrow_val_tuple.0.value == VByteArray(vs[0])
+                == bound_val_tuple.0.value;
+
+            var new_index := index + SizeOfV(narrow_val_tuple.0.value);
+            calc {
+                SizeOfV(narrow_val_tuple.0.value) + SeqSumLens(vs[1..]);
+                    { reveal_SeqSumLens(); }
+                SeqSumLens(vs);
+            }
+            assert new_index+SeqSumLens(vs[1..]) <= bound;
+
+            lemma_parse_Val_view_KeyArray_contents(data, vs[1..], new_index, bound, len - 1);
+
+            // TODO I'm not sure why but this next part is really really slow.
+
+            assert (parse_KeyArray_contents(data[new_index..bound], len - 1).0 == Some(vs[1..])) <==> (parse_KeyArray_contents(data[new_index..new_index+SeqSumLens(vs[1..])], len - 1).0 == Some(vs[1..]));
+            assert data[new_index..new_index+SeqSumLens(vs[1..])] == narrow_val_tuple.1;
+            assert data[new_index..bound] == bound_val_tuple.1;
+
+            assert narrow_tuple.0 == Some([vs[0]] + vs[1..]) == Some(vs);
+        } else {
+            // Doesn't matter for our ensures clause
+        }
+    }
+}
+
+lemma lemma_parse_Val_view_KeyArray(data:seq<byte>, v:V, grammar: G, index:int, bound:int)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires ValInGrammar(v, grammar);
+    requires ValidGrammar(grammar);
+    requires grammar.GKeyArray?;
+    requires 0 <= index <= |data|;
+    requires 0 <= index + SizeOfV(v) <= |data|;
+    requires index+SizeOfV(v) <= bound <= |data|;
+    ensures  (parse_KeyArray(data[index..bound]).0 == Some(v)) <==> (parse_KeyArray(data[index..index+SizeOfV(v)]).0 == Some(v));
+    ensures  parse_KeyArray(data[index..bound]).0 == Some(v) ==> parse_KeyArray(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+{
+    var narrow_tuple := parse_KeyArray(data[index..index+SizeOfV(v)]);
+    var bound_tuple := parse_KeyArray(data[index..bound]);
+    var narrow_len_tuple := parse_Uint64(data[index..index+SizeOfV(v)]);
+    var bound_len_tuple := parse_Uint64(data[index..bound]);
+    var narrow_contents_tuple := parse_KeyArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u);
+    var bound_contents_tuple := parse_KeyArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u);
+
+    assert narrow_len_tuple.0 == bound_len_tuple.0;
+
+    if bound_tuple.0 == Some(v) {
+        assert parse_KeyArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u).0 == Some(v.baa);   // OBSERVE
+        lemma_parse_KeyArray_contents_len(bound_len_tuple.1, narrow_len_tuple.0.value.u);
+        lemma_parse_Val_view_KeyArray_contents(data, v.baa, index+8, bound, narrow_len_tuple.0.value.u);
+    }
+
+    if narrow_tuple.0 == Some(v) {
+        assert parse_KeyArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u).0 == Some(v.baa);   // OBSERVE
+        lemma_parse_KeyArray_contents_len(narrow_len_tuple.1, narrow_len_tuple.0.value.u);
+        lemma_parse_Val_view_KeyArray_contents(data, v.baa, index+8, bound, narrow_len_tuple.0.value.u);
     }
 }
 
@@ -1242,6 +1782,12 @@ lemma lemma_parse_Val_view(data:seq<byte>, v:V, grammar:G, index:int)
             case GUint64             => assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GArray(elt)         => lemma_parse_Val_view_Array(data, v, grammar, index, bound);
                                         assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            case GKeyArray     => lemma_parse_Val_view_KeyArray(data, v, grammar, index, bound);
+                                        assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            case GMessage         => lemma_parse_Val_view_Message(data, v, grammar, index);
+                                        assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            case GMessageArray     => lemma_parse_Val_view_MessageArray(data, v, grammar, index, bound);
+                                        assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GTuple(t)           => lemma_parse_Val_view_Tuple(data, v, t, index, bound); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GByteArray          => lemma_parse_Val_view_ByteArray(data, v, grammar, index); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GUint64Array          => lemma_parse_Val_view_Uint64Array(data, v, grammar, index); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
@@ -1297,6 +1843,36 @@ method ComputeSeqSum(s:seq<V>) returns (size:uint64)
     }
 }
 
+method ComputeSeqSumLens(s:seq<Key>) returns (size:uint64)
+    requires |s| < 0x1_0000_0000_0000_0000;
+    requires 0 <= SeqSumLens(s) < 0x1_0000_0000_0000_0000;
+    ensures (size as int) == SeqSumLens(s);
+{
+    reveal_SeqSumLens();
+    if (|s| as uint64) == 0 {
+        size := 0;
+    } else {
+        var v_size := Uint64Size() + |s[0]| as uint64;
+        var rest_size := ComputeSeqSumLens(s[(1 as uint64)..]);
+        size := v_size + rest_size;
+    }
+}
+
+method ComputeSeqSumMessageLens(s:seq<Message>) returns (size:uint64)
+    requires |s| < 0x1_0000_0000_0000_0000;
+    requires 0 <= SeqSumMessageLens(s) < 0x1_0000_0000_0000_0000;
+    ensures (size as int) == SeqSumMessageLens(s);
+{
+    reveal_SeqSumMessageLens();
+    if (|s| as uint64) == 0 {
+        size := 0;
+    } else {
+        var v_size := MessageSize(s[0]) as uint64;
+        var rest_size := ComputeSeqSumMessageLens(s[(1 as uint64)..]);
+        size := v_size + rest_size;
+    }
+}
+
 method ComputeSizeOf(val:V) returns (size:uint64)
     requires 0 <= SizeOfV(val) < 0x1_0000_0000_0000_0000;
     requires ValidVal(val);
@@ -1312,7 +1888,16 @@ method ComputeSizeOf(val:V) returns (size:uint64)
                                }
         case VTuple(t)      => size := ComputeSeqSum(t);
         case VByteArray(b)  => size := 8 + (|b| as uint64);
+        case VMessage(m)    => size := MessageSize(m) as uint64;
         case VUint64Array(b)  => size := 8 + 8*(|b| as uint64);
+        case VKeyArray(b)  => {
+          var v := ComputeSeqSumLens(b);
+          size := 8 + v;
+        }
+        case VMessageArray(b)  => {
+          var v := ComputeSeqSumMessageLens(b);
+          size := 8 + v;
+        }
         case VCase(c, v)    => var vs := ComputeSizeOf(v);
                                size := 8 + vs;
 }
@@ -1463,7 +2048,7 @@ lemma lemma_marshall_array_contents(contents:seq<V>, eltType:G, marshalled_bytes
     }
 }
 
-method{:timeLimitMultiplier 4} MarshallArrayContents(contents:seq<V>, eltType:G, data:array<byte>, index:uint64) returns (size:uint64)
+method{:timeLimitMultiplier 4} MarshallArrayContents(contents:seq<V>, ghost eltType:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires forall v :: v in contents ==> ValInGrammar(v, eltType);
     requires forall v :: v in contents ==> ValidVal(v);
     requires ValidGrammar(eltType);
@@ -1546,7 +2131,7 @@ method{:timeLimitMultiplier 4} MarshallArrayContents(contents:seq<V>, eltType:G,
             (index as int) + SeqSum(contents);
             data.Length;
         }
-        assert {:split_here} true;
+        //assert {:split_here} true;
         assert marshalled_bytes == data[index..cur_index];
 
         // Prove the invariant about our index tracking correctly
@@ -1574,7 +2159,7 @@ method{:timeLimitMultiplier 4} MarshallArrayContents(contents:seq<V>, eltType:G,
     size := cur_index - index;
 }
 
-method MarshallArray(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+method MarshallArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VArray?;
     requires ValInGrammar(val, grammar);
     requires ValidGrammar(grammar);
@@ -1605,6 +2190,228 @@ method MarshallArray(val:V, grammar:G, data:array<byte>, index:uint64) returns (
     rest := tuple.1;
     assert !len.None?;
     ghost var contents_tuple := parse_Array_contents(rest, grammar.elt, len.value.u);
+    ghost var contents  := contents_tuple.0;
+    ghost var remainder := contents_tuple.1;
+    assert !contents.None?;
+    size := 8 + contents_size;
+}
+
+lemma lemma_marshall_keyarray_contents(contents:seq<Key>, marshalled_bytes:seq<byte>, trace:seq<seq<byte>>)
+    requires forall v :: v in contents ==> |v| < 0x1_0000_0000_0000_0000
+    requires |marshalled_bytes| < 0x1_0000_0000_0000_0000;
+    requires |contents| < 0x1_0000_0000_0000_0000;
+    requires |contents| == |trace|;
+    requires |marshalled_bytes| == SeqSumLens(contents);
+    requires marshalled_bytes == SeqCatRev(trace);
+    requires forall j :: 0 <= j < |trace| ==> 8 + |contents[j]| == |trace[j]| < 0x1_0000_0000_0000_0000;
+    requires forall j :: 0 <= j < |trace| ==> var (val, rest) := parse_ByteArray(trace[j]); val.Some? && val.value.b == contents[j]; 
+
+    ensures  parse_KeyArray_contents(marshalled_bytes, (|contents| as uint64)).0.Some?;
+    ensures  parse_KeyArray_contents(marshalled_bytes, (|contents| as uint64)).0.value == contents;
+{
+    if |contents| == 0 {
+        reveal_parse_KeyArray_contents();
+    } else {
+        var val_tuple := parse_ByteArray(marshalled_bytes);
+        var val, rest1 := val_tuple.0, val_tuple.1;
+        var rest_tuple := parse_KeyArray_contents(rest1, (|contents| as uint64)-1);
+        var others, rest2 := rest_tuple.0, rest_tuple.1;
+        var target := parse_KeyArray_contents(marshalled_bytes, (|contents| as uint64)).0;
+        calc {
+            target;
+                { reveal_parse_KeyArray_contents(); }
+            if !val.None? && !others.None? && |val.value.b| as uint64 <= Lexicographic_Byte_Order.MaxLen() then Some([val.value.b] + others.value) else None;
+        }
+
+        calc {
+            SeqCatRev(trace);
+                { lemma_SeqCat_equivalent(trace); }
+            SeqCat(trace);
+        }
+
+        assert marshalled_bytes[0..SizeOfV(VByteArray(contents[0]))] == trace[0];
+        assert parse_ByteArray(trace[0]).0.Some?;
+        assert parse_ByteArray(trace[0]).0.value.b == contents[0];
+        //assert parse_Val(trace[0], GByteArray).0 == Some(VByteArray(contents[0]));
+        //assert parse_Val(marshalled_bytes[..SizeOfV(VByteArray(contents[0]))], GByteArray).0 == Some(VByteArray(contents[0]));
+        reveal_parse_Val();
+        lemma_parse_Val_view_specific(marshalled_bytes, VByteArray(contents[0]), GByteArray, 0, |marshalled_bytes|);
+        assert parse_ByteArray(marshalled_bytes[0..|marshalled_bytes|]).0.value.b == Some(contents[0]).value;
+        assert marshalled_bytes[0..|marshalled_bytes|] == marshalled_bytes;     // OBSERVE
+        assert val.Some? && val.value.b == contents[0];
+        assert rest1 == marshalled_bytes[SizeOfV(VByteArray(contents[0]))..];
+
+        // Prove a requires for the recursive call
+        calc {
+            marshalled_bytes[SizeOfV(VByteArray(contents[0]))..];
+                calc {
+                    marshalled_bytes;
+                    SeqCatRev(trace);
+                        { lemma_SeqCat_equivalent(trace); }
+                    SeqCat(trace);
+                    trace[0] + SeqCat(trace[1..]);
+                        { lemma_SeqCat_equivalent(trace[1..]); }
+                    trace[0] + SeqCatRev(trace[1..]);
+                }
+            (trace[0] + SeqCatRev(trace[1..]))[SizeOfV(VByteArray(contents[0]))..];
+                { assert |trace[0]| == SizeOfV(VByteArray(contents[0])); }
+            SeqCatRev(trace[1..]);
+        }
+
+        // Prove a requires for the recursive call
+        calc {
+            SeqSumLens(contents);
+                { reveal_SeqSumLens(); }
+            8 + |contents[0]| + SeqSumLens(contents[1..]);
+        }
+        lemma_marshall_keyarray_contents(contents[1..], marshalled_bytes[SizeOfV(VByteArray(contents[0]))..], trace[1..]);
+        assert others.Some?;
+        assert others.value == contents[1..];
+        assert contents == [contents[0]] + contents[1..];
+       
+    }
+}
+
+method{:timeLimitMultiplier 4} MarshallKeyArrayContents(contents:seq<Key>, data:array<byte>, index:uint64) returns (size:uint64)
+    requires (index as int) + SeqSumLens(contents) <= data.Length;
+    requires 0 <= (index as int) + SeqSumLens(contents) < 0x1_0000_0000_0000_0000;
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    requires |contents| < 0x1_0000_0000_0000_0000;
+    decreases |contents|;
+    modifies data;
+    ensures  parse_KeyArray_contents(data[index..(index as int) + SeqSumLens(contents)], (|contents| as uint64)).0.Some?;
+    ensures  parse_KeyArray_contents(data[index..(index as int) + SeqSumLens(contents)], (|contents| as uint64)).0.value == contents;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SeqSumLens(contents) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SeqSumLens(contents);
+{
+    var i:uint64 := 0;
+    var cur_index := index;
+    reveal_SeqSumLens();
+    reveal_parse_KeyArray_contents();
+
+    ghost var trace := [];
+    ghost var marshalled_bytes := [];
+
+    while i < (|contents| as uint64)
+        invariant 0 <= (i as int) <= |contents|;
+        invariant 0 <= (index as int) <= (index as int) + SeqSumLens(contents[..i]) <= data.Length;
+        invariant (cur_index as int) == (index as int) + SeqSumLens(contents[..i]);
+        invariant forall j :: 0 <= j < index ==> data[j] == old(data[j]);
+        invariant forall j :: (index as int) + SeqSumLens(contents) <= j < data.Length ==> data[j] == old(data[j]);
+        invariant marshalled_bytes == data[index..cur_index];
+        invariant marshalled_bytes == SeqCatRev(trace);
+        invariant |trace| == (i as int);
+        invariant forall j :: 0 <= j < |trace| ==> SizeOfV(VByteArray(contents[j])) == |trace[j]| < 0x1_0000_0000_0000_0000;
+        invariant forall j :: 0 <= j < |trace| ==> 
+                        var (val, rest) := parse_ByteArray(trace[j]); 
+                        val.Some? && val.value.b == contents[j]; 
+    {
+        lemma_SeqSumLens_bound(contents, 0x1_0000_0000_0000_0000);
+
+        // Prove we meet MarshallVal's length requirement
+        calc <= {
+            (cur_index as int) + SizeOfV(VByteArray(contents[i]));
+            (index as int) + SeqSumLens(contents[..i]) + SizeOfV(VByteArray(contents[i]));
+                { lemma_SeqSumLens_prefix(contents[..i], contents[i]); 
+                  assert contents[..i] + [contents[i]] == contents[..i+1]; }
+            (index as int) + SeqSumLens(contents[..i+1]);
+                { lemma_SeqSumLens_bound_prefix(contents, contents[..i+1], (i as int)+1); }
+                //{ lemma_SeqSum_bound(contents, data.Length - (index as int) + 1); }
+            (index as int) + SeqSumLens(contents);
+            //data.Length;
+        }
+        var item_size := MarshallByteArrayInterior(contents[i], data, cur_index);
+        //var item_size := ComputeSizeOf(contents[uint64(i)]);
+
+        ghost var fresh_bytes := data[cur_index..cur_index + item_size];
+        marshalled_bytes := marshalled_bytes + fresh_bytes;
+        forall () 
+            ensures var (val, rest) := parse_ByteArray(fresh_bytes);
+                    val.Some? && val.value.b == contents[i];
+        {
+            assert SizeOfV(VByteArray(contents[i])) <= |fresh_bytes|;  // OBSERVE
+            reveal_parse_Val();
+            lemma_parse_Val_view(fresh_bytes, VByteArray(contents[i]), GByteArray, 0);
+        }
+
+        ghost var old_trace := trace;
+        trace := trace + [fresh_bytes];
+
+        ghost var old_cur_index := cur_index;
+        cur_index := cur_index + item_size;
+        i := i + 1;
+
+        // Prove the invariant that we stay within bounds
+        calc <= {
+            (index as int) + SeqSumLens(contents[..i]);
+            calc {
+                SeqSumLens(contents[..i]);
+                <=  { lemma_SeqSumLens_bound_prefix(contents, contents[..i], (i as int)); }
+                SeqSumLens(contents);
+            }
+            (index as int) + SeqSumLens(contents);
+            data.Length;
+        }
+        assert {:split_here} true;
+        assert marshalled_bytes == data[index..cur_index];
+
+        // Prove the invariant about our index tracking correctly
+        calc {
+            (cur_index as int);
+            (old_cur_index as int) + SizeOfV(VByteArray(contents[i-1]));
+            (index as int) + SeqSumLens(contents[..i-1]) + SizeOfV(VByteArray(contents[i-1]));
+                { lemma_SeqSumLens_prefix(contents[..i-1], contents[i-1]); 
+                  assert contents[..i-1] + [contents[i-1]] == contents[..i]; }
+            (index as int) + SeqSumLens(contents[..i]);
+        }
+        assert (cur_index as int) == (index as int) + SeqSumLens(contents[..i]);
+        assert marshalled_bytes == data[index..cur_index];
+    }
+
+    // Prove that parsing will produce the correct result
+
+    // After the while loop, we know:
+    assert contents[..i] == contents;   // OBSERVE
+    assert (cur_index as int) == (index as int) + SeqSumLens(contents);
+    assert marshalled_bytes == data[index..(index as int)+SeqSumLens(contents)];
+    //assert marshalled_bytes == SeqCatRev(trace);
+    //assert |trace| == |contents|;
+    lemma_marshall_keyarray_contents(contents, marshalled_bytes, trace);
+    size := cur_index - index;
+}
+
+method MarshallKeyArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+    requires val.VKeyArray?;
+    requires ValInGrammar(val, grammar);
+    requires ValidGrammar(grammar);
+    requires ValidVal(val);
+    requires (index as int) + SizeOfV(val) <= data.Length;
+    requires 0 <= (index as int) + SizeOfV(val) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    decreases grammar, -1;
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.Some? &&
+             parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.value == val;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SizeOfV(val);
+{
+    //assert{:split_here} true;
+    reveal_parse_Val();
+    MarshallUint64((|val.baa| as uint64), data, index);
+
+    ghost var tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
+    ghost var len := tuple.0;
+    ghost var rest := tuple.1;
+    assert !len.None?;
+    var contents_size := MarshallKeyArrayContents(val.baa, data, index + Uint64Size());
+    tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
+    assert {:split_here} true;
+    len := tuple.0;
+    rest := tuple.1;
+    assert !len.None?;
+    ghost var contents_tuple := parse_KeyArray_contents(rest, len.value.u);
     ghost var contents  := contents_tuple.0;
     ghost var remainder := contents_tuple.1;
     assert !contents.None?;
@@ -1688,7 +2495,7 @@ lemma lemma_marshall_tuple_contents(contents:seq<V>, eltTypes:seq<G>, marshalled
     }
 }
 
-method{:timeLimitMultiplier 2} MarshallTupleContents(contents:seq<V>, eltTypes:seq<G>, data:array<byte>, index:uint64) returns (size:uint64)
+method{:timeLimitMultiplier 2} MarshallTupleContents(contents:seq<V>, ghost eltTypes:seq<G>, data:array<byte>, index:uint64) returns (size:uint64)
     requires |contents| == |eltTypes|;
     requires forall i :: 0 <= i < |contents| ==> ValInGrammar(contents[i], eltTypes[i]);
     requires forall g :: g in eltTypes ==> ValidGrammar(g);
@@ -1815,7 +2622,7 @@ method{:timeLimitMultiplier 2} MarshallTupleContents(contents:seq<V>, eltTypes:s
     size := cur_index - index;
 }
 
-method MarshallTuple(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+method MarshallTuple(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VTuple?;
     requires ValidVal(val);
     requires ValidGrammar(grammar);
@@ -1890,7 +2697,58 @@ method MarshallBytes(bytes:seq<byte>, data:array<byte>, index:uint64)
     */
 }
 
-method MarshallByteArray(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+method MarshallByteArrayInterior(b:seq<byte>, data:array<byte>, index:uint64) returns (size:uint64)
+    requires ValidVal(VByteArray(b));
+    requires (index as int) + SizeOfV(VByteArray(b)) <= data.Length;
+    requires 0 <= (index as int) + SizeOfV(VByteArray(b)) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(VByteArray(b))], GByteArray).0.Some? &&
+             parse_Val(data[index..(index as int) + SizeOfV(VByteArray(b))], GByteArray).0.value == VByteArray(b);
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SizeOfV(VByteArray(b)) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SizeOfV(VByteArray(b));
+{
+    MarshallUint64((|b| as uint64), data, index);
+    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|b| as uint64);
+    MarshallBytes(b, data, index + 8);
+
+    calc {
+        parse_Val(data[index..(index as int) + SizeOfV(VByteArray(b))], GByteArray);
+            { reveal_parse_Val(); }
+        parse_ByteArray(data[index..(index as int) + SizeOfV(VByteArray(b))]);
+    }
+    ghost var data_seq := data[index..(index as int) + SizeOfV(VByteArray(b))];
+    ghost var tuple := parse_Uint64(data_seq);
+    ghost var len := tuple.0;
+    ghost var rest := tuple.1;
+    assert{:split_here} true;
+    assert len.value.u == (|b| as uint64);
+    
+    assert rest == data[index + 8..(index as int) + SizeOfV(VByteArray(b))] == b;
+    assert !len.None? && (len.value.u as int) <= |rest|;
+    assert rest[0..len.value.u] == b;       // OBSERVE
+    size := 8 + (|b| as uint64);
+}
+
+method MarshallMessage(m:Message, data:array<byte>, index:uint64) returns (size:uint64)
+    requires ValidVal(VMessage(m));
+    requires (index as int) + SizeOfV(VMessage(m)) <= data.Length;
+    requires 0 <= (index as int) + SizeOfV(VMessage(m)) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(VMessage(m))], GMessage).0.Some? &&
+             parse_Val(data[index..(index as int) + SizeOfV(VMessage(m))], GMessage).0.value == VMessage(m);
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SizeOfV(VMessage(m)) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SizeOfV(VMessage(m));
+{
+  reveal_MessageSize();
+  reveal_parse_Val();
+  size := MarshallByteArrayInterior(m.value, data, index);
+}
+
+method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VByteArray?;
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
@@ -1936,6 +2794,10 @@ lemma parse_Uint64ArrayContents_eq_seq(data: seq<byte>, ints: seq<uint64>)
 {
   if (|ints| == 0) {
   } else {
+    forall i | 0 <= i < |ints| - 1
+    ensures SeqByteToUint64(data[.. (|ints| - 1) * 8][i*8 .. (i+1)*8]) == ints[.. |ints| - 1][i]
+    {
+    }
     parse_Uint64ArrayContents_eq_seq(data[.. (|ints| - 1) * 8], ints[.. |ints| - 1]);
   }
 }
@@ -1956,7 +2818,7 @@ lemma parse_Uint64Array_eq_seq(data: seq<byte>, ints: seq<uint64>)
   assert data[8..] == data[8..][..8*|ints|];
 }
 
-method MarshallUint64Array(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VUint64Array?;
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
@@ -2008,7 +2870,7 @@ method MarshallUint64Array(val:V, grammar:G, data:array<byte>, index:uint64) ret
 }
 
 
-method MarshallCase(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VCase?;
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
@@ -2066,7 +2928,630 @@ method MarshallCase(val:V, grammar:G, data:array<byte>, index:uint64) returns (s
     size := 8 + val_size;
 }
 
-method MarshallVUint64(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+function parse_Message(data:seq<byte>)
+  : (res : (Option<Message>, seq<byte>))
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures |res.1| < 0x1_0000_0000_0000_0000;
+{
+  var (val, rest1) := parse_ByteArray(data);
+  if !val.None? && |val.value.b| as uint64 <= ValueWithDefault.MaxLen() then
+    (Some(ValueMessage.Define(val.value.b)), rest1)
+  else
+    (None, [])
+}
+
+method ParseMessage(data:seq<byte>, index:uint64) returns (success:bool, v:Message, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
+    ensures  var (v', rest') := parse_Message(data[index..]);
+             var v_opt := if success then Some(v) else None();
+             v_opt == v' && data[rest_index..] == rest';
+{
+  var bytes;
+  success, bytes, rest_index := ParseByteArray(data, index);
+  if success && |bytes| as uint64 <= ValueWithDefault.MaxLen() {
+    v := ValueMessage.Define(bytes);
+  } else {
+    success := false;
+    rest_index := |data| as uint64;
+  }
+}
+
+
+function {:opaque} parse_MessageArray_contents(data:seq<byte>, len:uint64) : (Option<seq<Message>>, seq<byte>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    decreases len
+    ensures var (opt_seq, rest) := parse_MessageArray_contents(data, len);
+            |rest| <= |data| && (opt_seq.Some? ==>
+            && |opt_seq.value| == len as int
+            && (forall i :: 0 <= i < |opt_seq.value| ==> ValidMessage(opt_seq.value[i]))
+            )
+{
+   if len == 0 then
+       (Some([]), data)
+   else
+       var (val, rest1) := parse_Message(data);
+       var (others, rest2) := parse_MessageArray_contents(rest1, len - 1);
+       if !val.None? && !others.None? then
+           (Some([val.value] + others.value), rest2)
+       else
+           (None, [])
+}
+
+datatype MessageArray_ContentsTraceStep = MessageArray_ContentsTraceStep(data:seq<byte>, val:Option<Message>)
+
+lemma lemma_MessageArrayContents_helper(data:seq<byte>, len:uint64, v:seq<Message>, trace:seq<MessageArray_ContentsTraceStep>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires |trace| == (len as int) + 1;
+    requires |v| == (len as int);
+    requires forall j :: 0 <= j < |trace| ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
+    requires trace[0].data == data;
+    requires forall j :: 0 < j < |trace| ==> trace[j].val.Some?;
+    requires forall j :: 0 < j < (len as int)+1 ==> 
+                    Some(trace[j].val.value) == parse_Message(trace[j-1].data).0
+                 && trace[j].data == parse_Message(trace[j-1].data).1;
+    requires forall j :: 0 < j < |trace| ==> v[j-1] == trace[j].val.value;
+    //requires v == ExtractValues(trace[1..]);
+    decreases len;
+    ensures  var (v', rest') := parse_MessageArray_contents(data, len);
+             var v_opt := Some(v);
+             v_opt == v' && trace[|trace|-1].data == rest';
+{
+    reveal_parse_MessageArray_contents();
+    if len == 0 {
+    } else {
+        var tuple := parse_Message(data);
+        var val, rest1 := tuple.0, tuple.1;
+        assert trace[1].data == rest1;
+        assert val.Some?;
+        assert trace[1].val == Some(val.value);
+        lemma_MessageArrayContents_helper(rest1, len-1, v[1..], trace[1..]);
+        var tuple'' := parse_MessageArray_contents(rest1, len-1);
+        var v'', rest'' := tuple''.0, tuple''.1;
+        var v_opt'' := Some(v[1..]);
+        assert v_opt'' == v'' && trace[1..][|trace[1..]|-1].data == rest'';
+
+        var tuple' := parse_MessageArray_contents(data, len);
+        var v', rest' := tuple'.0, tuple'.1;
+        calc { 
+            v'; 
+            Some([val.value] + v''.value);
+            Some([val.value] + v[1..]);
+            Some([v[0]] + v[1..]);
+                { assert v == [v[0]] + v[1..]; }
+            Some(v);
+        }
+        assert rest' == rest'';
+    }
+}
+
+lemma lemma_MessageArrayContents_helper_bailout(data:seq<byte>, len:uint64, trace:seq<MessageArray_ContentsTraceStep>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires 1 < |trace| <= (len as int) + 1;
+    //requires |v| == (len as int);
+    requires forall j :: 0 <= j < |trace| ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
+    requires trace[0].data == data;
+    requires forall j :: 0 < j < |trace| ==> 
+                    (trace[j].val.None? ==> parse_Message(trace[j-1].data).0.None?)
+                 && (trace[j].val.Some? ==> parse_Message(trace[j-1].data).0.Some? && trace[j].val.value  == parse_Message(trace[j-1].data).0.value)
+                 && trace[j].data == parse_Message(trace[j-1].data).1;
+    requires forall j :: 0 < j < |trace| - 1 ==> trace[j].val.Some?;
+    //requires forall j :: 0 < j < |trace| - 1 ==> v[j-1] == trace[j].val.value;
+    requires trace[|trace|-1].val.Some? ==> trace[|trace|-1].val.value.Define?
+    requires trace[|trace|-1].val.None? || |trace[|trace|-1].val.value.value| > ValueWithDefault.MaxLen() as int
+    //requires v == ExtractValues(trace[1..]);
+    decreases len;
+    ensures  var (v', rest') := parse_MessageArray_contents(data, len);
+             v'.None? && rest' == [];
+{
+    reveal_parse_MessageArray_contents();
+    
+    var tuple := parse_Message(data);
+    var val, rest1 := tuple.0, tuple.1;
+    if |trace| == 2 {
+      if (trace[|trace|-1].val.None?) {
+        assert val.None?;
+      }
+        
+      assert val.None? || !(|val.value.value| as uint64 <= ValueWithDefault.MaxLen());
+      var tuple' := parse_MessageArray_contents(data, len);
+      var v', rest' := tuple'.0, tuple'.1;
+      assert v'.None?;
+      assert rest' == [];
+    } else {
+      lemma_MessageArrayContents_helper_bailout(rest1, len-1, trace[1..]);
+    }
+}
+
+method{:timeLimitMultiplier 2} ParseMessageArrayContents(data:seq<byte>, index:uint64, len:uint64) 
+       returns (success:bool, v:seq<Message>, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
+    ensures  var (v', rest') := parse_MessageArray_contents(data[index..], len);
+             var v_opt := if success then Some(v) else None();
+             v_opt == v' && data[rest_index..] == rest';
+    ensures  success ==> ValidVal(VMessageArray(v));
+{
+    reveal_parse_MessageArray_contents();
+    var vArr := new Message[len];
+    ghost var g_v := [];
+    success := true;
+    var i:uint64 := 0;
+    var next_val_index:uint64 := index;
+    ghost var trace := [MessageArray_ContentsTraceStep(data[index..], None())];
+
+    while i < len
+        invariant 0 <= i <= len;
+        invariant index <= next_val_index <= (|data| as uint64);
+        invariant |trace| == (i as int) + 1;
+        invariant |g_v| == (i as int);
+        invariant vArr[..i] == g_v;
+        invariant trace[0].data == data[index..];
+        invariant forall j :: 0 <= j < (i as int)+1 ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
+        invariant trace[i].data == data[next_val_index..];
+        invariant forall j :: 0 < j <= i ==> trace[j].val.Some?;
+        invariant forall j :: 0 < j <= i ==> g_v[j-1] == trace[j].val.value;
+        invariant forall j :: 0 < j < (i as int)+1 ==> 
+            Some(trace[j].val.value) == parse_Message(trace[j-1].data).0
+         && trace[j].data == parse_Message(trace[j-1].data).1
+        invariant ValidVal(VMessageArray(vArr[..i]));
+    {
+        var some1, val, rest1 := ParseMessage(data, next_val_index);
+        ghost var step := MessageArray_ContentsTraceStep(data[rest1..], if some1 then Some(val) else None());
+        ghost var old_trace := trace;
+        trace := trace + [step];
+        if !some1 || |val.value| as uint64 > ValueWithDefault.MaxLen() {
+            success := false;
+            rest_index := (|data| as uint64);
+            lemma_MessageArrayContents_helper_bailout(data[index..], len, trace);
+            return;
+        }
+        g_v := g_v + [val];
+        vArr[i] := val;
+        next_val_index := rest1;
+
+        i := i + 1;
+    }
+
+    success := true;
+    rest_index := next_val_index;
+    v := vArr[..];               
+    lemma_MessageArrayContents_helper(data[index..], len, v, trace);
+}
+
+function parse_MessageArray(data:seq<byte>) : (Option<V>, seq<byte>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures var (opt_val, rest) := parse_MessageArray(data);
+            |rest| <= |data| && (opt_val.Some? ==>
+              && ValidVal(opt_val.value)
+              && ValInGrammar(opt_val.value, GMessageArray));
+{
+    var (len, rest) := parse_Uint64(data);
+    if !len.None? then
+        var (contents, remainder) := parse_MessageArray_contents(rest, len.value.u);
+        if !contents.None? then
+            (Some(VMessageArray(contents.value)), remainder)
+        else
+            (None, [])
+    else
+        (None, [])
+}
+
+method ParseMessageArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
+    ensures  var (v', rest') := parse_MessageArray(data[index..]);
+             var v_opt := if success then Some(v) else None();
+             v_opt == v' && data[rest_index..] == rest';
+    ensures  success ==> ValidVal(v);
+{
+    var some1, len, rest := ParseUint64(data, index);
+    if some1 {
+        var some2, contents, remainder := ParseMessageArrayContents(data, rest, len.u);
+        if some2 {
+            success := true;
+            v := VMessageArray(contents);
+            rest_index := remainder;
+        } else {
+            success := false;
+            rest_index := (|data| as uint64);
+        }
+    } else {
+        success := false;
+        rest_index := (|data| as uint64);
+    }
+}
+
+lemma lemma_parse_MessageArray_contents_len(data:seq<byte>, len:uint64)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires len >= 0;
+    requires !parse_MessageArray_contents(data, len).0.None?;
+    decreases len;
+    ensures  (len as int) == |parse_MessageArray_contents(data, len).0.value|;
+{
+    reveal_parse_MessageArray_contents();
+    if len == 0 {
+    } else {
+       var tuple1 := parse_Message(data);
+       var val   := tuple1.0;
+       var rest1 := tuple1.1;
+       var tuple2 := parse_MessageArray_contents(rest1, len - 1);
+       var others := tuple2.0;
+       var rest2  := tuple2.1;
+       assert !val.None? && !others.None?;
+       lemma_parse_MessageArray_contents_len(rest1, len - 1);
+    }
+}
+
+lemma lemma_parse_MessageArray_contents_first(data:seq<byte>, len: uint64, vs: seq<Message>)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires parse_MessageArray_contents(data, len).0 == Some(vs)
+requires len > 0
+ensures parse_Message(data).0.Some?
+ensures parse_Message(data).0.value == vs[0]
+{
+  reveal_parse_MessageArray_contents();
+}
+
+lemma {:fuel parse_Message,0} lemma_parse_Val_view_MessageArray_contents(data:seq<byte>, vs:seq<Message>, index:int, bound:int, len:uint64)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires (len as int) == |vs|;
+    requires 0 <= index <= |data|;
+    requires 0 <= index + SeqSumMessageLens(vs) <= |data|;
+    requires index+SeqSumMessageLens(vs) <= bound <= |data|;
+    decreases len;
+    //decreases |vs|;
+    ensures  (parse_MessageArray_contents(data[index..bound], len).0 == Some(vs)) <==> (parse_MessageArray_contents(data[index..index+SeqSumMessageLens(vs)], len).0 == Some(vs));
+    ensures  parse_MessageArray_contents(data[index..bound], len).0 == Some(vs) ==> parse_MessageArray_contents(data[index..bound], len).1 == data[index+SeqSumMessageLens(vs)..bound];
+{
+    reveal_parse_MessageArray_contents();
+    if len == 0 {
+        reveal_SeqSumMessageLens();
+    } else {
+        var narrow_tuple := parse_MessageArray_contents(data[index..index+SeqSumMessageLens(vs)], len);
+        var bound_tuple := parse_MessageArray_contents(data[index..bound], len);
+        var narrow_val_tuple := parse_Message(data[index..index+SeqSumMessageLens(vs)]);
+        var bound_val_tuple := parse_Message(data[index..bound]);
+        var narrow_contents_tuple := parse_MessageArray_contents(narrow_val_tuple.1, len - 1);
+        var bound_contents_tuple := parse_MessageArray_contents(bound_val_tuple.1, len - 1);
+
+
+        if narrow_tuple.0 == Some(vs) {
+            assert !narrow_val_tuple.0.None? && !narrow_contents_tuple.0.None?;
+            calc {
+                index + SeqSumMessageLens(vs) <= |data|;
+                SeqSumMessageLens(vs) <= |data| - index;
+                SeqSumMessageLens(vs) < |data| - index + 1;
+            }
+            lemma_SeqSumMessageLens_bound(vs, |data| - index + 1);
+            lemma_parse_Val_view_Message(data, VMessage(vs[0]), GMessage, index);
+
+            lemma_SeqSumMessageLens_bound(vs, SeqSumMessageLens(vs) + 1);
+            assert index+SizeOfV(VMessage(vs[0])) <= bound <= |data|;
+            assert (parse_Message(data[index..index+SeqSumMessageLens(vs)]).0 == Some(vs[0])) <==> (parse_Message(data[index..index+SizeOfV(VMessage(vs[0]))]).0 == Some(vs[0]));
+            lemma_SeqSumMessageLens_bound(vs, bound - index + 1);
+            assert index+SizeOfV(VMessage(vs[0])) <= bound <= |data|;     // OBSERVE (trigger on forall?)
+            assert (parse_Message(data[index..bound]).0 == Some(vs[0])) <==> (parse_Message(data[index..index+SizeOfV(VMessage(vs[0]))]).0 == Some(vs[0]));
+            lemma_parse_MessageArray_contents_first(data[index..index+SeqSumMessageLens(vs)], len, vs);
+            assert narrow_val_tuple.0.value == vs[0]
+                == bound_val_tuple.0.value;
+
+            var new_index := index + SizeOfV(VMessage(narrow_val_tuple.0.value));
+            calc {
+                SizeOfV(VMessage(narrow_val_tuple.0.value)) + SeqSumMessageLens(vs[1..]);
+                    { reveal_SeqSumMessageLens(); }
+                SeqSumMessageLens(vs);
+            }
+            assert new_index+SeqSumMessageLens(vs[1..]) <= bound;
+
+            lemma_parse_Val_view_MessageArray_contents(data, vs[1..], new_index, bound, len - 1);
+
+            assert (parse_MessageArray_contents(data[new_index..bound], len - 1).0 == Some(vs[1..])) <==> (parse_MessageArray_contents(data[new_index..new_index+SeqSumMessageLens(vs[1..])], len - 1).0 == Some(vs[1..]));
+            assert data[new_index..new_index+SeqSumMessageLens(vs[1..])] == narrow_val_tuple.1;
+            assert data[new_index..bound] == bound_val_tuple.1;
+
+            assert bound_tuple.0 == Some([vs[0]] + vs[1..]) == Some(vs);
+        } else if bound_tuple.0 == Some(vs) {
+            assert !bound_val_tuple.0.None? && !bound_contents_tuple.0.None?;
+
+            lemma_SeqSumMessageLens_bound(vs, |data| - index + 1);
+            lemma_parse_Val_view_Message(data, VMessage(vs[0]), GMessage, index);
+            // This is exactly the ensures of the lemma above
+            assert forall bound' :: index+SizeOfV(VMessage(vs[0])) <= bound' <= |data| ==>
+                   ((parse_Message(data[index..bound']).0 == Some(vs[0])) <==> (parse_Message(data[index..index+SizeOfV(VMessage(vs[0]))]).0 == Some(vs[0])));
+
+            lemma_SeqSumMessageLens_bound(vs, bound - index + 1);
+            lemma_SeqSumMessageLens_bound(vs, SeqSumMessageLens(vs) + 1);
+            assert index+SizeOfV(VMessage(vs[0])) <= index+SeqSumMessageLens(vs) <= |data|;
+            assert (parse_Message(data[index..index+SeqSumMessageLens(vs)]).0 == Some(vs[0])) <==> (parse_Message(data[index..index+SizeOfV(VMessage(vs[0]))]).0 == Some(vs[0]));
+            assert (parse_Message(data[index..bound]).0 == Some(vs[0])) <==> (parse_Message(data[index..index+SizeOfV(VMessage(vs[0]))]).0 == Some(vs[0]));
+            lemma_parse_MessageArray_contents_first(data[index..bound], len, vs);
+            assert narrow_val_tuple.0.value == vs[0]
+                == bound_val_tuple.0.value;
+
+            var new_index := index + SizeOfV(VMessage(narrow_val_tuple.0.value));
+            calc {
+                SizeOfV(VMessage(narrow_val_tuple.0.value)) + SeqSumMessageLens(vs[1..]);
+                    { reveal_SeqSumMessageLens(); }
+                SeqSumMessageLens(vs);
+            }
+            assert new_index+SeqSumMessageLens(vs[1..]) <= bound;
+
+            lemma_parse_Val_view_MessageArray_contents(data, vs[1..], new_index, bound, len - 1);
+
+            // TODO I'm not sure why but this next part is really really slow.
+
+            assert (parse_MessageArray_contents(data[new_index..bound], len - 1).0 == Some(vs[1..])) <==> (parse_MessageArray_contents(data[new_index..new_index+SeqSumMessageLens(vs[1..])], len - 1).0 == Some(vs[1..]));
+            assert data[new_index..new_index+SeqSumMessageLens(vs[1..])] == narrow_val_tuple.1;
+            assert data[new_index..bound] == bound_val_tuple.1;
+
+            assert narrow_tuple.0 == Some([vs[0]] + vs[1..]) == Some(vs);
+        } else {
+            // Doesn't matter for our ensures clause
+        }
+    }
+}
+
+lemma lemma_parse_Val_view_MessageArray(data:seq<byte>, v:V, grammar: G, index:int, bound:int)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    requires ValInGrammar(v, grammar);
+    requires ValidGrammar(grammar);
+    requires grammar.GMessageArray?;
+    requires 0 <= index <= |data|;
+    requires 0 <= index + SizeOfV(v) <= |data|;
+    requires index+SizeOfV(v) <= bound <= |data|;
+    ensures  (parse_MessageArray(data[index..bound]).0 == Some(v)) <==> (parse_MessageArray(data[index..index+SizeOfV(v)]).0 == Some(v));
+    ensures  parse_MessageArray(data[index..bound]).0 == Some(v) ==> parse_MessageArray(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+{
+    var narrow_tuple := parse_MessageArray(data[index..index+SizeOfV(v)]);
+    var bound_tuple := parse_MessageArray(data[index..bound]);
+    var narrow_len_tuple := parse_Uint64(data[index..index+SizeOfV(v)]);
+    var bound_len_tuple := parse_Uint64(data[index..bound]);
+    var narrow_contents_tuple := parse_MessageArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u);
+    var bound_contents_tuple := parse_MessageArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u);
+
+    assert narrow_len_tuple.0 == bound_len_tuple.0;
+
+    if bound_tuple.0 == Some(v) {
+        assert parse_MessageArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u).0 == Some(v.ma);   // OBSERVE
+        lemma_parse_MessageArray_contents_len(bound_len_tuple.1, narrow_len_tuple.0.value.u);
+        lemma_parse_Val_view_MessageArray_contents(data, v.ma, index+8, bound, narrow_len_tuple.0.value.u);
+    }
+
+    if narrow_tuple.0 == Some(v) {
+        assert parse_MessageArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u).0 == Some(v.ma);   // OBSERVE
+        lemma_parse_MessageArray_contents_len(narrow_len_tuple.1, narrow_len_tuple.0.value.u);
+        lemma_parse_Val_view_MessageArray_contents(data, v.ma, index+8, bound, narrow_len_tuple.0.value.u);
+    }
+}
+
+lemma lemma_marshall_messagearray_contents(contents:seq<Message>, marshalled_bytes:seq<byte>, trace:seq<seq<byte>>)
+    requires forall v :: v in contents ==> ValidMessage(v)
+    requires |marshalled_bytes| < 0x1_0000_0000_0000_0000;
+    requires |contents| < 0x1_0000_0000_0000_0000;
+    requires |contents| == |trace|;
+    requires |marshalled_bytes| == SeqSumMessageLens(contents);
+    requires marshalled_bytes == SeqCatRev(trace);
+    requires forall j :: 0 <= j < |trace| ==> MessageSize(contents[j]) == |trace[j]| < 0x1_0000_0000_0000_0000;
+    requires forall j :: 0 <= j < |trace| ==> var (val, rest) := parse_Message(trace[j]); val.Some? && val.value == contents[j];
+
+    ensures  parse_MessageArray_contents(marshalled_bytes, (|contents| as uint64)).0.Some?;
+    ensures  parse_MessageArray_contents(marshalled_bytes, (|contents| as uint64)).0.value == contents;
+{
+    if |contents| == 0 {
+        reveal_parse_MessageArray_contents();
+    } else {
+        var val_tuple := parse_Message(marshalled_bytes);
+        var val, rest1 := val_tuple.0, val_tuple.1;
+        var rest_tuple := parse_MessageArray_contents(rest1, (|contents| as uint64)-1);
+        var others, rest2 := rest_tuple.0, rest_tuple.1;
+        var target := parse_MessageArray_contents(marshalled_bytes, (|contents| as uint64)).0;
+        calc {
+            target;
+                { reveal_parse_MessageArray_contents(); }
+            if !val.None? && !others.None? && |val.value.value| as uint64 <= ValueWithDefault.MaxLen() then Some([val.value] + others.value) else None;
+        }
+
+        calc {
+            SeqCatRev(trace);
+                { lemma_SeqCat_equivalent(trace); }
+            SeqCat(trace);
+        }
+
+        assert marshalled_bytes[0..SizeOfV(VMessage(contents[0]))] == trace[0];
+        assert parse_Message(trace[0]).0.Some?;
+        assert parse_Message(trace[0]).0.value == contents[0];
+        //assert parse_Val(trace[0], GByteArray).0 == Some(VByteArray(contents[0]));
+        //assert parse_Val(marshalled_bytes[..SizeOfV(VByteArray(contents[0]))], GByteArray).0 == Some(VByteArray(contents[0]));
+        reveal_parse_Val();
+        lemma_parse_Val_view_specific(marshalled_bytes, VMessage(contents[0]), GMessage, 0, |marshalled_bytes|);
+        assert parse_Message(marshalled_bytes[0..|marshalled_bytes|]).0.value == contents[0];
+        assert marshalled_bytes[0..|marshalled_bytes|] == marshalled_bytes;     // OBSERVE
+        assert val.Some? && val.value == contents[0];
+        assert rest1 == marshalled_bytes[SizeOfV(VMessage(contents[0]))..];
+
+        // Prove a requires for the recursive call
+        calc {
+            marshalled_bytes[SizeOfV(VMessage(contents[0]))..];
+                calc {
+                    marshalled_bytes;
+                    SeqCatRev(trace);
+                        { lemma_SeqCat_equivalent(trace); }
+                    SeqCat(trace);
+                    trace[0] + SeqCat(trace[1..]);
+                        { lemma_SeqCat_equivalent(trace[1..]); }
+                    trace[0] + SeqCatRev(trace[1..]);
+                }
+            (trace[0] + SeqCatRev(trace[1..]))[SizeOfV(VMessage(contents[0]))..];
+                { assert |trace[0]| == SizeOfV(VMessage(contents[0])); }
+            SeqCatRev(trace[1..]);
+        }
+
+        // Prove a requires for the recursive call
+        calc {
+            SeqSumMessageLens(contents);
+                { reveal_SeqSumMessageLens(); }
+            SizeOfV(VMessage(contents[0])) + SeqSumMessageLens(contents[1..]);
+        }
+        lemma_marshall_messagearray_contents(contents[1..], marshalled_bytes[SizeOfV(VMessage(contents[0]))..], trace[1..]);
+        assert others.Some?;
+        assert others.value == contents[1..];
+        assert contents == [contents[0]] + contents[1..];
+       
+    }
+}
+
+method{:timeLimitMultiplier 4} MarshallMessageArrayContents(contents:seq<Message>, data:array<byte>, index:uint64) returns (size:uint64)
+    requires (index as int) + SeqSumMessageLens(contents) <= data.Length;
+    requires 0 <= (index as int) + SeqSumMessageLens(contents) < 0x1_0000_0000_0000_0000;
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    requires |contents| < 0x1_0000_0000_0000_0000;
+    requires forall j | 0 <= j < |contents| :: ValidMessage(contents[j])
+    decreases |contents|;
+    modifies data;
+    ensures  parse_MessageArray_contents(data[index..(index as int) + SeqSumMessageLens(contents)], (|contents| as uint64)).0.Some?;
+    ensures  parse_MessageArray_contents(data[index..(index as int) + SeqSumMessageLens(contents)], (|contents| as uint64)).0.value == contents;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SeqSumMessageLens(contents) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SeqSumMessageLens(contents);
+{
+    var i:uint64 := 0;
+    var cur_index := index;
+    reveal_SeqSumMessageLens();
+    reveal_parse_MessageArray_contents();
+
+    ghost var trace := [];
+    ghost var marshalled_bytes := [];
+
+    while i < (|contents| as uint64)
+        invariant 0 <= (i as int) <= |contents|;
+        invariant 0 <= (index as int) <= (index as int) + SeqSumMessageLens(contents[..i]) <= data.Length;
+        invariant (cur_index as int) == (index as int) + SeqSumMessageLens(contents[..i]);
+        invariant forall j :: 0 <= j < index ==> data[j] == old(data[j]);
+        invariant forall j :: (index as int) + SeqSumMessageLens(contents) <= j < data.Length ==> data[j] == old(data[j]);
+        invariant marshalled_bytes == data[index..cur_index];
+        invariant marshalled_bytes == SeqCatRev(trace);
+        invariant |trace| == (i as int);
+        invariant forall j :: 0 <= j < |trace| ==> SizeOfV(VMessage(contents[j])) == |trace[j]| < 0x1_0000_0000_0000_0000;
+        invariant forall j :: 0 <= j < |trace| ==> 
+                        var (val, rest) := parse_Message(trace[j]); 
+                        val.Some? && val.value == contents[j]; 
+    {
+        lemma_SeqSumMessageLens_bound(contents, 0x1_0000_0000_0000_0000);
+
+        // Prove we meet MarshallVal's length requirement
+        calc <= {
+            (cur_index as int) + SizeOfV(VMessage(contents[i]));
+            (index as int) + SeqSumMessageLens(contents[..i]) + SizeOfV(VMessage(contents[i]));
+                { lemma_SeqSumMessageLens_prefix(contents[..i], contents[i]); 
+                  assert contents[..i] + [contents[i]] == contents[..i+1]; }
+            (index as int) + SeqSumMessageLens(contents[..i+1]);
+                { lemma_SeqSumMessageLens_bound_prefix(contents, contents[..i+1], (i as int)+1); }
+                //{ lemma_SeqSum_bound(contents, data.Length - (index as int) + 1); }
+            (index as int) + SeqSumMessageLens(contents);
+            //data.Length;
+        }
+        var item_size := MarshallMessage(contents[i], data, cur_index);
+        //var item_size := ComputeSizeOf(contents[uint64(i)]);
+
+        ghost var fresh_bytes := data[cur_index..cur_index + item_size];
+        marshalled_bytes := marshalled_bytes + fresh_bytes;
+        forall () 
+            ensures var (val, rest) := parse_Message(fresh_bytes);
+                    val.Some? && val.value == contents[i];
+        {
+            assert SizeOfV(VMessage(contents[i])) <= |fresh_bytes|;  // OBSERVE
+            reveal_parse_Val();
+            lemma_parse_Val_view(fresh_bytes, VMessage(contents[i]), GMessage, 0);
+        }
+
+        ghost var old_trace := trace;
+        trace := trace + [fresh_bytes];
+
+        ghost var old_cur_index := cur_index;
+        cur_index := cur_index + item_size;
+        i := i + 1;
+
+        // Prove the invariant that we stay within bounds
+        calc <= {
+            (index as int) + SeqSumMessageLens(contents[..i]);
+            calc {
+                SeqSumMessageLens(contents[..i]);
+                <=  { lemma_SeqSumMessageLens_bound_prefix(contents, contents[..i], (i as int)); }
+                SeqSumMessageLens(contents);
+            }
+            (index as int) + SeqSumMessageLens(contents);
+            data.Length;
+        }
+        assert {:split_here} true;
+        assert marshalled_bytes == data[index..cur_index];
+
+        // Prove the invariant about our index tracking correctly
+        calc {
+            (cur_index as int);
+            (old_cur_index as int) + SizeOfV(VMessage(contents[i-1]));
+            (index as int) + SeqSumMessageLens(contents[..i-1]) + SizeOfV(VMessage(contents[i-1]));
+                { lemma_SeqSumMessageLens_prefix(contents[..i-1], contents[i-1]); 
+                  assert contents[..i-1] + [contents[i-1]] == contents[..i]; }
+            (index as int) + SeqSumMessageLens(contents[..i]);
+        }
+        assert (cur_index as int) == (index as int) + SeqSumMessageLens(contents[..i]);
+        assert marshalled_bytes == data[index..cur_index];
+    }
+
+    // Prove that parsing will produce the correct result
+
+    // After the while loop, we know:
+    assert contents[..i] == contents;   // OBSERVE
+    assert (cur_index as int) == (index as int) + SeqSumMessageLens(contents);
+    assert marshalled_bytes == data[index..(index as int)+SeqSumMessageLens(contents)];
+    //assert marshalled_bytes == SeqCatRev(trace);
+    //assert |trace| == |contents|;
+    lemma_marshall_messagearray_contents(contents, marshalled_bytes, trace);
+    size := cur_index - index;
+}
+
+method MarshallMessageArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+    requires val.VMessageArray?;
+    requires ValInGrammar(val, grammar);
+    requires ValidGrammar(grammar);
+    requires ValidVal(val);
+    requires (index as int) + SizeOfV(val) <= data.Length;
+    requires 0 <= (index as int) + SizeOfV(val) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    decreases grammar, -1;
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.Some? &&
+             parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.value == val;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SizeOfV(val);
+{
+    //assert{:split_here} true;
+    reveal_parse_Val();
+    MarshallUint64((|val.ma| as uint64), data, index);
+
+    ghost var tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
+    ghost var len := tuple.0;
+    ghost var rest := tuple.1;
+    assert !len.None?;
+    var contents_size := MarshallMessageArrayContents(val.ma, data, index + Uint64Size());
+    tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
+    assert {:split_here} true;
+    len := tuple.0;
+    rest := tuple.1;
+    assert !len.None?;
+    ghost var contents_tuple := parse_MessageArray_contents(rest, len.value.u);
+    ghost var contents  := contents_tuple.0;
+    ghost var remainder := contents_tuple.1;
+    assert !contents.None?;
+    size := 8 + contents_size;
+}
+
+method MarshallVUint64(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VUint64?;
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
@@ -2090,7 +3575,7 @@ method MarshallVUint64(val:V, grammar:G, data:array<byte>, index:uint64) returns
     return 8;
 }
 
-method MarshallVal(val:V, grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+method MarshallVal(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
     requires ValidVal(val);
@@ -2108,13 +3593,16 @@ method MarshallVal(val:V, grammar:G, data:array<byte>, index:uint64) returns (si
     match val
         case VUint64(_)    => size := MarshallVUint64(val, grammar, data, index);
         case VArray(_)     => size := MarshallArray(val, grammar, data, index);
+        case VKeyArray(_) => size := MarshallKeyArray(val, grammar, data, index);
         case VTuple(_)     => size := MarshallTuple(val, grammar, data, index);
         case VUint64Array(_) => size := MarshallUint64Array(val, grammar, data, index);
         case VByteArray(_) => size := MarshallByteArray(val, grammar, data, index);
+        case VMessage(_) => size := MarshallMessage(val.m, data, index);
+        case VMessageArray(_) => size := MarshallMessageArray(val, grammar, data, index);
         case VCase(_,_)    => size := MarshallCase(val, grammar, data, index);
 }
 
-method Marshall(val:V, grammar:G) returns (data:array<byte>)
+method Marshall(val:V, ghost grammar:G) returns (data:array<byte>)
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
     requires ValidVal(val);

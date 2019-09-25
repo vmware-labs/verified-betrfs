@@ -18,8 +18,6 @@ module Marshalling {
   type LBA = BC.LBA
   type Location = BC.Location
   type Sector = BC.Sector
-  type Message = M.Message
-  type Key = BT.G.Key
   type Node = BT.G.Node
 
   /////// Conversion to PivotNode

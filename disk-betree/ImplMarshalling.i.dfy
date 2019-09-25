@@ -46,8 +46,6 @@ module ImplMarshalling {
   type LBA = IMM.LBA
   type Location = IMM.Location
   type Sector = IS.Sector
-  type Message = IMM.Message
-  type Key = IMM.Key
 
   /////// Conversion to PivotNode
 
@@ -130,76 +128,39 @@ module ImplMarshalling {
     }
   }
 
-  lemma valToStrictlySortedKeySeqPrefixNone(v: V, i: int)
-  requires IMM.valToStrictlySortedKeySeq.requires(v)
-  requires 0 <= i <= |v.a|
-  ensures IMM.valToStrictlySortedKeySeq(VArray(v.a[..i])) == None
-      ==> IMM.valToStrictlySortedKeySeq(v) == None
-  decreases |v.a| - i
+  method IsStrictlySortedKeySeq(a: seq<Key>) returns (b : bool)
+  requires |a| < 0x1_0000_0000_0000_0000
+  ensures b == IMM.isStrictlySortedKeySeq(a)
   {
-    if (i < |v.a|) {
-      valToStrictlySortedKeySeqPrefixNone(v, i+1);
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-    } else {
-      assert v.a[..i] == v.a;
+    IMM.reveal_isStrictlySortedKeySeq();
+
+    if |a| as uint64 < 2 {
+      return true;
     }
+    var i: uint64 := 1;
+    while i < |a| as uint64
+    invariant 0 <= i as int <= |a|
+    invariant IMM.isStrictlySortedKeySeq(a) == IMM.isStrictlySortedKeySeqIterate(a, i as int)
+    {
+      var c := Keyspace.cmp(a[i-1], a[i]);
+      if c >= 0 {
+        return false;
+      }
+      i := i + 1;
+    }
+
+    return true;
   }
 
   method ValToStrictlySortedKeySeq(v: V) returns (s : Option<seq<Key>>)
   requires IMM.valToStrictlySortedKeySeq.requires(v)
   ensures s == IMM.valToStrictlySortedKeySeq(v)
   {
-    var ar := new Key[|v.a| as uint64];
-
-    var i: uint64 := 0;
-    while i < |v.a| as uint64
-    invariant 0 <= i as int <= |v.a|
-    invariant IMM.valToStrictlySortedKeySeq(VArray(v.a[..i])) == Some(ar[..i])
-    {
-      assert ValInGrammar(v.a[i], GByteArray);
-      assert ValidVal(v.a[i]);
-
-      valToStrictlySortedKeySeqPrefixNone(v, i as int + 1);
-
-      if |v.a[i].b| as uint64 > Keyspace.MaxLen() {
-        return None;
-      }
-
-      ar[i] := v.a[i].b;
-
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-
-      if (i > 0) {
-        var c := Keyspace.cmp(ar[i-1], ar[i]);
-        if (c >= 0) {
-          assert Last(ar[..i]) == ar[i-1];
-          assert IMM.valToStrictlySortedKeySeq(VArray(v.a[..i+1])) == None;
-
-          return None;
-        }
-      }
-
-      i := i + 1;
-    }
-
-    assert v.a[..i] == v.a;
-    assert ar[..i] == ar[..];
-    s := Some(ar[..]);
-  }
-
-  lemma valToMessageSeqPrefixNone(v: V, i: int)
-  requires IMM.valToMessageSeq.requires(v)
-  requires 0 <= i <= |v.a|
-  ensures IMM.valToMessageSeq(VArray(v.a[..i])) == None
-      ==> IMM.valToMessageSeq(v) == None
-  decreases |v.a| - i
-  {
-    if (i < |v.a|) {
-      valToMessageSeqPrefixNone(v, i+1);
-      assert DropLast(v.a[..i+1]) == v.a[..i];
+    var is_sorted := IsStrictlySortedKeySeq(v.baa);
+    if is_sorted {
+      return Some(v.baa);
     } else {
-      assert v.a[..i] == v.a;
+      return None;
     }
   }
 
@@ -207,35 +168,8 @@ module ImplMarshalling {
   requires IMM.valToMessageSeq.requires(v)
   ensures s == IMM.valToMessageSeq(v)
   {
-    var ar := new Message[|v.a| as uint64];
-
-    var i: uint64 := 0;
-    while i < |v.a| as uint64
-    invariant 0 <= i as int <= |v.a|
-    invariant IMM.valToMessageSeq(VArray(v.a[..i])) == Some(ar[..i])
-    {
-      assert ValInGrammar(v.a[i], GByteArray);
-      assert ValidVal(v.a[i]);
-
-      valToMessageSeqPrefixNone(v, i as int + 1);
-
-      if |v.a[i].b| as uint64 > ValueWithDefault.MaxLen() {
-        return None;
-      }
-
-      ar[i] := M.Define(v.a[i].b);
-
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-
-      i := i + 1;
-    }
-
-    assert v.a[..i] == v.a;
-    assert ar[..i] == ar[..];
-    s := Some(ar[..]);
+    return Some(v.ma);
   }
-
 
   method ValToPivots(v: V) returns (s : Option<seq<Key>>)
   requires IMM.valToPivots.requires(v)
@@ -537,47 +471,29 @@ module ImplMarshalling {
     return VUint64Array(a);
   }
 
+  lemma lemmaSizeOfKeyArray(keys: seq<Key>)
+  ensures 8 + WeightKeySeq(keys) == SizeOfV(VKeyArray(keys))
+
+  lemma lemmaSizeOfMessageArray(messages: seq<Message>)
+  ensures 8 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
+
+  lemma WeightKeySeqLe(keys: seq<Key>)
+  ensures WeightKeySeq(keys) <= |keys| * (8 + Keyspace.MaxLen() as int)
+
   method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
   requires Keyspace.IsStrictlySorted(keys)
   requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |keys|
+  ensures ValInGrammar(v, GKeyArray)
+  ensures v.baa == keys
   ensures IMM.valToStrictlySortedKeySeq(v) == Some(keys)
   ensures SizeOfV(v) <= 8 + |keys| * (8 + Keyspace.MaxLen() as int)
   ensures SizeOfV(v) == 8 + WeightKeySeq(keys)
   {
-    var ar := new V[|keys| as uint64];
-    var i: uint64 := 0;
-    while i < |keys| as uint64
-    invariant i as int <= |keys|
-    invariant ValidVal(VArray(ar[..i]))
-    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant IMM.valToStrictlySortedKeySeq(VArray(ar[..i])) == Some(keys[..i])
-    invariant SizeOfV(VArray(ar[..i])) <= 8 + i as int * (8 + Keyspace.MaxLen() as int)
-    invariant SizeOfV(VArray(ar[..i])) == 8 + WeightKeySeq(keys[..i])
-    {
-      ar[i] := VByteArray(keys[i]);
+    lemmaSizeOfKeyArray(keys);
+    WeightKeySeqLe(keys);
 
-      lemma_SeqSum_prefix(ar[..i], VByteArray(keys[i]));
-      assert keys[..i+1][..i] == keys[..i];
-      assert ar[..i+1][..i] == ar[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-      assert keys[..i] + [keys[i]] == keys[..i+1];
-
-      if i > 0 {
-        Keyspace.IsStrictlySortedImpliesLt(keys, i as int - 1, i as int);
-      }
-
-      assert i > 0 ==> keys[i-1] == Last(DropLast(keys[..i as int + 1]));
-      assert keys[i] == Last(keys[..i as int + 1]);
-
-      i := i + 1;
-    }
-    v := VArray(ar[..]);
-
-    assert ar[..i] == ar[..];
-    assert keys[..i] == keys;
+    return VKeyArray(keys);
   }
 
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
@@ -593,66 +509,30 @@ module ImplMarshalling {
   requires Pivots.WFPivots(pivots)
   requires |pivots| <= MaxNumChildren() as int - 1
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |pivots|
+  ensures ValInGrammar(v, GKeyArray)
+  ensures |v.baa| == |pivots|
   ensures IMM.valToPivots(v) == Some(pivots)
   ensures SizeOfV(v) <= 8 + |pivots| * (8 + Keyspace.MaxLen() as int)
   {
     v := strictlySortedKeySeqToVal(pivots);
 
-    if |pivots| as uint64 > 0 {
+    ghost var ghosty := true;
+    if ghosty && |pivots| > 0 {
       KeyInPivotsIsNonempty(pivots);
     }
-  }
-
-  lemma lemmaArrayDecomp<T>(ar: array<T>, i: uint64)
-  requires 0 <= i as int < ar.Length
-  requires ar.Length < 0x1_0000_0000_0000_0000
-  ensures ar[..i+1][..i] == ar[..i];
-  ensures ar[..i+1] == ar[..i] + [ar[i]];
-  {
-  }
-
-  lemma lemmaSeqDecomp<T>(s: seq<T>, i: uint64)
-  requires 0 <= i as int < |s|
-  requires |s| < 0x1_0000_0000_0000_0000
-  ensures s[..i+1][..i] == s[..i];
-  ensures s[..i+1] == s[..i] + [s[i]];
-  {
   }
 
   method messageSeqToVal(s: seq<Message>) returns (v : V)
   requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
   requires |s| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |s|
+  ensures ValInGrammar(v, GMessageArray)
+  ensures |v.ma| == |s|
   ensures IMM.valToMessageSeq(v) == Some(s)
   ensures SizeOfV(v) == 8 + WeightMessageSeq(s)
   {
-    var ar := new V[|s| as uint64];
-    var i: uint64 := 0;
-    while i < |s| as uint64
-    invariant 0 <= i <= |s| as uint64
-    invariant ValidVal(VArray(ar[..i]))
-    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant IMM.valToMessageSeq(VArray(ar[..i])) == Some(s[..i])
-    invariant SizeOfV(VArray(ar[..i])) == 8 + WeightMessageSeq(s[..i])
-    {
-      ar[i] := VByteArray(s[i].value);
-
-      lemma_SeqSum_prefix(ar[..i], VByteArray(s[i].value));
-      lemmaArrayDecomp(ar, i);
-      lemmaSeqDecomp(s, i);
-
-      assert WeightMessage(s[i]) == SizeOfV(ar[i]);
-
-      i := i + 1;
-    }
-    v := VArray(ar[..]);
-
-    assert ar[..i] == ar[..];
-    assert s[..i] == s;
+    lemmaSizeOfMessageArray(s);
+    return VMessageArray(s);
   }
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
