@@ -443,6 +443,22 @@ class Framework {
 namespace Native_Compile {
   public partial class @Arrays
   {
+      public static T[] @newArrayFill<T>(ulong n, T t)
+      {
+        T[] res = new T[n];
+        for (ulong i = 0; i < n; i++) {
+          res[i] = t;
+        }
+        return res;
+      }
+
+      public static T[] @newArrayClone<T>(T[] ar)
+      {
+        T[] res = new T[ar.Length];
+        System.Array.Copy(ar, 0, res, 0, ar.Length);
+        return res;
+      }
+
       public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
           //Native_Compile.BenchmarkingUtil.start();
 

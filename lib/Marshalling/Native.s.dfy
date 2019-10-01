@@ -6,6 +6,15 @@ module {:extern} Native {
   // Leverage .NET's ability to perform copies faster than one element at a time
   class Arrays
   {
+      static method{:axiom} newArrayFill<T>(n: uint64, t: T) returns (ar: array<T>)
+      ensures ar.Length == n as int
+      ensures forall i | 0 <= i < n :: ar[i] == t
+      ensures fresh(ar)
+
+      static method{:axiom} newArrayClone<T>(ar: array<T>) returns (ar': array<T>)
+      ensures ar[..] == ar'[..]
+      ensures fresh(ar')
+
       static method{:axiom} CopySeqIntoArray<A>(src:seq<A>, srcIndex:uint64, dst:array<A>, dstIndex:uint64, len:uint64)
           requires (srcIndex) as int + (len as int) <= |src|;
           requires (dstIndex as int) + (len as int) <= dst.Length;
