@@ -3,6 +3,7 @@ include "Option.s.dfy"
 include "sequences.s.dfy"
 include "Sets.i.dfy"
 include "SetBijectivity.i.dfy"
+include "Marshalling/Native.s.dfy"
 
 module MutableMap {
   import opened NativeTypes
@@ -10,6 +11,7 @@ module MutableMap {
   import opened Sequences
   import opened Sets
   import opened SetBijectivity
+  import Native
 
   datatype Slot = Slot(slot: nat)
 
@@ -329,8 +331,9 @@ module MutableMap {
     ensures forall r :: r in Repr ==> fresh(r)
     {
       Count := 0;
-      Storage := new [size] (_ => Empty);
       Contents := map[];
+      new;
+      Storage := Native.Arrays.newArrayFill(size, Empty);
       Repr := { this, Storage };
     }
 
@@ -666,7 +669,7 @@ module MutableMap {
       ensures cloned.Repr !! Repr
     {
       var size := Storage.Length as uint64;
-      var newStorage := new [size] (i reads this, this.Storage requires 0 <= i < Storage.Length => Storage[i]);
+      var newStorage := Native.Arrays.newArrayClone(this.Storage);
       cloned := new FixedSizeHashMap.FromStorage(newStorage, Count);
       cloned.Contents := Contents;
       /* (doc) assert cloned.Repr !! Repr; */
@@ -923,7 +926,7 @@ module MutableMap {
       assert Underlying.EntryInSlotMatchesContents(Underlying.Storage[..], Slot(storagePos as int), Underlying.Contents);
       assert firstEntry.key in Contents;
       // -- mutation --
-      result := new [Count] (_ => (firstEntry.key, firstEntry.value));
+      result := Native.Arrays.newArrayFill(Count, (firstEntry.key, firstEntry.value));
       transferredContents := transferredContents[firstEntry.key := firstEntry.value];
       // --------------
 
