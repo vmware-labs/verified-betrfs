@@ -96,8 +96,6 @@ module ImplSync {
   ensures WellUpdated(s)
   ensures (s.I(), IIO(io)) == ImplModelSync.syncNotFrozen(Ic(k), old(s.I()), old(IIO(io)))
   {
-    var ephemeralTable := s.ephemeralIndirectionTable.ToMap();
-    var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
     var foundDeallocable := FindDeallocable(s);
     ImplModelDealloc.FindDeallocableCorrect(s.I());
     if foundDeallocable.Some? {
