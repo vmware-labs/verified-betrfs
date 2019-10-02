@@ -91,7 +91,9 @@ module ImplIO {
       loc := None;
     } else {
       var len := bytes.Length as uint64;
+      Native.BenchmarkingUtil.start("getFreeLoc");
       loc := getFreeLoc(s, len);
+      Native.BenchmarkingUtil.end("getFreeLoc");
       if (loc.Some?) {
         var i := io.write(loc.value.addr, bytes);
         id := Some(i);
