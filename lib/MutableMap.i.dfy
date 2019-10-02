@@ -13,7 +13,7 @@ module MutableMap {
   import opened SetBijectivity
   import Native
 
-  datatype Slot = Slot(slot: nat)
+  datatype Slot = Slot(ghost slot: nat)
 
   datatype Item<V> = Empty | Entry(key: uint64, value: V) | Tombstone(key: uint64)
 

@@ -38,7 +38,7 @@ abstract module ThreeStateVersioned {
       s1: SM.Variables,
       s2: SM.Variables,
       s3: SM.Variables,
-      outstandingSyncReqs: map<int, SyncReqStatus>
+      ghost outstandingSyncReqs: map<int, SyncReqStatus>
   )
 
   predicate Init(k: Constants, s: Variables)
@@ -54,8 +54,8 @@ abstract module ThreeStateVersioned {
     | Move1to2Step
     | Move2to3Step
     | Move3Step
-    | PushSyncStep(id: int)
-    | PopSyncStep(id: int)
+    | PushSyncStep(ghost id: int)
+    | PopSyncStep(ghost id: int)
 
   predicate Crash(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
