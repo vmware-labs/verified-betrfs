@@ -1,10 +1,48 @@
 // NOTE: requires /noNLarith
 
 include "NativeTypes.s.dfy"
+include "Option.s.dfy"
 
 module Bitmap {
   import opened NativeTypes
+  import opened Options
 
+  type BitmapModel = seq<bool>
+
+  function Len(bm: BitmapModel) : int
+  {
+    |bm|
+  }
+
+  function {:opaque} BitSet(bm: BitmapModel, i: int) : BitmapModel
+  requires 0 <= i < Len(bm)
+  {
+    bm[i := true]
+  }
+
+  function {:opaque} BitUnset(bm: BitmapModel, i: int) : BitmapModel
+  requires 0 <= i < Len(bm)
+  {
+    bm[i := false]
+  }
+
+  function BitAllocIter(bm: BitmapModel, i: int) : (Option<int>, BitmapModel)
+  requires 0 <= i < |bm|
+  decreases |bm| - i
+  {
+    if i == |bm| then (
+      (None, bm)
+    ) else if !bm[i] then (
+      (Some(i), bm[i := true])
+    ) else (
+      BitAllocIter(bm, i+1)
+    ) 
+  }
+
+  function {:opaque} BitAlloc(bm: BitmapModel) : (res: (Option<int>, BitmapModel))
+  {
+    BitAllocIter(bm, 0)
+  }
 
   class Bitmap {
     var bits: array<uint64>;

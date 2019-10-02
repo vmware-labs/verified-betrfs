@@ -1,3 +1,5 @@
+include "NativeTypes.s.dfy"
+
 module BitsetLemmas {
   import opened NativeTypes
   // These first two are slow, but they work:
@@ -230,4 +232,6 @@ module BitsetLemmas {
       bit_and(a, bit(j));
     }
   }
+
+
 }

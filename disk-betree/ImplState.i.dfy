@@ -3,7 +3,6 @@ include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "MutableBucket.i.dfy"
 include "ImplNodes.i.dfy"
-include "../lib/Bitmap.i.dfy"
 
 module {:extern} ImplState {
   import opened Options
