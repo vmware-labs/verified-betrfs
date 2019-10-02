@@ -138,7 +138,7 @@ class BenchmarkRandomInserts : Benchmark {
 class LongBenchmarkRandomInserts : Benchmark {
   public override string Name { get { return "LongRandomInserts"; } }
 
-  int count = 3_000_000;
+  int count = 5_000_000;
 
   override protected int OpCount(Application app) {
     return count;
