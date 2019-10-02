@@ -51,8 +51,8 @@ module {:extern} Native {
   }
 
   class BenchmarkingUtil {
-    static method{:axiom} start()
-    static method{:axiom} end()
+    static method{:axiom} start(name: string)
+    static method{:axiom} end(name: string)
   }
 }
 

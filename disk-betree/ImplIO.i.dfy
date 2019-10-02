@@ -54,7 +54,10 @@ module ImplIO {
   {
     ImplModelIO.reveal_RequestWrite();
 
+    Native.BenchmarkingUtil.start("marshall (indirection table)");
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
+    Native.BenchmarkingUtil.end("marshall (indirection table)");
+
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
     } else {
@@ -80,7 +83,10 @@ module ImplIO {
   {
     ImplModelIO.reveal_FindLocationAndRequestWrite();
 
+    Native.BenchmarkingUtil.start("marshall");
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
+    Native.BenchmarkingUtil.end("marshall");
+
     if (bytes == null) {
       id := None;
       loc := None;
@@ -171,7 +177,9 @@ module ImplIO {
     var id1, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= BlockSizeUint64() {
+      Native.BenchmarkingUtil.start("parse");
       var sectorOpt := ImplMarshalling.ParseCheckedSector(bytes);
+      Native.BenchmarkingUtil.end("parse");
       sector := sectorOpt;
     } else {
       sector := None;
