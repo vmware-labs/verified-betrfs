@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <fcntl.h>
 
+void benchmark_start(string const& name);
+void benchmark_end(string const& name);
+
 [[ noreturn ]]
 void fail(string err)
 {
@@ -156,6 +159,8 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void writeSync(uint64 addr, byte* sector, size_t len) {
+    benchmark_start("writeSync");
+
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
       fail("writeSync not implemented for these arguments");
     }
@@ -189,9 +194,13 @@ namespace MainDiskIOHandler_Compile {
     if (close_res != 0) {
       fail("write fclose failed");
     }
+
+    benchmark_end("writeSync");
   }
 
   void readSync(uint64 addr, uint64 len, byte* sector) {
+    benchmark_start("readSync");
+
     if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
       fail("readSync not implemented for these arguments");
     }
@@ -201,6 +210,8 @@ namespace MainDiskIOHandler_Compile {
     if ((uint64)actualRead < len) {
       fail("readSync did not find enough bytes");
     }
+
+    benchmark_end("readSync");
   }
 
   DiskIOHandler::DiskIOHandler() : curId(0) { }
@@ -278,9 +289,11 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void DiskIOHandler::completeWriteTasks() {
+    benchmark_start("completeWriteTasks");
     for (auto p : this->writeReqs) {
       p.second->wait();
     }
+    benchmark_end("completeWriteTasks");
   }
   void DiskIOHandler::waitForOne() {
     vector<aiocb*> tasks;
@@ -297,7 +310,10 @@ namespace MainDiskIOHandler_Compile {
     if (i == 0) {
       fail("waitForOne called with no tasks\n");
     }
+
+    benchmark_start("waitForOne");
     aio_suspend(&tasks[0], i, NULL);
+    benchmark_end("waitForOne");
   }
 }
 
@@ -357,6 +373,8 @@ void Application::Sync() {
 
 void Application::Insert(ByteString key, ByteString val)
 {
+  benchmark_start("Application::Insert");
+
   if (key.size() > MaxKeyLen()) {
     fail("Insert: key is too long");
   }
@@ -365,13 +383,20 @@ void Application::Insert(ByteString key, ByteString val)
   }
 
   for (int i = 0; i < 500; i++) {
+    benchmark_start("handle_Insert");
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    benchmark_end("handle_Insert");
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();
+
+    benchmark_start("Insert-maybeDoResponse");
     this->maybeDoResponse();
+    benchmark_end("Insert-maybeDoResponse");
+
     if (success) {
       LOG("doing insert... success!");
       LOG("");
+      benchmark_end("Application::Insert");
       return;
     } else {
       LOG("doing insert...");
@@ -379,6 +404,7 @@ void Application::Insert(ByteString key, ByteString val)
   }
   LOG("giving up");
   fail("Insert operation didn't finish");
+  benchmark_end("Application::Insert");
 }
 
 ByteString Application::Query(ByteString key)

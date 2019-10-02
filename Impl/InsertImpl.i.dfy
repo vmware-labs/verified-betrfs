@@ -32,6 +32,48 @@ module InsertImpl {
 
   import opened PBS = PivotBetreeSpec`Spec
 
+  method passiveAggressive(k: ImplConstants, s: ImplVariables, key: Key, value: Value)
+  returns (theRef: BT.G.Reference)
+  {
+    var ref := BT.G.Root();
+    var root := s.cache.GetOpt(ref);
+    var node := root.value;
+    while true
+    {
+      if node.children.None? {
+        return ref;
+      }
+      var r := Pivots.ComputeRoute(node.pivotTable, key);
+      //var q := node.buckets[r].Query(key);
+      //if q.Some? {
+      //  return ref;
+      //}
+      if node.buckets[r].Weight != 0 {
+        return ref;
+      }
+      var childref := node.children.value[r];
+
+      var childNode := s.cache.GetOpt(childref);
+      if childNode.None? {
+        return ref;
+      }
+
+      var entry := s.ephemeralIndirectionTable.t.Get(childref);
+      if entry.value.loc.Some? {
+        return ref;
+      }
+
+      var weightSeq := MutBucket.computeWeightOfSeq(childNode.value.buckets);
+      if !(WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
+          <= MaxTotalBucketWeightUint64()) {
+        return ref;
+      }
+
+      ref := childref;
+      node := childNode.value;
+    }
+  }
+
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
   requires Inv(k, s)
@@ -45,9 +87,13 @@ module InsertImpl {
     InsertModel.reveal_InsertKeyValue();
 
     BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    //Native.BenchmarkingUtil.start("passiveAggressive calc");
+    //var ref := passiveAggressive(k, s, key, value);
+    var ref := BT.G.Root();
+    //Native.BenchmarkingUtil.end("passiveAggressive calc");
 
     if s.frozenIndirectionTable != null {
-      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
       if b {
         success := false;
         print "giving up; can't dirty root because frozen isn't written";
@@ -56,9 +102,9 @@ module InsertImpl {
     }
 
     var msg := ValueMessage.Define(value);
-    s.cache.InsertKeyValue(BT.G.Root(), key, msg);
+    s.cache.InsertKeyValue(ref, key, msg);
 
-    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
+    writeBookkeepingNoSuccsUpdate(k, s, ref);
 
     success := true;
   }
@@ -103,9 +149,13 @@ module InsertImpl {
 
     if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
+      NativeBenchmarking.start("InsertImpl-InsertKeyValue");
       success := InsertKeyValue(k, s, key, value);
+      NativeBenchmarking.end("InsertImpl-InsertKeyValue");
     } else {
+      NativeBenchmarking.start("InsertImpl-runFlushPolicy");
       runFlushPolicy(k, s, io);
+      NativeBenchmarking.end("InsertImpl-runFlushPolicy");
       success := false;
     }
   }

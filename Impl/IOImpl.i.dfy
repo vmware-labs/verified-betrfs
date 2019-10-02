@@ -1,6 +1,7 @@
 include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
 include "MarshallingImpl.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 module IOImpl { 
   import MainDiskIOHandler
@@ -18,6 +19,7 @@ module IOImpl {
   import opened Bounds
   import opened SI = StateImpl
   import MutableMapModel
+  import NativeBenchmarking
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
@@ -50,7 +52,9 @@ module IOImpl {
   {
     IOModel.reveal_RequestWrite();
 
+    NativeBenchmarking.start("marshall (indirection table)");
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
+    NativeBenchmarking.end("marshall (indirection table)");
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
     } else {
@@ -76,13 +80,17 @@ module IOImpl {
   {
     IOModel.reveal_FindLocationAndRequestWrite();
 
+    NativeBenchmarking.start("marshall");
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
+    NativeBenchmarking.end("marshall");
     if (bytes == null) {
       id := None;
       loc := None;
     } else {
       var len := bytes.Length as uint64;
+      NativeBenchmarking.start("getFreeLoc");
       loc := getFreeLoc(s, len);
+      NativeBenchmarking.end("getFreeLoc");
       if (loc.Some?) {
         var i := io.write(loc.value.addr, bytes);
         id := Some(i);
@@ -167,7 +175,9 @@ module IOImpl {
     var id1, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= BlockSizeUint64() {
+      NativeBenchmarking.start("parse");
       var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
+      NativeBenchmarking.end("parse");
       sector := sectorOpt;
     } else {
       sector := None;

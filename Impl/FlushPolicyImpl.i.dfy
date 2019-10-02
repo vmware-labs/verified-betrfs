@@ -4,6 +4,7 @@ include "SplitImpl.i.dfy"
 include "LeafImpl.i.dfy"
 include "EvictImpl.i.dfy"
 include "FlushPolicyModel.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 module FlushPolicyImpl {
   import opened IOImpl
@@ -23,6 +24,7 @@ module FlushPolicyImpl {
   import opened NativeTypes
   import opened BucketsLib
   import opened BucketWeights
+  import NativeBenchmarking
 
   method biggestSlot(buckets: seq<MutBucket>) returns (res : (uint64, uint64))
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
@@ -173,29 +175,41 @@ module FlushPolicyImpl {
 
     match action {
       case ActionPageIn(ref) => {
+        NativeBenchmarking.start("FlushPolicyImpl-PageInReq");
         PageInReq(k, s, io, ref);
+        NativeBenchmarking.end("FlushPolicyImpl-PageInReq");
       }
       case ActionSplit(parentref, slot) => {
+        NativeBenchmarking.start("FlushPolicyImpl-split");
         var parent := s.cache.GetOpt(parentref);
         doSplit(k, s, parentref, parent.value.children.value[slot], slot);
+        NativeBenchmarking.end("FlushPolicyImpl-split");
       }
       case ActionRepivot(ref) => {
+        NativeBenchmarking.start("FlushPolicyImpl-repivot");
         var node := s.cache.GetOpt(ref);
         repivotLeaf(k, s, ref, node.value);
+        NativeBenchmarking.end("FlushPolicyImpl-repivot");
       }
       case ActionFlush(parentref, slot) => {
+        NativeBenchmarking.start("FlushPolicyImpl-flush");
         var parent := s.cache.GetOpt(parentref);
         var childref := parent.value.children.value[slot];
         var child := s.cache.GetOpt(childref);
         flush(k, s, parentref, slot, 
             parent.value.children.value[slot],
             child.value);
+        NativeBenchmarking.end("FlushPolicyImpl-flush");
       }
       case ActionGrow => {
+        NativeBenchmarking.start("FlushPolicyImpl-grow");
         grow(k, s);
+        NativeBenchmarking.end("FlushPolicyImpl-grow");
       }
       case ActionEvict => {
+        NativeBenchmarking.start("FlushPolicyImpl-EvictOrDealloc");
         EvictOrDealloc(k, s, io);
+        NativeBenchmarking.end("FlushPolicyImpl-EvictOrDealloc");
       }
       case ActionFail => {
         print "ActionFail\n";

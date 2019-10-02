@@ -3,6 +3,7 @@ include "PackedKV.i.dfy"
 include "KVList.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
+include "../Base/NativeBenchmarking.s.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
@@ -31,6 +32,7 @@ module BucketImpl {
   import opened KeyType
   import BucketIteratorModel
   import Pivots = PivotsLib
+  import NativeBenchmarking
 
   type TreeMap = KMB.Node
 
@@ -41,9 +43,13 @@ module BucketImpl {
   ensures KVList.WF(kvl)
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
+    NativeBenchmarking.start("tree_to_kvl");
+
     var s := KMBBOps.ToSeq(tree);
     kvl := KVList.Kvl(s.0[..], s.1[..]);
     assume false;
+
+    NativeBenchmarking.end("tree_to_kvl");
   }
 
   method kvl_to_tree(kvl : KVList.Kvl)
@@ -53,9 +59,11 @@ module BucketImpl {
   ensures KMB.WF(tree)
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
+    NativeBenchmarking.start("kvl_to_tree");
     var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
     assume false;
+    NativeBenchmarking.end("kvl_to_tree");
   }
 
   method pkv_to_kvl(pkv: PackedKV.Pkv)
@@ -411,6 +419,7 @@ module BucketImpl {
     ensures Bucket == BucketInsert(old(Bucket), key, value)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
+      NativeBenchmarking.start("BucketImpl.Insert");
       assume false;
 
       if format.BFKvl? {
@@ -426,7 +435,9 @@ module BucketImpl {
 
       if value.Define? {
         var cur;
+        NativeBenchmarking.start("KMB.Insert");
         tree, cur := KMB.Insert(tree, key, value);
+        NativeBenchmarking.end("KMB.Insert");
         if (cur.Some?) {
           Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {
@@ -435,6 +446,7 @@ module BucketImpl {
       }
 
       Bucket := B(KMB.Interpretation(tree));
+      NativeBenchmarking.end("BucketImpl.Insert");
     }
 
     method Query(key: Key)

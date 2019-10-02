@@ -89,7 +89,9 @@ namespace MainDiskIOHandler_Compile {
 
     public ulong write(ulong addr, byte[] sector) {
       byte[] copied = new byte[sector.Length];
+      NativeBenchmarking_Compile.__default.start("write copy");
       Array.Copy(sector, 0, copied, 0, sector.Length);
+      NativeBenchmarking_Compile.__default.end("write copy");
 
       ulong id = this.curId;
       this.curId++;
@@ -265,7 +267,10 @@ class Application {
     for (int i = 0; i < 50; i++) {
       bool success = __default.handleInsert(k, hs, io, key, val);
       // TODO remove this to enable more asyncronocity:
+      NativeBenchmarking_Compile.__default.start("Insert_completeWriteTasks");
       io.completeWriteTasks();
+      NativeBenchmarking_Compile.__default.end("Insert_completeWriteTasks");
+
       this.maybeDoResponse();
       if (success) {
         log("doing insert... success!");
