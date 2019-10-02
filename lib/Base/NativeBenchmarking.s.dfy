@@ -1,4 +1,4 @@
 module {:extern} NativeBenchmarking {
-  method {:axiom} start()
-  method {:axiom} end()
+  method {:axiom} start(name: string)
+  method {:axiom} end(name: string)
 }

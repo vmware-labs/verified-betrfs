@@ -185,26 +185,36 @@ module ImplFlushPolicy {
         PageInReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
+        Native.BenchmarkingUtil.start("split");
         var parent := s.cache.GetOpt(parentref);
         doSplit(k, s, parentref, parent.value.children.value[slot], slot);
+        Native.BenchmarkingUtil.end("split");
       }
       case ActionRepivot(ref) => {
+        Native.BenchmarkingUtil.start("repivot");
         var node := s.cache.GetOpt(ref);
         repivotLeaf(k, s, ref, node.value);
+        Native.BenchmarkingUtil.end("repivot");
       }
       case ActionFlush(parentref, slot) => {
+        Native.BenchmarkingUtil.start("flush");
         var parent := s.cache.GetOpt(parentref);
         var childref := parent.value.children.value[slot];
         var child := s.cache.GetOpt(childref);
         flush(k, s, parentref, slot, 
             parent.value.children.value[slot],
             child.value);
+        Native.BenchmarkingUtil.end("flush");
       }
       case ActionGrow => {
+        Native.BenchmarkingUtil.start("grow");
         grow(k, s);
+        Native.BenchmarkingUtil.end("grow");
       }
       case ActionEvict => {
+        Native.BenchmarkingUtil.start("EvictOrDealloc");
         EvictOrDealloc(k, s, io);
+        Native.BenchmarkingUtil.end("EvictOrDealloc");
       }
       case ActionFail => {
         print "ActionFail\n";

@@ -297,6 +297,8 @@ module MutableBucket {
     ensures Bucket == BucketInsert(old(Bucket), key, value)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
+      Native.BenchmarkingUtil.start("insert");
+
       if !is_tree {
         is_tree := true;
         tree := kvl_to_tree(kvl);
@@ -316,6 +318,8 @@ module MutableBucket {
       }
 
       Bucket := TTT.I(tree);
+
+      Native.BenchmarkingUtil.end("insert");
     }
 
     method Query(key: Key)

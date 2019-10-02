@@ -83,11 +83,15 @@ module ImplEvict {
   ensures s.ready
   ensures ImplModelEvict.EvictOrDealloc(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
+    Native.BenchmarkingUtil.start("FindDeallocable");
     var ref := FindDeallocable(s);
+    Native.BenchmarkingUtil.end("FindDeallocable");
     ImplModelDealloc.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
+      Native.BenchmarkingUtil.start("dealloc");
       Dealloc(k, s, io, ref.value);
+      Native.BenchmarkingUtil.end("dealloc");
     } else {
       var ref := s.lru.Next();
       if ref == BT.G.Root() {
@@ -95,13 +99,17 @@ module ImplEvict {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
+            Native.BenchmarkingUtil.start("write back for eviction");
             TryToWriteBlock(k, s, io, ref);
+            Native.BenchmarkingUtil.end("write back for eviction");
           } else {
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
+            Native.BenchmarkingUtil.start("evict");
             Evict(k, s, ref);
+            Native.BenchmarkingUtil.end("evict");
           } else {
           }
         }
