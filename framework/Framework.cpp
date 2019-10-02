@@ -31,6 +31,9 @@ using namespace std;
 #endif
 #endif
 
+void benchmark_start(string const& name);
+void benchmark_end(string const& name);
+
 [[ noreturn ]]
 void fail(std::string err)
 {
@@ -179,6 +182,7 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void writeSync(int fd, uint64 addr, uint8_t* sector, size_t len) {
+    benchmark_start("writeSync");
     size_t aligned_len;
     uint8_t *aligned_sector;
     aligned_sector = aligned_copy(sector, len, &aligned_len);
@@ -196,6 +200,7 @@ namespace MainDiskIOHandler_Compile {
              fd, sector, len, (unsigned long)addr);
       fail("pwrite failed");
     }
+    benchmark_end("writeSync");
   }
 
   void readSync(int fd, uint64 addr, uint64 expected_len, uint64 len_to_read, uint8_t* sector) {
@@ -206,6 +211,7 @@ namespace MainDiskIOHandler_Compile {
   }
 
   DiskIOHandler::DiskIOHandler(string filename) : curId(0) {
+    benchmark_start("readSync");
 
     fd = open(filename.c_str(), O_RDWR | O_DIRECT_FLAG | O_DSYNC | O_NOATIME);
 
@@ -221,6 +227,8 @@ namespace MainDiskIOHandler_Compile {
     }
     #endif
     #endif
+
+    benchmark_end("readSync");
   }
 
   DiskIOHandler::~DiskIOHandler() {
@@ -341,6 +349,7 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void DiskIOHandler::completeWriteTasks() {
+    benchmark_start("completeWriteTasks");
     while (true) {
       vector<aiocb*> tasks;
       tasks.resize(this->writeReqs.size());
@@ -368,6 +377,7 @@ namespace MainDiskIOHandler_Compile {
 
       maybeStartWriteReq();
     }
+    benchmark_end("completeWriteTasks");
   }
   void DiskIOHandler::waitForOne() {
     std::vector<aiocb*> tasks;
@@ -384,7 +394,6 @@ namespace MainDiskIOHandler_Compile {
     if (i == 0) {
       fail("waitForOne called with no tasks\n");
     }
-
     aio_suspend(&tasks[0], i, NULL);
 
     maybeStartWriteReq();
@@ -448,6 +457,7 @@ void Application::Sync() {
 
 void Application::Insert(ByteString key, ByteString val)
 {
+  benchmark_start("Application::Insert");
   #ifdef LOG_QUERY_STATS
   auto t1 = chrono::high_resolution_clock::now();
   #endif
@@ -460,10 +470,11 @@ void Application::Insert(ByteString key, ByteString val)
   }
 
   for (int i = 0; i < 500000; i++) {
+    benchmark_start("handle_Insert");
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    benchmark_end("handle_Insert");
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();
-
     this->maybeDoResponse();
 
     if (success) {
@@ -476,6 +487,8 @@ void Application::Insert(ByteString key, ByteString val)
       long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
       benchmark_append("Appliation::Insert", ns);
       #endif
+
+      benchmark_end("Application::Insert");
 
       return;
     } else {

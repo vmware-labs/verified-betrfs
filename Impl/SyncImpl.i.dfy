@@ -5,6 +5,7 @@ include "BookkeepingModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 // See dependency graph in MainHandlers.dfy
 
@@ -19,6 +20,7 @@ module SyncImpl {
   import DeallocModel
   import BlockAllocatorModel
   import opened StateImpl
+  import NativeBenchmarking
 
   import opened Options
   import opened Maps
@@ -210,7 +212,9 @@ module SyncImpl {
       syncNotFrozen(k, s, io);
       return;
     }
+    NativeBenchmarking.start("FindRefInFrozenWithNoLoc");
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
+    NativeBenchmarking.end("FindRefInFrozenWithNoLoc");
 
     assert Inv(k, s) by { StateModel.reveal_ConsistentBitmap(); }
 
