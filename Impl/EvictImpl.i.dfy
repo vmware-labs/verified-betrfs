@@ -1,6 +1,7 @@
 include "EvictModel.i.dfy"
 include "DeallocImpl.i.dfy"
 include "SyncImpl.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 module EvictImpl {
   import opened IOImpl
@@ -17,6 +18,7 @@ module EvictImpl {
   import opened Sets
 
   import opened NativeTypes
+  import NativeBenchmarking
 
   import LruModel
 
@@ -83,11 +85,14 @@ module EvictImpl {
   ensures s.ready
   ensures EvictModel.EvictOrDealloc(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
+    NativeBenchmarking.start("FindDeallocable");
     var ref := FindDeallocable(s);
-    DeallocModel.FindDeallocableCorrect(s.I());
+    NativeBenchmarking.end("FindDeallocable");
 
     if ref.Some? {
+      NativeBenchmarking.start("dealloc");
       Dealloc(k, s, io, ref.value);
+      NativeBenchmarking.end("dealloc");
     } else {
       var ref := s.lru.Next();
       if ref == BT.G.Root() {
@@ -95,13 +100,17 @@ module EvictImpl {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
+            NativeBenchmarking.start("write back for eviction");
             TryToWriteBlock(k, s, io, ref);
+            NativeBenchmarking.end("write back for eviction");
           } else {
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
+            NativeBenchmarking.start("evict");
             Evict(k, s, ref);
+            NativeBenchmarking.end("evict");
           } else {
           }
         }

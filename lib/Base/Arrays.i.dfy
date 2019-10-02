@@ -1,11 +1,13 @@
 include "NativeTypes.s.dfy"
 //include "Marshalling/Native.s.dfy"
 include "sequences.i.dfy"
+include "NativeBenchmarking.s.dfy"
 
 module Arrays {
   import Seq = Sequences
   //import Native
   import opened NativeTypes
+  import NativeBenchmarking
 
   // This can be used in abstract modules (where you might not know in
   // advance whether T == U) to state that two arrays cannot be aliased
@@ -26,6 +28,7 @@ module Arrays {
     ensures arr[length+1..] == old(arr[length+1..])
     modifies arr
   {
+    //NativeBenchmarking.start("Arrays.Insert");
     // Native.Arrays.CopyArrayIntoArray(arr, pos, arr, pos+1, length-pos);
     // arr[pos] := element;
     
@@ -49,6 +52,8 @@ module Arrays {
       curelement := tmp;
       i := i + 1;
     }
+
+    //NativeBenchmarking.end("Arrays.Insert");
   }
 
   method replace1with2<T>(arr: array<T>, length: uint64, element1: T, element2: T, pos: uint64)
