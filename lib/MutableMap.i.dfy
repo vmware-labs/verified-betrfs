@@ -13,7 +13,7 @@ module MutableMap {
   import opened SetBijectivity
   import Native
 
-  datatype Slot = Slot(slot: nat)
+  datatype Slot = Slot(ghost slot: nat)
 
   datatype Item<V> = Empty | Entry(key: uint64, value: V) | Tombstone(key: uint64)
 
@@ -1067,7 +1067,8 @@ module MutableMap {
     {
       assume false;
       var asArray := ToArray();
-      result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
+// BP: Problematic map over nat
+//      result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
     }
 
     method Realloc()
