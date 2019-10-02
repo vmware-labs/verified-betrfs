@@ -138,7 +138,7 @@ class BenchmarkRandomInserts : Benchmark {
 class LongBenchmarkRandomInserts : Benchmark {
   public override string Name { get { return "LongRandomInserts"; } }
 
-  int count = 3_000_000;
+  int count = 5_000_000;
 
   override protected int OpCount(Application app) {
     return count;
@@ -330,7 +330,7 @@ class Benchmarks {
     new BenchmarkSequentialInserts().Run();
     // new Hashing().Run();
 
-    Native_Compile.BenchmarkingUtil.dump();
+    NativeBenchmarking_Compile.__default.dump();
   }
 
   static Dictionary<string, Func<Benchmark>> _benchmarks = new Dictionary<string, Func<Benchmark>>
@@ -351,29 +351,55 @@ class Benchmarks {
     }
     (_benchmarks[name])().Run();
 
-    Native_Compile.BenchmarkingUtil.dump();
+    NativeBenchmarking_Compile.__default.dump();
   }
 }
 
-namespace Native_Compile {
-  public partial class BenchmarkingUtil
-  {
-    public static Stopwatch sw = null;
-    public static int count = 0;
-    public static void start() {
-      if (sw == null) {
-        sw = new Stopwatch();
-      }
-      sw.Start();
-      count++;
+namespace NativeBenchmarking_Compile {
+  public class StopwatchEntry {
+    public Stopwatch s;
+    public int count;
+    public StopwatchEntry() {
+      s = new Stopwatch();
+      count = 0;
     }
-    public static void end() {
-      sw.Stop();
+  }
+
+  public partial class __default
+  {
+    public static Dictionary<string, StopwatchEntry> sw = new Dictionary<string, StopwatchEntry>();
+
+    public static string nameToString(Dafny.Sequence<char> dafnyName) {
+      ArraySegment<char> seg = (ArraySegment<char>) dafnyName.Elements;
+      return new string(seg.Array, seg.Offset, seg.Count);
+    }
+
+    public static void start(Dafny.Sequence<char> dafnyName) {
+      start(nameToString(dafnyName));
+    }
+
+    public static void end(Dafny.Sequence<char> dafnyName) {
+      end(nameToString(dafnyName));
+    }
+
+    public static void start(string name) {
+      if (!sw.ContainsKey(name)) {
+        sw.Add(name, new StopwatchEntry());
+      }
+      StopwatchEntry p = sw[name];
+      p.s.Start();
+      p.count++;
+    }
+    public static void end(string name) {
+      StopwatchEntry p = sw[name];
+      p.s.Stop();
     }
     public static void dump() {
-      if (sw != null) {
-        Console.WriteLine("measured time: " + sw.ElapsedMilliseconds.ToString());
-        Console.WriteLine("calls: " + count.ToString());
+      foreach (var k in sw) {
+        string name = k.Key;
+        int count = k.Value.count;
+        Stopwatch s = k.Value.s;
+        Console.WriteLine(name + " " + s.ElapsedMilliseconds.ToString() + " ms, " + count + " ticks");
       }
     }
   }

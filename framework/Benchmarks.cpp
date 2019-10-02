@@ -17,6 +17,9 @@ void benchmark_end(string const& name);
 constexpr int KEY_SIZE = 20;
 constexpr int VALUE_SIZE = 400;
 
+void benchmark_start(string const& name);
+void benchmark_end(string const& name);
+
 class Benchmark {
 public:
   virtual ~Benchmark() {}
@@ -154,10 +157,14 @@ public:
   virtual void prepare(Application& app) override {
   }
   virtual void go(Application& app) override {
+    benchmark_start("go-Insert");
     for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
+    benchmark_end("go-Insert");
+    benchmark_start("go-Sync");
     app.Sync();
+    benchmark_end("go-Sync");
   }
 };
 
