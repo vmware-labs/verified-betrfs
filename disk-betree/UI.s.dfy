@@ -8,7 +8,7 @@ module {:extern} ValueWithDefault {
   type Value(==,!new) = s : seq<NativeTypes.byte> | |s| <= 1024
 	function method DefaultValue() : Value { [] }
 
-	function method Len(v: Value) : nat { |v| }
+	function Len(v: Value) : nat { |v| }
 
 	export S provides Value, DefaultValue, Len
 	export Internal reveals *
@@ -27,8 +27,8 @@ module UI {
     | NoOp
     | SyncOp
     | CrashOp
-    | PushSyncOp(id: int)
-    | PopSyncOp(id: int)
+    | PushSyncOp(ghost id: int)
+    | PopSyncOp(ghost id: int)
 
     // TODO make these async? any value from it?
     | GetOp(key: Key, value: Value)
