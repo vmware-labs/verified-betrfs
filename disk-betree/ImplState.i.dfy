@@ -12,6 +12,8 @@ module {:extern} ImplState {
   import IM = ImplModel
   import opened ImplNode
   import opened ImplMutCache
+  import ImplBlockAllocator
+  import Bitmap
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -110,25 +112,27 @@ module {:extern} ImplState {
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
     var cache: MutCache;
     var lru: MutableLru.MutableLruQueue;
+    var blockAllocator: ImplBlockAllocator.BlockAllocator;
 
     // Unready
     var outstandingIndirectionTableRead: Option<D.ReqId>;
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache
+        frozenIndirectionTable, lru, cache, blockAllocator
     {
       {this} +
       persistentIndirectionTable.Repr +
       ephemeralIndirectionTable.Repr +
       (if frozenIndirectionTable != null then frozenIndirectionTable.Repr else {}) +
       lru.Repr +
-      cache.Repr
+      cache.Repr +
+      blockAllocator.Repr
     }
 
     predicate ReprInv()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     {
         // NOALIAS statically enforced no-aliasing would probably help here
@@ -143,17 +147,23 @@ module {:extern} ImplState {
         && cache.Repr !! persistentIndirectionTable.Repr
         && (frozenIndirectionTable != null ==> cache.Repr !! frozenIndirectionTable.Repr)
         && cache.Repr !! lru.Repr
+        && blockAllocator.Repr !! ephemeralIndirectionTable.Repr
+        && (frozenIndirectionTable != null ==> blockAllocator.Repr !! frozenIndirectionTable.Repr)
+        && blockAllocator.Repr !! persistentIndirectionTable.Repr
+        && blockAllocator.Repr !! lru.Repr
+        && blockAllocator.Repr !! cache.Repr
 
         && this !in ephemeralIndirectionTable.Repr
         && this !in persistentIndirectionTable.Repr
         && (frozenIndirectionTable != null ==> this !in frozenIndirectionTable.Repr)
         && this !in lru.Repr
         && this !in cache.Repr
+        && this !in blockAllocator.Repr
     }
 
     predicate W()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     {
       && ReprInv()
@@ -162,16 +172,17 @@ module {:extern} ImplState {
       && ephemeralIndirectionTable.Inv()
       && lru.Inv()
       && cache.Inv()
+      && blockAllocator.Inv()
     }
 
     function I() : IM.Variables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, cache.I(), lru.Queue)
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, cache.I(), lru.Queue, blockAllocator.I())
       ) else (
         IM.Unready(outstandingIndirectionTableRead, syncReqs)
       )
@@ -179,7 +190,7 @@ module {:extern} ImplState {
 
     predicate WF()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     {
       && W()
@@ -203,12 +214,15 @@ module {:extern} ImplState {
       persistentIndirectionTable := new MM.ResizingHashMap(128);
       frozenIndirectionTable := null;
       cache := new MutCache();
+
+      var bm := new Bitmap.Bitmap(NumBlocksUint64());
+      blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
     }
   }
 
   predicate Inv(k: M.Constants, s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-        s.frozenIndirectionTable, s.lru, s.cache
+        s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
   reads s.Repr()
   {
     && s.W()
@@ -234,7 +248,7 @@ module {:extern} ImplState {
 
   twostate predicate WellUpdated(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru, s.cache
+      s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
   reads s.Repr()
   {
     && s.W()

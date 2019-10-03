@@ -33,23 +33,6 @@ module ImplInsert {
 
   import Native
 
-  method RemoveLBAFromIndirectionTable(table: MutIndirectionTable, ref: Reference)
-  requires table.Inv()
-  ensures table.Inv()
-  ensures table.I() == ImplModelInsert.removeLBAFromIndirectionTable(old(table.I()), ref)
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in table.Repr :: fresh(r) || r in old(table.Repr)
-  modifies table.Repr
-  {
-    var lbaGraph := table.Get(ref);
-    if lbaGraph.Some? {
-      // TODO how do we deal with this?
-      assume table.Count as nat < 0x10000000000000000 / 8;
-      var (lba, graph) := lbaGraph.value;
-      table.Insert(ref, (None, graph));
-    }
-  }
-
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (success: bool)
   requires Inv(k, s)
@@ -74,13 +57,17 @@ module ImplInsert {
       }
     }
 
+    // TODO this isn't necessary because the children don't change
+    var root := s.cache.GetOpt(BT.G.Root());
+    var children := root.value.children;
+
     var msg := Messages.Define(value);
     s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
     // TODO how do we deal with this?
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
 
-    RemoveLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root());
+    writeBookkeeping(k, s, BT.G.Root(), children);
 
     success := true;
   }

@@ -391,6 +391,13 @@ module MutableLru {
         forall i | 0 <= i < |Queue| - 1 
         ensures nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]]
         {
+          if i < j - 1 {
+            assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
+          } else if i == j-1 {
+            assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
+          } else {
+            assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
+          }
         }
       } else {
         assert nodemap.I().contents == oldContents;

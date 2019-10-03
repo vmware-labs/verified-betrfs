@@ -32,6 +32,8 @@ module ImplGrow {
   {
     ImplModelGrow.reveal_grow();
 
+    assert s.blockAllocator.Repr <= s.Repr();
+
     if s.frozenIndirectionTable != null {
       var rootLbaGraph := s.frozenIndirectionTable.Get(BT.G.Root());
       if rootLbaGraph.Some? {

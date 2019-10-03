@@ -7,6 +7,8 @@ include "../lib/tttree.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"
 include "../lib/MutableMapModel.i.dfy"
+include "../lib/Bitmap.i.dfy"
+include "BlockAllocator.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -34,8 +36,10 @@ module ImplModel {
   import opened BucketWeights
   import opened Bounds
   import LruModel
+  import Bitmap
   import UI
   import MutableMapModel
+  import ImplModelBlockAllocator
 
   import ReferenceType`Internal
 
@@ -63,12 +67,52 @@ module ImplModel {
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
         syncReqs: map<uint64, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
-        lru: LruModel.LruQueue
+        lru: LruModel.LruQueue,
+        blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel
       )
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
+
+  predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
+  {
+    || i == 0 // block 0 is always implicitly allocated
+    || !(
+      forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? ::
+        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int
+    )
+  }
+
+  predicate IsLocAllocOutstanding(outstanding: map<SD.ReqId, BC.OutstandingWrite>, i: int)
+  {
+    !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * BlockSize() as int)
+  }
+
+  predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
+  {
+    && 0 <= i < Bitmap.Len(bm)
+    && Bitmap.IsSet(bm, i)
+  }
+
+  predicate {:opaque} ConsistentBitmap(
+      ephemeralIndirectionTable: IndirectionTable,
+      frozenIndirectionTable: Option<IndirectionTable>,
+      persistentIndirectionTable: IndirectionTable,
+      outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
+      blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel)
+  {
+    && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
+      <==> IsLocAllocBitmap(blockAllocator.ephemeral, i))
+    && (forall i: int :: IsLocAllocIndirectionTable(persistentIndirectionTable, i)
+      <==> IsLocAllocBitmap(blockAllocator.persistent, i))
+    && (frozenIndirectionTable.Some? <==> blockAllocator.frozen.Some?)
+    && (frozenIndirectionTable.Some? ==>
+      (forall i: int :: IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
+        <==> IsLocAllocBitmap(blockAllocator.frozen.value, i)))
+    && (forall i: int :: IsLocAllocOutstanding(outstandingBlockWrites, i)
+      <==> IsLocAllocBitmap(blockAllocator.outstanding, i))
+  }
 
   predicate WFNode(node: Node)
   {
@@ -91,7 +135,7 @@ module ImplModel {
   predicate WFVarsReady(s: Variables)
   requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru) := s;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) := s;
     && WFCache(cache)
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
@@ -99,6 +143,9 @@ module ImplModel {
     && MutableMapModel.Inv(ephemeralIndirectionTable)
     && MutableMapModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
+    && ImplModelBlockAllocator.Inv(s.blockAllocator)
+    && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
+        s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
   }
   predicate WFVars(vars: Variables)
   {
@@ -149,7 +196,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }

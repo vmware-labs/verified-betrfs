@@ -44,45 +44,43 @@ module ImplModelIO {
     && loc.len == len
   }
 
-  predicate addrNotUsedInIndirectionTable(addr: uint64, indirectionTable: IndirectionTable)
-  {
-    && (forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some?  ::
-          indirectionTable.contents[ref].0.value.addr != addr)
-  }
-
-  function getFreeLocIterate(s: Variables, len: uint64, tryOffset: uint64)
-  : (loc : Option<BC.Location>)
-  requires s.Ready?
-  requires WFVars(s)
-  requires len <= LBAType.BlockSize()
-  requires tryOffset as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
-  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
-  decreases 0x1_0000_0000_0000_0000 - tryOffset as int
-  {
-    if (
-      && var addr := tryOffset * LBAType.BlockSize();
-      && BC.ValidLBAForNode(addr)
-      && addrNotUsedInIndirectionTable(addr, s.persistentIndirectionTable)
-      && addrNotUsedInIndirectionTable(addr, s.ephemeralIndirectionTable)
-      && (s.frozenIndirectionTable.Some? ==> addrNotUsedInIndirectionTable(addr, s.frozenIndirectionTable.value))
-      && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr)
-    ) then (
-      Some(LBAType.Location(tryOffset * LBAType.BlockSize(), len))
-    ) else if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int then (
-      None
-    ) else (
-      getFreeLocIterate(s, len, tryOffset+1)
-    )
-  }
-
   function {:opaque} getFreeLoc(s: Variables, len: uint64)
-  : (loc : Option<BC.Location>)
+  : (res : Option<BC.Location>)
   requires s.Ready?
   requires WFVars(s)
   requires len <= LBAType.BlockSize()
-  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
+  ensures res.Some? ==> 0 <= res.value.addr as int / BlockSize() < NumBlocks()
   {
-    getFreeLocIterate(s, len, 0)
+    var i := ImplModelBlockAllocator.Alloc(s.blockAllocator);
+    if i.Some? then
+      Some(LBAType.Location((i.value * BlockSize()) as uint64, len))
+    else
+      None
+  }
+
+  lemma getFreeLocCorrect(s: Variables, len: uint64)
+  requires getFreeLoc.requires(s, len);
+  ensures var loc := getFreeLoc(s, len);
+    && (loc.Some? ==> LocAvailable(s, loc.value, len))
+  {
+    reveal_getFreeLoc();
+    reveal_ConsistentBitmap();
+    LBAType.reveal_ValidAddr();
+
+    var loc := getFreeLoc(s, len);
+    if loc.Some? {
+      var i := ImplModelBlockAllocator.Alloc(s.blockAllocator);
+
+      ImplModelBlockAllocator.LemmaAllocResult(s.blockAllocator);
+      assert !IsLocAllocBitmap(s.blockAllocator.ephemeral, i.value);
+      assert s.blockAllocator.frozen.Some? ==>
+          !IsLocAllocBitmap(s.blockAllocator.frozen.value, i.value);
+      assert !IsLocAllocBitmap(s.blockAllocator.persistent, i.value);
+      assert !IsLocAllocBitmap(s.blockAllocator.outstanding, i.value);
+
+      //assert BC.ValidLocationForNode(loc.value);
+      //assert BC.ValidAllocation(IVars(s), loc.value);
+    }
   }
 
   predicate {:opaque} RequestWrite(io: IO, loc: LBAType.Location, sector: Sector,
@@ -132,9 +130,12 @@ module ImplModelIO {
     Marshalling.reveal_parseSector();
   }
 
-  predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
+  predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector,
+      id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires s.Ready?
   requires WFVars(s)
+  ensures FindLocationAndRequestWrite(io, s, sector, id, loc, io') ==>
+      loc.Some? ==> 0 <= loc.value.addr as int / BlockSize() < NumBlocks()
   {
     && var dop := diskOp(io');
     && (dop.NoDiskOp? || dop.ReqWriteOp?)
@@ -182,6 +183,14 @@ module ImplModelIO {
     M.reveal_Parse();
     D.reveal_ChecksumChecksOut();
     Marshalling.reveal_parseSector();
+
+    var dop := diskOp(io');
+    if dop.ReqWriteOp? {
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      var len := |bytes| as uint64;
+
+      getFreeLocCorrect(s, len);
+    }
   }
 
   function RequestRead(io: IO, loc: LBAType.Location)
@@ -256,7 +265,8 @@ module ImplModelIO {
     ) else (
       var loc := s.ephemeralIndirectionTable.contents[ref].0.value;
       var (id, io') := RequestRead(io, loc);
-      var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+      var s' := s
+        .(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
       (s', io')
     )
   }
@@ -282,6 +292,8 @@ module ImplModelIO {
       assert BC.ValidLocationForNode(loc);
       var (id, io') := RequestRead(io, loc);
       var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+
+      assert WFVars(s');
 
       assert BC.PageInReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')), ref);
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.PageInReqStep(ref));
@@ -328,6 +340,228 @@ module ImplModelIO {
     D.reveal_ChecksumChecksOut();
   }
 
+  function InitLocBitmapIterate(indirectionTable: IndirectionTable,
+      it: MutableMapModel.Iterator<(Option<BC.Location>, seq<BT.G.Reference>)>,
+      bm: Bitmap.BitmapModel)
+  : (res : (bool, Bitmap.BitmapModel))
+  requires MutableMapModel.Inv(indirectionTable)
+  requires MutableMapModel.WFIter(indirectionTable, it)
+  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+  requires Bitmap.Len(bm) == NumBlocks()
+  ensures Bitmap.Len(res.1) == NumBlocks()
+  decreases it.decreaser
+  {
+    if it.next.None? then (
+      (true, bm)
+    ) else (
+      var kv := it.next.value;
+      assert kv.0 in IIndirectionTable(indirectionTable).locs;
+
+      var loc: uint64 := kv.1.0.value.addr;
+      var locIndex: uint64 := loc / BlockSize() as uint64;
+      if locIndex < NumBlocks() as uint64 && !Bitmap.IsSet(bm, locIndex as int) then (
+        InitLocBitmapIterate(indirectionTable,
+            MutableMapModel.IterInc(indirectionTable, it),
+            Bitmap.BitSet(bm, locIndex as int))
+      ) else (
+        (false, bm)
+      )
+    )
+  }
+
+  function {:opaque} InitLocBitmap(indirectionTable: IndirectionTable) : (res : (bool, Bitmap.BitmapModel))
+  requires MutableMapModel.Inv(indirectionTable)
+  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+  ensures Bitmap.Len(res.1) == NumBlocks()
+  {
+    var bm := Bitmap.EmptyBitmap(NumBlocks());
+    var bm' := Bitmap.BitSet(bm, 0);
+    InitLocBitmapIterate(indirectionTable,
+        MutableMapModel.IterStart(indirectionTable),
+        bm')
+  }
+
+  predicate IsLocAllocIndirectionTablePartial(indirectionTable: IndirectionTable, i: int, s: set<uint64>)
+  {
+    || i == 0 // block 0 is always implicitly allocated
+    || !(
+      forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in s ::
+        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int
+    )
+  }
+
+  lemma InitLocBitmapIterateCorrect(indirectionTable: IndirectionTable,
+      it: MutableMapModel.Iterator<(Option<BC.Location>, seq<BT.G.Reference>)>,
+      bm: Bitmap.BitmapModel)
+  requires InitLocBitmapIterate.requires(indirectionTable, it, bm);
+  requires (forall i: int ::
+        (IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)) <==> IsLocAllocBitmap(bm, i)
+      )
+  requires 
+    forall r1, r2 | r1 in IIndirectionTable(indirectionTable).locs && r2 in IIndirectionTable(indirectionTable).locs ::
+        r1 in it.s && r2 in it.s ==>
+        BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2)
+  ensures var (succ, bm') := InitLocBitmapIterate(indirectionTable, it, bm);
+    (succ ==>
+      && (forall i: int ::
+        (IsLocAllocIndirectionTable(indirectionTable, i)
+        <==> IsLocAllocBitmap(bm', i)
+      ))
+      && BC.AllLocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable))
+    )
+  decreases it.decreaser
+  {
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+
+    var (succ, bm') := InitLocBitmapIterate(indirectionTable, it, bm);
+    if it.next.None? {
+      forall i: int | IsLocAllocIndirectionTable(indirectionTable, i)
+      ensures IsLocAllocBitmap(bm', i)
+      {
+      }
+
+      forall i: int
+      | IsLocAllocBitmap(bm', i)
+      ensures IsLocAllocIndirectionTable(indirectionTable, i)
+      {
+      }
+    } else {
+      if (succ) {
+        var kv := it.next.value;
+        assert kv.0 in IIndirectionTable(indirectionTable).locs;
+        var loc: uint64 := kv.1.0.value.addr;
+        var locIndex: uint64 := loc / BlockSize() as uint64;
+
+        //assert IIndirectionTable(indirectionTable).locs[kv.0] == kv.1.0.value;
+        LBAType.reveal_ValidAddr();
+        assert BC.ValidLocationForNode(kv.1.0.value);
+        assert locIndex as int * BlockSize() == loc as int;
+
+        //assert locIndex < NumBlocks() as uint64;
+        //assert !Bitmap.IsSet(bm, locIndex as int);
+
+        var bm0 := Bitmap.BitSet(bm, locIndex as int);
+        var it0 := MutableMapModel.IterInc(indirectionTable, it);
+
+        forall i: int
+        | IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s)
+        ensures IsLocAllocBitmap(bm0, i)
+        {
+          // This triggers all the right stuff:
+          if IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s) { }
+          /*
+          if i != 0 {
+            var ref :| ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in it0.s && indirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
+            if (ref == kv.0) {
+              assert IsLocAllocBitmap(bm0, i);
+            } else {
+              assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s);
+              assert IsLocAllocBitmap(bm0, i);
+            }
+          } else {
+            assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s);
+          }
+          */
+        }
+
+        forall i: int
+        | IsLocAllocBitmap(bm0, i)
+        ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s)
+        {
+          if IsLocAllocBitmap(bm, i) { }
+          if IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s) { }
+
+          if i == locIndex as int {
+            var ref := kv.0;
+            assert ref in indirectionTable.contents;
+            assert indirectionTable.contents[ref].0.Some?;
+            assert ref in it0.s;
+            assert indirectionTable.contents[ref] == kv.1;
+            assert indirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
+
+            assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s);
+          } else {
+            assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s);
+          }
+        }
+
+        forall r1, r2 | r1 in IIndirectionTable(indirectionTable).locs && r2 in IIndirectionTable(indirectionTable).locs && r1 in it0.s && r2 in it0.s
+        ensures BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2)
+        {
+          if r1 != r2 {
+            if r1 in it.s && r2 in it.s {
+              assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
+            } else {
+              if IIndirectionTable(indirectionTable).locs[r1].addr == IIndirectionTable(indirectionTable).locs[r2].addr {
+                var j1 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r1].addr);
+                var j2 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r2].addr);
+                if r1 !in it.s {
+                  assert r2 in it.s;
+                  assert !Bitmap.IsSet(bm, j1);
+                  assert IsLocAllocBitmap(bm, j2);
+                  assert Bitmap.IsSet(bm, j2);
+                  assert false;
+                } else {
+                  assert r1 in it.s;
+                  assert !Bitmap.IsSet(bm, j2);
+                  assert IsLocAllocBitmap(bm, j1);
+                  assert Bitmap.IsSet(bm, j1);
+                  assert false;
+                }
+              } else {
+                assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
+              }
+            }
+          }
+        }
+
+        InitLocBitmapIterateCorrect(indirectionTable, it0, bm0);
+        assert (succ, bm') == InitLocBitmapIterate(indirectionTable, it0, bm0);
+      }
+    }
+  }
+
+  lemma InitLocBitmapCorrect(indirectionTable: IndirectionTable)
+  requires MutableMapModel.Inv(indirectionTable)
+  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+  ensures var (succ, bm) := InitLocBitmap(indirectionTable);
+    (succ ==>
+      && (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
+        <==> IsLocAllocBitmap(bm, i)
+      )
+      && BC.AllLocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable))
+    )
+  {
+    reveal_InitLocBitmap();
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+
+    var it := MutableMapModel.IterStart(indirectionTable);
+
+    var bm := Bitmap.EmptyBitmap(NumBlocks());
+    var bm' := Bitmap.BitSet(bm, 0);
+
+    /*forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
+    ensures IsLocAllocBitmap(bm', i)
+    {
+      assert i == 0;
+    }*/
+
+    forall i: int | IsLocAllocBitmap(bm', i)
+    ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
+    {
+      if i != 0 {
+        assert Bitmap.IsSet(bm', i)
+            == Bitmap.IsSet(bm, i)
+            == false;
+      }
+      assert i == 0;
+    }
+
+    InitLocBitmapIterateCorrect(indirectionTable, it, bm');
+  }
+
   function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
   : (s' : Variables)
   requires diskOp(io).RespReadOp?
@@ -335,9 +569,15 @@ module ImplModelIO {
   {
     var (id, sector) := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
-      var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty())
+      var (succ, bm) := InitLocBitmap(ephemeralIndirectionTable);
+      if succ then (
+        var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
+        var persistentIndirectionTable := sector.value.indirectionTable;
+        Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), blockAllocator)
+      ) else (
+        s
+      )
     ) else (
       s
     )
@@ -360,17 +600,29 @@ module ImplModelIO {
 
     var s' := PageInIndirectionTableResp(k, s, io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
-      WeightBucketEmpty();
-      assert WFVars(s');
-      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
-    } else {
-      assert s == s';
-      assert BC.NoOp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
-      assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s), UI.NoOp, M.IDiskOp(diskOp(io)), BC.NoOpStep);
-      assert M.NextStep(Ik(k), IVars(s), IVars(s), UI.NoOp, diskOp(io), M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
-      assert stepsBC(k, IVars(s), IVars(s), UI.NoOp, io, BC.NoOpStep);
+      var ephemeralIndirectionTable := sector.value.indirectionTable;
+      var (succ, bm) := InitLocBitmap(ephemeralIndirectionTable);
+      if succ {
+        WeightBucketEmpty();
+
+        reveal_ConsistentBitmap();
+        InitLocBitmapCorrect(ephemeralIndirectionTable);
+        assert ConsistentBitmap(s'.ephemeralIndirectionTable, s'.frozenIndirectionTable,
+          s'.persistentIndirectionTable, s'.outstandingBlockWrites, s'.blockAllocator);
+
+        assert WFVars(s');
+        assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.PageInIndirectionTableRespStep);
+        assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+
+        return;
+      }
     }
+
+    assert s == s';
+    assert BC.NoOp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
+    assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s), UI.NoOp, M.IDiskOp(diskOp(io)), BC.NoOpStep);
+    assert M.NextStep(Ik(k), IVars(s), IVars(s), UI.NoOp, diskOp(io), M.Step(BBC.BlockCacheMoveStep(BC.NoOpStep)));
+    assert stepsBC(k, IVars(s), IVars(s), UI.NoOp, io, BC.NoOpStep);
   }
 
   function PageInResp(k: Constants, s: Variables, io: IO)
@@ -492,37 +744,133 @@ module ImplModelIO {
 
   // == writeResponse ==
 
+  lemma lemmaOutstandingLocIndexValid(k: Constants, s: Variables, id: uint64)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires id in s.outstandingBlockWrites
+  ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / BlockSize() < NumBlocks()
+  {
+    reveal_ConsistentBitmap();
+    var i := s.outstandingBlockWrites[id].loc.addr as int / BlockSize();
+    LBAType.reveal_ValidAddr();
+    assert i * BlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
+    assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+  }
+
+  lemma lemmaBlockAllocatorFrozenSome(k: Constants, s: Variables)
+  requires Inv(k, s)
+  requires s.Ready?
+  ensures s.outstandingIndirectionTableWrite.Some?
+      ==> s.blockAllocator.frozen.Some?
+  {
+    reveal_ConsistentBitmap();
+  }
+
   function writeResponse(k: Constants, s: Variables, io: IO)
   : (s': Variables)
+  requires Inv(k, s)
   requires diskOp(io).RespWriteOp?
   requires s.Ready? && s.outstandingIndirectionTableWrite.Some? ==> s.frozenIndirectionTable.Some?
   {
     var id := io.id;
+
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) then (
+      lemmaBlockAllocatorFrozenSome(k, s);
       s.(outstandingIndirectionTableWrite := None)
              .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
              .(syncReqs := BC.syncReqs2to1(s.syncReqs))
+             .(blockAllocator := ImplModelBlockAllocator.MoveFrozenToPersistent(s.blockAllocator))
     ) else if (s.Ready? && id in s.outstandingBlockWrites) then (
+      lemmaOutstandingLocIndexValid(k, s, id);
       s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
+       .(blockAllocator := ImplModelBlockAllocator.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / BlockSize()))
     ) else (
       s
     )
   }
 
   lemma writeResponseCorrect(k: Constants, s: Variables, io: IO)
+  requires Inv(k, s)
   requires diskOp(io).RespWriteOp?
-  requires WFVars(s)
-  requires BBC.Inv(Ik(k), IVars(s))
   ensures var s' := writeResponse(k, s, io);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
+    reveal_ConsistentBitmap();
     var id := io.id;
     var s' := writeResponse(k, s, io);
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
+      lemmaBlockAllocatorFrozenSome(k, s);
+      assert WFVars(s');
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
+      var locIdx := s.outstandingBlockWrites[id].loc.addr as int / BlockSize();
+      lemmaOutstandingLocIndexValid(k, s, id);
+
+      LBAType.reveal_ValidAddr();
+      assert locIdx * BlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
+
+      Bitmap.reveal_BitUnset();
+      Bitmap.reveal_IsSet();
+
+      /*forall i | 0 <= i < NumBlocks()
+      ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
+          || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
+          || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+          || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+          || Bitmap.IsSet(s'.blockAllocator.full, i)
+        )
+      {
+        if i == locIdx {
+          assert Bitmap.IsSet(s'.blockAllocator.full, i) == (
+              || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
+              || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+              || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+              || Bitmap.IsSet(s'.blockAllocator.full, i)
+          );
+        } else {
+          assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
+          assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
+          assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
+          assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
+          assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
+        }
+      }*/
+
+      forall i: int
+      | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+      ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+      {
+        if i != locIdx {
+          assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
+          assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+          assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+        } else {
+          var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * BlockSize() as int;
+          assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
+          /*assert s.outstandingBlockWrites[id1].loc.addr as int
+              == s'.outstandingBlockWrites[id1].loc.addr as int
+              == i * BlockSize() as int;
+          assert id == id1;
+          assert id !in s'.outstandingBlockWrites;
+          assert false;*/
+        }
+      }
+
+      forall i: int
+      | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+      ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+      {
+        if i != locIdx {
+          assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+          assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+        } else {
+          assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+        }
+      }
+
+      assert WFVars(s');
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackRespStep);
     } else {
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);

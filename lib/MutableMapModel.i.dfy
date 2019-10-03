@@ -1102,6 +1102,8 @@ module MutableMapModel {
       && Inv(self')
       && self'.contents == self.contents[key := value]
       && self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
+      && (replaced.Some? ==> MapsTo(self.contents, key, replaced.value))
+      && (replaced.None? ==> key !in self.contents)
   {
     // -- mutation --
     var self1 := if |self.underlying.storage| as uint64 / 2 <= self.underlying.count then (
