@@ -64,6 +64,7 @@ module ImplModel {
                                                          // TODO replace with something that only tracks LBAs
         frozenIndirectionTable: Option<IndirectionTable>,
         ephemeralIndirectionTable: IndirectionTable,
+        nextFreeRef: uint64,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
@@ -132,7 +133,7 @@ module ImplModel {
   predicate WFVarsReady(s: Variables)
   requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) := s;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, nextFreeRef, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) := s;
     && WFCache(cache)
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
@@ -185,7 +186,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, nextFreeRef, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs.contents, ICache(cache))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs.contents)
     }
@@ -210,10 +211,19 @@ module ImplModel {
     IVars(s)
   }
 
+  predicate RefIsUpperBoundForUsedRefs(ref: uint64, indirectionTable: IndirectionTable)
+  {
+    && forall r | r in indirectionTable :: r < ref
+  }
+
   predicate Inv(k: Constants, s: Variables)
   {
     && WFVars(s)
     && BBC.Inv(Ik(k), IVars(s))
+    && (s.Ready? ==>
+      RefIsUpperBoundForUsedRefs(s.nextFreeRef, s.persistentIndirectionTable) &&
+      (s.frozenIndirectionTable.Some? ==> RefIsUpperBoundForUsedRefs(s.nextFreeRef, s.frozenIndirectionTable.value)) &&
+      RefIsUpperBoundForUsedRefs(s.nextFreeRef, s.ephemeralIndirectionTable))
   }
 
   // Functional model of the DiskIOHandler

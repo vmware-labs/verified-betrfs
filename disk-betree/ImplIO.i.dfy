@@ -177,6 +177,13 @@ module ImplIO {
     }
   }
 
+  method getFreeRef(indirectionTable: IS.MutIndirectionTable) returns (ref: Option<BT.G.Reference>)
+  requires indirectionTable.Inv()
+  ensures ref.Some? ==> RefIsUpperBoundForUsedRefs(IS.IIndirectionTable(indirectionTable)) && ref.value != BT.G.Root()
+  {
+
+  }
+
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires s.W()
   requires io.diskOp().RespReadOp?
@@ -205,6 +212,7 @@ module ImplIO {
         s.persistentIndirectionTable := persistentIndirectionTable;
         s.frozenIndirectionTable := null;
         s.ephemeralIndirectionTable := ephemeralIndirectionTable;
+        s.nextFreeRef := *;
         s.outstandingIndirectionTableWrite := None;
         s.outstandingBlockWrites := map[];
         s.outstandingBlockReads := map[];

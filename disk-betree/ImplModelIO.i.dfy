@@ -346,6 +346,26 @@ module ImplModelIO {
     D.reveal_ChecksumChecksOut();
   }
 
+  // predicate NextFreeRefAvailable(indirectionTable: IndirectionTable)
+  // {
+  //   && exists i: uint64 :: forall ref | ref in indirectionTable :: ref.0 < i
+  // }
+
+  function getFreeRefIterate(indirectionTable: IndirectionTable, i: uint64) 
+  : (ref : Option<BT.G.Reference>)
+  requires i >= 1
+  ensures ref.Some? ==> RefIsUpperBoundForUsedRefs(ref.value, indirectionTable) && ref.value != BT.G.Root()
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  {
+    if i !in indirectionTable.Keys then (
+      Some(i)
+    ) else if i == 0xffff_ffff_ffff_ffff then (
+      None
+    ) else (
+      getFreeRefIterate(indirectionTable, i+1) 
+    )
+  }
+
   function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
   : (s' : Variables)
   requires diskOp(io).RespReadOp?
@@ -356,10 +376,15 @@ module ImplModelIO {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
       if succ then (
-        var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
-        var persistentIndirectionTable :=
-            IndirectionTableModel.clone(sector.value.indirectionTable);
-        Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), blockAllocator)
+        var nextFreeRef := getFreeRefIterate(ephemeralIndirectionTable, 1);
+        if nextFreeRef.Some? then (
+          var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
+          var persistentIndirectionTable :=
+              IndirectionTableModel.clone(sector.value.indirectionTable);
+          Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, nextFreeRef.value, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), blockAllocator)
+        ) else (
+          s
+        )
       ) else (
         s
       )
@@ -384,6 +409,7 @@ module ImplModelIO {
     M.reveal_Parse();
 
     var s' := PageInIndirectionTableResp(k, s, io);
+
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);

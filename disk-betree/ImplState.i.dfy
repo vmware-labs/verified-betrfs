@@ -112,6 +112,7 @@ module {:extern} ImplState {
     var persistentIndirectionTable: MutIndirectionTable;
     var frozenIndirectionTable: MutIndirectionTableNullable;
     var ephemeralIndirectionTable: MutIndirectionTable;
+    var nextFreeRef: uint64;
     var outstandingIndirectionTableWrite: Option<BC.ReqId>;
     var outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>;
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
@@ -183,7 +184,7 @@ module {:extern} ImplState {
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs.I(), cache.I(), lru.Queue, blockAllocator.I())
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), nextFreeRef, outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs.I(), cache.I(), lru.Queue, blockAllocator.I())
       ) else (
         IM.Unready(outstandingIndirectionTableRead, syncReqs.I())
       )
