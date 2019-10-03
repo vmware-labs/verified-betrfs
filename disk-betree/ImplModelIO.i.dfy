@@ -44,45 +44,27 @@ module ImplModelIO {
     && loc.len == len
   }
 
-  predicate addrNotUsedInIndirectionTable(addr: uint64, indirectionTable: IndirectionTable)
-  {
-    && (forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some?  ::
-          indirectionTable.contents[ref].0.value.addr != addr)
-  }
-
-  function getFreeLocIterate(s: Variables, len: uint64, tryOffset: uint64)
-  : (loc : Option<BC.Location>)
-  requires s.Ready?
-  requires WFVars(s)
-  requires len <= LBAType.BlockSize()
-  requires tryOffset as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
-  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
-  decreases 0x1_0000_0000_0000_0000 - tryOffset as int
-  {
-    if (
-      && var addr := tryOffset * LBAType.BlockSize();
-      && BC.ValidLBAForNode(addr)
-      && addrNotUsedInIndirectionTable(addr, s.persistentIndirectionTable)
-      && addrNotUsedInIndirectionTable(addr, s.ephemeralIndirectionTable)
-      && (s.frozenIndirectionTable.Some? ==> addrNotUsedInIndirectionTable(addr, s.frozenIndirectionTable.value))
-      && (forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr)
-    ) then (
-      Some(LBAType.Location(tryOffset * LBAType.BlockSize(), len))
-    ) else if (tryOffset+1) as int >= 0x1_0000_0000_0000_0000 as int / LBAType.BlockSize() as int then (
-      None
-    ) else (
-      getFreeLocIterate(s, len, tryOffset+1)
-    )
-  }
-
   function {:opaque} getFreeLoc(s: Variables, len: uint64)
-  : (loc : Option<BC.Location>)
+  : (res : (Variables, Option<BC.Location>))
   requires s.Ready?
   requires WFVars(s)
   requires len <= LBAType.BlockSize()
-  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
   {
-    getFreeLocIterate(s, len, 0)
+    var (i, bm') := Bitmap.BitAlloc(s.locBitmap);
+    var loc := if i.Some? then
+      Some(LBAType.Location((i.value * BlockSize()) as uint64, len))
+    else
+      None;
+    var s' := s.(locBitmap := bm');
+    (s', loc)
+  }
+
+  lemma getFreeLocCorrect(s: Variables, len: uint64)
+  requires getFreeLoc.requires(s, len);
+  ensures var (s', loc) := getFreeLoc(s, len);
+    && (loc.Some? ==> LocAvailable(s, loc.value, len))
+  {
+    reveal_getFreeLoc();
   }
 
   predicate {:opaque} RequestWrite(io: IO, loc: LBAType.Location, sector: Sector,
@@ -132,7 +114,8 @@ module ImplModelIO {
     Marshalling.reveal_parseSector();
   }
 
-  predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
+  predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector,
+      s': Variables, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires s.Ready?
   requires WFVars(s)
   {
@@ -142,6 +125,7 @@ module ImplModelIO {
       && id == None
       && loc == None
       && io' == io
+      && s' == s
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
@@ -152,7 +136,7 @@ module ImplModelIO {
       && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
 
       && var len := |bytes| as uint64;
-      && loc == getFreeLoc(s, len)
+      && (s', loc) == getFreeLoc(s, len)
       && loc.Some?
 
       && id == Some(dop.id)
@@ -161,12 +145,12 @@ module ImplModelIO {
     ))
   }
 
-  lemma FindLocationAndRequestWriteCorrect(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
+  lemma FindLocationAndRequestWriteCorrect(io: IO, s: Variables, sector: Sector, s': Variables, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires WFVars(s)
   requires s.Ready?
   requires WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
-  requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
+  requires FindLocationAndRequestWrite(io, s, sector, s', id, loc, io')
   ensures M.ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> LBAType.ValidLocation(loc.value)
@@ -328,6 +312,8 @@ module ImplModelIO {
     D.reveal_ChecksumChecksOut();
   }
 
+  function initLocBitmap(indirectionTable: IndirectionTable) : 
+
   function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
   : (s' : Variables)
   requires diskOp(io).RespReadOp?
@@ -337,7 +323,8 @@ module ImplModelIO {
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty())
+      var bm := initLocBitmap(ephemeralIndirectionTable);
+      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), bm);
     ) else (
       s
     )

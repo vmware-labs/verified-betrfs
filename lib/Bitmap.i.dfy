@@ -26,9 +26,16 @@ module Bitmap {
     bm[i := false]
   }
 
-  function BitAllocIter(bm: BitmapModel, i: int) : (Option<int>, BitmapModel)
+  predicate {:opaque} IsSet(bm: BitmapModel, i: int)
+  requires 0 <= i < Len(bm)
+  {
+    bm[i]
+  }
+
+  function BitAllocIter(bm: BitmapModel, i: int) : (res: (Option<int>, BitmapModel))
   requires 0 <= i < |bm|
   decreases |bm| - i
+  ensures res.0.Some? ==> 0 <= res.0.value < |bm|
   {
     if i == |bm| then (
       (None, bm)
@@ -40,6 +47,7 @@ module Bitmap {
   }
 
   function {:opaque} BitAlloc(bm: BitmapModel) : (res: (Option<int>, BitmapModel))
+  ensures res.0.Some? ==> 0 <= res.0.value < Len(bm)
   {
     BitAllocIter(bm, 0)
   }

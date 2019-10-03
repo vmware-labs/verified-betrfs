@@ -7,6 +7,7 @@ include "../lib/tttree.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"
 include "../lib/MutableMapModel.i.dfy"
+include "../lib/Bitmap.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -34,6 +35,7 @@ module ImplModel {
   import opened BucketWeights
   import opened Bounds
   import LruModel
+  import Bitmap
   import UI
   import MutableMapModel
 
@@ -63,12 +65,38 @@ module ImplModel {
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
         syncReqs: map<uint64, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
-        lru: LruModel.LruQueue
+        lru: LruModel.LruQueue,
+        locBitmap: Bitmap.BitmapModel
       )
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
+
+  predicate IsLocFreeIndirectionTable(indirectionTable: IndirectionTable, i: int)
+  {
+    && (forall ref | ref in indirectionTable && indirectionTable[ref].0.Some? ::
+        indirectionTable[ref].0.value.addr as int == i * BlockSize() as int)
+  }
+
+  predicate IsLocFree(s: Variables, i: int)
+  requires s.Ready?
+  {
+    && IsLocFreeIndirectionTable(s.ephemeralIndirectionTable, i)
+    && IsLocFreeIndirectionTable(s.persistentIndirectionTable, i)
+    && (s.frozenIndirectionTable.Some? ==>
+        IsLocFreeIndirectionTable(s.frozenIndirectionTable.value, i))
+    && (forall id | id in s.outstandingBlockWrites ::
+        s.outstandingBlockWrites[id].loc.addr as int != i * BlockSize() as int)
+    && i != 0
+  }
+
+  predicate {:opaque} ConsistentBitmap(s: Variables)
+  requires s.Ready?
+  {
+    forall i: int :: !IsLocFree(s, i) <==>
+        (0 <= i < Bitmap.Len(s.locBitmap) && Bitmap.IsSet(s.locBitmap, i))
+  }
 
   predicate WFNode(node: Node)
   {
@@ -91,7 +119,7 @@ module ImplModel {
   predicate WFVarsReady(s: Variables)
   requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru) := s;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) := s;
     && WFCache(cache)
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
@@ -99,6 +127,7 @@ module ImplModel {
     && MutableMapModel.Inv(ephemeralIndirectionTable)
     && MutableMapModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
+    && ConsistentBitmap(s)
   }
   predicate WFVars(vars: Variables)
   {
@@ -149,7 +178,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }
