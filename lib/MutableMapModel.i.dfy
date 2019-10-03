@@ -232,7 +232,7 @@ module MutableMapModel {
         ==> TombstoneInSlotMatchesContents(elements, slot, contents)
   }
 
-  predicate Inv<V>(self: LinearHashMap<V>)
+  protected predicate Inv<V>(self: LinearHashMap<V>)
   {
     && 128 <= |self.storage| < 0x10000000000000000
     && (self.count as nat) < 0x10000000000000000
@@ -500,4 +500,89 @@ module MutableMapModel {
   //     */
   //   }
   }
+
+  datatype Iterator<V> = Iterator(
+    i: uint64, // index in hash table item list
+    ghost s: set<uint64>,
+    next: Option<(uint64, V)>)
+
+  protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  ensures WFIter(self, it) ==> (it.next.None? ==> it.s == self.contents.Keys)
+  {
+    && 0 <= it.i as int <= |self.storage|
+    && (it.next.Some? ==>
+      && it.i as int < |self.storage|
+      && self.storage[it.i].Entry?
+      && self.storage[it.i].key == it.next.value.0
+      && self.storage[it.i].value == it.next.value.1
+    )
+    && (it.next.None? ==> (
+      && it.s == self.contents.Keys
+      && it.i as int == |self.storage|
+    ))
+    && (forall j | 0 <= j < it.i as int ::
+        self.storage[j].Entry? ==> self.storage[j].key in it.s)
+    && (forall key | key in it.s ::
+        exists j | 0 <= j < it.i as int ::
+        && self.storage[j].Entry?
+        && key == self.storage[j].key)
+  }
+
+  function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, Option<(uint64, V)>))
+  requires Inv(self)
+  requires 0 <= i as int <= |self.storage|
+  ensures res.1.Some? ==> res.0 as int < |self.storage|
+  ensures res.1.Some? ==> self.storage[res.0].Entry?
+  ensures res.1.Some? ==> self.storage[res.0].key == res.1.value.0
+  ensures res.1.Some? ==> self.storage[res.0].value == res.1.value.1
+  ensures res.1.None? ==> res.0 as int == |self.storage|
+  ensures forall j | i <= j < res.0 :: !self.storage[j].Entry?
+  decreases |self.storage| - i as int
+  {
+    if i as int == |self.storage| then (
+      (i, None)
+    ) else if self.storage[i].Entry? then (
+      (i, Some((self.storage[i].key, self.storage[i].value)))
+    ) else (
+      iterToNext(self, i+1)
+    )
+  }
+
+  lemma EmptySetOfNoEntries<V>(self: LinearHashMap<V>)
+  requires Inv(self)
+  ensures (forall j | 0 <= j < |self.storage| :: !self.storage[j].Entry?) ==>
+      self.contents.Keys == {};
+  /*{
+    if (forall j | 0 <= j < |self.storage| :: !self.storage[j].Entry?) {
+      forall key | key in self.contents.Keys
+      ensures false
+      {
+        assert key in self.contents;
+        var skips :| SlotExplainsKey(self.storage, skips, key);
+      }
+      //assert self.contents == map[];
+    }
+  }*/
+
+  function {:opaque} IterStart<V>(self: LinearHashMap<V>) : (it' : Iterator<V>)
+  requires Inv(self)
+  ensures WFIter(self, it')
+  ensures it'.s == {}
+  {
+    EmptySetOfNoEntries(self);
+
+    var (i, next) := iterToNext(self, 0);
+    Iterator(i, {}, next)
+  }
+
+  /*
+  function {:opaque} IterInc<V>(self: HashTable, it: Iterator) : (it' : Iterator)
+  requires it.next.Some?
+  requires WFIter(self, it)
+  ensures WFIter(self, it')
+  ensures it'.s == it.s + {it.next.value.0}
+  ensures it'.next.None? ==> s == self.Contents.Keys
+  {
+  }
+  */
 }
