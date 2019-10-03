@@ -79,7 +79,7 @@ module MutableMapModel {
   //                 | > > > >   k = 8
   //   > > > *                   (slot + k) mod length is slot 3 == 8 - (12 - 7) == 8 - 5 == 3
   //
-  static lemma KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
+  lemma KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
     requires 0 <= k < elementsLength
     requires ValidSlot(elementsLength, slot)
     ensures if k < (elementsLength-slot.slot) then
@@ -322,28 +322,26 @@ module MutableMapModel {
   ensures size as nat == |self.storage|
   {
     LinearHashMap(
-     /* storage := */ [Empty],
+     /* storage := */ SeqOfLength(size as nat, Empty),
      /* count := */ 0,
      /* contents := */ map[])
   }
 
   // TODO is this necessary in functional land?
-  // function ConstructorFromStorage<V>(storage: seq<Item<V>>, count: uint64) 
-  // : (self: LinearHashMap<V>)
-  // requires 128 <= |storage|
-  // ensures self.storage == storage
-  // ensures forall slot :: ValidSlot(|self.storage|, slot) ==>
-  //   self.storage[slot.slot] == storage[slot.slot]
-  // ensures self.count == count
-  // ensures self.contents == map[]
-  // {
-  //   LinearHashMap(
-  //    /* storage := */ storage,
-  //    /* count := */ count,
-  //    /* contents := */ map[])
-  // }
-
-  /*
+  function ConstructorFromStorage<V>(storage: seq<Item<V>>, count: uint64) 
+  : (self: LinearHashMap<V>)
+  requires 128 <= |storage|
+  ensures self.storage == storage
+  ensures forall slot :: ValidSlot(|self.storage|, slot) ==>
+    self.storage[slot.slot] == storage[slot.slot]
+  ensures self.count == count
+  ensures self.contents == map[]
+  {
+    LinearHashMap(
+     /* storage := */ storage,
+     /* count := */ count,
+     /* contents := */ map[])
+  }
 
   function View<V>(elements: seq<Item<V>>, start: nat): (result: seq<Item<V>>)
   requires start < |elements|
@@ -365,6 +363,7 @@ module MutableMapModel {
   }
 
   function Uint64SlotSuccessor(elementsLength: nat, slot: uint64): (nextSlot: uint64)
+  requires elementsLength < 0x1_0000_0000_0000_0000
   requires ValidSlot(elementsLength, Slot(slot as nat))
   ensures ValidSlot(elementsLength, Slot(nextSlot as nat))
   ensures Slot(nextSlot as nat) == SlotSuccessor(elementsLength, Slot(slot as nat))
@@ -375,31 +374,44 @@ module MutableMapModel {
       slot + 1
   }
 
-  */
+  datatype ProbeResult<V> = ProbeResult(slotIdx: uint64, /* ghost */ startSlotIdx: uint64, /* ghost */ ghostSkips: uint64)
 
-  // method Probe(key: uint64) returns (slotIdx: uint64, ghost startSlotIdx: uint64, ghost ghostSkips: uint64)
-  // requires Inv()
-  // ensures Inv()
-  // ensures Storage.Length == old(Storage.Length)
-  // ensures ValidSlot(Storage.Length, Slot(slotIdx as nat))
-  // ensures ValidSlot(Storage.Length, Slot(startSlotIdx as nat))
-  // ensures Slot(startSlotIdx as nat) == SlotForKey(Storage.Length, key)
-  // ensures 0 <= ghostSkips
-  // ensures slotIdx as nat == KthSlotSuccessor(Storage.Length, Slot(startSlotIdx as nat), ghostSkips as nat).slot
-  // ensures key in Contents ==> SlotExplainsKey(Storage[..], ghostSkips as nat, key)
-  // ensures key !in Contents ==> FilledWithOtherKeys(Storage[..], Slot(startSlotIdx as nat), ghostSkips as nat, key) && (Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key))
-  // ensures Storage[slotIdx].Entry? ==> key in Contents && key == Storage[slotIdx].key
-  // ensures Storage[slotIdx].Empty? ==> key !in Contents
-  // ensures Repr == old(Repr)
-  // {
-  //   slotIdx := Uint64SlotForKey(key);
-  //   startSlotIdx := slotIdx;
-  //   ghost var startSlot := Slot(startSlotIdx as nat);
+  function ProbeIterate<V>(
+    self: LinearHashMap<V>,
+    key: uint64,
+    slotIdx: uint64,
+    // startSlotIdx: uint64,
+    // viewFromStartSlot: seq<Item<V>>,
+    skips: uint64
+  ) : (foundSlotIdx: uint64)
+  {
+    if self.storage[slotIdx].Empty? || self.storage[slotIdx].key == key then
+      slotIdx
+    else
+      ProbeIterate(self, key, Uint64SlotSuccessor(|self.storage|, slotIdx), skips + 1)
+  }
 
-  //   ghost var viewFromStartSlot := View(Storage[..], startSlotIdx as nat);
-  //   ViewsHaveConsistentCounts(Storage[..], viewFromStartSlot, startSlotIdx as nat);
-  //   CountFilledMatchesIndexSet(Storage[..]);
-  //   IndexSetMatchesContents(Storage[..], Contents);
+  function Probe<V>(self: LinearHashMap<V>, key: uint64): (result: ProbeResult<V>)
+  requires Inv(self)
+  ensures Inv(self)
+  ensures ValidSlot(|self.storage|, Slot(result.slotIdx as nat))
+  ensures ValidSlot(|self.storage|, Slot(result.startSlotIdx as nat))
+  ensures Slot(result.startSlotIdx as nat) == SlotForKey(|self.storage|, key)
+  ensures 0 <= result.ghostSkips
+  ensures result.slotIdx as nat == KthSlotSuccessor(|self.storage|, Slot(result.startSlotIdx as nat), result.ghostSkips as nat).slot
+  ensures key in self.contents ==> SlotExplainsKey(self.storage, result.ghostSkips as nat, key)
+  ensures key !in self.contents ==> FilledWithOtherKeys(self.storage, Slot(result.startSlotIdx as nat), result.ghostSkips as nat, key) && (self.storage[result.slotIdx].Empty? || (self.storage[result.slotIdx].Tombstone? && self.storage[result.slotIdx].key == key))
+  ensures self.storage[result.slotIdx].Entry? ==> key in self.contents && key == self.storage[result.slotIdx].key
+  ensures self.storage[result.slotIdx].Empty? ==> key !in self.contents
+  {
+    var slotIdx := Uint64SlotForKey(self, key);
+    var startSlotIdx := slotIdx;
+    // ghost var startSlot := Slot(startSlotIdx as nat);
+
+    ghost var viewFromStartSlot := View(self.storage, startSlotIdx as nat);
+    ViewsHaveConsistentCounts(self.storage, viewFromStartSlot, startSlotIdx as nat);
+    CountFilledMatchesIndexSet(self.storage);
+    IndexSetMatchesContents(self.storage, self.contents);
 
   //   /* (doc)
   //   calc {
@@ -408,18 +420,22 @@ module MutableMapModel {
   //     viewFromStartSlot[..Storage.Length-(startSlotIdx as int)] + viewFromStartSlot[Storage.Length-(startSlotIdx as int)..];
   //   }
   //   */
-  //   forall dist: nat | dist < Storage.Length
-  //   ensures Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist]
-  //   {
-  //     KthSlotSuccessorWrapsAround(Storage.Length, startSlot, dist); // observe
-  //     /* (doc)
-  //     if dist < Storage.Length-(startSlotIdx as int) {
-  //       assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == startSlotIdx as int + (dist as int);
-  //     } else {
-  //       assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == (dist as int) - (Storage.Length-(startSlotIdx as int));
-  //     }
-  //     */
-  //   }
+
+  // TODO proof?
+  //  forall dist: nat | dist < |self.storage|
+  //  ensures Storage[KthSlotSuccessor(|self.storage|, startSlot, dist).slot] == viewFromStartSlot[dist]
+  //  {
+  //    KthSlotSuccessorWrapsAround(|self.storage|, startSlot, dist); // observe
+  //    /* (doc)
+  //    if dist < Storage.Length-(startSlotIdx as int) {
+  //      assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == startSlotIdx as int + (dist as int);
+  //    } else {
+  //      assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == (dist as int) - (Storage.Length-(startSlotIdx as int));
+  //    }
+  //    */
+  //  }
+
+    ProbeResult(0, 0, 0)
 
   //   var skips := 0;
   //   ghostSkips := 0;
@@ -483,5 +499,5 @@ module MutableMapModel {
   //                                             // which is surprising because it's the output of the calc
   //     */
   //   }
-  // }
+  }
 }
