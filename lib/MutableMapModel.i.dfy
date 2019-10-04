@@ -5,7 +5,7 @@ include "Sets.i.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"
 
-module MutableMapModel {
+module FixedSizeMutableMapModel {
   import opened NativeTypes
   import opened Options
   import opened Sequences
@@ -22,7 +22,7 @@ module MutableMapModel {
     slot.slot < elementsLength
   }
 
-  datatype LinearHashMap<V> = LinearHashMap(
+  datatype FixedSizeLinearHashMap<V> = FixedSizeLinearHashMap(
     storage: seq<Item<V>>,
     count: uint64,
     /* ghost */ contents: map<uint64, Option<V>>)
@@ -39,7 +39,7 @@ module MutableMapModel {
     Slot((key as nat) % elementsLength)
   }
 
-  function method Uint64SlotForKey<V>(self: LinearHashMap<V>, key: uint64): (result: uint64)
+  function method Uint64SlotForKey<V>(self: FixedSizeLinearHashMap<V>, key: uint64): (result: uint64)
   requires 0 < |self.storage| < 0x10000000000000000
   ensures ValidSlot(|self.storage|, Slot(result as nat))
   ensures Slot(result as nat) == SlotForKey(|self.storage|, key)
@@ -232,7 +232,7 @@ module MutableMapModel {
         ==> TombstoneInSlotMatchesContents(elements, slot, contents)
   }
 
-  protected predicate Inv<V>(self: LinearHashMap<V>)
+  protected predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
   {
     && 128 <= |self.storage| < 0x10000000000000000
     && (self.count as nat) < 0x10000000000000000
@@ -314,14 +314,14 @@ module MutableMapModel {
     }
   }
 
-  function ConstructorFromSize<V>(size: uint64): (self: LinearHashMap<V>)
+  function ConstructorFromSize<V>(size: uint64): (self: FixedSizeLinearHashMap<V>)
   requires 128 <= size
-  ensures Inv(self)
+  ensures FixedSizeInv(self)
   ensures forall slot :: ValidSlot(|self.storage|, slot) ==> SlotIsEmpty(self.storage, slot)
   ensures self.contents == map[]
   ensures size as nat == |self.storage|
   {
-    LinearHashMap(
+    FixedSizeLinearHashMap(
      /* storage := */ SeqOfLength(size as nat, Empty),
      /* count := */ 0,
      /* contents := */ map[])
@@ -329,7 +329,7 @@ module MutableMapModel {
 
   // TODO is this necessary in functional land?
   function ConstructorFromStorage<V>(storage: seq<Item<V>>, count: uint64) 
-  : (self: LinearHashMap<V>)
+  : (self: FixedSizeLinearHashMap<V>)
   requires 128 <= |storage|
   ensures self.storage == storage
   ensures forall slot :: ValidSlot(|self.storage|, slot) ==>
@@ -337,7 +337,7 @@ module MutableMapModel {
   ensures self.count == count
   ensures self.contents == map[]
   {
-    LinearHashMap(
+    FixedSizeLinearHashMap(
      /* storage := */ storage,
      /* count := */ count,
      /* contents := */ map[])
@@ -377,7 +377,7 @@ module MutableMapModel {
   datatype ProbeResult<V> = ProbeResult(slotIdx: uint64, /* ghost */ startSlotIdx: uint64, /* ghost */ ghostSkips: uint64)
 
   function ProbeIterate<V>(
-    self: LinearHashMap<V>,
+    self: FixedSizeLinearHashMap<V>,
     key: uint64,
     slotIdx: uint64,
     // startSlotIdx: uint64,
@@ -391,9 +391,9 @@ module MutableMapModel {
       ProbeIterate(self, key, Uint64SlotSuccessor(|self.storage|, slotIdx), skips + 1)
   }
 
-  function Probe<V>(self: LinearHashMap<V>, key: uint64): (result: ProbeResult<V>)
-  requires Inv(self)
-  ensures Inv(self)
+  function Probe<V>(self: FixedSizeLinearHashMap<V>, key: uint64): (result: ProbeResult<V>)
+  requires FixedSizeInv(self)
+  ensures FixedSizeInv(self)
   ensures ValidSlot(|self.storage|, Slot(result.slotIdx as nat))
   ensures ValidSlot(|self.storage|, Slot(result.startSlotIdx as nat))
   ensures Slot(result.startSlotIdx as nat) == SlotForKey(|self.storage|, key)
@@ -501,6 +501,144 @@ module MutableMapModel {
   //   }
   }
 
+  //////// Resizing Hash Map
+
+  datatype LinearHashMap<V> = LinearHashMap(
+    underlying: FixedSizeLinearHashMap<V>,
+    count: uint64,
+    /* ghost */ contents: map<uint64, V>)
+
+  function MapFromStorage<V>(elements: seq<Item<V>>): (result: map<uint64, V>)
+  {
+    if |elements| == 0 then
+      map[]
+    else
+      var item := Last(elements);
+      var dropLastMap := MapFromStorage(DropLast(elements));
+      if item.Entry? then
+        dropLastMap[item.key := item.value]
+      else
+        dropLastMap
+  }
+
+  lemma CantEquivocateMapFromStorageKey<V>(underlying: FixedSizeLinearHashMap<V>)
+    requires FixedSizeInv(underlying)
+    ensures forall slot1, slot2 :: ValidSlot(|underlying.storage|, slot1) && ValidSlot(|underlying.storage|, slot2) &&
+        underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry? &&
+        underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key ==> slot1 == slot2
+  /*{
+    assert |underlying.storage| > 0;
+    assert ValidSlot(|underlying.storage|, Slot(0));
+    assert exists slot :: ValidSlot(|underlying.storage|, slot);
+    forall slot1, slot2 | (
+      && ValidSlot(|underlying.storage|, slot1) && ValidSlot(|underlying.storage|, slot2)
+      && underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry?
+      && underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key)
+    ensures slot1 == slot2
+    {
+      assert underlying.CantEquivocateStorageKey(underlying.storage[..]);
+      if underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry? &&
+        underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key {
+
+        assert underlying.TwoNonEmptyValidSlotsWithSameKey(underlying.storage[..], slot1, slot2);
+        if slot1 != slot2 {
+          assert false;
+        }
+        assert slot1 == slot2;
+      } else {
+        assert slot1 == slot2;
+      }
+    }
+  }*/
+
+  lemma MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
+    requires forall slot1, slot2 :: ValidSlot(|elements|, slot1) && ValidSlot(|elements|, slot2) &&
+        elements[slot1.slot].Entry? && elements[slot2.slot].Entry? &&
+        elements[slot1.slot].key == elements[slot2.slot].key ==> slot1 == slot2
+    requires MapFromStorage(elements) == result
+    ensures forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Entry? ==>
+        && var item := elements[slot.slot];
+        && item.key in result && result[item.key] == item.value
+    ensures forall key :: key in result ==>
+        exists slot :: ValidSlot(|elements|, slot) && elements[slot.slot] == Entry(key, result[key])
+    ensures forall key :: key !in result ==>
+        forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Entry?
+            ==> elements[slot.slot].key != key
+  {
+    if |elements| == 0 {
+    } else if Last(elements).Entry? {
+      var item := Last(elements);
+      assert elements == DropLast(elements) + [Last(elements)];
+      var dropLastMap := MapFromStorage(DropLast(elements));
+      MapFromStorageProperties(DropLast(elements), dropLastMap);
+
+      forall slot | ValidSlot(|elements|, slot) && elements[slot.slot].Entry?
+      ensures && var item := elements[slot.slot];
+              && item.key in result && result[item.key] == item.value
+      {
+        var slotItem := elements[slot.slot];
+        if item.key == elements[slot.slot].key {
+          if slot.slot == |elements| - 1 {
+            assert slotItem.key in result && result[slotItem.key] == slotItem.value;
+          } else {
+            var slot := Slot(|elements| - 1);
+            assert ValidSlot(|elements|, slot);
+            assert false;
+          }
+        } else {
+          assert slotItem.key in result && result[slotItem.key] == slotItem.value;
+        }
+      }
+      forall key | key in result
+      ensures exists slot :: ValidSlot(|elements|, slot) && elements[slot.slot] == Entry(key, result[key])
+      {
+        if key == item.key {
+          var slot := Slot(|elements| - 1);
+          assert ValidSlot(|elements|, slot);
+          assert elements[slot.slot] == Entry(key, result[key]);
+        } else {
+          assert exists slot :: ValidSlot(|elements|, slot) && elements[slot.slot] == Entry(key, result[key]);
+        }
+      }
+    } else {
+    }
+  }
+
+  predicate UnderlyingContentsMatchesContents<V>(underlying: FixedSizeLinearHashMap<V>, contents: map<uint64, V>)
+  {
+    && (forall key :: key in contents ==> key in underlying.contents && underlying.contents[key] == Some(contents[key]))
+    && (forall key :: key !in contents ==> key !in underlying.contents || underlying.contents[key].None?)
+  }
+
+  predicate UnderlyingInv<V>(self: LinearHashMap<V>, underlying: FixedSizeLinearHashMap<V>)
+  {
+    && |self.contents| == self.count as nat
+    && UnderlyingContentsMatchesContents(underlying, self.contents)
+    && FixedSizeInv(underlying)
+    && MapFromStorage(underlying.storage[..]) == self.contents
+  }
+
+  lemma UnderlyingInvImpliesMapFromStorageMatchesContents<V>(underlying: FixedSizeLinearHashMap<V>, contents: map<uint64, V>)
+    requires UnderlyingContentsMatchesContents(underlying, contents)
+    requires FixedSizeInv(underlying)
+    ensures MapFromStorage(underlying.storage[..]) == contents
+  {
+    var mapFromStorage := MapFromStorage(underlying.storage[..]);
+    CantEquivocateMapFromStorageKey(underlying);
+    MapFromStorageProperties(underlying.storage[..], mapFromStorage);
+    assert MapFromStorage(underlying.storage[..]) == contents;
+  }
+
+  protected predicate Inv<V>(self: LinearHashMap<V>)
+    ensures Inv(self) ==> |self.contents| == self.count as nat
+  {
+    && UnderlyingInv(self, self.underlying)
+    && MapFromStorage(self.underlying.storage[..]) == self.contents
+    && |self.contents| == self.count as nat
+  }
+
+  //////// Iterator
+
   datatype Iterator<V> = Iterator(
     i: uint64, // index in hash table item list
     ghost s: set<uint64>,
@@ -509,40 +647,40 @@ module MutableMapModel {
   protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
   ensures WFIter(self, it) ==> (it.next.None? ==> it.s == self.contents.Keys)
   {
-    && 0 <= it.i as int <= |self.storage|
+    && 0 <= it.i as int <= |self.underlying.storage|
     && (it.next.Some? ==>
-      && it.i as int < |self.storage|
-      && self.storage[it.i].Entry?
-      && self.storage[it.i].key == it.next.value.0
-      && self.storage[it.i].value == it.next.value.1
+      && it.i as int < |self.underlying.storage|
+      && self.underlying.storage[it.i].Entry?
+      && self.underlying.storage[it.i].key == it.next.value.0
+      && self.underlying.storage[it.i].value == it.next.value.1
     )
     && (it.next.None? ==> (
       && it.s == self.contents.Keys
-      && it.i as int == |self.storage|
+      && it.i as int == |self.underlying.storage|
     ))
     && (forall j | 0 <= j < it.i as int ::
-        self.storage[j].Entry? ==> self.storage[j].key in it.s)
+        self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
     && (forall key | key in it.s ::
         exists j | 0 <= j < it.i as int ::
-        && self.storage[j].Entry?
-        && key == self.storage[j].key)
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key)
   }
 
   function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, Option<(uint64, V)>))
   requires Inv(self)
-  requires 0 <= i as int <= |self.storage|
-  ensures res.1.Some? ==> res.0 as int < |self.storage|
-  ensures res.1.Some? ==> self.storage[res.0].Entry?
-  ensures res.1.Some? ==> self.storage[res.0].key == res.1.value.0
-  ensures res.1.Some? ==> self.storage[res.0].value == res.1.value.1
-  ensures res.1.None? ==> res.0 as int == |self.storage|
-  ensures forall j | i <= j < res.0 :: !self.storage[j].Entry?
-  decreases |self.storage| - i as int
+  requires 0 <= i as int <= |self.underlying.storage|
+  ensures res.1.Some? ==> res.0 as int < |self.underlying.storage|
+  ensures res.1.Some? ==> self.underlying.storage[res.0].Entry?
+  ensures res.1.Some? ==> self.underlying.storage[res.0].key == res.1.value.0
+  ensures res.1.Some? ==> self.underlying.storage[res.0].value == res.1.value.1
+  ensures res.1.None? ==> res.0 as int == |self.underlying.storage|
+  ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
+  decreases |self.underlying.storage| - i as int
   {
-    if i as int == |self.storage| then (
+    if i as int == |self.underlying.storage| then (
       (i, None)
-    ) else if self.storage[i].Entry? then (
-      (i, Some((self.storage[i].key, self.storage[i].value)))
+    ) else if self.underlying.storage[i].Entry? then (
+      (i, Some((self.underlying.storage[i].key, self.underlying.storage[i].value)))
     ) else (
       iterToNext(self, i+1)
     )
@@ -550,15 +688,15 @@ module MutableMapModel {
 
   lemma EmptySetOfNoEntries<V>(self: LinearHashMap<V>)
   requires Inv(self)
-  ensures (forall j | 0 <= j < |self.storage| :: !self.storage[j].Entry?) ==>
+  ensures (forall j | 0 <= j < |self.underlying.storage| :: !self.underlying.storage[j].Entry?) ==>
       self.contents.Keys == {};
   /*{
-    if (forall j | 0 <= j < |self.storage| :: !self.storage[j].Entry?) {
+    if (forall j | 0 <= j < |self.underlying.storage| :: !self.underlying.storage[j].Entry?) {
       forall key | key in self.contents.Keys
       ensures false
       {
         assert key in self.contents;
-        var skips :| SlotExplainsKey(self.storage, skips, key);
+        var skips :| SlotExplainsKey(self.underlying.storage, skips, key);
       }
       //assert self.contents == map[];
     }
