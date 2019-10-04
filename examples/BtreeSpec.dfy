@@ -28,6 +28,22 @@ abstract module BtreeSpec {
         (set i, k | 0 <= i < |children| && k in AllKeys(children[i]) :: k)
     }    
   }
+
+  predicate AllKeysBelowBound(node: Node, i: int)
+    requires node.Index?
+    requires 0 <= i < |node.children|-1
+    requires 0 <= i < |node.pivots|
+  {
+    forall key :: key in AllKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i])
+  }
+
+  predicate AllKeysAboveBound(node: Node, i: int)
+    requires node.Index?
+    requires 0 <= i < |node.children|
+    requires 0 <= i-1 < |node.pivots|
+  {
+    forall key :: key in AllKeys(node.children[i]) ==> Keys.lte(node.pivots[i-1], key)
+  }
   
   predicate WF(node: Node)
     decreases node, 1
@@ -40,8 +56,8 @@ abstract module BtreeSpec {
       && Keys.IsStrictlySorted(node.pivots)
       && (forall i :: 0 <= i < |node.children| ==> WF(node.children[i]))
       && (forall i :: 0 <= i < |node.children| ==> AllKeys(node.children[i]) != {})
-      && (forall i, key :: 0 <= i < |node.children|-1 && key in AllKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i]))
-      && (forall i, key :: 0 < i < |node.children|   && key in AllKeys(node.children[i]) ==> Keys.lte(node.pivots[i-1], key))
+      && (forall i :: 0 <= i < |node.children|-1 && AllKeysBelowBound(node, i))
+      && (forall i :: 0 < i < |node.children|   && AllKeysAboveBound(node, i))
   }
 
   function Interpretation(node: Node) : map<Key, Value>
@@ -190,11 +206,12 @@ abstract module BtreeSpec {
     SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
   }
   
-  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, wit: Key, pivot: Key)
+  lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, wit: Key, pivot: Key)
     requires SplitIndex(oldindex, leftindex, rightindex, wit, pivot)
     requires WF(leftindex)
     requires WF(rightindex)
-    ensures Interpretation(oldindex) == Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
+    ensures forall key :: key in Interpretation(oldindex) ==>
+    MapsTo(Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)), key, Interpretation(oldindex)[key])
   {
     var oldint := Interpretation(oldindex);
     var leftint := Interpretation(leftindex);
@@ -202,7 +219,7 @@ abstract module BtreeSpec {
     var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
 
     //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
-    
+
     forall key | key in oldint
       ensures MapsTo(newint, key, oldint[key])
     {
@@ -218,6 +235,21 @@ abstract module BtreeSpec {
         InterpretationDelegation(rightindex, key);
       }
     }
+  }
+  
+  lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, wit: Key, pivot: Key)
+    requires SplitIndex(oldindex, leftindex, rightindex, wit, pivot)
+    requires WF(leftindex)
+    requires WF(rightindex)
+    ensures Interpretation(oldindex).Keys >=
+            Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)).Keys
+  {
+    var oldint := Interpretation(oldindex);
+    var leftint := Interpretation(leftindex);
+    var rightint := Interpretation(rightindex);
+    var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
+
+    //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
 
     forall key | key in newint
       ensures key in oldint
@@ -236,6 +268,18 @@ abstract module BtreeSpec {
       }
     }
   }
+
+  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, wit: Key, pivot: Key)
+    requires SplitIndex(oldindex, leftindex, rightindex, wit, pivot)
+    requires WF(leftindex)
+    requires WF(rightindex)
+    ensures Interpretation(oldindex) ==
+    Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
+  {
+    SplitIndexInterpretation1(oldindex, leftindex, rightindex, wit, pivot);
+    SplitIndexInterpretation2(oldindex, leftindex, rightindex, wit, pivot);
+  }
+
   
   predicate SplitNode(oldnode: Node, leftnode: Node, rightnode: Node, wit: Key, pivot: Key)
   {
