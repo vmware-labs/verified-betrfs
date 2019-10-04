@@ -384,6 +384,7 @@ module FixedSizeMutableMapModel {
     // viewFromStartSlot: seq<Item<V>>,
     skips: uint64
   ) : (foundSlotIdx: uint64)
+  requires 0 <= slotIdx as int < |self.storage|
   {
     if self.storage[slotIdx].Empty? || self.storage[slotIdx].key == key then
       slotIdx
@@ -686,20 +687,11 @@ module FixedSizeMutableMapModel {
     )
   }
 
-  lemma EmptySetOfNoEntries<V>(self: LinearHashMap<V>)
+  /*lemma EmptySetOfNoEntries<V>(self: LinearHashMap<V>)
   requires Inv(self)
   ensures (forall j | 0 <= j < |self.underlying.storage| :: !self.underlying.storage[j].Entry?) ==>
       self.contents.Keys == {};
-  /*{
-    if (forall j | 0 <= j < |self.underlying.storage| :: !self.underlying.storage[j].Entry?) {
-      forall key | key in self.contents.Keys
-      ensures false
-      {
-        assert key in self.contents;
-        var skips :| SlotExplainsKey(self.underlying.storage, skips, key);
-      }
-      //assert self.contents == map[];
-    }
+  {
   }*/
 
   function {:opaque} IterStart<V>(self: LinearHashMap<V>) : (it' : Iterator<V>)
@@ -707,20 +699,21 @@ module FixedSizeMutableMapModel {
   ensures WFIter(self, it')
   ensures it'.s == {}
   {
-    EmptySetOfNoEntries(self);
-
     var (i, next) := iterToNext(self, 0);
     Iterator(i, {}, next)
   }
 
-  /*
-  function {:opaque} IterInc<V>(self: HashTable, it: Iterator) : (it' : Iterator)
-  requires it.next.Some?
+  function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
+  requires Inv(self)
   requires WFIter(self, it)
+  requires it.next.Some?
   ensures WFIter(self, it')
   ensures it'.s == it.s + {it.next.value.0}
-  ensures it'.next.None? ==> s == self.Contents.Keys
+  ensures it'.next.None? ==> it'.s == self.contents.Keys
   {
+    var (i, next) := iterToNext(self, it.i + 1);
+    var it' := Iterator(i, it.s + {it.next.value.0}, next);
+
+    it'
   }
-  */
 }
