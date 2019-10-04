@@ -565,7 +565,7 @@ module FixedSizeMutableMapModel {
       if key == explainedKey {
         assert SlotExplainsKey(self'.storage, probeSkips as nat, key); // observe
       } else {
-        var oldSkips :| SlotExplainsKey(old(self'.storage), oldSkips, explainedKey);
+        var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
         assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
       }
     }
