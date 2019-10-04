@@ -519,74 +519,84 @@ module FixedSizeMutableMapModel {
     }
   }
 
-  function FixedSizeInsert<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
+  function {:opaque} FixedSizeInsert<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
       : (res : (FixedSizeLinearHashMap, Option<V>))
     requires FixedSizeInv(self)
     requires self.count as nat < |self.storage| - 1
-    ensures var (self', replaced) := res;
-      && FixedSizeInv(self')
-      && self'.contents == self.contents[key := Some(value)]
-      && key in self.contents ==> replaced == self.contents[key]
-      && replaced.Some? ==> key in self.contents
-      && key !in self.contents ==> replaced.None?
-      && self.count as nat <= self'.count as nat <= self.count as nat + (if replaced.Some? then 0 else 1)
-      && key !in self.contents ==> self'.count as nat == self.count as nat + 1
-      && |self.storage| == |self'.storage|
+  {
+    var slotIdx := Probe(self, key);
+
+    var storage := self.storage[slotIdx as int := Entry(key, value)];
+    var contents := self.contents[key := Some(value)];
+    if self.storage[slotIdx].Empty? then (
+      (FixedSizeLinearHashMap(storage, self.count + 1, contents), None)
+    ) else if self.storage[slotIdx].Tombstone? then (
+      (FixedSizeLinearHashMap(storage, self.count, contents), None)
+    ) else (
+      var replaced := Some(self.storage[slotIdx].value);
+      (FixedSizeLinearHashMap(storage, self.count, contents), replaced)
+    )
+  }
+
+  lemma FixedSizeInsertResult<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
+  returns (self' : FixedSizeLinearHashMap, replaced : Option<V>)
+  requires FixedSizeInv(self)
+  requires self.count as nat < |self.storage| - 1
+  ensures (self', replaced) == FixedSizeInsert(self, key, value)
+  ensures FixedSizeInv(self')
+  ensures self'.contents == self.contents[key := Some(value)]
+  ensures (key in self.contents ==> replaced == self.contents[key])
+  ensures (replaced.Some? ==> key in self.contents)
+  ensures (key !in self.contents ==> replaced.None?)
+  {
+    assume false;
+    reveal_FixedSizeInsert();
+    self' := FixedSizeInsert(self, key, value).0;
+    replaced := FixedSizeInsert(self, key, value).1;
+
+    var probeRes := LemmaProbeResult(self, key);
+    var slotIdx := probeRes.slotIdx;
+    var probeStartSlotIdx := probeRes.startSlotIdx;
+    var probeSkips := probeRes.ghostSkips;
+
+    forall explainedKey | explainedKey in self'.contents
+    ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
     {
-      var slotIdx := Probe(self, key);
-
-      var storage := self.storage[slotIdx as int := Entry(key, value)];
-      var contents := self.contents[key := Some(value)];
-      if self.storage[slotIdx].Empty? then (
-        (FixedSizeLinearHashMap(storage, self.count + 1, contents), None)
-      ) else if self.storage[slotIdx].Tombstone? then (
-        (FixedSizeLinearHashMap(storage, self.count, contents), None)
-      ) else (
-        var replaced := Some(self.storage[slotIdx].value);
-        (FixedSizeLinearHashMap(storage, self.count, contents), replaced)
-      )
+      if key == explainedKey {
+        assert SlotExplainsKey(self'.storage, probeSkips as nat, key); // observe
+      } else {
+        var oldSkips :| SlotExplainsKey(old(self'.storage), oldSkips, explainedKey);
+        assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
+      }
     }
 
-  /*
-      forall explainedKey | explainedKey in self.contents
-      ensures exists skips :: SlotExplainsKey(self.storage[..], skips, explainedKey)
-      {
-        if key == explainedKey {
-          assert SlotExplainsKey(self.storage[..], probeSkips as nat, key); // observe
-        } else {
-          var oldSkips :| SlotExplainsKey(old(self.storage[..]), oldSkips, explainedKey);
-          assert SlotExplainsKey(self.storage[..], oldSkips, explainedKey); // observe
-        }
-      }
-
-      forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Entry?
-      ensures && var item := self.storage[slot.slot];
-              && self.contents[item.key] == Some(item.value)
-      {
-        var item := self.storage[slot.slot];
-        if slot != Slot(slotIdx as nat) {
-          if item.key == key {
-            assert TwoNonEmptyValidSlotsWithSameKey(self.storage[..], slot, Slot(slotIdx as nat)); // observe
-            assert SameSlot(|self.storage|, slot, Slot(slotIdx as nat)); // observe
-            assert false;
-          }
-        }
-      }
-      forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Tombstone?
-      ensures && var item := self.storage[slot.slot];
-              && self.contents[item.key].None?
-      {
-        var item := self.storage[slot.slot];
-        if slot != Slot(slotIdx as nat) {
-          if item.key == key {
-            assert TwoNonEmptyValidSlotsWithSameKey(self.storage[..], slot, Slot(slotIdx as nat)); // observe
-            assert SameSlot(|self.storage|, slot, Slot(slotIdx as nat)); // observe
-            assert false;
-          }
+    forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
+    ensures && var item := self'.storage[slot.slot];
+            && self'.contents[item.key] == Some(item.value)
+    {
+      var item := self'.storage[slot.slot];
+      if slot != Slot(slotIdx as nat) {
+        if item.key == key {
+          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert false;
         }
       }
     }
-  */
+    forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Tombstone?
+    ensures && var item := self.storage[slot.slot];
+            && self.contents[item.key].None?
+    {
+      var item := self.storage[slot.slot];
+      if slot != Slot(slotIdx as nat) {
+        if item.key == key {
+          assert TwoNonEmptyValidSlotsWithSameKey(self.storage[..], slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert false;
+        }
+      }
+    }
+  }
 
   //////// Resizing Hash Map
 
