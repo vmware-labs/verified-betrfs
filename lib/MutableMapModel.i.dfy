@@ -597,6 +597,76 @@ module FixedSizeMutableMapModel {
     }
   }
 
+  function {:opaque} FixedSizeRemove<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
+    : (res : (FixedSizeLinearHashMap<V>, Option<V>))
+  requires FixedSizeInv(self)
+  {
+    var slotIdx := Probe(self, key);
+
+    if self.storage[slotIdx].Entry? then (
+      var removed := Some(self.storage[slotIdx].value);
+      var self' := FixedSizeLinearHashMap(
+          self.storage[slotIdx as int := Tombstone(key)],
+          self.count,
+          self.contents[key := None]);
+      (self', removed)
+    ) else (
+      (self, None)
+    )
+  }
+
+  lemma FixedSizeRemoveResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
+  returns (self': FixedSizeLinearHashMap<V>, removed: Option<V>)
+  requires FixedSizeInv(self)
+  ensures (self', removed) == FixedSizeRemove(self, key)
+  ensures FixedSizeInv(self')
+  ensures self'.contents == if key in self.contents
+      then self.contents[key := None]
+      else self.contents
+  ensures removed == if key in self.contents && self.contents[key].Some?
+      then Some(self.contents[key].value)
+      else None
+  ensures self'.count == self.count
+  {
+    reveal_FixedSizeRemove();
+    self' := FixedSizeRemove(self, key).0;
+    removed := FixedSizeRemove(self, key).1;
+
+    var probeRes := LemmaProbeResult(self, key);
+    var slotIdx := probeRes.slotIdx;
+    var probeStartSlotIdx := probeRes.startSlotIdx;
+    var probeSkips := probeRes.ghostSkips;
+
+    if self.storage[slotIdx].Entry? {
+      forall explainedKey | explainedKey in self'.contents
+      ensures exists skips :: SlotExplainsKey(self'.storage[..], skips, explainedKey)
+      {
+        if key == explainedKey {
+          assert SlotExplainsKey(self'.storage[..], probeSkips as nat, key);
+        } else {
+          var oldSkips :| SlotExplainsKey(self.storage[..], oldSkips, explainedKey);
+          assert SlotExplainsKey(self'.storage[..], oldSkips, explainedKey);
+        }
+      }
+
+      forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
+      ensures && var item := self'.storage[slot.slot];
+              && self'.contents[item.key] == Some(item.value)
+      {
+        var item := self'.storage[slot.slot];
+        if slot != Slot(slotIdx as nat) {
+          if item.key == key {
+            assert CantEquivocateStorageKey(self'.storage[..]);
+            assert TwoNonEmptyValidSlotsWithSameKey(self'.storage[..], slot, Slot(slotIdx as nat));
+            assert false;
+          }
+        }
+      }
+    } else {
+    }
+  }
+
+
   //////// Resizing Hash Map
 
   datatype LinearHashMap<V> = LinearHashMap(

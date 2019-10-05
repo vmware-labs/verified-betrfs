@@ -583,6 +583,7 @@ module MutableMap {
       }
     }
 
+    // TODO rename to GetOpt
     method Get(key: uint64) returns (found: Option<V>)
     requires Inv()
     ensures Inv()
