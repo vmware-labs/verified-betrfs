@@ -866,7 +866,7 @@ module FixedSizeMutableMapModel {
     ensures var self' := Realloc(self);
       && Inv(self')
       && self'.contents == self.contents
-      && self'.count as nat < |self'.underlying.storage| - 2
+      && self'.underlying.count as nat < |self'.underlying.storage| - 2
   {
     var self' := Realloc(self);
     reveal_Realloc();
@@ -1017,6 +1017,50 @@ module FixedSizeMutableMapModel {
     assert self'.count == self.count;
     assert self'.count <= self'.underlying.count;
     assert Inv(self');
+  }
+
+  function Insert<V>(self: LinearHashMap, key: uint64, value: V)
+  : (res: (LinearHashMap, Option<V>))
+    requires Inv(self)
+    requires self.count as nat < 0x10000000000000000 / 8
+    ensures var (self', replaced) := res;
+      && Inv(self')
+      && self'.contents == self.contents[key := value]
+      && self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
+  {
+    // -- mutation --
+    var self1 := if |self.underlying.storage| as uint64 / 2 <= self.underlying.count then (
+      LemmaReallocResult(self);
+      Realloc(self)
+    ) else (
+      self
+    );
+    // --------------
+
+    //assert MapFromStorage(self1.underlying.storage) == self1.contents;
+    //assert self1.underlying.count as nat < |self1.underlying.storage| - 2;
+
+    // -- mutation --
+    var (underlying', replaced) := FixedSizeInsert(self1.underlying, key, value);
+    var self' := self1
+        .(underlying := underlying')
+        .(contents := self1.contents[key := value])
+        .(count := if replaced.None? then self1.count + 1 else self1.count);
+    // --------------
+
+    LemmaFixedSizeInsertResult(self1.underlying, key, value);
+
+    //assert replaced.None? ==> key !in self.contents;
+    //assert !replaced.None? ==> key in self'.contents;
+
+    //assert self'.underlying.count as nat < |self'.underlying.storage| - 1;
+
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
+    //assert MapFromStorage(self'.underlying.storage[..]) == self'.contents;
+    //assert UnderlyingInv(self', self'.underlying);
+    //assert Inv(self');
+
+    (self', replaced)
   }
 
   //////// Iterator
