@@ -549,7 +549,6 @@ module FixedSizeMutableMapModel {
   ensures (replaced.Some? ==> key in self.contents)
   ensures (key !in self.contents ==> replaced.None?)
   {
-    assume false;
     reveal_FixedSizeInsert();
     self' := FixedSizeInsert(self, key, value).0;
     replaced := FixedSizeInsert(self, key, value).1;
@@ -583,15 +582,15 @@ module FixedSizeMutableMapModel {
         }
       }
     }
-    forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Tombstone?
-    ensures && var item := self.storage[slot.slot];
-            && self.contents[item.key].None?
+    forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Tombstone?
+    ensures && var item := self'.storage[slot.slot];
+            && self'.contents[item.key].None?
     {
-      var item := self.storage[slot.slot];
+      var item := self'.storage[slot.slot];
       if slot != Slot(slotIdx as nat) {
         if item.key == key {
-          assert TwoNonEmptyValidSlotsWithSameKey(self.storage[..], slot, Slot(slotIdx as nat)); // observe
-          assert SameSlot(|self.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage[..], slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
           assert false;
         }
       }
