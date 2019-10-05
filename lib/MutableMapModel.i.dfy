@@ -241,7 +241,7 @@ module FixedSizeMutableMapModel {
     && |self.contents| == (self.count as nat)
     && SeqMatchesContentKeys(self.storage, self.contents)
     && EntriesMatchContentValue(self.storage, self.contents)
-    && TombstonesMatchContentValue(self.storage[..], self.contents)
+    && TombstonesMatchContentValue(self.storage, self.contents)
   }
 
   function IndexSetThrough<V>(elements: seq<Item<V>>, through: nat): set<int>
@@ -589,7 +589,7 @@ module FixedSizeMutableMapModel {
       var item := self'.storage[slot.slot];
       if slot != Slot(slotIdx as nat) {
         if item.key == key {
-          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage[..], slot, Slot(slotIdx as nat)); // observe
+          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
           assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
           assert false;
         }
@@ -639,13 +639,13 @@ module FixedSizeMutableMapModel {
 
     if self.storage[slotIdx].Entry? {
       forall explainedKey | explainedKey in self'.contents
-      ensures exists skips :: SlotExplainsKey(self'.storage[..], skips, explainedKey)
+      ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
       {
         if key == explainedKey {
-          assert SlotExplainsKey(self'.storage[..], probeSkips as nat, key);
+          assert SlotExplainsKey(self'.storage, probeSkips as nat, key);
         } else {
-          var oldSkips :| SlotExplainsKey(self.storage[..], oldSkips, explainedKey);
-          assert SlotExplainsKey(self'.storage[..], oldSkips, explainedKey);
+          var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
+          assert SlotExplainsKey(self'.storage, oldSkips, explainedKey);
         }
       }
 
@@ -656,8 +656,8 @@ module FixedSizeMutableMapModel {
         var item := self'.storage[slot.slot];
         if slot != Slot(slotIdx as nat) {
           if item.key == key {
-            assert CantEquivocateStorageKey(self'.storage[..]);
-            assert TwoNonEmptyValidSlotsWithSameKey(self'.storage[..], slot, Slot(slotIdx as nat));
+            assert CantEquivocateStorageKey(self'.storage);
+            assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat));
             assert false;
           }
         }
@@ -701,11 +701,11 @@ module FixedSizeMutableMapModel {
       && underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key)
     ensures slot1 == slot2
     {
-      assert underlying.CantEquivocateStorageKey(underlying.storage[..]);
+      assert underlying.CantEquivocateStorageKey(underlying.storage);
       if underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry? &&
         underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key {
 
-        assert underlying.TwoNonEmptyValidSlotsWithSameKey(underlying.storage[..], slot1, slot2);
+        assert underlying.TwoNonEmptyValidSlotsWithSameKey(underlying.storage, slot1, slot2);
         if slot1 != slot2 {
           assert false;
         }
@@ -780,25 +780,25 @@ module FixedSizeMutableMapModel {
     && |self.contents| == self.count as nat
     && UnderlyingContentsMatchesContents(underlying, self.contents)
     && FixedSizeInv(underlying)
-    && MapFromStorage(underlying.storage[..]) == self.contents
+    && MapFromStorage(underlying.storage) == self.contents
   }
 
   lemma UnderlyingInvImpliesMapFromStorageMatchesContents<V>(underlying: FixedSizeLinearHashMap<V>, contents: map<uint64, V>)
     requires UnderlyingContentsMatchesContents(underlying, contents)
     requires FixedSizeInv(underlying)
-    ensures MapFromStorage(underlying.storage[..]) == contents
+    ensures MapFromStorage(underlying.storage) == contents
   {
-    var mapFromStorage := MapFromStorage(underlying.storage[..]);
+    var mapFromStorage := MapFromStorage(underlying.storage);
     CantEquivocateMapFromStorageKey(underlying);
-    MapFromStorageProperties(underlying.storage[..], mapFromStorage);
-    assert MapFromStorage(underlying.storage[..]) == contents;
+    MapFromStorageProperties(underlying.storage, mapFromStorage);
+    assert MapFromStorage(underlying.storage) == contents;
   }
 
   protected predicate Inv<V>(self: LinearHashMap<V>)
     ensures Inv(self) ==> |self.contents| == self.count as nat
   {
     && UnderlyingInv(self, self.underlying)
-    && MapFromStorage(self.underlying.storage[..]) == self.contents
+    && MapFromStorage(self.underlying.storage) == self.contents
     && |self.contents| == self.count as nat
   }
 
@@ -858,6 +858,165 @@ module FixedSizeMutableMapModel {
     var newSize: uint64 := (128 + self.count) * 4;
     var newUnderlying := ReallocIterate(self, ConstructorFromSize(newSize), 0);
     self.(underlying := newUnderlying)
+  }
+
+  lemma LemmaReallocResult(self: LinearHashMap)
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    requires Inv(self)
+    ensures var self' := Realloc(self);
+      && Inv(self')
+      && self'.contents == self.contents
+      && self'.count as nat < |self'.underlying.storage| - 2
+  {
+    var self' := Realloc(self);
+    reveal_Realloc();
+
+    assert |self.contents| == self.count as nat;
+
+    var newSize: uint64 := (128 + self.count) * 4;
+    //print "(debug) MutableMap.Realloc: Count ", Count, ", Realloc ", newSize, "\n";
+
+    var newUnderlying := ConstructorFromSize(newSize);
+    
+    assert |newUnderlying.storage| == newSize as nat;
+
+    assert MapFromStorage(self.underlying.storage) == self.contents;
+    UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, map[]);
+    assert MapFromStorage(newUnderlying.storage) == map[];
+
+    var i: uint64 := 0;
+    ghost var transferredContents := map[];
+    while i < |self.underlying.storage| as uint64
+      invariant i as int <= |self.underlying.storage|
+      invariant FixedSizeInv(newUnderlying)
+      invariant |self.contents| == self.count as nat
+      invariant self.contents == old(self.contents) // this is necessary because of `modifies this` (?)
+      invariant UnderlyingContentsMatchesContents(newUnderlying, transferredContents)
+      invariant MapFromStorage(self.underlying.storage[..i]) == transferredContents
+      invariant MapFromStorage(self.underlying.storage) == self.contents
+
+      invariant newUnderlying.count as nat <= i as nat
+      invariant self.underlying == old(self.underlying)
+      invariant FixedSizeInv(self.underlying)
+      invariant self.underlying.count == old(self.underlying.count)
+      invariant |self.underlying.storage| == old(|self.underlying.storage|)
+      invariant |newUnderlying.storage| == newSize as nat
+
+      invariant |transferredContents| == newUnderlying.count as nat
+      invariant transferredContents.Keys <= self.contents.Keys
+      invariant forall key :: key in newUnderlying.contents ==> exists slot: Slot :: (
+          && slot.slot < i as int
+          && ValidSlot(|self.underlying.storage|, slot)
+          && FilledWithEntryKey(self.underlying.storage, slot, key))
+
+      invariant ReallocIterate(self, newUnderlying, i)
+             == Realloc(self).underlying
+
+      decreases |self.underlying.storage| - i as int
+    {
+      var item := self.underlying.storage[i];
+      assert self.underlying.storage[..i+1] == self.underlying.storage[..i] + [self.underlying.storage[i]];
+
+      if item.Entry? {
+        assert MapFromStorage(self.underlying.storage[..i]) == transferredContents;
+        assert |transferredContents| == newUnderlying.count as nat;
+
+        if item.key in newUnderlying.contents {
+          var j:uint64 :| (
+              && 0 <= j < i
+              && ValidSlot(|self.underlying.storage|, Slot(j as int))
+              && self.underlying.storage[Slot(j as int).slot].Entry?
+              && self.underlying.storage[Slot(j as int).slot].key == item.key);
+          assert ValidSlot(|self.underlying.storage|, Slot(i as nat));
+          assert i != j;
+          assert Slot(i as nat) != Slot(j as nat);
+          assert self.underlying.storage[Slot(j as nat).slot].key == self.underlying.storage[Slot(i as nat).slot].key;
+          CantEquivocateMapFromStorageKey(self.underlying);
+          assert false;
+        }
+        assert item.key !in newUnderlying.contents;
+
+        assert transferredContents.Keys <= self.contents.Keys;
+        SetInclusionImpliesSmallerCardinality(transferredContents.Keys, self.contents.Keys);
+        assert |transferredContents.Keys| <= |self.contents.Keys|;
+        assert |transferredContents.Keys| == |transferredContents|;
+        assert |self.contents.Keys| == |self.contents|;
+        assert |transferredContents| <= |self.contents|;
+        assert newUnderlying.count as nat < |newUnderlying.storage| - 1;
+
+        LemmaFixedSizeInsertResult(newUnderlying, item.key, item.value);
+
+        // -- mutation --
+        newUnderlying := FixedSizeInsert(newUnderlying, item.key, item.value).0;
+        transferredContents := transferredContents[item.key := item.value];
+        // --------------
+
+        forall key | key in newUnderlying.contents
+        ensures exists slot: Slot :: (
+            && slot.slot < i as nat + 1
+            && ValidSlot(|self.underlying.storage|, slot)
+            && self.underlying.storage[slot.slot].Entry?
+            && self.underlying.storage[slot.slot].key == key)
+        {
+          if key == item.key {
+            assert ValidSlot(|self.underlying.storage|, Slot(i as nat));
+            assert exists slot: Slot :: (
+                && slot.slot < i as nat + 1
+                && ValidSlot(|self.underlying.storage|, slot)
+                && self.underlying.storage[slot.slot].Entry?
+                && self.underlying.storage[slot.slot].key == key);
+          } else {
+            assert exists slot: Slot :: (
+                && slot.slot < i as nat + 1
+                && ValidSlot(|self.underlying.storage|, slot)
+                && self.underlying.storage[slot.slot].Entry?
+                && self.underlying.storage[slot.slot].key == key);
+          }
+        }
+        assert |transferredContents| == newUnderlying.count as nat;
+        assert MapFromStorage(self.underlying.storage[..i+1]) == transferredContents;
+      } else {
+        assert forall key :: key in newUnderlying.contents ==> exists slot: Slot :: (
+            && slot.slot < i as nat
+            && ValidSlot(|self.underlying.storage|, slot)
+            && self.underlying.storage[slot.slot].Entry?
+            && self.underlying.storage[slot.slot].key == key);
+        assert |transferredContents| <= newUnderlying.count as nat;
+        assert MapFromStorage(self.underlying.storage[..i+1]) == transferredContents;
+      }
+
+      // -- increment --
+      i := i + 1;
+      // ---------------
+
+      assert MapFromStorage(self.underlying.storage[..i]) == transferredContents;
+    }
+
+    assert i as nat == |self.underlying.storage|;
+    assert self.underlying.storage[..i] == self.underlying.storage;
+
+    assert MapFromStorage(self.underlying.storage) == transferredContents;
+    UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, transferredContents);
+    assert transferredContents == self.contents;
+
+    assert |self.contents| == self.count as nat;
+
+    assert forall key :: key in self.contents ==> key in newUnderlying.contents && newUnderlying.contents[key] == Some(self.contents[key]);
+    assert forall key :: key !in self.contents ==> key !in newUnderlying.contents || newUnderlying.contents[key].None?;
+
+    assert self' == self.(underlying := newUnderlying);
+
+    assert FixedSizeInv(newUnderlying);
+    assert UnderlyingInv(self', newUnderlying);
+    assert UnderlyingContentsMatchesContents(newUnderlying, self.contents);
+    assert MapFromStorage(newUnderlying.storage) == self.contents;
+    assert newUnderlying.count as nat < |newUnderlying.storage| - 2;
+
+    assert self'.underlying.count as nat < |self'.underlying.storage| - 2;
+    assert self'.contents == self.contents;
+    assert self'.count == self.count;
+    assert self'.count <= self'.underlying.count;
+    assert Inv(self');
   }
 
   //////// Iterator
