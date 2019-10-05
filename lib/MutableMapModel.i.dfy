@@ -538,20 +538,20 @@ module FixedSizeMutableMapModel {
     )
   }
 
-  lemma FixedSizeInsertResult<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
-  returns (self' : FixedSizeLinearHashMap, replaced : Option<V>)
+  lemma LemmaFixedSizeInsertResult<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
   requires FixedSizeInv(self)
   requires self.count as nat < |self.storage| - 1
-  ensures (self', replaced) == FixedSizeInsert(self, key, value)
-  ensures FixedSizeInv(self')
-  ensures self'.contents == self.contents[key := Some(value)]
-  ensures (key in self.contents ==> replaced == self.contents[key])
-  ensures (replaced.Some? ==> key in self.contents)
-  ensures (key !in self.contents ==> replaced.None?)
+  ensures var (self', replaced) := FixedSizeInsert(self, key, value);
+    && FixedSizeInv(self')
+    && self'.contents == self.contents[key := Some(value)]
+    && (key in self.contents ==> replaced == self.contents[key])
+    && (replaced.Some? ==> key in self.contents)
+    && (key !in self.contents ==> replaced.None?)
+    && |self'.storage| == |self.storage|
   {
     reveal_FixedSizeInsert();
-    self' := FixedSizeInsert(self, key, value).0;
-    replaced := FixedSizeInsert(self, key, value).1;
+    var self' := FixedSizeInsert(self, key, value).0;
+    var replaced := FixedSizeInsert(self, key, value).1;
 
     var probeRes := LemmaProbeResult(self, key);
     var slotIdx := probeRes.slotIdx;
@@ -665,7 +665,6 @@ module FixedSizeMutableMapModel {
     } else {
     }
   }
-
 
   //////// Resizing Hash Map
 
@@ -801,6 +800,64 @@ module FixedSizeMutableMapModel {
     && UnderlyingInv(self, self.underlying)
     && MapFromStorage(self.underlying.storage[..]) == self.contents
     && |self.contents| == self.count as nat
+  }
+
+  function {:opaque} Constructor<V>(size: uint64) : (self: LinearHashMap<V>)
+  requires 128 <= size
+  ensures Inv(self)
+  ensures self.contents == map[]
+  {
+    var self := LinearHashMap(ConstructorFromSize(size), 0, map[]);
+
+    assert forall slot :: ValidSlot(|self.underlying.storage|, slot) ==> !self.underlying.storage[slot.slot].Entry?;
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
+    assert MapFromStorage(self.underlying.storage) == self.contents;
+
+    self
+  }
+
+  lemma LemmaEntryKeyInContents<V>(self: LinearHashMap<V>, i: uint64)
+  requires Inv(self)
+  requires 0 <= i as int < |self.underlying.storage|
+  requires self.underlying.storage[i].Entry?
+  ensures self.underlying.storage[i].key in self.contents
+
+  function ReallocIterate<V>(self: LinearHashMap<V>, newUnderlying: FixedSizeLinearHashMap<V>, i: uint64) : FixedSizeLinearHashMap<V>
+    requires Inv(self)
+    requires FixedSizeInv(newUnderlying);
+    requires 0 <= i as int <= |self.underlying.storage|
+    requires self.count as int < |newUnderlying.storage| - 1
+    requires newUnderlying.contents.Keys <= self.contents.Keys
+    decreases |self.underlying.storage| - i as int
+  {
+    if i as int == |self.underlying.storage| then (
+      newUnderlying
+    ) else (
+      var item := self.underlying.storage[i];
+      var newUnderlying' := if item.Entry? then (
+        SetInclusionImpliesSmallerCardinality(newUnderlying.contents.Keys, self.contents.Keys);
+        /*assert newUnderlying.count as int
+            == |newUnderlying.contents.Keys|
+            <= |self.contents.Keys|
+            == self.count as int
+            < |newUnderlying.storage| - 1;*/
+        LemmaFixedSizeInsertResult(newUnderlying, item.key, item.value);
+        LemmaEntryKeyInContents(self, i);
+        //assert item.key in self.contents.Keys;
+        FixedSizeInsert(newUnderlying, item.key, item.value).0
+      ) else
+        newUnderlying;
+      ReallocIterate(self, newUnderlying', i+1)
+    )
+  }
+
+  function {:opaque} Realloc<V>(self: LinearHashMap<V>) : (self' : LinearHashMap<V>)
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    requires Inv(self)
+  {
+    var newSize: uint64 := (128 + self.count) * 4;
+    var newUnderlying := ReallocIterate(self, ConstructorFromSize(newSize), 0);
+    self.(underlying := newUnderlying)
   }
 
   //////// Iterator
