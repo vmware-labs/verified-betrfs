@@ -597,6 +597,27 @@ module FixedSizeMutableMapModel {
     }
   }
 
+  function {:opaque} FixedSizeGet<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
+    : (found : Option<V>)
+  requires FixedSizeInv(self)
+  {
+    var slotIdx := Probe(self, key);
+
+    if self.storage[slotIdx].Entry? then
+      Some(self.storage[slotIdx].value)
+    else
+      None
+  }
+
+  lemma LemmaFixedSizeGetResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
+  requires FixedSizeInv(self)
+  ensures var found := FixedSizeGet(self, key);
+    && if key in self.contents && self.contents[key].Some? then found == Some(self.contents[key].value) else found.None?
+  {
+    reveal_FixedSizeGet();
+    var _ := LemmaProbeResult(self, key);
+  }
+
   function {:opaque} FixedSizeRemove<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
     : (res : (FixedSizeLinearHashMap<V>, Option<V>))
   requires FixedSizeInv(self)
@@ -1142,6 +1163,17 @@ module FixedSizeMutableMapModel {
     UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
 
     (self', removed)
+  }
+
+  function Get<V>(self: LinearHashMap, key: uint64)
+  : (found: Option<V>)
+    requires Inv(self)
+    ensures if key in self.contents then found == Some(self.contents[key]) else found.None?
+    ensures found.Some? <==> key in self.contents
+  {
+    var found := FixedSizeGet(self.underlying, key);
+    LemmaFixedSizeGetResult(self.underlying, key);
+    found
   }
 
   //////// Iterator
