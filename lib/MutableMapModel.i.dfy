@@ -1072,13 +1072,6 @@ module FixedSizeMutableMapModel {
     (self', replaced)
   }
 
-  lemma UnderlyingTmp<V>(self: LinearHashMap, underlying: FixedSizeLinearHashMap)
-    requires underlying == self.underlying
-    requires UnderlyingInv(self, underlying)
-    ensures UnderlyingInv(self, underlying)
-  {
-  }
-
   function RemoveInternal<V>(self: LinearHashMap, key: uint64)
   : (res: (LinearHashMap, Option<V>))
     requires Inv(self)
