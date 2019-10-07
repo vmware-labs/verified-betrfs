@@ -615,22 +615,20 @@ module FixedSizeMutableMapModel {
     )
   }
 
-  lemma FixedSizeRemoveResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
-  returns (self': FixedSizeLinearHashMap<V>, removed: Option<V>)
+  lemma LemmaFixedSizeRemoveResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
   requires FixedSizeInv(self)
-  ensures (self', removed) == FixedSizeRemove(self, key)
-  ensures FixedSizeInv(self')
-  ensures self'.contents == if key in self.contents
+  ensures var (self', removed) := FixedSizeRemove(self, key);
+    && FixedSizeInv(self')
+    && (self'.contents == if key in self.contents
       then self.contents[key := None]
-      else self.contents
-  ensures removed == if key in self.contents && self.contents[key].Some?
+      else self.contents)
+    && (removed == if key in self.contents && self.contents[key].Some?
       then Some(self.contents[key].value)
-      else None
-  ensures self'.count == self.count
+      else None)
+    && (self'.count == self.count)
   {
     reveal_FixedSizeRemove();
-    self' := FixedSizeRemove(self, key).0;
-    removed := FixedSizeRemove(self, key).1;
+    var (self', removed) := FixedSizeRemove(self, key);
 
     var probeRes := LemmaProbeResult(self, key);
     var slotIdx := probeRes.slotIdx;
@@ -691,7 +689,7 @@ module FixedSizeMutableMapModel {
     ensures forall slot1, slot2 :: ValidSlot(|underlying.storage|, slot1) && ValidSlot(|underlying.storage|, slot2) &&
         underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry? &&
         underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key ==> slot1 == slot2
-  /*{
+  {
     assert |underlying.storage| > 0;
     assert ValidSlot(|underlying.storage|, Slot(0));
     assert exists slot :: ValidSlot(|underlying.storage|, slot);
@@ -701,11 +699,11 @@ module FixedSizeMutableMapModel {
       && underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key)
     ensures slot1 == slot2
     {
-      assert underlying.CantEquivocateStorageKey(underlying.storage);
+      assert CantEquivocateStorageKey(underlying.storage);
       if underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry? &&
         underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key {
 
-        assert underlying.TwoNonEmptyValidSlotsWithSameKey(underlying.storage, slot1, slot2);
+        assert TwoNonEmptyValidSlotsWithSameKey(underlying.storage, slot1, slot2);
         if slot1 != slot2 {
           assert false;
         }
@@ -714,7 +712,7 @@ module FixedSizeMutableMapModel {
         assert slot1 == slot2;
       }
     }
-  }*/
+  }
 
   lemma MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
     requires forall slot1, slot2 :: ValidSlot(|elements|, slot1) && ValidSlot(|elements|, slot2) &&
@@ -1061,6 +1059,85 @@ module FixedSizeMutableMapModel {
     //assert Inv(self');
 
     (self', replaced)
+  }
+
+  lemma UnderlyingTmp<V>(self: LinearHashMap, underlying: FixedSizeLinearHashMap)
+    requires underlying == self.underlying
+    requires UnderlyingInv(self, underlying)
+    ensures UnderlyingInv(self, underlying)
+  {
+  }
+
+  function RemoveInternal<V>(self: LinearHashMap, key: uint64)
+  : (res: (LinearHashMap, Option<V>))
+    requires Inv(self)
+    ensures var (self', removed) := res;
+      && (self'.underlying, removed) == FixedSizeRemove(self.underlying, key)
+      && FixedSizeInv(self'.underlying)
+      && (self'.underlying.contents == if key in self.underlying.contents
+        then self.underlying.contents[key := None]
+        else self.underlying.contents)
+      && (removed == if key in self.underlying.contents && self.underlying.contents[key].Some?
+        then Some(self.underlying.contents[key].value)
+        else None)
+      && (self'.underlying.count == self.underlying.count)
+  {
+    // -- mutation --
+    var (underlying', removed) := FixedSizeRemove(self.underlying, key);
+    // --------------
+
+    LemmaFixedSizeRemoveResult(self.underlying, key);
+
+    var self' := self
+      .(underlying := underlying')
+      .(contents := map k | k in self.contents && k != key :: self.contents[k])
+      .(count := if removed.Some? then self.count - 1 else self.count);
+
+    (self', removed)
+  }
+
+  lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: (LinearHashMap, Option<V>))
+  requires Inv(self)
+  requires res == RemoveInternal(self, key)
+  ensures var (self', removed) := res;
+    self'.count as nat == |self'.contents|
+  {
+    var (self', removed) := res;
+    if removed.Some? {
+      assert key in self.contents;
+      assert self'.contents.Keys <= self.contents.Keys;
+      assert |self.contents| == self'.count as nat + 1;
+      assert |self.contents.Keys| == self'.count as nat + 1;
+      assert |self.contents.Keys - {key}| == |self.contents.Keys| - |{key}|;
+      assert self.contents.Keys - {key} == self'.contents.Keys;
+      assert |self'.contents| == |self.contents| - 1;
+      assert |self'.contents| == self'.count as nat;
+    } else {
+      assert key !in self.contents;
+      assert self'.contents == self.contents;
+      assert |self'.contents| == self'.count as nat;
+    }
+  }
+
+  function Remove<V>(self: LinearHashMap, key: uint64)
+  : (res: (LinearHashMap, Option<V>))
+    requires Inv(self)
+    ensures var (self', removed) := res;
+      && Inv(self')
+      && (self'.contents == if key in self.contents
+        then map k | k in self.contents && k != key :: self.contents[k]
+        else self.contents)
+      && (removed == if key in self.contents
+        then Some(self.contents[key])
+        else None)
+  {
+    var (self', removed) := RemoveInternal(self, key);
+
+    LemmaFixedSizeRemoveResult(self.underlying, key);
+    RemoveCountCorrect(self, key, (self', removed));
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
+
+    (self', removed)
   }
 
   //////// Iterator
