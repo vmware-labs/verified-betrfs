@@ -849,7 +849,7 @@ module FixedSizeMutableMapModel {
     )
   }
 
-  function {:opaque} Realloc<V>(self: LinearHashMap<V>) : (self' : LinearHashMap<V>)
+  function {:opaque} ReallocInternal<V>(self: LinearHashMap<V>) : (self' : LinearHashMap<V>)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     requires Inv(self)
   {
@@ -858,21 +858,33 @@ module FixedSizeMutableMapModel {
     self.(underlying := newUnderlying)
   }
 
+  function Realloc<V>(self: LinearHashMap<V>) : (self': LinearHashMap<V>)
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    requires Inv(self)
+    ensures Inv(self')
+    ensures self'.contents == self.contents
+    ensures self'.underlying.count as nat < |self'.underlying.storage| - 2
+  {
+    var self' := ReallocInternal(self);
+    LemmaReallocResult(self);
+    self'
+  }
+
   lemma LemmaReallocResult(self: LinearHashMap)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     requires Inv(self)
-    ensures var self' := Realloc(self);
+    ensures var self' := ReallocInternal(self);
       && Inv(self')
       && self'.contents == self.contents
       && self'.underlying.count as nat < |self'.underlying.storage| - 2
   {
-    var self' := Realloc(self);
-    reveal_Realloc();
+    var self' := ReallocInternal(self);
+    reveal_ReallocInternal();
 
     assert |self.contents| == self.count as nat;
 
     var newSize: uint64 := (128 + self.count) * 4;
-    //print "(debug) MutableMap.Realloc: Count ", Count, ", Realloc ", newSize, "\n";
+    //print "(debug) MutableMap.ReallocInternal: Count ", Count, ", ReallocInternal ", newSize, "\n";
 
     var newUnderlying := ConstructorFromSize(newSize);
     
@@ -908,7 +920,7 @@ module FixedSizeMutableMapModel {
           && FilledWithEntryKey(self.underlying.storage, slot, key))
 
       invariant ReallocIterate(self, newUnderlying, i)
-             == Realloc(self).underlying
+             == ReallocInternal(self).underlying
 
       decreases |self.underlying.storage| - i as int
     {
@@ -1028,7 +1040,6 @@ module FixedSizeMutableMapModel {
   {
     // -- mutation --
     var self1 := if |self.underlying.storage| as uint64 / 2 <= self.underlying.count then (
-      LemmaReallocResult(self);
       Realloc(self)
     ) else (
       self
