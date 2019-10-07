@@ -5,7 +5,7 @@ include "Sets.i.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"
 
-module FixedSizeMutableMapModel {
+module MutableMapModel {
   import opened NativeTypes
   import opened Options
   import opened Sequences
@@ -39,7 +39,7 @@ module FixedSizeMutableMapModel {
     Slot((key as nat) % elementsLength)
   }
 
-  function method Uint64SlotForKey<V>(self: FixedSizeLinearHashMap<V>, key: uint64): (result: uint64)
+  function Uint64SlotForKey<V>(self: FixedSizeLinearHashMap<V>, key: uint64): (result: uint64)
   requires 0 < |self.storage| < 0x1_0000_0000_0000_0000
   ensures ValidSlot(|self.storage|, Slot(result as nat))
   ensures Slot(result as nat) == SlotForKey(|self.storage|, key)
