@@ -157,161 +157,47 @@ module MutableMap {
       this.Contents := Contents[key := Some(value)];
     }
 
+    // TODO rename to GetOpt
+    method Get(key: uint64) returns (found: Option<V>)
+    requires WF()
+    requires Inv()
+    ensures found == FixedSizeGet(ModelI(this), key)
+    {
+      MutableMapModel.reveal_FixedSizeGet();
 
-  //  method Insert(key: uint64, value: V) returns (replaced: Option<V>)
-  //  requires Inv()
-  //  requires Count as nat < Storage.Length - 1
-  //  ensures Inv()
-  //  ensures Contents == old(Contents[key := Some(value)])
-  //  ensures old(key in Contents) ==> replaced == old(Contents[key])
-  //  ensures replaced.Some? ==> old(key in Contents)
-  //  ensures old(key !in Contents) ==> replaced.None?
-  //  ensures old(Count as nat) <= Count as nat <= old(Count as nat) + (if replaced.Some? then 0 else 1)
-  //  ensures old(key !in Contents) ==> Count as nat == old(Count as nat) + 1
-  //  ensures Storage == old(Storage) // this was a surprising requirement, can be avoided with deeply-non-aliased types?
-  //  ensures Storage.Length == old(Storage.Length)
-  //  ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-  //  modifies Repr
-  //  {
-  //    var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
+      var slotIdx := Probe(key);
 
-  //    /* (doc)
-  //    assert forall explainedKey :: explainedKey in Contents ==>
-  //      exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey);
-  //    */
+      if Storage[slotIdx].Entry? {
+        found := Some(Storage[slotIdx].value);
+      } else {
+        found := None;
+      }
+    }
 
-  //    // -- mutation --
-  //    if Storage[slotIdx].Empty? {
-  //      Count := Count + 1;
-  //      replaced := None;
-  //    } else if Storage[slotIdx].Tombstone? {
-  //      replaced := None;
-  //    } else {
-  //      replaced := Some(Storage[slotIdx].value);
-  //    }
-  //    Storage[slotIdx] := Entry(key, value);
-  //    Contents := Contents[key := Some(value)];
-  //    // --------------
+    method Remove(key: uint64) returns (removed: Option<V>)
+    requires WF()
+    requires Inv()
+    ensures WF()
+    ensures Inv()
+    ensures (ModelI(this), removed) == FixedSizeRemove(old(ModelI(this)), key)
+    ensures Count == old(Count)
+    ensures Repr == old(Repr)
+    modifies Repr
+    {
+      MutableMapModel.reveal_FixedSizeRemove();
+      MutableMapModel.LemmaFixedSizeRemoveResult(ModelI(this), key);
 
-  //    /* (doc)
-  //    assert FilledWithOtherKeys(Storage[..], SlotForKey(Storage.Length, key), probeSkips as nat, key);
-  //    assert FilledWithKey(Storage[..], Slot(slotIdx as nat), key);
-  //    assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
-  //    assert key in Contents;
-  //    */
+      var slotIdx := Probe(key);
 
-  //    forall explainedKey | explainedKey in Contents
-  //    ensures exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey)
-  //    {
-  //      if key == explainedKey {
-  //        assert SlotExplainsKey(Storage[..], probeSkips as nat, key); // observe
-  //      } else {
-  //        var oldSkips :| SlotExplainsKey(old(Storage[..]), oldSkips, explainedKey);
-  //        assert SlotExplainsKey(Storage[..], oldSkips, explainedKey); // observe
-  //      }
-  //    }
-
-  //    forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry?
-  //    ensures && var item := Storage[slot.slot];
-  //            && Contents[item.key] == Some(item.value)
-  //    {
-  //      var item := Storage[slot.slot];
-  //      if slot != Slot(slotIdx as nat) {
-  //        if item.key == key {
-  //          assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat)); // observe
-  //          assert SameSlot(Storage.Length, slot, Slot(slotIdx as nat)); // observe
-  //          assert false;
-  //        }
-  //      }
-  //    }
-  //    forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Tombstone?
-  //    ensures && var item := Storage[slot.slot];
-  //            && Contents[item.key].None?
-  //    {
-  //      var item := Storage[slot.slot];
-  //      if slot != Slot(slotIdx as nat) {
-  //        if item.key == key {
-  //          assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat)); // observe
-  //          assert SameSlot(Storage.Length, slot, Slot(slotIdx as nat)); // observe
-  //          assert false;
-  //        }
-  //      }
-  //    }
-  //  }
-
-  //  // TODO rename to GetOpt
-  //  method Get(key: uint64) returns (found: Option<V>)
-  //  requires Inv()
-  //  ensures Inv()
-  //  ensures Contents == old(Contents)
-  //  ensures Count == old(Count)
-  //  ensures Repr == old(Repr)
-  //  ensures if key in Contents && Contents[key].Some? then found == Some(Contents[key].value) else found.None?
-  //  {
-  //    var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
-
-  //    if Storage[slotIdx].Entry? {
-  //      /* (doc) assert key in Contents; */
-  //      found := Some(Storage[slotIdx].value);
-  //    } else if Storage[slotIdx].Tombstone? {
-  //      /* (doc) assert key in Contents && Contents[key].None?; */
-  //      found := None;
-  //    } else {
-  //      /* (doc) assert key !in Contents; */
-  //      found := None;
-  //    }
-  //  }
-
-  //  method Remove(key: uint64) returns (removed: Option<V>)
-  //  requires Inv()
-  //  ensures Inv()
-  //  ensures Contents == if key in old(Contents)
-  //      then old(Contents[key := None])
-  //      else old(Contents)
-  //  ensures removed == if old(key in Contents) && old(Contents[key].Some?)
-  //      then Some(old(Contents[key].value))
-  //      else None
-  //  ensures Count == old(Count)
-  //  ensures Repr == old(Repr)
-  //  modifies Repr
-  //  {
-  //    var slotIdx, /* ghost */ probeStartSlotIdx, /* ghost */ probeSkips := Probe(key);
-
-  //    if Storage[slotIdx].Entry? {
-  //      // -- mutation --
-  //      removed := Some(Storage[slotIdx].value);
-  //      Storage[slotIdx] := Tombstone(key);
-  //      Contents := Contents[key := None];
-  //      // --------------
-
-  //      forall explainedKey | explainedKey in Contents
-  //      ensures exists skips :: SlotExplainsKey(Storage[..], skips, explainedKey)
-  //      {
-  //        if key == explainedKey {
-  //          assert SlotExplainsKey(Storage[..], probeSkips as nat, key);
-  //        } else {
-  //          var oldSkips :| SlotExplainsKey(old(Storage[..]), oldSkips, explainedKey);
-  //          assert SlotExplainsKey(Storage[..], oldSkips, explainedKey);
-  //        }
-  //      }
-
-  //      forall slot | ValidSlot(Storage.Length, slot) && Storage[slot.slot].Entry?
-  //      ensures && var item := Storage[slot.slot];
-  //              && Contents[item.key] == Some(item.value)
-  //      {
-  //        var item := Storage[slot.slot];
-  //        if slot != Slot(slotIdx as nat) {
-  //          if item.key == key {
-  //            assert CantEquivocateStorageKey(Storage[..]);
-  //            assert TwoNonEmptyValidSlotsWithSameKey(Storage[..], slot, Slot(slotIdx as nat));
-  //            assert false;
-  //          }
-  //        }
-  //      }
-  //    } else {
-  //      removed := None;
-  //    }
-  //  }
+      if Storage[slotIdx].Entry? {
+        removed := Some(Storage[slotIdx].value);
+        Storage[slotIdx] := Tombstone(key);
+        // ghost:
+        Contents := Contents[key := None];
+      } else {
+        removed := None;
+      }
+    }
 
   //  method Clone() returns (cloned: FixedSizeHashMap<V>)
   //    requires Inv()
