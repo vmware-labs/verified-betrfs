@@ -23,7 +23,7 @@ module ImplModelLeaf {
   : (s': Variables)
   requires Inv(k, s)
   requires s.Ready?
-  requires ref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.contents
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
@@ -53,7 +53,7 @@ module ImplModelLeaf {
   lemma repivotLeafCorrect(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
   requires s.Ready?
-  requires ref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.contents
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?

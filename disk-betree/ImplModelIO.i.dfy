@@ -46,8 +46,8 @@ module ImplModelIO {
 
   predicate addrNotUsedInIndirectionTable(addr: uint64, indirectionTable: IndirectionTable)
   {
-    && (forall ref | ref in indirectionTable && indirectionTable[ref].0.Some?  ::
-          indirectionTable[ref].0.value.addr != addr)
+    && (forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some?  ::
+          indirectionTable.contents[ref].0.value.addr != addr)
   }
 
   function getFreeLocIterate(s: Variables, len: uint64, tryOffset: uint64)
@@ -240,13 +240,13 @@ module ImplModelIO {
   : (res : (Variables, IO))
   requires s.Ready?
   requires io.IOInit?
-  requires ref in s.ephemeralIndirectionTable;
-  requires s.ephemeralIndirectionTable[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.contents;
+  requires s.ephemeralIndirectionTable.contents[ref].0.Some?;
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
       (s, io)
     ) else (
-      var loc := s.ephemeralIndirectionTable[ref].0.value;
+      var loc := s.ephemeralIndirectionTable.contents[ref].0.value;
       var (id, io') := RequestRead(io, loc);
       var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
       (s', io')
@@ -258,8 +258,8 @@ module ImplModelIO {
   requires s.Ready?
   requires WFVars(s)
   requires BBC.Inv(Ik(k), IVars(s))
-  requires ref in s.ephemeralIndirectionTable;
-  requires s.ephemeralIndirectionTable[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.contents;
+  requires s.ephemeralIndirectionTable.contents[ref].0.Some?;
   requires ref !in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures var (s', io') := PageInReq(k, s, io, ref);
@@ -269,7 +269,7 @@ module ImplModelIO {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       assert noop(k, IVars(s), IVars(s));
     } else {
-      var loc := s.ephemeralIndirectionTable[ref].0.value;
+      var loc := s.ephemeralIndirectionTable.contents[ref].0.value;
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert BC.ValidLocationForNode(loc);
       var (id, io') := RequestRead(io, loc);
@@ -380,7 +380,7 @@ module ImplModelIO {
 
       var ref := s.outstandingBlockReads[id].ref;
 
-      var locGraph := MapLookupOption(s.ephemeralIndirectionTable, ref);
+      var locGraph := MapLookupOption(s.ephemeralIndirectionTable.contents, ref);
       if (locGraph.None? || locGraph.value.0.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
         s
       ) else (
@@ -427,7 +427,7 @@ module ImplModelIO {
 
     var ref := s.outstandingBlockReads[id].ref;
     
-    var locGraph := MapLookupOption(s.ephemeralIndirectionTable, ref);
+    var locGraph := MapLookupOption(s.ephemeralIndirectionTable.contents, ref);
     if (locGraph.None? || locGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
       return;

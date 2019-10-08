@@ -30,8 +30,8 @@ module ImplModelDealloc {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && ref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[ref];
+      && ref in s.frozenIndirectionTable.value.contents
+      && var entry := s.frozenIndirectionTable.value.contents[ref];
       && var (loc, _) := entry;
       && loc.None?
     ) then (
@@ -40,7 +40,8 @@ module ImplModelDealloc {
       (s, io)
     ) else (
       var s' := s
-        .(ephemeralIndirectionTable := MapRemove(s.ephemeralIndirectionTable, {ref}))
+        .(ephemeralIndirectionTable :=
+            MutableMapModel.Remove(s.ephemeralIndirectionTable, ref))
         .(cache := MapRemove(s.cache, {ref}))
         .(lru := LruModel.Remove(s.lru, ref));
       (s', io)
@@ -62,8 +63,8 @@ module ImplModelDealloc {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && ref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[ref];
+      && ref in s.frozenIndirectionTable.value.contents
+      && var entry := s.frozenIndirectionTable.value.contents[ref];
       && var (loc, _) := entry;
       && loc.None?
     ) {
@@ -108,7 +109,7 @@ module ImplModelDealloc {
   requires s.Ready?
   {
     // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var ephemeralRefs := setToSeq(s.ephemeralIndirectionTable.Keys);
+    var ephemeralRefs := setToSeq(s.ephemeralIndirectionTable.contents.Keys);
 
     assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
 
@@ -119,7 +120,7 @@ module ImplModelDealloc {
   requires 0 <= i as int <= |ephemeralRefs|
   requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
   requires s.Ready?
-  requires ephemeralRefs == setToSeq(s.ephemeralIndirectionTable.Keys)
+  requires ephemeralRefs == setToSeq(s.ephemeralIndirectionTable.contents.Keys)
   requires forall k : nat | k < i as nat :: (
         && ephemeralRefs[k] in IIndirectionTable(s.ephemeralIndirectionTable).graph
         && !deallocable(s, ephemeralRefs[k]))
@@ -150,7 +151,7 @@ module ImplModelDealloc {
       && (ref.None? ==> forall r | r in IIndirectionTable(s.ephemeralIndirectionTable).graph :: !deallocable(s, r))
   {
     reveal_FindDeallocable();
-    var ephemeralRefs := setToSeq(s.ephemeralIndirectionTable.Keys);
+    var ephemeralRefs := setToSeq(s.ephemeralIndirectionTable.contents.Keys);
     assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
     FindDeallocableIterateCorrect(s, ephemeralRefs, 0);
   }

@@ -123,6 +123,7 @@ module ImplMarshallingModel {
               if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) then (
                 None
               ) else (
+                assume table.count as nat < 0x10000000000000000 / 8;
                 Some(MutableMapModel.Insert(table, ref, (Some(loc), succs)))
               )
             )

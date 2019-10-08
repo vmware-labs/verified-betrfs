@@ -20,7 +20,7 @@ module ImplModelCache {
   predicate RefAvailable(s: Variables, ref: Reference)
   {
     && s.Ready?
-    && ref !in s.ephemeralIndirectionTable
+    && ref !in s.ephemeralIndirectionTable.contents
     && ref !in s.cache 
     && ref != BT.G.Root()
   }
@@ -32,7 +32,7 @@ module ImplModelCache {
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   decreases 0x1_0000_0000_0000_0000 - i as int
   {
-    if i !in s.ephemeralIndirectionTable && i !in s.cache then (
+    if i !in s.ephemeralIndirectionTable.contents && i !in s.cache then (
       Some(i)
     ) else if i == 0xffff_ffff_ffff_ffff then (
       None
@@ -57,7 +57,7 @@ module ImplModelCache {
   ensures ref.Some? ==> ref.value != avoid
   decreases 0x1_0000_0000_0000_0000 - i as int
   {
-    if i != avoid && i !in s.ephemeralIndirectionTable && i !in s.cache then (
+    if i != avoid && i !in s.ephemeralIndirectionTable.contents && i !in s.cache then (
       Some(i)
     ) else if i == 0xffff_ffff_ffff_ffff then (
       None
@@ -81,10 +81,14 @@ module ImplModelCache {
   function {:opaque} writeBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   : (s': Variables)
   requires s.Ready?
+  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
   ensures s'.Ready?
   ensures s'.cache == s.cache
+  ensures MutableMapModel.Inv(s'.ephemeralIndirectionTable)
   {
-    var eph := s.ephemeralIndirectionTable[ref := (None, if children.Some? then children.value else [])];
+    assume s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
+    var eph := MutableMapModel.Insert(s.ephemeralIndirectionTable, ref,
+        (None, if children.Some? then children.value else []));
     s.(ephemeralIndirectionTable := eph)
         .(lru := LruModel.Use(s.lru, ref))
   }
@@ -92,8 +96,10 @@ module ImplModelCache {
   function {:opaque} allocBookkeeping(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
   : (p: (Variables, Option<Reference>))
   requires s.Ready?
+  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
   ensures var (s', id) := p;
-    s'.Ready?
+    && s'.Ready?
+    && MutableMapModel.Inv(s'.ephemeralIndirectionTable)
   {
     var ref := getFreeRef(s);
     if ref.Some? then (
@@ -111,9 +117,12 @@ module ImplModelCache {
   function writeWithNode(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   : (s': Variables)
   requires s.Ready?
+  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
   ensures s'.Ready?
   {
-    var eph := s.ephemeralIndirectionTable[ref := (None, if node.children.Some? then node.children.value else [])];
+    assume s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
+    var eph := MutableMapModel.Insert(s.ephemeralIndirectionTable, ref,
+        (None, if node.children.Some? then node.children.value else []));
     s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
         .(lru := LruModel.Use(s.lru, ref))
   }
@@ -121,6 +130,7 @@ module ImplModelCache {
   function allocWithNode(k: Constants, s: Variables, node: Node)
   : (p: (Variables, Option<Reference>))
   requires s.Ready?
+  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
   ensures var (s', id) := p;
     s'.Ready?
   {
@@ -157,7 +167,7 @@ module ImplModelCache {
   requires ref in s.cache
   requires WFNode(node)
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
-  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value ==> s.frozenIndirectionTable.value[ref].0.Some?
+  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.contents ==> s.frozenIndirectionTable.value.contents[ref].0.Some?
   ensures var s' := writeWithNode(k, s, ref, node);
     && WFVars(s')
     && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, INode(node))
@@ -190,9 +200,9 @@ module ImplModelCache {
   requires s.Ready?
   requires Inv(k, s)
   requires ref in s.cache
-  requires ref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.contents
   requires childref in BT.G.Successors(INode(s.cache[ref]))
-  ensures childref in s.ephemeralIndirectionTable
+  ensures childref in s.ephemeralIndirectionTable.contents
   {
     assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
   }
@@ -200,15 +210,15 @@ module ImplModelCache {
   lemma lemmaGraphChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
   requires s.Ready?
   requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable
-  requires childref in s.ephemeralIndirectionTable[ref].1
-  ensures childref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.contents
+  requires childref in s.ephemeralIndirectionTable.contents[ref].1
+  ensures childref in s.ephemeralIndirectionTable.contents
 
   lemma lemmaBlockPointsToValidReferences(k: Constants, s: Variables, ref: BT.G.Reference)
   requires Inv(k, s)
   requires s.Ready?
   requires ref in s.cache
-  requires ref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.contents
   ensures BC.BlockPointsToValidReferences(INode(s.cache[ref]), IIndirectionTable(s.ephemeralIndirectionTable).graph);
   {
     var node := INode(s.cache[ref]);

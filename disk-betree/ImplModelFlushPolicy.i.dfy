@@ -84,18 +84,18 @@ module ImplModelFlushPolicy {
   {
     && s.Ready?
     && (action.ActionPageIn? ==> (
-      && action.ref in s.ephemeralIndirectionTable
+      && action.ref in s.ephemeralIndirectionTable.contents
       && action.ref !in s.cache
-      && s.ephemeralIndirectionTable[action.ref].0.Some?
+      && s.ephemeralIndirectionTable.contents[action.ref].0.Some?
       && TotalCacheSize(s) <= MaxCacheSize() - 1
     ))
     && ((action.ActionSplit? || action.ActionFlush?) ==> (
-      && action.parentref in s.ephemeralIndirectionTable
+      && action.parentref in s.ephemeralIndirectionTable.contents
       && action.parentref in s.cache
       && s.cache[action.parentref].children.Some?
       && 0 <= action.slot as int < |s.cache[action.parentref].children.value|
       && s.cache[action.parentref].children.value[action.slot] in s.cache
-      && s.cache[action.parentref].children.value[action.slot] in s.ephemeralIndirectionTable
+      && s.cache[action.parentref].children.value[action.slot] in s.ephemeralIndirectionTable.contents
     ))
     && (action.ActionSplit? ==> (
       && |s.cache[s.cache[action.parentref].children.value[action.slot]].buckets| >= 2
@@ -109,7 +109,7 @@ module ImplModelFlushPolicy {
       && TotalCacheSize(s) <= MaxCacheSize() - 1
     ))
     && (action.ActionRepivot? ==> (
-      && action.ref in s.ephemeralIndirectionTable
+      && action.ref in s.ephemeralIndirectionTable.contents
       && action.ref in s.cache
       && s.cache[action.ref].children.None?
       && |s.cache[action.ref].buckets| == 1
@@ -202,7 +202,7 @@ module ImplModelFlushPolicy {
   requires 0 <= i as int < |stack|
   requires Inv(k, s)
   requires ValidStackSlots(k, s, stack, slots)
-  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
+  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.contents
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   requires s.cache[stack[|stack| - 1]].children.Some? ==> |s.cache[stack[|stack| - 1]].buckets| >= 2
   requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
@@ -232,7 +232,7 @@ module ImplModelFlushPolicy {
   requires |stack| <= 40
   requires ValidStackSlots(k, s, stack, slots)
   requires Inv(k, s)
-  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable
+  requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.contents
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures var (s', action) := getActionToFlush(k, s, stack, slots);

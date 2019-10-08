@@ -96,6 +96,9 @@ module ImplModel {
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
     && TotalCacheSize(s) <= MaxCacheSize()
+    && MutableMapModel.Inv(ephemeralIndirectionTable)
+    && MutableMapModel.Inv(persistentIndirectionTable)
+    && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
   }
   predicate WFVars(vars: Variables)
   {

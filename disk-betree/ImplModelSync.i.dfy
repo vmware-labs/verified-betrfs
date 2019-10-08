@@ -27,8 +27,8 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires ref !in s.cache
-  requires ref in s.ephemeralIndirectionTable
-  ensures s.ephemeralIndirectionTable[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.contents
+  ensures s.ephemeralIndirectionTable.contents[ref].0.Some?;
   {
     assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
     assert ref in s.cache.Keys + IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
@@ -36,16 +36,20 @@ module ImplModelSync {
     assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
   }
 
-  function {:opaque} AssignRefToLoc(table: IndirectionTable, ref: Reference, loc: BC.Location) : IndirectionTable
+  function {:opaque} AssignRefToLoc(table: IndirectionTable, ref: Reference, loc: BC.Location) : (table' : IndirectionTable)
+  requires MutableMapModel.Inv(table)
+  ensures MutableMapModel.Inv(table')
   {
-    if (ref in table && table[ref].0.None?) then (
-      table[ref := (Some(loc), table[ref].1)]
+    if (ref in table.contents && table.contents[ref].0.None?) then (
+      assume table.count as nat < 0x10000000000000000 / 8;
+      MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1))
     ) else (
       table
     )
   }
 
   lemma AssignRefToLocCorrect(table: IndirectionTable, ref: Reference, loc: BC.Location)
+  requires MutableMapModel.Inv(table)
   ensures var table' := AssignRefToLoc(table, ref, loc);
     IIndirectionTable(table') == BC.assignRefToLocation(IIndirectionTable(table), ref, loc)
   {
@@ -62,10 +66,10 @@ module ImplModelSync {
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
   ensures var ref := FindRefInFrozenWithNoLoc(s);
-    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value)
-    && (ref.Some? ==> s.frozenIndirectionTable.value[ref.value].0.None?)
-    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value
-        :: s.frozenIndirectionTable.value[r].0.Some?)
+    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value.contents)
+    && (ref.Some? ==> s.frozenIndirectionTable.value.contents[ref.value].0.None?)
+    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value.contents
+        :: s.frozenIndirectionTable.value.contents[r].0.Some?)
 
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: Constants, s: Variables, io: IO)
@@ -76,7 +80,7 @@ module ImplModelSync {
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.None?
   {
-    var ephemeralTable := s.ephemeralIndirectionTable;
+    var ephemeralTable := s.ephemeralIndirectionTable.contents;
     var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
 
     var foundDeallocable := FindDeallocable(s);
@@ -106,7 +110,7 @@ module ImplModelSync {
   {
     var (s', io') := syncNotFrozen(k, s, io);
 
-    var ephemeralTable := s.ephemeralIndirectionTable;
+    var ephemeralTable := s.ephemeralIndirectionTable.contents;
     var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
 
     var foundDeallocable := FindDeallocable(s);
@@ -190,13 +194,13 @@ module ImplModelSync {
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value
-  requires s.frozenIndirectionTable.value[ref].0.None?
+  requires ref in s.frozenIndirectionTable.value.contents
+  requires s.frozenIndirectionTable.value.contents[ref].0.None?
   {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if ref in s.ephemeralIndirectionTable && s.ephemeralIndirectionTable[ref].0.Some? then (
+    if ref in s.ephemeralIndirectionTable.contents && s.ephemeralIndirectionTable.contents[ref].0.Some? then (
       // TODO we should be able to prove this is impossible as well
       && s' == s
       && io' == io
@@ -212,8 +216,8 @@ module ImplModelSync {
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value
-  requires s.frozenIndirectionTable.value[ref].0.None?
+  requires ref in s.frozenIndirectionTable.value.contents
+  requires s.frozenIndirectionTable.value.contents[ref].0.None?
 
   requires syncFoundInFrozen(k, s, io, ref, s', io')
 
@@ -223,7 +227,7 @@ module ImplModelSync {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if ref in s.ephemeralIndirectionTable && s.ephemeralIndirectionTable[ref].0.Some? {
+    if ref in s.ephemeralIndirectionTable.contents && s.ephemeralIndirectionTable.contents[ref].0.Some? {
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert noop(k, IVars(s), IVars(s));
     } else {

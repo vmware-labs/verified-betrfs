@@ -1157,7 +1157,7 @@ module MutableMapModel {
     }
   }
 
-  function Remove<V>(self: LinearHashMap, key: uint64)
+  function RemoveAndGet<V>(self: LinearHashMap, key: uint64)
   : (res: (LinearHashMap, Option<V>))
     requires Inv(self)
     ensures var (self', removed) := res;
@@ -1176,6 +1176,18 @@ module MutableMapModel {
     UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
 
     (self', removed)
+  }
+
+  function Remove<V>(self: LinearHashMap, key: uint64)
+  : (self': LinearHashMap)
+    requires Inv(self)
+    ensures
+      && Inv(self')
+      && (self'.contents == if key in self.contents
+        then map k | k in self.contents && k != key :: self.contents[k]
+        else self.contents)
+  {
+    RemoveAndGet(self, key).0
   }
 
   function Get<V>(self: LinearHashMap, key: uint64)

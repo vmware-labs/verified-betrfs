@@ -22,11 +22,13 @@ module ImplModelInsert {
   // == insert ==
 
   function removeLBAFromIndirectionTable(table: IndirectionTable, ref: BT.G.Reference) : IndirectionTable
+  requires MutableMapModel.Inv(table)
   {
-    if ref in table then (
-      var lbaGraph := table[ref];
+    if ref in table.contents then (
+      var lbaGraph := table.contents[ref];
       var (lba, graph) := lbaGraph;
-      table[ref := (None, graph)]
+      assume table.count as nat < 0x10000000000000000 / 8;
+      MutableMapModel.Insert(table, ref, (None, graph))
     ) else (
       table
     )
@@ -56,8 +58,8 @@ module ImplModelInsert {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value
-      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value[BT.G.Root()];
+      && BT.G.Root() in s.frozenIndirectionTable.value.contents
+      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.contents[BT.G.Root()];
       && rootInFrozenLbaGraph.0.None?
     ) then (
       (s, false)
@@ -87,8 +89,8 @@ module ImplModelInsert {
     reveal_NodeInsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value
-      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value[BT.G.Root()];
+      && BT.G.Root() in s.frozenIndirectionTable.value.contents
+      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.contents[BT.G.Root()];
       && rootInFrozenLbaGraph.0.None?
     ) {
       assert (s.frozenIndirectionTable.Some? && BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).graph) &&

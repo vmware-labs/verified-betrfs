@@ -23,8 +23,8 @@ module ImplModelGrow {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[BT.G.Root()];
+      && BT.G.Root() in s.frozenIndirectionTable.value.contents
+      && var entry := s.frozenIndirectionTable.value.contents[BT.G.Root()];
       && var (loc, _) := entry;
       && loc.None?
     ) then (
@@ -64,8 +64,8 @@ module ImplModelGrow {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[BT.G.Root()];
+      && BT.G.Root() in s.frozenIndirectionTable.value.contents
+      && var entry := s.frozenIndirectionTable.value.contents[BT.G.Root()];
       && var (loc, _) := entry;
       && loc.None?
     ) {
