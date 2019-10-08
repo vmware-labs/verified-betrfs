@@ -232,7 +232,7 @@ module MutableMapModel {
         ==> TombstoneInSlotMatchesContents(elements, slot, contents)
   }
 
-  protected predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
+  predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
   {
     && 128 <= |self.storage| < 0x10000000000000000
     && (self.count as nat) < 0x10000000000000000

@@ -111,7 +111,12 @@ module MutableMap {
       slotIdx := Uint64SlotForKey(key);
 
       while true
+        invariant 0 <= slotIdx as int < |ModelI(this).storage|
         invariant MutableMapModel.Probe(ModelI(this), key) == ProbeIterate(ModelI(this), key, slotIdx)
+        decreases var wit := getEmptyWitness(ModelI(this), 0);
+          if slotIdx > wit
+            then wit as int - slotIdx as int + |ModelI(this).storage|
+            else wit as int - slotIdx as int
       {
         if Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key) {
           return;
