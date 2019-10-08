@@ -1050,7 +1050,7 @@ module MutableMapModel {
     assert Inv(self');
   }
 
-  function Insert<V>(self: LinearHashMap, key: uint64, value: V)
+  function {:opaque} InsertAndGetOld<V>(self: LinearHashMap, key: uint64, value: V)
   : (res: (LinearHashMap, Option<V>))
     requires Inv(self)
     requires self.count as nat < 0x10000000000000000 / 8
@@ -1091,6 +1091,19 @@ module MutableMapModel {
     //assert Inv(self');
 
     (self', replaced)
+  }
+
+  function {:opaque} Insert<V>(self: LinearHashMap, key: uint64, value: V)
+  : (self': LinearHashMap)
+    requires Inv(self)
+    requires self.count as nat < 0x10000000000000000 / 8
+    ensures
+      && Inv(self')
+      && self'.contents == self.contents[key := value]
+      && (self'.count as nat == self.count as nat ||
+         self'.count as nat == self.count as nat + 1)
+  {
+    InsertAndGetOld(self, key, value).0
   }
 
   function RemoveInternal<V>(self: LinearHashMap, key: uint64)
@@ -1181,6 +1194,7 @@ module MutableMapModel {
   datatype Iterator<V> = Iterator(
     i: uint64, // index in hash table item list
     ghost s: set<uint64>,
+    ghost decreaser: ORDINAL,
     next: Option<(uint64, V)>)
 
   protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
@@ -1238,7 +1252,7 @@ module MutableMapModel {
   ensures it'.s == {}
   {
     var (i, next) := iterToNext(self, 0);
-    Iterator(i, {}, next)
+    Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next)
   }
 
   function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
@@ -1248,9 +1262,10 @@ module MutableMapModel {
   ensures WFIter(self, it')
   ensures it'.s == it.s + {it.next.value.0}
   ensures it'.next.None? ==> it'.s == self.contents.Keys
+  ensures it'.decreaser < it.decreaser
   {
     var (i, next) := iterToNext(self, it.i + 1);
-    var it' := Iterator(i, it.s + {it.next.value.0}, next);
+    var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
     it'
   }

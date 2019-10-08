@@ -6,6 +6,7 @@ include "BetreeBlockCache.i.dfy"
 include "../lib/tttree.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"
+include "../lib/MutableMapModel.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -34,6 +35,7 @@ module ImplModel {
   import opened Bounds
   import LruModel
   import UI
+  import MutableMapModel
 
   import ReferenceType`Internal
 
@@ -42,7 +44,7 @@ module ImplModel {
   type Message = Messages.Message
   type DiskOp = BBC.DiskOp
 
-  type IndirectionTable = map<uint64, (Option<BC.Location>, seq<Reference>)>
+  type IndirectionTable = MutableMapModel.LinearHashMap<(Option<BC.Location>, seq<Reference>)>
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -120,11 +122,11 @@ module ImplModel {
   }
   function IIndirectionTableLbas(table: IndirectionTable) : map<uint64, BC.Location>
   {
-    map ref | ref in table && table[ref].0.Some? :: table[ref].0.value
+    map ref | ref in table.contents && table.contents[ref].0.Some? :: table.contents[ref].0.value
   }
   function IIndirectionTableGraph(table: IndirectionTable) : map<uint64, seq<Reference>>
   {
-    map ref | ref in table :: table[ref].1
+    map ref | ref in table.contents :: table.contents[ref].1
   }
   function IIndirectionTable(table: IndirectionTable) : (result: BC.IndirectionTable)
   {

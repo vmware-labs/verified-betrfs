@@ -21,6 +21,7 @@ module ImplMarshallingModel {
   import KVList
   import Crypto
   import Native
+  import MutableMapModel
 
   import BT = PivotBetreeSpec`Internal
 
@@ -100,12 +101,12 @@ module ImplMarshallingModel {
     Some(v.ua)
   }
 
-  function {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<map<uint64, (Option<Location>, seq<Reference>)>>)
+  function {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<IM.IndirectionTable>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-  ensures s.Some? ==> forall v | v in s.value.Values :: v.0.Some? && BC.ValidLocationForNode(v.0.value)
+  ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.0.Some? && BC.ValidLocationForNode(v.0.value)
   {
     if |a| == 0 then
-      Some(map[])
+      Some(MutableMapModel.Constructor(1024))
     else (
       var res := valToLocsAndSuccs(DropLast(a));
       match res {
@@ -119,10 +120,10 @@ module ImplMarshallingModel {
             case None => None
             case Some(succs) => (
               var loc := LBAType.Location(lba, len);
-              if ref in table || lba == 0 || !LBAType.ValidLocation(loc) then (
+              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) then (
                 None
               ) else (
-                Some(table[ref := (Some(loc), succs)])
+                Some(MutableMapModel.Insert(table, ref, (Some(loc), succs)))
               )
             )
           }
