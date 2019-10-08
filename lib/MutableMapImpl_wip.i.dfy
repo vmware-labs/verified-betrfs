@@ -199,25 +199,23 @@ module MutableMap {
       }
     }
 
-  //  method Clone() returns (cloned: FixedSizeHashMap<V>)
-  //    requires Inv()
-  //    ensures Inv()
-  //    ensures cloned.Inv()
-  //    ensures Count == old(Count)
-  //    ensures Repr == old(Repr)
-  //    ensures cloned.Contents == old(Contents)
-  //    ensures cloned.Count == old(Count)
-  //    ensures cloned.Storage[..] == Storage[..]
-  //    ensures fresh(cloned.Repr)
-  //    ensures cloned.Repr !! Repr
-  //  {
-  //    var size := Storage.Length as uint64;
-  //    var newStorage := Native.Arrays.newArrayClone(this.Storage);
-  //    cloned := new FixedSizeHashMap.FromStorage(newStorage, Count);
-  //    cloned.Contents := Contents;
-  //    /* (doc) assert cloned.Repr !! Repr; */
-  //    assert Storage[..] == cloned.Storage[..]; // observe
-  //  }
+    method Clone() returns (cloned: FixedSizeHashMap<V>)
+      requires WF()
+      requires Inv()
+      ensures cloned.WF()
+      ensures cloned.Inv()
+      ensures cloned.Contents == old(Contents)
+      ensures cloned.Count == old(Count)
+      ensures cloned.Storage[..] == Storage[..]
+      ensures fresh(cloned.Repr)
+    {
+      var size := Storage.Length as uint64;
+      var newStorage := Native.Arrays.newArrayClone(this.Storage);
+      cloned := new FixedSizeHashMap.FromStorage(newStorage, Count);
+      cloned.Contents := Contents;
+      /* (doc) assert cloned.Repr !! Repr; */
+      assert Storage[..] == cloned.Storage[..]; // observe
+    }
   }
 
   // class ResizingHashMap<V> {
