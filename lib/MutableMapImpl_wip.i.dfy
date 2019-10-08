@@ -355,45 +355,42 @@ module MutableMap {
       MutableMapModel.LemmaReallocResult(old(I()));
     }
 
-  //   method Insert(key: uint64, value: V) returns (replaced: Option<V>)
-  //     requires Inv()
-  //     requires Count as nat < 0x10000000000000000 / 8
-  //     ensures Inv()
-  //     ensures Contents == old(Contents[key := value])
-  //     ensures Count as nat == old(Count as nat) + (if replaced.Some? then 0 else 1)
-  //     ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
-  //     modifies Repr
-  //   {
-  //     // print "Insert ", key, "\n";
+    method InsertAndGetOld(key: uint64, value: V) returns (replaced: Option<V>)
+      requires Inv()
+      requires Count as nat < 0x10000000000000000 / 8
+      ensures Inv()
+      ensures (I(), replaced) == MutableMapModel.InsertAndGetOld(old(I()), key, value)
+      ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
+      modifies Repr
+    {
+      MutableMapModel.reveal_InsertAndGetOld();
 
-  //     // -- mutation --
-  //     if Underlying.Storage.Length as uint64 / 2 <= Underlying.Count {
-  //       Realloc();
-  //     }
-  //     // --------------
+      if Underlying.Storage.Length as uint64 / 2 <= Underlying.Count {
+        Realloc();
+      }
 
-  //     assert MapFromStorage(Underlying.Storage[..]) == Contents;
-  //     assert Underlying.Count as nat < Underlying.Storage.Length - 2;
+      replaced := Underlying.Insert(key, value);
+      Contents := Contents[key := value];
 
-  //     // -- mutation --
-  //     replaced := Underlying.Insert(key, value);
-  //     Contents := Contents[key := value];
-  //     // --------------
+      if replaced.None? {
+        Count := Count + 1;
+      }
 
-  //     if replaced.None? {
-  //       assert old(key !in Contents);
-  //       Count := Count + 1;
-  //     } else {
-  //       assert old(key in Contents);
-  //     }
+      this.Repr := { this, this.Underlying } + this.Underlying.Repr;
+      ghost var _ := MutableMapModel.InsertAndGetOld(old(I()), key, value);
+    }
 
-  //     assert Underlying.Count as nat < Underlying.Storage.Length - 1;
-
-  //     UnderlyingInvImpliesMapFromStorageMatchesContents(Underlying, Contents);
-  //     assert MapFromStorage(Underlying.Storage[..]) == Contents;
-  //     assert UnderlyingInv(Underlying);
-  //     assert Inv();
-  //   }
+    method Insert(key: uint64, value: V)
+      requires Inv()
+      requires Count as nat < 0x10000000000000000 / 8
+      ensures Inv()
+      ensures I() == MutableMapModel.Insert(old(I()), key, value)
+      ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
+      modifies Repr
+    {
+      MutableMapModel.reveal_Insert();
+      var _ := InsertAndGetOld(key, value);
+    }
 
   //   method Remove(key: uint64) returns (removed: Option<V>)
   //     requires Inv()
