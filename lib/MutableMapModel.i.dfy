@@ -29,7 +29,7 @@ module MutableMapModel {
 
   predicate ValidElements<V>(elements: seq<Item<V>>)
   {
-    && 0 < |elements| < 0x10000000000000000
+    && 0 < |elements| < 0x1_0000_0000_0000_0000
   }
 
   function SlotForKey(elementsLength: nat, key: uint64): (result: Slot)

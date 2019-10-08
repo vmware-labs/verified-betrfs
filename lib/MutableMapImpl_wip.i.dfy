@@ -28,7 +28,7 @@ module MutableMap {
       && Repr == { this, this.Storage }
     }
 
-    static function ModelI(self: FixedSizeHashMap<V>): (model: FixedSizeLinearHashMap<V>)
+    protected static function ModelI(self: FixedSizeHashMap<V>): (model: FixedSizeLinearHashMap<V>)
     requires self.WF()
     ensures model.contents == self.Contents
     reads self, self.Repr
@@ -39,7 +39,7 @@ module MutableMap {
         self.Contents)
     }
 
-    predicate Inv()
+    protected predicate Inv()
     requires WF()
     reads this, this.Repr
     {
@@ -77,6 +77,8 @@ module MutableMap {
     }
 
     method Uint64SlotForKey(key: uint64) returns (result: uint64)
+    requires WF()
+    requires Inv()
     requires 0 < this.Storage.Length < 0x1_0000_0000_0000_0000
     ensures result == MutableMapModel.Uint64SlotForKey(ModelI(this), key)
     {
@@ -84,7 +86,10 @@ module MutableMap {
     }
 
     method Uint64SlotSuccessor(slot: uint64) returns (nextSlot: uint64)
+    requires WF()
+    requires Inv()
     requires this.Storage.Length < 0x1_0000_0000_0000_0000
+    requires ValidSlot(this.Storage.Length, Slot(slot as nat))
     ensures nextSlot == MutableMapModel.Uint64SlotSuccessor(|ModelI(this).storage|, slot)
     {
       if slot == (this.Storage.Length as uint64) - 1 {
@@ -94,49 +99,16 @@ module MutableMap {
       }
     }
 
-
     method Probe(key: uint64) returns (slotIdx: uint64)
+    requires WF()
     requires Inv()
-    ensures WF()
+    requires Count as int < Storage.Length
     ensures slotIdx == MutableMapModel.Probe(ModelI(this), key)
-    ensures Inv()
-    // ensures Storage.Length == old(Storage.Length)
-    // ensures ValidSlot(Storage.Length, Slot(slotIdx as nat))
-    // ensures ValidSlot(Storage.Length, Slot(startSlotIdx as nat))
-    // ensures Slot(startSlotIdx as nat) == SlotForKey(Storage.Length, key)
-    // ensures 0 <= ghostSkips
-    // ensures slotIdx as nat == KthSlotSuccessor(Storage.Length, Slot(startSlotIdx as nat), ghostSkips as nat).slot
-    // ensures key in Contents ==> SlotExplainsKey(Storage[..], ghostSkips as nat, key)
-    // ensures key !in Contents ==> FilledWithOtherKeys(Storage[..], Slot(startSlotIdx as nat), ghostSkips as nat, key) && (Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key))
-    // ensures Storage[slotIdx].Entry? ==> key in Contents && key == Storage[slotIdx].key
-    // ensures Storage[slotIdx].Empty? ==> key !in Contents
     ensures Repr == old(Repr)
     {
+      reveal_Probe();
+
       slotIdx := Uint64SlotForKey(key);
-
-      // ViewsHaveConsistentCounts(Storage[..], viewFromStartSlot, startSlotIdx as nat);
-      // CountFilledMatchesIndexSet(Storage[..]);
-      // IndexSetMatchesContents(Storage[..], Contents);
-
-      /* (doc)
-      calc {
-        viewFromStartSlot;
-        Storage[startSlotIdx..] + Storage[..startSlotIdx];
-        viewFromStartSlot[..Storage.Length-(startSlotIdx as int)] + viewFromStartSlot[Storage.Length-(startSlotIdx as int)..];
-      }
-      */
-      // forall dist: nat | dist < Storage.Length
-      // ensures Storage[KthSlotSuccessor(Storage.Length, startSlot, dist).slot] == viewFromStartSlot[dist]
-      // {
-      //   KthSlotSuccessorWrapsAround(Storage.Length, startSlot, dist); // observe
-      //   /* (doc)
-      //   if dist < Storage.Length-(startSlotIdx as int) {
-      //     assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == startSlotIdx as int + (dist as int);
-      //   } else {
-      //     assert KthSlotSuccessor(Storage.Length, startSlot, dist).slot == (dist as int) - (Storage.Length-(startSlotIdx as int));
-      //   }
-      //   */
-      // }
 
       while true
         invariant MutableMapModel.Probe(ModelI(this), key) == ProbeIterate(ModelI(this), key, slotIdx)
@@ -144,47 +116,34 @@ module MutableMap {
         if Storage[slotIdx].Empty? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key == key) {
           return;
         } else if Storage[slotIdx].key == key {
-          // assert EntryInSlotMatchesContents(Storage[..], Slot(slotIdx as nat), Contents); // observe
           return;
         }
-        /* (doc)
-        assert Storage[slotIdx].Entry? || (Storage[slotIdx].Tombstone? && Storage[slotIdx].key != key);
-        assert CountFilled(viewFromStartSlot[..skips]) == skips as nat;
-        assert Storage[slotIdx] == viewFromStartSlot[skips];
-        assert slotIdx as nat == KthSlotSuccessor(Storage.Length, startSlot, skips as nat).slot;
-        */
-
-        // -- increment --
         slotIdx := Uint64SlotSuccessor(slotIdx);
-        // ---------------
-
-        /* (doc)
-        assert skips < (Storage.Length as uint64) ==> Storage[slotIdx] == viewFromStartSlot[skips];
-        assert CountFilled(viewFromStartSlot[..skipsBefore]) == skipsBefore as nat;
-        assert viewFromStartSlot[skipsBefore].Entry? || viewFromStartSlot[skipsBefore].Tombstone?;
-        */
-        // assert viewFromStartSlot[..skips] == viewFromStartSlot[..skipsBefore] + [viewFromStartSlot[skipsBefore]]; // observe
-        // CountFilledAdditive(viewFromStartSlot[..skipsBefore], [viewFromStartSlot[skipsBefore]]);
       }
-
-      // forall ensures false
-      // {
-      //   calc {
-      //     Storage.Length;
-      //     skips as nat;
-      //     CountFilled(viewFromStartSlot[..skips]);
-      //       { assert viewFromStartSlot[..skips] == viewFromStartSlot; } // observe
-      //     CountFilled(viewFromStartSlot);
-      //     |Contents|;
-      //     Count as nat;
-      //     < Storage.Length;
-      //   }
-      //   /* (doc)
-      //   assert Storage.Length < Storage.Length; // at some point adding this line made the proof work,
-      //                                           // which is surprising because it's the output of the calc
-      //   */
-      // }
     }
+
+    method Insert(key: uint64, value: V) returns (replaced : Option<V>)
+    requires Inv()
+    requires Count as nat < Storage.Length - 1
+    ensures WF()
+    ensures (ModelI(this), replaced) == MutableMapModel.FixedSizeInsert(old(ModelI(this)), key, value)
+    ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
+    modifies Repr
+    {
+      var slotIdx := Probe(key);
+
+      this.Storage[slotIdx as int] := Entry(key, value);
+      this.Contents := Contents[key := Some(value)];
+      if Storage[slotIdx].Empty? {
+        this.Count := this.Count + 1;
+        replaced := None;
+      } else if Storage[slotIdx].Tombstone? {
+        replaced := None;
+      } else {
+        replaced := Some(Storage[slotIdx].value);
+      }
+    }
+
 
   //  method Insert(key: uint64, value: V) returns (replaced: Option<V>)
   //  requires Inv()
