@@ -128,17 +128,21 @@ module MutableMap {
     }
 
     method Insert(key: uint64, value: V) returns (replaced : Option<V>)
+    requires WF()
     requires Inv()
     requires Count as nat < Storage.Length - 1
     ensures WF()
-    ensures (ModelI(this), replaced) == MutableMapModel.FixedSizeInsert(old(ModelI(this)), key, value)
+    ensures Inv()
+    ensures (ModelI(this), replaced) ==
+        MutableMapModel.FixedSizeInsert(old(ModelI(this)), key, value)
     ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
     modifies Repr
     {
+      MutableMapModel.reveal_FixedSizeInsert();
+      MutableMapModel.LemmaFixedSizeInsertResult(ModelI(this), key, value);
+
       var slotIdx := Probe(key);
 
-      this.Storage[slotIdx as int] := Entry(key, value);
-      this.Contents := Contents[key := Some(value)];
       if Storage[slotIdx].Empty? {
         this.Count := this.Count + 1;
         replaced := None;
@@ -147,6 +151,10 @@ module MutableMap {
       } else {
         replaced := Some(Storage[slotIdx].value);
       }
+      this.Storage[slotIdx as int] := Entry(key, value);
+
+      // ghost:
+      this.Contents := Contents[key := Some(value)];
     }
 
 
