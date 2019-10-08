@@ -292,16 +292,18 @@ module MutableMap {
       Repr := { this, Underlying } + Underlying.Repr;
     }
 
-  //   method ToMap() returns (result: map<uint64, V>)
-  //     requires Inv()
-  //     ensures Contents == old(Contents)
-  //     ensures Contents == result
-  //     ensures Repr == old(Repr)
-  //   {
-  //     assume false;
-  //     var asArray := ToArray();
-  //     result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
-  //   }
+    method ToMap() returns (result: map<uint64, V>)
+      requires Inv()
+      ensures Contents == old(Contents)
+      ensures Contents == result
+      ensures Repr == old(Repr)
+    {
+      assume false;
+      //var asArray := ToArray();
+      //result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
+      result := map i : nat | i < Underlying.Storage.Length && Underlying.Storage[i].Entry?
+        :: Underlying.Storage[i].key := Underlying.Storage[i].value;
+    }
 
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
