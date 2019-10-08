@@ -864,8 +864,9 @@ module MutableMapModel {
         LemmaEntryKeyInContents(self, i);
         //assert item.key in self.contents.Keys;
         FixedSizeInsert(newUnderlying, item.key, item.value).0
-      ) else
-        newUnderlying;
+      ) else (
+        newUnderlying
+      );
       ReallocIterate(self, newUnderlying', i+1)
     )
   }
