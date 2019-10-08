@@ -218,20 +218,49 @@ module MutableMap {
     }
   }
 
-  // class ResizingHashMap<V> {
-  //   var Underlying: FixedSizeHashMap<V>;
-  //   var Count: uint64;
+  class ResizingHashMap<V> {
+    var Underlying: FixedSizeHashMap<V>;
+    var Count: uint64;
 
-  //   ghost var Contents: map<uint64, V>;
-  //   ghost var Repr: set<object>;
+    ghost var Contents: map<uint64, V>;
+    ghost var Repr: set<object>;
 
-  //   static function I(self: ResizingHashMap<V>): (contents: map<uint64, V>)
-  //   requires self.Inv()
-  //   ensures contents == self.Contents
-  //   reads self, self.Repr
-  //   {
-  //     self.Contents
-  //   }
+    predicate ReprInv()
+      reads this, this.Repr
+    {
+      && { this, this.Underlying } <= Repr
+      && { this, this.Underlying } + this.Underlying.Repr == Repr
+      && this.Underlying.Repr == { this.Underlying, this.Underlying.Storage }
+    }
+
+    protected predicate Inv()
+      ensures Inv() ==> this in this.Repr
+      ensures Inv() ==> |Contents| == Count as nat
+      reads this, this.Repr
+    {
+      && ReprInv()
+
+      && Underlying.WF()
+      && Underlying.Inv()
+      && MutableMapModel.Inv(MutableMapModel.LinearHashMap(
+          FixedSizeHashMap.ModelI(Underlying), Count, Contents))
+    }
+
+    protected function I() : MutableMapModel.LinearHashMap<V>
+      reads this, this.Repr
+      requires Inv()
+    {
+      MutableMapModel.LinearHashMap(
+          FixedSizeHashMap.ModelI(Underlying), Count, Contents)
+    }
+
+    //static function I(self: ResizingHashMap<V>): (contents: map<uint64, V>)
+    //requires self.Inv()
+    //ensures contents == self.Contents
+    //reads self, self.Repr
+    //{
+    //  self.Contents
+    //}
 
   //   static function MapFromStorage(elements: seq<Item<V>>): (result: map<uint64, V>)
   //   {
@@ -376,27 +405,24 @@ module MutableMap {
   //     && |Contents| == Count as nat
   //   }
 
-  //   constructor (size: uint64)
-  //     requires 128 <= size
-  //     ensures Inv()
-  //     ensures Contents == map[]
-  //     ensures fresh(this)
-  //     ensures fresh(this.Underlying)
-  //     ensures fresh(this.Underlying.Storage)
-  //     ensures forall r :: r in Repr ==> fresh(r)
-  //   {
-  //     Count := 0;
-  //     Underlying := new FixedSizeHashMap(size);
-  //     Contents := map[];
+    constructor (size: uint64)
+      requires 128 <= size
+      ensures Inv()
+      ensures I() == MutableMapModel.Constructor(size)
+      ensures fresh(Repr)
+    {
+      Count := 0;
+      Underlying := new FixedSizeHashMap(size);
+      Contents := map[];
 
-  //     new;
+      new;
 
-  //     Repr := { this, Underlying } + Underlying.Repr;
+      Repr := { this, Underlying } + Underlying.Repr;
+      MutableMapModel.reveal_Constructor();
 
-  //     assert forall slot :: ValidSlot(Underlying.Storage.Length, slot) ==> !Underlying.Storage[slot.slot].Entry?;
-  //     UnderlyingInvImpliesMapFromStorageMatchesContents(Underlying, Contents);
-  //     assert MapFromStorage(Underlying.Storage[..]) == Contents;
-  //   }
+      // mention this to trigger its ensures clause:
+      ghost var c := MutableMapModel.Constructor<V>(size);
+    }
 
   //   constructor FromUnderlying(underlying: FixedSizeHashMap<V>, count: uint64)
   //     requires 128 <= underlying.Storage.Length
@@ -887,5 +913,5 @@ module MutableMap {
   //     cloned := new ResizingHashMap.FromUnderlying(clonedUnderlying, Count);
   //     cloned.Contents := Contents;
   //   }
-  // }
+  }
 }
