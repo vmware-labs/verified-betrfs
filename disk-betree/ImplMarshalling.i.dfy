@@ -51,7 +51,7 @@ module ImplMarshalling {
 
   method {:fuel ValInGrammar,3} ValToLocsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
   requires IMM.valToLocsAndSuccs.requires(a)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToLocsAndSuccs(a)
+  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.I()) == IMM.valToLocsAndSuccs(a)
   ensures s.Some? ==> s.value.Inv()
   ensures s.Some? ==> s.value.Count as nat == |a|
   ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -81,7 +81,7 @@ module ImplMarshalling {
               if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc) {
                 s := None;
               } else {
-                var _ := mutMap.Insert(ref, (Some(loc), succs));
+                mutMap.Insert(ref, (Some(loc), succs));
                 s := Some(mutMap);
                 assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
                 assume s.value.Count as nat == |a|;
@@ -98,8 +98,8 @@ module ImplMarshalling {
 
   method GraphClosed(table: ImplState.MutIndirectionTable) returns (result: bool)
     requires table.Inv()
-    requires BC.GraphClosed.requires(IM.IIndirectionTable(table.Contents).graph)
-    ensures BC.GraphClosed(IM.IIndirectionTable(table.Contents).graph) == result
+    requires BC.GraphClosed.requires(IM.IIndirectionTable(table.I()).graph)
+    ensures BC.GraphClosed(IM.IIndirectionTable(table.I()).graph) == result
   {
     var m := table.ToMap();
     var m' := map ref | ref in m :: m[ref].1;
@@ -108,7 +108,7 @@ module ImplMarshalling {
 
   method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
   requires IMM.valToIndirectionTable.requires(v)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToIndirectionTable(v)
+  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.I()) == IMM.valToIndirectionTable(v)
   ensures s.Some? ==> s.value.Inv()
   {
     var res := ValToLocsAndSuccs(v.a);
@@ -417,49 +417,6 @@ module ImplMarshalling {
     return VUint64Array(children);
   }
 
-  // TODO(alattuada) remove?
-  method {:fuel ValInGrammar,2} lbasSuccsToVal(indirectionTable: map<Reference, (Option<Location>, seq<Reference>)>) returns (v: Option<V>)
-  requires forall ref | ref in indirectionTable :: indirectionTable[ref].0.Some?
-  requires forall ref | ref in indirectionTable :: BC.ValidLocationForNode(indirectionTable[ref].0.value)
-  requires |indirectionTable| < 0x1_0000_0000_0000_0000 / 8
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, IMM.IndirectionTableGrammar());
-  ensures v.Some? ==> |v.value.a| == |indirectionTable|
-  ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some(indirectionTable)
-  {
-    if (|indirectionTable| as uint64 == 0) {
-      return Some(VArray([]));
-    } else {
-      var ref :| ref in indirectionTable.Keys;
-      var vpref := lbasSuccsToVal(MapRemove(indirectionTable, {ref}));
-      match vpref {
-        case None => return None;
-        case Some(vpref) => {
-          var loc := indirectionTable[ref].0.value;
-          assume |indirectionTable[ref].1| < 0x1_0000_0000_0000_0000;
-          //if (|indirectionTable[ref].1| >= 0x1_0000_0000_0000_0000) {
-          //  return None;
-          //}
-          var succs := indirectionTable[ref].1;
-          var succsV := childrenToVal(indirectionTable[ref].1);
-          var tuple := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), succsV]);
-
-          assert MapRemove(indirectionTable, {ref})[ref := (Some(loc), succs)] == indirectionTable;
-
-          //assert ref == valToReference(tuple.t[0]);
-          //assert lba == valToReference(tuple.t[1]);
-          //assert !(ref in MapRemove(graph, {ref}));
-          assert BC.ValidLocationForNode(loc);
-          //assert !(lba == 0);
-          //assert valToLocssAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
-          assert ValidVal(tuple);
-
-          return Some(VArray(vpref.a + [tuple]));
-        }
-      }
-    }
-  }
-
   method {:fuel ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
   requires |a| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
@@ -655,27 +612,27 @@ module ImplMarshalling {
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
   requires sector.SectorIndirectionTable? ==>
-      BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
+      BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.SectorGrammar());
-  ensures v.Some? ==> IMM.valToSector(v.value) == Some(ImplState.ISector(sector))
+  ensures v.Some? ==> Marshalling.valToSector(v.value) == Some(IM.ISector(ImplState.ISector(sector)))
   ensures sector.SectorBlock? ==> v.Some?
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
   {
     match sector {
       case SectorIndirectionTable(mutMap) => {
-        assert forall r | r in mutMap.Contents :: r in IM.IIndirectionTable(sector.indirectionTable.Contents).locs
-            ==> mutMap.Contents[r].0.Some? && BC.ValidLocationForNode(mutMap.Contents[r].0.value);
+        assert forall r | r in mutMap.I().contents :: r in IM.IIndirectionTable(sector.indirectionTable.I()).locs
+            ==> mutMap.I().contents[r].0.Some? && BC.ValidLocationForNode(mutMap.I().contents[r].0.value);
         var table := mutMap.ToArray();
         ghost var tableSeq := table[..];
-        /* (doc) assert mutMap.Contents.Values == set i | 0 <= i < |tableSeq| :: tableSeq[i].1; */
-        assert forall i: nat | i < |tableSeq| :: tableSeq[i].1 == mutMap.Contents[tableSeq[i].0];
+        /* (doc) assert mutMap.I().contents.Values == set i | 0 <= i < |tableSeq| :: tableSeq[i].1; */
+        assert forall i: nat | i < |tableSeq| :: tableSeq[i].1 == mutMap.I().contents[tableSeq[i].0];
         assert forall i: nat, j: nat | i <= j < |tableSeq| :: tableSeq[i].0 == tableSeq[j].0 ==> i == j;
         if table.Length as uint64 < 0x2000_0000_0000_0000 {
           assert forall i: nat | i < |tableSeq| :: tableSeq[i].1.0.Some?;
           // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
           assume forall i: nat | i < |tableSeq| :: |tableSeq[i].1.1| < |tableSeq|;
-          /* (doc) assert table.Length == |mutMap.Contents.Keys| == |mutMap.Contents|; */
+          /* (doc) assert table.Length == |mutMap.I().contents.Keys| == |mutMap.I().contents|; */
           var a: array<V> := new V[table.Length as uint64];
           var i: uint64 := 0;
           ghost var partial := map[];
@@ -688,10 +645,10 @@ module ImplMarshalling {
           invariant IMM.valToLocsAndSuccs(a[..i]).Some?
           invariant IMM.valToLocsAndSuccs(a[..i]).value == partial
           invariant |partial.Keys| == i as nat
-          invariant partial.Keys <= mutMap.Contents.Keys
-          invariant forall r | r in partial :: r in mutMap.Contents && partial[r] == mutMap.Contents[r]
+          invariant partial.Keys <= mutMap.I().contents.Keys
+          invariant forall r | r in partial :: r in mutMap.I().contents && partial[r] == mutMap.I().contents[r]
           // NOALIAS/CONST mutMap doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant mutMap.Contents == old(mutMap.Contents)
+          invariant mutMap.I().contents == old(mutMap.I().contents)
           invariant forall r | r in partial :: exists j: nat | j < i as nat :: table[j].0 == r
           {
             // TODO I'd use a seq comprehension, but I don't know how to extract properties of the elements
@@ -710,8 +667,8 @@ module ImplMarshalling {
 
             assert a[..i-1] == DropLast(a[..i]); // observe
           }
-          /* (doc) assert |partial.Keys| == |mutMap.Contents.Keys|; */
-          SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.Contents.Keys);
+          /* (doc) assert |partial.Keys| == |mutMap.I().contents.Keys|; */
+          SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.I().contents.Keys);
 
           assert partial == ImplState.IIndirectionTable(mutMap); // observe
           assert a[..i] == a[..]; // observe
