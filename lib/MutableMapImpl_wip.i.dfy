@@ -416,36 +416,42 @@ module MutableMap {
         RevealProtectedInv(old(ModelI(this)));
         LemmaFixedSizeRemoveResult(old(ModelI(this).underlying), key);
         Count := Count - 1;
-      } else {
       }
       // --------------
     }
 
-  //   method Get(key: uint64) returns (found: Option<V>)
-  //     requires Inv()
-  //     ensures Inv()
-  //     ensures Count == old(Count)
-  //     ensures Repr == old(Repr)
-  //     ensures if key in Contents then found == Some(Contents[key]) else found.None?
-  //     ensures found.Some? <==> key in Contents
-  //   {
-  //     found := Underlying.Get(key);
-  //   }
-  //   
-  //   method Clone() returns (cloned: ResizingHashMap<V>)
-  //     requires Inv()
-  //     ensures Inv()
-  //     ensures Count == old(Count)
-  //     ensures Repr == old(Repr)
-  //     ensures cloned.Contents == old(Contents)
-  //     ensures cloned.Count == old(Count)
-  //     ensures fresh(cloned.Repr)
-  //     ensures cloned.Inv()
-  //     ensures cloned.Repr !! Repr
-  //   {
-  //     var clonedUnderlying := Underlying.Clone();
-  //     cloned := new ResizingHashMap.FromUnderlying(clonedUnderlying, Count);
-  //     cloned.Contents := Contents;
-  //   }
+    method Remove(key: uint64)
+      requires Inv()
+      ensures ReprInv()
+      ensures ModelI(this) == MutableMapModel.Remove(old(ModelI(this)), key)
+      ensures Inv()
+      ensures Repr == old(Repr)
+      modifies Repr
+    {
+      // -- mutation --
+      var _ := RemoveAndGet(key);
+      // --------------
+    }
+
+    method Get(key: uint64) returns (found: Option<V>)
+      requires Inv()
+      ensures Inv()
+      ensures found == MutableMapModel.Get(old(ModelI(this)), key)
+    {
+      found := Underlying.Get(key);
+    }
+    
+    method Clone() returns (cloned: ResizingHashMap<V>)
+      requires Inv()
+      ensures cloned.Inv()
+      ensures cloned.Contents == old(Contents)
+      ensures cloned.Count == old(Count)
+      ensures fresh(cloned.Repr)
+      ensures cloned.Repr !! Repr
+    {
+      var clonedUnderlying := Underlying.Clone();
+      cloned := new ResizingHashMap.FromUnderlying(clonedUnderlying, Count);
+      cloned.Contents := Contents;
+    }
   }
 }
