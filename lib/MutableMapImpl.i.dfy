@@ -404,9 +404,8 @@ module MutableMap {
 
     method RemoveAndGet(key: uint64) returns (removed: Option<V>)
       requires Inv()
-      ensures ReprInv()
-      ensures (ModelI(this), removed) == MutableMapModel.RemoveAndGet(old(ModelI(this)), key)
       ensures Inv()
+      ensures (I(), removed) == MutableMapModel.RemoveAndGet(old(I()), key)
       ensures Repr == old(Repr)
       modifies Repr
     {
@@ -416,18 +415,19 @@ module MutableMap {
       Contents := map k | k in Contents && k != key :: Contents[k];
 
       if removed.Some? {
-        RevealProtectedInv(old(ModelI(this)));
-        LemmaFixedSizeRemoveResult(old(ModelI(this).underlying), key);
+        RevealProtectedInv(old(I()));
+        LemmaFixedSizeRemoveResult(old(I().underlying), key);
         Count := Count - 1;
       }
       // --------------
+
+      ghost var _ := MutableMapModel.RemoveAndGet(old(I()), key);
     }
 
     method Remove(key: uint64)
       requires Inv()
-      ensures ReprInv()
-      ensures ModelI(this) == MutableMapModel.Remove(old(ModelI(this)), key)
       ensures Inv()
+      ensures I() == MutableMapModel.Remove(old(I()), key)
       ensures Repr == old(Repr)
       modifies Repr
     {
@@ -439,7 +439,7 @@ module MutableMap {
     method Get(key: uint64) returns (found: Option<V>)
       requires Inv()
       ensures Inv()
-      ensures found == MutableMapModel.Get(old(ModelI(this)), key)
+      ensures found == MutableMapModel.Get(old(I()), key)
     {
       found := Underlying.Get(key);
     }
@@ -450,7 +450,6 @@ module MutableMap {
       ensures cloned.Contents == old(Contents)
       ensures cloned.Count == old(Count)
       ensures fresh(cloned.Repr)
-      ensures cloned.Repr !! Repr
     {
       var clonedUnderlying := Underlying.Clone();
       cloned := new ResizingHashMap.FromUnderlying(clonedUnderlying, Count);
