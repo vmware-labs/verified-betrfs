@@ -67,14 +67,17 @@ module {:extern} ImplState {
     && (sector.SectorBlock? ==> sector.block.Inv())
   }
 
+  // TODO remove this and just replace with .I() because it's easier
   function IIndirectionTable(table: MutIndirectionTable) : (result: IM.IndirectionTable)
   reads table, table.Repr
+  requires table.Inv()
   {
-    table.Contents
+    table.I()
   }
  
   function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<IM.IndirectionTable>)
   reads if table != null then {table} + table.Repr else {}
+  requires table != null ==> table.Inv()
   {
     if table != null then
       Some(IIndirectionTable(table))
