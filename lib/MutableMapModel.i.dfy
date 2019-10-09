@@ -646,7 +646,7 @@ module MutableMapModel {
     && (removed == if key in self.contents && self.contents[key].Some?
       then Some(self.contents[key].value)
       else None)
-    && (removed.Some? <==> (key in self.contents && self.contents[key].Some?)) // TODO(andreal)
+    && (removed.Some? <==> (key in self.contents && self.contents[key].Some?))
     && (self'.count == self.count)
   {
     reveal_FixedSizeRemove();
