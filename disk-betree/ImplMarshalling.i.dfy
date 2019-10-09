@@ -29,6 +29,7 @@ module ImplMarshalling {
   import KVList
   import Crypto
   import Native
+  import MutableMapModel
 
   import BT = PivotBetreeSpec`Internal
 
@@ -51,8 +52,9 @@ module ImplMarshalling {
 
   method {:fuel ValInGrammar,3} ValToLocsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
   requires IMM.valToLocsAndSuccs.requires(a)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.I()) == IMM.valToLocsAndSuccs(a)
+  ensures s.None? ==> IMM.valToLocsAndSuccs(a).None?
   ensures s.Some? ==> s.value.Inv()
+  ensures s.Some? ==> Some(s.value.I()) == IMM.valToLocsAndSuccs(a)
   ensures s.Some? ==> s.value.Count as nat == |a|
   ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
   ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
@@ -623,37 +625,28 @@ module ImplMarshalling {
       case SectorIndirectionTable(mutMap) => {
         assert forall r | r in mutMap.I().contents :: r in IM.IIndirectionTable(sector.indirectionTable.I()).locs
             ==> mutMap.I().contents[r].0.Some? && BC.ValidLocationForNode(mutMap.I().contents[r].0.value);
-        var table := mutMap.ToArray();
-        ghost var tableSeq := table[..];
-        /* (doc) assert mutMap.I().contents.Values == set i | 0 <= i < |tableSeq| :: tableSeq[i].1; */
-        assert forall i: nat | i < |tableSeq| :: tableSeq[i].1 == mutMap.I().contents[tableSeq[i].0];
-        assert forall i: nat, j: nat | i <= j < |tableSeq| :: tableSeq[i].0 == tableSeq[j].0 ==> i == j;
-        if table.Length as uint64 < 0x2000_0000_0000_0000 {
-          assert forall i: nat | i < |tableSeq| :: tableSeq[i].1.0.Some?;
+        if mutMap.Count < 0x2000_0000_0000_0000 {
           // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
-          assume forall i: nat | i < |tableSeq| :: |tableSeq[i].1.1| < |tableSeq|;
-          /* (doc) assert table.Length == |mutMap.I().contents.Keys| == |mutMap.I().contents|; */
-          var a: array<V> := new V[table.Length as uint64];
-          var i: uint64 := 0;
+
+          var a: array<V> := new V[mutMap.Count as uint64];
+          var it := mutMap.IterStart();
+          var i := 0;
           ghost var partial := map[];
-          while i < table.Length as uint64
-          invariant i <= table.Length as uint64
+          while it.next.Some?
+          invariant MutableMapModel.WFIter(mutMap.I(), it);
           invariant forall j | j < i :: ValidVal(a[j])
           invariant forall j | j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
           // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant table[..] == tableSeq
           invariant IMM.valToLocsAndSuccs(a[..i]).Some?
-          invariant IMM.valToLocsAndSuccs(a[..i]).value == partial
+          invariant IMM.valToLocsAndSuccs(a[..i]).value.contents == partial
           invariant |partial.Keys| == i as nat
+          invariant partial.Keys == it.s
           invariant partial.Keys <= mutMap.I().contents.Keys
           invariant forall r | r in partial :: r in mutMap.I().contents && partial[r] == mutMap.I().contents[r]
           // NOALIAS/CONST mutMap doesn't need to be mutable, if we could say so we wouldn't need this
           invariant mutMap.I().contents == old(mutMap.I().contents)
-          invariant forall r | r in partial :: exists j: nat | j < i as nat :: table[j].0 == r
           {
-            // TODO I'd use a seq comprehension, but I don't know how to extract properties of the elements
-
-            var (ref, locOptGraph: (Option<LBAType.Location>, seq<Reference>)) := table[i];
+            var (ref, locOptGraph: (Option<LBAType.Location>, seq<Reference>)) := it.next.value;
             // NOTE: deconstructing in two steps to work around c# translation bug
             var (locOpt, graph) := locOptGraph;
             var loc := locOpt.value;
@@ -663,6 +656,7 @@ module ImplMarshalling {
             partial := partial[ref := (locOpt, graph)];
             a[i] := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]);
             i := i + 1;
+            it := mutMap.IterInc(it);
             // ==============
 
             assert a[..i-1] == DropLast(a[..i]); // observe
@@ -670,7 +664,7 @@ module ImplMarshalling {
           /* (doc) assert |partial.Keys| == |mutMap.I().contents.Keys|; */
           SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.I().contents.Keys);
 
-          assert partial == ImplState.IIndirectionTable(mutMap); // observe
+          assert partial == ImplState.IIndirectionTable(mutMap).contents; // observe
           assert a[..i] == a[..]; // observe
           v := Some(VCase(0, VArray(a[..])));
           return;
