@@ -479,5 +479,34 @@ module MutableMap {
       var next := None;
       it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
     }
+
+    method IterInc(it: Iterator<V>) returns (it' : Iterator<V>)
+    requires Inv()
+    requires it.next.Some?
+    requires WFIter(I(), it)
+    ensures it' == MutableMapModel.IterInc(I(), it)
+    {
+      ghost var self := I();
+      reveal_IterInc();
+
+      LemmaWFIterImpliesILt(self, it);
+
+      var i: uint64 := it.i + 1;
+      while i < Underlying.Storage.Length as uint64
+      invariant 0 <= i as int <= |self.underlying.storage|
+      invariant iterToNext(self, it.i + 1) == iterToNext(self, i)
+      {
+        if Underlying.Storage[i].Entry? {
+          var next := Some((Underlying.Storage[i].key, Underlying.Storage[i].value));
+          it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+          return;
+        }
+        i := i + 1;
+      }
+
+      var next := None;
+      it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+    }
+
   }
 }

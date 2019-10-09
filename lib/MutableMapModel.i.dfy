@@ -234,8 +234,8 @@ module MutableMapModel {
 
   predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
   {
-    && 128 <= |self.storage| < 0x10000000000000000
-    && (self.count as nat) < 0x10000000000000000
+    && 128 <= |self.storage| < 0x1_0000_0000_0000_0000
+    && (self.count as nat) < 0x1_0000_0000_0000_0000
     && self.count as nat < |self.storage|
 
     && |self.contents| == (self.count as nat)
@@ -1240,6 +1240,13 @@ module MutableMapModel {
         exists j | 0 <= j < it.i as int ::
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key)
+    && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
+  }
+
+  lemma LemmaWFIterImpliesILt<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  requires WFIter(self, it)
+  ensures it.next.Some? ==> it.i as int < |self.underlying.storage|
+  {
   }
 
   function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, Option<(uint64, V)>))
@@ -1251,6 +1258,7 @@ module MutableMapModel {
   ensures res.1.Some? ==> self.underlying.storage[res.0].value == res.1.value.1
   ensures res.1.None? ==> res.0 as int == |self.underlying.storage|
   ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
+  ensures i <= res.0
   decreases |self.underlying.storage| - i as int
   {
     if i as int == |self.underlying.storage| then (
@@ -1271,18 +1279,24 @@ module MutableMapModel {
     Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next)
   }
 
-  // function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
-  // requires Inv(self)
-  // requires WFIter(self, it)
-  // requires it.next.Some?
-  // ensures WFIter(self, it')
-  // ensures it'.s == it.s + {it.next.value.0}
-  // ensures it'.next.None? ==> it'.s == self.contents.Keys
-  // ensures it'.decreaser < it.decreaser
-  // {
-  //   var (i, next) := iterToNext(self, it.i + 1);
-  //   var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+  function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
+  requires Inv(self)
+  requires WFIter(self, it)
+  requires it.next.Some?
+  ensures WFIter(self, it')
+  ensures it'.s == it.s + {it.next.value.0}
+  ensures it'.next.None? ==> it'.s == self.contents.Keys
+  ensures it'.decreaser < it.decreaser
+  {
+    var (i, next) := iterToNext(self, it.i + 1);
+    var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
-  //   it'
-  // }
+    assume (forall key | key in it'.s ::
+        exists j | 0 <= j < it'.i as int ::
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key);
+    assume (it'.next.None? ==> it'.s == self.contents.Keys);
+
+    it'
+  }
 }
