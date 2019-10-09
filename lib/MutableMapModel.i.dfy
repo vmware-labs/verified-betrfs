@@ -2,6 +2,7 @@ include "NativeTypes.s.dfy"
 include "Option.s.dfy"
 include "sequences.s.dfy"
 include "Sets.i.dfy"
+include "Maps.s.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"
 
@@ -10,6 +11,7 @@ module MutableMapModel {
   import opened Options
   import opened Sequences
   import opened Sets
+  import opened Maps
   import opened SetBijectivity
   import Native
 
@@ -1222,6 +1224,10 @@ module MutableMapModel {
 
   protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
   ensures WFIter(self, it) ==> (it.next.None? ==> it.s == self.contents.Keys)
+  ensures WFIter(self, it) ==> (it.next.Some? ==>
+      MapsTo(self.contents, it.next.value.0, it.next.value.1));
+  ensures WFIter(self, it) ==> (it.next.Some? ==> it.next.value.0 !in it.s)
+  ensures WFIter(self, it) ==> it.s <= self.contents.Keys
   {
     && 0 <= it.i as int <= |self.underlying.storage|
     && (it.next.Some? ==>
@@ -1299,4 +1305,8 @@ module MutableMapModel {
 
     it'
   }
+
+  lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  requires WFIter(self, it)
+  ensures it.next.Some? ==> |it.s| < self.count as int
 }
