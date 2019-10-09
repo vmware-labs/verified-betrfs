@@ -646,6 +646,7 @@ module MutableMapModel {
     && (removed == if key in self.contents && self.contents[key].Some?
       then Some(self.contents[key].value)
       else None)
+    && (removed.Some? <==> (key in self.contents && self.contents[key].Some?)) // TODO(andreal)
     && (self'.count == self.count)
   {
     reveal_FixedSizeRemove();
@@ -819,6 +820,15 @@ module MutableMapModel {
     && UnderlyingInv(self, self.underlying)
     && MapFromStorage(self.underlying.storage) == self.contents
     && |self.contents| == self.count as nat
+  }
+
+  lemma RevealProtectedInv<V>(self: LinearHashMap<V>)
+    requires Inv(self)
+    ensures (
+      && UnderlyingInv(self, self.underlying)
+      && MapFromStorage(self.underlying.storage) == self.contents
+      && |self.contents| == self.count as nat)
+  {
   }
 
   function {:opaque} Constructor<V>(size: uint64) : (self: LinearHashMap<V>)

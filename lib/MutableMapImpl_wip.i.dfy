@@ -233,6 +233,15 @@ module MutableMap {
       && this.Underlying.Repr == { this.Underlying, this.Underlying.Storage }
     }
 
+    protected static function ModelI(self: ResizingHashMap<V>): (model: LinearHashMap<V>)
+    requires self.ReprInv()
+    ensures model.contents == self.Contents
+    reads self, self.Repr
+    {
+      MutableMapModel.LinearHashMap(
+          FixedSizeHashMap.ModelI(self.Underlying), self.Count, self.Contents)
+    }
+
     protected predicate Inv()
       ensures Inv() ==> this in this.Repr
       ensures Inv() ==> |Contents| == Count as nat
@@ -242,16 +251,14 @@ module MutableMap {
 
       && Underlying.WF()
       && Underlying.Inv()
-      && MutableMapModel.Inv(MutableMapModel.LinearHashMap(
-          FixedSizeHashMap.ModelI(Underlying), Count, Contents))
+      && MutableMapModel.Inv(ModelI(this))
     }
 
     protected function I() : MutableMapModel.LinearHashMap<V>
       reads this, this.Repr
       requires Inv()
     {
-      MutableMapModel.LinearHashMap(
-          FixedSizeHashMap.ModelI(Underlying), Count, Contents)
+      ModelI(this)
     }
 
     constructor (size: uint64)
@@ -392,45 +399,27 @@ module MutableMap {
       var _ := InsertAndGetOld(key, value);
     }
 
-  //   method Remove(key: uint64) returns (removed: Option<V>)
-  //     requires Inv()
-  //     ensures Inv()
-  //     ensures Contents == if key in old(Contents)
-  //         then map k | old(k in Contents) && k != key :: old(Contents[k])
-  //         else old(Contents)
-  //     ensures removed == if old(key in Contents)
-  //         then Some(old(Contents)[key])
-  //         else None
-  //     ensures Count as nat == old(Count as nat) - (if removed.Some? then 1 else 0)
-  //     ensures Repr == old(Repr)
-  //     modifies Repr
-  //   {
-  //     // -- mutation --
-  //     removed := Underlying.Remove(key);
-  //     assert Contents == old(Contents);
-  //     Contents := map k | k in Contents && k != key :: Contents[k];
-  //     if removed.Some? {
-  //       Count := Count - 1;
-  //       assert old(key in Contents);
-  //       assert Contents.Keys <= old(Contents.Keys);
-  //       assert old(|Contents|) == Count as nat + 1;
-  //       assert old(|Contents.Keys|) == Count as nat + 1;
-  //       assert old(|Contents.Keys - {key}|) == old(|Contents.Keys| - |{key}|);
-  //       assert old(Contents.Keys - {key}) == Contents.Keys;
-  //       assert |Contents| == old(|Contents|) - 1;
-  //       assert |Contents| == Count as nat;
-  //     } else {
-  //       assert old(key !in Contents);
-  //       assert Contents == old(Contents);
-  //       assert |Contents| == Count as nat;
-  //     }
-  //     // --------------
+    method RemoveAndGet(key: uint64) returns (removed: Option<V>)
+      requires Inv()
+      ensures ReprInv()
+      ensures (ModelI(this), removed) == MutableMapModel.RemoveAndGet(old(ModelI(this)), key)
+      ensures Inv()
+      ensures Repr == old(Repr)
+      modifies Repr
+    {
+      // -- mutation --
+      removed := Underlying.Remove(key);
+      // assert Contents == old(Contents);
+      Contents := map k | k in Contents && k != key :: Contents[k];
 
-  //     assert UnderlyingContentsMatchesContents(Underlying, Contents);
-  //     UnderlyingInvImpliesMapFromStorageMatchesContents(Underlying, Contents);
-  //     assert MapFromStorage(Underlying.Storage[..]) == Contents;
-  //     assert |Contents| == Count as nat;
-  //   }
+      if removed.Some? {
+        RevealProtectedInv(old(ModelI(this)));
+        LemmaFixedSizeRemoveResult(old(ModelI(this).underlying), key);
+        Count := Count - 1;
+      } else {
+      }
+      // --------------
+    }
 
   //   method Get(key: uint64) returns (found: Option<V>)
   //     requires Inv()
