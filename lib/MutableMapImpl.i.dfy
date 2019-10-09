@@ -257,6 +257,9 @@ module MutableMap {
     protected function I() : MutableMapModel.LinearHashMap<V>
       reads this, this.Repr
       requires Inv()
+      ensures Inv() ==> (
+        && this.I().contents == Contents
+        && this.I().count == Count)
     {
       ModelI(this)
     }

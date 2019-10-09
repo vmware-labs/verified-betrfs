@@ -1278,18 +1278,18 @@ module MutableMapModel {
     Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next)
   }
 
-  function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
-  requires Inv(self)
-  requires WFIter(self, it)
-  requires it.next.Some?
-  ensures WFIter(self, it')
-  ensures it'.s == it.s + {it.next.value.0}
-  ensures it'.next.None? ==> it'.s == self.contents.Keys
-  ensures it'.decreaser < it.decreaser
-  {
-    var (i, next) := iterToNext(self, it.i + 1);
-    var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+  // function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
+  // requires Inv(self)
+  // requires WFIter(self, it)
+  // requires it.next.Some?
+  // ensures WFIter(self, it')
+  // ensures it'.s == it.s + {it.next.value.0}
+  // ensures it'.next.None? ==> it'.s == self.contents.Keys
+  // ensures it'.decreaser < it.decreaser
+  // {
+  //   var (i, next) := iterToNext(self, it.i + 1);
+  //   var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
-    it'
-  }
+  //   it'
+  // }
 }

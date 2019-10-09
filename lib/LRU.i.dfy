@@ -2,7 +2,7 @@
 
 include "NativeTypes.s.dfy"
 include "sequences.s.dfy"
-include "MutableMap.i.dfy"
+include "MutableMapImpl.i.dfy"
 
 module LruModel {
 	export S provides LruQueue, WF, I, Empty, Remove, Use, Pop, Next, LruUse, LruRemove, NativeTypes
@@ -318,7 +318,7 @@ module MutableLru {
       ghost var oldContents := nodemap.Contents;
       ghost var oldQueue := Queue;
 
-      var node := nodemap.Remove(x);
+      var node := nodemap.RemoveAndGet(x);
       if node.Some? {
         var prev := node.value.prev;
         var next := node.value.next;
@@ -489,7 +489,7 @@ module MutableLru {
         }
         tail_node := newnode;
 
-        var _ := nodemap.Insert(x, newnode);
+        nodemap.Insert(x, newnode);
 
         Repr := {this} + nodemap.Repr + nodemap.Contents.Values;
         Queue := oldQueue + [x];

@@ -4,7 +4,7 @@ include "Message.i.dfy"
 include "ImplModel.i.dfy"
 include "../lib/Crypto.s.dfy"
 include "../lib/Option.s.dfy"
-include "../lib/MutableMap.i.dfy"
+include "../lib/MutableMapImpl.i.dfy"
 include "KVList.i.dfy"
 
 module ImplMarshallingModel {
