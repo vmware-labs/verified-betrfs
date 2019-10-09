@@ -1262,13 +1262,6 @@ module MutableMapModel {
     )
   }
 
-  /*lemma EmptySetOfNoEntries<V>(self: LinearHashMap<V>)
-  requires Inv(self)
-  ensures (forall j | 0 <= j < |self.underlying.storage| :: !self.underlying.storage[j].Entry?) ==>
-      self.contents.Keys == {};
-  {
-  }*/
-
   function {:opaque} IterStart<V>(self: LinearHashMap<V>) : (it' : Iterator<V>)
   requires Inv(self)
   ensures WFIter(self, it')

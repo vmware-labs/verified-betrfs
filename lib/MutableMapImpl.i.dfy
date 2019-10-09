@@ -455,5 +455,29 @@ module MutableMap {
       cloned := new ResizingHashMap.FromUnderlying(clonedUnderlying, Count);
       cloned.Contents := Contents;
     }
+
+    method IterStart() returns (it' : Iterator<V>)
+    requires Inv()
+    ensures it' == MutableMapModel.IterStart(I())
+    {
+      ghost var self := I();
+      reveal_IterStart();
+
+      var i: uint64 := 0;
+      while i < Underlying.Storage.Length as uint64
+      invariant 0 <= i as int <= |self.underlying.storage|
+      invariant iterToNext(self, 0) == iterToNext(self, i)
+      {
+        if Underlying.Storage[i].Entry? {
+          var next := Some((Underlying.Storage[i].key, Underlying.Storage[i].value));
+          it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+          return;
+        }
+        i := i + 1;
+      }
+
+      var next := None;
+      it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+    }
   }
 }
