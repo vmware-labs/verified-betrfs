@@ -70,7 +70,7 @@ module ImplDealloc {
       return;
     }
 
-    var _ := s.ephemeralIndirectionTable.Remove(ref);
+    s.ephemeralIndirectionTable.Remove(ref);
 
     s.lru.Remove(ref);
     s.cache.Remove(ref);

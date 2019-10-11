@@ -36,17 +36,17 @@ module ImplInsert {
   method RemoveLBAFromIndirectionTable(table: MutIndirectionTable, ref: Reference)
   requires table.Inv()
   ensures table.Inv()
-  ensures table.Contents == ImplModelInsert.removeLBAFromIndirectionTable(old(table.Contents), ref)
+  ensures table.I() == ImplModelInsert.removeLBAFromIndirectionTable(old(table.I()), ref)
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in table.Repr :: fresh(r) || r in old(table.Repr)
   modifies table.Repr
   {
-    var lbaGraph := table.Remove(ref);
+    var lbaGraph := table.Get(ref);
     if lbaGraph.Some? {
       // TODO how do we deal with this?
       assume table.Count as nat < 0x10000000000000000 / 8;
       var (lba, graph) := lbaGraph.value;
-      var _ := table.Insert(ref, (None, graph));
+      table.Insert(ref, (None, graph));
     }
   }
 

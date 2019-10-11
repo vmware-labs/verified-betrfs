@@ -34,7 +34,7 @@ module ImplSync {
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall r | r in table.Repr :: fresh(r) || r in old(table.Repr)
   modifies table.Repr
-  ensures table.Contents == ImplModelSync.AssignRefToLoc(old(table.Contents), ref, loc)
+  ensures table.I() == ImplModelSync.AssignRefToLoc(old(table.I()), ref, loc)
   {
     ImplModelSync.reveal_AssignRefToLoc();
     var locGraph := table.Get(ref);
@@ -42,7 +42,7 @@ module ImplSync {
       var (oldloc, succ) := locGraph.value;
       if oldloc.None? {
         assume table.Count as nat < 0x10000000000000000 / 8;
-        var _ := table.Insert(ref, (Some(loc), succ));
+        table.Insert(ref, (Some(loc), succ));
       }
     }
     //assert IIndirectionTable(table) ==

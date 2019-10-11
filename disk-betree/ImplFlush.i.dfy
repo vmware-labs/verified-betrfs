@@ -31,14 +31,14 @@ module ImplFlush {
 
   requires Some(child) == s.cache.ptr(childref)
 
-  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable)
+  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable).contents
   requires parentref in s.cache.I()
 
   requires s.cache.I()[parentref].children.Some?
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
 
-  requires childref in IIndirectionTable(s.ephemeralIndirectionTable)
+  requires childref in IIndirectionTable(s.ephemeralIndirectionTable).contents
 
   modifies s.Repr()
 
