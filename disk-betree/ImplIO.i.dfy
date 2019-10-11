@@ -165,8 +165,8 @@ module ImplIO {
   requires io.initialized();
   requires s.ready
   requires s.WF()
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable)
-  requires IS.IIndirectionTable(s.ephemeralIndirectionTable)[ref].0.Some?
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).contents
+  requires IS.IIndirectionTable(s.ephemeralIndirectionTable).contents[ref].0.Some?
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()

@@ -98,7 +98,13 @@ module ImplModelIO {
       var bytes: seq<byte> := dop.reqWrite.bytes;
       && |bytes| <= BlockSize() as int
       && 32 <= |bytes|
-      && IMM.parseCheckedSector(bytes) == Some(sector)
+      && IMM.parseCheckedSector(bytes).Some?
+      && WFSector(sector)
+      // Note: we have to say this instead of just
+      //     IMM.parseCheckedSector(bytes).value == sector
+      // because the indirection table might not parse to an indirection table
+      // with exactly the same internals.
+      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
 
       && |bytes| == loc.len as int
       && id == Some(dop.id)
@@ -141,7 +147,9 @@ module ImplModelIO {
       var bytes: seq<byte> := dop.reqWrite.bytes;
       && |bytes| <= BlockSize() as int
       && 32 <= |bytes|
-      && IMM.parseCheckedSector(bytes) == Some(sector)
+      && IMM.parseCheckedSector(bytes).Some?
+      && WFSector(sector)
+      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
 
       && var len := |bytes| as uint64;
       && loc == getFreeLoc(s, len)

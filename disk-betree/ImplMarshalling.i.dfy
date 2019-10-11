@@ -754,7 +754,10 @@ module ImplMarshalling {
   requires IM.WFSector(ImplState.ISector(sector))
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
-  ensures data != null ==> IMM.parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
+  ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
+  ensures data != null ==>
+      && IM.ISector(IMM.parseCheckedSector(data[..]).value)
+      == IM.ISector(ImplState.ISector(sector))
   ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length == BlockSize() as int

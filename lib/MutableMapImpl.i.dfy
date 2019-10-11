@@ -447,8 +447,7 @@ module MutableMap {
     method Clone() returns (cloned: ResizingHashMap<V>)
       requires Inv()
       ensures cloned.Inv()
-      ensures cloned.Contents == old(Contents)
-      ensures cloned.Count == old(Count)
+      ensures cloned.I() == old(I())
       ensures fresh(cloned.Repr)
     {
       var clonedUnderlying := Underlying.Clone();
