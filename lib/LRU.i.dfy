@@ -269,27 +269,29 @@ module MutableLru {
     {
       && nodemap in Repr
       && nodemap.Repr <= Repr
-      && Repr == {this} + nodemap.Repr + nodemap.Contents.Values
+      && nodemap.Inv()
+      && Repr == {this} + nodemap.Repr + nodemap.I().contents.Values
+      && this !in nodemap.Repr
+      && nodemap.I().contents.Values !! nodemap.Repr
       && (|Queue| == 0 ==> (
         && head_node == null
         && tail_node == null
-        && nodemap.Contents == map[]
+        && nodemap.I().contents == map[]
       ))
-      && (forall i | 0 <= i < |Queue| :: Queue[i] in nodemap.Contents)
-      && (forall ref | ref in nodemap.Contents :: ref in Queue)
-      && (forall ref | ref in nodemap.Contents :: nodemap.Contents[ref].value == ref)
+      && (forall i | 0 <= i < |Queue| :: Queue[i] in nodemap.I().contents)
+      && (forall ref | ref in nodemap.I().contents :: ref in Queue)
+      && (forall ref | ref in nodemap.I().contents :: nodemap.I().contents[ref].value == ref)
       && (|Queue| > 0 ==>
-        && head_node == nodemap.Contents[Queue[0]]
-        && tail_node == nodemap.Contents[Queue[|Queue| - 1]]
-        && nodemap.Contents[Queue[0]].prev == null
-        && nodemap.Contents[Queue[|Queue| - 1]].next == null
+        && head_node == nodemap.I().contents[Queue[0]]
+        && tail_node == nodemap.I().contents[Queue[|Queue| - 1]]
+        && nodemap.I().contents[Queue[0]].prev == null
+        && nodemap.I().contents[Queue[|Queue| - 1]].next == null
       )
       && (forall i | 0 <= i < |Queue| - 1 ::
-          nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]])
+          nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]])
       && (forall i | 0 <= i < |Queue| - 1 ::
-          nodemap.Contents[Queue[i]] == nodemap.Contents[Queue[i+1]].prev)
-      && nodemap.Inv()
-      && nodemap.Repr !! nodemap.Contents.Values
+          nodemap.I().contents[Queue[i]] == nodemap.I().contents[Queue[i+1]].prev)
+      && nodemap.Repr !! nodemap.I().contents.Values
       && WF(Queue)
     }
 
@@ -315,7 +317,7 @@ module MutableLru {
     ensures Repr <= old(Repr)
     modifies this, this.Repr
     {
-      ghost var oldContents := nodemap.Contents;
+      ghost var oldContents := nodemap.I().contents;
       ghost var oldQueue := Queue;
 
       var node := nodemap.RemoveAndGet(x);
@@ -343,26 +345,26 @@ module MutableLru {
           next.prev := prev;
         }
 
-        Repr := {this} + nodemap.Repr + nodemap.Contents.Values;
+        Repr := {this} + nodemap.Repr + nodemap.I().contents.Values;
         Queue := LruModel.Remove(Queue, x);
 
-        forall k | 0 <= k < |Queue| ensures Queue[k] in nodemap.Contents
+        forall k | 0 <= k < |Queue| ensures Queue[k] in nodemap.I().contents
         {
           reveal_distinct();
           if k < j {
             assert oldQueue[k] == Queue[k];
             assert oldQueue[k] in oldContents;
             assert oldQueue[k] != x;
-            assert oldQueue[k] in nodemap.Contents;
+            assert oldQueue[k] in nodemap.I().contents;
           } else {
             assert oldQueue[k+1] == Queue[k];
             assert oldQueue[k+1] in oldContents;
             assert oldQueue[k+1] != x;
-            assert oldQueue[k+1] in nodemap.Contents;
+            assert oldQueue[k+1] in nodemap.I().contents;
           }
         }
 
-        forall ref | ref in nodemap.Contents ensures ref in Queue
+        forall ref | ref in nodemap.I().contents ensures ref in Queue
         {
           assert ref in oldContents;
           var k :| 0 <= k < |oldQueue| && oldQueue[k] == ref;
@@ -375,22 +377,32 @@ module MutableLru {
         }
 
         forall k | 0 <= k < |Queue| - 1
-        ensures nodemap.Contents[Queue[k]] == nodemap.Contents[Queue[k+1]].prev
+        ensures nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev
         {
           if k < j-1 {
-            assert nodemap.Contents[Queue[k]] == nodemap.Contents[Queue[k+1]].prev;
+            assert nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev;
           } else if k == j-1 {
-            assert nodemap.Contents[Queue[k]] == nodemap.Contents[Queue[k+1]].prev;
+            assert nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev;
           } else {
-            assert nodemap.Contents[Queue[k]] == nodemap.Contents[Queue[k+1]].prev;
+            assert nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev;
           }
         }
+
+        forall i | 0 <= i < |Queue| - 1 
+        ensures nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]]
+        {
+        }
       } else {
-        assert nodemap.Contents == oldContents;
+        assert nodemap.I().contents == oldContents;
         lemmaRemoveNonPresentKeyFromQueue(Queue, x);
 
         forall k | 0 <= k < |Queue| - 1
-        ensures nodemap.Contents[Queue[k]] == nodemap.Contents[Queue[k+1]].prev
+        ensures nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev
+        {
+        }
+
+        forall i | 0 <= i < |Queue| - 1 
+        ensures nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]]
         {
         }
       }
@@ -402,10 +414,10 @@ module MutableLru {
     requires Inv()
     ensures |I(Queue)| == nodemap.Count as int
     {
-      assert I(Queue) == nodemap.Contents.Keys;
+      assert I(Queue) == nodemap.I().contents.Keys;
       assert |I(Queue)|
-          == |nodemap.Contents.Keys|
-          ==|nodemap.Contents|
+          == |nodemap.I().contents.Keys|
+          ==|nodemap.I().contents|
           == nodemap.Count as int;
     }
 
@@ -417,7 +429,7 @@ module MutableLru {
     ensures forall x | x in Repr :: x in old(Repr) || fresh(x)
     modifies this, this.Repr
     {
-      ghost var oldContents := nodemap.Contents;
+      ghost var oldContents := nodemap.I().contents;
       ghost var oldQueue := Queue;
       LemmaMapCountEqInterpCount();
 
@@ -452,29 +464,29 @@ module MutableLru {
           }
           tail_node := node.value;
 
-          Repr := {this} + nodemap.Repr + nodemap.Contents.Values;
+          Repr := {this} + nodemap.Repr + nodemap.I().contents.Values;
           Queue := LruModel.Remove(Queue, x) + [x];
 
           forall i | 0 <= i < |Queue| - 1
-          ensures nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]]
+          ensures nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]]
           {
             if i == |Queue| - 2 {
-              assert nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]];
+              assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
             } else if i == j-1 {
-              assert nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]];
+              assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
             } else if i < j-1 {
-              assert nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]];
+              assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
             } else {
-              assert nodemap.Contents[Queue[i]].next == nodemap.Contents[Queue[i+1]];
+              assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
             }
           }
 
           forall i | 0 <= i < |Queue| - 1
-          ensures nodemap.Contents[Queue[i]] == nodemap.Contents[Queue[i+1]].prev
+          ensures nodemap.I().contents[Queue[i]] == nodemap.I().contents[Queue[i+1]].prev
           {
           }
         } else {
-          Repr := {this} + nodemap.Repr + nodemap.Contents.Values;
+          Repr := {this} + nodemap.Repr + nodemap.I().contents.Values;
           Queue := LruModel.Remove(Queue, x) + [x];
         }
       } else {
@@ -491,17 +503,17 @@ module MutableLru {
 
         nodemap.Insert(x, newnode);
 
-        Repr := {this} + nodemap.Repr + nodemap.Contents.Values;
+        Repr := {this} + nodemap.Repr + nodemap.I().contents.Values;
         Queue := oldQueue + [x];
 
         assert Queue[|Queue| - 1] == x;
-        assert nodemap.Contents[x] == newnode;
+        assert nodemap.I().contents[x] == newnode;
         assert newnode.next == null;
-        assert nodemap.Contents[Queue[|Queue| - 1]].next == null;
-        forall ref | ref in nodemap.Contents ensures nodemap.Contents[ref].value == ref
+        assert nodemap.I().contents[Queue[|Queue| - 1]].next == null;
+        forall ref | ref in nodemap.I().contents ensures nodemap.I().contents[ref].value == ref
         {
         }
-        forall i | 0 <= i < |Queue| ensures Queue[i] in nodemap.Contents
+        forall i | 0 <= i < |Queue| ensures Queue[i] in nodemap.I().contents
         {
           if (i == |Queue| - 1) {
           } else {
