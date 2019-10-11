@@ -109,6 +109,7 @@ module ImplModel {
     match sector {
       case SectorBlock(node) => WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
+        && MutableMapModel.Inv(indirectionTable)
         && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
       )
     }
