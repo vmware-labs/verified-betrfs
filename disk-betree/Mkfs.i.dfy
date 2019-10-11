@@ -41,7 +41,7 @@ module {:extern} MkfsImpl {
 
     var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number
     assume sectorIndirectionTable.Count == 0;
-    var _ := sectorIndirectionTable.Insert(0, (Some(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)), []));
+    sectorIndirectionTable.Insert(0, (Some(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)), []));
     assert IM.IIndirectionTable(IS.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
       map[0 := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)],
       map[0 := []]
