@@ -98,7 +98,7 @@ module ImplCache {
 
     // TODO how do we deal with this?
     assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
-    var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if children.Some? then children.value else []));
+    s.ephemeralIndirectionTable.Insert(ref, (None, if children.Some? then children.value else []));
 
     s.lru.Use(ref);
 
