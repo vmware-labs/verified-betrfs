@@ -13,6 +13,7 @@ module Bounds {
   // Minimum weight a bucket needs to have before we consider flushing it.
   function method FlushTriggerWeightUint64() : uint64 { MaxTotalBucketWeightUint64() / 8 }
 
+  function method NumBlocksUint64() : uint64 { 0x1_0000 }
 
 
   function BlockSize() : int { BlockSizeUint64() as int }
@@ -24,4 +25,6 @@ module Bounds {
 
   // Minimum weight a bucket needs to have before we consider flushing it.
   function FlushTriggerWeight() : int { FlushTriggerWeightUint64() as int }
+
+  function NumBlocks() : int { NumBlocksUint64() as int }
 }

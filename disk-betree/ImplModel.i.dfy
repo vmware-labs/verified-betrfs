@@ -75,8 +75,8 @@ module ImplModel {
 
   predicate IsLocFreeIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
-    && (forall ref | ref in indirectionTable && indirectionTable[ref].0.Some? ::
-        indirectionTable[ref].0.value.addr as int == i * BlockSize() as int)
+    && (forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? ::
+        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int)
   }
 
   predicate IsLocFree(s: Variables, i: int)
@@ -128,6 +128,7 @@ module ImplModel {
     && MutableMapModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
     && ConsistentBitmap(s)
+    && Bitmap.Len(s.locBitmap) == NumBlocks()
   }
   predicate WFVars(vars: Variables)
   {

@@ -65,6 +65,19 @@ module ImplModelIO {
     && (loc.Some? ==> LocAvailable(s, loc.value, len))
   {
     reveal_getFreeLoc();
+    reveal_ConsistentBitmap();
+    LBAType.reveal_ValidAddr();
+
+    Bitmap.LemmaBitAllocResult(s.locBitmap);
+
+    var (s', loc) := getFreeLoc(s, len);
+    if loc.Some? {
+      var (i, bm') := Bitmap.BitAlloc(s.locBitmap);
+      assert !Bitmap.IsSet(s.locBitmap, i.value);
+      //assert IsLocFree(s, i.value);
+      //assert BC.ValidLocationForNode(loc.value);
+      //assert BC.ValidAllocation(IVars(s), loc.value);
+    }
   }
 
   predicate {:opaque} RequestWrite(io: IO, loc: LBAType.Location, sector: Sector,
@@ -166,6 +179,14 @@ module ImplModelIO {
     M.reveal_Parse();
     D.reveal_ChecksumChecksOut();
     Marshalling.reveal_parseSector();
+
+    var dop := diskOp(io');
+    if dop.ReqWriteOp? {
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      var len := |bytes| as uint64;
+
+      getFreeLocCorrect(s, len);
+    }
   }
 
   function RequestRead(io: IO, loc: LBAType.Location)
@@ -240,7 +261,9 @@ module ImplModelIO {
     ) else (
       var loc := s.ephemeralIndirectionTable.contents[ref].0.value;
       var (id, io') := RequestRead(io, loc);
-      var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+      var s' := s
+        .(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+        .(locBitmap := 
       (s', io')
     )
   }
@@ -266,6 +289,8 @@ module ImplModelIO {
       assert BC.ValidLocationForNode(loc);
       var (id, io') := RequestRead(io, loc);
       var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+
+      assert WFVars(s');
 
       assert BC.PageInReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')), ref);
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.PageInReqStep(ref));
@@ -312,7 +337,37 @@ module ImplModelIO {
     D.reveal_ChecksumChecksOut();
   }
 
-  function initLocBitmap(indirectionTable: IndirectionTable) : 
+  function initLocBitmapIterate(indirectionTable: IndirectionTable,
+      it: MutableMapModel.Iterator<(Option<BC.Location>, seq<Reference>)>,
+      bm: Bitmap.BitmapModel)
+  : (bool, Bitmap.BitmapModel)
+  requires MutableMapModel.Inv(indirectionTable)
+  requires MutableMapModel.WFIter(indirectionTable, it)
+  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+  requires Bitmap.Len(bm) == NumBlocks()
+  {
+    if it.next.None? then (
+      (true, bm)
+    ) else (
+      var loc: uint64 := it.next.value.1.0.value.addr;
+      var locIndex: uint64 := loc / BlockSize() as uint64;
+      if locIndex < NumBlocks() as uint64 then (
+        initLocBitmapIterate(indirectionTable,
+            MutableMapModel.IterInc(indirectionTable, it),
+            Bitmap.BitSet(bm, locIndex as int))
+      ) else (
+        (false, bm)
+      )
+    )
+  }
+
+  function initLocBitmap(indirectionTable: IndirectionTable) : (bool, Bitmap.BitmapModel)
+  requires MutableMapModel.Inv(indirectionTable)
+  {
+    initLocBitmapIterate(indirectionTable,
+        MutableMapModel.IterStart(indirectionTable),
+        Bitmap.EmptyBitmap(NumBlocks()))
+  }
 
   function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
   : (s' : Variables)
@@ -321,10 +376,14 @@ module ImplModelIO {
   {
     var (id, sector) := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
-      var persistentIndirectionTable := sector.value.indirectionTable;
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var bm := initLocBitmap(ephemeralIndirectionTable);
-      Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), bm);
+      var (succ, bm) := initLocBitmap(ephemeralIndirectionTable);
+      if succ then (
+        var persistentIndirectionTable := sector.value.indirectionTable;
+        Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), bm)
+      ) else (
+        s
+      )
     ) else (
       s
     )

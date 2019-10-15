@@ -32,6 +32,13 @@ module Bitmap {
     bm[i]
   }
 
+  function {:opaque} EmptyBitmap(n: int) : (bm : BitmapModel)
+  ensures Len(bm) == n
+  ensures forall i | 0 <= i < Len(bm) :: !IsSet(bm, i)
+  {
+    if n == 0 then [] else EmptyBitmap(n-1) + [false]
+  }
+
   function BitAllocIter(bm: BitmapModel, i: int) : (res: (Option<int>, BitmapModel))
   requires 0 <= i < |bm|
   decreases |bm| - i
@@ -51,6 +58,16 @@ module Bitmap {
   {
     BitAllocIter(bm, 0)
   }
+
+  lemma LemmaBitAllocResult(bm: BitmapModel)
+  ensures var (i, bm') := BitAlloc(bm);
+    && (i.Some? ==> (
+      && Len(bm) == Len(bm')
+      && (forall j | 0 <= j < Len(bm) && i.value != j :: IsSet(bm, j) == IsSet(bm', j))
+      && !IsSet(bm, i.value)
+      && IsSet(bm', i.value)
+    ))
+    && (i.None? ==> bm' == bm)
 
   class Bitmap {
     var bits: array<uint64>;
