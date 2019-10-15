@@ -308,6 +308,7 @@ abstract module BlockCache refines Transactable {
     && dop.respRead.sector.Some?
     && dop.respRead.sector.value.SectorIndirectionTable?
     && WFCompleteIndirectionTable(dop.respRead.sector.value.indirectionTable)
+    && AllLocationsForDifferentRefsDontOverlap(dop.respRead.sector.value.indirectionTable)
     && s' == Ready(dop.respRead.sector.value.indirectionTable, None, dop.respRead.sector.value.indirectionTable, None, map[], map[], s.syncReqs, map[])
   }
 
@@ -505,6 +506,20 @@ abstract module BlockCache refines Transactable {
         OverlappingImpliesEq(indirectionTable.locs[ref], s.outstandingBlockWrites[id].loc)
   }
 
+  predicate LocationsForDifferentRefsDontOverlap(indirectionTable: IndirectionTable,
+      r1: Reference, r2: Reference)
+  requires r1 in indirectionTable.locs
+  requires r2 in indirectionTable.locs
+  {
+    indirectionTable.locs[r1] == indirectionTable.locs[r2] ==> r1 == r2
+  }
+
+  predicate AllLocationsForDifferentRefsDontOverlap(indirectionTable: IndirectionTable)
+  {
+    forall r1, r2 | r1 in indirectionTable.locs && r2 in indirectionTable.locs ::
+        LocationsForDifferentRefsDontOverlap(indirectionTable, r1, r2)
+  }
+
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
@@ -517,6 +532,10 @@ abstract module BlockCache refines Transactable {
     && OutstandingReadRefsUnique(s.outstandingBlockReads)
     && OverlappingWritesEqForIndirectionTable(k, s, s.ephemeralIndirectionTable)
     && OverlappingWritesEqForIndirectionTable(k, s, s.persistentIndirectionTable)
+
+    // This isn't necessary for the other invariants in this file,
+    // but it is useful for the implementation.
+    && AllLocationsForDifferentRefsDontOverlap(s.ephemeralIndirectionTable)
 
     && (s.frozenIndirectionTable.Some? ==> (
       && WFIndirectionTable(s.frozenIndirectionTable.value)
