@@ -14,14 +14,16 @@ module Bitmap {
     |bm|
   }
 
-  function {:opaque} BitSet(bm: BitmapModel, i: int) : BitmapModel
+  function {:opaque} BitSet(bm: BitmapModel, i: int) : (bm' : BitmapModel)
   requires 0 <= i < Len(bm)
+  ensures Len(bm') == Len(bm)
   {
     bm[i := true]
   }
 
-  function {:opaque} BitUnset(bm: BitmapModel, i: int) : BitmapModel
+  function {:opaque} BitUnset(bm: BitmapModel, i: int) : (bm' : BitmapModel)
   requires 0 <= i < Len(bm)
+  ensures Len(bm') == Len(bm)
   {
     bm[i := false]
   }
@@ -39,35 +41,29 @@ module Bitmap {
     if n == 0 then [] else EmptyBitmap(n-1) + [false]
   }
 
-  function BitAllocIter(bm: BitmapModel, i: int) : (res: (Option<int>, BitmapModel))
+  function BitAllocIter(bm: BitmapModel, i: int) : (res: Option<int>)
   requires 0 <= i < |bm|
   decreases |bm| - i
-  ensures res.0.Some? ==> 0 <= res.0.value < |bm|
+  ensures res.Some? ==> 0 <= res.value < |bm|
   {
     if i == |bm| then (
-      (None, bm)
+      (None)
     ) else if !bm[i] then (
-      (Some(i), bm[i := true])
+      Some(i)
     ) else (
       BitAllocIter(bm, i+1)
     ) 
   }
 
-  function {:opaque} BitAlloc(bm: BitmapModel) : (res: (Option<int>, BitmapModel))
-  ensures res.0.Some? ==> 0 <= res.0.value < Len(bm)
+  function {:opaque} BitAlloc(bm: BitmapModel) : (res: Option<int>)
+  ensures res.Some? ==> 0 <= res.value < Len(bm)
   {
     BitAllocIter(bm, 0)
   }
 
   lemma LemmaBitAllocResult(bm: BitmapModel)
-  ensures var (i, bm') := BitAlloc(bm);
-    && (i.Some? ==> (
-      && Len(bm) == Len(bm')
-      && (forall j | 0 <= j < Len(bm) && i.value != j :: IsSet(bm, j) == IsSet(bm', j))
-      && !IsSet(bm, i.value)
-      && IsSet(bm', i.value)
-    ))
-    && (i.None? ==> bm' == bm)
+  ensures var i := BitAlloc(bm);
+    && (i.Some? ==> (!IsSet(bm, i.value)))
 
   class Bitmap {
     var bits: array<uint64>;

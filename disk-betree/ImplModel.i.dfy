@@ -8,6 +8,7 @@ include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"
 include "../lib/MutableMapModel.i.dfy"
 include "../lib/Bitmap.i.dfy"
+include "BlockAllocator.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -38,6 +39,7 @@ module ImplModel {
   import Bitmap
   import UI
   import MutableMapModel
+  import BlockAllocator
 
   import ReferenceType`Internal
 
@@ -66,36 +68,50 @@ module ImplModel {
         syncReqs: map<uint64, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue,
-        locBitmap: Bitmap.BitmapModel
+        blockAllocator: BlockAllocator.BlockAllocatorModel
       )
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
 
-  predicate IsLocFreeIndirectionTable(indirectionTable: IndirectionTable, i: int)
+  predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
-    && (forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? ::
-        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int)
+    || i == 0 // block 0 is always implicitly allocated
+    || !(
+      forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? ::
+        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int
+    )
   }
 
-  predicate IsLocFree(s: Variables, i: int)
-  requires s.Ready?
+  predicate IsLocAllocOutstanding(outstanding: map<SD.ReqId, BC.OutstandingWrite>, i: int)
   {
-    && IsLocFreeIndirectionTable(s.ephemeralIndirectionTable, i)
-    && IsLocFreeIndirectionTable(s.persistentIndirectionTable, i)
-    && (s.frozenIndirectionTable.Some? ==>
-        IsLocFreeIndirectionTable(s.frozenIndirectionTable.value, i))
-    && (forall id | id in s.outstandingBlockWrites ::
-        s.outstandingBlockWrites[id].loc.addr as int != i * BlockSize() as int)
-    && i != 0
+    !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * BlockSize() as int)
   }
 
-  predicate {:opaque} ConsistentBitmap(s: Variables)
-  requires s.Ready?
+  predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
   {
-    forall i: int :: !IsLocFree(s, i) <==>
-        (0 <= i < Bitmap.Len(s.locBitmap) && Bitmap.IsSet(s.locBitmap, i))
+    && 0 <= i < Bitmap.Len(bm)
+    && Bitmap.IsSet(bm, i)
+  }
+
+  predicate {:opaque} ConsistentBitmap(
+      ephemeralIndirectionTable: IndirectionTable,
+      frozenIndirectionTable: Option<IndirectionTable>,
+      persistentIndirectionTable: IndirectionTable,
+      outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
+      blockAllocator: BlockAllocator.BlockAllocatorModel)
+  {
+    && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
+      <==> IsLocAllocBitmap(blockAllocator.ephemeral, i))
+    && (forall i: int :: IsLocAllocIndirectionTable(persistentIndirectionTable, i)
+      <==> IsLocAllocBitmap(blockAllocator.persistent, i))
+    && (frozenIndirectionTable.Some? <==> blockAllocator.frozen.Some?)
+    && (frozenIndirectionTable.Some? ==>
+      (forall i: int :: IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
+        <==> IsLocAllocBitmap(blockAllocator.frozen.value, i)))
+    && (forall i: int :: IsLocAllocOutstanding(outstandingBlockWrites, i)
+      <==> IsLocAllocBitmap(blockAllocator.outstanding, i))
   }
 
   predicate WFNode(node: Node)
@@ -127,8 +143,9 @@ module ImplModel {
     && MutableMapModel.Inv(ephemeralIndirectionTable)
     && MutableMapModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
-    && ConsistentBitmap(s)
-    && Bitmap.Len(s.locBitmap) == NumBlocks()
+    && BlockAllocator.Inv(s.blockAllocator)
+    && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
+        s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
   }
   predicate WFVars(vars: Variables)
   {
