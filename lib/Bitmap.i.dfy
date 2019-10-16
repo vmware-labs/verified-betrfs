@@ -61,6 +61,23 @@ module Bitmap {
     BitAllocIter(bm, 0)
   }
 
+  function {:opaque} Union(a: BitmapModel, b: BitmapModel) : (res: BitmapModel)
+  requires Len(a) == Len(b)
+  ensures Len(res) == Len(a)
+  ensures forall i | 0 <= i < Len(res) :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i))
+  {
+    reveal_IsSet();
+    if |a| == 0 then [] else (
+      var res := Union(a[..|a|-1], b[..|b|-1]) + [a[|a|-1] || b[|b|-1]];
+      assert IsSet(res, |a|-1) == (IsSet(a, |a|-1) || IsSet(b, |a|-1));
+      assert forall i | 0 <= i < Len(res)-1 :: IsSet(a, i) == IsSet(a[..|a|-1], i);
+      assert forall i | 0 <= i < Len(res)-1 :: IsSet(b, i) == IsSet(b[..|a|-1], i);
+      assert forall i | 0 <= i < Len(res)-1 :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i));
+      assert forall i | 0 <= i < Len(res) :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i));
+      res
+    )
+  }
+
   lemma LemmaBitAllocResult(bm: BitmapModel)
   ensures var i := BitAlloc(bm);
     && (i.Some? ==> (!IsSet(bm, i.value)))
