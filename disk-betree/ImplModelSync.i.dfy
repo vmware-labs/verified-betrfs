@@ -152,9 +152,9 @@ module ImplModelSync {
   requires io.IOInit?
   requires ref in s.cache
   {
-    exists id, loc ::
-      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
-      && WriteBlockUpdateState(k, s, ref, id, loc, s')
+    exists id, loc, s0 ::
+      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), s0, id, loc, io')
+      && WriteBlockUpdateState(k, s0, ref, id, loc, s')
   }
 
   lemma TryToWriteBlockCorrect(k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
@@ -166,11 +166,11 @@ module ImplModelSync {
   ensures WFVars(s')
   ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
-    var id, loc :| 
-      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
-      && WriteBlockUpdateState(k, s, ref, id, loc, s');
+    var id, loc, s0 :| 
+      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), s0, id, loc, io')
+      && WriteBlockUpdateState(k, s0, ref, id, loc, s');
 
-    FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), id, loc, io');
+    FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), s0, id, loc, io');
 
     if id.Some? {
       AssignRefToLocCorrect(s.ephemeralIndirectionTable, ref, loc.value);
