@@ -788,9 +788,8 @@ module ImplModelIO {
   }
 
   lemma writeResponseCorrect(k: Constants, s: Variables, io: IO)
+  requires Inv(k, s)
   requires diskOp(io).RespWriteOp?
-  requires WFVars(s)
-  requires BBC.Inv(Ik(k), IVars(s))
   ensures var s' := writeResponse(k, s, io);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
@@ -805,6 +804,9 @@ module ImplModelIO {
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
       var locIdx := s.outstandingBlockWrites[id].loc.addr as int / BlockSize();
       lemmaOutstandingLocIndexValid(k, s, id);
+
+      LBAType.reveal_ValidAddr();
+      assert locIdx * BlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
 
       Bitmap.reveal_BitUnset();
       Bitmap.reveal_IsSet();
@@ -842,7 +844,14 @@ module ImplModelIO {
           assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
           assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
         } else {
-          assert false;
+          var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * BlockSize() as int;
+          assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
+          /*assert s.outstandingBlockWrites[id1].loc.addr as int
+              == s'.outstandingBlockWrites[id1].loc.addr as int
+              == i * BlockSize() as int;
+          assert id == id1;
+          assert id !in s'.outstandingBlockWrites;
+          assert false;*/
         }
       }
 
@@ -850,6 +859,12 @@ module ImplModelIO {
       | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
       ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
       {
+        if i != locIdx {
+          assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+          assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+        } else {
+          assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+        }
       }
 
       assert WFVars(s');

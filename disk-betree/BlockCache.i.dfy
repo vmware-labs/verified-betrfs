@@ -526,6 +526,19 @@ abstract module BlockCache refines Transactable {
       LBAType.ValidLocation(outstandingBlockWrites[id].loc)
   }
 
+  predicate OutstandingBlockWritesDontOverlap(outstandingBlockWrites: map<ReqId, OutstandingWrite>, id1: ReqId, id2: ReqId)
+  requires id1 in outstandingBlockWrites
+  requires id2 in outstandingBlockWrites
+  {
+    outstandingBlockWrites[id1].loc.addr == outstandingBlockWrites[id2].loc.addr ==> id1 == id2
+  }
+
+  predicate AllOutstandingBlockWritesDontOverlap(outstandingBlockWrites: map<ReqId, OutstandingWrite>)
+  {
+    forall id1, id2 | id1 in outstandingBlockWrites && id2 in outstandingBlockWrites ::
+        OutstandingBlockWritesDontOverlap(outstandingBlockWrites, id1, id2)
+  }
+
   predicate InvReady(k: Constants, s: Variables)
   requires s.Ready?
   {
@@ -539,6 +552,7 @@ abstract module BlockCache refines Transactable {
     && OverlappingWritesEqForIndirectionTable(k, s, s.ephemeralIndirectionTable)
     && OverlappingWritesEqForIndirectionTable(k, s, s.persistentIndirectionTable)
     && OutstandingWriteValidLocation(s.outstandingBlockWrites)
+    && AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
 
     // This isn't necessary for the other invariants in this file,
     // but it is useful for the implementation.
