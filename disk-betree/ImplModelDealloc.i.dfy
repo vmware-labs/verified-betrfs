@@ -4,6 +4,7 @@ module ImplModelDealloc {
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
+  import opened Bounds
 
   import opened Options
   import opened Maps
@@ -39,11 +40,19 @@ module ImplModelDealloc {
     ) else if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) then (
       (s, io)
     ) else (
+      var (eph, oldEntry) := MutableMapModel.RemoveAndGet(s.ephemeralIndirectionTable, ref);
+
+      lemmaIndirectionTableLocIndexValid(k, s, ref);
+
+      var blockAllocator' := if oldEntry.Some? && oldEntry.value.0.Some?
+        then BlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldEntry.value.0.value.addr as int / BlockSize())
+        else s.blockAllocator;
+
       var s' := s
-        .(ephemeralIndirectionTable :=
-            MutableMapModel.Remove(s.ephemeralIndirectionTable, ref))
+        .(ephemeralIndirectionTable := eph)
         .(cache := MapRemove(s.cache, {ref}))
-        .(lru := LruModel.Remove(s.lru, ref));
+        .(lru := LruModel.Remove(s.lru, ref))
+        .(blockAllocator := blockAllocator');
       (s', io)
     )
   }
@@ -76,6 +85,22 @@ module ImplModelDealloc {
       assert noop(k, IVars(s), IVars(s'));
       return;
     }
+
+    lemmaIndirectionTableLocIndexValid(k, s, ref);
+
+    var (eph, oldEntry) := MutableMapModel.RemoveAndGet(s.ephemeralIndirectionTable, ref);
+
+    var blockAllocator' := if oldEntry.Some? && oldEntry.value.0.Some?
+      then BlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldEntry.value.0.value.addr as int / BlockSize())
+      else s.blockAllocator;
+
+    freeIndirectionTableLocCorrect(k, s, s', ref,
+      if oldEntry.Some? && oldEntry.value.0.Some?
+      then Some(oldEntry.value.0.value.addr as int / BlockSize())
+      else None);
+    reveal_ConsistentBitmap();
+
+    assert WFVars(s');
 
     var iDiskOp := M.IDiskOp(diskOp(io));
     assert BC.Unalloc(Ik(k), IVars(s), IVars(s'), iDiskOp, ref);
