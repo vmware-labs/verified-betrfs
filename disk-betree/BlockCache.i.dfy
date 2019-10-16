@@ -511,7 +511,7 @@ abstract module BlockCache refines Transactable {
   requires r1 in indirectionTable.locs
   requires r2 in indirectionTable.locs
   {
-    indirectionTable.locs[r1] == indirectionTable.locs[r2] ==> r1 == r2
+    indirectionTable.locs[r1].addr == indirectionTable.locs[r2].addr ==> r1 == r2
   }
 
   predicate AllLocationsForDifferentRefsDontOverlap(indirectionTable: IndirectionTable)
