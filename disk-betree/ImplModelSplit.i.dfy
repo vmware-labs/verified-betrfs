@@ -279,7 +279,7 @@ module ImplModelSplit {
   function {:opaque} splitBookkeeping(k: Constants, s: Variables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': Variables)
   requires 0 <= slot < |fused_parent_children|
   requires s.Ready?
-  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
+  requires WriteAllocConditions(k, s)
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
@@ -316,7 +316,7 @@ module ImplModelSplit {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires 0 <= slot < |fused_parent_children|
   requires |child.buckets| >= 2
-  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
+  requires WriteAllocConditions(k, s)
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
