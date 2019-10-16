@@ -91,7 +91,8 @@ module ImplModelSync {
     ) else (
       var s' := s
           .(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
-          .(syncReqs := BC.syncReqs3to2(s.syncReqs));
+          .(syncReqs := BC.syncReqs3to2(s.syncReqs))
+          .(blockAllocator := BlockAllocator.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
     )
   }
@@ -120,6 +121,10 @@ module ImplModelSync {
       DeallocCorrect(k, s, io, foundDeallocable.value);
       return;
     }
+
+    reveal_ConsistentBitmap();
+    assert WFVars(s');
+
     assert BC.Freeze(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
     assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, M.IDiskOp(diskOp(io')), BC.FreezeStep);
     assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.FreezeStep);

@@ -95,6 +95,18 @@ module BlockAllocator {
     )
   }
 
+  function CopyEphemeralToFrozen(bam: BlockAllocatorModel) : (bam': BlockAllocatorModel)
+  requires Inv(bam)
+  {
+    BlockAllocatorModel(
+      bam.ephemeral,
+      Some(bam.ephemeral),
+      bam.persistent,
+      bam.outstanding,
+      bam.full
+    )
+  }
+
   // Lemmas
 
   lemma LemmaAllocResult(bam: BlockAllocatorModel)
