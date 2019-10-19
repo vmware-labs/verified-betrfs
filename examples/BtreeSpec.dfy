@@ -56,8 +56,8 @@ abstract module BtreeSpec {
       && Keys.IsStrictlySorted(node.pivots)
       && (forall i :: 0 <= i < |node.children| ==> WF(node.children[i]))
       && (forall i :: 0 <= i < |node.children| ==> AllKeys(node.children[i]) != {})
-      && (forall i :: 0 <= i < |node.children|-1 && AllKeysBelowBound(node, i))
-      && (forall i :: 0 < i < |node.children|   && AllKeysAboveBound(node, i))
+      && (forall i :: 0 <= i < |node.children|-1 ==> AllKeysBelowBound(node, i))
+      && (forall i :: 0 < i < |node.children|   ==> AllKeysAboveBound(node, i))
   }
 
   function Interpretation(node: Node) : map<Key, Value>
@@ -182,6 +182,17 @@ abstract module BtreeSpec {
     ensures WF(SubIndex(node, from, to))
   {
     Keys.StrictlySortedSubsequence(node.pivots, from, to-1);
+    var subindex := SubIndex(node, from, to);
+    forall i | 0 <= i < to - from - 1
+      ensures AllKeysBelowBound(subindex, i)
+    {
+      assert AllKeysBelowBound(node, from + i);
+    }
+    forall i | 0 < i < to - from
+      ensures AllKeysAboveBound(subindex, i)
+    {
+      assert AllKeysAboveBound(node, from + i);
+    }
   }
   
   predicate SplitIndex(oldindex: Node, leftindex: Node, rightindex: Node, wit: Key, pivot: Key)
@@ -357,6 +368,7 @@ abstract module BtreeSpec {
         Keys.IsStrictlySortedImpliesLt(oldnode.pivots, i, |leftnode.pivots|);
       } else {
         var i :| 0 <= i < |leftnode.children| && key in AllKeys(leftnode.children[i]);
+        assert AllKeysBelowBound(oldnode, i);
         if i < |leftnode.pivots| {
           Keys.IsStrictlySortedImpliesLt(oldnode.pivots, i, |leftnode.pivots|);
         }
@@ -369,9 +381,11 @@ abstract module BtreeSpec {
         Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i);
       } else {
         var i :| 0 <= i < |rightnode.children| && key in AllKeys(rightnode.children[i]);
+        assert AllKeysAboveBound(oldnode, |leftnode.children| + i);
         Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i - 1);
       }
     }
+    assert Last(rightnode.children) == Last(oldnode.children);
   }
   
   lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, wit: Key, pivot: Key)
@@ -417,6 +431,8 @@ abstract module BtreeSpec {
     var rightchild := newindex.children[childidx+1];
     SplitNodeAllKeys(oldchild, leftchild, rightchild, wit, pivot);
     SplitNodePreservesWF(oldchild, leftchild, rightchild, wit, pivot);
+    assert 0 < childidx ==> AllKeysAboveBound(oldindex, childidx);
+    assert childidx < |oldindex.pivots| ==> AllKeysBelowBound(oldindex, childidx);
     Keys.strictlySortedInsert2(oldindex.pivots, pivot, childidx);
 
     forall i | 0 <= i < |newindex.children|
@@ -435,10 +451,14 @@ abstract module BtreeSpec {
       ensures Keys.lt(key, newindex.pivots[i])
     {
       if i < childidx {
+        assert AllKeysBelowBound(oldindex, i);
       } else if i == childidx {
+        //assume false;
       } else if i == childidx + 1 {
+        //assume false;
       } else {
         assert newindex.children[i] == oldindex.children[i-1];
+        assert AllKeysBelowBound(oldindex, i-1);
       }      
     }
 
@@ -446,11 +466,13 @@ abstract module BtreeSpec {
       ensures Keys.lte(newindex.pivots[i-1], key)
     {
       if i < childidx {
+        assert AllKeysAboveBound(oldindex, i);
       } else if i == childidx {
       } else if i == childidx + 1 {
         assert Keys.lte(newindex.pivots[i-1], key);
       } else {
         assert newindex.children[i] == oldindex.children[i-1];
+        assert AllKeysAboveBound(oldindex, i-1);
       }      
     }
     
@@ -568,7 +590,7 @@ abstract module BtreeSpec {
     requires leaf.Leaf?
     requires WF(leaf)
     ensures Interpretation(InsertLeaf(leaf, key, value)) == Interpretation(leaf)[key := value]
-    ensures AllKeys(InsertLeaf(leaf, key, value)) <= AllKeys(leaf) + {key}
+    ensures AllKeys(InsertLeaf(leaf, key, value)) == AllKeys(leaf) + {key}
   {
     var result := InsertLeaf(leaf, key, value);
     var llte := Keys.LargestLte(leaf.keys, key);
@@ -582,6 +604,16 @@ abstract module BtreeSpec {
         var kpos := IndexOf(result.keys, k);
         if llte + 1 < kpos {
           assert k == leaf.keys[kpos-1];
+        }
+      }
+      forall k | k in AllKeys(result)
+        ensures k in AllKeys(leaf) + {key}
+      {
+        var i :| 0 <= i < |result.keys| && result.keys[i] == k;
+        if i < llte+1 {
+        } else if i == llte+1 {
+        } else {
+          assert k == leaf.keys[i-1];
         }
       }
     }
