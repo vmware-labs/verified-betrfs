@@ -626,14 +626,30 @@ abstract module BtreeSpec {
     requires pos == Keys.LargestLte(node.pivots, key)+1
     requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
     requires newnode == node.(children := node.children[pos := newchild])
-    //requires pos < |node.children|-1 ==> (forall key :: key in AllKeys(newchild) ==> Keys.lt(key, node.pivots[pos]))
-    //requires 0 < pos ==> (forall key :: key in AllKeys(newchild) ==> Keys.lte(node.pivots[pos-1], key))
+    requires pos < |node.children|-1 ==> (forall key :: key in AllKeys(newchild) ==> Keys.lt(key, node.pivots[pos]))
+    requires 0 < pos ==> (forall key :: key in AllKeys(newchild) ==> Keys.lte(node.pivots[pos-1], key))
     requires AllKeys(newchild) <= AllKeys(node.children[pos]) + {key}
     ensures WF(newnode)
     ensures Interpretation(newnode) == Interpretation(node)[key := value]
   {
     var oldint := Interpretation(node);
     AllKeysIsConsistentWithInterpretation(newchild, key);
+    forall i | 0 <= i < |newnode.children| - 1
+      ensures AllKeysBelowBound(newnode, i);
+    {
+      if i == pos {
+      } else {
+        assert AllKeysBelowBound(node, i);
+      }
+    }
+    forall i | 0 < i < |newnode.children|
+      ensures AllKeysAboveBound(newnode, i);
+    {
+      if i == pos {
+      } else {
+        assert AllKeysAboveBound(node, i);
+      }
+    }
     var newint := Interpretation(newnode);
 
     forall key' | key' in oldint && key' != key
