@@ -38,6 +38,7 @@ module BlockAllocator {
   function MarkUsedEphemeral(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
   requires Inv(bam)
   requires 0 <= i < NumBlocks()
+  ensures Inv(bam')
   {
     bam
       .(ephemeral := Bitmap.BitSet(bam.ephemeral, i))
@@ -48,9 +49,19 @@ module BlockAllocator {
   requires Inv(bam)
   requires bam.frozen.Some?
   requires 0 <= i < NumBlocks()
+  ensures Inv(bam')
   {
     bam
       .(frozen := Some(Bitmap.BitSet(bam.frozen.value, i)))
+      .(full := Bitmap.BitSet(bam.full, i))
+  }
+
+  function MarkUsedOutstanding(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
+  requires Inv(bam)
+  requires 0 <= i < NumBlocks()
+  {
+    bam
+      .(outstanding := Bitmap.BitSet(bam.outstanding, i))
       .(full := Bitmap.BitSet(bam.full, i))
   }
 
