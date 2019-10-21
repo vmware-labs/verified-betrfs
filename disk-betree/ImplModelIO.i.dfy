@@ -45,31 +45,29 @@ module ImplModelIO {
   }
 
   function {:opaque} getFreeLoc(s: Variables, len: uint64)
-  : (res : (Variables, Option<BC.Location>))
+  : (res : Option<BC.Location>)
   requires s.Ready?
   requires WFVars(s)
   requires len <= LBAType.BlockSize()
+  ensures res.Some? ==> 0 <= res.value.addr as int / BlockSize() < NumBlocks()
   {
     var i := BlockAllocator.Alloc(s.blockAllocator);
     if i.Some? then
-      (
-        s.(blockAllocator := BlockAllocator.MarkUsed(s.blockAllocator, i.value)),
-        Some(LBAType.Location((i.value * BlockSize()) as uint64, len))
-      )
+      Some(LBAType.Location((i.value * BlockSize()) as uint64, len))
     else
-      (s, None)
+      None
   }
 
   lemma getFreeLocCorrect(s: Variables, len: uint64)
   requires getFreeLoc.requires(s, len);
-  ensures var (s', loc) := getFreeLoc(s, len);
+  ensures var loc := getFreeLoc(s, len);
     && (loc.Some? ==> LocAvailable(s, loc.value, len))
   {
     reveal_getFreeLoc();
     reveal_ConsistentBitmap();
     LBAType.reveal_ValidAddr();
 
-    var (s', loc) := getFreeLoc(s, len);
+    var loc := getFreeLoc(s, len);
     if loc.Some? {
       var i := BlockAllocator.Alloc(s.blockAllocator);
 
@@ -133,9 +131,11 @@ module ImplModelIO {
   }
 
   predicate {:opaque} FindLocationAndRequestWrite(io: IO, s: Variables, sector: Sector,
-      s': Variables, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
+      id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires s.Ready?
   requires WFVars(s)
+  ensures FindLocationAndRequestWrite(io, s, sector, id, loc, io') ==>
+      loc.Some? ==> 0 <= loc.value.addr as int / BlockSize() < NumBlocks()
   {
     && var dop := diskOp(io');
     && (dop.NoDiskOp? || dop.ReqWriteOp?)
@@ -143,7 +143,6 @@ module ImplModelIO {
       && id == None
       && loc == None
       && io' == io
-      && s' == s
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
@@ -154,7 +153,7 @@ module ImplModelIO {
       && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
 
       && var len := |bytes| as uint64;
-      && (s', loc) == getFreeLoc(s, len)
+      && loc == getFreeLoc(s, len)
       && loc.Some?
 
       && id == Some(dop.id)
@@ -163,12 +162,12 @@ module ImplModelIO {
     ))
   }
 
-  lemma FindLocationAndRequestWriteCorrect(io: IO, s: Variables, sector: Sector, s': Variables, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
+  lemma FindLocationAndRequestWriteCorrect(io: IO, s: Variables, sector: Sector, id: Option<D.ReqId>, loc: Option<LBAType.Location>, io': IO)
   requires WFVars(s)
   requires s.Ready?
   requires WFSector(sector)
   requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
-  requires FindLocationAndRequestWrite(io, s, sector, s', id, loc, io')
+  requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures M.ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> LBAType.ValidLocation(loc.value)
@@ -490,24 +489,28 @@ module ImplModelIO {
         forall r1, r2 | r1 in IIndirectionTable(indirectionTable).locs && r2 in IIndirectionTable(indirectionTable).locs && r1 in it0.s && r2 in it0.s
         ensures BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2)
         {
-          if r1 in it.s && r2 in it.s {
-            assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
-          } else {
-            if r1 != r2 && IIndirectionTable(indirectionTable).locs[r1] == IIndirectionTable(indirectionTable).locs[r2] {
-              var j1 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r1].addr);
-              var j2 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r2].addr);
-              if r1 !in it.s {
-                assert r2 in it.s;
-                assert !Bitmap.IsSet(bm, j1);
-                assert IsLocAllocBitmap(bm, j2);
-                assert Bitmap.IsSet(bm, j2);
-                assert false;
+          if r1 != r2 {
+            if r1 in it.s && r2 in it.s {
+              assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
+            } else {
+              if IIndirectionTable(indirectionTable).locs[r1].addr == IIndirectionTable(indirectionTable).locs[r2].addr {
+                var j1 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r1].addr);
+                var j2 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r2].addr);
+                if r1 !in it.s {
+                  assert r2 in it.s;
+                  assert !Bitmap.IsSet(bm, j1);
+                  assert IsLocAllocBitmap(bm, j2);
+                  assert Bitmap.IsSet(bm, j2);
+                  assert false;
+                } else {
+                  assert r1 in it.s;
+                  assert !Bitmap.IsSet(bm, j2);
+                  assert IsLocAllocBitmap(bm, j1);
+                  assert Bitmap.IsSet(bm, j1);
+                  assert false;
+                }
               } else {
-                assert r1 in it.s;
-                assert !Bitmap.IsSet(bm, j2);
-                assert IsLocAllocBitmap(bm, j1);
-                assert Bitmap.IsSet(bm, j1);
-                assert false;
+                assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
               }
             }
           }

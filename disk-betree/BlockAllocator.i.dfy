@@ -35,7 +35,7 @@ module BlockAllocator {
     Bitmap.BitAlloc(bam.full)
   }
 
-  function MarkUsed(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
+  function MarkUsedEphemeral(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
   requires Inv(bam)
   requires 0 <= i < NumBlocks()
   {
