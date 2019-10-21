@@ -62,3 +62,7 @@ which is there to introduce an obligation, should it?
 
 - Rob's profiler didn't help here: 88b8873f549dff64fa7cb5f853aa636591a8aaae (profile-useless-00) for disk-betree/ImplSync.i.dfy::doSplit
   - `mono ~/VMware/dafny-base/dafny/Binaries/Dafny.exe ImplSync.i.dfy  /compile:0 /proc:'*doSplit*' /timeLimit:120 /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000 > /tmp/dafny.profile`
+
+warnings about unused non-ghost variables
+warnings about if/forall statements where condition is non-ghost but body is entirely ghost
+ghost { } blocks
