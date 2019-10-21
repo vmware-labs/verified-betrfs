@@ -483,9 +483,16 @@ module ImplModelSync {
       var s0 := AssignRefToLocEphemeral(k, s, ref, loc.value);
       var s1 := AssignRefToLocFrozen(k, s0, ref, loc.value);
 
+      assume id.value !in s.outstandingBlockWrites; // TODO figure out how to deal with this?
+
       LemmaAssignRefToLocEphemeralCorrect(k, s, ref, loc.value);
       LemmaAssignRefToLocFrozenCorrect(k, s0, ref, loc.value);
       LemmaAssignIdRefLocOutstandingCorrect(k, s1, id.value, ref, loc.value);
+      
+      if s.frozenIndirectionTable.Some? {
+        assert IIndirectionTable(s'.frozenIndirectionTable.value)
+          == BC.assignRefToLocation(IIndirectionTable(s.frozenIndirectionTable.value), ref, loc.value);
+      }
 
       assert BC.ValidLocationForNode(M.IDiskOp(diskOp(io')).reqWrite.loc);
       assert BC.WriteBackReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')), ref);

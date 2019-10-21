@@ -21,19 +21,6 @@ module ImplModelInsert {
 
   // == insert ==
 
-  function removeLBAFromIndirectionTable(table: IndirectionTable, ref: BT.G.Reference) : IndirectionTable
-  requires MutableMapModel.Inv(table)
-  {
-    if ref in table.contents then (
-      var lbaGraph := table.contents[ref];
-      var (lba, graph) := lbaGraph;
-      assume table.count as nat < 0x10000000000000000 / 8;
-      MutableMapModel.Insert(table, ref, (None, graph))
-    ) else (
-      table
-    )
-  }
-
   function {:opaque} NodeInsertKeyValue(node: Node, key: MS.Key, msg: Message) : Node
   requires WFNode(node)
   {
@@ -67,8 +54,8 @@ module ImplModelInsert {
       var msg := Messages.Define(value);
       var newCache := CacheInsertKeyValue(s.cache, BT.G.Root(), key, msg);
 
-      var s' := s.(cache := newCache)
-          .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
+      var s0 := s.(cache := newCache);
+      var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
       (s', true)
     )
   }
@@ -112,8 +99,11 @@ module ImplModelInsert {
 
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
-    var s' := s.(cache := newCache)
-        .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
+    var s0 := s.(cache := newCache);
+    var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
+
+    reveal_writeBookkeeping();
+    writeCorrect(k, s0, BT.G.Root(), newRoot);
 
     var oldroot := INode(root);
     var newroot := INode(newRoot);
