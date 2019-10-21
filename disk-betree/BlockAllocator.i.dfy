@@ -40,9 +40,15 @@ module BlockAllocator {
   requires 0 <= i < NumBlocks()
   ensures Inv(bam')
   {
-    bam
+    var bam' := bam
       .(ephemeral := Bitmap.BitSet(bam.ephemeral, i))
-      .(full := Bitmap.BitSet(bam.full, i))
+      .(full := Bitmap.BitSet(bam.full, i));
+
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> Bitmap.IsSet(bam'.ephemeral, j) == Bitmap.IsSet(bam.ephemeral, j);
+
+    bam'
   }
 
   function MarkUsedFrozen(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
@@ -51,9 +57,15 @@ module BlockAllocator {
   requires 0 <= i < NumBlocks()
   ensures Inv(bam')
   {
-    bam
+    var bam' := bam
       .(frozen := Some(Bitmap.BitSet(bam.frozen.value, i)))
-      .(full := Bitmap.BitSet(bam.full, i))
+      .(full := Bitmap.BitSet(bam.full, i));
+
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> Bitmap.IsSet(bam'.ephemeral, j) == Bitmap.IsSet(bam.ephemeral, j);
+
+    bam'
   }
 
   function MarkUsedOutstanding(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
