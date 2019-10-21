@@ -235,80 +235,61 @@ module Bitmap {
       }
     }
 
-/*
-    static function method {:opaque} ClearBit(word: uint64, b: uint64) : uint64
+    static function method UnsetBit(word: uint64, b: uint64) : uint64
     requires b < 64
     {
-      (word as bv64 & (0xffff_ffff_ffff_ffff ^ (1 << b))) as uint64
+      BitsetLemmas.set_bit_to_0_uint64(word, b)
     }
 
-    static lemma ClearBitProperties(before: uint64, after: uint64, b: uint64)
-    requires b < 64
-    requires after == ClearBit(before, b)
-    ensures !BitBSet(after, b as nat)
-    ensures forall b': nat | b' != b as nat && b' < 64 :: BitBSet(after, b') <==> BitBSet(before, b')
-    {
-      assume false;
-    }
-
-    method Clear(c: uint64)
-    requires c as nat / 64 < bits.Length
+    method Unset(c: uint64)
     requires Inv()
+    requires c as nat < Len(I())
     ensures Inv()
-    ensures Contents == old(Contents) - {c}
+    ensures I() == BitUnset(old(I()), c as int)
     ensures this.Repr == old(this.Repr)
     modifies this, this.Repr
     {
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
-      this.bits[i] := ClearBit(this.bits[i], b);
-      ClearBitProperties(old(this.bits[i]), this.bits[i], b);
+      this.bits[i] := UnsetBit(this.bits[i], b);
 
-      Contents := Contents - {c};
+      ghost var ghosty := true;
+      if ghosty {
+        reveal_BitUnset();
+        reveal_IsSet();
 
-      forall c': nat | c' < 0x1_0000_0000_0000_0000 && c' / 64 < bits.Length
-      ensures c' as uint64 in Contents <==> BitsSetAtC(bits[..], c') {
-        var i' := c' / 64;
-        var b' := c' % 64;
-        if i' == i as nat {
-          if b' == b as nat {
-            assert c' == c as nat;
-            assert c !in Contents;
+        forall c' : int | 0 <= c' as int < 64 * this.bits.Length
+        ensures I()[c'] == BitUnset(old(I()), c as int)[c']
+        {
+          var i' := c' / 64;
+          var b' := c' % 64;
+          if i' == i as nat {
+            if b' == b as nat {
+              BitsetLemmas.set_bit_to_0_self_uint64(old(this.bits[i]), b);
+              assert I()[c'] == BitUnset(old(I()), c as int)[c'];
+            } else {
+              BitsetLemmas.set_bit_to_0_other_uint64(old(this.bits[i]), b, b' as uint64);
+              assert I()[c'] == BitUnset(old(I()), c as int)[c'];
+            }
           } else {
-            reveal_BitsMatchesContents();
-            assert old(c' as uint64 in Contents) <==> BitsSetAtC(old(bits[..]), c'); // observe
+            assert I()[c'] == BitUnset(old(I()), c as int)[c'];
           }
-        } else {
-          reveal_BitsMatchesContents();
-          assert old(c' as uint64 in Contents) <==> BitsSetAtC(old(bits[..]), c'); // observe
-          /* (doc) assert this.bits[c' / 64] == old(this.bits[c' / 64]); */
         }
       }
-      reveal_BitsMatchesContents();
     }
 
-    method IsSet(c: uint64) returns (result: bool)
-    requires c as nat / 64 < bits.Length
+    method GetIsSet(c: uint64) returns (result: bool)
     requires Inv()
-    ensures Inv()
-    ensures result <==> old(c in Contents)
+    requires c as nat < Len(I())
+    ensures result == IsSet(I(), c as int)
     {
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
-      result := this.bits[i] as bv64 & (1 << b) != 0;
+      reveal_IsSet();
 
-      if c in Contents {
-        reveal_BitsMatchesContents();
-        assert BitsSetAtC(this.bits[..], c as nat);
-        reveal_BitBSet();
-      } else {
-        reveal_BitsMatchesContents();
-        assert !BitsSetAtC(this.bits[..], c as nat);
-        reveal_BitBSet();
-      }
+      result := BitsetLemmas.in_set_uint64(b, this.bits[i]);
     }
-    */
   }
 }
