@@ -57,16 +57,110 @@ module ImplModelSync {
     )
   }
 
+  function {:opaque} AssignRefToLocFrozen(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some? ==> MutableMapModel.Inv(s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
+  requires BlockAllocator.Inv(s.blockAllocator)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  {
+    if s.frozenIndirectionTable.Some? then (
+      var table := s.frozenIndirectionTable.value;
+      if (ref in table.contents && table.contents[ref].0.None?) then (
+        assume table.count as nat < 0x10000000000000000 / 8;
+        var table' := MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1));
+        var blockAllocator' := BlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+        var s' := s
+          .(frozenIndirectionTable := Some(table'))
+          .(blockAllocator := blockAllocator');
+        s'
+      ) else (
+        s
+      )
+    ) else (
+      s
+    )
+  }
+
+  lemma LemmaAssignRefToLocBitmapConsistent(
+      indirectionTable: IndirectionTable,
+      bm: Bitmap.BitmapModel,
+      indirectionTable': IndirectionTable,
+      bm': Bitmap.BitmapModel,
+      ref: BT.G.Reference,
+      loc: BC.Location)
+  requires MutableMapModel.Inv(indirectionTable)
+  requires (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
+          <==> IsLocAllocBitmap(bm, i))
+  requires BC.ValidLocationForNode(loc);
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires indirectionTable.count as nat < 0x10000000000000000 / 8;
+  requires ref in indirectionTable.contents
+  requires indirectionTable.contents[ref].0.None?
+  requires indirectionTable' == MutableMapModel.Insert(indirectionTable, ref, (Some(loc), indirectionTable.contents[ref].1));
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires Bitmap.Len(bm) == NumBlocks()
+  requires bm' == Bitmap.BitSet(bm, loc.addr as int / BlockSize())
+  ensures 
+      && (forall i: int :: IsLocAllocIndirectionTable(indirectionTable', i)
+          <==> IsLocAllocBitmap(bm', i))
+  {
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+    reveal_AssignRefToLoc();
+
+    assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
+
+    var j := loc.addr as int / BlockSize();
+    LBAType.reveal_ValidAddr();
+    assert j != 0;
+    assert j * BlockSize() == loc.addr as int;
+
+    forall i: int | IsLocAllocIndirectionTable(indirectionTable', i)
+    ensures IsLocAllocBitmap(bm', i)
+    {
+      if i == j {
+        assert IsLocAllocBitmap(bm', i);
+      } else {
+        assert IsLocAllocIndirectionTable(indirectionTable, i);
+        assert IsLocAllocBitmap(bm', i);
+      }
+    }
+    forall i: int | IsLocAllocBitmap(bm', i)
+    ensures IsLocAllocIndirectionTable(indirectionTable', i)
+    {
+      if i == j {
+        assert ref in indirectionTable'.contents;
+        assert indirectionTable'.contents[ref].0.Some?;
+        assert indirectionTable'.contents[ref].0.value.addr as int == i * BlockSize() as int;
+        assert IsLocAllocIndirectionTable(indirectionTable', i);
+      } else {
+        if i == 0 {
+          assert IsLocAllocIndirectionTable(indirectionTable', i);
+        } else {
+          assert IsLocAllocIndirectionTable(indirectionTable, i);
+          var r :| r in indirectionTable.contents && indirectionTable.contents[r].0.Some? &&
+            indirectionTable.contents[r].0.value.addr as int == i * BlockSize() as int;
+          assert MapsAgreeOnKey(
+            IIndirectionTable(indirectionTable).locs,
+            IIndirectionTable(indirectionTable').locs, r);
+          assert r in indirectionTable'.contents && indirectionTable'.contents[r].0.Some? &&
+            indirectionTable'.contents[r].0.value.addr as int == i * BlockSize() as int;
+          assert IsLocAllocIndirectionTable(indirectionTable', i);
+        }
+      }
+    }
+  }
+
   lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
   requires s.Ready?
-  requires WriteAllocConditions(k, s)
+  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
   requires BlockAllocator.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocEphemeral(k, s, ref, loc);
-      //WriteAllocConditions(k, s')
       && s'.Ready?
       && (forall i: int :: IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
@@ -80,9 +174,6 @@ module ImplModelSync {
     reveal_AssignRefToLoc();
 
     var j := loc.addr as int / BlockSize();
-    LBAType.reveal_ValidAddr();
-    assert j != 0;
-    assert j * BlockSize() == loc.addr as int;
 
     var table := s.ephemeralIndirectionTable;
     if (ref in table.contents && table.contents[ref].0.None?) {
@@ -110,41 +201,84 @@ module ImplModelSync {
         }
       }
 
-      forall i: int
-      | IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
-      ensures IsLocAllocBitmap(s'.blockAllocator.ephemeral, i)
+      LemmaAssignRefToLocBitmapConsistent(
+          s.ephemeralIndirectionTable,
+          s.blockAllocator.ephemeral,
+          s'.ephemeralIndirectionTable, 
+          s'.blockAllocator.ephemeral,
+          ref,
+          loc);
+    } else {
+    }
+  }
+
+  lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some? ==> MutableMapModel.Inv(s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
+  requires s.frozenIndirectionTable.Some? ==>
+        (forall i: int :: IsLocAllocIndirectionTable(s.frozenIndirectionTable.value, i)
+          <==> IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
+  requires BlockAllocator.Inv(s.blockAllocator)
+  requires BC.ValidLocationForNode(loc);
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  ensures var s' := AssignRefToLocFrozen(k, s, ref, loc);
+      && s'.Ready?
+      && (s'.frozenIndirectionTable.Some? ==> s'.blockAllocator.frozen.Some?)
+      && (s'.frozenIndirectionTable.Some? ==>
+          (forall i: int :: IsLocAllocIndirectionTable(s'.frozenIndirectionTable.value, i)
+          <==> IsLocAllocBitmap(s'.blockAllocator.frozen.value, i)))
+      && BlockAllocator.Inv(s'.blockAllocator)
+      && (s.frozenIndirectionTable.Some? ==>
+          s'.frozenIndirectionTable == Some(AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc))
+      )
+  {
+    reveal_AssignRefToLocFrozen();
+
+    if s.frozenIndirectionTable.None? {
+      return;
+    }
+
+    reveal_ConsistentBitmap();
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+    reveal_AssignRefToLoc();
+
+    var j := loc.addr as int / BlockSize();
+
+    var table := s.frozenIndirectionTable.value;
+    if (ref in table.contents && table.contents[ref].0.None?) {
+      assume table.count as nat < 0x10000000000000000 / 8;
+      var table' := MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1));
+      var blockAllocator' := BlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+      var s' := s
+      .(frozenIndirectionTable := Some(table'))
+      .(blockAllocator := blockAllocator');
+
+      forall i | 0 <= i < NumBlocks()
+      ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
+        || Bitmap.IsSet(s'.blockAllocator.frozen.value, i)
+        || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+        || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+        || Bitmap.IsSet(s'.blockAllocator.full, i)
+      )
       {
-        if i == j {
-          assert IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);
-        } else {
-          assert IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i);
-          assert IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);
+        if i != j {
+          assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
+          assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
+          assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
+          assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
+          assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
         }
       }
-      forall i: int
-      | IsLocAllocBitmap(s'.blockAllocator.ephemeral, i)
-      ensures IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
-      {
-        if i == j {
-          assert ref in s'.ephemeralIndirectionTable.contents && s'.ephemeralIndirectionTable.contents[ref].0.Some? &&
-            s'.ephemeralIndirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
-          assert IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i);
-        } else {
-          if i == 0 {
-            assert IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i);
-          } else {
-            assert IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i);
-            var r :| r in s.ephemeralIndirectionTable.contents && s.ephemeralIndirectionTable.contents[r].0.Some? &&
-              s.ephemeralIndirectionTable.contents[r].0.value.addr as int == i * BlockSize() as int;
-            assert MapsAgreeOnKey(
-              IIndirectionTable(s.ephemeralIndirectionTable).locs,
-              IIndirectionTable(s'.ephemeralIndirectionTable).locs, r);
-            assert r in s'.ephemeralIndirectionTable.contents && s'.ephemeralIndirectionTable.contents[r].0.Some? &&
-              s'.ephemeralIndirectionTable.contents[r].0.value.addr as int == i * BlockSize() as int;
-            assert IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i);
-          }
-        }
-      }
+
+      LemmaAssignRefToLocBitmapConsistent(
+          s.frozenIndirectionTable.value,
+          s.blockAllocator.frozen.value,
+          s'.frozenIndirectionTable.value,
+          s'.blockAllocator.frozen.value,
+          ref,
+          loc);
     } else {
     }
   }

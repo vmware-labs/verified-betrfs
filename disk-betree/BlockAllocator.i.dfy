@@ -44,6 +44,16 @@ module BlockAllocator {
       .(full := Bitmap.BitSet(bam.full, i))
   }
 
+  function MarkUsedFrozen(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
+  requires Inv(bam)
+  requires bam.frozen.Some?
+  requires 0 <= i < NumBlocks()
+  {
+    bam
+      .(frozen := Some(Bitmap.BitSet(bam.frozen.value, i)))
+      .(full := Bitmap.BitSet(bam.full, i))
+  }
+
   function InitBlockAllocator(bm: Bitmap.BitmapModel) : BlockAllocatorModel
   {
     var empty := Bitmap.EmptyBitmap(NumBlocks());
