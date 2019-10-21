@@ -79,14 +79,14 @@ module Bitmap {
     BitAllocIter(bm, 0)
   }
 
-  function {:opaque} Union(a: BitmapModel, b: BitmapModel) : (res: BitmapModel)
+  function {:opaque} BitUnion(a: BitmapModel, b: BitmapModel) : (res: BitmapModel)
   requires Len(a) == Len(b)
   ensures Len(res) == Len(a)
   ensures forall i | 0 <= i < Len(res) :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i))
   {
     reveal_IsSet();
     if |a| == 0 then [] else (
-      var res := Union(a[..|a|-1], b[..|b|-1]) + [a[|a|-1] || b[|b|-1]];
+      var res := BitUnion(a[..|a|-1], b[..|b|-1]) + [a[|a|-1] || b[|b|-1]];
       assert IsSet(res, |a|-1) == (IsSet(a, |a|-1) || IsSet(b, |a|-1));
       assert forall i | 0 <= i < Len(res)-1 :: IsSet(a, i) == IsSet(a[..|a|-1], i);
       assert forall i | 0 <= i < Len(res)-1 :: IsSet(b, i) == IsSet(b[..|a|-1], i);
@@ -171,6 +171,7 @@ module Bitmap {
     requires len % 64 == 0
     ensures Inv()
     ensures I() == EmptyBitmap(len as int)
+    ensures fresh(Repr)
     {
       new;
       bits := Native.Arrays.newArrayFill(len / 64, 0);
@@ -291,5 +292,17 @@ module Bitmap {
 
       result := BitsetLemmas.in_set_uint64(b, this.bits[i]);
     }
+
+    method Alloc() returns (res: Option<int>)
+    requires Inv()
+    ensures res == BitAlloc(I())
+
+    constructor Union(a: Bitmap, b: Bitmap)
+    requires a.Inv()
+    requires b.Inv()
+    requires Len(a.I()) == Len(b.I())
+    ensures Inv()
+    ensures I() == BitUnion(a.I(), b.I())
+    ensures fresh(Repr)
   }
 }
