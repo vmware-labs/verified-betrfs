@@ -39,14 +39,28 @@ module Bitmap {
   }
 
   function {:opaque} EmptyBitmap(n: int) : (bm : BitmapModel)
+  requires n >= 0
   ensures Len(bm) == n
   ensures forall i | 0 <= i < Len(bm) :: !IsSet(bm, i)
   {
-    if n == 0 then [] else EmptyBitmap(n-1) + [false]
+    if n == 0 then [] else (
+      var bm := EmptyBitmap(n-1) + [false];
+
+      reveal_IsSet();
+      assert forall i | 0 <= i < n - 1 :: !IsSet(EmptyBitmap(n-1), i);
+      assert forall i | 0 <= i < n - 1 :: bm[i] == IsSet(bm, i);
+      assert forall i | 0 <= i < n - 1 :: EmptyBitmap(n-1)[i] == IsSet(EmptyBitmap(n-1), i);
+      assert forall i | 0 <= i < n - 1 :: bm[i] == EmptyBitmap(n-1)[i];
+      assert forall i | 0 <= i < n - 1 :: !IsSet(bm, i);
+      assert !IsSet(bm, n - 1);
+      assert forall i | 0 <= i < n :: !IsSet(bm, i);
+
+      bm
+    )
   }
 
   function BitAllocIter(bm: BitmapModel, i: int) : (res: Option<int>)
-  requires 0 <= i < |bm|
+  requires 0 <= i <= |bm|
   decreases |bm| - i
   ensures res.Some? ==> 0 <= res.value < |bm|
   {
