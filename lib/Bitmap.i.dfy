@@ -304,5 +304,11 @@ module Bitmap {
     ensures Inv()
     ensures I() == BitUnion(a.I(), b.I())
     ensures fresh(Repr)
+
+    constructor Clone(a: Bitmap)
+    requires a.Inv()
+    ensures Inv()
+    ensures fresh(Repr)
+    ensures I() == a.I()
   }
 }
