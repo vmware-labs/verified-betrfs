@@ -293,9 +293,10 @@ module Bitmap {
       result := BitsetLemmas.in_set_uint64(b, this.bits[i]);
     }
 
-    method Alloc() returns (res: Option<int>)
+    method Alloc() returns (res: Option<uint64>)
     requires Inv()
-    ensures res == BitAlloc(I())
+    ensures res.Some? <==> BitAlloc(I()).Some?
+    ensures res.Some? ==> res.value as int == BitAlloc(I()).value
 
     constructor Union(a: Bitmap, b: Bitmap)
     requires a.Inv()

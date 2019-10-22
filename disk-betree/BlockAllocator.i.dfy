@@ -228,9 +228,10 @@ module ImplBlockAllocator {
       Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
     }
 
-    method Alloc() returns (res : Option<int>)
+    method Alloc() returns (res : Option<uint64>)
     requires Inv()
-    ensures res == ImplModelBlockAllocator.Alloc(I())
+    ensures res.Some? <==> ImplModelBlockAllocator.Alloc(I()).Some?
+    ensures res.Some? ==> res.value as int == ImplModelBlockAllocator.Alloc(I()).value
     {
       res := full.Alloc();
     }
