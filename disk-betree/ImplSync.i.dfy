@@ -14,9 +14,11 @@ module ImplSync {
   import opened ImplIO
   import opened ImplCache
   import opened ImplDealloc
+  import opened Bounds
   import ImplModelSync
   import ImplModelCache
   import ImplModelDealloc
+  import ImplModelBlockAllocator
   import opened ImplState
 
   import opened Options
@@ -28,25 +30,74 @@ module ImplSync {
 
   import opened NativeTypes
 
-  method AssignRefToLoc(table: MutIndirectionTable, ref: Reference, loc: BC.Location)
-  requires table.Inv()
-  ensures table.Inv()
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in table.Repr :: fresh(r) || r in old(table.Repr)
-  modifies table.Repr
-  ensures table.I() == ImplModelSync.AssignRefToLoc(old(table.I()), ref, loc)
+  method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.W()
+  requires s.ready
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator.I())
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  modifies s.Repr()
+  ensures s.W()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSync.AssignRefToLocEphemeral(Ic(k), old(s.I()), ref, loc)
+  ensures s.ready
   {
-    ImplModelSync.reveal_AssignRefToLoc();
+    ImplModelSync.reveal_AssignRefToLocEphemeral();
+
+    var table := s.ephemeralIndirectionTable;
     var locGraph := table.Get(ref);
     if locGraph.Some? {
       var (oldloc, succ) := locGraph.value;
       if oldloc.None? {
         assume table.Count as nat < 0x10000000000000000 / 8;
         table.Insert(ref, (Some(loc), succ));
+        s.blockAllocator.MarkUsedEphemeral(loc.addr / BlockSizeUint64());
       }
     }
-    //assert IIndirectionTable(table) ==
-    //    old(BC.assignRefToLocation(IIndirectionTable(table), ref, loc));
+  }
+
+  method AssignRefToLocFrozen(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.W()
+  requires s.ready
+  requires s.I().frozenIndirectionTable.Some? ==> s.I().blockAllocator.frozen.Some?
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator.I())
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  modifies s.Repr()
+  ensures s.W()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSync.AssignRefToLocFrozen(Ic(k), old(s.I()), ref, loc)
+  ensures s.ready
+  {
+    ImplModelSync.reveal_AssignRefToLocFrozen();
+
+    if s.frozenIndirectionTable != null {
+      var table := s.frozenIndirectionTable;
+      var locGraph := table.Get(ref);
+      if locGraph.Some? {
+        var (oldloc, succ) := locGraph.value;
+        if oldloc.None? {
+          assume table.Count as nat < 0x10000000000000000 / 8;
+          table.Insert(ref, (Some(loc), succ));
+          s.blockAllocator.MarkUsedFrozen(loc.addr / BlockSizeUint64());
+        }
+      }
+    }
+  }
+
+  method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
+  requires s.W()
+  requires s.ready
+  requires ImplModelBlockAllocator.Inv(s.I().blockAllocator)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  modifies s.Repr()
+  ensures s.W()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSync.AssignIdRefLocOutstanding(Ic(k), old(s.I()), id, ref, loc)
+  ensures s.ready
+  {
+    ImplModelSync.reveal_AssignIdRefLocOutstanding();
+
+    s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
+    s.blockAllocator.MarkUsedOutstanding(loc.addr / BlockSizeUint64());
   }
 
   method FindRefInFrozenWithNoLoc(s: ImplVariables) returns (ref: Option<Reference>)
@@ -107,6 +158,7 @@ module ImplSync {
 
     s.frozenIndirectionTable := clonedEphemeralIndirectionTable;
     s.syncReqs := BC.syncReqs3to2(s.syncReqs);
+    s.blockAllocator.CopyEphemeralToFrozen();
 
     return;
   }
@@ -130,11 +182,11 @@ module ImplSync {
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
 
     if (id.Some?) {
-      AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value);
-      if (s.frozenIndirectionTable != null) {
-        AssignRefToLoc(s.frozenIndirectionTable, ref, loc.value);
-      }
-      s.outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)];
+      IM.reveal_ConsistentBitmap();
+
+      AssignRefToLocEphemeral(k, s, ref, loc.value);
+      AssignRefToLocFrozen(k, s, ref, loc.value);
+      AssignIdRefLocOutstanding(k, s, id.value, ref, loc.value);
     } else {
       print "sync: giving up; write req failed\n";
     }
