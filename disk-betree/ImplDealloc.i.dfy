@@ -7,6 +7,7 @@ module ImplDealloc {
   import opened ImplCache
   import ImplModelDealloc
   import opened ImplState
+  import opened Bounds
 
   import opened Options
   import opened Maps
@@ -70,10 +71,16 @@ module ImplDealloc {
       return;
     }
 
-    s.ephemeralIndirectionTable.Remove(ref);
+    ImplModelCache.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+
+    var oldEntry := s.ephemeralIndirectionTable.RemoveAndGet(ref);
 
     s.lru.Remove(ref);
     s.cache.Remove(ref);
+
+    if oldEntry.Some? && oldEntry.value.0.Some? {
+      s.blockAllocator.MarkFreeEphemeral(oldEntry.value.0.value.addr / BlockSizeUint64());
+    }
 
     assume s.ephemeralIndirectionTable.Contents
         == MapRemove(old(s.ephemeralIndirectionTable.Contents), {ref});
