@@ -57,6 +57,7 @@ module ImplInsert {
       }
     }
 
+    // TODO this isn't necessary because the children don't change
     var root := s.cache.GetOpt(BT.G.Root());
     var children := root.value.children;
 
