@@ -32,10 +32,12 @@ module ImplSplit {
   requires s.ready
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.blockAllocator.Repr
   ensures s.ready
   ensures s.W()
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures s.I() == ImplModelSplit.splitBookkeeping(Ic(k), old(s.I()), left_childref, right_childref, parentref, fused_parent_children, left_child.I(), right_child.I(), slot as int);
   {
     ImplModelSplit.reveal_splitBookkeeping();
