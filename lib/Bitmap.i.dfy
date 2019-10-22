@@ -297,6 +297,28 @@ module Bitmap {
     requires Inv()
     ensures res.Some? <==> BitAlloc(I()).Some?
     ensures res.Some? ==> res.value as int == BitAlloc(I()).value
+    {
+      assume false;
+
+      var i: uint64 := 0;
+      while i < this.bits.Length as uint64
+      {
+        if this.bits[i] != 0xffff_ffff_ffff_ffff {
+          // TODO this could be done faster:
+          var j: uint64 := 0;
+          while j < 64 {
+            if !BitsetLemmas.in_set_uint64(j, this.bits[i]) {
+              res := Some(64 * i + j);
+              return;
+            }
+            j := j + 1;
+          }
+        }
+        i := i + 1;
+      }
+
+      res := None;
+    }
 
     constructor Union(a: Bitmap, b: Bitmap)
     requires a.Inv()
@@ -305,11 +327,32 @@ module Bitmap {
     ensures Inv()
     ensures I() == BitUnion(a.I(), b.I())
     ensures fresh(Repr)
+    {
+      assume false;
+
+      bits := new uint64[a.bits.Length];
+      new;
+
+      var i: uint64 := 0;
+      while i < a.bits.Length as uint64
+      {
+        bits[i] := BitsetLemmas.bit_or_uint64(a.bits[i], b.bits[i]);
+        i := i + 1;
+      }
+
+      Repr := { this, this.bits };
+    }
 
     constructor Clone(a: Bitmap)
     requires a.Inv()
     ensures Inv()
     ensures fresh(Repr)
     ensures I() == a.I()
+    {
+      new;
+      bits := Native.Arrays.newArrayClone(a.bits);
+
+      Repr := { this, this.bits };
+    }
   }
 }

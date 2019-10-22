@@ -235,6 +235,11 @@ module BitsetLemmas {
 
   // uint64
 
+  function method {:opaque} bit_or_uint64(a: uint64, b: uint64) : uint64
+  {
+    bit_or(a as bv64, b as bv64) as uint64
+  }
+
   predicate method {:opaque} in_set_uint64(i: uint64, a: uint64)
   requires i < 64
   {
