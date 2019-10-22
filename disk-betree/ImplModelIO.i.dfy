@@ -51,7 +51,7 @@ module ImplModelIO {
   requires len <= LBAType.BlockSize()
   ensures res.Some? ==> 0 <= res.value.addr as int / BlockSize() < NumBlocks()
   {
-    var i := BlockAllocator.Alloc(s.blockAllocator);
+    var i := ImplModelBlockAllocator.Alloc(s.blockAllocator);
     if i.Some? then
       Some(LBAType.Location((i.value * BlockSize()) as uint64, len))
     else
@@ -69,9 +69,9 @@ module ImplModelIO {
 
     var loc := getFreeLoc(s, len);
     if loc.Some? {
-      var i := BlockAllocator.Alloc(s.blockAllocator);
+      var i := ImplModelBlockAllocator.Alloc(s.blockAllocator);
 
-      BlockAllocator.LemmaAllocResult(s.blockAllocator);
+      ImplModelBlockAllocator.LemmaAllocResult(s.blockAllocator);
       assert !IsLocAllocBitmap(s.blockAllocator.ephemeral, i.value);
       assert s.blockAllocator.frozen.Some? ==>
           !IsLocAllocBitmap(s.blockAllocator.frozen.value, i.value);
@@ -572,7 +572,7 @@ module ImplModelIO {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       var (succ, bm) := InitLocBitmap(ephemeralIndirectionTable);
       if succ then (
-        var blockAllocator := BlockAllocator.InitBlockAllocator(bm);
+        var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
         var persistentIndirectionTable := sector.value.indirectionTable;
         Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), blockAllocator)
       ) else (
@@ -780,11 +780,11 @@ module ImplModelIO {
              .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
              .(syncReqs := BC.syncReqs2to1(s.syncReqs))
-             .(blockAllocator := BlockAllocator.MoveFrozenToPersistent(s.blockAllocator))
+             .(blockAllocator := ImplModelBlockAllocator.MoveFrozenToPersistent(s.blockAllocator))
     ) else if (s.Ready? && id in s.outstandingBlockWrites) then (
       lemmaOutstandingLocIndexValid(k, s, id);
       s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
-       .(blockAllocator := BlockAllocator.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / BlockSize()))
+       .(blockAllocator := ImplModelBlockAllocator.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / BlockSize()))
     ) else (
       s
     )

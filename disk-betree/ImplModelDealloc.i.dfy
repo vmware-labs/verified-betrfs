@@ -45,7 +45,7 @@ module ImplModelDealloc {
       lemmaIndirectionTableLocIndexValid(k, s, ref);
 
       var blockAllocator' := if oldEntry.Some? && oldEntry.value.0.Some?
-        then BlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldEntry.value.0.value.addr as int / BlockSize())
+        then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldEntry.value.0.value.addr as int / BlockSize())
         else s.blockAllocator;
 
       var s' := s
@@ -91,7 +91,7 @@ module ImplModelDealloc {
     var (eph, oldEntry) := MutableMapModel.RemoveAndGet(s.ephemeralIndirectionTable, ref);
 
     var blockAllocator' := if oldEntry.Some? && oldEntry.value.0.Some?
-      then BlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldEntry.value.0.value.addr as int / BlockSize())
+      then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldEntry.value.0.value.addr as int / BlockSize())
       else s.blockAllocator;
 
     freeIndirectionTableLocCorrect(k, s, s', ref,

@@ -39,7 +39,7 @@ module ImplModel {
   import Bitmap
   import UI
   import MutableMapModel
-  import BlockAllocator
+  import ImplModelBlockAllocator
 
   import ReferenceType`Internal
 
@@ -68,7 +68,7 @@ module ImplModel {
         syncReqs: map<uint64, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue,
-        blockAllocator: BlockAllocator.BlockAllocatorModel
+        blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel
       )
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
   datatype Sector =
@@ -100,7 +100,7 @@ module ImplModel {
       frozenIndirectionTable: Option<IndirectionTable>,
       persistentIndirectionTable: IndirectionTable,
       outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
-      blockAllocator: BlockAllocator.BlockAllocatorModel)
+      blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel)
   {
     && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
       <==> IsLocAllocBitmap(blockAllocator.ephemeral, i))
@@ -143,7 +143,7 @@ module ImplModel {
     && MutableMapModel.Inv(ephemeralIndirectionTable)
     && MutableMapModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
-    && BlockAllocator.Inv(s.blockAllocator)
+    && ImplModelBlockAllocator.Inv(s.blockAllocator)
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
   }
