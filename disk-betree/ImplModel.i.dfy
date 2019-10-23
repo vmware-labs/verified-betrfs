@@ -48,8 +48,6 @@ module ImplModel {
   type Message = Messages.Message
   type DiskOp = BBC.DiskOp
 
-  type IndirectionTable = MutableMapModel.LinearHashMap<(Option<BC.Location>, seq<Reference>)>
-
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<Reference>>,
