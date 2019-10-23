@@ -45,9 +45,7 @@ module ImplModelInsert {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value.contents
-      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.contents[BT.G.Root()];
-      && rootInFrozenLbaGraph.0.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
     ) then (
       (s, false)
     ) else (
@@ -76,9 +74,7 @@ module ImplModelInsert {
     reveal_NodeInsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value.contents
-      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value.contents[BT.G.Root()];
-      && rootInFrozenLbaGraph.0.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
     ) {
       assert (s.frozenIndirectionTable.Some? && BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).graph) &&
           !(BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).locs);

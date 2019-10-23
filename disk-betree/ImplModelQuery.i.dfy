@@ -31,7 +31,7 @@ module ImplModelQuery {
   requires s.Ready?
   requires Inv(k, s)
   requires io.IOInit?
-  requires ref in s.ephemeralIndirectionTable.contents
+  requires ref in s.ephemeralIndirectionTable.graph
   requires counter >= 0
   decreases counter
   {
@@ -90,7 +90,7 @@ module ImplModelQuery {
     && s.Ready?
     && Inv(k, s)
     && io.IOInit?
-    && ref in s.ephemeralIndirectionTable.contents
+    && ref in s.ephemeralIndirectionTable.graph
     && counter >= 0
     && (|lookup| == 0 ==> ref == BT.G.Root())
     && (msg.Define? ==> |lookup| > 0)
