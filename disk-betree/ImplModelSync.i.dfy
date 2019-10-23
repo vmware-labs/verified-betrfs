@@ -28,18 +28,18 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires ref !in s.cache
-  requires ref in s.ephemeralIndirectionTable.contents
-  ensures s.ephemeralIndirectionTable.contents[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.graph
+  ensures ref in s.ephemeralIndirectionTable.locs
   {
-    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
+    /*assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
     assert ref in s.cache.Keys + IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
     assert ref !in s.cache.Keys;
-    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
+    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;*/
   }
 
   function {:opaque} AssignRefToLocEphemeral(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
   requires s.Ready?
-  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires ImplModelBlockAllocator.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   ensures s'.Ready?
@@ -49,22 +49,19 @@ module ImplModelSync {
   ensures ImplModelBlockAllocator.Inv(s'.blockAllocator)
   {
     var table := s.ephemeralIndirectionTable;
-    if (ref in table.contents && table.contents[ref].0.None?) then (
-      assume table.count as nat < 0x10000000000000000 / 8;
-      var table' := MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1));
+    var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+    if added then (
       var blockAllocator' := ImplModelBlockAllocator.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
-      var s' := s
-        .(ephemeralIndirectionTable := table')
-        .(blockAllocator := blockAllocator');
-      s'
+      s.(ephemeralIndirectionTable := table')
+       .(blockAllocator := blockAllocator')
     ) else (
-      s
+      s.(ephemeralIndirectionTable := table')
     )
   }
 
   function {:opaque} AssignRefToLocFrozen(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
   requires s.Ready?
-  requires s.frozenIndirectionTable.Some? ==> MutableMapModel.Inv(s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
   requires ImplModelBlockAllocator.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
@@ -74,16 +71,13 @@ module ImplModelSync {
   {
     if s.frozenIndirectionTable.Some? then (
       var table := s.frozenIndirectionTable.value;
-      if (ref in table.contents && table.contents[ref].0.None?) then (
-        assume table.count as nat < 0x10000000000000000 / 8;
-        var table' := MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1));
+      var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+      if added then (
         var blockAllocator' := ImplModelBlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
-        var s' := s
-          .(frozenIndirectionTable := Some(table'))
-          .(blockAllocator := blockAllocator');
-        s'
+        s.(frozenIndirectionTable := Some(table'))
+         .(blockAllocator := blockAllocator')
       ) else (
-        s
+        s.(frozenIndirectionTable := Some(table'))
       )
     ) else (
       s
@@ -166,15 +160,14 @@ module ImplModelSync {
       bm': Bitmap.BitmapModel,
       ref: BT.G.Reference,
       loc: BC.Location)
-  requires MutableMapModel.Inv(indirectionTable)
+  requires IndirectionTableModel.Inv(indirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
           <==> IsLocAllocBitmap(bm, i))
   requires BC.ValidLocationForNode(loc);
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
-  requires indirectionTable.count as nat < 0x10000000000000000 / 8;
-  requires ref in indirectionTable.contents
-  requires indirectionTable.contents[ref].0.None?
-  requires indirectionTable' == MutableMapModel.Insert(indirectionTable, ref, (Some(loc), indirectionTable.contents[ref].1));
+  requires ref in indirectionTable.graph
+  requires ref !in indirectionTable.locs
+  requires (indirectionTable', true) == IndirectionTableModel.AddLocIfPresent(indirectionTable, ref, loc)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   requires Bitmap.Len(bm) == NumBlocks()
   requires bm' == Bitmap.BitSet(bm, loc.addr as int / BlockSize())
@@ -185,7 +178,7 @@ module ImplModelSync {
     Bitmap.reveal_BitSet();
     Bitmap.reveal_IsSet();
 
-    assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
+    //assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
 
     var j := loc.addr as int / BlockSize();
     LBAType.reveal_ValidAddr();
@@ -206,22 +199,22 @@ module ImplModelSync {
     ensures IsLocAllocIndirectionTable(indirectionTable', i)
     {
       if i == j {
-        assert ref in indirectionTable'.contents;
-        assert indirectionTable'.contents[ref].0.Some?;
-        assert indirectionTable'.contents[ref].0.value.addr as int == i * BlockSize() as int;
+        assert ref in indirectionTable'.graph;
+        assert ref in indirectionTable'.locs;
+        assert indirectionTable'.locs[ref].addr as int == i * BlockSize() as int;
         assert IsLocAllocIndirectionTable(indirectionTable', i);
       } else {
         if i == 0 {
           assert IsLocAllocIndirectionTable(indirectionTable', i);
         } else {
           assert IsLocAllocIndirectionTable(indirectionTable, i);
-          var r :| r in indirectionTable.contents && indirectionTable.contents[r].0.Some? &&
-            indirectionTable.contents[r].0.value.addr as int == i * BlockSize() as int;
+          var r :| r in indirectionTable.locs &&
+            indirectionTable.locs[r].addr as int == i * BlockSize() as int;
           assert MapsAgreeOnKey(
             IIndirectionTable(indirectionTable).locs,
             IIndirectionTable(indirectionTable').locs, r);
-          assert r in indirectionTable'.contents && indirectionTable'.contents[r].0.Some? &&
-            indirectionTable'.contents[r].0.value.addr as int == i * BlockSize() as int;
+          assert r in indirectionTable'.locs &&
+            indirectionTable'.locs[r].addr as int == i * BlockSize() as int;
           assert IsLocAllocIndirectionTable(indirectionTable', i);
         }
       }
@@ -230,7 +223,7 @@ module ImplModelSync {
 
   lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
   requires s.Ready?
-  requires MutableMapModel.Inv(s.ephemeralIndirectionTable)
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
   requires ImplModelBlockAllocator.Inv(s.blockAllocator)
@@ -250,9 +243,9 @@ module ImplModelSync {
     var j := loc.addr as int / BlockSize();
 
     var table := s.ephemeralIndirectionTable;
-    if (ref in table.contents && table.contents[ref].0.None?) {
-      assume table.count as nat < 0x10000000000000000 / 8;
-      var table' := MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1));
+    if (ref in table.graph && ref !in table.locs) {
+      var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+      assert added;
       var blockAllocator' := ImplModelBlockAllocator.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
       var s' := s
       .(ephemeralIndirectionTable := table')
@@ -288,7 +281,7 @@ module ImplModelSync {
 
   lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
   requires s.Ready?
-  requires s.frozenIndirectionTable.Some? ==> MutableMapModel.Inv(s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
   requires s.frozenIndirectionTable.Some? ==>
         (forall i: int :: IsLocAllocIndirectionTable(s.frozenIndirectionTable.value, i)
@@ -317,13 +310,14 @@ module ImplModelSync {
     var j := loc.addr as int / BlockSize();
 
     var table := s.frozenIndirectionTable.value;
-    if (ref in table.contents && table.contents[ref].0.None?) {
-      assume table.count as nat < 0x10000000000000000 / 8;
-      var table' := MutableMapModel.Insert(table, ref, (Some(loc), table.contents[ref].1));
+    var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+    if added {
       var blockAllocator' := ImplModelBlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
       var s' := s
-      .(frozenIndirectionTable := Some(table'))
-      .(blockAllocator := blockAllocator');
+        .(frozenIndirectionTable := Some(table'))
+        .(blockAllocator := blockAllocator');
+
+      assert s' == AssignRefToLocFrozen(k, s, ref, loc);
 
       forall i | 0 <= i < NumBlocks()
       ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
@@ -363,10 +357,10 @@ module ImplModelSync {
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
   ensures var ref := FindRefInFrozenWithNoLoc(s);
-    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value.contents)
-    && (ref.Some? ==> s.frozenIndirectionTable.value.contents[ref.value].0.None?)
-    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value.contents
-        :: s.frozenIndirectionTable.value.contents[r].0.Some?)
+    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value.graph)
+    && (ref.Some? ==> ref.value !in s.frozenIndirectionTable.value.locs)
+    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value.graph
+        :: r in s.frozenIndirectionTable.value.locs)
 
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: Constants, s: Variables, io: IO)
@@ -377,9 +371,6 @@ module ImplModelSync {
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.None?
   {
-    var ephemeralTable := s.ephemeralIndirectionTable.contents;
-    var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
-
     var foundDeallocable := FindDeallocable(s);
     FindDeallocableCorrect(s);
 
@@ -407,9 +398,6 @@ module ImplModelSync {
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
     var (s', io') := syncNotFrozen(k, s, io);
-
-    var ephemeralTable := s.ephemeralIndirectionTable.contents;
-    var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
 
     var foundDeallocable := FindDeallocable(s);
     FindDeallocableCorrect(s);
@@ -510,13 +498,13 @@ module ImplModelSync {
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value.contents
-  requires s.frozenIndirectionTable.value.contents[ref].0.None?
+  requires ref in s.frozenIndirectionTable.value.graph
+  requires ref !in s.frozenIndirectionTable.value.locs
   {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if ref in s.ephemeralIndirectionTable.contents && s.ephemeralIndirectionTable.contents[ref].0.Some? then (
+    if ref in s.ephemeralIndirectionTable.locs then (
       // TODO we should be able to prove this is impossible as well
       && s' == s
       && io' == io
@@ -532,8 +520,8 @@ module ImplModelSync {
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value.contents
-  requires s.frozenIndirectionTable.value.contents[ref].0.None?
+  requires ref in s.frozenIndirectionTable.value.graph
+  requires ref !in s.frozenIndirectionTable.value.locs
 
   requires syncFoundInFrozen(k, s, io, ref, s', io')
 
@@ -543,7 +531,7 @@ module ImplModelSync {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if ref in s.ephemeralIndirectionTable.contents && s.ephemeralIndirectionTable.contents[ref].0.Some? {
+    if ref in s.ephemeralIndirectionTable.locs {
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert noop(k, IVars(s), IVars(s));
     } else {

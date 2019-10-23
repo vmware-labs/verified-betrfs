@@ -29,6 +29,7 @@ module IndirectionTableModel {
   datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
 
+  // TODO move bitmap in here?
   datatype IndirectionTable = IndirectionTable(
     t: HashMap,
     locs: map<BT.G.Reference, BC.Location>,
@@ -122,20 +123,23 @@ module IndirectionTableModel {
     IndirectionTable(t, Locs(t), Graph(t))
   }
 
-  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (self' : IndirectionTable)
+  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (IndirectionTable, bool)
   requires Inv(self)
-  ensures Inv(self')
-  ensures self'.graph == self.graph
-  ensures ref in self.graph ==> self'.locs == self.locs[ref := loc]
-  ensures ref !in self.graph ==> self'.locs == self.locs
+  ensures var (self', added) := AddLocIfPresent(self, ref, loc);
+    && Inv(self')
+    && added == (ref in self.graph && ref !in self.locs)
+    && self'.graph == self.graph
+    && (added ==> self'.locs == self.locs[ref := loc])
+    && (!added ==> self'.locs == self.locs)
   {
     assume self.t.count as nat < 0x10000000000000000 / 8;
     var oldEntry := MutableMapModel.Get(self.t, ref);
-    var t := (if oldEntry.Some? then
+    var added := oldEntry.Some? && oldEntry.value.loc.None?;
+    var t := (if added then
       MutableMapModel.Insert(self.t, ref, Entry(Some(loc), oldEntry.value.succs))
     else
       self.t);
-    IndirectionTable(t, Locs(t), Graph(t))
+    (IndirectionTable(t, Locs(t), Graph(t)), added)
   }
 
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)

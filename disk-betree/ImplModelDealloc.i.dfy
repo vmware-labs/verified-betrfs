@@ -120,5 +120,4 @@ module ImplModelDealloc {
     reveal_FindDeallocable();
     IndirectionTableModel.FindDeallocableCorrect(s.ephemeralIndirectionTable);
   }
-
 }
