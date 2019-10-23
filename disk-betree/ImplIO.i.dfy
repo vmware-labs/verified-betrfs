@@ -129,8 +129,7 @@ module ImplIO {
   requires io.initialized();
   requires s.ready
   requires s.WF()
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).contents
-  requires IS.IIndirectionTable(s.ephemeralIndirectionTable).contents[ref].0.Some?
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -141,10 +140,10 @@ module ImplIO {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
     } else {
-      var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-      assert lbaGraph.Some?;
-      var (lba, _) := lbaGraph.value;
-      var id := RequestRead(io, lba.value);
+      var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
+      assert locGraph.Some?;
+      var loc := locGraph.value.loc;
+      var id := RequestRead(io, loc.value);
       s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
     }
   }
@@ -179,54 +178,6 @@ module ImplIO {
     }
   }
 
-  method InitLocBitmap(indirectionTable: MutIndirectionTable)
-  returns (success: bool, bm: Bitmap.Bitmap)
-  requires indirectionTable.Inv()
-  requires BC.WFCompleteIndirectionTable(IM.IIndirectionTable(indirectionTable.I()))
-  ensures bm.Inv()
-  ensures (success, bm.I()) == ImplModelIO.InitLocBitmap(old(indirectionTable.I()))
-  ensures fresh(bm.Repr)
-  {
-    ImplModelIO.reveal_InitLocBitmap();
-
-    bm := new Bitmap.Bitmap(NumBlocksUint64());
-    bm.Set(0);
-    var it := indirectionTable.IterStart();
-    while it.next.Some?
-    invariant indirectionTable.Inv()
-    invariant BC.WFCompleteIndirectionTable(IM.IIndirectionTable(indirectionTable.I()))
-    invariant bm.Inv()
-    invariant MutableMapModel.WFIter(indirectionTable.I(), it)
-    invariant Bitmap.Len(bm.I()) == NumBlocks()
-    invariant ImplModelIO.InitLocBitmapIterate(indirectionTable.I(), it, bm.I())
-           == ImplModelIO.InitLocBitmap(indirectionTable.I())
-    invariant fresh(bm.Repr)
-    decreases it.decreaser
-    {
-      var kv := it.next.value;
-
-      assert kv.0 in IM.IIndirectionTable(indirectionTable.I()).locs;
-
-      var loc: uint64 := kv.1.0.value.addr;
-      var locIndex: uint64 := loc / BlockSizeUint64();
-      if locIndex < NumBlocksUint64() {
-        var isSet := bm.GetIsSet(locIndex);
-        if !isSet {
-          it := indirectionTable.IterInc(it);
-          bm.Set(locIndex);
-        } else {
-          success := false;
-          return;
-        }
-      } else {
-        success := false;
-        return;
-      }
-    }
-
-    success := true;
-  }
-
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires s.W()
   requires io.diskOp().RespReadOp?
@@ -241,7 +192,7 @@ module ImplIO {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone(); // TODO one of these clones is not necessary, we just need to shhow that sector.value.indirectionTable is fresh
 
-      var succ, bm := InitLocBitmap(ephemeralIndirectionTable);
+      var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
       if succ {
         var blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
 
@@ -286,8 +237,8 @@ module ImplIO {
 
     var ref := s.outstandingBlockReads[id].ref;
 
-    var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-    if (lbaGraph.None? || lbaGraph.value.0.None?) {
+    var lbaGraph := s.ephemeralIndirectionTable.GetEntry(ref);
+    if (lbaGraph.None? || lbaGraph.value.loc.None?) {
       print "PageInResp: ref !in lbas\n";
       return;
     }
@@ -300,8 +251,8 @@ module ImplIO {
     assert sector.Some? ==> IS.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
-    var lba := lbaGraph.value.0.value;
-    var graph := lbaGraph.value.1;
+    var lba := lbaGraph.value.loc.value;
+    var graph := lbaGraph.value.succs;
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;

@@ -23,7 +23,7 @@ module ImplLeaf {
   method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
   requires s.ready
-  requires ref in s.ephemeralIndirectionTable.Contents
+  requires ref in s.ephemeralIndirectionTable.I().graph
   requires s.cache.ptr(ref) == Some(node)
   requires node.Inv()
   requires node.children.None?
@@ -36,13 +36,10 @@ module ImplLeaf {
     ImplModelLeaf.reveal_repivotLeaf();
 
     if s.frozenIndirectionTable != null {
-      var lbaGraph := s.frozenIndirectionTable.Get(ref);
-      if lbaGraph.Some? {
-        var (lba, _) := lbaGraph.value;
-        if lba.None? {
-          print "giving up; flush can't run because frozen isn't written";
-          return;
-        }
+      var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
+      if b {
+        print "giving up; repivotLeaf can't run because frozen isn't written";
+        return;
       }
     }
 

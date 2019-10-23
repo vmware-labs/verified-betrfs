@@ -65,6 +65,24 @@ module IndirectionTableImpl {
       Repr := {this} + this.t.Repr;
     }
 
+    constructor(t: HashMap)
+    ensures this.t == t
+    {
+      this.t := t;
+    }
+
+    method Clone()
+    returns (table : IndirectionTable)
+    requires Inv()
+    ensures table.Inv()
+    ensures fresh(table.Repr)
+    ensures table.I() == I()
+    {
+      var t0 := this.t.Clone();
+      table := new IndirectionTable(t0);
+      table.Repr := {table} + table.t.Repr;
+    }
+
     method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
     requires Inv()
     ensures e == IndirectionTableModel.GetEntry(I(), ref)
@@ -212,11 +230,6 @@ module IndirectionTableImpl {
       result := BC.GraphClosed(m');
     }
 
-    constructor(t: HashMap)
-    ensures this.t == t
-    {
-      this.t := t;
-    }
 
     static method ValToIndirectionTable(v: V)
     returns (s : IndirectionTable?)
