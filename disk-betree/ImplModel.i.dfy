@@ -175,7 +175,7 @@ module ImplModel {
   }
   function IIndirectionTable(table: IndirectionTable) : (result: BC.IndirectionTable)
   {
-    BC.IndirectionTable(table.locs, table.graph)
+    IndirectionTableModel.I(table)
   }
   function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<BC.IndirectionTable>)
   {

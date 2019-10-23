@@ -1,4 +1,5 @@
 include "../lib/Maps.s.dfy"
+include "../lib/sequences.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"
@@ -6,16 +7,20 @@ include "../lib/MutableMapModel.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "BlockCacheSystem.i.dfy"
+include "../lib/Marshalling/GenericMarshalling.i.dfy"
 
 module IndirectionTableModel {
   import opened Maps
   import opened Options
+  import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
   import BT = PivotBetreeSpec`Internal
   import BC = BetreeGraphBlockCache
   import LruModel
   import MutableMapModel
+  import LBAType
+  import opened GenericMarshalling
 
   datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
@@ -71,6 +76,11 @@ module IndirectionTableModel {
     && self.graph == Graph(self.t)
   }
 
+  function I(self: IndirectionTable) : BC.IndirectionTable
+  {
+    BC.IndirectionTable(self.locs, self.graph)
+  }
+
   function {:opaque} RemoveLocIfPresent(self: IndirectionTable, ref: BT.G.Reference) : (self' : IndirectionTable)
   requires Inv(self)
   ensures Inv(self')
@@ -117,5 +127,64 @@ module IndirectionTableModel {
     assume self.t.count as nat < 0x10000000000000000 / 8;
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs));
     IndirectionTable(t, Locs(t), Graph(t))
+  }
+
+  function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
+  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+  ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
+  {
+    if |a| == 0 then
+      Some(MutableMapModel.Constructor(1024))
+    else (
+      var res := valToHashMap(DropLast(a));
+      match res {
+        case Some(table) => (
+          var tuple := Last(a);
+          var ref := tuple.t[0].u;
+          var lba := tuple.t[1].u;
+          var len := tuple.t[2].u;
+          var succs := Some(tuple.t[3].ua);
+          match succs {
+            case None => None
+            case Some(succs) => (
+              var loc := LBAType.Location(lba, len);
+              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) then (
+                None
+              ) else (
+                assume table.count as nat < 0x10000000000000000 / 8;
+                Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs)))
+              )
+            )
+          }
+        )
+        case None => None
+      }
+    )
+  }
+
+  function method IndirectionTableGrammar() : G
+  ensures ValidGrammar(IndirectionTableGrammar())
+  {
+    // (Reference, address, len, successor-list) triples
+    GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+  }
+
+  function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
+  requires ValInGrammar(v, IndirectionTableGrammar())
+  ensures s.Some? ==> Inv(s.value)
+  ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
+  {
+    var t := valToHashMap(v.a);
+    match t {
+      case Some(t) => (
+        var res := IndirectionTable(t, Locs(t), Graph(t));
+        if BT.G.Root() in res.graph && BC.GraphClosed(res.graph) then (
+          Some(res)
+        ) else (
+          None
+        )
+      )
+      case None => None
+    }
   }
 }
