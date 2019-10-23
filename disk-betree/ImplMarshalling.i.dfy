@@ -30,6 +30,7 @@ module ImplMarshalling {
   import Crypto
   import Native
   import MutableMapModel
+  import IndirectionTableImpl
 
   import BT = PivotBetreeSpec`Internal
 
@@ -49,87 +50,6 @@ module ImplMarshalling {
   type Sector = IS.Sector
 
   /////// Conversion to PivotNode
-
-  method {:fuel ValInGrammar,3} ValToLocsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
-  requires IMM.valToLocsAndSuccs.requires(a)
-  ensures s.None? ==> IMM.valToLocsAndSuccs(a).None?
-  ensures s.Some? ==> s.value.Inv()
-  ensures s.Some? ==> Some(s.value.I()) == IMM.valToLocsAndSuccs(a)
-  ensures s.Some? ==> s.value.Count as nat == |a|
-  ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
-  ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
-  {
-    assume |a| < 0x1_0000_0000_0000_0000;
-    if |a| as uint64 == 0 {
-      var newHashMap := new MM.ResizingHashMap<(Option<Location>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
-      s := Some(newHashMap);
-      assume s.value.Count as nat == |a|;
-    } else {
-      var res := ValToLocsAndSuccs(a[..|a| as uint64 - 1]);
-      match res {
-        case Some(mutMap) => {
-          var tuple := a[|a| as uint64 - 1];
-          var ref := IMM.valToReference(tuple.t[0 as uint64]);
-          var lba := IMM.valToLBA(tuple.t[1 as uint64]);
-          var len := tuple.t[2 as uint64].u;
-          var succs := IMM.valToChildren(tuple.t[3 as uint64]);
-          match succs {
-            case None => {
-              s := None;
-            }
-            case Some(succs) => {
-              var graphRef := mutMap.Get(ref);
-              var loc := LBAType.Location(lba, len);
-              if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc) {
-                s := None;
-              } else {
-                mutMap.Insert(ref, (Some(loc), succs));
-                s := Some(mutMap);
-                assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
-                assume s.value.Count as nat == |a|;
-              }
-            }
-          }
-        }
-        case None => {
-          s := None;
-        }
-      }
-    }
-  }
-
-  method GraphClosed(table: ImplState.MutIndirectionTable) returns (result: bool)
-    requires table.Inv()
-    requires BC.GraphClosed.requires(IM.IIndirectionTable(table.I()).graph)
-    ensures BC.GraphClosed(IM.IIndirectionTable(table.I()).graph) == result
-  {
-    var m := table.ToMap();
-    var m' := map ref | ref in m :: m[ref].1;
-    result := BC.GraphClosed(m');
-  }
-
-  method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
-  requires IMM.valToIndirectionTable.requires(v)
-  ensures s.None? ==> IMM.valToIndirectionTable(v).None?
-  ensures s.Some? ==> s.value.Inv()
-  ensures s.Some? ==> IMM.valToIndirectionTable(v) == Some(s.value.I())
-  {
-    var res := ValToLocsAndSuccs(v.a);
-    match res {
-      case Some(res) => {
-        var rootRef := res.Get(BT.G.Root());
-        var isGraphClosed := GraphClosed(res);
-        if rootRef.Some? && isGraphClosed {
-          s := Some(res);
-        } else {
-          s := None;
-        }
-      }
-      case None => {
-        s := None;
-      }
-    }
-  }
 
   method IsStrictlySortedKeySeq(a: seq<Key>) returns (b : bool)
   requires |a| < 0x1_0000_0000_0000_0000
@@ -392,10 +312,11 @@ module ImplMarshalling {
   ensures MapOption(s, IS.ISector) == IMM.valToSector(v)
   {
     if v.c == 0 {
-      var mutMap := ValToIndirectionTable(v.val);
-      match mutMap {
-        case Some(s) => return Some(ImplState.SectorIndirectionTable(s));
-        case None => return None;
+      var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
+      if mutMap != null {
+        return Some(ImplState.SectorIndirectionTable(mutMap));
+      } else {
+        return None;
       }
     } else {
       var node := ValToNode(v.val);
@@ -623,58 +544,10 @@ module ImplMarshalling {
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
   {
     match sector {
-      case SectorIndirectionTable(mutMap) => {
-        assert forall r | r in mutMap.I().contents :: r in IM.IIndirectionTable(sector.indirectionTable.I()).locs
-            ==> mutMap.I().contents[r].0.Some? && BC.ValidLocationForNode(mutMap.I().contents[r].0.value);
-        if mutMap.Count < 0x2000_0000_0000_0000 {
-          var a: array<V> := new V[mutMap.Count as uint64];
-          var it := mutMap.IterStart();
-          var i := 0;
-          ghost var partial := map[];
-          while it.next.Some?
-          invariant 0 <= i <= a.Length
-          invariant MutableMapModel.WFIter(mutMap.I(), it);
-          invariant forall j | 0 <= j < i :: ValidVal(a[j])
-          invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-          // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant IMM.valToLocsAndSuccs(a[..i]).Some?
-          invariant IMM.valToLocsAndSuccs(a[..i]).value.contents == partial
-          invariant |partial.Keys| == i as nat
-          invariant partial.Keys == it.s
-          invariant partial.Keys <= mutMap.I().contents.Keys
-          invariant forall r | r in partial :: r in mutMap.I().contents && partial[r] == mutMap.I().contents[r]
-          // NOALIAS/CONST mutMap doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant mutMap.I().contents == old(mutMap.I().contents)
-          decreases it.decreaser
-          {
-            var (ref, locOptGraph: (Option<LBAType.Location>, seq<Reference>)) := it.next.value;
-            // NOTE: deconstructing in two steps to work around c# translation bug
-            var (locOpt, graph) := locOptGraph;
-            var loc := locOpt.value;
-            var childrenVal := VUint64Array(graph);
-
-            MutableMapModel.LemmaIterIndexLtCount(mutMap.I(), it);
-
-            // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
-            assume |graph| < 0x1_0000_0000_0000_0000;
-            assert ValidVal(VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]));
-
-            // == mutation ==
-            partial := partial[ref := (locOpt, graph)];
-            a[i] := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]);
-            i := i + 1;
-            it := mutMap.IterInc(it);
-            // ==============
-
-            assert a[..i-1] == DropLast(a[..i]); // observe
-          }
-          /* (doc) assert |partial.Keys| == |mutMap.I().contents.Keys|; */
-          SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.I().contents.Keys);
-
-          assert partial == ImplState.IIndirectionTable(mutMap).contents; // observe
-          assert a[..i] == a[..]; // observe
-          v := Some(VCase(0, VArray(a[..])));
-          return;
+      case SectorIndirectionTable(indirectionTable) => {
+        var v := indirectionTable.indirectionTableToVal();
+        if v.Some? {
+          return Some(VCase(0, v.value));
         } else {
           return None;
         }

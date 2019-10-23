@@ -44,14 +44,9 @@ module ImplSync {
     ImplModelSync.reveal_AssignRefToLocEphemeral();
 
     var table := s.ephemeralIndirectionTable;
-    var locGraph := table.Get(ref);
-    if locGraph.Some? {
-      var (oldloc, succ) := locGraph.value;
-      if oldloc.None? {
-        assume table.Count as nat < 0x10000000000000000 / 8;
-        table.Insert(ref, (Some(loc), succ));
-        s.blockAllocator.MarkUsedEphemeral(loc.addr / BlockSizeUint64());
-      }
+    var added := table.AddLocIfPresent(ref, loc);
+    if added {
+      s.blockAllocator.MarkUsedEphemeral(loc.addr / BlockSizeUint64());
     }
   }
 
@@ -71,14 +66,9 @@ module ImplSync {
 
     if s.frozenIndirectionTable != null {
       var table := s.frozenIndirectionTable;
-      var locGraph := table.Get(ref);
-      if locGraph.Some? {
-        var (oldloc, succ) := locGraph.value;
-        if oldloc.None? {
-          assume table.Count as nat < 0x10000000000000000 / 8;
-          table.Insert(ref, (Some(loc), succ));
-          s.blockAllocator.MarkUsedFrozen(loc.addr / BlockSizeUint64());
-        }
+      var added := table.AddLocIfPresent(ref, loc);
+      if added {
+        s.blockAllocator.MarkUsedFrozen(loc.addr / BlockSizeUint64());
       }
     }
   }
@@ -108,7 +98,7 @@ module ImplSync {
   {
     assume false;
     // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var frozenTable := s.frozenIndirectionTable.ToMap();
+    var frozenTable := s.frozenIndirectionTable.t.ToMap();
     var frozenRefs := SetToSeq(frozenTable.Keys);
 
     assume |frozenRefs| < 0x1_0000_0000_0000_0000;
@@ -121,9 +111,9 @@ module ImplSync {
         && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs)
     {
       var ref := frozenRefs[i];
-      var lbaGraph := s.frozenIndirectionTable.Get(ref);
+      var lbaGraph := s.frozenIndirectionTable.t.Get(ref);
       assert lbaGraph.Some?;
-      var (lba, _) := lbaGraph.value;
+      var lba := lbaGraph.value.loc;
       if lba.None? {
         return Some(ref);
       }
@@ -202,8 +192,8 @@ module ImplSync {
   requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable != null
-  requires ref in s.frozenIndirectionTable.Contents
-  requires s.frozenIndirectionTable.Contents[ref].0.None?
+  requires ref in s.frozenIndirectionTable.I().graph
+  requires ref !in s.frozenIndirectionTable.I().locs
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -213,8 +203,8 @@ module ImplSync {
     assert ref in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
     assert ref !in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
 
-    var ephemeralRef := s.ephemeralIndirectionTable.Get(ref);
-    if ephemeralRef.Some? && ephemeralRef.value.0.Some? {
+    var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
+    if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
       // TODO we should be able to prove this is impossible as well
       print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
       return;

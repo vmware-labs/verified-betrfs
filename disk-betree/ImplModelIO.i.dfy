@@ -257,13 +257,12 @@ module ImplModelIO {
   : (res : (Variables, IO))
   requires s.Ready?
   requires io.IOInit?
-  requires ref in s.ephemeralIndirectionTable.contents;
-  requires s.ephemeralIndirectionTable.contents[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.locs;
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
       (s, io)
     ) else (
-      var loc := s.ephemeralIndirectionTable.contents[ref].0.value;
+      var loc := s.ephemeralIndirectionTable.locs[ref];
       var (id, io') := RequestRead(io, loc);
       var s' := s
         .(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
@@ -276,8 +275,7 @@ module ImplModelIO {
   requires s.Ready?
   requires WFVars(s)
   requires BBC.Inv(Ik(k), IVars(s))
-  requires ref in s.ephemeralIndirectionTable.contents;
-  requires s.ephemeralIndirectionTable.contents[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.locs;
   requires ref !in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures var (s', io') := PageInReq(k, s, io, ref);
@@ -287,7 +285,7 @@ module ImplModelIO {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       assert noop(k, IVars(s), IVars(s));
     } else {
-      var loc := s.ephemeralIndirectionTable.contents[ref].0.value;
+      var loc := s.ephemeralIndirectionTable.locs[ref];
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert BC.ValidLocationForNode(loc);
       var (id, io') := RequestRead(io, loc);
@@ -340,228 +338,6 @@ module ImplModelIO {
     D.reveal_ChecksumChecksOut();
   }
 
-  function InitLocBitmapIterate(indirectionTable: IndirectionTable,
-      it: MutableMapModel.Iterator<(Option<BC.Location>, seq<BT.G.Reference>)>,
-      bm: Bitmap.BitmapModel)
-  : (res : (bool, Bitmap.BitmapModel))
-  requires MutableMapModel.Inv(indirectionTable)
-  requires MutableMapModel.WFIter(indirectionTable, it)
-  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
-  requires Bitmap.Len(bm) == NumBlocks()
-  ensures Bitmap.Len(res.1) == NumBlocks()
-  decreases it.decreaser
-  {
-    if it.next.None? then (
-      (true, bm)
-    ) else (
-      var kv := it.next.value;
-      assert kv.0 in IIndirectionTable(indirectionTable).locs;
-
-      var loc: uint64 := kv.1.0.value.addr;
-      var locIndex: uint64 := loc / BlockSize() as uint64;
-      if locIndex < NumBlocks() as uint64 && !Bitmap.IsSet(bm, locIndex as int) then (
-        InitLocBitmapIterate(indirectionTable,
-            MutableMapModel.IterInc(indirectionTable, it),
-            Bitmap.BitSet(bm, locIndex as int))
-      ) else (
-        (false, bm)
-      )
-    )
-  }
-
-  function {:opaque} InitLocBitmap(indirectionTable: IndirectionTable) : (res : (bool, Bitmap.BitmapModel))
-  requires MutableMapModel.Inv(indirectionTable)
-  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
-  ensures Bitmap.Len(res.1) == NumBlocks()
-  {
-    var bm := Bitmap.EmptyBitmap(NumBlocks());
-    var bm' := Bitmap.BitSet(bm, 0);
-    InitLocBitmapIterate(indirectionTable,
-        MutableMapModel.IterStart(indirectionTable),
-        bm')
-  }
-
-  predicate IsLocAllocIndirectionTablePartial(indirectionTable: IndirectionTable, i: int, s: set<uint64>)
-  {
-    || i == 0 // block 0 is always implicitly allocated
-    || !(
-      forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in s ::
-        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int
-    )
-  }
-
-  lemma InitLocBitmapIterateCorrect(indirectionTable: IndirectionTable,
-      it: MutableMapModel.Iterator<(Option<BC.Location>, seq<BT.G.Reference>)>,
-      bm: Bitmap.BitmapModel)
-  requires InitLocBitmapIterate.requires(indirectionTable, it, bm);
-  requires (forall i: int ::
-        (IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)) <==> IsLocAllocBitmap(bm, i)
-      )
-  requires 
-    forall r1, r2 | r1 in IIndirectionTable(indirectionTable).locs && r2 in IIndirectionTable(indirectionTable).locs ::
-        r1 in it.s && r2 in it.s ==>
-        BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2)
-  ensures var (succ, bm') := InitLocBitmapIterate(indirectionTable, it, bm);
-    (succ ==>
-      && (forall i: int ::
-        (IsLocAllocIndirectionTable(indirectionTable, i)
-        <==> IsLocAllocBitmap(bm', i)
-      ))
-      && BC.AllLocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable))
-    )
-  decreases it.decreaser
-  {
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
-
-    var (succ, bm') := InitLocBitmapIterate(indirectionTable, it, bm);
-    if it.next.None? {
-      forall i: int | IsLocAllocIndirectionTable(indirectionTable, i)
-      ensures IsLocAllocBitmap(bm', i)
-      {
-      }
-
-      forall i: int
-      | IsLocAllocBitmap(bm', i)
-      ensures IsLocAllocIndirectionTable(indirectionTable, i)
-      {
-      }
-    } else {
-      if (succ) {
-        var kv := it.next.value;
-        assert kv.0 in IIndirectionTable(indirectionTable).locs;
-        var loc: uint64 := kv.1.0.value.addr;
-        var locIndex: uint64 := loc / BlockSize() as uint64;
-
-        //assert IIndirectionTable(indirectionTable).locs[kv.0] == kv.1.0.value;
-        LBAType.reveal_ValidAddr();
-        assert BC.ValidLocationForNode(kv.1.0.value);
-        assert locIndex as int * BlockSize() == loc as int;
-
-        //assert locIndex < NumBlocks() as uint64;
-        //assert !Bitmap.IsSet(bm, locIndex as int);
-
-        var bm0 := Bitmap.BitSet(bm, locIndex as int);
-        var it0 := MutableMapModel.IterInc(indirectionTable, it);
-
-        forall i: int
-        | IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s)
-        ensures IsLocAllocBitmap(bm0, i)
-        {
-          // This triggers all the right stuff:
-          if IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s) { }
-          /*
-          if i != 0 {
-            var ref :| ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in it0.s && indirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
-            if (ref == kv.0) {
-              assert IsLocAllocBitmap(bm0, i);
-            } else {
-              assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s);
-              assert IsLocAllocBitmap(bm0, i);
-            }
-          } else {
-            assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s);
-          }
-          */
-        }
-
-        forall i: int
-        | IsLocAllocBitmap(bm0, i)
-        ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s)
-        {
-          if IsLocAllocBitmap(bm, i) { }
-          if IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s) { }
-
-          if i == locIndex as int {
-            var ref := kv.0;
-            assert ref in indirectionTable.contents;
-            assert indirectionTable.contents[ref].0.Some?;
-            assert ref in it0.s;
-            assert indirectionTable.contents[ref] == kv.1;
-            assert indirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
-
-            assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s);
-          } else {
-            assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s);
-          }
-        }
-
-        forall r1, r2 | r1 in IIndirectionTable(indirectionTable).locs && r2 in IIndirectionTable(indirectionTable).locs && r1 in it0.s && r2 in it0.s
-        ensures BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2)
-        {
-          if r1 != r2 {
-            if r1 in it.s && r2 in it.s {
-              assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
-            } else {
-              if IIndirectionTable(indirectionTable).locs[r1].addr == IIndirectionTable(indirectionTable).locs[r2].addr {
-                var j1 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r1].addr);
-                var j2 := LBAType.ValidAddrDivisor(IIndirectionTable(indirectionTable).locs[r2].addr);
-                if r1 !in it.s {
-                  assert r2 in it.s;
-                  assert !Bitmap.IsSet(bm, j1);
-                  assert IsLocAllocBitmap(bm, j2);
-                  assert Bitmap.IsSet(bm, j2);
-                  assert false;
-                } else {
-                  assert r1 in it.s;
-                  assert !Bitmap.IsSet(bm, j2);
-                  assert IsLocAllocBitmap(bm, j1);
-                  assert Bitmap.IsSet(bm, j1);
-                  assert false;
-                }
-              } else {
-                assert BC.LocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable), r1, r2);
-              }
-            }
-          }
-        }
-
-        InitLocBitmapIterateCorrect(indirectionTable, it0, bm0);
-        assert (succ, bm') == InitLocBitmapIterate(indirectionTable, it0, bm0);
-      }
-    }
-  }
-
-  lemma InitLocBitmapCorrect(indirectionTable: IndirectionTable)
-  requires MutableMapModel.Inv(indirectionTable)
-  requires BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
-  ensures var (succ, bm) := InitLocBitmap(indirectionTable);
-    (succ ==>
-      && (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
-        <==> IsLocAllocBitmap(bm, i)
-      )
-      && BC.AllLocationsForDifferentRefsDontOverlap(IIndirectionTable(indirectionTable))
-    )
-  {
-    reveal_InitLocBitmap();
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
-
-    var it := MutableMapModel.IterStart(indirectionTable);
-
-    var bm := Bitmap.EmptyBitmap(NumBlocks());
-    var bm' := Bitmap.BitSet(bm, 0);
-
-    /*forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
-    ensures IsLocAllocBitmap(bm', i)
-    {
-      assert i == 0;
-    }*/
-
-    forall i: int | IsLocAllocBitmap(bm', i)
-    ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
-    {
-      if i != 0 {
-        assert Bitmap.IsSet(bm', i)
-            == Bitmap.IsSet(bm, i)
-            == false;
-      }
-      assert i == 0;
-    }
-
-    InitLocBitmapIterateCorrect(indirectionTable, it, bm');
-  }
-
   function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
   : (s' : Variables)
   requires diskOp(io).RespReadOp?
@@ -570,7 +346,7 @@ module ImplModelIO {
     var (id, sector) := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var (succ, bm) := InitLocBitmap(ephemeralIndirectionTable);
+      var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
       if succ then (
         var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
         var persistentIndirectionTable := sector.value.indirectionTable;
@@ -601,12 +377,12 @@ module ImplModelIO {
     var s' := PageInIndirectionTableResp(k, s, io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var (succ, bm) := InitLocBitmap(ephemeralIndirectionTable);
+      var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
       if succ {
         WeightBucketEmpty();
 
         reveal_ConsistentBitmap();
-        InitLocBitmapCorrect(ephemeralIndirectionTable);
+        IndirectionTableModel.InitLocBitmapCorrect(ephemeralIndirectionTable);
         assert ConsistentBitmap(s'.ephemeralIndirectionTable, s'.frozenIndirectionTable,
           s'.persistentIndirectionTable, s'.outstandingBlockWrites, s'.blockAllocator);
 
@@ -629,6 +405,7 @@ module ImplModelIO {
   : (s': Variables)
   requires diskOp(io).RespReadOp?
   requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   {
     var (id, sector) := ReadSector(io);
 
@@ -640,14 +417,14 @@ module ImplModelIO {
 
       var ref := s.outstandingBlockReads[id].ref;
 
-      var locGraph := MapLookupOption(s.ephemeralIndirectionTable.contents, ref);
-      if (locGraph.None? || locGraph.value.0.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
+      var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
+      if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
         s
       ) else (
-        var graph := locGraph.value.1;
+        var succs := locGraph.value.succs;
         if (sector.Some? && sector.value.SectorBlock?) then (
           var node := sector.value.block;
-          if (graph == (if node.children.Some? then node.children.value else [])
+          if (succs == (if node.children.Some? then node.children.value else [])
               && id in s.outstandingBlockReads) then (
             s.(cache := s.cache[ref := sector.value.block])
              .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id))
@@ -687,17 +464,17 @@ module ImplModelIO {
 
     var ref := s.outstandingBlockReads[id].ref;
     
-    var locGraph := MapLookupOption(s.ephemeralIndirectionTable.contents, ref);
-    if (locGraph.None? || locGraph.value.0.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
+    var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
+    if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
       return;
     }
 
-    var graph := locGraph.value.1;
+    var succs := locGraph.value.succs;
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
-      if (graph == (if node.children.Some? then node.children.value else [])
+      if (succs == (if node.children.Some? then node.children.value else [])
           && id in s.outstandingBlockReads) {
         WeightBucketEmpty();
 
@@ -720,6 +497,7 @@ module ImplModelIO {
   function readResponse(k: Constants, s: Variables, io: IO)
   : (s': Variables)
   requires diskOp(io).RespReadOp?
+  requires s.Ready? ==> IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   {
     if (s.Unready?) then (
       PageInIndirectionTableResp(k, s, io)

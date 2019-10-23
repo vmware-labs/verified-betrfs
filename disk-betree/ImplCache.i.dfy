@@ -31,7 +31,7 @@ module ImplCache {
            == ImplModelCache.getFreeRef(s.I())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
-      var lookup := s.ephemeralIndirectionTable.Get(i);
+      var lookup := s.ephemeralIndirectionTable.GetEntry(i);
       if lookup.None? {
         var cacheLookup := s.cache.GetOpt(i);
         if cacheLookup.None? {
@@ -63,7 +63,7 @@ module ImplCache {
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
-        var lookup := s.ephemeralIndirectionTable.Get(i);
+        var lookup := s.ephemeralIndirectionTable.GetEntry(i);
         if lookup.None? {
           var cacheLookup := s.cache.GetOpt(i);
           if cacheLookup.None? {
@@ -98,14 +98,12 @@ module ImplCache {
 
     ImplModelCache.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
 
-    // TODO how do we deal with this?
-    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
-    var oldEntry := s.ephemeralIndirectionTable.InsertAndGetOld(ref, (None, if children.Some? then children.value else []));
+    var oldLoc := s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
 
     s.lru.Use(ref);
 
-    if oldEntry.Some? && oldEntry.value.0.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldEntry.value.0.value.addr / BlockSizeUint64());
+    if oldLoc.Some? {
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
     }
 
     LruModel.LruUse(old(s.lru.Queue), ref);

@@ -21,7 +21,7 @@ module ImplMarshallingModel {
   import KVList
   import Crypto
   import Native
-  import MutableMapModel
+  import IndirectionTableModel
 
   import BT = PivotBetreeSpec`Internal
 
@@ -49,13 +49,6 @@ module ImplMarshallingModel {
 
   /////// Grammar
 
-  function method IndirectionTableGrammar() : G
-  ensures ValidGrammar(IndirectionTableGrammar())
-  {
-    // (Reference, address, len, successor-list) triples
-    GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-  }
-
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
@@ -78,7 +71,7 @@ module ImplMarshallingModel {
   function method SectorGrammar() : G
   ensures ValidGrammar(SectorGrammar())
   {
-    GTaggedUnion([IndirectionTableGrammar(), PivotNodeGrammar()])    
+    GTaggedUnion([IndirectionTableModel.IndirectionTableGrammar(), PivotNodeGrammar()])    
   }
 
   /////// Conversion to PivotNode
@@ -101,56 +94,6 @@ module ImplMarshallingModel {
     Some(v.ua)
   }
 
-  function {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<IM.IndirectionTable>)
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-  ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.0.Some? && BC.ValidLocationForNode(v.0.value)
-  {
-    if |a| == 0 then
-      Some(MutableMapModel.Constructor(1024))
-    else (
-      var res := valToLocsAndSuccs(DropLast(a));
-      match res {
-        case Some(table) => (
-          var tuple := Last(a);
-          var ref := valToReference(tuple.t[0]);
-          var lba := valToLBA(tuple.t[1]);
-          var len := tuple.t[2].u;
-          var succs := valToChildren(tuple.t[3]);
-          match succs {
-            case None => None
-            case Some(succs) => (
-              var loc := LBAType.Location(lba, len);
-              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) then (
-                None
-              ) else (
-                assume table.count as nat < 0x10000000000000000 / 8;
-                Some(MutableMapModel.Insert(table, ref, (Some(loc), succs)))
-              )
-            )
-          }
-        )
-        case None => None
-      }
-    )
-  }
-
-  function valToIndirectionTable(v: V) : (s : Option<IM.IndirectionTable>)
-  requires ValInGrammar(v, IndirectionTableGrammar())
-  ensures s.Some? ==> BC.WFCompleteIndirectionTable(IM.IIndirectionTable(s.value))
-  {
-    var res := valToLocsAndSuccs(v.a);
-    match res {
-      case Some(res) => (
-        var graph := IM.IIndirectionTable(res).graph;
-        if BT.G.Root() in graph && BC.GraphClosed(graph) then (
-          Some(res)
-        ) else (
-          None
-        )
-      )
-      case None => None
-    }
-  }
 
   function valToUint64Seq(v: V) : (s : seq<uint64>)
   requires ValInGrammar(v, GUint64Array)
@@ -329,7 +272,7 @@ module ImplMarshallingModel {
   requires ValInGrammar(v, SectorGrammar())
   {
     if v.c == 0 then (
-      match valToIndirectionTable(v.val) {
+      match IndirectionTableModel.valToIndirectionTable(v.val) {
         case Some(s) => Some(IM.SectorIndirectionTable(s))
         case None => None
       }

@@ -13,6 +13,7 @@ module Marshalling {
   import M = ValueMessage`Internal
   import Pivots = PivotsLib
   import KVList
+  import IndirectionTableModel
 
   type Reference = BC.Reference
   type LBA = BC.LBA
@@ -23,10 +24,10 @@ module Marshalling {
   /////// Conversion to PivotNode
 
   function valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
-  requires ValInGrammar(v, IMM.IndirectionTableGrammar())
+  requires ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value)
   {
-    MapOption(IMM.valToIndirectionTable(v), IM.IIndirectionTable)
+    MapOption(IndirectionTableModel.valToIndirectionTable(v), IM.IIndirectionTable)
   }
 
   function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<map<Key, Message>>)

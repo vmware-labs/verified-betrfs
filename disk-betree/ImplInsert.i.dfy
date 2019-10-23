@@ -45,17 +45,14 @@ module ImplInsert {
     ImplModelInsert.reveal_InsertKeyValue();
 
     if s.frozenIndirectionTable != null {
-      var rootInFrozenLbaGraph := s.frozenIndirectionTable.Get(BT.G.Root());
-      if (
-        && rootInFrozenLbaGraph.Some?
-        && rootInFrozenLbaGraph.value.0.None?
-      ) {
-        // TODO write out the root here instead of giving up
+      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      if b {
         success := false;
-        print "giving up; can't dirty root when frozen is not written yet\n";
+        print "giving up; can't dirty root because frozen isn't written";
         return;
       }
     }
+
 
     // TODO this isn't necessary because the children don't change
     var root := s.cache.GetOpt(BT.G.Root());
@@ -63,9 +60,6 @@ module ImplInsert {
 
     var msg := Messages.Define(value);
     s.cache.InsertKeyValue(BT.G.Root(), key, msg);
-
-    // TODO how do we deal with this?
-    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
 
     writeBookkeeping(k, s, BT.G.Root(), children);
 
