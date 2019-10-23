@@ -35,13 +35,10 @@ module ImplGrow {
     assert s.blockAllocator.Repr <= s.Repr();
 
     if s.frozenIndirectionTable != null {
-      var rootLbaGraph := s.frozenIndirectionTable.Get(BT.G.Root());
-      if rootLbaGraph.Some? {
-        var (lba, _) := rootLbaGraph.value;
-        if lba.None? {
-          print "giving up; grow can't run because frozen isn't written\n";
-          return;
-        }
+      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      if b {
+        print "giving up; grow can't run because frozen isn't written";
+        return;
       }
     }
 

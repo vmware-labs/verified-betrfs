@@ -31,14 +31,14 @@ module ImplFlush {
 
   requires Some(child) == s.cache.ptr(childref)
 
-  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable).contents
+  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires parentref in s.cache.I()
 
   requires s.cache.I()[parentref].children.Some?
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
 
-  requires childref in IIndirectionTable(s.ephemeralIndirectionTable).contents
+  requires childref in IIndirectionTable(s.ephemeralIndirectionTable).graph
 
   modifies s.Repr()
 
@@ -47,15 +47,13 @@ module ImplFlush {
   ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
   {
     if s.frozenIndirectionTable != null {
-      var lbaGraph := s.frozenIndirectionTable.Get(parentref);
-      if lbaGraph.Some? {
-        var (lba, _) := lbaGraph.value;
-        if lba.None? {
-          print "giving up; flush can't run because frozen isn't written";
-          return;
-        }
+      var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
+      if b {
+        print "giving up; flush can't run because frozen isn't written";
+        return;
       }
     }
+
 
     //Native.BenchmarkingUtil.start();
 
