@@ -115,8 +115,8 @@ module ImplSplit {
   method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: uint64)
   requires s.ready
   requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable.Contents
-  requires parentref in s.ephemeralIndirectionTable.Contents
+  requires ref in s.ephemeralIndirectionTable.I().graph
+  requires parentref in s.ephemeralIndirectionTable.I().graph
   requires s.cache.ptr(ref).Some?
   requires s.cache.ptr(parentref).Some?
   requires s.cache.I()[parentref].children.Some?
@@ -130,13 +130,10 @@ module ImplSplit {
     ImplModelSplit.reveal_doSplit();
 
     if s.frozenIndirectionTable != null {
-      var lbaGraph := s.frozenIndirectionTable.Get(parentref);
-      if lbaGraph.Some? {
-        var (lba, _) := lbaGraph.value;
-        if lba.None? {
-          print "giving up; doSplit can't run because frozen isn't written";
-          return;
-        }
+      var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
+      if b {
+        print "giving up; split can't run because frozen isn't written";
+        return;
       }
     }
 
