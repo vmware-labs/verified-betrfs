@@ -29,23 +29,23 @@ module ImplModelEvict {
   requires s.Ready?
   {
     || (
-      && ref in s.ephemeralIndirectionTable.contents
-      && s.ephemeralIndirectionTable.contents[ref].0.None?
+      && ref in s.ephemeralIndirectionTable.graph
+      && ref !in s.ephemeralIndirectionTable.locs
     )
     || (
       && s.frozenIndirectionTable.Some?
-      && ref in s.frozenIndirectionTable.value.contents
-      && s.frozenIndirectionTable.value.contents[ref].0.None?
+      && ref in s.frozenIndirectionTable.value.graph
+      && ref !in s.frozenIndirectionTable.value.locs
     )
   }
 
   predicate CanEvict(s: Variables, ref: BT.G.Reference)
   requires s.Ready?
-  requires ref in s.ephemeralIndirectionTable.contents ==>
-      s.ephemeralIndirectionTable.contents[ref].0.Some?
+  requires ref in s.ephemeralIndirectionTable.graph ==>
+      ref in s.ephemeralIndirectionTable.locs
   {
-    && (ref in s.ephemeralIndirectionTable.contents ==>
-      && BC.OutstandingWrite(ref, s.ephemeralIndirectionTable.contents[ref].0.value) !in s.outstandingBlockWrites.Values
+    && (ref in s.ephemeralIndirectionTable.graph ==>
+      && BC.OutstandingWrite(ref, s.ephemeralIndirectionTable.locs[ref]) !in s.outstandingBlockWrites.Values
     )
   }
 
