@@ -12,6 +12,7 @@ include "../lib/Bitmap.i.dfy"
 
 module IndirectionTableModel {
   import opened Maps
+  import opened Sets
   import opened Options
   import opened Sequences
   import opened NativeTypes
@@ -135,6 +136,22 @@ module IndirectionTableModel {
     else
       self.t);
     IndirectionTable(t, Locs(t), Graph(t))
+  }
+
+  function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
+    : (res : (IndirectionTable, Option<BC.Location>))
+  requires Inv(self)
+  ensures var (self', oldLoc) := res;
+    && Inv(self')
+    && self'.graph == MapRemove1(self.graph, ref)
+    && self'.locs == MapRemove1(self.locs, ref)
+    && (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
+    && (ref !in self.locs ==> oldLoc == None)
+  {
+    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
+    var self' := IndirectionTable(t, Locs(t), Graph(t));
+    var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
+    (self', oldLoc)
   }
 
   /*function updateRefcountsInc(garbageQueue: LruModel.LruQueue, refcounts: map<BT.G.Reference, uint64>, oldChildren: seq<BT.G.Reference, uint64>, newChildren: seq<BT.G.Reference>, idx: uint64)
@@ -455,5 +472,84 @@ module IndirectionTableModel {
     }
 
     InitLocBitmapIterateCorrect(indirectionTable, it, bm');
+  }
+
+  ///// Dealloc stuff
+
+  predicate deallocable(self: IndirectionTable, ref: BT.G.Reference)
+  {
+    && ref in I(self).graph
+    && ref != BT.G.Root()
+    && (forall r | r in I(self).graph :: ref !in I(self).graph[r])
+  }
+
+  function FindDeallocableIterate(self: IndirectionTable, ephemeralRefs: seq<BT.G.Reference>, i: uint64)
+  : (ref: Option<BT.G.Reference>)
+  requires 0 <= i as int <= |ephemeralRefs|
+  requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  {
+    if i == |ephemeralRefs| as uint64 then (
+      None
+    ) else (
+      var ref := ephemeralRefs[i];
+      var isDeallocable := deallocable(self, ref);
+      if isDeallocable then (
+        Some(ref)
+      ) else (
+        FindDeallocableIterate(self, ephemeralRefs, i + 1)
+      )
+    )
+  }
+
+  function {:opaque} FindDeallocable(self: IndirectionTable)
+  : (ref: Option<BT.G.Reference>)
+  requires Inv(self)
+  {
+    // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
+    var ephemeralRefs := setToSeq(self.t.contents.Keys);
+
+    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
+
+    FindDeallocableIterate(self, ephemeralRefs, 0)
+  }
+
+  lemma FindDeallocableIterateCorrect(self: IndirectionTable, ephemeralRefs: seq<BT.G.Reference>, i: uint64)
+  requires Inv(self)
+  requires 0 <= i as int <= |ephemeralRefs|
+  requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
+  requires ephemeralRefs == setToSeq(self.t.contents.Keys)
+  requires forall k : nat | k < i as nat :: (
+        && ephemeralRefs[k] in I(self).graph
+        && !deallocable(self, ephemeralRefs[k]))
+  ensures var ref := FindDeallocableIterate(self, ephemeralRefs, i);
+      && (ref.Some? ==> ref.value in I(self).graph)
+      && (ref.Some? ==> deallocable(self, ref.value))
+      && (ref.None? ==> forall r | r in I(self).graph :: !deallocable(self, r))
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  {
+    if i == |ephemeralRefs| as uint64 {
+      assert forall r | r in I(self).graph :: !deallocable(self, r);
+    } else {
+      var ref := ephemeralRefs[i];
+      var isDeallocable := deallocable(self, ref);
+      if isDeallocable {
+      } else {
+        FindDeallocableIterateCorrect(self, ephemeralRefs, i + 1);
+      }
+    }
+  }
+
+  lemma FindDeallocableCorrect(self: IndirectionTable)
+  requires Inv(self)
+  ensures var ref := FindDeallocable(self);
+      && (ref.Some? ==> ref.value in I(self).graph)
+      && (ref.Some? ==> deallocable(self, ref.value))
+      && (ref.None? ==> forall r | r in I(self).graph :: !deallocable(self, r))
+  {
+    reveal_FindDeallocable();
+    var ephemeralRefs := setToSeq(self.t.contents.Keys);
+    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
+    FindDeallocableIterateCorrect(self, ephemeralRefs, 0);
   }
 }
