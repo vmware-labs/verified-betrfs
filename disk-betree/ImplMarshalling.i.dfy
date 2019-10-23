@@ -544,58 +544,10 @@ module ImplMarshalling {
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
   {
     match sector {
-      case SectorIndirectionTable(mutMap) => {
-        assert forall r | r in mutMap.I().contents :: r in IM.IIndirectionTable(sector.indirectionTable.I()).locs
-            ==> mutMap.I().contents[r].0.Some? && BC.ValidLocationForNode(mutMap.I().contents[r].0.value);
-        if mutMap.Count < 0x2000_0000_0000_0000 {
-          var a: array<V> := new V[mutMap.Count as uint64];
-          var it := mutMap.IterStart();
-          var i := 0;
-          ghost var partial := map[];
-          while it.next.Some?
-          invariant 0 <= i <= a.Length
-          invariant MutableMapModel.WFIter(mutMap.I(), it);
-          invariant forall j | 0 <= j < i :: ValidVal(a[j])
-          invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-          // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant IMM.valToLocsAndSuccs(a[..i]).Some?
-          invariant IMM.valToLocsAndSuccs(a[..i]).value.contents == partial
-          invariant |partial.Keys| == i as nat
-          invariant partial.Keys == it.s
-          invariant partial.Keys <= mutMap.I().contents.Keys
-          invariant forall r | r in partial :: r in mutMap.I().contents && partial[r] == mutMap.I().contents[r]
-          // NOALIAS/CONST mutMap doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant mutMap.I().contents == old(mutMap.I().contents)
-          decreases it.decreaser
-          {
-            var (ref, locOptGraph: (Option<LBAType.Location>, seq<Reference>)) := it.next.value;
-            // NOTE: deconstructing in two steps to work around c# translation bug
-            var (locOpt, graph) := locOptGraph;
-            var loc := locOpt.value;
-            var childrenVal := VUint64Array(graph);
-
-            MutableMapModel.LemmaIterIndexLtCount(mutMap.I(), it);
-
-            // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
-            assume |graph| < 0x1_0000_0000_0000_0000;
-            assert ValidVal(VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]));
-
-            // == mutation ==
-            partial := partial[ref := (locOpt, graph)];
-            a[i] := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]);
-            i := i + 1;
-            it := mutMap.IterInc(it);
-            // ==============
-
-            assert a[..i-1] == DropLast(a[..i]); // observe
-          }
-          /* (doc) assert |partial.Keys| == |mutMap.I().contents.Keys|; */
-          SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.I().contents.Keys);
-
-          assert partial == ImplState.IIndirectionTable(mutMap).contents; // observe
-          assert a[..i] == a[..]; // observe
-          v := Some(VCase(0, VArray(a[..])));
-          return;
+      case SectorIndirectionTable(indirectionTable) => {
+        var v := indirectionTable.indirectionTableToVal();
+        if v.Some? {
+          return Some(VCase(0, v.value));
         } else {
           return None;
         }

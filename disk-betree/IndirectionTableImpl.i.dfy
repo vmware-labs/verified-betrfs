@@ -249,6 +249,7 @@ module IndirectionTableImpl {
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
     ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableModel.IndirectionTableGrammar())
+    ensures v.Some? ==> ValidVal(v.value)
     ensures v.Some? ==> IndirectionTableModel.valToIndirectionTable(v.value).Some?
     ensures v.Some? ==>
           IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v.value).value)
