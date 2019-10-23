@@ -244,6 +244,86 @@ module IndirectionTableImpl {
       }
     }
 
+    method indirectionTableToVal()
+    returns (v : Option<V>)
+    requires Inv()
+    requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+    ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableModel.IndirectionTableGrammar())
+    ensures v.Some? ==> IndirectionTableModel.valToIndirectionTable(v.value).Some?
+    ensures v.Some? ==>
+          IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v.value).value)
+       == IndirectionTableModel.I(I())
+    {
+      if t.Count < 0x2000_0000_0000_0000 {
+        var a: array<V> := new V[t.Count as uint64];
+        var it := t.IterStart();
+        var i := 0;
+        ghost var partial := map[];
+        while it.next.Some?
+        invariant Inv()
+        invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+        invariant 0 <= i <= a.Length
+        invariant MutableMapModel.WFIter(t.I(), it);
+        invariant forall j | 0 <= j < i :: ValidVal(a[j])
+        invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+        // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
+        invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
+        invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
+        invariant |partial.Keys| == i as nat
+        invariant partial.Keys == it.s
+        invariant partial.Keys <= t.I().contents.Keys
+        invariant forall r | r in partial :: r in t.I().contents && partial[r] == t.I().contents[r]
+        // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
+        invariant t.I().contents == old(t.I().contents)
+        decreases it.decreaser
+        {
+          var (ref, locOptGraph: IndirectionTableModel.Entry) := it.next.value;
+          assert ref in I().locs;
+          // NOTE: deconstructing in two steps to work around c# translation bug
+          var locOpt := locOptGraph.loc;
+          var succs := locOptGraph.succs;
+          var loc := locOpt.value;
+          var childrenVal := VUint64Array(succs);
+
+          //assert I().locs[ref] == loc;
+          //assert I().graph[ref] == succs;
+
+          //assert IndirectionTableModel.I(I()).locs[ref] == loc;
+          //assert IndirectionTableModel.I(I()).graph[ref] == succs;
+
+          assert BC.ValidLocationForNode(loc);
+          /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
+          assert ref !in t0.value.contents;
+          assert loc.addr != 0;
+          assert LBAType.ValidLocation(loc);*/
+
+          MutableMapModel.LemmaIterIndexLtCount(t.I(), it);
+
+          // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
+          assume |succs| < 0x1_0000_0000_0000_0000;
+          assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
+
+          // == mutation ==
+          partial := partial[ref := IndirectionTableModel.Entry(locOpt, succs)];
+          a[i] := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
+          i := i + 1;
+          it := t.IterInc(it);
+          // ==============
+
+          assert a[..i-1] == DropLast(a[..i]); // observe
+        }
+        /* (doc) assert |partial.Keys| == |t.I().contents.Keys|; */
+        SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.I().contents.Keys);
+
+        assert partial == t.I().contents; // observe
+        assert a[..i] == a[..]; // observe
+        v := Some(VArray(a[..]));
+        return;
+      } else {
+        return None;
+      }
+    }
+
     // To bitmap
 
     method InitLocBitmap()
