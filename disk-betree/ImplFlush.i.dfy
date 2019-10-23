@@ -54,7 +54,6 @@ module ImplFlush {
       }
     }
 
-
     //Native.BenchmarkingUtil.start();
 
     MutBucket.reveal_ReprSeq();

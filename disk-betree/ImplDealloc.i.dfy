@@ -32,13 +32,10 @@ module ImplDealloc {
     ImplModelDealloc.reveal_Dealloc();
 
     if s.frozenIndirectionTable != null {
-      var lbaGraph := s.frozenIndirectionTable.Get(ref);
-      if lbaGraph.Some? {
-        var (lba, _) := lbaGraph.value;
-        if lba.None? {
-          print "giving up; dealloc can't dealloc because frozen isn't written\n";
-          return;
-        }
+      var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
+      if b {
+        print "giving up; dealloc can't run because frozen isn't written";
+        return;
       }
     }
 
@@ -49,17 +46,14 @@ module ImplDealloc {
 
     ImplModelCache.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
 
-    var oldEntry := s.ephemeralIndirectionTable.RemoveAndGet(ref);
+    var oldLoc := s.ephemeralIndirectionTable.RemoveRef(ref);
 
     s.lru.Remove(ref);
     s.cache.Remove(ref);
 
-    if oldEntry.Some? && oldEntry.value.0.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldEntry.value.0.value.addr / BlockSizeUint64());
+    if oldLoc.Some? {
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
     }
-
-    assume s.ephemeralIndirectionTable.Contents
-        == MapRemove(old(s.ephemeralIndirectionTable.Contents), {ref});
 
     ghost var s1 := s.I();
     ghost var s2 := ImplModelDealloc.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref).0;
@@ -80,5 +74,7 @@ module ImplDealloc {
   requires s.ready
   ensures ref == ImplModelDealloc.FindDeallocable(s.I())
   {
+    ImplModelDealloc.reveal_FindDeallocable();
+    ref := s.ephemeralIndirectionTable.FindDeallocable();
   }
 }
