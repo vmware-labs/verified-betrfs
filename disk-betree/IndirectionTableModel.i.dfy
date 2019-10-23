@@ -82,9 +82,21 @@ module IndirectionTableModel {
     && self.graph == Graph(self.t)
   }
 
+  function IHashMap(m: HashMap) : BC.IndirectionTable
+  {
+    BC.IndirectionTable(Locs(m), Graph(m))
+  }
+
   function I(self: IndirectionTable) : BC.IndirectionTable
   {
     BC.IndirectionTable(self.locs, self.graph)
+  }
+
+  function FromHashMap(m: HashMap) : IndirectionTable
+  requires MutableMapModel.Inv(m)
+  ensures Inv(FromHashMap(m))
+  {
+    IndirectionTable(m, Locs(m), Graph(m))
   }
 
   function {:opaque} GetEntry(self: IndirectionTable, ref: BT.G.Reference) : (e : Option<Entry>)
