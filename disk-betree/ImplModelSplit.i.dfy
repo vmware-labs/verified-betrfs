@@ -333,8 +333,8 @@ module ImplModelSplit {
   : (s': Variables)
   requires s.Ready?
   requires Inv(k, s)
-  requires childref in s.ephemeralIndirectionTable.contents
-  requires parentref in s.ephemeralIndirectionTable.contents
+  requires childref in s.ephemeralIndirectionTable.graph
+  requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
@@ -343,10 +343,7 @@ module ImplModelSplit {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && parentref in s.frozenIndirectionTable.value.contents
-      && var entry := s.frozenIndirectionTable.value.contents[parentref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) then (
       s
     ) else (
@@ -384,8 +381,8 @@ module ImplModelSplit {
   lemma doSplitCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires s.Ready?
   requires Inv(k, s)
-  requires childref in s.ephemeralIndirectionTable.contents
-  requires parentref in s.ephemeralIndirectionTable.contents
+  requires childref in s.ephemeralIndirectionTable.graph
+  requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
@@ -402,10 +399,7 @@ module ImplModelSplit {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && parentref in s.frozenIndirectionTable.value.contents
-      && var entry := s.frozenIndirectionTable.value.contents[parentref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) {
       assert noop(k, IVars(s), IVars(s));
     } else {

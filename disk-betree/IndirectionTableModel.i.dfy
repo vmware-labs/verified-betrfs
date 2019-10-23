@@ -70,6 +70,7 @@ module IndirectionTableModel {
   */
 
   protected predicate Inv(self: IndirectionTable)
+  ensures Inv(self) ==> (forall ref | ref in self.locs :: ref in self.graph)
   {
     //&& (forall ref | ref in LruModel.I(self.garbageQueue) :: Refcount0(self, ref))
     //&& (forall ref | Refcount0(self, ref) :: ref in LruModel.I(self.garbageQueue))
@@ -95,6 +96,15 @@ module IndirectionTableModel {
   {
     MutableMapModel.Get(self.t, ref)
   }
+
+  predicate {:opaque} HasEmptyLoc(self: IndirectionTable, ref: BT.G.Reference)
+  requires Inv(self)
+  ensures HasEmptyLoc(self, ref) == (ref in self.graph && ref !in self.locs)
+  {
+    var entry := MutableMapModel.Get(self.t, ref);
+    entry.Some? && entry.value.loc.None?
+  }
+
 
   function {:opaque} RemoveLocIfPresent(self: IndirectionTable, ref: BT.G.Reference) : (self' : IndirectionTable)
   requires Inv(self)
@@ -133,15 +143,20 @@ module IndirectionTableModel {
     if idx ==
   }*/
 
-  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (self' : IndirectionTable)
+  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
-  ensures Inv(self')
-  ensures self'.locs == MapRemove1(self.locs, ref)
-  ensures self'.graph == self.graph[ref := succs]
+  ensures var (self', oldLoc) := res;
+    && Inv(self')
+    && self'.locs == MapRemove1(self.locs, ref)
+    && self'.graph == self.graph[ref := succs]
+    && (oldLoc.None? ==> ref !in self.locs)
+    && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
   {
     assume self.t.count as nat < 0x10000000000000000 / 8;
-    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs));
-    IndirectionTable(t, Locs(t), Graph(t))
+    var (t, oldEntry) := MutableMapModel.InsertAndGetOld(self.t, ref, Entry(None, succs));
+    var self' := IndirectionTable(t, Locs(t), Graph(t));
+    var oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
+    (self', oldLoc)
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
