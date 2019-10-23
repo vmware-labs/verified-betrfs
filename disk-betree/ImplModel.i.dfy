@@ -9,6 +9,7 @@ include "../lib/LRU.i.dfy"
 include "../lib/MutableMapModel.i.dfy"
 include "../lib/Bitmap.i.dfy"
 include "BlockAllocator.i.dfy"
+include "IndirectionTableModel.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -40,6 +41,7 @@ module ImplModel {
   import UI
   import MutableMapModel
   import ImplModelBlockAllocator
+  import IndirectionTableModel
 
   import ReferenceType`Internal
 
@@ -47,6 +49,8 @@ module ImplModel {
   type Key = MS.Key
   type Message = Messages.Message
   type DiskOp = BBC.DiskOp
+  
+  type IndirectionTable = IndirectionTableModel.IndirectionTable
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -77,8 +81,8 @@ module ImplModel {
   {
     || i == 0 // block 0 is always implicitly allocated
     || !(
-      forall ref | ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? ::
-        indirectionTable.contents[ref].0.value.addr as int != i * BlockSize() as int
+      forall ref | ref in indirectionTable.locs ::
+        indirectionTable.locs[ref].addr as int != i * BlockSize() as int
     )
   }
 
@@ -138,9 +142,9 @@ module ImplModel {
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
     && TotalCacheSize(s) <= MaxCacheSize()
-    && MutableMapModel.Inv(ephemeralIndirectionTable)
-    && MutableMapModel.Inv(persistentIndirectionTable)
-    && (frozenIndirectionTable.Some? ==> MutableMapModel.Inv(frozenIndirectionTable.value))
+    && IndirectionTableModel.Inv(ephemeralIndirectionTable)
+    && IndirectionTableModel.Inv(persistentIndirectionTable)
+    && (frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(frozenIndirectionTable.value))
     && ImplModelBlockAllocator.Inv(s.blockAllocator)
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
@@ -154,7 +158,7 @@ module ImplModel {
     match sector {
       case SectorBlock(node) => WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
-        && MutableMapModel.Inv(indirectionTable)
+        && IndirectionTableModel.Inv(indirectionTable)
         && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
       )
     }
@@ -169,19 +173,9 @@ module ImplModel {
   {
     map ref | ref in cache :: INode(cache[ref])
   }
-  function IIndirectionTableLbas(table: IndirectionTable) : map<uint64, BC.Location>
-  {
-    map ref | ref in table.contents && table.contents[ref].0.Some? :: table.contents[ref].0.value
-  }
-  function IIndirectionTableGraph(table: IndirectionTable) : map<uint64, seq<Reference>>
-  {
-    map ref | ref in table.contents :: table.contents[ref].1
-  }
   function IIndirectionTable(table: IndirectionTable) : (result: BC.IndirectionTable)
   {
-    var lbas := IIndirectionTableLbas(table);
-    var graph := IIndirectionTableGraph(table);
-    BC.IndirectionTable(lbas, graph)
+    BC.IndirectionTable(table.locs, table.graph)
   }
   function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<BC.IndirectionTable>)
   {
