@@ -79,11 +79,7 @@ module ImplModel {
 
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
-    || i == 0 // block 0 is always implicitly allocated
-    || !(
-      forall ref | ref in indirectionTable.locs ::
-        indirectionTable.locs[ref].addr as int != i * BlockSize() as int
-    )
+    IndirectionTableModel.IsLocAllocIndirectionTable(indirectionTable, i)
   }
 
   predicate IsLocAllocOutstanding(outstanding: map<SD.ReqId, BC.OutstandingWrite>, i: int)
@@ -93,8 +89,7 @@ module ImplModel {
 
   predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
   {
-    && 0 <= i < Bitmap.Len(bm)
-    && Bitmap.IsSet(bm, i)
+    IndirectionTableModel.IsLocAllocBitmap(bm, i)
   }
 
   predicate {:opaque} ConsistentBitmap(
