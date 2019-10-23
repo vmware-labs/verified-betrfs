@@ -56,6 +56,15 @@ module IndirectionTableImpl {
       IndirectionTableModel.FromHashMap(t.I())
     }
 
+    constructor Empty()
+    ensures Inv()
+    ensures fresh(Repr)
+    {
+      this.t := new MutableMap.ResizingHashMap(128);
+      new;
+      Repr := {this} + this.t.Repr;
+    }
+
     method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
     requires Inv()
     ensures e == IndirectionTableModel.GetEntry(I(), ref)

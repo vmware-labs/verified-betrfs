@@ -30,6 +30,7 @@ module ImplMarshalling {
   import Crypto
   import Native
   import MutableMapModel
+  import IndirectionTableImpl
 
   import BT = PivotBetreeSpec`Internal
 
@@ -311,10 +312,11 @@ module ImplMarshalling {
   ensures MapOption(s, IS.ISector) == IMM.valToSector(v)
   {
     if v.c == 0 {
-      var mutMap := ValToIndirectionTable(v.val);
-      match mutMap {
-        case Some(s) => return Some(ImplState.SectorIndirectionTable(s));
-        case None => return None;
+      var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
+      if mutMap != null {
+        return Some(ImplState.SectorIndirectionTable(mutMap));
+      } else {
+        return None;
       }
     } else {
       var node := ValToNode(v.val);

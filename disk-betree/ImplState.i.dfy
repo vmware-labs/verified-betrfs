@@ -3,6 +3,7 @@ include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "MutableBucket.i.dfy"
 include "ImplNodes.i.dfy"
+include "IndirectionTableImpl.i.dfy"
 
 module {:extern} ImplState {
   import opened Options
@@ -14,6 +15,8 @@ module {:extern} ImplState {
   import opened ImplMutCache
   import ImplBlockAllocator
   import Bitmap
+  import IndirectionTableImpl
+  import IndirectionTableModel
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -37,8 +40,8 @@ module {:extern} ImplState {
   type Message = Messages.Message
   type TreeMap = TTT.Tree<Message>
 
-  type MutIndirectionTable = MM.ResizingHashMap<(Option<BC.Location>, seq<BT.G.Reference>)>
-  type MutIndirectionTableNullable = MM.ResizingHashMap?<(Option<BC.Location>, seq<Reference>)>
+  type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
+  type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
 
   datatype Sector =
     | SectorBlock(block: Node)
@@ -70,7 +73,7 @@ module {:extern} ImplState {
   }
 
   // TODO remove this and just replace with .I() because it's easier
-  function IIndirectionTable(table: MutIndirectionTable) : (result: IM.IndirectionTable)
+  function IIndirectionTable(table: MutIndirectionTable) : (result: IndirectionTableModel.IndirectionTable)
   reads table, table.Repr
   requires table.Inv()
   {
@@ -210,8 +213,8 @@ module {:extern} ImplState {
       // Unused for the `ready = false` state but we need to initialize them.
       // (could make them nullable instead).
       lru := new MutableLru.MutableLruQueue();
-      ephemeralIndirectionTable := new MM.ResizingHashMap(128);
-      persistentIndirectionTable := new MM.ResizingHashMap(128);
+      ephemeralIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
+      persistentIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
       frozenIndirectionTable := null;
       cache := new MutCache();
 
