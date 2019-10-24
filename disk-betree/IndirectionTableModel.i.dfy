@@ -26,14 +26,18 @@ module IndirectionTableModel {
   import Bitmap
   import opened Bounds
 
-  datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>)
+  datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
 
   // TODO move bitmap in here?
   datatype IndirectionTable = IndirectionTable(
     t: HashMap,
-    locs: map<BT.G.Reference, BC.Location>,
-    graph: map<BT.G.Reference, seq<BT.G.Reference>>
+
+    // These are for easy access in proof code, but all the relevant data
+    // is contained in the `t: HashMap` field.
+    ghost locs: map<BT.G.Reference, BC.Location>,
+    ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+    ghost predCounts: map<BT.G.Reference, int>
   )
 
     // This contains reference with the empty predecessor set.
@@ -52,24 +56,23 @@ module IndirectionTableModel {
     map ref | ref in t.contents :: t.contents[ref].succs
   }
 
-  /*datatype PredecessorEdge = PredecessorEdge(src: BT.G.Reference, idx: int)
+  function PredCounts(t: HashMap) : map<BT.G.Reference, int>
+  {
+    map ref | ref in t.contents :: t.contents[ref].predCount as int
+  }
+
+  datatype PredecessorEdge = PredecessorEdge(src: BT.G.Reference, ghost idx: int)
 
   function PredecessorSet(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference) : set<PredecessorEdge>
   {
-    set src, idx | src in graph && 0 <= idx < graph[src] :: PredecessorEdge(src, idx)
+    set src, idx | src in graph && 0 <= idx < |graph[src]| :: PredecessorEdge(src, idx)
   }
 
-  function GraphRefcounts(graph: map<BT.G.Reference, seq<BT.G.Reference>>) : map<BT.G.Reference, uint64>
+  predicate ValidPredCounts(predCounts: map<BT.G.Reference, int>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
   {
-    map ref | ref in graph :: |PredecessorSet(graph, ref)|
+    forall ref | ref in predCounts ::
+        predCounts[ref] == |PredecessorSet(graph, ref)|
   }
-
-  predicate Refcount0(self: IndirectionTable, ref: BT.G.Reference)
-  {
-    && ref in refcounts
-    && refcounts[ref] == 0
-  }
-  */
 
   protected predicate Inv(self: IndirectionTable)
   ensures Inv(self) ==> (forall ref | ref in self.locs :: ref in self.graph)
@@ -80,6 +83,9 @@ module IndirectionTableModel {
     && MutableMapModel.Inv(self.t)
     && self.locs == Locs(self.t)
     && self.graph == Graph(self.t)
+    && self.predCounts == PredCounts(self.t)
+    && ValidPredCounts(self.predCounts, self.graph)
+    && BC.GraphClosed(self.graph)
   }
 
   function IHashMap(m: HashMap) : BC.IndirectionTable
@@ -93,10 +99,8 @@ module IndirectionTableModel {
   }
 
   function FromHashMap(m: HashMap) : IndirectionTable
-  requires MutableMapModel.Inv(m)
-  ensures Inv(FromHashMap(m))
   {
-    IndirectionTable(m, Locs(m), Graph(m))
+    IndirectionTable(m, Locs(m), Graph(m), PredCounts(m))
   }
 
   function {:opaque} GetEntry(self: IndirectionTable, ref: BT.G.Reference) : (e : Option<Entry>)
@@ -119,7 +123,6 @@ module IndirectionTableModel {
     entry.Some? && entry.value.loc.None?
   }
 
-
   function {:opaque} RemoveLocIfPresent(self: IndirectionTable, ref: BT.G.Reference) : (self' : IndirectionTable)
   requires Inv(self)
   ensures Inv(self')
@@ -129,10 +132,14 @@ module IndirectionTableModel {
     assume self.t.count as nat < 0x10000000000000000 / 8;
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var t := (if oldEntry.Some? then
-      MutableMapModel.Insert(self.t, ref, Entry(None, oldEntry.value.succs))
+      MutableMapModel.Insert(self.t, ref, Entry(None, oldEntry.value.succs, oldEntry.value.predCount))
     else
       self.t);
-    IndirectionTable(t, Locs(t), Graph(t))
+
+    assert Graph(t) == Graph(self.t);
+    assert PredCounts(t) == PredCounts(self.t);
+
+    FromHashMap(t)
   }
 
   function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (IndirectionTable, bool)
@@ -148,33 +155,65 @@ module IndirectionTableModel {
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var added := oldEntry.Some? && oldEntry.value.loc.None?;
     var t := (if added then
-      MutableMapModel.Insert(self.t, ref, Entry(Some(loc), oldEntry.value.succs))
+      MutableMapModel.Insert(self.t, ref, Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount))
     else
       self.t);
-    (IndirectionTable(t, Locs(t), Graph(t)), added)
+
+    assert Graph(t) == Graph(self.t);
+    assert PredCounts(t) == PredCounts(self.t);
+
+    (FromHashMap(t), added)
   }
 
-  function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
-    : (res : (IndirectionTable, Option<BC.Location>))
-  requires Inv(self)
-  ensures var (self', oldLoc) := res;
-    && Inv(self')
-    && self'.graph == MapRemove1(self.graph, ref)
-    && self'.locs == MapRemove1(self.locs, ref)
-    && (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
-    && (ref !in self.locs ==> oldLoc == None)
+  function PredInc(t: IndirectionTable, ref: BT.G.Reference)
+  requires ref in t.contents
   {
-    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
-    var self' := IndirectionTable(t, Locs(t), Graph(t));
-    var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
-    (self', oldLoc)
+    var oldEntry := t.contents[ref];
+    var newEntry := oldEntry.(predCount := oldEntry.predCount + 1);
+    MutableMapModel.Insert(t, ref, newEntry)
   }
 
-  /*function updateRefcountsInc(garbageQueue: LruModel.LruQueue, refcounts: map<BT.G.Reference, uint64>, oldChildren: seq<BT.G.Reference, uint64>, newChildren: seq<BT.G.Reference>, idx: uint64)
-  requires 0 <= idx <= |newChildren|
+  function PredDec(t: IndirectionTable, ref: BT.G.Reference)
+  requires ref in t.contents
   {
-    if idx ==
-  }*/
+    var oldEntry := t.contents[ref];
+    var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
+    MutableMapModel.Insert(t, ref, newEntry)
+  }
+
+  function UpdatePredCountsDec(
+      t: HashMap,
+      newSuccs: seq<BT.G.Reference>,
+      oldSuccs: seq<BT.G.Reference>,
+      idx: uint64)
+  requires 0 <= idx < |oldSuccs|
+  requires |newSuccs| <= MaxNumChildren()
+  requires |oldSuccs| <= MaxNumChildren()
+  {
+    if idx == |oldSuccs| as uint64 then
+      t
+    else (
+      var t' := PredDec(t, oldSuccs[idx]);
+      UpdatePredCountsInc(t', newSuccs, oldSuccs, idx)
+    )
+  }
+
+  function UpdatePredCountsInc(
+      t: HashMap,
+      newSuccs: seq<BT.G.Reference>,
+      oldSuccs: seq<BT.G.Reference>,
+      idx: uint64)
+  requires 0 <= idx < |newSuccs|
+  requires |newSuccs| <= MaxNumChildren()
+  requires |oldSuccs| <= MaxNumChildren()
+  {
+    if idx == |newSuccs| as uint64 then
+      UpdatePredCountsDec(t, newSuccs, oldSuccs, 0)
+    else (
+      var t' := PredInc(t, newSuccs[idx]);
+      UpdatePredCountsInc(t', newSuccs, oldSuccs, idx)
+    )
+  }
 
   function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
@@ -186,8 +225,14 @@ module IndirectionTableModel {
     && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
   {
     assume self.t.count as nat < 0x10000000000000000 / 8;
-    var (t, oldEntry) := MutableMapModel.InsertAndGetOld(self.t, ref, Entry(None, succs));
-    var self' := IndirectionTable(t, Locs(t), Graph(t));
+    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
+    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
+
+    var t1 := UpdatePredCountsInc(t, succs,
+        if oldEntry.Some? then oldEntry.succs else [], 0);
+
+    var self' := FromHashMap(t);
     var oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
     (self', oldLoc)
   }
@@ -215,7 +260,7 @@ module IndirectionTableModel {
                 None
               ) else (
                 assume table.count as nat < 0x10000000000000000 / 8;
-                Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs)))
+                Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0)))
               )
             )
           }
@@ -240,7 +285,7 @@ module IndirectionTableModel {
     var t := valToHashMap(v.a);
     match t {
       case Some(t) => (
-        var res := IndirectionTable(t, Locs(t), Graph(t));
+        var res := FromHashMap(t);
         if BT.G.Root() in res.graph && BC.GraphClosed(res.graph) then (
           Some(res)
         ) else (
@@ -568,4 +613,22 @@ module IndirectionTableModel {
     assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
     FindDeallocableIterateCorrect(self, ephemeralRefs, 0);
   }
+
+  function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
+    : (res : (IndirectionTable, Option<BC.Location>))
+  requires Inv(self)
+  requires deallocable(self, ref)
+  ensures var (self', oldLoc) := res;
+    && Inv(self')
+    && self'.graph == MapRemove1(self.graph, ref)
+    && self'.locs == MapRemove1(self.locs, ref)
+    && (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
+    && (ref !in self.locs ==> oldLoc == None)
+  {
+    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
+    var self' := FromHashMap(t);
+    var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
+    (self', oldLoc)
+  }
+
 }
