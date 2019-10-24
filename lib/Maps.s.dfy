@@ -24,7 +24,7 @@ module Maps {
     && (forall key :: key in sub.Keys ==> IMapsAgreeOnKey(sub, sup, key))
   }
 
-  function method {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
+  function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures forall k :: k in m && k !in ks ==> k in m'
     ensures forall k :: k in m' ==> k in m && k !in ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
