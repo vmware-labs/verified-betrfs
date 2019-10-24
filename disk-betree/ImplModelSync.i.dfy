@@ -11,6 +11,7 @@ module ImplModelSync {
   import opened ImplModelIO
   import opened ImplModelCache
   import opened ImplModelDealloc
+  import opened Bounds
 
   import IMM = ImplMarshallingModel
 
@@ -27,29 +28,323 @@ module ImplModelSync {
   requires Inv(k, s)
   requires s.Ready?
   requires ref !in s.cache
-  requires ref in s.ephemeralIndirectionTable
-  ensures s.ephemeralIndirectionTable[ref].0.Some?;
+  requires ref in s.ephemeralIndirectionTable.graph
+  ensures ref in s.ephemeralIndirectionTable.locs
   {
-    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
+    /*assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
     assert ref in s.cache.Keys + IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
     assert ref !in s.cache.Keys;
-    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
+    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;*/
   }
 
-  function {:opaque} AssignRefToLoc(table: IndirectionTable, ref: Reference, loc: BC.Location) : IndirectionTable
+  function {:opaque} AssignRefToLocEphemeral(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  ensures s'.Ready?
+  ensures s'.frozenIndirectionTable == s.frozenIndirectionTable
+  ensures s'.blockAllocator.frozen == s.blockAllocator.frozen
+  ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
+  ensures ImplModelBlockAllocator.Inv(s'.blockAllocator)
   {
-    if (ref in table && table[ref].0.None?) then (
-      table[ref := (Some(loc), table[ref].1)]
+    var table := s.ephemeralIndirectionTable;
+    var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+    if added then (
+      var blockAllocator' := ImplModelBlockAllocator.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
+      s.(ephemeralIndirectionTable := table')
+       .(blockAllocator := blockAllocator')
     ) else (
-      table
+      s.(ephemeralIndirectionTable := table')
     )
   }
 
-  lemma AssignRefToLocCorrect(table: IndirectionTable, ref: Reference, loc: BC.Location)
-  ensures var table' := AssignRefToLoc(table, ref, loc);
-    IIndirectionTable(table') == BC.assignRefToLocation(IIndirectionTable(table), ref, loc)
+  function {:opaque} AssignRefToLocFrozen(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  ensures s'.Ready?
+  ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
+  ensures ImplModelBlockAllocator.Inv(s'.blockAllocator)
   {
-    reveal_AssignRefToLoc();
+    if s.frozenIndirectionTable.Some? then (
+      var table := s.frozenIndirectionTable.value;
+      var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+      if added then (
+        var blockAllocator' := ImplModelBlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+        s.(frozenIndirectionTable := Some(table'))
+         .(blockAllocator := blockAllocator')
+      ) else (
+        s.(frozenIndirectionTable := Some(table'))
+      )
+    ) else (
+      s
+    )
+  }
+
+  function {:opaque} AssignIdRefLocOutstanding(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  requires s.Ready?
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  {
+     s
+      .(outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)])
+      .(blockAllocator := ImplModelBlockAllocator.MarkUsedOutstanding(s.blockAllocator, loc.addr as int / BlockSize()))
+  }
+
+  lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
+  requires s.Ready?
+  requires (forall i: int :: IsLocAllocOutstanding(s.outstandingBlockWrites, i)
+          <==> IsLocAllocBitmap(s.blockAllocator.outstanding, i))
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BC.ValidLocationForNode(loc);
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires id !in s.outstandingBlockWrites
+  ensures var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
+      && s'.Ready?
+      && (forall i: int :: IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+          <==> IsLocAllocBitmap(s'.blockAllocator.outstanding, i))
+      && ImplModelBlockAllocator.Inv(s'.blockAllocator)
+  {
+    reveal_AssignIdRefLocOutstanding();
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+
+    var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
+
+    var j := loc.addr as int / BlockSize();
+    LBAType.reveal_ValidAddr();
+    assert j != 0;
+    assert j * BlockSize() == loc.addr as int;
+
+    forall i: int
+    | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+    ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    {
+      if i != j {
+        assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
+        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+      } else {
+        assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+      }
+    }
+
+    forall i: int
+    | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+    {
+      if i != j {
+        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
+        var id0 :| id0 in s.outstandingBlockWrites
+          && s.outstandingBlockWrites[id0].loc.addr as int == i * BlockSize() as int;
+        assert id0 != id;
+        assert id0 in s'.outstandingBlockWrites;
+        assert s'.outstandingBlockWrites[id0].loc.addr as int == i * BlockSize() as int;
+        assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+      } else {
+        assert id in s'.outstandingBlockWrites;
+        assert s'.outstandingBlockWrites[id].loc.addr as int == i * BlockSize() as int;
+        assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+      }
+    }
+  }
+
+  lemma LemmaAssignRefToLocBitmapConsistent(
+      indirectionTable: IndirectionTable,
+      bm: Bitmap.BitmapModel,
+      indirectionTable': IndirectionTable,
+      bm': Bitmap.BitmapModel,
+      ref: BT.G.Reference,
+      loc: BC.Location)
+  requires IndirectionTableModel.Inv(indirectionTable)
+  requires (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
+          <==> IsLocAllocBitmap(bm, i))
+  requires BC.ValidLocationForNode(loc);
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires ref in indirectionTable.graph
+  requires ref !in indirectionTable.locs
+  requires (indirectionTable', true) == IndirectionTableModel.AddLocIfPresent(indirectionTable, ref, loc)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires Bitmap.Len(bm) == NumBlocks()
+  requires bm' == Bitmap.BitSet(bm, loc.addr as int / BlockSize())
+  ensures 
+      && (forall i: int :: IsLocAllocIndirectionTable(indirectionTable', i)
+          <==> IsLocAllocBitmap(bm', i))
+  {
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+
+    //assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
+
+    var j := loc.addr as int / BlockSize();
+    LBAType.reveal_ValidAddr();
+    assert j != 0;
+    assert j * BlockSize() == loc.addr as int;
+
+    forall i: int | IsLocAllocIndirectionTable(indirectionTable', i)
+    ensures IsLocAllocBitmap(bm', i)
+    {
+      if i == j {
+        assert IsLocAllocBitmap(bm', i);
+      } else {
+        assert IsLocAllocIndirectionTable(indirectionTable, i);
+        assert IsLocAllocBitmap(bm', i);
+      }
+    }
+    forall i: int | IsLocAllocBitmap(bm', i)
+    ensures IsLocAllocIndirectionTable(indirectionTable', i)
+    {
+      if i == j {
+        assert ref in indirectionTable'.graph;
+        assert ref in indirectionTable'.locs;
+        assert indirectionTable'.locs[ref].addr as int == i * BlockSize() as int;
+        assert IsLocAllocIndirectionTable(indirectionTable', i);
+      } else {
+        if i == 0 {
+          assert IsLocAllocIndirectionTable(indirectionTable', i);
+        } else {
+          assert IsLocAllocIndirectionTable(indirectionTable, i);
+          var r :| r in indirectionTable.locs &&
+            indirectionTable.locs[r].addr as int == i * BlockSize() as int;
+          assert MapsAgreeOnKey(
+            IIndirectionTable(indirectionTable).locs,
+            IIndirectionTable(indirectionTable').locs, r);
+          assert r in indirectionTable'.locs &&
+            indirectionTable'.locs[r].addr as int == i * BlockSize() as int;
+          assert IsLocAllocIndirectionTable(indirectionTable', i);
+        }
+      }
+    }
+  }
+
+  lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+  requires (forall i: int :: IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i)
+          <==> IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BC.ValidLocationForNode(loc);
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  ensures var s' := AssignRefToLocEphemeral(k, s, ref, loc);
+      && s'.Ready?
+      && (forall i: int :: IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
+          <==> IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
+      && ImplModelBlockAllocator.Inv(s'.blockAllocator)
+  {
+    reveal_AssignRefToLocEphemeral();
+    reveal_ConsistentBitmap();
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+
+    var j := loc.addr as int / BlockSize();
+
+    var table := s.ephemeralIndirectionTable;
+    if (ref in table.graph && ref !in table.locs) {
+      var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+      assert added;
+      var blockAllocator' := ImplModelBlockAllocator.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
+      var s' := s
+      .(ephemeralIndirectionTable := table')
+      .(blockAllocator := blockAllocator');
+
+      forall i | 0 <= i < NumBlocks()
+      ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
+        || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
+        || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+        || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+        || Bitmap.IsSet(s'.blockAllocator.full, i)
+      )
+      {
+        if i != j {
+          assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
+          assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
+          assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
+          assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
+          assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
+        }
+      }
+
+      LemmaAssignRefToLocBitmapConsistent(
+          s.ephemeralIndirectionTable,
+          s.blockAllocator.ephemeral,
+          s'.ephemeralIndirectionTable, 
+          s'.blockAllocator.ephemeral,
+          ref,
+          loc);
+    } else {
+    }
+  }
+
+  lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
+  requires s.frozenIndirectionTable.Some? ==>
+        (forall i: int :: IsLocAllocIndirectionTable(s.frozenIndirectionTable.value, i)
+          <==> IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BC.ValidLocationForNode(loc);
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  ensures var s' := AssignRefToLocFrozen(k, s, ref, loc);
+      && s'.Ready?
+      && (s'.frozenIndirectionTable.Some? ==> s'.blockAllocator.frozen.Some?)
+      && (s'.frozenIndirectionTable.Some? ==>
+          (forall i: int :: IsLocAllocIndirectionTable(s'.frozenIndirectionTable.value, i)
+          <==> IsLocAllocBitmap(s'.blockAllocator.frozen.value, i)))
+      && ImplModelBlockAllocator.Inv(s'.blockAllocator)
+  {
+    reveal_AssignRefToLocFrozen();
+
+    if s.frozenIndirectionTable.None? {
+      return;
+    }
+
+    reveal_ConsistentBitmap();
+    Bitmap.reveal_BitSet();
+    Bitmap.reveal_IsSet();
+
+    var j := loc.addr as int / BlockSize();
+
+    var table := s.frozenIndirectionTable.value;
+    var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
+    if added {
+      var blockAllocator' := ImplModelBlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+      var s' := s
+        .(frozenIndirectionTable := Some(table'))
+        .(blockAllocator := blockAllocator');
+
+      assert s' == AssignRefToLocFrozen(k, s, ref, loc);
+
+      forall i | 0 <= i < NumBlocks()
+      ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
+        || Bitmap.IsSet(s'.blockAllocator.frozen.value, i)
+        || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+        || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+        || Bitmap.IsSet(s'.blockAllocator.full, i)
+      )
+      {
+        if i != j {
+          assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
+          assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
+          assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
+          assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
+          assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
+        }
+      }
+
+      LemmaAssignRefToLocBitmapConsistent(
+          s.frozenIndirectionTable.value,
+          s.blockAllocator.frozen.value,
+          s'.frozenIndirectionTable.value,
+          s'.blockAllocator.frozen.value,
+          ref,
+          loc);
+    } else {
+    }
   }
 
   function {:opaque} FindRefInFrozenWithNoLoc(s: Variables) : (ref: Option<Reference>)
@@ -62,10 +357,10 @@ module ImplModelSync {
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
   ensures var ref := FindRefInFrozenWithNoLoc(s);
-    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value)
-    && (ref.Some? ==> s.frozenIndirectionTable.value[ref.value].0.None?)
-    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value
-        :: s.frozenIndirectionTable.value[r].0.Some?)
+    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value.graph)
+    && (ref.Some? ==> ref.value !in s.frozenIndirectionTable.value.locs)
+    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value.graph
+        :: r in s.frozenIndirectionTable.value.locs)
 
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: Constants, s: Variables, io: IO)
@@ -76,9 +371,6 @@ module ImplModelSync {
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.None?
   {
-    var ephemeralTable := s.ephemeralIndirectionTable;
-    var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
-
     var foundDeallocable := FindDeallocable(s);
     FindDeallocableCorrect(s);
 
@@ -87,7 +379,8 @@ module ImplModelSync {
     ) else (
       var s' := s
           .(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
-          .(syncReqs := BC.syncReqs3to2(s.syncReqs));
+          .(syncReqs := BC.syncReqs3to2(s.syncReqs))
+          .(blockAllocator := ImplModelBlockAllocator.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
     )
   }
@@ -106,9 +399,6 @@ module ImplModelSync {
   {
     var (s', io') := syncNotFrozen(k, s, io);
 
-    var ephemeralTable := s.ephemeralIndirectionTable;
-    var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
-
     var foundDeallocable := FindDeallocable(s);
     FindDeallocableCorrect(s);
 
@@ -116,6 +406,10 @@ module ImplModelSync {
       DeallocCorrect(k, s, io, foundDeallocable.value);
       return;
     }
+
+    reveal_ConsistentBitmap();
+    assert WFVars(s');
+
     assert BC.Freeze(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
     assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, M.IDiskOp(diskOp(io')), BC.FreezeStep);
     assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.FreezeStep);
@@ -126,16 +420,16 @@ module ImplModelSync {
       id: Option<D.ReqId>, loc: Option<LBAType.Location>, s': Variables)
   requires s.Ready?
   requires Inv(k, s)
+  requires loc.Some? ==> 0 <= loc.value.addr as int / BlockSize() < NumBlocks()
   requires ref in s.cache
   {
+    reveal_ConsistentBitmap();
+
     if id.Some? then (
       && loc.Some?
-      && s' == s
-        .(outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)])
-        .(ephemeralIndirectionTable := AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value))
-        .(frozenIndirectionTable := if s.frozenIndirectionTable.Some?
-            then Some(AssignRefToLoc(s.frozenIndirectionTable.value, ref, loc.value))
-            else None)
+      && var s0 := AssignRefToLocEphemeral(k, s, ref, loc.value);
+      && var s1 := AssignRefToLocFrozen(k, s0, ref, loc.value);
+      && s' == AssignIdRefLocOutstanding(k, s1, id.value, ref, loc.value)
     ) else (
       && s' == s
     )
@@ -169,9 +463,23 @@ module ImplModelSync {
     FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), id, loc, io');
 
     if id.Some? {
-      AssignRefToLocCorrect(s.ephemeralIndirectionTable, ref, loc.value);
-      if (s.frozenIndirectionTable.Some?) {
-        AssignRefToLocCorrect(s.frozenIndirectionTable.value, ref, loc.value);
+      reveal_ConsistentBitmap();
+      reveal_AssignRefToLocEphemeral();
+      reveal_AssignRefToLocFrozen();
+      reveal_AssignIdRefLocOutstanding();
+
+      var s0 := AssignRefToLocEphemeral(k, s, ref, loc.value);
+      var s1 := AssignRefToLocFrozen(k, s0, ref, loc.value);
+
+      assume id.value !in s.outstandingBlockWrites; // TODO figure out how to deal with this?
+
+      LemmaAssignRefToLocEphemeralCorrect(k, s, ref, loc.value);
+      LemmaAssignRefToLocFrozenCorrect(k, s0, ref, loc.value);
+      LemmaAssignIdRefLocOutstandingCorrect(k, s1, id.value, ref, loc.value);
+      
+      if s.frozenIndirectionTable.Some? {
+        assert IIndirectionTable(s'.frozenIndirectionTable.value)
+          == BC.assignRefToLocation(IIndirectionTable(s.frozenIndirectionTable.value), ref, loc.value);
       }
 
       assert BC.ValidLocationForNode(M.IDiskOp(diskOp(io')).reqWrite.loc);
@@ -190,13 +498,13 @@ module ImplModelSync {
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value
-  requires s.frozenIndirectionTable.value[ref].0.None?
+  requires ref in s.frozenIndirectionTable.value.graph
+  requires ref !in s.frozenIndirectionTable.value.locs
   {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if ref in s.ephemeralIndirectionTable && s.ephemeralIndirectionTable[ref].0.Some? then (
+    if ref in s.ephemeralIndirectionTable.locs then (
       // TODO we should be able to prove this is impossible as well
       && s' == s
       && io' == io
@@ -212,8 +520,8 @@ module ImplModelSync {
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
-  requires ref in s.frozenIndirectionTable.value
-  requires s.frozenIndirectionTable.value[ref].0.None?
+  requires ref in s.frozenIndirectionTable.value.graph
+  requires ref !in s.frozenIndirectionTable.value.locs
 
   requires syncFoundInFrozen(k, s, io, ref, s', io')
 
@@ -223,7 +531,7 @@ module ImplModelSync {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
-    if ref in s.ephemeralIndirectionTable && s.ephemeralIndirectionTable[ref].0.Some? {
+    if ref in s.ephemeralIndirectionTable.locs {
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert noop(k, IVars(s), IVars(s));
     } else {

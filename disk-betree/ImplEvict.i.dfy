@@ -40,14 +40,14 @@ module ImplEvict {
   requires s.ready
   ensures b == ImplModelEvict.NeedToWrite(s.I(), ref)
   {
-    var eph := s.ephemeralIndirectionTable.Get(ref);
-    if eph.Some? && eph.value.0.None? {
+    var eph := s.ephemeralIndirectionTable.GetEntry(ref);
+    if eph.Some? && eph.value.loc.None? {
       return true;
     }
 
     if (s.frozenIndirectionTable != null) {
-      var fro := s.frozenIndirectionTable.Get(ref);
-      if fro.Some? && fro.value.0.None? {
+      var fro := s.frozenIndirectionTable.GetEntry(ref);
+      if fro.Some? && fro.value.loc.None? {
         return true;
       }
     }
@@ -59,13 +59,13 @@ module ImplEvict {
   returns (b: bool)
   requires s.WF()
   requires s.ready
-  requires ref in s.ephemeralIndirectionTable.Contents ==>
-      s.ephemeralIndirectionTable.Contents[ref].0.Some?
+  requires ref in s.ephemeralIndirectionTable.I().graph ==>
+      ref in s.ephemeralIndirectionTable.I().locs
   ensures b == ImplModelEvict.CanEvict(s.I(), ref)
   {
-    var eph := s.ephemeralIndirectionTable.Get(ref);
+    var eph := s.ephemeralIndirectionTable.GetEntry(ref);
     if (eph.Some?) {
-      return BC.OutstandingWrite(ref, eph.value.0.value) !in s.outstandingBlockWrites.Values;
+      return BC.OutstandingWrite(ref, eph.value.loc.value) !in s.outstandingBlockWrites.Values;
     } else {
       return true;
     }

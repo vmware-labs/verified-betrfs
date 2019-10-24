@@ -14,9 +14,11 @@ module ImplSync {
   import opened ImplIO
   import opened ImplCache
   import opened ImplDealloc
+  import opened Bounds
   import ImplModelSync
   import ImplModelCache
   import ImplModelDealloc
+  import ImplModelBlockAllocator
   import opened ImplState
 
   import opened Options
@@ -28,25 +30,64 @@ module ImplSync {
 
   import opened NativeTypes
 
-  method AssignRefToLoc(table: MutIndirectionTable, ref: Reference, loc: BC.Location)
-  requires table.Inv()
-  ensures table.Inv()
-  // NOALIAS statically enforced no-aliasing would probably help here
-  ensures forall r | r in table.Repr :: fresh(r) || r in old(table.Repr)
-  modifies table.Repr
-  ensures table.Contents == ImplModelSync.AssignRefToLoc(old(table.Contents), ref, loc)
+  method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.W()
+  requires s.ready
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator.I())
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  modifies s.Repr()
+  ensures s.W()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSync.AssignRefToLocEphemeral(Ic(k), old(s.I()), ref, loc)
+  ensures s.ready
   {
-    ImplModelSync.reveal_AssignRefToLoc();
-    var locGraph := table.Get(ref);
-    if locGraph.Some? {
-      var (oldloc, succ) := locGraph.value;
-      if oldloc.None? {
-        assume table.Count as nat < 0x10000000000000000 / 8;
-        var _ := table.Insert(ref, (Some(loc), succ));
+    ImplModelSync.reveal_AssignRefToLocEphemeral();
+
+    var table := s.ephemeralIndirectionTable;
+    var added := table.AddLocIfPresent(ref, loc);
+    if added {
+      s.blockAllocator.MarkUsedEphemeral(loc.addr / BlockSizeUint64());
+    }
+  }
+
+  method AssignRefToLocFrozen(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  requires s.W()
+  requires s.ready
+  requires s.I().frozenIndirectionTable.Some? ==> s.I().blockAllocator.frozen.Some?
+  requires ImplModelBlockAllocator.Inv(s.blockAllocator.I())
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  modifies s.Repr()
+  ensures s.W()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSync.AssignRefToLocFrozen(Ic(k), old(s.I()), ref, loc)
+  ensures s.ready
+  {
+    ImplModelSync.reveal_AssignRefToLocFrozen();
+
+    if s.frozenIndirectionTable != null {
+      var table := s.frozenIndirectionTable;
+      var added := table.AddLocIfPresent(ref, loc);
+      if added {
+        s.blockAllocator.MarkUsedFrozen(loc.addr / BlockSizeUint64());
       }
     }
-    //assert IIndirectionTable(table) ==
-    //    old(BC.assignRefToLocation(IIndirectionTable(table), ref, loc));
+  }
+
+  method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
+  requires s.W()
+  requires s.ready
+  requires ImplModelBlockAllocator.Inv(s.I().blockAllocator)
+  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  modifies s.Repr()
+  ensures s.W()
+  ensures WellUpdated(s)
+  ensures s.I() == ImplModelSync.AssignIdRefLocOutstanding(Ic(k), old(s.I()), id, ref, loc)
+  ensures s.ready
+  {
+    ImplModelSync.reveal_AssignIdRefLocOutstanding();
+
+    s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
+    s.blockAllocator.MarkUsedOutstanding(loc.addr / BlockSizeUint64());
   }
 
   method FindRefInFrozenWithNoLoc(s: ImplVariables) returns (ref: Option<Reference>)
@@ -57,7 +98,7 @@ module ImplSync {
   {
     assume false;
     // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var frozenTable := s.frozenIndirectionTable.ToMap();
+    var frozenTable := s.frozenIndirectionTable.t.ToMap();
     var frozenRefs := SetToSeq(frozenTable.Keys);
 
     assume |frozenRefs| < 0x1_0000_0000_0000_0000;
@@ -70,9 +111,9 @@ module ImplSync {
         && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs)
     {
       var ref := frozenRefs[i];
-      var lbaGraph := s.frozenIndirectionTable.Get(ref);
+      var lbaGraph := s.frozenIndirectionTable.t.Get(ref);
       assert lbaGraph.Some?;
-      var (lba, _) := lbaGraph.value;
+      var lba := lbaGraph.value.loc;
       if lba.None? {
         return Some(ref);
       }
@@ -96,8 +137,6 @@ module ImplSync {
   ensures WellUpdated(s)
   ensures (s.I(), IIO(io)) == ImplModelSync.syncNotFrozen(Ic(k), old(s.I()), old(IIO(io)))
   {
-    var ephemeralTable := s.ephemeralIndirectionTable.ToMap();
-    var ephemeralGraph := map k | k in ephemeralTable :: ephemeralTable[k].1;
     var foundDeallocable := FindDeallocable(s);
     ImplModelDealloc.FindDeallocableCorrect(s.I());
     if foundDeallocable.Some? {
@@ -109,6 +148,7 @@ module ImplSync {
 
     s.frozenIndirectionTable := clonedEphemeralIndirectionTable;
     s.syncReqs := BC.syncReqs3to2(s.syncReqs);
+    s.blockAllocator.CopyEphemeralToFrozen();
 
     return;
   }
@@ -132,11 +172,11 @@ module ImplSync {
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
 
     if (id.Some?) {
-      AssignRefToLoc(s.ephemeralIndirectionTable, ref, loc.value);
-      if (s.frozenIndirectionTable != null) {
-        AssignRefToLoc(s.frozenIndirectionTable, ref, loc.value);
-      }
-      s.outstandingBlockWrites := s.outstandingBlockWrites[id.value := BC.OutstandingWrite(ref, loc.value)];
+      IM.reveal_ConsistentBitmap();
+
+      AssignRefToLocEphemeral(k, s, ref, loc.value);
+      AssignRefToLocFrozen(k, s, ref, loc.value);
+      AssignIdRefLocOutstanding(k, s, id.value, ref, loc.value);
     } else {
       print "sync: giving up; write req failed\n";
     }
@@ -152,8 +192,8 @@ module ImplSync {
   requires s.ready
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable != null
-  requires ref in s.frozenIndirectionTable.Contents
-  requires s.frozenIndirectionTable.Contents[ref].0.None?
+  requires ref in s.frozenIndirectionTable.I().graph
+  requires ref !in s.frozenIndirectionTable.I().locs
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -163,8 +203,8 @@ module ImplSync {
     assert ref in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
     assert ref !in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
 
-    var ephemeralRef := s.ephemeralIndirectionTable.Get(ref);
-    if ephemeralRef.Some? && ephemeralRef.value.0.Some? {
+    var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
+    if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
       // TODO we should be able to prove this is impossible as well
       print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
       return;

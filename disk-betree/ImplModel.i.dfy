@@ -6,6 +6,10 @@ include "BetreeBlockCache.i.dfy"
 include "../lib/tttree.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"
+include "../lib/MutableMapModel.i.dfy"
+include "../lib/Bitmap.i.dfy"
+include "BlockAllocator.i.dfy"
+include "IndirectionTableModel.i.dfy"
 
 // This file represents immutability's last stand
 // It is the highest-fidelity representation of the implementation
@@ -33,7 +37,11 @@ module ImplModel {
   import opened BucketWeights
   import opened Bounds
   import LruModel
+  import Bitmap
   import UI
+  import MutableMapModel
+  import ImplModelBlockAllocator
+  import IndirectionTableModel
 
   import ReferenceType`Internal
 
@@ -41,8 +49,8 @@ module ImplModel {
   type Key = MS.Key
   type Message = Messages.Message
   type DiskOp = BBC.DiskOp
-
-  type IndirectionTable = map<uint64, (Option<BC.Location>, seq<Reference>)>
+  
+  type IndirectionTable = IndirectionTableModel.IndirectionTable
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -61,12 +69,47 @@ module ImplModel {
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
         syncReqs: map<uint64, BC.SyncReqStatus>,
         cache: map<Reference, Node>,
-        lru: LruModel.LruQueue
+        lru: LruModel.LruQueue,
+        blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel
       )
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
+
+  predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
+  {
+    IndirectionTableModel.IsLocAllocIndirectionTable(indirectionTable, i)
+  }
+
+  predicate IsLocAllocOutstanding(outstanding: map<SD.ReqId, BC.OutstandingWrite>, i: int)
+  {
+    !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * BlockSize() as int)
+  }
+
+  predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
+  {
+    IndirectionTableModel.IsLocAllocBitmap(bm, i)
+  }
+
+  predicate {:opaque} ConsistentBitmap(
+      ephemeralIndirectionTable: IndirectionTable,
+      frozenIndirectionTable: Option<IndirectionTable>,
+      persistentIndirectionTable: IndirectionTable,
+      outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
+      blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel)
+  {
+    && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
+      <==> IsLocAllocBitmap(blockAllocator.ephemeral, i))
+    && (forall i: int :: IsLocAllocIndirectionTable(persistentIndirectionTable, i)
+      <==> IsLocAllocBitmap(blockAllocator.persistent, i))
+    && (frozenIndirectionTable.Some? <==> blockAllocator.frozen.Some?)
+    && (frozenIndirectionTable.Some? ==>
+      (forall i: int :: IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
+        <==> IsLocAllocBitmap(blockAllocator.frozen.value, i)))
+    && (forall i: int :: IsLocAllocOutstanding(outstandingBlockWrites, i)
+      <==> IsLocAllocBitmap(blockAllocator.outstanding, i))
+  }
 
   predicate WFNode(node: Node)
   {
@@ -89,11 +132,17 @@ module ImplModel {
   predicate WFVarsReady(s: Variables)
   requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru) := s;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) := s;
     && WFCache(cache)
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
     && TotalCacheSize(s) <= MaxCacheSize()
+    && IndirectionTableModel.Inv(ephemeralIndirectionTable)
+    && IndirectionTableModel.Inv(persistentIndirectionTable)
+    && (frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(frozenIndirectionTable.value))
+    && ImplModelBlockAllocator.Inv(s.blockAllocator)
+    && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
+        s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
   }
   predicate WFVars(vars: Variables)
   {
@@ -104,6 +153,7 @@ module ImplModel {
     match sector {
       case SectorBlock(node) => WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
+        && IndirectionTableModel.Inv(indirectionTable)
         && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
       )
     }
@@ -118,19 +168,9 @@ module ImplModel {
   {
     map ref | ref in cache :: INode(cache[ref])
   }
-  function IIndirectionTableLbas(table: IndirectionTable) : map<uint64, BC.Location>
-  {
-    map ref | ref in table && table[ref].0.Some? :: table[ref].0.value
-  }
-  function IIndirectionTableGraph(table: IndirectionTable) : map<uint64, seq<Reference>>
-  {
-    map ref | ref in table :: table[ref].1
-  }
   function IIndirectionTable(table: IndirectionTable) : (result: BC.IndirectionTable)
   {
-    var lbas := IIndirectionTableLbas(table);
-    var graph := IIndirectionTableGraph(table);
-    BC.IndirectionTable(lbas, graph)
+    IndirectionTableModel.I(table)
   }
   function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<BC.IndirectionTable>)
   {
@@ -143,7 +183,7 @@ module ImplModel {
   requires WFVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru) =>
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
         BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
     }

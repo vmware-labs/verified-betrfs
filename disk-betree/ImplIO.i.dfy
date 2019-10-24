@@ -21,17 +21,9 @@ module ImplIO {
   import opened Bounds
   import opened IS = ImplState
   import Native
+  import MutableMapModel
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
-
-  method addrUsedInIndirectionTable(addr: uint64, indirectionTable:IS.MutIndirectionTable) returns (used:bool)
-    requires indirectionTable.Inv()
-    ensures !used == ImplModelIO.addrNotUsedInIndirectionTable(addr, IS.IIndirectionTable(indirectionTable))
-  {
-    var table := indirectionTable.ToMap();
-    return !(forall ref | ref in table && table[ref].0.Some?  ::
-          table[ref].0.value.addr != addr);
-  }
 
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(s: ImplVariables, len: uint64)
@@ -42,39 +34,11 @@ module ImplIO {
   ensures loc == ImplModelIO.getFreeLoc(s.I(), len)
   {
     ImplModelIO.reveal_getFreeLoc();
-    var tryOffset:uint64 := 0;
-    while true
-        invariant tryOffset as int * LBAType.BlockSize() as int < 0x1_0000_0000_0000_0000
-        invariant ImplModelIO.getFreeLoc(s.I(), len)
-               == ImplModelIO.getFreeLocIterate(s.I(), len, tryOffset)
-        decreases 0x1_0000_0000_0000_0000 - tryOffset as int
-    {
-      var addr : uint64 := tryOffset * LBAType.BlockSize();
-      var persistentUsed := addrUsedInIndirectionTable(addr, s.persistentIndirectionTable);
-      var ephemeralUsed := addrUsedInIndirectionTable(addr, s.ephemeralIndirectionTable);
-      var frozenUsed := false;
-      if s.frozenIndirectionTable != null {
-        frozenUsed := addrUsedInIndirectionTable(addr, s.frozenIndirectionTable);
-      }
-      var outstandingUsed := !(forall id | id in s.outstandingBlockWrites :: s.outstandingBlockWrites[id].loc.addr != addr);
-      if (
-          && BC.ValidLBAForNode(addr)
-          && !persistentUsed
-          && !ephemeralUsed
-          && !frozenUsed
-          && !outstandingUsed
-        ) {
-        var result := Some(LBAType.Location(addr, len));
-        assert result == ImplModelIO.getFreeLocIterate(s.I(), len, tryOffset);
-
-        return result;
-      }
-      // Hardcoding this value because this is the easiest way to avoid bigint logic
-      if tryOffset >= 2199023255551 {
-        return None;
-      }
-
-      tryOffset := tryOffset + 1;     
+    var i := s.blockAllocator.Alloc();
+    if i.Some? {
+      loc := Some(LBAType.Location((i.value * BlockSizeUint64()), len));
+    } else {
+      loc := None;
     }
   }
 
@@ -165,8 +129,7 @@ module ImplIO {
   requires io.initialized();
   requires s.ready
   requires s.WF()
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable)
-  requires IS.IIndirectionTable(s.ephemeralIndirectionTable)[ref].0.Some?
+  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -177,10 +140,10 @@ module ImplIO {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
     } else {
-      var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-      assert lbaGraph.Some?;
-      var (lba, _) := lbaGraph.value;
-      var id := RequestRead(io, lba.value);
+      var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
+      assert locGraph.Some?;
+      var loc := locGraph.value.loc;
+      var id := RequestRead(io, loc.value);
       s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
     }
   }
@@ -229,15 +192,23 @@ module ImplIO {
       var persistentIndirectionTable := sector.value.indirectionTable.Clone();
       var ephemeralIndirectionTable := sector.value.indirectionTable.Clone(); // TODO one of these clones is not necessary, we just need to shhow that sector.value.indirectionTable is fresh
 
-      s.ready := true;
-      s.persistentIndirectionTable := persistentIndirectionTable;
-      s.frozenIndirectionTable := null;
-      s.ephemeralIndirectionTable := ephemeralIndirectionTable;
-      s.outstandingIndirectionTableWrite := None;
-      s.outstandingBlockWrites := map[];
-      s.outstandingBlockReads := map[];
-      s.cache := new MutCache();
-      s.lru := new MutableLru.MutableLruQueue();
+      var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
+      if succ {
+        var blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
+
+        s.ready := true;
+        s.persistentIndirectionTable := persistentIndirectionTable;
+        s.frozenIndirectionTable := null;
+        s.ephemeralIndirectionTable := ephemeralIndirectionTable;
+        s.outstandingIndirectionTableWrite := None;
+        s.outstandingBlockWrites := map[];
+        s.outstandingBlockReads := map[];
+        s.cache := new MutCache();
+        s.lru := new MutableLru.MutableLruQueue();
+        s.blockAllocator := blockAllocator;
+      } else {
+        print "InitLocBitmap failed\n";
+      }
     } else {
       print "giving up; did not get indirectionTable when reading\n";
     }
@@ -266,8 +237,8 @@ module ImplIO {
 
     var ref := s.outstandingBlockReads[id].ref;
 
-    var lbaGraph := s.ephemeralIndirectionTable.Get(ref);
-    if (lbaGraph.None? || lbaGraph.value.0.None?) {
+    var lbaGraph := s.ephemeralIndirectionTable.GetEntry(ref);
+    if (lbaGraph.None? || lbaGraph.value.loc.None?) {
       print "PageInResp: ref !in lbas\n";
       return;
     }
@@ -280,8 +251,8 @@ module ImplIO {
     assert sector.Some? ==> IS.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
-    var lba := lbaGraph.value.0.value;
-    var graph := lbaGraph.value.1;
+    var lba := lbaGraph.value.loc.value;
+    var graph := lbaGraph.value.succs;
 
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
@@ -334,11 +305,18 @@ module ImplIO {
   {
     var id := io.getWriteResult();
     if (s.ready && s.outstandingIndirectionTableWrite == Some(id)) {
+      ImplModelIO.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
+
       s.outstandingIndirectionTableWrite := None;
       s.persistentIndirectionTable := s.frozenIndirectionTable;
       s.frozenIndirectionTable := null;
       s.syncReqs := BC.syncReqs2to1(s.syncReqs);
+
+      s.blockAllocator.MoveFrozenToPersistent();
     } else if (s.ready && id in s.outstandingBlockWrites) {
+      ImplModelIO.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
+
+      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64());
       s.outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id);
     } else {
     }

@@ -1,4 +1,4 @@
-include "../lib/MutableMap.i.dfy"
+include "../lib/MutableMapImpl.i.dfy"
 include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "MutableBucket.i.dfy"
@@ -516,7 +516,7 @@ module ImplMutCache {
     ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
     {
       LemmaSizeEqCount();
-      var _ := cache.Insert(ref, node);
+      cache.Insert(ref, node);
       assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
@@ -531,7 +531,7 @@ module ImplMutCache {
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       LemmaSizeEqCount();
-      var _ := cache.Remove(ref);
+      cache.Remove(ref);
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();
@@ -552,8 +552,8 @@ module ImplMutCache {
       LemmaSizeEqCount();
       var oldnodeOpt := cache.Get(oldref);
       var oldnode := oldnodeOpt.value;
-      var _ := cache.Insert(newref, oldnode);
-      var _ := cache.Insert(oldref, node);
+      cache.Insert(newref, oldnode);
+      cache.Insert(oldref, node);
 
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
       assert Inv();
@@ -572,7 +572,7 @@ module ImplMutCache {
     ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
     {
       LemmaSizeEqCount();
-      var _ := cache.Insert(ref, node);
+      cache.Insert(ref, node);
       assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 

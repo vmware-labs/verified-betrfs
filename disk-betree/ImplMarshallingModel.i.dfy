@@ -4,7 +4,7 @@ include "Message.i.dfy"
 include "ImplModel.i.dfy"
 include "../lib/Crypto.s.dfy"
 include "../lib/Option.s.dfy"
-include "../lib/MutableMap.i.dfy"
+include "../lib/MutableMapImpl.i.dfy"
 include "KVList.i.dfy"
 
 module ImplMarshallingModel {
@@ -21,6 +21,7 @@ module ImplMarshallingModel {
   import KVList
   import Crypto
   import Native
+  import IndirectionTableModel
 
   import BT = PivotBetreeSpec`Internal
 
@@ -44,25 +45,16 @@ module ImplMarshallingModel {
   type LBA = BC.LBA
   type Location = BC.Location
   type Sector = IM.Sector
-  type Message = M.Message
-  type Key = BT.G.Key
   type Node = IM.Node
 
   /////// Grammar
-
-  function method IndirectionTableGrammar() : G
-  ensures ValidGrammar(IndirectionTableGrammar())
-  {
-    // (Reference, address, len, successor-list) triples
-    GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-  }
 
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
     GTuple([
-      GArray(GByteArray),
-      GArray(GByteArray)
+      GKeyArray,
+      GMessageArray
     ])
   }
 
@@ -70,7 +62,7 @@ module ImplMarshallingModel {
   ensures ValidGrammar(PivotNodeGrammar())
   {
     GTuple([
-        GArray(GByteArray), // pivots
+        GKeyArray, // pivots
         GUint64Array, // children
         GArray(BucketGrammar()) 
     ])
@@ -79,7 +71,7 @@ module ImplMarshallingModel {
   function method SectorGrammar() : G
   ensures ValidGrammar(SectorGrammar())
   {
-    GTaggedUnion([IndirectionTableGrammar(), PivotNodeGrammar()])    
+    GTaggedUnion([IndirectionTableModel.IndirectionTableGrammar(), PivotNodeGrammar()])    
   }
 
   /////// Conversion to PivotNode
@@ -102,55 +94,6 @@ module ImplMarshallingModel {
     Some(v.ua)
   }
 
-  function {:fuel ValInGrammar,3} valToLocsAndSuccs(a: seq<V>) : (s : Option<map<uint64, (Option<Location>, seq<Reference>)>>)
-  requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-  ensures s.Some? ==> forall v | v in s.value.Values :: v.0.Some? && BC.ValidLocationForNode(v.0.value)
-  {
-    if |a| == 0 then
-      Some(map[])
-    else (
-      var res := valToLocsAndSuccs(DropLast(a));
-      match res {
-        case Some(table) => (
-          var tuple := Last(a);
-          var ref := valToReference(tuple.t[0]);
-          var lba := valToLBA(tuple.t[1]);
-          var len := tuple.t[2].u;
-          var succs := valToChildren(tuple.t[3]);
-          match succs {
-            case None => None
-            case Some(succs) => (
-              var loc := LBAType.Location(lba, len);
-              if ref in table || lba == 0 || !LBAType.ValidLocation(loc) then (
-                None
-              ) else (
-                Some(table[ref := (Some(loc), succs)])
-              )
-            )
-          }
-        )
-        case None => None
-      }
-    )
-  }
-
-  function valToIndirectionTable(v: V) : (s : Option<IM.IndirectionTable>)
-  requires ValInGrammar(v, IndirectionTableGrammar())
-  ensures s.Some? ==> BC.WFCompleteIndirectionTable(IM.IIndirectionTable(s.value))
-  {
-    var res := valToLocsAndSuccs(v.a);
-    match res {
-      case Some(res) => (
-        var graph := IM.IIndirectionTable(res).graph;
-        if BT.G.Root() in graph && BC.GraphClosed(graph) then (
-          Some(res)
-        ) else (
-          None
-        )
-      )
-      case None => None
-    }
-  }
 
   function valToUint64Seq(v: V) : (s : seq<uint64>)
   requires ValInGrammar(v, GUint64Array)
@@ -158,39 +101,53 @@ module ImplMarshallingModel {
     v.ua
   }
 
+  predicate isStrictlySortedKeySeqIterate(a: seq<Key>, i: int)
+  requires 1 <= i <= |a|
+  decreases |a| - i
+  ensures isStrictlySortedKeySeqIterate(a, i) <==> Keyspace.IsStrictlySorted(a[i-1..])
+  {
+    Keyspace.reveal_IsStrictlySorted();
+
+    if i == |a| then (
+      true
+    ) else (
+      if (Keyspace.lt(a[i-1], a[i])) then (
+        isStrictlySortedKeySeqIterate(a, i+1)
+      ) else (
+        false
+      )
+    )
+  }
+
+  predicate {:opaque} isStrictlySortedKeySeq(a: seq<Key>)
+  ensures isStrictlySortedKeySeq(a) <==> Keyspace.IsStrictlySorted(a)
+  {
+    Keyspace.reveal_IsStrictlySorted();
+
+    if |a| >= 2 then (
+      isStrictlySortedKeySeqIterate(a, 1)
+    ) else (
+      true
+    )
+  }
+
   function valToStrictlySortedKeySeq(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
-  requires ValInGrammar(v, GArray(GByteArray))
+  requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
-  ensures s.Some? ==> |s.value| == |v.a|
-  decreases |v.a|
+  ensures s.Some? ==> |s.value| == |v.baa|
+  decreases |v.baa|
   {
-    if |v.a| == 0 then
-      Some([])
+    if isStrictlySortedKeySeq(v.baa) then
+      var blah : seq<Key> := v.baa;
+      Some(v.baa)
     else
-      match valToStrictlySortedKeySeq(VArray(DropLast(v.a))) {
-        case None => None
-        case Some(pref) => (
-          assert ValInGrammar(Last(v.a), GByteArray);
-          var key := Last(v.a).b;
-
-          if (|key| <= Keyspace.MaxLen() as int && (|pref| > 0 ==> Keyspace.lt(Last(pref), key))) then (
-            Keyspace.reveal_seq_lte();
-            Keyspace.StrictlySortedAugment(pref, key);
-
-            var k : Key := key;
-
-            Some(pref + [k])
-          ) else (
-            None
-          )
-        )
-      }
+      None
   }
 
   function valToPivots(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
-  requires ValInGrammar(v, GArray(GByteArray))
+  requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Pivots.WFPivots(s.value)
   {
     var s := valToStrictlySortedKeySeq(v);
@@ -209,22 +166,13 @@ module ImplMarshallingModel {
 
   function {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : Option<seq<Message>>)
   requires ValidVal(v)
-  requires ValInGrammar(v, GArray(GByteArray))
+  requires ValInGrammar(v, GMessageArray)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i] != M.IdentityMessage()
-  ensures s.Some? ==> |s.value| == |v.a|
-  decreases |v.a|
+  ensures s.Some? ==> |s.value| == |v.ma|
+  decreases |v.ma|
   {
-    if |v.a| == 0 then Some([]) else (
-      assert ValInGrammar(Last(v.a), GByteArray);
-      var pref := valToMessageSeq(VArray(DropLast(v.a)));
-      if pref.Some? && |Last(v.a).b| <= ValueWithDefault.MaxLen() as int then (
-        var val : ValueWithDefault.Value := Last(v.a).b;
-        var msg := M.Define(val);
-        Some(pref.value + [msg])
-      ) else (
-        None
-      )
-    )
+    assert forall i | 0 <= i < |v.ma| :: ValidMessage(v.ma[i]);
+    Some(v.ma)
   }
 
   function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KVList.Kvl>)
@@ -324,7 +272,7 @@ module ImplMarshallingModel {
   requires ValInGrammar(v, SectorGrammar())
   {
     if v.c == 0 then (
-      match valToIndirectionTable(v.val) {
+      match IndirectionTableModel.valToIndirectionTable(v.val) {
         case Some(s) => Some(IM.SectorIndirectionTable(s))
         case None => None
       }

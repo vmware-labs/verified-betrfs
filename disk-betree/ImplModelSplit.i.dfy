@@ -279,6 +279,7 @@ module ImplModelSplit {
   function {:opaque} splitBookkeeping(k: Constants, s: Variables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': Variables)
   requires 0 <= slot < |fused_parent_children|
   requires s.Ready?
+  requires WriteAllocConditions(k, s)
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
@@ -315,6 +316,7 @@ module ImplModelSplit {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires 0 <= slot < |fused_parent_children|
   requires |child.buckets| >= 2
+  requires WriteAllocConditions(k, s)
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
@@ -331,8 +333,8 @@ module ImplModelSplit {
   : (s': Variables)
   requires s.Ready?
   requires Inv(k, s)
-  requires childref in s.ephemeralIndirectionTable
-  requires parentref in s.ephemeralIndirectionTable
+  requires childref in s.ephemeralIndirectionTable.graph
+  requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
@@ -341,10 +343,7 @@ module ImplModelSplit {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && parentref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[parentref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) then (
       s
     ) else (
@@ -382,8 +381,8 @@ module ImplModelSplit {
   lemma doSplitCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires s.Ready?
   requires Inv(k, s)
-  requires childref in s.ephemeralIndirectionTable
-  requires parentref in s.ephemeralIndirectionTable
+  requires childref in s.ephemeralIndirectionTable.graph
+  requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires parentref in s.cache
   requires s.cache[parentref].children.Some?
@@ -400,10 +399,7 @@ module ImplModelSplit {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && parentref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[parentref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) {
       assert noop(k, IVars(s), IVars(s));
     } else {

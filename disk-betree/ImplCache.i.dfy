@@ -31,7 +31,7 @@ module ImplCache {
            == ImplModelCache.getFreeRef(s.I())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
-      var lookup := s.ephemeralIndirectionTable.Get(i);
+      var lookup := s.ephemeralIndirectionTable.GetEntry(i);
       if lookup.None? {
         var cacheLookup := s.cache.GetOpt(i);
         if cacheLookup.None? {
@@ -63,7 +63,7 @@ module ImplCache {
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
-        var lookup := s.ephemeralIndirectionTable.Get(i);
+        var lookup := s.ephemeralIndirectionTable.GetEntry(i);
         if lookup.None? {
           var cacheLookup := s.cache.GetOpt(i);
           if cacheLookup.None? {
@@ -81,26 +81,30 @@ module ImplCache {
   }
 
   method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
-  requires s.ready
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
+  requires ImplModelCache.WriteAllocConditions(Ic(k), s.I())
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
-  ensures s.ready
+  modifies s.blockAllocator.Repr
   ensures s.W()
+  ensures s.I() == ImplModelCache.writeBookkeeping(Ic(k), old(s.I()), ref, children)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
-  ensures s.I() == ImplModelCache.writeBookkeeping(Ic(k), old(s.I()), ref, children)
+  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
-  //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_writeBookkeeping();
 
-    // TODO how do we deal with this?
-    assume s.ephemeralIndirectionTable.Count as nat < 0x10000000000000000 / 8;
-    var _ := s.ephemeralIndirectionTable.Insert(ref, (None, if children.Some? then children.value else []));
+    ImplModelCache.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+
+    var oldLoc := s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
 
     s.lru.Use(ref);
+
+    if oldLoc.Some? {
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+    }
 
     LruModel.LruUse(old(s.lru.Queue), ref);
     assert LruModel.I(s.lru.Queue) == LruModel.I(old(s.lru.Queue)) + {ref};
@@ -111,19 +115,19 @@ module ImplCache {
 
   method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<BT.G.Reference>>)
   returns (ref: Option<BT.G.Reference>)
-  requires s.ready
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  //modifies s.Repr()
+  requires ImplModelCache.WriteAllocConditions(Ic(k), s.I())
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.blockAllocator.Repr
   ensures s.ready
   ensures s.W()
+  ensures (s.I(), ref) == ImplModelCache.allocBookkeeping(Ic(k), old(s.I()), children)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
-  ensures (s.I(), ref) == ImplModelCache.allocBookkeeping(Ic(k), old(s.I()), children)
+  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
-  //ensures s.cache.I() == old(s.cache.I())
   {
     ImplModelCache.reveal_allocBookkeeping();
     

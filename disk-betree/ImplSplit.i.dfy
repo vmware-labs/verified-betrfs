@@ -32,10 +32,12 @@ module ImplSplit {
   requires s.ready
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
+  modifies s.blockAllocator.Repr
   ensures s.ready
   ensures s.W()
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures s.I() == ImplModelSplit.splitBookkeeping(Ic(k), old(s.I()), left_childref, right_childref, parentref, fused_parent_children, left_child.I(), right_child.I(), slot as int);
   {
     ImplModelSplit.reveal_splitBookkeeping();
@@ -113,8 +115,8 @@ module ImplSplit {
   method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: uint64)
   requires s.ready
   requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable.Contents
-  requires parentref in s.ephemeralIndirectionTable.Contents
+  requires ref in s.ephemeralIndirectionTable.I().graph
+  requires parentref in s.ephemeralIndirectionTable.I().graph
   requires s.cache.ptr(ref).Some?
   requires s.cache.ptr(parentref).Some?
   requires s.cache.I()[parentref].children.Some?
@@ -128,13 +130,10 @@ module ImplSplit {
     ImplModelSplit.reveal_doSplit();
 
     if s.frozenIndirectionTable != null {
-      var lbaGraph := s.frozenIndirectionTable.Get(parentref);
-      if lbaGraph.Some? {
-        var (lba, _) := lbaGraph.value;
-        if lba.None? {
-          print "giving up; doSplit can't run because frozen isn't written";
-          return;
-        }
+      var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
+      if b {
+        print "giving up; split can't run because frozen isn't written";
+        return;
       }
     }
 

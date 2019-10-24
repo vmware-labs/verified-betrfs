@@ -15,6 +15,8 @@ module {:extern} MkfsImpl {
   import opened MutableBucket
   import opened ImplNode
   import KVList
+  import IndirectionTableModel
+  import IndirectionTableImpl
 
   import BT = PivotBetreeSpec
   import BC = BetreeGraphBlockCache
@@ -39,9 +41,10 @@ module {:extern} MkfsImpl {
     assume IM.WFNode(node.I());
     var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));
 
-    var sectorIndirectionTable := new IS.MutIndirectionTable(1024); // TODO magic number
-    assume sectorIndirectionTable.Count == 0;
-    var _ := sectorIndirectionTable.Insert(0, (Some(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)), []));
+    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
+    assume sectorIndirectionTable.t.Count == 0;
+    assume false;
+    sectorIndirectionTable.t.Insert(0, IndirectionTableModel.Entry(Some(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)), []));
     assert IM.IIndirectionTable(IS.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
       map[0 := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)],
       map[0 := []]

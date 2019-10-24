@@ -23,13 +23,16 @@ module ImplModelLeaf {
   : (s': Variables)
   requires Inv(k, s)
   requires s.Ready?
-  requires ref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
   requires |node.buckets| == 1
   {
-    if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) then (
+    if (
+      && s.frozenIndirectionTable.Some?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
+    ) then (
       s
     ) else (
       WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
@@ -53,7 +56,7 @@ module ImplModelLeaf {
   lemma repivotLeafCorrect(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
   requires s.Ready?
-  requires ref in s.ephemeralIndirectionTable
+  requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
   requires node == s.cache[ref]
   requires node.children.None?
@@ -66,7 +69,10 @@ module ImplModelLeaf {
 
     reveal_repivotLeaf();
 
-    if (!(s.frozenIndirectionTable.Some? && ref in IIndirectionTable(s.frozenIndirectionTable.value).graph ==> ref in IIndirectionTable(s.frozenIndirectionTable.value).locs)) {
+    if (
+      && s.frozenIndirectionTable.Some?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
+    ) {
       assert s' == s;
       assert WFVars(s');
       assert noop(k, IVars(s), IVars(s));

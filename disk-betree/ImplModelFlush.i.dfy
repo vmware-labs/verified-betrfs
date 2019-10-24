@@ -26,23 +26,20 @@ module ImplModelFlush {
   requires Inv(k, s)
   requires s.Ready?
 
-  requires parentref in s.ephemeralIndirectionTable
+  requires parentref in s.ephemeralIndirectionTable.graph
   requires parentref in s.cache
 
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
 
-  requires childref in s.ephemeralIndirectionTable
+  requires childref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires s.cache[childref] == child
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && parentref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[parentref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) then (
       s
     ) else (
@@ -82,10 +79,7 @@ module ImplModelFlush {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && parentref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[parentref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) {
       assert noop(k, IVars(s), IVars(s));
     } else {
@@ -110,12 +104,12 @@ module ImplModelFlush {
 
       // TODO these are actually kind of annoying right now
       assume childref in s.cache;
-      assume childref in s.ephemeralIndirectionTable;
+      assume childref in s.ephemeralIndirectionTable.graph;
       assume child == s.cache[childref];
       assume childref != BT.G.Root();
 
       assert parentref in s.cache;
-      assert parentref in s.ephemeralIndirectionTable;
+      assert parentref in s.ephemeralIndirectionTable.graph;
       assert parent == s.cache[parentref];
 
       var newchild := child.(buckets := newbuckets);

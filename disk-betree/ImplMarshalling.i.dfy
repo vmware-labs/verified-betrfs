@@ -29,6 +29,8 @@ module ImplMarshalling {
   import KVList
   import Crypto
   import Native
+  import MutableMapModel
+  import IndirectionTableImpl
 
   import BT = PivotBetreeSpec`Internal
 
@@ -46,160 +48,42 @@ module ImplMarshalling {
   type LBA = IMM.LBA
   type Location = IMM.Location
   type Sector = IS.Sector
-  type Message = IMM.Message
-  type Key = IMM.Key
 
   /////// Conversion to PivotNode
 
-  method {:fuel ValInGrammar,3} ValToLocsAndSuccs(a: seq<V>) returns (s : Option<ImplState.MutIndirectionTable>)
-  requires IMM.valToLocsAndSuccs.requires(a)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToLocsAndSuccs(a)
-  ensures s.Some? ==> s.value.Inv()
-  ensures s.Some? ==> s.value.Count as nat == |a|
-  ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
-  ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
+  method IsStrictlySortedKeySeq(a: seq<Key>) returns (b : bool)
+  requires |a| < 0x1_0000_0000_0000_0000
+  ensures b == IMM.isStrictlySortedKeySeq(a)
   {
-    assume |a| < 0x1_0000_0000_0000_0000;
-    if |a| as uint64 == 0 {
-      var newHashMap := new MM.ResizingHashMap<(Option<Location>, seq<Reference>)>(1024); // TODO(alattuada) magic numbers
-      s := Some(newHashMap);
-      assume s.value.Count as nat == |a|;
-    } else {
-      var res := ValToLocsAndSuccs(a[..|a| as uint64 - 1]);
-      match res {
-        case Some(mutMap) => {
-          var tuple := a[|a| as uint64 - 1];
-          var ref := IMM.valToReference(tuple.t[0 as uint64]);
-          var lba := IMM.valToLBA(tuple.t[1 as uint64]);
-          var len := tuple.t[2 as uint64].u;
-          var succs := IMM.valToChildren(tuple.t[3 as uint64]);
-          match succs {
-            case None => {
-              s := None;
-            }
-            case Some(succs) => {
-              var graphRef := mutMap.Get(ref);
-              var loc := LBAType.Location(lba, len);
-              if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc) {
-                s := None;
-              } else {
-                var _ := mutMap.Insert(ref, (Some(loc), succs));
-                s := Some(mutMap);
-                assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
-                assume s.value.Count as nat == |a|;
-              }
-            }
-          }
-        }
-        case None => {
-          s := None;
-        }
-      }
-    }
-  }
+    IMM.reveal_isStrictlySortedKeySeq();
 
-  method GraphClosed(table: ImplState.MutIndirectionTable) returns (result: bool)
-    requires table.Inv()
-    requires BC.GraphClosed.requires(IM.IIndirectionTable(table.Contents).graph)
-    ensures BC.GraphClosed(IM.IIndirectionTable(table.Contents).graph) == result
-  {
-    var m := table.ToMap();
-    var m' := map ref | ref in m :: m[ref].1;
-    result := BC.GraphClosed(m');
-  }
-
-  method ValToIndirectionTable(v: V) returns (s : Option<ImplState.MutIndirectionTable>)
-  requires IMM.valToIndirectionTable.requires(v)
-  ensures MapOption(s, (x: ImplState.MutIndirectionTable) reads x => x.Contents) == IMM.valToIndirectionTable(v)
-  ensures s.Some? ==> s.value.Inv()
-  {
-    var res := ValToLocsAndSuccs(v.a);
-    match res {
-      case Some(res) => {
-        var rootRef := res.Get(BT.G.Root());
-        var isGraphClosed := GraphClosed(res);
-        if rootRef.Some? && isGraphClosed {
-          s := Some(res);
-        } else {
-          s := None;
-        }
-      }
-      case None => {
-        s := None;
-      }
+    if |a| as uint64 < 2 {
+      return true;
     }
-  }
-
-  lemma valToStrictlySortedKeySeqPrefixNone(v: V, i: int)
-  requires IMM.valToStrictlySortedKeySeq.requires(v)
-  requires 0 <= i <= |v.a|
-  ensures IMM.valToStrictlySortedKeySeq(VArray(v.a[..i])) == None
-      ==> IMM.valToStrictlySortedKeySeq(v) == None
-  decreases |v.a| - i
-  {
-    if (i < |v.a|) {
-      valToStrictlySortedKeySeqPrefixNone(v, i+1);
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-    } else {
-      assert v.a[..i] == v.a;
+    var i: uint64 := 1;
+    while i < |a| as uint64
+    invariant 0 <= i as int <= |a|
+    invariant IMM.isStrictlySortedKeySeq(a) == IMM.isStrictlySortedKeySeqIterate(a, i as int)
+    {
+      var c := Keyspace.cmp(a[i-1], a[i]);
+      if c >= 0 {
+        return false;
+      }
+      i := i + 1;
     }
+
+    return true;
   }
 
   method ValToStrictlySortedKeySeq(v: V) returns (s : Option<seq<Key>>)
   requires IMM.valToStrictlySortedKeySeq.requires(v)
   ensures s == IMM.valToStrictlySortedKeySeq(v)
   {
-    var ar := new Key[|v.a| as uint64];
-
-    var i: uint64 := 0;
-    while i < |v.a| as uint64
-    invariant 0 <= i as int <= |v.a|
-    invariant IMM.valToStrictlySortedKeySeq(VArray(v.a[..i])) == Some(ar[..i])
-    {
-      assert ValInGrammar(v.a[i], GByteArray);
-      assert ValidVal(v.a[i]);
-
-      valToStrictlySortedKeySeqPrefixNone(v, i as int + 1);
-
-      if |v.a[i].b| as uint64 > Keyspace.MaxLen() {
-        return None;
-      }
-
-      ar[i] := v.a[i].b;
-
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-
-      if (i > 0) {
-        var c := Keyspace.cmp(ar[i-1], ar[i]);
-        if (c >= 0) {
-          assert Last(ar[..i]) == ar[i-1];
-          assert IMM.valToStrictlySortedKeySeq(VArray(v.a[..i+1])) == None;
-
-          return None;
-        }
-      }
-
-      i := i + 1;
-    }
-
-    assert v.a[..i] == v.a;
-    assert ar[..i] == ar[..];
-    s := Some(ar[..]);
-  }
-
-  lemma valToMessageSeqPrefixNone(v: V, i: int)
-  requires IMM.valToMessageSeq.requires(v)
-  requires 0 <= i <= |v.a|
-  ensures IMM.valToMessageSeq(VArray(v.a[..i])) == None
-      ==> IMM.valToMessageSeq(v) == None
-  decreases |v.a| - i
-  {
-    if (i < |v.a|) {
-      valToMessageSeqPrefixNone(v, i+1);
-      assert DropLast(v.a[..i+1]) == v.a[..i];
+    var is_sorted := IsStrictlySortedKeySeq(v.baa);
+    if is_sorted {
+      return Some(v.baa);
     } else {
-      assert v.a[..i] == v.a;
+      return None;
     }
   }
 
@@ -207,35 +91,8 @@ module ImplMarshalling {
   requires IMM.valToMessageSeq.requires(v)
   ensures s == IMM.valToMessageSeq(v)
   {
-    var ar := new Message[|v.a| as uint64];
-
-    var i: uint64 := 0;
-    while i < |v.a| as uint64
-    invariant 0 <= i as int <= |v.a|
-    invariant IMM.valToMessageSeq(VArray(v.a[..i])) == Some(ar[..i])
-    {
-      assert ValInGrammar(v.a[i], GByteArray);
-      assert ValidVal(v.a[i]);
-
-      valToMessageSeqPrefixNone(v, i as int + 1);
-
-      if |v.a[i].b| as uint64 > ValueWithDefault.MaxLen() {
-        return None;
-      }
-
-      ar[i] := M.Define(v.a[i].b);
-
-      assert DropLast(v.a[..i+1]) == v.a[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-
-      i := i + 1;
-    }
-
-    assert v.a[..i] == v.a;
-    assert ar[..i] == ar[..];
-    s := Some(ar[..]);
+    return Some(v.ma);
   }
-
 
   method ValToPivots(v: V) returns (s : Option<seq<Key>>)
   requires IMM.valToPivots.requires(v)
@@ -455,10 +312,11 @@ module ImplMarshalling {
   ensures MapOption(s, IS.ISector) == IMM.valToSector(v)
   {
     if v.c == 0 {
-      var mutMap := ValToIndirectionTable(v.val);
-      match mutMap {
-        case Some(s) => return Some(ImplState.SectorIndirectionTable(s));
-        case None => return None;
+      var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
+      if mutMap != null {
+        return Some(ImplState.SectorIndirectionTable(mutMap));
+      } else {
+        return None;
       }
     } else {
       var node := ValToNode(v.val);
@@ -483,49 +341,6 @@ module ImplMarshalling {
     return VUint64Array(children);
   }
 
-  // TODO(alattuada) remove?
-  method {:fuel ValInGrammar,2} lbasSuccsToVal(indirectionTable: map<Reference, (Option<Location>, seq<Reference>)>) returns (v: Option<V>)
-  requires forall ref | ref in indirectionTable :: indirectionTable[ref].0.Some?
-  requires forall ref | ref in indirectionTable :: BC.ValidLocationForNode(indirectionTable[ref].0.value)
-  requires |indirectionTable| < 0x1_0000_0000_0000_0000 / 8
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, IMM.IndirectionTableGrammar());
-  ensures v.Some? ==> |v.value.a| == |indirectionTable|
-  ensures v.Some? ==> IMM.valToLocsAndSuccs(v.value.a) == Some(indirectionTable)
-  {
-    if (|indirectionTable| as uint64 == 0) {
-      return Some(VArray([]));
-    } else {
-      var ref :| ref in indirectionTable.Keys;
-      var vpref := lbasSuccsToVal(MapRemove(indirectionTable, {ref}));
-      match vpref {
-        case None => return None;
-        case Some(vpref) => {
-          var loc := indirectionTable[ref].0.value;
-          assume |indirectionTable[ref].1| < 0x1_0000_0000_0000_0000;
-          //if (|indirectionTable[ref].1| >= 0x1_0000_0000_0000_0000) {
-          //  return None;
-          //}
-          var succs := indirectionTable[ref].1;
-          var succsV := childrenToVal(indirectionTable[ref].1);
-          var tuple := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), succsV]);
-
-          assert MapRemove(indirectionTable, {ref})[ref := (Some(loc), succs)] == indirectionTable;
-
-          //assert ref == valToReference(tuple.t[0]);
-          //assert lba == valToReference(tuple.t[1]);
-          //assert !(ref in MapRemove(graph, {ref}));
-          assert BC.ValidLocationForNode(loc);
-          //assert !(lba == 0);
-          //assert valToLocssAndSuccs(vpref.a + [tuple]) == Some((lbas, graph));
-          assert ValidVal(tuple);
-
-          return Some(VArray(vpref.a + [tuple]));
-        }
-      }
-    }
-  }
-
   method {:fuel ValidVal,2} uint64ArrayToVal(a: seq<uint64>) returns (v: V)
   requires |a| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
@@ -537,47 +352,29 @@ module ImplMarshalling {
     return VUint64Array(a);
   }
 
+  lemma lemmaSizeOfKeyArray(keys: seq<Key>)
+  ensures 8 + WeightKeySeq(keys) == SizeOfV(VKeyArray(keys))
+
+  lemma lemmaSizeOfMessageArray(messages: seq<Message>)
+  ensures 8 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
+
+  lemma WeightKeySeqLe(keys: seq<Key>)
+  ensures WeightKeySeq(keys) <= |keys| * (8 + Keyspace.MaxLen() as int)
+
   method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
   requires Keyspace.IsStrictlySorted(keys)
   requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |keys|
+  ensures ValInGrammar(v, GKeyArray)
+  ensures v.baa == keys
   ensures IMM.valToStrictlySortedKeySeq(v) == Some(keys)
   ensures SizeOfV(v) <= 8 + |keys| * (8 + Keyspace.MaxLen() as int)
   ensures SizeOfV(v) == 8 + WeightKeySeq(keys)
   {
-    var ar := new V[|keys| as uint64];
-    var i: uint64 := 0;
-    while i < |keys| as uint64
-    invariant i as int <= |keys|
-    invariant ValidVal(VArray(ar[..i]))
-    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant IMM.valToStrictlySortedKeySeq(VArray(ar[..i])) == Some(keys[..i])
-    invariant SizeOfV(VArray(ar[..i])) <= 8 + i as int * (8 + Keyspace.MaxLen() as int)
-    invariant SizeOfV(VArray(ar[..i])) == 8 + WeightKeySeq(keys[..i])
-    {
-      ar[i] := VByteArray(keys[i]);
+    lemmaSizeOfKeyArray(keys);
+    WeightKeySeqLe(keys);
 
-      lemma_SeqSum_prefix(ar[..i], VByteArray(keys[i]));
-      assert keys[..i+1][..i] == keys[..i];
-      assert ar[..i+1][..i] == ar[..i];
-      assert ar[..i+1] == ar[..i] + [ar[i]];
-      assert keys[..i] + [keys[i]] == keys[..i+1];
-
-      if i > 0 {
-        Keyspace.IsStrictlySortedImpliesLt(keys, i as int - 1, i as int);
-      }
-
-      assert i > 0 ==> keys[i-1] == Last(DropLast(keys[..i as int + 1]));
-      assert keys[i] == Last(keys[..i as int + 1]);
-
-      i := i + 1;
-    }
-    v := VArray(ar[..]);
-
-    assert ar[..i] == ar[..];
-    assert keys[..i] == keys;
+    return VKeyArray(keys);
   }
 
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
@@ -593,66 +390,30 @@ module ImplMarshalling {
   requires Pivots.WFPivots(pivots)
   requires |pivots| <= MaxNumChildren() as int - 1
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |pivots|
+  ensures ValInGrammar(v, GKeyArray)
+  ensures |v.baa| == |pivots|
   ensures IMM.valToPivots(v) == Some(pivots)
   ensures SizeOfV(v) <= 8 + |pivots| * (8 + Keyspace.MaxLen() as int)
   {
     v := strictlySortedKeySeqToVal(pivots);
 
-    if |pivots| as uint64 > 0 {
+    ghost var ghosty := true;
+    if ghosty && |pivots| > 0 {
       KeyInPivotsIsNonempty(pivots);
     }
-  }
-
-  lemma lemmaArrayDecomp<T>(ar: array<T>, i: uint64)
-  requires 0 <= i as int < ar.Length
-  requires ar.Length < 0x1_0000_0000_0000_0000
-  ensures ar[..i+1][..i] == ar[..i];
-  ensures ar[..i+1] == ar[..i] + [ar[i]];
-  {
-  }
-
-  lemma lemmaSeqDecomp<T>(s: seq<T>, i: uint64)
-  requires 0 <= i as int < |s|
-  requires |s| < 0x1_0000_0000_0000_0000
-  ensures s[..i+1][..i] == s[..i];
-  ensures s[..i+1] == s[..i] + [s[i]];
-  {
   }
 
   method messageSeqToVal(s: seq<Message>) returns (v : V)
   requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
   requires |s| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GArray(GByteArray))
-  ensures |v.a| == |s|
+  ensures ValInGrammar(v, GMessageArray)
+  ensures |v.ma| == |s|
   ensures IMM.valToMessageSeq(v) == Some(s)
   ensures SizeOfV(v) == 8 + WeightMessageSeq(s)
   {
-    var ar := new V[|s| as uint64];
-    var i: uint64 := 0;
-    while i < |s| as uint64
-    invariant 0 <= i <= |s| as uint64
-    invariant ValidVal(VArray(ar[..i]))
-    invariant ValInGrammar(VArray(ar[..i]), GArray(GByteArray))
-    invariant IMM.valToMessageSeq(VArray(ar[..i])) == Some(s[..i])
-    invariant SizeOfV(VArray(ar[..i])) == 8 + WeightMessageSeq(s[..i])
-    {
-      ar[i] := VByteArray(s[i].value);
-
-      lemma_SeqSum_prefix(ar[..i], VByteArray(s[i].value));
-      lemmaArrayDecomp(ar, i);
-      lemmaSeqDecomp(s, i);
-
-      assert WeightMessage(s[i]) == SizeOfV(ar[i]);
-
-      i := i + 1;
-    }
-    v := VArray(ar[..]);
-
-    assert ar[..i] == ar[..];
-    assert s[..i] == s;
+    lemmaSizeOfMessageArray(s);
+    return VMessageArray(s);
   }
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
@@ -775,68 +536,18 @@ module ImplMarshalling {
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
   requires sector.SectorIndirectionTable? ==>
-      BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.Contents))
+      BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
   ensures v.Some? ==> ValidVal(v.value)
   ensures v.Some? ==> ValInGrammar(v.value, IMM.SectorGrammar());
-  ensures v.Some? ==> IMM.valToSector(v.value) == Some(ImplState.ISector(sector))
+  ensures v.Some? ==> Marshalling.valToSector(v.value) == Some(IM.ISector(ImplState.ISector(sector)))
   ensures sector.SectorBlock? ==> v.Some?
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
   {
     match sector {
-      case SectorIndirectionTable(mutMap) => {
-        assert forall r | r in mutMap.Contents :: r in IM.IIndirectionTable(sector.indirectionTable.Contents).locs
-            ==> mutMap.Contents[r].0.Some? && BC.ValidLocationForNode(mutMap.Contents[r].0.value);
-        var table := mutMap.ToArray();
-        ghost var tableSeq := table[..];
-        /* (doc) assert mutMap.Contents.Values == set i | 0 <= i < |tableSeq| :: tableSeq[i].1; */
-        assert forall i: nat | i < |tableSeq| :: tableSeq[i].1 == mutMap.Contents[tableSeq[i].0];
-        assert forall i: nat, j: nat | i <= j < |tableSeq| :: tableSeq[i].0 == tableSeq[j].0 ==> i == j;
-        if table.Length as uint64 < 0x2000_0000_0000_0000 {
-          assert forall i: nat | i < |tableSeq| :: tableSeq[i].1.0.Some?;
-          // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
-          assume forall i: nat | i < |tableSeq| :: |tableSeq[i].1.1| < |tableSeq|;
-          /* (doc) assert table.Length == |mutMap.Contents.Keys| == |mutMap.Contents|; */
-          var a: array<V> := new V[table.Length as uint64];
-          var i: uint64 := 0;
-          ghost var partial := map[];
-          while i < table.Length as uint64
-          invariant i <= table.Length as uint64
-          invariant forall j | j < i :: ValidVal(a[j])
-          invariant forall j | j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-          // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant table[..] == tableSeq
-          invariant IMM.valToLocsAndSuccs(a[..i]).Some?
-          invariant IMM.valToLocsAndSuccs(a[..i]).value == partial
-          invariant |partial.Keys| == i as nat
-          invariant partial.Keys <= mutMap.Contents.Keys
-          invariant forall r | r in partial :: r in mutMap.Contents && partial[r] == mutMap.Contents[r]
-          // NOALIAS/CONST mutMap doesn't need to be mutable, if we could say so we wouldn't need this
-          invariant mutMap.Contents == old(mutMap.Contents)
-          invariant forall r | r in partial :: exists j: nat | j < i as nat :: table[j].0 == r
-          {
-            // TODO I'd use a seq comprehension, but I don't know how to extract properties of the elements
-
-            var (ref, locOptGraph: (Option<LBAType.Location>, seq<Reference>)) := table[i];
-            // NOTE: deconstructing in two steps to work around c# translation bug
-            var (locOpt, graph) := locOptGraph;
-            var loc := locOpt.value;
-            var childrenVal := VUint64Array(graph);
-
-            // == mutation ==
-            partial := partial[ref := (locOpt, graph)];
-            a[i] := VTuple([IMM.refToVal(ref), IMM.lbaToVal(loc.addr), VUint64(loc.len), childrenVal]);
-            i := i + 1;
-            // ==============
-
-            assert a[..i-1] == DropLast(a[..i]); // observe
-          }
-          /* (doc) assert |partial.Keys| == |mutMap.Contents.Keys|; */
-          SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, mutMap.Contents.Keys);
-
-          assert partial == ImplState.IIndirectionTable(mutMap); // observe
-          assert a[..i] == a[..]; // observe
-          v := Some(VCase(0, VArray(a[..])));
-          return;
+      case SectorIndirectionTable(indirectionTable) => {
+        var v := indirectionTable.indirectionTableToVal();
+        if v.Some? {
+          return Some(VCase(0, v.value));
         } else {
           return None;
         }
@@ -916,7 +627,10 @@ module ImplMarshalling {
   requires IM.WFSector(ImplState.ISector(sector))
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
-  ensures data != null ==> IMM.parseCheckedSector(data[..]) == ISectorOpt(Some(sector))
+  ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
+  ensures data != null ==>
+      && IM.ISector(IMM.parseCheckedSector(data[..]).value)
+      == IM.ISector(ImplState.ISector(sector))
   ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length == BlockSize() as int

@@ -21,7 +21,7 @@ module LBAType {
   }
   predicate method {:opaque} ValidAddr(addr: LBA) {
     //exists j: int :: j * BlockSize() as int == addr as int
-    addr as int % BlockSize() as int == 0
+    addr % BlockSize() == 0
   }
   predicate method ValidLocation(loc: Location) {
     && ValidAddr(loc.addr)

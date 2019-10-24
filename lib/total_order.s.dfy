@@ -9,12 +9,12 @@ abstract module Total_Order {
 
 	function SomeElement() : Element
 
-	predicate method lt(a: Element, b: Element)
+	predicate lt(a: Element, b: Element)
 	{
 		lte(a, b) && a != b
 	}
 		
-	predicate method lte(a: Element, b: Element)
+	predicate lte(a: Element, b: Element)
 		ensures lte(a, b) == ltedef(a, b);
 		ensures ltedef(a, b) || ltedef(b, a); // Total
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
@@ -26,14 +26,14 @@ abstract module Total_Order {
     ensures c == 1 ==> lt(b, a)
     ensures c == 0 ==> a == b
 
-	predicate method ltedef(a: Element, b: Element)
+	predicate ltedef(a: Element, b: Element)
 
-  function method Min(a: Element, b: Element) : Element
+  function Min(a: Element, b: Element) : Element
   {
     if lte(a, b) then a else b
   }
     
-  function method Max(a: Element, b: Element) : Element
+  function Max(a: Element, b: Element) : Element
   {
     if lte(a, b) then b else a
   }
@@ -563,7 +563,7 @@ abstract module Lexicographic_Order refines Total_Order {
 
   function SomeElement() : Element { [] }
 
-  predicate method lte(a: Element, b: Element)
+  predicate lte(a: Element, b: Element)
   {
     totality(a, b);
     antisymm(a, b);
@@ -572,12 +572,12 @@ abstract module Lexicographic_Order refines Total_Order {
     seq_lte(a, b)
   }
 
-  predicate method ltedef(a: Element, b: Element)
+  predicate ltedef(a: Element, b: Element)
   {
     seq_lte(a, b)
   }
     
-  predicate method {:opaque} seq_lte(a: Element, b: Element)
+  predicate {:opaque} seq_lte(a: Element, b: Element)
   decreases |a|
   {
     if |a| == 0 then (

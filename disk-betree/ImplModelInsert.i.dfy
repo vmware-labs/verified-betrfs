@@ -21,17 +21,6 @@ module ImplModelInsert {
 
   // == insert ==
 
-  function removeLBAFromIndirectionTable(table: IndirectionTable, ref: BT.G.Reference) : IndirectionTable
-  {
-    if ref in table then (
-      var lbaGraph := table[ref];
-      var (lba, graph) := lbaGraph;
-      table[ref := (None, graph)]
-    ) else (
-      table
-    )
-  }
-
   function {:opaque} NodeInsertKeyValue(node: Node, key: MS.Key, msg: Message) : Node
   requires WFNode(node)
   {
@@ -56,17 +45,15 @@ module ImplModelInsert {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value
-      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value[BT.G.Root()];
-      && rootInFrozenLbaGraph.0.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
     ) then (
       (s, false)
     ) else (
       var msg := Messages.Define(value);
       var newCache := CacheInsertKeyValue(s.cache, BT.G.Root(), key, msg);
 
-      var s' := s.(cache := newCache)
-          .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
+      var s0 := s.(cache := newCache);
+      var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
       (s', true)
     )
   }
@@ -87,9 +74,7 @@ module ImplModelInsert {
     reveal_NodeInsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
-      && BT.G.Root() in s.frozenIndirectionTable.value
-      && var rootInFrozenLbaGraph := s.frozenIndirectionTable.value[BT.G.Root()];
-      && rootInFrozenLbaGraph.0.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
     ) {
       assert (s.frozenIndirectionTable.Some? && BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).graph) &&
           !(BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).locs);
@@ -110,8 +95,11 @@ module ImplModelInsert {
 
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
-    var s' := s.(cache := newCache)
-        .(ephemeralIndirectionTable := removeLBAFromIndirectionTable(s.ephemeralIndirectionTable, BT.G.Root()));
+    var s0 := s.(cache := newCache);
+    var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
+
+    reveal_writeBookkeeping();
+    writeCorrect(k, s0, BT.G.Root(), newRoot);
 
     var oldroot := INode(root);
     var newroot := INode(newRoot);

@@ -4,6 +4,7 @@ module ImplModelDealloc {
   import opened ImplModel
   import opened ImplModelIO
   import opened ImplModelCache
+  import opened Bounds
 
   import opened Options
   import opened Maps
@@ -17,9 +18,7 @@ module ImplModelDealloc {
   predicate deallocable(s: Variables, ref: BT.G.Reference)
   {
     && s.Ready?
-    && ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
-    && ref != BT.G.Root()
-    && forall r | r in IIndirectionTable(s.ephemeralIndirectionTable).graph :: ref !in IIndirectionTable(s.ephemeralIndirectionTable).graph[r]
+    && IndirectionTableModel.deallocable(s.ephemeralIndirectionTable, ref)
   }
 
   function {:opaque} Dealloc(k: Constants, s: Variables, io: IO, ref: BT.G.Reference)
@@ -30,19 +29,25 @@ module ImplModelDealloc {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && ref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[ref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
     ) then (
       (s, io)
     ) else if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) then (
       (s, io)
     ) else (
+      var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
+
+      lemmaIndirectionTableLocIndexValid(k, s, ref);
+
+      var blockAllocator' := if oldLoc.Some?
+        then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+        else s.blockAllocator;
+
       var s' := s
-        .(ephemeralIndirectionTable := MapRemove(s.ephemeralIndirectionTable, {ref}))
+        .(ephemeralIndirectionTable := eph)
         .(cache := MapRemove(s.cache, {ref}))
-        .(lru := LruModel.Remove(s.lru, ref));
+        .(lru := LruModel.Remove(s.lru, ref))
+        .(blockAllocator := blockAllocator');
       (s', io)
     )
   }
@@ -62,10 +67,7 @@ module ImplModelDealloc {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && ref in s.frozenIndirectionTable.value
-      && var entry := s.frozenIndirectionTable.value[ref];
-      && var (loc, _) := entry;
-      && loc.None?
+      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
     ) {
       assert noop(k, IVars(s), IVars(s'));
       return;
@@ -76,6 +78,22 @@ module ImplModelDealloc {
       return;
     }
 
+    lemmaIndirectionTableLocIndexValid(k, s, ref);
+
+    var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
+
+    var blockAllocator' := if oldLoc.Some?
+      then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      else s.blockAllocator;
+
+    freeIndirectionTableLocCorrect(k, s, s', ref,
+      if oldLoc.Some?
+      then Some(oldLoc.value.addr as int / BlockSize())
+      else None);
+    reveal_ConsistentBitmap();
+
+    assert WFVars(s');
+
     var iDiskOp := M.IDiskOp(diskOp(io));
     assert BC.Unalloc(Ik(k), IVars(s), IVars(s'), iDiskOp, ref);
     assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, iDiskOp, BC.UnallocStep(ref));
@@ -83,62 +101,12 @@ module ImplModelDealloc {
     // assert M.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, io.diskOp(), M.Step(BBC.BlockCacheMoveStep(BC.UnallocStep(ref))));
   }
 
-  function FindDeallocableIterate(s: Variables, ephemeralRefs: seq<BT.G.Reference>, i: uint64)
-  : (ref: Option<Reference>)
-  requires 0 <= i as int <= |ephemeralRefs|
-  requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-  decreases 0x1_0000_0000_0000_0000 - i as int
-  {
-    if i == |ephemeralRefs| as uint64 then (
-      None
-    ) else (
-      var ref := ephemeralRefs[i];
-      var isDeallocable := deallocable(s, ref);
-      if isDeallocable then (
-        Some(ref)
-      ) else (
-        FindDeallocableIterate(s, ephemeralRefs, i + 1)
-      )
-    )
-  }
-
   function {:opaque} FindDeallocable(s: Variables)
   : (ref: Option<Reference>)
   requires WFVars(s)
   requires s.Ready?
   {
-    // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var ephemeralRefs := setToSeq(s.ephemeralIndirectionTable.Keys);
-
-    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-
-    FindDeallocableIterate(s, ephemeralRefs, 0)
-  }
-
-  lemma FindDeallocableIterateCorrect(s: Variables, ephemeralRefs: seq<BT.G.Reference>, i: uint64)
-  requires 0 <= i as int <= |ephemeralRefs|
-  requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-  requires s.Ready?
-  requires ephemeralRefs == setToSeq(s.ephemeralIndirectionTable.Keys)
-  requires forall k : nat | k < i as nat :: (
-        && ephemeralRefs[k] in IIndirectionTable(s.ephemeralIndirectionTable).graph
-        && !deallocable(s, ephemeralRefs[k]))
-  ensures var ref := FindDeallocableIterate(s, ephemeralRefs, i);
-      && (ref.Some? ==> ref.value in IIndirectionTable(s.ephemeralIndirectionTable).graph)
-      && (ref.Some? ==> deallocable(s, ref.value))
-      && (ref.None? ==> forall r | r in IIndirectionTable(s.ephemeralIndirectionTable).graph :: !deallocable(s, r))
-  decreases 0x1_0000_0000_0000_0000 - i as int
-  {
-    if i == |ephemeralRefs| as uint64 {
-      assert forall r | r in IIndirectionTable(s.ephemeralIndirectionTable).graph :: !deallocable(s, r);
-    } else {
-      var ref := ephemeralRefs[i];
-      var isDeallocable := deallocable(s, ref);
-      if isDeallocable {
-      } else {
-        FindDeallocableIterateCorrect(s, ephemeralRefs, i + 1);
-      }
-    }
+    IndirectionTableModel.FindDeallocable(s.ephemeralIndirectionTable)
   }
 
   lemma FindDeallocableCorrect(s: Variables)
@@ -150,9 +118,6 @@ module ImplModelDealloc {
       && (ref.None? ==> forall r | r in IIndirectionTable(s.ephemeralIndirectionTable).graph :: !deallocable(s, r))
   {
     reveal_FindDeallocable();
-    var ephemeralRefs := setToSeq(s.ephemeralIndirectionTable.Keys);
-    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-    FindDeallocableIterateCorrect(s, ephemeralRefs, 0);
+    IndirectionTableModel.FindDeallocableCorrect(s.ephemeralIndirectionTable);
   }
-
 }

@@ -214,7 +214,7 @@ module PivotBetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, newchild: Node, slotIndex: int, keys: set<Key>)
+  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, newchild: Node, ghost slotIndex: int, keys: set<Key>)
 
   predicate ValidFlush(f: NodeFlush)
   {
@@ -289,8 +289,8 @@ module PivotBetreeSpec {
     left_child: Node,
     right_child: Node,
 
-    slot_idx: int,
-    num_children_left: int,
+    ghost slot_idx: int,
+    ghost num_children_left: int,
     pivot: Key
   )
 

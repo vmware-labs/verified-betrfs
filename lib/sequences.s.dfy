@@ -211,4 +211,14 @@ module Sequences {
   {
     SeqIndexIterate(run, needle, 0)
   }
+
+  function {:opaque} SeqOfLength<V(==)>(length: nat, v: V) : (res: seq<V>)
+  ensures |res| == length
+  ensures forall i: nat | i < |res| :: res[i] == v
+  {
+    if length == 0 then
+      []
+    else
+      [v] + SeqOfLength(length - 1, v)
+  }
 }

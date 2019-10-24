@@ -601,7 +601,8 @@ module TwoThreeTree {
      ensures ValidDeletionResult(result, tree, key);
      decreases tree, 1;
     {
-        if Keyspace.lt(key, tree.pivot) {
+        var c := Keyspace.cmp(key, tree.pivot);
+        if c < 0 {
             result := DeleteFromTwoNodeLeft(tree, key);
         } else {
             result := DeleteFromTwoNodeRight(tree, key);
@@ -718,12 +719,16 @@ module TwoThreeTree {
      ensures ValidDeletionResult(result, tree, key);
      decreases tree, 1;
     {
-        if Keyspace.lt(key, tree.pivota) {
-            result := DeleteFromThreeNodeLeft(tree, key);
-        } else if Keyspace.lt(key, tree.pivotb) {
-            result := DeleteFromThreeNodeMiddle(tree, key);
+        var c := Keyspace.cmp(key, tree.pivota);
+        if c < 0 {
+          result := DeleteFromThreeNodeLeft(tree, key);
         } else {
+          var cb := Keyspace.cmp(key, tree.pivotb);
+          if cb < 0 {
+            result := DeleteFromThreeNodeMiddle(tree, key);
+          } else {
             result := DeleteFromThreeNodeRight(tree, key);
+          }
         }
     }
     
