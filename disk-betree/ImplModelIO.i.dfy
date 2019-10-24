@@ -349,7 +349,8 @@ module ImplModelIO {
       var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
       if succ then (
         var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
-        var persistentIndirectionTable := sector.value.indirectionTable;
+        var persistentIndirectionTable :=
+            IndirectionTableModel.clone(sector.value.indirectionTable);
         Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), blockAllocator)
       ) else (
         s

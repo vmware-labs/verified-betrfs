@@ -189,12 +189,18 @@ module ImplIO {
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
-      var persistentIndirectionTable := sector.value.indirectionTable.Clone();
-      var ephemeralIndirectionTable := sector.value.indirectionTable.Clone(); // TODO one of these clones is not necessary, we just need to shhow that sector.value.indirectionTable is fresh
+      var ephemeralIndirectionTable := sector.value.indirectionTable;
+      //assert fresh(SectorRepr(sector.value));
+      assert SectorRepr(sector.value) == {ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr; // why is this needed??
+      //assert fresh({ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr);
+      //assert fresh(ephemeralIndirectionTable.Repr);
 
       var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
       if succ {
         var blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
+        var persistentIndirectionTable := sector.value.indirectionTable.Clone();
+        //assert fresh(ephemeralIndirectionTable.Repr);
+        //assert fresh(persistentIndirectionTable.Repr);
 
         s.ready := true;
         s.persistentIndirectionTable := persistentIndirectionTable;

@@ -305,6 +305,8 @@ module ImplMarshallingModel {
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
   ensures s.Some? ==> IM.WFSector(s.value)
+  ensures s.Some? && s.value.SectorIndirectionTable? ==>
+      IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -320,6 +322,8 @@ module ImplMarshallingModel {
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
   ensures s.Some? ==> IM.WFSector(s.value)
+  ensures s.Some? && s.value.SectorIndirectionTable? ==>
+      IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
   {
     if |data| >= 32 && Crypto.Crc32(data[32..]) == data[..32] then
       parseSector(data[32..])

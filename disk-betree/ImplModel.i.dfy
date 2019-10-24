@@ -138,6 +138,7 @@ module ImplModel {
     && LruModel.I(lru) == cache.Keys
     && TotalCacheSize(s) <= MaxCacheSize()
     && IndirectionTableModel.Inv(ephemeralIndirectionTable)
+    && IndirectionTableModel.TrackingGarbage(ephemeralIndirectionTable)
     && IndirectionTableModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(frozenIndirectionTable.value))
     && ImplModelBlockAllocator.Inv(s.blockAllocator)

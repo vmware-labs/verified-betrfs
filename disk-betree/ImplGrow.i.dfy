@@ -32,6 +32,8 @@ module ImplGrow {
   {
     ImplModelGrow.reveal_grow();
 
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+
     assert s.blockAllocator.Repr <= s.Repr();
 
     if s.frozenIndirectionTable != null {
@@ -44,6 +46,8 @@ module ImplGrow {
 
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
+
+    ImplModelCache.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
     var newref := allocBookkeeping(k, s, oldroot.children);
 
     match newref {

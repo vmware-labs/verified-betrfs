@@ -44,6 +44,8 @@ module ImplInsert {
   {
     ImplModelInsert.reveal_InsertKeyValue();
 
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
       if b {

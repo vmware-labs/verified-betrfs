@@ -3,14 +3,14 @@ include "NativeTypes.s.dfy"
 module Sets {
   import opened NativeTypes 
 
-  lemma {:opaque} SetInclusionImpliesSmallerCardinality(a: set<uint64>, b: set<uint64>)
+  lemma {:opaque} SetInclusionImpliesSmallerCardinality<T>(a: set<T>, b: set<T>)
     requires a <= b
     ensures |a| <= |b|
   {
     assert b == a + (b - a);
   }
 
-  lemma {:opaque} SetInclusionAndEqualCardinalityImpliesSetEquality(a: set<uint64>, b: set<uint64>)
+  lemma {:opaque} SetInclusionAndEqualCardinalityImpliesSetEquality<T>(a: set<T>, b: set<T>)
     requires a <= b
     requires |a| == |b|
     ensures a == b
@@ -19,34 +19,6 @@ module Sets {
   }
 
   // NOTE: these are horribly slow
-
-  function setToSeq<T(==)>(s: set<T>) : (run: seq<T>)
-  ensures |run| == |s|
-  ensures (set e | e in run) == s
-
-  method SetToSeq<T(==)>(s: set<T>) returns (run: seq<T>)
-  ensures |run| == |s|
-  ensures (set e | e in run) == s
-  ensures run == setToSeq(s)
-  {
-    if |s| == 0 {
-      return [];
-    } else {
-      var x :| x in s;
-      var lset := set t | t in s && t != x;
-      var l := SetToSeq(lset);
-      run := l + [x];
-
-      assert lset !! {x};
-      assert lset + {x} == s;
-
-      assert |run| == |l| + 1
-        == |lset| + |{x}|
-        == |lset + {x}|
-        == |s|;
-    }
-    assume run == setToSeq(s);
-  }
 
   method minimum(s: set<uint64>) returns (o: uint64)
   requires |s| >= 1

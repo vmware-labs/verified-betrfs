@@ -48,10 +48,14 @@ module ImplModelFlush {
       WeightBucketLeBucketList(parent.buckets, slot);
       WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
       WFBucketsOfWFBucketList(child.buckets, child.pivotTable);
+      lemmaChildrenConditionsOfNode(k, s, childref);
+      lemmaChildrenConditionsOfNode(k, s, parentref);
 
       var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
+      lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+          k, s, newchild.children, parent.children.value, slot);
       if newchildref.None? then (
         s2
       ) else (
@@ -88,6 +92,8 @@ module ImplModelFlush {
       WeightBucketLeBucketList(parent.buckets, slot);
       WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
       WFBucketsOfWFBucketList(child.buckets, child.pivotTable);
+      lemmaChildrenConditionsOfNode(k, s, childref);
+      lemmaChildrenConditionsOfNode(k, s, parentref);
 
       var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var flushedKeys := KVListPartialFlush.bucketPartialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);

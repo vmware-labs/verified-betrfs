@@ -296,7 +296,7 @@ module MutableMapModel {
   requires SeqMatchesContentKeys(elements, contents)
   ensures |IndexSet(elements)| == |contents.Keys|
   {
-    var relation := set i | i in IndexSet(elements) :: (i, elements[i].key);
+    var relation := iset i | i in IndexSet(elements) :: (i, elements[i].key);
     var setA := IndexSet(elements);
     var setB := contents.Keys;
     assert forall a | a in setA

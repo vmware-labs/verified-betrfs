@@ -97,27 +97,17 @@ module ImplSync {
   ensures ref == ImplModelSync.FindRefInFrozenWithNoLoc(s.I())
   {
     assume false;
-    // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var frozenTable := s.frozenIndirectionTable.t.ToMap();
-    var frozenRefs := SetToSeq(frozenTable.Keys);
+    var it := s.frozenIndirectionTable.t.IterStart();
 
-    assume |frozenRefs| < 0x1_0000_0000_0000_0000;
-
-    var i: uint64 := 0;
-    while i < |frozenRefs| as uint64
-    invariant i as int <= |frozenRefs|
-    invariant forall k : nat | k < i as nat :: (
-        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
-        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs)
+    while it.next.Some?
     {
-      var ref := frozenRefs[i];
-      var lbaGraph := s.frozenIndirectionTable.t.Get(ref);
-      assert lbaGraph.Some?;
-      var lba := lbaGraph.value.loc;
+      var ref := it.next.value.0;
+      var lbaGraph := it.next.value.1;
+      var lba := lbaGraph.loc;
       if lba.None? {
         return Some(ref);
       }
-      i := i + 1;
+      it := s.frozenIndirectionTable.t.IterInc(it);
     }
     assert forall r | r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
         :: r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
