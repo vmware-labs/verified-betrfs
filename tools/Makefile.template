@@ -1,6 +1,6 @@
 TOOLS=$(dir $(abspath $(filter %/Makefile.template,$(MAKEFILE_LIST))))
 ROOT=$(abspath $(TOOLS)/..)/
-DAFNY_CMD="$(ROOT)/.dafny/bin/dafny"
+DAFNY_CMD?="$(ROOT)/.dafny/bin/dafny"
 
 BUILD_DIR=$(ROOT)build
 export ROOT
