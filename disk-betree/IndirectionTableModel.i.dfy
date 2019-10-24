@@ -25,6 +25,7 @@ module IndirectionTableModel {
   import opened GenericMarshalling
   import Bitmap
   import opened Bounds
+  import SetBijectivity
 
   datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
@@ -65,7 +66,7 @@ module IndirectionTableModel {
 
   function PredecessorSet(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference) : set<PredecessorEdge>
   {
-    set src, idx | src in graph && 0 <= idx < |graph[src]| :: PredecessorEdge(src, idx)
+    set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest :: PredecessorEdge(src, idx)
   }
 
   predicate ValidPredCounts(predCounts: map<BT.G.Reference, int>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -165,16 +166,265 @@ module IndirectionTableModel {
     (FromHashMap(t), added)
   }
 
-  function PredInc(t: IndirectionTable, ref: BT.G.Reference)
+  /////// Reference count updating
+
+  function SeqCountSet(s: seq<BT.G.Reference>, ref: BT.G.Reference, upTo: int) : set<int>
+  requires 0 <= upTo <= |s|
+  {
+    set i | 0 <= i < upTo && s[i] == ref
+  }
+
+  function SeqCount(s: seq<BT.G.Reference>, ref: BT.G.Reference, upTo: int) : int
+  requires 0 <= upTo <= |s|
+  {
+    |SeqCountSet(s, ref, upTo)|
+  }
+
+  predicate ValidPredCountsIntermediate(
+      predCounts: map<BT.G.Reference, int>,
+      graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+      newSuccs: seq<BT.G.Reference>,
+      oldSuccs: seq<BT.G.Reference>,
+      newIdx: int,
+      oldIdx: int)
+  requires 0 <= newIdx <= |newSuccs|
+  requires 0 <= oldIdx <= |oldSuccs|
+  {
+    forall ref | ref in predCounts ::
+      predCounts[ref] == |PredecessorSet(graph, ref)|
+          + SeqCount(newSuccs, ref, newIdx)
+          - SeqCount(oldSuccs, ref, oldIdx)
+  }
+
+  predicate RefcountUpdateInv(
+      t: HashMap,
+      changingRef: BT.G.Reference,
+      newSuccs: seq<BT.G.Reference>,
+      oldSuccs: seq<BT.G.Reference>,
+      newIdx: int,
+      oldIdx: int)
+  {
+    && MutableMapModel.Inv(t)
+    && t.count as nat < 0x10000000000000000 / 8
+    && |newSuccs| <= MaxNumChildren()
+    && |oldSuccs| <= MaxNumChildren()
+    && 0 <= newIdx <= |newSuccs|
+    && 0 <= oldIdx <= |oldSuccs|
+    && changingRef in Graph(t)
+    && Graph(t)[changingRef] == oldSuccs
+    && ValidPredCountsIntermediate(PredCounts(t), Graph(t), newSuccs, oldSuccs, newIdx, oldIdx)
+    && (forall j | 0 <= j < |newSuccs| :: newSuccs[j] in t.contents)
+    && BC.GraphClosed(Graph(t))
+  }
+
+  lemma SeqCountLePredecessorSet(
+      graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+      ref: BT.G.Reference,
+      r: BT.G.Reference,
+      upTo: int)
+  requires r in graph
+  requires 0 <= upTo <= |graph[r]|
+  ensures SeqCount(graph[r], ref, upTo) <= |PredecessorSet(graph, ref)|
+  {
+    var setA := set i | 0 <= i < upTo && graph[r][i] == ref;
+    var setB := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == ref && src == r && idx < upTo :: PredecessorEdge(src, idx);
+    var setC := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == ref :: PredecessorEdge(src, idx);
+    
+
+    calc {
+      |SeqCountSet(graph[r], ref, upTo)|;
+      |setA|;
+      {
+        var relation := iset i, src, idx | src == r && i == idx :: (i, PredecessorEdge(src, idx));
+        forall a | a in setA
+        ensures exists b :: b in setB && (a, b) in relation
+        {
+          var b := PredecessorEdge(r, a);
+          assert b in setB;
+          assert (a, b) in relation;
+        }
+        forall b | b in setB
+        ensures exists a :: a in setA && (a, b) in relation
+        {
+          var a := b.idx;
+          assert a in setA;
+          assert (a, b) in relation;
+        }
+
+        SetBijectivity.BijectivityImpliesEqualCardinality(setA, setB, relation);
+      }
+      |setB|;
+    }
+
+    SetInclusionImpliesSmallerCardinality(setB, setC);
+  }
+
+  lemma SeqCountInc(
+      s: seq<BT.G.Reference>,
+      ref: BT.G.Reference,
+      idx: int)
+  requires 0 <= idx < |s|
+  requires s[idx] == ref
+  ensures SeqCount(s, ref, idx + 1)
+       == SeqCount(s, ref, idx) + 1;
+  {
+    var a := set i | 0 <= i < idx && s[i] == ref;
+    var b := set i | 0 <= i < idx + 1 && s[i] == ref;
+    assert a + {idx} == b;
+  }
+
+  lemma SeqCountIncOther(
+      s: seq<BT.G.Reference>,
+      ref: BT.G.Reference,
+      idx: int)
+  requires 0 <= idx < |s|
+  requires s[idx] != ref
+  ensures SeqCount(s, ref, idx + 1)
+       == SeqCount(s, ref, idx);
+  {
+    var a := set i | 0 <= i < idx && s[i] == ref;
+    var b := set i | 0 <= i < idx + 1 && s[i] == ref;
+    assert a == b;
+  }
+
+  lemma LemmaUpdatePredCountsDecStuff(
+      t: HashMap,
+      changingRef: BT.G.Reference,
+      newSuccs: seq<BT.G.Reference>,
+      oldSuccs: seq<BT.G.Reference>,
+      idx: int)
+  requires RefcountUpdateInv(t, changingRef, newSuccs, oldSuccs, |newSuccs|, idx)
+  ensures idx < |oldSuccs| ==> oldSuccs[idx] in t.contents
+  ensures idx < |oldSuccs| ==> t.contents[oldSuccs[idx]].predCount > 0
+  ensures idx < |oldSuccs| ==>
+    var t' := PredDec(t, oldSuccs[idx]);
+    RefcountUpdateInv(t', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
+  {
+    if idx < |oldSuccs| {
+      var graph := Graph(t);
+
+      assert oldSuccs[idx] in graph;
+
+      assert oldSuccs[idx] in t.contents;
+
+      var ref := oldSuccs[idx];
+      assert t.contents[ref].predCount as int
+        == |PredecessorSet(graph, ref)|
+          + SeqCount(newSuccs, ref, |newSuccs|)
+          - SeqCount(oldSuccs, ref, idx);
+
+      SeqCountLePredecessorSet(graph, ref, changingRef, idx + 1);
+
+      assert |PredecessorSet(graph, ref)|
+          >= SeqCount(graph[changingRef], ref, idx + 1);
+
+      SeqCountInc(graph[changingRef], ref, idx);
+      assert SeqCount(graph[changingRef], ref, idx + 1)
+          == SeqCount(graph[changingRef], ref, idx) + 1;
+
+      assert |PredecessorSet(graph, ref)| - SeqCount(graph[changingRef], ref, idx) > 0;
+      assert t.contents[oldSuccs[idx]].predCount > 0;
+
+      var t' := PredDec(t, oldSuccs[idx]);
+      assert Graph(t) == Graph(t');
+
+      var predCounts := PredCounts(t);
+      var predCounts' := PredCounts(t');
+      forall r | r in predCounts'
+      ensures predCounts'[r] == |PredecessorSet(graph, r)|
+          + SeqCount(newSuccs, r, |newSuccs|)
+          - SeqCount(oldSuccs, r, idx + 1)
+      {
+        if r == ref {
+          /*assert predCounts'[r]
+              == predCounts[r] - 1
+              == |PredecessorSet(graph, r)|
+                  + SeqCount(newSuccs, r, |newSuccs|)
+                  - SeqCount(oldSuccs, r, idx) - 1
+              == |PredecessorSet(graph, r)|
+                  + SeqCount(newSuccs, r, |newSuccs|)
+                  - SeqCount(oldSuccs, r, idx + 1);*/
+        } else {
+          SeqCountIncOther(graph[changingRef], r, idx);
+          assert SeqCount(oldSuccs, r, idx) == SeqCount(oldSuccs, r, idx + 1);
+          /*assert predCounts'[r]
+              == predCounts[r]
+              == |PredecessorSet(graph, r)|
+                  + SeqCount(newSuccs, r, |newSuccs|)
+                  - SeqCount(oldSuccs, r, idx)
+              == |PredecessorSet(graph, r)|
+                  + SeqCount(newSuccs, r, |newSuccs|)
+                  - SeqCount(oldSuccs, r, idx + 1);*/
+          }
+      }
+    }
+  }
+
+  lemma LemmaUpdatePredCountsIncStuff(
+      t: HashMap,
+      changingRef: BT.G.Reference,
+      newSuccs: seq<BT.G.Reference>,
+      oldSuccs: seq<BT.G.Reference>,
+      idx: int)
+  requires RefcountUpdateInv(t, changingRef, newSuccs, oldSuccs, idx, 0)
+  ensures idx < |newSuccs| ==> newSuccs[idx] in t.contents
+  ensures idx < |newSuccs| ==> t.contents[newSuccs[idx]].predCount < 0xffff_ffff_ffff_ffff
+  ensures idx < |newSuccs| ==>
+    var t' := PredInc(t, newSuccs[idx]);
+    RefcountUpdateInv(t', changingRef, newSuccs, oldSuccs, idx + 1, 0)
+  {
+    if idx < |newSuccs| {
+      var graph := Graph(t);
+
+      assert newSuccs[idx] in t.contents;
+
+      var ref := newSuccs[idx];
+      assert t.contents[ref].predCount as int
+        == |PredecessorSet(graph, ref)|
+          + SeqCount(newSuccs, ref, idx)
+          - SeqCount(newSuccs, ref, 0);
+
+      SeqCountInc(newSuccs, ref, idx);
+      assert SeqCount(newSuccs, ref, idx + 1)
+          == SeqCount(newSuccs, ref, idx) + 1;
+
+      assert t.contents[newSuccs[idx]].predCount < 0xffff_ffff_ffff_ffff;
+
+      var t' := PredInc(t, newSuccs[idx]);
+      assert Graph(t) == Graph(t');
+
+      var predCounts := PredCounts(t);
+      var predCounts' := PredCounts(t');
+      forall r | r in predCounts'
+      ensures predCounts'[r] == |PredecessorSet(graph, r)|
+          + SeqCount(newSuccs, r, idx + 1)
+          - SeqCount(oldSuccs, r, 0)
+      {
+        if r == ref {
+        } else {
+          SeqCountIncOther(newSuccs, r, idx);
+        }
+      }
+    }
+  }
+
+
+  function PredInc(t: HashMap, ref: BT.G.Reference) : HashMap
+  requires MutableMapModel.Inv(t)
+  requires t.count as nat < 0x10000000000000000 / 8
   requires ref in t.contents
+  requires t.contents[ref].predCount < 0xffff_ffff_ffff_ffff
   {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount + 1);
     MutableMapModel.Insert(t, ref, newEntry)
   }
 
-  function PredDec(t: IndirectionTable, ref: BT.G.Reference)
+  function PredDec(t: HashMap, ref: BT.G.Reference) : HashMap
+  requires MutableMapModel.Inv(t)
+  requires t.count as nat < 0x10000000000000000 / 8
   requires ref in t.contents
+  requires t.contents[ref].predCount > 0
   {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
@@ -183,35 +433,39 @@ module IndirectionTableModel {
 
   function UpdatePredCountsDec(
       t: HashMap,
+      changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
-      idx: uint64)
-  requires 0 <= idx < |oldSuccs|
-  requires |newSuccs| <= MaxNumChildren()
-  requires |oldSuccs| <= MaxNumChildren()
+      idx: uint64) : HashMap
+  requires RefcountUpdateInv(t, changingRef, newSuccs, oldSuccs, |newSuccs|, idx as int)
+  decreases |oldSuccs| - idx as int
   {
+    LemmaUpdatePredCountsDecStuff(t, changingRef, newSuccs, oldSuccs, idx as int);
+
     if idx == |oldSuccs| as uint64 then
       t
     else (
       var t' := PredDec(t, oldSuccs[idx]);
-      UpdatePredCountsInc(t', newSuccs, oldSuccs, idx)
+      UpdatePredCountsDec(t', changingRef, newSuccs, oldSuccs, idx + 1)
     )
   }
 
   function UpdatePredCountsInc(
       t: HashMap,
+      changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
-      idx: uint64)
-  requires 0 <= idx < |newSuccs|
-  requires |newSuccs| <= MaxNumChildren()
-  requires |oldSuccs| <= MaxNumChildren()
+      idx: uint64) : HashMap
+  requires RefcountUpdateInv(t, changingRef, newSuccs, oldSuccs, idx as int, 0)
+  decreases |newSuccs| - idx as int
   {
+    LemmaUpdatePredCountsIncStuff(t, changingRef, newSuccs, oldSuccs, idx as int);
+
     if idx == |newSuccs| as uint64 then
-      UpdatePredCountsDec(t, newSuccs, oldSuccs, 0)
+      UpdatePredCountsDec(t, changingRef, newSuccs, oldSuccs, 0)
     else (
       var t' := PredInc(t, newSuccs[idx]);
-      UpdatePredCountsInc(t', newSuccs, oldSuccs, idx)
+      UpdatePredCountsInc(t', changingRef, newSuccs, oldSuccs, idx + 1)
     )
   }
 
@@ -229,8 +483,8 @@ module IndirectionTableModel {
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
 
-    var t1 := UpdatePredCountsInc(t, succs,
-        if oldEntry.Some? then oldEntry.succs else [], 0);
+    var t1 := UpdatePredCountsInc(t, ref, succs,
+        if oldEntry.Some? then oldEntry.value.succs else [], 0);
 
     var self' := FromHashMap(t);
     var oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
