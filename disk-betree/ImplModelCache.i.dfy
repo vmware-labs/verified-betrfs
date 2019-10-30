@@ -90,6 +90,15 @@ module ImplModelCache {
         IIndirectionTable(s.ephemeralIndirectionTable))
   }
 
+  predicate ChildrenConditions(k: Constants, s: Variables, succs: Option<seq<BT.G.Reference>>)
+  requires s.Ready?
+  {
+    succs.Some? ==> (
+      && |succs.value| <= MaxNumChildren()
+      && IndirectionTableModel.SuccsValid(succs.value, s.ephemeralIndirectionTable.graph)
+    )
+  }
+
   lemma lemmaIndirectionTableLocIndexValid(k: Constants, s: Variables, ref: BT.G.Reference)
   requires WriteAllocConditions(k, s)
   ensures ref in s.ephemeralIndirectionTable.locs ==>
@@ -117,6 +126,7 @@ module ImplModelCache {
   function {:opaque} writeBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   : (s': Variables)
   requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
   ensures s'.Ready?
   ensures s'.cache == s.cache
   ensures WriteAllocConditions(k, s')
@@ -143,6 +153,7 @@ module ImplModelCache {
   function {:opaque} allocBookkeeping(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
   : (p: (Variables, Option<Reference>))
   requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
 
   ensures var (s', id) := p;
     && s'.Ready?
@@ -164,6 +175,7 @@ module ImplModelCache {
   function writeWithNode(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
   : (s': Variables)
   requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, node.children)
   ensures WriteAllocConditions(k, s')
   {
     lemmaIndirectionTableLocIndexValid(k, s, ref);
@@ -188,6 +200,7 @@ module ImplModelCache {
   function allocWithNode(k: Constants, s: Variables, node: Node)
   : (p: (Variables, Option<Reference>))
   requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, node.children)
   ensures var (s', id) := p;
       WriteAllocConditions(k, s')
   {
@@ -343,6 +356,7 @@ module ImplModelCache {
 
   lemma writeBookkeepingBitmapCorrect(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
   ensures var s' := writeBookkeeping(k, s, ref, children);
     && WriteAllocConditions(k, s')
   {
@@ -476,4 +490,34 @@ module ImplModelCache {
   requires ref in s.cache
   ensures getFreeRef2(s, avoid) != Some(ref)
 
+  lemma lemmaChildrenConditionsOfNode(
+      k: Constants, s: Variables, ref: BT.G.Reference)
+  requires s.Ready?
+  requires Inv(k, s)
+  requires ref in s.cache
+  requires ref in s.ephemeralIndirectionTable.graph
+  ensures ChildrenConditions(k, s, s.cache[ref].children)
+  {
+    if s.cache[ref].children.Some? {
+      forall r | r in s.cache[ref].children.value
+      ensures r in s.ephemeralIndirectionTable.graph
+      {
+        // Trigger the forall in CacheConsistentWithSuccessors
+        assert r in BT.G.Successors(INode(s.cache[ref]));
+        assert r in s.ephemeralIndirectionTable.graph[ref];
+      }
+    }
+  }
+
+  lemma lemmaChildrenConditionsSingleOfAllocBookkeeping(
+      k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
+  requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
+  ensures var (s1, newref) := allocBookkeeping(k, s, children);
+    newref.Some? ==> ChildrenConditions(k, s1, Some([newref.value]))
+  {
+    reveal_allocBookkeeping();
+    reveal_writeBookkeeping();
+    //assert newref.value in s1.ephemeralIndirectionTable.graph;
+  }
 }
