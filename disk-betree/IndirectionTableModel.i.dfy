@@ -91,7 +91,7 @@ module IndirectionTableModel {
   requires 0 <= j <= |graph[next]|
   {
     && GraphClosedRestricted(graph, domain)
-    && (forall i | 0 <= i < j :: graph[next][j] in graph)
+    && (forall i | 0 <= i < j :: graph[next][i] in graph)
   }
 
 
@@ -529,7 +529,6 @@ module IndirectionTableModel {
           - SeqCount(succs, r, 0)
           + SeqCount(oldSuccs, r, 0)
     {
-      assert predCounts[r] == |PredecessorSet(graph0, r)|;
       SeqCountPlusPredecessorSetExcept(graph0, r, ref);
       SeqCountPlusPredecessorSetExcept(graph, r, ref);
 
@@ -610,8 +609,8 @@ module IndirectionTableModel {
       var oldEntry := MutableMapModel.Get(t, ref);
       if oldEntry.Some? then (
         var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-        var t' := MutableMapModel.Insert(t, ref, newEntry);
-        ComputeRefCountsEntryIterate(t', succs, i + 1)
+        var t0 := MutableMapModel.Insert(t, ref, newEntry);
+        ComputeRefCountsEntryIterate(t0, succs, i + 1)
       ) else (
         None
       )
@@ -668,7 +667,6 @@ module IndirectionTableModel {
   requires (forall ref | ref in t.contents :: t.contents[ref].loc == copy.contents[ref].loc)
   requires t.count == copy.count
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.value.0].succs, i)
-  requires GraphClosedRestrictedPartial(Graph(copy), it.s, it.next.value.0, i as int)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, i as int)|
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.value.0].succs, i);
     && (t'.Some? ==>
@@ -679,7 +677,6 @@ module IndirectionTableModel {
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].loc == copy.contents[ref].loc)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].succs == copy.contents[ref].succs)
       && t'.value.count == copy.count
-      && GraphClosedRestricted(Graph(copy), it.s + {it.next.value.0})
     )
     && (t'.None? ==> !BC.GraphClosed(Graph(copy)))
   decreases |copy.contents[it.next.value.0].succs| - i as int
@@ -690,24 +687,6 @@ module IndirectionTableModel {
       ensures t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})|
       {
         assert PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0}) == PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, i as int);
-      }
-
-      var graph := Graph(copy);
-      var domain := it.s + {it.next.value.0};
-      forall ref | ref in graph && ref in domain
-      ensures forall i | 0 <= i < |graph[ref]| :: graph[ref][i] in graph
-      {
-        forall i | 0 <= i < |graph[ref]|
-        ensures graph[ref][i] in graph
-        {
-          if ref == it.next.value.0 {
-            assert graph[it.next.value.0][i] in graph;
-            assert graph[ref][i] in graph;
-          } else {
-            assert ref in it.s;
-            assert graph[ref][i] in graph;
-          }
-        }
       }
     } else {
       var ref := succs[i];
@@ -726,6 +705,58 @@ module IndirectionTableModel {
           }
         }
 
+        LemmaComputeRefCountsEntryIterateCorrectPartial(t0, copy, it, i+1);
+      } else {
+        //assert it.next.value.0 in Graph(copy);
+        assert ref in Graph(copy)[it.next.value.0];
+      }
+    }
+  }
+
+lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>, i: uint64)
+  requires it.next.Some?
+  requires MutableMapModel.Inv(t)
+  requires MutableMapModel.Inv(copy)
+  requires MutableMapModel.WFIter(copy, it)
+  requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.value.0].succs, i)
+  requires (forall ref | ref in t.contents :: ref in copy.contents)
+  requires (forall ref | ref in copy.contents :: ref in t.contents)
+  requires (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
+  requires GraphClosedRestrictedPartial(Graph(copy), it.s, it.next.value.0, i as int)
+  ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.value.0].succs, i);
+    && (t'.Some? ==>
+      && GraphClosedRestricted(Graph(copy), it.s + {it.next.value.0})
+    )
+  decreases |copy.contents[it.next.value.0].succs| - i as int
+  {
+    var succs := copy.contents[it.next.value.0].succs;
+    if i == |succs| as uint64 {
+      /*var graph := Graph(copy);
+      var domain := it.s + {it.next.value.0};
+      forall ref | ref in graph && ref in domain
+      ensures forall j | 0 <= j < |graph[ref]| :: graph[ref][j] in graph
+      {
+        forall j | 0 <= j < |graph[ref]|
+        ensures graph[ref][j] in graph
+        {
+          if ref == it.next.value.0 {
+            assert j < i as int;
+            assert forall j | 0 <= j < i as int :: graph[it.next.value.0][j] in graph;
+            assert graph[it.next.value.0][j] in graph;
+            assert graph[ref][j] in graph;
+          } else {
+            assert ref in it.s;
+            assert graph[ref][j] in graph;
+          }
+        }
+      }*/
+    } else {
+      var ref := succs[i];
+      var oldEntry := MutableMapModel.Get(t, ref);
+      if oldEntry.Some? {
+        var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
+        var t0 := MutableMapModel.Insert(t, ref, newEntry);
+
         var graph := Graph(t0);
         forall k | 0 <= k < i+1
         ensures graph[it.next.value.0][k] in graph
@@ -733,10 +764,11 @@ module IndirectionTableModel {
           if k == i {
             assert graph[it.next.value.0][k] in graph;
           } else {
+            assert Graph(copy)[it.next.value.0][k] in Graph(copy);
             assert graph[it.next.value.0][k] in graph;
           }
         }
-        LemmaComputeRefCountsEntryIterateCorrectPartial(t0, copy, it, i+1);
+        LemmaComputeRefCountsEntryIterateGraphClosed(t0, copy, it, i+1);
       } else {
         //assert it.next.value.0 in Graph(copy);
         assert ref in Graph(copy)[it.next.value.0];
@@ -769,6 +801,7 @@ module IndirectionTableModel {
           == PredecessorSetRestricted(Graph(copy), ref, it.s);
     }
     LemmaComputeRefCountsEntryIterateCorrectPartial(t, copy, it, 0);
+    LemmaComputeRefCountsEntryIterateGraphClosed(t, copy, it, 0);
   }
 
   lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
@@ -776,14 +809,32 @@ module IndirectionTableModel {
   ensures forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000
   ensures it.next.Some? ==>
     var succs := it.next.value.1.succs;
-    var t' := ComputeRefCountsEntryIterate(t, succs, 0);
-    && (t'.Some? ==> ComputeRefCountsIterateInv(t'.value, copy, MutableMapModel.IterInc(copy, it)))
-    && (t'.Some? <==> BC.GraphClosed(Graph(copy)))
+    var t0 := ComputeRefCountsEntryIterate(t, succs, 0);
+    && (t0.Some? ==> ComputeRefCountsIterateInv(t0.value, copy, MutableMapModel.IterInc(copy, it)))
+    && (t0.None? ==> !BC.GraphClosed(Graph(copy)))
   {
     assume forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
     if it.next.Some? {
       assert |copy.contents[it.next.value.0].succs| <= MaxNumChildren();
       LemmaComputeRefCountsEntryIterateCorrect(t, copy, it);
+    }
+  }
+
+  lemma LemmaComputeRefCountsIterateValidPredCounts(
+    t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
+  requires ComputeRefCountsIterateInv(t, copy, it)
+  ensures it.next.None? ==> ValidPredCounts(PredCounts(t), Graph(t))
+  {
+    if it.next.None? {
+      var predCounts := PredCounts(t);
+      var graph := Graph(t);
+      forall ref | ref in predCounts
+      ensures predCounts[ref] == |PredecessorSet(graph, ref)|
+      {
+        assert PredecessorSet(graph, ref)
+            //== PredecessorSetRestricted(graph, ref, it.s)
+            == PredecessorSetRestricted(Graph(copy), ref, it.s);
+      }
     }
   }
 
@@ -794,36 +845,64 @@ module IndirectionTableModel {
   function ComputeRefCountsIterate(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>) : (t' : Option<HashMap>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   ensures t'.Some? ==> MutableMapModel.Inv(t'.value)
+  ensures t'.Some? <==> BC.GraphClosed(Graph(copy))
+  ensures t'.Some? ==> Graph(copy) == Graph(t'.value)
+  ensures t'.Some? ==> Locs(copy) == Locs(t'.value)
+  ensures t'.Some? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
   decreases it.decreaser
   {
     LemmaComputeRefCountsIterateStuff(t, copy, it);
+    LemmaComputeRefCountsIterateValidPredCounts(t, copy, it);
 
     if it.next.None? then (
       Some(t)
     ) else (
       var succs := it.next.value.1.succs;
-      var t' := ComputeRefCountsEntryIterate(t, succs, 0);
-      if t'.Some? then (
-        ComputeRefCountsIterate(t'.value, copy, MutableMapModel.IterInc(copy, it))
+      var t0 := ComputeRefCountsEntryIterate(t, succs, 0);
+      if t0.Some? then (
+        ComputeRefCountsIterate(t0.value, copy, MutableMapModel.IterInc(copy, it))
       ) else (
         None
       )
     )
   }
 
+  lemma LemmaComputeRefCountsIterateInvInit(t: HashMap)
+  requires MutableMapModel.Inv(t)
+  requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
+  requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
+  requires t.count as int <= NumBlocks()
+  ensures ComputeRefCountsIterateInv(t, t, MutableMapModel.IterStart(t))
+  {
+    var it := MutableMapModel.IterStart(t);
+    forall ref | ref in t.contents
+    ensures t.contents[ref].predCount as int
+        == |PredecessorSetRestricted(Graph(t), ref, it.s)|
+    {
+      assert PredecessorSetRestricted(Graph(t), ref, it.s) == {};
+    }
+  }
+
   function ComputeRefCounts(t: HashMap) : (t' : Option<HashMap>)
   requires MutableMapModel.Inv(t)
+  requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
+  requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
+  requires t.count as int <= NumBlocks()
   ensures BC.GraphClosed(Graph(t)) <==> t'.Some?
   ensures t'.Some? ==> Graph(t) == Graph(t'.value)
   ensures t'.Some? ==> Locs(t) == Locs(t'.value)
   ensures t'.Some? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
   {
+    LemmaComputeRefCountsIterateInvInit(t);
+
     ComputeRefCountsIterate(t, t, MutableMapModel.IterStart(t))
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
+  ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
+  ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
   {
     if |a| == 0 then
       Some(MutableMapModel.Constructor(1024))
@@ -840,7 +919,7 @@ module IndirectionTableModel {
             case None => None
             case Some(succs) => (
               var loc := LBAType.Location(lba, len);
-              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) then (
+              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
                 None
               ) else (
                 assume table.count as nat < 0x1_0000_0000_0000_0000 / 8;
@@ -869,10 +948,11 @@ module IndirectionTableModel {
     var t := valToHashMap(v.a);
     match t {
       case Some(t) => (
-        var res := FromHashMap(t);
-        if BT.G.Root() in t.contents then (
+        if BT.G.Root() in t.contents
+            && t.count <= NumBlocksUint64() then (
           var t1 := ComputeRefCounts(t);
           if t1.Some? then (
+            var res := FromHashMap(t1.value);
             Some(res)
           ) else (
             None
@@ -1203,6 +1283,17 @@ module IndirectionTableModel {
     FindDeallocableIterateCorrect(self, ephemeralRefs, 0);
   }
 
+  lemma LemmaRemoveRefStuff(self: IndirectionTable, ref: BT.G.Reference)
+  requires Inv(self)
+  requires ref in self.t.contents
+  requires self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
+  ensures
+    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
+    RefcountUpdateInv(t, ref, [], oldEntry.value.succs, 0, 0)
+  {
+    LemmaUpdateAndRemoveLocStuff(self, ref, []);
+  }
+
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
     : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
@@ -1214,10 +1305,17 @@ module IndirectionTableModel {
     && (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
     && (ref !in self.locs ==> oldLoc == None)
   {
+    assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
+
+    LemmaRemoveRefStuff(self, ref);
+
     var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
-    var self' := FromHashMap(t);
+    var t1 := UpdatePredCountsInc(t, ref, [], oldEntry.value.succs, 0);
+
+    LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), [], oldEntry.value.succs);
+
+    var self' := FromHashMap(t1);
     var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
     (self', oldLoc)
   }
-
 }
