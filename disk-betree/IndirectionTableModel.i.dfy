@@ -247,8 +247,8 @@ module IndirectionTableModel {
     && (forall ref | ref in Graph(t) :: |Graph(t)[ref]| <= MaxNumChildren())
     && 0 <= newIdx <= |newSuccs|
     && 0 <= oldIdx <= |oldSuccs|
-    && changingRef in Graph(t)
-    && Graph(t)[changingRef] == newSuccs
+    && (changingRef in Graph(t) ==> Graph(t)[changingRef] == newSuccs)
+    && (changingRef !in Graph(t) ==> newSuccs == [])
     && ValidPredCountsIntermediate(PredCounts(t), Graph(t), newSuccs, oldSuccs, newIdx, oldIdx)
     && (forall j | 0 <= j < |oldSuccs| :: oldSuccs[j] in t.contents)
     && BC.GraphClosed(Graph(t))
@@ -350,10 +350,11 @@ module IndirectionTableModel {
           - SeqCount(newSuccs, ref, |newSuccs|)
           + SeqCount(oldSuccs, ref, idx);
 
-      SeqCountLePredecessorSet(graph, ref, changingRef, |newSuccs|);
-
-      assert |PredecessorSet(graph, ref)|
-          >= SeqCount(graph[changingRef], ref, |newSuccs|);
+      if changingRef in graph {
+        SeqCountLePredecessorSet(graph, ref, changingRef, |newSuccs|);
+        assert |PredecessorSet(graph, ref)|
+            >= SeqCount(graph[changingRef], ref, |newSuccs|);
+      }
 
       SeqCountInc(oldSuccs, ref, idx);
       assert SeqCount(oldSuccs, ref, idx + 1)
@@ -1286,12 +1287,62 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   lemma LemmaRemoveRefStuff(self: IndirectionTable, ref: BT.G.Reference)
   requires Inv(self)
   requires ref in self.t.contents
+  requires deallocable(self, ref)
   requires self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
   ensures
     var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
     RefcountUpdateInv(t, ref, [], oldEntry.value.succs, 0, 0)
   {
-    LemmaUpdateAndRemoveLocStuff(self, ref, []);
+    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
+
+    assert |Graph(self.t)[ref]| <= MaxNumChildren();
+
+    forall ref | ref in Graph(t)
+    ensures |Graph(t)[ref]| <= MaxNumChildren()
+    {
+      assert Graph(t)[ref] == Graph(self.t)[ref];
+    }
+
+    var graph0 := Graph(self.t);
+    var graph1 := Graph(t);
+    var succs0 := Graph(self.t)[ref];
+    var succs1 := [];
+    var predCounts1 := PredCounts(t);
+    forall r | r in predCounts1
+    ensures predCounts1[r] == |PredecessorSet(graph1, r)|
+          - SeqCount(succs1, r, 0)
+          + SeqCount(succs0, r, 0)
+    {
+      SeqCountPlusPredecessorSetExcept(graph0, r, ref);
+      SeqCountPlusPredecessorSetExcept(graph1, r, ref);
+
+      assert PredecessorSetExcept(graph0, r, ref)
+          == PredecessorSetExcept(graph1, r, ref);
+    }
+    assert ValidPredCountsIntermediate(PredCounts(t), Graph(t), [], succs0, 0, 0);
+
+    forall j | 0 <= j < |succs0|
+    ensures succs0[j] in t.contents
+    {
+      if succs0[j] == ref {
+        assert ref in I(self).graph[ref];
+        assert false;
+      }
+      assert succs0[j] == self.t.contents[ref].succs[j];
+      assert succs0[j] in self.t.contents[ref].succs;
+      assert succs0[j] in self.t.contents;
+    }
+
+    forall r, succ | r in Graph(t) && succ in Graph(t)[r]
+    ensures succ in Graph(t)
+    {
+      if succ == ref {
+        assert ref in I(self).graph[r];
+        assert false;
+      }
+      assert succ in Graph(self.t)[r];
+      assert succ in Graph(self.t);
+    }
   }
 
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
