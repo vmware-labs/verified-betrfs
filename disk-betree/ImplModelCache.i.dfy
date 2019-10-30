@@ -520,4 +520,19 @@ module ImplModelCache {
     reveal_writeBookkeeping();
     //assert newref.value in s1.ephemeralIndirectionTable.graph;
   }
+
+  lemma lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+      k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>,
+          children1: seq<BT.G.Reference>, i: int)
+  requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
+  requires ChildrenConditions(k, s, Some(children1))
+  requires 0 <= i < |children1|
+  ensures var (s1, newref) := allocBookkeeping(k, s, children);
+    newref.Some? ==> ChildrenConditions(k, s1, Some(children1[i := newref.value]))
+  {
+    reveal_allocBookkeeping();
+    reveal_writeBookkeeping();
+  }
+
 }
