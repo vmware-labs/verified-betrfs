@@ -43,9 +43,15 @@ module IndirectionTableImpl {
     {
       && this in Repr
       && this.t in Repr
-      && Repr == {this} + this.t.Repr
+      && this.Repr == {this} + this.t.Repr
       && this !in this.t.Repr
-      && t.Inv()
+      && this.t.Inv()
+
+      && var predCounts := IndirectionTableModel.PredCounts(this.t.I());
+      && var graph := IndirectionTableModel.Graph(this.t.I());
+      && IndirectionTableModel.ValidPredCounts(predCounts, graph)
+      && BC.GraphClosed(graph)
+      && (forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren())
     }
 
     protected function I() : IndirectionTableModel.IndirectionTable
@@ -53,7 +59,9 @@ module IndirectionTableImpl {
     requires Inv()
     ensures IndirectionTableModel.Inv(I())
     {
-      IndirectionTableModel.FromHashMap(t.I())
+      var res := IndirectionTableModel.FromHashMap(t.I());
+      IndirectionTableModel.reveal_Inv(res);
+      res
     }
 
     constructor Empty()
@@ -111,10 +119,11 @@ module IndirectionTableImpl {
       assume this.t.Count as nat < 0x10000000000000000 / 8;
       var oldEntry := this.t.Get(ref);
       if oldEntry.Some? {
-        this.t.Insert(ref, IndirectionTableModel.Entry(None, oldEntry.value.succs));
+        this.t.Insert(ref, IndirectionTableModel.Entry(None, oldEntry.value.succs, oldEntry.value.predCount));
       }
 
       Repr := {this} + this.t.Repr;
+      ghost var _ := IndirectionTableModel.RemoveLocIfPresent(old(I()), ref);
     }
 
     method AddLocIfPresent(ref: BT.G.Reference, loc: BC.Location)
@@ -131,26 +140,45 @@ module IndirectionTableImpl {
       var oldEntry := this.t.Get(ref);
       added := oldEntry.Some? && oldEntry.value.loc.None?;
       if added {
-        this.t.Insert(ref, IndirectionTableModel.Entry(Some(loc), oldEntry.value.succs));
+        this.t.Insert(ref, IndirectionTableModel.Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
       }
 
       Repr := {this} + this.t.Repr;
+      ghost var _ := IndirectionTableModel.AddLocIfPresent(old(I()), ref, loc);
     }
 
     method RemoveRef(ref: BT.G.Reference)
     returns (oldLoc : Option<BC.Location>)
     requires Inv()
+    requires IndirectionTableModel.deallocable(I(), ref)
     modifies Repr
     ensures Inv()
     ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
     ensures (I(), oldLoc) == IndirectionTableModel.RemoveRef(old(I()), ref)
     {
       IndirectionTableModel.reveal_RemoveRef();
+      assume this.t.Count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
+
+      IndirectionTableModel.LemmaRemoveRefStuff(I(), ref);
 
       var oldEntry := this.t.RemoveAndGet(ref);
+      UpdatePredCounts(this.t, ref, [], oldEntry.value.succs);
+
       oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
 
       Repr := {this} + this.t.Repr;
+      ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
+    }
+
+    static method UpdatePredCounts(t: HashMap, ghost changingRef: BT.G.Reference,
+        newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
+    requires t.Inv()
+    requires IndirectionTableModel.RefcountUpdateInv(t.I(), changingRef, newSuccs, oldSuccs, 0, 0)
+    modifies t.Repr
+    ensures forall o | o in t.Repr :: o in old(t.Repr) || fresh(o)
+    ensures t.Inv()
+    ensures t.I() == IndirectionTableModel.UpdatePredCountsInc(old(t.I()), changingRef, newSuccs, oldSuccs, 0)
+    {
     }
 
     method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
@@ -163,9 +191,19 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_UpdateAndRemoveLoc();
 
-      assume this.t.Count as nat < 0x10000000000000000 / 8;
-      var oldEntry := this.t.InsertAndGetOld(ref, IndirectionTableModel.Entry(None, succs));
-      oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
+      assume this.t.Count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
+      IndirectionTableModel.LemmaUpdateAndRemoveLocStuff(I(), ref, succs);
+
+      var oldEntry := this.t.Get(ref);
+      var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
+      this.t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
+
+      UpdatePredCounts(this.t, ref, succs,
+          if oldEntry.Some? then oldEntry.value.succs else []);
+
+      //IndirectionTableModel.LemmaValidPredCountsOfValidPredCountsIntermediate(IndirectionTableModel.PredCounts(this.t.I()), IndirectionTableModel.Graph(this.t.I()), succs, if oldEntry.Some? then oldEntry.value.succs else []);
+
+      oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
 
       Repr := {this} + this.t.Repr;
     }
@@ -205,7 +243,7 @@ module IndirectionTableImpl {
                 if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc) {
                   s := None;
                 } else {
-                  mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs));
+                  mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
                   s := Some(mutMap);
                   assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
                   assume s.value.Count as nat == |a|;
@@ -297,6 +335,7 @@ module IndirectionTableImpl {
           var locOpt := locOptGraph.loc;
           var succs := locOptGraph.succs;
           var loc := locOpt.value;
+          ghost var predCount := locOptGraph.predCount;
           var childrenVal := VUint64Array(succs);
 
           //assert I().locs[ref] == loc;
@@ -318,7 +357,7 @@ module IndirectionTableImpl {
           assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
 
           // == mutation ==
-          partial := partial[ref := IndirectionTableModel.Entry(locOpt, succs)];
+          partial := partial[ref := IndirectionTableModel.Entry(locOpt, succs, predCount)];
           a[i] := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
           i := i + 1;
           it := t.IterInc(it);

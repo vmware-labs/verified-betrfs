@@ -104,9 +104,11 @@ module IndirectionTableModel {
   protected predicate Inv(self: IndirectionTable)
   ensures Inv(self) ==> (forall ref | ref in self.locs :: ref in self.graph)
   {
-    //&& (forall ref | ref in LruModel.I(self.garbageQueue) :: Refcount0(self, ref))
-    //&& (forall ref | Refcount0(self, ref) :: ref in LruModel.I(self.garbageQueue))
-    //&& self.refcounts == GraphRefcounts(self.graph)
+    Inv1(self)
+  }
+
+  predicate Inv1(self: IndirectionTable)
+  {
     && MutableMapModel.Inv(self.t)
     && self.locs == Locs(self.t)
     && self.graph == Graph(self.t)
@@ -114,6 +116,11 @@ module IndirectionTableModel {
     && ValidPredCounts(self.predCounts, self.graph)
     && BC.GraphClosed(self.graph)
     && (forall ref | ref in self.graph :: |self.graph[ref]| <= MaxNumChildren())
+  }
+
+  lemma reveal_Inv(self: IndirectionTable)
+  ensures Inv(self) == Inv1(self)
+  {
   }
 
   function IHashMap(m: HashMap) : BC.IndirectionTable
