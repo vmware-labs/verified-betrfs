@@ -43,6 +43,8 @@ module ImplModelInsert {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   {
+    lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
+
     if (
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
