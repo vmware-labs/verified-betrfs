@@ -535,4 +535,49 @@ module ImplModelCache {
     reveal_writeBookkeeping();
   }
 
+  lemma lemmaChildrenConditionsPreservedWriteBookkeeping(
+      k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>,
+      children1: Option<seq<BT.G.Reference>>)
+  requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
+  requires ChildrenConditions(k, s, children1)
+  ensures var s1 := writeBookkeeping(k, s, ref, children);
+    ChildrenConditions(k, s1, children1)
+  {
+    reveal_writeBookkeeping();
+  }
+
+  lemma lemmaChildrenConditionsOfReplace1With2(
+      k: Constants, s: Variables,
+      children: seq<BT.G.Reference>,
+      i: int, a: BT.G.Reference, b: BT.G.Reference)
+  requires s.Ready?
+  requires ChildrenConditions(k, s, Some(children))
+  requires a in s.ephemeralIndirectionTable.graph
+  requires b in s.ephemeralIndirectionTable.graph
+  requires 0 <= i < |children|
+  requires |children| < MaxNumChildren()
+  ensures ChildrenConditions(k, s, Some(replace1with2(children, a, b, i)))
+  {
+    reveal_replace1with2();
+  }
+
+  lemma lemmaRefInGraphOfWriteBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
+  ensures var s1 := writeBookkeeping(k, s, ref, children);
+    ref in s1.ephemeralIndirectionTable.graph
+  {
+    reveal_writeBookkeeping();
+  }
+
+  lemma lemmaRefInGraphPreservedWriteBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, ref2: BT.G.Reference)
+  requires WriteAllocConditions(k, s)
+  requires ChildrenConditions(k, s, children)
+  requires ref2 in s.ephemeralIndirectionTable.graph
+  ensures var s1 := writeBookkeeping(k, s, ref, children);
+    ref2 in s1.ephemeralIndirectionTable.graph
+  {
+    reveal_writeBookkeeping();
+  }
 }
