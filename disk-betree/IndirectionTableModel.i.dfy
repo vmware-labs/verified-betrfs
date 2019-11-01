@@ -33,7 +33,7 @@ module IndirectionTableModel {
   // TODO move bitmap in here?
   datatype IndirectionTable = IndirectionTable(
     t: HashMap,
-    garbageQueue: LruModel.LruQueue,
+    garbageQueue: Option<LruModel.LruQueue>,
 
     // These are for easy access in proof code, but all the relevant data
     // is contained in the `t: HashMap` field.
@@ -112,6 +112,11 @@ module IndirectionTableModel {
     Inv1(self)
   }
 
+  predicate TrackingGarbage(self: IndirectionTable)
+  {
+    self.garbageQueue.Some?
+  }
+
   predicate Inv1(self: IndirectionTable)
   {
     && MutableMapModel.Inv(self.t)
@@ -121,9 +126,11 @@ module IndirectionTableModel {
     && ValidPredCounts(self.predCounts, self.graph)
     && BC.GraphClosed(self.graph)
     && (forall ref | ref in self.graph :: |self.graph[ref]| <= MaxNumChildren())
-    && LruModel.WF(self.garbageQueue)
-    && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in LruModel.I(self.garbageQueue))
-    && (forall ref | ref in LruModel.I(self.garbageQueue) :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
+    && (self.garbageQueue.Some? ==>
+      && LruModel.WF(self.garbageQueue.value)
+      && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in LruModel.I(self.garbageQueue.value))
+      && (forall ref | ref in LruModel.I(self.garbageQueue.value) :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
+    )
     && BT.G.Root() in self.t.contents
   }
 
@@ -142,7 +149,7 @@ module IndirectionTableModel {
     BC.IndirectionTable(self.locs, self.graph)
   }
 
-  function FromHashMap(m: HashMap, q: LruModel.LruQueue) : IndirectionTable
+  function FromHashMap(m: HashMap, q: Option<LruModel.LruQueue>) : IndirectionTable
   {
     IndirectionTable(m, q, Locs(m), Graph(m), PredCounts(m))
   }
@@ -540,6 +547,7 @@ module IndirectionTableModel {
 
   lemma LemmaUpdateAndRemoveLocStuff(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>)
   requires Inv(self)
+  requires TrackingGarbage(self)
   requires |succs| <= MaxNumChildren()
   requires SuccsValid(succs, self.graph)
   requires self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
@@ -547,16 +555,16 @@ module IndirectionTableModel {
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
-    var q := if oldEntry.Some? then self.garbageQueue else LruModel.Use(self.garbageQueue, ref);
+    var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
     RefcountUpdateInv(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0, 0)
   {
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
-    var q := if oldEntry.Some? then self.garbageQueue else LruModel.Use(self.garbageQueue, ref);
+    var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
 
-    LruModel.LruUse(self.garbageQueue, ref);
+    LruModel.LruUse(self.garbageQueue.value, ref);
 
     assert oldEntry.Some? ==> oldEntry.value.succs == Graph(self.t)[ref];
     assert forall r | r != ref && r in Graph(t) :: r in Graph(self.t) && Graph(t)[r] == Graph(self.t)[r];
@@ -608,10 +616,12 @@ module IndirectionTableModel {
 
   function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
+  requires TrackingGarbage(self)
   requires |succs| <= MaxNumChildren()
   requires SuccsValid(succs, self.graph)
   ensures var (self', oldLoc) := res;
     && Inv(self')
+    && TrackingGarbage(self')
     && self'.locs == MapRemove1(self.locs, ref)
     && self'.graph == self.graph[ref := succs]
     && (oldLoc.None? ==> ref !in self.locs)
@@ -622,7 +632,7 @@ module IndirectionTableModel {
 
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
-    var q := if oldEntry.Some? then self.garbageQueue else LruModel.Use(self.garbageQueue, ref);
+    var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
 
     var (t1, garbageQueue1) := UpdatePredCountsInc(t, q, ref, succs,
@@ -631,7 +641,7 @@ module IndirectionTableModel {
     LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), succs,
         if oldEntry.Some? then oldEntry.value.succs else []);
 
-    var self' := FromHashMap(t1, garbageQueue1);
+    var self' := FromHashMap(t1, Some(garbageQueue1));
     var oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
     (self', oldLoc)
   }
@@ -1065,6 +1075,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> Inv(s.value)
+  ensures s.Some? ==> TrackingGarbage(s.value)
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
   {
     var t := valToHashMap(v.a);
@@ -1075,7 +1086,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
           var t1 := ComputeRefCounts(t);
           if t1.Some? then (
             lemmaMakeGarbageQueueCorrect(t1.value);
-            var res := FromHashMap(t1.value, makeGarbageQueue(t1.value));
+            var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
             Some(res)
           ) else (
             None
@@ -1339,12 +1350,14 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   function {:opaque} FindDeallocable(self: IndirectionTable)
   : (ref: Option<BT.G.Reference>)
   requires Inv(self)
+  requires TrackingGarbage(self)
   {
-    LruModel.NextOpt(self.garbageQueue)
+    LruModel.NextOpt(self.garbageQueue.value)
   }
 
   lemma FindDeallocableCorrect(self: IndirectionTable)
   requires Inv(self)
+  requires TrackingGarbage(self)
   ensures var ref := FindDeallocable(self);
       && (ref.Some? ==> ref.value in I(self).graph)
       && (ref.Some? ==> deallocable(self, ref.value))
@@ -1383,17 +1396,18 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
 
   lemma LemmaRemoveRefStuff(self: IndirectionTable, ref: BT.G.Reference)
   requires Inv(self)
+  requires TrackingGarbage(self)
   requires ref in self.t.contents
   requires deallocable(self, ref)
   requires self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
   ensures
     var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
-    var q := LruModel.Remove(self.garbageQueue, ref);
+    var q := LruModel.Remove(self.garbageQueue.value, ref);
     RefcountUpdateInv(t, q, ref, [], oldEntry.value.succs, 0, 0)
   {
     var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
 
-    LruModel.LruRemove(self.garbageQueue, ref);
+    LruModel.LruRemove(self.garbageQueue.value, ref);
 
     assert |Graph(self.t)[ref]| <= MaxNumChildren();
 
@@ -1448,9 +1462,11 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
     : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
+  requires TrackingGarbage(self)
   requires deallocable(self, ref)
   ensures var (self', oldLoc) := res;
     && Inv(self')
+    && TrackingGarbage(self')
     && self'.graph == MapRemove1(self.graph, ref)
     && self'.locs == MapRemove1(self.locs, ref)
     && (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
@@ -1461,12 +1477,12 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
     LemmaRemoveRefStuff(self, ref);
 
     var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
-    var q := LruModel.Remove(self.garbageQueue, ref);
+    var q := LruModel.Remove(self.garbageQueue.value, ref);
     var (t1, q1) := UpdatePredCountsInc(t, q, ref, [], oldEntry.value.succs, 0);
 
     LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), [], oldEntry.value.succs);
 
-    var self' := FromHashMap(t1, q1);
+    var self' := FromHashMap(t1, Some(q1));
     var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
     (self', oldLoc)
   }
