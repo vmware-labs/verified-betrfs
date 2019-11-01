@@ -80,6 +80,7 @@ module ImplModelCache {
   {
     && s.Ready?
     && IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+    && IndirectionTableModel.TrackingGarbage(s.ephemeralIndirectionTable)
     && (forall loc |
         loc in IIndirectionTable(s.ephemeralIndirectionTable).locs.Values :: 
           BC.ValidLocationForNode(loc))

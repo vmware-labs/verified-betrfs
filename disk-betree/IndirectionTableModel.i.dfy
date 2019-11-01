@@ -201,6 +201,7 @@ module IndirectionTableModel {
     && self'.graph == self.graph
     && (added ==> self'.locs == self.locs[ref := loc])
     && (!added ==> self'.locs == self.locs)
+    && (TrackingGarbage(self) ==> TrackingGarbage(self'))
   {
     assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8;
     var oldEntry := MutableMapModel.Get(self.t, ref);
