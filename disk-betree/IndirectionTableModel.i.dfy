@@ -418,6 +418,8 @@ module IndirectionTableModel {
   ensures idx < |newSuccs| ==>
     var (t', q') := PredInc(t, q, newSuccs[idx]);
     RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, idx + 1, 0)
+  ensures MutableMapModel.Inv(t)
+  ensures 0 <= idx <= |newSuccs|
   {
     if idx < |newSuccs| {
       var graph := Graph(t);
@@ -507,7 +509,7 @@ module IndirectionTableModel {
     )
   }
 
-  function UpdatePredCountsInc(
+  function {:fuel RefcountUpdateInv,0} UpdatePredCountsInc(
       t: HashMap,
       q: LruModel.LruQueue,
       changingRef: BT.G.Reference,
@@ -667,7 +669,7 @@ module IndirectionTableModel {
     && (forall ref | ref in copy.contents :: ref in t.contents)
     && (forall ref | ref in copy.contents :: t.contents[ref].loc == copy.contents[ref].loc)
     && (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
-    && (forall ref | ref in copy.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)|)
+    && (forall ref | ref in copy.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref))
     && (forall ref | ref in copy.contents :: |copy.contents[ref].succs| <= MaxNumChildren())
     && (forall ref | ref in t.contents :: ref in copy.contents)
     && GraphClosedRestricted(Graph(copy), it.s)
@@ -709,11 +711,11 @@ module IndirectionTableModel {
   requires (forall ref | ref in t.contents :: t.contents[ref].loc == copy.contents[ref].loc)
   requires t.count == copy.count
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.value.0].succs, i)
-  requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, i as int)|
+  requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, i as int)| + IsRoot(ref)
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.value.0].succs, i);
     && (t'.Some? ==>
       && MutableMapModel.Inv(t'.value)
-      && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})|)
+      && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})| + IsRoot(ref))
       && (forall ref | ref in t'.value.contents :: ref in copy.contents)
       && (forall ref | ref in copy.contents :: ref in t'.value.contents)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].loc == copy.contents[ref].loc)
@@ -726,7 +728,7 @@ module IndirectionTableModel {
     var succs := copy.contents[it.next.value.0].succs;
     if i == |succs| as uint64 {
       forall ref | ref in t.contents
-      ensures t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})|
+      ensures t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})| + IsRoot(ref)
       {
         assert PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0}) == PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, i as int);
       }
@@ -738,7 +740,7 @@ module IndirectionTableModel {
         var t0 := MutableMapModel.Insert(t, ref, newEntry);
 
         forall r | r in t0.contents
-        ensures t0.contents[r].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), r, it.s, it.next.value.0, (i+1) as int)|
+        ensures t0.contents[r].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), r, it.s, it.next.value.0, (i+1) as int)| + IsRoot(r)
         {
           if r == ref {
             LemmaPredecessorSetRestrictedPartialAdd1Self(Graph(copy), r, it.s, it.next.value.0, i as int);
@@ -822,11 +824,11 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   requires it.next.Some?
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.value.0].succs, 0)
-  requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)|
+  requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref)
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.value.0].succs, 0);
     && (t'.Some? ==>
       && MutableMapModel.Inv(t'.value)
-      && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})|)
+      && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.value.0})| + IsRoot(ref))
       && (forall ref | ref in t'.value.contents :: ref in copy.contents)
       && (forall ref | ref in copy.contents :: ref in t'.value.contents)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].loc == t.contents[ref].loc)
@@ -837,7 +839,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
     && (t'.None? ==> !BC.GraphClosed(Graph(copy)))
   {
     forall ref | ref in t.contents
-    ensures t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, 0)|
+    ensures t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, 0)| + IsRoot(ref)
     {
       assert PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, 0)
           == PredecessorSetRestricted(Graph(copy), ref, it.s);
@@ -914,14 +916,21 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
   requires t.count as int <= NumBlocks()
-  ensures ComputeRefCountsIterateInv(t, t, MutableMapModel.IterStart(t))
+  requires BT.G.Root() in t.contents
+  ensures
+    var oldEntry := t.contents[BT.G.Root()];
+    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    ComputeRefCountsIterateInv(t0, t, MutableMapModel.IterStart(t))
   {
+    var oldEntry := t.contents[BT.G.Root()];
+    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+
     var it := MutableMapModel.IterStart(t);
-    forall ref | ref in t.contents
-    ensures t.contents[ref].predCount as int
-        == |PredecessorSetRestricted(Graph(t), ref, it.s)|
+    forall ref | ref in t0.contents
+    ensures t0.contents[ref].predCount as int
+        == |PredecessorSetRestricted(Graph(t0), ref, it.s)| + IsRoot(ref)
     {
-      assert PredecessorSetRestricted(Graph(t), ref, it.s) == {};
+      assert PredecessorSetRestricted(Graph(t0), ref, it.s) == {};
     }
   }
 
@@ -930,6 +939,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
   requires t.count as int <= NumBlocks()
+  requires BT.G.Root() in t.contents
   ensures BC.GraphClosed(Graph(t)) <==> t'.Some?
   ensures t'.Some? ==> Graph(t) == Graph(t'.value)
   ensures t'.Some? ==> Locs(t) == Locs(t'.value)
@@ -937,7 +947,10 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   {
     LemmaComputeRefCountsIterateInvInit(t);
 
-    ComputeRefCountsIterate(t, t, MutableMapModel.IterStart(t))
+    var oldEntry := t.contents[BT.G.Root()];
+    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+
+    ComputeRefCountsIterate(t0, t, MutableMapModel.IterStart(t))
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
@@ -1336,6 +1349,27 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
       forall r | r in I(self).graph ensures !deallocable(self, r)
       {
         assert self.t.contents[r].predCount != 0;
+        if r == BT.G.Root() {
+          assert !deallocable(self, r);
+        } else {
+          assert |PredecessorSet(self.graph, r)| > 0;
+          assert PredecessorSet(self.graph, r) != {};
+          var y : PredecessorEdge :| y in PredecessorSet(self.graph, r);
+          assert y.src in I(self).graph;
+          assert r in I(self).graph[y.src];
+          assert !deallocable(self, r);
+        }
+      }
+    } else {
+      assert ref.value in PredCounts(self.t);
+      assert self.predCounts[ref.value] == |PredecessorSet(self.graph, ref.value)| + IsRoot(ref.value);
+      assert self.t.contents[ref.value].predCount == 0;
+      forall r | r in I(self).graph ensures ref.value !in I(self).graph[r]
+      {
+        if ref.value in I(self).graph[r] {
+          var i :| 0 <= i < |I(self).graph[r]| && I(self).graph[r][i] == ref.value;
+          assert PredecessorEdge(r, i) in PredecessorSet(self.graph, ref.value);
+        }
       }
     }
   }
@@ -1368,7 +1402,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
     var succs1 := [];
     var predCounts1 := PredCounts(t);
     forall r | r in predCounts1
-    ensures predCounts1[r] == |PredecessorSet(graph1, r)|
+    ensures predCounts1[r] == |PredecessorSet(graph1, r)| + IsRoot(r)
           - SeqCount(succs1, r, 0)
           + SeqCount(succs0, r, 0)
     {
