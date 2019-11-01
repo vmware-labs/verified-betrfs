@@ -712,6 +712,7 @@ module IndirectionTableModel {
   requires t.count == copy.count
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.value.0].succs, i)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.value.0, i as int)| + IsRoot(ref)
+  requires BT.G.Root() in t.contents
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.value.0].succs, i);
     && (t'.Some? ==>
       && MutableMapModel.Inv(t'.value)
@@ -721,6 +722,7 @@ module IndirectionTableModel {
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].loc == copy.contents[ref].loc)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].succs == copy.contents[ref].succs)
       && t'.value.count == copy.count
+      && BT.G.Root() in t'.value.contents
     )
     && (t'.None? ==> !BC.GraphClosed(Graph(copy)))
   decreases |copy.contents[it.next.value.0].succs| - i as int
@@ -825,6 +827,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.value.0].succs, 0)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref)
+  requires BT.G.Root() in t.contents
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.value.0].succs, 0);
     && (t'.Some? ==>
       && MutableMapModel.Inv(t'.value)
@@ -850,6 +853,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
 
   lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
+  requires BT.G.Root() in t.contents
   ensures forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000
   ensures it.next.Some? ==>
     var succs := it.next.value.1.succs;
@@ -888,11 +892,13 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   // as we don't need to prove anything about iterator preservation.
   function ComputeRefCountsIterate(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>) : (t' : Option<HashMap>)
   requires ComputeRefCountsIterateInv(t, copy, it)
+  requires BT.G.Root() in t.contents
   ensures t'.Some? ==> MutableMapModel.Inv(t'.value)
   ensures t'.Some? <==> BC.GraphClosed(Graph(copy))
   ensures t'.Some? ==> Graph(copy) == Graph(t'.value)
   ensures t'.Some? ==> Locs(copy) == Locs(t'.value)
   ensures t'.Some? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
+  ensures t'.Some? ==> BT.G.Root() in t'.value.contents
   decreases it.decreaser
   {
     LemmaComputeRefCountsIterateStuff(t, copy, it);
@@ -944,6 +950,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
   ensures t'.Some? ==> Graph(t) == Graph(t'.value)
   ensures t'.Some? ==> Locs(t) == Locs(t'.value)
   ensures t'.Some? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
+  ensures t'.Some? ==> BT.G.Root() in t'.value.contents
   {
     LemmaComputeRefCountsIterateInvInit(t);
 

@@ -29,12 +29,14 @@ module IndirectionTableImpl {
   import Bitmap
   import opened Bounds
   import IndirectionTableModel
+  import MutableLru
 
   type HashMap = MutableMap.ResizingHashMap<IndirectionTableModel.Entry>
 
   // TODO move bitmap in here?
   class IndirectionTable {
     var t: HashMap;
+    var garbageQueue: MutableLru.MutableLruQueue;
     ghost var Repr: set<object>;
 
     protected predicate Inv()
@@ -43,15 +45,20 @@ module IndirectionTableImpl {
     {
       && this in Repr
       && this.t in Repr
-      && this.Repr == {this} + this.t.Repr
+      && this.garbageQueue in Repr
+      && this.Repr == {this} + this.t.Repr + this.garbageQueue.Repr
       && this !in this.t.Repr
       && this.t.Inv()
+      && this.garbageQueue.Inv()
 
       && var predCounts := IndirectionTableModel.PredCounts(this.t.I());
       && var graph := IndirectionTableModel.Graph(this.t.I());
       && IndirectionTableModel.ValidPredCounts(predCounts, graph)
       && BC.GraphClosed(graph)
       && (forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren())
+      && (forall ref | ref in this.t.I().contents && t.I().contents[ref].predCount == 0 :: ref in LruModel.I(garbageQueue.Queue))
+      && (forall ref | ref in LruModel.I(garbageQueue.Queue) :: ref in t.I().contents && t.I().contents[ref].predCount == 0)
+      && BT.G.Root() in t.I().contents
     }
 
     protected function I() : IndirectionTableModel.IndirectionTable
@@ -59,7 +66,7 @@ module IndirectionTableImpl {
     requires Inv()
     ensures IndirectionTableModel.Inv(I())
     {
-      var res := IndirectionTableModel.FromHashMap(t.I());
+      var res := IndirectionTableModel.FromHashMap(t.I(), garbageQueue.Queue);
       IndirectionTableModel.reveal_Inv(res);
       res
     }
@@ -70,7 +77,7 @@ module IndirectionTableImpl {
     {
       this.t := new MutableMap.ResizingHashMap(128);
       new;
-      Repr := {this} + this.t.Repr;
+      Repr := {this} + this.t.Repr + this.garbageQueue.Repr;
     }
 
     constructor(t: HashMap)
@@ -88,7 +95,7 @@ module IndirectionTableImpl {
     {
       var t0 := this.t.Clone();
       table := new IndirectionTable(t0);
-      table.Repr := {table} + table.t.Repr;
+      table.Repr := {table} + table.t.Repr + table.garbageQueue.Repr;
     }
 
     method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
@@ -122,7 +129,7 @@ module IndirectionTableImpl {
         this.t.Insert(ref, IndirectionTableModel.Entry(None, oldEntry.value.succs, oldEntry.value.predCount));
       }
 
-      Repr := {this} + this.t.Repr;
+      Repr := {this} + this.t.Repr + this.garbageQueue.Repr;
       ghost var _ := IndirectionTableModel.RemoveLocIfPresent(old(I()), ref);
     }
 
@@ -143,7 +150,7 @@ module IndirectionTableImpl {
         this.t.Insert(ref, IndirectionTableModel.Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
       }
 
-      Repr := {this} + this.t.Repr;
+      Repr := {this} + this.t.Repr + this.garbageQueue.Repr;
       ghost var _ := IndirectionTableModel.AddLocIfPresent(old(I()), ref, loc);
     }
 
@@ -162,22 +169,22 @@ module IndirectionTableImpl {
       IndirectionTableModel.LemmaRemoveRefStuff(I(), ref);
 
       var oldEntry := this.t.RemoveAndGet(ref);
-      UpdatePredCounts(this.t, ref, [], oldEntry.value.succs);
+      UpdatePredCounts(this.t, this.garbageQueue, ref, [], oldEntry.value.succs);
 
       oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
 
-      Repr := {this} + this.t.Repr;
+      Repr := {this} + this.t.Repr + this.garbageQueue.Repr;
       ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
     }
 
-    static method UpdatePredCounts(t: HashMap, ghost changingRef: BT.G.Reference,
+    static method UpdatePredCounts(t: HashMap, q: MutableLru.MutableLruQueue, ghost changingRef: BT.G.Reference,
         newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
     requires t.Inv()
-    requires IndirectionTableModel.RefcountUpdateInv(t.I(), changingRef, newSuccs, oldSuccs, 0, 0)
+    requires IndirectionTableModel.RefcountUpdateInv(t.I(), q.Queue, changingRef, newSuccs, oldSuccs, 0, 0)
     modifies t.Repr
     ensures forall o | o in t.Repr :: o in old(t.Repr) || fresh(o)
     ensures t.Inv()
-    ensures t.I() == IndirectionTableModel.UpdatePredCountsInc(old(t.I()), changingRef, newSuccs, oldSuccs, 0)
+    ensures (t.I(), q.Queue) == IndirectionTableModel.UpdatePredCountsInc(old(t.I()), old(q.Queue), changingRef, newSuccs, oldSuccs, 0)
     {
     }
 
@@ -198,14 +205,14 @@ module IndirectionTableImpl {
       var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
       this.t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
 
-      UpdatePredCounts(this.t, ref, succs,
+      UpdatePredCounts(this.t, this.garbageQueue, ref, succs,
           if oldEntry.Some? then oldEntry.value.succs else []);
 
       //IndirectionTableModel.LemmaValidPredCountsOfValidPredCountsIntermediate(IndirectionTableModel.PredCounts(this.t.I()), IndirectionTableModel.Graph(this.t.I()), succs, if oldEntry.Some? then oldEntry.value.succs else []);
 
       oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
 
-      Repr := {this} + this.t.Repr;
+      Repr := {this} + this.t.Repr + this.garbageQueue.Repr;
     }
 
     // Parsing and marshalling
@@ -284,7 +291,7 @@ module IndirectionTableImpl {
           var isGraphClosed := GraphClosed(res);
           if rootRef.Some? && isGraphClosed {
             s := new IndirectionTable(res);
-            s.Repr := {s} + s.t.Repr;
+            s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
           } else {
             s := null;
           }
@@ -452,27 +459,7 @@ module IndirectionTableImpl {
     ensures ref == IndirectionTableModel.FindDeallocable(I())
     {
       IndirectionTableModel.reveal_FindDeallocable();
-
-      // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-      var ephemeralTable := t.ToMap();
-      var ephemeralRefs := SetToSeq(ephemeralTable.Keys);
-
-      assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-
-      var i: uint64 := 0;
-      while i < |ephemeralRefs| as uint64
-      invariant 0 <= i as int <= |ephemeralRefs|
-      invariant IndirectionTableModel.FindDeallocableIterate(I(), ephemeralRefs, i)
-             == IndirectionTableModel.FindDeallocable(I())
-      {
-        var ref := ephemeralRefs[i];
-        var isDeallocable := this.Deallocable(ref);
-        if isDeallocable {
-          return Some(ref);
-        }
-        i := i + 1;
-      }
-      return None;
+      ref := garbageQueue.NextOpt();
     }
   }
 }
