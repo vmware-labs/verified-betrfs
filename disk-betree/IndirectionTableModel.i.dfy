@@ -42,12 +42,6 @@ module IndirectionTableModel {
     ghost predCounts: map<BT.G.Reference, int>
   )
 
-    // This contains reference with the empty predecessor set.
-    // We use a LRU queue not because we care about the LRU,
-    // but just because it happens to be a queue data structure lying around.
-    //garbageQueue: LruModel.LruQueue,
-    //refcounts: map<BT.G.Reference, uint64>)
-
   function Locs(t: HashMap) : map<BT.G.Reference, BC.Location>
   {
     map ref | ref in t.contents && t.contents[ref].loc.Some? :: t.contents[ref].loc.value
@@ -770,7 +764,7 @@ module IndirectionTableModel {
     }
   }
 
-lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>, i: uint64)
+  lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>, i: uint64)
   requires it.next.Some?
   requires MutableMapModel.Inv(t)
   requires MutableMapModel.Inv(copy)
@@ -1486,5 +1480,16 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
     var self' := FromHashMap(t1, Some(q1));
     var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
     (self', oldLoc)
+  }
+
+  // When we clone an ephemeral indirection table to a frozen one, we don't need
+  // to clone the garbageQueue.
+  function {:opaque} clone(self: IndirectionTable) : (self' : IndirectionTable)
+  requires Inv(self)
+  ensures Inv(self')
+  ensures self'.graph == self.graph
+  ensures self'.locs == self.locs
+  {
+    FromHashMap(self.t, None)
   }
 }
