@@ -20,34 +20,6 @@ module Sets {
 
   // NOTE: these are horribly slow
 
-  function setToSeq<T(==)>(s: set<T>) : (run: seq<T>)
-  ensures |run| == |s|
-  ensures (set e | e in run) == s
-
-  method SetToSeq<T(==)>(s: set<T>) returns (run: seq<T>)
-  ensures |run| == |s|
-  ensures (set e | e in run) == s
-  ensures run == setToSeq(s)
-  {
-    if |s| == 0 {
-      return [];
-    } else {
-      var x :| x in s;
-      var lset := set t | t in s && t != x;
-      var l := SetToSeq(lset);
-      run := l + [x];
-
-      assert lset !! {x};
-      assert lset + {x} == s;
-
-      assert |run| == |l| + 1
-        == |lset| + |{x}|
-        == |lset + {x}|
-        == |s|;
-    }
-    assume run == setToSeq(s);
-  }
-
   method minimum(s: set<uint64>) returns (o: uint64)
   requires |s| >= 1
   ensures forall t : uint64 :: t in s ==> o <= t

@@ -1309,61 +1309,11 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
     && (forall r | r in I(self).graph :: ref !in I(self).graph[r])
   }
 
-  function FindDeallocableIterate(self: IndirectionTable, ephemeralRefs: seq<BT.G.Reference>, i: uint64)
-  : (ref: Option<BT.G.Reference>)
-  requires 0 <= i as int <= |ephemeralRefs|
-  requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-  decreases 0x1_0000_0000_0000_0000 - i as int
-  {
-    if i == |ephemeralRefs| as uint64 then (
-      None
-    ) else (
-      var ref := ephemeralRefs[i];
-      var isDeallocable := deallocable(self, ref);
-      if isDeallocable then (
-        Some(ref)
-      ) else (
-        FindDeallocableIterate(self, ephemeralRefs, i + 1)
-      )
-    )
-  }
-
   function {:opaque} FindDeallocable(self: IndirectionTable)
   : (ref: Option<BT.G.Reference>)
   requires Inv(self)
   {
-    // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var ephemeralRefs := setToSeq(self.t.contents.Keys);
-
-    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-
-    FindDeallocableIterate(self, ephemeralRefs, 0)
-  }
-
-  lemma FindDeallocableIterateCorrect(self: IndirectionTable, ephemeralRefs: seq<BT.G.Reference>, i: uint64)
-  requires Inv(self)
-  requires 0 <= i as int <= |ephemeralRefs|
-  requires |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-  requires ephemeralRefs == setToSeq(self.t.contents.Keys)
-  requires forall k : nat | k < i as nat :: (
-        && ephemeralRefs[k] in I(self).graph
-        && !deallocable(self, ephemeralRefs[k]))
-  ensures var ref := FindDeallocableIterate(self, ephemeralRefs, i);
-      && (ref.Some? ==> ref.value in I(self).graph)
-      && (ref.Some? ==> deallocable(self, ref.value))
-      && (ref.None? ==> forall r | r in I(self).graph :: !deallocable(self, r))
-  decreases 0x1_0000_0000_0000_0000 - i as int
-  {
-    if i == |ephemeralRefs| as uint64 {
-      assert forall r | r in I(self).graph :: !deallocable(self, r);
-    } else {
-      var ref := ephemeralRefs[i];
-      var isDeallocable := deallocable(self, ref);
-      if isDeallocable {
-      } else {
-        FindDeallocableIterateCorrect(self, ephemeralRefs, i + 1);
-      }
-    }
+    LruModel.NextOpt(self.garbageQueue)
   }
 
   lemma FindDeallocableCorrect(self: IndirectionTable)
@@ -1374,9 +1324,13 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
       && (ref.None? ==> forall r | r in I(self).graph :: !deallocable(self, r))
   {
     reveal_FindDeallocable();
-    var ephemeralRefs := setToSeq(self.t.contents.Keys);
-    assume |ephemeralRefs| < 0x1_0000_0000_0000_0000;
-    FindDeallocableIterateCorrect(self, ephemeralRefs, 0);
+    var ref := FindDeallocable(self);
+    if ref.None? {
+      forall r | r in I(self).graph ensures !deallocable(self, r)
+      {
+        assert self.t.contents[r].predCount != 0;
+      }
+    }
   }
 
   lemma LemmaRemoveRefStuff(self: IndirectionTable, ref: BT.G.Reference)
