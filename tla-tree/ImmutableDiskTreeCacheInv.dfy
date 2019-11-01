@@ -10,7 +10,6 @@ import opened ImmutableDiskTreeInv
 import opened ImmutableDiskTreeHeight
 import opened ImmutableDiskTreeContent
 import opened ImmutableDiskTreeInterpretation
-import opened MissingLibrary
 
 predicate ValidCacheIndex(k:Constants, lba:TreeDisk.LBA)
 {

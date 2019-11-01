@@ -1,7 +1,6 @@
 include "../NativeTypes.s.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
-include "../../tla-tree/MissingLibrary.i.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 include "Native.s.dfy"
@@ -14,10 +13,10 @@ module GenericMarshalling {
 import opened NativeTypes
 import opened Collections__Maps_i
 import opened Collections__Seqs_i 
-import opened MissingLibrary
 import opened Common__Util_i
 import opened Common__MarshallInt_i
 import opened Libraries__base_s
+import opened Options
 //import opened Math__power2_i
 import opened Native
 import opened Math
@@ -26,8 +25,8 @@ import ValueMessage`Internal
 import ValueWithDefault`Internal
 
 export S
-  provides NativeTypes, MissingLibrary, parse_Val, ParseVal, Marshall, Demarshallable,
-      ComputeSizeOf, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
+  provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
+      ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
       Lexicographic_Byte_Order, ValueMessage, ValueWithDefault
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, SeqSumMessageLens
 
@@ -169,7 +168,7 @@ method ParseUint64(data:seq<byte>, index:uint64) returns (success:bool, v:V, res
     lemma_2toX();
 
     if (|data| as uint64) >= 8 && index <= (|data| as uint64) - 8 {
-    // Avoids overflow and equvalent to: if index + 8 < uint64(data.Length) {
+    // Avoids overflow and equvalent to: if index + 8 < uint64(data.Length) 
         var result := (data[index + (0 as uint64)] as uint64) * 0x1_00_0000_0000_0000
                     + (data[index + (1 as uint64)] as uint64) * 0x1_00_0000_0000_00
                     + (data[index + (2 as uint64)] as uint64) * 0x1_00_0000_0000

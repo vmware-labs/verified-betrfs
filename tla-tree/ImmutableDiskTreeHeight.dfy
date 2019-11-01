@@ -4,7 +4,6 @@ module ImmutableDiskTreeHeight {
 import opened TreeTypes
 import opened ImmutableDiskTreeImpl
 import opened ImmutableDiskTreeInv
-import opened MissingLibrary
 
 // A view of a thing we expect to be a tree -- but at this point we're still proving it.
 // So it's just a "graph" for now.

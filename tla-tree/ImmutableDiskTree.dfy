@@ -1,4 +1,3 @@
-include "MissingLibrary.i.dfy"
 include "KVTypes.dfy"
 include "Disk.dfy"
 
@@ -43,7 +42,6 @@ datatype Sector =
 // big data structure changes to make later.
 
 module ImmutableDiskTreeImpl {
-import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
 import TreeDisk
@@ -945,7 +943,6 @@ predicate {:opaque} Next(k:Constants, s:Variables, s':Variables)
 } // module
 
 module ImmutableDiskTree {
-import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
 import TreeDisk
