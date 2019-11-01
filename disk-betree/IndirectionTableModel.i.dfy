@@ -95,11 +95,15 @@ module IndirectionTableModel {
     && (forall i | 0 <= i < j :: graph[next][i] in graph)
   }
 
+  function IsRoot(ref: BT.G.Reference) : int
+  {
+    if ref == BT.G.Root() then 1 else 0
+  }
 
   predicate ValidPredCounts(predCounts: map<BT.G.Reference, int>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
   {
     forall ref | ref in predCounts ::
-        predCounts[ref] == |PredecessorSet(graph, ref)|
+        predCounts[ref] == |PredecessorSet(graph, ref)| + IsRoot(ref)
   }
 
   protected predicate Inv(self: IndirectionTable)
@@ -120,6 +124,7 @@ module IndirectionTableModel {
     && LruModel.WF(self.garbageQueue)
     && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in LruModel.I(self.garbageQueue))
     && (forall ref | ref in LruModel.I(self.garbageQueue) :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
+    && BT.G.Root() in self.t.contents
   }
 
   lemma reveal_Inv(self: IndirectionTable)
@@ -234,7 +239,7 @@ module IndirectionTableModel {
   requires 0 <= oldIdx <= |oldSuccs|
   {
     forall ref | ref in predCounts ::
-      predCounts[ref] == |PredecessorSet(graph, ref)|
+      predCounts[ref] == |PredecessorSet(graph, ref)| + IsRoot(ref)
           - SeqCount(newSuccs, ref, newIdx)
           + SeqCount(oldSuccs, ref, oldIdx)
   }
@@ -267,6 +272,7 @@ module IndirectionTableModel {
     && BC.GraphClosed(Graph(t))
     && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in LruModel.I(q))
     && (forall ref | ref in LruModel.I(q) :: ref in t.contents && t.contents[ref].predCount == 0)
+    && BT.G.Root() in t.contents
   }
 
   lemma SeqCountLePredecessorSet(
@@ -362,7 +368,7 @@ module IndirectionTableModel {
 
       var ref := oldSuccs[idx];
       assert t.contents[ref].predCount as int
-        == |PredecessorSet(graph, ref)|
+        == |PredecessorSet(graph, ref)| + IsRoot(ref)
           - SeqCount(newSuccs, ref, |newSuccs|)
           + SeqCount(oldSuccs, ref, idx);
 
@@ -384,7 +390,7 @@ module IndirectionTableModel {
       var predCounts := PredCounts(t);
       var predCounts' := PredCounts(t');
       forall r | r in predCounts'
-      ensures predCounts'[r] == |PredecessorSet(graph, r)|
+      ensures predCounts'[r] == |PredecessorSet(graph, r)| + IsRoot(r)
           - SeqCount(newSuccs, r, |newSuccs|)
           + SeqCount(oldSuccs, r, idx + 1)
       {
@@ -421,7 +427,7 @@ module IndirectionTableModel {
 
       var ref := newSuccs[idx];
       assert t.contents[ref].predCount as int
-        == |PredecessorSet(graph, ref)|
+        == |PredecessorSet(graph, ref)| + IsRoot(ref)
           - SeqCount(newSuccs, ref, idx)
           + SeqCount(oldSuccs, ref, 0);
 
@@ -437,7 +443,7 @@ module IndirectionTableModel {
       var predCounts := PredCounts(t);
       var predCounts' := PredCounts(t');
       forall r | r in predCounts'
-      ensures predCounts'[r] == |PredecessorSet(graph, r)|
+      ensures predCounts'[r] == |PredecessorSet(graph, r)| + IsRoot(r)
           - SeqCount(newSuccs, r, idx + 1)
           + SeqCount(oldSuccs, r, 0)
       {
@@ -558,8 +564,9 @@ module IndirectionTableModel {
     var predCounts := PredCounts(t);
     var graph0 := Graph(self.t);
     var graph := Graph(t);
+
     forall r | r in predCounts
-    ensures predCounts[r] == |PredecessorSet(graph, r)|
+    ensures predCounts[r] == |PredecessorSet(graph, r)| + IsRoot(r)
           - SeqCount(succs, r, 0)
           + SeqCount(oldSuccs, r, 0)
     {
@@ -864,7 +871,7 @@ lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it
       var predCounts := PredCounts(t);
       var graph := Graph(t);
       forall ref | ref in predCounts
-      ensures predCounts[ref] == |PredecessorSet(graph, ref)|
+      ensures predCounts[ref] == |PredecessorSet(graph, ref)| + IsRoot(ref)
       {
         assert PredecessorSet(graph, ref)
             //== PredecessorSetRestricted(graph, ref, it.s)
