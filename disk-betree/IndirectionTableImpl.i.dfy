@@ -75,6 +75,21 @@ module IndirectionTableImpl {
       res
     }
 
+    // Dummy constructor only used when ImplVariables is in a state with no indirection
+    // table. We could use a null indirection table instead, it's just slightly more
+    // annoying to do that because we'd need additional invariants.
+    constructor Empty()
+    ensures Inv()
+    ensures fresh(Repr)
+    {
+      this.t := new MutableMap.ResizingHashMap(128);
+      new;
+      // This is not important, but needed to satisfy the Inv:
+      this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
+      this.garbageQueue := null;
+      Repr := {this} + this.t.Repr;
+    }
+
     constructor(t: HashMap)
     ensures this.t == t
     ensures this.garbageQueue == null

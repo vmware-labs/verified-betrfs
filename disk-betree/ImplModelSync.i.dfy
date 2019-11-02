@@ -378,7 +378,7 @@ module ImplModelSync {
       Dealloc(k, s, io, foundDeallocable.value)
     ) else (
       var s' := s
-          .(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
+          .(frozenIndirectionTable := Some(IndirectionTableModel.clone(s.ephemeralIndirectionTable)))
           .(syncReqs := BC.syncReqs3to2(s.syncReqs))
           .(blockAllocator := ImplModelBlockAllocator.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
