@@ -67,12 +67,12 @@ module ImplModel {
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
         outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
-        syncReqs: map<uint64, BC.SyncReqStatus>,
+        syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue,
         blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel
       )
-    | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: map<uint64, BC.SyncReqStatus>)
+    | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
   datatype Sector =
     | SectorBlock(block: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
@@ -148,6 +148,7 @@ module ImplModel {
   predicate WFVars(vars: Variables)
   {
     && (vars.Ready? ==> WFVarsReady(vars))
+    && MutableMapModel.Inv(vars.syncReqs)
   }
   predicate WFSector(sector: Sector)
   {
@@ -185,8 +186,8 @@ module ImplModel {
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
-        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, ICache(cache))
-      case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs)
+        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs.contents, ICache(cache))
+      case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs.contents)
     }
   }
   function ISector(sector: Sector) : BC.Sector

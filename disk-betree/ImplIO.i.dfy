@@ -299,6 +299,72 @@ module ImplIO {
     }
   }
 
+  // == syncReqs manipulations ==
+
+  // TODO we could have these do the modification in-place instead.
+
+  method SyncReqs2to1(m: MutableMap.ResizingHashMap<BC.SyncReqStatus>)
+  returns (m' : MutableMap.ResizingHashMap<BC.SyncReqStatus>)
+  requires m.Inv()
+  ensures fresh(m'.Repr)
+  ensures m'.Inv()
+  ensures m'.I() == ImplModelIO.SyncReqs2to1(m.I())
+  {
+    ImplModelIO.reveal_SyncReqs2to1();
+    var it := m.IterStart();
+    var m0 := new MutableMap.ResizingHashMap(128);
+    while !it.next.None?
+    invariant m.Inv()
+    invariant fresh(m0.Repr)
+    invariant m0.Inv()
+    invariant MutableMapModel.WFIter(m.I(), it)
+    invariant m0.Inv()
+    invariant m0.I().contents.Keys == it.s
+    invariant ImplModelIO.SyncReqs2to1(m.I()) == ImplModelIO.SyncReqs2to1Iterate(m.I(), it, m0.I())
+
+    decreases it.decreaser
+    {
+      var key := it.next.value.0;
+      var value := it.next.value.1;
+      MutableMapModel.LemmaIterIndexLtCount(m.I(), it);
+      MutableMapModel.CountBound(m.I());
+      m0.Insert(key, (if value == BC.State2 then BC.State1 else value));
+      it := m.IterInc(it);
+    }
+    m' := m0;
+  }
+
+  method SyncReqs3to2(m: MutableMap.ResizingHashMap<BC.SyncReqStatus>)
+  returns (m' : MutableMap.ResizingHashMap<BC.SyncReqStatus>)
+  requires m.Inv()
+  ensures fresh(m'.Repr)
+  ensures m'.Inv()
+  ensures m'.I() == ImplModelIO.SyncReqs3to2(m.I())
+  {
+    ImplModelIO.reveal_SyncReqs3to2();
+    var it := m.IterStart();
+    var m0 := new MutableMap.ResizingHashMap(128);
+    while !it.next.None?
+    invariant m.Inv()
+    invariant fresh(m0.Repr)
+    invariant m0.Inv()
+    invariant MutableMapModel.WFIter(m.I(), it)
+    invariant m0.Inv()
+    invariant m0.I().contents.Keys == it.s
+    invariant ImplModelIO.SyncReqs3to2(m.I()) == ImplModelIO.SyncReqs3to2Iterate(m.I(), it, m0.I())
+
+    decreases it.decreaser
+    {
+      var key := it.next.value.0;
+      var value := it.next.value.1;
+      MutableMapModel.LemmaIterIndexLtCount(m.I(), it);
+      MutableMapModel.CountBound(m.I());
+      m0.Insert(key, (if value == BC.State3 then BC.State2 else value));
+      it := m.IterInc(it);
+    }
+    m' := m0;
+  }
+
   // == writeResponse ==
 
   method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
@@ -316,7 +382,7 @@ module ImplIO {
       s.outstandingIndirectionTableWrite := None;
       s.persistentIndirectionTable := s.frozenIndirectionTable;
       s.frozenIndirectionTable := null;
-      s.syncReqs := BC.syncReqs2to1(s.syncReqs);
+      s.syncReqs := SyncReqs2to1(s.syncReqs);
 
       s.blockAllocator.MoveFrozenToPersistent();
     } else if (s.ready && id in s.outstandingBlockWrites) {

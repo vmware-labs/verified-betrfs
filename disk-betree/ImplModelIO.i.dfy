@@ -545,6 +545,138 @@ module ImplModelIO {
     reveal_ConsistentBitmap();
   }
 
+  function SyncReqs2to1Iterate(
+      m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
+      it: MutableMapModel.Iterator<BC.SyncReqStatus>,
+      m0: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+    : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+  requires MutableMapModel.Inv(m)
+  requires MutableMapModel.WFIter(m, it)
+  requires MutableMapModel.Inv(m0)
+  requires m0.contents.Keys == it.s
+  ensures MutableMapModel.Inv(m')
+  decreases it.decreaser
+  {
+    if it.next.None? then
+      m0
+    else (
+      var key := it.next.value.0;
+      var value := it.next.value.1;
+
+      MutableMapModel.LemmaIterIndexLtCount(m, it);
+      MutableMapModel.CountBound(m);
+      SyncReqs2to1Iterate(
+        m,
+        MutableMapModel.IterInc(m, it),
+        MutableMapModel.Insert(m0, key,
+            (if value == BC.State2 then BC.State1 else value))
+      )
+    )
+  }
+
+  function {:opaque} SyncReqs2to1(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+      : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+  requires MutableMapModel.Inv(m)
+  ensures MutableMapModel.Inv(m')
+  {
+    SyncReqs2to1Iterate(m,
+      MutableMapModel.IterStart(m),
+      MutableMapModel.Constructor(128))
+  }
+
+  lemma SyncReqs2to1Correct(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+  requires MutableMapModel.Inv(m)
+  ensures SyncReqs2to1(m).contents == BC.syncReqs2to1(m.contents)
+  {
+    reveal_SyncReqs2to1();
+    var it := MutableMapModel.IterStart(m);
+    var m0 := MutableMapModel.Constructor(128);
+    while !it.next.None?
+    invariant MutableMapModel.Inv(m)
+    invariant MutableMapModel.WFIter(m, it)
+    invariant MutableMapModel.Inv(m0)
+    invariant m0.contents.Keys == it.s
+    invariant forall id | id in it.s ::
+        m0.contents[id] == (if m.contents[id] == BC.State2 then BC.State1 else m.contents[id])
+    invariant SyncReqs2to1(m) == SyncReqs2to1Iterate(m, it, m0)
+    decreases it.decreaser
+    {
+      var key := it.next.value.0;
+      var value := it.next.value.1;
+      MutableMapModel.LemmaIterIndexLtCount(m, it);
+      MutableMapModel.CountBound(m);
+      m0 := MutableMapModel.Insert(m0, key,
+          (if value == BC.State2 then BC.State1 else value));
+      it := MutableMapModel.IterInc(m, it);
+    }
+  }
+
+  function SyncReqs3to2Iterate(
+      m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
+      it: MutableMapModel.Iterator<BC.SyncReqStatus>,
+      m0: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+    : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+  requires MutableMapModel.Inv(m)
+  requires MutableMapModel.WFIter(m, it)
+  requires MutableMapModel.Inv(m0)
+  requires m0.contents.Keys == it.s
+  ensures MutableMapModel.Inv(m')
+  decreases it.decreaser
+  {
+    if it.next.None? then
+      m0
+    else (
+      var key := it.next.value.0;
+      var value := it.next.value.1;
+
+      MutableMapModel.LemmaIterIndexLtCount(m, it);
+      MutableMapModel.CountBound(m);
+      SyncReqs3to2Iterate(
+        m,
+        MutableMapModel.IterInc(m, it),
+        MutableMapModel.Insert(m0, key,
+            (if value == BC.State3 then BC.State2 else value))
+      )
+    )
+  }
+
+  function {:opaque} SyncReqs3to2(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+      : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+  requires MutableMapModel.Inv(m)
+  ensures MutableMapModel.Inv(m')
+  {
+    SyncReqs3to2Iterate(m,
+      MutableMapModel.IterStart(m),
+      MutableMapModel.Constructor(128))
+  }
+
+  lemma SyncReqs3to2Correct(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+  requires MutableMapModel.Inv(m)
+  ensures SyncReqs3to2(m).contents == BC.syncReqs3to2(m.contents)
+  {
+    reveal_SyncReqs3to2();
+    var it := MutableMapModel.IterStart(m);
+    var m0 := MutableMapModel.Constructor(128);
+    while !it.next.None?
+    invariant MutableMapModel.Inv(m)
+    invariant MutableMapModel.WFIter(m, it)
+    invariant MutableMapModel.Inv(m0)
+    invariant m0.contents.Keys == it.s
+    invariant forall id | id in it.s ::
+        m0.contents[id] == (if m.contents[id] == BC.State3 then BC.State2 else m.contents[id])
+    invariant SyncReqs3to2(m) == SyncReqs3to2Iterate(m, it, m0)
+    decreases it.decreaser
+    {
+      var key := it.next.value.0;
+      var value := it.next.value.1;
+      MutableMapModel.LemmaIterIndexLtCount(m, it);
+      MutableMapModel.CountBound(m);
+      m0 := MutableMapModel.Insert(m0, key,
+          (if value == BC.State3 then BC.State2 else value));
+      it := MutableMapModel.IterInc(m, it);
+    }
+  }
+
   function writeResponse(k: Constants, s: Variables, io: IO)
   : (s': Variables)
   requires Inv(k, s)
@@ -558,7 +690,7 @@ module ImplModelIO {
       s.(outstandingIndirectionTableWrite := None)
              .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
              .(persistentIndirectionTable := s.frozenIndirectionTable.value)
-             .(syncReqs := BC.syncReqs2to1(s.syncReqs))
+             .(syncReqs := SyncReqs2to1(s.syncReqs))
              .(blockAllocator := ImplModelBlockAllocator.MoveFrozenToPersistent(s.blockAllocator))
     ) else if (s.Ready? && id in s.outstandingBlockWrites) then (
       lemmaOutstandingLocIndexValid(k, s, id);
@@ -581,6 +713,7 @@ module ImplModelIO {
     var s' := writeResponse(k, s, io);
     if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
       lemmaBlockAllocatorFrozenSome(k, s);
+      SyncReqs2to1Correct(s.syncReqs);
       assert WFVars(s');
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
