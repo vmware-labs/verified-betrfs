@@ -31,6 +31,7 @@ module ImplMarshalling {
   import Native
   import MutableMapModel
   import IndirectionTableImpl
+  import KeyType
 
   import BT = PivotBetreeSpec`Internal
 
@@ -40,7 +41,7 @@ module ImplMarshalling {
 
   import Pivots = PivotsLib
   import MS = MapSpec
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
 
   import MM = MutableMap
 
@@ -359,7 +360,7 @@ module ImplMarshalling {
   ensures 8 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
 
   lemma WeightKeySeqLe(keys: seq<Key>)
-  ensures WeightKeySeq(keys) <= |keys| * (8 + Keyspace.MaxLen() as int)
+  ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
 
   method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
   requires Keyspace.IsStrictlySorted(keys)
@@ -368,7 +369,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, GKeyArray)
   ensures v.baa == keys
   ensures IMM.valToStrictlySortedKeySeq(v) == Some(keys)
-  ensures SizeOfV(v) <= 8 + |keys| * (8 + Keyspace.MaxLen() as int)
+  ensures SizeOfV(v) <= 8 + |keys| * (8 + KeyType.MaxLen() as int)
   ensures SizeOfV(v) == 8 + WeightKeySeq(keys)
   {
     lemmaSizeOfKeyArray(keys);
@@ -393,7 +394,7 @@ module ImplMarshalling {
   ensures ValInGrammar(v, GKeyArray)
   ensures |v.baa| == |pivots|
   ensures IMM.valToPivots(v) == Some(pivots)
-  ensures SizeOfV(v) <= 8 + |pivots| * (8 + Keyspace.MaxLen() as int)
+  ensures SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int)
   {
     v := strictlySortedKeySeqToVal(pivots);
 

@@ -37,7 +37,7 @@ module ImplMarshallingModel {
 
   import Pivots = PivotsLib
   import MS = MapSpec
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
 
   import MM = MutableMap
 

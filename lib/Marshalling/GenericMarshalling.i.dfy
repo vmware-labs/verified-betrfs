@@ -20,19 +20,19 @@ import opened Options
 //import opened Math__power2_i
 import opened Native
 import opened Math
-import Lexicographic_Byte_Order
+import KeyType
 import ValueMessage`Internal
 import ValueWithDefault`Internal
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
-      Lexicographic_Byte_Order, ValueMessage, ValueWithDefault
+      KeyType, ValueMessage, ValueWithDefault
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, SeqSumMessageLens
 
 export extends S
 
-type Key = Lexicographic_Byte_Order.Element
+type Key = KeyType.Key
 type Message = ValueMessage.Message
 
 datatype G = GUint64
@@ -408,7 +408,7 @@ function {:opaque} parse_KeyArray_contents(data:seq<byte>, len:uint64) : (Option
    else
        var (val, rest1) := parse_ByteArray(data);
        var (others, rest2) := parse_KeyArray_contents(rest1, len - 1);
-       if !val.None? && !others.None? && |val.value.b| as uint64 <= Lexicographic_Byte_Order.MaxLen() then
+       if !val.None? && !others.None? && |val.value.b| as uint64 <= KeyType.MaxLen() then
            var key : Key := val.value.b;
            (Some([key] + others.value), rest2)
        else
@@ -474,7 +474,7 @@ lemma lemma_KeyArrayContents_helper_bailout(data:seq<byte>, len:uint64, trace:se
                  && trace[j].data == parse_ByteArray(trace[j-1].data).1;
     requires forall j :: 0 < j < |trace| - 1 ==> trace[j].val.Some?;
     //requires forall j :: 0 < j < |trace| - 1 ==> v[j-1] == trace[j].val.value;
-    requires trace[|trace|-1].val.None? || |trace[|trace|-1].val.value| > Lexicographic_Byte_Order.MaxLen() as int
+    requires trace[|trace|-1].val.None? || |trace[|trace|-1].val.value| > KeyType.MaxLen() as int
     //requires v == ExtractValues(trace[1..]);
     decreases len;
     ensures  var (v', rest') := parse_KeyArray_contents(data, len);
@@ -489,7 +489,7 @@ lemma lemma_KeyArrayContents_helper_bailout(data:seq<byte>, len:uint64, trace:se
         assert val.None?;
       }
         
-      assert val.None? || !(|val.value.b| as uint64 <= Lexicographic_Byte_Order.MaxLen());
+      assert val.None? || !(|val.value.b| as uint64 <= KeyType.MaxLen());
       var tuple' := parse_KeyArray_contents(data, len);
       var v', rest' := tuple'.0, tuple'.1;
       assert v'.None?;
@@ -537,7 +537,7 @@ method{:timeLimitMultiplier 2} ParseKeyArrayContents(data:seq<byte>, index:uint6
         ghost var step := KeyArray_ContentsTraceStep(data[rest1..], if some1 then Some(val) else None());
         ghost var old_trace := trace;
         trace := trace + [step];
-        if !some1 || |val| as uint64 > Lexicographic_Byte_Order.MaxLen() {
+        if !some1 || |val| as uint64 > KeyType.MaxLen() {
             success := false;
             rest_index := (|data| as uint64);
             lemma_KeyArrayContents_helper_bailout(data[index..], len, trace);
@@ -2219,7 +2219,7 @@ lemma lemma_marshall_keyarray_contents(contents:seq<Key>, marshalled_bytes:seq<b
         calc {
             target;
                 { reveal_parse_KeyArray_contents(); }
-            if !val.None? && !others.None? && |val.value.b| as uint64 <= Lexicographic_Byte_Order.MaxLen() then Some([val.value.b] + others.value) else None;
+            if !val.None? && !others.None? && |val.value.b| as uint64 <= KeyType.MaxLen() then Some([val.value.b] + others.value) else None;
         }
 
         calc {

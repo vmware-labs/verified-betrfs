@@ -1,5 +1,6 @@
 include "MapSpec.s.dfy"
 include "../lib/sequences.s.dfy"
+include "../lib/total_order.s.dfy"
 //
 // Provides definitions and libraries for pivot tables. A pivot
 // table is a sorted list of *pivot* keys that divides the keyspace into
@@ -11,7 +12,7 @@ module PivotsLib {
   import opened NativeTypes
 
   import MS = MapSpec
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
   type Key = Keyspace.Element
 
   // A PivotTable of length n breaks the keyspace into n "buckets"

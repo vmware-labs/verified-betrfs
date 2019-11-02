@@ -24,7 +24,7 @@ module PivotBetreeGraph refines Graph {
   import opened Options
   import M = ValueMessage
 
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
   type Key = Keyspace.Element
   type Value = BG.Value
 
@@ -664,7 +664,7 @@ module PivotBetreeSpecWFNodes {
   import M = ValueMessage
 
   import MS = MapSpec
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
   type Key = Keyspace.Element
 
   lemma ValidFlushWritesWFNodes(f: NodeFlush)
