@@ -4,6 +4,15 @@ include "../lib/Maps.s.dfy"
 include "Graph.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "PivotBetreeSpec.i.dfy"
+//
+// A BlockCache implements the BlockInterface by caching over an
+// AsyncSectorDisk. At this layer, the disk provides high-level sectors
+// (containing either this module's indirection tables or the Node
+// type of the application, a not-yet-bound parameter).
+//
+// The BlockCache provides Persistent, Frozen, and Ephemeral views of the
+// application data, facilitating the crash-safety and crash recovery behavior.
+//
 
 abstract module BlockCache refines Transactable {
   import opened Maps

@@ -1,6 +1,9 @@
 include "Betree.i.dfy"
 include "MapSpec.s.dfy"
 include "BetreeInv.i.dfy"
+//
+// Refinement proof from Betree to Map.
+//
 
 module Betree_Refines_Map {
   import opened DBI = BetreeInv

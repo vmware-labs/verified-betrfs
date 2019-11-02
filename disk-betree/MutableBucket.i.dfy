@@ -2,6 +2,12 @@ include "../lib/tttree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "Bounds.i.dfy"
+//
+// Collects singleton message insertions efficiently, avoiding repeated
+// replacement of the immutable root Node. Once this bucket is full,
+// it is flushed into the root in a batch.
+// TODO(robj): Littered with assume false!?
+//
 
 module MutableBucket {
   import TTT = TwoThreeTree

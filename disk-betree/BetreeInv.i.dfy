@@ -2,6 +2,11 @@ include "../lib/Maps.s.dfy"
 include "../lib/sequences.s.dfy"
 include "MapSpec.s.dfy"
 include "Betree.i.dfy"
+//
+// Invariants about Betrees: lookup structure, non-equivocation, and
+// preservation. 
+// TODO(jonh) and apparently a bunch of dead code! See TODO inline.
+//
   
 module BetreeInv {
   import opened DB = Betree

@@ -11,6 +11,11 @@ include "PivotsLib.i.dfy"
 include "BucketsLib.i.dfy"
 include "Bounds.i.dfy"
 include "BucketWeights.i.dfy"
+//
+// A PivotBetree refines a Betree, carrying forward the tree structure
+// but refining the abstract infinite key maps with key ranges separated
+// by pivot keys.
+//
 
 module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph

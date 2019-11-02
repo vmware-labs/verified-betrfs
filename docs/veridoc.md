@@ -82,7 +82,7 @@ concurrent in-flight requests.
 
 
 **disk-betree/Bounds.i.dfy** 
-This file defines bounds on various abstract quantities, such as the number
+Defines bounds on various abstract quantities, such as the number
 of children of a node.
 
 
@@ -158,18 +158,52 @@ TODO(robj,thance): How is it used... in MutableBucket?
 
 
 **disk-betree/Betree.i.dfy** 
+The compound state machine that joins a BetreeSpec to an abstract
+BlockInterface. It instantiates the BetreeSpec's op-sequences into concrete
+state machine OpTransaction steps, and interleaves Betree operations with
+BlockInterface garbage collection. The BlockInterface remains uninstantiated.
+TODO(jonh): This probably should get renamed; its place in the heirarchy
+is confusing.
+
 
 **disk-betree/KVListPartialFlush.i.dfy** 
+I guess sometimes we want to flush only part of a node's effective KVList,
+and KVList only specified full flushes?
+TODO(robj,thance): Improve this doc.
+
 
 **disk-betree/BetreeInv.i.dfy** 
+Invariants about Betrees: lookup structure, non-equivocation, and
+preservation.
+TODO(jonh) and apparently a bunch of dead code! See TODO inline.
+
 
 **disk-betree/MutableBucket.i.dfy** 
+Collects singleton message insertions efficiently, avoiding repeated
+replacement of the immutable root Node. Once this bucket is full,
+it is flushed into the root in a batch.
+TODO(robj): Littered with assume false!?
+
 
 **disk-betree/PivotBetreeSpec.i.dfy** 
+A PivotBetree refines a Betree, carrying forward the tree structure
+but refining the abstract infinite key maps with key ranges separated
+by pivot keys.
+
 
 **disk-betree/Betree_Refines_Map.i.dfy** 
+Refinement proof from Betree to Map.
+
 
 **disk-betree/BlockCache.i.dfy** 
+A BlockCache implements the BlockInterface by caching over an
+AsyncSectorDisk. At this layer, the disk provides high-level sectors
+(containing either this module's indirection tables or the Node
+type of the application, a not-yet-bound parameter).
+
+The BlockCache provides Persistent, Frozen, and Ephemeral views of the
+application data, facilitating the crash-safety and crash recovery behavior.
+
 
 **disk-betree/PivotBetree.i.dfy** 
 
