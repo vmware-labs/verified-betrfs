@@ -497,5 +497,28 @@ module MutableMap {
       it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
     }
 
+    method MaxKey() returns (res : uint64)
+    requires Inv()
+    ensures res == MutableMapModel.MaxKey(I())
+    {
+      MutableMapModel.reveal_MaxKey();
+      var it := IterStart();
+      var m: uint64 := 0;
+      while it.next.Some?
+      invariant Inv()
+      invariant MutableMapModel.WFIter(I(), it)
+      invariant forall key | key in it.s :: key <= m
+      invariant MutableMapModel.MaxKeyIterate(I(), it, m) == MutableMapModel.MaxKey(I())
+      decreases it.decreaser
+      {
+        var key := it.next.value.0;
+        if key > m {
+          m := key;
+        }
+        it := IterInc(it);
+      }
+      return m;
+    }
+
   }
 }

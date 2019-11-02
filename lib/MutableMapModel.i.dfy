@@ -1377,4 +1377,26 @@ module MutableMapModel {
   lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires WFIter(self, it)
   ensures it.next.Some? ==> |it.s| < self.count as int
+
+  function MaxKeyIterate<V>(self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
+  requires Inv(self)
+  requires WFIter(self, it)
+  requires forall key | key in it.s :: key <= m
+  ensures forall key | key in self.contents :: key <= res
+  decreases it.decreaser
+  {
+    if it.next.None? then (
+      m
+    ) else (
+      var key := it.next.value.0;
+      MaxKeyIterate(self, IterInc(self, it), if m < key then key else m)
+    )
+  }
+
+  function {:opaque} MaxKey<V>(self: LinearHashMap<V>) : (res : uint64)
+  requires Inv(self)
+  ensures forall key | key in self.contents :: key <= res
+  {
+    MaxKeyIterate(self, IterStart(self), 0)    
+  }
 }
