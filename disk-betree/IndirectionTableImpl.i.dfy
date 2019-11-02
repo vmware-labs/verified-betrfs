@@ -538,12 +538,12 @@ module IndirectionTableImpl {
       if t.Count < NumBlocksUint64() {
         var a: array<V> := new V[t.Count as uint64];
         var it := t.IterStart();
-        var i := 0;
+        var i: uint64 := 0;
         ghost var partial := map[];
         while it.next.Some?
         invariant Inv()
         invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-        invariant 0 <= i <= a.Length
+        invariant 0 <= i as int <= a.Length
         invariant MutableMapModel.WFIter(t.I(), it);
         invariant forall j | 0 <= j < i :: ValidVal(a[j])
         invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
