@@ -90,7 +90,8 @@ module ImplFlush {
 
     assert parent.I().children == s.I().cache[parentref].children;
 
-    var newparent_children := parent.children.value[slot as int := newchildref.value];
+    var newparent_children := SeqIndexUpdate(
+      parent.children.value, slot, newchildref.value);
 
     writeBookkeeping(k, s, parentref, Some(newparent_children));
 
