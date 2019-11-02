@@ -1,5 +1,3 @@
-// NOTE: requires /noNLarith
-
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
 include "Marshalling/Native.s.dfy"
