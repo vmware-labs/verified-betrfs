@@ -1,6 +1,6 @@
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "Sets.i.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"

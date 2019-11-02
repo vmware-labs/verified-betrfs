@@ -5,7 +5,7 @@ include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 include "Native.s.dfy"
 include "../Math/bases.i.dfy"
-include "../total_order.s.dfy"
+include "../total_order.i.dfy"
 include "../../disk-betree/Message.i.dfy"
 
 module GenericMarshalling {

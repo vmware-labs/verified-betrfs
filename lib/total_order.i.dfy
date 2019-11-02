@@ -1,4 +1,4 @@
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "NativeTypes.s.dfy"
 include "../disk-betree/UI.s.dfy"
   

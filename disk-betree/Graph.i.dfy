@@ -1,4 +1,4 @@
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 //
 // An abstract graph that tracks dependencies.

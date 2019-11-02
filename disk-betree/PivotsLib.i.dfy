@@ -1,6 +1,6 @@
 include "MapSpec.s.dfy"
-include "../lib/sequences.s.dfy"
-include "../lib/total_order.s.dfy"
+include "../lib/sequences.i.dfy"
+include "../lib/total_order.i.dfy"
 //
 // Provides definitions and libraries for pivot tables. A pivot
 // table is a sorted list of *pivot* keys that divides the keyspace into

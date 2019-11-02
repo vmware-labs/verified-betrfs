@@ -1,5 +1,5 @@
 include "../lib/Maps.s.dfy"
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/NativeTypes.s.dfy"
 include "../lib/LRU.i.dfy"

@@ -1,7 +1,7 @@
 // A LRU-queue.
 
 include "NativeTypes.s.dfy"
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "MutableMapImpl.i.dfy"
 include "Option.s.dfy"
 

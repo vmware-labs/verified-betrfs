@@ -1,5 +1,5 @@
 include "Message.i.dfy"
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/Maps.s.dfy"
 include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"
