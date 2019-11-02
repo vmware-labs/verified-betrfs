@@ -151,7 +151,7 @@ module MutableMap {
       } else {
         replaced := Some(Storage[slotIdx].value);
       }
-      this.Storage[slotIdx as int] := Entry(key, value);
+      this.Storage[slotIdx] := Entry(key, value);
 
       // ghost:
       this.Contents := Contents[key := Some(value)];

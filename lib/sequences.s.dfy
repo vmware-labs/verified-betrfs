@@ -229,6 +229,6 @@ module Sequences {
   requires 0 <= i as int < |s|
   ensures SeqIndexUpdate(s, i, t) == s[i as int := t]
   {
-    s[0..i] + [t] + s[i+1..]
+    s[..i] + [t] + s[i+1..]
   }
 }
