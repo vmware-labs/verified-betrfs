@@ -1,4 +1,8 @@
 include "../lib/NativeTypes.s.dfy"
+//
+// This file defines bounds on various abstract quantities, such as the number
+// of children of a node.
+//
 
 module Bounds {
   import opened NativeTypes

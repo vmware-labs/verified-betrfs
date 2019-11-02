@@ -108,4 +108,27 @@ def includePaths(iref):
         irefs.append(subIref)
     return irefs
 
+def visit(iref):
+    subIrefs = []
+    for subIref in includePaths(iref):
+        if not subIref.validPath():
+            raise InvalidDafnyIncludePath(subIref)
+        if not subIref.declaresTrustedness():
+            raise UndeclaredTrustedness(subIref)
+        if not subIref.compatiblePath():
+            raise IncompatibleIncludeTrustedness(subIref, iref)
+        subIrefs.append(subIref)
+    return subIrefs
+
+def depsFromDfySource(initialRef):
+    needExplore = [initialRef]
+    visited = []
+    while len(needExplore)>0:
+        iref = needExplore.pop()
+        if iref in visited:
+            continue
+        visited.append(iref)
+        needExplore.extend(visit(iref))
+    visited.remove(initialRef)
+    return visited
 

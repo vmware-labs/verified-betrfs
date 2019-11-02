@@ -1,5 +1,18 @@
 include "../lib/sequences.s.dfy"
 include "../lib/NativeTypes.s.dfy"
+//
+// An abstract graph that tracks dependencies.
+// It is an interface implemented by BetreeGraph (and the refined
+// PivotBetreeGraph): trees whose dependencies are child pointers that
+// reference other nodes.
+// It is used by the BlockInterface to identify which blocks can be
+// garbage-collected because they're unreachable from the graph roots.
+//
+
+// a tree uses 
+This module
+// interfaces between things that are graphs (
+// 
 
 module ReferenceType {
   import NativeTypes

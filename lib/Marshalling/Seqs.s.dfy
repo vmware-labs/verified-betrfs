@@ -1,3 +1,7 @@
+//
+// TODO(jonh): Not sure why this is file is .s; perhaps a holdover from
+// IronFleet?
+//
 
 module Collections__Seqs_s {
 

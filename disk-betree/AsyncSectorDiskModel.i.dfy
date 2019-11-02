@@ -1,7 +1,13 @@
 include "MapSpec.s.dfy"
 include "../lib/Maps.s.dfy"
+//
+// An AsyncSectorDisk is a disk (map from Location to Sector) that interleaves
+// concurrent in-flight requests.
+//
 
-// TODO disallow overlapping writes/reads
+// TODO why is this definition .i? Must this not be an assumption about
+// the environment?
+// TODO disallow concurrent spatially-overlapping writes/reads
 
 module AsyncSectorDiskModelTypes {
   datatype AsyncSectorDiskModelConstants<M,D> = AsyncSectorDiskModelConstants(machine: M, disk: D)

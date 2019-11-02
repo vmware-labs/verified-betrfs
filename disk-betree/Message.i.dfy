@@ -1,4 +1,9 @@
 include "MapSpec.s.dfy"
+//
+// The messages propagated down a B-epsilon tree. Each message either
+// completely defines the value of the key, or is a delta that modifies the
+// value defined by prior messages.
+//
 
 // Delta forms a monoid with a monoid-action on the values
 // (https://en.wikipedia.org/wiki/Monoid_action)
