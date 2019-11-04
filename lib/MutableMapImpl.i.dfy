@@ -382,7 +382,7 @@ module MutableMap {
 
     method Insert(key: uint64, value: V)
       requires Inv()
-      requires Count as nat < 0x10000000000000000 / 8
+      requires Count as nat < 0x1_0000_0000_0000_0000 / 8
       ensures Inv()
       ensures I() == MutableMapModel.Insert(old(I()), key, value)
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)

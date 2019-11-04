@@ -822,6 +822,13 @@ module MutableMapModel {
     && UnderlyingInv(self, self.underlying)
     && MapFromStorage(self.underlying.storage) == self.contents
     && |self.contents| == self.count as nat
+    && (self.count as nat) <= 0x1_0000_0000_0000_0000 / 8
+  }
+
+  lemma CountBound<V>(self: LinearHashMap<V>)
+  requires Inv(self)
+  ensures self.count as int <= 0x1_0000_0000_0000_0000 / 8
+  {
   }
 
   lemma RevealProtectedInv<V>(self: LinearHashMap<V>)
@@ -1097,7 +1104,7 @@ module MutableMapModel {
   function {:opaque} InsertAndGetOld<V>(self: LinearHashMap, key: uint64, value: V)
   : (res: (LinearHashMap, Option<V>))
     requires Inv(self)
-    requires self.count as nat < 0x10000000000000000 / 8
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures var (self', replaced) := res;
       && Inv(self')
       && self'.contents == self.contents[key := value]
@@ -1142,7 +1149,7 @@ module MutableMapModel {
   function {:opaque} Insert<V>(self: LinearHashMap, key: uint64, value: V)
   : (self': LinearHashMap)
     requires Inv(self)
-    requires self.count as nat < 0x10000000000000000 / 8
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures
       && Inv(self')
       && self'.contents == self.contents[key := value]
