@@ -86,6 +86,12 @@ module ImplInsert {
       return;
     }
 
+    var indirectionTableSize := s.ephemeralIndirectionTable.GetSize();
+    if (!(indirectionTableSize <= IndirectionTableModel.MaxSizeUint64() - 3)) {
+      success := false;
+      return;
+    }
+
     var rootLookup := s.cache.GetOpt(BT.G.Root());
     if (rootLookup.None?) {
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {

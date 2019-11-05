@@ -36,6 +36,8 @@ module ImplModelFlush {
   requires childref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires s.cache[childref] == child
+
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
   {
     if (
       && s.frozenIndirectionTable.Some?

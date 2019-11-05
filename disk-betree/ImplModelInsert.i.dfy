@@ -42,6 +42,7 @@ module ImplModelInsert {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   {
     lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
 
@@ -64,6 +65,7 @@ module ImplModelInsert {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
       WeightBucketList(s.cache[BT.G.Root()].buckets) 
       <= MaxTotalBucketWeight()
@@ -136,6 +138,10 @@ module ImplModelInsert {
     if (s.Unready?) then (
       && (s', io') == PageInIndirectionTableReq(k, s, io)
       && success == false
+    ) else if !(|s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3) then (
+      && s' == s
+      && io' == io
+      && success == false
     ) else if (BT.G.Root() !in s.cache) then (
       if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
         && (s', io') == PageInReq(k, s, io, BT.G.Root())
@@ -171,6 +177,8 @@ module ImplModelInsert {
 
     if (s.Unready?) {
       PageInIndirectionTableReqCorrect(k, s, io);
+    } else if !(|s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3) {
+      assert noop(k, IVars(s), IVars(s));
     } else if (BT.G.Root() !in s.cache) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
         PageInReqCorrect(k, s, io, BT.G.Root());

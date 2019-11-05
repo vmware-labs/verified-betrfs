@@ -100,6 +100,16 @@ module IndirectionTableModel {
         predCounts[ref] == |PredecessorSet(graph, ref)| + IsRoot(ref)
   }
 
+  function MaxSize() : int
+  {
+    0x1_0000_0000
+  }
+
+  function method MaxSizeUint64() : uint64
+  {
+    0x1_0000_0000
+  }
+
   protected predicate Inv(self: IndirectionTable)
   ensures Inv(self) ==> (forall ref | ref in self.locs :: ref in self.graph)
   {
@@ -126,6 +136,7 @@ module IndirectionTableModel {
       && (forall ref | ref in LruModel.I(self.garbageQueue.value) :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
     )
     && BT.G.Root() in self.t.contents
+    && self.t.count as int <= MaxSize()
   }
 
   lemma reveal_Inv(self: IndirectionTable)
@@ -609,9 +620,14 @@ module IndirectionTableModel {
   {
   }
 
+  lemma lemma_count_eq_graph_size(t: HashMap)
+  requires MutableMapModel.Inv(t)
+  ensures t.count as int == |Graph(t)|
+
   function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
+  requires |self.graph| < MaxSize()
   requires |succs| <= MaxNumChildren()
   requires SuccsValid(succs, self.graph)
   ensures var (self', oldLoc) := res;
@@ -622,7 +638,7 @@ module IndirectionTableModel {
     && (oldLoc.None? ==> ref !in self.locs)
     && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
   {
-    assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
+    lemma_count_eq_graph_size(self.t);
     LemmaUpdateAndRemoveLocStuff(self, ref, succs);
 
     var oldEntry := MutableMapModel.Get(self.t, ref);
@@ -632,6 +648,9 @@ module IndirectionTableModel {
 
     var (t1, garbageQueue1) := UpdatePredCountsInc(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0);
+
+    lemma_count_eq_graph_size(t);
+    lemma_count_eq_graph_size(t1);
 
     LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), succs,
         if oldEntry.Some? then oldEntry.value.succs else []);
@@ -647,7 +666,7 @@ module IndirectionTableModel {
   requires MutableMapModel.Inv(t)
   requires 0 <= i as int <= |succs|
   requires |succs| <= MaxNumChildren()
-  requires t.count as int <= NumBlocks()
+  requires t.count as int <= MaxSize()
   requires forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000 + i as int
   decreases |succs| - i as int
   {
@@ -679,7 +698,7 @@ module IndirectionTableModel {
     && (forall ref | ref in t.contents :: ref in copy.contents)
     && GraphClosedRestricted(Graph(copy), it.s)
     && (t.count == copy.count)
-    && (t.count as int <= NumBlocks())
+    && (t.count as int <= MaxSize())
   }
 
   lemma LemmaPredecessorSetRestrictedPartialAdd1Self(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
@@ -926,7 +945,7 @@ module IndirectionTableModel {
   requires MutableMapModel.Inv(t)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
-  requires t.count as int <= NumBlocks()
+  requires t.count as int <= MaxSize()
   requires BT.G.Root() in t.contents
   ensures
     var oldEntry := t.contents[BT.G.Root()];
@@ -949,7 +968,7 @@ module IndirectionTableModel {
   requires MutableMapModel.Inv(t)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
-  requires t.count as int <= NumBlocks()
+  requires t.count as int <= MaxSize()
   requires BT.G.Root() in t.contents
   ensures BC.GraphClosed(Graph(t)) <==> t'.Some?
   ensures t'.Some? ==> Graph(t) == Graph(t'.value)
@@ -1076,11 +1095,12 @@ module IndirectionTableModel {
     var t := valToHashMap(v.a);
     match t {
       case Some(t) => (
-        if BT.G.Root() in t.contents
-            && t.count <= NumBlocksUint64() then (
+        if BT.G.Root() in t.contents && t.count as int <= MaxSize() then (
           var t1 := ComputeRefCounts(t);
           if t1.Some? then (
             lemmaMakeGarbageQueueCorrect(t1.value);
+            lemma_count_eq_graph_size(t);
+            lemma_count_eq_graph_size(t1.value);
             var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
             Some(res)
           ) else (
@@ -1467,13 +1487,16 @@ module IndirectionTableModel {
     && (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
     && (ref !in self.locs ==> oldLoc == None)
   {
-    assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
+    lemma_count_eq_graph_size(self.t);
 
     LemmaRemoveRefStuff(self, ref);
 
     var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
     var q := LruModel.Remove(self.garbageQueue.value, ref);
     var (t1, q1) := UpdatePredCountsInc(t, q, ref, [], oldEntry.value.succs, 0);
+
+    lemma_count_eq_graph_size(t);
+    lemma_count_eq_graph_size(t1);
 
     LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), [], oldEntry.value.succs);
 

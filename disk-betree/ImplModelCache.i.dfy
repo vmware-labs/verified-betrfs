@@ -128,9 +128,11 @@ module ImplModelCache {
   : (s': Variables)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures s'.Ready?
   ensures s'.cache == s.cache
   ensures WriteAllocConditions(k, s')
+  ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
     lemmaIndirectionTableLocIndexValid(k, s, ref);
     var (eph, oldLoc) := IndirectionTableModel.UpdateAndRemoveLoc(s.ephemeralIndirectionTable, ref,
@@ -155,10 +157,12 @@ module ImplModelCache {
   : (p: (Variables, Option<Reference>))
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
 
   ensures var (s', id) := p;
     && s'.Ready?
     && WriteAllocConditions(k, s')
+    && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
     var ref := getFreeRef(s);
     if ref.Some? then (
@@ -177,7 +181,9 @@ module ImplModelCache {
   : (s': Variables)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, node.children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures WriteAllocConditions(k, s')
+  ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
     lemmaIndirectionTableLocIndexValid(k, s, ref);
     var (eph, oldLoc) := IndirectionTableModel.UpdateAndRemoveLoc(s.ephemeralIndirectionTable, ref,
@@ -202,8 +208,10 @@ module ImplModelCache {
   : (p: (Variables, Option<Reference>))
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, node.children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var (s', id) := p;
-      WriteAllocConditions(k, s')
+      && WriteAllocConditions(k, s')
+      && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
     var ref := getFreeRef(s);
     if ref.Some? then (
@@ -358,6 +366,7 @@ module ImplModelCache {
   lemma writeBookkeepingBitmapCorrect(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s' := writeBookkeeping(k, s, ref, children);
     && WriteAllocConditions(k, s')
   {
@@ -383,6 +392,7 @@ module ImplModelCache {
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires WFNode(node)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var (s', ref) := allocWithNode(k, s, node);
     && WFVars(s')
     && (ref.Some? ==> BC.Alloc(Ik(k), IVars(s), IVars(s'), ref.value, INode(node)))
@@ -410,6 +420,7 @@ module ImplModelCache {
   requires WFNode(node)
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s' := writeWithNode(k, s, ref, node);
     && WFVars(s')
     && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, INode(node))
@@ -436,6 +447,7 @@ module ImplModelCache {
   requires WFNode(node)
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s' := writeWithNode(k, s, ref, node);
     && WFVars(s')
     && BC.Alloc(Ik(k), IVars(s), IVars(s'), ref, INode(node))
@@ -514,6 +526,7 @@ module ImplModelCache {
       k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var (s1, newref) := allocBookkeeping(k, s, children);
     newref.Some? ==> ChildrenConditions(k, s1, Some([newref.value]))
   {
@@ -528,6 +541,7 @@ module ImplModelCache {
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires ChildrenConditions(k, s, Some(children1))
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   requires 0 <= i < |children1|
   ensures var (s1, newref) := allocBookkeeping(k, s, children);
     newref.Some? ==> ChildrenConditions(k, s1, Some(children1[i := newref.value]))
@@ -542,6 +556,7 @@ module ImplModelCache {
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires ChildrenConditions(k, s, children1)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s1 := writeBookkeeping(k, s, ref, children);
     ChildrenConditions(k, s1, children1)
   {
@@ -566,6 +581,7 @@ module ImplModelCache {
   lemma lemmaRefInGraphOfWriteBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s1 := writeBookkeeping(k, s, ref, children);
     ref in s1.ephemeralIndirectionTable.graph
   {
@@ -575,6 +591,7 @@ module ImplModelCache {
   lemma lemmaRefInGraphPreservedWriteBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, ref2: BT.G.Reference)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   requires ref2 in s.ephemeralIndirectionTable.graph
   ensures var s1 := writeBookkeeping(k, s, ref, children);
     ref2 in s1.ephemeralIndirectionTable.graph

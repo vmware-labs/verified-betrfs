@@ -85,6 +85,7 @@ module ImplCache {
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires ImplModelCache.WriteAllocConditions(Ic(k), s.I())
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), children)
+  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -120,6 +121,7 @@ module ImplCache {
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires ImplModelCache.WriteAllocConditions(Ic(k), s.I())
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), children)
+  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr

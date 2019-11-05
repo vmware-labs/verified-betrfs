@@ -25,6 +25,7 @@ module ImplGrow {
   requires Inv(k, s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready

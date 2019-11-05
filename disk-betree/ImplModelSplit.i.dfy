@@ -309,6 +309,7 @@ module ImplModelSplit {
   requires ChildrenConditions(k, s, right_child.children)
   requires ChildrenConditions(k, s, Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
@@ -362,6 +363,7 @@ module ImplModelSplit {
   requires ChildrenConditions(k, s, Some(fused_parent_children))
   requires ChildrenConditions(k, s, child.children)
   requires |fused_parent_children| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
@@ -388,6 +390,7 @@ module ImplModelSplit {
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   {
     if (
       && s.frozenIndirectionTable.Some?
@@ -442,6 +445,7 @@ module ImplModelSplit {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
   requires TotalCacheSize(s) <= MaxCacheSize() - 2
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   ensures var s' := doSplit(k, s, parentref, childref, slot);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
