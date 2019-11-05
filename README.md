@@ -24,19 +24,19 @@ You can run veri-dafny with `./.dafny/bin/dafny`, the Makefile will use veri-daf
 Active:
 
 ```
-2019-11-04 19:40:33 -0500 12 hours ago 	origin/indirection-table-size-bound
 2019-11-04 13:46:46 -0500 18 hours ago 	origin/master
-2019-11-04 12:51:18 -0500 19 hours ago 	origin/remove-min
-2019-11-01 21:49:46 -0400 3 days ago 	origin/ref-counting
+2019-10-15 16:36:20 +0200 3 weeks ago 	origin/free-ref
 ```
 
 Inactive:
 
 ```
+2019-11-04 19:40:33 -0500 12 hours ago 	origin/indirection-table-size-bound
+2019-11-04 12:51:18 -0500 19 hours ago 	origin/remove-min
+2019-11-01 21:49:46 -0400 3 days ago 	origin/ref-counting
 2019-10-23 22:57:06 -0400 12 days ago 	origin/compile
 2019-10-23 18:24:51 -0400 13 days ago 	origin/indirection-table-refactor
 2019-10-22 15:46:05 -0400 2 weeks ago 	origin/integrate-bitmap
-2019-10-15 16:36:20 +0200 3 weeks ago 	origin/free-ref
 2019-10-11 14:03:31 -0400 4 weeks ago 	origin/reference-counts
 2019-10-11 14:03:31 -0400 4 weeks ago 	origin/mutablemap-iter
 2019-10-02 14:05:09 -0400 5 weeks ago 	origin/benchmarking
