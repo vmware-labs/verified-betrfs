@@ -26,6 +26,7 @@ Active:
 ```
 2019-11-04 13:46:46 -0500 18 hours ago 	origin/master
 2019-10-15 16:36:20 +0200 3 weeks ago 	origin/free-ref
+2019-09-07 10:09:43 -0700 8 weeks ago 	origin/mutable-btree
 ```
 
 Inactive:
@@ -42,7 +43,6 @@ Inactive:
 2019-10-02 14:05:09 -0400 5 weeks ago 	origin/benchmarking
 2019-09-19 00:01:58 -0400 7 weeks ago 	origin/passive-aggressive-unverified
 2019-09-17 21:49:21 -0400 7 weeks ago 	origin/mutable-bucket
-2019-09-07 10:09:43 -0700 8 weeks ago 	origin/mutable-btree
 2019-09-06 11:39:16 -0700 9 weeks ago 	origin/talk
 2019-09-03 22:10:34 -0400 9 weeks ago 	origin/eviction
 2019-08-30 13:55:43 -0400 10 weeks ago 	origin/weights
