@@ -28,6 +28,7 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires |node.buckets| == 1
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   {
     if (
       && s.frozenIndirectionTable.Some?
@@ -61,6 +62,7 @@ module ImplModelLeaf {
   requires node == s.cache[ref]
   requires node.children.None?
   requires |node.buckets| == 1
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   ensures var s' := repivotLeaf(k, s, ref, node);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)

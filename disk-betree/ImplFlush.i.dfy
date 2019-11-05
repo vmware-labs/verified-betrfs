@@ -40,6 +40,8 @@ module ImplFlush {
 
   requires childref in IIndirectionTable(s.ephemeralIndirectionTable).graph
 
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
+
   modifies s.Repr()
 
   ensures WellUpdated(s)

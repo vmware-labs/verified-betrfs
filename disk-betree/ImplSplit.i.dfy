@@ -34,6 +34,7 @@ module ImplSplit {
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), right_child.children)
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -113,6 +114,7 @@ module ImplSplit {
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), child.children)
   requires |fused_parent_children| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
 
   modifies s.Repr()
 
@@ -145,6 +147,7 @@ module ImplSplit {
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
   requires |s.cache.I()[parentref].buckets| <= MaxNumChildren() - 1
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready

@@ -38,6 +38,7 @@ module ImplInsert {
   requires Inv(k, s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(s.I()), key, value)
@@ -82,6 +83,12 @@ module ImplInsert {
 
     if (!s.ready) {
       PageInIndirectionTableReq(k, s, io);
+      success := false;
+      return;
+    }
+
+    var indirectionTableSize := s.ephemeralIndirectionTable.GetSize();
+    if (!(indirectionTableSize <= IndirectionTableModel.MaxSizeUint64() - 3)) {
       success := false;
       return;
     }

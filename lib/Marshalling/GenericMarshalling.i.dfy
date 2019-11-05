@@ -2184,7 +2184,7 @@ method MarshallArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) ret
     assert !len.None?;
     var contents_size := MarshallArrayContents(val.a, grammar.elt, data, index + Uint64Size());
     tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
-    assert {:split_here} true;
+    //assert {:split_here} true;
     len := tuple.0;
     rest := tuple.1;
     assert !len.None?;
@@ -2352,7 +2352,7 @@ method{:timeLimitMultiplier 4} MarshallKeyArrayContents(contents:seq<Key>, data:
             (index as int) + SeqSumLens(contents);
             data.Length;
         }
-        assert {:split_here} true;
+        //assert {:split_here} true;
         assert marshalled_bytes == data[index..cur_index];
 
         // Prove the invariant about our index tracking correctly

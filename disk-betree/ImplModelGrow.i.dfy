@@ -20,6 +20,7 @@ module ImplModelGrow {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
   {
     lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
 
@@ -56,6 +57,7 @@ module ImplModelGrow {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
   ensures var s' := grow(k, s);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
