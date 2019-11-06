@@ -28,7 +28,7 @@ export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
       KeyType, ValueMessage, ValueWithDefault
-  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, SeqSumMessageLens
+  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
 
 export extends S
 
@@ -120,14 +120,14 @@ function {:opaque} SeqSumLens(t:seq<Key>) : int
     else Uint64Size() as int + |t[0]| + SeqSumLens(t[1..])
 }
 
-function {:opaque} MessageSize(m:Message) : int
+function MessageSize(m:Message) : int
 ensures MessageSize(m) >= 0
 {
-  if m.Define? then Uint64Size() as int + |m.value| else 0
+  MessageSizeUint64(m) as int
 }
 
 function method {:opaque} MessageSizeUint64(m:Message) : uint64
-ensures MessageSize(m) >= 0
+ensures MessageSizeUint64(m) >= 0
 {
   if m.Define? then Uint64Size() + |m.value| as uint64 else 0
 }
@@ -1227,7 +1227,7 @@ lemma lemma_SeqSumMessageLens_bound(s:seq<Message>, bound:int)
     requires SeqSumMessageLens(s) < bound;
     ensures  forall v :: v in s ==> MessageSize(v) < bound;
 {
-    reveal_MessageSize();
+    reveal_MessageSizeUint64();
     reveal_SeqSumMessageLens();
     if |s| == 0 {
     } else {
@@ -2749,7 +2749,7 @@ method MarshallMessage(m:Message, data:array<byte>, index:uint64) returns (size:
     ensures  forall i :: (index as int) + SizeOfV(VMessage(m)) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(VMessage(m));
 {
-  reveal_MessageSize();
+  reveal_MessageSizeUint64();
   reveal_parse_Val();
   size := MarshallByteArrayInterior(m.value, data, index);
 }
