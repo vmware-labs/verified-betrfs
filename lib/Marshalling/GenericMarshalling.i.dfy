@@ -106,34 +106,41 @@ predicate ValidVal(val:V)
 
 }
 
-function method {:opaque} SeqSum(t:seq<V>) : int
+function {:opaque} SeqSum(t:seq<V>) : int
     ensures SeqSum(t) >= 0;
 {
     if |t| == 0 then 0
     else SizeOfV(t[0]) + SeqSum(t[1..])
 }
 
-function method {:opaque} SeqSumLens(t:seq<Key>) : int
+function {:opaque} SeqSumLens(t:seq<Key>) : int
     ensures SeqSumLens(t) >= 0;
 {
     if |t| == 0 then 0
     else Uint64Size() as int + |t[0]| + SeqSumLens(t[1..])
 }
 
-function method {:opaque} MessageSize(m:Message) : int
+function {:opaque} MessageSize(m:Message) : int
 ensures MessageSize(m) >= 0
 {
   if m.Define? then Uint64Size() as int + |m.value| else 0
 }
 
-function method {:opaque} SeqSumMessageLens(t:seq<Message>) : int
+function method {:opaque} MessageSizeUint64(m:Message) : uint64
+ensures MessageSize(m) >= 0
+{
+  if m.Define? then Uint64Size() + |m.value| as uint64 else 0
+}
+
+
+function {:opaque} SeqSumMessageLens(t:seq<Message>) : int
     ensures SeqSumMessageLens(t) >= 0;
 {
     if |t| == 0 then 0
     else MessageSize(t[0]) + SeqSumMessageLens(t[1..])
 }
 
-function method SizeOfV(val:V) : int
+function SizeOfV(val:V) : int
     ensures SizeOfV(val) >= 0;
 {
     match val
@@ -1851,7 +1858,7 @@ method ComputeSeqSumLens(s:seq<Key>) returns (size:uint64)
     if (|s| as uint64) == 0 {
         size := 0;
     } else {
-        var v_size := Uint64Size() + |s[0]| as uint64;
+        var v_size := Uint64Size() + |s[0 as uint64]| as uint64;
         var rest_size := ComputeSeqSumLens(s[(1 as uint64)..]);
         size := v_size + rest_size;
     }
@@ -1866,7 +1873,7 @@ method ComputeSeqSumMessageLens(s:seq<Message>) returns (size:uint64)
     if (|s| as uint64) == 0 {
         size := 0;
     } else {
-        var v_size := MessageSize(s[0]) as uint64;
+        var v_size := MessageSizeUint64(s[0 as uint64]);
         var rest_size := ComputeSeqSumMessageLens(s[(1 as uint64)..]);
         size := v_size + rest_size;
     }
@@ -1887,7 +1894,7 @@ method ComputeSizeOf(val:V) returns (size:uint64)
                                }
         case VTuple(t)      => size := ComputeSeqSum(t);
         case VByteArray(b)  => size := 8 + (|b| as uint64);
-        case VMessage(m)    => size := MessageSize(m) as uint64;
+        case VMessage(m)    => size := MessageSizeUint64(m);
         case VUint64Array(b)  => size := 8 + 8*(|b| as uint64);
         case VKeyArray(b)  => {
           var v := ComputeSeqSumLens(b);
