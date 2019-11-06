@@ -255,7 +255,7 @@ class Application {
     if (key.Count > (int)KeyType_Compile.__default.MaxLen()) {
       throw new Exception("Insert: key is too long");
     }
-    if (val.Count > (int)KeyType_Compile.__default.MaxLen()) {
+    if (val.Count > (int)ValueWithDefault_Compile.__default.MaxLen()) {
       throw new Exception("Insert: value is too long");
     }
 
