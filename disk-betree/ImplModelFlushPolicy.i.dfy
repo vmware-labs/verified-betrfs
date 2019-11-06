@@ -331,8 +331,8 @@ module ImplModelFlushPolicy {
   requires io.IOInit?
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  requires runFlushPolicy(k, s, io, s', io')
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires runFlushPolicy(k, s, io, s', io')
   ensures WFVars(s')
   ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
