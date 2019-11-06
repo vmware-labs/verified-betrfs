@@ -543,6 +543,7 @@ module ImplMarshalling {
   ensures v.Some? ==> Marshalling.valToSector(v.value) == Some(IM.ISector(ImplState.ISector(sector)))
   ensures sector.SectorBlock? ==> v.Some?
   ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
+  ensures v.Some? ==> SizeOfV(v.value) < 0x1_0000_0000_0000_0000 - 32
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {
@@ -641,16 +642,12 @@ module ImplMarshalling {
     match v {
       case None => return null;
       case Some(v) => {
-        if (sector.SectorBlock? || SizeOfV(v) <= BlockSizeUint64() as int - 32) {
-          //Native.BenchmarkingUtil.start();
-          var size: uint64;
-          if (sector.SectorIndirectionTable?) {
-            size := BlockSizeUint64();
-          } else {
-            var computedSize := GenericMarshalling.ComputeSizeOf(v);
-            size := 32 + computedSize;
-          }
+        var computedSize := GenericMarshalling.ComputeSizeOf(v);
 
+        if (computedSize + 32 <= BlockSizeUint64()) {
+          var size := if sector.SectorIndirectionTable? then BlockSizeUint64() else computedSize + 32;
+
+          //Native.BenchmarkingUtil.start();
           var data := MarshallIntoFixedSize(v, IMM.SectorGrammar(), 32, size);
           //Native.BenchmarkingUtil.end();
 
