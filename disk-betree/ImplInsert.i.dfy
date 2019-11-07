@@ -56,15 +56,10 @@ module ImplInsert {
       }
     }
 
-
-    // TODO this isn't necessary because the children don't change
-    var root := s.cache.GetOpt(BT.G.Root());
-    var children := root.value.children;
-
     var msg := Messages.Define(value);
     s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
-    writeBookkeeping(k, s, BT.G.Root(), children);
+    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
 
     success := true;
   }

@@ -179,25 +179,6 @@ module IndirectionTableModel {
     entry.Some? && entry.value.loc.None?
   }
 
-  function {:opaque} RemoveLocIfPresent(self: IndirectionTable, ref: BT.G.Reference) : (self' : IndirectionTable)
-  requires Inv(self)
-  ensures Inv(self')
-  ensures self'.locs == MapRemove1(self.locs, ref)
-  ensures self'.graph == self.graph
-  {
-    assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8;
-    var oldEntry := MutableMapModel.Get(self.t, ref);
-    var t := (if oldEntry.Some? then
-      MutableMapModel.Insert(self.t, ref, Entry(None, oldEntry.value.succs, oldEntry.value.predCount))
-    else
-      self.t);
-
-    assert Graph(t) == Graph(self.t);
-    assert PredCounts(t) == PredCounts(self.t);
-
-    FromHashMap(t, self.garbageQueue)
-  }
-
   function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (IndirectionTable, bool)
   requires Inv(self)
   ensures var (self', added) := AddLocIfPresent(self, ref, loc);
@@ -657,6 +638,32 @@ module IndirectionTableModel {
 
     var self' := FromHashMap(t1, Some(garbageQueue1));
     var oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
+    (self', oldLoc)
+  }
+
+  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BT.G.Reference) : (res : (IndirectionTable, Option<BC.Location>))
+  requires Inv(self)
+  requires TrackingGarbage(self)
+  requires ref in self.graph
+  ensures var (self', oldLoc) := res;
+    && Inv(self')
+    && TrackingGarbage(self')
+    && self'.locs == MapRemove1(self.locs, ref)
+    && self'.graph == self.graph
+    && (oldLoc.None? ==> ref !in self.locs)
+    && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
+  {
+    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var predCount := oldEntry.value.predCount;
+    var succs := oldEntry.value.succs;
+    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
+
+    var self' := FromHashMap(t, self.garbageQueue);
+    var oldLoc := oldEntry.value.loc;
+
+    assert PredCounts(t) == PredCounts(self.t);
+    assert Graph(t) == Graph(self.t);
+
     (self', oldLoc)
   }
 

@@ -115,6 +115,41 @@ module ImplCache {
         == |LruModel.I(old(s.lru.Queue))| + 1;
   }
 
+  method writeBookkeepingNoSuccsUpdate(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
+  requires s.W()
+  requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
+  requires ImplModelCache.WriteAllocConditions(Ic(k), s.I())
+  requires ref in s.ephemeralIndirectionTable.I().graph
+  modifies s.lru.Repr
+  modifies s.ephemeralIndirectionTable.Repr
+  modifies s.blockAllocator.Repr
+  ensures s.W()
+  ensures s.I() == ImplModelCache.writeBookkeepingNoSuccsUpdate(Ic(k), old(s.I()), ref)
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
+  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
+  {
+    ImplModelCache.reveal_writeBookkeepingNoSuccsUpdate();
+
+    ImplModelCache.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+
+    var oldLoc := s.ephemeralIndirectionTable.RemoveLoc(ref);
+
+    s.lru.Use(ref);
+
+    if oldLoc.Some? {
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+    }
+
+    LruModel.LruUse(old(s.lru.Queue), ref);
+    assert LruModel.I(s.lru.Queue) == LruModel.I(old(s.lru.Queue)) + {ref};
+    assert |LruModel.I(s.lru.Queue)| == |LruModel.I(old(s.lru.Queue)) + {ref}|
+        <= |LruModel.I(old(s.lru.Queue))| + |{ref}|
+        == |LruModel.I(old(s.lru.Queue))| + 1;
+  }
+
+
   method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<BT.G.Reference>>)
   returns (ref: Option<BT.G.Reference>)
   requires s.W()

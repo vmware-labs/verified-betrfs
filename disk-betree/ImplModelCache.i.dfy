@@ -153,6 +153,34 @@ module ImplModelCache {
     s'
   }
 
+  function {:opaque} writeBookkeepingNoSuccsUpdate(k: Constants, s: Variables, ref: BT.G.Reference)
+  : (s': Variables)
+  requires WriteAllocConditions(k, s)
+  requires ref in s.ephemeralIndirectionTable.graph
+  ensures s'.Ready?
+  ensures s'.cache == s.cache
+  ensures WriteAllocConditions(k, s')
+  ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
+  {
+    lemmaIndirectionTableLocIndexValid(k, s, ref);
+    var (eph, oldLoc) := IndirectionTableModel.RemoveLoc(s.ephemeralIndirectionTable, ref);
+    var blockAllocator' := if oldLoc.Some?
+      then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      else s.blockAllocator;
+    var s' := s.(ephemeralIndirectionTable := eph)
+     .(lru := LruModel.Use(s.lru, ref))
+     .(blockAllocator := blockAllocator');
+
+    freeIndirectionTableLocCorrect(k, s, s', ref,
+      if oldLoc.Some?
+      then Some(oldLoc.value.addr as int / BlockSize())
+      else None);
+    reveal_ConsistentBitmap();
+
+    s'
+  }
+
+
   function {:opaque} allocBookkeeping(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
   : (p: (Variables, Option<Reference>))
   requires WriteAllocConditions(k, s)

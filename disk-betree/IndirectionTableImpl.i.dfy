@@ -129,23 +129,27 @@ module IndirectionTableImpl {
       b := entry.Some? && entry.value.loc.None?;
     }
 
-    method RemoveLocIfPresent(ref: BT.G.Reference)
+    method RemoveLoc(ref: BT.G.Reference)
+    returns (oldLoc: Option<BC.Location>)
     requires Inv()
+    requires IndirectionTableModel.TrackingGarbage(I())
+    requires ref in I().graph
     modifies Repr
     ensures Inv()
     ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-    ensures I() == IndirectionTableModel.RemoveLocIfPresent(old(I()), ref)
+    ensures (I(), oldLoc) == IndirectionTableModel.RemoveLoc(old(I()), ref)
     {
-      IndirectionTableModel.reveal_RemoveLocIfPresent();
+      IndirectionTableModel.reveal_RemoveLoc();
 
-      assume this.t.Count as nat < 0x10000000000000000 / 8;
-      var oldEntry := this.t.Get(ref);
-      if oldEntry.Some? {
-        this.t.Insert(ref, IndirectionTableModel.Entry(None, oldEntry.value.succs, oldEntry.value.predCount));
-      }
+      var oldEntry := t.Get(ref);
+      var predCount := oldEntry.value.predCount;
+      var succs := oldEntry.value.succs;
+      t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
+
+      oldLoc := oldEntry.value.loc;
 
       Repr := {this} + this.t.Repr + (if this.garbageQueue != null then this.garbageQueue.Repr else {});
-      ghost var _ := IndirectionTableModel.RemoveLocIfPresent(old(I()), ref);
+      ghost var _ := IndirectionTableModel.RemoveLoc(old(I()), ref);
     }
 
     method AddLocIfPresent(ref: BT.G.Reference, loc: BC.Location)

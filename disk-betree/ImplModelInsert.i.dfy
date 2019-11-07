@@ -56,7 +56,7 @@ module ImplModelInsert {
       var newCache := CacheInsertKeyValue(s.cache, BT.G.Root(), key, msg);
 
       var s0 := s.(cache := newCache);
-      var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
+      var s' := writeBookkeepingNoSuccsUpdate(k, s0, BT.G.Root());
       (s', true)
     )
   }
@@ -100,9 +100,9 @@ module ImplModelInsert {
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
     var s0 := s.(cache := newCache);
-    var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
+    var s' := writeBookkeepingNoSuccsUpdate(k, s0, BT.G.Root());
 
-    reveal_writeBookkeeping();
+    reveal_writeBookkeepingNoSuccsUpdate();
     writeCorrect(k, s0, BT.G.Root(), newRoot);
 
     var oldroot := INode(root);
