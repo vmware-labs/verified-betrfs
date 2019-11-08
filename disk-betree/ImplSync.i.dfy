@@ -232,7 +232,11 @@ module ImplSync {
       syncNotFrozen(k, s, io);
       return;
     }
+
+    Native.BenchmarkingUtil.start("FindRefInFrozenWithNoLoc");
     var foundInFrozen := FindRefInFrozenWithNoLoc(s);
+    Native.BenchmarkingUtil.end("FindRefInFrozenWithNoLoc");
+
     ImplModelSync.FindRefInFrozenWithNoLocCorrect(s.I());
 
     if foundInFrozen.Some? {
