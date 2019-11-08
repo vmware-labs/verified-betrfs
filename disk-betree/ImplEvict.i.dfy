@@ -71,25 +71,6 @@ module ImplEvict {
     }
   }
 
-  method checkSanity(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
-  {
-    var node := s.cache.cache.Get(ref);
-    if node.value.children.Some? {
-      var children := node.value.children.value;
-      var i: uint64 := 0;
-      while i < |children| as uint64
-      {
-        var childref := children[i];
-        var opt := s.cache.cache.Get(childref);
-        if opt.Some? {
-          print "doing insane evict\n";
-          return;
-        }
-        i := i + 1;
-      }
-    }
-  }
-
   method EvictOrDealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires Inv(k, s)
   requires s.ready
@@ -126,8 +107,6 @@ module ImplEvict {
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
-            checkSanity(k, s, ref);
-
             Native.BenchmarkingUtil.start("evict");
             Evict(k, s, ref);
             Native.BenchmarkingUtil.end("evict");
