@@ -87,7 +87,9 @@ module ImplInsert {
   {
     ImplModelInsert.reveal_InsertKeyValue();
 
+    Native.BenchmarkingUtil.start("passiveAggressive calc");
     var ref := passiveAggressive(k, s, key, value);
+    Native.BenchmarkingUtil.end("passiveAggressive calc");
 
     ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), ref);
 
