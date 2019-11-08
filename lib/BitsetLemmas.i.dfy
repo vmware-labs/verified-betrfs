@@ -1,7 +1,9 @@
 include "NativeTypes.s.dfy"
+include "MathAxioms.s.dfy"
 
 module BitsetLemmas {
   import opened NativeTypes
+  import MathAxioms
   // These first two are slow, but they work:
 
   lemma bit_ne_expanded(i: uint64, j: uint64)
@@ -260,6 +262,9 @@ module BitsetLemmas {
 
   lemma bv64cast(a: bv64)
   ensures (a as uint64) as bv64 == a
+  {
+    MathAxioms.as_int_as_bv64(a);
+  }
 
   lemma set_bit_to_1_self_uint64(a: uint64, i: uint64)
   requires i < 64

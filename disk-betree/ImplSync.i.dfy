@@ -97,27 +97,17 @@ module ImplSync {
   ensures ref == ImplModelSync.FindRefInFrozenWithNoLoc(s.I())
   {
     assume false;
-    // TODO once we have an lba freelist, rewrite this to avoid extracting a `map` from `s.ephemeralIndirectionTable`
-    var frozenTable := s.frozenIndirectionTable.t.ToMap();
-    var frozenRefs := SetToSeq(frozenTable.Keys);
+    var it := s.frozenIndirectionTable.t.IterStart();
 
-    assume |frozenRefs| < 0x1_0000_0000_0000_0000;
-
-    var i: uint64 := 0;
-    while i < |frozenRefs| as uint64
-    invariant i as int <= |frozenRefs|
-    invariant forall k : nat | k < i as nat :: (
-        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
-        && frozenRefs[k] in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs)
+    while it.next.Some?
     {
-      var ref := frozenRefs[i];
-      var lbaGraph := s.frozenIndirectionTable.t.Get(ref);
-      assert lbaGraph.Some?;
-      var lba := lbaGraph.value.loc;
+      var ref := it.next.value.0;
+      var lbaGraph := it.next.value.1;
+      var lba := lbaGraph.loc;
       if lba.None? {
         return Some(ref);
       }
-      i := i + 1;
+      it := s.frozenIndirectionTable.t.IterInc(it);
     }
     assert forall r | r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
         :: r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
@@ -147,7 +137,7 @@ module ImplSync {
     var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
 
     s.frozenIndirectionTable := clonedEphemeralIndirectionTable;
-    s.syncReqs := BC.syncReqs3to2(s.syncReqs);
+    s.syncReqs := SyncReqs3to2(s.syncReqs);
     s.blockAllocator.CopyEphemeralToFrozen();
 
     return;
@@ -266,22 +256,16 @@ module ImplSync {
 
   // == pushSync ==
 
-  method freeId<A>(syncReqs: map<uint64, A>) returns (id: uint64)
-  ensures id == ImplModelSync.freeId(syncReqs)
+  method freeId<A>(syncReqs: MutableMap.ResizingHashMap<A>) returns (id: uint64)
+  requires syncReqs.Inv()
+  ensures id == ImplModelSync.freeId(syncReqs.I())
   {
     ImplModelSync.reveal_freeId();
-
-    var s := syncReqs.Keys;
-    assume |s| < 0x1_0000_0000_0000_0000;
-    if (|s| as uint64 == 0) {
-      id := 1;
+    var maxId := syncReqs.MaxKey();
+    if maxId == 0xffff_ffff_ffff_ffff {
+      return 0;
     } else {
-      var maxId := MaximumInt(syncReqs.Keys);
-      if maxId == 0xffff_ffff_ffff_ffff {
-        id := 0;
-      } else {
-        id := maxId + 1;
-      }
+      return maxId + 1;
     }
   }
 
@@ -293,8 +277,10 @@ module ImplSync {
   ensures (s.I(), id) == ImplModelSync.pushSync(Ic(k), old(s.I()))
   {
     id := freeId(s.syncReqs);
-    if id != 0 {
-      s.syncReqs := s.syncReqs[id := BC.State3];
+    if id != 0 && s.syncReqs.Count < 0x2000_0000_0000_0000 {
+      s.syncReqs.Insert(id, BC.State3);
+    } else {
+      id := 0;
     }
   }
 
@@ -310,10 +296,11 @@ module ImplSync {
   ensures WellUpdated(s)
   ensures ImplModelSync.popSync(Ic(k), old(s.I()), old(IIO(io)), id, s.I(), success, IIO(io))
   {
-    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
+    var g := s.syncReqs.Get(id);
+    if (g.Some? && g.value == BC.State1) {
       success := true;
       wait := false;
-      s.syncReqs := MapRemove1(s.syncReqs, id);
+      s.syncReqs.Remove(id);
     } else {
       success := false;
       wait := sync(k, s, io);

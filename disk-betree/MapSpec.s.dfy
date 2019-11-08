@@ -1,14 +1,13 @@
 include "../lib/Option.s.dfy"
-include "../lib/total_order.s.dfy"
 include "UI.s.dfy"
 include "UIStateMachine.s.dfy"
 
 module MapSpec refines UIStateMachine {
   import V = ValueWithDefault
+  import K = KeyType
 
   import UI
-  import Keyspace = UI.Keyspace
-  type Key = Keyspace.Element
+  type Key = K.Key
   type Value = V.Value
 
   // Users must provide a definition of EmptyValue

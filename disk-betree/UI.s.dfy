@@ -1,5 +1,11 @@
 include "../lib/NativeTypes.s.dfy"
-include "../lib/total_order.s.dfy"
+
+module {:extern} KeyType {
+  import NativeTypes
+
+  function method MaxLen() : NativeTypes.uint64 { 1024 }
+  type Key = s : seq<NativeTypes.byte> | |s| <= 1024
+}
 
 module {:extern} ValueWithDefault {
   import NativeTypes
@@ -17,11 +23,13 @@ module {:extern} ValueWithDefault {
 
 module UI {
   //import Keyspace = Total_Order
-  import Keyspace = Lexicographic_Byte_Order
+  //import Keyspace = Lexicographic_Byte_Order
 
   import V = ValueWithDefault
-  type Key = Keyspace.Element
+  import K = KeyType
+
   type Value = V.Value
+  type Key = K.Key
 
   datatype Op =
     | NoOp

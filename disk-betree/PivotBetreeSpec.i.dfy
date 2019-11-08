@@ -1,5 +1,5 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
@@ -11,6 +11,11 @@ include "PivotsLib.i.dfy"
 include "BucketsLib.i.dfy"
 include "Bounds.i.dfy"
 include "BucketWeights.i.dfy"
+//
+// A PivotBetree refines a Betree, carrying forward the tree structure
+// but refining the abstract infinite key maps with key ranges separated
+// by pivot keys.
+//
 
 module PivotBetreeGraph refines Graph {
   import BG = BetreeGraph
@@ -19,7 +24,7 @@ module PivotBetreeGraph refines Graph {
   import opened Options
   import M = ValueMessage
 
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
   type Key = Keyspace.Element
   type Value = BG.Value
 
@@ -659,7 +664,7 @@ module PivotBetreeSpecWFNodes {
   import M = ValueMessage
 
   import MS = MapSpec
-  import Keyspace = MS.Keyspace
+  import Keyspace = Lexicographic_Byte_Order
   type Key = Keyspace.Element
 
   lemma ValidFlushWritesWFNodes(f: NodeFlush)

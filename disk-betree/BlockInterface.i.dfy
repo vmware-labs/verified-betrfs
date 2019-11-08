@@ -1,13 +1,18 @@
 include "../lib/Maps.s.dfy"
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "Graph.i.dfy"
 include "Transactable.i.dfy"
+//
+// A BlockInterface lets its client code (the Betree) perform atomic sequences
+// of block allocation (assigning a new value),
+// block write (replacing an existing value),
+// and read steps.
+// It also supports a GC step that frees some subset of unreferenced blocks.
+//
   
 abstract module BlockInterface refines Transactable {
-  // BlockInterface is parameterized by the graph type
-  // (this line was moved to Transactable)
-  // import G : Graph 
-
+  // A BlockInterface, being a Transactable, is parameterized by the graph
+  // type Transactable.G.
   import opened Maps
     
   type View = G.Graph

@@ -1,6 +1,13 @@
 include "PivotsLib.i.dfy"
 include "Message.i.dfy"
 include "../lib/Maps.s.dfy"
+include "../lib/total_order.i.dfy"
+//
+// A Bucket maps keys to Messages. A BucketList imparts a Message meaning
+// to every key obeying the Message composition rules. This module shows
+// how pushing messages down a tree towards a child still produces equivalent
+// values as viewed through the Message chain.
+//
 
 module BucketsLib {
   import opened PivotsLib

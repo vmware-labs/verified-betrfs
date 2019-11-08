@@ -1,5 +1,12 @@
 include "../lib/Bitmap.i.dfy"
 include "Bounds.i.dfy"
+//
+// A BlockAllocator tracks which blocks are allocated, to safely allocate
+// blocks unused by any view.
+//
+
+// TODO these modules need better names. And we should probably do the
+// one-module-per-file thing.
 
 module ImplModelBlockAllocator {
   import Bitmap

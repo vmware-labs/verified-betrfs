@@ -56,6 +56,8 @@ include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 #TIME=time -f "real %es cpu %Us"
 TIME=time
 
+# To build without verification, use: NOVERIFY=/dafnyVerify:0
+# This will taint your build directory with bogusly-.okay files.
 $(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
 	touch $@

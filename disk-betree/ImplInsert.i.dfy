@@ -38,11 +38,14 @@ module ImplInsert {
   requires Inv(k, s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(s.I()), key, value)
   {
     ImplModelInsert.reveal_InsertKeyValue();
+
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
 
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
@@ -53,15 +56,10 @@ module ImplInsert {
       }
     }
 
-
-    // TODO this isn't necessary because the children don't change
-    var root := s.cache.GetOpt(BT.G.Root());
-    var children := root.value.children;
-
     var msg := Messages.Define(value);
     s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
-    writeBookkeeping(k, s, BT.G.Root(), children);
+    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
 
     success := true;
   }
@@ -80,6 +78,12 @@ module ImplInsert {
 
     if (!s.ready) {
       PageInIndirectionTableReq(k, s, io);
+      success := false;
+      return;
+    }
+
+    var indirectionTableSize := s.ephemeralIndirectionTable.GetSize();
+    if (!(indirectionTableSize <= IndirectionTableModel.MaxSizeUint64() - 3)) {
       success := false;
       return;
     }

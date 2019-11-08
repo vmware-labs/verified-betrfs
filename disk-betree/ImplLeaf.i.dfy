@@ -28,6 +28,7 @@ module ImplLeaf {
   requires node.Inv()
   requires node.children.None?
   requires |node.buckets| == 1
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)

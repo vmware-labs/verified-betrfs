@@ -5,7 +5,6 @@ import opened KVTypes
 import opened TreeTypes
 import opened ImmutableDiskTreeImpl
 import opened ImmutableDiskTreeHeight // TODO not sure we need any of Height ... until GC
-import opened MissingLibrary
 
 datatype LookupView = LookupView(k:Constants, table:Table, view:View)
 

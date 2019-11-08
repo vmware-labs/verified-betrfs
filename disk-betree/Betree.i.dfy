@@ -1,11 +1,18 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
 include "BetreeSpec.i.dfy"
+//
+// The compound state machine that joins a BetreeSpec to an abstract
+// BlockInterface. It instantiates the BetreeSpec's op-sequences into concrete
+// state machine OpTransaction steps, and interleaves Betree operations with
+// BlockInterface garbage collection. The BlockInterface remains uninstantiated.
+// TODO(jonh): This probably should get renamed; its place in the heirarchy
+// is confusing.
+//
 
-// jonh: we should rename this. It marries a BetreeSpec to the abstract block interface.
 module Betree {
   import opened BetreeSpec`Internal
   import BI = BetreeBlockInterface

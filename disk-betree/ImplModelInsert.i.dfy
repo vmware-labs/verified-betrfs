@@ -42,7 +42,10 @@ module ImplModelInsert {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   {
+    lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
+
     if (
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
@@ -53,7 +56,7 @@ module ImplModelInsert {
       var newCache := CacheInsertKeyValue(s.cache, BT.G.Root(), key, msg);
 
       var s0 := s.(cache := newCache);
-      var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
+      var s' := writeBookkeepingNoSuccsUpdate(k, s0, BT.G.Root());
       (s', true)
     )
   }
@@ -62,6 +65,7 @@ module ImplModelInsert {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
       WeightBucketList(s.cache[BT.G.Root()].buckets) 
       <= MaxTotalBucketWeight()
@@ -96,9 +100,9 @@ module ImplModelInsert {
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
     var s0 := s.(cache := newCache);
-    var s' := writeBookkeeping(k, s0, BT.G.Root(), s.cache[BT.G.Root()].children);
+    var s' := writeBookkeepingNoSuccsUpdate(k, s0, BT.G.Root());
 
-    reveal_writeBookkeeping();
+    reveal_writeBookkeepingNoSuccsUpdate();
     writeCorrect(k, s0, BT.G.Root(), newRoot);
 
     var oldroot := INode(root);
@@ -133,6 +137,10 @@ module ImplModelInsert {
   {
     if (s.Unready?) then (
       && (s', io') == PageInIndirectionTableReq(k, s, io)
+      && success == false
+    ) else if !(|s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3) then (
+      && s' == s
+      && io' == io
       && success == false
     ) else if (BT.G.Root() !in s.cache) then (
       if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
@@ -169,6 +177,8 @@ module ImplModelInsert {
 
     if (s.Unready?) {
       PageInIndirectionTableReqCorrect(k, s, io);
+    } else if !(|s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3) {
+      assert noop(k, IVars(s), IVars(s));
     } else if (BT.G.Root() !in s.cache) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
         PageInReqCorrect(k, s, io, BT.G.Root());

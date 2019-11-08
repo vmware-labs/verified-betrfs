@@ -17,6 +17,8 @@ module {:extern} ImplState {
   import Bitmap
   import IndirectionTableImpl
   import IndirectionTableModel
+  import MutableMap
+  import MutableMapModel
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -104,7 +106,7 @@ module {:extern} ImplState {
   class Variables {
     var ready: bool;
 
-    var syncReqs: map<uint64, BC.SyncReqStatus>;
+    var syncReqs: MutableMap.ResizingHashMap<BC.SyncReqStatus>
 
     // Ready
     var persistentIndirectionTable: MutIndirectionTable;
@@ -122,7 +124,7 @@ module {:extern} ImplState {
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator
+        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
     {
       {this} +
       persistentIndirectionTable.Repr +
@@ -130,31 +132,25 @@ module {:extern} ImplState {
       (if frozenIndirectionTable != null then frozenIndirectionTable.Repr else {}) +
       lru.Repr +
       cache.Repr +
-      blockAllocator.Repr
+      blockAllocator.Repr +
+      syncReqs.Repr
     }
 
     predicate ReprInv()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator
+        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
     reads Repr()
     {
         // NOALIAS statically enforced no-aliasing would probably help here
-
-        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
-        && (frozenIndirectionTable != null ==> persistentIndirectionTable.Repr !! frozenIndirectionTable.Repr)
-        && (frozenIndirectionTable != null ==> ephemeralIndirectionTable.Repr !! frozenIndirectionTable.Repr)
-        && persistentIndirectionTable.Repr !! lru.Repr
-        && ephemeralIndirectionTable.Repr !! lru.Repr
-        && (frozenIndirectionTable != null ==> frozenIndirectionTable.Repr !! lru.Repr)
-        && cache.Repr !! ephemeralIndirectionTable.Repr
-        && cache.Repr !! persistentIndirectionTable.Repr
-        && (frozenIndirectionTable != null ==> cache.Repr !! frozenIndirectionTable.Repr)
-        && cache.Repr !! lru.Repr
-        && blockAllocator.Repr !! ephemeralIndirectionTable.Repr
-        && (frozenIndirectionTable != null ==> blockAllocator.Repr !! frozenIndirectionTable.Repr)
-        && blockAllocator.Repr !! persistentIndirectionTable.Repr
-        && blockAllocator.Repr !! lru.Repr
-        && blockAllocator.Repr !! cache.Repr
+        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr !! lru.Repr !! cache.Repr !! blockAllocator.Repr !! syncReqs.Repr
+        && (frozenIndirectionTable != null ==>
+            && frozenIndirectionTable.Repr !! persistentIndirectionTable.Repr
+            && frozenIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
+            && frozenIndirectionTable.Repr !! lru.Repr
+            && frozenIndirectionTable.Repr !! cache.Repr
+            && frozenIndirectionTable.Repr !! blockAllocator.Repr
+            && frozenIndirectionTable.Repr !! syncReqs.Repr
+        )
 
         && this !in ephemeralIndirectionTable.Repr
         && this !in persistentIndirectionTable.Repr
@@ -162,11 +158,12 @@ module {:extern} ImplState {
         && this !in lru.Repr
         && this !in cache.Repr
         && this !in blockAllocator.Repr
+        && this !in syncReqs.Repr
     }
 
     predicate W()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator
+        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
     reads Repr()
     {
       && ReprInv()
@@ -176,24 +173,25 @@ module {:extern} ImplState {
       && lru.Inv()
       && cache.Inv()
       && blockAllocator.Inv()
+      && syncReqs.Inv()
     }
 
     function I() : IM.Variables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator
+        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
     reads Repr()
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs, cache.I(), lru.Queue, blockAllocator.I())
+        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs.I(), cache.I(), lru.Queue, blockAllocator.I())
       ) else (
-        IM.Unready(outstandingIndirectionTableRead, syncReqs)
+        IM.Unready(outstandingIndirectionTableRead, syncReqs.I())
       )
     }
 
     predicate WF()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator
+        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
     reads Repr()
     {
       && W()
@@ -202,12 +200,13 @@ module {:extern} ImplState {
 
     constructor()
     ensures !ready
-    ensures syncReqs == map[]
+    ensures syncReqs.Inv()
+    ensures syncReqs.I() == MutableMapModel.Constructor(128)
     ensures outstandingIndirectionTableRead == None
     ensures WF()
     {
       ready := false;
-      syncReqs := map[];
+      syncReqs := new MutableMap.ResizingHashMap(128);
       outstandingIndirectionTableRead := None;
 
       // Unused for the `ready = false` state but we need to initialize them.
@@ -225,7 +224,7 @@ module {:extern} ImplState {
 
   predicate Inv(k: M.Constants, s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-        s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
+        s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator, s.syncReqs
   reads s.Repr()
   {
     && s.W()
@@ -251,7 +250,7 @@ module {:extern} ImplState {
 
   twostate predicate WellUpdated(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
+      s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator, s.syncReqs
   reads s.Repr()
   {
     && s.W()

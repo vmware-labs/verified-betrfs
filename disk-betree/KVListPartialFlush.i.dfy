@@ -1,6 +1,11 @@
 include "KVList.i.dfy"
 include "Bounds.i.dfy"
 include "PivotsLib.i.dfy"
+//
+// I guess sometimes we want to flush only part of a node's effective KVList,
+// and KVList only specified full flushes?
+// TODO(robj,thance): Improve this doc.
+//
 
 module KVListPartialFlush {
   import opened KVList

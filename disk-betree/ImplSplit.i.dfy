@@ -30,6 +30,11 @@ module ImplSplit {
   requires left_child.Repr !! s.Repr()
   requires right_child.Repr !! s.Repr()
   requires s.ready
+  requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), left_child.children)
+  requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), right_child.children)
+  requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
+  requires |fused_parent_children| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -41,8 +46,21 @@ module ImplSplit {
   ensures s.I() == ImplModelSplit.splitBookkeeping(Ic(k), old(s.I()), left_childref, right_childref, parentref, fused_parent_children, left_child.I(), right_child.I(), slot as int);
   {
     ImplModelSplit.reveal_splitBookkeeping();
+
+    ImplModelCache.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, right_child.children);
+    ImplModelCache.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, Some(fused_parent_children));
+    ImplModelCache.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children);
+
     writeBookkeeping(k, s, left_childref, left_child.children);
+
+    ImplModelCache.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, Some(fused_parent_children));
+    ImplModelCache.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children);
+    ImplModelCache.lemmaRefInGraphPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, left_childref);
+
     writeBookkeeping(k, s, right_childref, right_child.children);
+
+    ImplModelCache.lemmaChildrenConditionsOfReplace1With2(Ic(k), s.I(), fused_parent_children, slot as int, left_childref, right_childref);
+
     var rep := Replace1with2(fused_parent_children, left_childref, right_childref, slot);
     writeBookkeeping(k, s, parentref, Some(rep));
   }
@@ -93,6 +111,10 @@ module ImplSplit {
   requires left_childref != parentref
   requires right_childref != parentref
   requires |child.buckets| >= 2
+  requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
+  requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), child.children)
+  requires |fused_parent_children| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
 
   modifies s.Repr()
 
@@ -103,6 +125,8 @@ module ImplSplit {
     var num_children_left := |child.buckets| as uint64 / 2;
     var pivot := child.pivotTable[num_children_left - 1];
 
+    ImplModelSplit.lemmaChildrenConditionsSplitChild(Ic(k), s.I(), child.I(), num_children_left as int);
+
     var left_child := child.SplitChildLeft(num_children_left as uint64);
     var right_child := child.SplitChildRight(num_children_left as uint64);
 
@@ -112,20 +136,22 @@ module ImplSplit {
     ImplModelSplit.reveal_splitDoChanges();
   }
 
-  method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, ref: BT.G.Reference, slot: uint64)
+  method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64)
   requires s.ready
   requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable.I().graph
+  requires childref in s.ephemeralIndirectionTable.I().graph
   requires parentref in s.ephemeralIndirectionTable.I().graph
-  requires s.cache.ptr(ref).Some?
+  requires s.cache.ptr(childref).Some?
   requires s.cache.ptr(parentref).Some?
   requires s.cache.I()[parentref].children.Some?
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
-  requires s.cache.I()[parentref].children.value[slot] == ref
+  requires s.cache.I()[parentref].children.value[slot] == childref
+  requires |s.cache.I()[parentref].buckets| <= MaxNumChildren() - 1
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures s.I() == ImplModelSplit.doSplit(Ic(k), old(s.I()), parentref, ref, slot as int);
+  ensures s.I() == ImplModelSplit.doSplit(Ic(k), old(s.I()), parentref, childref, slot as int);
   {
     ImplModelSplit.reveal_doSplit();
 
@@ -139,12 +165,16 @@ module ImplSplit {
 
     var fused_parent_opt := s.cache.GetOpt(parentref);
     var fused_parent := fused_parent_opt.value;
-    var fused_child_opt := s.cache.GetOpt(ref);
+    var fused_child_opt := s.cache.GetOpt(childref);
     var fused_child := fused_child_opt.value;
+
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| as uint64 then Some(fused_parent.pivotTable[slot]) else None);
 
+    ImplModelSplit.lemmaChildrenConditionsCutoffNode(Ic(k), s.I(), fused_child.I(), lbound, ubound);
     ImplModelSplit.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
     var child := fused_child.CutoffNode(lbound, ubound);
     assert IM.WFNode(child.I());

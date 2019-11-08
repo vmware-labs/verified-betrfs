@@ -1,5 +1,20 @@
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "Graph.i.dfy"
+//
+// A Transactable is a state machine defined by atomically gluing together
+// groups of a few step primitives. Each BetreeSpec operation performs
+// an atomic sequence of cache updates, such as a block allocation
+// followed by a write (which includes a reference to the allocated block).
+//
+
+// Note that these aren't disk transactions; we're not assuming anything
+// atomic about the I/O subsystem. Transactable is a way of defining a
+// complex in-memory atomic action by composing simpler primitives offered
+// by an underlying module (the cache). This is (metatheoretically) safe with
+// respect to crashes, because the effect of a crash (to reset the RAM) can't
+// distinguish whether that reset occurs within or after a transaction.
+// It's not safe with respect to CPU concurrency, which is okay because
+// we don't yet expliot it.
 
 abstract module Transactable {
   import opened Sequences

@@ -164,6 +164,7 @@ module ImplFlushPolicy {
   requires s.ready
   requires BT.G.Root() in s.cache.I()
   requires io !in s.Repr()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)

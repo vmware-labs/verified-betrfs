@@ -1,5 +1,3 @@
-// NOTE: requires /noNLarith
-
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
 include "Marshalling/Native.s.dfy"
@@ -330,7 +328,7 @@ module Bitmap {
     {
       assume false;
 
-      bits := new uint64[a.bits.Length];
+      bits := new uint64[a.bits.Length as uint64];
       new;
 
       var i: uint64 := 0;

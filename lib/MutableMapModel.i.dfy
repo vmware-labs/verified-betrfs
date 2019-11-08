@@ -1,6 +1,6 @@
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "Sets.i.dfy"
 include "Maps.s.dfy"
 include "SetBijectivity.i.dfy"
@@ -296,7 +296,7 @@ module MutableMapModel {
   requires SeqMatchesContentKeys(elements, contents)
   ensures |IndexSet(elements)| == |contents.Keys|
   {
-    var relation := set i | i in IndexSet(elements) :: (i, elements[i].key);
+    var relation := iset i | i in IndexSet(elements) :: (i, elements[i].key);
     var setA := IndexSet(elements);
     var setB := contents.Keys;
     assert forall a | a in setA
@@ -822,6 +822,13 @@ module MutableMapModel {
     && UnderlyingInv(self, self.underlying)
     && MapFromStorage(self.underlying.storage) == self.contents
     && |self.contents| == self.count as nat
+    && (self.count as nat) <= 0x1_0000_0000_0000_0000 / 8
+  }
+
+  lemma CountBound<V>(self: LinearHashMap<V>)
+  requires Inv(self)
+  ensures self.count as int <= 0x1_0000_0000_0000_0000 / 8
+  {
   }
 
   lemma RevealProtectedInv<V>(self: LinearHashMap<V>)
@@ -1097,7 +1104,7 @@ module MutableMapModel {
   function {:opaque} InsertAndGetOld<V>(self: LinearHashMap, key: uint64, value: V)
   : (res: (LinearHashMap, Option<V>))
     requires Inv(self)
-    requires self.count as nat < 0x10000000000000000 / 8
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures var (self', replaced) := res;
       && Inv(self')
       && self'.contents == self.contents[key := value]
@@ -1142,7 +1149,7 @@ module MutableMapModel {
   function {:opaque} Insert<V>(self: LinearHashMap, key: uint64, value: V)
   : (self': LinearHashMap)
     requires Inv(self)
-    requires self.count as nat < 0x10000000000000000 / 8
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures
       && Inv(self')
       && self'.contents == self.contents[key := value]
@@ -1377,4 +1384,26 @@ module MutableMapModel {
   lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires WFIter(self, it)
   ensures it.next.Some? ==> |it.s| < self.count as int
+
+  function MaxKeyIterate<V>(self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
+  requires Inv(self)
+  requires WFIter(self, it)
+  requires forall key | key in it.s :: key <= m
+  ensures forall key | key in self.contents :: key <= res
+  decreases it.decreaser
+  {
+    if it.next.None? then (
+      m
+    ) else (
+      var key := it.next.value.0;
+      MaxKeyIterate(self, IterInc(self, it), if m < key then key else m)
+    )
+  }
+
+  function {:opaque} MaxKey<V>(self: LinearHashMap<V>) : (res : uint64)
+  requires Inv(self)
+  ensures forall key | key in self.contents :: key <= res
+  {
+    MaxKeyIterate(self, IterStart(self), 0)    
+  }
 }

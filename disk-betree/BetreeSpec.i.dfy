@@ -1,9 +1,21 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
 include "Message.i.dfy"
+//
+// Defines the basic B-e-tree-shaped operations.
+//
+// * A Query is satisfied by examining enough of the tree to observe a
+//   terminating message list.
+// * Insert shoves a single message into the root.
+//   (Do we still use that, now that we have a mutable write buffer at the top?)
+// * Flush moves a bundle of messages from a node to one of its children.
+// * Grow inserts a new layer at the top of the tree to admit growth.
+// * Redirect replaces a subtree with a semantically-equivalent one.
+//   (when do we use that?)
+//
 
 module BetreeGraph refines Graph {
   import MS = MapSpec
