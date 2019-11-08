@@ -50,6 +50,7 @@ module MutableBucket {
     Native.BenchmarkingUtil.start("kvl_to_tree");
     assume false;
     if (|kvl.keys| as uint64 == 0) {
+      Native.BenchmarkingUtil.end("kvl_to_tree");
       return TTT.EmptyTree;
     }
 
