@@ -44,15 +44,14 @@ module ImplInsert {
       if node.children.None? {
         return ref;
       }
-      if node.buckets[ref].Weight != 0 {
-        return ref;
-      }
-
       var r := Pivots.ComputeRoute(node.pivotTable, key);
       //var q := node.buckets[r].Query(key);
       //if q.Some? {
       //  return ref;
       //}
+      if node.buckets[r].Weight != 0 {
+        return ref;
+      }
       var childref := node.children.value[r];
 
       var childNode := s.cache.GetOpt(childref);
@@ -88,9 +87,7 @@ module ImplInsert {
   {
     ImplModelInsert.reveal_InsertKeyValue();
 
-    Native.BenchmarkingUtil.start("passive agressive choice");
     var ref := passiveAggressive(k, s, key, value);
-    Native.BenchmarkingUtil.end("passive agressive choice");
 
     ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), ref);
 
