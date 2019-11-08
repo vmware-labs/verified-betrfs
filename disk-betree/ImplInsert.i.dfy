@@ -33,6 +33,48 @@ module ImplInsert {
 
   import Native
 
+  method passiveAggressive(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
+  returns (theRef: BT.G.Reference)
+  {
+    var ref := BT.G.Root();
+    var root := s.cache.GetOpt(ref);
+    var node := root.value;
+    while true
+    {
+      if node.children.None? {
+        return ref;
+      }
+      var r := Pivots.ComputeRoute(node.pivotTable, key);
+      //var q := node.buckets[r].Query(key);
+      //if q.Some? {
+      //  return ref;
+      //}
+      if node.buckets[r].Weight != 0 {
+        return ref;
+      }
+      var childref := node.children.value[r];
+
+      var childNode := s.cache.GetOpt(childref);
+      if childNode.None? {
+        return ref;
+      }
+
+      var entry := s.ephemeralIndirectionTable.t.Get(childref);
+      if entry.value.loc.Some? {
+        return ref;
+      }
+
+      var weightSeq := MutBucket.computeWeightOfSeq(childNode.value.buckets);
+      if !(WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) + weightSeq
+          <= MaxTotalBucketWeightUint64()) {
+        return ref;
+      }
+
+      ref := childref;
+      node := childNode.value;
+    }
+  }
+
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (success: bool)
   requires Inv(k, s)
@@ -45,10 +87,12 @@ module ImplInsert {
   {
     ImplModelInsert.reveal_InsertKeyValue();
 
-    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    var ref := passiveAggressive(k, s, key, value);
+
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), ref);
 
     if s.frozenIndirectionTable != null {
-      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
       if b {
         success := false;
         print "giving up; can't dirty root because frozen isn't written";
@@ -57,9 +101,9 @@ module ImplInsert {
     }
 
     var msg := Messages.Define(value);
-    s.cache.InsertKeyValue(BT.G.Root(), key, msg);
+    s.cache.InsertKeyValue(ref, key, msg);
 
-    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
+    writeBookkeepingNoSuccsUpdate(k, s, ref);
 
     success := true;
   }
