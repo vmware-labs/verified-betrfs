@@ -34,9 +34,11 @@ module MutableBucket {
   ensures KVList.WF(kvl)
   ensures KVList.I(kvl) == TTT.I(tree)
   {
+    Native.BenchmarkingUtil.start("tree_to_kvl");
     assume false;
     var s := TTT.AsSeq(tree);
     kvl := KVList.KvlOfSeq(s, TTT.I(tree));
+    Native.BenchmarkingUtil.end("tree_to_kvl");
   }
 
   method kvl_to_tree(kvl : Kvl)
@@ -45,6 +47,7 @@ module MutableBucket {
   ensures TTT.TTTree(tree)
   ensures KVList.I(kvl) == TTT.I(tree)
   {
+    Native.BenchmarkingUtil.start("kvl_to_tree");
     assume false;
     if (|kvl.keys| as uint64 == 0) {
       return TTT.EmptyTree;
@@ -80,6 +83,8 @@ module MutableBucket {
       len := newlen;
     }
     tree := TTT.NonEmptyTree(ar[0 as uint64].1);
+
+    Native.BenchmarkingUtil.end("kvl_to_tree");
   }
 
   class MutBucket {
