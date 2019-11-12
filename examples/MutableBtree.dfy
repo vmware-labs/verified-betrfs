@@ -51,13 +51,13 @@ abstract module MutableBtree {
     decreases node.height
   {
     if node.contents.Leaf? then
-      && node.repr == { node.contents.keys, node.contents.values }
+      && node.repr == { node, node.contents.keys, node.contents.values }
       && node.contents.keys != node.contents.values
       && node.height == 0
       && 0 <= node.contents.nkeys as int <= MaxKeysPerLeaf() as int == node.contents.keys.Length
       && node.contents.values.Length == node.contents.keys.Length
     else
-      && {node, node.contents.pivots, node.contents.children} <= node.repr
+      && { node, node.contents.pivots, node.contents.children } <= node.repr
       && 0 < node.contents.nchildren as int <= MaxChildren() as int == node.contents.children.Length
       && node.contents.pivots.Length == MaxChildren() as int - 1
       && (forall i :: 0 <= i < node.contents.nchildren ==> node.contents.children[i] != null)
@@ -71,6 +71,110 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < node.contents.nchildren ==> WFShape(node.contents.children[i]))
   }
 
+  function Ichildren(nodes: seq<Node>, parentheight: int) : (result: seq<BS.Node>)
+    requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
+    requires forall i :: 0 <= i < |nodes| ==> nodes[i].height < parentheight
+    ensures |result| == |nodes|
+    ensures forall i :: 0 <= i < |result| ==> result[i] == I(nodes[i])
+    reads set i | 0 <= i < |nodes| :: nodes[i]
+    reads set i, o | 0 <= i < |nodes| && o in nodes[i].repr :: o
+    decreases parentheight, |nodes|
+  {
+    if |nodes| == 0 then []
+    else Ichildren(DropLast(nodes), parentheight) + [I(Last(nodes))]
+  }
+  
+  function I(node: Node) : (result: BS.Node)
+    requires WFShape(node)
+    reads node, node.repr
+    decreases node.height
+  {
+    match node.contents {
+      case Leaf(nkeys, keys, values) => BS.Leaf(keys[..nkeys], values[..nkeys])
+      case Index(nchildren, pivots, children) =>
+        var bschildren := Ichildren(children[..nchildren], node.height);
+        BS.Index(pivots[..nchildren-1], bschildren)
+    }
+  }
+
+  method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Leaf?
+    ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
+    ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
+    decreases node.height, 0
+  {
+    var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
+    if 1 <= posplus1 && node.contents.keys[posplus1-1] == needle {
+      result := BS.Found(node.contents.values[posplus1-1]);
+    } else {
+      result := BS.NotFound;
+    }
+  }
+
+  method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
+    ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
+    decreases node.height, 0
+  {
+    var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
+    result := Query(node.contents.children[posplus1], needle);
+  }
+
+  method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
+    ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
+    decreases node.height, 1
+  {
+    match node.contents {
+      case Leaf(_, _, _) => result := QueryLeaf(node, needle);
+      case Index(_, _, _) => result := QueryIndex(node, needle);
+    }
+  }
+
+  predicate method Full(node: Node)
+    reads node
+  {
+    match node.contents {
+      case Leaf(nkeys, _, _) => nkeys == MaxKeysPerLeaf()
+      case Index(nchildren, _, _) => nchildren == MaxChildren()
+    }
+  }
+
+  method SplitLeaf(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Leaf?
+    requires Full(node)
+    ensures WFShape(node)
+    ensures WFShape(right)
+    ensures BS.SplitLeaf(old(I(node)), I(node), I(right), wit, pivot)
+    ensures node.repr == old(node.repr)
+    ensures fresh(right.repr)
+    modifies node
+  {
+    var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
+    var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
+    var boundary := node.contents.nkeys / 2;
+    Arrays.Memcpy(rightkeys, 0, node.contents.keys[boundary..node.contents.nkeys]); // FIXME: remove conversion to seq
+    Arrays.Memcpy(rightvalues, 0, node.contents.values[boundary..node.contents.nkeys]); // FIXME: remove conversion to seq
+
+    right := new Node;
+    right.repr := {right, rightkeys, rightvalues};
+    right.height := 0;
+    right.contents := Leaf(node.contents.nkeys - boundary, rightkeys, rightvalues);
+
+    node.contents := Leaf(boundary, node.contents.keys, node.contents.values);
+    wit := node.contents.keys[0];
+    pivot := right.contents.keys[0];
+  }
+
   predicate ObjectIsInSubtree(node: Node, o: object, i: int)
     requires WFShape(node)
     requires node.contents.Index?
@@ -80,7 +184,7 @@ abstract module MutableBtree {
     o in node.contents.children[i].repr
   }
 
-  function {:opaque} SubRepr(node: Node, from: int, to: int) : (result: set<object>)
+  function SubRepr(node: Node, from: int, to: int) : (result: set<object>)
     requires WFShape(node)
     requires node.contents.Index?
     requires 0 <= from <= to <= node.contents.nchildren as int
@@ -89,39 +193,19 @@ abstract module MutableBtree {
     set i: int, o | 0 <= from <= i < to && o in node.repr && ObjectIsInSubtree(node, o, i) :: o
   }
 
-  lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
-    requires WFShape(node)
-    requires node.contents.Index?
-    requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
-    ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
-  {
-    var subrepr1 := SubRepr(node, from1, to1);
-    var subrepr2 := SubRepr(node, from2, to2);
-
-    if o :| o in subrepr1 && o in subrepr2 {
-      reveal_SubRepr();
-      var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && ObjectIsInSubtree(node, o, i1);
-      var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && ObjectIsInSubtree(node, o, i2);
-      assert i1 < i2;
-      assert DisjointSubtrees(node.contents, i1, i2);
-    }
-  }
-  
-  lemma SubReprFits(node: Node, from: int, to: int)
+  lemma SubReprUpperBound(node: Node, from: int, to: int)
     requires WFShape(node)
     requires node.contents.Index?
     requires 1 < node.contents.nchildren
     requires 0 <= from <= to <= node.contents.nchildren as int
     ensures SubRepr(node, from, to) <= node.repr - {node, node.contents.pivots, node.contents.children}
     ensures to - from < node.contents.nchildren as int ==> SubRepr(node, from, to) < node.repr - {node, node.contents.pivots, node.contents.children}
-    ensures forall i :: from <= i < to ==> node.contents.children[i].repr <= SubRepr(node, from, to)
   {
     var subrepr := SubRepr(node, from, to);
     var nchildren := node.contents.nchildren;
     var pivots := node.contents.pivots;
     var children := node.contents.children;
     
-    reveal_SubRepr();
     assert subrepr <= node.repr;
     assert pivots !in subrepr;
     assert children !in subrepr;
@@ -161,6 +245,25 @@ abstract module MutableBtree {
         assert subrepr < node.repr - {node, pivots, children};
       }
     }
+  }
+
+  lemma SubReprLowerBound(node: Node, from: int, to: int)
+    requires WFShape(node)
+    requires node.contents.Index?
+    requires 1 < node.contents.nchildren
+    requires 0 <= from <= to <= node.contents.nchildren as int
+    ensures forall i :: from <= i < to ==> node.contents.children[i].repr <= SubRepr(node, from, to)
+  {
+    var subrepr := SubRepr(node, from, to);
+    var nchildren := node.contents.nchildren;
+    var pivots := node.contents.pivots;
+    var children := node.contents.children;
+    
+    assert subrepr <= node.repr;
+    assert pivots !in subrepr;
+    assert children !in subrepr;
+    assert subrepr <= node.repr - {node, pivots, children};
+    
     forall i | from <= i < to
       ensures children[i].repr <= subrepr
     {
@@ -171,16 +274,131 @@ abstract module MutableBtree {
       }
     }
   }
+
   
-  // function method IndexPrefix(node: Node, newnchildren: int) : (result: Node)
+  method IndexPrefix(node: Node, newnchildren: uint64)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires 1 < newnchildren
+    requires 0 <= newnchildren <= node.contents.nchildren
+    ensures WFShape(node)
+    ensures node.repr == old({node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, newnchildren as int))
+    ensures node.height == old(node.height)
+    ensures I(node) == BS.SubIndex(old(I(node)), 0, newnchildren as int)
+    modifies node
+  {
+    ghost var oldinode := I(node);
+    SubReprLowerBound(node, 0, newnchildren as int);
+    node.repr := {node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, newnchildren as int);
+    node.contents := node.contents.(nchildren := newnchildren);
+    forall i, j | 0 <= i < j < node.contents.nchildren as int
+      ensures DisjointSubtrees(node.contents, i, j)
+    {
+      assert old(DisjointSubtrees(node.contents, i, j));
+    }
+    ghost var newinode := I(node);
+    assert newinode == BS.SubIndex(oldinode, 0, newnchildren as int);
+  }
+
+  method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires 1 < node.contents.nchildren
+    requires 0 <= from < to <= node.contents.nchildren
+    ensures WFShape(subnode)
+    ensures subnode.contents.Index?
+    ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode, subnode.contents.pivots, subnode.contents.children}
+    ensures subnode.height == node.height
+    ensures I(subnode) == BS.SubIndex(I(node), from as int, to as int)
+    ensures fresh(subnode)
+    ensures fresh(subnode.contents.pivots)
+    ensures fresh(subnode.contents.children)
+  {
+    var subpivots := new Key[MaxChildren()-1](_ => DefaultKey());
+    var subchildren := new Node?[MaxChildren()](_ => null);
+    Arrays.Memcpy(subpivots, 0, node.contents.pivots[from..to-1]); // FIXME: remove conversion to seq
+    Arrays.Memcpy(subchildren, 0, node.contents.children[from..to]); // FIXME: remove conversion to seq
+    subnode := new Node;
+    subnode.repr := SubRepr(node, from as int, to as int) + {subnode, subpivots, subchildren};
+    subnode.height := node.height;
+    subnode.contents := Index(to - from, subpivots, subchildren);
+
+    assert forall i :: 0 <= i < to - from ==> subnode.contents.children[i as int] == node.contents.children[(from + i) as int];
+
+    forall i, j | 0 <= i < j < subnode.contents.nchildren
+      ensures DisjointSubtrees(subnode.contents, i as int, j as int)
+    {
+      assert DisjointSubtrees(node.contents, (from + i) as int, (from + j) as int);
+    }
+
+    SubReprLowerBound(node, from as int, to as int);
+
+    ghost var inode := I(node);
+    ghost var isubnode := I(subnode);
+    assert subnode.contents.pivots[..subnode.contents.nchildren-1] == node.contents.pivots[from..to-1];
+    assert isubnode.pivots == inode.pivots[from..to-1];
+    assert isubnode.children == inode.children[from as int..to as int];
+  }
+
+  // method SplitIndex(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
   //   requires WFShape(node)
-  //   requires node.Index?
-  //   requires 1 < node.nchildren
-  //   requires 0 <= newnchildren <= node.nchildren as int
-  //   reads node.repr
+  //   requires BS.WF(I(node))
+  //   requires node.contents.Index?
+  //   requires Full(node)
+  //   ensures WFShape(node)
+  //   ensures WFShape(right)
+  //   ensures BS.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
+  //   ensures node.repr <= old(node.repr)
+  //   ensures node.repr !! right.repr
+  //   ensures fresh(right.repr - old(node.repr))
+  //   ensures node.height == old(node.height) == right.height
+  //   modifies node
   // {
-  //   Index(SubRepr(node, 0, newnchildren) + {node.pivots, node.children}, node.height, newnchildren as uint64, node.pivots, node.children)
+  //   var rightpivots := new Key[MaxChildren()-1](_ => DefaultKey());
+  //   var rightchildren := new Node?[MaxChildren()](_ => null);
+  //   var boundary := node.contents.nchildren / 2;
+  //   Arrays.Memcpy(rightpivots, 0, node.contents.pivots[boundary..node.contents.nchildren-1]); // FIXME: remove conversion to seq
+  //   Arrays.Memcpy(rightchildren, 0, node.contents.children[boundary..node.contents.nchildren]); // FIXME: remove conversion to seq
+
+  //   right := new Node;
+  //   right.contents := Index(node.contents.nchildren - boundary, rightpivots, rightchildren);
+  //   right.repr := {right, rightpivots, rightchildren} + SubRepr(node, boundary as int, node.contents.nchildren as int);
+  //   right.height := node.height;
+
+  //   SubReprFits(node, 0, boundary as int);
+      
+  //   node.repr := {node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, boundary as int);
+  //   node.contents := node.contents.(nchildren := boundary);
+
+  //   forall i, j | 0 <= i < j < node.contents.nchildren as int
+  //     ensures DisjointSubtrees(node.contents, i, j)
+  //   {
+  //     assert DisjointSubtrees(old(node.contents), i, j);
+  //   }
+  //   assert WFShape(node);
+  //   assume false;
   // }
+  
+  // lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
+  //   requires WFShape(node)
+  //   requires node.contents.Index?
+  //   requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
+  //   ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
+  // {
+  //   var subrepr1 := SubRepr(node, from1, to1);
+  //   var subrepr2 := SubRepr(node, from2, to2);
+
+  //   if o :| o in subrepr1 && o in subrepr2 {
+  //     reveal_SubRepr();
+  //     var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && ObjectIsInSubtree(node, o, i1);
+  //     var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && ObjectIsInSubtree(node, o, i2);
+  //     assert i1 < i2;
+  //     assert DisjointSubtrees(node.contents, i1, i2);
+  //   }
+  // }
+  
 
   // lemma IndexPrefixPreservesWFShape(node: Node, newnchildren: int)
   //   requires WFShape(node)
@@ -211,32 +429,6 @@ abstract module MutableBtree {
   //   IndexPrefix(node, newnchildren)
   // }
   
-  // function I(node: Node) : (result: BS.Node)
-  //   requires WFShape(node)
-  //   ensures node.Leaf? ==> result.Leaf?
-  //   ensures node.Leaf? ==> result.keys == node.keys[..node.nkeys];
-  //   ensures node.Leaf? ==> result.values == node.values[..node.nkeys];
-  //   ensures node.Index? ==> result.Index?
-  //   ensures node.Index? ==> result.pivots == node.pivots[..node.nchildren-1]
-  //   ensures node.Index? ==> |result.children| == node.nchildren as int
-  //   ensures node.Index? ==> forall i :: 0 <= i < node.nchildren ==>
-  //          result.children[i] == I(node.children[i])
-  //   reads node.repr
-  //   decreases node.repr
-  // {
-  //   match node {
-  //     case Leaf(_, _, nkeys, keys, values) => BS.Leaf(keys[..nkeys], values[..nkeys])
-  //     case Index(repr, _, nchildren, pivots, children) =>
-  //       if nchildren == 1 then
-  //         BS.Index([], [I(children[0])])
-  //       else
-  //         IndexPrefixPreservesWFShape(node, node.nchildren as int - 1);
-  //         var imprefix := I(IndexPrefix(node, node.nchildren as int - 1));
-  //         var imlastchild := I(children[nchildren-1]);
-  //         BS.Index(imprefix.pivots + [pivots[nchildren-2]], imprefix.children + [imlastchild])
-  //   }
-  // }
-
   // predicate {:opaque} BSWF(node: BS.Node)
   // {
   //   BS.WF(node)
@@ -338,148 +530,6 @@ abstract module MutableBtree {
   //   reveal_BSSubIndex();
   // }
     
-  // method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires node.Leaf?
-  //   ensures needle in BSInterpretation(I(node)) ==> result == BS.Found(BSInterpretation(I(node))[needle])
-  //   ensures needle !in BSInterpretation(I(node)) ==> result == BS.NotFound
-  //   decreases node.height, 0
-  // {
-  //   reveal_BSWF();
-  //   reveal_BSInterpretation();
-  //   var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.keys, 0, node.nkeys, needle);
-  //   if 1 <= posplus1 && node.keys[posplus1-1] == needle {
-  //     result := BS.Found(node.values[posplus1-1]);
-  //   } else {
-  //     result := BS.NotFound;
-  //   }
-  // }
-
-  // method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires node.Index?
-  //   ensures needle in BSInterpretation(I(node)) ==> result == BS.Found(BSInterpretation(I(node))[needle])
-  //   ensures needle !in BSInterpretation(I(node)) ==> result == BS.NotFound
-  //   decreases node.height, 0
-  // {
-  //   reveal_BSWF();
-  //   reveal_BSInterpretation();
-  //   reveal_BSAllKeys();
-  //   reveal_BSAllKeysOfChild();
-  //   reveal_BSInterpretationOfChild();
-  //   var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, needle);
-  //   result := Query(node.children[posplus1], needle);
-
-  //   if needle !in BSInterpretation(I(node)) {
-  //     if needle !in BSAllKeys(I(node)) {
-  //       assert needle !in BSAllKeysOfChild(I(node), posplus1 as int);
-  //     }
-  //     assert needle !in BSInterpretationOfChild(I(node), posplus1 as int);
-  //   }
-  // }
-
-  // method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   ensures needle in BSInterpretation(I(node)) ==> result == BS.Found(BSInterpretation(I(node))[needle])
-  //   ensures needle !in BSInterpretation(I(node)) ==> result == BS.NotFound
-  //   decreases node.height, 1
-  // {
-  //   match node {
-  //     case Leaf(_, _, _, _, _) => result := QueryLeaf(node, needle);
-  //     case Index(_, _, _, _, _) => result := QueryIndex(node, needle);
-  //   }
-  // }
-
-  // predicate method Full(node: Node)
-  //   requires !node.NotInUse?
-  // {
-  //   match node {
-  //     case Leaf(_, _, nkeys, _, _) => nkeys == MaxKeysPerLeaf()
-  //     case Index(_, _, nchildren, _, _) => nchildren == MaxChildren()
-  //   }
-  // }
-
-  // method SplitLeaf(node: Node) returns (left: Node, right: Node, ghost wit: Key, pivot: Key)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires node.Leaf?
-  //   requires Full(node)
-  //   ensures WFShape(left)
-  //   ensures WFShape(right)
-  //   ensures BSSplitLeaf(I(node), I(left), I(right), wit, pivot)
-  //   ensures left.Leaf?
-  //   ensures right.Leaf?
-  //   ensures left.keys == node.keys
-  //   ensures left.values == node.values
-  //   ensures fresh(right.keys)
-  //   ensures fresh(right.values)
-  // {
-  //   var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
-  //   var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
-  //   var boundary := node.nkeys / 2;
-  //   Arrays.Memcpy(rightkeys, 0, node.keys[boundary..node.nkeys]); // FIXME: remove conversion to seq
-  //   Arrays.Memcpy(rightvalues, 0, node.values[boundary..node.nkeys]); // FIXME: remove conversion to seq
-  //   left := Leaf(node.repr, 0, boundary, node.keys, node.values);
-  //   right := Leaf({rightkeys, rightvalues}, 0, node.nkeys - boundary, rightkeys, rightvalues);
-  //   wit := left.keys[0];
-  //   pivot := right.keys[0];
-    
-  //   BS.Keys.reveal_IsStrictlySorted();
-  //   reveal_BSSplitLeaf();
-  // }
-
-  // method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires node.Index?
-  //   requires 1 < node.nchildren
-  //   requires 0 <= from < to <= node.nchildren
-  //   ensures WFShape(subnode)
-  //   ensures subnode.Index?
-  //   ensures subnode.height == node.height
-  //   ensures I(subnode) == BSSubIndex(I(node), from as int, to as int)
-  //   ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode.pivots, subnode.children}
-  //   ensures fresh(subnode.pivots)
-  //   ensures fresh(subnode.children)
-  // {
-  //   var subnchildren := to - from;
-  //   var subpivots := new Key[MaxChildren()-1]
-  //     (i
-  //     requires 0 <= i <= (MaxChildren()-1) as int
-  //     reads node.pivots
-  //     =>
-  //     if i < subnchildren as int - 1 then node.pivots[from as int + i]
-  //     else DefaultKey());
-  //   var subchildren := new Node[MaxChildren()]
-  //     (i
-  //     requires 0 <= i <= MaxChildren() as int
-  //     reads node.children
-  //     =>
-  //     if i < subnchildren as int then node.children[from as int + i]
-  //     else NotInUse);
-  //   ghost var subrepr := SubRepr(node, from as int, to as int) + {subpivots, subchildren};
-  //   subnode := Index(subrepr, node.height, subnchildren, subpivots, subchildren);
-
-  //   SubReprFits(node, from as int, to as int);
-  //   forall i, j | 0 <= i < j < subnode.nchildren as int
-  //     ensures DisjointSubtrees(subnode, i, j)
-  //   {
-  //     assert subnode.children[i] == node.children[from as int + i];
-  //     assert subnode.children[j] == node.children[from as int + j];
-  //     assert DisjointSubtrees(node, from as int + i, from as int + j);
-  //   }
-
-  //   ghost var inode := I(node);
-  //   ghost var isubnode := I(subnode);
-  //   assert subnode.pivots[..subnode.nchildren-1] == node.pivots[from..to-1];
-  //   assert isubnode.pivots == inode.pivots[from..to-1];
-  //   assert isubnode.children == inode.children[from..to];
-  //   reveal_BSWF();
-  //   reveal_BSSubIndex();
-  // }
 
   
   // method SplitIndex(node: Node) returns (left: Node, right: Node, ghost wit: Key, pivot: Key)
