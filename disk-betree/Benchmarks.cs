@@ -375,7 +375,14 @@ namespace Native_Compile {
     }
 
     public static void start(Dafny.Sequence<char> dafnyName) {
-      string name = nameToString(dafnyName);
+      start(nameToString(dafnyName));
+    }
+
+    public static void end(Dafny.Sequence<char> dafnyName) {
+      end(nameToString(dafnyName));
+    }
+
+    public static void start(string name) {
       if (!sw.ContainsKey(name)) {
         sw.Add(name, new StopwatchEntry());
       }
@@ -383,8 +390,7 @@ namespace Native_Compile {
       p.s.Start();
       p.count++;
     }
-    public static void end(Dafny.Sequence<char> dafnyName) {
-      string name = nameToString(dafnyName);
+    public static void end(string name) {
       StopwatchEntry p = sw[name];
       p.s.Stop();
     }
