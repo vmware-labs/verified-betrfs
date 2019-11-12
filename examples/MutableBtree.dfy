@@ -335,11 +335,10 @@ abstract module MutableBtree {
 
     SubReprLowerBound(node, from as int, to as int);
 
+    // WTF?  Why is this necessary?
     ghost var inode := I(node);
     ghost var isubnode := I(subnode);
-    assert subnode.contents.pivots[..subnode.contents.nchildren-1] == node.contents.pivots[from..to-1];
-    assert isubnode.pivots == inode.pivots[from..to-1];
-    assert isubnode.children == inode.children[from as int..to as int];
+    assert I(subnode) == BS.SubIndex(I(node), from as int, to as int);
   }
 
   // method SplitIndex(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
