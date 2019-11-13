@@ -1,6 +1,6 @@
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "Sets.i.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"
@@ -154,7 +154,7 @@ module MutableMap {
       } else {
         replaced := Some(Storage[slotIdx].value);
       }
-      this.Storage[slotIdx as int] := Entry(key, value);
+      this.Storage[slotIdx] := Entry(key, value);
 
       // ghost:
       this.Contents := Contents[key := Some(value)];
@@ -308,19 +308,6 @@ module MutableMap {
       Repr := { this, Underlying } + Underlying.Repr;
     }
 
-    method ToMap() returns (result: map<uint64, V>)
-      requires Inv()
-      ensures Contents == old(Contents)
-      ensures Contents == result
-      ensures Repr == old(Repr)
-    {
-      assume false;
-      //var asArray := ToArray();
-      //result := map i: nat | i < asArray.Length :: asArray[i].0 := asArray[i].1;
-      result := map i : nat | i < Underlying.Storage.Length && Underlying.Storage[i].Entry?
-        :: Underlying.Storage[i].key := Underlying.Storage[i].value;
-    }
-
     method Realloc()
       requires Count as nat < 0x10000000000000000 / 8
       requires Inv()
@@ -398,7 +385,7 @@ module MutableMap {
 
     method Insert(key: uint64, value: V)
       requires Inv()
-      requires Count as nat < 0x10000000000000000 / 8
+      requires Count as nat < 0x1_0000_0000_0000_0000 / 8
       ensures Inv()
       ensures I() == MutableMapModel.Insert(old(I()), key, value)
       ensures forall r :: r in Repr ==> r in old(Repr) || fresh(r)
@@ -511,6 +498,29 @@ module MutableMap {
 
       var next := None;
       it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+    }
+
+    method MaxKey() returns (res : uint64)
+    requires Inv()
+    ensures res == MutableMapModel.MaxKey(I())
+    {
+      MutableMapModel.reveal_MaxKey();
+      var it := IterStart();
+      var m: uint64 := 0;
+      while it.next.Some?
+      invariant Inv()
+      invariant MutableMapModel.WFIter(I(), it)
+      invariant forall key | key in it.s :: key <= m
+      invariant MutableMapModel.MaxKeyIterate(I(), it, m) == MutableMapModel.MaxKey(I())
+      decreases it.decreaser
+      {
+        var key := it.next.value.0;
+        if key > m {
+          m := key;
+        }
+        it := IterInc(it);
+      }
+      return m;
     }
 
   }

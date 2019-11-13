@@ -1,5 +1,6 @@
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "NativeTypes.s.dfy"
+include "../disk-betree/UI.s.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
@@ -553,13 +554,11 @@ module Byte_Order refines Total_Order {
   }
 }
 
-abstract module Lexicographic_Order refines Total_Order {
-  import Base_Order : Total_Order
+module Lexicographic_Byte_Order refines Total_Order {
+  import KeyType
+  type Element = KeyType.Key
 
-  function method MaxLen() : uint64 { 1024 }
-  type Bounded = s : seq<Base_Order.Element> | |s| <= 1024
-
-  type Element = Bounded
+  import Base_Order = Byte_Order
 
   function SomeElement() : Element { [] }
 
@@ -630,10 +629,6 @@ abstract module Lexicographic_Order refines Total_Order {
       transitivity(a[1..], b[1..], c[1..]);
     }
   }
-}
-
-module {:extern} Lexicographic_Byte_Order refines Lexicographic_Order {
-  import Base_Order = Byte_Order
 
   method cmp(a: Element, b: Element) returns (c: int32)
   {

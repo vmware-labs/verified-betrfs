@@ -1,6 +1,6 @@
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 
 module MutableVec {
   import opened NativeTypes

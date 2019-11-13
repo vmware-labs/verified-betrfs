@@ -2,7 +2,7 @@ include "BlockCache.i.dfy"
 include "BlockCacheSystem.i.dfy"
 include "ThreeStateVersioned.s.dfy"
 include "../lib/Maps.s.dfy"
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 //
 // A BlockCacheSystem -- a crash-safe block cache running a client program and
 // attached to our disk model -- correctly provides three-state crash safety

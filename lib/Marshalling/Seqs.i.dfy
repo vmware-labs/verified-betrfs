@@ -1,11 +1,23 @@
-include "Seqs.s.dfy"
 include "Native.s.dfy"
 include "../NativeTypes.s.dfy"
 
 module Collections__Seqs_i {
-import opened Collections__Seqs_s 
 import opened NativeTypes
 import Native
+
+function last<T>(s:seq<T>):T
+    requires |s| > 0;
+{
+    s[|s|-1]
+}
+
+function all_but_last<T>(s:seq<T>):seq<T>
+    requires |s| > 0;
+    ensures  |all_but_last(s)| == |s| - 1;
+{
+    s[..|s|-1]
+}
+
 
 lemma SeqAdditionIsAssociative<T>(a:seq<T>, b:seq<T>, c:seq<T>)
     ensures a+(b+c) == (a+b)+c;

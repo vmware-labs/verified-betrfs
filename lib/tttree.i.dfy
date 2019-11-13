@@ -1,4 +1,4 @@
-include "../lib/total_order.s.dfy"
+include "../lib/total_order.i.dfy"
 include "../lib/Maps.s.dfy"
 include "../lib/mathematics.i.dfy"
 include "../lib/Marshalling/Native.s.dfy"

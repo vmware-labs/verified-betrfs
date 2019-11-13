@@ -89,6 +89,7 @@ module ImplNode {
     requires children.Some?
     requires 0 <= slot as int < |children.value|
     requires 0 <= slot as int < |buckets|
+    requires slot as int + 1 < 0x1_0000_0000_0000_0000
     requires bucket.Repr !! Repr
     modifies Repr
     ensures Inv()
@@ -99,8 +100,8 @@ module ImplNode {
       ))
     ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o);
     {
-      buckets := buckets[slot as int := bucket];
-      children := Some(children.value[slot as int := childref]);
+      buckets := SeqIndexUpdate(buckets, slot, bucket);
+      children := Some(SeqIndexUpdate(children.value, slot, childref));
 
       MutBucket.reveal_ReprSeq();
       MutBucket.reveal_ReprSeqDisjoint();
@@ -586,6 +587,7 @@ module ImplMutCache {
     requires I()[ref].children.Some?
     requires 0 <= slot as int < |I()[ref].children.value|
     requires 0 <= slot as int < |I()[ref].buckets|
+    requires slot as int + 1 < 0x1_0000_0000_0000_0000
     requires bucket.Repr !! Repr
     requires |I()| <= 0x10000
     modifies Repr

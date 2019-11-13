@@ -20,7 +20,10 @@ module ImplModelGrow {
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
   {
+    lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
+
     if (
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
@@ -29,6 +32,9 @@ module ImplModelGrow {
     ) else (
       var oldroot := s.cache[BT.G.Root()];
       var (s1, newref) := allocBookkeeping(k, s, oldroot.children);
+
+      lemmaChildrenConditionsSingleOfAllocBookkeeping(k, s, oldroot.children);
+
       match newref {
         case None => (
           s1
@@ -51,6 +57,7 @@ module ImplModelGrow {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
+  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
   ensures var s' := grow(k, s);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
@@ -58,6 +65,8 @@ module ImplModelGrow {
     reveal_grow();
 
     var s' := grow(k, s);
+
+    lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
 
     if (
       && s.frozenIndirectionTable.Some?

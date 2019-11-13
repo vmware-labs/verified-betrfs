@@ -378,8 +378,8 @@ module ImplModelSync {
       Dealloc(k, s, io, foundDeallocable.value)
     ) else (
       var s' := s
-          .(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
-          .(syncReqs := BC.syncReqs3to2(s.syncReqs))
+          .(frozenIndirectionTable := Some(IndirectionTableModel.clone(s.ephemeralIndirectionTable)))
+          .(syncReqs := ImplModelIO.SyncReqs3to2(s.syncReqs))
           .(blockAllocator := ImplModelBlockAllocator.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
     )
@@ -406,6 +406,8 @@ module ImplModelSync {
       DeallocCorrect(k, s, io, foundDeallocable.value);
       return;
     }
+
+    SyncReqs3to2Correct(s.syncReqs);
 
     reveal_ConsistentBitmap();
     assert WFVars(s');
@@ -628,32 +630,27 @@ module ImplModelSync {
 
   // == pushSync ==
 
-  function {:opaque} freeId<A>(syncReqs: map<uint64, A>) : (id: uint64)
-  ensures id != 0 ==> id !in syncReqs
+  function {:opaque} freeId<A>(syncReqs: MutableMapModel.LinearHashMap<A>) : (id: uint64)
+  requires MutableMapModel.Inv(syncReqs)
+  ensures id != 0 ==> id !in syncReqs.contents
   {
-    var s := syncReqs.Keys;
-    if (|s| == 0) then (
-      1
+    var maxId := MutableMapModel.MaxKey(syncReqs);
+    if maxId == 0xffff_ffff_ffff_ffff then (
+      0
     ) else (
-      var maxId := maximumInt(syncReqs.Keys);
-      maximumIntCorrect(syncReqs.Keys);
-      if maxId == 0xffff_ffff_ffff_ffff then (
-        0
-      ) else (
-        maxId + 1
-      )
+      maxId + 1
     )
   }
 
   function pushSync(k: Constants, s: Variables)
   : (Variables, uint64)
-  requires Inv(k,s )
+  requires Inv(k, s)
   {
     var id := freeId(s.syncReqs);
-    if id == 0 then (
-      (s, id)
+    if id == 0 || s.syncReqs.count as int >= 0x1_0000_0000_0000_0000 / 8 then (
+      (s, 0)
     ) else (
-      var s' := s.(syncReqs := s.syncReqs[id := BC.State3]);
+      var s' := s.(syncReqs := MutableMapModel.Insert(s.syncReqs, id, BC.State3));
       (s', id)
     )
   }
@@ -667,7 +664,7 @@ module ImplModelSync {
         D.NoDiskOp)
   {
     var (s', id) := pushSync(k, s);
-    if id == 0 {
+    if id == 0 || s.syncReqs.count as int >= 0x1_0000_0000_0000_0000 / 8 {
       assert noop(k, IVars(s), IVars(s'));
     } else {
       assert M.NextStep(Ik(k), IVars(s), IVars(s'), UI.PushSyncOp(id as int), D.NoDiskOp, M.Step(BBC.BlockCacheMoveStep(BC.PushSyncReqStep(id))));
@@ -681,9 +678,9 @@ module ImplModelSync {
   requires io.IOInit?
   requires Inv(k, s)
   {
-    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) then (
+    if (id in s.syncReqs.contents && s.syncReqs.contents[id] == BC.State1) then (
       && success == true
-      && s' == s.(syncReqs := MapRemove1(s.syncReqs, id))
+      && s' == s.(syncReqs := MutableMapModel.Remove(s.syncReqs, id))
       && io' == io
     ) else (
       && success == false
@@ -699,7 +696,7 @@ module ImplModelSync {
   ensures WFVars(s')
   ensures M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PopSyncOp(id as int) else UI.NoOp, diskOp(io'))
   {
-    if (id in s.syncReqs && s.syncReqs[id] == BC.State1) {
+    if (id in s.syncReqs.contents && s.syncReqs.contents[id] == BC.State1) {
       assert stepsBC(k, IVars(s), IVars(s'), UI.PopSyncOp(id as int), io', BC.PopSyncReqStep(id));
     } else {
       syncCorrect(k, s, io, s', io');

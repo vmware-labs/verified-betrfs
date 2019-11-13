@@ -221,4 +221,14 @@ module Sequences {
     else
       [v] + SeqOfLength(length - 1, v)
   }
+
+  // This is a workaround since Dafny right now doesn't support
+  // s[i := t] when i is a native type integer.
+  function method {:opaque} SeqIndexUpdate<T>(s: seq<T>, i: uint64, t: T) : seq<T>
+  requires i as int + 1 < 0x1_0000_0000_0000_0000
+  requires 0 <= i as int < |s|
+  ensures SeqIndexUpdate(s, i, t) == s[i as int := t]
+  {
+    s[..i] + [t] + s[i+1..]
+  }
 }

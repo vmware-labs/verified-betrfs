@@ -1,4 +1,4 @@
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/NativeTypes.s.dfy"
 //
 // An abstract graph that tracks dependencies.
@@ -10,7 +10,7 @@ include "../lib/NativeTypes.s.dfy"
 //
 
 // a tree uses 
-This module
+// This module
 // interfaces between things that are graphs (
 // 
 

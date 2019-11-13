@@ -40,6 +40,8 @@ module ImplFlush {
 
   requires childref in IIndirectionTable(s.ephemeralIndirectionTable).graph
 
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
+
   modifies s.Repr()
 
   ensures WellUpdated(s)
@@ -63,6 +65,9 @@ module ImplFlush {
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
+
     assert s.I().cache[parentref] == parent.I();
     assert parent.I().children == s.I().cache[parentref].children;
     s.cache.LemmaNodeReprLeRepr(parentref);
@@ -75,6 +80,10 @@ module ImplFlush {
 
     var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
+
+    ImplModelCache.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+        Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
+
     var newchildref := allocBookkeeping(k, s, newchild.children);
     if newchildref.None? {
       print "giving up; could not get parentref\n";
@@ -83,7 +92,8 @@ module ImplFlush {
 
     assert parent.I().children == s.I().cache[parentref].children;
 
-    var newparent_children := parent.children.value[slot as int := newchildref.value];
+    var newparent_children := SeqIndexUpdate(
+      parent.children.value, slot, newchildref.value);
 
     writeBookkeeping(k, s, parentref, Some(newparent_children));
 

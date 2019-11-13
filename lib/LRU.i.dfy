@@ -1,18 +1,20 @@
 include "NativeTypes.s.dfy"
-include "sequences.s.dfy"
+include "sequences.i.dfy"
 include "MutableMapImpl.i.dfy"
+include "Option.s.dfy"
 //
 // An LRU-queue.
 //
 
 module LruModel {
-	export S provides LruQueue, WF, I, Empty, Remove, Use, Pop, Next, LruUse, LruRemove, NativeTypes
+	export S provides LruQueue, WF, I, Empty, Remove, Use, Pop, Next, LruUse, NextOpt, LruRemove, NativeTypes, Options
 
 	export Internal reveals *
 	export extends S
 
   import opened NativeTypes
   import opened Sequences
+  import opened Options
 
   // Index-0: Least recently used
   // Index-1: Most recently used
@@ -58,6 +60,13 @@ module LruModel {
   ensures x in I(q)
   {
     q[0]
+  }
+
+  function {:opaque} NextOpt(q: LruQueue) : (x : Option<uint64>)
+  ensures x.Some? ==> x.value in I(q)
+  ensures x.None? ==> I(q) == {}
+  {
+    if q == [] then None else Some(q[0])
   }
 
   function Pop(q: LruQueue) : (LruQueue, uint64)
@@ -193,6 +202,7 @@ module MutableLru {
   import opened Sequences
   import opened LruModel`Internal
   import MutableMap
+  import opened Options
 
   lemma lemmaRemoveNonPresentKeyFromQueue(q: LruQueue, x: uint64)
   requires x !in q
@@ -543,5 +553,20 @@ module MutableLru {
       assert head_node != null;
       x := head_node.value;
     }
+
+    method NextOpt()
+    returns (x: Option<uint64>)
+    requires Inv()
+    ensures x == LruModel.NextOpt(Queue)
+    {
+      LruModel.reveal_NextOpt();
+      LemmaQueueCountEqInterpCount(Queue);
+      if head_node != null {
+        x := Some(head_node.value);
+      } else {
+        x := None;
+      }
+    }
+
   }
 }

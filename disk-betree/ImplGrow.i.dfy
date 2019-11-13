@@ -25,12 +25,15 @@ module ImplGrow {
   requires Inv(k, s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
   ensures s.I() == ImplModelGrow.grow(Ic(k), old(s.I()))
   {
     ImplModelGrow.reveal_grow();
+
+    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
 
     assert s.blockAllocator.Repr <= s.Repr();
 
@@ -44,6 +47,8 @@ module ImplGrow {
 
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
+
+    ImplModelCache.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
     var newref := allocBookkeeping(k, s, oldroot.children);
 
     match newref {

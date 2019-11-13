@@ -1,5 +1,5 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.s.dfy"
+include "../lib/sequences.i.dfy"
 include "../lib/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"

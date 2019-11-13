@@ -1,7 +1,9 @@
 #!/usr/bin/python
 """Builds the docs/veridoc.md documentation file."""
 
+# do `pip install toposort`
 import toposort
+
 from lib_deps import *
 
 def readVeriDoc(path):
