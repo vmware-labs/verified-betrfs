@@ -383,205 +383,26 @@ abstract module MutableBtree {
     BS.Keys.IsStrictlySortedImpliesLt(old(I(node)).pivots, 0, (boundary - 1) as int);
   }
   
-  // lemma IndexPrefixPreservesWFShape(node: Node, newnchildren: int)
-  //   requires WFShape(node)
-  //   requires node.Index?
-  //   requires 1 < node.nchildren
-  //   requires 0 < newnchildren <= node.nchildren as int
-  //   ensures WFShape(IndexPrefix(node, newnchildren))
-  //   ensures newnchildren < node.nchildren as int ==> IndexPrefix(node, newnchildren).repr < node.repr
-  // {
-  //   var pnode := IndexPrefix(node, newnchildren);
-  //   forall i: int, j: int | 0 <= i < j < pnode.nchildren as int
-  //     ensures DisjointSubtrees(pnode, i, j)
-  //   {
-  //     assert DisjointSubtrees(node, i, j);
-  //   }
-  //   SubReprFits(node, 0, newnchildren);
-  // }
-
-  // function WFShapeIndexPrefix(node: Node, newnchildren: int) : (result: Node)
-  //   requires WFShape(node)
-  //   requires node.Index?
-  //   requires 1 < node.nchildren
-  //   requires 0 < newnchildren <= node.nchildren as int
-  //   ensures WFShape(result)
-  //   reads node.repr
-  // {
-  //   IndexPrefixPreservesWFShape(node, newnchildren);
-  //   IndexPrefix(node, newnchildren)
-  // }
-  
-  // predicate {:opaque} BSWF(node: BS.Node)
-  // {
-  //   BS.WF(node)
-  // }
-
-  // lemma BSWFImpliesChildBSWF(node: BS.Node, childidx: int)
-  //   requires BSWF(node)
-  //   requires node.Index?
-  //   requires 0 <= childidx < |node.children|
-  //   ensures BSWF(node.children[childidx])
-  // {
-  //   reveal_BSWF();
-  // }
-  
-  // function {:opaque} BSSubIndex(node: BS.Node, from: int, to: int) : BS.Node
-  //   requires BSWF(node)
-  //   requires node.Index?
-  //   requires 0 <= from < to <= |node.children|
-  // {
-  //   reveal_BSWF();
-  //   BS.SubIndex(node, from, to)
-  // }
-
-  // function {:opaque} BSInterpretation(node: BS.Node) : map<Key, Value>
-  //   requires BSWF(node)
-  // {
-  //   reveal_BSWF();
-  //   BS.Interpretation(node)
-  // }
-  
-  // function {:opaque} BSInterpretationOfChild(node: BS.Node, childidx: int) : map<Key, Value>
-  //   requires BSWF(node)
-  //   requires node.Index?
-  //   requires 0 <= childidx < |node.children|
-  // {
-  //   reveal_BSWF();
-  //   BS.Interpretation(node.children[childidx])
-  // }
-
-  // function {:opaque} BSAllKeys(node: BS.Node) : set<Key>
-  // {
-  //   BS.AllKeys(node)
-  // }
-  
-  // function {:opaque} BSAllKeysOfChild(node: BS.Node, childidx: int) : set<Key>
-  //   requires node.Index?
-  //   requires 0 <= childidx < |node.children|
-  // {
-  //   BS.AllKeys(node.children[childidx])
-  // }
-
-  // predicate {:opaque} BSSplitLeaf(oldleaf: BS.Node, leftleaf: BS.Node, rightleaf: BS.Node, wit: Key, pivot: Key)
-  // {
-  //   BS.SplitLeaf(oldleaf, leftleaf, rightleaf, wit, pivot)
-  // }
-
-  // predicate {:opaque} BSSplitIndex(oldleaf: BS.Node, leftleaf: BS.Node, rightleaf: BS.Node, wit: Key, pivot: Key)
-  // {
-  //   BS.SplitIndex(oldleaf, leftleaf, rightleaf, wit, pivot)
-  // }
-
-  // predicate {:opaque} BSSplitNode(oldleaf: BS.Node, leftleaf: BS.Node, rightleaf: BS.Node, wit: Key, pivot: Key)
-  // {
-  //   BS.SplitNode(oldleaf, leftleaf, rightleaf, wit, pivot)
-  // }
-
-  // predicate {:opaque} BSSplitChildOfIndex(oldindex: BS.Node, newindex: BS.Node, childidx: int, wit: Key)
-  //   requires oldindex.Index?
-  //   requires 0 <= childidx < |oldindex.children|
-  // {
-  //   BS.SplitChildOfIndex(oldindex, newindex, childidx, wit)
-  // }
-
-  // function {:opaque} BSInsertLeaf(leaf: BS.Node, key: Key, value: Value) : (result: BS.Node)
-  //   requires leaf.Leaf?
-  //   requires BSWF(leaf)
-  // {
-  //   reveal_BSWF();
-  //   BS.InsertLeaf(leaf, key, value)
-  // }
-
-  // function {:opaque} BSChildFor(node: BS.Node, key: Key) : (childidx: int)
-  //   requires node.Index?
-  //   requires BSWF(node)
-  //   ensures 0 <= childidx < |node.children|
-  // {
-  //   reveal_BSWF();
-  //   BS.Keys.LargestLte(node.pivots, key) + 1
-  // }
-  
-  // lemma IndexPrefixIsSubIndex(node: Node, newnchildren: int)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires node.Index?
-  //   requires 1 < node.nchildren
-  //   requires 0 < newnchildren <= node.nchildren as int
-  //   ensures I(WFShapeIndexPrefix(node, newnchildren)) == BSSubIndex(I(node), 0, newnchildren)
-  // {
-  //   reveal_BSSubIndex();
-  // }
-    
-
-  
-  // method SplitIndex(node: Node) returns (left: Node, right: Node, ghost wit: Key, pivot: Key)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires node.Index?
-  //   requires Full(node)
-  //   ensures WFShape(left)
-  //   ensures WFShape(right)
-  //   ensures left.Index?
-  //   ensures right.Index?
-  //   ensures left.height == node.height
-  //   ensures right.height == node.height
-  //   ensures BSSplitIndex(I(node), I(left), I(right), wit, pivot)
-  //   ensures left.pivots == node.pivots
-  //   ensures left.children == node.children
-  //   ensures fresh(right.pivots)
-  //   ensures fresh(right.children)
-  //   ensures left.repr !! right.repr
-  //   ensures left.repr <= node.repr
-  //   ensures right.repr <= node.repr + {right.pivots, right.children}
-  // {
-  //   var boundary := node.nchildren/2;
-  //   left := IndexPrefix(node, boundary as int);
-  //   right := SubIndex(node, boundary, node.nchildren);
-  //   reveal_BSWF();
-  //   if node.children[0].Leaf? {
-  //     wit := node.children[0].keys[0];
-  //   } else {
-  //     wit :| wit in BS.AllKeys(I(node.children[0]));
-  //   }
-  //   pivot := node.pivots[boundary-1];
-    
-  //   IndexPrefixPreservesWFShape(node, boundary as int);
-  //   IndexPrefixIsSubIndex(node, boundary as int);
-  //   BS.SubIndexPreservesWF(I(node), 0, boundary as int);
-  //   BS.SubIndexPreservesWF(I(node), boundary as int, node.nchildren as int);
-  //   SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.nchildren as int);
-  //   SubReprFits(node, 0, boundary as int);
-  //   SubReprFits(node, boundary as int, node.nchildren as int);
-
-  //   reveal_BSSubIndex();
-  //   reveal_BSSplitIndex();
-
-  //   assert BS.SplitIndex(I(node), I(left), I(right), wit, pivot);
-  // }
-
-  // method SplitNode(node: Node) returns (left: Node, right: Node, ghost wit: Key, pivot: Key)
-  //   requires WFShape(node)
-  //   requires BSWF(I(node))
-  //   requires Full(node)
-  //   ensures WFShape(left)
-  //   ensures WFShape(right)
-  //   ensures left.height == node.height
-  //   ensures right.height == node.height
-  //   ensures BSSplitNode(I(node), I(left), I(right), wit, pivot)
-  //   ensures left.repr <= node.repr
-  //   ensures fresh(right.repr - node.repr)
-  //   ensures left.repr !! right.repr
-  // {
-  //   reveal_BSSplitNode();
-  //   reveal_BSSplitLeaf();
-  //   reveal_BSSplitIndex();
-  //   if node.Leaf? {
-  //     left, right, wit, pivot := SplitLeaf(node);
-  //   } else {
-  //     left, right, wit, pivot := SplitIndex(node);
-  //   }
-  // }
+  method SplitNode(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires Full(node)
+    ensures WFShape(node)
+    ensures WFShape(right)
+    ensures node.height == old(node.height)
+    ensures right.height == old(node.height)
+    ensures BS.SplitNode(old(I(node)), I(node), I(right), wit, pivot)
+    ensures node.repr <= old(node.repr)
+    ensures fresh(right.repr - old(node.repr))
+    ensures node.repr !! right.repr
+    modifies node
+  {
+    if node.contents.Leaf? {
+      right, wit, pivot := SplitLeaf(node);
+    } else {
+      right, wit, pivot := SplitIndex(node);
+    }
+  }
 
   // lemma SplitChildOfIndexPreservesDisjointReprs(oldchildren: seq<Node>, childidx: int, left: Node, right: Node)
   //   requires forall i :: 0 <= i < |oldchildren| ==> !oldchildren[i].NotInUse?
