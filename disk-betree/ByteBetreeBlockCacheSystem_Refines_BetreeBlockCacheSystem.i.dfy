@@ -1,4 +1,9 @@
 include "ByteBetreeBlockCacheSystem.i.dfy"
+//
+// Proves refinement from the Byte (disk-parse-y) Betree system to the Pivot-y
+// Betree system.  This proof is simple because all the work happens in the
+// invariant prep in ByteBetreeBlockCacheSystem.
+//
 
 module ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem {
   import A = ByteBetreeBlockCacheSystem 

@@ -6,6 +6,16 @@ include "../lib/Crypto.s.dfy"
 include "../lib/Option.s.dfy"
 include "../lib/MutableMapImpl.i.dfy"
 include "KVList.i.dfy"
+//
+// Parses bytes and returns the data structure (a Pivot-Node Sector) used by
+// the Model.
+//
+// Annoyingly, our marshaling framework doesn't enforce bijectivity.
+// So we talk only about parsing, and define marshal(X) as anything
+// that produces an output that parses to X.
+//
+// TODO(jonh): rename to ModelParsing.
+//
 
 module ImplMarshallingModel {
   import opened GenericMarshalling

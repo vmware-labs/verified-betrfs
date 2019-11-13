@@ -1,4 +1,16 @@
 include "ImplMarshallingModel.i.dfy"
+//
+// Raises ImpLMarshallingModel by converting indirection table sectors
+// up from IndirectionTableModel.IndirectionTable to
+// BlockCache.IndirectionTable (and leaving pivot node sectors alone).
+// (This gets used as part of the interpretation function in a refinement
+// proof.)
+//
+// TODO(thance): This structure is convoluted. Travis has some ideas
+// for rearranging it. In particular, we might want to make the on-disk
+// representation stand alone, so that we could later prove properties
+// about version mutationts in the file system: that you can read old disks.
+//
 
 module Marshalling {
   import IMM = ImplMarshallingModel

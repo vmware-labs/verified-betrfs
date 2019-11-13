@@ -1,4 +1,7 @@
 include "NativeTypes.s.dfy"
+//
+// Some support math to support Bitmap module.
+//
 
 module BitsetLemmas {
   import opened NativeTypes

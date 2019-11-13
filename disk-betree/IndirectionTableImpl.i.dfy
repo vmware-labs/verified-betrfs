@@ -11,6 +11,9 @@ include "BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/Bitmap.i.dfy"
 include "IndirectionTableModel.i.dfy"
+//
+// The heap-y implementation of IndirectionTableModel.
+//
 
 module IndirectionTableImpl {
   import opened Maps

@@ -5,6 +5,9 @@ include "Sets.i.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"
 include "MutableMapModel.i.dfy"
+//
+// A map implemented as a fast, mutable hash table.
+//
 
 module MutableMap {
   import opened NativeTypes

@@ -10,15 +10,15 @@ include "../lib/MutableMapModel.i.dfy"
 include "../lib/Bitmap.i.dfy"
 include "BlockAllocator.i.dfy"
 include "IndirectionTableModel.i.dfy"
-
-// This file represents immutability's last stand
+//
+// This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation
-// that can be represented with immutable datatypes
-
-// For example, it has a model of the root bucket which does not exist in BlockCache
-// It also represents indirection table as a map to pairs, rather than two maps,
-// because real, mutable implementation uses a map to pairs.
-// Eventually it will probably have refcounts.
+// that can be represented with immutable datatypes.
+//
+// For example, it has a model of the root bucket which does not exist in
+// BlockCache.  It also represents indirection table as a map to pairs, rather
+// than two maps, because real, mutable implementation uses a map to pairs.
+//
 
 module ImplModel {
   import opened Options

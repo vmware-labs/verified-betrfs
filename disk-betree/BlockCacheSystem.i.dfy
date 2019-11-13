@@ -1,5 +1,8 @@
 include "BlockCache.i.dfy"
 include "PivotBetreeSpec.i.dfy"
+//
+// Attach a BlockCache to a Disk
+//
 
 abstract module BlockCacheSystem {
   import M : BlockCache

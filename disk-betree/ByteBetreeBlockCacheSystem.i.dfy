@@ -1,6 +1,14 @@
 include "AsyncDiskModel.s.dfy"
 include "ByteBetreeBlockCache.i.dfy"
 include "BetreeBlockCacheSystem.i.dfy"
+//
+// Instantiates the ByteBetreeBlockCache program in the (trusted, byte-level)
+// disk model to get a System.
+// Proves invariants to prepare for refinement from the resulting system to the
+// BetreeBlockCacheSystem.
+//
+// TODO(jonh): fold together/regularize ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.
+//
 
 module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import M = ByteBetreeBlockCache

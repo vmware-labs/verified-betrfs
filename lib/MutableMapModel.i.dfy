@@ -5,6 +5,17 @@ include "Sets.i.dfy"
 include "Maps.s.dfy"
 include "SetBijectivity.i.dfy"
 include "Marshalling/Native.s.dfy"
+//
+// Immutable (functional) model to support MutableMapImpl.  API provides an
+// iterator interface with a deterministic order for parsing/marshaling.
+// (That's why the API is/ more than just a Dafny map.)
+//
+// TODO(jonh): Here and elsewhere, Model files seem to be both
+// API (because callers use some of the definitions as 'public' ways
+// to reason about the behavior of the modeled Impl) and internal
+// proof (the logic half of the behavior of the Impl). It would be
+// nice to cleanly separate these concerns.
+//
 
 module MutableMapModel {
   import opened NativeTypes

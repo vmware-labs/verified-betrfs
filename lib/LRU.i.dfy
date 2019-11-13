@@ -1,8 +1,9 @@
-// A LRU-queue.
-
 include "NativeTypes.s.dfy"
 include "sequences.s.dfy"
 include "MutableMapImpl.i.dfy"
+//
+// An LRU-queue.
+//
 
 module LruModel {
 	export S provides LruQueue, WF, I, Empty, Remove, Use, Pop, Next, LruUse, LruRemove, NativeTypes
@@ -186,6 +187,7 @@ module LruModel {
   }
 }
 
+// TODO(jonh): Rename/split to follow Impl convention.
 module MutableLru {
   import opened NativeTypes
   import opened Sequences

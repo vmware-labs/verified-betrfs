@@ -1,9 +1,14 @@
-// NOTE: requires /noNLarith
-
 include "NativeTypes.s.dfy"
 include "Option.s.dfy"
 include "Marshalling/Native.s.dfy"
 include "BitsetLemmas.i.dfy"
+//
+// A module that maintains a compact set of integers using a packed-uint64
+// bitmap representation.
+//
+// TODO(thance): This module has both the Model (BytemapModel) and the
+// Impl (class Bitmap) that implements it efficiently.
+//
 
 module Bitmap {
   import opened NativeTypes

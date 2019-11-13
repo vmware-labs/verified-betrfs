@@ -10,6 +10,10 @@ include "Betree.i.dfy"
 include "BetreeInv.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "PivotsLib.i.dfy"
+//
+// Lays out the abstraction function between the datatypes, setting
+// up for PivotBetree_Refines_Betree.
+//
 
 module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
@@ -66,6 +70,7 @@ module PivotBetreeSpecRefinement {
       IBufferLeaf(node)
   }
 
+  // This is the main part of the story: the refinement from pivot node to betree node.
   function INode(node: PNode) : Node
   requires (node.children.Some? ==> |node.buckets| == |node.children.value|)
   requires WFBucketList(node.buckets, node.pivotTable)
@@ -823,6 +828,7 @@ module PivotBetreeSpecRefinement {
     */
   }
 
+  // interpret the pivot-y Ops (from our little cache DSL) to their Betree (non-pivot) versions.
   function IOp(op: P.G.Op) : B.G.Op
   requires P.WFNode(op.node)
   {
@@ -1080,6 +1086,9 @@ module PivotBetreeSpecRefinement {
     PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(f);
   }
 
+  // The meaty lemma: If we mutate the nodes of a pivot-y cache according to a
+  // (generic-DSL) BetreeStep, under the INode interpretation, the same
+  // mutation happens to the imap-y cache.
   lemma {:fuel IOps,3} RefinesOps(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   requires !betreeStep.BetreeRepivot?

@@ -6,6 +6,12 @@ include "../lib/sequences.s.dfy"
 include "BlockCacheSystem.i.dfy"
 include "BetreeBlockCache.i.dfy"
 include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy"
+//
+// Instantiate the {PivotBetree, BlockCache} code in a System (model of the environment).
+// ("Bottom lettuce")
+//
+
+// TODO(jonh): Rename PivotBetreeBlockCacheSystem. [approved by thance]
 
 module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
   import opened Maps

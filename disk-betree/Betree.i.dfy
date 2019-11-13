@@ -5,10 +5,10 @@ include "MapSpec.s.dfy"
 include "Graph.i.dfy"
 include "BetreeSpec.i.dfy"
 //
-// The compound state machine that joins a BetreeSpec to an abstract
-// BlockInterface. It instantiates the BetreeSpec's op-sequences into concrete
-// state machine OpTransaction steps, and interleaves Betree operations with
-// BlockInterface garbage collection. The BlockInterface remains uninstantiated.
+// Betree lowers the "lifted" op-sequences of BetreeSpec down to concrete state machine
+// steps that advance the BetreeBlockInterface as required by BetreeSpec.
+// It also interleaves Betree operations with BlockInterface garbage collection.
+// 
 // TODO(jonh): This probably should get renamed; its place in the heirarchy
 // is confusing.
 //
@@ -26,6 +26,7 @@ module Betree {
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
   
+  // TODO(jonh): [cleanup] Not sure why these 3 are in this file.
   predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
     forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
   }
