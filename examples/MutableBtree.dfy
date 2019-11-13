@@ -404,6 +404,78 @@ abstract module MutableBtree {
     }
   }
 
+  method SplitChildOfIndex(node: Node, childidx: uint64)  returns (ghost wit: Key)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires !Full(node)
+    requires 0 <= childidx < node.contents.nchildren
+    requires Full(node.contents.children[childidx]);
+    ensures WFShape(node)
+    ensures node.contents.Index?
+    ensures fresh(node.repr - old(node.repr))
+    ensures node.height == old(node.height)
+    //ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
+    modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
+  {
+    var right, wit', pivot := SplitNode(node.contents.children[childidx]);
+    Arrays.Insert(node.contents.pivots, node.contents.nchildren-1, pivot, childidx);
+    Arrays.Insert(node.contents.children, node.contents.nchildren, right, childidx + 1);
+    node.contents := node.contents.(nchildren := node.contents.nchildren + 1);
+    node.repr := node.repr + right.repr;
+    wit := wit;
+
+    forall i | 0 <= i < node.contents.nchildren
+      ensures node.contents.children[i] != null
+      ensures node.contents.children[i] in node.repr
+      ensures node.contents.children[i].repr < node.repr
+      ensures node !in node.contents.children[i].repr
+      ensures node.contents.pivots !in node.contents.children[i].repr
+      ensures node.contents.children !in node.contents.children[i].repr
+      ensures node.contents.children[i].height < node.height
+      ensures WFShape(node.contents.children[i])
+    {
+      if i < childidx {
+        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert node.contents.children[i] == old(node.contents.children[i-1]);
+        assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));
+      }
+    }
+
+    forall i: uint64, j: uint64 | 0 <= i < j < node.contents.nchildren
+      ensures DisjointSubtrees(node.contents, i as int, j as int)
+    {
+      if                           j <  childidx       {
+        assert old(DisjointSubtrees(node.contents, i as int, j as int));
+      } else if                    j == childidx       {
+        assert old(DisjointSubtrees(node.contents, i as int, j as int));
+      } else if i < childidx     && j == childidx+1     {
+        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
+      } else if i == childidx    && j == childidx+1     {
+        assert node.contents.children[childidx+1] == right;
+      } else if i < childidx     &&      childidx+1 < j {
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
+      } else if i == childidx    &&      childidx+1 < j {
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
+      } else if i == childidx+1  &&      childidx+1 < j {
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
+      } else {
+        assert node.contents.children[i] == old(node.contents.children[i-1]);
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
+      }
+    }
+    
+    //assume BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit);
+  }
+
+
   // lemma SplitChildOfIndexPreservesDisjointReprs(oldchildren: seq<Node>, childidx: int, left: Node, right: Node)
   //   requires forall i :: 0 <= i < |oldchildren| ==> !oldchildren[i].NotInUse?
   //   requires 0 <= childidx < |oldchildren|
