@@ -8,21 +8,21 @@ export ROOT
 TARGET_DIR_PATH=$(shell realpath --relative-to $(ROOT) .)
 
 define transform-targets
-	$(patsubst %.dfy,$(BUILD_DIR)/$(TARGET_DIR_PATH)/%.okay,$1)
+	$(patsubst %.dfy,$(BUILD_DIR)/$(TARGET_DIR_PATH)/%.verified,$1)
 endef
 
 #
 # Shouldn't have to modify anything below here.
 #
 
-TARGET_OKAYS=$(call transform-targets,$(TARGET_SRCS))
-TARGET_DEPS=$(patsubst %.okay,%.deps,$(TARGET_OKAYS))
+TARGET_VERIFIEDS=$(call transform-targets,$(TARGET_SRCS))
+TARGET_DEPS=$(patsubst %.verified,%.deps,$(TARGET_VERIFIEDS))
 
-$(warning TARGET_SRCS $(TARGET_SRCS))
-$(warning TARGET_OKAYS $(TARGET_OKAYS))
-$(warning TARGET_DEPS $(TARGET_DEPS))
+#$(warning TARGET_SRCS $(TARGET_SRCS))
+#$(warning TARGET_VERIFIEDS $(TARGET_VERIFIEDS))
+#$(warning TARGET_DEPS $(TARGET_DEPS))
 
-all: $(TARGET_OKAYS)
+all: $(TARGET_VERIFIEDS)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -49,19 +49,39 @@ include $(TARGET_DEPS)
 # jonh thinks we don't want this wildcard include: it's unsound in a surprising way.
 # The single include above is clumsy because it requires deps-for-dafny to emit
 # transitive closure of deps, but at least we know what it does and when it does it.
-rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
-include $(call rwildcard,$(BUILD_DIR)/,*.deps)
+#rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+#include $(call rwildcard,$(BUILD_DIR)/,*.deps)
 
 # This was cool until someone tried to run it on MacOS.
 #TIME=time -f "real %es cpu %Us"
 TIME=time
 
-# To build without verification, use: NOVERIFY=/dafnyVerify:0
-# This will taint your build directory with bogusly-.okay files.
-$(BUILD_DIR)/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
+$(BUILD_DIR)/%.s.syntax: $(ROOT)%.s.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<
 	touch $@
 
-$(BUILD_DIR)/%.i.okay: $(ROOT)%.i.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
+$(BUILD_DIR)/%.i.syntax: $(ROOT)%.i.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<
 	touch $@
+
+$(BUILD_DIR)/%.s.verified: $(ROOT)%.s.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 $<
+	touch $@
+
+$(BUILD_DIR)/%.i.verified: $(ROOT)%.i.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 $<
+	touch $@
+
+# In principle, building code should depend on .verified! But we want
+# to play with perf with not-entirely-verifying trees.
+$(BUILD_DIR)/%.i.cs: $(ROOT)%.i.dfy | $$(@D)/.
+	$(eval TMPNAME=$(patsubst %.i.cs,%-i.cs,$@))	 #eval trick to assign make var inside rule
+	# Dafny irritatingly removes the '.i' presuffix.
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) $<
+	mv $(TMPNAME) $@
+
+$(BUILD_DIR)/%.i.cpp: $(ROOT)%.i.dfy | $$(@D)/.
+	$(eval TMPNAME=$(patsubst %.i.cpp,%-i.cpp,$@))	 #eval trick to assign make var inside rule
+	# Dafny irritatingly removes the '.i' presuffix.
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
+	mv $(TMPNAME) $@

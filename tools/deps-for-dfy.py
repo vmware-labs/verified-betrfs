@@ -41,8 +41,8 @@ def target(iref, suffix):
     result = "$(BUILD_DIR)/%s" % targetRootRelPath
     return result
 
-def okay(iref):
-    return target(iref, ".okay")
+def verified(iref):
+    return target(iref, ".verified")
 
 def deps(iref):
     return target(iref, ".deps")
@@ -55,7 +55,7 @@ def main():
     output += "# deps from %s\n" % target
     allDeps = depsFromDfySource(target)
     for dep in allDeps[::-1]:
-        output += "%s: %s\n" % (okay(target), okay(dep))
+        output += "%s: %s\n" % (verified(target), verified(dep))
         output += "%s: %s\n\n" % (deps(target), deps(dep))
 
     outfp = open(outputFilename, "w")
