@@ -341,64 +341,48 @@ abstract module MutableBtree {
     assert I(subnode) == BS.SubIndex(I(node), from as int, to as int);
   }
 
-  // method SplitIndex(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
-  //   requires WFShape(node)
-  //   requires BS.WF(I(node))
-  //   requires node.contents.Index?
-  //   requires Full(node)
-  //   ensures WFShape(node)
-  //   ensures WFShape(right)
-  //   ensures BS.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
-  //   ensures node.repr <= old(node.repr)
-  //   ensures node.repr !! right.repr
-  //   ensures fresh(right.repr - old(node.repr))
-  //   ensures node.height == old(node.height) == right.height
-  //   modifies node
-  // {
-  //   var rightpivots := new Key[MaxChildren()-1](_ => DefaultKey());
-  //   var rightchildren := new Node?[MaxChildren()](_ => null);
-  //   var boundary := node.contents.nchildren / 2;
-  //   Arrays.Memcpy(rightpivots, 0, node.contents.pivots[boundary..node.contents.nchildren-1]); // FIXME: remove conversion to seq
-  //   Arrays.Memcpy(rightchildren, 0, node.contents.children[boundary..node.contents.nchildren]); // FIXME: remove conversion to seq
+  lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
+    requires WFShape(node)
+    requires node.contents.Index?
+    requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
+    ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
+  {
+    var subrepr1 := SubRepr(node, from1, to1);
+    var subrepr2 := SubRepr(node, from2, to2);
 
-  //   right := new Node;
-  //   right.contents := Index(node.contents.nchildren - boundary, rightpivots, rightchildren);
-  //   right.repr := {right, rightpivots, rightchildren} + SubRepr(node, boundary as int, node.contents.nchildren as int);
-  //   right.height := node.height;
-
-  //   SubReprFits(node, 0, boundary as int);
-      
-  //   node.repr := {node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, boundary as int);
-  //   node.contents := node.contents.(nchildren := boundary);
-
-  //   forall i, j | 0 <= i < j < node.contents.nchildren as int
-  //     ensures DisjointSubtrees(node.contents, i, j)
-  //   {
-  //     assert DisjointSubtrees(old(node.contents), i, j);
-  //   }
-  //   assert WFShape(node);
-  //   assume false;
-  // }
-  
-  // lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
-  //   requires WFShape(node)
-  //   requires node.contents.Index?
-  //   requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
-  //   ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
-  // {
-  //   var subrepr1 := SubRepr(node, from1, to1);
-  //   var subrepr2 := SubRepr(node, from2, to2);
-
-  //   if o :| o in subrepr1 && o in subrepr2 {
-  //     reveal_SubRepr();
-  //     var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && ObjectIsInSubtree(node, o, i1);
-  //     var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && ObjectIsInSubtree(node, o, i2);
-  //     assert i1 < i2;
-  //     assert DisjointSubtrees(node.contents, i1, i2);
-  //   }
-  // }
+    if o :| o in subrepr1 && o in subrepr2 {
+      var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && ObjectIsInSubtree(node, o, i1);
+      var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && ObjectIsInSubtree(node, o, i2);
+      assert i1 < i2;
+      assert DisjointSubtrees(node.contents, i1, i2);
+    }
+  }
   
 
+  method SplitIndex(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires Full(node)
+    ensures WFShape(node)
+    ensures WFShape(right)
+    ensures BS.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
+    ensures node.repr <= old(node.repr)
+    ensures node.repr !! right.repr
+    ensures fresh(right.repr - old(node.repr))
+    ensures node.height == old(node.height) == right.height
+    modifies node
+  {
+    var boundary: uint64 := node.contents.nchildren / 2;
+    SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.contents.nchildren as int);
+    right := SubIndex(node, boundary, node.contents.nchildren);
+    pivot := node.contents.pivots[boundary-1];
+    wit := node.contents.pivots[0];
+    IndexPrefix(node, boundary);
+
+    BS.Keys.IsStrictlySortedImpliesLt(old(I(node)).pivots, 0, (boundary - 1) as int);
+  }
+  
   // lemma IndexPrefixPreservesWFShape(node: Node, newnchildren: int)
   //   requires WFShape(node)
   //   requires node.Index?

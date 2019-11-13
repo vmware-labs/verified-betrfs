@@ -204,7 +204,8 @@ abstract module BtreeSpec {
     && 0 < |leftindex.children| < |oldindex.children|-1
     && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
     && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
-    && wit in AllKeys(oldindex.children[0])
+    && Keys.lt(wit, pivot)
+    && wit in AllKeys(oldindex)
     && pivot == oldindex.pivots[|leftindex.pivots|]
   }
 
