@@ -22,7 +22,7 @@ cd ..
 git clone https://github.com/secure-foundations/dafny.git
 cd dafny
 git fetch
-git checkout veri-master
+git checkout cpp
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
 

@@ -15,4 +15,6 @@ $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe:$(BUILD_DIR)/disk-betree/Bundle.i.c
 exe: $(BUILD_DIR)/disk-betree/Bundle.i.exe
 exe-roslyn: $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe
 
+allcpp: $(BUILD_DIR)/disk-betree/Bundle.i.cpp
+
 .PHONY: exe exe-roslyn
