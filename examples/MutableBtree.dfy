@@ -154,9 +154,11 @@ abstract module MutableBtree {
     requires Full(node)
     ensures WFShape(node)
     ensures WFShape(right)
-    ensures BS.SplitLeaf(old(I(node)), I(node), I(right), wit, pivot)
     ensures node.repr == old(node.repr)
     ensures fresh(right.repr)
+    ensures !Full(node)
+    ensures !Full(right)
+    ensures BS.SplitLeaf(old(I(node)), I(node), I(right), wit, pivot)
     modifies node
   {
     var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
@@ -366,11 +368,13 @@ abstract module MutableBtree {
     requires Full(node)
     ensures WFShape(node)
     ensures WFShape(right)
-    ensures BS.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
     ensures node.repr <= old(node.repr)
     ensures node.repr !! right.repr
     ensures fresh(right.repr - old(node.repr))
     ensures node.height == old(node.height) == right.height
+    ensures !Full(node)
+    ensures !Full(right)
+    ensures BS.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
     modifies node
   {
     var boundary: uint64 := node.contents.nchildren / 2;
@@ -391,10 +395,12 @@ abstract module MutableBtree {
     ensures WFShape(right)
     ensures node.height == old(node.height)
     ensures right.height == old(node.height)
-    ensures BS.SplitNode(old(I(node)), I(node), I(right), wit, pivot)
     ensures node.repr <= old(node.repr)
     ensures fresh(right.repr - old(node.repr))
     ensures node.repr !! right.repr
+    ensures !Full(node)
+    ensures !Full(right)
+    ensures BS.SplitNode(old(I(node)), I(node), I(right), wit, pivot)
     modifies node
   {
     if node.contents.Leaf? {
@@ -416,6 +422,8 @@ abstract module MutableBtree {
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
     ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
+    ensures !Full(node.contents.children[childidx])
+    ensures !Full(node.contents.children[childidx+1])
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
     ghost var oldnchildren := node.contents.nchildren;
@@ -482,6 +490,8 @@ abstract module MutableBtree {
 
     ghost var inode := I(node);
 
+    assert inode.pivots == Seq.insert(ioldnode.pivots, pivot, childidx as int);
+
     ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
     forall i | 0 <= i < |inode.children|
       ensures inode.children[i] == target[i]
@@ -499,8 +509,6 @@ abstract module MutableBtree {
       }
     }
     assert inode.children == Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
-    
-    assert inode.pivots == Seq.insert(ioldnode.pivots, pivot, childidx as int);
   }
 
   method InsertLeaf(node: Node, key: Key, value: Value)
@@ -520,6 +528,42 @@ abstract module MutableBtree {
       Arrays.Insert(node.contents.keys, node.contents.nkeys, key, posplus1);
       Arrays.Insert(node.contents.values, node.contents.nkeys, value, posplus1);
       node.contents := node.contents.(nkeys := node.contents.nkeys + 1);
+    }
+  }
+
+  method InsertIndex(node: Node, key: Key, value: Value)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires !Full(node)
+    ensures WFShape(node)
+    ensures fresh(node.repr - old(node.repr))
+    modifies node, node.repr
+    decreases node.height, 0
+  {
+    var childidx: uint64 := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
+    if Full(node.contents.children[childidx]) {
+      ghost var wit := SplitChildOfIndex(node, childidx);
+      if BS.Keys.lte(node.contents.pivots[childidx], key) {
+        childidx := childidx + 1;
+      }
+    } 
+    InsertNode(node.contents.children[childidx], key, value);
+  }
+
+  method InsertNode(node: Node, key: Key, value: Value)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires !Full(node)
+    ensures WFShape(node)
+    ensures fresh(node.repr - old(node.repr))
+    modifies node, node.repr
+    decreases node.height, 1
+  {
+    if node.contents.Leaf? {
+      InsertLeaf(node, key, value);
+    } else {
+      InsertIndex(node, key, value);
     }
   }
 
