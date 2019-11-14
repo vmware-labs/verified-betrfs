@@ -581,6 +581,39 @@ abstract module MutableBtree {
     }
   }
 
+  method InsertIndexSelectAndPrepareChild(node: Node, key: Key) returns (childidx: uint64)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires !Full(node)
+    ensures WFShape(node)
+    ensures fresh(node.repr - old(node.repr))
+    ensures node.height == old(node.height)
+    ensures BS.WF(I(node))
+    ensures node.contents.Index?
+    ensures childidx as int == BS.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
+    ensures !Full(node.contents.children[childidx])
+    modifies node, node.repr
+  {
+    childidx := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
+    if Full(node.contents.children[childidx]) {
+      ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
+      ghost var wit := SplitChildOfIndex(node, childidx);
+      ghost var newpivots := node.contents.pivots[..node.contents.nchildren-1];
+      BS.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
+
+      if BS.Keys.lte(node.contents.pivots[childidx], key) {
+        childidx := childidx + 1;
+        forall i | childidx as int - 1 < i < |newpivots|
+          ensures BS.Keys.lt(key, newpivots[i])
+        {
+          assert newpivots[i] == oldpivots[i-1];
+        }
+      }
+      BS.Keys.LargestLteIsUnique(node.contents.pivots[..node.contents.nchildren-1], key, childidx as int - 1);
+    }
+  }
+  
   method InsertIndex(node: Node, key: Key, value: Value)
     requires WFShape(node)
     requires BS.WF(I(node))
@@ -590,6 +623,10 @@ abstract module MutableBtree {
     ensures node.height == old(node.height)
     modifies node, node.repr
     decreases node.height, 1
+  {
+    var childidx := InsertIndexSelectAndPrepareChild(node, key);
+    InsertIndexChildNotFull(node, childidx, key, value);
+  }
   
   method InsertNode(node: Node, key: Key, value: Value)
     requires WFShape(node)
