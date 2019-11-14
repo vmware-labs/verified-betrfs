@@ -13,16 +13,16 @@ mono ./nuget.exe restore Source/Boogie.sln
 msbuild /p:Configuration=Release Source/Boogie.sln
 cd ..
 
-#git clone https://github.com/splatlab/dafny.git 
-#cd dafny
-#git fetch
-#git checkout veri-master
-
-# Use Bryan's cpp-enabled Dafny:
-git clone https://github.com/secure-foundations/dafny.git
+git clone https://github.com/splatlab/dafny.git 
 cd dafny
 git fetch
-git checkout cpp
+git checkout veri-master
+
+# Use Bryan's cpp-enabled Dafny:
+#git clone https://github.com/secure-foundations/dafny.git
+#cd dafny
+#git fetch
+#git checkout cpp
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
 
