@@ -5,6 +5,7 @@ include "../disk-betree/UI.s.dfy"
 abstract module Total_Order {
   import Seq = Sequences
   import opened NativeTypes
+  import Native
     
 	type Element(!new,==)
 
@@ -632,36 +633,6 @@ module Lexicographic_Byte_Order refines Total_Order {
 
   method cmp(a: Element, b: Element) returns (c: int32)
   {
-    reveal_seq_lte();
-    Base_Order.reveal_lte();
-    Base_Order.reveal_ltedef();
-
-    var i: uint64 := 0;
-    var m: uint64 := if |a| as uint64 < |b| as uint64 then |a| as uint64 else |b| as uint64;
-    while i < m
-    invariant i as int <= |a|
-    invariant i as int <= |b|
-    invariant lt(a[i..], b[i..]) ==> lt(a, b)
-    invariant lt(b[i..], a[i..]) ==> lt(b, a)
-    invariant a[..i] == b[..i]
-    {
-      if (a[i] < b[i]) {
-        return -1;
-      } else if (a[i] == b[i]) {
-        i := i + 1;
-      } else {
-        return 1;
-      }
-    }
-
-    if i == |a| as uint64 {
-      if i == |b| as uint64 {
-        return 0;
-      } else {
-        return -1;
-      }
-    } else {
-      return 1;
-    } 
+    c := Native.Arrays.ByteSeqCmpByteSeq(a, b);
   }
 }

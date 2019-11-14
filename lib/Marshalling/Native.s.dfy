@@ -26,7 +26,7 @@ module {:extern} Native {
           ensures  forall i :: (srcIndex as int) <= i < (srcIndex as int) + (len as int) ==>
                       src[i] == dst[i - (srcIndex as int) + (dstIndex as int)];
 
-      /*static predicate lt(a: seq<byte>, b: seq<byte>)
+      static predicate lt(a: seq<byte>, b: seq<byte>)
       {
         if |a| == 0 && |b| == 0 then false
         else if |a| == 0 then true
@@ -36,17 +36,11 @@ module {:extern} Native {
         else lt(a[1..], b[1..])
       }
 
-      static method{:axiom} ByteSeqCmpByteSeq(s1: seq<byte>, i1: int32, l1: int32, s2: seq<byte>, i2: int32, l2: int32)
+      static method{:axiom} ByteSeqCmpByteSeq(s1: seq<byte>, s2: seq<byte>)
           returns (c : int32)
-          requires 0 <= i1
-          requires 0 <= i2
-          requires 0 <= l1
-          requires 0 <= l2
-          requires i1 as int + l1 as int <= |s1|
-          requires i2 as int + l2 as int <= |s2|
-          ensures c < 0 ==> lt(s1[i1 .. i1 + l1], s2[i2 .. i2 + l2])
-          ensures c > 0 ==> lt(s2[i2 .. i2 + l2], s1[i1 .. i1 + l1])
-          ensures c == 0 ==> s1[i1 .. i1 + l1] == s2[i2 .. i2 + l2]*/
+          ensures c < 0 ==> lt(s1, s2)
+          ensures c > 0 ==> lt(s2, s1)
+          ensures c == 0 ==> s1 == s2
 
   }
 
