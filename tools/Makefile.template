@@ -40,11 +40,15 @@ $(BUILD_DIR)/.:
 $(BUILD_DIR)%/.:
 	mkdir -p $@
 
-.PRECIOUS: $(BUILD_DIR)/%.deps
-$(BUILD_DIR)/%.deps: $(ROOT)%.dfy | $$(@D)/.
-	@ $(ROOT)tools/deps-for-dfy.py $< $@
+.PRECIOUS: $(BUILD_DIR)/%/dir.deps
+$(warning BUILD_DIR $(BUILD_DIR))
+$(BUILD_DIR)/%/dir.deps: $(ROOT)% | $$(@D)/.
+	$(ROOT)tools/deps-for-dfy.py $<
 
-include $(TARGET_DEPS)
+#include $(TARGET_DEPS)
+DIR_DEPS=$(BUILD_DIR)/$(TARGET_DIR_PATH)/dir.deps
+$(warning DIR_DEPS $(DIR_DEPS))
+include $(DIR_DEPS)
 
 # jonh thinks we don't want this wildcard include: it's unsound in a surprising way.
 # The single include above is clumsy because it requires deps-for-dafny to emit
@@ -64,11 +68,7 @@ $(BUILD_DIR)/%.i.syntax: $(ROOT)%.i.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<
 	touch $@
 
-$(BUILD_DIR)/%.s.verified: $(ROOT)%.s.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 $<
-	touch $@
-
-$(BUILD_DIR)/%.i.verified: $(ROOT)%.i.dfy | $$(@D)/.
+$(BUILD_DIR)/%.verified: $(ROOT)%.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 $<
 	touch $@
 
@@ -80,8 +80,8 @@ $(BUILD_DIR)/%.i.cs: $(ROOT)%.i.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) $<
 	mv $(TMPNAME) $@
 
-$(BUILD_DIR)/%.i.cpp: $(ROOT)%.i.dfy | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.i.cpp,%-i.cpp,$@))	 #eval trick to assign make var inside rule
+$(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
+	$(eval TMPNAME=$(patsubst %.cpp,%-i.cpp,$@))	 #eval trick to assign make var inside rule
 	# Dafny irritatingly removes the '.i' presuffix.
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
 	mv $(TMPNAME) $@

@@ -1,12 +1,12 @@
-include "../NativeTypes.s.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/total_order.i.dfy"
+include "../Math/bases.i.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
 include "Native.s.dfy"
-include "../Math/bases.i.dfy"
-include "../total_order.i.dfy"
-include "../../disk-betree/Message.i.dfy"
+// include "../../disk-betree/Message.i.dfy"  // TODO fixme: Can't have loop in directory includes.
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s

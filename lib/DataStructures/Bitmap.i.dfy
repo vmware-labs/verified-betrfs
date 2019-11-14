@@ -1,7 +1,7 @@
-include "NativeTypes.s.dfy"
-include "Option.s.dfy"
-include "Marshalling/Native.s.dfy"
-include "BitsetLemmas.i.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/Option.s.dfy"
+include "../Base/BitsetLemmas.i.dfy"
+include "../Marshalling/Native.s.dfy"
 //
 // A module that maintains a compact set of integers using a packed-uint64
 // bitmap representation.

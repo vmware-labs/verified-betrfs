@@ -1,5 +1,5 @@
 include "Native.s.dfy"
-include "../NativeTypes.s.dfy"
+include "../Base/NativeTypes.s.dfy"
 
 module Collections__Seqs_i {
 import opened NativeTypes

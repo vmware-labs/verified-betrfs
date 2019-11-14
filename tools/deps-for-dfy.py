@@ -3,6 +3,7 @@
 import os
 import re
 import sys
+import glob
 from lib_deps import *
 
 class InvalidDafnyIncludePath(Exception):
@@ -36,7 +37,7 @@ class IncompatibleIncludeTrustedness(Exception):
     def __str__(self):
         return self.msg()
 
-def target(iref, suffix):
+def targetName(iref, suffix):
     targetRootRelPath = iref.normPath.replace(".dfy", suffix)
     result = "$(BUILD_DIR)/%s" % targetRootRelPath
     return result
@@ -47,19 +48,36 @@ def verified(iref):
 def deps(iref):
     return target(iref, ".deps")
 
-def main():
-    target = IncludeReference(None, 0, sys.argv[1])
-    outputFilename = sys.argv[2]
+BUILD_DIR = "build" # The build dir; make clean = rm -rf $BUILD_DIR
+DIR_DEPS = "dir.deps"   # The per-directory dependencies file
 
-    output = ""
-    output += "# deps from %s\n" % target
-    allDeps = depsFromDfySource(target)
-    for dep in allDeps[::-1]:
-        output += "%s: %s\n" % (verified(target), verified(dep))
-        output += "%s: %s\n\n" % (deps(target), deps(dep))
+def main():
+    directory = IncludeReference(None, 0, sys.argv[1])
+    dfyList = glob.glob(os.path.join(directory.absPath, "*.dfy"))
+    targets = [IncludeReference(directory, i+1, dfyList[i]) for i in range(len(dfyList))]
+
+    outputFilename = os.path.join(os.path.join(os.path.join(
+        ROOT_PATH, BUILD_DIR), directory.normPath), DIR_DEPS)
+
+    dirDeps = set()    # accumulate cross-directory refs
+    fileDeps = []   # accumulate inter-file refs
+    for target in targets:
+        fileDeps.append("")
+        fileDeps.append("# deps from %s" % target)
+        allDeps = depsFromDfySource(target)
+        for dep in allDeps[::-1]:
+            for targetType in (".deps", ".synchk", ".verified", ".cpp"):
+                fileDeps.append("%s: %s" % (targetName(target, targetType), targetName(dep, targetType)))
+                dirDeps.add(os.path.dirname(dep.normPath))
+    dirDeps.remove(directory.normPath)
 
     outfp = open(outputFilename, "w")
-    outfp.write(output)
+    dirDeps = list(dirDeps)
+    dirDeps.sort()
+    for dirDep in dirDeps:
+        outfp.write("include %s\n" % os.path.join("$(BUILD_DIR)", os.path.join(dirDep, DIR_DEPS)))
+    for fileDep in fileDeps:
+        outfp.write(fileDep + "\n")
     outfp.close()
 
 if (__name__=="__main__"):

@@ -1,5 +1,5 @@
-include "../lib/Maps.s.dfy"
-include "../lib/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
 include "MapSpec.s.dfy"
 include "Betree.i.dfy"
 //

@@ -4,8 +4,8 @@ include "ImplDealloc.i.dfy"
 include "ImplModelSync.i.dfy"
 include "ImplModelCache.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/Sets.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/Sets.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

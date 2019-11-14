@@ -1,6 +1,6 @@
 include "sequences.i.dfy"
 include "NativeTypes.s.dfy"
-include "../disk-betree/UI.s.dfy"
+// include "../disk-betree/UI.s.dfy"    // TODO(jonh): can't have loop in dir deps
   
 abstract module Total_Order {
   import Seq = Sequences

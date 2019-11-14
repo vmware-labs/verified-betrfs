@@ -1,9 +1,9 @@
-include "NativeTypes.s.dfy"
-include "Option.s.dfy"
-include "sequences.i.dfy"
-include "Sets.i.dfy"
-include "SetBijectivity.i.dfy"
-include "Marshalling/Native.s.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/Option.s.dfy"
+include "../Base/sequences.i.dfy"
+include "../Base/Sets.i.dfy"
+include "../Base/SetBijectivity.i.dfy"
+include "../Marshalling/Native.s.dfy"
 include "MutableMapModel.i.dfy"
 //
 // A map implemented as a fast, mutable hash table.

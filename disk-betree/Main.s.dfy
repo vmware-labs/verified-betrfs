@@ -1,7 +1,7 @@
 include "MapSpec.s.dfy"
 include "ThreeStateVersionedMap.s.dfy"
 include "AsyncDiskModel.s.dfy"
-include "../lib/NativeTypes.s.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
 include "MainDiskIOHandler.s.dfy"
 
 module DiskTypes {

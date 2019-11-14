@@ -1,5 +1,5 @@
 include "MapSpec.s.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/Maps.s.dfy"
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
 // is some higher-level Node datatype. A later refinement step shows how to marshall and align

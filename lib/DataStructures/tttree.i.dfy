@@ -1,7 +1,7 @@
-include "../lib/total_order.i.dfy"
-include "../lib/Maps.s.dfy"
-include "../lib/mathematics.i.dfy"
-include "../lib/Marshalling/Native.s.dfy"
+include "../Base/total_order.i.dfy"
+include "../Base/Maps.s.dfy"
+include "../Base/mathematics.i.dfy"
+include "../Marshalling/Native.s.dfy"
 
 module TwoThreeTree {
     import Keyspace = Lexicographic_Byte_Order

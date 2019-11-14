@@ -1,8 +1,8 @@
 include "ImplModel.i.dfy"
 include "ImplModelIO.i.dfy"
 include "ImplModelDealloc.i.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/Sets.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/Sets.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

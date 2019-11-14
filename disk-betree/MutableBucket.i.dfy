@@ -1,4 +1,4 @@
-include "../lib/tttree.i.dfy"
+include "../lib/DataStructures/tttree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "Bounds.i.dfy"

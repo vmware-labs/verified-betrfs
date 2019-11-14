@@ -2,7 +2,7 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "ImplState.i.dfy"
 include "ImplModel.i.dfy"
 include "MutableBucket.i.dfy"
-include "../lib/Option.s.dfy"
+include "../lib/Base/Option.s.dfy"
 
 include "Marshalling.i.dfy"
 include "ImplMarshallingModel.i.dfy"

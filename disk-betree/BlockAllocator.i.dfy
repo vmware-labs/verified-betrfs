@@ -1,4 +1,4 @@
-include "../lib/Bitmap.i.dfy"
+include "../lib/DataStructures/Bitmap.i.dfy"
 include "Bounds.i.dfy"
 //
 // A BlockAllocator tracks which blocks are allocated, to safely allocate

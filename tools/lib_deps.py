@@ -88,7 +88,7 @@ class IncludeNotFound(Exception):
 
 def fileFromIncludeLine(line):
     if not line.startswith("//"):
-        mo = re.search('include "(.*)"', line)
+        mo = re.search('^include "(.*)"', line)
         if mo==None:
             return mo
         return mo.groups(1)[0]

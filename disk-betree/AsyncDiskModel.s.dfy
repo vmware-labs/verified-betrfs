@@ -1,6 +1,6 @@
 include "MapSpec.s.dfy"
-include "../lib/Maps.s.dfy"
-include "../lib/Crypto.s.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Crypto.s.dfy"
 //
 // An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
 //

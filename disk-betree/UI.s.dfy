@@ -1,4 +1,4 @@
-include "../lib/NativeTypes.s.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
 
 module {:extern} KeyType {
   import NativeTypes

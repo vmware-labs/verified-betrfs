@@ -1,6 +1,6 @@
 include "Betree.i.dfy"
-include "../lib/sequences.i.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
 include "Graph.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "PivotBetreeSpec.i.dfy"

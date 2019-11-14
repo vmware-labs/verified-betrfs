@@ -1,10 +1,10 @@
-include "NativeTypes.s.dfy"
-include "Option.s.dfy"
-include "sequences.i.dfy"
-include "Sets.i.dfy"
-include "Maps.s.dfy"
-include "SetBijectivity.i.dfy"
-include "Marshalling/Native.s.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/Option.s.dfy"
+include "../Base/sequences.i.dfy"
+include "../Base/Sets.i.dfy"
+include "../Base/Maps.s.dfy"
+include "../Base/SetBijectivity.i.dfy"
+include "../Marshalling/Native.s.dfy"
 //
 // Immutable (functional) model to support MutableMapImpl.  API provides an
 // iterator interface with a deterministic order for parsing/marshaling.

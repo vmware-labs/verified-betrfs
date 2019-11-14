@@ -1,6 +1,6 @@
 include "MapSpec.s.dfy"
 include "UIStateMachine.s.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/Maps.s.dfy"
 //
 // Our definition of crash-safety.
 //
