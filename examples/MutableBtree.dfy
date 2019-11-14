@@ -415,15 +415,21 @@ abstract module MutableBtree {
     ensures node.contents.Index?
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    //ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
+    ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
+    ghost var oldnchildren := node.contents.nchildren;
+    ghost var ioldnode := I(node);
+    ghost var ichild := I(node.contents.children[childidx]);
     var right, wit', pivot := SplitNode(node.contents.children[childidx]);
+    ghost var ileft := I(node.contents.children[childidx]);
+    ghost var iright := I(right);
+
     Arrays.Insert(node.contents.pivots, node.contents.nchildren-1, pivot, childidx);
     Arrays.Insert(node.contents.children, node.contents.nchildren, right, childidx + 1);
     node.contents := node.contents.(nchildren := node.contents.nchildren + 1);
     node.repr := node.repr + right.repr;
-    wit := wit;
+    wit := wit';
 
     forall i | 0 <= i < node.contents.nchildren
       ensures node.contents.children[i] != null
@@ -453,9 +459,11 @@ abstract module MutableBtree {
       } else if                    j == childidx       {
         assert old(DisjointSubtrees(node.contents, i as int, j as int));
       } else if i < childidx     && j == childidx+1     {
-        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
+        assert old(DisjointSubtrees(node.contents, i as int, j as int - 1));
       } else if i == childidx    && j == childidx+1     {
         assert node.contents.children[childidx+1] == right;
+        assert node.contents.children[childidx].repr !! right.repr;
+        assert DisjointSubtrees(node.contents, childidx as int, (childidx + 1) as int);
       } else if i < childidx     &&      childidx+1 < j {
         assert node.contents.children[j] == old(node.contents.children[j-1]);
         assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
@@ -471,8 +479,28 @@ abstract module MutableBtree {
         assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
       }
     }
+
+    ghost var inode := I(node);
+
+    ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
+    forall i | 0 <= i < |inode.children|
+      ensures inode.children[i] == target[i]
+    {
+      if i < childidx as int {
+        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
+        assert inode.children[i] == ioldnode.children[i] == target[i];
+      } else if i == childidx as int {
+        assert inode.children[i] == ileft == target[i];
+      } else if i == (childidx + 1) as int {
+        assert inode.children[i] == iright == target[i];
+      } else {
+        assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));      
+        assert inode.children[i] == ioldnode.children[i-1] == target[i];
+      }
+    }
+    assert inode.children == Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
     
-    //assume BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit);
+    assert inode.pivots == Seq.insert(ioldnode.pivots, pivot, childidx as int);
   }
 
 
