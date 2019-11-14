@@ -616,6 +616,7 @@ abstract module MutableBtree {
   
   method InsertIndex(node: Node, key: Key, value: Value)
     requires WFShape(node)
+    requires node.contents.Index?
     requires BS.WF(I(node))
     requires !Full(node)
     ensures WFShape(node)
