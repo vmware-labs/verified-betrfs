@@ -29,7 +29,7 @@ echo "flags: $@"
 COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe $@ &
 PID=$!
 read -n 1 -s -r -p "Press any key to start recording with perf (preferably before veribetrfs exits)"
-perf record -p $PID -g -F1000 &
+perf record -p $PID -g -F$frequency &
 PERF_PID=$!
 sleep 1
 read -n 1 -s -r -p "Press any key to stop recording"
