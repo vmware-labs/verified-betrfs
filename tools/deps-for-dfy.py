@@ -42,9 +42,6 @@ def targetName(iref, suffix):
     result = "$(BUILD_DIR)/%s" % targetRootRelPath
     return result
 
-def verified(iref):
-    return target(iref, ".verified")
-
 def deps(iref):
     return target(iref, ".deps")
 
@@ -66,11 +63,14 @@ def main():
         fileDeps.append("# deps from %s" % target)
         allDeps = depsFromDfySource(target)
         for dep in allDeps[::-1]:
-            for targetType in (".synchk", ".verified", ".cpp"):
+            for targetType in (".synchk", ".verchk", ".cs", ".cpp"):
                 fileDeps.append("%s: %s" % (targetName(target, targetType), targetName(dep, targetType)))
-                dirDeps.add(os.path.dirname(dep.normPath))
+            dirDeps.add(os.path.dirname(dep.normPath))
+            fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verchk")))
+            fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verified")))
         fileDeps.append("%s: %s" % (outputFilename, target.absPath))
-    dirDeps.remove(directory.normPath)
+    if (directory.normPath in dirDeps):
+        dirDeps.remove(directory.normPath)
 
     outfp = open(outputFilename, "w")
     dirDeps = list(dirDeps)

@@ -48,6 +48,9 @@ $(BUILD_DIR)/%/dir.deps: $(ROOT)% | $$(@D)/.
 #include $(TARGET_DEPS)
 DIR_DEPS=$(BUILD_DIR)/$(TARGET_DIR_PATH)/dir.deps
 $(warning DIR_DEPS $(DIR_DEPS))
+# TODO bug: deps are only checked for the directory we started make in,
+# but you can make targets in any directory using their full paths. Ugh
+# I hate make.
 include $(DIR_DEPS)
 
 # jonh thinks we don't want this wildcard include: it's unsound in a surprising way.
@@ -60,14 +63,21 @@ include $(DIR_DEPS)
 #TIME=time -f "real %es cpu %Us"
 TIME=time
 
+# .synchk: Dafny syntax check
 $(BUILD_DIR)/%.synchk: $(ROOT)%.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<
-	touch $@
+	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< | tee $@
 
-$(BUILD_DIR)/%.verified: $(ROOT)%.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 $<
-	touch $@
+# .verchk: Dafny file-local verification
+$(BUILD_DIR)/%.verchk: $(ROOT)%.dfy | $$(@D)/.
+	$(TIME) unbuffer $(DAFNY_CMD) /compile:0 $< | tee $@
 
+# .verified: Aggregate result of verification for this file and
+# its dependencies.
+.PRECIOUS: $(BUILD_DIR)/%.verchk
+$(BUILD_DIR)/%.verified: $(BUILD_DIR)/%.verchk | $$(@D)/.
+	$(ROOT)tools/aggregate-verchk.py $^ | tee $@
+
+# .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
 # In principle, building code should depend on .verified! But we want
 # to play with perf with not-entirely-verifying trees.
 $(BUILD_DIR)/%.i.cs: $(ROOT)%.i.dfy | $$(@D)/.
@@ -76,6 +86,7 @@ $(BUILD_DIR)/%.i.cs: $(ROOT)%.i.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) $<
 	mv $(TMPNAME) $@
 
+# .cpp: C++ output from compiling a Dafny file (which includes all deps)
 $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.cpp,%-i.cpp,$@))	 #eval trick to assign make var inside rule
 	# Dafny irritatingly removes the '.i' presuffix.
