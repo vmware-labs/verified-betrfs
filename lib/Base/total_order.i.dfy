@@ -1,11 +1,34 @@
 include "sequences.i.dfy"
 include "NativeTypes.s.dfy"
 include "KeyType.s.dfy"
+
+module {:extern} TotalOrderNative {
+  import opened NativeTypes
+
+  class Arrays
+  {
+    static predicate lt(a: seq<byte>, b: seq<byte>)
+    {
+      if |a| == 0 && |b| == 0 then false
+      else if |a| == 0 then true
+      else if |b| == 0 then false
+      else if a[0] < b[0] then true
+      else if a[0] > b[0] then false
+      else lt(a[1..], b[1..])
+    }
+
+    static method{:axiom} ByteSeqCmpByteSeq(s1: seq<byte>, s2: seq<byte>)
+        returns (c : int32)
+        ensures c < 0 ==> lt(s1, s2)
+        ensures c > 0 ==> lt(s2, s1)
+        ensures c == 0 ==> s1 == s2
+  }
+}
   
 abstract module Total_Order {
   import Seq = Sequences
   import opened NativeTypes
-  import Native
+  import TotalOrderNative
     
 	type Element(!new,==)
 
@@ -633,6 +656,6 @@ module Lexicographic_Byte_Order refines Total_Order {
 
   method cmp(a: Element, b: Element) returns (c: int32)
   {
-    c := Native.Arrays.ByteSeqCmpByteSeq(a, b);
+    c := TotalOrderNative.Arrays.ByteSeqCmpByteSeq(a, b);
   }
 }
