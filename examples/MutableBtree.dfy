@@ -337,10 +337,10 @@ abstract module MutableBtree {
 
     SubReprLowerBound(node, from as int, to as int);
 
-    // WTF?  Why is this necessary?
-    ghost var inode := I(node);
     ghost var isubnode := I(subnode);
-    assert I(subnode) == BS.SubIndex(I(node), from as int, to as int);
+    ghost var inode := I(node);
+    assert isubnode.pivots == inode.pivots[from..to as int - 1];
+    assert isubnode.children == inode.children[from..to];
   }
 
   lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
