@@ -66,9 +66,10 @@ def main():
         fileDeps.append("# deps from %s" % target)
         allDeps = depsFromDfySource(target)
         for dep in allDeps[::-1]:
-            for targetType in (".deps", ".synchk", ".verified", ".cpp"):
+            for targetType in (".synchk", ".verified", ".cpp"):
                 fileDeps.append("%s: %s" % (targetName(target, targetType), targetName(dep, targetType)))
                 dirDeps.add(os.path.dirname(dep.normPath))
+        fileDeps.append("%s: %s" % (outputFilename, target.absPath))
     dirDeps.remove(directory.normPath)
 
     outfp = open(outputFilename, "w")

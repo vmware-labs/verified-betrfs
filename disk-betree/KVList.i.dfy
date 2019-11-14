@@ -1,4 +1,4 @@
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "BucketsLib.i.dfy"

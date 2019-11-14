@@ -60,11 +60,7 @@ include $(DIR_DEPS)
 #TIME=time -f "real %es cpu %Us"
 TIME=time
 
-$(BUILD_DIR)/%.s.syntax: $(ROOT)%.s.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<
-	touch $@
-
-$(BUILD_DIR)/%.i.syntax: $(ROOT)%.i.dfy | $$(@D)/.
+$(BUILD_DIR)/%.synchk: $(ROOT)%.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<
 	touch $@
 

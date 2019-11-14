@@ -1,5 +1,5 @@
 include "PivotBetreeSpec.i.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 include "AsyncDiskModel.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "BetreeBlockCache.i.dfy"

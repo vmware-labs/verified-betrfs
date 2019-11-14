@@ -1,6 +1,6 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "PivotBetreeSpec.i.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 include "ImplModel.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"

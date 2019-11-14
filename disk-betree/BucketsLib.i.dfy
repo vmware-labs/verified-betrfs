@@ -1,5 +1,5 @@
 include "PivotsLib.i.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/total_order.i.dfy"
 //
