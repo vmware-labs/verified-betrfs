@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 
+using System.Runtime.InteropServices;
+
 namespace MainDiskIOHandler_Compile {
   // TODO make this actually async lol
   public partial class DiskIOHandler {
@@ -468,15 +470,37 @@ namespace Native_Compile {
           //Native_Compile.BenchmarkingUtil.end();
       }
 
-      /*public static void @ByteSeqCmpByteSeq(
-        Dafny.Sequence<byte> s1, int i1, int l1,
-        Dafny.Sequence<byte> s2, int i2, int l2,
-        out int res)
+      [DllImport("c", CallingConvention = CallingConvention.Cdecl)]
+      private static extern unsafe int memcmp(byte* b1, byte* b2, int count);
+
+      public static int @ByteSeqCmpByteSeq(
+        Dafny.Sequence<byte> s1,
+        Dafny.Sequence<byte> s2)
       {
-        var span1 = new Span<byte>(s1.Elements, i1, l1);
-        var span2 = new Span<byte>(s2.Elements, i2, l2);
-        res = span1.SequenceCompareTo(span2);
-      }*/
+        var seg1 = (ArraySegment<int>) s1.Elements;
+        var seg2 = (ArraySegment<int>) s2.Elements;
+
+        int result;
+        unsafe {
+          fixed (byte* b1 = seg1.Array) {
+            fixed (byte* b2 = seg2.Array) {
+              result = memcmp(b1 + seg1.Offset, b2 + seg2.Offset, Math.Min(seg1.Count, seg2.Count));
+            }
+          }
+        }
+
+        if (result < 0) {
+          return -1;
+        } else if (result > 0) {
+          return 1;
+        } else if (seg1.Count < seg2.Count) {
+          return -1;
+        } else if (seg1.Count > seg2.Count) {
+          return 1;
+        } else {
+          return 0;
+        }
+      }
   }
 }
 
