@@ -519,6 +519,7 @@ abstract module MutableBtree {
     ensures WFShape(node)
     ensures node.repr == old(node.repr)
     ensures I(node) == BS.InsertLeaf(old(I(node)), key, value)
+    ensures BS.Interpretation(I(node)) == BS.Interpretation(old(I(node)))[key := value]
     modifies node, node.contents.keys, node.contents.values
   {
     var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
@@ -529,6 +530,7 @@ abstract module MutableBtree {
       Arrays.Insert(node.contents.values, node.contents.nkeys, value, posplus1);
       node.contents := node.contents.(nkeys := node.contents.nkeys + 1);
     }
+    BS.InsertLeafIsCorrect(old(I(node)), key, value);
   }
 
   method InsertIndexChildNotFull(node: Node, childidx: uint64, key: Key, value: Value)
