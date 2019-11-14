@@ -673,6 +673,14 @@ abstract module MutableBtree {
     requires BS.WF(I(node))
     requires Full(node)
     ensures BS.AllKeys(I(node)) != {}
+  {
+    var inode := I(node);
+    if inode.Leaf? {
+      assert inode.keys[0] in BS.AllKeys(inode);
+    } else {
+      assert inode.pivots[0] in BS.AllKeys(inode);
+    }
+  }
   
   method Insert(root: Node, key: Key, value: Value) returns (newroot: Node)
     requires WFShape(root)
