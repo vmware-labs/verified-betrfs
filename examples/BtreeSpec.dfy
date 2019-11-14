@@ -454,9 +454,7 @@ abstract module BtreeSpec {
       if i < childidx {
         assert AllKeysBelowBound(oldindex, i);
       } else if i == childidx {
-        //assume false;
       } else if i == childidx + 1 {
-        //assume false;
       } else {
         assert newindex.children[i] == oldindex.children[i-1];
         assert AllKeysBelowBound(oldindex, i-1);
@@ -685,5 +683,33 @@ abstract module BtreeSpec {
     assert key in Interpretation(newchild);
     assert key in AllKeys(newchild);
     assert newnode.children[Keys.LargestLte(newnode.pivots, key)+1] == newchild;
+  }
+
+  function Grow(node: Node) : Node
+  {
+    Index([], [node])
+  }
+
+  lemma GrowPreservesWF(node: Node)
+    requires WF(node)
+    requires AllKeys(node) != {}
+    ensures WF(Grow(node))
+  {
+  }
+
+  lemma GrowPreservesInterpretation(node: Node)
+    requires WF(node)
+    requires AllKeys(node) != {}
+    ensures WF(Grow(node))
+    ensures Interpretation(Grow(node)) == Interpretation(node)
+  {
+    var interp := Interpretation(node);
+    var ginterp := Interpretation(Grow(node));
+    
+    forall key | key in interp
+      ensures key in ginterp && ginterp[key] == interp[key]
+    {
+      InterpretationDelegation(Grow(node), key);
+    }
   }
 }
