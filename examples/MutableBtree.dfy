@@ -527,6 +527,7 @@ abstract module MutableBtree {
     ensures WFShape(node)
     ensures node.repr == old(node.repr)
     ensures I(node) == BS.InsertLeaf(old(I(node)), key, value)
+    ensures BS.WF(I(node))
     ensures BS.Interpretation(I(node)) == BS.Interpretation(old(I(node)))[key := value]
     ensures BS.AllKeys(I(node)) == BS.AllKeys(old(I(node))) + {key}
     modifies node, node.contents.keys, node.contents.values
@@ -641,7 +642,9 @@ abstract module MutableBtree {
     ensures node.contents.Index?
     ensures childidx as int == BS.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
     ensures !Full(node.contents.children[childidx])
+    ensures BS.WF(I(node))
     ensures BS.Interpretation(I(node)) == BS.Interpretation(old(I(node)))
+    ensures BS.AllKeys(I(node)) == BS.AllKeys(old(I(node)))
     modifies node, node.repr
   {
     childidx := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
@@ -650,7 +653,9 @@ abstract module MutableBtree {
       ghost var wit := SplitChildOfIndex(node, childidx);
       ghost var newpivots := node.contents.pivots[..node.contents.nchildren-1];
       BS.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
-
+      BS.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
+      BS.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
+      
       if BS.Keys.lte(node.contents.pivots[childidx], key) {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |newpivots|
@@ -741,7 +746,9 @@ abstract module MutableBtree {
     requires WFShape(root)
     requires BS.WF(I(root))
     ensures WFShape(newroot)
+    ensures BS.WF(I(newroot))
     ensures fresh(newroot.repr - old(root.repr))
+    ensures BS.Interpretation(I(newroot)) == BS.Interpretation(old(I(root)))[key := value]
     modifies root, root.repr
   {
     if Full(root) {
@@ -751,6 +758,7 @@ abstract module MutableBtree {
     } else {
       newroot := root;
     }
+    assert BS.Interpretation(I(newroot)) == BS.Interpretation(old(I(root)));
     InsertNode(newroot, key, value);
   }
 }
