@@ -3,6 +3,7 @@ include "ImplState.i.dfy"
 include "ImplModel.i.dfy"
 include "MutableBucket.i.dfy"
 include "../lib/Base/Option.s.dfy"
+include "../lib/Base/NativeArrays.s.dfy"
 
 include "Marshalling.i.dfy"
 include "ImplMarshallingModel.i.dfy"
@@ -28,7 +29,7 @@ module ImplMarshalling {
   import ImplState
   import KVList
   import Crypto
-  import Native
+  import NativeArrays
   import MutableMapModel
   import IndirectionTableImpl
   import KeyType
@@ -658,7 +659,7 @@ module ImplMarshalling {
           assert data[32..] == data[32..data.Length];
           assert hash == Crypto.Crc32C(data[32..]);
           ghost var data_suffix := data[32..];
-          Native.Arrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+          NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
           assert data_suffix == data[32..];
 
           /*ghost var data_seq := data[..];

@@ -1,13 +1,11 @@
 include "../Base/total_order.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/mathematics.i.dfy"
-include "../Marshalling/Native.s.dfy"
 
 module TwoThreeTree {
     import Keyspace = Lexicographic_Byte_Order
     import Maps = Maps
     import Math = Mathematics
-    import Native
 
     datatype Node<Value> =
         Leaf(key: Keyspace.Element, value: Value) |

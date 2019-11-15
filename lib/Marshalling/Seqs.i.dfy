@@ -1,9 +1,9 @@
-include "Native.s.dfy"
+include "../Base/NativeArrays.s.dfy"
 include "../Base/NativeTypes.s.dfy"
 
 module Collections__Seqs_i {
 import opened NativeTypes
-import Native
+import NativeArrays
 
 function last<T>(s:seq<T>):T
     requires |s| > 0;
@@ -189,7 +189,7 @@ ensures c == SeqCatRev(a)
         == LenSum(a[..j+1]);
 
     assert pos as int + |a[j]| <= ar.Length;
-    Native.Arrays.CopySeqIntoArray(a[j], 0, ar, pos, |a[j]| as uint64);
+    NativeArrays.CopySeqIntoArray(a[j], 0, ar, pos, |a[j]| as uint64);
 
     assert pos as int + |a[j]|
         == LenSum(a[..j]) + |a[j]|

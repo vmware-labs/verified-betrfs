@@ -4,7 +4,6 @@ include "../Base/sequences.i.dfy"
 include "../Base/Sets.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/SetBijectivity.i.dfy"
-include "../Marshalling/Native.s.dfy"
 //
 // Immutable (functional) model to support MutableMapImpl.  API provides an
 // iterator interface with a deterministic order for parsing/marshaling.
@@ -24,7 +23,6 @@ module MutableMapModel {
   import opened Sets
   import opened Maps
   import opened SetBijectivity
-  import Native
 
   datatype Slot = Slot(ghost slot: nat)
 

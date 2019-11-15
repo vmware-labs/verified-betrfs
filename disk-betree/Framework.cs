@@ -442,33 +442,65 @@ class Framework {
   }
 }
 
-namespace Native_Compile {
-  public partial class @Arrays
+namespace NativeArrays_Compile {
+  public partial class __default
   {
-      public static T[] @newArrayFill<T>(ulong n, T t)
-      {
-        T[] res = new T[n];
-        for (ulong i = 0; i < n; i++) {
-          res[i] = t;
+    public static T[] @newArrayFill<T>(ulong n, T t)
+    {
+      T[] res = new T[n];
+      for (ulong i = 0; i < n; i++) {
+        res[i] = t;
+      }
+      return res;
+    }
+
+    public static T[] @newArrayClone<T>(T[] ar)
+    {
+      T[] res = new T[ar.Length];
+      System.Array.Copy(ar, 0, res, 0, ar.Length);
+      return res;
+    }
+
+    public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+        //Native_Compile.BenchmarkingUtil.start();
+
+        ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
+        System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
+
+        //Native_Compile.BenchmarkingUtil.end();
+    }
+
+    [DllImport("c", CallingConvention = CallingConvention.Cdecl)]
+    private static extern unsafe int memcmp(byte* b1, byte* b2, int count);
+
+    public static int @ByteSeqCmpByteSeq(
+      Dafny.Sequence<byte> s1,
+      Dafny.Sequence<byte> s2)
+    {
+      var seg1 = (ArraySegment<byte>) s1.Elements;
+      var seg2 = (ArraySegment<byte>) s2.Elements;
+
+      int result;
+      unsafe {
+        fixed (byte* b1 = seg1.Array) {
+          fixed (byte* b2 = seg2.Array) {
+            result = memcmp(b1 + seg1.Offset, b2 + seg2.Offset, Math.Min(seg1.Count, seg2.Count));
+          }
         }
-        return res;
       }
 
-      public static T[] @newArrayClone<T>(T[] ar)
-      {
-        T[] res = new T[ar.Length];
-        System.Array.Copy(ar, 0, res, 0, ar.Length);
-        return res;
+      if (result < 0) {
+        return -1;
+      } else if (result > 0) {
+        return 1;
+      } else if (seg1.Count < seg2.Count) {
+        return -1;
+      } else if (seg1.Count > seg2.Count) {
+        return 1;
+      } else {
+        return 0;
       }
-
-      public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-          //Native_Compile.BenchmarkingUtil.start();
-
-          ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
-          System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
-
-          //Native_Compile.BenchmarkingUtil.end();
-      }
+    }
   }
 }
 
@@ -520,42 +552,5 @@ namespace Crypto_Compile {
     {
       return padded_crc32(ar, (int)start, (int)len);
     }
-  }
-}
-
-namespace TotalOrderNative_Compile {
-  public partial class @Arrays
-  {
-      [DllImport("c", CallingConvention = CallingConvention.Cdecl)]
-      private static extern unsafe int memcmp(byte* b1, byte* b2, int count);
-
-      public static int @ByteSeqCmpByteSeq(
-        Dafny.Sequence<byte> s1,
-        Dafny.Sequence<byte> s2)
-      {
-        var seg1 = (ArraySegment<byte>) s1.Elements;
-        var seg2 = (ArraySegment<byte>) s2.Elements;
-
-        int result;
-        unsafe {
-          fixed (byte* b1 = seg1.Array) {
-            fixed (byte* b2 = seg2.Array) {
-              result = memcmp(b1 + seg1.Offset, b2 + seg2.Offset, Math.Min(seg1.Count, seg2.Count));
-            }
-          }
-        }
-
-        if (result < 0) {
-          return -1;
-        } else if (result > 0) {
-          return 1;
-        } else if (seg1.Count < seg2.Count) {
-          return -1;
-        } else if (seg1.Count > seg2.Count) {
-          return 1;
-        } else {
-          return 0;
-        }
-      }
   }
 }

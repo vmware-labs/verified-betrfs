@@ -1,7 +1,7 @@
 include "../Base/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/BitsetLemmas.i.dfy"
-include "../Marshalling/Native.s.dfy"
+include "../Base/NativeArrays.s.dfy"
 //
 // A module that maintains a compact set of integers using a packed-uint64
 // bitmap representation.
@@ -13,7 +13,7 @@ include "../Marshalling/Native.s.dfy"
 module Bitmap {
   import opened NativeTypes
   import opened Options
-  import Native
+  import NativeArrays
   import BitsetLemmas
 
   type BitmapModel = seq<bool>
@@ -179,7 +179,7 @@ module Bitmap {
     ensures fresh(Repr)
     {
       new;
-      bits := Native.Arrays.newArrayFill(len / 64, 0);
+      bits := NativeArrays.newArrayFill(len / 64, 0);
       Repr := { this, this.bits };
 
       ghost var ghosty := true;
@@ -355,7 +355,7 @@ module Bitmap {
     ensures I() == a.I()
     {
       new;
-      bits := Native.Arrays.newArrayClone(a.bits);
+      bits := NativeArrays.newArrayClone(a.bits);
 
       Repr := { this, this.bits };
     }

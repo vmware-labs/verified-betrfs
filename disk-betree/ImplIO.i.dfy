@@ -20,7 +20,6 @@ module ImplIO {
   import MutableLru
   import opened Bounds
   import opened IS = ImplState
-  import Native
   import MutableMapModel
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler

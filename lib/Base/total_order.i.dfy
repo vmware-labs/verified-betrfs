@@ -6,7 +6,7 @@ include "NativeArrays.s.dfy"
 abstract module Total_Order {
   import Seq = Sequences
   import opened NativeTypes
-  import TotalOrderNative
+  import NativeArrays
     
 	type Element(!new,==)
 
@@ -632,7 +632,7 @@ module Lexicographic_Byte_Order refines Total_Order {
   }
 
   lemma lemma_lt_defs_same(a: Element, b: Element)
-  ensures TotalOrderNative.Arrays.lt(a, b) == (seq_lte(a, b) && a != b)
+  ensures NativeArrays.lt(a, b) == (seq_lte(a, b) && a != b)
   decreases |a|
   {
     reveal_seq_lte();
@@ -646,6 +646,6 @@ module Lexicographic_Byte_Order refines Total_Order {
   {
     lemma_lt_defs_same(a, b);
     lemma_lt_defs_same(b, a);
-    c := TotalOrderNative.Arrays.ByteSeqCmpByteSeq(a, b);
+    c := NativeArrays.ByteSeqCmpByteSeq(a, b);
   }
 }

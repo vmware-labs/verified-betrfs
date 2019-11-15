@@ -4,6 +4,7 @@ include "../lib/Base/Message.i.dfy"
 include "ImplModel.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
+include "../lib/Base/NativeArrays.s.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "KVList.i.dfy"
 //
@@ -30,7 +31,7 @@ module ImplMarshallingModel {
   import IM = ImplModel
   import KVList
   import Crypto
-  import Native
+  import NativeArrays
   import IndirectionTableModel
 
   import BT = PivotBetreeSpec`Internal
