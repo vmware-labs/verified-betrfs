@@ -65,14 +65,17 @@ def main():
         for dep in allDeps[::-1]:
             # dependencies going up the .dfy graph
             for fromType,toType in (
+                    # dummy dependencies to ensure that any targets depending
+                    # on a dfy also get rebuilt when any upstream dfys change.
+                    (".dummydep", ".dummydep"),
                     # depend on all included dfys by synchking each first.
-                    (".synchk", ".synchk"),
+                    (".synchk", ".dummydep"),
                     # depend on all included dfys, but don't require verifying
                     # all prior .cs files.
-                    (".verchk", ".synchk"),
+                    (".verchk", ".dummydep"),
                     # depend on all included dfys, but don't require building
                     # all prior .cs files.
-                    (".cs", ".synchk"),
+                    (".cs", ".dummydep"),
                     # For now, depend on all prior .cpps, to make development
                     # of cpp backend easier.
                     (".cpp", ".cpp"),

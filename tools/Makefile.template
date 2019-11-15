@@ -64,6 +64,10 @@ include $(DIR_DEPS)
 #TIME=time -f "real %es cpu %Us"
 TIME=time
 
+# .dummydep: Dummy target that establishes transitive dependencies
+$(BUILD_DIR)/%.dummydep: $(ROOT)%.dfy | $$(@D)/.
+	touch $@
+
 # .synchk: Dafny syntax check
 $(BUILD_DIR)/%.synchk: $(ROOT)%.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< | tee $@
