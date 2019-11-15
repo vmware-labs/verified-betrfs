@@ -40,9 +40,14 @@ class Traverser:
         return summarize(verchk)
 
     def addFillColors(self):
+        def breakName(name):
+            parts = name.rsplit("/", 1)
+            return "/\n".join(parts)
+
         for iref in self.visited:
             summary = self.getSummary(iref)
-            self.output.append('"%s" [style=filled; color=%s; label="%s\n%ss"];' % (iref.normPath, summary.color, iref.normPath.replace("/", "/\n", 1), summary.userTimeSec))
+            self.output.append('"%s" [style=filled; color=%s; label="%s\n%ss"];' % (
+                iref.normPath, summary.color, breakName(iref.normPath), summary.userTimeSec))
 
     def sourceDir(self, iref):
         return iref.normPath.rsplit("/", 1)[0]

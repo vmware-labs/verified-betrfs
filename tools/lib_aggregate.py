@@ -76,4 +76,5 @@ def summarize(verchk):
 
     condition = extractCondition(verchk, content)
     condition.userTimeSec = userTimeSec
+    condition.verchk = verchk
     return condition
