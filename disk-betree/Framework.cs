@@ -495,7 +495,7 @@ namespace Crypto_Compile {
       uint currentCrc = 0;
 
       if (length > 0) {
-          _crc32algo.Append(currentCrc, ar, offset, length);
+          currentCrc = _crc32algo.Append(currentCrc, ar, offset, length);
       }
 
       byte[] hash = System.BitConverter.GetBytes(currentCrc);
@@ -510,13 +510,13 @@ namespace Crypto_Compile {
       return new Dafny.Sequence<byte>(padded);
     }
 
-    public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
+    public static Dafny.Sequence<byte> Crc32C(Dafny.Sequence<byte> seq)
     {
       ArraySegment<byte> seg = (ArraySegment<byte>) seq.Elements;
       return padded_crc32(seg.Array, seg.Offset, seg.Count);
     }
 
-    public static Dafny.Sequence<byte> Crc32Array(byte[] ar, ulong start, ulong len)
+    public static Dafny.Sequence<byte> Crc32CArray(byte[] ar, ulong start, ulong len)
     {
       return padded_crc32(ar, (int)start, (int)len);
     }

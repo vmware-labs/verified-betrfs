@@ -129,7 +129,7 @@ module AsyncDisk {
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
     && |s| >= 32
-    && s[0..32] == Crypto.Crc32(s[32..])
+    && s[0..32] == Crypto.Crc32C(s[32..])
   }
 
   predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)

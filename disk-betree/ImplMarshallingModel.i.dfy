@@ -335,7 +335,7 @@ module ImplMarshallingModel {
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
       IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
   {
-    if |data| >= 32 && Crypto.Crc32(data[32..]) == data[..32] then
+    if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
       parseSector(data[32..])
     else
       None

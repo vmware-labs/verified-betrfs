@@ -11,11 +11,15 @@
  * Max Vysokikh, 2016-2017
  */
 
+// NOTE: modified to calculate CRC-32C which is efficiently calcuable on an intel
+// chip, and according to wikipedia is what ext4, btrfs use.
+
 namespace Force.Crc32
 {
 	class Crc32Algo
 	{
-		private const uint Poly = 0xedb88320u;
+	  // Polynomial for CRC-32C.
+		private const uint Poly = 0x82F63B78u;
 
 		private readonly uint[] _table = new uint[16 * 256];
 
