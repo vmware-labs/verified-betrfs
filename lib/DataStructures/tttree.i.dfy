@@ -918,7 +918,7 @@ module TwoThreeTree {
     method AsSeq<Value>(tree: Tree<Value>) returns (s : seq<(Keyspace.Element, Value)>)
     requires TTTree(tree)
     //ensures Keyspace.SortedSeqForMap(s, I(tree))
-    ensures s == Keyspace.getSortedSeqForMap(I(tree))
+    ensures Keyspace.SortedSeqForMap(s, I(tree))
     {
       assume false; // I expect we'll replace tttree, no need to prove this at the moment
       //Native.BenchmarkingUtil.start();

@@ -389,7 +389,7 @@ abstract module Total_Order {
     {
       var mid := (lo + hi) / 2;
       var c := cmp(run[mid], needle);
-      if (c == 1) {
+      if (c > 0) {
         hi := mid;
       } else {
         lo := mid+1;
@@ -414,7 +414,7 @@ abstract module Total_Order {
     {
       var mid := (lo + hi) / 2;
       var c := cmp(run[mid], needle);
-      if (c == -1) {
+      if (c < 0) {
         lo := mid+1;
       } else {
         hi := mid;
@@ -430,9 +430,6 @@ abstract module Total_Order {
     && (forall i | 0 <= i < |s| :: s[i].0 in m && m[s[i].0] == s[i].1)
     && (forall key | key in m :: exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key])
   }
-
-  function getSortedSeqForMap<V>(m : map<Element, V>) : (s: seq<(Element, V)>)
-  ensures SortedSeqForMap(s, m)
 
   lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
   requires SortedSeqForMap(s, m)
