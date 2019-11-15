@@ -45,5 +45,5 @@ uint32_t crc32c(const uint8_t *bytes, size_t len)
 
 int main() {
   const char* ch = "The quick brown fox jumps over the lazy dog";
-	cout << crc32c((const uint8_t*)ch, strlen(ch)) << endl;
+  cout << crc32c((const uint8_t*)ch, strlen(ch)) << endl;
 }
