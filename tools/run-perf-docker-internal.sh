@@ -19,9 +19,12 @@ rm -R .veribetrfs-storage || true
 mkdir .veribetrfs-storage
 
 set +e
-rm build/roslyn-veribetrfs.exe
+rm build/disk-betree/Bundle.i.roslyn.exe
 set -e
-make build/roslyn-veribetrfs.exe
+
+cd disk-betree
+make exe-roslyn
+cd ..
 
 echo "==== starting benchmark ===="
 echo "flags: $@"

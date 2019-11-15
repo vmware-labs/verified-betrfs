@@ -1,7 +1,7 @@
 module Options {
   datatype Option<V> = None | Some(value:V)
 
-  function method MapOption<V0, V1>(opt: Option<V0>, f: V0 ~> V1) : (result: Option<V1>)
+  function MapOption<V0, V1>(opt: Option<V0>, f: V0 ~> V1) : (result: Option<V1>)
   requires opt.Some? ==> f.requires(opt.value)
   ensures opt.Some? <==> result.Some?
   ensures result.Some? ==> result.value == f(opt.value)
@@ -13,7 +13,7 @@ module Options {
     }
   }
 
-  function method FlatMapOption<V0, V1>(opt: Option<V0>, f: V0 ~> Option<V1>) : (result: Option<V1>)
+  function FlatMapOption<V0, V1>(opt: Option<V0>, f: V0 ~> Option<V1>) : (result: Option<V1>)
   requires opt.Some? ==> f.requires(opt.value)
   ensures opt.Some? && f(opt.value).Some? ==> result.Some?
   ensures opt.Some? && f(opt.value).Some? ==> result.value == f(opt.value).value

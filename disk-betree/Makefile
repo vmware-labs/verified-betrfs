@@ -11,9 +11,15 @@ $(BUILD_DIR)/disk-betree/Bundle.i.exe:$(BUILD_DIR)/disk-betree/Bundle.i.cs $(FRA
 
 $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe:$(BUILD_DIR)/disk-betree/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	$(ROOT)/tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
-	./tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
+	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
+	$(ROOT)/tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
 
 exe: $(BUILD_DIR)/disk-betree/Bundle.i.exe
 
+exe-roslyn: $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe
+
 status: $(BUILD_DIR)/disk-betree/Bundle.i.status.pdf
+
+allcpp: $(BUILD_DIR)/disk-betree/Bundle.i.cpp
+
+.PHONY: exe exe-roslyn
