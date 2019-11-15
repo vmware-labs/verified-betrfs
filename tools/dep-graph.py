@@ -46,8 +46,8 @@ class Traverser:
 
         for iref in self.visited:
             summary = self.getSummary(iref)
-            self.output.append('"%s" [style=filled; color=%s; label="%s\n%ss"];' % (
-                iref.normPath, summary.color, breakName(iref.normPath), summary.userTimeSec))
+            self.output.append('"%s" [style=filled; %s; label="%s\n%ss"];' % (
+                iref.normPath, summary.style, breakName(iref.normPath), summary.userTimeSec))
 
     def sourceDir(self, iref):
         return iref.normPath.rsplit("/", 1)[0]

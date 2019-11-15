@@ -103,7 +103,8 @@ $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
 #
 $(BUILD_DIR)/%.status.pdf: $(ROOT)%.dfy | $$(@D)/.
 STATUS_TOOL=$(ROOT)tools/dep-graph.py
-$(BUILD_DIR)/%.status.pdf: $(ROOT)%.dfy $(BUILD_DIR)/%.verified $(STATUS_TOOL) | $$(@D)/.
+STATUS_DEPS=$(ROOT)tools/lib_aggregate.py
+$(BUILD_DIR)/%.status.pdf: $(ROOT)%.dfy $(BUILD_DIR)/%.verified $(STATUS_TOOL) $(STATUS_DEPS) | $$(@D)/.
 	$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
 	$(STATUS_TOOL) $< $(DOTNAME)
 	@tred < $(DOTNAME) | dot -Tpdf -o$@

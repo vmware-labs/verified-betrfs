@@ -2,10 +2,10 @@ import sys
 import re
 
 class DafnyCondition:
-    def __init__(self, level, result, color):
+    def __init__(self, level, result, style):
         self.level = level
         self.result = result
-        self.color = color
+        self.style = style
 
     def __lt__(self, other):
         return self.level < other.level
@@ -15,23 +15,23 @@ class DafnyCondition:
 
 class DafnyParseError(DafnyCondition):
     def __init__(self):
-        super().__init__(0, "parse error", "red")
+        super().__init__(0, "parse error", "fillcolor=red; shape=trapezium")
 
 class DafnyTypeError(DafnyCondition):
     def __init__(self):
-        super().__init__(1, "type error", "orange")
+        super().__init__(1, "type error", "fillcolor=orange; shape=parallelogram")
 
 class DafnyVerificationError(DafnyCondition):
     def __init__(self):
-        super().__init__(2, "verification error", "yellow")
+        super().__init__(2, "verification error", "fillcolor=yellow; shape=doubleoctagon")
 
 class DafnyAssumeError(DafnyCondition):
     def __init__(self):
-        super().__init__(3, "untrusted file contains assumptions", "cyan")
+        super().__init__(3, "untrusted file contains assumptions", "fillcolor=cyan; shape=octagon")
 
 class DafnyVerified(DafnyCondition):
     def __init__(self):
-        super().__init__(4, "verified successfully", "green")
+        super().__init__(4, "verified successfully", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
     return verchk.replace("/build/", "/").replace(".verchk", ".dfy")
