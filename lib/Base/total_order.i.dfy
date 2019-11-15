@@ -24,9 +24,8 @@ abstract module Total_Order {
 		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
   method cmp(a: Element, b: Element) returns (c: int32)
-    ensures c == -1 || c == 0 || c == 1
-    ensures c == -1 ==> lt(a, b)
-    ensures c == 1 ==> lt(b, a)
+    ensures c < 0 ==> lt(a, b)
+    ensures c > 0 ==> lt(b, a)
     ensures c == 0 ==> a == b
 
 	predicate ltedef(a: Element, b: Element)
@@ -632,9 +631,21 @@ module Lexicographic_Byte_Order refines Total_Order {
     }
   }
 
+  lemma lemma_lt_defs_same(a: Element, b: Element)
+  ensures TotalOrderNative.Arrays.lt(a, b) == (seq_lte(a, b) && a != b)
+  decreases |a|
+  {
+    reveal_seq_lte();
+    Base_Order.reveal_lte();
+    if |a| > 0 && |b| > 0 {
+      lemma_lt_defs_same(a[1..], b[1..]);
+    }
+  }
+
   method cmp(a: Element, b: Element) returns (c: int32)
   {
-    assume false;
+    lemma_lt_defs_same(a, b);
+    lemma_lt_defs_same(b, a);
     c := TotalOrderNative.Arrays.ByteSeqCmpByteSeq(a, b);
   }
 }
