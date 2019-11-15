@@ -63,11 +63,25 @@ def main():
         fileDeps.append("# deps from %s" % target)
         allDeps = depsFromDfySource(target)
         for dep in allDeps[::-1]:
-            for targetType in (".synchk", ".verchk", ".cs", ".cpp"):
-                fileDeps.append("%s: %s" % (targetName(target, targetType), targetName(dep, targetType)))
+            # dependencies going up the .dfy graph
+            for fromType,toType in (
+                    # depend on all included dfys by synchking each first.
+                    (".synchk", ".synchk"),
+                    # depend on all included dfys, but don't require verifying
+                    # all prior .cs files.
+                    (".verchk", ".synchk"),
+                    # depend on all included dfys, but don't require building
+                    # all prior .cs files.
+                    (".cs", ".synchk"),
+                    # For now, depend on all prior .cpps, to make development
+                    # of cpp backend easier.
+                    (".cpp", ".cpp"),
+                    ):
+                fileDeps.append("%s: %s" % (targetName(target, fromType), targetName(dep, toType)))
             dirDeps.add(os.path.dirname(dep.normPath))
+            # dependencies from this file to type parents
             fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verchk")))
-            fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verified")))
+        # The dirDeps file depends on each target it describes.
         fileDeps.append("%s: %s" % (outputFilename, target.absPath))
     if (directory.normPath in dirDeps):
         dirDeps.remove(directory.normPath)

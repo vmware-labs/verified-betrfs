@@ -69,13 +69,14 @@ $(BUILD_DIR)/%.synchk: $(ROOT)%.dfy | $$(@D)/.
 
 # .verchk: Dafny file-local verification
 $(BUILD_DIR)/%.verchk: $(ROOT)%.dfy | $$(@D)/.
-	$(TIME) unbuffer $(DAFNY_CMD) /compile:0 $< | tee $@
+	$(TIME) $(DAFNY_CMD) /compile:0 $< 2>&1 | tee $@
 
 # .verified: Aggregate result of verification for this file and
 # its dependencies.
 .PRECIOUS: $(BUILD_DIR)/%.verchk
-$(BUILD_DIR)/%.verified: $(BUILD_DIR)/%.verchk | $$(@D)/.
-	$(ROOT)tools/aggregate-verchk.py $^ | tee $@
+AGGREGATE_TOOL=$(ROOT)tools/aggregate-verchk.py
+$(BUILD_DIR)/%.verified: $(BUILD_DIR)/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
+	$(AGGREGATE_TOOL) $^ | tee $@
 
 # .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
 # In principle, building code should depend on .verified! But we want
@@ -92,3 +93,12 @@ $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
 	# Dafny irritatingly removes the '.i' presuffix.
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
 	mv $(TMPNAME) $@
+
+# .status.pdf: a dependency graph of .dfy files labeled with verification result status.
+#
+$(BUILD_DIR)/%.status.pdf: $(ROOT)%.dfy | $$(@D)/.
+STATUS_TOOL=$(ROOT)tools/dep-graph.py
+$(BUILD_DIR)/%.status.pdf: $(ROOT)%.dfy $(BUILD_DIR)/%.verified $(STATUS_TOOL) | $$(@D)/.
+	$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
+	$(STATUS_TOOL) $< $(DOTNAME)
+	@tred < $(DOTNAME) | dot -Tpdf -o$@
