@@ -625,11 +625,10 @@ abstract module BtreeSpec {
     requires pos == Keys.LargestLte(node.pivots, key)+1
     requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
     requires newnode == node.(children := node.children[pos := newchild])
-    requires pos < |node.children|-1 ==> (forall key :: key in AllKeys(newchild) ==> Keys.lt(key, node.pivots[pos]))
-    requires 0 < pos ==> (forall key :: key in AllKeys(newchild) ==> Keys.lte(node.pivots[pos-1], key))
     requires AllKeys(newchild) <= AllKeys(node.children[pos]) + {key}
     ensures WF(newnode)
     ensures Interpretation(newnode) == Interpretation(node)[key := value]
+    ensures AllKeys(newnode) <= AllKeys(node) + {key}
   {
     var oldint := Interpretation(node);
     AllKeysIsConsistentWithInterpretation(newchild, key);
@@ -637,6 +636,14 @@ abstract module BtreeSpec {
       ensures AllKeysBelowBound(newnode, i);
     {
       if i == pos {
+        forall key' | key' in AllKeys(newchild)
+          ensures Keys.lt(key', node.pivots[i])
+        {
+          if key' == key {
+          } else {
+            assert AllKeysBelowBound(node, i);
+          }
+        }
       } else {
         assert AllKeysBelowBound(node, i);
       }
@@ -645,6 +652,14 @@ abstract module BtreeSpec {
       ensures AllKeysAboveBound(newnode, i);
     {
       if i == pos {
+        forall key' | key' in AllKeys(newchild)
+          ensures Keys.lte(node.pivots[i-1], key')
+        {
+          if key' == key {
+          } else {
+            assert AllKeysAboveBound(node, i);
+          }
+        }
       } else {
         assert AllKeysAboveBound(node, i);
       }
