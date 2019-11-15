@@ -13,7 +13,7 @@ def callOrDie(*kargs):
 def main():
     os.chdir("../continuous-integration")
 
-    result = subprocess.Popen(["git", "status"], stdout=subprocess.PIPE).communicate()
+    result = subprocess.Popen(["git", "status"], stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
     if "nothing to commit, working tree clean" not in result:
         raise Exception("Git unclean; git commit hash label would be a lie.")
 
