@@ -761,72 +761,87 @@ abstract module MutableBtree {
     assert BS.Interpretation(I(newroot)) == BS.Interpretation(old(I(root)));
     InsertNode(newroot, key, value);
   }
+
+  method EmptyTree() returns (root: Node)
+    ensures WFShape(root)
+    ensures BS.WF(I(root))
+    ensures fresh(root.repr)
+    ensures BS.Interpretation(I(root)) == map[]
+  {
+    var rootkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
+    var rootvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
+    root := new Node;
+    root.contents := Leaf(0, rootkeys, rootvalues);
+    root.repr := {root, rootkeys, rootvalues};
+    root.height := 0;
+  }
 }
 
-// module TestBtreeSpec refines BtreeSpec {
-//   import Keys = Integer_Order
-//   type Value = int
-// }
+module TestBtreeSpec refines BtreeSpec {
+  import Keys = Integer_Order
+  type Value = int
+}
 
-// module TestMutableBtree refines MutableBtree {
-//   import BS = TestBtreeSpec
+module TestMutableBtree refines MutableBtree {
+  import BS = TestBtreeSpec
     
-//   function method MaxKeysPerLeaf() : uint64 { 64 }
-//   function method MaxChildren() : uint64 { 64 }
+  function method MaxKeysPerLeaf() : uint64 { 64 }
+  function method MaxChildren() : uint64 { 64 }
 
-//   function method DefaultValue() : Value { 0 }
-//   function method DefaultKey() : Key { 0 }
-// }
+  function method DefaultValue() : Value { 0 }
+  function method DefaultKey() : Key { 0 }
+}
 
-// module MainModule {
-//   import opened NativeTypes
-//   import TestMutableBtree
-    
-//   method Main()
-//   {
-//     // var n: uint64 := 1_000_000;
-//     // var p: uint64 := 300_007;
-//     var n: uint64 := 10_000_000;
-//     var p: uint64 := 3_000_017;
-//     // var n: uint64 := 100_000_000;
-//     // var p: uint64 := 1_073_741_827;
-//     var t := new TestMutableBtree.MutableBtree();
-//     var i: uint64 := 0;
-//     while i < n
-//       invariant 0 <= i <= n
-//       invariant t.root.WF()
-//       modifies t, t.root, t.root.subtreeObjects
-//     {
-//       t.Insert((i * p) % n , i);
-//       i := i + 1;
-//     }
+module MainModule {
+  import opened NativeTypes
+  import TestMutableBtree
+  
+  method Main()
+  {
+    // var n: uint64 := 1_000_000;
+    // var p: uint64 := 300_007;
+    var n: uint64 := 10_000_000;
+    var p: uint64 := 3_000_017;
+    // var n: uint64 := 100_000_000;
+    // var p: uint64 := 1_073_741_827;
+    var t := TestMutableBtree.EmptyTree();
+    var i: uint64 := 0;
+    while i < n
+      invariant 0 <= i <= n
+      invariant TestMutableBtree.WFShape(t)
+      invariant TestMutableBtree.BS.WF(TestMutableBtree.I(t))
+      modifies t, t.repr
+    {
+      t := TestMutableBtree.Insert(t, ((i * p) % n) as int , i as int);
+      i := i + 1;
+    }
 
-//     // i := 0;
-//     // while i < n
-//     //   invariant 0 <= i <= n
-//     // {
-//     //   var needle := (i * p) % n;
-//     //   var qr := t.Query(needle);
-//     //   if qr != TestMutableBtree.Found(i) {
-//     //     print "Test failed";
-//   //   } else {
-//   //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
+    // i := 0;
+    // while i < n
+    //   invariant 0 <= i <= n
+    // {
+    //   var needle := (i * p) % n;
+    //   var qr := t.Query(needle);
+    //   if qr != TestMutableBtree.Found(i) {
+    //     print "Test failed";
+  //   } else {
+  //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
+  //   }
+  //   i := i + 1;
+  // }
 
-//   // i := 0;
-//   // while i < n
-//   //   invariant 0 <= i <= n
-//   // {
-//   //   var qr := t.Query(n + ((i * p) % n));
-//   //   if qr != TestMutableBtree.NotFound {
-//   //     print "Test failed";
-//   //   } else {
-//   //     //print "Didn't return bullsh*t\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
-//     print "PASSED\n";
-//   }
-// } 
+  // i := 0;
+  // while i < n
+  //   invariant 0 <= i <= n
+  // {
+  //   var qr := t.Query(n + ((i * p) % n));
+  //   if qr != TestMutableBtree.NotFound {
+  //     print "Test failed";
+  //   } else {
+  //     //print "Didn't return bullsh*t\n";
+  //   }
+  //   i := i + 1;
+  // }
+    print "PASSED\n";
+  }
+} 

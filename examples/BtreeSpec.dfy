@@ -88,6 +88,8 @@ abstract module BtreeSpec {
     requires key in Interpretation(node.children[Keys.LargestLte(node.pivots, key)+1])
     ensures MapsTo(Interpretation(node), key, Interpretation(node)[key])
   {
+    var interp := Interpretation(node);
+    assert key in interp;
   }
   
   lemma AllKeysIsConsistentWithInterpretation(node: Node, key: Key)
@@ -727,4 +729,9 @@ abstract module BtreeSpec {
       InterpretationDelegation(Grow(node), key);
     }
   }
+}
+
+module TestBtreeSpec refines BtreeSpec {
+  import Keys = Integer_Order
+  type Value = int
 }
