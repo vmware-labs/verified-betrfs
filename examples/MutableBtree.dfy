@@ -623,10 +623,7 @@ abstract module MutableBtree {
       assert I(node.contents.children[i]) == I(node).children[i];
       assert old(I(node.contents.children[i])) == old(I(node).children[i]);
     }
-    assert inode == oldinode.(children := oldinode.children[childidx as int := inewchild]);
-
     BS.RecursiveInsertIsCorrect(oldinode, key, value, childidx as int, inode, inode.children[childidx]);
-    
   }
 
   method InsertIndexSelectAndPrepareChild(node: Node, key: Key) returns (childidx: uint64)
