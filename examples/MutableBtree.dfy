@@ -478,7 +478,7 @@ abstract module MutableBtree {
         assert old(DisjointSubtrees(node.contents, i as int, j as int - 1));
       } else if i == childidx    && j == childidx+1     {
         assert node.contents.children[childidx+1] == right;
-        assert node.contents.children[childidx].repr !! right.repr;
+        //assert node.contents.children[childidx].repr !! right.repr;
         assert DisjointSubtrees(node.contents, childidx as int, (childidx + 1) as int);
       } else if i < childidx     &&      childidx+1 < j {
         assert node.contents.children[j] == old(node.contents.children[j-1]);
@@ -497,8 +497,6 @@ abstract module MutableBtree {
     }
 
     ghost var inode := I(node);
-
-    assert inode.pivots == Seq.insert(ioldnode.pivots, pivot, childidx as int);
 
     ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
     forall i | 0 <= i < |inode.children|
