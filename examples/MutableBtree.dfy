@@ -602,7 +602,6 @@ abstract module MutableBtree {
 
     ghost var oldinode := old(I(node));
     ghost var inode := I(node);
-    ghost var inewchild := I(node).children[childidx];
 
     forall i | 0 <= i < childidx as int
       ensures inode.children[i] == oldinode.children[i]
