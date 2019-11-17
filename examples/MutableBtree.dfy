@@ -587,16 +587,15 @@ abstract module MutableBtree {
       ensures DisjointSubtrees(node.contents, i as int, j as int)
     {
       assert old(DisjointSubtrees(node.contents, i as int, j as int));
-      if                           j <  childidx       {
+      if i < childidx {
         assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
-        assert old(DisjointSubtrees(node.contents, j as int, childidx as int));
-      } else if                    j == childidx       {
-      } else if i < childidx     &&      childidx < j {
-        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
-        assert old(DisjointSubtrees(node.contents, childidx as int, j as int));
-      } else if i == childidx    &&      childidx < j {
-      } else {
+      } else if childidx < i {
         assert old(DisjointSubtrees(node.contents, childidx as int, i as int));
+      }
+
+      if j < childidx {
+        assert old(DisjointSubtrees(node.contents, j as int, childidx as int));
+      } else if childidx < j {
         assert old(DisjointSubtrees(node.contents, childidx as int, j as int));
       }
     }
