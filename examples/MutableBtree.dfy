@@ -604,13 +604,6 @@ abstract module MutableBtree {
     ghost var oldinode := old(I(node));
     ghost var inode := I(node);
     ghost var inewchild := I(node).children[childidx];
-    assert inode.children[childidx] == I(node.contents.children[childidx]);
-    assert BS.WF(oldinode);
-    assert oldinode.Index?;
-    assert BS.WF(inewchild);
-    assert childidx as int == BS.Keys.LargestLte(oldinode.pivots, key) + 1;
-    assert BS.Interpretation(inewchild) == BS.Interpretation(inode.children[childidx])[key := value];
-
 
     forall i | 0 <= i < childidx as int
       ensures inode.children[i] == oldinode.children[i]
