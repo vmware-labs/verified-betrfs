@@ -558,6 +558,12 @@ abstract module MutableBtree {
     modifies node, node.contents.children[childidx].repr
     decreases node.height, 0
   {
+    forall i | 0 <= i < node.contents.nchildren
+      ensures old(I(node.contents.children[i])) == old(I(node).children[i])
+    {
+      IOfChild(node, i as int);
+    }
+    
     InsertNode(node.contents.children[childidx], key, value);
     node.repr := node.repr + node.contents.children[childidx].repr;
 
@@ -778,8 +784,9 @@ abstract module MutableBtree {
 }
 
 module TestBtreeSpec refines BtreeSpec {
-  import Keys = Integer_Order
-  type Value = int
+  import opened NativeTypes
+  import Keys = Uint64_Order
+  type Value = uint64
 }
 
 module TestMutableBtree refines MutableBtree {
@@ -810,9 +817,10 @@ module MainModule {
       invariant 0 <= i <= n
       invariant TestMutableBtree.WFShape(t)
       invariant TestMutableBtree.BS.WF(TestMutableBtree.I(t))
-      modifies t, t.repr
+      invariant fresh(t)
+      invariant fresh(t.repr)
     {
-      t := TestMutableBtree.Insert(t, ((i * p) % n) as int , i as int);
+      t := TestMutableBtree.Insert(t, ((i * p) % n), i);
       i := i + 1;
     }
 

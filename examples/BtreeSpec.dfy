@@ -731,7 +731,3 @@ abstract module BtreeSpec {
   }
 }
 
-module TestBtreeSpec refines BtreeSpec {
-  import Keys = Integer_Order
-  type Value = int
-}
