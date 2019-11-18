@@ -418,6 +418,27 @@ abstract module MutableBtree {
     }
   }
 
+  lemma ChildrenAreDistinct(node: Node)
+    requires WFShape(node)
+    requires node.contents.Index?
+    ensures forall i, j :: 0 <= i < j < node.contents.nchildren ==> node.contents.children[i] != node.contents.children[j]
+  {
+    forall i, j | 0 <= i < j < node.contents.nchildren
+      ensures node.contents.children[i] != node.contents.children[j]
+    {
+      assert WFShape(node.contents.children[i]);
+      assert node.contents.children[i] in node.contents.children[i].repr;
+      assert DisjointSubtrees(node.contents, i as int, j as int);
+      if node.contents.children[i] == node.contents.children[j] {
+        assert node.contents.children[i].repr == node.contents.children[j].repr;
+        assert node.contents.children[i] in node.contents.children[j].repr;
+        assert node.contents.children[i] in node.contents.children[i].repr * node.contents.children[j].repr;
+        assert !(node.contents.children[i].repr !! node.contents.children[j].repr);
+        assert false;
+      }
+    }
+  }
+  
   method SplitChildOfIndex(node: Node, childidx: uint64)  returns (ghost wit: Key)
     requires WFShape(node)
     requires BS.WF(I(node))
@@ -434,9 +455,9 @@ abstract module MutableBtree {
     ensures !Full(node.contents.children[childidx+1])
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
-    ghost var oldnchildren := node.contents.nchildren;
+    ChildrenAreDistinct(node);
+    
     ghost var ioldnode := I(node);
-    ghost var ichild := I(node.contents.children[childidx]);
     var right, wit', pivot := SplitNode(node.contents.children[childidx]);
     ghost var ileft := I(node.contents.children[childidx]);
     ghost var iright := I(right);
@@ -495,7 +516,7 @@ abstract module MutableBtree {
         assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
       }
     }
-
+      
     ghost var inode := I(node);
 
     ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
