@@ -73,7 +73,6 @@ module ImplInsert {
     }
   }
 
->>>>>>> 152f3da... passive agressive test
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (success: bool)
   requires Inv(k, s)

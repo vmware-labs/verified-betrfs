@@ -2,6 +2,7 @@ include "../lib/DataStructures/tttree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "Bounds.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
@@ -23,6 +24,7 @@ module MutableBucket {
   import opened BucketWeights
   import opened NativeTypes
   import Pivots = PivotsLib
+  import NativeBenchmarking
 
   type Key = Element
   type Kvl = KVList.Kvl
@@ -34,11 +36,11 @@ module MutableBucket {
   ensures KVList.WF(kvl)
   ensures KVList.I(kvl) == TTT.I(tree)
   {
-    Native.BenchmarkingUtil.start("tree_to_kvl");
+    NativeBenchmarking.start("tree_to_kvl");
     assume false;
     var s := TTT.AsSeq(tree);
     kvl := KVList.KvlOfSeq(s, TTT.I(tree));
-    Native.BenchmarkingUtil.end("tree_to_kvl");
+    NativeBenchmarking.end("tree_to_kvl");
   }
 
   method kvl_to_tree(kvl : Kvl)
@@ -47,10 +49,10 @@ module MutableBucket {
   ensures TTT.TTTree(tree)
   ensures KVList.I(kvl) == TTT.I(tree)
   {
-    Native.BenchmarkingUtil.start("kvl_to_tree");
+    NativeBenchmarking.start("kvl_to_tree");
     assume false;
     if (|kvl.keys| as uint64 == 0) {
-      Native.BenchmarkingUtil.end("kvl_to_tree");
+      NativeBenchmarking.end("kvl_to_tree");
       return TTT.EmptyTree;
     }
 
@@ -85,7 +87,7 @@ module MutableBucket {
     }
     tree := TTT.NonEmptyTree(ar[0 as uint64].1);
 
-    Native.BenchmarkingUtil.end("kvl_to_tree");
+    NativeBenchmarking.end("kvl_to_tree");
   }
 
   class MutBucket {
@@ -303,7 +305,7 @@ module MutableBucket {
     ensures Bucket == BucketInsert(old(Bucket), key, value)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      Native.BenchmarkingUtil.start("insert");
+      NativeBenchmarking.start("insert");
 
       if !is_tree {
         is_tree := true;
@@ -325,7 +327,7 @@ module MutableBucket {
 
       Bucket := TTT.I(tree);
 
-      Native.BenchmarkingUtil.end("insert");
+      NativeBenchmarking.end("insert");
     }
 
     method Query(key: Key)

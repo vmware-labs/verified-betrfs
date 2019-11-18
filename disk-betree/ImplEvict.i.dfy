@@ -1,6 +1,7 @@
 include "ImplModelEvict.i.dfy"
 include "ImplDealloc.i.dfy"
 include "ImplSync.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 module ImplEvict {
   import opened Impl
@@ -17,6 +18,7 @@ module ImplEvict {
   import opened Sets
 
   import opened NativeTypes
+  import NativeBenchmarking
 
   import LruModel
 
@@ -83,15 +85,15 @@ module ImplEvict {
   ensures s.ready
   ensures ImplModelEvict.EvictOrDealloc(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
-    Native.BenchmarkingUtil.start("FindDeallocable");
+    NativeBenchmarking.start("FindDeallocable");
     var ref := FindDeallocable(s);
-    Native.BenchmarkingUtil.end("FindDeallocable");
+    NativeBenchmarking.end("FindDeallocable");
     ImplModelDealloc.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
-      Native.BenchmarkingUtil.start("dealloc");
+      NativeBenchmarking.start("dealloc");
       Dealloc(k, s, io, ref.value);
-      Native.BenchmarkingUtil.end("dealloc");
+      NativeBenchmarking.end("dealloc");
     } else {
       var ref := s.lru.Next();
       if ref == BT.G.Root() {
@@ -99,17 +101,17 @@ module ImplEvict {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
-            Native.BenchmarkingUtil.start("write back for eviction");
+            NativeBenchmarking.start("write back for eviction");
             TryToWriteBlock(k, s, io, ref);
-            Native.BenchmarkingUtil.end("write back for eviction");
+            NativeBenchmarking.end("write back for eviction");
           } else {
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
-            Native.BenchmarkingUtil.start("evict");
+            NativeBenchmarking.start("evict");
             Evict(k, s, ref);
-            Native.BenchmarkingUtil.end("evict");
+            NativeBenchmarking.end("evict");
           } else {
           }
         }

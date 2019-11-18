@@ -6,6 +6,7 @@ include "ImplModelCache.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 // See dependency graph in MainImpl.dfy
 
@@ -20,6 +21,7 @@ module ImplSync {
   import ImplModelDealloc
   import ImplModelBlockAllocator
   import opened ImplState
+  import NativeBenchmarking
 
   import opened Options
   import opened Maps
@@ -233,9 +235,9 @@ module ImplSync {
       return;
     }
 
-    Native.BenchmarkingUtil.start("FindRefInFrozenWithNoLoc");
+    NativeBenchmarking.start("FindRefInFrozenWithNoLoc");
     var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-    Native.BenchmarkingUtil.end("FindRefInFrozenWithNoLoc");
+    NativeBenchmarking.end("FindRefInFrozenWithNoLoc");
 
     ImplModelSync.FindRefInFrozenWithNoLocCorrect(s.I());
 

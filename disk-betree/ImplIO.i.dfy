@@ -2,6 +2,7 @@ include "Impl.i.dfy"
 include "ImplState.i.dfy"
 include "ImplModelIO.i.dfy"
 include "ImplMarshalling.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 module ImplIO { 
   import opened Impl
@@ -21,6 +22,7 @@ module ImplIO {
   import opened Bounds
   import opened IS = ImplState
   import MutableMapModel
+  import NativeBenchmarking
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
@@ -53,9 +55,9 @@ module ImplIO {
   {
     ImplModelIO.reveal_RequestWrite();
 
-    Native.BenchmarkingUtil.start("marshall (indirection table)");
+    NativeBenchmarking.start("marshall (indirection table)");
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
-    Native.BenchmarkingUtil.end("marshall (indirection table)");
+    NativeBenchmarking.end("marshall (indirection table)");
 
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
@@ -82,18 +84,18 @@ module ImplIO {
   {
     ImplModelIO.reveal_FindLocationAndRequestWrite();
 
-    Native.BenchmarkingUtil.start("marshall");
+    NativeBenchmarking.start("marshall");
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
-    Native.BenchmarkingUtil.end("marshall");
+    NativeBenchmarking.end("marshall");
 
     if (bytes == null) {
       id := None;
       loc := None;
     } else {
       var len := bytes.Length as uint64;
-      Native.BenchmarkingUtil.start("getFreeLoc");
+      NativeBenchmarking.start("getFreeLoc");
       loc := getFreeLoc(s, len);
-      Native.BenchmarkingUtil.end("getFreeLoc");
+      NativeBenchmarking.end("getFreeLoc");
       if (loc.Some?) {
         var i := io.write(loc.value.addr, bytes);
         id := Some(i);
@@ -178,9 +180,9 @@ module ImplIO {
     var id1, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= BlockSizeUint64() {
-      Native.BenchmarkingUtil.start("parse");
+      NativeBenchmarking.start("parse");
       var sectorOpt := ImplMarshalling.ParseCheckedSector(bytes);
-      Native.BenchmarkingUtil.end("parse");
+      NativeBenchmarking.end("parse");
       sector := sectorOpt;
     } else {
       sector := None;

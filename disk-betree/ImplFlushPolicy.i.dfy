@@ -4,6 +4,7 @@ include "ImplSplit.i.dfy"
 include "ImplLeaf.i.dfy"
 include "ImplEvict.i.dfy"
 include "ImplModelFlushPolicy.i.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 module ImplFlushPolicy {
   import opened Impl
@@ -24,6 +25,7 @@ module ImplFlushPolicy {
   import opened NativeTypes
   import opened BucketsLib
   import opened BucketWeights
+  import NativeBenchmarking
 
   method biggestSlot(buckets: seq<MutBucket>) returns (res : (uint64, uint64))
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
@@ -185,36 +187,36 @@ module ImplFlushPolicy {
         PageInReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        Native.BenchmarkingUtil.start("split");
+        NativeBenchmarking.start("split");
         var parent := s.cache.GetOpt(parentref);
         doSplit(k, s, parentref, parent.value.children.value[slot], slot);
-        Native.BenchmarkingUtil.end("split");
+        NativeBenchmarking.end("split");
       }
       case ActionRepivot(ref) => {
-        Native.BenchmarkingUtil.start("repivot");
+        NativeBenchmarking.start("repivot");
         var node := s.cache.GetOpt(ref);
         repivotLeaf(k, s, ref, node.value);
-        Native.BenchmarkingUtil.end("repivot");
+        NativeBenchmarking.end("repivot");
       }
       case ActionFlush(parentref, slot) => {
-        Native.BenchmarkingUtil.start("flush");
+        NativeBenchmarking.start("flush");
         var parent := s.cache.GetOpt(parentref);
         var childref := parent.value.children.value[slot];
         var child := s.cache.GetOpt(childref);
         flush(k, s, parentref, slot, 
             parent.value.children.value[slot],
             child.value);
-        Native.BenchmarkingUtil.end("flush");
+        NativeBenchmarking.end("flush");
       }
       case ActionGrow => {
-        Native.BenchmarkingUtil.start("grow");
+        NativeBenchmarking.start("grow");
         grow(k, s);
-        Native.BenchmarkingUtil.end("grow");
+        NativeBenchmarking.end("grow");
       }
       case ActionEvict => {
-        Native.BenchmarkingUtil.start("EvictOrDealloc");
+        NativeBenchmarking.start("EvictOrDealloc");
         EvictOrDealloc(k, s, io);
-        Native.BenchmarkingUtil.end("EvictOrDealloc");
+        NativeBenchmarking.end("EvictOrDealloc");
       }
       case ActionFail => {
         print "ActionFail\n";

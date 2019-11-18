@@ -330,7 +330,7 @@ class Benchmarks {
     new BenchmarkSequentialInserts().Run();
     // new Hashing().Run();
 
-    Native_Compile.BenchmarkingUtil.dump();
+    NativeBenchmarking_Compile.__default.dump();
   }
 
   static Dictionary<string, Func<Benchmark>> _benchmarks = new Dictionary<string, Func<Benchmark>>
@@ -351,11 +351,11 @@ class Benchmarks {
     }
     (_benchmarks[name])().Run();
 
-    Native_Compile.BenchmarkingUtil.dump();
+    NativeBenchmarking_Compile.__default.dump();
   }
 }
 
-namespace Native_Compile {
+namespace NativeBenchmarking_Compile {
   public class StopwatchEntry {
     public Stopwatch s;
     public int count;
@@ -365,7 +365,7 @@ namespace Native_Compile {
     }
   }
 
-  public partial class BenchmarkingUtil
+  public partial class __default
   {
     public static Dictionary<string, StopwatchEntry> sw = new Dictionary<string, StopwatchEntry>();
 
