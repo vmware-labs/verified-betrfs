@@ -577,6 +577,8 @@ abstract module MutableBtree {
     modifies node, node.contents.children[childidx].repr
     decreases node.height, 0
   {
+    ChildrenAreDistinct(node);
+    
     forall i | 0 <= i < node.contents.nchildren
       ensures old(I(node.contents.children[i])) == old(I(node).children[i])
     {
