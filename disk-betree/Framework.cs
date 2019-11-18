@@ -470,7 +470,8 @@ namespace NativeArrays_Compile {
         //Native_Compile.BenchmarkingUtil.end();
     }
 
-    [DllImport("c", CallingConvention = CallingConvention.Cdecl)]
+    //[DllImport("c", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("msvcrt.dll", CallingConvention=CallingConvention.Cdecl)]
     private static extern unsafe int memcmp(byte* b1, byte* b2, int count);
 
     public static int @ByteSeqCmpByteSeq(
