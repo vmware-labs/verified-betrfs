@@ -42,6 +42,14 @@ module IndirectionTableImpl {
     var garbageQueue: MutableLru.MutableLruQueue?;
     ghost var Repr: set<object>;
 
+    lemma TODOThingJonNeeds()
+        requires Inv()
+        ensures this.t in Repr
+        ensures this.t.Repr <= Repr
+        ensures this.t.Inv()
+    {
+    }
+
     protected predicate Inv()
     reads this, Repr
     ensures Inv() ==> this in Repr
@@ -85,6 +93,7 @@ module IndirectionTableImpl {
     constructor Empty()
     ensures Inv()
     ensures fresh(Repr)
+    ensures t.Count == 1;   // TODO(jonh): Kind of a gross contract. I needed it to bodge Mkfs together.
     {
       this.t := new MutableMap.ResizingHashMap(128);
       new;
