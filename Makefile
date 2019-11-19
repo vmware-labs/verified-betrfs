@@ -37,6 +37,7 @@ $(BUILD_DIR)/disk-betree/Bundle.i.cpp:
 	make -C $(ROOT)/disk-betree $@
 
 allcpp: $(BUILD_DIR)/disk-betree/Bundle.i.cpp
+allo: $(BUILD_DIR)/disk-betree/Bundle.i.o
 
 .PHONY: exe exe-roslyn
 

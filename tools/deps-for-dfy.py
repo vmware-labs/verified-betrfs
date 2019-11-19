@@ -79,8 +79,15 @@ def main():
                     # For now, depend on all prior .cpps, to make development
                     # of cpp backend easier.
                     (".cpp", ".cpp"),
+
+                    # When we build X.o, we first want to build Y.cpp and Y.o.
+                    # These aren't true dependencies, but they make the ordering
+                    # more convenient.
+                    (".o", ".o"),
+                    (".cpp", ".o"),
                     ):
                 fileDeps.append("%s: %s" % (targetName(target, fromType), targetName(dep, toType)))
+
             dirDeps.add(os.path.dirname(dep.normPath))
             # dependencies from this file to type parents
             fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verchk")))

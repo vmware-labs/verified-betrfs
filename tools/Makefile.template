@@ -1,7 +1,7 @@
 TOOLS=$(dir $(abspath $(filter %/Makefile.template,$(MAKEFILE_LIST))))
 ROOT=$(abspath $(TOOLS)/..)/
-DAFNY_CMD="$(ROOT)/.dafny/bin/dafny"
-CPP_DAFNY_CMD="$(ROOT)/.dafny/bin/cpp-dafny"
+DAFNY_ROOT?="$(ROOT)/.dafny/"
+DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
 
 BUILD_DIR=$(ROOT)build
 export ROOT
@@ -87,17 +87,22 @@ $(BUILD_DIR)/%.verified: $(BUILD_DIR)/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
 # In principle, building code should depend on .verified! But we want
 # to play with perf with not-entirely-verifying trees.
 $(BUILD_DIR)/%.cs: $(ROOT)%.dfy | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@)))	 #eval trick to assign make var inside rule
-	# Dafny irritatingly removes the '.i' presuffix.
+#eval trick to assign make var inside rule
+	$(eval TMPNAME=$(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@)))
+# Dafny irritatingly removes the '.i' presuffix.
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) $<
 	mv $(TMPNAME) $@
 
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
 $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.cpp,%-i.cpp,$@))	 #eval trick to assign make var inside rule
-	# Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(CPP_DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
+#eval trick to assign make var inside rule
+	$(eval TMPNAME=$(patsubst %.cpp,%-i.cpp,$@))
+# Dafny irritatingly removes the '.i' presuffix.
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
 	mv $(TMPNAME) $@
+
+$(BUILD_DIR)/%.o: $(BUILD_DIR)/%.cpp | $$(@D)/.
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14
 
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
 #
