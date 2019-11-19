@@ -78,9 +78,11 @@ def main():
                     (".cs", ".dummydep"),
                     # For now, depend on all prior .cpps, to make development
                     # of cpp backend easier.
+                    (".o", ".o"),
                     (".cpp", ".cpp"),
                     ):
                 fileDeps.append("%s: %s" % (targetName(target, fromType), targetName(dep, toType)))
+
             dirDeps.add(os.path.dirname(dep.normPath))
             # dependencies from this file to type parents
             fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verchk")))

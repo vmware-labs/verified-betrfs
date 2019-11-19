@@ -99,6 +99,9 @@ $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
 	$(TIME) $(CPP_DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
 	mv $(TMPNAME) $@
 
+$(BUILD_DIR)/%.o: $(BUILD_DIR)/%.cpp | $$(@D)/.
+	g++ -c $< -o $@ -I$(ROOT)/.dafny/cpp-dafny/Binaries/ -std=c++14
+
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
 #
 $(BUILD_DIR)/%.status.pdf: $(ROOT)%.dfy | $$(@D)/.

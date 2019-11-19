@@ -24,5 +24,6 @@ exe-roslyn: $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe
 status: $(BUILD_DIR)/disk-betree/Bundle.i.status.pdf
 
 allcpp: $(BUILD_DIR)/disk-betree/Bundle.i.cpp
+allo: $(BUILD_DIR)/disk-betree/Bundle.i.o
 
 .PHONY: exe exe-roslyn
