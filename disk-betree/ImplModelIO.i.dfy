@@ -353,9 +353,15 @@ module ImplModelIO {
 
   function getFreeRef(indirectionTable: IndirectionTable) 
   : (ref : Option<BT.G.Reference>)
+  requires MutableMapModel.Inv(indirectionTable.t)
   ensures ref.Some? ==> RefIsUpperBoundForUsedRefs(ref.value, indirectionTable) && ref.value != BT.G.Root()
   {
-    MutableMapModel.MaxKey(indirectionTable)
+    var maxKey := MutableMapModel.MaxKey(indirectionTable.t);
+    if maxKey < 0xffff_ffff_ffff_ffff then (
+      Some(maxKey + 1)
+    ) else (
+      None
+    )
   }
 
   function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
@@ -368,7 +374,7 @@ module ImplModelIO {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
       if succ then (
-        var nextFreeRef := getFreeRef(ephemeralIndirectionTable, 1);
+        var nextFreeRef := getFreeRef(ephemeralIndirectionTable);
         if nextFreeRef.Some? then (
           var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
           var persistentIndirectionTable :=

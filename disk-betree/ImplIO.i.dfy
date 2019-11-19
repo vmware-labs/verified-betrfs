@@ -181,7 +181,12 @@ module ImplIO {
   requires indirectionTable.Inv()
   ensures ref.Some? ==> RefIsUpperBoundForUsedRefs(IS.IIndirectionTable(indirectionTable)) && ref.value != BT.G.Root()
   {
-    ref := indirectionTable.MaxKey();
+    var maxKey := indirectionTable.t.MaxKey();
+    if maxKey < 0xffff_ffff_ffff_ffff {
+      ref := Some(maxKey + 1);
+    } else {
+      ref := None;
+    )
   }
 
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)

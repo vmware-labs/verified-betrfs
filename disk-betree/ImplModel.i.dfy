@@ -213,7 +213,7 @@ module ImplModel {
 
   predicate RefIsUpperBoundForUsedRefs(ref: uint64, indirectionTable: IndirectionTable)
   {
-    && forall r | r in indirectionTable :: r < ref
+    && forall r | r in indirectionTable.t.contents :: r < ref
   }
 
   predicate Inv(k: Constants, s: Variables)
