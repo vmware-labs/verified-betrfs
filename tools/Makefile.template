@@ -1,6 +1,6 @@
 TOOLS=$(dir $(abspath $(filter %/Makefile.template,$(MAKEFILE_LIST))))
 ROOT=$(abspath $(TOOLS)/..)/
-DAFNY_ROOT?="$(ROOT)/.dafny/"
+DAFNY_ROOT?="$(ROOT)/.dafny/dafny/"
 DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
 
 BUILD_DIR=$(ROOT)build
@@ -102,7 +102,7 @@ $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
 	mv $(TMPNAME) $@
 
 $(BUILD_DIR)/%.o: $(BUILD_DIR)/%.cpp | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14 -include disk-betree/Framework.h
 
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
 #

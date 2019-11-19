@@ -13,7 +13,7 @@ mono ./nuget.exe restore Source/Boogie.sln
 msbuild /p:Configuration=Release Source/Boogie.sln
 cd ..
 
-git clone --branch cpp https://github.com/secure-foundations/dafny.git cpp-dafny
+git clone --branch cpp https://github.com/secure-foundations/dafny.git
 cd dafny
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
