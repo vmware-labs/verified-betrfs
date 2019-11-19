@@ -1,5 +1,10 @@
 #include "DafnyRuntime.h"
 
+namespace Maps_Compile {
+  template <typename K, typename V>
+  DafnyMap<K, V> ComputeMapRemove1(DafnyMap<K, V>, K);
+}
+
 namespace NativeArrays_Compile {
   int32_t ByteSeqCmpByteSeq(DafnySequence<uint8>, DafnySequence<uint8>);
 
