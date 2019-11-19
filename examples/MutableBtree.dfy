@@ -1,8 +1,8 @@
-include "../lib/NativeTypes.dfy"
-include "../lib/total_order.dfy"
-include "../lib/sequences.dfy"
-include "../lib/Arrays.dfy"
-include "../lib/Maps.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Base/total_order.i.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Arrays.i.dfy"
+include "../lib/Base/Maps.s.dfy"
 include "BtreeSpec.dfy"
 
 abstract module MutableBtree {
@@ -670,8 +670,9 @@ abstract module MutableBtree {
       BS.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
       BS.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
       BS.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
-      
-      if BS.Keys.lte(node.contents.pivots[childidx], key) {
+
+      var t := BS.Keys.cmp(node.contents.pivots[childidx], key);
+      if  t <= 0 {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |newpivots|
           ensures BS.Keys.lt(key, newpivots[i])

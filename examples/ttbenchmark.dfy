@@ -1,4 +1,4 @@
-include "tttree.dfy"
+include "tttree.i.dfy"
 
 module Integer_TTTree refines TwoThreeTree {
     import Keyspace = Integer_Order

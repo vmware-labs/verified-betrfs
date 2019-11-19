@@ -2,8 +2,15 @@
 *.mdb
 *.dll
 *.exe
+*.pdb
+*.pyc
 
 *.deps
 *.includes
 *.output
 .build_info
+/build/
+
+/.veribetrfs-storage/
+/perf.data*
+/.dafny

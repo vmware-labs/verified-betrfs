@@ -17,21 +17,23 @@ abstract class Benchmark {
 
     Stopwatch sw = Stopwatch.StartNew();
     Go(app);
+    int opCount = OpCount(app);
     sw.Stop();
 
-    Console.WriteLine("Benchmark " + Name + " " + sw.ElapsedMilliseconds.ToString() + " ms");
+    Console.WriteLine("Benchmark " + Name + ": " + (((double) opCount) / (((double) sw.ElapsedMilliseconds) / 1000)).ToString() + " ops/s" + ", " + sw.ElapsedMilliseconds.ToString() + " ms" + ", " + opCount.ToString() + " ops");
   }
 
   abstract protected void Prepare(Application app);
   abstract protected void Go(Application app);
 
-  protected List<byte[]> RandomKeys(int n, int seed) {
+  abstract protected int OpCount(Application app);
+
+  protected List<byte[]> RandomSeqs(int n, int seed, int len) {
     Random rand = new Random(seed);
 
     List<byte[]> l = new List<byte[]>();
     for (int i = 0; i < n; i++) {
-      int sz = rand.Next(1, 1024 + 1);
-      byte[] bytes = new byte[sz];
+      byte[] bytes = new byte[len];
       rand.NextBytes(bytes);
       l.Add(bytes);
     }
@@ -39,8 +41,12 @@ abstract class Benchmark {
     return l;
   }
 
+  protected List<byte[]> RandomKeys(int n, int seed) {
+    return RandomSeqs(n, seed, 20);
+  }
+
   protected List<byte[]> RandomValues(int n, int seed) {
-    return RandomKeys(n, seed);
+    return RandomSeqs(n, seed, 400);
   }
 
   protected List<byte[]> RandomSortedKeys(int n, int seed) {
@@ -79,8 +85,7 @@ abstract class Benchmark {
     for (int i = 0; i < n; i++) {
       if (rand.Next(0, 2) == 0) {
         // Min length 20 so probability of collision is miniscule
-        int sz = rand.Next(20, 1024 + 1);
-        byte[] bytes = new byte[sz];
+        byte[] bytes = new byte[20];
         rand.NextBytes(bytes);
         queryKeys.Add(bytes);
         queryValues.Add(emptyBytes);
@@ -99,21 +104,87 @@ class BenchmarkRandomInserts : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
 
+  int count = 500000;
+
   public BenchmarkRandomInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
+    keys = RandomKeys(count, seed1);
+    values = RandomValues(count, seed2);
   }
 
   override protected void Prepare(Application app) {
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
     for (int i = 0; i < keys.Count; i++) {
       app.Insert(keys[i], values[i]);
     }
+    Console.Error.Write("? sync ");
+    //Native_Compile.BenchmarkingUtil.start();
     app.Sync();
+    //Native_Compile.BenchmarkingUtil.end();
+    Console.Error.WriteLine("done");
+  }
+}
+
+// 50_000_000 random inserts
+//
+// This harness can generate ~2_300_000 ops/s on my machine (only generating keys and values, not calling Insert/Sync)
+class LongBenchmarkRandomInserts : Benchmark {
+  public override string Name { get { return "LongRandomInserts"; } }
+
+  int count = 3_000_000;
+
+  override protected int OpCount(Application app) {
+    return count;
+  }
+
+  public LongBenchmarkRandomInserts() {
+  }
+
+  override protected void Prepare(Application app) {
+  }
+
+  uint rngState = 198432;
+
+  protected uint NextPseudoRandom() {
+    rngState = (uint) (((ulong) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  unsafe override protected void Go(Application app) {
+
+    for (uint i = 0; i < this.count; i++) {
+      byte[] keyBytes = new byte[20];
+      for (uint j = 0; j < 20; j += 4) {
+        fixed (byte* ptr = &keyBytes[j]) {
+          uint* intPtr = (uint*) ptr;
+          *intPtr = NextPseudoRandom();
+        }
+      }
+      byte[] valueBytes = new byte[400];
+      for (uint j = 0; j < 400; j += 4) {
+        fixed (byte* ptr = &valueBytes[j]) {
+          uint* intPtr = (uint*) ptr;
+          *intPtr = NextPseudoRandom();
+        }
+      }
+      // Console.Error.WriteLine("KEY " + BitConverter.ToString(keyBytes));
+      app.Insert(keyBytes, valueBytes);
+      if (i % 1000000 == 0 && i != 0) {
+        Console.Error.WriteLine("? at " + i.ToString() + " ");
+        //app.Sync();
+        //Console.Error.WriteLine("done");
+      }
+    }
+    Console.Error.WriteLine("? sync at " + this.count + " ");
+    app.Sync();
+    Console.WriteLine("done");
   }
 }
 
@@ -125,13 +196,15 @@ class BenchmarkRandomQueries : Benchmark {
   List<byte[]> query_keys;
   List<byte[]> query_values;
 
+  int count = 500000;
+
   public BenchmarkRandomQueries() {
     int seed1 = 1234;
     int seed2 = 527;
     int seed3 = 19232;
-    keys = RandomKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
-    RandomQueryKeysAndValues(2000, seed3, keys, values, out query_keys, out query_values);
+    keys = RandomKeys(count, seed1);
+    values = RandomValues(count, seed2);
+    RandomQueryKeysAndValues(count, seed3, keys, values, out query_keys, out query_values);
   }
 
   override protected void Prepare(Application app) {
@@ -140,6 +213,10 @@ class BenchmarkRandomQueries : Benchmark {
     }
     app.Sync();
     app.crash();
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
@@ -155,14 +232,20 @@ class BenchmarkSequentialInserts : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
 
+  int count = 500000;
+
   public BenchmarkSequentialInserts() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomSortedKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
+    keys = RandomSortedKeys(count, seed1);
+    values = RandomValues(count, seed2);
   }
 
   override protected void Prepare(Application app) {
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
   }
 
   override protected void Go(Application app) {
@@ -179,11 +262,13 @@ class BenchmarkSequentialQueries : Benchmark {
   List<byte[]> keys;
   List<byte[]> values;
 
+  int count = 500000;
+
   public BenchmarkSequentialQueries() {
     int seed1 = 1234;
     int seed2 = 527;
-    keys = RandomSortedKeys(2000, seed1);
-    values = RandomValues(2000, seed2);
+    keys = RandomSortedKeys(count, seed1);
+    values = RandomValues(count, seed2);
   }
 
   override protected void Prepare(Application app) {
@@ -194,9 +279,45 @@ class BenchmarkSequentialQueries : Benchmark {
     app.crash();
   }
 
+  override protected int OpCount(Application app) {
+    return count;
+  }
+
   override protected void Go(Application app) {
     for (int i = 0; i < keys.Count; i++) {
       app.QueryAndExpect(keys[i], values[i]);
+    }
+  }
+}
+
+class Hashing : Benchmark {
+  public override string Name { get { return "Hashing"; } }
+
+  const int size = 1024*1024;
+
+  byte[] b;
+  //byte[] a;
+  
+  int count = 10;
+
+  public Hashing() {
+  }
+
+  override protected void Prepare(Application app) {
+    b = new byte[size];
+  }
+
+  override protected int OpCount(Application app) {
+    return count;
+  }
+
+  override protected void Go(Application app) {
+    for (int i = 0; i < count; i++) {
+      Crypto_Compile.__default.Crc32C(new Dafny.Sequence<byte>(b));
+      /*a = new byte[size];
+      for (int j = 0; j < size; j++) {
+        a[j] = b[j];
+      }*/
     }
   }
 }
@@ -207,5 +328,53 @@ class Benchmarks {
     new BenchmarkRandomInserts().Run();
     new BenchmarkSequentialQueries().Run();
     new BenchmarkSequentialInserts().Run();
+    // new Hashing().Run();
+
+    Native_Compile.BenchmarkingUtil.dump();
+  }
+
+  static Dictionary<string, Func<Benchmark>> _benchmarks = new Dictionary<string, Func<Benchmark>>
+  {
+    { "random-queries", () => new BenchmarkRandomQueries() }, 
+    { "random-inserts", () => new BenchmarkRandomInserts() }, 
+    { "sequential-queries", () => new BenchmarkSequentialQueries() }, 
+    { "sequential-inserts", () => new BenchmarkSequentialInserts() }, 
+    { "long-random-inserts", () => new LongBenchmarkRandomInserts() }, 
+  };
+
+  public void RunBenchmark(String name) {
+    if (!_benchmarks.ContainsKey(name)) {
+        Console.WriteLine("invalid benchmark, either use --all-benchmarks or choose one of the following with --benchmark=name:");
+        foreach (var k in _benchmarks.Keys) {
+            Console.WriteLine("    " + k);
+        }
+    }
+    (_benchmarks[name])().Run();
+
+    Native_Compile.BenchmarkingUtil.dump();
+  }
+}
+
+namespace Native_Compile {
+  public partial class BenchmarkingUtil
+  {
+    public static Stopwatch sw = null;
+    public static int count = 0;
+    public static void start() {
+      if (sw == null) {
+        sw = new Stopwatch();
+      }
+      sw.Start();
+      count++;
+    }
+    public static void end() {
+      sw.Stop();
+    }
+    public static void dump() {
+      if (sw != null) {
+        Console.WriteLine("measured time: " + sw.ElapsedMilliseconds.ToString());
+        Console.WriteLine("calls: " + count.ToString());
+      }
+    }
   }
 }

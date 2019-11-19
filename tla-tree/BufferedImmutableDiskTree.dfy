@@ -1,4 +1,3 @@
-include "MissingLibrary.dfy"
 include "KVTypes.dfy"
 include "Disk.dfy"
 
@@ -45,7 +44,6 @@ datatype Sector =
 // big data structure changes to make later.
 
 module BufferedImmutableDiskTree {
-import opened MissingLibrary
 import opened KVTypes
 import opened TreeTypes
 import TreeDisk

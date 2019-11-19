@@ -1,8 +1,8 @@
-include "../lib/total_order.dfy"
+include "../lib/total_order.s.dfy"
 include "CrashSafeMap.dfy"
 include "BtreeSpec.dfy"
 include "BtreeInv.dfy"  
-include "BtreeImpl.dfy"  
+include "BtreeImpl.i.dfy"  
 
 module IntegerCrashSafeMap refines CrashSafeMap {
   import Keyspace = Bounded_Integer_Order

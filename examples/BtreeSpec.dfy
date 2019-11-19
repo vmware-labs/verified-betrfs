@@ -1,6 +1,6 @@
-include "../lib/sequences.dfy"
-include "../lib/Maps.dfy"
-include "../lib/total_order.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/total_order.i.dfy"
 
 abstract module BtreeSpec {
   import opened Seq = Sequences

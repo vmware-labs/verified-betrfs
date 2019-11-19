@@ -1,13 +1,14 @@
-include "../NativeTypes.dfy"
+include "../Base/NativeTypes.s.dfy"
 //include "../../Common/Native/Io.s.dfy"
-include "../Math/power2.i.dfy"
+include "Math.i.dfy"
 
 module Common__Util_i {
 import opened NativeTypes
 //import opened Native__Io_s
-import opened Math__power2_i
-import opened Math__power2_s
-import opened Math__div_i
+//import opened Math__power2_i
+//import opened Math__power2_s
+//import opened Math__div_i
+import opened Math
 
 // Uses BigIntegers.  If you can, consider using the Opt versions below
 /*
@@ -326,7 +327,7 @@ lemma lemma_BEByteSeqToInt_BEUintToSeqByte_invertability()
 }
 
 
-function method Uint64ToSeqByte(u:uint64) : seq<byte>
+function Uint64ToSeqByte(u:uint64) : seq<byte>
     ensures Uint64ToSeqByte(u) == BEUintToSeqByte((u) as int, 8);
 {
     ghost var pv := 256;
@@ -374,7 +375,7 @@ function method SeqByteToUint16(bs:seq<byte>) : uint16
     (bs[(0) as uint64] as uint16) * 256 + (bs[(1) as uint64] as uint16)
 }
 
-function method Uint16ToSeqByte(u:uint16) : seq<byte>
+/*function method Uint16ToSeqByte(u:uint16) : seq<byte>
     ensures Uint16ToSeqByte(u) == BEUintToSeqByte((u) as int, 2);
 {
     ghost var pv := 256;
@@ -391,7 +392,7 @@ function method Uint16ToSeqByte(u:uint16) : seq<byte>
         BEUintToSeqByte((u_int/0x10000), 0) + [ ((u_int/0x100) % 0x100) as byte ] + [ (u_int % 0x100) as byte ];
     }
     s
-}
+}*/
 
 
 } 

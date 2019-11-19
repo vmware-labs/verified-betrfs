@@ -3,53 +3,8 @@
 import os
 import re
 import sys
-
-ROOT_PATH = os.getenv("ROOT")
-assert ROOT_PATH
-
-def fileFromIncludeLine(line):
-    mo = re.search('include "(.*)"', line)
-    if mo==None:
-        return mo
-    return mo.groups(1)[0]
-
-class IncludeReference:
-    def __init__(self, origin, line_num, raw_reference):
-        self.origin = origin
-        self.line_num = line_num
-        self.raw_reference = raw_reference
-
-    def validPath(self):
-        return True
-
-    def __repr__(self):
-        return "%s, from %s line %d" % (self.raw_reference, self.origin, self.line_num)
-
-    def __str__(self):
-        return repr(self)
-
-    def rootPath(self):
-        path = os.path.normpath(
-                os.path.join(os.path.dirname(self.origin), self.raw_reference))
-        return path
-
-    def __hash__(self):
-        return hash(self.rootPath())
-
-    def __cmp__(self, other):
-        return cmp(self.rootPath(), other.rootPath())
-
-
-class IncludeNotFound(Exception):
-    def __init__(self, path, referencingPath):
-        self.path = path
-        self.referencingPath = referencingPath
-
-    def msg(self):
-        return "Cannot find file '%s' referenced from '%s'" % (self.path, self.referencingPath)
-
-    def __str__(self):
-        return self.msg()
+import glob
+from lib_deps import *
 
 class InvalidDafnyIncludePath(Exception):
     def __init__(self, iref):
@@ -61,54 +16,87 @@ class InvalidDafnyIncludePath(Exception):
     def __str__(self):
         return self.msg()
 
-def visit(iref):
-    subIrefs = []
-    try:
-        contents = open(iref.rootPath()).readlines()
-    except IOError:
-        raise IncludeNotFound(iref.rootPath(), iref.origin)
-    for line_num in range(len(contents)):
-        line = contents[line_num]
-        includePath = fileFromIncludeLine(line)
-        if includePath == None:
-            continue
-        subIref = IncludeReference(iref.rootPath(), line_num+1, includePath)
-        if not subIref.validPath():
-            raise InvalidDafnyIncludePath(subIref)
-        subIrefs.append(subIref)
-    return subIrefs
+class UndeclaredTrustedness(Exception):
+    def __init__(self, iref):
+        self.iref = iref
 
-def depsFromDfySource(path):
-    initialRef = IncludeReference("./dummy", 0, path)
-    needExplore = [initialRef]
-    visited = set()
-    while len(needExplore)>0:
-        iref = needExplore.pop()
-        if iref in visited:
-            continue
-        visited.add(iref)
-        needExplore.extend(visit(iref))
-    visited.remove(initialRef)
-    return visited
+    def msg(self):
+        return "Dafny file %s must declare trustedness with .s.dfy or .i.dfy extension" % self.iref
 
-def okay(path):
-    path = path.replace(".dfy", ".okay")
-    assert path.startswith(ROOT_PATH)
-    path = path[len(ROOT_PATH):]
-    return "$(BUILD_DIR)/%s" % path
+    def __str__(self):
+        return self.msg()
+
+class IncompatibleIncludeTrustedness(Exception):
+    def __init__(self, iref, origin):
+        self.iref = iref
+        self.origin = origin
+
+    def msg(self):
+        return "Trusted .s files may only include other trusted .s files; %s includes %s" % (self.origin, self.iref)
+
+    def __str__(self):
+        return self.msg()
+
+def targetName(iref, suffix):
+    targetRootRelPath = iref.normPath.replace(".dfy", suffix)
+    result = "$(BUILD_DIR)/%s" % targetRootRelPath
+    return result
+
+def deps(iref):
+    return target(iref, ".deps")
+
+BUILD_DIR = "build" # The build dir; make clean = rm -rf $BUILD_DIR
+DIR_DEPS = "dir.deps"   # The per-directory dependencies file
 
 def main():
-    target = sys.argv[1]
-    outputFilename = sys.argv[2]
+    directory = IncludeReference(None, 0, sys.argv[1])
+    dfyList = glob.glob(os.path.join(directory.absPath, "*.dfy"))
+    targets = [IncludeReference(directory, i+1, dfyList[i]) for i in range(len(dfyList))]
 
-    output = ""
-    output += "# deps from %s\n" % target
-    allDeps = depsFromDfySource(target)
-    for dep in allDeps:
-        output += "%s: %s\n\n" % (okay(target), okay(dep.rootPath()))
+    outputFilename = os.path.join(os.path.join(os.path.join(
+        ROOT_PATH, BUILD_DIR), directory.normPath), DIR_DEPS)
+
+    dirDeps = set()    # accumulate cross-directory refs
+    fileDeps = []   # accumulate inter-file refs
+    for target in targets:
+        fileDeps.append("")
+        fileDeps.append("# deps from %s" % target)
+        allDeps = depsFromDfySource(target)
+        for dep in allDeps[::-1]:
+            # dependencies going up the .dfy graph
+            for fromType,toType in (
+                    # dummy dependencies to ensure that any targets depending
+                    # on a dfy also get rebuilt when any upstream dfys change.
+                    (".dummydep", ".dummydep"),
+                    # depend on all included dfys by synchking each first.
+                    (".synchk", ".dummydep"),
+                    # depend on all included dfys, but don't require verifying
+                    # all prior .cs files.
+                    (".verchk", ".dummydep"),
+                    # depend on all included dfys, but don't require building
+                    # all prior .cs files.
+                    (".cs", ".dummydep"),
+                    # For now, depend on all prior .cpps, to make development
+                    # of cpp backend easier.
+                    (".cpp", ".cpp"),
+                    ):
+                fileDeps.append("%s: %s" % (targetName(target, fromType), targetName(dep, toType)))
+            dirDeps.add(os.path.dirname(dep.normPath))
+            # dependencies from this file to type parents
+            fileDeps.append("%s: %s" % (targetName(target, ".verified"), targetName(dep, ".verchk")))
+        # The dirDeps file depends on each target it describes.
+        fileDeps.append("%s: %s" % (outputFilename, target.absPath))
+    if (directory.normPath in dirDeps):
+        dirDeps.remove(directory.normPath)
 
     outfp = open(outputFilename, "w")
-    outfp.write(output)
+    dirDeps = list(dirDeps)
+    dirDeps.sort()
+    for dirDep in dirDeps:
+        outfp.write("include %s\n" % os.path.join("$(BUILD_DIR)", os.path.join(dirDep, DIR_DEPS)))
+    for fileDep in fileDeps:
+        outfp.write(fileDep + "\n")
     outfp.close()
 
-main()
+if (__name__=="__main__"):
+    main()

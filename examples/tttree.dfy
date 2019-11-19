@@ -1,7 +1,7 @@
-include "../lib/total_order.dfy"
-include "../lib/lexical.dfy"
-include "../lib/Maps.dfy"
-include "../lib/mathematics.dfy"
+include "../lib/total_order.s.dfy"
+include "../lib/lexical.i.dfy"
+include "../lib/Maps.s.dfy"
+include "../lib/mathematics.i.dfy"
 
 abstract module TwoThreeTree {
     import Keyspace : Total_Order

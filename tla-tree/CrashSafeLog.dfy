@@ -1,10 +1,8 @@
-include "MissingLibrary.dfy"
 include "KVTypes.dfy"
 include "Disk.dfy"
 
 module DatumDisk refines Disk {
 import opened KVTypes
-import opened MissingLibrary
 datatype Sector = Superblock(logSize:int) | Datablock(datum:Datum)
 }
 

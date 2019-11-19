@@ -1,6 +1,6 @@
-include "../lib/sequences.dfy"
-include "../lib/total_order.dfy"
-include "../lib/lexical.dfy"
+include "../lib/sequences.s.dfy"
+include "../lib/total_order.s.dfy"
+include "../lib/lexical.i.dfy"
 
 abstract module SSTable {
   import LO: Lexical_Order
