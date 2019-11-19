@@ -78,8 +78,13 @@ def main():
                     (".cs", ".dummydep"),
                     # For now, depend on all prior .cpps, to make development
                     # of cpp backend easier.
-                    (".o", ".o"),
                     (".cpp", ".cpp"),
+
+                    # When we build X.o, we first want to build Y.cpp and Y.o.
+                    # These aren't true dependencies, but they make the ordering
+                    # more convenient.
+                    (".o", ".o"),
+                    (".cpp", ".o"),
                     ):
                 fileDeps.append("%s: %s" % (targetName(target, fromType), targetName(dep, toType)))
 
