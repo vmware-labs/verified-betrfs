@@ -25,7 +25,7 @@ module ReferenceType {
 
   export S provides Reference, Root, toRef, toUint64, NativeTypes
   export extends S
-	export Internal reveals *
+  export Internal reveals *
 }
   
 abstract module Graph {

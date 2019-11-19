@@ -14,7 +14,10 @@ $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe:$(BUILD_DIR)/disk-betree/Bundle.i.c
 	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
 	$(ROOT)/tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
 
-exe: $(BUILD_DIR)/disk-betree/Bundle.i.exe
+$(BUILD_DIR)/Veribetrfs.exe: $(BUILD_DIR)/disk-betree/Bundle.i.exe
+	cp $< $@
+
+exe: $(BUILD_DIR)/Veribetrfs.exe
 
 exe-roslyn: $(BUILD_DIR)/disk-betree/Bundle.i.roslyn.exe
 

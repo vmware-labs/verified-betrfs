@@ -31,8 +31,6 @@ module ImplInsert {
 
   import opened PBS = PivotBetreeSpec`Spec
 
-  import Native
-
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (success: bool)
   requires Inv(k, s)

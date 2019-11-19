@@ -1,6 +1,7 @@
 include "../lib/Base/Message.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/NativeArrays.s.dfy"
 include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"
 include "../lib/Marshalling/Seqs.i.dfy"
@@ -18,7 +19,7 @@ module KVList {
   import opened BucketsLib
   import opened BucketWeights
   import opened NativeTypes
-  import Native
+  import NativeArrays
   import P = PivotsLib
 
   type Key = Element
@@ -908,8 +909,8 @@ module KVList {
           == pos as int + |kvls[j].keys|;
 
       assert pos as int + |kvls[j].keys| <= keys.Length;
-      Native.Arrays.CopySeqIntoArray(kvls[j].keys, 0, keys, pos, |kvls[j].keys| as uint64);
-      Native.Arrays.CopySeqIntoArray(kvls[j].values, 0, values, pos, |kvls[j].values| as uint64);
+      NativeArrays.CopySeqIntoArray(kvls[j].keys, 0, keys, pos, |kvls[j].keys| as uint64);
+      NativeArrays.CopySeqIntoArray(kvls[j].values, 0, values, pos, |kvls[j].values| as uint64);
 
       assert pos as int + |kvls[j].keys|
           == LenSum(kvls, j as int) + |kvls[j].keys|

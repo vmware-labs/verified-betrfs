@@ -7,7 +7,7 @@ module {:extern} MainDiskIOHandler {
   import opened NativeTypes
   import D = AsyncDisk
 
-  class DiskIOHandler {
+  class {:extern} DiskIOHandler {
     method {:axiom} write(addr: uint64, bytes: array<byte>) returns (id : D.ReqId)
     modifies this;
     requires diskOp() == D.NoDiskOp;

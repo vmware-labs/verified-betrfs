@@ -23,8 +23,6 @@ module ImplFlush {
   import ImplModelCache
   import ImplModelFlush
 
-  import Native
-
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)
   requires s.ready

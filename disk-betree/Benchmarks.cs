@@ -313,7 +313,7 @@ class Hashing : Benchmark {
 
   override protected void Go(Application app) {
     for (int i = 0; i < count; i++) {
-      Crypto_Compile.__default.Crc32(new Dafny.Sequence<byte>(b));
+      Crypto_Compile.__default.Crc32C(new Dafny.Sequence<byte>(b));
       /*a = new byte[size];
       for (int j = 0; j < size; j++) {
         a[j] = b[j];

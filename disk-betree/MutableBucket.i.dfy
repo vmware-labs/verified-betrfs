@@ -22,7 +22,6 @@ module MutableBucket {
   import opened Bounds
   import opened BucketWeights
   import opened NativeTypes
-  import Native
   import Pivots = PivotsLib
 
   type Key = Element

@@ -5,8 +5,8 @@ include "Maps.i.dfy"
 include "Seqs.i.dfy"
 include "Util.i.dfy"
 include "MarshallInt.i.dfy"
-include "Native.s.dfy"
 include "../Base/Message.i.dfy"
+include "../Base/NativeArrays.s.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -18,7 +18,7 @@ import opened Common__MarshallInt_i
 import opened Libraries__base_s
 import opened Options
 //import opened Math__power2_i
-import opened Native
+import NativeArrays
 import opened Math
 import KeyType
 import ValueMessage`Internal
@@ -2662,7 +2662,7 @@ method MarshallUint64s(ints:seq<uint64>, data:array<byte>, index:uint64)
     ensures forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
     ensures  forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
 {
-    //Arrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
+    //NativeArrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
 
     var j:uint64 := 0;
 
@@ -2686,7 +2686,7 @@ method MarshallBytes(bytes:seq<byte>, data:array<byte>, index:uint64)
     ensures  forall i :: (index as int) <= i < (index as int) + |bytes| ==> data[i] == bytes[i - (index as int)];
     ensures  forall i :: (index as int) + |bytes| <= i < data.Length ==> data[i] == old(data[i]);
 {
-    Arrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
+    NativeArrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
 
     /*
     var j:uint64 := 0;

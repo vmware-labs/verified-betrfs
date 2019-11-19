@@ -45,7 +45,7 @@ module LBAType {
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
   //    reveals BlockSize
   //export extends S
-	//export Internal reveals *
+  //export Internal reveals *
 }
 
 // A disk, processing stuff in its queue, doing its thing.

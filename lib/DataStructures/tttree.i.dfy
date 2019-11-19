@@ -1,13 +1,11 @@
 include "../Base/total_order.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/mathematics.i.dfy"
-include "../Marshalling/Native.s.dfy"
 
 module TwoThreeTree {
     import Keyspace = Lexicographic_Byte_Order
     import Maps = Maps
     import Math = Mathematics
-    import Native
 
     datatype Node<Value> =
         Leaf(key: Keyspace.Element, value: Value) |
@@ -920,7 +918,7 @@ module TwoThreeTree {
     method AsSeq<Value>(tree: Tree<Value>) returns (s : seq<(Keyspace.Element, Value)>)
     requires TTTree(tree)
     //ensures Keyspace.SortedSeqForMap(s, I(tree))
-    ensures s == Keyspace.getSortedSeqForMap(I(tree))
+    ensures Keyspace.SortedSeqForMap(s, I(tree))
     {
       assume false; // I expect we'll replace tttree, no need to prove this at the moment
       //Native.BenchmarkingUtil.start();
