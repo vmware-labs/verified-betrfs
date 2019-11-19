@@ -442,6 +442,24 @@ class Framework {
   }
 }
 
+namespace Maps_Compile {
+  public partial class __default
+  {
+    public static Dafny.Map<K,V> ComputeMapRemove1<K,V>(Dafny.Map<K,V> m, K k)
+    {
+      return ((System.Func<Dafny.Map<K,V>>)(() => {
+        var _coll0 = new System.Collections.Generic.List<Dafny.Pair<K,V>>();
+        foreach (var _1_j in (m).Keys.Elements) {
+          if (((m).Contains(_1_j)) && (!(_1_j).Equals(k))) {
+            _coll0.Add(new Dafny.Pair<K,V>(_1_j,(m).Select(_1_j)));
+          }
+        }
+        return Dafny.Map<K,V>.FromCollection(_coll0);
+      }))();
+    }
+  }
+}
+
 namespace NativeArrays_Compile {
   public partial class __default
   {
