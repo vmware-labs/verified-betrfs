@@ -42,7 +42,7 @@ module IndirectionTableImpl {
     var garbageQueue: MutableLru.MutableLruQueue?;
     ghost var Repr: set<object>;
 
-    lemma TODOThingJonNeeds()
+    lemma InvForMkfs()
         requires Inv()
         ensures this.t in Repr
         ensures this.t.Repr <= Repr
