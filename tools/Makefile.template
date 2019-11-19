@@ -1,7 +1,7 @@
 TOOLS=$(dir $(abspath $(filter %/Makefile.template,$(MAKEFILE_LIST))))
 ROOT=$(abspath $(TOOLS)/..)/
-DAFNY_CMD="$(ROOT)/.dafny/bin/dafny"
-CPP_DAFNY_CMD="$(ROOT)/.dafny/bin/cpp-dafny"
+DAFNY_ROOT?="$(ROOT)/.dafny/"
+DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
 
 BUILD_DIR=$(ROOT)build
 export ROOT
@@ -98,11 +98,11 @@ $(BUILD_DIR)/%.cpp: $(ROOT)%.dfy | $$(@D)/.
 #eval trick to assign make var inside rule
 	$(eval TMPNAME=$(patsubst %.cpp,%-i.cpp,$@))
 # Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(CPP_DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
 	mv $(TMPNAME) $@
 
 $(BUILD_DIR)/%.o: $(BUILD_DIR)/%.cpp | $$(@D)/.
-	g++ -c $< -o $@ -I$(ROOT)/.dafny/cpp-dafny/Binaries/ -std=c++14
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14
 
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
 #
