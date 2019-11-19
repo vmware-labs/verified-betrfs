@@ -1,5 +1,8 @@
 #! /bin/bash
 
+frequency=$1
+shift
+
 set -x
 set -e
 
@@ -12,11 +15,16 @@ echo "LANG=en_US.UTF-8" > /etc/locale.conf
 locale-gen en_US.UTF-8
 
 cd /veribetrfs
+rm -R .veribetrfs-storage || true
+mkdir .veribetrfs-storage
 
 set +e
-rm build/roslyn-veribetrfs.exe
+rm build/disk-betree/Bundle.i.roslyn.exe
 set -e
-make build/roslyn-veribetrfs.exe
+
+cd disk-betree
+make exe-roslyn
+cd ..
 
 echo "==== starting benchmark ===="
 echo "flags: $@"
@@ -24,7 +32,7 @@ echo "flags: $@"
 COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe $@ &
 PID=$!
 read -n 1 -s -r -p "Press any key to start recording with perf (preferably before veribetrfs exits)"
-perf record -p $PID -g &
+perf record -p $PID -g -F$frequency &
 PERF_PID=$!
 sleep 1
 read -n 1 -s -r -p "Press any key to stop recording"

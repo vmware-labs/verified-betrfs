@@ -1,4 +1,4 @@
-include "../lib/MutableMapImpl.i.dfy"
+include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "ImplModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "MutableBucket.i.dfy"

@@ -1,10 +1,13 @@
-include "NativeTypes.s.dfy"
-include "Option.s.dfy"
-include "sequences.i.dfy"
-include "Sets.i.dfy"
-include "SetBijectivity.i.dfy"
-include "Marshalling/Native.s.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/NativeArrays.s.dfy"
+include "../Base/Option.s.dfy"
+include "../Base/sequences.i.dfy"
+include "../Base/Sets.i.dfy"
+include "../Base/SetBijectivity.i.dfy"
 include "MutableMapModel.i.dfy"
+//
+// A map implemented as a fast, mutable hash table.
+//
 
 module MutableMap {
   import opened NativeTypes
@@ -12,7 +15,7 @@ module MutableMap {
   import opened Sequences
   import opened Sets
   import opened SetBijectivity
-  import Native
+  import NativeArrays
   import opened MutableMapModel
 
   class FixedSizeHashMap<V> {
@@ -58,7 +61,7 @@ module MutableMap {
       Count := 0;
       Contents := map[];
       new;
-      Storage := Native.Arrays.newArrayFill(size, Empty);
+      Storage := NativeArrays.newArrayFill(size, Empty);
       Repr := { this, Storage };
     }
 
@@ -210,7 +213,7 @@ module MutableMap {
       ensures fresh(cloned.Repr)
     {
       var size := Storage.Length as uint64;
-      var newStorage := Native.Arrays.newArrayClone(this.Storage);
+      var newStorage := NativeArrays.newArrayClone(this.Storage);
       cloned := new FixedSizeHashMap.FromStorage(newStorage, Count);
       cloned.Contents := Contents;
       /* (doc) assert cloned.Repr !! Repr; */

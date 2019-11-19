@@ -1,5 +1,5 @@
-include "../lib/sequences.i.dfy"
-include "../lib/NativeTypes.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
 //
 // An abstract graph that tracks dependencies.
 // It is an interface implemented by BetreeGraph (and the refined
@@ -25,7 +25,7 @@ module ReferenceType {
 
   export S provides Reference, Root, toRef, toUint64, NativeTypes
   export extends S
-	export Internal reveals *
+  export Internal reveals *
 }
   
 abstract module Graph {

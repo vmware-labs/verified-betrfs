@@ -1,4 +1,4 @@
-include "MapSpec.s.dfy"
+include "KeyType.s.dfy"
 //
 // The messages propagated down a B-epsilon tree. Each message either
 // completely defines the value of the key, or is a delta that modifies the

@@ -1,15 +1,21 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.i.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
-include "../lib/Option.s.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/Message.i.dfy"
 include "BetreeSpec.i.dfy"
 include "Betree.i.dfy"
 include "BetreeInv.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "UIStateMachine.s.dfy"
+//
+// Like Betree, PivetBetree lowers the "lifted" op-sequences of PivotBetreeSpec
+// down to concrete state machine steps that advance the PivotBetreeBlockInterface
+// as required by BetreeSpec. The only difference is that the interface has a more
+// concrete (pivot-y) type.
+//
 
 module PivotBetree refines UIStateMachine {
   import opened PivotBetreeSpec`Internal

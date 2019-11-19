@@ -1,9 +1,13 @@
 include "BlockCache.i.dfy"
-include "../lib/Maps.s.dfy"
-include "../lib/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "PivotBetree.i.dfy"
+//
+// Bind a Betree to a BlockCache to get the behavior of both: the map implementation of a Betree,
+// and the crash-safety implementation of a BlockCache.
+//
 
 module BetreeBlockCache refines AsyncSectorDiskMachine {
   import opened Maps

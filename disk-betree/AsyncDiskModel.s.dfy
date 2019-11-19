@@ -1,6 +1,12 @@
 include "MapSpec.s.dfy"
-include "../lib/Maps.s.dfy"
-include "../lib/Crypto.s.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Crypto.s.dfy"
+//
+// An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
+//
+// (Real disks constrain I/Os to fall on logical-block-address boundaries, but we're
+// ignoring constraint for now.)
+//
 
 module AsyncDiskModelTypes {
   datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
@@ -123,7 +129,7 @@ module AsyncDisk {
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
     && |s| >= 32
-    && s[0..32] == Crypto.Crc32(s[32..])
+    && s[0..32] == Crypto.Crc32C(s[32..])
   }
 
   predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
@@ -216,6 +222,7 @@ module AsyncDisk {
   }
 }
 
+// Interface to the implementer-supplied program that is getting verified.
 abstract module AsyncDiskMachine {
   import D = AsyncDisk
   import UI
@@ -234,6 +241,8 @@ abstract module AsyncDiskMachine {
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
 }
 
+// TODO(jonh): Rename to a "System", because its job is to explain how a trusted disk interacts
+// with some implementer-supplied program (Machine).
 abstract module AsyncDiskModel {
   import D = AsyncDisk
   import M : AsyncDiskMachine

@@ -1,11 +1,22 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "PivotBetreeSpec.i.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 include "ImplModel.i.dfy"
-include "../lib/Crypto.s.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/MutableMapImpl.i.dfy"
+include "../lib/Base/Crypto.s.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "KVList.i.dfy"
+//
+// Parses bytes and returns the data structure (a Pivot-Node Sector) used by
+// the Model.
+//
+// Annoyingly, our marshaling framework doesn't enforce bijectivity.
+// So we talk only about parsing, and define marshal(X) as anything
+// that produces an output that parses to X.
+//
+// TODO(jonh): rename to ModelParsing.
+//
 
 module ImplMarshallingModel {
   import opened GenericMarshalling
@@ -20,7 +31,7 @@ module ImplMarshallingModel {
   import IM = ImplModel
   import KVList
   import Crypto
-  import Native
+  import NativeArrays
   import IndirectionTableModel
 
   import BT = PivotBetreeSpec`Internal
@@ -325,7 +336,7 @@ module ImplMarshallingModel {
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
       IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
   {
-    if |data| >= 32 && Crypto.Crc32(data[32..]) == data[..32] then
+    if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
       parseSector(data[32..])
     else
       None

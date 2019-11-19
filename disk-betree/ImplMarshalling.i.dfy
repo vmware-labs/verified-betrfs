@@ -2,7 +2,8 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "ImplState.i.dfy"
 include "ImplModel.i.dfy"
 include "MutableBucket.i.dfy"
-include "../lib/Option.s.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/NativeArrays.s.dfy"
 
 include "Marshalling.i.dfy"
 include "ImplMarshallingModel.i.dfy"
@@ -28,7 +29,7 @@ module ImplMarshalling {
   import ImplState
   import KVList
   import Crypto
-  import Native
+  import NativeArrays
   import MutableMapModel
   import IndirectionTableImpl
   import KeyType
@@ -613,7 +614,7 @@ module ImplMarshalling {
     s := None;
 
     if |data| as uint64 >= 32 {
-      var hash := Crypto.Crc32(data[32 as uint64..]);
+      var hash := Crypto.Crc32C(data[32 as uint64..]);
       if hash == data[..32 as uint64] {
         s := ParseSector(data, 32);
       }
@@ -654,17 +655,17 @@ module ImplMarshalling {
           IMM.reveal_parseSector();
           IMM.reveal_parseCheckedSector();
 
-          var hash := Crypto.Crc32Array(data, 32, data.Length as uint64 - 32);
+          var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
           assert data[32..] == data[32..data.Length];
-          assert hash == Crypto.Crc32(data[32..]);
+          assert hash == Crypto.Crc32C(data[32..]);
           ghost var data_suffix := data[32..];
-          Native.Arrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+          NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
           assert data_suffix == data[32..];
 
           /*ghost var data_seq := data[..];
           assert |data_seq| >= 32;
-          assert Crypto.Crc32(data_seq[32..])
-              == Crypto.Crc32(data[32..])
+          assert Crypto.Crc32C(data_seq[32..])
+              == Crypto.Crc32C(data[32..])
               == hash
               == data[..32]
               == data_seq[..32];*/

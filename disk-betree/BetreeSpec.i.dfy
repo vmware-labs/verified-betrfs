@@ -1,9 +1,9 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.i.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 //
 // Defines the basic B-e-tree-shaped operations.
 //

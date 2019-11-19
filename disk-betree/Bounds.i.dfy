@@ -1,4 +1,4 @@
-include "../lib/NativeTypes.s.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
 //
 // Defines bounds on various abstract quantities, such as the number
 // of children of a node.

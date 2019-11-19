@@ -1,14 +1,27 @@
-include "../lib/Maps.s.dfy"
-include "../lib/sequences.i.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/NativeTypes.s.dfy"
-include "../lib/LRU.i.dfy"
-include "../lib/MutableMapModel.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/DataStructures/LRU.i.dfy"
+include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/Bitmap.i.dfy"
+include "../lib/DataStructures/Bitmap.i.dfy"
+//
+// An IndirectionTable maps references to locations and tracks
+// dependencies (accounts for locations containing references).
+// This module includes a reference-counting map and free list
+// that make discovering free blocks (and maintaining the list of
+// them) cheap.
+// 
+// TODO(thance): separate API from refcount-y implementation using
+// a layer of Dafny refinement.
+//
+// TODO(jonh): Here "Model" means "lowest functional model of the mutable
+// impl". Maybe move Model to the beginning of all such usages?
+//
 
 module IndirectionTableModel {
   import opened Maps

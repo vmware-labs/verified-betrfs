@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 
+using System.Runtime.InteropServices;
+
 namespace MainDiskIOHandler_Compile {
   // TODO make this actually async lol
   public partial class DiskIOHandler {
@@ -440,43 +442,84 @@ class Framework {
   }
 }
 
-namespace Native_Compile {
-  public partial class @Arrays
+namespace Maps_Compile {
+  public partial class __default
   {
-      public static T[] @newArrayFill<T>(ulong n, T t)
-      {
-        T[] res = new T[n];
-        for (ulong i = 0; i < n; i++) {
-          res[i] = t;
+    public static Dafny.Map<K,V> ComputeMapRemove1<K,V>(Dafny.Map<K,V> m, K k)
+    {
+      return ((System.Func<Dafny.Map<K,V>>)(() => {
+        var _coll0 = new System.Collections.Generic.List<Dafny.Pair<K,V>>();
+        foreach (var _1_j in (m).Keys.Elements) {
+          if (((m).Contains(_1_j)) && (!(_1_j).Equals(k))) {
+            _coll0.Add(new Dafny.Pair<K,V>(_1_j,(m).Select(_1_j)));
+          }
         }
-        return res;
+        return Dafny.Map<K,V>.FromCollection(_coll0);
+      }))();
+    }
+  }
+}
+
+namespace NativeArrays_Compile {
+  public partial class __default
+  {
+    public static T[] @newArrayFill<T>(ulong n, T t)
+    {
+      T[] res = new T[n];
+      for (ulong i = 0; i < n; i++) {
+        res[i] = t;
+      }
+      return res;
+    }
+
+    public static T[] @newArrayClone<T>(T[] ar)
+    {
+      T[] res = new T[ar.Length];
+      System.Array.Copy(ar, 0, res, 0, ar.Length);
+      return res;
+    }
+
+    public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+        //Native_Compile.BenchmarkingUtil.start();
+
+        ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
+        System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
+
+        //Native_Compile.BenchmarkingUtil.end();
+    }
+
+    //[DllImport("c", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("msvcrt.dll", CallingConvention=CallingConvention.Cdecl)]
+    private static extern unsafe int memcmp(byte* b1, byte* b2, int count);
+
+    public static int @ByteSeqCmpByteSeq(
+      Dafny.Sequence<byte> s1,
+      Dafny.Sequence<byte> s2)
+    {
+      var seg1 = (ArraySegment<byte>) s1.Elements;
+      var seg2 = (ArraySegment<byte>) s2.Elements;
+
+      int result;
+      unsafe {
+        fixed (byte* b1 = seg1.Array) {
+          fixed (byte* b2 = seg2.Array) {
+            result = memcmp(b1 + seg1.Offset, b2 + seg2.Offset, Math.Min(seg1.Count, seg2.Count));
+          }
+        }
       }
 
-      public static T[] @newArrayClone<T>(T[] ar)
-      {
-        T[] res = new T[ar.Length];
-        System.Array.Copy(ar, 0, res, 0, ar.Length);
-        return res;
+      if (result < 0) {
+        return -1;
+      } else if (result > 0) {
+        return 1;
+      } else if (seg1.Count < seg2.Count) {
+        return -1;
+      } else if (seg1.Count > seg2.Count) {
+        return 1;
+      } else {
+        return 0;
       }
-
-      public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-          //Native_Compile.BenchmarkingUtil.start();
-
-          ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
-          System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
-
-          //Native_Compile.BenchmarkingUtil.end();
-      }
-
-      /*public static void @ByteSeqCmpByteSeq(
-        Dafny.Sequence<byte> s1, int i1, int l1,
-        Dafny.Sequence<byte> s2, int i2, int l2,
-        out int res)
-      {
-        var span1 = new Span<byte>(s1.Elements, i1, l1);
-        var span2 = new Span<byte>(s2.Elements, i2, l2);
-        res = span1.SequenceCompareTo(span2);
-      }*/
+    }
   }
 }
 
@@ -503,7 +546,7 @@ namespace Crypto_Compile {
       uint currentCrc = 0;
 
       if (length > 0) {
-          _crc32algo.Append(currentCrc, ar, offset, length);
+          currentCrc = _crc32algo.Append(currentCrc, ar, offset, length);
       }
 
       byte[] hash = System.BitConverter.GetBytes(currentCrc);
@@ -518,13 +561,13 @@ namespace Crypto_Compile {
       return new Dafny.Sequence<byte>(padded);
     }
 
-    public static Dafny.Sequence<byte> Crc32(Dafny.Sequence<byte> seq)
+    public static Dafny.Sequence<byte> Crc32C(Dafny.Sequence<byte> seq)
     {
       ArraySegment<byte> seg = (ArraySegment<byte>) seq.Elements;
       return padded_crc32(seg.Array, seg.Offset, seg.Count);
     }
 
-    public static Dafny.Sequence<byte> Crc32Array(byte[] ar, ulong start, ulong len)
+    public static Dafny.Sequence<byte> Crc32CArray(byte[] ar, ulong start, ulong len)
     {
       return padded_crc32(ar, (int)start, (int)len);
     }

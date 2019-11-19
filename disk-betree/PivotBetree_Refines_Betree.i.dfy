@@ -1,19 +1,26 @@
 include "BlockInterface.i.dfy"  
-include "../lib/sequences.i.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
-include "Message.i.dfy"
+include "../lib/Base/Message.i.dfy"
 include "BetreeSpec.i.dfy"
 include "Betree.i.dfy"
 include "BetreeInv.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "PivotBetreeSpecRefinement.i.dfy"
 include "PivotBetree.i.dfy"
+//
+// "Boilerplate" for the refinement/invariant proof for PivotBetree.
+// Reasons about refinement between generic Ops.
+// Relies on logic about specific ops from PivotBetreeSpecRefinement.
+//
+// This is "boilerplate" in that the difficult logic is about the Node and Op refinement
+// in PivotBetreeSpecRefinement; this file just "lowers" that logic from ops down to
+// concrete state machine steps.
+//
 
-// "boilerplate" for the refinement/invariant proof for PivotBetree.
-// Interesting logic is in PivotBetreeSpecRefinement.
-
+// TODO(jonh): name doesn't match filename.
 module PivotBetreeInvAndRefinement {
   import opened PivotBetreeSpec`Spec
   import opened Sequences

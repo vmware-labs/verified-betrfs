@@ -4,8 +4,8 @@ include "ImplCache.i.dfy"
 include "ImplModelInsert.i.dfy"
 include "ImplFlushPolicy.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/Sets.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/Sets.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
@@ -30,8 +30,6 @@ module ImplInsert {
   import opened Bounds
 
   import opened PBS = PivotBetreeSpec`Spec
-
-  import Native
 
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
   returns (success: bool)

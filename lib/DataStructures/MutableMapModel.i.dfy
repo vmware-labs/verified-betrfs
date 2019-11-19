@@ -1,10 +1,20 @@
-include "NativeTypes.s.dfy"
-include "Option.s.dfy"
-include "sequences.i.dfy"
-include "Sets.i.dfy"
-include "Maps.s.dfy"
-include "SetBijectivity.i.dfy"
-include "Marshalling/Native.s.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/Option.s.dfy"
+include "../Base/sequences.i.dfy"
+include "../Base/Sets.i.dfy"
+include "../Base/Maps.s.dfy"
+include "../Base/SetBijectivity.i.dfy"
+//
+// Immutable (functional) model to support MutableMapImpl.  API provides an
+// iterator interface with a deterministic order for parsing/marshaling.
+// (That's why the API is/ more than just a Dafny map.)
+//
+// TODO(jonh): Here and elsewhere, Model files seem to be both
+// API (because callers use some of the definitions as 'public' ways
+// to reason about the behavior of the modeled Impl) and internal
+// proof (the logic half of the behavior of the Impl). It would be
+// nice to cleanly separate these concerns.
+//
 
 module MutableMapModel {
   import opened NativeTypes
@@ -13,7 +23,6 @@ module MutableMapModel {
   import opened Sets
   import opened Maps
   import opened SetBijectivity
-  import Native
 
   datatype Slot = Slot(ghost slot: nat)
 
@@ -1370,11 +1379,11 @@ module MutableMapModel {
     var (i, next) := iterToNext(self, it.i + 1);
     var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
-    assume (forall key | key in it'.s ::
+    assert (forall key | key in it'.s ::
         exists j | 0 <= j < it'.i as int ::
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key);
-    assume (it'.next.None? ==> it'.s == self.contents.Keys);
+    assert (it'.next.None? ==> it'.s == self.contents.Keys);
 
     LemmaIterNextNotInS(self, it');
 

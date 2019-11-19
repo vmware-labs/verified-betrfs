@@ -1,12 +1,10 @@
 include "MapSpec.s.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Base/Maps.s.dfy"
 //
-// An AsyncSectorDisk is a disk (map from Location to Sector) that interleaves
-// concurrent in-flight requests.
+// An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
+// is some higher-level Node datatype. A later refinement step shows how to marshall and align
+// these Nodes to the byte-ranges of the (trusted) AsyncDiskModel.
 //
-
-// TODO why is this definition .i? Must this not be an assumption about
-// the environment?
 // TODO disallow concurrent spatially-overlapping writes/reads
 
 module AsyncSectorDiskModelTypes {
@@ -47,9 +45,10 @@ module LBAType {
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
   //    reveals BlockSize
   //export extends S
-	//export Internal reveals *
+  //export Internal reveals *
 }
 
+// A disk, processing stuff in its queue, doing its thing.
 module AsyncSectorDisk {
   import opened NativeTypes
   import opened Maps
@@ -227,6 +226,9 @@ abstract module AsyncSectorDiskMachine {
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
 }
 
+// A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
+// program. Designed to look like the AsyncDiskModel, which we want to show refines to this.
+// TODO(jonh): Rename this to a "System"?
 abstract module AsyncSectorDiskModel {
   import D = AsyncSectorDisk
   import M : AsyncSectorDiskMachine

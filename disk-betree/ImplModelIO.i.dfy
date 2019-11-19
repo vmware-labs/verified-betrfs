@@ -1,5 +1,13 @@
 include "ImplModel.i.dfy"
 include "ByteBetreeBlockCache.i.dfy"
+//
+// IO functions used by various ImplModel verbs.
+// Updates data structures as defined in ImplModel.
+// Interacts with the disk via ImplModel.IO, which abstracts
+// MainDiskIOHandlers.s.dfy.
+//
+// Also, the code that reads in indirection tables and nodes.
+//
 
 module ImplModelIO { 
   import opened ImplModel

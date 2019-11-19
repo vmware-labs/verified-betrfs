@@ -3,6 +3,7 @@
 *.dll
 *.exe
 *.pdb
+*.pyc
 
 *.deps
 *.includes

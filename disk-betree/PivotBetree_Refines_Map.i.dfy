@@ -1,8 +1,8 @@
 include "MapSpec.s.dfy"
 include "PivotBetree_Refines_Betree.i.dfy"
 include "Betree_Refines_Map.i.dfy"
-
-// This composes the two refinements:
+//
+// Composes the two refinements:
 //
 //   PivotBetree -> Betree
 //   Betree -> Map
@@ -10,6 +10,7 @@ include "Betree_Refines_Map.i.dfy"
 // To yield
 //
 //   PivotBetree -> Map
+//
 
 module PivotBetree_Refines_Map {
   import PB = PivotBetree

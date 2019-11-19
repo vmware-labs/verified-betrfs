@@ -1,7 +1,7 @@
 include "PivotsLib.i.dfy"
-include "Message.i.dfy"
-include "../lib/Maps.s.dfy"
-include "../lib/total_order.i.dfy"
+include "../lib/Base/Message.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/total_order.i.dfy"
 //
 // A Bucket maps keys to Messages. A BucketList imparts a Message meaning
 // to every key obeying the Message composition rules. This module shows

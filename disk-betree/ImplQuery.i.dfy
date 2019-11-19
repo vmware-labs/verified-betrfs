@@ -2,8 +2,8 @@ include "Impl.i.dfy"
 include "ImplSync.i.dfy"
 include "ImplModelQuery.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/Sets.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/Sets.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy

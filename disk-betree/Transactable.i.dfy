@@ -1,4 +1,4 @@
-include "../lib/sequences.i.dfy"
+include "../lib/Base/sequences.i.dfy"
 include "Graph.i.dfy"
 //
 // A Transactable is a state machine defined by atomically gluing together

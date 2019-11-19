@@ -1,14 +1,20 @@
 include "BlockCache.i.dfy"
 include "BlockCacheSystem.i.dfy"
 include "ThreeStateVersioned.s.dfy"
-include "../lib/Maps.s.dfy"
-include "../lib/sequences.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+//
+// A BlockCacheSystem -- a crash-safe block cache running a client program and
+// attached to our disk model -- correctly provides three-state crash safety
+// for the state of its program.
+//
+// Ideally we would prove the refinement for an arbitrary graph, but if we
+// imported the abstract BlockCacheSystem and CrashSafeBlockInterface
+// separately then we wouldn't know they were using the same graph.  So for
+// now, we just prove the refinement specifically for BetreeGraph.
+//
 
 module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
-  // Ideally we would prove the refinement for an arbitrary graph,
-  // but if we imported the abstract BlockCacheSystem and CrashSafeBlockInterface
-  // separately then we wouldn't know they were using the same graph.
-  // So for now, we just prove the refinement specifically for BetreeGraph.
   import opened G = PivotBetreeGraph
   import BCS = BetreeGraphBlockCacheSystem
   import opened AsyncSectorDiskModelTypes

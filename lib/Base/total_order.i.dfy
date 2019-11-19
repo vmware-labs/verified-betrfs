@@ -1,10 +1,12 @@
 include "sequences.i.dfy"
 include "NativeTypes.s.dfy"
-include "../disk-betree/UI.s.dfy"
+include "KeyType.s.dfy"
+include "NativeArrays.s.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
   import opened NativeTypes
+  import NativeArrays
     
 	type Element(!new,==)
 
@@ -22,9 +24,8 @@ abstract module Total_Order {
 		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
   method cmp(a: Element, b: Element) returns (c: int32)
-    ensures c == -1 || c == 0 || c == 1
-    ensures c == -1 ==> lt(a, b)
-    ensures c == 1 ==> lt(b, a)
+    ensures c < 0 ==> lt(a, b)
+    ensures c > 0 ==> lt(b, a)
     ensures c == 0 ==> a == b
 
 	predicate ltedef(a: Element, b: Element)
@@ -388,7 +389,7 @@ abstract module Total_Order {
     {
       var mid := (lo + hi) / 2;
       var c := cmp(run[mid], needle);
-      if (c == 1) {
+      if (c > 0) {
         hi := mid;
       } else {
         lo := mid+1;
@@ -413,7 +414,7 @@ abstract module Total_Order {
     {
       var mid := (lo + hi) / 2;
       var c := cmp(run[mid], needle);
-      if (c == -1) {
+      if (c < 0) {
         lo := mid+1;
       } else {
         hi := mid;
@@ -429,9 +430,6 @@ abstract module Total_Order {
     && (forall i | 0 <= i < |s| :: s[i].0 in m && m[s[i].0] == s[i].1)
     && (forall key | key in m :: exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key])
   }
-
-  function getSortedSeqForMap<V>(m : map<Element, V>) : (s: seq<(Element, V)>)
-  ensures SortedSeqForMap(s, m)
 
   lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
   requires SortedSeqForMap(s, m)
@@ -630,38 +628,21 @@ module Lexicographic_Byte_Order refines Total_Order {
     }
   }
 
-  method cmp(a: Element, b: Element) returns (c: int32)
+  lemma lemma_lt_defs_same(a: Element, b: Element)
+  ensures NativeArrays.lt(a, b) == (seq_lte(a, b) && a != b)
+  decreases |a|
   {
     reveal_seq_lte();
     Base_Order.reveal_lte();
-    Base_Order.reveal_ltedef();
-
-    var i: uint64 := 0;
-    var m: uint64 := if |a| as uint64 < |b| as uint64 then |a| as uint64 else |b| as uint64;
-    while i < m
-    invariant i as int <= |a|
-    invariant i as int <= |b|
-    invariant lt(a[i..], b[i..]) ==> lt(a, b)
-    invariant lt(b[i..], a[i..]) ==> lt(b, a)
-    invariant a[..i] == b[..i]
-    {
-      if (a[i] < b[i]) {
-        return -1;
-      } else if (a[i] == b[i]) {
-        i := i + 1;
-      } else {
-        return 1;
-      }
+    if |a| > 0 && |b| > 0 {
+      lemma_lt_defs_same(a[1..], b[1..]);
     }
+  }
 
-    if i == |a| as uint64 {
-      if i == |b| as uint64 {
-        return 0;
-      } else {
-        return -1;
-      }
-    } else {
-      return 1;
-    } 
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    lemma_lt_defs_same(a, b);
+    lemma_lt_defs_same(b, a);
+    c := NativeArrays.ByteSeqCmpByteSeq(a, b);
   }
 }

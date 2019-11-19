@@ -1,16 +1,19 @@
-include "../lib/Maps.s.dfy"
-include "../lib/sequences.i.dfy"
-include "../lib/Option.s.dfy"
-include "../lib/NativeTypes.s.dfy"
-include "../lib/LRU.i.dfy"
-include "../lib/MutableMapModel.i.dfy"
-include "../lib/MutableMapImpl.i.dfy"
+include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Option.s.dfy"
+include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/DataStructures/LRU.i.dfy"
+include "../lib/DataStructures/MutableMapModel.i.dfy"
+include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "PivotBetreeSpec.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/Bitmap.i.dfy"
+include "../lib/DataStructures/Bitmap.i.dfy"
 include "IndirectionTableModel.i.dfy"
+//
+// The heap-y implementation of IndirectionTableModel.
+//
 
 module IndirectionTableImpl {
   import opened Maps
@@ -38,6 +41,14 @@ module IndirectionTableImpl {
     var t: HashMap;
     var garbageQueue: MutableLru.MutableLruQueue?;
     ghost var Repr: set<object>;
+
+    lemma InvForMkfs()
+        requires Inv()
+        ensures this.t in Repr
+        ensures this.t.Repr <= Repr
+        ensures this.t.Inv()
+    {
+    }
 
     protected predicate Inv()
     reads this, Repr
@@ -82,6 +93,7 @@ module IndirectionTableImpl {
     constructor Empty()
     ensures Inv()
     ensures fresh(Repr)
+    ensures t.Count == 1;   // TODO(jonh): Kind of a gross contract. I needed it to bodge Mkfs together.
     {
       this.t := new MutableMap.ResizingHashMap(128);
       new;

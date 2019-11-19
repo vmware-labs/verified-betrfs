@@ -2,7 +2,7 @@
 
 include "Option.s.dfy"
 
-module Maps {
+module {:extern} Maps {
   import opened Options
 
   predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
@@ -60,6 +60,9 @@ module Maps {
     assert m'.Keys == m.Keys - {k};
     m'
   }
+
+  method {:axiom} ComputeMapRemove1<K,V>(m: map<K,V>, k:K) returns (m' : map<K,V>)
+  ensures m' == MapRemove1(m, k)
 
   function {:opaque} MapRemove1Strong<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - {k}
