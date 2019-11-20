@@ -44,6 +44,7 @@ module BetreeSpec {
   import opened G = BetreeGraph
   import opened Sequences
   import opened Maps
+  import UI
   import Keyspace = Lexicographic_Byte_Order
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G
@@ -126,7 +127,7 @@ module BetreeSpec {
 
   //// Successor
 
-  datatype SuccQuery = SuccQuery(key: Key, succKey: Key, succValue: Value,
+  datatype SuccQuery = SuccQuery(key: Key, res: UI.SuccResult,
       lookup1: Lookup, lookup2: Lookup)
 
   predicate LookupKeyValue(l: Lookup, key: Key, value: Value)
@@ -143,9 +144,14 @@ module BetreeSpec {
 
   predicate ValidSuccQuery(q: SuccQuery)
   {
-    && Lookup2KeyValue(q.lookup1, q.lookup2, q.succKey, q.succValue)
-    && (forall k | Keyspace.lt(q.key, k) && Keyspace.lt(k, q.succKey) :: Lookup2KeyValue(q.lookup1, q.lookup2, k, MS.EmptyValue()))
-    && q.succValue != MS.EmptyValue()
+    && (q.res.SuccNone? ==> (
+      && (forall k | Keyspace.lt(q.key, k) :: Lookup2KeyValue(q.lookup1, q.lookup2, k, MS.EmptyValue()))
+    ))
+    && (q.res.SuccKeyValue? ==> (
+      && q.res.value != MS.EmptyValue()
+      && Lookup2KeyValue(q.lookup1, q.lookup2, q.res.key, q.res.value)
+      && (forall k | Keyspace.lt(q.key, k) && Keyspace.lt(k, q.res.key) :: Lookup2KeyValue(q.lookup1, q.lookup2, k, MS.EmptyValue()))
+    ))
   }
 
   function SuccQueryReads(q: SuccQuery) : seq<ReadOp>
@@ -408,7 +414,7 @@ module BetreeSpec {
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
-      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.key, sq.succKey, sq.succValue)
+      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.key, sq.res)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?

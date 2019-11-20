@@ -59,15 +59,21 @@ module MapSpec refines UIStateMachine {
     && s' == s
   }
 
-  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, succKey: Key, succValue: Value)
+  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, res: UI.SuccResult)
   {
-    && uiop == UI.SuccOp(key, succKey, succValue)
+    && uiop == UI.SuccOp(key, res)
     && WF(s)
     && s' == s
-    && succValue != EmptyValue()
-    && s.view[succKey] == succValue
-    && (forall k | (SeqComparison.lt(key, k) && SeqComparison.lt(k, succKey)
-        && k in s.view) :: s.view[k] == EmptyValue())
+    && (res.SuccKeyValue? ==>
+      && res.value != EmptyValue()
+      && s.view[res.key] == res.value
+      && (forall k | SeqComparison.lt(key, k) && SeqComparison.lt(k, res.key) && k in s.view
+          :: s.view[k] == EmptyValue())
+    )
+    && (res.SuccNone? ==>
+      && (forall k | SeqComparison.lt(key, k) && k in s.view
+          :: s.view[k] == EmptyValue())
+    )
   }
 
   predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
@@ -89,7 +95,7 @@ module MapSpec refines UIStateMachine {
   datatype Step =
       | QueryStep(key: Key, result: Value)
       | WriteStep(key: Key, new_value: Value)
-      | SuccStep(key: Key, succKey: Key, succValue: Value)
+      | SuccStep(key: Key, res: UI.SuccResult)
       | StutterStep
 
   predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UIOp, step:Step)
@@ -97,7 +103,7 @@ module MapSpec refines UIStateMachine {
     match step {
       case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
       case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
-      case SuccStep(key, succKey, succValue) => Succ(k, s, s', uiop, key, succKey, succValue)
+      case SuccStep(key, res) => Succ(k, s, s', uiop, key, res)
       case StutterStep() => Stutter(k, s, s', uiop)
     }
   }
