@@ -106,7 +106,7 @@ abstract module StrictlySortedArray {
       && (!Done() ==> Keys.lte(ssa.arr[pos], key.value))
     }
 
-    method Next()
+    method Advance()
       requires WF()
       requires !Done()
       requires ssa.AllIteratorsValid()
@@ -191,13 +191,13 @@ module Test {
     var iter := new StrictlySortedArrayIterator.StrictlySortedArrayIterator(ssa);
     ssa.Insert(15);
     assert iter.key == Some(5);
-    iter.Next();
+    iter.Advance();
     if !iter.Done() {
       print iter.key.value;
       print "\n";
     }
     ssa.Insert(20);
-    iter.Next();
+    iter.Advance();
     if !iter.Done() {
       print iter.key.value;
       print "\n";

@@ -3,13 +3,15 @@ include "Maps.s.dfy"
 include "NativeTypes.s.dfy"
 include "KeyType.s.dfy"
 include "NativeArrays.s.dfy"
+include "Option.s.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
   import Maps
   import opened NativeTypes
   import NativeArrays
-    
+  import opened Options
+  
 	type Element(!new,==)
 
 	function SomeElement() : Element
@@ -637,16 +639,63 @@ abstract module Total_Order {
     return lo - 1;
   }
 
-  predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
+  function SetSuccessor(m: set<Element>, key: Element) : Option<Element>
   {
-    && (forall i, j | 0 <= i < j < |s| :: lt(s[i].0, s[j].0))
-    && (forall i | 0 <= i < |s| :: s[i].0 in m && m[s[i].0] == s[i].1)
-    && (forall key | key in m :: exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key])
+    if next :|
+      && next in m
+      && lt(key, next)
+      && (forall other :: other in m && other != next && lt(key, other) ==> lt(next, other)) then
+      Some(next)
+    else
+      None
+  }
+  
+  function MapSuccessor<V>(m: map<Element, V>, key: Element) : Option<Element>
+  {
+    SetSuccessor(m.Keys, key)
   }
 
-  lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
-  requires SortedSeqForMap(s, m)
-  ensures |s| == |m|
+  function SeqSuccessor(m: seq<Element>, key: Element) : Option<Element>
+  {
+    SetSuccessor(set x | x in m, key)
+  }
+
+  lemma StrictlySortedSeqSuccessor(s: seq<Element>, key: Element, pos: int)
+    requires IsStrictlySorted(s)
+    requires 0 < pos < |s|
+    requires lte(s[pos-1], key)
+    requires lt(key, s[pos])
+    ensures SeqSuccessor(s, key) == Some(s[pos])
+  {
+    forall other | other in s && other != s[pos] && lt(key, other)
+      ensures lt(s[pos], other)
+    {
+      var otherpos := Seq.IndexOf(s, other);
+      IsStrictlySortedImpliesLtIndices(s, pos-1, otherpos);
+      IsStrictlySortedImpliesLt(s, pos, otherpos);
+    }
+  }
+  
+  predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
+  {
+    && (forall i, j :: 0 <= i < j < |s| ==> lt(s[i].0, s[j].0))
+    && (forall i :: 0 <= i < |s| ==> s[i].0 in m && m[s[i].0] == s[i].1)
+    && (forall key :: key in m ==> (exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key]))
+  }
+
+  // lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
+  // requires SortedSeqForMap(s, m)
+  // ensures |s| == |m|
+  // {
+  //   reveal_SortedSeqForMap();
+  //   if |m| == 0 {
+  //     if 0 < |s| {
+  //       assert s[0].0 in m;
+  //     }
+  //   } else {
+  //     assume false;
+  //   }
+  // }
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {
@@ -765,97 +814,97 @@ module Byte_Order refines Total_Order {
   }
 }
 
-module Lexicographic_Byte_Order refines Total_Order {
-  import KeyType
-  type Element = KeyType.Key
+// module Lexicographic_Byte_Order refines Total_Order {
+//   import KeyType
+//   type Element = KeyType.Key
 
-  import Base_Order = Byte_Order
+//   import Base_Order = Byte_Order
 
-  function SomeElement() : Element { [] }
+//   function SomeElement() : Element { [] }
 
-  predicate lte(a: Element, b: Element)
-  {
-    totality(a, b);
-    antisymm(a, b);
-    transitivity_forall();
+//   predicate lte(a: Element, b: Element)
+//   {
+//     totality(a, b);
+//     antisymm(a, b);
+//     transitivity_forall();
 
-    seq_lte(a, b)
-  }
+//     seq_lte(a, b)
+//   }
 
-  predicate ltedef(a: Element, b: Element)
-  {
-    seq_lte(a, b)
-  }
+//   predicate ltedef(a: Element, b: Element)
+//   {
+//     seq_lte(a, b)
+//   }
     
-  predicate {:opaque} seq_lte(a: Element, b: Element)
-  decreases |a|
-  {
-    if |a| == 0 then (
-      true
-    ) else (
-      if |b| == 0 then (
-        false
-      ) else (
-        if Base_Order.lt(a[0], b[0]) then true
-        else if Base_Order.lt(b[0], a[0]) then false
-        else seq_lte(a[1..], b[1..])
-      )
-    )
-  }
+//   predicate {:opaque} seq_lte(a: Element, b: Element)
+//   decreases |a|
+//   {
+//     if |a| == 0 then (
+//       true
+//     ) else (
+//       if |b| == 0 then (
+//         false
+//       ) else (
+//         if Base_Order.lt(a[0], b[0]) then true
+//         else if Base_Order.lt(b[0], a[0]) then false
+//         else seq_lte(a[1..], b[1..])
+//       )
+//     )
+//   }
 
-  lemma totality(a: Element, b: Element)
-  ensures seq_lte(a, b) || seq_lte(b, a);
-  {
-    reveal_seq_lte();
-  }
+//   lemma totality(a: Element, b: Element)
+//   ensures seq_lte(a, b) || seq_lte(b, a);
+//   {
+//     reveal_seq_lte();
+//   }
 
-  lemma antisymm(a: Element, b: Element)
-  ensures seq_lte(a, b) && seq_lte(b, a) ==> a == b;
-  {
-    reveal_seq_lte();
-    if |a| > 0 && |b| > 0 {
-      antisymm(a[1..], b[1..]);
-    }
-  }
+//   lemma antisymm(a: Element, b: Element)
+//   ensures seq_lte(a, b) && seq_lte(b, a) ==> a == b;
+//   {
+//     reveal_seq_lte();
+//     if |a| > 0 && |b| > 0 {
+//       antisymm(a[1..], b[1..]);
+//     }
+//   }
 
-  lemma transitivity_forall()
-  ensures forall a, b, c | (seq_lte(a, b) && seq_lte(b, c)) :: seq_lte(a, c);
-  {
-    // We need this due to dafny bug
-    // https://github.com/dafny-lang/dafny/issues/287
-    reveal_seq_lte();
+//   lemma transitivity_forall()
+//   ensures forall a, b, c | (seq_lte(a, b) && seq_lte(b, c)) :: seq_lte(a, c);
+//   {
+//     // We need this due to dafny bug
+//     // https://github.com/dafny-lang/dafny/issues/287
+//     reveal_seq_lte();
 
-    forall a, b, c | seq_lte(a, b) && seq_lte(b, c)
-    ensures seq_lte(a, c)
-    {
-      transitivity(a, b, c);
-    }
-  }
+//     forall a, b, c | seq_lte(a, b) && seq_lte(b, c)
+//     ensures seq_lte(a, c)
+//     {
+//       transitivity(a, b, c);
+//     }
+//   }
 
-  lemma transitivity(a: Element, b: Element, c: Element)
-  ensures seq_lte(a, b) && seq_lte(b, c) ==> seq_lte(a, c);
-  {
-    reveal_seq_lte();
-    if (|a| > 0 && |b| > 0 && |c| > 0) {
-      transitivity(a[1..], b[1..], c[1..]);
-    }
-  }
+//   lemma transitivity(a: Element, b: Element, c: Element)
+//   ensures seq_lte(a, b) && seq_lte(b, c) ==> seq_lte(a, c);
+//   {
+//     reveal_seq_lte();
+//     if (|a| > 0 && |b| > 0 && |c| > 0) {
+//       transitivity(a[1..], b[1..], c[1..]);
+//     }
+//   }
 
-  lemma lemma_lt_defs_same(a: Element, b: Element)
-  ensures NativeArrays.lt(a, b) == (seq_lte(a, b) && a != b)
-  decreases |a|
-  {
-    reveal_seq_lte();
-    Base_Order.reveal_lte();
-    if |a| > 0 && |b| > 0 {
-      lemma_lt_defs_same(a[1..], b[1..]);
-    }
-  }
+//   lemma lemma_lt_defs_same(a: Element, b: Element)
+//   ensures NativeArrays.lt(a, b) == (seq_lte(a, b) && a != b)
+//   decreases |a|
+//   {
+//     reveal_seq_lte();
+//     Base_Order.reveal_lte();
+//     if |a| > 0 && |b| > 0 {
+//       lemma_lt_defs_same(a[1..], b[1..]);
+//     }
+//   }
 
-  method cmp(a: Element, b: Element) returns (c: int32)
-  {
-    lemma_lt_defs_same(a, b);
-    lemma_lt_defs_same(b, a);
-    c := NativeArrays.ByteSeqCmpByteSeq(a, b);
-  }
-}
+//   method cmp(a: Element, b: Element) returns (c: int32)
+//   {
+//     lemma_lt_defs_same(a, b);
+//     lemma_lt_defs_same(b, a);
+//     c := NativeArrays.ByteSeqCmpByteSeq(a, b);
+//   }
+// }
