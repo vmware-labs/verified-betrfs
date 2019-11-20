@@ -1,22 +1,14 @@
 include "NativeTypes.s.dfy"
+include "SeqComparison.s.dfy"
 
 module {:extern} NativeArrays {
   import opened NativeTypes
-
-  predicate lt(a: seq<byte>, b: seq<byte>)
-  {
-    if |a| == 0 && |b| == 0 then false
-    else if |a| == 0 then true
-    else if |b| == 0 then false
-    else if a[0] < b[0] then true
-    else if a[0] > b[0] then false
-    else lt(a[1..], b[1..])
-  }
+  import SeqComparison
 
   method {:axiom} ByteSeqCmpByteSeq(s1: seq<byte>, s2: seq<byte>)
       returns (c : int32)
-      ensures c < 0 ==> lt(s1, s2)
-      ensures c > 0 ==> lt(s2, s1)
+      ensures c < 0 ==> SeqComparison.lt(s1, s2)
+      ensures c > 0 ==> SeqComparison.lt(s2, s1)
       ensures c == 0 ==> s1 == s2
 
   method {:axiom} newArrayFill<T>(n: uint64, t: T) returns (ar: array<T>)
