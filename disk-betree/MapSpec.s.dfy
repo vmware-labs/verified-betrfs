@@ -1,10 +1,12 @@
 include "../lib/Base/Option.s.dfy"
+include "../lib/Base/SeqComparison.s.dfy"
 include "UI.s.dfy"
 include "UIStateMachine.s.dfy"
 
 module MapSpec refines UIStateMachine {
   import V = ValueWithDefault
   import K = KeyType
+  import SeqComparison
 
   import UI
   type Key = K.Key
@@ -26,73 +28,89 @@ module MapSpec refines UIStateMachine {
 
   predicate WF(s:Variables)
   {
-      && ViewComplete(s.view)
+    && ViewComplete(s.view)
   }
 
   // Dafny black magic: This name is here to give EmptyMap's forall something to
   // trigger on. (Eliminates a /!\ Warning.)
   predicate InDomain(k:Key)
   {
-      true
+    true
   }
 
   function EmptyMap() : (zmap : imap<Key,Value>)
       ensures ViewComplete(zmap)
   {
-      imap k | InDomain(k) :: EmptyValue()
+    imap k | InDomain(k) :: EmptyValue()
   }
 
   predicate Init(k:Constants, s:Variables)
       ensures Init(k, s) ==> WF(s)
   {
-      s == Variables(EmptyMap())
+    s == Variables(EmptyMap())
   }
 
   // Can collapse key and result; use the ones that came in uiop for free.
   predicate Query(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value)
   {
-      && uiop == UI.GetOp(key, result)
-      && WF(s)
-      && result == s.view[key]
-      && s' == s
+    && uiop == UI.GetOp(key, result)
+    && WF(s)
+    && result == s.view[key]
+    && s' == s
+  }
+
+  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, succKey: Key, succValue: Value)
+  {
+    && uiop == UI.SuccOp(key, succKey, succValue)
+    && WF(s)
+    && s' == s
+    && succValue != EmptyValue()
+    && s.view[succKey] == succValue
+    && (forall k | (SeqComparison.lte(key, k) && SeqComparison.lte(k, succKey)
+        && k != key && k != succKey && k in s.view) :: s.view[k] == EmptyValue())
   }
 
   predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
       ensures Write(k, s, s', uiop, key, new_value) ==> WF(s')
   {
-      && uiop == UI.PutOp(key, new_value)
-      && WF(s)
-      && WF(s')
-      && s'.view == s.view[key := new_value]
+    && uiop == UI.PutOp(key, new_value)
+    && WF(s)
+    && WF(s')
+    && s'.view == s.view[key := new_value]
   }
 
   predicate Stutter(k:Constants, s:Variables, s':Variables, uiop: UIOp)
   {
-      && uiop.NoOp?
-      && s' == s
+    && uiop.NoOp?
+    && s' == s
   }
 
   // uiop should be in here, too.
   datatype Step =
-      | QueryStep(key:Key, result:Value)
-      | WriteStep(key:Key, new_value:Value)
+      | QueryStep(key: Key, result: Value)
+      | WriteStep(key: Key, new_value: Value)
+      | SuccStep(key: Key, succKey: Key, succValue: Value)
       | StutterStep
 
   predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UIOp, step:Step)
   {
-      match step {
-          case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
-          case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
-          case StutterStep() => Stutter(k, s, s', uiop)
-      }
+    match step {
+      case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
+      case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
+      case SuccStep(key, succKey, succValue) => Succ(k, s, s', uiop, key, succKey, succValue)
+      case StutterStep() => Stutter(k, s, s', uiop)
+    }
   }
 
   predicate Next(k:Constants, s:Variables, s':Variables, uiop: UIOp)
   {
-      exists step :: NextStep(k, s, s', uiop, step)
+    exists step :: NextStep(k, s, s', uiop, step)
   }
 
-  predicate Inv(k:Constants, s:Variables) { WF(s) }
+  predicate Inv(k:Constants, s:Variables)
+  {
+    WF(s)
+  }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
     requires Init(k, s)

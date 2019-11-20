@@ -20,4 +20,8 @@ module UI {
     // TODO make these async? any value from it?
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
+
+    // For a query of key, return the succKey such that
+    // key < succKey, and succKey is the minimal such key.
+    | SuccOp(key: Key, succKey: Key, succValue: Value)
 }

@@ -554,6 +554,7 @@ module Byte_Order refines Total_Order {
 
 module Lexicographic_Byte_Order refines Total_Order {
   import KeyType
+  import SeqComparison
   type Element = KeyType.Key
 
   import Base_Order = Byte_Order
@@ -566,83 +567,54 @@ module Lexicographic_Byte_Order refines Total_Order {
     antisymm(a, b);
     transitivity_forall();
 
-    seq_lte(a, b)
+    SeqComparison.lte(a, b)
   }
 
   predicate ltedef(a: Element, b: Element)
   {
-    seq_lte(a, b)
+    SeqComparison.lte(a, b)
   }
     
-  predicate {:opaque} seq_lte(a: Element, b: Element)
-  decreases |a|
-  {
-    if |a| == 0 then (
-      true
-    ) else (
-      if |b| == 0 then (
-        false
-      ) else (
-        if Base_Order.lt(a[0], b[0]) then true
-        else if Base_Order.lt(b[0], a[0]) then false
-        else seq_lte(a[1..], b[1..])
-      )
-    )
-  }
-
   lemma totality(a: Element, b: Element)
-  ensures seq_lte(a, b) || seq_lte(b, a);
+  ensures SeqComparison.lte(a, b) || SeqComparison.lte(b, a);
   {
-    reveal_seq_lte();
+    SeqComparison.reveal_lte();
   }
 
   lemma antisymm(a: Element, b: Element)
-  ensures seq_lte(a, b) && seq_lte(b, a) ==> a == b;
+  ensures SeqComparison.lte(a, b) && SeqComparison.lte(b, a) ==> a == b;
   {
-    reveal_seq_lte();
+    SeqComparison.reveal_lte();
     if |a| > 0 && |b| > 0 {
       antisymm(a[1..], b[1..]);
     }
   }
 
   lemma transitivity_forall()
-  ensures forall a, b, c | (seq_lte(a, b) && seq_lte(b, c)) :: seq_lte(a, c);
+  ensures forall a, b, c | (SeqComparison.lte(a, b) && SeqComparison.lte(b, c)) :: SeqComparison.lte(a, c);
   {
     // We need this due to dafny bug
     // https://github.com/dafny-lang/dafny/issues/287
-    reveal_seq_lte();
+    SeqComparison.reveal_lte();
 
-    forall a, b, c | seq_lte(a, b) && seq_lte(b, c)
-    ensures seq_lte(a, c)
+    forall a: Element, b: Element, c: Element | SeqComparison.lte(a, b) && SeqComparison.lte(b, c)
+    ensures SeqComparison.lte(a, c)
     {
       transitivity(a, b, c);
     }
   }
 
   lemma transitivity(a: Element, b: Element, c: Element)
-  ensures seq_lte(a, b) && seq_lte(b, c) ==> seq_lte(a, c);
+  ensures SeqComparison.lte(a, b) && SeqComparison.lte(b, c) ==> SeqComparison.lte(a, c);
   {
-    reveal_seq_lte();
+    SeqComparison.reveal_lte();
     if (|a| > 0 && |b| > 0 && |c| > 0) {
       transitivity(a[1..], b[1..], c[1..]);
     }
   }
 
-  lemma lemma_lt_defs_same(a: Element, b: Element)
-  ensures NativeArrays.lt(a, b) == (seq_lte(a, b) && a != b)
-  decreases |a|
-  {
-    reveal_seq_lte();
-    Base_Order.reveal_lte();
-    if |a| > 0 && |b| > 0 {
-      lemma_lt_defs_same(a[1..], b[1..]);
-    }
-  }
-
   method cmp(a: Element, b: Element) returns (c: int32)
   {
-    lemma_lt_defs_same(a, b);
-    lemma_lt_defs_same(b, a);
     c := NativeArrays.ByteSeqCmpByteSeq(a, b);
   }
 }
