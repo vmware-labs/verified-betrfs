@@ -66,8 +66,8 @@ module MapSpec refines UIStateMachine {
     && s' == s
     && succValue != EmptyValue()
     && s.view[succKey] == succValue
-    && (forall k | (SeqComparison.lte(key, k) && SeqComparison.lte(k, succKey)
-        && k != key && k != succKey && k in s.view) :: s.view[k] == EmptyValue())
+    && (forall k | (SeqComparison.lt(key, k) && SeqComparison.lt(k, succKey)
+        && k in s.view) :: s.view[k] == EmptyValue())
   }
 
   predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)

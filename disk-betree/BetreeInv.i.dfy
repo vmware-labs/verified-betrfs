@@ -195,6 +195,14 @@ module BetreeInv {
     && BI.OpTransaction(k, s, s', QueryOps(LookupQuery(key, value, lookup)))
   }
 
+  predicate SuccQuery(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, succKey: Key, succValue: Value, lookup1: Lookup, lookup2: Lookup)
+  {
+    && ValidSuccQuery(BetreeSpec.SuccQuery(key, succKey, succValue, lookup1, lookup2))
+    && BI.Reads(k, s, SuccQueryReads(BetreeSpec.SuccQuery(key, succKey, succValue, lookup1, lookup2)))
+    && BI.OpTransaction(k, s, s', SuccQueryOps(BetreeSpec.SuccQuery(key, succKey, succValue, lookup1, lookup2)))
+  }
+
+
   //
   // Acyclicity proofs
   //
@@ -853,6 +861,7 @@ module BetreeInv {
   {
     match betreeStep {
       case BetreeQuery(q) => QueryStepPreservesInvariant(k, s, s');
+      case BetreeSuccQuery(sq) => QueryStepPreservesInvariant(k, s, s');
       case BetreeInsert(ins) => InsertMessageStepPreservesInvariant(k, s, s', ins.key, ins.msg, ins.oldroot);
       case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush);
       case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);

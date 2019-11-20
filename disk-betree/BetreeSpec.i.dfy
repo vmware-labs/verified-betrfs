@@ -4,6 +4,7 @@ include "../lib/Base/Maps.s.dfy"
 include "MapSpec.s.dfy"
 include "Graph.i.dfy"
 include "../lib/Base/Message.i.dfy"
+include "../lib/Base/total_order.i.dfy"
 //
 // Defines the basic B-e-tree-shaped operations.
 //
@@ -43,6 +44,7 @@ module BetreeSpec {
   import opened G = BetreeGraph
   import opened Sequences
   import opened Maps
+  import Keyspace = Lexicographic_Byte_Order
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G
   export Internal reveals *
@@ -119,6 +121,40 @@ module BetreeSpec {
   }
 
   function QueryOps(q: LookupQuery): seq<Op> {
+    []
+  }
+
+  //// Successor
+
+  datatype SuccQuery = SuccQuery(key: Key, succKey: Key, succValue: Value,
+      lookup1: Lookup, lookup2: Lookup)
+
+  predicate LookupKeyValue(l: Lookup, key: Key, value: Value)
+  {
+    && WFLookupForKey(l,key)
+    && BufferDefinesValue(InterpretLookup(l, key), value)
+  }
+
+  predicate Lookup2KeyValue(l1: Lookup, l2: Lookup, key: Key, value: Value)
+  {
+    || LookupKeyValue(l1, key, value)
+    || LookupKeyValue(l2, key, value)
+  }
+
+  predicate ValidSuccQuery(q: SuccQuery)
+  {
+    && Lookup2KeyValue(q.lookup1, q.lookup2, q.succKey, q.succValue)
+    && (forall k | Keyspace.lt(q.key, k) && Keyspace.lt(k, q.succKey) :: Lookup2KeyValue(q.lookup1, q.lookup2, k, MS.EmptyValue()))
+    && q.succValue != MS.EmptyValue()
+  }
+
+  function SuccQueryReads(q: SuccQuery) : seq<ReadOp>
+  {
+    q.lookup1 + q.lookup2
+  }
+
+  function SuccQueryOps(q: SuccQuery) : seq<Op>
+  {
     []
   }
 
@@ -324,6 +360,7 @@ module BetreeSpec {
 
   datatype BetreeStep =
     | BetreeQuery(q: LookupQuery)
+    | BetreeSuccQuery(sq: SuccQuery)
     | BetreeInsert(ins: MessageInsertion)
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
@@ -334,6 +371,7 @@ module BetreeSpec {
   {
     match step {
       case BetreeQuery(q) => ValidQuery(q)
+      case BetreeSuccQuery(sq) => ValidSuccQuery(sq)
       case BetreeInsert(ins) => ValidInsertion(ins)
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
@@ -346,6 +384,7 @@ module BetreeSpec {
   {
     match step {
       case BetreeQuery(q) => QueryReads(q)
+      case BetreeSuccQuery(sq) => SuccQueryReads(sq)
       case BetreeInsert(ins) => InsertionReads(ins)
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
@@ -358,6 +397,7 @@ module BetreeSpec {
   {
     match step {
       case BetreeQuery(q) => QueryOps(q)
+      case BetreeSuccQuery(sq) => SuccQueryOps(sq)
       case BetreeInsert(ins) => InsertionOps(ins)
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
@@ -368,6 +408,7 @@ module BetreeSpec {
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
+      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.key, sq.succKey, sq.succValue)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
