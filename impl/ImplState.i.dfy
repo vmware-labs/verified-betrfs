@@ -1,9 +1,9 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
-include "../treemodel/ImplModel.i.dfy"
-include "../treemodel/MainDiskIOHandler.s.dfy"
-include "../treemodel/MutableBucket.i.dfy"
-include "../treemodel/ImplNodes.i.dfy"
-include "../treemodel/IndirectionTableImpl.i.dfy"
+include "ImplModel.i.dfy"
+include "MainDiskIOHandler.s.dfy"
+include "MutableBucket.i.dfy"
+include "ImplNodes.i.dfy"
+include "IndirectionTableImpl.i.dfy"
 
 module {:extern} ImplState {
   import opened Options

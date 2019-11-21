@@ -1,9 +1,9 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
-include "../treemodel/ImplModel.i.dfy"
-include "../treemodel/MainDiskIOHandler.s.dfy"
-include "../treemodel/MutableBucket.i.dfy"
-include "../treemodel/ImplModelSplit.i.dfy"
-include "../treemodel/ImplModelInsert.i.dfy"
+include "ImplModel.i.dfy"
+include "MainDiskIOHandler.s.dfy"
+include "MutableBucket.i.dfy"
+include "ImplModelSplit.i.dfy"
+include "ImplModelInsert.i.dfy"
 
 module ImplNode {
   import opened Options

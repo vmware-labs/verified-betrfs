@@ -1,12 +1,12 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../treemodel/ImplState.i.dfy"
-include "../treemodel/ImplModel.i.dfy"
-include "../treemodel/MutableBucket.i.dfy"
+include "ImplState.i.dfy"
+include "ImplModel.i.dfy"
+include "MutableBucket.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
 
-include "../treemodel/Marshalling.i.dfy"
-include "../treemodel/ImplMarshallingModel.i.dfy"
+include "Marshalling.i.dfy"
+include "ImplMarshallingModel.i.dfy"
 
 module ImplMarshalling {
   import IM = ImplModel

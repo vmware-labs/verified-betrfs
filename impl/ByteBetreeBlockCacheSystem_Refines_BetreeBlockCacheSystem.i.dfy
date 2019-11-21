@@ -1,4 +1,4 @@
-include "../treemodel/ByteBetreeBlockCacheSystem.i.dfy"
+include "ByteBetreeBlockCacheSystem.i.dfy"
 //
 // Proves refinement from the Byte (disk-parse-y) Betree system to the Pivot-y
 // Betree system.  This proof is simple because all the work happens in the

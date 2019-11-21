@@ -1,5 +1,5 @@
-include "../treemodel/ImplModelCache.i.dfy"
-include "../treemodel/ImplModelIO.i.dfy"
+include "ImplModelCache.i.dfy"
+include "ImplModelIO.i.dfy"
 include "../treemodel/AsyncDiskModel.s.dfy"
 include "../treemodel/KVListPartialFlush.i.dfy"
 

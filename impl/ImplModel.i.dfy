@@ -8,8 +8,8 @@ include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/DataStructures/LRU.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/Bitmap.i.dfy"
-include "../treemodel/BlockAllocator.i.dfy"
-include "../treemodel/IndirectionTableModel.i.dfy"
+include "BlockAllocator.i.dfy"
+include "IndirectionTableModel.i.dfy"
 //
 // This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation

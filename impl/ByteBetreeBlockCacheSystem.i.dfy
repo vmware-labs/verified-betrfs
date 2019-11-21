@@ -1,5 +1,5 @@
 include "../treemodel/AsyncDiskModel.s.dfy"
-include "../treemodel/ByteBetreeBlockCache.i.dfy"
+include "ByteBetreeBlockCache.i.dfy"
 include "../treemodel/BetreeBlockCacheSystem.i.dfy"
 //
 // Instantiates the ByteBetreeBlockCache program in the (trusted, byte-level)

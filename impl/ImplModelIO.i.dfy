@@ -1,5 +1,5 @@
-include "../treemodel/ImplModel.i.dfy"
-include "../treemodel/ByteBetreeBlockCache.i.dfy"
+include "ImplModel.i.dfy"
+include "ByteBetreeBlockCache.i.dfy"
 //
 // IO functions used by various ImplModel verbs.
 // Updates data structures as defined in ImplModel.

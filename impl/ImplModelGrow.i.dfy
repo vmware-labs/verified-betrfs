@@ -1,4 +1,4 @@
-include "../treemodel/ImplModelCache.i.dfy"
+include "ImplModelCache.i.dfy"
 
 module ImplModelGrow { 
   import opened ImplModel

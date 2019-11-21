@@ -1,6 +1,6 @@
 include "../treemodel/AsyncDiskModel.s.dfy"
 include "../treemodel/BetreeBlockCache.i.dfy"
-include "../treemodel/Marshalling.i.dfy"
+include "Marshalling.i.dfy"
 //
 // Wraps a BetreeBlockCache (which does I/O in high-level Node sectors) into
 // a state machine that is an AsyncDiskMachine: a client of a disk that does

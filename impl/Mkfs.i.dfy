@@ -1,7 +1,7 @@
-include "../treemodel/Marshalling.i.dfy"
-include "../treemodel/Impl.i.dfy"
-include "../treemodel/ImplState.i.dfy"
-include "../treemodel/ImplMarshalling.i.dfy"
+include "Marshalling.i.dfy"
+include "Impl.i.dfy"
+include "ImplState.i.dfy"
+include "ImplMarshalling.i.dfy"
 
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {

@@ -10,7 +10,7 @@ include "../treemodel/AsyncSectorDiskModel.i.dfy"
 include "../treemodel/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/Bitmap.i.dfy"
-include "../treemodel/IndirectionTableModel.i.dfy"
+include "IndirectionTableModel.i.dfy"
 //
 // The heap-y implementation of IndirectionTableModel.
 //

@@ -1,8 +1,8 @@
-include "../treemodel/ImplModelFlush.i.dfy"
-include "../treemodel/ImplModelGrow.i.dfy"
-include "../treemodel/ImplModelSplit.i.dfy"
-include "../treemodel/ImplModelLeaf.i.dfy"
-include "../treemodel/ImplModelEvict.i.dfy"
+include "ImplModelFlush.i.dfy"
+include "ImplModelGrow.i.dfy"
+include "ImplModelSplit.i.dfy"
+include "ImplModelLeaf.i.dfy"
+include "ImplModelEvict.i.dfy"
 include "../treemodel/Bounds.i.dfy"
 
 module ImplModelFlushPolicy {

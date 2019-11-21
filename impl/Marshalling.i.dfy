@@ -1,4 +1,4 @@
-include "../treemodel/ImplMarshallingModel.i.dfy"
+include "ImplMarshallingModel.i.dfy"
 //
 // Raises ImpLMarshallingModel by converting indirection table sectors
 // up from IndirectionTableModel.IndirectionTable to

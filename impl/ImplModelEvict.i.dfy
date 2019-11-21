@@ -1,5 +1,5 @@
-include "../treemodel/ImplModelDealloc.i.dfy"
-include "../treemodel/ImplModelSync.i.dfy"
+include "ImplModelDealloc.i.dfy"
+include "ImplModelSync.i.dfy"
 
 module ImplModelEvict {
   import opened ImplModel
