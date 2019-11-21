@@ -1,6 +1,6 @@
-include "AsyncDiskModel.s.dfy"
-include "ByteBetreeBlockCache.i.dfy"
-include "BetreeBlockCacheSystem.i.dfy"
+include "../treemodel/AsyncDiskModel.s.dfy"
+include "../treemodel/ByteBetreeBlockCache.i.dfy"
+include "../treemodel/BetreeBlockCacheSystem.i.dfy"
 //
 // Instantiates the ByteBetreeBlockCache program in the (trusted, byte-level)
 // disk model to get a System.

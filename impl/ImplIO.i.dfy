@@ -1,7 +1,7 @@
-include "Impl.i.dfy"
-include "ImplState.i.dfy"
-include "ImplModelIO.i.dfy"
-include "ImplMarshalling.i.dfy"
+include "../treemodel/Impl.i.dfy"
+include "../treemodel/ImplState.i.dfy"
+include "../treemodel/ImplModelIO.i.dfy"
+include "../treemodel/ImplMarshalling.i.dfy"
 
 module ImplIO { 
   import opened Impl

@@ -1,8 +1,8 @@
-include "ImplModel.i.dfy"
-include "ImplModelCache.i.dfy"
+include "../treemodel/ImplModel.i.dfy"
+include "../treemodel/ImplModelCache.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "PivotBetreeSpec.i.dfy"
+include "../treemodel/PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

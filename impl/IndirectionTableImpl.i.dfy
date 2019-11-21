@@ -5,12 +5,12 @@ include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/DataStructures/LRU.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
-include "PivotBetreeSpec.i.dfy"
-include "AsyncSectorDiskModel.i.dfy"
-include "BlockCacheSystem.i.dfy"
+include "../treemodel/PivotBetreeSpec.i.dfy"
+include "../treemodel/AsyncSectorDiskModel.i.dfy"
+include "../treemodel/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/Bitmap.i.dfy"
-include "IndirectionTableModel.i.dfy"
+include "../treemodel/IndirectionTableModel.i.dfy"
 //
 // The heap-y implementation of IndirectionTableModel.
 //

@@ -1,7 +1,7 @@
-include "ImplModelCache.i.dfy"
-include "ImplModelIO.i.dfy"
-include "AsyncDiskModel.s.dfy"
-include "KVListPartialFlush.i.dfy"
+include "../treemodel/ImplModelCache.i.dfy"
+include "../treemodel/ImplModelIO.i.dfy"
+include "../treemodel/AsyncDiskModel.s.dfy"
+include "../treemodel/KVListPartialFlush.i.dfy"
 
 module ImplModelFlush { 
   import opened ImplModel

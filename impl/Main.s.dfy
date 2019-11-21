@@ -1,8 +1,8 @@
-include "MapSpec.s.dfy"
-include "ThreeStateVersionedMap.s.dfy"
-include "AsyncDiskModel.s.dfy"
+include "../treemodel/MapSpec.s.dfy"
+include "../treemodel/ThreeStateVersionedMap.s.dfy"
+include "../treemodel/AsyncDiskModel.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
-include "MainDiskIOHandler.s.dfy"
+include "../treemodel/MainDiskIOHandler.s.dfy"
 
 module DiskTypes {
   import opened NativeTypes

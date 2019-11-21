@@ -1,10 +1,10 @@
-include "Impl.i.dfy"
-include "ImplSync.i.dfy"
-include "ImplModelQuery.i.dfy"
-include "MainDiskIOHandler.s.dfy"
+include "../treemodel/Impl.i.dfy"
+include "../treemodel/ImplSync.i.dfy"
+include "../treemodel/ImplModelQuery.i.dfy"
+include "../treemodel/MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "PivotBetreeSpec.i.dfy"
+include "../treemodel/PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

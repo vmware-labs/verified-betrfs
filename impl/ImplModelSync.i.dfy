@@ -1,6 +1,6 @@
-include "ImplModel.i.dfy"
-include "ImplModelIO.i.dfy"
-include "ImplModelDealloc.i.dfy"
+include "../treemodel/ImplModel.i.dfy"
+include "../treemodel/ImplModelIO.i.dfy"
+include "../treemodel/ImplModelDealloc.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 

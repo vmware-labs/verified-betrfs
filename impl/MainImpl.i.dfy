@@ -1,15 +1,15 @@
-include "Main.s.dfy"
+include "../treemodel/Main.s.dfy"
 
 include "../lib/Base/Sets.i.dfy"
-include "ByteBetreeBlockCacheSystem.i.dfy"
-include "Marshalling.i.dfy"
+include "../treemodel/ByteBetreeBlockCacheSystem.i.dfy"
+include "../treemodel/Marshalling.i.dfy"
 
-include "Impl.i.dfy"
-include "ImplInsert.i.dfy"
-include "ImplQuery.i.dfy"
-include "ImplModelInsert.i.dfy"
-include "ImplModelQuery.i.dfy"
-include "ImplModelSync.i.dfy"
+include "../treemodel/Impl.i.dfy"
+include "../treemodel/ImplInsert.i.dfy"
+include "../treemodel/ImplQuery.i.dfy"
+include "../treemodel/ImplModelInsert.i.dfy"
+include "../treemodel/ImplModelQuery.i.dfy"
+include "../treemodel/ImplModelSync.i.dfy"
 
 module {:extern} MainImpl refines Main { 
   import opened Impl

@@ -1,6 +1,6 @@
-include "ImplModelEvict.i.dfy"
-include "ImplDealloc.i.dfy"
-include "ImplSync.i.dfy"
+include "../treemodel/ImplModelEvict.i.dfy"
+include "../treemodel/ImplDealloc.i.dfy"
+include "../treemodel/ImplSync.i.dfy"
 
 module ImplEvict {
   import opened Impl

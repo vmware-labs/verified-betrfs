@@ -1,5 +1,5 @@
-include "ImplCache.i.dfy"
-include "ImplModelGrow.i.dfy"
+include "../treemodel/ImplCache.i.dfy"
+include "../treemodel/ImplModelGrow.i.dfy"
 
 module ImplGrow { 
   import opened Impl

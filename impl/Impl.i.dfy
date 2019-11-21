@@ -1,15 +1,15 @@
-include "MapSpec.s.dfy"
+include "../treemodel/MapSpec.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../lib/Base/Option.s.dfy"
-include "ByteBetreeBlockCacheSystem.i.dfy"
-include "Marshalling.i.dfy"
-include "MainDiskIOHandler.s.dfy"
-include "ImplState.i.dfy"
+include "../treemodel/ByteBetreeBlockCacheSystem.i.dfy"
+include "../treemodel/Marshalling.i.dfy"
+include "../treemodel/MainDiskIOHandler.s.dfy"
+include "../treemodel/ImplState.i.dfy"
 
-include "PivotBetree_Refines_Map.i.dfy"
-include "ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"
-include "BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree.i.dfy"
+include "../treemodel/PivotBetree_Refines_Map.i.dfy"
+include "../treemodel/ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"
+include "../treemodel/BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

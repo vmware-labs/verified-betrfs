@@ -1,4 +1,4 @@
-include "ImplModelCache.i.dfy"
+include "../treemodel/ImplModelCache.i.dfy"
 
 module ImplModelDealloc { 
   import opened ImplModel

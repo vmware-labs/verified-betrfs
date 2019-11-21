@@ -1,12 +1,12 @@
-include "Impl.i.dfy"
-include "ImplIO.i.dfy"
-include "ImplCache.i.dfy"
-include "ImplModelInsert.i.dfy"
-include "ImplFlushPolicy.i.dfy"
-include "MainDiskIOHandler.s.dfy"
+include "../treemodel/Impl.i.dfy"
+include "../treemodel/ImplIO.i.dfy"
+include "../treemodel/ImplCache.i.dfy"
+include "../treemodel/ImplModelInsert.i.dfy"
+include "../treemodel/ImplFlushPolicy.i.dfy"
+include "../treemodel/MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "PivotBetreeSpec.i.dfy"
+include "../treemodel/PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

@@ -1,15 +1,15 @@
-include "PivotBetreeSpec.i.dfy"
+include "../treemodel/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
-include "AsyncDiskModel.s.dfy"
+include "../treemodel/AsyncDiskModel.s.dfy"
 include "../lib/Base/Option.s.dfy"
-include "BetreeBlockCache.i.dfy"
+include "../treemodel/BetreeBlockCache.i.dfy"
 include "../lib/DataStructures/tttree.i.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/DataStructures/LRU.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/Bitmap.i.dfy"
-include "BlockAllocator.i.dfy"
-include "IndirectionTableModel.i.dfy"
+include "../treemodel/BlockAllocator.i.dfy"
+include "../treemodel/IndirectionTableModel.i.dfy"
 //
 // This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation

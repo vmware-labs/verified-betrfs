@@ -1,7 +1,7 @@
 include "../lib/DataStructures/tttree.i.dfy"
-include "KVList.i.dfy"
-include "KVListPartialFlush.i.dfy"
-include "Bounds.i.dfy"
+include "../treemodel/KVList.i.dfy"
+include "../treemodel/KVListPartialFlush.i.dfy"
+include "../treemodel/Bounds.i.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
