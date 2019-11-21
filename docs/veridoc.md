@@ -1,25 +1,27 @@
 # Trusted Libraries
 
-**lib/Marshalling/Seqs.s.dfy** 
-TODO(jonh): Not sure why this is file is .s; perhaps a holdover from
-IronFleet?
+**lib/Base/MathAxioms.s.dfy** This files contains math axioms which, for whatever reason,
+don't seem to be provable with Dafny.
 
+**lib/Base/NativeTypes.s.dfy** 
 
-**lib/NativeTypes.s.dfy** 
+**lib/Base/Option.s.dfy** 
 
-**lib/Option.s.dfy** 
+**lib/Base/Crypto.s.dfy** 
 
-**lib/Crypto.s.dfy** 
+**lib/Base/KeyType.s.dfy** 
 
-**lib/Maps.s.dfy** 
+**lib/Base/Maps.s.dfy** TODO most of this doesn't need to be .s
 
-**lib/Marshalling/Native.s.dfy** 
+**lib/Base/SeqComparison.s.dfy** 
 
-**lib/sequences.s.dfy** 
-
-**lib/total_order.s.dfy** 
+**lib/Base/NativeArrays.s.dfy** 
 
 # Verified Libraries
+
+**lib/Base/SetBijectivity.i.dfy** 
+
+**lib/Base/mathematics.i.dfy** 
 
 **lib/Marshalling/Maps.i.dfy** 
 
@@ -30,23 +32,27 @@ a lot of dependencies.
 
 **lib/Math/bases.i.dfy** 
 
-**lib/SetBijectivity.i.dfy** 
-
-**lib/mathematics.i.dfy** 
-
-**lib/BitsetLemmas.i.dfy** 
+**lib/Base/BitsetLemmas.i.dfy** 
 Some support math to support Bitmap module.
 
+
+**lib/Base/Message.i.dfy** 
+The messages propagated down a B-epsilon tree. Each message either
+completely defines the value of the key, or is a delta that modifies the
+value defined by prior messages.
+
+
+**lib/Base/Sets.i.dfy** 
+
+**lib/Base/sequences.i.dfy** 
 
 **lib/Marshalling/Seqs.i.dfy** 
 
 **lib/Marshalling/Util.i.dfy** include "../../Common/Native/Io.s.dfy"
 
-**lib/Sets.i.dfy** 
+**lib/Base/total_order.i.dfy** 
 
-**lib/tttree.i.dfy** 
-
-**lib/Bitmap.i.dfy** 
+**lib/DataStructures/Bitmap.i.dfy** 
 A module that maintains a compact set of integers using a packed-uint64
 bitmap representation.
 
@@ -54,9 +60,7 @@ TODO(thance): This module has both the Model (BytemapModel) and the
 Impl (class Bitmap) that implements it efficiently.
 
 
-**lib/Marshalling/MarshallInt.i.dfy** include "../../../Libraries/Util/seqs_transforms.i.dfy"
-
-**lib/MutableMapModel.i.dfy** 
+**lib/DataStructures/MutableMapModel.i.dfy** 
 Immutable (functional) model to support MutableMapImpl.  API provides an
 iterator interface with a deterministic order for parsing/marshaling.
 (That's why the API is/ more than just a Dafny map.)
@@ -68,13 +72,17 @@ proof (the logic half of the behavior of the Impl). It would be
 nice to cleanly separate these concerns.
 
 
-**lib/Marshalling/GenericMarshalling.i.dfy** 
+**lib/Marshalling/MarshallInt.i.dfy** include "../../../Libraries/Util/seqs_transforms.i.dfy"
 
-**lib/MutableMapImpl.i.dfy** 
+**lib/DataStructures/MutableMapImpl.i.dfy** 
 A map implemented as a fast, mutable hash table.
 
 
-**lib/LRU.i.dfy** 
+**lib/DataStructures/tttree.i.dfy** 
+
+**lib/Marshalling/GenericMarshalling.i.dfy** 
+
+**lib/DataStructures/LRU.i.dfy** 
 An LRU-queue.
 
 
@@ -124,12 +132,6 @@ PivotBetreeGraph): trees whose dependencies are child pointers that
 reference other nodes.
 It is used by the BlockInterface to identify which blocks can be
 garbage-collected because they're unreachable from the graph roots.
-
-
-**disk-betree/Message.i.dfy** 
-The messages propagated down a B-epsilon tree. Each message either
-completely defines the value of the key, or is a delta that modifies the
-value defined by prior messages.
 
 
 **disk-betree/PivotsLib.i.dfy** 

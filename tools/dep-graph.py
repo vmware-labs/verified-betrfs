@@ -28,9 +28,9 @@ class Traverser:
         if iref in self.visited:
             return
         self.visited.add(iref)
-        for dep in visit(iref):
+        for dep in childrenForIref(iref):
             self.output.append('"%s" -> "%s";' % (iref.normPath, dep.normPath))
-        for dep in visit(iref):
+        for dep in childrenForIref(iref):
             self.visit(dep)
 
     def getSummary(self, iref):

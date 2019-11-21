@@ -1,9 +1,17 @@
 import os
+import sys
 import re
 
+try:
+    import toposort
+except ModuleNotFoundError:
+    sys.stderr.write("*****************************************\n")
+    sys.stderr.write("** Python3 needs toposort module. Try: **\n")
+    sys.stderr.write("** pip3 install toposort               **\n")
+    sys.stderr.write("*****************************************\n")
+    sys.exit(-1)
+
 # find veribetrfs root relative to this file's location in /tools/
-import os
-import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 ROOT_PATH = os.path.abspath(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -70,6 +78,9 @@ class IncludeReference:
         return hash(self.rootPath())
 
     # Python3
+    def __lt__(self, other):
+        return self.rootPath() < other.rootPath()
+
     def __eq__(self, other):
         return self.rootPath() == other.rootPath()
 
@@ -113,7 +124,7 @@ def includePaths(iref):
         irefs.append(subIref)
     return irefs
 
-def visit(iref):
+def childrenForIref(iref):
     subIrefs = []
     for subIref in includePaths(iref):
         if not subIref.validPath():
@@ -133,7 +144,19 @@ def depsFromDfySource(initialRef):
         if iref in visited:
             continue
         visited.append(iref)
-        needExplore.extend(visit(iref))
+        needExplore.extend(childrenForIref(iref))
     visited.remove(initialRef)
     return visited
 
+def toposortGroup(candidateIrefs):
+    """Given a set of IRefs, returns a list of irefs toposorted based on the include graph."""
+    graph = {}
+    for iRef in candidateIrefs:
+        graph[iRef] = set(includePaths(iRef))
+    candidateSet = set(candidateIrefs)
+    output = []
+    for group in toposort.toposort(graph):
+        group = list(group.intersection(candidateSet))
+        group.sort()
+        output += group
+    return output
