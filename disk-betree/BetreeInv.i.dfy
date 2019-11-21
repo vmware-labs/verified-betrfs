@@ -195,11 +195,11 @@ module BetreeInv {
     && BI.OpTransaction(k, s, s', QueryOps(LookupQuery(key, value, lookup)))
   }
 
-  predicate SuccQuery(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, succKey: Key, succValue: Value, lookup1: Lookup, lookup2: Lookup)
+  predicate SuccQuery(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, res: UI.SuccResult, lookup1: Lookup, lookup2: Lookup)
   {
-    && ValidSuccQuery(BetreeSpec.SuccQuery(key, succKey, succValue, lookup1, lookup2))
-    && BI.Reads(k, s, SuccQueryReads(BetreeSpec.SuccQuery(key, succKey, succValue, lookup1, lookup2)))
-    && BI.OpTransaction(k, s, s', SuccQueryOps(BetreeSpec.SuccQuery(key, succKey, succValue, lookup1, lookup2)))
+    && ValidSuccQuery(BetreeSpec.SuccQuery(key, res, lookup1, lookup2))
+    && BI.Reads(k, s, SuccQueryReads(BetreeSpec.SuccQuery(key, res, lookup1, lookup2)))
+    && BI.OpTransaction(k, s, s', SuccQueryOps(BetreeSpec.SuccQuery(key, res, lookup1, lookup2)))
   }
 
 

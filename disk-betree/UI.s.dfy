@@ -10,6 +10,8 @@ module UI {
   type Value = V.Value
   type Key = K.Key
 
+  datatype SuccResult = SuccNone | SuccKeyValue(key: Key, value: Value)
+
   datatype Op =
     | NoOp
     | SyncOp
@@ -23,5 +25,5 @@ module UI {
 
     // For a query of key, return the succKey such that
     // key < succKey, and succKey is the minimal such key.
-    | SuccOp(key: Key, succKey: Key, succValue: Value)
+    | SuccOp(key: Key, res: SuccResult)
 }
