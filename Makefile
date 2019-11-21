@@ -2,7 +2,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=impl/Bundle.i.dfy build-tests/test-suite.i.dfy
+DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=".dafny/dafny/"
 DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
@@ -66,7 +66,7 @@ endef
 # Verification status page
 
 .PHONY: status
-status: build/deps build/impl/Bundle.i.status.pdf
+status: build/deps build/Impl/Bundle.i.status.pdf
 
 ##############################################################################
 # C# executables
@@ -76,28 +76,28 @@ FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32
 .PHONY: exe
 exe: build/Veribetrfs.exe
 
-build/impl/Bundle.i.exe: build/impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
+build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
 
 .PHONY: exe-roslyn
-exe-roslyn: build/impl/Bundle.i.roslyn.exe
+exe-roslyn: build/Impl/Bundle.i.roslyn.exe
 
-build/impl/Bundle.i.roslyn.exe:build/impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
+build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
 	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
 	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
 
-build/Veribetrfs.exe: build/impl/Bundle.i.exe
+build/Veribetrfs.exe: build/Impl/Bundle.i.exe
 	cp $< $@
 
 ##############################################################################
 # C++ executables
 
 .PHONY: allcpp
-allcpp: build/impl/Bundle.i.cpp
+allcpp: build/Impl/Bundle.i.cpp
 
 .PHONY: allo
-allo: build/impl/Bundle.i.o
+allo: build/Impl/Bundle.i.o
 
 ##############################################################################
 ##############################################################################
