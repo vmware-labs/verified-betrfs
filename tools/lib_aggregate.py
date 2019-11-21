@@ -33,6 +33,10 @@ class DafnyVerified(DafnyCondition):
     def __init__(self):
         super().__init__(4, "verified successfully", "fillcolor=green; shape=ellipse")
 
+class DafnySyntaxOK(DafnyCondition):
+    def __init__(self):
+        super().__init__(4, "syntax ok", "fillcolor=green; shape=ellipse")
+
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy")
 
@@ -48,7 +52,7 @@ def hasDisallowedAssumptions(verchk):
             return True
     return False
 
-def extractCondition(verchk, content):
+def extractCondition(reportType, report, content):
     # Extract Dafny verification result
     if re.compile("parse errors detected in").search(content) != None:
         return DafnyParseError()
@@ -59,12 +63,17 @@ def extractCondition(verchk, content):
         verifCount,errorCount = map(int, mo.groups())
         if errorCount > 0:
             return DafnyVerificationError()
-        if hasDisallowedAssumptions(verchk):
+        if hasDisallowedAssumptions(report):
             return DafnyAssumeError()
         return DafnyVerified()
-    raise Exception("build system error: aggregate-verchk couldn't summarize %s\n" % verchk)
+    if reportType=="verchk":
+        raise Exception("build system error: couldn't summarize %s\n" % report)
+    elif reportType=="synchk":
+        return DafnySyntaxOK()
+    else:
+        raise Exception("build system error: unknown report type %s\n" % reportType)
 
-def summarize(verchk):
+def summarize(reportType, verchk):
     content = open(verchk).read()
 
     # Extract time
@@ -74,7 +83,7 @@ def summarize(verchk):
     else:
         userTimeSec = None
 
-    condition = extractCondition(verchk, content)
+    condition = extractCondition(reportType, verchk, content)
     condition.userTimeSec = userTimeSec
     condition.verchk = verchk
     return condition

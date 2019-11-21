@@ -12,6 +12,9 @@ DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
 
 all: status exe
 
+clean:
+	rm -rf build
+
 ##############################################################################
 # Build dir and dependency setup
 
@@ -114,7 +117,7 @@ build/%.dummydep: %.dfy | $$(@D)/.
 # .synchk: Dafny syntax check
 build/%.synchk: %.dfy | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.synchk,%.synchk-tmp,$@))
-	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ##############################################################################
@@ -132,14 +135,26 @@ AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
 	$(call tee_capture,$@,$(AGGREGATE_TOOL) $^)
 
+# Syntax is trivial from synchk file, just a marker.
+# (We need the .syntax target to get a recursive dependency computation.)
+build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
+	touch $@
+
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
 #
 STATUS_TOOL=tools/dep-graph.py
 STATUS_DEPS=tools/lib_aggregate.py
 build/%.status.pdf: %.dfy build/%.verified $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
+	@$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
+	$(STATUS_TOOL) verchk $< $(DOTNAME)
+	@tred < $(DOTNAME) | dot -Tpdf -o$@
+
+# A syntax-only version of the tree so I can play around without waiting for
+# a complete verification.
+build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
 	$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
-	$(STATUS_TOOL) $< $(DOTNAME)
+	$(STATUS_TOOL) synchk $< $(DOTNAME)
 	@tred < $(DOTNAME) | dot -Tpdf -o$@
 
 ##############################################################################

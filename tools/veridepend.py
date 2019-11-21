@@ -65,6 +65,8 @@ class Veridepend:
                     # Verifieds are recursive to make top-level target depend
                     # on all the others.
                     (".verified", ".verified"),
+                    # Corresponding recursive tree for synchk.
+                    (".syntax", ".syntax"),
 
                     # When we build X.o, we first want to build Y.cpp and Y.o.
                     # These aren't true dependencies, but they make the ordering
@@ -76,6 +78,7 @@ class Veridepend:
 
             # dependencies from this file to type parents
             output.append("%s: %s" % (targetName(iref, ".verified"), targetName(dep, ".verchk")))
+            output.append("%s: %s" % (targetName(iref, ".syntax"), targetName(dep, ".synchk")))
         # The dirDeps file depends on each target it describes.
         output.append("%s: %s" % (self.depFilename(), iref.normPath))
         return output
