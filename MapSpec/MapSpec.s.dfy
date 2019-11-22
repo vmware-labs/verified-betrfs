@@ -59,21 +59,38 @@ module MapSpec refines UIStateMachine {
     && s' == s
   }
 
-  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, res: UI.SuccResult)
+  predicate ValidSuccResult(k: Constants, s: Variables, key: Key, res: UI.SuccResult)
+  requires WF(s)
   {
-    && uiop == UI.SuccOp(key, res)
-    && WF(s)
-    && s' == s
     && (res.SuccKeyValue? ==>
+      && SeqComparison.lt(key, res.key)
       && res.value != EmptyValue()
       && s.view[res.key] == res.value
       && (forall k | SeqComparison.lt(key, k) && SeqComparison.lt(k, res.key) && k in s.view
           :: s.view[k] == EmptyValue())
     )
-    && (res.SuccNone? ==>
+    && (res.SuccEnd? ==>
       && (forall k | SeqComparison.lt(key, k) && k in s.view
           :: s.view[k] == EmptyValue())
     )
+  }
+
+  predicate ValidAdjacentSuccResults(k: Constants, s: Variables, res1: UI.SuccResult,
+      res2: UI.SuccResult)
+  requires WF(s)
+  {
+    && res1.SuccKeyValue?
+    && ValidSuccResult(k, s, res1.key, res2)
+  }
+
+  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, results: seq<UI.SuccResult>)
+  {
+    && uiop == UI.SuccOp(key, results)
+    && WF(s)
+    && s' == s
+    && (|results| > 0 ==> ValidSuccResult(k, s, key, results[0]))
+    && (forall i | 1 <= i < |results| ::
+        ValidAdjacentSuccResults(k, s, results[i-1], results[i]))
   }
 
   predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
@@ -95,7 +112,7 @@ module MapSpec refines UIStateMachine {
   datatype Step =
       | QueryStep(key: Key, result: Value)
       | WriteStep(key: Key, new_value: Value)
-      | SuccStep(key: Key, res: UI.SuccResult)
+      | SuccStep(key: Key, res: seq<UI.SuccResult>)
       | StutterStep
 
   predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UIOp, step:Step)

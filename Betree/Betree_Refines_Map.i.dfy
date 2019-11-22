@@ -207,44 +207,89 @@ module Betree_Refines_Map {
     LookupImpliesMap(k, s, key, value, lookup);
   }
 
-  lemma SuccQueryStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, key: Key, res: UI.SuccResult, lookup1: Lookup, lookup2: Lookup)
+  lemma SuccQueryStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, key: Key, results: seq<UI.SuccResult>, lookup1: Lookup, lookup2: Lookup)
     requires Inv(k, s)
-    requires BetreeStepUI(BetreeSuccQuery(SuccQuery(key, res, lookup1, lookup2)), uiop)
-    requires DBI.SuccQuery(k.bck, s.bcv, s'.bcv, key, res, lookup1, lookup2)
+    requires BetreeStepUI(BetreeSuccQuery(SuccQuery(key, results, lookup1, lookup2)), uiop)
+    requires DBI.SuccQuery(k.bck, s.bcv, s'.bcv, key, results, lookup1, lookup2)
     requires Inv(k, s')
-    ensures MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, MS.SuccStep(key, res))
+    ensures MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, MS.SuccStep(key, results))
   {
-    if (res.SuccKeyValue?) {
-      if LookupKeyValue(lookup1, res.key, res.value) {
-        LookupImpliesMap(k, s, res.key, res.value, lookup1);
-      } else {
-        LookupImpliesMap(k, s, res.key, res.value, lookup2);
-      }
+    forall i | 1 <= i < |results|
+    ensures MS.ValidAdjacentSuccResults(Ik(k), I(k, s), results[i-1], results[i])
+    {
+      assert ValidAdjacentSuccResults(lookup1, lookup2, results[i-1], results[i]);
 
-      forall mid | SeqComparison.lt(key, mid) && SeqComparison.lt(mid, res.key) && mid in I(k,s).view
-      ensures I(k,s).view[mid] == MS.EmptyValue()
-      {
-        assert Lookup2KeyValue(lookup1, lookup2, mid, MS.EmptyValue());
-        if LookupKeyValue(lookup1, mid, MS.EmptyValue()) {
-          LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup1);
+      var startKey := results[i-1].key;
+      var res := results[i];
+
+      if (res.SuccKeyValue?) {
+        assert Lookup2KeyValue(lookup1, lookup2, results[i].key, results[i].value);
+
+        if LookupKeyValue(lookup1, res.key, res.value) {
+          LookupImpliesMap(k, s, res.key, res.value, lookup1);
         } else {
-          LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup2);
+          LookupImpliesMap(k, s, res.key, res.value, lookup2);
         }
-      }
 
-      assert MS.Succ(Ik(k), I(k,s), I(k,s'), uiop, key, res);
-    } else {
-      forall mid | SeqComparison.lt(key, mid) && mid in I(k,s).view
-      ensures I(k,s).view[mid] == MS.EmptyValue()
-      {
-        assert Lookup2KeyValue(lookup1, lookup2, mid, MS.EmptyValue());
-        if LookupKeyValue(lookup1, mid, MS.EmptyValue()) {
-          LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup1);
-        } else {
-          LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup2);
+        forall mid | SeqComparison.lt(startKey, mid) && SeqComparison.lt(mid, res.key) && mid in I(k,s).view
+        ensures I(k,s).view[mid] == MS.EmptyValue()
+        {
+          assert Lookup2KeyValue(lookup1, lookup2, mid, MS.EmptyValue());
+          if LookupKeyValue(lookup1, mid, MS.EmptyValue()) {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup1);
+          } else {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup2);
+          }
+        }
+      } else {
+        forall mid | SeqComparison.lt(startKey, mid) && mid in I(k,s).view
+        ensures I(k,s).view[mid] == MS.EmptyValue()
+        {
+          assert Lookup2KeyValue(lookup1, lookup2, mid, MS.EmptyValue());
+          if LookupKeyValue(lookup1, mid, MS.EmptyValue()) {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup1);
+          } else {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup2);
+          }
         }
       }
     }
+
+    if |results| > 0 {
+      var res := results[0];
+      var startKey := key;
+      if (res.SuccKeyValue?) {
+        if LookupKeyValue(lookup1, res.key, res.value) {
+          LookupImpliesMap(k, s, res.key, res.value, lookup1);
+        } else {
+          LookupImpliesMap(k, s, res.key, res.value, lookup2);
+        }
+
+        forall mid | SeqComparison.lt(startKey, mid) && SeqComparison.lt(mid, res.key) && mid in I(k,s).view
+        ensures I(k,s).view[mid] == MS.EmptyValue()
+        {
+          assert Lookup2KeyValue(lookup1, lookup2, mid, MS.EmptyValue());
+          if LookupKeyValue(lookup1, mid, MS.EmptyValue()) {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup1);
+          } else {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup2);
+          }
+        }
+      } else {
+        forall mid | SeqComparison.lt(startKey, mid) && mid in I(k,s).view
+        ensures I(k,s).view[mid] == MS.EmptyValue()
+        {
+          assert Lookup2KeyValue(lookup1, lookup2, mid, MS.EmptyValue());
+          if LookupKeyValue(lookup1, mid, MS.EmptyValue()) {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup1);
+          } else {
+            LookupImpliesMap(k, s, mid, MS.EmptyValue(), lookup2);
+          }
+        }
+      }
+    }
+
+    assert MS.Succ(Ik(k), I(k,s), I(k,s'), uiop, key, results);
   }
   
   lemma InsertMessageStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UIOp, key: Key, msg: BufferEntry, oldroot: Node)
@@ -320,7 +365,7 @@ module Betree_Refines_Map {
     NextPreservesInv(k, s, s', uiop);
     match betreeStep {
       case BetreeQuery(q) => QueryStepRefinesMap(k, s, s', uiop, q.key, q.value, q.lookup);
-      case BetreeSuccQuery(q) => SuccQueryStepRefinesMap(k, s, s', uiop, q.key, q.res, q.lookup1, q.lookup2);
+      case BetreeSuccQuery(q) => SuccQueryStepRefinesMap(k, s, s', uiop, q.key, q.results, q.lookup1, q.lookup2);
       case BetreeInsert(ins) => InsertMessageStepRefinesMap(k, s, s', uiop, ins.key, ins.msg, ins.oldroot);
       case BetreeFlush(flush) => FlushStepRefinesMap(k, s, s', uiop, flush);
       case BetreeGrow(growth) => GrowStepRefinesMap(k, s, s', uiop, growth.oldroot, growth.newchildref);

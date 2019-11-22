@@ -11,7 +11,6 @@ include "../lib/Base/total_order.i.dfy"
 // * A Query is satisfied by examining enough of the tree to observe a
 //   terminating message list.
 // * Insert shoves a single message into the root.
-//   (Do we still use that, now that we have a mutable write buffer at the top?)
 // * Flush moves a bundle of messages from a node to one of its children.
 // * Grow inserts a new layer at the top of the tree to admit growth.
 // * Redirect replaces a subtree with a semantically-equivalent one.
@@ -127,8 +126,11 @@ module BetreeSpec {
 
   //// Successor
 
-  datatype SuccQuery = SuccQuery(key: Key, res: UI.SuccResult,
-      lookup1: Lookup, lookup2: Lookup)
+  datatype SuccQuery = SuccQuery(
+      key: Key,
+      results: seq<UI.SuccResult>,
+      lookup1: Lookup,
+      lookup2: Lookup)
 
   predicate LookupKeyValue(l: Lookup, key: Key, value: Value)
   {
@@ -141,17 +143,30 @@ module BetreeSpec {
     || LookupKeyValue(l1, key, value)
     || LookupKeyValue(l2, key, value)
   }
+  
+  predicate ValidSuccResult(lookup1: Lookup, lookup2: Lookup, key: Key, res: UI.SuccResult)
+  {
+    && (res.SuccEnd? ==> (
+      && (forall k | Keyspace.lt(key, k) :: Lookup2KeyValue(lookup1, lookup2, k, MS.EmptyValue()))
+    ))
+    && (res.SuccKeyValue? ==> (
+      && Keyspace.lt(key, res.key)
+      && res.value != MS.EmptyValue()
+      && Lookup2KeyValue(lookup1, lookup2, res.key, res.value)
+      && (forall k | Keyspace.lt(key, k) && Keyspace.lt(k, res.key) :: Lookup2KeyValue(lookup1, lookup2, k, MS.EmptyValue()))
+    ))
+  }
+
+  predicate ValidAdjacentSuccResults(lookup1: Lookup, lookup2: Lookup, res1: UI.SuccResult, res2: UI.SuccResult)
+  {
+    && res1.SuccKeyValue?
+    && ValidSuccResult(lookup1, lookup2, res1.key, res2)
+  }
 
   predicate ValidSuccQuery(q: SuccQuery)
   {
-    && (q.res.SuccNone? ==> (
-      && (forall k | Keyspace.lt(q.key, k) :: Lookup2KeyValue(q.lookup1, q.lookup2, k, MS.EmptyValue()))
-    ))
-    && (q.res.SuccKeyValue? ==> (
-      && q.res.value != MS.EmptyValue()
-      && Lookup2KeyValue(q.lookup1, q.lookup2, q.res.key, q.res.value)
-      && (forall k | Keyspace.lt(q.key, k) && Keyspace.lt(k, q.res.key) :: Lookup2KeyValue(q.lookup1, q.lookup2, k, MS.EmptyValue()))
-    ))
+    && (|q.results| > 0 ==> ValidSuccResult(q.lookup1, q.lookup2, q.key, q.results[0]))
+    && (forall i | 1 <= i < |q.results| :: ValidAdjacentSuccResults(q.lookup1, q.lookup2, q.results[i-1], q.results[i]))
   }
 
   function SuccQueryReads(q: SuccQuery) : seq<ReadOp>
@@ -414,7 +429,7 @@ module BetreeSpec {
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
-      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.key, sq.res)
+      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.key, sq.results)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
