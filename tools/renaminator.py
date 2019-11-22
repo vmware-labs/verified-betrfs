@@ -11,6 +11,7 @@ class Renaminator:
         self.catalog()
         # Apply the include path fixes first, since they're expressed relative
         # to the source path locations.
+        self.mkdirCmds = []
         self.fixCmds = []
         self.gitCmds = []
 
@@ -55,6 +56,7 @@ class Renaminator:
             self.fixCmds.append(["sed", "-i", "/include/s#%s#%s#" % (expectInclude, newInclude), referrer])
 
     def relocate(self, filename, destDir):
+        self.mkdirCmds.append(["mkdir", destDir])
         sourceDir = self.findSourceDir(filename)
         sourceName = os.path.join(sourceDir, filename)
         destName = os.path.join(destDir, filename)
@@ -64,9 +66,9 @@ class Renaminator:
             self.fixReferrer(referrer, filename, sourceDir, destDir)
 
     def enact(self):
-        for cmd in self.fixCmds + self.gitCmds:
+        for cmd in self.fixCmds + self.mkdirCmds + self.gitCmds:
             print(cmd)
-            #subprocess.call(cmd)
+            subprocess.call(cmd)
 
 renaminator = Renaminator()
 def moveinto(destDir, filenamesStr):
