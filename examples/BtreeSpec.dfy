@@ -729,5 +729,96 @@ abstract module BtreeSpec {
       InterpretationDelegation(Grow(node), key);
     }
   }
+
+  function NumElementsOfChildren(nodes: seq<Node>) : nat
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+  {
+    if |nodes| == 0 then 0
+    else NumElementsOfChildren(DropLast(nodes)) + NumElements(Last(nodes))
+  }
+  
+  function NumElements(node: Node) : nat
+    requires WF(node)
+  {
+    if node.Leaf? then |node.keys|
+    else NumElementsOfChildren(node.children)
+  }
+
+  function ToSeqChildren(nodes: seq<Node>) : (kvlists : (seq<Key>, seq<Value>))
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    ensures |kvlists.0| == |kvlists.1| == NumElementsOfChildren(nodes)
+    ensures forall k :: k in kvlists.0 ==> exists i :: 0 <= i < |nodes| && k in AllKeys(nodes[i])
+  {
+    if |nodes| == 0 then ([], [])
+    else
+      var (k1, v1) := ToSeqChildren(DropLast(nodes));
+      var (k2, v2) := ToSeq(Last(nodes));
+      (k1 + k2, v1 + v2)
+  }
+    
+  function ToSeq(node: Node) : (kvlists : (seq<Key>, seq<Value>))
+    requires WF(node)
+    ensures |kvlists.0| == |kvlists.1| == NumElements(node)
+    ensures forall k :: k in kvlists.0 ==> k in AllKeys(node)
+  {
+    if node.Leaf? then (node.keys, node.values)
+    else ToSeqChildren(node.children)
+  }
+
+  lemma ToSeqIsStrictlySorted(node: Node)
+    requires WF(node)
+    ensures Keys.IsStrictlySorted(ToSeq(node).0)
+  {
+    var keys := ToSeq(node).0;
+
+    if node.Leaf? {
+      assert Keys.IsStrictlySorted(keys);
+    } else {
+      var partialkeylist := [];
+      var i := 0;
+      while i < |node.children|
+        invariant 0 <= i <= |node.children|
+        invariant Keys.IsStrictlySorted(partialkeylist)
+        invariant partialkeylist == ToSeqChildren(node.children[..i]).0
+        invariant forall k :: k in partialkeylist ==> exists src :: 0 <= src < i && k in AllKeys(node.children[src])
+      {
+        var oldpartialkeylist := partialkeylist;
+
+        var childkeylist := ToSeq(node.children[i]).0;
+        ToSeqIsStrictlySorted(node.children[i]);
+
+        partialkeylist := partialkeylist + childkeylist;
+        i := i + 1;
+
+        assert node.children[..i][..i-1] == node.children[..i-1];
+        forall j, k | 0 <= j < k < |partialkeylist|
+          ensures Keys.lt(partialkeylist[j], partialkeylist[k])
+        {
+          if k < |oldpartialkeylist| {
+            assert partialkeylist[j] == oldpartialkeylist[j];
+            assert partialkeylist[k] == oldpartialkeylist[k];
+            Keys.IsStrictlySortedImpliesLt(oldpartialkeylist, j, k);
+          } else if |oldpartialkeylist| <= j {
+            assert partialkeylist[j] == childkeylist[j - |oldpartialkeylist|];
+            assert partialkeylist[k] == childkeylist[k - |oldpartialkeylist|];
+            Keys.IsStrictlySortedImpliesLt(childkeylist, j - |oldpartialkeylist|, k - |oldpartialkeylist|);
+          } else {
+            assert partialkeylist[j] == oldpartialkeylist[j];
+            assert partialkeylist[j] in oldpartialkeylist;
+            var jsrc :| 0 <= jsrc < i-1 && partialkeylist[j] in AllKeys(node.children[jsrc]);
+            assert partialkeylist[k] == childkeylist[k - |oldpartialkeylist|];
+            assert partialkeylist[k] in AllKeys(node.children[i-1]);
+            assert AllKeysBelowBound(node, jsrc);
+            assert Keys.lt(partialkeylist[j], node.pivots[jsrc]);
+            assert AllKeysAboveBound(node, i-1);
+            assert Keys.lte(node.pivots[i-2], partialkeylist[k]);
+            Keys.IsStrictlySortedImpliesLte(node.pivots, jsrc, i-2);
+          }
+        }
+        Keys.reveal_IsStrictlySorted();
+      }
+      assert node.children == node.children[..|node.children|];
+    }
+  }
 }
 

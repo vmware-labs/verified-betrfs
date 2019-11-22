@@ -239,4 +239,23 @@ module Sequences {
   {
     s[..i] + [t] + s[i+1..]
   }
+
+  function Zip<A,B>(a: seq<A>, b: seq<B>) : seq<(A,B)>
+    requires |a| == |b|
+    ensures |Zip(a, b)| == |a|
+    ensures forall i :: 0 <= i < |Zip(a, b)| ==> Zip(a, b)[i] == (a[i], b[i])
+  {
+    if |a| == 0 then []
+    else Zip(DropLast(a), DropLast(b)) + [(Last(a), Last(b))]
+  }
+
+  function Unzip<A,B>(z: seq<(A, B)>) : (seq<A>, seq<B>)
+    ensures |Unzip(z).0| == |Unzip(z).1| == |z|
+    ensures forall i :: 0 <= i < |z| ==> (Unzip(z).0[i], Unzip(z).1[i]) == z[i]
+  {
+    if |z| == 0 then ([], [])
+    else
+      var (a, b) := Unzip(DropLast(z));
+      (a + [Last(z).0], b + [Last(z).1])
+  }
 }
