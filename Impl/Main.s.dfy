@@ -1,6 +1,6 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../MapSpec/ThreeStateVersionedMap.s.dfy"
-include "../MapSpec/AsyncDiskModel.s.dfy"
+include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "MainDiskIOHandler.s.dfy"
 

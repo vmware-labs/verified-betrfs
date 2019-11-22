@@ -1,4 +1,4 @@
-include "../MapSpec/AsyncDiskModel.s.dfy"
+include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
 include "Marshalling.i.dfy"
 //

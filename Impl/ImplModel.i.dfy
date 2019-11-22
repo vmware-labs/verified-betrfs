@@ -1,6 +1,6 @@
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
-include "../MapSpec/AsyncDiskModel.s.dfy"
+include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
 include "../lib/DataStructures/tttree.i.dfy"

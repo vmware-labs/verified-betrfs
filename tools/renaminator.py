@@ -78,53 +78,8 @@ def moveinto(destDir, filenamesStr):
         renaminator.relocate(filename, destDir)
 
 
-moveinto("MapSpec", """
-AsyncDiskModel.s.dfy
-MapSpec.s.dfy
-ThreeStateVersionedMap.s.dfy
-ThreeStateVersioned.s.dfy
-UI.s.dfy
-UIStateMachine.s.dfy
-""")
-
-moveinto("Betree", """
-Betree.i.dfy
-BetreeInv.i.dfy
-Betree_Refines_Map.i.dfy
-BetreeSpec.i.dfy
-Transactable.i.dfy
-Graph.i.dfy
-BlockInterface.i.dfy
-""")
-
-moveinto("PivotBetree", """
-PivotBetree.i.dfy
-PivotBetree_Refines_Betree.i.dfy
-PivotBetree_Refines_Map.i.dfy
-PivotBetreeSpec.i.dfy
-PivotBetreeSpecRefinement.i.dfy
-PivotsLib.i.dfy
-Bounds.i.dfy
-BucketsLib.i.dfy
-BucketWeights.i.dfy
-""")
-
-# Introduces the Block Cache, shows that it's 3-state crash safe, and
-# then staples it onto a Betree to get a crash-safe pivot tree.
 moveinto("BlockCacheSystem", """
-AsyncSectorDiskModel.i.dfy
-BlockCache.i.dfy
-BlockCacheSystem.i.dfy
-BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy
-BetreeBlockCache.i.dfy
-BetreeBlockCacheSystem.i.dfy
-BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree.i.dfy
-ThreeStateVersionedPivotBetree.i.dfy
-""")
-
-moveinto("Impl", """
-KVList.i.dfy
-KVListPartialFlush.i.dfy
+AsyncDiskModel.s.dfy
 """)
 
 renaminator.enact()

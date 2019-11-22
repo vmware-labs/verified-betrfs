@@ -1,6 +1,6 @@
 include "ImplModelCache.i.dfy"
 include "ImplModelIO.i.dfy"
-include "../MapSpec/AsyncDiskModel.s.dfy"
+include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
 
 module ImplModelFlush { 
