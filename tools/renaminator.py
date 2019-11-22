@@ -2,6 +2,7 @@
 # Automation for moving dfy files among directories, cleaning up include references.
 
 import os
+import subprocess
 
 EXCLUDED_DIRS = set([".dafny", "build"])
 
@@ -51,13 +52,13 @@ class Renaminator:
         expectInclude = 'include "%s"' % sourceRelative
         newInclude = 'include "%s"' % destRelative
         if self.containsLine(referrer, expectInclude):
-            self.fixCmds.append("sed -i 's#%s#%s#' %s" % (expectInclude, newInclude, referrer))
+            self.fixCmds.append(["sed", "-i", "/include/s#%s#%s#" % (expectInclude, newInclude), referrer])
 
     def relocate(self, filename, destDir):
         sourceDir = self.findSourceDir(filename)
         sourceName = os.path.join(sourceDir, filename)
         destName = os.path.join(destDir, filename)
-        self.gitCmds.append("git mv %s %s" % (sourceName, destName))
+        self.gitCmds.append(["git", "mv", sourceName, destName])
 
         for referrer in self.paths:
             self.fixReferrer(referrer, filename, sourceDir, destDir)
@@ -65,6 +66,7 @@ class Renaminator:
     def enact(self):
         for cmd in self.fixCmds + self.gitCmds:
             print(cmd)
+            #subprocess.call(cmd)
 
 renaminator = Renaminator()
 def moveinto(destDir, filenamesStr):
