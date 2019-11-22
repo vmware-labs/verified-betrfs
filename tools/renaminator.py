@@ -13,6 +13,7 @@ class Renaminator:
         # to the source path locations.
         self.mkdirCmds = []
         self.fixCmds = []
+        self.gitAddCmds = []    # some of these will be pre-move referrers, so do them first
         self.gitCmds = []
 
     def catalog(self):
@@ -54,6 +55,7 @@ class Renaminator:
         newInclude = 'include "%s"' % destRelative
         if self.containsLine(referrer, expectInclude):
             self.fixCmds.append(["sed", "-i", "/include/s#%s#%s#" % (expectInclude, newInclude), referrer])
+            self.gitAddCmds.append(["git", "add", referrer])
 
     def relocate(self, filename, destDir):
         self.mkdirCmds.append(["mkdir", destDir])
@@ -61,13 +63,12 @@ class Renaminator:
         sourceName = os.path.join(sourceDir, filename)
         destName = os.path.join(destDir, filename)
         self.gitCmds.append(["git", "mv", sourceName, destName])
-        self.gitCmds.append(["git", "add", destName])
 
         for referrer in self.paths:
             self.fixReferrer(referrer, filename, sourceDir, destDir)
 
     def enact(self):
-        for cmd in self.fixCmds + self.mkdirCmds + self.gitCmds:
+        for cmd in self.fixCmds + self.mkdirCmds + self.gitAddCmds + self.gitCmds:
             print(cmd)
             subprocess.call(cmd)
 
