@@ -1,9 +1,9 @@
-include "Betree.i.dfy"
+include "../Betree/Betree.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.s.dfy"
-include "Graph.i.dfy"
-include "AsyncSectorDiskModel.i.dfy"
-include "PivotBetreeSpec.i.dfy"
+include "../Betree/Graph.i.dfy"
+include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
+include "../PivotBetree/PivotBetreeSpec.i.dfy"
 //
 // A BlockCache implements the BlockInterface by caching over an
 // AsyncSectorDisk. At this layer, the disk provides high-level sectors

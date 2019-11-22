@@ -1,7 +1,7 @@
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
-include "Graph.i.dfy"
-include "Transactable.i.dfy"
+include "../Betree/Graph.i.dfy"
+include "../Betree/Transactable.i.dfy"
 //
 // A BlockInterface lets its client code (the Betree) perform atomic sequences
 // of block allocation (assigning a new value),

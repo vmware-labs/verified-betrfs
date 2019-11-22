@@ -1,5 +1,5 @@
 include "../lib/DataStructures/Bitmap.i.dfy"
-include "../treemodel/Bounds.i.dfy"
+include "../PivotBetree/Bounds.i.dfy"
 //
 // A BlockAllocator tracks which blocks are allocated, to safely allocate
 // blocks unused by any view.

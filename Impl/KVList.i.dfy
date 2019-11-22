@@ -2,8 +2,8 @@ include "../lib/Base/Message.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
-include "BucketsLib.i.dfy"
-include "BucketWeights.i.dfy"
+include "../PivotBetree/BucketsLib.i.dfy"
+include "../PivotBetree/BucketWeights.i.dfy"
 include "../lib/Marshalling/Seqs.i.dfy"
 //
 // A list of key-message pairs, with unique, sorted keys.

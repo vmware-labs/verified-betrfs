@@ -1,7 +1,7 @@
 // DiskInterface
 
 include "../lib/Base/NativeTypes.s.dfy"
-include "../treemodel/AsyncDiskModel.s.dfy"
+include "../MapSpec/AsyncDiskModel.s.dfy"
 
 module {:extern} MainDiskIOHandler {
   import opened NativeTypes

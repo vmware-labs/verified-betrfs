@@ -1,5 +1,5 @@
-include "BlockCache.i.dfy"
-include "PivotBetreeSpec.i.dfy"
+include "../BlockCacheSystem/BlockCache.i.dfy"
+include "../PivotBetree/PivotBetreeSpec.i.dfy"
 //
 // Attach a BlockCache to a Disk
 //

@@ -1,6 +1,6 @@
-include "Betree.i.dfy"
-include "MapSpec.s.dfy"
-include "BetreeInv.i.dfy"
+include "../Betree/Betree.i.dfy"
+include "../MapSpec/MapSpec.s.dfy"
+include "../Betree/BetreeInv.i.dfy"
 //
 // Refinement proof from Betree to Map.
 //

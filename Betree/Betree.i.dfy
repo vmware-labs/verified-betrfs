@@ -1,9 +1,9 @@
-include "BlockInterface.i.dfy"  
+include "../Betree/BlockInterface.i.dfy"  
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.s.dfy"
-include "MapSpec.s.dfy"
-include "Graph.i.dfy"
-include "BetreeSpec.i.dfy"
+include "../MapSpec/MapSpec.s.dfy"
+include "../Betree/Graph.i.dfy"
+include "../Betree/BetreeSpec.i.dfy"
 //
 // Betree lowers the "lifted" op-sequences of BetreeSpec down to concrete state machine
 // steps that advance the BetreeBlockInterface as required by BetreeSpec.

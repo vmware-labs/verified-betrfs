@@ -1,6 +1,6 @@
-include "KVList.i.dfy"
-include "Bounds.i.dfy"
-include "PivotsLib.i.dfy"
+include "../Impl/KVList.i.dfy"
+include "../PivotBetree/Bounds.i.dfy"
+include "../PivotBetree/PivotsLib.i.dfy"
 //
 // I guess sometimes we want to flush only part of a node's effective KVList,
 // and KVList only specified full flushes?

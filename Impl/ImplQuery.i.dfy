@@ -4,7 +4,7 @@ include "ImplModelQuery.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "../treemodel/PivotBetreeSpec.i.dfy"
+include "../PivotBetree/PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 

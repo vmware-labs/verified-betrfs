@@ -1,6 +1,6 @@
-include "BlockCache.i.dfy"
-include "BlockCacheSystem.i.dfy"
-include "ThreeStateVersioned.s.dfy"
+include "../BlockCacheSystem/BlockCache.i.dfy"
+include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
+include "../MapSpec/ThreeStateVersioned.s.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 //

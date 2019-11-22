@@ -1,6 +1,6 @@
-include "../treemodel/MapSpec.s.dfy"
-include "../treemodel/ThreeStateVersionedMap.s.dfy"
-include "../treemodel/AsyncDiskModel.s.dfy"
+include "../MapSpec/MapSpec.s.dfy"
+include "../MapSpec/ThreeStateVersionedMap.s.dfy"
+include "../MapSpec/AsyncDiskModel.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "MainDiskIOHandler.s.dfy"
 

@@ -1,7 +1,7 @@
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/SeqComparison.s.dfy"
-include "UI.s.dfy"
-include "UIStateMachine.s.dfy"
+include "../MapSpec/UI.s.dfy"
+include "../MapSpec/UIStateMachine.s.dfy"
 
 module MapSpec refines UIStateMachine {
   import V = ValueWithDefault

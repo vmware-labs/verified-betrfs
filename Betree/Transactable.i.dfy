@@ -1,5 +1,5 @@
 include "../lib/Base/sequences.i.dfy"
-include "Graph.i.dfy"
+include "../Betree/Graph.i.dfy"
 //
 // A Transactable is a state machine defined by atomically gluing together
 // groups of a few step primitives. Each BetreeSpec operation performs

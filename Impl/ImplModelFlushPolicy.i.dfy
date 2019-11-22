@@ -3,7 +3,7 @@ include "ImplModelGrow.i.dfy"
 include "ImplModelSplit.i.dfy"
 include "ImplModelLeaf.i.dfy"
 include "ImplModelEvict.i.dfy"
-include "../treemodel/Bounds.i.dfy"
+include "../PivotBetree/Bounds.i.dfy"
 
 module ImplModelFlushPolicy {
   import opened ImplModel

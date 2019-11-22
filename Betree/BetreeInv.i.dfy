@@ -1,7 +1,7 @@
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
-include "MapSpec.s.dfy"
-include "Betree.i.dfy"
+include "../MapSpec/MapSpec.s.dfy"
+include "../Betree/Betree.i.dfy"
 //
 // Invariants about Betrees: lookup structure, non-equivocation, and
 // preservation. 

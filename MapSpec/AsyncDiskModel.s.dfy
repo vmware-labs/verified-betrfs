@@ -1,84 +1,47 @@
-include "MapSpec.s.dfy"
+include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Crypto.s.dfy"
 //
-// An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
-// is some higher-level Node datatype. A later refinement step shows how to marshall and align
-// these Nodes to the byte-ranges of the (trusted) AsyncDiskModel.
+// An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
 //
-// TODO disallow concurrent spatially-overlapping writes/reads
+// (Real disks constrain I/Os to fall on logical-block-address boundaries, but we're
+// ignoring constraint for now.)
+//
 
-module AsyncSectorDiskModelTypes {
-  datatype AsyncSectorDiskModelConstants<M,D> = AsyncSectorDiskModelConstants(machine: M, disk: D)
-  datatype AsyncSectorDiskModelVariables<M,D> = AsyncSectorDiskModelVariables(machine: M, disk: D)
+module AsyncDiskModelTypes {
+  datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
+  datatype AsyncDiskModelVariables<M,D> = AsyncDiskModelVariables(machine: M, disk: D)
 }
 
-module LBAType {
-  import opened NativeTypes
-
-  type LBA(==,!new) = uint64
-  datatype Location = Location(addr: LBA, len: uint64)
-
-  function method BlockSize() : uint64 { 8*1024*1024 }
-  function method IndirectionTableLBA() : LBA { 0 }
-  function method IndirectionTableLocation() : Location {
-    Location(IndirectionTableLBA(), BlockSize())
-  }
-  predicate method {:opaque} ValidAddr(addr: LBA) {
-    //exists j: int :: j * BlockSize() as int == addr as int
-    addr % BlockSize() == 0
-  }
-  predicate method ValidLocation(loc: Location) {
-    && ValidAddr(loc.addr)
-    && loc.len <= BlockSize()
-  }
-  lemma ValidAddrDivisor(addr: LBA) returns (i: int)
-  requires ValidAddr(addr);
-  ensures i * BlockSize() as int == addr as int
-  {
-    reveal_ValidAddr();
-    i := addr as int / BlockSize() as int;
-  }
-  predicate overlap(loc: Location, loc': Location) {
-    loc.addr == loc'.addr
-  }
-
-  //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
-  //    reveals BlockSize
-  //export extends S
-  //export Internal reveals *
-}
-
-// A disk, processing stuff in its queue, doing its thing.
-module AsyncSectorDisk {
+module AsyncDisk {
   import opened NativeTypes
   import opened Maps
-  import opened Options
-  import opened LBAType
+  import Crypto
 
   type ReqId = uint64
 
-  datatype ReqRead = ReqRead(loc: Location)
-  datatype ReqWrite<Sector> = ReqWrite(loc: Location, sector: Sector)
-  datatype RespRead<Sector> = RespRead(sector: Option<Sector>)
+  datatype ReqRead = ReqRead(addr: uint64, len: uint64)
+  datatype ReqWrite = ReqWrite(addr: uint64, bytes: seq<byte>)
+  datatype RespRead = RespRead(bytes: seq<byte>)
   datatype RespWrite = RespWrite
 
-  datatype DiskOp<Sector> =
+  datatype DiskOp =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
-    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite<Sector>)
-    | RespReadOp(id: ReqId, respRead: RespRead<Sector>)
+    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite)
+    | RespReadOp(id: ReqId, respRead: RespRead)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
 
   datatype Constants = Constants()
-  datatype Variables<Sector> = Variables(
+  datatype Variables = Variables(
     // Queue of requests and responses:
     reqReads: map<ReqId, ReqRead>,
-    reqWrites: map<ReqId, ReqWrite<Sector>>,
-    respReads: map<ReqId, RespRead<Sector>>,
+    reqWrites: map<ReqId, ReqWrite>,
+    respReads: map<ReqId, RespRead>,
     respWrites: map<ReqId, RespWrite>,
 
     // The disk:
-    blocks: imap<Location, Sector>
+    contents: seq<byte>
   )
 
   predicate Init(k: Constants, s: Variables)
@@ -150,48 +113,101 @@ module AsyncSectorDisk {
 
   datatype InternalStep =
     | ProcessReadStep(id: ReqId)
-    | ProcessReadFailureStep(id: ReqId)
+    | ProcessReadFailureStep(id: ReqId, fakeContents: seq<byte>)
     | ProcessWriteStep(id: ReqId)
+    | HavocConflictingWritesStep(id: ReqId, id': ReqId)
+    | HavocConflictingWriteReadStep(id: ReqId, id': ReqId)
 
   predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
+    && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(ImapLookupOption(s.blocks, req.loc))])
+              .(respReads := s.respReads[id := RespRead(s.contents[req.addr .. req.addr as int + req.len as int])])
   }
 
-  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId)
+  predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
+    && |s| >= 32
+    && s[0..32] == Crypto.Crc32C(s[32..])
+  }
+
+  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
+    && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
+    && var realContents := s.contents[req.addr .. req.addr as int + req.len as int];
+    && |fakeContents| == |realContents|
+
+    // We make the assumption that the disk cannot fail from a checksum-correct state
+    // to a different checksum-correct state. This is a reasonable assumption for many
+    // probabilistic failure models of the disk.
+
+    // We don't make a blanket assumption that !ChecksumChecksOut(fakeContents)
+    // because it would be reasonable for a disk to fail into a checksum-correct state
+    // from a checksum-incorrect one.
+
+    && (ChecksumChecksOut(realContents) ==> !ChecksumChecksOut(fakeContents))
+
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(None)])
+              .(respReads := s.respReads[id := RespRead(fakeContents)])
+  }
+
+  function {:opaque} splice(bytes: seq<byte>, start: int, ins: seq<byte>) : seq<byte>
+  requires 0 <= start
+  requires start + |ins| <= |bytes|
+  {
+    bytes[.. start] + ins + bytes[start + |ins| ..]
   }
 
   predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqWrites
     && var req := s.reqWrites[id];
+    && 0 <= req.addr
+    && req.addr as int + |req.bytes| <= |s.contents|
     && s' == s.(reqWrites := MapRemove1(s.reqWrites, id))
               .(respWrites := s.respWrites[id := RespWrite])
-              .(blocks := s'.blocks)
+              .(contents := splice(s.contents, req.addr as int, req.bytes))
+  }
 
-    // It would be easier to say s'.blocks == s.blocks[req.loc := req.sector]
-    // but to make the refinement from AsyncDiskModel easier, we only require that
-    // the map preserves every location not intersecting the given region. We don't
-    // have to say anything about potential intervals which could intersect this one.
-    && req.loc in s'.blocks
-    && s'.blocks[req.loc] == req.sector
-    && (forall loc | loc in s.blocks && !overlap(loc, req.loc) :: loc in s'.blocks && s'.blocks[loc] == s.blocks[loc])
+  // We assume the disk makes ABSOLUTELY NO GUARANTEES about what happens
+  // when there are conflicting reads or writes.
+
+  predicate overlap(start: int, len: int, start': int, len': int)
+  {
+    && start + len > start'
+    && start' + len' > start
+  }
+
+  predicate HavocConflictingWrites(k: Constants, s: Variables, s': Variables, id: ReqId, id': ReqId)
+  {
+    && id != id'
+    && id in s.reqWrites
+    && id' in s.reqWrites
+    && overlap(
+        s.reqWrites[id].addr as int, |s.reqWrites[id].bytes|,
+        s.reqWrites[id'].addr as int, |s.reqWrites[id'].bytes|)
+  }
+
+  predicate HavocConflictingWriteRead(k: Constants, s: Variables, s': Variables, id: ReqId, id': ReqId)
+  {
+    && id in s.reqWrites
+    && id' in s.reqReads
+    && overlap(
+        s.reqWrites[id].addr as int, |s.reqWrites[id].bytes|,
+        s.reqReads[id'].addr as int, s.reqReads[id'].len as int)
   }
 
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
   {
     match step {
       case ProcessReadStep(id) => ProcessRead(k, s, s', id)
-      case ProcessReadFailureStep(id) => ProcessReadFailure(k, s, s', id)
+      case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailure(k, s, s', id, fakeContents)
       case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
+      case HavocConflictingWritesStep(id, id') => HavocConflictingWrites(k, s, s', id, id')
+      case HavocConflictingWriteReadStep(id, id') => HavocConflictingWriteRead(k, s, s', id, id')
     }
   }
 
@@ -202,41 +218,39 @@ module AsyncSectorDisk {
 
   predicate Crash(k: Constants, s: Variables, s': Variables)
   {
-    s' == Variables(map[], map[], map[], map[], s.blocks)
+    s' == Variables(map[], map[], map[], map[], s.contents)
   }
 }
 
-abstract module AsyncSectorDiskMachine {
-  import D = AsyncSectorDisk
+// Interface to the implementer-supplied program that is getting verified.
+abstract module AsyncDiskMachine {
+  import D = AsyncDisk
   import UI
 
   type Variables
   type Constants
-  type Location(==)
-  type Sector
   type UIOp = UI.Op
 
-  type DiskOp = D.DiskOp<Sector>
+  type DiskOp = D.DiskOp
   type ReqRead = D.ReqRead
-  type ReqWrite = D.ReqWrite<Sector>
-  type RespRead = D.RespRead<Sector>
+  type ReqWrite = D.ReqWrite
+  type RespRead = D.RespRead
   type RespWrite = D.RespWrite
 
   predicate Init(k: Constants, s: Variables)
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
 }
 
-// A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
-// program. Designed to look like the AsyncDiskModel, which we want to show refines to this.
-// TODO(jonh): Rename this to a "System"?
-abstract module AsyncSectorDiskModel {
-  import D = AsyncSectorDisk
-  import M : AsyncSectorDiskMachine
-  import AsyncSectorDiskModelTypes
+// TODO(jonh): Rename to a "System", because its job is to explain how a trusted disk interacts
+// with some implementer-supplied program (Machine).
+abstract module AsyncDiskModel {
+  import D = AsyncDisk
+  import M : AsyncDiskMachine
+  import AsyncDiskModelTypes
 
   type DiskOp = M.DiskOp
-  type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
-  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables<M.Sector>>
+  type Constants = AsyncDiskModelTypes.AsyncDiskModelConstants<M.Constants, D.Constants>
+  type Variables = AsyncDiskModelTypes.AsyncDiskModelVariables<M.Variables, D.Variables>
   type UIOp = M.UIOp
 
   datatype Step =

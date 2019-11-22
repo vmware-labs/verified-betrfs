@@ -1,13 +1,13 @@
-include "AsyncSectorDiskModel.i.dfy"
-include "PivotBetree_Refines_Betree.i.dfy"
-include "BlockCache.i.dfy"
+include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
+include "../PivotBetree/PivotBetree_Refines_Betree.i.dfy"
+include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
-include "BlockCacheSystem.i.dfy"
-include "BetreeBlockCache.i.dfy"
-include "BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy"
-include "ThreeStateVersionedPivotBetree.i.dfy"
-include "BetreeBlockCacheSystem.i.dfy"
+include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
+include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
+include "../BlockCacheSystem/BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy"
+include "../BlockCacheSystem/ThreeStateVersionedPivotBetree.i.dfy"
+include "../BlockCacheSystem/BetreeBlockCacheSystem.i.dfy"
 //
 // Take the whole crash-safe BlockCacheSystem, and constrain it to
 // run the (Pivot)Betree as its client, thereby yielding a 3-state-crash-safe

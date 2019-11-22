@@ -1,4 +1,4 @@
-include "MapSpec.s.dfy"
+include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/total_order.i.dfy"
 //

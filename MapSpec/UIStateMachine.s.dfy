@@ -1,4 +1,4 @@
-include "UI.s.dfy"
+include "../MapSpec/UI.s.dfy"
 
 abstract module UIStateMachine {
   import _UI = UI

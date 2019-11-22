@@ -1,5 +1,5 @@
-include "../treemodel/AsyncDiskModel.s.dfy"
-include "../treemodel/BetreeBlockCache.i.dfy"
+include "../MapSpec/AsyncDiskModel.s.dfy"
+include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
 include "Marshalling.i.dfy"
 //
 // Wraps a BetreeBlockCache (which does I/O in high-level Node sectors) into
