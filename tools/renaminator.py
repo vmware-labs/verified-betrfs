@@ -61,6 +61,7 @@ class Renaminator:
         sourceName = os.path.join(sourceDir, filename)
         destName = os.path.join(destDir, filename)
         self.gitCmds.append(["git", "mv", sourceName, destName])
+        self.gitCmds.append(["git", "add", destName])
 
         for referrer in self.paths:
             self.fixReferrer(referrer, filename, sourceDir, destDir)
