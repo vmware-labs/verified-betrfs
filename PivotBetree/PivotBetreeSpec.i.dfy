@@ -63,6 +63,7 @@ module PivotBetreeSpec {
   import Pivots = PivotsLib
   import Buckets = BucketsLib
   import opened BucketWeights
+  import UI
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
   export Internal reveals *
@@ -193,8 +194,61 @@ module PivotBetreeSpec {
     []
   }
 
-  //// Insert
+  //// Succ
 
+  datatype ForkedLookup = ForkedLookup(
+    lookup1: Lookup,
+    lookup2: Lookup,
+    ghost lastInCommon: int,
+    ghost leftForkChildIndex: int)
+  datatype SuccQuery = SuccQuery(key: Key, results: seq<UI.SuccResult>, fork: ForkedLookup)
+
+  predicate LookupNodeIsLastChild(lookup: Lookup, i: int)
+  requires 1 <= i < |lookup|
+  {
+    && lookup[i-1].node.children.Some?
+    && |lookup[i-1].node.children.value| > 0
+    && lookup[i].ref == Last(lookup[i-1].node.children.value)
+  }
+
+  predicate LookupNodeIsFirstChild(lookup: Lookup, i: int)
+  requires 1 <= i < |lookup|
+  {
+    && lookup[i-1].node.children.Some?
+    && |lookup[i-1].node.children.value| > 0
+    && lookup[i].ref == lookup[i-1].node.children.value[0]
+  }
+
+  predicate ValidForkedLookup(fork: ForkedLookup)
+  {
+    && LookupVisitsWFNodes(fork.lookup1)
+    && LookupVisitsWFNodes(fork.lookup2)
+
+    && 0 <= fork.lastInCommon < |fork.lookup1|
+    && 0 <= fork.lastInCommon < |fork.lookup2|
+    && (fork.lastInCommon == |fork.lookup1| - 1 <==>
+        fork.lastInCommon == |fork.lookup1| - 1)
+    // Paths must go all the way down to leaves
+    && Last(fork.lookup1).node.children.None?
+    && Last(fork.lookup2).node.children.None?
+
+    && (forall i | 0 <= i <= fork.lastInCommon :: fork.lookup1[i] == fork.lookup2[i])
+    && (fork.lastInCommon + 1 < |fork.lookup1| ==> (
+      && fork.lookup1[fork.lastInCommon].node.children.Some?
+      && 0 <= fork.leftForkChildIndex < |fork.lookup1[fork.lastInCommon].node.children.value| - 1
+      && fork.lookup1[fork.lastInCommon].node.children.value[fork.leftForkChildIndex] == fork.lookup1[fork.lastInCommon + 1].ref
+      && fork.lookup1[fork.lastInCommon].node.children.value[fork.leftForkChildIndex + 1] == fork.lookup2[fork.lastInCommon + 1].ref
+    ))
+    && (forall i | fork.lastInCommon + 1 < i < |fork.lookup1| :: LookupNodeIsLastChild(fork.lookup1, i))
+    && (forall i | fork.lastInCommon + 1 < i < |fork.lookup2| :: LookupNodeIsFirstChild(fork.lookup2, i))
+  }
+
+  predicate ValidSuccQuery(sq: SuccQuery)
+  {
+    && ValidForkedLookup(sq.fork)
+  }
+
+  //// Insert
   datatype MessageInsertion = MessageInsertion(key: Key, msg: Message, oldroot: Node)
 
   predicate ValidInsertion(ins: MessageInsertion) {
@@ -854,5 +908,4 @@ module PivotBetreeSpecWFNodes {
       }
     }
   }
-
 }
