@@ -273,7 +273,7 @@ module ImplIO {
         assume |s.cache.I()| <= MaxCacheSize();
         s.cache.Insert(ref, sector.value.block);
 
-        s.outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id);
+        s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
       } else {
         print "giving up; block does not match graph\n";
       }
@@ -388,7 +388,7 @@ module ImplIO {
       ImplModelIO.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
 
       s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64());
-      s.outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id);
+      s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
     } else {
     }
   }

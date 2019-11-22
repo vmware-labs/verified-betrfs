@@ -1379,11 +1379,11 @@ module MutableMapModel {
     var (i, next) := iterToNext(self, it.i + 1);
     var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
-    assume (forall key | key in it'.s ::
+    assert (forall key | key in it'.s ::
         exists j | 0 <= j < it'.i as int ::
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key);
-    assume (it'.next.None? ==> it'.s == self.contents.Keys);
+    assert (it'.next.None? ==> it'.s == self.contents.Keys);
 
     LemmaIterNextNotInS(self, it');
 

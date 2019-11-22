@@ -16,9 +16,7 @@ class Traverser:
 
         self.addFillColors()
 
-        # Ranks are too rigid; the whole of disk-betree gets rendered
-        # in one wide row
-        #self.addRanks()
+        self.createSubgraphs()
 
         self.output.append("}")
         self.emit(outputFilename)
@@ -30,9 +28,9 @@ class Traverser:
         if iref in self.visited:
             return
         self.visited.add(iref)
-        for dep in visit(iref):
+        for dep in childrenForIref(iref):
             self.output.append('"%s" -> "%s";' % (iref.normPath, dep.normPath))
-        for dep in visit(iref):
+        for dep in childrenForIref(iref):
             self.visit(dep)
 
     def getSummary(self, iref):
@@ -52,11 +50,20 @@ class Traverser:
     def sourceDir(self, iref):
         return iref.normPath.rsplit("/", 1)[0]
 
-    def addRanks(self):
+    def createSubgraphs(self):
         prefixes = set([self.sourceDir(iref) for iref in self.visited])
         for prefix in prefixes:
             members = ['"%s"' % iref.normPath for iref in self.visited if self.sourceDir(iref) == prefix]
-            self.output.append("{ rank=same; %s }" % (",".join(members)))
+            dot_safe_prefix = prefix.replace("/", "_").replace("-", "_")
+            # NB the cluster_ prefix is semantically important to graphviz
+            # https://graphs.grevian.org/example#example-6
+            self.output.append("subgraph cluster_%s {" % dot_safe_prefix)
+            self.output.append('    label="%s"' % prefix)
+            self.output.append("    style=filled")
+            self.output.append("    color=lightblue")
+            for member in members:
+                self.output.append("    %s;" % member);
+            self.output.append("}");
 
     def emit(self, outputFilename):
         fp = open(outputFilename, "w")

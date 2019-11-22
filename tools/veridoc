@@ -1,9 +1,6 @@
 #!/usr/bin/python
 """Builds the docs/veridoc.md documentation file."""
 
-# do `pip install toposort`
-import toposort
-
 from lib_deps import *
 
 def readVeriDoc(path):
@@ -17,18 +14,8 @@ def readVeriDoc(path):
         offset += 1
     return "\n".join(veridoc)
 
-def toposortGroup(candidates):
-    graph = {}
-    for line in candidates:
-        target = IncludeReference(None, 0, line)
-        graph[target.normPath] = set([path.normPath for path in includePaths(target)])
-    candidateSet = set(candidates)
-    output = []
-    for group in toposort.toposort(graph):
-        group = list(group.intersection(candidateSet))
-        group.sort()
-        output += group
-    return output
+def toposortFiles(candidates):
+    return toposortGroup([IncludeReference(None, 0, line) for line in candidates])
 
 def separate(irefs, l):
     match = set([i for i in irefs if l(i.normPath)])
@@ -52,9 +39,9 @@ class Documentater:
     def present(self, irefs, headerText):
         files = [i.normPath for i in irefs]
         self.veridoc_fp.write("# %s\n\n" % headerText)
-        for filename in toposortGroup(files):
-            self.veridoc_fp.write("**%s** " % filename)
-            self.veridoc_fp.write(readVeriDoc(filename))
+        for iref in toposortFiles(files):
+            self.veridoc_fp.write("**%s** " % iref.normPath)
+            self.veridoc_fp.write(readVeriDoc(iref.normPath))
             self.veridoc_fp.write("\n")
             self.veridoc_fp.write("\n")
 

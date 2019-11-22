@@ -33,6 +33,7 @@ module ImplMarshallingModel {
   import Crypto
   import NativeArrays
   import IndirectionTableModel
+  import SeqComparison
 
   import BT = PivotBetreeSpec`Internal
 
@@ -164,7 +165,7 @@ module ImplMarshallingModel {
     var s := valToStrictlySortedKeySeq(v);
     if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
       if |s.value| > 0 then (
-        Keyspace.reveal_seq_lte();
+        SeqComparison.reveal_lte();
         Keyspace.IsNotMinimum([], s.value[0]);
         s
       ) else (

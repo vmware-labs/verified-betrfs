@@ -34,6 +34,7 @@ module KVList {
 
   function {:opaque} I(kvl: Kvl) : Bucket
   requires |kvl.keys| == |kvl.values|
+  ensures |kvl.keys| == 0 ==> |I(kvl).Keys| == 0    // empty input -> empty output.
   decreases |kvl.keys|
   {
     if |kvl.keys| == 0 then map[] else (

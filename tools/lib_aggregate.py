@@ -34,7 +34,7 @@ class DafnyVerified(DafnyCondition):
         super().__init__(4, "verified successfully", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
-    return verchk.replace("/build/", "/").replace(".verchk", ".dfy")
+    return verchk.replace("build/", "./").replace(".verchk", ".dfy")
 
 def hasDisallowedAssumptions(verchk):
     dfy = dafnyFromVerchk(verchk)
