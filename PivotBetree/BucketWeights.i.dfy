@@ -66,6 +66,7 @@ module BucketWeights {
 
   function {:opaque} WeightBucket(bucket: Bucket) : (w:int)
   ensures w >= 0
+  ensures |bucket|==0 ==> WeightBucket(bucket) == 0
   {
     if |bucket| == 0 then 0 else (
       var key := ChooseKey(bucket);
@@ -82,86 +83,204 @@ module BucketWeights {
     )
   }
 
+  function Image(b:Bucket, s:set<Key>) : Bucket
+  requires s <= b.Keys
+  ensures |Image(b, s)| == |s|
+  {
+    var m := map k | k in s :: b[k];
+    assert m.Keys == s;
+    m
+  }
+
+  lemma MapRemoveVsImage(bbig:Bucket, bsmall:Bucket, key:Key)
+  requires bsmall == MapRemove1(bbig, key)
+  ensures Image(bbig, bbig.Keys - {key}) == bsmall;
+  {
+    reveal_MapRemove1();
+  }
+
+  lemma WeightBucketSingleton(bucket:Bucket, key:Key)
+  requires bucket.Keys == {key};
+  ensures WeightBucket(bucket) == WeightKey(key) + WeightMessage(bucket[key]);
+  {
+    reveal_WeightBucket();
+  }
+
+  lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:set<Key>, b:set<Key>)
+  requires a !! b
+  requires a + b == bucket.Keys
+  requires |a| > 0  // So we can decrease |bucket|
+  requires |b| > 0
+  requires |bucket| > 0 // So we can ChooseKey
+  requires ChooseKey(bucket) in a
+  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
+  decreases |bucket|, 0
+  {
+    var key := ChooseKey(bucket);
+    var msg := bucket[key];
+    var residual := WeightKey(key) + WeightMessage(msg);
+
+    calc {
+      WeightBucket(Image(bucket, a));
+        { WeightBucketLinearInKeySet(Image(bucket, a), a-{key}, {key}); }
+      WeightBucket(Image(Image(bucket, a), a-{key})) + WeightBucket(Image(Image(bucket, a), {key}));
+        {
+          assert Image(Image(bucket, a), a-{key}) == Image(bucket, a-{key});  // OBSERVE trigger
+          assert Image(Image(bucket, a), {key}) == Image(bucket, {key});  // OBSERVE trigger
+        }
+      WeightBucket(Image(bucket, a-{key})) + WeightBucket(Image(bucket, {key}));
+        { WeightBucketSingleton(Image(bucket, {key}), key); }
+      WeightBucket(Image(bucket, a-{key})) + residual;
+    }
+    calc {
+      WeightBucket(bucket);
+        { reveal_WeightBucket(); }
+      WeightBucket(MapRemove1(bucket, key)) + residual;
+        { MapRemoveVsImage(bucket, Image(bucket, (a+b)-{key}), key); }
+      WeightBucket(Image(bucket, (a+b)-{key}) )+ residual;
+        { assert a+b-{key} == (a-{key})+b; }  // OSBERVE trigger
+      WeightBucket(Image(bucket, (a-{key})+b)) + residual;
+        { WeightBucketLinearInKeySet(Image(bucket, (a-{key})+b), a-{key}, b); }
+      WeightBucket(Image(Image(bucket, (a-{key})+b), a-{key})) + WeightBucket(Image(Image(bucket, (a-{key})+b), b)) + residual;
+        { 
+          assert Image(Image(bucket, (a-{key})+b), a-{key}) == Image(bucket, a-{key});  // OBSERVE trigger
+          assert Image(Image(bucket, (a-{key})+b), b) == Image(bucket, b);  // OBSERVE trigger
+        }
+      WeightBucket(Image(bucket, a-{key})) + WeightBucket(Image(bucket, b)) + residual;
+        // upper calc
+      WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));
+    }
+  }
+
+  // The raw WeightBucket definition is really difficult to work with. This
+  // lemma is a much nicer foundation to work with.
+  lemma WeightBucketLinearInKeySet(bucket:Bucket, a:set<Key>, b:set<Key>)
+  requires a !! b
+  requires a + b == bucket.Keys
+  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
+  decreases |bucket|, 1
+  {
+    if |bucket| == 0 {
+    } else if a=={} {
+      assert bucket == Image(bucket, b);  // trigger
+    } else if b=={} {
+      assert bucket == Image(bucket, a);  // trigger
+    } else {
+      if ChooseKey(bucket) in a {
+        WeightBucketLinearInKeySetInner(bucket, a, b);
+      } else {
+        WeightBucketLinearInKeySetInner(bucket, b, a);
+      }
+    }
+  }
+
   lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
   requires key !in bucket
   ensures WeightBucket(bucket[key := msg]) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
+  {
+    var update := map [ key := msg ];
+    var rest := bucket.Keys - {key};
+
+    WeightBucketLinearInKeySet(bucket[key := msg], {key}, rest);
+    assert Image(bucket[key := msg], {key}) == update;  // trigger
+    assert Image(bucket[key := msg], rest) == bucket; // trigger
+    WeightBucketSingleton(Image(update, {key}), key);
+  }
 
   lemma WeightSplitBucketLeft(bucket: Bucket, key: Key)
   ensures WeightBucket(SplitBucketLeft(bucket, key)) <= WeightBucket(bucket)
+  { }
 
   lemma WeightSplitBucketRight(bucket: Bucket, key: Key)
   ensures WeightBucket(SplitBucketRight(bucket, key)) <= WeightBucket(bucket)
+  { }
 
   lemma WeightSplitBucketAdditive(bucket: Bucket, key: Key)
   ensures WeightBucket(SplitBucketLeft(bucket, key)) +
           WeightBucket(SplitBucketRight(bucket, key)) == WeightBucket(bucket)
+  { }
 
   lemma WeightBucketList2(a: Bucket, b: Bucket)
   ensures WeightBucketList([a,b]) == WeightBucket(a) + WeightBucket(b)
+  { }
 
   lemma WeightSplitBucketListLeft(blist: BucketList, pivots: seq<Key>, cLeft: int, key: Key)
   requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
   ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
       <= WeightBucketList(blist)
+  { }
 
   lemma WeightSplitBucketListRight(blist: BucketList, pivots: seq<Key>, cRight: int, key: Key)
   requires SplitBucketListRight.requires(blist, pivots, cRight, key)
   ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
       <= WeightBucketList(blist)
+  { }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
   requires WFPivots(pivots)
   ensures WeightBucketList(BucketListFlush(parent, children, pivots))
       <= WeightBucket(parent) + WeightBucketList(children)
+  { }
 
   lemma WeightBucketListItemFlush(parent: Bucket, children: BucketList, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
   ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
       <= WeightBucket(parent) + WeightBucket(children[i])
+  { }
 
   lemma WeightBucketListShrinkEntry(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|
   requires WeightBucket(bucket) <= WeightBucket(blist[i])
   ensures WeightBucketList(blist[i := bucket]) <= WeightBucketList(blist)
+  { }
 
   lemma WeightBucketListClearEntry(blist: BucketList, i: int)
   requires 0 <= i < |blist|
   ensures WeightBucketList(blist[i := map[]]) <= WeightBucketList(blist)
+  { }
 
   lemma WeightSplitBucketInList(blist: BucketList, slot: int, pivot: Key)
   requires 0 <= slot < |blist|
   ensures WeightBucketList(SplitBucketInList(blist, slot, pivot))
       == WeightBucketList(blist)
+  { }
 
   lemma WeightBucketListSlice(blist: BucketList, a: int, b: int)
   requires 0 <= a <= b <= |blist|
   ensures WeightBucketList(blist[a..b]) <= WeightBucketList(blist)
+  { }
 
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
   requires 0 <= a <= |blist|
   ensures WeightBucketList(blist[a..]) <= WeightBucketList(blist)
+  { }
 
   lemma WeightBucketListConcat(left: BucketList, right: BucketList)
   ensures WeightBucketList(left + right)
       == WeightBucketList(left) + WeightBucketList(right)
+  { }
 
   lemma WeightMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
   requires 0 <= slot < |blist| - 1
   requires WFBucketList(blist, pivots)
   ensures WeightBucketList(MergeBucketsInList(blist, slot)) == WeightBucketList(blist)
+  { }
 
   lemma WeightJoinBucketList(blist: BucketList)
   ensures WeightBucket(JoinBucketList(blist)) <= WeightBucketList(blist)
+  { }
 
   lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
   ensures WeightBucketList(SplitBucketOnPivots(bucket, pivots)) == WeightBucket(bucket)
+  { }
 
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
   // to show that numbers fit within 64 bits.
   lemma LenLeWeight(bucket: Bucket)
   ensures |bucket| <= WeightBucket(bucket)
+  { }
 
   lemma WeightBucketEmpty()
   ensures WeightBucket(map[]) == 0
@@ -171,26 +290,33 @@ module BucketWeights {
 
   lemma WeightBucketListOneEmpty()
   ensures WeightBucketList([map[]]) == 0
+  { }
 
   lemma WeightBucketPut(bucket: Bucket, key: Key, msg: Message)
   ensures WeightBucket(bucket[key := msg]) <=
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
+  { }
 
   lemma WeightBucketLeBucketList(blist: BucketList, i: int)
   requires 0 <= i < |blist|
   ensures WeightBucket(blist[i]) <= WeightBucketList(blist)
+  { }
 
   lemma WeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
   requires WFBucketList(blist, pivots)
   ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
       WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
+  { }
 
   lemma WeightBucketIntersect(bucket: Bucket, keys: set<Key>)
   ensures WeightBucket(BucketIntersect(bucket, keys)) <= WeightBucket(bucket)
+  { }
 
   lemma WeightBucketComplement(bucket: Bucket, keys: set<Key>)
   ensures WeightBucket(BucketComplement(bucket, keys)) <= WeightBucket(bucket)
+  { }
 
   lemma WeightMessageBound(msg: Message)
   ensures WeightMessage(msg) <= 8 + 1024
+  { }
 }
