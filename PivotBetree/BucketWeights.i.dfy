@@ -187,13 +187,25 @@ module BucketWeights {
     WeightBucketSingleton(Image(update, {key}), key);
   }
 
-  lemma WeightSplitBucketLeft(bucket: Bucket, key: Key)
-  ensures WeightBucket(SplitBucketLeft(bucket, key)) <= WeightBucket(bucket)
-  { }
+  lemma WeightSplitBucketLeft(bucket: Bucket, pivot: Key)
+  ensures WeightBucket(SplitBucketLeft(bucket, pivot)) <= WeightBucket(bucket)
+  {
+    var leftKeys := set k | k in bucket && Keyspace.lt(k, pivot);
+    var rightKeys := bucket.Keys - leftKeys;
+    assert SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys); // trigger.
+    // TODO(jonh) Crap, there's a timeout hiding in here. Probably SplitBucketLeft defn?
+    // Exposed when trigger assert above is hidden.
+    WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
+  }
 
-  lemma WeightSplitBucketRight(bucket: Bucket, key: Key)
-  ensures WeightBucket(SplitBucketRight(bucket, key)) <= WeightBucket(bucket)
-  { }
+  lemma WeightSplitBucketRight(bucket: Bucket, pivot: Key)
+  ensures WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
+  {
+    var rightKeys := set k | k in bucket && Keyspace.lte(pivot, k);
+    var leftKeys := bucket.Keys - rightKeys;
+    assert SplitBucketRight(bucket, pivot) == Image(bucket, rightKeys); // trigger.
+    WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
+  }
 
   lemma WeightSplitBucketAdditive(bucket: Bucket, key: Key)
   ensures WeightBucket(SplitBucketLeft(bucket, key)) +
