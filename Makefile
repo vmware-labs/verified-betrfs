@@ -68,6 +68,9 @@ endef
 .PHONY: status
 status: build/deps build/Impl/Bundle.i.status.pdf
 
+.PHONY: faststatus
+syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
+
 ##############################################################################
 # C# executables
 

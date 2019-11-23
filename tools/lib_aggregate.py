@@ -38,7 +38,7 @@ class DafnySyntaxOK(DafnyCondition):
         super().__init__(4, "syntax ok", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
-    return verchk.replace("build/", "./").replace(".verchk", ".dfy")
+    return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
 
 def hasDisallowedAssumptions(verchk):
     dfy = dafnyFromVerchk(verchk)
@@ -69,6 +69,9 @@ def extractCondition(reportType, report, content):
     if reportType=="verchk":
         raise Exception("build system error: couldn't summarize %s\n" % report)
     elif reportType=="synchk":
+        #  Report assumes even in syntax-only mode.
+        if hasDisallowedAssumptions(report):
+            return DafnyAssumeError()
         return DafnySyntaxOK()
     else:
         raise Exception("build system error: unknown report type %s\n" % reportType)
