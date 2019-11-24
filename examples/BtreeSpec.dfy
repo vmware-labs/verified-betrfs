@@ -841,12 +841,13 @@ abstract module BtreeSpec {
           assert MapsTo(Interpretation(node.children[i-1]), childkeylist[j], childvaluelist[j]);
           InterpretationDelegation(node, childkeylist[j]);
         }
-        // forall j | 0 <= j < |partialkeylist|
-        //   ensures MapsTo(Interpretation(node), partialkeylist[j], partialvaluelist[j])
-        // {
-        //   assume false;
-        // }          
-          
+        forall j | 0 <= j < |partialkeylist|
+          ensures MapsTo(Interpretation(node), partialkeylist[j], partialvaluelist[j])
+        {
+          if j < |oldpartialkeylist| {
+          } else {
+          }          
+        }
       }
       assert node.children == node.children[..|node.children|];
       //assume false;
