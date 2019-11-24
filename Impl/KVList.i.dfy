@@ -210,7 +210,7 @@ module KVList {
     && (childrenIdx < |children| ==> 0 <= childIdx <= |children[childrenIdx].keys|)
     && |acc| == childrenIdx
     && (forall i | 0 <= i < childrenIdx :: WF(acc[i]))
-    && ISeq(acc) == BucketListFlush'(I(parent), ISeq(children), pivots, childrenIdx)
+    && ISeq(acc) == BucketListFlushPartial(I(parent), ISeq(children), pivots, childrenIdx)
     && WF(cur)
     && (childrenIdx < |children| ==> I(cur) == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx))
     && (childrenIdx < |children| && childIdx > 0 && parentIdx < |parent.keys| ==> lt(children[childrenIdx].keys[childIdx - 1], parent.keys[parentIdx]))

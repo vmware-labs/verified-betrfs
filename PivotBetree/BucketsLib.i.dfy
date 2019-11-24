@@ -75,15 +75,13 @@ module BucketsLib {
     :: Merge(BucketGet(parent, key), BucketGet(child, key))
   }
 
-  // TODO(jonh): Using ' in method names is discouraged in Veribetrfs because we'd like to reserve it
-  // for its TLA+ meaning in state machines.
-  function BucketListFlush'(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
+  function BucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
   requires WFPivots(pivots)
   requires 0 <= i <= |children|
   ensures |res| == i
   {
     if i == 0 then [] else (
-      BucketListFlush'(parent, children, pivots, i-1) + [BucketListItemFlush(parent, children[i-1], pivots, i-1)]
+      BucketListFlushPartial(parent, children, pivots, i-1) + [BucketListItemFlush(parent, children[i-1], pivots, i-1)]
     )
   }
 
@@ -91,7 +89,7 @@ module BucketsLib {
   requires WFPivots(pivots)
   ensures |res| == |children|
   {
-    BucketListFlush'(parent, children, pivots, |children|)
+    BucketListFlushPartial(parent, children, pivots, |children|)
   }
 
   function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)
@@ -357,14 +355,14 @@ module BucketsLib {
     }
   }
 
-  lemma BucketListFlush'At(parent: Bucket, blist: BucketList, pivots: PivotTable, j: int, i: int)
+  lemma BucketListFlushPartialAt(parent: Bucket, blist: BucketList, pivots: PivotTable, j: int, i: int)
   requires 0 <= i < j <= |blist|
   requires WFPivots(pivots)
-  ensures BucketListFlush'(parent, blist, pivots, j)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
+  ensures BucketListFlushPartial(parent, blist, pivots, j)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
   {
     if j == i + 1 {
     } else {
-      BucketListFlush'At(parent, blist, pivots, j-1, i);
+      BucketListFlushPartialAt(parent, blist, pivots, j-1, i);
     }
   }
 
@@ -373,7 +371,7 @@ module BucketsLib {
   requires WFPivots(pivots)
   ensures BucketListFlush(parent, blist, pivots)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
   {
-    BucketListFlush'At(parent, blist, pivots, |blist|, i);
+    BucketListFlushPartialAt(parent, blist, pivots, |blist|, i);
   }
 
   lemma WFBucketListFlush(parent: Bucket, blist: BucketList, pivots: PivotTable)
