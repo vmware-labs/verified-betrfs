@@ -192,7 +192,7 @@ module BucketWeights {
   {
     var leftKeys := set k | k in bucket && Keyspace.lt(k, pivot);
     var rightKeys := bucket.Keys - leftKeys;
-    assert SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys); // trigger.
+    //assert SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys); // trigger.
     // TODO(jonh) Crap, there's a timeout hiding in here. Probably SplitBucketLeft defn?
     // Exposed when trigger assert above is hidden.
     WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
@@ -219,7 +219,7 @@ module BucketWeights {
   {
     var leftKeys := set k | k in bucket && Keyspace.lt(k, pivot);
     forall ensures SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys)
-    { reveal_SplitBucketLeft(); }
+    //{ reveal_SplitBucketLeft(); }
 
     var rightKeys := set k | k in bucket && Keyspace.lte(pivot, k);
     SplitBucketRightImage(bucket, pivot, rightKeys);

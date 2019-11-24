@@ -145,12 +145,12 @@ module BucketsLib {
   ///// Splitting stuff
 
   // NB(jonh): These definitions are timeout monsters.
-  function {:opaque} SplitBucketLeft(bucket: Bucket, pivot: Key) : Bucket
+  function SplitBucketLeft(bucket: Bucket, pivot: Key) : Bucket
   {
     map key | key in bucket && Keyspace.lt(key, pivot) :: bucket[key]
   }
 
-  function {:opaque} SplitBucketRight(bucket: Bucket, pivot: Key) : Bucket
+  function SplitBucketRight(bucket: Bucket, pivot: Key) : Bucket
   {
     map key | key in bucket && Keyspace.lte(pivot, key) :: bucket[key]
   }
