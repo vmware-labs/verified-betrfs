@@ -83,9 +83,12 @@ module BucketWeights {
     )
   }
 
-  function Image(b:Bucket, s:set<Key>) : Bucket
+  function {:opaque} Image(b:Bucket, s:set<Key>) : (image:Bucket)
   requires s <= b.Keys
   ensures |Image(b, s)| == |s|
+  ensures forall k :: k in image ==> k in s
+  // The ensures above isn't implicated in profiling, but seems to overtrigger
+  // MapType0Select somewhere else, quite badly.
   {
     var m := map k | k in s :: b[k];
     assert m.Keys == s;
@@ -346,18 +349,74 @@ module BucketWeights {
     }
   }
 
-  lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
-  requires WFPivots(pivots)
-  ensures WeightBucketList(BucketListFlush(parent, children, pivots))
-      <= WeightBucket(parent) + WeightBucketList(children)
-  { }
+  function {:opaque} KeySetForRoute(parent: Bucket, pivots: PivotTable, i: int) : (ks:set<Key>)
+    ensures forall k :: k in parent.Keys && Route(pivots, k) == i <==> k in ks
+  {
+    set k | k in parent.Keys && Route(pivots, k) == i
+  }
+
+  lemma EmptyBucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int)
+    requires |Image(parent, KeySetForRoute(parent, pivots, i))| == 0
+    ensures |BucketListItemFlush(parent, child, pivots, i)| == 0
+  {
+    forall key | key in (child.Keys + parent.Keys) && Route(pivots, key) == i
+      ensures key in Image(parent, KeySetForRoute(parent, pivots, i))
+    {
+    }
+  }
 
   lemma WeightBucketListItemFlush(parent: Bucket, children: BucketList, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
+  // A tighter bound we'll need later...
+  ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
+      <= WeightBucket(Image(parent, KeySetForRoute(parent, pivots, i))) + WeightBucket(children[i])
+  // ...gives this one easily:
   ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
       <= WeightBucket(parent) + WeightBucket(children[i])
-  { }
+  {
+    var childKeys := KeySetForRoute(parent, pivots, i);
+    if |Image(parent, childKeys)| == 0 {
+      calc {
+        WeightBucket(BucketListItemFlush(parent, children[i], pivots, i));
+          { EmptyBucketListItemFlush(parent, children[i], pivots, i); }
+        0;
+        <=
+        WeightBucket(children[i]);
+        WeightBucket(Image(parent, childKeys)) + WeightBucket(children[i]);
+      }
+    } else {
+      // Pick a key to decrease parent by
+      var extraKey :| extraKey in Image(parent, childKeys);
+      var subparent := MapRemove1(parent, extraKey);
+      assert extraKey in parent;
+      assert |subparent| < |parent|;
+      var subChildKeys := childKeys - { extraKey };
+      calc {
+        WeightBucket(BucketListItemFlush(parent, children[i], pivots, i));
+        //here
+        WeightBucket(BucketListItemFlush(subparent, children[i], pivots, i));
+        <=
+          { WeightBucketListItemFlush(subparent, children, pivots, i); }
+          // here`:3
+        WeightBucket(Image(subparent, subChildKeys)) + WeightBucket(children[i]);
+        WeightBucket(Image(parent, childKeys)) + WeightBucket(children[i]);
+      }
+    }
+    assert WeightBucket(Image(parent, KeySetForRoute(parent, pivots, i))) <= WeightBucket(parent);
+  }
+
+  lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
+  requires WFPivots(pivots)
+  ensures WeightBucketList(BucketListFlush(parent, children, pivots))
+      <= WeightBucket(parent) + WeightBucketList(children)
+  {
+    calc {
+      WeightBucketList(BucketListFlush(parent, children, pivots));
+      WeightBucketList(BucketListFlush(parent, children, pivots));
+
+    }
+  }
 
   lemma WeightBucketListShrinkEntry(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|

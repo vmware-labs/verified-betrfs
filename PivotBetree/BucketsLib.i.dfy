@@ -65,6 +65,8 @@ module BucketsLib {
     blist[i := BucketInsert(blist[i], key, msg)]
   }
 
+  // Gives a new child bucket that merges the old child bucket plus the
+  // messages from the parent destined for this child.
   function BucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int) : Bucket
   requires WFPivots(pivots)
   {
@@ -79,6 +81,7 @@ module BucketsLib {
   requires WFPivots(pivots)
   requires 0 <= i <= |children|
   ensures |res| == i
+  ensures forall h :: 0 <= h < i ==> res[h] == BucketListItemFlush(parent, children[h], pivots, h);
   {
     if i == 0 then [] else (
       BucketListFlushPartial(parent, children, pivots, i-1) + [BucketListItemFlush(parent, children[i-1], pivots, i-1)]
@@ -88,6 +91,7 @@ module BucketsLib {
   function BucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable) : (res : BucketList)
   requires WFPivots(pivots)
   ensures |res| == |children|
+  ensures forall h :: 0 <= h < |res| ==> res[h] == BucketListItemFlush(parent, children[h], pivots, h);
   {
     BucketListFlushPartial(parent, children, pivots, |children|)
   }
