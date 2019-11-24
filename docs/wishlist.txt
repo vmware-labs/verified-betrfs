@@ -66,3 +66,7 @@ which is there to introduce an obligation, should it?
 warnings about unused non-ghost variables
 warnings about if/forall statements where condition is non-ghost but body is entirely ghost
 ghost { } blocks
+
+Here's a timeout case, memorialized in a branch:
+[map-comprehension-timeout 5a69ea2] map comprehension timeout. Hard to diagnose in profiler because it doesn't point to offending definitions. PivotBetree/BucketWeights.i.dfy /proc:'*WeightSplitBucketLeft*'
+
