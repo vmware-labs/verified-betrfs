@@ -198,35 +198,146 @@ module BucketWeights {
     WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
   }
 
+  lemma SplitBucketRightImage(bucket: Bucket, pivot: Key, rightKeys:set<Key>)
+  requires rightKeys == set k | k in bucket && Keyspace.lte(pivot, k)
+  ensures SplitBucketRight(bucket, pivot) == Image(bucket, rightKeys) // trigger
+  {
+  }
+
   lemma WeightSplitBucketRight(bucket: Bucket, pivot: Key)
   ensures WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
   {
     var rightKeys := set k | k in bucket && Keyspace.lte(pivot, k);
     var leftKeys := bucket.Keys - rightKeys;
-    assert SplitBucketRight(bucket, pivot) == Image(bucket, rightKeys); // trigger.
+    SplitBucketRightImage(bucket, pivot, rightKeys);
     WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
   }
 
-  lemma WeightSplitBucketAdditive(bucket: Bucket, key: Key)
-  ensures WeightBucket(SplitBucketLeft(bucket, key)) +
-          WeightBucket(SplitBucketRight(bucket, key)) == WeightBucket(bucket)
-  { }
+  lemma WeightSplitBucketAdditive(bucket: Bucket, pivot: Key)
+  ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
+          WeightBucket(SplitBucketRight(bucket, pivot)) == WeightBucket(bucket)
+  {
+    var leftKeys := set k | k in bucket && Keyspace.lt(k, pivot);
+    forall ensures SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys)
+    { reveal_SplitBucketLeft(); }
+
+    var rightKeys := set k | k in bucket && Keyspace.lte(pivot, k);
+    SplitBucketRightImage(bucket, pivot, rightKeys);
+    assert SplitBucketRight(bucket, pivot) == Image(bucket, rightKeys); // trigger.
+
+    var notLeftKeys := bucket.Keys - leftKeys;
+    assert notLeftKeys == rightKeys;
+
+    WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
+  }
 
   lemma WeightBucketList2(a: Bucket, b: Bucket)
   ensures WeightBucketList([a,b]) == WeightBucket(a) + WeightBucket(b)
-  { }
+  {
+    calc {
+      WeightBucketList([a,b]);
+        { reveal_WeightBucketList(); }
+      WeightBucketList(DropLast([a,b])) + WeightBucket(Last([a,b]));
+        { assert DropLast([a,b]) == [a]; }
+      WeightBucketList([a]) + WeightBucket(b);
+        { reveal_WeightBucketList(); }
+      WeightBucket(a) + WeightBucket(b);
+    }
+  }
+
+  lemma WeightBucketListConcat(left: BucketList, right: BucketList)
+  ensures WeightBucketList(left + right)
+      == WeightBucketList(left) + WeightBucketList(right)
+  {
+    if |right| == 0 {
+      reveal_WeightBucketList();
+      assert left + right == left;  // trigger
+    } else {
+      var lessRight := DropLast(right);
+      calc {
+        WeightBucketList(left + right);
+          { assert left + right == left + lessRight + [Last(right)]; }  // trigger
+        WeightBucketList(left + lessRight + [Last(right)]);
+          { reveal_WeightBucketList(); }
+        WeightBucketList(left + lessRight) + WeightBucket(Last(right));
+          { WeightBucketListConcat(left, lessRight); }
+        WeightBucketList(left) + WeightBucketList(lessRight) + WeightBucket(Last(right));
+          { reveal_WeightBucketList(); }
+        WeightBucketList(left) + WeightBucketList(right);
+      }
+    }
+  }
+
+  lemma WeightBucketListSlice(blist: BucketList, a: int, b: int)
+  requires 0 <= a <= b <= |blist|
+  ensures WeightBucketList(blist[a..b]) <= WeightBucketList(blist)
+  {
+    calc {
+      WeightBucketList(blist[a..b]);
+      <=
+      WeightBucketList(blist[..a]) + WeightBucketList(blist[a..b]) + WeightBucketList(blist[b..]);
+        { WeightBucketListConcat(blist[a..b], blist[b..]); }
+        { assert blist[a..b] + blist[b..] == blist[a..]; }
+      WeightBucketList(blist[..a]) + WeightBucketList(blist[a..]);
+        { WeightBucketListConcat(blist[..a], blist[a..]); }
+        { assert blist[..a] + blist[a..] == blist; }
+      WeightBucketList(blist);
+    }
+  }
 
   lemma WeightSplitBucketListLeft(blist: BucketList, pivots: seq<Key>, cLeft: int, key: Key)
   requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
   ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
       <= WeightBucketList(blist)
-  { }
+  {
+    // This proof can get away with reveal_WeightBucketList, but maybe for
+    // symmetry with the *Right version it should be rewritten with
+    // WeightBucketListConcat.
+    calc {
+      WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key));
+        { reveal_WeightBucketList(); }
+      WeightBucketList(blist[.. cLeft]) + WeightBucket(SplitBucketLeft(blist[cLeft], key));
+      <=
+        { WeightSplitBucketLeft(blist[cLeft], key); }
+      WeightBucketList(blist[.. cLeft]) + WeightBucket(blist[cLeft]);
+        {
+          reveal_WeightBucketList();
+          assert DropLast(blist[.. cLeft + 1]) == blist[.. cLeft];
+        }
+      WeightBucketList(blist[.. cLeft + 1]);
+      <=
+        { WeightBucketListSlice(blist, 0, cLeft + 1); }
+      WeightBucketList(blist);
+    }
+  }
 
   lemma WeightSplitBucketListRight(blist: BucketList, pivots: seq<Key>, cRight: int, key: Key)
   requires SplitBucketListRight.requires(blist, pivots, cRight, key)
   ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
       <= WeightBucketList(blist)
-  { }
+  {
+    calc {
+      WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key));
+      WeightBucketList([SplitBucketRight(blist[cRight], key)] + blist[cRight + 1 ..]);
+        { WeightBucketListConcat([SplitBucketRight(blist[cRight], key)], blist[cRight + 1 ..]); }
+      WeightBucketList([SplitBucketRight(blist[cRight], key)]) + WeightBucketList(blist[cRight + 1 ..]);
+        { reveal_WeightBucketList(); }
+      WeightBucket(SplitBucketRight(blist[cRight], key)) + WeightBucketList(blist[cRight + 1 ..]);
+      <=
+        { WeightSplitBucketRight(blist[cRight], key); }
+      WeightBucket(blist[cRight]) + WeightBucketList(blist[cRight + 1 ..]);
+        { reveal_WeightBucketList(); }
+      WeightBucketList([blist[cRight]]) + WeightBucketList(blist[cRight + 1 ..]);
+        { WeightBucketListConcat([blist[cRight]], blist[cRight + 1 ..]); }
+        { assert blist[cRight ..] == [blist[cRight]] + blist[cRight + 1 ..]; }
+      WeightBucketList(blist[cRight ..]);
+      <=
+      WeightBucketList(blist[.. cRight]) + WeightBucketList(blist[cRight ..]);
+        { WeightBucketListConcat(blist[.. cRight], blist[cRight ..]); }
+        { assert blist == blist[.. cRight] + blist[cRight ..]; }
+      WeightBucketList(blist);
+    }
+  }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
   requires WFPivots(pivots)
@@ -258,19 +369,9 @@ module BucketWeights {
       == WeightBucketList(blist)
   { }
 
-  lemma WeightBucketListSlice(blist: BucketList, a: int, b: int)
-  requires 0 <= a <= b <= |blist|
-  ensures WeightBucketList(blist[a..b]) <= WeightBucketList(blist)
-  { }
-
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
   requires 0 <= a <= |blist|
   ensures WeightBucketList(blist[a..]) <= WeightBucketList(blist)
-  { }
-
-  lemma WeightBucketListConcat(left: BucketList, right: BucketList)
-  ensures WeightBucketList(left + right)
-      == WeightBucketList(left) + WeightBucketList(right)
   { }
 
   lemma WeightMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
