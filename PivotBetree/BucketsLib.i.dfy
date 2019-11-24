@@ -75,6 +75,8 @@ module BucketsLib {
     :: Merge(BucketGet(parent, key), BucketGet(child, key))
   }
 
+  // TODO(jonh): Using ' in method names is discouraged in Veribetrfs because we'd like to reserve it
+  // for its TLA+ meaning in state machines.
   function BucketListFlush'(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
   requires WFPivots(pivots)
   requires 0 <= i <= |children|
