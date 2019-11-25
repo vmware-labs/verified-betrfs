@@ -426,14 +426,14 @@ module BucketWeights {
   requires WFPivots(pivots)
   requires 0 <= i < |children|
   ensures
-    WeightBucket(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i))
+    WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i))
       <= WeightBucket(IImage(parent, RouteRange(pivots, i) * filter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter))
   decreases |IImage(parent, filter)|
   {
     if |IImage(parent, filter)| == 0 {
       calc {
-        WeightBucket(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i));
-          { EmptyBucketListItemFlush(IImage(parent, filter), children[i], pivots, i); }
+        WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i));
+          { EmptyBucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i); }
         0;
         <=
         WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
@@ -490,109 +490,43 @@ module BucketWeights {
 
       // Partition for WeightBucketLinearInKeySet(parent)
       assert filter == filter * carFilter + filter * cdrFilter;
-      var child := children[i];
-      var P := (key:Key) => key in (child.Keys + IImage(parent, filter).Keys)
-        && Route(pivots, key) == i
-        && Merge(BucketGet(IImage(parent, filter), key), BucketGet(child, key)) != IdentityMessage();
-      var Pcar := (key:Key) => key in (child.Keys + IImage(parent, filter * carFilter).Keys)
-          && Route(pivots, key) == i
-          && Merge(BucketGet(IImage(parent, filter * carFilter), key), BucketGet(child, key)) != IdentityMessage();
-      var Pcdr := (key:Key) => key in (child.Keys + IImage(parent, filter * cdrFilter).Keys)
-          && Route(pivots, key) == i
-          && Merge(BucketGet(IImage(parent, filter * cdrFilter), key), BucketGet(child, key)) != IdentityMessage();
-      forall key:Key ensures P(key) && !Pcar(key) ==> Pcdr(key)
-      {
-      }
-      forall key | key in carFilter ensures BucketGet(IImage(parent, filter * carFilter), key) == BucketGet(IImage(parent, filter), key);
+
+      // If a key is in the unfiltered view, it appears in one of the filtered partitions.
+      forall key |
+      Merge(BucketGet(IImage(parent, filter), key), BucketGet(IImage(children[i], filter), key)) != IdentityMessage()
+      <==> Merge(BucketGet(IImage(parent, filter * carFilter), key), BucketGet(IImage(children[i], filter * carFilter), key)) != IdentityMessage()
+           || Merge(BucketGet(IImage(parent, filter * cdrFilter), key), BucketGet(IImage(children[i], filter * cdrFilter), key)) != IdentityMessage()
       {
         reveal_IImage();
       }
-      forall key | key in cdrFilter ensures BucketGet(IImage(parent, filter * cdrFilter), key) == BucketGet(IImage(parent, filter), key);
-      {
-        reveal_IImage();
-      }
-      forall key:Key | Pcar(key) ensures P(key)
-      { //here
-        assert key in (child.Keys + IImage(parent, filter).Keys);
-        assert Route(pivots, key) == i;
-        forall ensures key in carFilter {
-          reveal_IImage();
-        }
-        assert Merge(BucketGet(IImage(parent, filter), key), BucketGet(child, key)) != IdentityMessage();
-      }
-      forall key:Key | Pcdr(key) ensures P(key)
-      { // here
-      }
-      assume false;
-      forall key:Key ensures (Pcar(key) || Pcdr(key)) == P(key)
-      {
-      }
-      assert BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys
-        == set key | (key in (child.Keys + IImage(parent, filter).Keys)) && P(key);
-      assert BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
-        == set key | (key in (child.Keys + IImage(parent, filter * carFilter).Keys)) && Pcar(key);
-      assert BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys
-        == set key | (key in (child.Keys + IImage(parent, filter * cdrFilter).Keys)) && Pcdr(key);
 
-      assert (set key | (key in (child.Keys + IImage(parent, filter * carFilter).Keys)) && Pcar(key))
-        == set key | (key in (child.Keys + IImage(parent, filter).Keys)) && Pcar(key);
-      assert (set key | (key in (child.Keys + IImage(parent, filter * cdrFilter).Keys)) && Pcdr(key))
-        == set key | (key in (child.Keys + IImage(parent, filter).Keys)) && Pcdr(key);
-
-      var B := child.Keys + IImage(parent, filter).Keys;
-      SetPartition(B, P, Pcar, Pcdr);
-      assert (set key | (key in B) && Pcar(key))
-        + (set key | (key in B) && Pcdr(key))
-        == set key | (key in B) && P(key);
-      assert (set key | (key in (child.Keys + IImage(parent, filter).Keys)) && Pcar(key))
-        + (set key | (key in (child.Keys + IImage(parent, filter).Keys)) && Pcdr(key))
-        == set key | (key in (child.Keys + IImage(parent, filter).Keys)) && P(key);
-
-      calc {
-        BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys;
-//        set key | (key in (child.Keys + IImage(parent, filter).Keys))
-//        && Route(pivots, key) == i
-//        && Merge(BucketGet(IImage(parent, filter), key), BucketGet(child, key)) != IdentityMessage();
-//        // here
-//        (set key | (key in (child.Keys + IImage(parent, filter * carFilter).Keys))
-//        && Route(pivots, key) == i
-//        && Merge(BucketGet(IImage(parent, filter * carFilter), key), BucketGet(child, key)) != IdentityMessage())
-//          +
-//        (set key | (key in (child.Keys + IImage(parent, filter * cdrFilter).Keys))
-//        && Route(pivots, key) == i
-//        && Merge(BucketGet(IImage(parent, filter * cdrFilter), key), BucketGet(child, key)) != IdentityMessage());
-        BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
-          + BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys;
-      }
-      calc {
-        BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys;
-        // here
-        BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
-          + BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys;
-      }
-      //here
-      assert BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys !!
-        BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
-          + BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys;
 
       // Partition for WeightBucketLinearInKeySet(parent * filter)
       assert RouteRange(pivots, i) * filter * carFilter + RouteRange(pivots, i) * filter * cdrFilter == RouteRange(pivots, i) * filter;
 
       calc {
-        WeightBucket(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i));
+        WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i));
           {
-            WeightBucketLinearInKeySet(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i),
-              BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys,
-              BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys);
+//            WeightBucketLinearInKeySet(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i),
+//              carFilter, cdrFilter);
+            assume false;  // TODO iset-ize WeightBucketLinearInKeySet
           }
-        WeightBucket(BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i))
-          + WeightBucket(BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i));
+        WeightBucket(IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), carFilter))
+        + WeightBucket(IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), cdrFilter));
+          { // push filters through IImage operator & BucketListItemFlush.
+            reveal_IImage();
+            assert IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), carFilter)
+              == BucketListItemFlush(IImage(parent, filter * carFilter), IImage(children[i], filter * carFilter), pivots, i);
+            assert IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), cdrFilter)
+              == BucketListItemFlush(IImage(parent, filter * cdrFilter), IImage(children[i], filter * cdrFilter), pivots, i);
+          }
+        WeightBucket(BucketListItemFlush(IImage(parent, filter * carFilter), IImage(children[i], filter * carFilter), pivots, i))
+        + WeightBucket(BucketListItemFlush(IImage(parent, filter * cdrFilter), IImage(children[i], filter * cdrFilter), pivots, i));
         <=
           { WeightBucketListItemFlushInner(parent, children, pivots, i, filter * carFilter); }  // recursion car
-        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
-          + WeightBucket(BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i));
-        <=
+          { assert RouteRange(pivots, i) * (filter * carFilter) == RouteRange(pivots, i) * filter * carFilter; }
           { WeightBucketListItemFlushInner(parent, children, pivots, i, filter * cdrFilter); }  // recursion cdr
+          { assert RouteRange(pivots, i) * (filter * cdrFilter) == RouteRange(pivots, i) * filter * cdrFilter; }
         WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
           + WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * cdrFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
         // Just rearranging terms
