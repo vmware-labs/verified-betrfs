@@ -765,6 +765,52 @@ abstract module BtreeSpec {
     else ToSeqChildren(node.children)
   }
 
+  lemma ToSeqDecompose(node: Node)
+    requires WF(node)
+    requires node.Index?
+    ensures forall i, j :: (0 <= i < |node.children| && 0 <= j < |ToSeq(node.children[i]).0|) ==>
+    (exists k :: 0 <= k < |ToSeq(node).0|
+    && ToSeq(node.children[i]).0[j] == ToSeq(node).0[k]
+    && ToSeq(node.children[i]).1[j] == ToSeq(node).1[k])
+  {
+      var partialkeylist: seq<Key> := [];
+      var partialvaluelist: seq<Value> := [];
+      var l := 0;
+      while l < |node.children|
+        invariant 0 <= l <= |node.children|
+        invariant (partialkeylist, partialvaluelist) == ToSeqChildren(node.children[..l])
+        invariant forall i, j :: (0 <= i < l && 0 <= j < |ToSeq(node.children[i]).0|) ==>
+        (exists k :: 0 <= k < |partialkeylist|
+        && ToSeq(node.children[i]).0[j] == partialkeylist[k]
+        && ToSeq(node.children[i]).1[j] == partialvaluelist[k])
+      {
+        var oldpartialkeylist := partialkeylist;
+        var oldpartialvaluelist := partialvaluelist;
+
+        var (childkeylist, childvaluelist) := ToSeq(node.children[l]);
+
+        partialkeylist := partialkeylist + childkeylist;
+        partialvaluelist := partialvaluelist + childvaluelist;
+
+        l := l + 1;
+
+        assert node.children[..l][..l-1] == node.children[..l-1];
+
+        forall i, j | 0 <= i < l && 0 <= j < |ToSeq(node.children[i]).0|
+          ensures exists k :: 0 <= k < |partialkeylist|
+          && ToSeq(node.children[i]).0[j] == partialkeylist[k]
+          && ToSeq(node.children[i]).1[j] == partialvaluelist[k]
+        {
+          assume false;
+        }
+      }
+      assert node.children == node.children[..|node.children|];
+      assert forall i, j :: (0 <= i < |node.children| && 0 <= j < |ToSeq(node.children[i]).0|) ==>
+        (exists k :: 0 <= k < |ToSeq(node).0|
+        && ToSeq(node.children[i]).0[j] == ToSeq(node).0[k]
+        && ToSeq(node.children[i]).1[j] == ToSeq(node).1[k]);
+  }
+              
   lemma ToSeqIsStrictlySorted(node: Node)
     requires WF(node)
     ensures Keys.IsStrictlySorted(ToSeq(node).0)

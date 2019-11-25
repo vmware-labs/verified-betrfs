@@ -258,4 +258,53 @@ module Sequences {
       var (a, b) := Unzip(DropLast(z));
       (a + [Last(z).0], b + [Last(z).1])
   }
+
+  function Flatten<A>(seqs: seq<seq<A>>) : seq<A>
+  {
+    if |seqs| == 0 then []
+    else Flatten(DropLast(seqs)) + Last(seqs)
+  }
+
+  function FlattenIndex<A>(seqs: seq<seq<A>>, i: nat, j: nat) : nat
+    requires i < |seqs|
+    requires j < |seqs[i]|
+  {
+    |Flatten(seqs[..i])| + j
+  }
+
+  function UnflattenIndex<A>(seqs: seq<seq<A>>, i: nat) : (nat, nat)
+    requires i < |Flatten(seqs)|
+  {
+    if i < |Flatten(DropLast(seqs))| then UnflattenIndex(DropLast(seqs), i)
+    else (|seqs|-1, i - |Flatten(DropLast(seqs))|)
+  }
+
+  lemma FlattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat, j: nat)
+    requires i < |seqs|
+    requires j < |seqs[i]|
+    ensures FlattenIndex(seqs, i, j) < |Flatten(seqs)|
+    ensures Flatten(seqs)[FlattenIndex(seqs, i, j)] == seqs[i][j]
+    ensures UnflattenIndex(seqs, FlattenIndex(seqs, i, j)) == (i, j)
+  {
+    if i == |seqs|-1 {
+    } else {
+      FlattenIndexIsCorrect(DropLast(seqs), i, j);
+      assert DropLast(seqs)[..i] == seqs[..i];
+    }
+  }
+
+  lemma UnflattenIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
+    requires i < |Flatten(seqs)|
+    ensures UnflattenIndex(seqs, i).0 < |seqs|
+    ensures UnflattenIndex(seqs, i).1 < |seqs[UnflattenIndex(seqs, i).0]|
+    ensures Flatten(seqs)[i] == seqs[UnflattenIndex(seqs, i).0][UnflattenIndex(seqs, i).1]
+    ensures FlattenIndex(seqs, UnflattenIndex(seqs, i).0,UnflattenIndex(seqs, i).1) == i
+  {
+    var seqidx := UnflattenIndex(seqs, i).0;
+    if seqidx == |seqs|-1 {
+    } else {
+      UnflattenIsCorrect(DropLast(seqs), i);
+      assert DropLast(seqs)[..seqidx] == seqs[..seqidx];
+    }
+  }
 }
