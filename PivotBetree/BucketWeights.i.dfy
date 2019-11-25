@@ -109,14 +109,14 @@ module BucketWeights {
     reveal_WeightBucket();
   }
 
-  lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:set<Key>, b:set<Key>)
+  lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires a !! b
-  requires a + b == bucket.Keys
-  requires |a| > 0  // So we can decrease |bucket|
-  requires |b| > 0
+  requires forall k:Key :: k in a + b
+  requires exists k :: k in a // So we can decrease |bucket|
+  requires exists k :: k in b // So we can decrease |bucket|
   requires |bucket| > 0 // So we can ChooseKey
   requires ChooseKey(bucket) in a
-  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
+  ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
   decreases |bucket|, 0
   {
     var key := ChooseKey(bucket);
@@ -124,34 +124,54 @@ module BucketWeights {
     var residual := WeightKey(key) + WeightMessage(msg);
 
     calc {
-      WeightBucket(Image(bucket, a));
-        { WeightBucketLinearInKeySet(Image(bucket, a), a-{key}, {key}); }
-      WeightBucket(Image(Image(bucket, a), a-{key})) + WeightBucket(Image(Image(bucket, a), {key}));
+      WeightBucket(IImage(bucket, a));
+        { IWeightBucketLinearInKeySet(IImage(bucket, a), a-iset{key}, iset{key}); }
+      WeightBucket(IImage(IImage(bucket, a), a-iset{key})) + WeightBucket(IImage(IImage(bucket, a), iset{key}));
         {
-          assert Image(Image(bucket, a), a-{key}) == Image(bucket, a-{key});  // OBSERVE trigger
-          assert Image(Image(bucket, a), {key}) == Image(bucket, {key});  // OBSERVE trigger
+          assert IImage(IImage(bucket, a), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
+          assert IImage(IImage(bucket, a), iset{key}) == IImage(bucket, iset{key});  // OBSERVE trigger
         }
-      WeightBucket(Image(bucket, a-{key})) + WeightBucket(Image(bucket, {key}));
-        { WeightBucketSingleton(Image(bucket, {key}), key); }
-      WeightBucket(Image(bucket, a-{key})) + residual;
+      WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, iset{key}));
+        { WeightBucketSingleton(IImage(bucket, iset{key}), key); }
+      WeightBucket(IImage(bucket, a-iset{key})) + residual;
     }
     calc {
       WeightBucket(bucket);
         { reveal_WeightBucket(); }
       WeightBucket(MapRemove1(bucket, key)) + residual;
-        { MapRemoveVsImage(bucket, Image(bucket, (a+b)-{key}), key); }
-      WeightBucket(Image(bucket, (a+b)-{key}) )+ residual;
-        { assert a+b-{key} == (a-{key})+b; }  // OSBERVE trigger
-      WeightBucket(Image(bucket, (a-{key})+b)) + residual;
-        { WeightBucketLinearInKeySet(Image(bucket, (a-{key})+b), a-{key}, b); }
-      WeightBucket(Image(Image(bucket, (a-{key})+b), a-{key})) + WeightBucket(Image(Image(bucket, (a-{key})+b), b)) + residual;
+        //{ MapRemoveVsImage(bucket, IImage(bucket, (a+b)-iset{key}), key); }
+      WeightBucket(IImage(bucket, (a+b)-iset{key}) )+ residual;
+        { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
+      WeightBucket(IImage(bucket, (a-iset{key})+b)) + residual;
+        { IWeightBucketLinearInKeySet(IImage(bucket, (a-iset{key})+b), a-iset{key}, b); }
+      WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
         { 
-          assert Image(Image(bucket, (a-{key})+b), a-{key}) == Image(bucket, a-{key});  // OBSERVE trigger
-          assert Image(Image(bucket, (a-{key})+b), b) == Image(bucket, b);  // OBSERVE trigger
+          assert IImage(IImage(bucket, (a-iset{key})+b), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
+          assert IImage(IImage(bucket, (a-iset{key})+b), b) == IImage(bucket, b);  // OBSERVE trigger
         }
-      WeightBucket(Image(bucket, a-{key})) + WeightBucket(Image(bucket, b)) + residual;
+      WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, b)) + residual;
         // upper calc
-      WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));
+      WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b));
+    }
+  }
+
+  lemma IWeightBucketLinearInKeySet(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+  requires a !! b
+  requires forall k:Key :: k in a + b
+  ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
+  decreases |bucket|, 1
+  {
+    if |bucket| == 0 {
+    } else if a=={} {
+      assert bucket == IImage(bucket, b);  // trigger
+    } else if b=={} {
+      assert bucket == IImage(bucket, a);  // trigger
+    } else {
+      if ChooseKey(bucket) in a {
+//        WeightBucketLinearInKeySetInner(bucket, a, b);
+      } else {
+ //       WeightBucketLinearInKeySetInner(bucket, b, a);
+      }
     }
   }
 
@@ -170,9 +190,9 @@ module BucketWeights {
       assert bucket == Image(bucket, a);  // trigger
     } else {
       if ChooseKey(bucket) in a {
-        WeightBucketLinearInKeySetInner(bucket, a, b);
+//        WeightBucketLinearInKeySetInner(bucket, a, b);
       } else {
-        WeightBucketLinearInKeySetInner(bucket, b, a);
+ //       WeightBucketLinearInKeySetInner(bucket, b, a);
       }
     }
   }
