@@ -86,7 +86,7 @@ module BucketWeights {
   function {:opaque} Image(b:Bucket, s:set<Key>) : (image:Bucket)
   requires s <= b.Keys
   ensures |Image(b, s)| == |s|
-  ensures forall k :: k in image ==> k in s
+  // ensures forall k :: k in image ==> k in s
   // The ensures above isn't implicated in profiling, but seems to overtrigger
   // MapType0Select somewhere else, quite badly.
   {
@@ -349,61 +349,247 @@ module BucketWeights {
     }
   }
 
-  function {:opaque} KeySetForRoute(parent: Bucket, pivots: PivotTable, i: int) : (ks:set<Key>)
-    ensures forall k :: k in parent.Keys && Route(pivots, k) == i <==> k in ks
+  function RouteRange(pivots: PivotTable, i: int) : iset<Key>
   {
-    set k | k in parent.Keys && Route(pivots, k) == i
+    iset k | Route(pivots, k) == i
+  }
+
+  function toIset<T>(s:set<T>) : iset<T>
+  {
+     iset e | e in s
+  }
+
+  function {:opaque} IImage(b:Bucket, s:iset<Key>) : (image:Bucket)
+    ensures image.Keys <= b.Keys
+    ensures toIset(image.Keys) <= s
+  {
+    map k | k in b && k in s :: b[k]
+  }
+
+  function fIntersect<T>(s:set<T>, t:iset<T>) : set<T>
+  {
+    set e | e in s && e in t
   }
 
   lemma EmptyBucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int)
-    requires |Image(parent, KeySetForRoute(parent, pivots, i))| == 0
+    requires |IImage(parent, RouteRange(pivots, i))| == 0
     ensures |BucketListItemFlush(parent, child, pivots, i)| == 0
   {
     forall key | key in (child.Keys + parent.Keys) && Route(pivots, key) == i
-      ensures key in Image(parent, KeySetForRoute(parent, pivots, i))
+      ensures key in IImage(parent, RouteRange(pivots, i))
     {
+    }
+  }
+
+  lemma SetCardinality<T>(a:set<T>, b:set<T>)
+    requires a < b
+    ensures |a| < |b|
+  {
+  }
+
+  lemma FreakinSetExtensionality<T>(a:set<T>, b:set<T>)
+    requires forall e :: e in a ==> e in b;
+    requires forall e :: e in b ==> e in a;
+    ensures a == b;
+  {
+  }
+
+  // Flipping back and forth between iset and set here is a pain.
+  lemma SetMunging(bucket:Bucket, fa:iset<Key>, fb:iset<Key>)
+  ensures fIntersect(bucket.Keys, fa * fb) <= IImage(bucket, fa).Keys;
+  ensures Image(IImage(bucket, fa), fIntersect(bucket.Keys, fa * fb)) == IImage(bucket, fa * fb)
+  {
+    reveal_IImage();
+    reveal_Image();
+  }
+
+  lemma WeightBucketFilterPartitions(bucket:Bucket, filter:iset<Key>, a:iset<Key>, b:iset<Key>)
+    ensures WeightBucket(IImage(bucket, filter)) ==
+      WeightBucket(IImage(bucket, filter * a)) + WeightBucket(IImage(bucket, filter * b));
+    requires a !! b
+    requires filter * a + filter * b == filter;
+  {
+    reveal_IImage();
+    WeightBucketLinearInKeySet(IImage(bucket, filter),
+      fIntersect(bucket.Keys, filter * a), fIntersect(bucket.Keys, filter * b));
+    SetMunging(bucket, filter, a);
+    SetMunging(bucket, filter, b);
+  }
+
+  lemma WeightBucketListItemFlushInner(parent: Bucket, children: BucketList, pivots: PivotTable, i: int, filter:iset<Key>)
+  requires WFPivots(pivots)
+  requires 0 <= i < |children|
+  ensures
+    WeightBucket(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i))
+      <= WeightBucket(IImage(parent, RouteRange(pivots, i) * filter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter))
+  decreases |IImage(parent, filter)|
+  {
+    if |IImage(parent, filter)| == 0 {
+      calc {
+        WeightBucket(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i));
+          { EmptyBucketListItemFlush(IImage(parent, filter), children[i], pivots, i); }
+        0;
+        <=
+        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
+          + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter));
+      }
+    } else if |IImage(parent, filter)| == 1 {
+      // Falling through to argument below fails termination, so special-case this one.
+      assume false;
+    } else {
+      // Pick an arbitrary key to decrease parent by
+      // (In Lisp, "car" is the first thing in a list, "cdr" is everything else.)
+      var carKey :| carKey in IImage(parent, filter);
+      var carFilter := iset {carKey};
+      var cdrFilter := iset k | k in IImage(parent, filter) && k != carKey;
+
+      // carFilter decreases
+      forall ensures |IImage(parent, filter * carFilter)| < |IImage(parent, filter)|
+      {
+        reveal_IImage();
+        if (cdrFilter == iset{}) {
+          // proof by contradiction: cdrFilter must include something, or else we're in the ||==1 case.
+          assert IImage(parent, filter).Keys == IImage(parent, filter * carFilter).Keys + IImage(parent, filter * cdrFilter).Keys;
+          assert IImage(parent, filter * carFilter).Keys == {carKey};
+          assert |IImage(parent, filter * cdrFilter).Keys| == 0;
+          assert |IImage(parent, filter)| == |IImage(parent, filter * carFilter)| == 1;
+          assert false;
+        }
+        SetCardinality(IImage(parent, filter * carFilter).Keys, IImage(parent, filter).Keys);
+      }
+
+      // cdrFilter decreases
+      forall ensures |IImage(parent, filter * cdrFilter)| < |IImage(parent, filter)|
+      {
+        reveal_IImage();
+        SetCardinality(IImage(parent, filter * cdrFilter).Keys, IImage(parent, filter).Keys);
+      }
+
+      // Establish that carFilter + cdrFilter partition parent.Keys*filter, so
+      // we can use ...LinearInKeySet below.
+      calc {
+        fIntersect(parent.Keys, filter * carFilter) + fIntersect(parent.Keys, filter * cdrFilter);
+        {
+          forall e | e in parent.Keys && e in filter && !(e in parent.Keys && e in filter * carFilter)
+          ensures (e in parent.Keys && e in filter * cdrFilter)
+          {
+            reveal_IImage();
+          }
+        }
+        fIntersect(parent.Keys, filter);
+        { reveal_IImage(); }
+        IImage(parent, filter).Keys;
+      }
+
+      // Partition for WeightBucketLinearInKeySet(parent)
+      var child := children[i];
+      forall ensures filter == filter * carFilter + filter * cdrFilter
+      {
+        forall e | e in filter ensures e in filter * carFilter + filter * cdrFilter
+        {
+          if e == carKey {
+            assert e in carFilter;
+          } else {
+            assert e in filter * cdrFilter;
+          }
+        }
+//        forall e | e in filter * carFilter + filter * cdrFilter ensures e in filter { }
+      }
+      calc {
+        BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys;
+        set key | (key in (child.Keys + IImage(parent, filter).Keys))
+        && Route(pivots, key) == i
+        && Merge(BucketGet(IImage(parent, filter), key), BucketGet(child, key)) != IdentityMessage();
+        // here
+        (set key | (key in (child.Keys + IImage(parent, filter * carFilter).Keys))
+        && Route(pivots, key) == i
+        && Merge(BucketGet(IImage(parent, filter * carFilter), key), BucketGet(child, key)) != IdentityMessage())
+          +
+        (set key | (key in (child.Keys + IImage(parent, filter * cdrFilter).Keys))
+        && Route(pivots, key) == i
+        && Merge(BucketGet(IImage(parent, filter * cdrFilter), key), BucketGet(child, key)) != IdentityMessage());
+        BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
+          + BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys;
+      }
+      calc {
+        BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys;
+        // here
+        BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
+          + BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys;
+      }
+      //here
+      assert BucketListItemFlush(IImage(parent, filter), children[i], pivots, i).Keys !!
+        BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys
+          + BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys;
+
+      // Partition for WeightBucketLinearInKeySet(parent * filter)
+      forall e | e in RouteRange(pivots, i) * filter * carFilter + RouteRange(pivots, i) * filter * cdrFilter
+        ensures e in RouteRange(pivots, i) * filter
+      {
+        assert e in RouteRange(pivots, i) * filter;
+      }
+      forall e | e in RouteRange(pivots, i) * filter
+        ensures e in RouteRange(pivots, i) * filter * carFilter + RouteRange(pivots, i) * filter * cdrFilter
+      {
+        if e == carKey {
+          assert e in RouteRange(pivots, i) * filter * carFilter;
+        } else {
+          //here
+          assert e in IImage(parent, filter);
+          assert e != carKey;
+          assert e in cdrFilter;
+          assert e in RouteRange(pivots, i) * filter * cdrFilter;
+        }
+      }
+      calc {
+        RouteRange(pivots, i) * filter * carFilter + RouteRange(pivots, i) * filter * cdrFilter;
+        RouteRange(pivots, i) * filter;
+      }
+
+      calc {
+        WeightBucket(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i));
+          {
+            WeightBucketLinearInKeySet(BucketListItemFlush(IImage(parent, filter), children[i], pivots, i),
+              BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i).Keys,
+              BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i).Keys);
+          }
+        WeightBucket(BucketListItemFlush(IImage(parent, filter * carFilter), children[i], pivots, i))
+          + WeightBucket(BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i));
+        <=
+          { WeightBucketListItemFlushInner(parent, children, pivots, i, filter * carFilter); }  // recursion car
+        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
+          + WeightBucket(BucketListItemFlush(IImage(parent, filter * cdrFilter), children[i], pivots, i));
+        <=
+          { WeightBucketListItemFlushInner(parent, children, pivots, i, filter * cdrFilter); }  // recursion cdr
+        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
+          + WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * cdrFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
+        // Just rearranging terms
+        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter))
+          + WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * cdrFilter))
+          + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
+          + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
+        { WeightBucketFilterPartitions(parent, RouteRange(pivots, i) * filter, carFilter, cdrFilter); }
+        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
+          + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
+          + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
+        { WeightBucketFilterPartitions(children[i], RouteRange(pivots, i) * filter, carFilter, cdrFilter); }
+        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
+          + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter));
+      }
     }
   }
 
   lemma WeightBucketListItemFlush(parent: Bucket, children: BucketList, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
-  // A tighter bound we'll need later...
-  ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
-      <= WeightBucket(Image(parent, KeySetForRoute(parent, pivots, i))) + WeightBucket(children[i])
-  // ...gives this one easily:
   ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
       <= WeightBucket(parent) + WeightBucket(children[i])
   {
-    var childKeys := KeySetForRoute(parent, pivots, i);
-    if |Image(parent, childKeys)| == 0 {
-      calc {
-        WeightBucket(BucketListItemFlush(parent, children[i], pivots, i));
-          { EmptyBucketListItemFlush(parent, children[i], pivots, i); }
-        0;
-        <=
-        WeightBucket(children[i]);
-        WeightBucket(Image(parent, childKeys)) + WeightBucket(children[i]);
-      }
-    } else {
-      // Pick a key to decrease parent by
-      var extraKey :| extraKey in Image(parent, childKeys);
-      var subparent := MapRemove1(parent, extraKey);
-      assert extraKey in parent;
-      assert |subparent| < |parent|;
-      var subChildKeys := childKeys - { extraKey };
-      calc {
-        WeightBucket(BucketListItemFlush(parent, children[i], pivots, i));
-        //here
-        WeightBucket(BucketListItemFlush(subparent, children[i], pivots, i));
-        <=
-          { WeightBucketListItemFlush(subparent, children, pivots, i); }
-          // here`:3
-        WeightBucket(Image(subparent, subChildKeys)) + WeightBucket(children[i]);
-        WeightBucket(Image(parent, childKeys)) + WeightBucket(children[i]);
-      }
+    calc {
+      WeightBucket(BucketListItemFlush(parent, children[i], pivots, i));
+      <=
+      WeightBucket(parent) + WeightBucket(children[i]);
     }
-    assert WeightBucket(Image(parent, KeySetForRoute(parent, pivots, i))) <= WeightBucket(parent);
   }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
