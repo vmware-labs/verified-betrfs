@@ -38,6 +38,11 @@ module BucketWeights {
   lemma MergeGainsNoWeight(parent: Message, child: Message)
   ensures WeightMessage(Merge(parent, child)) <= WeightMessage(parent) + WeightMessage(child)
   {
+    var merged := Merge(parent, child);
+    if (parent.Update? && child.Define?) {
+      assume ValueWithDefault.Len(ApplyDelta(parent.delta, child.value))
+        <= WeightMessage(parent) + ValueWithDefault.Len(child.value);
+    }
   }
 
   function method WeightKeyUint64(key: Key) : (w:uint64)
