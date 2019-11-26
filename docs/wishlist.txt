@@ -77,3 +77,7 @@ funType:MapType0Select produces 600k triggers; profile doesn't show problem.
 Commenting out BucketWeights.i.dfy:89 "solves" the problem, but (a) I'm not
 sure that's actually the issue, and (b) the profiler sure didn't point me
 to it.
+
+Here's another one.
+on branch hard-to-trace-map-timeout
+tools/profile.sh PivotBetree/BucketWeights.i.dfy /proc:"*WeightBucketLinearInKeySetInner*"
