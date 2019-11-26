@@ -1,3 +1,4 @@
+include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/BucketsLib.i.dfy"
 //
 // Assigning weights to buckets guides the flushing algorithm to decide
@@ -5,6 +6,7 @@ include "../PivotBetree/BucketsLib.i.dfy"
 //
 
 module BucketWeights {
+  import Sets
   import opened PivotsLib
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
@@ -112,6 +114,33 @@ module BucketWeights {
     reveal_MapRemove1();
   }
 
+  function {:opaque} IImage(b:Bucket, s:iset<Key>) : (image:Bucket)
+    ensures image.Keys <= b.Keys
+  {
+    map k | k in b && k in s :: b[k]
+  }
+
+  lemma IImageDomain(b:Bucket, s:iset<Key>)
+    ensures forall k :: k in b && k in s <==> k in IImage(b, s).Keys
+  {
+    reveal_IImage();
+  }
+
+  lemma IImageSingleton(b:Bucket, k:Key)
+    requires k in b;
+    ensures IImage(b, iset {k}).Keys == {k};
+    ensures IImage(b, iset {k})[k] == b[k];
+  {
+    reveal_IImage();
+  }
+
+  lemma IImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
+    requires t <= s;
+    ensures IImage(IImage(b, s), t) == IImage(b, t)
+  {
+    reveal_IImage();
+  }
+
   lemma MapRemoveVsIImage(bucket:Bucket, ibk:iset<Key>, key:Key)
   requires forall k :: k in bucket.Keys ==> k in ibk
   ensures MapRemove1(bucket, key) == IImage(bucket, ibk - iset{key})
@@ -135,7 +164,7 @@ module BucketWeights {
   requires |bucket| > 0 // So we can ChooseKey
   requires ChooseKey(bucket) in a
   ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |bucket|, 0
+  decreases |IImage(bucket, a).Keys|, 0
   {
     var key := ChooseKey(bucket);
     var msg := bucket[key];
@@ -143,15 +172,27 @@ module BucketWeights {
 
     calc {
       WeightBucket(IImage(bucket, a));
-        { IWeightBucketLinearInKeySet(IImage(bucket, a), a-iset{key}, iset{key}); }
+        {
+          var A := IImage(bucket, a);
+          var B := IImage(A, a-iset{key});
+          IImageSubset(bucket, a, a-iset{key});
+          IImageDomain(bucket, a-iset{key});
+          IImageDomain(bucket, a);
+          Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, A.Keys);
+          IWeightBucketLinearInKeySet(A, a-iset{key}, iset{key});
+        }
       WeightBucket(IImage(IImage(bucket, a), a-iset{key})) + WeightBucket(IImage(IImage(bucket, a), iset{key}));
         {
-          reveal_IImage();
-          assert IImage(IImage(bucket, a), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
-          assert IImage(IImage(bucket, a), iset{key}) == IImage(bucket, iset{key});  // OBSERVE trigger
+          IImageSubset(bucket, a, a-iset{key});
+          IImageSubset(bucket, a, iset{key});
         }
       WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, iset{key}));
-        { reveal_IImage(); WeightBucketSingleton(IImage(bucket, iset{key}), key); }
+        {
+          IImageSingleton(bucket, key);
+          WeightBucketSingleton(IImage(bucket, iset{key}), key);
+          assert IImage(bucket, iset{key})[key] == bucket[key];
+          assert WeightBucket(IImage(bucket, iset{key})) == WeightKey(key) + WeightMessage(bucket[key]);
+        }
       WeightBucket(IImage(bucket, a-iset{key})) + residual;
     }
     calc {
@@ -162,10 +203,23 @@ module BucketWeights {
       WeightBucket(IImage(bucket, (a+b)-iset{key}) )+ residual;
         { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
       WeightBucket(IImage(bucket, (a-iset{key})+b)) + residual;
-        { IWeightBucketLinearInKeySet(IImage(bucket, (a-iset{key})+b), a-iset{key}, b); }
+        {
+          var A := IImage(bucket, (a-iset{key})+b);
+          var B := IImage(A, a-iset{key});
+          IImageSubset(bucket, (a-iset{key})+b, a-iset{key});
+          assert B == IImage(bucket, a-iset{key});
+//          forall ensures B.Keys < IImage(bucket, a).Keys
+//          {
+            IImageDomain(bucket, a-iset{key});
+            IImageDomain(bucket, a);
+//          }
+          Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, IImage(bucket, a).Keys);
+          assert |IImage(IImage(bucket, (a-iset{key})+b), a-iset{key}).Keys| < |IImage(bucket, a).Keys|;
+          IWeightBucketLinearInKeySet(IImage(bucket, (a-iset{key})+b), a-iset{key}, b);
+        }
       WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
         { 
-          reveal_IImage();
+          //reveal_IImage();
           assert IImage(IImage(bucket, (a-iset{key})+b), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
           assert IImage(IImage(bucket, (a-iset{key})+b), b) == IImage(bucket, b);  // OBSERVE trigger
         }
@@ -179,8 +233,9 @@ module BucketWeights {
   requires a !! b
   requires forall k:Key :: k in bucket ==> k in a + b
   ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |bucket|, 1
+  decreases |IImage(bucket, a)|, 1
   {
+    //reveal_IImage();
     if |bucket| == 0 {
     } else if a==iset{} {
       assert bucket == IImage(bucket, b);  // trigger
@@ -188,9 +243,9 @@ module BucketWeights {
       assert bucket == IImage(bucket, a);  // trigger
     } else {
       if ChooseKey(bucket) in a {
-//        WeightBucketLinearInKeySetInner(bucket, a, b);
+        WeightBucketLinearInKeySetInner(bucket, a, b);
       } else {
- //       WeightBucketLinearInKeySetInner(bucket, b, a);
+        WeightBucketLinearInKeySetInner(bucket, b, a);
       }
     }
   }
@@ -203,18 +258,9 @@ module BucketWeights {
   ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
   decreases |bucket|, 1
   {
-    if |bucket| == 0 {
-    } else if a=={} {
-      assert bucket == Image(bucket, b);  // trigger
-    } else if b=={} {
-      assert bucket == Image(bucket, a);  // trigger
-    } else {
-      if ChooseKey(bucket) in a {
-//        WeightBucketLinearInKeySetInner(bucket, a, b);
-      } else {
- //       WeightBucketLinearInKeySetInner(bucket, b, a);
-      }
-    }
+    IWeightBucketLinearInKeySet(bucket, iset k | k in a, iset k | k in b);
+    //reveal_Image();
+    reveal_IImage();
   }
 
   lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
@@ -224,6 +270,7 @@ module BucketWeights {
     var update := map [ key := msg ];
     var rest := bucket.Keys - {key};
 
+    reveal_Image();
     WeightBucketLinearInKeySet(bucket[key := msg], {key}, rest);
     assert Image(bucket[key := msg], {key}) == update;  // trigger
     assert Image(bucket[key := msg], rest) == bucket; // trigger
@@ -394,18 +441,6 @@ module BucketWeights {
     iset k | Route(pivots, k) == i
   }
 
-  function toIset<T>(s:set<T>) : iset<T>
-  {
-     iset e | e in s
-  }
-
-  function {:opaque} IImage(b:Bucket, s:iset<Key>) : (image:Bucket)
-    ensures image.Keys <= b.Keys
-    ensures toIset(image.Keys) <= s
-  {
-    map k | k in b && k in s :: b[k]
-  }
-
   function fIntersect<T>(s:set<T>, t:iset<T>) : set<T>
   {
     set e | e in s && e in t
@@ -435,6 +470,7 @@ module BucketWeights {
   }
 
   // Flipping back and forth between iset and set here is a pain.
+  // TODO no longer! Use IWeightBucketLinearInKeySet
   lemma SetMunging(bucket:Bucket, fa:iset<Key>, fb:iset<Key>)
   ensures fIntersect(bucket.Keys, fa * fb) <= IImage(bucket, fa).Keys;
   ensures Image(IImage(bucket, fa), fIntersect(bucket.Keys, fa * fb)) == IImage(bucket, fa * fb)
