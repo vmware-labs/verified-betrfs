@@ -35,6 +35,11 @@ module BucketWeights {
     }
   }
 
+  lemma MergeGainsNoWeight(parent: Message, child: Message)
+  ensures WeightMessage(Merge(parent, child)) <= WeightMessage(parent) + WeightMessage(child)
+  {
+  }
+
   function method WeightKeyUint64(key: Key) : (w:uint64)
   ensures w as int == WeightKey(key)
   {
@@ -460,76 +465,34 @@ module BucketWeights {
     <= WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
        + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter));
   {
-    if key !in BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i) {
-      calc {
-        WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i));
-          { WeightBucketEmpty();
-            reveal_IImage();
-            assert BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i) == map[];
-          }
-        0;
-        <=
-        WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
-         + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter));
-      }
-      return;
-    }
+    reveal_IImage();
 
     var flush := BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i);
     if key in flush.Keys {
-      reveal_IImage();
-      //assert forall k :: k in flush ==> k == key;
-      //assert flush.Keys == {key};
-      calc {
-        WeightBucket(flush);
-          { WeightBucketSingleton(flush, key); }
-        WeightKey(key) + WeightMessage(flush[key]);
-      }
+      WeightBucketSingleton(flush, key);
     } else {
-      calc {
-        WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i));
-          { reveal_IImage(); }
-        0;
-      }
+      WeightBucketEmpty();
+      assert flush == map[];
     }
 
     var filteredParent := IImage(parent, RouteRange(pivots, i) * filter);
     if key in filteredParent {
-      //assert filteredParent.Keys == {key};
       WeightBucketSingleton(filteredParent, key);
-      assert WeightKey(key) + WeightMessage(filteredParent[key]) == WeightBucket(filteredParent);
     } else {
-      reveal_IImage();
-      assert filteredParent == map[];
       WeightBucketEmpty();
-      assert 0 == WeightBucket(filteredParent);
     }
 
     var filteredChild := IImage(children[i], RouteRange(pivots, i) * filter);
     if key in filteredChild {
-      //assert filteredChild.Keys == {key};
       WeightBucketSingleton(filteredChild, key);
-      assert WeightKey(key) + WeightMessage(filteredChild[key]) == WeightBucket(filteredChild);
     } else {
-      reveal_IImage();
-      assert filteredChild == map[];
       WeightBucketEmpty();
-      assert 0 == WeightBucket(filteredChild);
     }
 
     if (key in filteredChild && key in filteredParent && key in flush) {
-      assert WeightMessage(Merge(BucketGet(filteredParent, key), BucketGet(filteredChild, key)))
-        <= WeightMessage(filteredChild[key]); // here!
-      assert flush[key] == Merge(BucketGet(filteredParent, key), BucketGet(filteredChild, key));
-      calc {
-        WeightBucket(flush);
-        WeightKey(key) + WeightMessage(flush[key]);
-        <=
-        WeightKey(key) + WeightMessage(filteredParent[key]) + WeightKey(key) + WeightMessage(filteredChild[key]);
-        WeightBucket(filteredParent) + WeightBucket(filteredChild);
-      }
-    } else {
-      assert WeightBucket(flush) <= WeightBucket(filteredParent) + WeightBucket(filteredChild);
+      // This is the only tricksy case, where we actually care how Merge
+      // affects weights of the messages getting swapped.
+      MergeGainsNoWeight(BucketGet(filteredParent, key), BucketGet(filteredChild, key));
     }
   }
 
