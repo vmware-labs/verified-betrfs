@@ -196,12 +196,25 @@ module PivotBetreeSpec {
 
   //// Succ
 
+  // A fork consists of two adjacent lookups. The `lastInCommon` field means that the lookups
+  // are identical up *through* the layer indexed `lastInCommon` (which will always be at least
+  // 0, since the roots are always identical).
+  // The next two layers will correspond to adjacent children.
+  // The `firstKey` is always used to generate the first lookup. It corresponds to the key
+  // used to make the successor query.
+  // The `cutoffKey` is the first key of the second lookup.
   datatype ForkedLookup = ForkedLookup(
     lookup1: Lookup,
     lookup2: Lookup,
     ghost lastInCommon: int,
-    ghost leftForkChildIndex: int)
-  datatype SuccQuery = SuccQuery(key: Key, results: seq<UI.SuccResult>, fork: ForkedLookup)
+    firstKey: Key,
+    cutoffKey: Key)
+
+  datatype SuccQuery = SuccQuery(
+    key: Key,
+    results: seq<UI.SuccResult>,
+    fork: ForkedLookup,
+    numResultsInLeft: int)
 
   predicate LookupNodeIsLastChild(lookup: Lookup, i: int)
   requires 1 <= i < |lookup|
@@ -219,10 +232,42 @@ module PivotBetreeSpec {
     && lookup[i].ref == lookup[i-1].node.children.value[0]
   }
 
+  function LookupUpperBoundAtLayer(layer: Layer, key: Key)
+  {
+    var r := Pivots.Route(layer.node.pivotTable, key);
+    if r < |layer.node.pivotTable|
+    then Some(layer.node.pivotTable[r])
+    else None
+  }
+
+  function OptionKeyMin(k1: Option<Key>, k2: Option<Key>)
+  {
+    match k1 (
+      case Some(key1) => match k2 (
+        case Some(key2) => if Keyspace.lt(key1, key2) then Some(key1) else Some(key2)
+        case None => k1
+      )
+      case None => k2
+    )
+  }
+
+  function {:opaque} LookupUpperBound(lookup: Lookup, key: Key) : Option<Key>
+  {
+    if lookup == []
+    then None
+    else OptionKeyMin(
+        LookupUpperBound(DropLast(lookup)),
+        LookupUpperBoundAtLevel(Last(lookup), key)
+      )
+  }
+
   predicate ValidForkedLookup(fork: ForkedLookup)
   {
     && LookupVisitsWFNodes(fork.lookup1)
     && LookupVisitsWFNodes(fork.lookup2)
+
+    && WFLookupForKey(fork.firstKey, fork.lookup1)
+    && WFLookupForKey(fork.cutoffKey, fork.lookup2)
 
     && 0 <= fork.lastInCommon < |fork.lookup1|
     && 0 <= fork.lastInCommon < |fork.lookup2|
@@ -232,20 +277,28 @@ module PivotBetreeSpec {
     && Last(fork.lookup1).node.children.None?
     && Last(fork.lookup2).node.children.None?
 
-    && (forall i | 0 <= i <= fork.lastInCommon :: fork.lookup1[i] == fork.lookup2[i])
-    && (fork.lastInCommon + 1 < |fork.lookup1| ==> (
-      && fork.lookup1[fork.lastInCommon].node.children.Some?
-      && 0 <= fork.leftForkChildIndex < |fork.lookup1[fork.lastInCommon].node.children.value| - 1
-      && fork.lookup1[fork.lastInCommon].node.children.value[fork.leftForkChildIndex] == fork.lookup1[fork.lastInCommon + 1].ref
-      && fork.lookup1[fork.lastInCommon].node.children.value[fork.leftForkChildIndex + 1] == fork.lookup2[fork.lastInCommon + 1].ref
-    ))
-    && (forall i | fork.lastInCommon + 1 < i < |fork.lookup1| :: LookupNodeIsLastChild(fork.lookup1, i))
-    && (forall i | fork.lastInCommon + 1 < i < |fork.lookup2| :: LookupNodeIsFirstChild(fork.lookup2, i))
+    // In this case, lookup1 is the rightmost possible lookup.
+    && (LookupUpperBound(fork.lookup1, fork.firstKey).None? ==>
+        fork.lastInCommon == |fork.lookup1| - 1)
+
+    && (LookupUpperBound(fork.lookup1, fork.firstKey).Some? ==>
+      LookupUpperBoundAtLevel(fork.lookup1[fork.lastInCommon])
+          == LookupUpperBound(fork.lookup1, fork.firstKey)
+    )
   }
 
   predicate ValidSuccQuery(sq: SuccQuery)
   {
+    && sq.key == sq.fork.firstKey
     && ValidForkedLookup(sq.fork)
+    && 0 <= sq.numResultsInLeft <= |sq.results|
+    && (forall i | 0 <= i < |sq.results| - 1 :: sq.results[i].SuccKeyValue?)
+    && (forall i | 0 <= i < sq.numResultsInLeft ::
+        IsValidSucc_1(sq.fork, if i == 0 then sq.key else sq.results[i-1].key, sq.results[i]))
+    && (sq.numResultsInLeft < |sq.results| ==>
+        IsValidSucc_1to2(sq.fork, if i == 0 then sq.key else sq.results[i-1].key, sq.results[i]))
+    && (forall i | sq.numResultsInLeft < i < |sq.results| ::
+        IsValidSucc_2(sq.fork, sq.results[i-1].key, sq.results[i]))
   }
 
   //// Insert
