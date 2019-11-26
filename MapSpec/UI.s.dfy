@@ -10,7 +10,10 @@ module UI {
   type Value = V.Value
   type Key = K.Key
 
-  datatype SuccResult = SuccEnd | SuccKeyValue(key: Key, value: Value)
+  datatype RangeStart = SInclusive(key: Key) | SExclusive(key: Key) | NegativeInf
+  datatype RangeEnd = EInclusive(key: Key) | EExclusive(key: Key) | PositiveInf
+
+  datatype SuccResult = SuccKeyValue(key: Key, value: Value)
 
   datatype Op =
     | NoOp
@@ -23,7 +26,6 @@ module UI {
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
 
-    // For a query of key, return the succKey such that
-    // key < succKey, and succKey is the minimal such key.
-    | SuccOp(key: Key, res: seq<SuccResult>)
+    | SuccOp(start: RangeStart,
+        results: seq<SuccResult>, end: RangeEnd)
 }
