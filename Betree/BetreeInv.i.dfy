@@ -195,13 +195,12 @@ module BetreeInv {
     && BI.OpTransaction(k, s, s', QueryOps(LookupQuery(key, value, lookup)))
   }
 
-  predicate SuccQuery(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, res: seq<UI.SuccResult>, lookup1: Lookup, lookup2: Lookup)
+  predicate SuccQuery(k: BI.Constants, s: BI.Variables, s': BI.Variables, start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd, lookup: Lookup)
   {
-    && ValidSuccQuery(BetreeSpec.SuccQuery(key, res, lookup1, lookup2))
-    && BI.Reads(k, s, SuccQueryReads(BetreeSpec.SuccQuery(key, res, lookup1, lookup2)))
-    && BI.OpTransaction(k, s, s', SuccQueryOps(BetreeSpec.SuccQuery(key, res, lookup1, lookup2)))
+    && ValidSuccQuery(BetreeSpec.SuccQuery(start, results, end, lookup))
+    && BI.Reads(k, s, SuccQueryReads(BetreeSpec.SuccQuery(start, results, end, lookup)))
+    && BI.OpTransaction(k, s, s', SuccQueryOps(BetreeSpec.SuccQuery(start, results, end, lookup)))
   }
-
 
   //
   // Acyclicity proofs

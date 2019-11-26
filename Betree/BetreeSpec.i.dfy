@@ -127,10 +127,10 @@ module BetreeSpec {
   //// Successor
 
   datatype SuccQuery = SuccQuery(
-      key: Key,
+      start: UI.RangeStart,
       results: seq<UI.SuccResult>,
-      lookup1: Lookup,
-      lookup2: Lookup)
+      end: UI.RangeEnd,
+      lookup: Lookup)
 
   predicate LookupKeyValue(l: Lookup, key: Key, value: Value)
   {
@@ -138,40 +138,22 @@ module BetreeSpec {
     && BufferDefinesValue(InterpretLookup(l, key), value)
   }
 
-  predicate Lookup2KeyValue(l1: Lookup, l2: Lookup, key: Key, value: Value)
-  {
-    || LookupKeyValue(l1, key, value)
-    || LookupKeyValue(l2, key, value)
-  }
-  
-  predicate ValidSuccResult(lookup1: Lookup, lookup2: Lookup, key: Key, res: UI.SuccResult)
-  {
-    && (res.SuccEnd? ==> (
-      && (forall k | Keyspace.lt(key, k) :: Lookup2KeyValue(lookup1, lookup2, k, MS.EmptyValue()))
-    ))
-    && (res.SuccKeyValue? ==> (
-      && Keyspace.lt(key, res.key)
-      && res.value != MS.EmptyValue()
-      && Lookup2KeyValue(lookup1, lookup2, res.key, res.value)
-      && (forall k | Keyspace.lt(key, k) && Keyspace.lt(k, res.key) :: Lookup2KeyValue(lookup1, lookup2, k, MS.EmptyValue()))
-    ))
-  }
-
-  predicate ValidAdjacentSuccResults(lookup1: Lookup, lookup2: Lookup, res1: UI.SuccResult, res2: UI.SuccResult)
-  {
-    && res1.SuccKeyValue?
-    && ValidSuccResult(lookup1, lookup2, res1.key, res2)
-  }
-
   predicate ValidSuccQuery(q: SuccQuery)
   {
-    && (|q.results| > 0 ==> ValidSuccResult(q.lookup1, q.lookup2, q.key, q.results[0]))
-    && (forall i | 1 <= i < |q.results| :: ValidAdjacentSuccResults(q.lookup1, q.lookup2, q.results[i-1], q.results[i]))
+    && MS.NonEmptyRange(q.start, q.end)
+    && (forall i | 0 <= i < |q.results| :: LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value))
+    && (forall i | 0 <= i < |q.results| :: q.results[i].value != MS.EmptyValue())
+    && (forall i | 0 <= i < |q.results| :: MS.InRange(q.start, q.results[i].key, q.end))
+    && (forall i, j | 0 <= i < j < |q.results| :: Keyspace.lt(q.results[i].key, q.results[j].key))
+    && (forall key | MS.InRange(q.start, key, q.end) ::
+        (forall i | 0 <= i < |q.results| :: q.results[i].key != key) ==>
+        LookupKeyValue(q.lookup, key, MS.EmptyValue())
+      )
   }
 
   function SuccQueryReads(q: SuccQuery) : seq<ReadOp>
   {
-    q.lookup1 + q.lookup2
+    q.lookup
   }
 
   function SuccQueryOps(q: SuccQuery) : seq<Op>
@@ -429,7 +411,7 @@ module BetreeSpec {
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
-      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.key, sq.results)
+      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.start, sq.results, sq.end)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?

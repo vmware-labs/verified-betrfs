@@ -196,6 +196,7 @@ module PivotBetreeSpec {
 
   //// Succ
 
+  /*
   // A fork consists of two adjacent lookups. The `lastInCommon` field means that the lookups
   // are identical up *through* the layer indexed `lastInCommon` (which will always be at least
   // 0, since the roots are always identical).
@@ -300,6 +301,7 @@ module PivotBetreeSpec {
     && (forall i | sq.numResultsInLeft < i < |sq.results| ::
         IsValidSucc_2(sq.fork, sq.results[i-1].key, sq.results[i]))
   }
+  */
 
   //// Insert
   datatype MessageInsertion = MessageInsertion(key: Key, msg: Message, oldroot: Node)
