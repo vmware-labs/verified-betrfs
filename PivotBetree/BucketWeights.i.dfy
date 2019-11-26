@@ -158,21 +158,13 @@ module BucketWeights {
 
   lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires a !! b
-<<<<<<< HEAD
-  requires forall k:Key :: k in a + b
-=======
   requires forall k:Key :: k in bucket ==> k in a + b
->>>>>>> hard-to-trace-map-timeout
   requires exists k :: k in a // So we can decrease |bucket|
   requires exists k :: k in b // So we can decrease |bucket|
   requires |bucket| > 0 // So we can ChooseKey
   requires ChooseKey(bucket) in a
   ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-<<<<<<< HEAD
-  decreases |bucket|, 0
-=======
   decreases |IImage(bucket, a).Keys|, 0
->>>>>>> hard-to-trace-map-timeout
   {
     var key := ChooseKey(bucket);
     var msg := bucket[key];
@@ -180,16 +172,6 @@ module BucketWeights {
 
     calc {
       WeightBucket(IImage(bucket, a));
-<<<<<<< HEAD
-        { IWeightBucketLinearInKeySet(IImage(bucket, a), a-iset{key}, iset{key}); }
-      WeightBucket(IImage(IImage(bucket, a), a-iset{key})) + WeightBucket(IImage(IImage(bucket, a), iset{key}));
-        {
-          assert IImage(IImage(bucket, a), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
-          assert IImage(IImage(bucket, a), iset{key}) == IImage(bucket, iset{key});  // OBSERVE trigger
-        }
-      WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, iset{key}));
-        { WeightBucketSingleton(IImage(bucket, iset{key}), key); }
-=======
         {
           var A := IImage(bucket, a);
           var B := IImage(A, a-iset{key});
@@ -211,22 +193,12 @@ module BucketWeights {
           assert IImage(bucket, iset{key})[key] == bucket[key];
           assert WeightBucket(IImage(bucket, iset{key})) == WeightKey(key) + WeightMessage(bucket[key]);
         }
->>>>>>> hard-to-trace-map-timeout
       WeightBucket(IImage(bucket, a-iset{key})) + residual;
     }
     calc {
       WeightBucket(bucket);
         { reveal_WeightBucket(); }
       WeightBucket(MapRemove1(bucket, key)) + residual;
-<<<<<<< HEAD
-        //{ MapRemoveVsImage(bucket, IImage(bucket, (a+b)-iset{key}), key); }
-      WeightBucket(IImage(bucket, (a+b)-iset{key}) )+ residual;
-        { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
-      WeightBucket(IImage(bucket, (a-iset{key})+b)) + residual;
-        { IWeightBucketLinearInKeySet(IImage(bucket, (a-iset{key})+b), a-iset{key}, b); }
-      WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
-        { 
-=======
         { MapRemoveVsIImage(bucket, a+b, key); }
       WeightBucket(IImage(bucket, (a+b)-iset{key}) )+ residual;
         { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
@@ -248,36 +220,12 @@ module BucketWeights {
       WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
         { 
           //reveal_IImage();
->>>>>>> hard-to-trace-map-timeout
           assert IImage(IImage(bucket, (a-iset{key})+b), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
           assert IImage(IImage(bucket, (a-iset{key})+b), b) == IImage(bucket, b);  // OBSERVE trigger
         }
       WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, b)) + residual;
         // upper calc
       WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b));
-<<<<<<< HEAD
-    }
-  }
-
-  lemma IWeightBucketLinearInKeySet(bucket:Bucket, a:iset<Key>, b:iset<Key>)
-  requires a !! b
-  requires forall k:Key :: k in a + b
-  ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |bucket|, 1
-  {
-    if |bucket| == 0 {
-    } else if a=={} {
-      assert bucket == IImage(bucket, b);  // trigger
-    } else if b=={} {
-      assert bucket == IImage(bucket, a);  // trigger
-    } else {
-      if ChooseKey(bucket) in a {
-//        WeightBucketLinearInKeySetInner(bucket, a, b);
-      } else {
- //       WeightBucketLinearInKeySetInner(bucket, b, a);
-      }
-=======
->>>>>>> hard-to-trace-map-timeout
     }
   }
 
