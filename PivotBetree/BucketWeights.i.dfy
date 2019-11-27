@@ -419,6 +419,7 @@ module BucketWeights {
   ensures WeightBucketList(left + [extra]) == WeightBucketList(left) + WeightBucket(extra)
   {
     WeightBucketListConcat(left, [extra]);
+    reveal_WeightBucketList();
   }
 
   lemma WeightBucketListSlice(blist: BucketList, a: int, b: int)
@@ -685,7 +686,6 @@ module BucketWeights {
   }
 
   lemma WeightBucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, items: int)
-  requires WFPivots(pivots)
   requires WFBucketList(children, pivots)
   requires 0 <= items <= |children|
   ensures WeightBucketList(BucketListFlushPartial(parent, children, pivots, items))
@@ -746,7 +746,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
-  requires WFPivots(pivots)
+  requires WFBucketList(children, pivots)
   requires |children| == NumBuckets(pivots)
   ensures WeightBucketList(BucketListFlush(parent, children, pivots))
       <= WeightBucket(parent) + WeightBucketList(children)
