@@ -115,13 +115,16 @@ module BucketWeights {
   }
 
   function {:opaque} IImage(b:Bucket, s:iset<Key>) : (image:Bucket)
-    ensures image.Keys <= b.Keys
+//    ensures image.Keys <= b.Keys
+// Even this subset relation is a timeout source. (This must be the cause of
+// timeout on branch hard-to-trace-map-timeout)
   {
     map k | k in b && k in s :: b[k]
   }
 
-  lemma IImageDomain(b:Bucket, s:iset<Key>)
+  lemma IImageShape(b:Bucket, s:iset<Key>)
     ensures forall k :: k in b && k in s <==> k in IImage(b, s).Keys
+    ensures forall k :: k in IImage(b,s) ==> IImage(b,s)[k] == b[k];
   {
     reveal_IImage();
   }
@@ -158,13 +161,13 @@ module BucketWeights {
 
   lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires a !! b
-  requires forall k:Key :: k in bucket ==> k in a + b
-  requires exists k :: k in a // So we can decrease |bucket|
-  requires exists k :: k in b // So we can decrease |bucket|
+  requires forall k:Key :: k in bucket ==> k in a + b // a,b partition bucket
+  requires IImage(bucket, a).Keys != {} // So we can decrease
+  requires IImage(bucket, b).Keys != {} // So we can decrease
   requires |bucket| > 0 // So we can ChooseKey
   requires ChooseKey(bucket) in a
   ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |IImage(bucket, a).Keys|, 0
+  decreases |IImage(bucket, a).Keys| + |IImage(bucket, b).Keys|, 0
   {
     var key := ChooseKey(bucket);
     var msg := bucket[key];
@@ -176,9 +179,16 @@ module BucketWeights {
           var A := IImage(bucket, a);
           var B := IImage(A, a-iset{key});
           IImageSubset(bucket, a, a-iset{key});
-          IImageDomain(bucket, a-iset{key});
-          IImageDomain(bucket, a);
+          IImageShape(bucket, a-iset{key});
+          IImageShape(bucket, a);
           Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, A.Keys);
+
+          IImageShape(A, iset{key});
+          Sets.SetInclusionImpliesSmallerCardinality(IImage(A, iset{key}).Keys, {key});
+          IImageShape(bucket, b);
+          var kb :| kb in IImage(bucket, b).Keys;
+          Sets.SetInclusionImpliesSmallerCardinality({kb}, IImage(bucket, b).Keys);
+
           IWeightBucketLinearInKeySet(A, a-iset{key}, iset{key});
         }
       WeightBucket(IImage(IImage(bucket, a), a-iset{key})) + WeightBucket(IImage(IImage(bucket, a), iset{key}));
@@ -207,21 +217,21 @@ module BucketWeights {
           var A := IImage(bucket, (a-iset{key})+b);
           var B := IImage(A, a-iset{key});
           IImageSubset(bucket, (a-iset{key})+b, a-iset{key});
-          assert B == IImage(bucket, a-iset{key});
-//          forall ensures B.Keys < IImage(bucket, a).Keys
-//          {
-            IImageDomain(bucket, a-iset{key});
-            IImageDomain(bucket, a);
-//          }
+          IImageShape(bucket, a-iset{key});
+          IImageShape(bucket, a);
           Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, IImage(bucket, a).Keys);
-          assert |IImage(IImage(bucket, (a-iset{key})+b), a-iset{key}).Keys| < |IImage(bucket, a).Keys|;
+
+          IImageSubset(bucket, (a-iset{key})+b, b);
+          Sets.SetInclusionImpliesSmallerCardinality(
+            IImage(IImage(bucket, (a-iset{key})+b), b).Keys, IImage(bucket, b).Keys);
+
+          IImageShape(bucket, (a-iset{key})+b); // propagate partition precondition
           IWeightBucketLinearInKeySet(IImage(bucket, (a-iset{key})+b), a-iset{key}, b);
         }
       WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
         { 
-          //reveal_IImage();
-          assert IImage(IImage(bucket, (a-iset{key})+b), a-iset{key}) == IImage(bucket, a-iset{key});  // OBSERVE trigger
-          assert IImage(IImage(bucket, (a-iset{key})+b), b) == IImage(bucket, b);  // OBSERVE trigger
+          IImageSubset(bucket, (a-iset{key})+b, a-iset{key});
+          IImageSubset(bucket, (a-iset{key})+b, b);
         }
       WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, b)) + residual;
         // upper calc
@@ -233,21 +243,31 @@ module BucketWeights {
   requires a !! b
   requires forall k:Key :: k in bucket ==> k in a + b
   ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |IImage(bucket, a)|, 1
+  decreases |IImage(bucket, a).Keys| + |IImage(bucket, b).Keys|, 1
   {
-    //reveal_IImage();
+    IImageShape(bucket, a);
+    IImageShape(bucket, b);
+    WeightBucketEmpty();
     if |bucket| == 0 {
-    } else if a==iset{} {
+    } else if IImage(bucket, a).Keys=={} {
       assert bucket == IImage(bucket, b);  // trigger
-    } else if b==iset{} {
+    } else if IImage(bucket, b).Keys=={} {
       assert bucket == IImage(bucket, a);  // trigger
     } else {
       if ChooseKey(bucket) in a {
-//        WeightBucketLinearInKeySetInner(bucket, a, b);
+        WeightBucketLinearInKeySetInner(bucket, a, b);
       } else {
- //       WeightBucketLinearInKeySetInner(bucket, b, a);
+        WeightBucketLinearInKeySetInner(bucket, b, a);
       }
     }
+  }
+
+  lemma ImageVsIImage(bucket:Bucket, a:set<Key>)
+    requires a <= bucket.Keys
+    ensures Image(bucket, a) == IImage(bucket, iset k | k in a)
+  {
+    reveal_Image();
+    reveal_IImage();
   }
 
   // The raw WeightBucket definition is really difficult to work with. This
@@ -259,8 +279,8 @@ module BucketWeights {
   decreases |bucket|, 1
   {
     IWeightBucketLinearInKeySet(bucket, iset k | k in a, iset k | k in b);
-    //reveal_Image();
-    reveal_IImage();
+    ImageVsIImage(bucket, a);
+    ImageVsIImage(bucket, b);
   }
 
   lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
