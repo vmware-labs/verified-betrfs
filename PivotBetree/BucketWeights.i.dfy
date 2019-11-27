@@ -467,16 +467,18 @@ module BucketWeights {
     iset k | Route(pivots, k) == i
   }
 
-  lemma EmptyBucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int)
-    requires WFPivots(pivots)
-    requires |IImage(parent, RouteRange(pivots, i))| == 0
-    ensures |BucketListItemFlush(parent, child, pivots, i)| == 0
-  {
-    forall key | key in (child.Keys + parent.Keys) && Route(pivots, key) == i
-      ensures key in IImage(parent, RouteRange(pivots, i))
-    {
-    }
-  }
+// TODO deleteme yeah it's false
+//  lemma EmptyBucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int)
+//    requires WFPivots(pivots)
+//    requires |IImage(parent, RouteRange(pivots, i))| == 0
+//    ensures |BucketListItemFlush(parent, child, pivots, i)| == 0
+//  {
+//    forall key | key in (child.Keys + parent.Keys) && Route(pivots, key) == i
+//      ensures key in IImage(parent, RouteRange(pivots, i))
+//    {
+//      reveal_IImage();
+//    }
+//  }
 
   lemma SetCardinality<T>(a:set<T>, b:set<T>)
     requires a < b
@@ -568,7 +570,7 @@ module BucketWeights {
     if |IImage(parent, filter)| == 0 {
       calc {
         WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i));
-          { EmptyBucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i); }
+//          { EmptyBucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i); }
         0;
         <=
         WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
