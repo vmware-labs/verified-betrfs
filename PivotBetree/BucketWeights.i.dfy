@@ -759,16 +759,46 @@ module BucketWeights {
     assert children[..|children|] == children;  // trigger
   }
 
+  lemma WeightBucketListReplace(blist: BucketList, i: int, bucket: Bucket)
+  requires 0 <= i < |blist|
+  ensures WeightBucketList(blist[i := bucket]) == WeightBucketList(blist) - WeightBucket(blist[i]) + WeightBucket(bucket)
+  {
+    assert blist[i := bucket] == (blist[..i] + [bucket]) + blist[i+1..];
+    calc {
+      WeightBucketList(blist[i := bucket]);
+        { WeightBucketListConcat(blist[..i] + [bucket], blist[i+1..]); }
+      WeightBucketList(blist[..i] + [bucket]) + WeightBucketList(blist[i+1..]);
+        { WeightBucketListConcat(blist[..i], [bucket]); }
+      WeightBucketList(blist[..i]) + WeightBucketList([bucket]) + WeightBucketList(blist[i+1..]);
+        { reveal_WeightBucketList(); }
+      WeightBucketList(blist[..i]) + WeightBucket(bucket) + WeightBucketList(blist[i+1..]);
+    }
+    assert blist == (blist[..i] + [blist[i]]) + blist[i+1..];
+    calc {
+      WeightBucketList(blist);
+        { WeightBucketListConcat(blist[..i] + [blist[i]], blist[i+1..]); }
+      WeightBucketList(blist[..i] + [blist[i]]) + WeightBucketList(blist[i+1..]);
+        { WeightBucketListConcat(blist[..i], [blist[i]]); }
+      WeightBucketList(blist[..i]) + WeightBucketList([blist[i]]) + WeightBucketList(blist[i+1..]);
+        { reveal_WeightBucketList(); }
+      WeightBucketList(blist[..i]) + WeightBucket(blist[i]) + WeightBucketList(blist[i+1..]);
+    }
+  }
+
   lemma WeightBucketListShrinkEntry(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|
   requires WeightBucket(bucket) <= WeightBucket(blist[i])
   ensures WeightBucketList(blist[i := bucket]) <= WeightBucketList(blist)
-  { }
+  {
+    WeightBucketListReplace(blist, i, bucket);
+  }
 
   lemma WeightBucketListClearEntry(blist: BucketList, i: int)
   requires 0 <= i < |blist|
   ensures WeightBucketList(blist[i := map[]]) <= WeightBucketList(blist)
-  { }
+  {
+    WeightBucketListReplace(blist, i, map[]);
+  }
 
   lemma WeightSplitBucketInList(blist: BucketList, slot: int, pivot: Key)
   requires 0 <= slot < |blist|
