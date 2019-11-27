@@ -844,7 +844,10 @@ module BucketWeights {
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
   requires 0 <= a <= |blist|
   ensures WeightBucketList(blist[a..]) <= WeightBucketList(blist)
-  { }
+  {
+    WeightBucketListConcat(blist[..a], blist[a..]);
+    assert blist == blist[..a] + blist[a..];
+  }
 
   lemma WeightMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
   requires 0 <= slot < |blist| - 1
