@@ -800,11 +800,46 @@ module BucketWeights {
     WeightBucketListReplace(blist, i, map[]);
   }
 
-  lemma WeightSplitBucketInList(blist: BucketList, slot: int, pivot: Key)
-  requires 0 <= slot < |blist|
-  ensures WeightBucketList(SplitBucketInList(blist, slot, pivot))
+  // Analogous to WeightBucketListReplace, except we're changing the size of the thing in the middle.
+  lemma WeightSplitBucketInList(blist: BucketList, i: int, pivot: Key)
+  requires 0 <= i < |blist|
+  ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
       == WeightBucketList(blist)
-  { }
+  {
+    assert blist == (blist[..i] + [blist[i]]) + blist[i+1..];
+    calc {  // Take the old list apart
+      WeightBucketList(blist);
+        { WeightBucketListConcat(blist[..i] + [blist[i]], blist[i+1..]); }
+      WeightBucketList(blist[..i] + [blist[i]]) + WeightBucketList(blist[i+1..]);
+        { WeightBucketListConcat(blist[..i], [blist[i]]); }
+      WeightBucketList(blist[..i]) + WeightBucketList([blist[i]]) + WeightBucketList(blist[i+1..]);
+        { reveal_WeightBucketList(); }
+      WeightBucketList(blist[..i]) + WeightBucket(blist[i]) + WeightBucketList(blist[i+1..]);
+    }
+
+    calc {  // Take the new list apart
+      SplitBucketInList(blist, i, pivot);
+        { reveal_SplitBucketInList(); }
+      replace1with2(blist, SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot), i);
+        { reveal_replace1with2(); }
+      blist[..i] + [SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot)] + blist[i+1..];
+    }
+    calc {
+      WeightBucketList(SplitBucketInList(blist, i, pivot));
+      WeightBucketList((blist[..i] + [SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot)]) + blist[i+1..]);
+        { WeightBucketListConcat((blist[..i] + [SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot)]), blist[i+1..]); }
+      WeightBucketList(blist[..i] + [SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot)])
+        + WeightBucketList(blist[i+1..]);
+        { WeightBucketListConcat(blist[..i], [SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot)]); }
+      WeightBucketList(blist[..i])
+        + WeightBucketList([SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot)])
+        + WeightBucketList(blist[i+1..]);
+    }
+
+    // And then relate the replaced terms.
+    WeightBucketList2(SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot));
+    WeightSplitBucketAdditive(blist[i], pivot);
+  }
 
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
   requires 0 <= a <= |blist|
