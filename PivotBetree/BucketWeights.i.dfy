@@ -132,9 +132,9 @@ module BucketWeights {
 
   // TODO reorder s <= t
   lemma IImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
-    requires t <= s;
-    ensures IImage(IImage(b, s), t) == IImage(b, t)
-    ensures IImage(b, t).Keys <= IImage(b, s).Keys
+    requires s <= t;
+    ensures IImage(IImage(b, t), s) == IImage(b, s)
+    ensures IImage(b, s).Keys <= IImage(b, t).Keys
   {
     reveal_IImage();
   }
@@ -179,7 +179,7 @@ module BucketWeights {
         {
           var A := IImage(bucket, a);
           var B := IImage(A, a-iset{key});
-          IImageSubset(bucket, a, a-iset{key});
+          IImageSubset(bucket, a-iset{key}, a);
           IImageShape(bucket, a-iset{key});
           IImageShape(bucket, a);
           Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, A.Keys);
@@ -194,8 +194,8 @@ module BucketWeights {
         }
       WeightBucket(IImage(IImage(bucket, a), a-iset{key})) + WeightBucket(IImage(IImage(bucket, a), iset{key}));
         {
-          IImageSubset(bucket, a, a-iset{key});
-          IImageSubset(bucket, a, iset{key});
+          IImageSubset(bucket, a-iset{key}, a);
+          IImageSubset(bucket, iset{key}, a);
         }
       WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, iset{key}));
         {
@@ -217,12 +217,12 @@ module BucketWeights {
         {
           var A := IImage(bucket, (a-iset{key})+b);
           var B := IImage(A, a-iset{key});
-          IImageSubset(bucket, (a-iset{key})+b, a-iset{key});
+          IImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
           IImageShape(bucket, a-iset{key});
           IImageShape(bucket, a);
           Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, IImage(bucket, a).Keys);
 
-          IImageSubset(bucket, (a-iset{key})+b, b);
+          IImageSubset(bucket, b, (a-iset{key})+b);
           Sets.SetInclusionImpliesSmallerCardinality(
             IImage(IImage(bucket, (a-iset{key})+b), b).Keys, IImage(bucket, b).Keys);
 
@@ -231,8 +231,8 @@ module BucketWeights {
         }
       WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
         { 
-          IImageSubset(bucket, (a-iset{key})+b, a-iset{key});
-          IImageSubset(bucket, (a-iset{key})+b, b);
+          IImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
+          IImageSubset(bucket, b, (a-iset{key})+b);
         }
       WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, b)) + residual;
         // upper calc
@@ -571,10 +571,10 @@ module BucketWeights {
         reveal_IImage();
         Sets.ProperSubsetImpliesSmallerCardinality(IImage(parent, filter * cdrFilter).Keys, IImage(parent, filter).Keys);
       }
-      IImageSubset(children[i], filter, filter * cdrFilter);
+      IImageSubset(children[i], filter * cdrFilter, filter);
       Sets.SetInclusionImpliesSmallerCardinality(IImage(children[i], filter * cdrFilter).Keys, IImage(children[i], filter).Keys);
     } else {
-      IImageSubset(parent, filter, filter * cdrFilter);
+      IImageSubset(parent, filter * cdrFilter, filter);
       Sets.SetInclusionImpliesSmallerCardinality(IImage(parent, filter * cdrFilter).Keys, IImage(parent, filter).Keys);
       forall ensures |IImage(children[i], filter * cdrFilter)| < |IImage(children[i], filter)|
       {
