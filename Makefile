@@ -2,7 +2,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=disk-betree/Bundle.i.dfy build-tests/test-suite.i.dfy
+DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=".dafny/dafny/"
 DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
@@ -11,6 +11,9 @@ DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
 # Automatic targets
 
 all: status exe
+
+clean:
+	rm -rf build
 
 ##############################################################################
 # Build dir and dependency setup
@@ -63,38 +66,41 @@ endef
 # Verification status page
 
 .PHONY: status
-status: build/deps build/disk-betree/Bundle.i.status.pdf
+status: build/deps build/Impl/Bundle.i.status.pdf
+
+.PHONY: faststatus
+syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
 ##############################################################################
 # C# executables
 
-FRAMEWORK_SOURCES=disk-betree/Framework.cs disk-betree/Benchmarks.cs disk-betree/Crc32.cs
+FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32.cs
 
 .PHONY: exe
 exe: build/Veribetrfs.exe
 
-build/disk-betree/Bundle.i.exe: build/disk-betree/Bundle.i.cs $(FRAMEWORK_SOURCES)
+build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
 
 .PHONY: exe-roslyn
-exe-roslyn: build/disk-betree/Bundle.i.roslyn.exe
+exe-roslyn: build/Impl/Bundle.i.roslyn.exe
 
-build/disk-betree/Bundle.i.roslyn.exe:build/disk-betree/Bundle.i.cs $(FRAMEWORK_SOURCES)
+build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
 	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
 	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
 
-build/Veribetrfs.exe: build/disk-betree/Bundle.i.exe
+build/Veribetrfs.exe: build/Impl/Bundle.i.exe
 	cp $< $@
 
 ##############################################################################
 # C++ executables
 
 .PHONY: allcpp
-allcpp: build/disk-betree/Bundle.i.cpp
+allcpp: build/Impl/Bundle.i.cpp
 
 .PHONY: allo
-allo: build/disk-betree/Bundle.i.o
+allo: build/Impl/Bundle.i.o
 
 ##############################################################################
 ##############################################################################
@@ -102,7 +108,8 @@ allo: build/disk-betree/Bundle.i.o
 
 # This was cool until someone tried to run it on MacOS.
 #TIME=time -f "real %es cpu %Us"
-TIME=/usr/bin/time --format '%Uuser'
+#TIME=/usr/bin/time --format '%Uuser'
+TIME=/usr/bin/time
 
 ##############################################################################
 # Dummy dependency chains, so that a rule that depends on a top-level .dfy
@@ -114,7 +121,7 @@ build/%.dummydep: %.dfy | $$(@D)/.
 # .synchk: Dafny syntax check
 build/%.synchk: %.dfy | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.synchk,%.synchk-tmp,$@))
-	$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ##############################################################################
@@ -132,14 +139,26 @@ AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
 	$(call tee_capture,$@,$(AGGREGATE_TOOL) $^)
 
+# Syntax is trivial from synchk file, just a marker.
+# (We need the .syntax target to get a recursive dependency computation.)
+build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
+	touch $@
+
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
 #
 STATUS_TOOL=tools/dep-graph.py
 STATUS_DEPS=tools/lib_aggregate.py
 build/%.status.pdf: %.dfy build/%.verified $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
+	@$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
+	$(STATUS_TOOL) verchk $< $(DOTNAME)
+	@tred < $(DOTNAME) | dot -Tpdf -o$@
+
+# A syntax-only version of the tree so I can play around without waiting for
+# a complete verification.
+build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) build/deps | $$(@D)/.
 	$(eval DOTNAME=$(patsubst %.status.pdf,%.dot,$@))	 #eval trick to assign make var inside rule
-	$(STATUS_TOOL) $< $(DOTNAME)
+	$(STATUS_TOOL) synchk $< $(DOTNAME)
 	@tred < $(DOTNAME) | dot -Tpdf -o$@
 
 ##############################################################################
@@ -165,5 +184,5 @@ build/%.cpp: %.dfy | $$(@D)/.
 
 ##############################################################################
 # C++ object files
-build/%.o: build/%.cpp disk-betree/Framework.h | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14 -include disk-betree/Framework.h
+build/%.o: build/%.cpp framework/Framework.h | $$(@D)/.
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14 -include framework/Framework.h

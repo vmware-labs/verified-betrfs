@@ -1,11 +1,15 @@
 #!/usr/bin/python3
+# Args: dep-graph <synchk|verchk> root.dfy output.dot
+# Gather the syntax or verification check output for all dfy files reachable
+# from root.dfy. Construct a GraphViz dot file as output.
 
 import os
 from lib_deps import *
 from lib_aggregate import *
 
 class Traverser:
-    def __init__(self, rootDfy, outputFilename):
+    def __init__(self, reportType, rootDfy, outputFilename):
+        self.reportType = reportType
         self.output = []
         self.count = 0
         self.output.append("digraph {")
@@ -34,8 +38,8 @@ class Traverser:
             self.visit(dep)
 
     def getSummary(self, iref):
-        verchk = os.path.join(ROOT_PATH, "build", iref.normPath).replace(".dfy", ".verchk")
-        return summarize(verchk)
+        report = os.path.join(ROOT_PATH, "build", iref.normPath).replace(".dfy", "."+self.reportType)
+        return summarize(self.reportType, report)
 
     def addFillColors(self):
         def breakName(name):
@@ -71,6 +75,11 @@ class Traverser:
             fp.write(line+"\n")
         fp.close()
 
-rootDfy = sys.argv[1]
-outputFilename = sys.argv[2]
-Traverser(rootDfy, outputFilename)
+def main():
+    reportType = sys.argv[1]
+    assert reportType in ("verchk", "synchk")
+    rootDfy = sys.argv[2]
+    outputFilename = sys.argv[3]
+    Traverser(reportType, rootDfy, outputFilename)
+
+main()
