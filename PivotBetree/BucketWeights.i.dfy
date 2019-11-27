@@ -263,6 +263,29 @@ module BucketWeights {
     }
   }
 
+  // A variant that's handy for peeling off extra IImage wrappers.
+  lemma WeightBucketLinearVariant(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+    requires a!!b
+    ensures WeightBucket(IImage(bucket, a + b)) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b));
+  {
+    var c := a + b;
+    calc {
+      WeightBucket(IImage(bucket, a))
+        + WeightBucket(IImage(bucket, b));
+        { IImageSubset(bucket, b, c); }
+      WeightBucket(IImage(bucket, a))
+        + WeightBucket(IImage(IImage(bucket, c), b));
+        { IImageSubset(bucket, a, c); }
+      WeightBucket(IImage(IImage(bucket, c), a))
+        + WeightBucket(IImage(IImage(bucket, c), b));
+      {
+        IImageShape(bucket, c);
+        IWeightBucketLinearInKeySet(IImage(bucket, c), a, b);
+      }
+      WeightBucket(IImage(bucket, c));
+    }
+  }
+
   lemma ImageVsIImage(bucket:Bucket, a:set<Key>)
     requires a <= bucket.Keys
     ensures Image(bucket, a) == IImage(bucket, iset k | k in a)
@@ -390,6 +413,12 @@ module BucketWeights {
         WeightBucketList(left) + WeightBucketList(right);
       }
     }
+  }
+
+  lemma WeightBucketListConcatOne(left: BucketList, extra: Bucket)
+  ensures WeightBucketList(left + [extra]) == WeightBucketList(left) + WeightBucket(extra)
+  {
+    WeightBucketListConcat(left, [extra]);
   }
 
   lemma WeightBucketListSlice(blist: BucketList, a: int, b: int)
@@ -657,80 +686,59 @@ module BucketWeights {
 
   lemma WeightBucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, items: int)
   requires WFPivots(pivots)
+  requires WFBucketList(children, pivots)
   requires 0 <= items <= |children|
   ensures WeightBucketList(BucketListFlushPartial(parent, children, pivots, items))
       <= WeightBucket(IImage(parent, RouteRanges(pivots, items)))
         + WeightBucketList(children[..items])
   {
     if items == 0 {
-      calc {
-        WeightBucketList(BucketListFlushPartial(parent, children, pivots, items));
-        <= WeightBucket(IImage(parent, RouteRanges(pivots, items)))
-          + WeightBucketList(children[..items]);
-      }
     } else {
-      var listiminus1 := BucketListFlushPartial(parent, children, pivots, items - 1);
-      var item1 := BucketListItemFlush(parent, children[items - 1], pivots, items - 1);
-      var listi := BucketListFlushPartial(parent, children, pivots, items);
-      assert listi == listiminus1 + [item1];
       calc {
         WeightBucketList(BucketListFlushPartial(parent, children, pivots, items));
-        WeightBucketList(listi);
-          { WeightBucketListConcat(BucketListFlushPartial(parent, children, pivots, items - 1),
-            [BucketListItemFlush(parent, children[items - 1], pivots, items - 1)]);
+          { // Break off the last element as a sublist.
+            WeightBucketListConcat(BucketListFlushPartial(parent, children, pivots, items - 1),
+              [BucketListItemFlush(parent, children[items - 1], pivots, items - 1)]);
           }
         WeightBucketList(BucketListFlushPartial(parent, children, pivots, items - 1))
           + WeightBucketList([BucketListItemFlush(parent, children[items - 1], pivots, items - 1)]);
-          { reveal_WeightBucketList(); }
+          { reveal_WeightBucketList(); }  // from singleton list to bucket
         WeightBucketList(BucketListFlushPartial(parent, children, pivots, items - 1))
           + WeightBucket(BucketListItemFlush(parent, children[items - 1], pivots, items - 1));
         <=
-          { WeightBucketListFlushPartial(parent, children, pivots, items - 1); }
+          { WeightBucketListFlushPartial(parent, children, pivots, items - 1); }  // Recurse on prefix
         WeightBucket(IImage(parent, RouteRanges(pivots, items - 1)))
           + WeightBucketList(children[..items - 1])
           + WeightBucket(BucketListItemFlush(parent, children[items - 1], pivots, items - 1));
         <=
-          { WeightBucketListItemFlush(parent, children, pivots, items -1); }
+          { WeightBucketListItemFlush(parent, children, pivots, items -1); }  // Flush the singleton
         WeightBucket(IImage(parent, RouteRanges(pivots, items - 1)))
           + WeightBucketList(children[..items - 1])
           + WeightBucket(IImage(parent, RouteRange(pivots, items - 1)))
           + WeightBucket(IImage(children[items - 1], RouteRange(pivots, items - 1)));
-        {
-          assert RouteRanges(pivots, items) == RouteRanges(pivots, items - 1) + RouteRange(pivots, items - 1);
-          calc {
-            WeightBucket(IImage(parent, RouteRanges(pivots, items)));
-            { IWeightBucketLinearInKeySet(IImage(parent, RouteRanges(pivots, items)), RouteRanges(pivots, items - 1), RouteRange(pivots, items - 1)); }
-            WeightBucket(IImage(IImage(parent, RouteRanges(pivots, items)), RouteRanges(pivots, items - 1)))
-              + WeightBucket(IImage(IImage(parent, RouteRanges(pivots, items)), RouteRange(pivots, items - 1)));
-            WeightBucket(IImage(parent, RouteRanges(pivots, items - 1)))
-              + WeightBucket(IImage(IImage(parent, RouteRanges(pivots, items)), RouteRange(pivots, items - 1)));
-            WeightBucket(IImage(parent, RouteRanges(pivots, items - 1)))
-              + WeightBucket(IImage(parent, RouteRange(pivots, items - 1)));
-          }
+        {  // Glue the parent halves back together
+          WeightBucketLinearVariant(parent, RouteRanges(pivots, items - 1), RouteRange(pivots, items - 1));
+          assert RouteRanges(pivots, items) == RouteRanges(pivots, items - 1) + RouteRange(pivots, items - 1);  // trigger
         }
         WeightBucket(IImage(parent, RouteRanges(pivots, items)))
-          + WeightBucketList(children[..items-1])
-          + WeightBucket(children[items-1]);
-            {
-              calc {
-                WeightBucketList(children[..items]);
-                {
-                  WeightBucketListConcat(children[..items-1], children[items-1..items]);
-                  assert children[..items-1] + children[items-1..items] == children[..items]; // trigger
-                }
-                WeightBucketList(children[..items-1]) + WeightBucketList(children[items-1..items]);
-                {
-                  calc {
-                    WeightBucketList(children[items-1..items]);
-                    { assert children[items-1..items] == [children[items-1]]; } // trigger
-                    WeightBucketList([children[items-1]]);
-                    { reveal_WeightBucketList(); }
-                    WeightBucket(children[items-1]);
-                  }
-                }
-                WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
-              }
-            }
+          + WeightBucketList(children[..items - 1])
+          + WeightBucket(IImage(children[items - 1], RouteRange(pivots, items - 1)));
+        { // The last child bucket's RouteRange covers the whole bucket, so we can simplify.
+          IImageShape(children[items - 1], RouteRange(pivots, items - 1));
+          assert IImage(children[items - 1], RouteRange(pivots, items - 1)) == children[items-1]; // trigger
+        }
+        WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+          + WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
+        { // pack the last bucket up into a singleton list
+          assert children[items-1..items] == [children[items-1]]; // trigger
+          reveal_WeightBucketList();
+        }
+        WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+          + WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
+        { // and glue the children sublists back together
+          WeightBucketListConcatOne(children[..items-1], children[items-1]);
+          assert children[..items-1] + [children[items-1]] == children[..items]; // trigger
+        }
         WeightBucket(IImage(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items]);
       }
