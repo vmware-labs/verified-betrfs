@@ -849,11 +849,47 @@ module BucketWeights {
     assert blist == blist[..a] + blist[a..];
   }
 
-  lemma WeightMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
-  requires 0 <= slot < |blist| - 1
+  lemma MergeUndoesSplit(blist:BucketList, pivots:PivotTable, i:int)
+  requires 0 <= i < |blist| - 1
   requires WFBucketList(blist, pivots)
-  ensures WeightBucketList(MergeBucketsInList(blist, slot)) == WeightBucketList(blist)
-  { }
+  ensures SplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]) == blist;
+  {
+    var merged := MergeBucketsInList(blist, i);
+    var mbucket := MergeBuckets(blist[i], blist[i+1]);
+
+    reveal_MergeBucketsInList();
+    reveal_replace2with1();
+    reveal_MergeBuckets();
+    reveal_Image();
+    var leftKeys := set k | k in mbucket && Keyspace.lt(k, pivots[i]);
+    SplitBucketLeftImage(mbucket, pivots[i], leftKeys);
+    var rightKeys := set k | k in mbucket && Keyspace.lte(pivots[i], k);
+    SplitBucketRightImage(mbucket, pivots[i], rightKeys);
+
+    assert SplitBucketLeft(mbucket, pivots[i]) == blist[i];
+    assert SplitBucketRight(mbucket, pivots[i]) == blist[i+1];
+
+    calc {
+      SplitBucketInList(merged, i, pivots[i]);
+        { reveal_SplitBucketInList(); }
+      replace1with2(merged, SplitBucketLeft(merged[i], pivots[i]), SplitBucketRight(merged[i], pivots[i]), i);
+        { reveal_replace1with2(); }
+      merged[..i] + [SplitBucketLeft(merged[i], pivots[i]), SplitBucketRight(merged[i], pivots[i])] + merged[i+1..];
+      blist[..i] + [SplitBucketLeft(mbucket, pivots[i]), SplitBucketRight(mbucket, pivots[i])] + blist[i+2..];
+      blist[..i] + [blist[i], blist[i+1]] + blist[i+2..];
+      blist;
+    }
+  }
+
+  // Undoes WeightSplitBucketInList
+  lemma WeightMergeBucketsInList(blist: BucketList, i: int, pivots: PivotTable)
+  requires 0 <= i < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures WeightBucketList(MergeBucketsInList(blist, i)) == WeightBucketList(blist)
+  {
+    MergeUndoesSplit(blist, pivots, i);
+    WeightSplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]);
+  }
 
   lemma WeightJoinBucketList(blist: BucketList)
   ensures WeightBucket(JoinBucketList(blist)) <= WeightBucketList(blist)
