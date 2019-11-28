@@ -891,9 +891,95 @@ module BucketWeights {
     WeightSplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]);
   }
 
+  lemma WeightBucketSubset(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+    requires a<=b
+    ensures WeightBucket(IImage(bucket, a)) <= WeightBucket(IImage(bucket, b))
+  {
+    calc {
+      WeightBucket(IImage(bucket, a));
+        { IImageSubset(bucket, a, b); }
+      WeightBucket(IImage(IImage(bucket, b), a));
+      <=
+      WeightBucket(IImage(IImage(bucket, b), a)) + WeightBucket(IImage(IImage(bucket, b), b-a));
+        {
+          IImageShape(bucket, b);
+          IWeightBucketLinearInKeySet(IImage(bucket, b), a, b-a);
+        }
+      WeightBucket(IImage(bucket, b));
+    }
+  }
+   
+  lemma WeightBucketMapUnion(x:Bucket, xKeys:iset<Key>, y:Bucket, yKeys:iset<Key>)
+  requires xKeys == iset k | k in x.Keys;
+  requires yKeys == iset k | k !in x.Keys;
+  ensures WeightBucket(MapUnion(x, y)) == WeightBucket(IImage(x, xKeys)) + WeightBucket(IImage(y, yKeys))
+  {
+    calc {
+      WeightBucket(MapUnion(x, y));
+        { reveal_MapUnion(); }
+      WeightBucket(MapUnionPreferA(x, y));
+        {
+          IImageShape(MapUnionPreferA(x, y), xKeys + yKeys);
+          assert IImage(MapUnionPreferA(x, y), xKeys + yKeys) == MapUnionPreferA(x, y); // trigger
+        }
+      WeightBucket(IImage(MapUnionPreferA(x, y), xKeys + yKeys));
+        { WeightBucketLinearVariant(MapUnionPreferA(x, y), xKeys, yKeys); }
+      WeightBucket(IImage(MapUnionPreferA(x, y), xKeys)) + WeightBucket(IImage(MapUnionPreferA(x, y), yKeys));
+      {
+        IImageShape(MapUnionPreferA(x, y), xKeys);
+        IImageShape(x, xKeys);
+        assert IImage(MapUnionPreferA(x, y), xKeys) == IImage(x, xKeys); // trigger
+        IImageShape(MapUnionPreferA(x, y), yKeys);
+        IImageShape(y, yKeys);
+        assert IImage(MapUnionPreferA(x, y), yKeys) == IImage(y, yKeys); // trigger
+      }
+      WeightBucket(IImage(x, xKeys)) + WeightBucket(IImage(y, yKeys));
+    }
+  }
+
+  // TODO(thance): Why do we have both MergeBuckets and JoinBucketList? The
+  // former is nice because it obeys the WFBucketList discipline, and can hence
+  // draw tight conclusions (WeightBucketList == WeightBucketList). Can we
+  // redefine JoinBucketList in terms of MergBuckets and lose some cruft?
   lemma WeightJoinBucketList(blist: BucketList)
   ensures WeightBucket(JoinBucketList(blist)) <= WeightBucketList(blist)
-  { }
+  {
+    if |blist| == 0 {
+      assert WeightBucket(JoinBucketList(blist)) == 0;  // delete
+      // assert JoinBucketList(blist) == map[];
+      reveal_WeightBucketList();
+      assert WeightBucketList(blist) == 0;  // delete
+    } else {
+      var subKeys := iset k | k in JoinBucketList(DropLast(blist)).Keys;
+      var noFilter := iset k | true;
+      var lastKeys := noFilter - subKeys;
+      calc {
+        WeightBucket(JoinBucketList(blist));
+        WeightBucket(MapUnion(JoinBucketList(DropLast(blist)), Last(blist)));
+          { WeightBucketMapUnion(JoinBucketList(DropLast(blist)), subKeys, Last(blist), lastKeys); }
+        WeightBucket(IImage(JoinBucketList(DropLast(blist)), subKeys))
+          + WeightBucket(IImage(Last(blist), lastKeys));
+        <=
+          { WeightBucketSubset(Last(blist), lastKeys, noFilter); }
+        WeightBucket(IImage(JoinBucketList(DropLast(blist)), subKeys)) + WeightBucket(IImage(Last(blist), noFilter));
+          { // subKeys doesn't reduce the subList, and noFilter doesn't reduce Last(blist)
+            IImageShape(Last(blist), noFilter);
+            assert IImage(Last(blist), noFilter) == Last(blist);  // trigger
+            IImageShape(JoinBucketList(DropLast(blist)), subKeys);
+            assert IImage(JoinBucketList(DropLast(blist)), subKeys) == JoinBucketList(DropLast(blist)); // trigger
+          }
+        WeightBucket(JoinBucketList(DropLast(blist))) + WeightBucket(Last(blist));
+        <=
+          { WeightJoinBucketList(DropLast(blist)); }  // recurse
+        WeightBucketList(DropLast(blist)) + WeightBucket(Last(blist));
+          { // Stitch blist back together.
+            WeightBucketListConcatOne(DropLast(blist), Last(blist));
+            assert DropLast(blist) + [Last(blist)] == blist; // trigger
+          }
+        WeightBucketList(blist);
+      }
+    }
+  }
 
   lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
   ensures WeightBucketList(SplitBucketOnPivots(bucket, pivots)) == WeightBucket(bucket)
