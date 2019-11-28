@@ -1032,12 +1032,61 @@ module BucketWeights {
     }
   }
 
+  lemma LenLeWeightInner(bucket: Bucket, filter:iset<Key>)
+  ensures |IImage(bucket, filter)| <= WeightBucket(IImage(bucket, filter))
+  decreases |IImage(bucket, filter)|
+  {
+    if |IImage(bucket, filter)| == 0 {
+    } else {
+      var key :| key in IImage(bucket, filter);
+      var keySet := iset{key};
+      var others := filter - keySet;
+
+      IImageShape(bucket, keySet);
+      IImageShape(bucket, filter);
+      assert |IImage(bucket, filter)| == |IImage(bucket, filter).Keys|;
+      assert |IImage(bucket, keySet)| == |IImage(bucket, keySet).Keys|;
+      assert |IImage(bucket, others)| == |IImage(bucket, others).Keys|;
+
+      calc {
+        |IImage(bucket, filter)|;
+          {
+            reveal_IImage();
+            assert IImage(bucket, filter).Keys == IImage(bucket, keySet).Keys + IImage(bucket, others).Keys;  // trigger
+          }
+        |IImage(bucket, keySet)| + |IImage(bucket, others)|;
+        <=
+          { assert IImage(bucket, keySet).Keys == {key}; }
+        WeightKey(key) + WeightMessage(bucket[key]) + |IImage(bucket, others)|;
+          { WeightBucketSingleton(IImage(bucket, keySet), key); } // break key out of bucket
+        WeightBucket(IImage(bucket, keySet)) + |IImage(bucket, others)|;
+        <=
+          { // recurse
+            reveal_IImage();
+            assert IImage(bucket, others).Keys == IImage(bucket, filter).Keys - {key};
+            LenLeWeightInner(bucket, others);
+          }
+        WeightBucket(IImage(bucket, keySet)) + WeightBucket(IImage(bucket, others));
+          { // reassemble
+            IWeightBucketLinearInKeySet(IImage(bucket, filter), keySet, others);
+            IImageSubset(bucket, keySet, filter);
+            IImageSubset(bucket, others, filter);
+          }
+        WeightBucket(IImage(bucket, filter));
+      }
+    }
+  }
+
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
   // to show that numbers fit within 64 bits.
   lemma LenLeWeight(bucket: Bucket)
   ensures |bucket| <= WeightBucket(bucket)
-  { }
+  {
+    var noFilter := iset k | true;
+    LenLeWeightInner(bucket, noFilter);
+    IImageIdentity(bucket, noFilter);
+  }
 
   lemma WeightBucketEmpty()
   ensures WeightBucket(map[]) == 0
