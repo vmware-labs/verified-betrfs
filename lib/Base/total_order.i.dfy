@@ -232,6 +232,53 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+
+  lemma FlattenSorted(seqs: seq<seq<Element>>)
+    requires forall i :: 0 <= i < |seqs| ==> IsSorted(seqs[i])
+    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lte(k1, k2)
+    ensures IsSorted(Seq.Flatten(seqs))
+  {
+    var shape := Seq.FlattenShape(seqs);
+    var fseqs := Seq.Flatten(seqs);
+    forall i, j | 0 <= i < j < |fseqs|
+      ensures lte(fseqs[i], fseqs[j])
+    {
+      var (il, io) := Seq.UnflattenIndex(shape, i);
+      var (jl, jo) := Seq.UnflattenIndex(shape, j);
+      Seq.UnflattenIndexIsCorrect(seqs, i);
+      Seq.UnflattenIndexIsCorrect(seqs, j);
+      Seq.UnflattenIndexOrdering(shape, i, j);
+      if il < jl {
+      } else {
+        IsSortedImpliesLte(seqs[il], io, jo);
+      }
+    }
+    reveal_IsSorted();
+  }
+
+  lemma FlattenStrictlySorted(seqs: seq<seq<Element>>)
+    requires forall i :: 0 <= i < |seqs| ==> IsStrictlySorted(seqs[i])
+    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lt(k1, k2)
+    ensures IsStrictlySorted(Seq.Flatten(seqs))
+  {
+    var shape := Seq.FlattenShape(seqs);
+    var fseqs := Seq.Flatten(seqs);
+    forall i, j | 0 <= i < j < |fseqs|
+      ensures lt(fseqs[i], fseqs[j])
+    {
+      var (il, io) := Seq.UnflattenIndex(shape, i);
+      var (jl, jo) := Seq.UnflattenIndex(shape, j);
+      Seq.UnflattenIndexIsCorrect(seqs, i);
+      Seq.UnflattenIndexIsCorrect(seqs, j);
+      Seq.UnflattenIndexOrdering(shape, i, j);
+      if il < jl {
+      } else {
+        IsStrictlySortedImpliesLt(seqs[il], io, jo);
+      }
+    }
+    reveal_IsStrictlySorted();
+  }
+  
   function LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLte(run, needle) < |run|;

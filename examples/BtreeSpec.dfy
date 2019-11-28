@@ -744,160 +744,205 @@ abstract module BtreeSpec {
     else NumElementsOfChildren(node.children)
   }
 
-  function ToSeqChildren(nodes: seq<Node>) : (kvlists : (seq<Key>, seq<Value>))
+  function ToSeqChildren(nodes: seq<Node>) : (kvlists : (seq<seq<Key>>, seq<seq<Value>>))
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-    ensures |kvlists.0| == |kvlists.1| == NumElementsOfChildren(nodes)
-    ensures forall k :: k in kvlists.0 ==> exists i :: 0 <= i < |nodes| && k in AllKeys(nodes[i])
+    ensures |kvlists.0| == |kvlists.1| == |nodes|
+    ensures forall i :: 0 <= i < |nodes| ==> (kvlists.0[i], kvlists.1[i]) == ToSeq(nodes[i])
+    ensures forall i :: 0 <= i < |nodes| ==> |kvlists.0[i]| == |kvlists.1[i]|
+    
   {
     if |nodes| == 0 then ([], [])
     else
-      var (k1, v1) := ToSeqChildren(DropLast(nodes));
-      var (k2, v2) := ToSeq(Last(nodes));
-      (k1 + k2, v1 + v2)
+      var kv1 := ToSeqChildren(DropLast(nodes));
+      var kv2 := ToSeq(Last(nodes));
+      (kv1.0 + [kv2.0], kv1.1 + [kv2.1])
   }
     
   function ToSeq(node: Node) : (kvlists : (seq<Key>, seq<Value>))
     requires WF(node)
-    ensures |kvlists.0| == |kvlists.1| == NumElements(node)
-    ensures forall k :: k in kvlists.0 ==> k in AllKeys(node)
+    ensures |kvlists.0| == |kvlists.1|
   {
     if node.Leaf? then (node.keys, node.values)
-    else ToSeqChildren(node.children)
+    else
+      var (keylists, valuelists) := ToSeqChildren(node.children);
+      FlattenLengths(keylists, valuelists);
+      (Flatten(keylists), Flatten(valuelists))
   }
 
-  lemma ToSeqDecompose(node: Node)
+  lemma ToSeqMapCorrespondence(node: Node)
     requires WF(node)
-    requires node.Index?
-    ensures forall i, j :: (0 <= i < |node.children| && 0 <= j < |ToSeq(node.children[i]).0|) ==>
-    (exists k :: 0 <= k < |ToSeq(node).0|
-    && ToSeq(node.children[i]).0[j] == ToSeq(node).0[k]
-    && ToSeq(node.children[i]).1[j] == ToSeq(node).1[k])
-  {
-      var partialkeylist: seq<Key> := [];
-      var partialvaluelist: seq<Value> := [];
-      var l := 0;
-      while l < |node.children|
-        invariant 0 <= l <= |node.children|
-        invariant (partialkeylist, partialvaluelist) == ToSeqChildren(node.children[..l])
-        invariant forall i, j :: (0 <= i < l && 0 <= j < |ToSeq(node.children[i]).0|) ==>
-        (exists k :: 0 <= k < |partialkeylist|
-        && ToSeq(node.children[i]).0[j] == partialkeylist[k]
-        && ToSeq(node.children[i]).1[j] == partialvaluelist[k])
-      {
-        var oldpartialkeylist := partialkeylist;
-        var oldpartialvaluelist := partialvaluelist;
-
-        var (childkeylist, childvaluelist) := ToSeq(node.children[l]);
-
-        partialkeylist := partialkeylist + childkeylist;
-        partialvaluelist := partialvaluelist + childvaluelist;
-
-        l := l + 1;
-
-        assert node.children[..l][..l-1] == node.children[..l-1];
-
-        forall i, j | 0 <= i < l && 0 <= j < |ToSeq(node.children[i]).0|
-          ensures exists k :: 0 <= k < |partialkeylist|
-          && ToSeq(node.children[i]).0[j] == partialkeylist[k]
-          && ToSeq(node.children[i]).1[j] == partialvaluelist[k]
-        {
-          assume false;
-        }
-      }
-      assert node.children == node.children[..|node.children|];
-      assert forall i, j :: (0 <= i < |node.children| && 0 <= j < |ToSeq(node.children[i]).0|) ==>
-        (exists k :: 0 <= k < |ToSeq(node).0|
-        && ToSeq(node.children[i]).0[j] == ToSeq(node).0[k]
-        && ToSeq(node.children[i]).1[j] == ToSeq(node).1[k]);
-  }
-              
-  lemma ToSeqIsStrictlySorted(node: Node)
-    requires WF(node)
-    ensures Keys.IsStrictlySorted(ToSeq(node).0)
+    ensures Keys.IsStrictlySorted(ToSeq(node).0);
     ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
   {
     var (keys, values) := ToSeq(node);
-    var interp := Interpretation(node);
-
+    
     if node.Leaf? {
-      assert Keys.IsStrictlySorted(keys);
-      forall i | 0 <= i < |keys|
-        ensures interp[keys[i]] == values[i]
-      {
-        Keys.PosEqLargestLte(keys, keys[i], i);
-      }
     } else {
-      var partialkeylist := [];
-      var partialvaluelist := [];
-      var i := 0;
-      while i < |node.children|
-        invariant 0 <= i <= |node.children|
-        invariant Keys.IsStrictlySorted(partialkeylist)
-        invariant (partialkeylist, partialvaluelist) == ToSeqChildren(node.children[..i])
-        invariant forall k :: k in partialkeylist ==> exists src :: 0 <= src < i && k in AllKeys(node.children[src])
-        invariant forall k :: 0 <= k < |partialkeylist| ==> MapsTo(Interpretation(node), partialkeylist[k], partialvaluelist[k])
+      var (keylists, valuelists) := ToSeqChildren(node.children);
+      forall i | 0 <= i < |keylists|
+        ensures Keys.IsStrictlySorted(keylists[i])
+        ensures forall j :: 0 <= j < |keylists[i]| ==> MapsTo(Interpretation(node.children[i]), keylists[i][j], valuelists[i][j])
       {
-        var oldpartialkeylist := partialkeylist;
-        var oldpartialvaluelist := partialvaluelist;
+      }
 
-        var (childkeylist, childvaluelist) := ToSeq(node.children[i]);
-        ToSeqIsStrictlySorted(node.children[i]);
-
-        partialkeylist := partialkeylist + childkeylist;
-        partialvaluelist := partialvaluelist + childvaluelist;
-        i := i + 1;
-
-        assert node.children[..i][..i-1] == node.children[..i-1];
-        forall j, k | 0 <= j < k < |partialkeylist|
-          ensures Keys.lt(partialkeylist[j], partialkeylist[k])
-        {
-          if k < |oldpartialkeylist| {
-            assert partialkeylist[j] == oldpartialkeylist[j];
-            assert partialkeylist[k] == oldpartialkeylist[k];
-            Keys.IsStrictlySortedImpliesLt(oldpartialkeylist, j, k);
-          } else if |oldpartialkeylist| <= j {
-            assert partialkeylist[j] == childkeylist[j - |oldpartialkeylist|];
-            assert partialkeylist[k] == childkeylist[k - |oldpartialkeylist|];
-            Keys.IsStrictlySortedImpliesLt(childkeylist, j - |oldpartialkeylist|, k - |oldpartialkeylist|);
-          } else {
-            assert partialkeylist[j] == oldpartialkeylist[j];
-            assert partialkeylist[j] in oldpartialkeylist;
-            var jsrc :| 0 <= jsrc < i-1 && partialkeylist[j] in AllKeys(node.children[jsrc]);
-            assert partialkeylist[k] == childkeylist[k - |oldpartialkeylist|];
-            assert partialkeylist[k] in AllKeys(node.children[i-1]);
-            assert AllKeysBelowBound(node, jsrc);
-            assert Keys.lt(partialkeylist[j], node.pivots[jsrc]);
-            assert AllKeysAboveBound(node, i-1);
-            assert Keys.lte(node.pivots[i-2], partialkeylist[k]);
-            Keys.IsStrictlySortedImpliesLte(node.pivots, jsrc, i-2);
-          }
-        }
-        Keys.reveal_IsStrictlySorted();
-
-        forall j | 0 <= j < |childkeylist|
-          ensures MapsTo(Interpretation(node), childkeylist[j], childvaluelist[j])
-        {
-          assert childkeylist[j] in AllKeys(node.children[i-1]);
-          if 0 < i-1 {
-            assert AllKeysAboveBound(node, i-1);
-          }
-          if i-1 < |node.children| - 1 {
-            assert AllKeysBelowBound(node, i-1);
-          }
-          assert MapsTo(Interpretation(node.children[i-1]), childkeylist[j], childvaluelist[j]);
-          InterpretationDelegation(node, childkeylist[j]);
-        }
-        forall j | 0 <= j < |partialkeylist|
-          ensures MapsTo(Interpretation(node), partialkeylist[j], partialvaluelist[j])
-        {
-          if j < |oldpartialkeylist| {
-          } else {
-          }          
+      forall i, j, k1, k2 | 0 <= i < j < |keylists| && k1 in keylists[i] && k2 in keylists[j]
+        ensures Keys.lt(k1, k2)
+      {
+        assert k1 in Interpretation(node.children[i]);
+        assert k2 in Interpretation(node.children[j]);
+        AllKeysIsConsistentWithInterpretation(node.children[i], k1);
+        AllKeysIsConsistentWithInterpretation(node.children[j], k2);
+        assert AllKeysBelowBound(node, i);
+        assert AllKeysAboveBound(node, j);
+        if i < j-1 {
+          Keys.IsStrictlySortedImpliesLt(node.pivots, i, j-1);
         }
       }
-      assert node.children == node.children[..|node.children|];
-      //assume false;
+      Keys.FlattenStrictlySorted(keylists);
+
+
+      forall i | 0 <= i < |keys|
+        ensures MapsTo(Interpretation(node), keys[i], values[i])
+      {
+        
+      }
+      
     }
   }
+  
+  // lemma ToSeqDecompose(node: Node)
+  //   requires WF(node)
+  //   requires node.Index?
+  //   ensures forall i, j :: (0 <= i < |node.children| && 0 <= j < |ToSeq(node.children[i]).0|) ==>
+  //   (exists k :: 0 <= k < |ToSeq(node).0|
+  //   && ToSeq(node.children[i]).0[j] == ToSeq(node).0[k]
+  //   && ToSeq(node.children[i]).1[j] == ToSeq(node).1[k])
+  // {
+  //     var partialkeylist: seq<Key> := [];
+  //     var partialvaluelist: seq<Value> := [];
+  //     var l := 0;
+  //     while l < |node.children|
+  //       invariant 0 <= l <= |node.children|
+  //       invariant (partialkeylist, partialvaluelist) == ToSeqChildren(node.children[..l])
+  //       invariant forall i, j :: (0 <= i < l && 0 <= j < |ToSeq(node.children[i]).0|) ==>
+  //       (exists k :: 0 <= k < |partialkeylist|
+  //       && ToSeq(node.children[i]).0[j] == partialkeylist[k]
+  //       && ToSeq(node.children[i]).1[j] == partialvaluelist[k])
+  //     {
+  //       var oldpartialkeylist := partialkeylist;
+  //       var oldpartialvaluelist := partialvaluelist;
+
+  //       var (childkeylist, childvaluelist) := ToSeq(node.children[l]);
+
+  //       partialkeylist := partialkeylist + childkeylist;
+  //       partialvaluelist := partialvaluelist + childvaluelist;
+
+  //       l := l + 1;
+
+  //       assert node.children[..l][..l-1] == node.children[..l-1];
+
+  //       forall i, j | 0 <= i < l && 0 <= j < |ToSeq(node.children[i]).0|
+  //         ensures exists k :: 0 <= k < |partialkeylist|
+  //         && ToSeq(node.children[i]).0[j] == partialkeylist[k]
+  //         && ToSeq(node.children[i]).1[j] == partialvaluelist[k]
+  //       {
+  //         assume false;
+  //       }
+  //     }
+  //     assert node.children == node.children[..|node.children|];
+  //     assert forall i, j :: (0 <= i < |node.children| && 0 <= j < |ToSeq(node.children[i]).0|) ==>
+  //       (exists k :: 0 <= k < |ToSeq(node).0|
+  //       && ToSeq(node.children[i]).0[j] == ToSeq(node).0[k]
+  //       && ToSeq(node.children[i]).1[j] == ToSeq(node).1[k]);
+  // }
+              
+  // lemma ToSeqIsStrictlySorted(node: Node)
+  //   requires WF(node)
+  //   ensures Keys.IsStrictlySorted(ToSeq(node).0)
+  //   ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
+  // {
+  //   var (keys, values) := ToSeq(node);
+  //   var interp := Interpretation(node);
+
+  //   if node.Leaf? {
+  //     assert Keys.IsStrictlySorted(keys);
+  //     forall i | 0 <= i < |keys|
+  //       ensures interp[keys[i]] == values[i]
+  //     {
+  //       Keys.PosEqLargestLte(keys, keys[i], i);
+  //     }
+  //   } else {
+  //     var partialkeylist := [];
+  //     var partialvaluelist := [];
+  //     var i := 0;
+  //     while i < |node.children|
+  //       invariant 0 <= i <= |node.children|
+  //       invariant Keys.IsStrictlySorted(partialkeylist)
+  //       invariant (partialkeylist, partialvaluelist) == ToSeqChildren(node.children[..i])
+  //       invariant forall k :: k in partialkeylist ==> exists src :: 0 <= src < i && k in AllKeys(node.children[src])
+  //       invariant forall k :: 0 <= k < |partialkeylist| ==> MapsTo(Interpretation(node), partialkeylist[k], partialvaluelist[k])
+  //     {
+  //       var oldpartialkeylist := partialkeylist;
+  //       var oldpartialvaluelist := partialvaluelist;
+
+  //       var (childkeylist, childvaluelist) := ToSeq(node.children[i]);
+  //       ToSeqIsStrictlySorted(node.children[i]);
+
+  //       partialkeylist := partialkeylist + childkeylist;
+  //       partialvaluelist := partialvaluelist + childvaluelist;
+  //       i := i + 1;
+
+  //       assert node.children[..i][..i-1] == node.children[..i-1];
+  //       forall j, k | 0 <= j < k < |partialkeylist|
+  //         ensures Keys.lt(partialkeylist[j], partialkeylist[k])
+  //       {
+  //         if k < |oldpartialkeylist| {
+  //           assert partialkeylist[j] == oldpartialkeylist[j];
+  //           assert partialkeylist[k] == oldpartialkeylist[k];
+  //           Keys.IsStrictlySortedImpliesLt(oldpartialkeylist, j, k);
+  //         } else if |oldpartialkeylist| <= j {
+  //           assert partialkeylist[j] == childkeylist[j - |oldpartialkeylist|];
+  //           assert partialkeylist[k] == childkeylist[k - |oldpartialkeylist|];
+  //           Keys.IsStrictlySortedImpliesLt(childkeylist, j - |oldpartialkeylist|, k - |oldpartialkeylist|);
+  //         } else {
+  //           assert partialkeylist[j] == oldpartialkeylist[j];
+  //           assert partialkeylist[j] in oldpartialkeylist;
+  //           var jsrc :| 0 <= jsrc < i-1 && partialkeylist[j] in AllKeys(node.children[jsrc]);
+  //           assert partialkeylist[k] == childkeylist[k - |oldpartialkeylist|];
+  //           assert partialkeylist[k] in AllKeys(node.children[i-1]);
+  //           assert AllKeysBelowBound(node, jsrc);
+  //           assert Keys.lt(partialkeylist[j], node.pivots[jsrc]);
+  //           assert AllKeysAboveBound(node, i-1);
+  //           assert Keys.lte(node.pivots[i-2], partialkeylist[k]);
+  //           Keys.IsStrictlySortedImpliesLte(node.pivots, jsrc, i-2);
+  //         }
+  //       }
+  //       Keys.reveal_IsStrictlySorted();
+
+  //       forall j | 0 <= j < |childkeylist|
+  //         ensures MapsTo(Interpretation(node), childkeylist[j], childvaluelist[j])
+  //       {
+  //         assert childkeylist[j] in AllKeys(node.children[i-1]);
+  //         if 0 < i-1 {
+  //           assert AllKeysAboveBound(node, i-1);
+  //         }
+  //         if i-1 < |node.children| - 1 {
+  //           assert AllKeysBelowBound(node, i-1);
+  //         }
+  //         assert MapsTo(Interpretation(node.children[i-1]), childkeylist[j], childvaluelist[j]);
+  //         InterpretationDelegation(node, childkeylist[j]);
+  //       }
+  //       forall j | 0 <= j < |partialkeylist|
+  //         ensures MapsTo(Interpretation(node), partialkeylist[j], partialvaluelist[j])
+  //       {
+  //         if j < |oldpartialkeylist| {
+  //         } else {
+  //         }          
+  //       }
+  //     }
+  //     assert node.children == node.children[..|node.children|];
+  //     //assume false;
+  //   }
+  // }
 }
 
