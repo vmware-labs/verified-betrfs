@@ -18,7 +18,7 @@ include "../PivotBetree/PivotsLib.i.dfy"
 module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
-  import M = ValueMessage
+  import M = ValueMessage`Internal
   import MS = MapSpec
   import opened Maps
   import opened Sequences
@@ -354,52 +354,76 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma InRangeImpliesValidLookup(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, lookup: P.Lookup)
+  requires MS.InRange(start, key, end)
+  requires P.LookupVisitsWFNodes(lookup)
+  requires
+    var startKey := if start.NegativeInf? then [] else start.key;
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  ensures P.WFLookupForKey(lookup, key)
+  {
+    var startKey := if start.NegativeInf? then [] else start.key;
+
+    forall idx | P.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 
+    ensures P.LookupFollowsChildRefAtLayer(key, lookup, idx)
+    {
+      assert P.LookupFollowsChildRefAtLayer(startKey, lookup, idx);
+
+      var r := Route(lookup[idx].node.pivotTable, startKey);
+      //assert r > 0 ==> Keyspace.lte(lookup[idx].node.pivotTable[r-1], startKey);
+
+      Keyspace.EmptyLte(key);
+      //assert Keyspace.lte([], key);
+      //assert Keyspace.lte(startKey, key);
+
+      assert MS.InRange(start, key, end);
+      var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+      //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end);
+      //assert MS.UpperBound(key, end);
+      if (lookupUpperBound.Some?) {
+        InUpperBoundAndNot(key, end, lookupUpperBound.value);
+      }
+      //assert lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value);
+      KeyWithinUpperBoundIsWithinLookup(lookup, startKey, key, idx);
+      //assert r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(q.key, lookup[idx].node.pivotTable[r]);
+
+      RouteIs(lookup[idx].node.pivotTable, key, r);
+    }
+  }
+
   lemma RefinesValidSuccQuery(sq: P.SuccQuery)
   requires P.ValidSuccQuery(sq)
   ensures B.ValidSuccQuery(ISuccQuery(sq))
   {
     var q := ISuccQuery(sq);
-    var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
 
     forall i | 0 <= i < |q.results|
     ensures B.LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value)
     {
-      forall idx | P.ValidLayerIndex(sq.lookup, idx) && idx < |sq.lookup| - 1 
-      ensures P.LookupFollowsChildRefAtLayer(q.results[i].key, sq.lookup, idx)
-      {
-        assert P.LookupFollowsChildRefAtLayer(startKey, sq.lookup, idx);
+      InRangeImpliesValidLookup(sq.start, sq.results[i].key, sq.end, sq.lookup);
 
-        var r := Route(sq.lookup[idx].node.pivotTable, startKey);
-        //assert r > 0 ==> Keyspace.lte(sq.lookup[idx].node.pivotTable[r-1], startKey);
-
-        Keyspace.EmptyLte(q.results[i].key);
-        //assert Keyspace.lte([], q.results[i].key);
-        //assert Keyspace.lte(startKey, q.results[i].key);
-
-        assert MS.InRange(sq.start, sq.results[i].key, sq.end);
-        var lookupUpperBound := P.LookupUpperBound(sq.lookup, startKey);
-        //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end);
-        //assert MS.UpperBound(sq.results[i].key, sq.end);
-        if (lookupUpperBound.Some?) {
-          InUpperBoundAndNot(sq.results[i].key, sq.end, lookupUpperBound.value);
-        }
-        //assert lookupUpperBound.Some? ==> Keyspace.lt(sq.results[i].key, lookupUpperBound.value);
-        KeyWithinUpperBoundIsWithinLookup(sq.lookup, startKey, q.results[i].key, idx);
-        //assert r < |sq.lookup[idx].node.pivotTable| ==> Keyspace.lt(q.results[i].key, sq.lookup[idx].node.pivotTable[r]);
-
-        RouteIs(sq.lookup[idx].node.pivotTable, q.results[i].key, r);
-      }
-
-      RefinesLookup(sq.lookup, q.results[i].key);
+      RefinesLookup(sq.lookup, sq.results[i].key);
       RefinesInterpretLookupAccountingForLeaf(sq.lookup, sq.results[i].key, sq.results[i].value);
     }
-
-    assume false;
 
     forall key | MS.InRange(q.start, key, q.end)
         && (forall i | 0 <= i < |q.results| :: q.results[i].key != key)
     ensures B.LookupKeyValue(q.lookup, key, MS.EmptyValue())
     {
+      InRangeImpliesValidLookup(sq.start, key, sq.end, sq.lookup);
+
+      RefinesLookup(sq.lookup, key);
+      RefinesInterpretLookupAccountingForLeaf(sq.lookup, key, MS.EmptyValue());
+      //assert P.BufferDefinesEmptyValue(P.InterpretLookup(sq.lookup, key));
+      //assert P.InterpretLookupAccountingForLeaf(sq.lookup, key) == M.DefineDefault();
+
+      //assert M.DefaultValue() == MS.EmptyValue();
+
+      /*assert B.InterpretLookup(IReadOps(sq.lookup), key).value
+          == P.InterpretLookupAccountingForLeaf(sq.lookup, key).value
+          == MS.EmptyValue();*/
     }
   }
 
