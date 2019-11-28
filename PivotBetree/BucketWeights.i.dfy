@@ -743,6 +743,12 @@ module BucketWeights {
     iset k | Route(pivots, k) < i
   }
 
+  lemma SequenceSingleton<T>(s:seq<T>, i:int)
+  requires 0 <= i < |s|
+  ensures s[i..i+1] == [s[i]];
+  {
+  }
+
   lemma WeightBucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, items: int)
   requires WFBucketList(children, pivots)
   requires 0 <= items <= |children|
@@ -788,7 +794,8 @@ module BucketWeights {
         WeightBucket(IImage(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
         { // pack the last bucket up into a singleton list
-          assert children[items-1..items] == [children[items-1]]; // trigger
+          SequenceSingleton(children, items-1);
+          //assert children[items-1..items] == [children[items-1]]; // trigger
           reveal_WeightBucketList();
         }
         WeightBucket(IImage(parent, RouteRanges(pivots, items)))
