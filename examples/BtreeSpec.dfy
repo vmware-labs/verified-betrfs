@@ -744,12 +744,23 @@ abstract module BtreeSpec {
     else NumElementsOfChildren(node.children)
   }
 
+  lemma NumElementsOfChildrenDecreases(nodes: seq<Node>, prefix: int)
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    requires 0 <= prefix <= |nodes|
+    ensures NumElementsOfChildren(nodes[..prefix]) <= NumElementsOfChildren(nodes)
+  {
+    if prefix == |nodes| {
+      assert nodes[..prefix] == nodes;
+    } else {
+      assert DropLast(nodes)[..prefix] == nodes[..prefix];
+    }
+  }
+
   function ToSeqChildren(nodes: seq<Node>) : (kvlists : (seq<seq<Key>>, seq<seq<Value>>))
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
     ensures |kvlists.0| == |kvlists.1| == |nodes|
     ensures forall i :: 0 <= i < |nodes| ==> (kvlists.0[i], kvlists.1[i]) == ToSeq(nodes[i])
     ensures FlattenShape(kvlists.0) == FlattenShape(kvlists.1)
-    
   {
     if |nodes| == 0 then ([], [])
     else

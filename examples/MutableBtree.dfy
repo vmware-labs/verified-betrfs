@@ -129,7 +129,7 @@ abstract module MutableBtree {
     ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
     decreases node.height, 0
   {
-    var posplus1 := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
+    var posplus1: uint64 := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     result := Query(node.contents.children[posplus1], needle);
   }
 
@@ -171,7 +171,7 @@ abstract module MutableBtree {
   {
     var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
     var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
-    var boundary := node.contents.nkeys / 2;
+    var boundary: uint64 := node.contents.nkeys / 2;
     Arrays.Memcpy(rightkeys, 0, node.contents.keys[boundary..node.contents.nkeys]); // FIXME: remove conversion to seq
     Arrays.Memcpy(rightvalues, 0, node.contents.values[boundary..node.contents.nkeys]); // FIXME: remove conversion to seq
 
@@ -671,7 +671,7 @@ abstract module MutableBtree {
       BS.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
       BS.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
 
-      var t := BS.Keys.cmp(node.contents.pivots[childidx], key);
+      var t: int32 := BS.Keys.cmp(node.contents.pivots[childidx], key);
       if  t <= 0 {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |newpivots|
@@ -698,7 +698,7 @@ abstract module MutableBtree {
     modifies node, node.repr
     decreases node.height, 1
   {
-    var childidx := InsertIndexSelectAndPrepareChild(node, key);
+    var childidx: uint64 := InsertIndexSelectAndPrepareChild(node, key);
     InsertIndexChildNotFull(node, childidx, key, value);
   }
   
