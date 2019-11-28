@@ -122,6 +122,29 @@ module BucketWeights {
     reveal_IImage();
   }
 
+  lemma IImageIdentity(bucket:Bucket, s:iset<Key>)
+  requires forall k :: k in bucket ==> k in s
+  ensures bucket == IImage(bucket, s)
+  {
+    IImageShape(bucket, s);
+  }
+
+  lemma IImageTrim(bucket:Bucket, s:iset<Key>, trimBucket:Bucket)
+  requires forall k :: k in trimBucket <==> k in bucket && k in s
+  requires forall k :: k in trimBucket ==> trimBucket[k]==bucket[k]
+  ensures IImage(bucket, s) == trimBucket
+  {
+    IImageShape(bucket, s);
+  }
+
+  lemma IImageEquiv(a:Bucket, b:Bucket, s:iset<Key>)
+  requires forall k :: k in a.Keys && k in s <==> k in b.Keys && k in s
+  requires forall k :: k in a.Keys && k in s ==> a[k] == b[k]
+  ensures IImage(a, s) == IImage(b, s)
+  {
+    reveal_IImage();
+  }
+
   lemma IImageSingleton(b:Bucket, k:Key)
     requires k in b;
     ensures IImage(b, iset {k}).Keys == {k};
@@ -671,9 +694,9 @@ module BucketWeights {
   {
     var noFilter := iset k | true;
     WeightBucketListItemFlushInner(parent, children, pivots, i, noFilter);
+    IImageIdentity(parent, noFilter);
+    IImageIdentity(children[i], noFilter);
     reveal_IImage();
-    assert IImage(parent, noFilter) == parent;  // trigger
-    assert IImage(children[i], noFilter) == children[i];  // trigger
     assert IImage(parent, RouteRange(pivots, i) * noFilter) == IImage(parent, RouteRange(pivots, i));  // trigger
     assert IImage(children[i], RouteRange(pivots, i) * noFilter) == IImage(children[i], RouteRange(pivots, i));  // trigger
   }
@@ -919,19 +942,14 @@ module BucketWeights {
         { reveal_MapUnion(); }
       WeightBucket(MapUnionPreferA(x, y));
         {
-          IImageShape(MapUnionPreferA(x, y), xKeys + yKeys);
-          assert IImage(MapUnionPreferA(x, y), xKeys + yKeys) == MapUnionPreferA(x, y); // trigger
+          IImageIdentity(MapUnionPreferA(x, y), xKeys + yKeys);
         }
       WeightBucket(IImage(MapUnionPreferA(x, y), xKeys + yKeys));
         { WeightBucketLinearVariant(MapUnionPreferA(x, y), xKeys, yKeys); }
       WeightBucket(IImage(MapUnionPreferA(x, y), xKeys)) + WeightBucket(IImage(MapUnionPreferA(x, y), yKeys));
       {
-        IImageShape(MapUnionPreferA(x, y), xKeys);
-        IImageShape(x, xKeys);
-        assert IImage(MapUnionPreferA(x, y), xKeys) == IImage(x, xKeys); // trigger
-        IImageShape(MapUnionPreferA(x, y), yKeys);
-        IImageShape(y, yKeys);
-        assert IImage(MapUnionPreferA(x, y), yKeys) == IImage(y, yKeys); // trigger
+        IImageEquiv(x, MapUnionPreferA(x, y), xKeys);
+        IImageEquiv(y, MapUnionPreferA(x, y), yKeys);
       }
       WeightBucket(IImage(x, xKeys)) + WeightBucket(IImage(y, yKeys));
     }
@@ -963,10 +981,8 @@ module BucketWeights {
           { WeightBucketSubset(Last(blist), lastKeys, noFilter); }
         WeightBucket(IImage(JoinBucketList(DropLast(blist)), subKeys)) + WeightBucket(IImage(Last(blist), noFilter));
           { // subKeys doesn't reduce the subList, and noFilter doesn't reduce Last(blist)
-            IImageShape(Last(blist), noFilter);
-            assert IImage(Last(blist), noFilter) == Last(blist);  // trigger
-            IImageShape(JoinBucketList(DropLast(blist)), subKeys);
-            assert IImage(JoinBucketList(DropLast(blist)), subKeys) == JoinBucketList(DropLast(blist)); // trigger
+            IImageIdentity(Last(blist), noFilter);
+            IImageIdentity(JoinBucketList(DropLast(blist)), subKeys);
           }
         WeightBucket(JoinBucketList(DropLast(blist))) + WeightBucket(Last(blist));
         <=
@@ -1004,18 +1020,13 @@ module BucketWeights {
           { WeightSplitBucketOnPivots(l, DropLast(pivots)); }
         WeightBucket(l) + WeightBucket(r);
           {
-            IImageShape(bucket, lKeys);
-            assert l == IImage(bucket, lKeys);
-            IImageShape(bucket, rKeys);
-            assert r == IImage(bucket, rKeys);
+            IImageTrim(bucket, lKeys, l);
+            IImageTrim(bucket, rKeys, r);
           }
         WeightBucket(IImage(bucket, lKeys)) + WeightBucket(IImage(bucket, rKeys));
           { WeightBucketLinearVariant(bucket, lKeys, rKeys); }
         WeightBucket(IImage(bucket, lKeys + rKeys));
-          {
-            IImageShape(bucket, lKeys + rKeys);
-            assert bucket == IImage(bucket, lKeys + rKeys);
-          }
+          { IImageIdentity(bucket, lKeys + rKeys); }
         WeightBucket(bucket);
       }
     }
