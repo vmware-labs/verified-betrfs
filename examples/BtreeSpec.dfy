@@ -772,6 +772,7 @@ abstract module BtreeSpec {
     requires WF(node)
     ensures Keys.IsStrictlySorted(ToSeq(node).0);
     ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
+    ensures forall key :: key in Interpretation(node) ==> key in ToSeq(node).0
   {
     var (keys, values) := ToSeq(node);
     
@@ -781,7 +782,7 @@ abstract module BtreeSpec {
       {
         Keys.PosEqLargestLte(node.keys, node.keys[i], i);
       }
-
+      
     } else {
       var (keylists, valuelists) := ToSeqChildren(node.children);
       var shape := FlattenShape(keylists);
@@ -790,6 +791,7 @@ abstract module BtreeSpec {
       forall i | 0 <= i < |keylists|
         ensures Keys.IsStrictlySorted(keylists[i])
         ensures forall j :: 0 <= j < |keylists[i]| ==> MapsTo(Interpretation(node.children[i]), keylists[i][j], valuelists[i][j])
+        ensures forall key :: key in Interpretation(node.children[i]) ==> key in keylists[i]
       {
         ToSeqMapCorrespondence(node.children[i]);
       }
@@ -826,6 +828,16 @@ abstract module BtreeSpec {
         }
         Keys.LargestLteIsUnique2(node.pivots, keys[i], child-1);
         InterpretationDelegation(node, keys[i]);
+      }
+
+      forall key | key in Interpretation(node)
+        ensures key in keys
+      {
+        InterpretationInheritance(node, key);
+        var child := Keys.LargestLte(node.pivots, key) + 1;
+        var offset :| 0 <= offset < |keylists[child]| && keylists[child][offset] == key;
+        assert keylists[child][offset] == key;
+        FlattenIndexIsCorrect(keylists, child, offset);
       }
     }
   }
