@@ -15,6 +15,7 @@ module BucketsLib {
   import opened ValueMessage
   import opened Maps
   import opened Sequences
+  import UI
 
   type Bucket = map<Key, Message>
   type BucketList = seq<Bucket>
@@ -144,6 +145,171 @@ module BucketsLib {
   {
     reveal_WFBucket();
     reveal_BucketComplement();
+  }
+
+  ///// Composeing
+
+  // Note: does NOT necessarily return a WFBucket!
+  // It might contain NoOp messages
+  function {:opaque} Compose(top: Bucket, bot: Bucket) : Bucket
+  {
+    map key
+    | key in (top.Keys + bot.Keys)
+    :: Merge(BucketGet(top, key), BucketGet(bot, key))
+  }
+
+  function {:opaque} ComposeSeq(buckets: seq<Bucket>) : Bucket
+  {
+    if |buckets| == 0 then map[] else Compose(ComposeSeq(DropLast(buckets)), Last(buckets))
+  }
+
+  lemma ComposeSeq1(b: Bucket)
+  ensures ComposeSeq([b]) == b
+  {
+    reveal_Compose();
+    reveal_ComposeSeq();
+  }
+
+  lemma ComposeAssoc(a: Bucket, b: Bucket, c: Bucket)
+  ensures Compose(Compose(a, b), c) == Compose(a, Compose(b, c))
+  {
+    reveal_Compose();
+    forall a, b, c ensures Merge(a, Merge(b, c)) == Merge(Merge(a, b), c)
+    {
+      MergeIsAssociative(a, b, c);
+    }
+  }
+
+  lemma ComposeSeqAdditive(a: seq<Bucket>, b: seq<Bucket>)
+  ensures ComposeSeq(a + b) == Compose(ComposeSeq(a), ComposeSeq(b))
+  {
+    reveal_ComposeSeq();
+    reveal_Compose();
+    if |b| == 0 {
+      assert b == [];
+      assert a + b == a;
+      assert ComposeSeq(a + b)
+          == ComposeSeq(a)
+          == Compose(ComposeSeq(a), map[])
+          == Compose(ComposeSeq(a), ComposeSeq(b));
+    } else {
+      ComposeSeqAdditive(a, b[..|b|-1]);
+      assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
+      assert (a+b)[|a+b|-1] == b[|b|-1];
+      ComposeAssoc(ComposeSeq(a), ComposeSeq(b[..|b|-1]), b[|b|-1]);
+      assert ComposeSeq(a + b)
+          == Compose(ComposeSeq((a + b)[..|a+b|-1]), (a+b)[|a+b|-1])
+          == Compose(ComposeSeq(a + b[..|b|-1]), b[|b|-1])
+          == Compose(Compose(ComposeSeq(a), ComposeSeq(b[..|b|-1])), b[|b|-1])
+          == Compose(ComposeSeq(a), Compose(ComposeSeq(b[..|b|-1]), b[|b|-1]))
+          == Compose(ComposeSeq(a), ComposeSeq(b));
+    }
+  }
+
+  function InterpretBucketStack(buckets: seq<Bucket>, key: Key) : Message
+  {
+    if |buckets| == 0 then
+      Update(NopDelta())
+    else
+      Merge(InterpretBucketStack(DropLast(buckets), key), BucketGet(Last(buckets), key))
+  }
+
+  lemma BucketGetComposeSeq(buckets: seq<Bucket>, key: Key)
+  ensures BucketGet(ComposeSeq(buckets), key) == InterpretBucketStack(buckets, key);
+  {
+    reveal_ComposeSeq();
+    reveal_Compose();
+    if |buckets| == 0 {
+    } else {
+      BucketGetComposeSeq(DropLast(buckets), key);
+    }
+  }
+
+  ////// Clamping based on RangeStart and RangeEnd
+
+  function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : Bucket
+  {
+    map key | key in bucket && MS.InRange(start, key, end) :: bucket[key]
+  }
+
+  function {:opaque} ClampStart(bucket: Bucket, start: UI.RangeStart) : Bucket
+  {
+    map key | key in bucket && MS.LowerBound(start, key) :: bucket[key]
+  }
+
+  function {:opaque} ClampEnd(bucket: Bucket, end: UI.RangeEnd) : Bucket
+  {
+    map key | key in bucket && MS.UpperBound(key, end) :: bucket[key]
+  }
+
+  ///// KeyValueMapOfBucket
+
+  function {:opaque} KeyValueMapOfBucket(bucket: Bucket) : map<Key, Value>
+  {
+    map key | key in bucket && Merge(bucket[key], DefineDefault()).value != DefaultValue()
+      :: Merge(bucket[key], DefineDefault()).value
+  }
+
+  function {:opaque} SortedSeqOfKeyValueMap(m: map<Key, Value>) : seq<UI.SuccResult>
+  {
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.None? then
+      []
+    else
+      SortedSeqOfKeyValueMap(MapRemove1(m, max.value))
+          + [UI.SuccResult(max.value, m[max.value])]
+  }
+
+  lemma SortedSeqOfKeyValueHasKey(m: map<Key, Value>, key: Key)
+  requires key in m
+  ensures var s := SortedSeqOfKeyValueMap(m);
+      exists i :: 0 <= i < |s| && s[i].key == key
+  {
+    reveal_SortedSeqOfKeyValueMap();
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.Some? {
+      if key != max.value {
+        SortedSeqOfKeyValueHasKey(MapRemove1(m, max.value), key);
+        var i :| 0 <= i < |SortedSeqOfKeyValueMap(MapRemove1(m, max.value))| &&
+            SortedSeqOfKeyValueMap(MapRemove1(m, max.value))[i].key == key;
+        assert SortedSeqOfKeyValueMap(m)[i].key == key;
+      } else {
+        assert Last(SortedSeqOfKeyValueMap(m)).key == key;
+      }
+    }
+  }
+
+  lemma SortedSeqOfKeyValueMaps(m: map<Key, Value>, i: int)
+  requires 0 <= i < |SortedSeqOfKeyValueMap(m)|
+  ensures MapsTo(m, SortedSeqOfKeyValueMap(m)[i].key, SortedSeqOfKeyValueMap(m)[i].value)
+  {
+    reveal_SortedSeqOfKeyValueMap();
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.Some? && i != |SortedSeqOfKeyValueMap(m)| - 1 {
+      SortedSeqOfKeyValueMaps(MapRemove1(m, max.value), i);
+    }
+  }
+
+  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
+  ensures var s := SortedSeqOfKeyValueMap(m);
+      forall i, j | 0 <= i < j < |s| :: Keyspace.lt(s[i].key, s[j].key)
+  {
+    var s := SortedSeqOfKeyValueMap(m);
+    reveal_SortedSeqOfKeyValueMap();
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.Some? {
+      SortedSeqOfKeyValueMapHasSortedKeys(MapRemove1(m, max.value));
+    }
+    forall i, j | 0 <= i < j < |s| ensures Keyspace.lt(s[i].key, s[j].key)
+    {
+      if j == |s| - 1 {
+        SortedSeqOfKeyValueMaps(MapRemove1(m, max.value), i);
+        assert Keyspace.lt(s[i].key, s[j].key);
+      } else {
+        var s1 := SortedSeqOfKeyValueMap(MapRemove1(m, max.value));
+        assert Keyspace.lt(s1[i].key, s1[j].key);
+      }
+    }
   }
 
   ///// Splitting stuff

@@ -39,7 +39,7 @@ module {:extern} MkfsImpl {
     var node := new Node([], None, [empty]);
 
     WeightBucketListOneEmpty();
-    assert node.I().buckets == [MutBucket.I(empty)];    // OBSERVE (trigger)
+    assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
     ghost var sector:IS.Sector := IS.SectorBlock(node);
     ghost var is:IM.Sector := IS.ISector(sector);
     var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));

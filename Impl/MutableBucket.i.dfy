@@ -2,6 +2,8 @@ include "../lib/DataStructures/tttree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
+include "../PivotBetree/BucketIterator.i.dfy"
+
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
@@ -22,6 +24,7 @@ module MutableBucket {
   import opened Bounds
   import opened BucketWeights
   import opened NativeTypes
+  import BucketIterator
   import Pivots = PivotsLib
 
   type Key = Element
@@ -81,6 +84,9 @@ module MutableBucket {
     }
     tree := TTT.NonEmptyTree(ar[0 as uint64].1);
   }
+
+  datatype Iterator = Iterator(i: uint64)
+  function IIterator(it: Iterator) : BucketIterator.Iterator
 
   class MutBucket {
     var is_tree: bool;
@@ -173,10 +179,10 @@ module MutableBucket {
       forall i | 0 <= i < |s| :: s[i].Inv()
     }
 
-    static function I(s: MutBucket) : Bucket
-    reads s
+    function I() : Bucket
+    reads this
     {
-      s.Bucket
+      this.Bucket
     }
 
     static protected function ISeq(s: seq<MutBucket>) : (bs : seq<Bucket>)
@@ -187,12 +193,32 @@ module MutableBucket {
     decreases |s|
     {
       reveal_ReprSeq();
-      if |s| == 0 then [] else ISeq(DropLast(s)) + [I(Last(s))]
+      if |s| == 0 then [] else ISeq(DropLast(s)) + [Last(s).I()]
     }
 
     static lemma ISeqInduction(s: seq<MutBucket>)
     requires |s| > 0
-    ensures ISeq(s) == ISeq(DropLast(s)) + [I(Last(s))]
+    ensures ISeq(s) == ISeq(DropLast(s)) + [Last(s).I()]
+
+    static lemma ISeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
+    ensures ISeq(a + b) == ISeq(a) + ISeq(b)
+
+    static twostate lemma AllocatedReprSeq(new s: seq<MutBucket>)
+    ensures allocated(ReprSeq(s))
+    {
+      reveal_ReprSeq();
+    }
+
+    static lemma ReprSeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
+    ensures ReprSeq(a) + ReprSeq(b) == ReprSeq(a + b)
+
+    static lemma ReprSeq1Eq(a: seq<MutBucket>)
+    requires |a| == 1
+    ensures ReprSeq(a) == a[0].Repr
+
+    static lemma LemmaReprBucketLeReprSeq(buckets: seq<MutBucket>, i: int)
+    requires 0 <= i < |buckets|
+    ensures buckets[i].Repr <= ReprSeq(buckets)
 
     static predicate {:opaque} ReprSeqDisjoint(buckets: seq<MutBucket>)
     reads set i | 0 <= i < |buckets| :: buckets[i]
@@ -230,10 +256,6 @@ module MutableBucket {
       reveal_ReprSeq();
     }
 
-    static lemma LemmaReprBucketLeReprSeq(buckets: seq<MutBucket>, i: int)
-    requires 0 <= i < |buckets|
-    ensures buckets[i].Repr <= ReprSeq(buckets)
-
     static method kvlSeqToMutBucketSeq(kvls: seq<Kvl>)
     returns (buckets : seq<MutBucket>)
     requires |kvls| < 0x1_0000_0000_0000_0000
@@ -269,7 +291,7 @@ module MutableBucket {
     requires parent.Inv()
     requires InvSeq(children)
     requires WFBucketList(ISeq(children), pivots)
-    requires WeightBucket(I(parent)) <= MaxTotalBucketWeight() as int
+    requires WeightBucket(parent.I()) <= MaxTotalBucketWeight() as int
     requires WeightBucketList(ISeq(children)) <= MaxTotalBucketWeight() as int
     ensures newParent.Inv()
     ensures InvSeq(newChildren)
@@ -424,7 +446,7 @@ module MutableBucket {
       invariant w as int == WeightBucketList(bs[0..j]);
       {
         assert DropLast(bs[0..j+1]) == bs[0..j];
-        assert Last(bs[0..j+1]) == I(buckets[j]);
+        assert Last(bs[0..j+1]) == buckets[j].I();
         WeightBucketListSlice(bs, 0, j as int + 1);
 
         w := w + buckets[j].Weight;
@@ -491,6 +513,81 @@ module MutableBucket {
         j := j + 1;
       }
       buckets' := ar[..];
+    }
+
+    predicate WFIter(it: Iterator)
+    reads this, this.Repr
+    ensures this.WFIter(it) ==> this.Inv()
+    ensures this.WFIter(it) ==> BucketIterator.WFIter(I(), IIterator(it))
+
+    method IterStart() returns (it': Iterator)
+    requires Inv()
+    ensures this.WFIter(it')
+    ensures IIterator(it') == BucketIterator.IterStart(I())
+    {
+      assume false;
+      it' := Iterator(0);
+    }
+
+    method IterFindFirstGte(key: Key) returns (it': Iterator)
+    requires Inv()
+    ensures this.WFIter(it')
+    ensures IIterator(it') == BucketIterator.IterFindFirstGte(I(), key)
+    {
+      assume false;
+      var i: uint64 := 0;
+      var kvl := GetKvl();
+      while i < |kvl.keys| as uint64 {
+        var c := cmp(kvl.keys[i], key);
+        if c >= 0 {
+          return Iterator(i);
+        }
+        i := i + 1;
+      }
+      return Iterator(|kvl.keys| as uint64);
+    }
+
+    method IterFindFirstGt(key: Key) returns (it': Iterator)
+    requires Inv()
+    ensures this.WFIter(it')
+    ensures IIterator(it') == BucketIterator.IterFindFirstGt(I(), key)
+    {
+      assume false;
+      var i: uint64 := 0;
+      var kvl := GetKvl();
+      while i < |kvl.keys| as uint64 {
+        var c := cmp(kvl.keys[i], key);
+        if c > 0 {
+          return Iterator(i);
+        }
+        i := i + 1;
+      }
+      return Iterator(|kvl.keys| as uint64);
+    }
+
+    method IterInc(it: Iterator) returns (it': Iterator)
+    requires Inv()
+    requires IIterator(it).next.Next?
+    requires this.WFIter(it)
+    ensures this.WFIter(it')
+    ensures IIterator(it') == BucketIterator.IterInc(I(), IIterator(it))
+    {
+      assume false;
+      return Iterator(it.i + 1);
+    }
+
+    method GetNext(it: Iterator) returns (next : BucketIterator.IteratorOutput)
+    requires Inv()
+    requires this.WFIter(it)
+    ensures next == IIterator(it).next
+    {
+      assume false;
+      var kvl := GetKvl();
+      if it.i == |kvl.keys| as uint64 {
+        next := BucketIterator.Done;
+      } else {
+        next := BucketIterator.Next(kvl.keys[it.i], kvl.values[it.i]);
+      }
     }
   }
 }
