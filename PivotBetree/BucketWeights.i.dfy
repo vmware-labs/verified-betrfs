@@ -1066,36 +1066,37 @@ module BucketWeights {
     if |IImage(bucket, filter)| == 0 {
     } else {
       var key :| key in IImage(bucket, filter);
+      var others := filter - IncludeKey(key);
 
       IImageShape(bucket, IncludeKey(key));
       IImageShape(bucket, filter);
       assert |IImage(bucket, filter)| == |IImage(bucket, filter).Keys|;
       assert |IImage(bucket, IncludeKey(key))| == |IImage(bucket, IncludeKey(key)).Keys|;
-      assert |IImage(bucket, ExcludeKey(key))| == |IImage(bucket, ExcludeKey(key)).Keys|;
+      assert |IImage(bucket, others)| == |IImage(bucket, others).Keys|;
 
       calc {
         |IImage(bucket, filter)|;
           {
             reveal_IImage();
-            assert IImage(bucket, filter).Keys == IImage(bucket, IncludeKey(key)).Keys + IImage(bucket, ExcludeKey(key)).Keys;  // trigger
+            assert IImage(bucket, filter).Keys == IImage(bucket, IncludeKey(key)).Keys + IImage(bucket, others).Keys;  // trigger
           }
-        |IImage(bucket, IncludeKey(key))| + |IImage(bucket, ExcludeKey(key))|;
+        |IImage(bucket, IncludeKey(key))| + |IImage(bucket, others)|;
         <=
           { assert IImage(bucket, IncludeKey(key)).Keys == {key}; }
-        WeightKey(key) + WeightMessage(bucket[key]) + |IImage(bucket, ExcludeKey(key))|;
+        WeightKey(key) + WeightMessage(bucket[key]) + |IImage(bucket, others)|;
           { WeightBucketSingleton(IImage(bucket, IncludeKey(key)), key); } // break key out of bucket
-        WeightBucket(IImage(bucket, IncludeKey(key))) + |IImage(bucket, ExcludeKey(key))|;
+        WeightBucket(IImage(bucket, IncludeKey(key))) + |IImage(bucket, others)|;
         <=
           { // recurse
             reveal_IImage();
-            assert IImage(bucket, ExcludeKey(key)).Keys == IImage(bucket, filter).Keys - {key};
-            LenLeWeightInner(bucket, ExcludeKey(key));
+            assert IImage(bucket, others).Keys == IImage(bucket, filter).Keys - {key};
+            LenLeWeightInner(bucket, others);
           }
-        WeightBucket(IImage(bucket, IncludeKey(key))) + WeightBucket(IImage(bucket, ExcludeKey(key)));
+        WeightBucket(IImage(bucket, IncludeKey(key))) + WeightBucket(IImage(bucket, others));
           { // reassemble
-            IWeightBucketLinearInKeySet(IImage(bucket, filter), IncludeKey(key), ExcludeKey(key));
+            IWeightBucketLinearInKeySet(IImage(bucket, filter), IncludeKey(key), others);
             IImageSubset(bucket, IncludeKey(key), filter);
-            IImageSubset(bucket, ExcludeKey(key), filter);
+            IImageSubset(bucket, others, filter);
           }
         WeightBucket(IImage(bucket, filter));
       }
