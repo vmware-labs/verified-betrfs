@@ -51,11 +51,11 @@ module BucketsLib {
 
   function BucketInsert(bucket: Bucket, key: Key, msg: Message) : Bucket
   {
-    var msg := Merge(msg, BucketGet(bucket, key));
-    if msg == IdentityMessage() then
+    var mergedMsg := Merge(msg, BucketGet(bucket, key));
+    if mergedMsg == IdentityMessage() then
       MapRemove1(bucket, key)
     else
-      bucket[key := msg]
+      bucket[key := mergedMsg]
   }
 
   function BucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message) : BucketList
