@@ -1207,11 +1207,25 @@ module BucketWeights {
 
   lemma WeightBucketIntersect(bucket: Bucket, keys: set<Key>)
   ensures WeightBucket(BucketIntersect(bucket, keys)) <= WeightBucket(bucket)
-  { }
+  {
+    var ikeys := iset k | k in keys;
+    reveal_BucketIntersect();
+    IImageShape(bucket, ikeys);
+    assert BucketIntersect(bucket, keys) == IImage(bucket, ikeys);
+    IImageIdentity(bucket, AllKeys());
+    WeightBucketSubset(bucket, ikeys, AllKeys());
+  }
 
   lemma WeightBucketComplement(bucket: Bucket, keys: set<Key>)
   ensures WeightBucket(BucketComplement(bucket, keys)) <= WeightBucket(bucket)
-  { }
+  {
+    var ikeys := iset k | k !in keys;
+    reveal_BucketComplement();
+    IImageShape(bucket, ikeys);
+    assert BucketComplement(bucket, keys) == IImage(bucket, ikeys);
+    IImageIdentity(bucket, AllKeys());
+    WeightBucketSubset(bucket, ikeys, AllKeys());
+  }
 
   lemma WeightMessageBound(msg: Message)
   ensures WeightMessage(msg) <= 8 + 1024
