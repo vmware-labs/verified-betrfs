@@ -1066,38 +1066,36 @@ module BucketWeights {
     if |IImage(bucket, filter)| == 0 {
     } else {
       var key :| key in IImage(bucket, filter);
-      var keySet := iset{key};
-      var others := filter - keySet;
 
-      IImageShape(bucket, keySet);
+      IImageShape(bucket, IncludeKey(key));
       IImageShape(bucket, filter);
       assert |IImage(bucket, filter)| == |IImage(bucket, filter).Keys|;
-      assert |IImage(bucket, keySet)| == |IImage(bucket, keySet).Keys|;
-      assert |IImage(bucket, others)| == |IImage(bucket, others).Keys|;
+      assert |IImage(bucket, IncludeKey(key))| == |IImage(bucket, IncludeKey(key)).Keys|;
+      assert |IImage(bucket, ExcludeKey(key))| == |IImage(bucket, ExcludeKey(key)).Keys|;
 
       calc {
         |IImage(bucket, filter)|;
           {
             reveal_IImage();
-            assert IImage(bucket, filter).Keys == IImage(bucket, keySet).Keys + IImage(bucket, others).Keys;  // trigger
+            assert IImage(bucket, filter).Keys == IImage(bucket, IncludeKey(key)).Keys + IImage(bucket, ExcludeKey(key)).Keys;  // trigger
           }
-        |IImage(bucket, keySet)| + |IImage(bucket, others)|;
+        |IImage(bucket, IncludeKey(key))| + |IImage(bucket, ExcludeKey(key))|;
         <=
-          { assert IImage(bucket, keySet).Keys == {key}; }
-        WeightKey(key) + WeightMessage(bucket[key]) + |IImage(bucket, others)|;
-          { WeightBucketSingleton(IImage(bucket, keySet), key); } // break key out of bucket
-        WeightBucket(IImage(bucket, keySet)) + |IImage(bucket, others)|;
+          { assert IImage(bucket, IncludeKey(key)).Keys == {key}; }
+        WeightKey(key) + WeightMessage(bucket[key]) + |IImage(bucket, ExcludeKey(key))|;
+          { WeightBucketSingleton(IImage(bucket, IncludeKey(key)), key); } // break key out of bucket
+        WeightBucket(IImage(bucket, IncludeKey(key))) + |IImage(bucket, ExcludeKey(key))|;
         <=
           { // recurse
             reveal_IImage();
-            assert IImage(bucket, others).Keys == IImage(bucket, filter).Keys - {key};
-            LenLeWeightInner(bucket, others);
+            assert IImage(bucket, ExcludeKey(key)).Keys == IImage(bucket, filter).Keys - {key};
+            LenLeWeightInner(bucket, ExcludeKey(key));
           }
-        WeightBucket(IImage(bucket, keySet)) + WeightBucket(IImage(bucket, others));
+        WeightBucket(IImage(bucket, IncludeKey(key))) + WeightBucket(IImage(bucket, ExcludeKey(key)));
           { // reassemble
-            IWeightBucketLinearInKeySet(IImage(bucket, filter), keySet, others);
-            IImageSubset(bucket, keySet, filter);
-            IImageSubset(bucket, others, filter);
+            IWeightBucketLinearInKeySet(IImage(bucket, filter), IncludeKey(key), ExcludeKey(key));
+            IImageSubset(bucket, IncludeKey(key), filter);
+            IImageSubset(bucket, ExcludeKey(key), filter);
           }
         WeightBucket(IImage(bucket, filter));
       }
@@ -1125,20 +1123,17 @@ module BucketWeights {
   ensures WeightBucket(bucket[key := msg]) <=
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
   {
-    var keyFilter := iset k | k == key;
-    var others := iset k | k != key;
-
     calc {
       WeightBucket(bucket[key := msg]);
         { KeyContribution(bucket[key := msg], key); }
-      WeightBucket(IImage(bucket[key := msg], others)) + WeightKey(key) + WeightMessage(msg);
-        { IImageShape(bucket[key := msg], others);
-          IImageShape(bucket, others);
-          assert IImage(bucket[key := msg], others) == IImage(bucket, others);
+      WeightBucket(IImage(bucket[key := msg], ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
+        { IImageShape(bucket[key := msg], ExcludeKey(key));
+          IImageShape(bucket, ExcludeKey(key));
+          assert IImage(bucket[key := msg], ExcludeKey(key)) == IImage(bucket, ExcludeKey(key));
         }
-      WeightBucket(IImage(bucket, others)) + WeightKey(key) + WeightMessage(msg);
+      WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
       <=
-      WeightBucket(IImage(bucket, others)) + WeightKey(key) + (if key in bucket then WeightMessage(bucket[key]) else 0)
+      WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightKey(key) + (if key in bucket then WeightMessage(bucket[key]) else 0)
         + WeightKey(key) + WeightMessage(msg);
         { KeyContribution(bucket, key); }
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
