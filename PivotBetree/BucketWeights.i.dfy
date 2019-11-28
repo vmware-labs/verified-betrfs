@@ -1134,7 +1134,7 @@ module BucketWeights {
         }
       WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
       <=
-      WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightKey(key) + (if key in bucket then WeightMessage(bucket[key]) else 0)
+      WeightBucket(IImage(bucket, ExcludeKey(key))) + (if key in bucket then WeightKey(key) + WeightMessage(bucket[key]) else 0)
         + WeightKey(key) + WeightMessage(msg);
         { KeyContribution(bucket, key); }
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
