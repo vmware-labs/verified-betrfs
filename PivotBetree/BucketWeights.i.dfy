@@ -983,7 +983,43 @@ module BucketWeights {
 
   lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
   ensures WeightBucketList(SplitBucketOnPivots(bucket, pivots)) == WeightBucket(bucket)
-  { }
+  {
+    if |pivots| == 0 {
+      reveal_WeightBucketList();
+      calc {
+        WeightBucketList(SplitBucketOnPivots(bucket, pivots));
+        WeightBucket(bucket);
+      }
+    } else {
+      var l := map key | key in bucket && Keyspace.lt(key, Last(pivots)) :: bucket[key];
+      var r := map key | key in bucket && Keyspace.lte(Last(pivots), key) :: bucket[key];
+      var lKeys := iset k | k in l;
+      var rKeys := iset k | k in r;
+
+      calc {
+        WeightBucketList(SplitBucketOnPivots(bucket, pivots));  // defn.
+        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots)) + [r]);
+          { WeightBucketListConcatOne(SplitBucketOnPivots(l, DropLast(pivots)), r); } // break off tail
+        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots))) + WeightBucket(r);
+          { WeightSplitBucketOnPivots(l, DropLast(pivots)); }
+        WeightBucket(l) + WeightBucket(r);
+          {
+            IImageShape(bucket, lKeys);
+            assert l == IImage(bucket, lKeys);
+            IImageShape(bucket, rKeys);
+            assert r == IImage(bucket, rKeys);
+          }
+        WeightBucket(IImage(bucket, lKeys)) + WeightBucket(IImage(bucket, rKeys));
+          { WeightBucketLinearVariant(bucket, lKeys, rKeys); }
+        WeightBucket(IImage(bucket, lKeys + rKeys));
+          {
+            IImageShape(bucket, lKeys + rKeys);
+            assert bucket == IImage(bucket, lKeys + rKeys);
+          }
+        WeightBucket(bucket);
+      }
+    }
+  }
 
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
