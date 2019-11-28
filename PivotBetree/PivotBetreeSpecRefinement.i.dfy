@@ -104,6 +104,12 @@ module PivotBetreeSpecRefinement {
     B.LookupQuery(q.key, q.value, IReadOps(q.lookup))
   }
 
+  function ISuccQuery(q: P.SuccQuery) : B.SuccQuery
+  requires P.ValidSuccQuery(q)
+  {
+    B.SuccQuery(q.start, q.results, q.end, IReadOps(q.lookup))
+  }
+
   function IInsertion(ins: P.MessageInsertion) : B.MessageInsertion
   requires P.ValidInsertion(ins)
   {
@@ -182,6 +188,7 @@ module PivotBetreeSpecRefinement {
   {
     match betreeStep {
       case BetreeQuery(q) => B.BetreeQuery(IQuery(q))
+      case BetreeSuccQuery(sq) => B.BetreeSuccQuery(ISuccQuery(sq))
       case BetreeInsert(ins) => B.BetreeInsert(IInsertion(ins))
       case BetreeFlush(flush) => B.BetreeFlush(IFlush(flush))
       case BetreeGrow(growth) => B.BetreeGrow(IGrow(growth))
@@ -311,6 +318,89 @@ module PivotBetreeSpecRefinement {
   {
     RefinesLookup(q.lookup, q.key);
     RefinesInterpretLookupAccountingForLeaf(q.lookup, q.key, q.value);
+  }
+
+  lemma KeyWithinUpperBoundIsWithinLookup(
+      lookup: P.Lookup, startKey: Key, key: Key, idx: int)
+  requires P.LookupVisitsWFNodes(lookup)
+  requires 0 <= idx < |lookup|
+  requires var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && (lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value))
+  ensures var r := Route(lookup[idx].node.pivotTable, startKey);
+      r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(key, lookup[idx].node.pivotTable[r]);
+  {
+    P.reveal_LookupUpperBound();
+    if idx == |lookup| - 1 {
+    } else {
+      KeyWithinUpperBoundIsWithinLookup(DropLast(lookup), startKey, key, idx);
+    }
+  }
+
+  lemma InUpperBoundAndNot(a: Key, end: MS.UI.RangeEnd, b: Key)
+  requires MS.UpperBound(a, end)
+  requires !MS.UpperBound(b, end)
+  ensures Keyspace.lt(a, b)
+  {
+    match end {
+      case EInclusive(key) => {
+        assert Keyspace.lte(a, key);
+        assert Keyspace.lt(key, b);
+      }
+      case EExclusive(key) => {
+        assert Keyspace.lt(a, key);
+        assert Keyspace.lte(key, b);
+      }
+      case PositiveInf => { }
+    }
+  }
+
+  lemma RefinesValidSuccQuery(sq: P.SuccQuery)
+  requires P.ValidSuccQuery(sq)
+  ensures B.ValidSuccQuery(ISuccQuery(sq))
+  {
+    var q := ISuccQuery(sq);
+    var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
+
+    forall i | 0 <= i < |q.results|
+    ensures B.LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value)
+    {
+      forall idx | P.ValidLayerIndex(sq.lookup, idx) && idx < |sq.lookup| - 1 
+      ensures P.LookupFollowsChildRefAtLayer(q.results[i].key, sq.lookup, idx)
+      {
+        assert P.LookupFollowsChildRefAtLayer(startKey, sq.lookup, idx);
+
+        var r := Route(sq.lookup[idx].node.pivotTable, startKey);
+        //assert r > 0 ==> Keyspace.lte(sq.lookup[idx].node.pivotTable[r-1], startKey);
+
+        Keyspace.EmptyLte(q.results[i].key);
+        //assert Keyspace.lte([], q.results[i].key);
+        //assert Keyspace.lte(startKey, q.results[i].key);
+
+        assert MS.InRange(sq.start, sq.results[i].key, sq.end);
+        var lookupUpperBound := P.LookupUpperBound(sq.lookup, startKey);
+        //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end);
+        //assert MS.UpperBound(sq.results[i].key, sq.end);
+        if (lookupUpperBound.Some?) {
+          InUpperBoundAndNot(sq.results[i].key, sq.end, lookupUpperBound.value);
+        }
+        //assert lookupUpperBound.Some? ==> Keyspace.lt(sq.results[i].key, lookupUpperBound.value);
+        KeyWithinUpperBoundIsWithinLookup(sq.lookup, startKey, q.results[i].key, idx);
+        //assert r < |sq.lookup[idx].node.pivotTable| ==> Keyspace.lt(q.results[i].key, sq.lookup[idx].node.pivotTable[r]);
+
+        RouteIs(sq.lookup[idx].node.pivotTable, q.results[i].key, r);
+      }
+
+      RefinesLookup(sq.lookup, q.results[i].key);
+      RefinesInterpretLookupAccountingForLeaf(sq.lookup, sq.results[i].key, sq.results[i].value);
+    }
+
+    assume false;
+
+    forall key | MS.InRange(q.start, key, q.end)
+        && (forall i | 0 <= i < |q.results| :: q.results[i].key != key)
+    ensures B.LookupKeyValue(q.lookup, key, MS.EmptyValue())
+    {
+    }
   }
 
   lemma RefinesValidInsertion(ins: P.MessageInsertion)
@@ -793,6 +883,7 @@ module PivotBetreeSpecRefinement {
   {
     match betreeStep {
       case BetreeQuery(q) => RefinesValidQuery(q);
+      case BetreeSuccQuery(sq) => RefinesValidSuccQuery(sq);
       case BetreeInsert(ins) => RefinesValidInsertion(ins);
       case BetreeFlush(flush) => RefinesValidFlush(flush);
       case BetreeGrow(growth) => RefinesValidGrow(growth);
@@ -1105,6 +1196,11 @@ module PivotBetreeSpecRefinement {
 
     match betreeStep {
       case BetreeQuery(q) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+      case BetreeSuccQuery(q) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
             P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));

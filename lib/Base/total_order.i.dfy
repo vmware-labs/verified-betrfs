@@ -617,4 +617,10 @@ module Lexicographic_Byte_Order refines Total_Order {
   {
     c := NativeArrays.ByteSeqCmpByteSeq(a, b);
   }
+
+  lemma EmptyLte(x: Element)
+  ensures lte([], x)
+  {
+    SeqComparison.reveal_lte();
+  }
 }

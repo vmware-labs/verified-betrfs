@@ -242,13 +242,9 @@ module PivotBetreeSpec {
   {
     && var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
     && WFLookupForKey(sq.lookup, startKey)
-    && var lookupUpperBound := LookupUpperBound(sq.lookup, startKey);
 
-    && (lookupUpperBound.Some? ==> (
-      && (sq.end.PositiveInf? ==> false)
-      && (sq.end.EExclusive? ==> Keyspace.lte(sq.end.key, lookupUpperBound.value))
-      && (sq.end.EInclusive? ==> Keyspace.lt(sq.end.key, lookupUpperBound.value))
-    ))
+    && var lookupUpperBound := LookupUpperBound(sq.lookup, startKey);
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
 
     && Last(sq.lookup).node.children.None?
 
@@ -263,6 +259,14 @@ module PivotBetreeSpec {
         (forall i | 0 <= i < |sq.results| :: sq.results[i].key != key) ==>
         BufferDefinesEmptyValue(InterpretLookup(sq.lookup, key))
       )
+  }
+
+  function SuccQueryReads(q: SuccQuery): seq<ReadOp> {
+    q.lookup
+  }
+
+  function SuccQueryOps(q: SuccQuery): seq<Op> {
+    []
   }
 
   //// Insert
@@ -664,6 +668,7 @@ module PivotBetreeSpec {
 
   datatype BetreeStep =
     | BetreeQuery(q: LookupQuery)
+    | BetreeSuccQuery(sq: SuccQuery)
     | BetreeInsert(ins: MessageInsertion)
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
@@ -675,6 +680,7 @@ module PivotBetreeSpec {
   {
     match step {
       case BetreeQuery(q) => ValidQuery(q)
+      case BetreeSuccQuery(sq) => ValidSuccQuery(sq)
       case BetreeInsert(ins) => ValidInsertion(ins)
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
@@ -689,6 +695,7 @@ module PivotBetreeSpec {
   {
     match step {
       case BetreeQuery(q) => QueryReads(q)
+      case BetreeSuccQuery(sq) => SuccQueryReads(sq)
       case BetreeInsert(ins) => InsertionReads(ins)
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
@@ -703,6 +710,7 @@ module PivotBetreeSpec {
   {
     match step {
       case BetreeQuery(q) => QueryOps(q)
+      case BetreeSuccQuery(sq) => SuccQueryOps(sq)
       case BetreeInsert(ins) => InsertionOps(ins)
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
@@ -715,6 +723,7 @@ module PivotBetreeSpec {
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
+      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.start, sq.results, sq.end)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
@@ -907,6 +916,7 @@ module PivotBetreeSpecWFNodes {
   {
     match betreeStep {
       case BetreeQuery(q) => {}
+      case BetreeSuccQuery(q) => {}
       case BetreeInsert(ins) => {
         ValidInsertWritesWFNodes(ins);
       }
