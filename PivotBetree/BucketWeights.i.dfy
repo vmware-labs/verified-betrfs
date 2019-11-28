@@ -350,8 +350,15 @@ module BucketWeights {
     ImageVsIImage(bucket, b);
   }
 
+  function WeightOneKey(bucket: Bucket, key: Key) : (w:int)
+  {
+    if key in bucket
+      then WeightKey(key) + WeightMessage(bucket[key])
+      else 0
+  }
+
   lemma KeyContribution(bucket: Bucket, key: Key)
-    ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, ExcludeKey(key))) + (if key in bucket then WeightKey(key) + WeightMessage(bucket[key]) else 0);
+    ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key);
   {
     IImageIdentity(bucket, ExcludeKey(key) + IncludeKey(key));
     WeightBucketLinearVariant(bucket, ExcludeKey(key), IncludeKey(key));
@@ -1166,32 +1173,36 @@ module BucketWeights {
     var bucket := blist[i];
 
     var mergedMsg := Merge(msg, BucketGet(bucket, key));
-    if mergedMsg == IdentityMessage() {
-      calc {
-        WeightBucket(BucketInsert(bucket, key, msg));
-        WeightBucket(MapRemove1(bucket, key));
-        <=
-        WeightBucket(bucket);
-        <=
-        WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
-      }
-    } else {
-      WeightBucketPut(bucket, key, mergedMsg);
+    var mergedWeight := if mergedMsg != IdentityMessage() then WeightKey(key) + WeightMessage(mergedMsg) else 0;
+
+    calc {
+      WeightBucket(BucketInsert(bucket, key, msg));
+        { KeyContribution(BucketInsert(bucket, key, msg), key); }
+      WeightBucket(IImage(BucketInsert(bucket, key, msg), ExcludeKey(key))) + WeightOneKey(BucketInsert(bucket, key, msg), key);
+        {
+          IImageShape(BucketInsert(bucket, key, msg), ExcludeKey(key));
+          IImageShape(bucket, ExcludeKey(key));
+          assert IImage(BucketInsert(bucket, key, msg), ExcludeKey(key)) == IImage(bucket, ExcludeKey(key)); // trigger
+        }
+      WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightOneKey(BucketInsert(bucket, key, msg), key);
+      WeightBucket(IImage(bucket, ExcludeKey(key))) + mergedWeight;
     }
-/*
+
     calc {
       WeightBucketList(BucketListInsert(blist, pivots, key, msg));
         { WeightBucketListReplace(blist, i, BucketInsert(bucket, key, msg)); }
       WeightBucketList(blist) - WeightBucket(bucket) + WeightBucket(BucketInsert(bucket, key, msg));
-      <=  // if block above
-      WeightBucketList(blist) + WeightKey(key) + WeightMessage(mergedMsg);
+        // Calc above
+      WeightBucketList(blist) - WeightBucket(bucket) + WeightBucket(IImage(bucket, ExcludeKey(key))) + mergedWeight;
+        { KeyContribution(bucket, key); }
+      WeightBucketList(blist) - (WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key))
+        + WeightBucket(IImage(bucket, ExcludeKey(key))) + mergedWeight;
+      <= // terms cancel; mergedWeight definition
+      WeightBucketList(blist) - WeightOneKey(bucket, key) + WeightKey(key) + WeightMessage(mergedMsg);
       <=
         { MergeGainsNoWeight(msg, BucketGet(bucket, key)); }
-      WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg) + WeightMessage(BucketGet(bucket, key));
-      <=
       WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg);
     }
-    */
   }
 
   lemma WeightBucketIntersect(bucket: Bucket, keys: set<Key>)
