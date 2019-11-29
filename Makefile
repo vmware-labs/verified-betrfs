@@ -108,7 +108,8 @@ allo: build/Impl/Bundle.i.o
 
 # This was cool until someone tried to run it on MacOS.
 #TIME=time -f "real %es cpu %Us"
-TIME=/usr/bin/time --format '%Uuser'
+#TIME=/usr/bin/time --format '%Uuser'
+TIME=/usr/bin/time
 
 ##############################################################################
 # Dummy dependency chains, so that a rule that depends on a top-level .dfy

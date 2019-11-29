@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Create the build/ directory, generate the initial build/makefile
 
 import os

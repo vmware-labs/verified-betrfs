@@ -7,6 +7,7 @@ module MapSpec refines UIStateMachine {
   import V = ValueWithDefault
   import K = KeyType
   import SeqComparison
+  import Options
 
   import UI
   type Key = K.Key
@@ -59,38 +60,45 @@ module MapSpec refines UIStateMachine {
     && s' == s
   }
 
-  predicate ValidSuccResult(k: Constants, s: Variables, key: Key, res: UI.SuccResult)
-  requires WF(s)
+  predicate LowerBound(start: UI.RangeStart, key: Key)
   {
-    && (res.SuccKeyValue? ==>
-      && SeqComparison.lt(key, res.key)
-      && res.value != EmptyValue()
-      && s.view[res.key] == res.value
-      && (forall k | SeqComparison.lt(key, k) && SeqComparison.lt(k, res.key) && k in s.view
-          :: s.view[k] == EmptyValue())
-    )
-    && (res.SuccEnd? ==>
-      && (forall k | SeqComparison.lt(key, k) && k in s.view
-          :: s.view[k] == EmptyValue())
-    )
+    && (start.SInclusive? ==> SeqComparison.lte(start.key, key))
+    && (start.SExclusive? ==> SeqComparison.lt(start.key, key))
   }
 
-  predicate ValidAdjacentSuccResults(k: Constants, s: Variables, res1: UI.SuccResult,
-      res2: UI.SuccResult)
-  requires WF(s)
+  predicate UpperBound(key: Key, end: UI.RangeEnd)
   {
-    && res1.SuccKeyValue?
-    && ValidSuccResult(k, s, res1.key, res2)
+    && (end.EInclusive? ==> SeqComparison.lte(key, end.key))
+    && (end.EExclusive? ==> SeqComparison.lt(key, end.key))
   }
 
-  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp, key: Key, results: seq<UI.SuccResult>)
+  predicate InRange(start: UI.RangeStart, key: Key, end: UI.RangeEnd)
   {
-    && uiop == UI.SuccOp(key, results)
+    && LowerBound(start, key)
+    && UpperBound(key, end)
+  }
+
+  predicate NonEmptyRange(start: UI.RangeStart, end: UI.RangeEnd)
+  {
+    || start.NegativeInf?
+    || end.PositiveInf?
+    || (start.SInclusive? && end.EInclusive? && SeqComparison.lte(start.key, end.key))
+    || SeqComparison.lt(start.key, end.key)
+  }
+
+  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp,
+      start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
+  {
+    && uiop == UI.SuccOp(start, results, end)
     && WF(s)
     && s' == s
-    && (|results| > 0 ==> ValidSuccResult(k, s, key, results[0]))
-    && (forall i | 1 <= i < |results| ::
-        ValidAdjacentSuccResults(k, s, results[i-1], results[i]))
+    && NonEmptyRange(start, end)
+    && (forall i | 0 <= i < |results| :: s.view[results[i].key] == results[i].value)
+    && (forall i | 0 <= i < |results| :: results[i].value != EmptyValue())
+    && (forall i | 0 <= i < |results| :: InRange(start, results[i].key, end))
+    && (forall i, j | 0 <= i < j < |results| :: SeqComparison.lt(results[i].key, results[j].key))
+    && (forall key | InRange(start, key, end) && s.view[key] != EmptyValue() ::
+        exists i :: 0 <= i < |results| && results[i].key == key)
   }
 
   predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
@@ -112,7 +120,7 @@ module MapSpec refines UIStateMachine {
   datatype Step =
       | QueryStep(key: Key, result: Value)
       | WriteStep(key: Key, new_value: Value)
-      | SuccStep(key: Key, res: seq<UI.SuccResult>)
+      | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
 
   predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UIOp, step:Step)
@@ -120,7 +128,7 @@ module MapSpec refines UIStateMachine {
     match step {
       case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
       case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
-      case SuccStep(key, res) => Succ(k, s, s', uiop, key, res)
+      case SuccStep(start, results, end) => Succ(k, s, s', uiop, start, results, end)
       case StutterStep() => Stutter(k, s, s', uiop)
     }
   }
