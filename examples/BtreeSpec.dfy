@@ -744,14 +744,32 @@ abstract module BtreeSpec {
     else NumElementsOfChildren(node.children)
   }
 
+  lemma NumElementsOfChildrenNotZero(node: Node)
+    requires WF(node)
+    requires node.Index?
+    ensures forall child :: 0 <= child < |node.children| ==> 0 < NumElements(node.children[child])
+  {
+    forall child | 0 <= child < |node.children|
+      ensures 0 < NumElements(node.children[child])
+    {
+      if node.children[child].Leaf? {
+      } else {
+        NumElementsOfChildrenNotZero(node.children[child]);
+      }
+    }
+  }
+  
   lemma NumElementsOfChildrenDecreases(nodes: seq<Node>, prefix: int)
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    requires forall i :: 0 <= i < |nodes| ==> 0 < NumElements(nodes[i])
     requires 0 <= prefix <= |nodes|
     ensures NumElementsOfChildren(nodes[..prefix]) <= NumElementsOfChildren(nodes)
+    ensures prefix < |nodes| ==> NumElementsOfChildren(nodes[..prefix]) < NumElementsOfChildren(nodes)
   {
     if prefix == |nodes| {
       assert nodes[..prefix] == nodes;
     } else {
+      NumElementsOfChildrenDecreases(DropLast(nodes), prefix);
       assert DropLast(nodes)[..prefix] == nodes[..prefix];
     }
   }
