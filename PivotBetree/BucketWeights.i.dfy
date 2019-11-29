@@ -37,6 +37,7 @@ module BucketWeights {
     }
   }
 
+  // TODO(thance): There's an assume in here that we need to sort out.
   lemma MergeGainsNoWeight(parent: Message, child: Message)
   ensures WeightMessage(Merge(parent, child)) <= WeightMessage(parent) + WeightMessage(child)
   {
@@ -95,101 +96,6 @@ module BucketWeights {
     )
   }
 
-  function {:opaque} Image(b:Bucket, s:set<Key>) : (image:Bucket)
-  requires s <= b.Keys
-  ensures |Image(b, s)| == |s|
-  // ensures forall k :: k in image ==> k in s
-  // The ensures above isn't implicated in profiling, but seems to overtrigger
-  // MapType0Select somewhere else, quite badly.
-  {
-    var m := map k | k in s :: b[k];
-    assert m.Keys == s;
-    m
-  }
-
-  // Commonly-used filters for IImage()
-  function AllKeys() : iset<Key>
-  {
-    iset k | true
-  }
-  function IncludeKey(key:Key) : iset<Key>
-  {
-    iset k | k == key
-  }
-  function ExcludeKey(key:Key) : iset<Key>
-  {
-    iset k | k != key
-  }
-
-  // Image of bucket showing only keys in filter
-  function {:opaque} IImage(bucket:Bucket, filter:iset<Key>) : (image:Bucket)
-//    ensures image.Keys <= bucket.Keys
-// Even this subset relation is a timeout source. (This must be the cause of
-// timeout on branch hard-to-trace-map-timeout)
-  {
-    map k | k in bucket && k in filter :: bucket[k]
-  }
-
-  lemma IImageShape(b:Bucket, s:iset<Key>)
-    ensures forall k :: k in b && k in s <==> k in IImage(b, s).Keys
-    ensures forall k :: k in IImage(b,s) ==> IImage(b,s)[k] == b[k];
-  {
-    reveal_IImage();
-  }
-
-  lemma IImageIdentity(bucket:Bucket, s:iset<Key>)
-  requires forall k :: k in bucket ==> k in s
-  ensures bucket == IImage(bucket, s)
-  {
-    IImageShape(bucket, s);
-  }
-
-  lemma IImageTrim(bucket:Bucket, s:iset<Key>, trimBucket:Bucket)
-  requires forall k :: k in trimBucket <==> k in bucket && k in s
-  requires forall k :: k in trimBucket ==> trimBucket[k]==bucket[k]
-  ensures IImage(bucket, s) == trimBucket
-  {
-    IImageShape(bucket, s);
-  }
-
-  lemma IImageEquiv(a:Bucket, b:Bucket, s:iset<Key>)
-  requires forall k :: k in a.Keys && k in s <==> k in b.Keys && k in s
-  requires forall k :: k in a.Keys && k in s ==> a[k] == b[k]
-  ensures IImage(a, s) == IImage(b, s)
-  {
-    reveal_IImage();
-  }
-
-  lemma IImageSingleton(b:Bucket, k:Key)
-    requires k in b;
-    ensures IImage(b, iset {k}).Keys == {k};
-    ensures IImage(b, iset {k})[k] == b[k];
-  {
-    reveal_IImage();
-  }
-
-  lemma IImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
-    requires s <= t;
-    ensures IImage(IImage(b, t), s) == IImage(b, s)
-    ensures IImage(b, s).Keys <= IImage(b, t).Keys
-  {
-    reveal_IImage();
-  }
-
-  lemma IImageIntersect(b:Bucket, s:iset<Key>, t:iset<Key>)
-    ensures IImage(IImage(b, s), t) == IImage(b, s * t)
-  {
-    reveal_IImage();
-  }
-
-  lemma MapRemoveVsIImage(bucket:Bucket, ibk:iset<Key>, key:Key)
-  requires forall k :: k in bucket.Keys ==> k in ibk
-  ensures MapRemove1(bucket, key) == IImage(bucket, ibk - iset{key})
-  {
-    reveal_MapRemove1();
-    reveal_IImage();
-  }
-
   lemma WeightBucketEmpty()
   ensures WeightBucket(map[]) == 0
   {
@@ -203,100 +109,183 @@ module BucketWeights {
     reveal_WeightBucket();
   }
 
+  // Commonly-used filters for Image()
+  function AllKeys() : iset<Key>
+  {
+    iset k | true
+  }
+  function IncludeKey(key:Key) : iset<Key>
+  {
+    iset k | k == key
+  }
+  function ExcludeKey(key:Key) : iset<Key>
+  {
+    iset k | k != key
+  }
+
+  // Image of bucket showing only keys in filter.
+  function {:opaque} Image(bucket:Bucket, filter:iset<Key>) : (image:Bucket)
+//    ensures image.Keys <= bucket.Keys
+// Even this subset relation is a timeout source. (This must be the cause of
+// timeout on branch hard-to-trace-map-timeout)
+  {
+    map k | k in bucket && k in filter :: bucket[k]
+  }
+
+  lemma ImageShape(b:Bucket, s:iset<Key>)
+    ensures forall k :: k in b && k in s <==> k in Image(b, s).Keys
+    ensures forall k :: k in Image(b,s) ==> Image(b,s)[k] == b[k];
+  {
+    reveal_Image();
+  }
+
+  lemma ImageIdentity(bucket:Bucket, s:iset<Key>)
+  requires forall k :: k in bucket ==> k in s
+  ensures bucket == Image(bucket, s)
+  {
+    ImageShape(bucket, s);
+  }
+
+  lemma ImageTrim(bucket:Bucket, s:iset<Key>, trimBucket:Bucket)
+  requires forall k :: k in trimBucket <==> k in bucket && k in s
+  requires forall k :: k in trimBucket ==> trimBucket[k]==bucket[k]
+  ensures Image(bucket, s) == trimBucket
+  {
+    ImageShape(bucket, s);
+  }
+
+  lemma ImageEquiv(a:Bucket, b:Bucket, s:iset<Key>)
+  requires forall k :: k in a.Keys && k in s <==> k in b.Keys && k in s
+  requires forall k :: k in a.Keys && k in s ==> a[k] == b[k]
+  ensures Image(a, s) == Image(b, s)
+  {
+    reveal_Image();
+  }
+
+  lemma ImageSingleton(b:Bucket, k:Key)
+    requires k in b;
+    ensures Image(b, iset {k}).Keys == {k};
+    ensures Image(b, iset {k})[k] == b[k];
+  {
+    reveal_Image();
+  }
+
+  lemma ImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
+    requires s <= t;
+    ensures Image(Image(b, t), s) == Image(b, s)
+    ensures Image(b, s).Keys <= Image(b, t).Keys
+  {
+    reveal_Image();
+  }
+
+  lemma ImageIntersect(b:Bucket, s:iset<Key>, t:iset<Key>)
+    ensures Image(Image(b, s), t) == Image(b, s * t)
+  {
+    reveal_Image();
+  }
+
+  lemma MapRemoveVsImage(bucket:Bucket, ibk:iset<Key>, key:Key)
+  requires forall k :: k in bucket.Keys ==> k in ibk
+  ensures MapRemove1(bucket, key) == Image(bucket, ibk - iset{key})
+  {
+    reveal_MapRemove1();
+    reveal_Image();
+  }
+
   lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires a !! b
   requires forall k:Key :: k in bucket ==> k in a + b // a,b partition bucket
-  requires IImage(bucket, a).Keys != {} // So we can decrease
-  requires IImage(bucket, b).Keys != {} // So we can decrease
+  requires Image(bucket, a).Keys != {} // So we can decrease
+  requires Image(bucket, b).Keys != {} // So we can decrease
   requires |bucket| > 0 // So we can ChooseKey
   requires ChooseKey(bucket) in a
-  ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |IImage(bucket, a).Keys| + |IImage(bucket, b).Keys|, 0
+  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
+  decreases |Image(bucket, a).Keys| + |Image(bucket, b).Keys|, 0
   {
     var key := ChooseKey(bucket);
     var msg := bucket[key];
     var residual := WeightKey(key) + WeightMessage(msg);
 
     calc {
-      WeightBucket(IImage(bucket, a));
+      WeightBucket(Image(bucket, a));
         {
-          var A := IImage(bucket, a);
-          var B := IImage(A, a-iset{key});
-          IImageSubset(bucket, a-iset{key}, a);
-          IImageShape(bucket, a-iset{key});
-          IImageShape(bucket, a);
+          var A := Image(bucket, a);
+          var B := Image(A, a-iset{key});
+          ImageSubset(bucket, a-iset{key}, a);
+          ImageShape(bucket, a-iset{key});
+          ImageShape(bucket, a);
           Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, A.Keys);
 
-          IImageShape(A, iset{key});
-          Sets.SetInclusionImpliesSmallerCardinality(IImage(A, iset{key}).Keys, {key});
-          IImageShape(bucket, b);
-          var kb :| kb in IImage(bucket, b).Keys;
-          Sets.SetInclusionImpliesSmallerCardinality({kb}, IImage(bucket, b).Keys);
+          ImageShape(A, iset{key});
+          Sets.SetInclusionImpliesSmallerCardinality(Image(A, iset{key}).Keys, {key});
+          ImageShape(bucket, b);
+          var kb :| kb in Image(bucket, b).Keys;
+          Sets.SetInclusionImpliesSmallerCardinality({kb}, Image(bucket, b).Keys);
 
-          IWeightBucketLinearInKeySet(A, a-iset{key}, iset{key});
+          WeightBucketLinearInKeySet(A, a-iset{key}, iset{key});
         }
-      WeightBucket(IImage(IImage(bucket, a), a-iset{key})) + WeightBucket(IImage(IImage(bucket, a), iset{key}));
+      WeightBucket(Image(Image(bucket, a), a-iset{key})) + WeightBucket(Image(Image(bucket, a), iset{key}));
         {
-          IImageSubset(bucket, a-iset{key}, a);
-          IImageSubset(bucket, iset{key}, a);
+          ImageSubset(bucket, a-iset{key}, a);
+          ImageSubset(bucket, iset{key}, a);
         }
-      WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, iset{key}));
+      WeightBucket(Image(bucket, a-iset{key})) + WeightBucket(Image(bucket, iset{key}));
         {
-          IImageSingleton(bucket, key);
-          WeightBucketSingleton(IImage(bucket, iset{key}), key);
-          assert IImage(bucket, iset{key})[key] == bucket[key];
-          assert WeightBucket(IImage(bucket, iset{key})) == WeightKey(key) + WeightMessage(bucket[key]);
+          ImageSingleton(bucket, key);
+          WeightBucketSingleton(Image(bucket, iset{key}), key);
+          assert Image(bucket, iset{key})[key] == bucket[key];
+          assert WeightBucket(Image(bucket, iset{key})) == WeightKey(key) + WeightMessage(bucket[key]);
         }
-      WeightBucket(IImage(bucket, a-iset{key})) + residual;
+      WeightBucket(Image(bucket, a-iset{key})) + residual;
     }
     calc {
       WeightBucket(bucket);
         { reveal_WeightBucket(); }
       WeightBucket(MapRemove1(bucket, key)) + residual;
-        { MapRemoveVsIImage(bucket, a+b, key); }
-      WeightBucket(IImage(bucket, (a+b)-iset{key}) )+ residual;
+        { MapRemoveVsImage(bucket, a+b, key); }
+      WeightBucket(Image(bucket, (a+b)-iset{key}) )+ residual;
         { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
-      WeightBucket(IImage(bucket, (a-iset{key})+b)) + residual;
+      WeightBucket(Image(bucket, (a-iset{key})+b)) + residual;
         {
-          var A := IImage(bucket, (a-iset{key})+b);
-          var B := IImage(A, a-iset{key});
-          IImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
-          IImageShape(bucket, a-iset{key});
-          IImageShape(bucket, a);
-          Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, IImage(bucket, a).Keys);
+          var A := Image(bucket, (a-iset{key})+b);
+          var B := Image(A, a-iset{key});
+          ImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
+          ImageShape(bucket, a-iset{key});
+          ImageShape(bucket, a);
+          Sets.ProperSubsetImpliesSmallerCardinality(B.Keys, Image(bucket, a).Keys);
 
-          IImageSubset(bucket, b, (a-iset{key})+b);
+          ImageSubset(bucket, b, (a-iset{key})+b);
           Sets.SetInclusionImpliesSmallerCardinality(
-            IImage(IImage(bucket, (a-iset{key})+b), b).Keys, IImage(bucket, b).Keys);
+            Image(Image(bucket, (a-iset{key})+b), b).Keys, Image(bucket, b).Keys);
 
-          IImageShape(bucket, (a-iset{key})+b); // propagate partition precondition
-          IWeightBucketLinearInKeySet(IImage(bucket, (a-iset{key})+b), a-iset{key}, b);
+          ImageShape(bucket, (a-iset{key})+b); // propagate partition precondition
+          WeightBucketLinearInKeySet(Image(bucket, (a-iset{key})+b), a-iset{key}, b);
         }
-      WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(IImage(IImage(bucket, (a-iset{key})+b), b)) + residual;
+      WeightBucket(Image(Image(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(Image(Image(bucket, (a-iset{key})+b), b)) + residual;
         { 
-          IImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
-          IImageSubset(bucket, b, (a-iset{key})+b);
+          ImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
+          ImageSubset(bucket, b, (a-iset{key})+b);
         }
-      WeightBucket(IImage(bucket, a-iset{key})) + WeightBucket(IImage(bucket, b)) + residual;
+      WeightBucket(Image(bucket, a-iset{key})) + WeightBucket(Image(bucket, b)) + residual;
         // upper calc
-      WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b));
+      WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));
     }
   }
 
-  lemma IWeightBucketLinearInKeySet(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+  lemma WeightBucketLinearInKeySet(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires a !! b
   requires forall k:Key :: k in bucket ==> k in a + b
-  ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b))
-  decreases |IImage(bucket, a).Keys| + |IImage(bucket, b).Keys|, 1
+  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
+  decreases |Image(bucket, a).Keys| + |Image(bucket, b).Keys|, 1
   {
-    IImageShape(bucket, a);
-    IImageShape(bucket, b);
+    ImageShape(bucket, a);
+    ImageShape(bucket, b);
     WeightBucketEmpty();
     if |bucket| == 0 {
-    } else if IImage(bucket, a).Keys=={} {
-      assert bucket == IImage(bucket, b);  // trigger
-    } else if IImage(bucket, b).Keys=={} {
-      assert bucket == IImage(bucket, a);  // trigger
+    } else if Image(bucket, a).Keys=={} {
+      assert bucket == Image(bucket, b);  // trigger
+    } else if Image(bucket, b).Keys=={} {
+      assert bucket == Image(bucket, a);  // trigger
     } else {
       if ChooseKey(bucket) in a {
         WeightBucketLinearInKeySetInner(bucket, a, b);
@@ -306,48 +295,27 @@ module BucketWeights {
     }
   }
 
-  // A variant that's handy for peeling off extra IImage wrappers.
-  lemma WeightBucketLinearVariant(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+  // A variant that's handy if a+b don't cover bucket.
+  lemma WeightBucketLinearInKeySetSum(bucket:Bucket, a:iset<Key>, b:iset<Key>)
     requires a!!b
-    ensures WeightBucket(IImage(bucket, a + b)) == WeightBucket(IImage(bucket, a)) + WeightBucket(IImage(bucket, b));
+    ensures WeightBucket(Image(bucket, a + b)) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));
   {
     var c := a + b;
     calc {
-      WeightBucket(IImage(bucket, a))
-        + WeightBucket(IImage(bucket, b));
-        { IImageSubset(bucket, b, c); }
-      WeightBucket(IImage(bucket, a))
-        + WeightBucket(IImage(IImage(bucket, c), b));
-        { IImageSubset(bucket, a, c); }
-      WeightBucket(IImage(IImage(bucket, c), a))
-        + WeightBucket(IImage(IImage(bucket, c), b));
+      WeightBucket(Image(bucket, a))
+        + WeightBucket(Image(bucket, b));
+        { ImageSubset(bucket, b, c); }
+      WeightBucket(Image(bucket, a))
+        + WeightBucket(Image(Image(bucket, c), b));
+        { ImageSubset(bucket, a, c); }
+      WeightBucket(Image(Image(bucket, c), a))
+        + WeightBucket(Image(Image(bucket, c), b));
       {
-        IImageShape(bucket, c);
-        IWeightBucketLinearInKeySet(IImage(bucket, c), a, b);
+        ImageShape(bucket, c);
+        WeightBucketLinearInKeySet(Image(bucket, c), a, b);
       }
-      WeightBucket(IImage(bucket, c));
+      WeightBucket(Image(bucket, c));
     }
-  }
-
-  lemma ImageVsIImage(bucket:Bucket, a:set<Key>)
-    requires a <= bucket.Keys
-    ensures Image(bucket, a) == IImage(bucket, iset k | k in a)
-  {
-    reveal_Image();
-    reveal_IImage();
-  }
-
-  // The raw WeightBucket definition is really difficult to work with. This
-  // lemma is a much nicer foundation to work with.
-  lemma WeightBucketLinearInKeySet(bucket:Bucket, a:set<Key>, b:set<Key>)
-  requires a !! b
-  requires a + b == bucket.Keys
-  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
-  decreases |bucket|, 1
-  {
-    IWeightBucketLinearInKeySet(bucket, iset k | k in a, iset k | k in b);
-    ImageVsIImage(bucket, a);
-    ImageVsIImage(bucket, b);
   }
 
   function WeightOneKey(bucket: Bucket, key: Key) : (w:int)
@@ -358,14 +326,14 @@ module BucketWeights {
   }
 
   lemma KeyContribution(bucket: Bucket, key: Key)
-    ensures WeightBucket(bucket) == WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key);
+    ensures WeightBucket(bucket) == WeightBucket(Image(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key);
   {
-    IImageIdentity(bucket, ExcludeKey(key) + IncludeKey(key));
-    WeightBucketLinearVariant(bucket, ExcludeKey(key), IncludeKey(key));
+    ImageIdentity(bucket, ExcludeKey(key) + IncludeKey(key));
+    WeightBucketLinearInKeySetSum(bucket, ExcludeKey(key), IncludeKey(key));
 
-    IImageShape(bucket, IncludeKey(key));
+    ImageShape(bucket, IncludeKey(key));
     if key in bucket {
-      WeightBucketSingleton(IImage(bucket, IncludeKey(key)), key);
+      WeightBucketSingleton(Image(bucket, IncludeKey(key)), key);
     } else {
       WeightBucketEmpty();
     }
@@ -376,65 +344,43 @@ module BucketWeights {
   ensures WeightBucket(bucket[key := msg]) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
   {
     KeyContribution(bucket[key := msg], key);
-    IImageShape(bucket[key := msg], ExcludeKey(key));
-    assert bucket == IImage(bucket[key := msg], ExcludeKey(key));
+    ImageShape(bucket[key := msg], ExcludeKey(key));
+    assert bucket == Image(bucket[key := msg], ExcludeKey(key));
   }
 
-  lemma SplitBucketLeftImage(bucket: Bucket, pivot: Key, leftKeys:set<Key>)
-  requires leftKeys == set k | k in bucket && Keyspace.lt(k, pivot)
-  ensures SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys)
+  function ILeftKeys(pivot: Key) : iset<Key> { iset k | Keyspace.lt(k, pivot) }
+  function IRightKeys(pivot: Key) : iset<Key> { iset k | Keyspace.lte(pivot, k) }
+
+  lemma SplitBucketImage(bucket: Bucket, pivot: Key)
+    ensures SplitBucketLeft(bucket, pivot) == Image(bucket, ILeftKeys(pivot))
+    ensures SplitBucketRight(bucket, pivot) == Image(bucket, IRightKeys(pivot))
   {
-    reveal_Image();
     reveal_SplitBucketLeft();
-  }
-
-  lemma SplitBucketRightImage(bucket: Bucket, pivot: Key, rightKeys:set<Key>)
-  requires rightKeys == set k | k in bucket && Keyspace.lte(pivot, k)
-  ensures SplitBucketRight(bucket, pivot) == Image(bucket, rightKeys)
-  {
-    reveal_Image();
     reveal_SplitBucketRight();
+    ImageShape(bucket, ILeftKeys(pivot));
+    ImageShape(bucket, IRightKeys(pivot));
   }
 
   lemma WeightSplitBucketLeft(bucket: Bucket, pivot: Key)
   ensures WeightBucket(SplitBucketLeft(bucket, pivot)) <= WeightBucket(bucket)
   {
-    var leftKeys := set k | k in bucket && Keyspace.lt(k, pivot);
-    var rightKeys := bucket.Keys - leftKeys;
-    reveal_SplitBucketLeft();
-    reveal_Image();
-    assert SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys); // trigger.
-    WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
+    SplitBucketImage(bucket, pivot);
+    WeightBucketLinearInKeySet(bucket, ILeftKeys(pivot), AllKeys() - ILeftKeys(pivot));
   }
 
   lemma WeightSplitBucketRight(bucket: Bucket, pivot: Key)
   ensures WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
   {
-    var rightKeys := set k | k in bucket && Keyspace.lte(pivot, k);
-    var leftKeys := bucket.Keys - rightKeys;
-    SplitBucketRightImage(bucket, pivot, rightKeys);
-    WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
+    SplitBucketImage(bucket, pivot);
+    WeightBucketLinearInKeySet(bucket, AllKeys() - IRightKeys(pivot), IRightKeys(pivot));
   }
 
   lemma WeightSplitBucketAdditive(bucket: Bucket, pivot: Key)
   ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
           WeightBucket(SplitBucketRight(bucket, pivot)) == WeightBucket(bucket)
   {
-    var leftKeys := set k | k in bucket && Keyspace.lt(k, pivot);
-    forall ensures SplitBucketLeft(bucket, pivot) == Image(bucket, leftKeys)
-    {
-      reveal_Image();
-      reveal_SplitBucketLeft();
-    }
-
-    var rightKeys := set k | k in bucket && Keyspace.lte(pivot, k);
-    SplitBucketRightImage(bucket, pivot, rightKeys);
-    assert SplitBucketRight(bucket, pivot) == Image(bucket, rightKeys); // trigger.
-
-    var notLeftKeys := bucket.Keys - leftKeys;
-    assert notLeftKeys == rightKeys;
-
-    WeightBucketLinearInKeySet(bucket, leftKeys, rightKeys);
+    SplitBucketImage(bucket, pivot);
+    WeightBucketLinearInKeySet(bucket, ILeftKeys(pivot), IRightKeys(pivot));
   }
 
   lemma WeightBucketList2(a: Bucket, b: Bucket)
@@ -558,51 +504,17 @@ module BucketWeights {
     iset k | Route(pivots, k) == i
   }
 
-  lemma FreakinSetExtensionality<T>(a:set<T>, b:set<T>)
-    requires forall e :: e in a ==> e in b;
-    requires forall e :: e in b ==> e in a;
-    ensures a == b;
-  {
-  }
-
-  lemma WeightBucketFilterPartitions(bucket:Bucket, filter:iset<Key>, a:iset<Key>, b:iset<Key>)
-    requires a !! b
-    requires filter * a + filter * b == filter;
-    ensures WeightBucket(IImage(bucket, filter)) ==
-      WeightBucket(IImage(bucket, filter * a)) + WeightBucket(IImage(bucket, filter * b));
-  {
-    calc {
-      WeightBucket(IImage(bucket, filter));
-        {
-          IImageShape(bucket, filter);
-          IWeightBucketLinearInKeySet(IImage(bucket, filter), a, b);
-        }
-      WeightBucket(IImage(IImage(bucket, filter), a)) + WeightBucket(IImage(IImage(bucket, filter), b));
-        {
-          IImageIntersect(bucket, filter, a);
-          IImageIntersect(bucket, filter, b);
-        }
-      WeightBucket(IImage(bucket, filter * a)) + WeightBucket(IImage(bucket, filter * b));
-    }
-  }
-
-  lemma SetPartition<T>(B:set<T>, f:T->bool, fa:T->bool, fb:T->bool)
-    requires forall e:T :: f(e) == (fa(e) || fb(e))
-    ensures (set e | e in B && f(e)) == (set e | e in B && fa(e)) + (set e | e in B && fb(e))
-  {
-  }
-
   lemma WeightBucketListItemFlushSingletonOrEmpty(parent: Bucket, children: BucketList, pivots: PivotTable, i: int, filter:iset<Key>, key:Key)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
   requires forall k :: k in filter ==> k == key   // filter admits at most one key
-  ensures WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i))
-    <= WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
-       + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter));
+  ensures WeightBucket(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i))
+    <= WeightBucket(Image(parent, RouteRange(pivots, i) * filter))
+       + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter));
   {
-    reveal_IImage();
+    reveal_Image();
 
-    var flush := BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i);
+    var flush := BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i);
     if key in flush.Keys {
       WeightBucketSingleton(flush, key);
     } else {
@@ -610,14 +522,14 @@ module BucketWeights {
       assert flush == map[];
     }
 
-    var filteredParent := IImage(parent, RouteRange(pivots, i) * filter);
+    var filteredParent := Image(parent, RouteRange(pivots, i) * filter);
     if key in filteredParent {
       WeightBucketSingleton(filteredParent, key);
     } else {
       WeightBucketEmpty();
     }
 
-    var filteredChild := IImage(children[i], RouteRange(pivots, i) * filter);
+    var filteredChild := Image(children[i], RouteRange(pivots, i) * filter);
     if key in filteredChild {
       WeightBucketSingleton(filteredChild, key);
     } else {
@@ -631,21 +543,42 @@ module BucketWeights {
     }
   }
 
+  lemma WeightBucketFilterPartitions(bucket:Bucket, filter:iset<Key>, a:iset<Key>, b:iset<Key>)
+    requires a !! b
+    requires filter * a + filter * b == filter;
+    ensures WeightBucket(Image(bucket, filter)) ==
+      WeightBucket(Image(bucket, filter * a)) + WeightBucket(Image(bucket, filter * b));
+  {
+    calc {
+      WeightBucket(Image(bucket, filter));
+        {
+          ImageShape(bucket, filter);
+          WeightBucketLinearInKeySet(Image(bucket, filter), a, b);
+        }
+      WeightBucket(Image(Image(bucket, filter), a)) + WeightBucket(Image(Image(bucket, filter), b));
+        {
+          ImageIntersect(bucket, filter, a);
+          ImageIntersect(bucket, filter, b);
+        }
+      WeightBucket(Image(bucket, filter * a)) + WeightBucket(Image(bucket, filter * b));
+    }
+  }
+
   lemma WeightBucketListItemFlushInner(parent: Bucket, children: BucketList, pivots: PivotTable, i: int, filter:iset<Key>)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
   ensures
-    WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i))
-      <= WeightBucket(IImage(parent, RouteRange(pivots, i) * filter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter))
-  decreases |IImage(parent, filter)| + |IImage(children[i], filter)|
+    WeightBucket(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i))
+      <= WeightBucket(Image(parent, RouteRange(pivots, i) * filter)) + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter))
+  decreases |Image(parent, filter)| + |Image(children[i], filter)|
   {
     // Pick an arbitrary key to decrease by
     // (In Lisp, "car" is the first thing in a list, "cdr" is everything else.)
     var carKey;
-    if |IImage(parent, filter)| != 0 {
-      carKey :| carKey in IImage(parent, filter);
-    } else if |IImage(children[i], filter)| != 0 {
-      carKey :| carKey in IImage(children[i], filter);
+    if |Image(parent, filter)| != 0 {
+      carKey :| carKey in Image(parent, filter);
+    } else if |Image(children[i], filter)| != 0 {
+      carKey :| carKey in Image(children[i], filter);
     } else {
       return;
     }
@@ -654,49 +587,48 @@ module BucketWeights {
     var cdrFilter := ExcludeKey(carKey);
 
     // cdrFilter decreases
-    if |IImage(parent, filter)| != 0 {
-      forall ensures |IImage(parent, filter * cdrFilter)| < |IImage(parent, filter)|
+    if |Image(parent, filter)| != 0 {
+      forall ensures |Image(parent, filter * cdrFilter)| < |Image(parent, filter)|
       {
-        reveal_IImage();
-        Sets.ProperSubsetImpliesSmallerCardinality(IImage(parent, filter * cdrFilter).Keys, IImage(parent, filter).Keys);
+        reveal_Image();
+        Sets.ProperSubsetImpliesSmallerCardinality(Image(parent, filter * cdrFilter).Keys, Image(parent, filter).Keys);
       }
-      IImageSubset(children[i], filter * cdrFilter, filter);
-      Sets.SetInclusionImpliesSmallerCardinality(IImage(children[i], filter * cdrFilter).Keys, IImage(children[i], filter).Keys);
+      ImageSubset(children[i], filter * cdrFilter, filter);
+      Sets.SetInclusionImpliesSmallerCardinality(Image(children[i], filter * cdrFilter).Keys, Image(children[i], filter).Keys);
     } else {
-      IImageSubset(parent, filter * cdrFilter, filter);
-      Sets.SetInclusionImpliesSmallerCardinality(IImage(parent, filter * cdrFilter).Keys, IImage(parent, filter).Keys);
-      forall ensures |IImage(children[i], filter * cdrFilter)| < |IImage(children[i], filter)|
+      ImageSubset(parent, filter * cdrFilter, filter);
+      Sets.SetInclusionImpliesSmallerCardinality(Image(parent, filter * cdrFilter).Keys, Image(parent, filter).Keys);
+      forall ensures |Image(children[i], filter * cdrFilter)| < |Image(children[i], filter)|
       {
-        reveal_IImage();
-        Sets.ProperSubsetImpliesSmallerCardinality(IImage(children[i], filter * cdrFilter).Keys, IImage(children[i], filter).Keys);
+        reveal_Image();
+        Sets.ProperSubsetImpliesSmallerCardinality(Image(children[i], filter * cdrFilter).Keys, Image(children[i], filter).Keys);
       }
     }
 
-    // The core of the proof is that the inequality holds for the carKey we
-    // chose from the parent.
-    forall k | k in BucketListItemFlush(IImage(parent, filter * carFilter), IImage(children[i], filter * carFilter), pivots, i).Keys
+    // The core of the proof is that the inequality holds for the carKey we chose from the parent.
+    forall k | k in BucketListItemFlush(Image(parent, filter * carFilter), Image(children[i], filter * carFilter), pivots, i).Keys
       ensures k == carKey
     {
-      reveal_IImage();
+      reveal_Image();
     }
 
     calc {
-      WeightBucket(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i));
+      WeightBucket(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i));
         {
-          IWeightBucketLinearInKeySet(
-            BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), carFilter, cdrFilter);
+          WeightBucketLinearInKeySet(
+            BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), carFilter, cdrFilter);
         }
-      WeightBucket(IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), carFilter))
-      + WeightBucket(IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), cdrFilter));
-        { // push filters through IImage operator & BucketListItemFlush.
-          reveal_IImage();
-          assert IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), carFilter)
-            == BucketListItemFlush(IImage(parent, filter * carFilter), IImage(children[i], filter * carFilter), pivots, i);
-          assert IImage(BucketListItemFlush(IImage(parent, filter), IImage(children[i], filter), pivots, i), cdrFilter)
-            == BucketListItemFlush(IImage(parent, filter * cdrFilter), IImage(children[i], filter * cdrFilter), pivots, i);
+      WeightBucket(Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), carFilter))
+      + WeightBucket(Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), cdrFilter));
+        { // push filters through Image operator & BucketListItemFlush.
+          reveal_Image();
+          assert Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), carFilter)
+            == BucketListItemFlush(Image(parent, filter * carFilter), Image(children[i], filter * carFilter), pivots, i);
+          assert Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), cdrFilter)
+            == BucketListItemFlush(Image(parent, filter * cdrFilter), Image(children[i], filter * cdrFilter), pivots, i);
         }
-      WeightBucket(BucketListItemFlush(IImage(parent, filter * carFilter), IImage(children[i], filter * carFilter), pivots, i))
-      + WeightBucket(BucketListItemFlush(IImage(parent, filter * cdrFilter), IImage(children[i], filter * cdrFilter), pivots, i));
+      WeightBucket(BucketListItemFlush(Image(parent, filter * carFilter), Image(children[i], filter * carFilter), pivots, i))
+      + WeightBucket(BucketListItemFlush(Image(parent, filter * cdrFilter), Image(children[i], filter * cdrFilter), pivots, i));
       <=
         { // recursion for car
           WeightBucketListItemFlushSingletonOrEmpty(parent, children, pivots, i, filter * carFilter, carKey);
@@ -705,20 +637,20 @@ module BucketWeights {
           WeightBucketListItemFlushInner(parent, children, pivots, i, filter * cdrFilter);
           assert RouteRange(pivots, i) * (filter * cdrFilter) == RouteRange(pivots, i) * filter * cdrFilter;
         }
-      WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
-        + WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * cdrFilter)) + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
+      WeightBucket(Image(parent, RouteRange(pivots, i) * filter * carFilter)) + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter * carFilter))
+        + WeightBucket(Image(parent, RouteRange(pivots, i) * filter * cdrFilter)) + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter * cdrFilter));
       // Just rearranging terms
-      WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * carFilter))
-        + WeightBucket(IImage(parent, RouteRange(pivots, i) * filter * cdrFilter))
-        + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
-        + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
+      WeightBucket(Image(parent, RouteRange(pivots, i) * filter * carFilter))
+        + WeightBucket(Image(parent, RouteRange(pivots, i) * filter * cdrFilter))
+        + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter * carFilter))
+        + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter * cdrFilter));
       { WeightBucketFilterPartitions(parent, RouteRange(pivots, i) * filter, carFilter, cdrFilter); }
-      WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
-        + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * carFilter))
-        + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter * cdrFilter));
+      WeightBucket(Image(parent, RouteRange(pivots, i) * filter))
+        + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter * carFilter))
+        + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter * cdrFilter));
       { WeightBucketFilterPartitions(children[i], RouteRange(pivots, i) * filter, carFilter, cdrFilter); }
-      WeightBucket(IImage(parent, RouteRange(pivots, i) * filter))
-        + WeightBucket(IImage(children[i], RouteRange(pivots, i) * filter));
+      WeightBucket(Image(parent, RouteRange(pivots, i) * filter))
+        + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter));
     }
   }
 
@@ -726,14 +658,14 @@ module BucketWeights {
   requires WFPivots(pivots)
   requires 0 <= i < |children|
   ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
-      <= WeightBucket(IImage(parent, RouteRange(pivots, i))) + WeightBucket(IImage(children[i], RouteRange(pivots, i)))
+      <= WeightBucket(Image(parent, RouteRange(pivots, i))) + WeightBucket(Image(children[i], RouteRange(pivots, i)))
   {
     WeightBucketListItemFlushInner(parent, children, pivots, i, AllKeys());
-    IImageIdentity(parent, AllKeys());
-    IImageIdentity(children[i], AllKeys());
-    reveal_IImage();
-    assert IImage(parent, RouteRange(pivots, i) * AllKeys()) == IImage(parent, RouteRange(pivots, i));  // trigger
-    assert IImage(children[i], RouteRange(pivots, i) * AllKeys()) == IImage(children[i], RouteRange(pivots, i));  // trigger
+    ImageIdentity(parent, AllKeys());
+    ImageIdentity(children[i], AllKeys());
+    reveal_Image();
+    assert Image(parent, RouteRange(pivots, i) * AllKeys()) == Image(parent, RouteRange(pivots, i));  // trigger
+    assert Image(children[i], RouteRange(pivots, i) * AllKeys()) == Image(children[i], RouteRange(pivots, i));  // trigger
   }
 
   function RouteRanges(pivots: PivotTable, i: int) : iset<Key>
@@ -743,6 +675,8 @@ module BucketWeights {
     iset k | Route(pivots, k) < i
   }
 
+  // The sequence axioms were responsible for creating a timeout in the rich
+  // context where this was used; hence this ugly workaround.
   lemma SequenceSingleton<T>(s:seq<T>, i:int)
   requires 0 <= i < |s|
   ensures s[i..i+1] == [s[i]];
@@ -753,7 +687,7 @@ module BucketWeights {
   requires WFBucketList(children, pivots)
   requires 0 <= items <= |children|
   ensures WeightBucketList(BucketListFlushPartial(parent, children, pivots, items))
-      <= WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+      <= WeightBucket(Image(parent, RouteRanges(pivots, items)))
         + WeightBucketList(children[..items])
   {
     if items == 0 {
@@ -771,40 +705,40 @@ module BucketWeights {
           + WeightBucket(BucketListItemFlush(parent, children[items - 1], pivots, items - 1));
         <=
           { WeightBucketListFlushPartial(parent, children, pivots, items - 1); }  // Recurse on prefix
-        WeightBucket(IImage(parent, RouteRanges(pivots, items - 1)))
+        WeightBucket(Image(parent, RouteRanges(pivots, items - 1)))
           + WeightBucketList(children[..items - 1])
           + WeightBucket(BucketListItemFlush(parent, children[items - 1], pivots, items - 1));
         <=
           { WeightBucketListItemFlush(parent, children, pivots, items -1); }  // Flush the singleton
-        WeightBucket(IImage(parent, RouteRanges(pivots, items - 1)))
+        WeightBucket(Image(parent, RouteRanges(pivots, items - 1)))
           + WeightBucketList(children[..items - 1])
-          + WeightBucket(IImage(parent, RouteRange(pivots, items - 1)))
-          + WeightBucket(IImage(children[items - 1], RouteRange(pivots, items - 1)));
+          + WeightBucket(Image(parent, RouteRange(pivots, items - 1)))
+          + WeightBucket(Image(children[items - 1], RouteRange(pivots, items - 1)));
         {  // Glue the parent halves back together
-          WeightBucketLinearVariant(parent, RouteRanges(pivots, items - 1), RouteRange(pivots, items - 1));
+          WeightBucketLinearInKeySetSum(parent, RouteRanges(pivots, items - 1), RouteRange(pivots, items - 1));
           assert RouteRanges(pivots, items) == RouteRanges(pivots, items - 1) + RouteRange(pivots, items - 1);  // trigger
         }
-        WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+        WeightBucket(Image(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items - 1])
-          + WeightBucket(IImage(children[items - 1], RouteRange(pivots, items - 1)));
+          + WeightBucket(Image(children[items - 1], RouteRange(pivots, items - 1)));
         { // The last child bucket's RouteRange covers the whole bucket, so we can simplify.
-          IImageShape(children[items - 1], RouteRange(pivots, items - 1));
-          assert IImage(children[items - 1], RouteRange(pivots, items - 1)) == children[items-1]; // trigger
+          ImageShape(children[items - 1], RouteRange(pivots, items - 1));
+          assert Image(children[items - 1], RouteRange(pivots, items - 1)) == children[items-1]; // trigger
         }
-        WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+        WeightBucket(Image(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
         { // pack the last bucket up into a singleton list
           SequenceSingleton(children, items-1);
           //assert children[items-1..items] == [children[items-1]]; // trigger
           reveal_WeightBucketList();
         }
-        WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+        WeightBucket(Image(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
         { // and glue the children sublists back together
           WeightBucketListConcatOne(children[..items-1], children[items-1]);
           assert children[..items-1] + [children[items-1]] == children[..items]; // trigger
         }
-        WeightBucket(IImage(parent, RouteRanges(pivots, items)))
+        WeightBucket(Image(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items]);
       }
     }
@@ -817,9 +751,9 @@ module BucketWeights {
       <= WeightBucket(parent) + WeightBucketList(children)
   {
     WeightBucketListFlushPartial(parent, children, pivots, |children|);
-    forall ensures IImage(parent, RouteRanges(pivots, |children|)) == parent
+    forall ensures Image(parent, RouteRanges(pivots, |children|)) == parent
     {
-      reveal_IImage();
+      reveal_Image();
     }
     assert children[..|children|] == children;  // trigger
   }
@@ -865,7 +799,7 @@ module BucketWeights {
     WeightBucketListReplace(blist, i, map[]);
   }
 
-  // Analogous to WeightBucketListReplace, except we're changing the size of the thing in the middle.
+  // Analogous to WeightBucketListReplace, except we're changing the size of the subsequence in the middle.
   lemma WeightSplitBucketInList(blist: BucketList, i: int, pivot: Key)
   requires 0 <= i < |blist|
   ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
@@ -922,25 +856,22 @@ module BucketWeights {
     var merged := MergeBucketsInList(blist, i);
     var mbucket := MergeBuckets(blist[i], blist[i+1]);
 
-    reveal_MergeBucketsInList();
-    reveal_replace2with1();
-    reveal_MergeBuckets();
-    reveal_Image();
-    var leftKeys := set k | k in mbucket && Keyspace.lt(k, pivots[i]);
-    SplitBucketLeftImage(mbucket, pivots[i], leftKeys);
-    var rightKeys := set k | k in mbucket && Keyspace.lte(pivots[i], k);
-    SplitBucketRightImage(mbucket, pivots[i], rightKeys);
-
-    assert SplitBucketLeft(mbucket, pivots[i]) == blist[i];
-    assert SplitBucketRight(mbucket, pivots[i]) == blist[i+1];
-
     calc {
       SplitBucketInList(merged, i, pivots[i]);
         { reveal_SplitBucketInList(); }
       replace1with2(merged, SplitBucketLeft(merged[i], pivots[i]), SplitBucketRight(merged[i], pivots[i]), i);
         { reveal_replace1with2(); }
       merged[..i] + [SplitBucketLeft(merged[i], pivots[i]), SplitBucketRight(merged[i], pivots[i])] + merged[i+1..];
+        { reveal_replace2with1(); }
+        { reveal_MergeBucketsInList(); }
       blist[..i] + [SplitBucketLeft(mbucket, pivots[i]), SplitBucketRight(mbucket, pivots[i])] + blist[i+2..];
+        {
+          reveal_MergeBuckets();
+          reveal_Image();
+          SplitBucketImage(mbucket, pivots[i]);
+          assert SplitBucketLeft(mbucket, pivots[i]) == blist[i];
+          assert SplitBucketRight(mbucket, pivots[i]) == blist[i+1];
+        }
       blist[..i] + [blist[i], blist[i+1]] + blist[i+2..];
       blist;
     }
@@ -958,42 +889,42 @@ module BucketWeights {
 
   lemma WeightBucketSubset(bucket:Bucket, a:iset<Key>, b:iset<Key>)
     requires a<=b
-    ensures WeightBucket(IImage(bucket, a)) <= WeightBucket(IImage(bucket, b))
+    ensures WeightBucket(Image(bucket, a)) <= WeightBucket(Image(bucket, b))
   {
     calc {
-      WeightBucket(IImage(bucket, a));
-        { IImageSubset(bucket, a, b); }
-      WeightBucket(IImage(IImage(bucket, b), a));
+      WeightBucket(Image(bucket, a));
+        { ImageSubset(bucket, a, b); }
+      WeightBucket(Image(Image(bucket, b), a));
       <=
-      WeightBucket(IImage(IImage(bucket, b), a)) + WeightBucket(IImage(IImage(bucket, b), b-a));
+      WeightBucket(Image(Image(bucket, b), a)) + WeightBucket(Image(Image(bucket, b), b-a));
         {
-          IImageShape(bucket, b);
-          IWeightBucketLinearInKeySet(IImage(bucket, b), a, b-a);
+          ImageShape(bucket, b);
+          WeightBucketLinearInKeySet(Image(bucket, b), a, b-a);
         }
-      WeightBucket(IImage(bucket, b));
+      WeightBucket(Image(bucket, b));
     }
   }
    
   lemma WeightBucketMapUnion(x:Bucket, xKeys:iset<Key>, y:Bucket, yKeys:iset<Key>)
   requires xKeys == iset k | k in x.Keys;
   requires yKeys == iset k | k !in x.Keys;
-  ensures WeightBucket(MapUnion(x, y)) == WeightBucket(IImage(x, xKeys)) + WeightBucket(IImage(y, yKeys))
+  ensures WeightBucket(MapUnion(x, y)) == WeightBucket(Image(x, xKeys)) + WeightBucket(Image(y, yKeys))
   {
     calc {
       WeightBucket(MapUnion(x, y));
         { reveal_MapUnion(); }
       WeightBucket(MapUnionPreferA(x, y));
         {
-          IImageIdentity(MapUnionPreferA(x, y), xKeys + yKeys);
+          ImageIdentity(MapUnionPreferA(x, y), xKeys + yKeys);
         }
-      WeightBucket(IImage(MapUnionPreferA(x, y), xKeys + yKeys));
-        { WeightBucketLinearVariant(MapUnionPreferA(x, y), xKeys, yKeys); }
-      WeightBucket(IImage(MapUnionPreferA(x, y), xKeys)) + WeightBucket(IImage(MapUnionPreferA(x, y), yKeys));
+      WeightBucket(Image(MapUnionPreferA(x, y), xKeys + yKeys));
+        { WeightBucketLinearInKeySetSum(MapUnionPreferA(x, y), xKeys, yKeys); }
+      WeightBucket(Image(MapUnionPreferA(x, y), xKeys)) + WeightBucket(Image(MapUnionPreferA(x, y), yKeys));
       {
-        IImageEquiv(x, MapUnionPreferA(x, y), xKeys);
-        IImageEquiv(y, MapUnionPreferA(x, y), yKeys);
+        ImageEquiv(x, MapUnionPreferA(x, y), xKeys);
+        ImageEquiv(y, MapUnionPreferA(x, y), yKeys);
       }
-      WeightBucket(IImage(x, xKeys)) + WeightBucket(IImage(y, yKeys));
+      WeightBucket(Image(x, xKeys)) + WeightBucket(Image(y, yKeys));
     }
   }
 
@@ -1016,14 +947,14 @@ module BucketWeights {
         WeightBucket(JoinBucketList(blist));
         WeightBucket(MapUnion(JoinBucketList(DropLast(blist)), Last(blist)));
           { WeightBucketMapUnion(JoinBucketList(DropLast(blist)), subKeys, Last(blist), lastKeys); }
-        WeightBucket(IImage(JoinBucketList(DropLast(blist)), subKeys))
-          + WeightBucket(IImage(Last(blist), lastKeys));
+        WeightBucket(Image(JoinBucketList(DropLast(blist)), subKeys))
+          + WeightBucket(Image(Last(blist), lastKeys));
         <=
           { WeightBucketSubset(Last(blist), lastKeys, AllKeys()); }
-        WeightBucket(IImage(JoinBucketList(DropLast(blist)), subKeys)) + WeightBucket(IImage(Last(blist), AllKeys()));
+        WeightBucket(Image(JoinBucketList(DropLast(blist)), subKeys)) + WeightBucket(Image(Last(blist), AllKeys()));
           { // subKeys doesn't reduce the subList, and AllKeys() doesn't reduce Last(blist)
-            IImageIdentity(Last(blist), AllKeys());
-            IImageIdentity(JoinBucketList(DropLast(blist)), subKeys);
+            ImageIdentity(Last(blist), AllKeys());
+            ImageIdentity(JoinBucketList(DropLast(blist)), subKeys);
           }
         WeightBucket(JoinBucketList(DropLast(blist))) + WeightBucket(Last(blist));
         <=
@@ -1061,58 +992,58 @@ module BucketWeights {
           { WeightSplitBucketOnPivots(l, DropLast(pivots)); }
         WeightBucket(l) + WeightBucket(r);
           {
-            IImageTrim(bucket, lKeys, l);
-            IImageTrim(bucket, rKeys, r);
+            ImageTrim(bucket, lKeys, l);
+            ImageTrim(bucket, rKeys, r);
           }
-        WeightBucket(IImage(bucket, lKeys)) + WeightBucket(IImage(bucket, rKeys));
-          { WeightBucketLinearVariant(bucket, lKeys, rKeys); }
-        WeightBucket(IImage(bucket, lKeys + rKeys));
-          { IImageIdentity(bucket, lKeys + rKeys); }
+        WeightBucket(Image(bucket, lKeys)) + WeightBucket(Image(bucket, rKeys));
+          { WeightBucketLinearInKeySetSum(bucket, lKeys, rKeys); }
+        WeightBucket(Image(bucket, lKeys + rKeys));
+          { ImageIdentity(bucket, lKeys + rKeys); }
         WeightBucket(bucket);
       }
     }
   }
 
   lemma LenLeWeightInner(bucket: Bucket, filter:iset<Key>)
-  ensures |IImage(bucket, filter)| <= WeightBucket(IImage(bucket, filter))
-  decreases |IImage(bucket, filter)|
+  ensures |Image(bucket, filter)| <= WeightBucket(Image(bucket, filter))
+  decreases |Image(bucket, filter)|
   {
-    if |IImage(bucket, filter)| == 0 {
+    if |Image(bucket, filter)| == 0 {
     } else {
-      var key :| key in IImage(bucket, filter);
+      var key :| key in Image(bucket, filter);
       var others := filter - IncludeKey(key);
 
-      IImageShape(bucket, IncludeKey(key));
-      IImageShape(bucket, filter);
-      assert |IImage(bucket, filter)| == |IImage(bucket, filter).Keys|;
-      assert |IImage(bucket, IncludeKey(key))| == |IImage(bucket, IncludeKey(key)).Keys|;
-      assert |IImage(bucket, others)| == |IImage(bucket, others).Keys|;
+      ImageShape(bucket, IncludeKey(key));
+      ImageShape(bucket, filter);
+      assert |Image(bucket, filter)| == |Image(bucket, filter).Keys|;
+      assert |Image(bucket, IncludeKey(key))| == |Image(bucket, IncludeKey(key)).Keys|;
+      assert |Image(bucket, others)| == |Image(bucket, others).Keys|;
 
       calc {
-        |IImage(bucket, filter)|;
+        |Image(bucket, filter)|;
           {
-            reveal_IImage();
-            assert IImage(bucket, filter).Keys == IImage(bucket, IncludeKey(key)).Keys + IImage(bucket, others).Keys;  // trigger
+            reveal_Image();
+            assert Image(bucket, filter).Keys == Image(bucket, IncludeKey(key)).Keys + Image(bucket, others).Keys;  // trigger
           }
-        |IImage(bucket, IncludeKey(key))| + |IImage(bucket, others)|;
+        |Image(bucket, IncludeKey(key))| + |Image(bucket, others)|;
         <=
-          { assert IImage(bucket, IncludeKey(key)).Keys == {key}; }
-        WeightKey(key) + WeightMessage(bucket[key]) + |IImage(bucket, others)|;
-          { WeightBucketSingleton(IImage(bucket, IncludeKey(key)), key); } // break key out of bucket
-        WeightBucket(IImage(bucket, IncludeKey(key))) + |IImage(bucket, others)|;
+          { assert Image(bucket, IncludeKey(key)).Keys == {key}; }
+        WeightKey(key) + WeightMessage(bucket[key]) + |Image(bucket, others)|;
+          { WeightBucketSingleton(Image(bucket, IncludeKey(key)), key); } // break key out of bucket
+        WeightBucket(Image(bucket, IncludeKey(key))) + |Image(bucket, others)|;
         <=
           { // recurse
-            reveal_IImage();
-            assert IImage(bucket, others).Keys == IImage(bucket, filter).Keys - {key};
+            reveal_Image();
+            assert Image(bucket, others).Keys == Image(bucket, filter).Keys - {key};
             LenLeWeightInner(bucket, others);
           }
-        WeightBucket(IImage(bucket, IncludeKey(key))) + WeightBucket(IImage(bucket, others));
+        WeightBucket(Image(bucket, IncludeKey(key))) + WeightBucket(Image(bucket, others));
           { // reassemble
-            IWeightBucketLinearInKeySet(IImage(bucket, filter), IncludeKey(key), others);
-            IImageSubset(bucket, IncludeKey(key), filter);
-            IImageSubset(bucket, others, filter);
+            WeightBucketLinearInKeySet(Image(bucket, filter), IncludeKey(key), others);
+            ImageSubset(bucket, IncludeKey(key), filter);
+            ImageSubset(bucket, others, filter);
           }
-        WeightBucket(IImage(bucket, filter));
+        WeightBucket(Image(bucket, filter));
       }
     }
   }
@@ -1124,7 +1055,7 @@ module BucketWeights {
   ensures |bucket| <= WeightBucket(bucket)
   {
     LenLeWeightInner(bucket, AllKeys());
-    IImageIdentity(bucket, AllKeys());
+    ImageIdentity(bucket, AllKeys());
   }
 
   lemma WeightBucketListOneEmpty()
@@ -1141,14 +1072,14 @@ module BucketWeights {
     calc {
       WeightBucket(bucket[key := msg]);
         { KeyContribution(bucket[key := msg], key); }
-      WeightBucket(IImage(bucket[key := msg], ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
-        { IImageShape(bucket[key := msg], ExcludeKey(key));
-          IImageShape(bucket, ExcludeKey(key));
-          assert IImage(bucket[key := msg], ExcludeKey(key)) == IImage(bucket, ExcludeKey(key));
+      WeightBucket(Image(bucket[key := msg], ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
+        { ImageShape(bucket[key := msg], ExcludeKey(key));
+          ImageShape(bucket, ExcludeKey(key));
+          assert Image(bucket[key := msg], ExcludeKey(key)) == Image(bucket, ExcludeKey(key));
         }
-      WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
+      WeightBucket(Image(bucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
       <=
-      WeightBucket(IImage(bucket, ExcludeKey(key))) + (if key in bucket then WeightKey(key) + WeightMessage(bucket[key]) else 0)
+      WeightBucket(Image(bucket, ExcludeKey(key))) + (if key in bucket then WeightKey(key) + WeightMessage(bucket[key]) else 0)
         + WeightKey(key) + WeightMessage(msg);
         { KeyContribution(bucket, key); }
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
@@ -1185,14 +1116,14 @@ module BucketWeights {
     calc {
       WeightBucket(BucketInsert(bucket, key, msg));
         { KeyContribution(BucketInsert(bucket, key, msg), key); }
-      WeightBucket(IImage(BucketInsert(bucket, key, msg), ExcludeKey(key))) + WeightOneKey(BucketInsert(bucket, key, msg), key);
+      WeightBucket(Image(BucketInsert(bucket, key, msg), ExcludeKey(key))) + WeightOneKey(BucketInsert(bucket, key, msg), key);
         {
-          IImageShape(BucketInsert(bucket, key, msg), ExcludeKey(key));
-          IImageShape(bucket, ExcludeKey(key));
-          assert IImage(BucketInsert(bucket, key, msg), ExcludeKey(key)) == IImage(bucket, ExcludeKey(key)); // trigger
+          ImageShape(BucketInsert(bucket, key, msg), ExcludeKey(key));
+          ImageShape(bucket, ExcludeKey(key));
+          assert Image(BucketInsert(bucket, key, msg), ExcludeKey(key)) == Image(bucket, ExcludeKey(key)); // trigger
         }
-      WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightOneKey(BucketInsert(bucket, key, msg), key);
-      WeightBucket(IImage(bucket, ExcludeKey(key))) + mergedWeight;
+      WeightBucket(Image(bucket, ExcludeKey(key))) + WeightOneKey(BucketInsert(bucket, key, msg), key);
+      WeightBucket(Image(bucket, ExcludeKey(key))) + mergedWeight;
     }
 
     calc {
@@ -1200,10 +1131,10 @@ module BucketWeights {
         { WeightBucketListReplace(blist, i, BucketInsert(bucket, key, msg)); }
       WeightBucketList(blist) - WeightBucket(bucket) + WeightBucket(BucketInsert(bucket, key, msg));
         // Calc above
-      WeightBucketList(blist) - WeightBucket(bucket) + WeightBucket(IImage(bucket, ExcludeKey(key))) + mergedWeight;
+      WeightBucketList(blist) - WeightBucket(bucket) + WeightBucket(Image(bucket, ExcludeKey(key))) + mergedWeight;
         { KeyContribution(bucket, key); }
-      WeightBucketList(blist) - (WeightBucket(IImage(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key))
-        + WeightBucket(IImage(bucket, ExcludeKey(key))) + mergedWeight;
+      WeightBucketList(blist) - (WeightBucket(Image(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key))
+        + WeightBucket(Image(bucket, ExcludeKey(key))) + mergedWeight;
       <= // terms cancel; mergedWeight definition
       WeightBucketList(blist) - WeightOneKey(bucket, key) + WeightKey(key) + WeightMessage(mergedMsg);
       <=
@@ -1217,9 +1148,9 @@ module BucketWeights {
   {
     var ikeys := iset k | k in keys;
     reveal_BucketIntersect();
-    IImageShape(bucket, ikeys);
-    assert BucketIntersect(bucket, keys) == IImage(bucket, ikeys);
-    IImageIdentity(bucket, AllKeys());
+    ImageShape(bucket, ikeys);
+    assert BucketIntersect(bucket, keys) == Image(bucket, ikeys);
+    ImageIdentity(bucket, AllKeys());
     WeightBucketSubset(bucket, ikeys, AllKeys());
   }
 
@@ -1228,9 +1159,9 @@ module BucketWeights {
   {
     var ikeys := iset k | k !in keys;
     reveal_BucketComplement();
-    IImageShape(bucket, ikeys);
-    assert BucketComplement(bucket, keys) == IImage(bucket, ikeys);
-    IImageIdentity(bucket, AllKeys());
+    ImageShape(bucket, ikeys);
+    assert BucketComplement(bucket, keys) == Image(bucket, ikeys);
+    ImageIdentity(bucket, AllKeys());
     WeightBucketSubset(bucket, ikeys, AllKeys());
   }
 
