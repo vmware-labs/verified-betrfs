@@ -29,6 +29,10 @@ class DafnyAssumeError(DafnyCondition):
     def __init__(self):
         super().__init__(3, "untrusted file contains assumptions", "fillcolor=cyan; shape=octagon")
 
+class DafnyTimeoutError(DafnyCondition):
+    def __init__(self):
+        super().__init__(3, "untrusted file contains assumptions", "fillcolor=\"#555555\"; fontcolor=white; shape=octagon")
+
 class DafnyVerified(DafnyCondition):
     def __init__(self):
         super().__init__(4, "verified successfully", "fillcolor=green; shape=ellipse")
@@ -58,13 +62,17 @@ def extractCondition(reportType, report, content):
         return DafnyParseError()
     if re.compile("resolution/type errors detected in").search(content) != None:
         return DafnyTypeError()
-    mo = re.compile("Dafny program verifier finished with (\d+) verified, (\d+) error").search(content)
+    mo = re.compile("Dafny program verifier finished with (\d+) verified, (\d+) error(.*(\d+) time out)?").search(content)
     if mo != None:
-        verifCount,errorCount = map(int, mo.groups())
+        rawVerifCount,rawErrorCount,dummy,rawTimeoutCount = mo.groups()
+        verifCount = int(rawVerifCount)
+        errorCount = int(rawErrorCount)
         if errorCount > 0:
             return DafnyVerificationError()
         if hasDisallowedAssumptions(report):
             return DafnyAssumeError()
+        if rawTimeoutCount != None and int(rawTimeoutCount) > 0:
+            return DafnyTimeoutError()
         return DafnyVerified()
     if reportType=="verchk":
         raise Exception("build system error: couldn't summarize %s\n" % report)
