@@ -77,12 +77,12 @@ abstract module MutableBtreeBulkOperations {
       while i < node.contents.nchildren
         invariant 0 <= i <= node.contents.nchildren
         invariant inextstart == start as int + BS.NumElementsOfChildren(I(node).children[..i])
-        invariant nextstart as int == inextstart
-        //invariant start as int <= inextstart
+        invariant inextstart <= keys.Length
         invariant i < node.contents.nchildren ==> inextstart < keys.Length
+        invariant nextstart as int == inextstart
         invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
         invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
-        //invariant keys[start..inextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0)
+        //invariant keys[start..nextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0)
         // invariant values[start..inextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).1)
         invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
         invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
@@ -93,40 +93,30 @@ abstract module MutableBtreeBulkOperations {
         
         assert I(node).children[..i+1][..i] == I(node).children[..i];
         inextstart := inextstart + BS.NumElements(I(node).children[i]);
-        BS.NumElementsOfChildrenDecreases(I(node).children, i as int + 1);
+        BS.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
         
-        //assert BS.NumElementsOfChildren(I(node).children[..i]) + BS.NumElements(I(node.contents.children[i])) ==
-        //BS.NumElementsOfChildren(I(node).children[..i+1]);
-        //assert BS.NumElementsOfChildren(I(node).children[..i+1]) <= BS.NumElements(I(node));
-        //assert inextstart as int + BS.NumElements(I(node.contents.children[i])) == start as int +
-        //  BS.NumElementsOfChildren(I(node).children[..i+1]);
-        //assert inextstart as int + BS.NumElements(I(node.contents.children[i])) <= keys.Length;
-
-        //assert I(node.contents.children[i]) == I(node).children[i];
-        //assert keys.Length == old(keys.Length);
         ghost var oldnextstart := nextstart;
         nextstart := ToSeq(node.contents.children[i], keys, values, nextstart);
 
-        //assert keys[start..oldnextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0);
-        //assert keys[oldnextstart..nextstart] == BS.ToSeq(I(node.contents.children[i])).0;
-
-        // forall j | 0 <= j < |keys[start..inextstart]|
-        //   ensures keys[start..inextstart][j] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i+1]).0)[j]
-        // {
-        //   assume false;
-        // }
-      
-        // var nextstep := NumElements(node.contents.children[i]);
-        // assert nextstart as int + nextstep as int == inextstart;
-        // assert inextstart < Uint64UpperBound();
-        // nextstart := nextstart + nextstep;
         i := i + 1;
-        //assume false;
-        //assume keys[start..inextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0);
+
+        ghost var target := BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0);
+        BS.ToSeqChildrenLength(I(node).children[..i]);
+        assert |keys[start..nextstart]| == (nextstart - start) as int;
+        forall j | 0 <= j < (nextstart - start) as int
+          ensures keys[start..nextstart][j] == target[j]
+        {
+          if j < oldnextstart as int {
+            //var oldtarget := BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i-1]).0);
+            assume false;
+          } else {
+            assume false;
+          }
+        }
+        assert keys[start..nextstart] == target;
+        assert keys[start..nextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0);
       }
       assert I(node).children[..node.contents.nchildren] == I(node).children;
-      //nextstart := inextstart as uint64;
-      //assume false;
     }
   }
 }

@@ -797,6 +797,27 @@ abstract module BtreeSpec {
       (Flatten(keylists), Flatten(valuelists))
   }
 
+  lemma ToSeqChildrenLength(nodes: seq<Node>)
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    ensures |Flatten(ToSeqChildren(nodes).0)| == NumElementsOfChildren(nodes)
+  {
+    if |nodes| == 0 {
+    } else {
+      ToSeqChildrenLength(DropLast(nodes));
+      ToSeqLength(Last(nodes));
+    }
+  }
+  
+  lemma ToSeqLength(node: Node)
+    requires WF(node)
+    ensures |ToSeq(node).0| == NumElements(node)
+  {
+    if node.Leaf? {
+    } else {
+      ToSeqChildrenLength(node.children);
+    }      
+  }
+  
   lemma ToSeqMapCorrespondence(node: Node)
     requires WF(node)
     ensures Keys.IsStrictlySorted(ToSeq(node).0);
@@ -869,6 +890,13 @@ abstract module BtreeSpec {
         FlattenIndexIsCorrect(keylists, child, offset);
       }
     }
+  }
+
+  lemma NumElementsCorrect(node: Node)
+    requires WF(node)
+    ensures NumElements(node) == |Interpretation(node)|
+  {
+    ToSeqLength(node);
   }
 }
 
