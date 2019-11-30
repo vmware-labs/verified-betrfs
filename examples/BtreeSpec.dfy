@@ -112,7 +112,8 @@ abstract module BtreeSpec {
     && 0 < |rightleaf.keys| == |rightleaf.values|
     && oldleaf.keys == leftleaf.keys + rightleaf.keys
     && oldleaf.values == leftleaf.values + rightleaf.values
-    && pivot == rightleaf.keys[0]
+    && Keys.lt(Last(leftleaf.keys), pivot)
+    && Keys.lte(pivot, rightleaf.keys[0])
     && wit == leftleaf.keys[0]
   }
 
@@ -331,7 +332,7 @@ abstract module BtreeSpec {
   lemma SplitLeafAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, wit: Key, pivot: Key)
     requires WF(oldnode)
     requires SplitLeaf(oldnode, leftnode, rightnode, wit, pivot)
-    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
+    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode)
     ensures wit in AllKeys(oldnode)
     ensures Keys.lt(wit, pivot)
     ensures AllKeys(leftnode) != {}
@@ -339,11 +340,12 @@ abstract module BtreeSpec {
     ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
     ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
   {
+    assert rightnode.keys[0] in AllKeys(rightnode);
     forall key | key in AllKeys(leftnode)
       ensures Keys.lt(key, pivot)
     {
       var i :| 0 <= i < |leftnode.keys| && key == leftnode.keys[i];
-      Keys.IsStrictlySortedImpliesLt(oldnode.keys, i, |leftnode.keys|);
+      Keys.IsStrictlySortedImpliesLte(oldnode.keys, i, |leftnode.keys|-1);
     }
     forall key | key in AllKeys(rightnode)
       ensures Keys.lte(pivot, key)
@@ -394,7 +396,8 @@ abstract module BtreeSpec {
   lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, wit: Key, pivot: Key)
     requires WF(oldnode)
     requires SplitNode(oldnode, leftnode, rightnode, wit, pivot)
-    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
+    ensures AllKeys(oldnode) <= AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
+    ensures AllKeys(leftnode) + AllKeys(rightnode) <= AllKeys(oldnode)
     ensures wit in AllKeys(oldnode)
     ensures Keys.lt(wit, pivot)
     ensures AllKeys(leftnode) != {}
@@ -481,14 +484,14 @@ abstract module BtreeSpec {
   
   lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int, wit: Key)
     requires SplitChildOfIndex(oldindex, newindex, childidx, wit)
-    ensures AllKeys(newindex) == AllKeys(oldindex)
+    ensures AllKeys(newindex) == AllKeys(oldindex) + {newindex.pivots[childidx]}
   {
     assert WF(oldindex);
     SplitChildOfIndexPreservesWF(oldindex, newindex, childidx, wit);
     SplitNodeAllKeys(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], wit, newindex.pivots[childidx]);
     
     forall key | key in AllKeys(newindex)
-      ensures key in AllKeys(oldindex)
+      ensures key in AllKeys(oldindex) + {newindex.pivots[childidx]}
     {
       if i :| 0 <= i < |newindex.children| && key in AllKeys(newindex.children[i]) {
         if i < childidx {
@@ -890,13 +893,6 @@ abstract module BtreeSpec {
         FlattenIndexIsCorrect(keylists, child, offset);
       }
     }
-  }
-
-  lemma NumElementsCorrect(node: Node)
-    requires WF(node)
-    ensures NumElements(node) == |Interpretation(node)|
-  {
-    ToSeqLength(node);
   }
 }
 
