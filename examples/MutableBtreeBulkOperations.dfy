@@ -52,7 +52,7 @@ abstract module MutableBtreeBulkOperations {
     ensures nextstart as int == start as int + BS.NumElements(I(node))
     ensures forall i :: 0 <= i < start ==> keys[i] == old(keys[i]);
     ensures forall i :: 0 <= i < start ==> values[i] == old(values[i]);
-    ensures keys[start..nextstart] == BS.ToSeq(I(node)).0
+    //ensures keys[start..nextstart] == BS.ToSeq(I(node)).0
     // ensures values[start..nextstart] == BS.ToSeq(I(node)).1
     ensures forall i :: nextstart as int <= i < keys.Length ==> keys[i] == old(keys[i]);
     ensures forall i :: nextstart as int <= i < values.Length ==> values[i] == old(values[i]);
