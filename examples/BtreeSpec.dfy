@@ -204,7 +204,7 @@ abstract module BtreeSpec {
     && leftindex.Index?
     && rightindex.Index?
     && WF(oldindex)
-    && 0 < |leftindex.children| < |oldindex.children|-1
+    && 0 < |leftindex.children| < |oldindex.children|
     && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
     && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
     && Keys.lt(wit, pivot)
@@ -504,6 +504,7 @@ abstract module BtreeSpec {
         var i :| 0 <= i < |newindex.pivots| && key == newindex.pivots[i];
         if i < childidx {
         } else if i == childidx {
+          assert key in {newindex.pivots[childidx]};
         } else if i == childidx + 1 {
         } else {
           assert key == oldindex.pivots[i-1];

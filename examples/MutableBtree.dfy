@@ -155,34 +155,34 @@ abstract module MutableBtree {
     }
   }
 
-  method SplitLeaf(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
+  method SplitLeaf(node: Node, nleft: uint64, ghost pivot: Key) returns (right: Node, ghost wit: Key)
     requires WFShape(node)
     requires BS.WF(I(node))
     requires node.contents.Leaf?
-    requires Full(node)
+    requires 0 < nleft < node.contents.nkeys
+    requires BS.Keys.lt(node.contents.keys[nleft-1], pivot)
+    requires BS.Keys.lte(pivot, node.contents.keys[nleft])
     ensures WFShape(node)
     ensures WFShape(right)
     ensures node.repr == old(node.repr)
     ensures fresh(right.repr)
-    ensures !Full(node)
-    ensures !Full(right)
     ensures BS.SplitLeaf(old(I(node)), I(node), I(right), wit, pivot)
+    ensures node.contents.nkeys == nleft
     modifies node
   {
     var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
     var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
-    var boundary: uint64 := node.contents.nkeys / 2;
-    Arrays.Memcpy(rightkeys, 0, node.contents.keys[boundary..node.contents.nkeys]); // FIXME: remove conversion to seq
-    Arrays.Memcpy(rightvalues, 0, node.contents.values[boundary..node.contents.nkeys]); // FIXME: remove conversion to seq
+    Arrays.Memcpy(rightkeys, 0, node.contents.keys[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
+    Arrays.Memcpy(rightvalues, 0, node.contents.values[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
 
     right := new Node;
     right.repr := {right, rightkeys, rightvalues};
     right.height := 0;
-    right.contents := Leaf(node.contents.nkeys - boundary, rightkeys, rightvalues);
+    right.contents := Leaf(node.contents.nkeys - nleft, rightkeys, rightvalues);
 
-    node.contents := Leaf(boundary, node.contents.keys, node.contents.values);
+    node.contents := Leaf(nleft, node.contents.keys, node.contents.values);
     wit := node.contents.keys[0];
-    pivot := right.contents.keys[0];
+    BS.Keys.IsStrictlySortedImpliesLt(old(node.contents.keys[..node.contents.nkeys]), nleft as int - 1, nleft as int);
   }
 
   predicate ObjectIsInSubtree(node: Node, o: object, i: int)
@@ -260,7 +260,7 @@ abstract module MutableBtree {
   lemma SubReprLowerBound(node: Node, from: int, to: int)
     requires WFShape(node)
     requires node.contents.Index?
-    requires 1 < node.contents.nchildren
+    requires 1 <= node.contents.nchildren
     requires 0 <= from <= to <= node.contents.nchildren as int
     ensures forall i :: from <= i < to ==> node.contents.children[i].repr <= SubRepr(node, from, to)
   {
@@ -290,7 +290,7 @@ abstract module MutableBtree {
     requires WFShape(node)
     requires BS.WF(I(node))
     requires node.contents.Index?
-    requires 1 < newnchildren
+    requires 1 <= newnchildren
     requires 0 <= newnchildren <= node.contents.nchildren
     ensures WFShape(node)
     ensures node.repr == old({node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, newnchildren as int))
@@ -369,30 +369,38 @@ abstract module MutableBtree {
   }
   
 
-  method SplitIndex(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
+  method SplitIndex(node: Node, nleft: uint64) returns (right: Node, ghost wit: Key, pivot: Key)
     requires WFShape(node)
     requires BS.WF(I(node))
     requires node.contents.Index?
-    requires Full(node)
+    requires 2 <= node.contents.nchildren
+    requires 0 < nleft < node.contents.nchildren
     ensures WFShape(node)
     ensures WFShape(right)
     ensures node.repr <= old(node.repr)
     ensures node.repr !! right.repr
     ensures fresh(right.repr - old(node.repr))
     ensures node.height == old(node.height) == right.height
-    ensures !Full(node)
-    ensures !Full(right)
     ensures BS.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
+    ensures node.contents.nchildren == nleft
+    ensures pivot == old(node.contents.pivots[nleft-1])
     modifies node
   {
-    var boundary: uint64 := node.contents.nchildren / 2;
-    SubReprsDisjoint(node, 0, boundary as int, boundary as int, node.contents.nchildren as int);
-    right := SubIndex(node, boundary, node.contents.nchildren);
-    pivot := node.contents.pivots[boundary-1];
-    wit := node.contents.pivots[0];
-    IndexPrefix(node, boundary);
-
-    BS.Keys.IsStrictlySortedImpliesLt(old(I(node)).pivots, 0, (boundary - 1) as int);
+    SubReprsDisjoint(node, 0, nleft as int, nleft as int, node.contents.nchildren as int);
+    right := SubIndex(node, nleft, node.contents.nchildren);
+    pivot := node.contents.pivots[nleft-1];
+    assert BS.AllKeys(I(node.contents.children[0])) != {};
+    wit :| wit in BS.AllKeys(I(node.contents.children[0]));
+    IndexPrefix(node, nleft);
+    ghost var inode := old(I(node));
+    ghost var ileft := I(node);
+    ghost var iright := I(right);
+    assert BS.AllKeysBelowBound(inode, 0);
+    BS.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
+    assert BS.Keys.lt(wit, inode.pivots[0]);
+    assert BS.Keys.lte(inode.pivots[0], pivot);
+    assert BS.Keys.lt(wit, pivot);
+    assert wit in BS.AllKeys(inode);
   }
   
   method SplitNode(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
@@ -409,12 +417,17 @@ abstract module MutableBtree {
     ensures !Full(node)
     ensures !Full(right)
     ensures BS.SplitNode(old(I(node)), I(node), I(right), wit, pivot)
+    ensures pivot in BS.AllKeys(old(I(node)))
     modifies node
   {
     if node.contents.Leaf? {
-      right, wit, pivot := SplitLeaf(node);
+      var boundary := node.contents.nkeys/2;
+      pivot := node.contents.keys[boundary];
+      BS.Keys.IsStrictlySortedImpliesLt(node.contents.keys[..node.contents.nkeys], boundary as int - 1, boundary as int);
+      right, wit := SplitLeaf(node, node.contents.nkeys / 2, pivot);
     } else {
-      right, wit, pivot := SplitIndex(node);
+      var boundary := node.contents.nchildren/2;
+      right, wit, pivot := SplitIndex(node, boundary);
     }
   }
 
@@ -453,6 +466,7 @@ abstract module MutableBtree {
     ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
     ensures !Full(node.contents.children[childidx])
     ensures !Full(node.contents.children[childidx+1])
+    ensures node.contents.pivots[childidx] in BS.AllKeys(old(I(node)).children[childidx])
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
     ChildrenAreDistinct(node);
