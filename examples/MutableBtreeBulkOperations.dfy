@@ -2,6 +2,7 @@ include "MutableBtree.dfy"
 
 abstract module MutableBtreeBulkOperations {
   import opened NativeTypes
+  import opened Sequences
   import opened MB : MutableBtree
 
   method NumElements(node: Node) returns (count: uint64)
@@ -137,4 +138,146 @@ abstract module MutableBtreeBulkOperations {
     assert values[..] == values[0..end];
     return (keys, values);
   }
+
+  method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key)  returns (ghost wit: Key)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires node.contents.Index?
+    requires !Full(node)
+    requires 0 <= childidx < node.contents.nchildren
+    requires node.contents.children[childidx].contents.Leaf?
+    requires WFShape(node.contents.children[childidx])
+    requires BS.Keys.lt(node.contents.children[childidx].contents.keys[0], pivot)
+    requires BS.Keys.lte(pivot, node.contents.children[childidx].contents.keys[node.contents.children[childidx].contents.nkeys-1])
+    ensures WFShape(node)
+    ensures node.contents.Index?
+    ensures fresh(node.repr - old(node.repr))
+    ensures node.height == old(node.height)
+    ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
+    ensures !Full(node.contents.children[childidx])
+    ensures !Full(node.contents.children[childidx+1])
+    ensures node.contents.pivots[childidx] == pivot
+    modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
+  {
+    ChildrenAreDistinct(node);
+    
+    ghost var ioldnode := I(node);
+    var child := node.contents.children[childidx];
+    var nleft := BS.Keys.ArrayLargestLtePlus1(child.contents.keys, 0, child.contents.nkeys, pivot);
+    assert 0 < nleft;
+    if child.contents.keys[nleft-1] == pivot {
+      nleft := nleft - 1;
+    }
+    BS.Keys.IsStrictlySortedImpliesLt(child.contents.keys[..child.contents.nkeys], nleft as int - 1, nleft as int);
+    var right, wit' := SplitLeaf(node.contents.children[childidx], nleft, pivot);
+    ghost var ileft := I(node.contents.children[childidx]);
+    ghost var iright := I(right);
+
+    Arrays.Insert(node.contents.pivots, node.contents.nchildren-1, pivot, childidx);
+    Arrays.Insert(node.contents.children, node.contents.nchildren, right, childidx + 1);
+    node.contents := node.contents.(nchildren := node.contents.nchildren + 1);
+    node.repr := node.repr + right.repr;
+    wit := wit';
+
+    forall i | 0 <= i < node.contents.nchildren
+      ensures node.contents.children[i] != null
+      ensures node.contents.children[i] in node.repr
+      ensures node.contents.children[i].repr < node.repr
+      ensures node !in node.contents.children[i].repr
+      ensures node.contents.pivots !in node.contents.children[i].repr
+      ensures node.contents.children !in node.contents.children[i].repr
+      ensures node.contents.children[i].height < node.height
+      ensures WFShape(node.contents.children[i])
+    {
+      if i < childidx {
+        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert node.contents.children[i] == old(node.contents.children[i-1]);
+        assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));
+      }
+    }
+
+    forall i: uint64, j: uint64 | 0 <= i < j < node.contents.nchildren
+      ensures DisjointSubtrees(node.contents, i as int, j as int)
+    {
+      if                           j <  childidx       {
+        assert old(DisjointSubtrees(node.contents, i as int, j as int));
+      } else if                    j == childidx       {
+        assert old(DisjointSubtrees(node.contents, i as int, j as int));
+      } else if i < childidx     && j == childidx+1     {
+        assert old(DisjointSubtrees(node.contents, i as int, j as int - 1));
+      } else if i == childidx    && j == childidx+1     {
+        assert node.contents.children[childidx+1] == right;
+        //assert node.contents.children[childidx].repr !! right.repr;
+        assert DisjointSubtrees(node.contents, childidx as int, (childidx + 1) as int);
+      } else if i < childidx     &&      childidx+1 < j {
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
+      } else if i == childidx    &&      childidx+1 < j {
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
+      } else if i == childidx+1  &&      childidx+1 < j {
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
+      } else {
+        assert node.contents.children[i] == old(node.contents.children[i-1]);
+        assert node.contents.children[j] == old(node.contents.children[j-1]);
+        assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
+      }
+    }
+      
+    ghost var inode := I(node);
+
+    ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
+    forall i | 0 <= i < |inode.children|
+      ensures inode.children[i] == target[i]
+    {
+      if i < childidx as int {
+        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
+        assert inode.children[i] == ioldnode.children[i] == target[i];
+      } else if i == childidx as int {
+        assert inode.children[i] == ileft == target[i];
+      } else if i == (childidx + 1) as int {
+        assert inode.children[i] == iright == target[i];
+      } else {
+        assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));      
+        assert inode.children[i] == ioldnode.children[i-1] == target[i];
+      }
+    }
+    assert inode.children == Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
+  }
+
+  
+  // method EnsurePivotNotFull(node: Node, pivot: Key) returns (pos: int64)
+  //   requires WFShape(node)
+  //   requires BS.WF(I(node))
+  //   requires BS.NumElements(I(node)) < Uint64UpperBound()
+  //   requires node.contents.Index?
+  //   requires !Full(node)
+  //   ensures WFShape(node)
+  //   ensures BS.WF(I(node))
+  //   ensures -1 <= pos as int < node.contents.nchildren as int
+  //   ensures 0 <= pos as int < node.contents.nchildren as int - 1 ==> node.contents.pivots[pos] == pivot
+  // {
+  //   var childidx := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, pivot);
+  //   if 0 < childidx && node.contents.pivots[childidx-1] == pivot {
+  //     pos := childidx as int64 - 1;
+  //   } else {
+  //     var childpos := EnsurePivot(node.contents.children[pos], pivot);
+  //   }
+  // }
+
+  // method EnsurePivot(node: Node, pivot: Key) returns (pos: int64)
+  //   requires WFShape(node)
+  //   requires BS.WF(I(node))
+  //   requires BS.NumElements(I(node)) < Uint64UpperBound()
+  //   requires node.contents.Index?
+  //   requires !Full(node)
+  //   ensures WFShape(node)
+  //   ensures BS.WF(I(node))
+  //   ensures -1 <= pos as int < node.contents.nchildren as int
+  //   ensures 0 <= pos as int < node.contents.nchildren as int - 1 ==> node.contents.pivots[pos] == pivot
+
 }
