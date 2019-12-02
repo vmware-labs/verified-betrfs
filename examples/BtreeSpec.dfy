@@ -742,11 +742,11 @@ abstract module BtreeSpec {
     node.(pivots := node.pivots[pivotidx := pivot])
   }
 
-  lemma IncreasePivot(node: Node, pivotidx: int, pivot: Key)
+  lemma ReplacePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
     requires WF(node)
     requires node.Index?
     requires 0 <= pivotidx < |node.pivots|
-    requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lte(key, pivot)
+    requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lt(key, pivot)
     requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
     ensures WF(ReplacePivot(node, pivotidx, pivot))
     ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
@@ -761,7 +761,10 @@ abstract module BtreeSpec {
       assert Keys.lt(pivot, node.pivots[pivotidx+1]);
     }
     if 0 < pivotidx {
-      Keys.IsStrictlySortedImpliesLt(node.pivots, pivotidx-1, pivotidx);
+      var wit :| wit in AllKeys(node.children[pivotidx]);
+      assert AllKeysAboveBound(node, pivotidx);
+      assert Keys.lt(wit, pivot);
+      assert Keys.lt(node.pivots[pivotidx-1], pivot);
     }
     Keys.strictlySortedReplace(node.pivots, pivot, pivotidx);
     
@@ -788,13 +791,13 @@ abstract module BtreeSpec {
     {
       var childidx := Keys.LargestLte(newnode.pivots, key) + 1;
       InterpretationInheritance(newnode, key);
-      if 0 < childidx {
-        assert AllKeysAboveBound(newnode, childidx);
-      }
       if childidx < |newnode.pivots| {
         assert AllKeysBelowBound(newnode, childidx);
       }
       assert AllKeysBelowBound(node, pivotidx);
+      if 0 <= childidx - 1 {
+        assert AllKeysAboveBound(node, childidx);
+      }
       Keys.LargestLteIsUnique2(node.pivots, key, childidx-1);
     }
   }
