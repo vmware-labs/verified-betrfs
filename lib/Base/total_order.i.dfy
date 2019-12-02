@@ -232,7 +232,30 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
-
+  lemma strictlySortedReplace(l: seq<Element>, k: Element, pos: int)
+    requires IsStrictlySorted(l)
+    requires 0 <= pos < |l|
+    requires 0 < pos ==> lt(l[pos-1], k)
+    requires pos < |l|-1 ==> lt(k, l[pos+1])
+    ensures IsStrictlySorted(l[pos := k])
+  {
+    var l' := l[pos := k];
+    reveal_IsStrictlySorted();
+    forall i, j | 0 <= i < j < |l'|
+      ensures lt(l'[i], l'[j])
+    {
+      if i == pos {
+        if pos < |l|-1 {
+          assert lte(l[pos+1], l[j]);
+        }
+      } else if j == pos {
+        if 0 < pos {
+          assert lte(l[i], l[pos-1]);
+        }
+      }
+    }
+  }
+  
   lemma FlattenSorted(seqs: seq<seq<Element>>)
     requires forall i :: 0 <= i < |seqs| ==> IsSorted(seqs[i])
     requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lte(k1, k2)
@@ -474,6 +497,47 @@ abstract module Total_Order {
       assert lte(run[i], run[j]);
     }
     LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
+    posplus1 := i;
+  }
+  
+  method ArrayLargestLtPlus1(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
+    requires IsSorted(run[start..end]);
+    ensures posplus1 as int == start as int + LargestLt(run[start..end], needle) + 1
+  {
+    reveal_IsSorted();
+    var lo := start;
+    var hi := end;
+    while 64 < hi - lo 
+      invariant start <= lo <= hi <= end
+      invariant forall i :: start <= i < lo ==> lt(run[i], needle)
+      invariant forall i :: hi <= i < end ==> lte(needle, run[i])
+      decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var t := cmp(run[mid], needle);
+      if t < 0 {
+        lo := mid;
+      } else {
+        hi := mid + 1;
+      }
+    }
+    var i: uint64 := lo;
+    var t;
+    if i < hi {
+      t := cmp(run[i], needle);
+    }
+    while i < hi && t < 0
+      invariant start <= i <= end
+      invariant forall j :: start <= j < i ==> lt(run[j], needle)
+      invariant i < hi ==> (t < 0 <==> lt(run[i], needle))
+    {
+      i := i + 1;
+      if i < hi {
+        t := cmp(run[i], needle);
+      }
+    }
+    LargestLtIsUnique(run[start..end], needle, i as int - start as int - 1);
     posplus1 := i;
   }
   

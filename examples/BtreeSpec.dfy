@@ -734,6 +734,71 @@ abstract module BtreeSpec {
     }
   }
 
+  function ReplacePivot(node: Node, pivotidx: int, pivot: Key) : Node
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= pivotidx < |node.pivots|
+  {
+    node.(pivots := node.pivots[pivotidx := pivot])
+  }
+
+  lemma IncreasePivot(node: Node, pivotidx: int, pivot: Key)
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= pivotidx < |node.pivots|
+    requires Keys.lte(node.pivots[pivotidx], pivot)
+    requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
+    ensures WF(ReplacePivot(node, pivotidx, pivot))
+    ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
+    ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
+  {
+    var newnode := ReplacePivot(node, pivotidx, pivot);
+    
+    if pivotidx < |node.pivots|-1 {
+      var wit :| wit in AllKeys(node.children[pivotidx+1]);
+      assert AllKeysBelowBound(node, pivotidx+1);
+      assert Keys.lte(pivot, wit);
+      assert Keys.lt(pivot, node.pivots[pivotidx+1]);
+    }
+    if 0 < pivotidx {
+      Keys.IsStrictlySortedImpliesLt(node.pivots, pivotidx-1, pivotidx);
+    }
+    Keys.strictlySortedReplace(node.pivots, pivot, pivotidx);
+    
+    forall i | 0 <= i < |newnode.children|-1
+      ensures AllKeysBelowBound(newnode, i)
+    {
+      assert AllKeysBelowBound(node, i);
+    }
+    forall i | 0 < i < |newnode.children|
+      ensures AllKeysAboveBound(newnode, i)
+    {
+      assert AllKeysAboveBound(node, i);
+    }
+
+    forall key | key in Interpretation(node)
+      ensures MapsTo(Interpretation(newnode), key, Interpretation(node)[key])
+    {
+      var childidx := Keys.LargestLte(node.pivots, key) + 1;
+      InterpretationInheritance(node, key);
+      Keys.LargestLteIsUnique2(newnode.pivots, key, childidx-1);
+    }
+    forall key | key in Interpretation(newnode)
+      ensures key in Interpretation(node)
+    {
+      var childidx := Keys.LargestLte(newnode.pivots, key) + 1;
+      InterpretationInheritance(newnode, key);
+      if 0 < childidx {
+        assert AllKeysAboveBound(newnode, childidx);
+      }
+      if childidx < |newnode.pivots| {
+        assert AllKeysBelowBound(newnode, childidx);
+      }
+      assert AllKeysBelowBound(node, pivotidx);
+      Keys.LargestLteIsUnique2(node.pivots, key, childidx-1);
+    }
+  }
+  
   function NumElementsOfChildren(nodes: seq<Node>) : nat
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
   {

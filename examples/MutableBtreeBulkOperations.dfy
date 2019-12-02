@@ -139,7 +139,7 @@ abstract module MutableBtreeBulkOperations {
     return (keys, values);
   }
 
-  method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key)  returns (ghost wit: Key)
+  method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)
     requires WFShape(node)
     requires BS.WF(I(node))
     requires node.contents.Index?
@@ -149,6 +149,8 @@ abstract module MutableBtreeBulkOperations {
     requires WFShape(node.contents.children[childidx])
     requires BS.Keys.lt(node.contents.children[childidx].contents.keys[0], pivot)
     requires BS.Keys.lte(pivot, node.contents.children[childidx].contents.keys[node.contents.children[childidx].contents.nkeys-1])
+    requires BS.Keys.IsSorted(node.contents.children[childidx].contents.keys[..node.contents.children[childidx].contents.nkeys])
+    requires nleft as int == BS.Keys.LargestLt(node.contents.children[childidx].contents.keys[..node.contents.children[childidx].contents.nkeys], pivot) + 1
     ensures WFShape(node)
     ensures node.contents.Index?
     ensures fresh(node.repr - old(node.repr))
@@ -163,12 +165,7 @@ abstract module MutableBtreeBulkOperations {
     
     ghost var ioldnode := I(node);
     var child := node.contents.children[childidx];
-    var nleft := BS.Keys.ArrayLargestLtePlus1(child.contents.keys, 0, child.contents.nkeys, pivot);
-    assert 0 < nleft;
-    if child.contents.keys[nleft-1] == pivot {
-      nleft := nleft - 1;
-    }
-    BS.Keys.IsStrictlySortedImpliesLt(child.contents.keys[..child.contents.nkeys], nleft as int - 1, nleft as int);
+    //assert 0 < nleft;
     var right, wit' := SplitLeaf(node.contents.children[childidx], nleft, pivot);
     ghost var ileft := I(node.contents.children[childidx]);
     ghost var iright := I(right);
@@ -249,7 +246,53 @@ abstract module MutableBtreeBulkOperations {
     assert inode.children == Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
   }
 
-  
+
+  method EnsurePivotNotFullParentOfLeaf(node: Node, pivot: Key, childidx: uint64) returns (pos: int64)
+    requires WFShape(node)
+    requires BS.WF(I(node))
+    requires BS.NumElements(I(node)) < Uint64UpperBound()
+    requires node.contents.Index?
+    requires !Full(node)
+    requires childidx as int == BS.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], pivot) + 1
+    requires node.contents.children[childidx].contents.Leaf?
+    ensures WFShape(node)
+    ensures BS.WF(I(node))
+    ensures node.contents.Index?
+    ensures node.height == old(node.height)
+    ensures fresh(node.repr - old(node.repr))
+    ensures -1 <= pos as int < node.contents.nchildren as int
+    ensures 0 <= pos as int < node.contents.nchildren as int - 1 ==> node.contents.pivots[pos] == pivot
+    ensures BS.Interpretation(I(node)) == BS.Interpretation(old(I(node)))
+    ensures BS.AllKeys(I(node)) <= BS.AllKeys(old(I(node))) + {pivot}
+    modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
+  {
+    var child := node.contents.children[childidx];
+    assert child.contents.keys[0..child.contents.nkeys] == child.contents.keys[..child.contents.nkeys];
+    var nleft := BS.Keys.ArrayLargestLtPlus1(child.contents.keys, 0, child.contents.nkeys, pivot);
+
+    if 0 == nleft {
+      if 0 < childidx {
+        node.contents.pivots[childidx-1] := pivot;
+        pos := childidx as int64 - 1;
+      } else {
+        pos := -1;
+      }
+    } else if nleft == child.contents.nkeys {
+      if childidx < node.contents.nchildren-1 {
+        node.contents.pivots[childidx] := pivot;
+        pos := childidx as int64;
+      } else {
+        pos := node.contents.nchildren as int64 - 1;
+      }
+    } else {
+      ghost var wit := SplitLeafOfIndexAtKey(node, childidx, pivot, nleft);
+      pos := childidx as int64;
+      BS.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
+      BS.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
+      BS.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
+    }
+  }
+
   // method EnsurePivotNotFull(node: Node, pivot: Key) returns (pos: int64)
   //   requires WFShape(node)
   //   requires BS.WF(I(node))
