@@ -173,6 +173,14 @@ module PivotBetreeSpec {
       G.M.Merge(InterpretLookup(lookup, key), M.DefineDefault())
   }
 
+  function InterpretBucketStack(buckets: seq<Bucket>, key: Key) : G.M.Message
+  {
+    if |buckets| == 0 then
+      G.M.Update(G.M.NopDelta())
+    else
+      G.M.Merge(InterpretBucketStack(DropLast(buckets), key), Buckets.BucketGet(Last(buckets), key))
+  }
+
   predicate WFLookupForKey(lookup: Lookup, key: Key)
   {
     && |lookup| > 0
@@ -200,6 +208,7 @@ module PivotBetreeSpec {
       start: UI.RangeStart,
       results: seq<UI.SuccResult>,
       end: UI.RangeEnd,
+      buckets: seq<Bucket>,
       lookup: Lookup)
 
   function LookupUpperBoundAtLayer(layer: Layer, key: Key) : Option<Key>
@@ -248,16 +257,19 @@ module PivotBetreeSpec {
 
     && Last(sq.lookup).node.children.None?
 
+    && |sq.lookup| == |sq.buckets|
+    && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Pivots.Route(sq.lookup[i].node.pivotTable, startKey)])
+
     && MS.NonEmptyRange(sq.start, sq.end)
     && (forall i | 0 <= i < |sq.results| ::
-      BufferDefinesValue(InterpretLookup(sq.lookup, sq.results[i].key), sq.results[i].value))
+      BufferDefinesValue(InterpretBucketStack(sq.buckets, sq.results[i].key), sq.results[i].value))
     && (forall i | 0 <= i < |sq.results| :: sq.results[i].value != MS.EmptyValue())
     && (forall i | 0 <= i < |sq.results| :: MS.InRange(sq.start, sq.results[i].key, sq.end))
     && (forall i, j | 0 <= i < j < |sq.results| :: Keyspace.lt(sq.results[i].key, sq.results[j].key))
 
     && (forall key | MS.InRange(sq.start, key, sq.end) ::
         (forall i | 0 <= i < |sq.results| :: sq.results[i].key != key) ==>
-        BufferDefinesEmptyValue(InterpretLookup(sq.lookup, key))
+        BufferDefinesEmptyValue(InterpretBucketStack(sq.buckets, key))
       )
   }
 

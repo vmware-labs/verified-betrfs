@@ -354,6 +354,42 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma InRangeImpliesSameRoute(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, lookup: P.Lookup, idx: int)
+  requires MS.InRange(start, key, end)
+  requires P.LookupVisitsWFNodes(lookup)
+  requires
+    var startKey := if start.NegativeInf? then [] else start.key;
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  requires 0 <= idx < |lookup|
+  ensures var startKey := if start.NegativeInf? then [] else start.key;
+        Route(lookup[idx].node.pivotTable, startKey)
+     == Route(lookup[idx].node.pivotTable, key)
+  {
+    var startKey := if start.NegativeInf? then [] else start.key;
+
+    var r := Route(lookup[idx].node.pivotTable, startKey);
+    //assert r > 0 ==> Keyspace.lte(lookup[idx].node.pivotTable[r-1], startKey);
+
+    Keyspace.EmptyLte(key);
+    //assert Keyspace.lte([], key);
+    //assert Keyspace.lte(startKey, key);
+
+    assert MS.InRange(start, key, end);
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end);
+    //assert MS.UpperBound(key, end);
+    if (lookupUpperBound.Some?) {
+      InUpperBoundAndNot(key, end, lookupUpperBound.value);
+    }
+    //assert lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value);
+    KeyWithinUpperBoundIsWithinLookup(lookup, startKey, key, idx);
+    //assert r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(q.key, lookup[idx].node.pivotTable[r]);
+
+    RouteIs(lookup[idx].node.pivotTable, key, r);
+  }
+
   lemma InRangeImpliesValidLookup(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, lookup: P.Lookup)
   requires MS.InRange(start, key, end)
   requires P.LookupVisitsWFNodes(lookup)
@@ -370,27 +406,58 @@ module PivotBetreeSpecRefinement {
     ensures P.LookupFollowsChildRefAtLayer(key, lookup, idx)
     {
       assert P.LookupFollowsChildRefAtLayer(startKey, lookup, idx);
-
-      var r := Route(lookup[idx].node.pivotTable, startKey);
-      //assert r > 0 ==> Keyspace.lte(lookup[idx].node.pivotTable[r-1], startKey);
-
-      Keyspace.EmptyLte(key);
-      //assert Keyspace.lte([], key);
-      //assert Keyspace.lte(startKey, key);
-
-      assert MS.InRange(start, key, end);
-      var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
-      //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end);
-      //assert MS.UpperBound(key, end);
-      if (lookupUpperBound.Some?) {
-        InUpperBoundAndNot(key, end, lookupUpperBound.value);
-      }
-      //assert lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value);
-      KeyWithinUpperBoundIsWithinLookup(lookup, startKey, key, idx);
-      //assert r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(q.key, lookup[idx].node.pivotTable[r]);
-
-      RouteIs(lookup[idx].node.pivotTable, key, r);
+      InRangeImpliesSameRoute(start, key, end, lookup, idx);
     }
+  }
+
+  lemma InterpretBucketStackEqInterpretLookupIter(
+      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
+      buckets: seq<Bucket>, lookup: P.Lookup, key: Key,
+      j: int)
+  requires startKey == if start.NegativeInf? then [] else start.key;
+  requires P.LookupVisitsWFNodes(lookup)
+  requires |lookup| == |buckets|
+  requires (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
+  requires MS.InRange(start, key, end)
+  requires
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  requires 0 <= j <= |lookup|
+  ensures P.InterpretBucketStack(buckets[..j], key)
+       == P.InterpretLookup(lookup[..j], key)
+  {
+    if j == 0 {
+    } else {
+      InRangeImpliesSameRoute(start, key, end, lookup, j-1);
+      //var layer := lookup[j-1]
+      //assert Route(layer.node.pivotTable, key) == Route(layer.node.pivotTable, startKey);
+
+      InterpretBucketStackEqInterpretLookupIter(start, end, startKey,
+          buckets, lookup, key, j-1);
+      assert DropLast(buckets[..j]) == buckets[..j-1];
+      assert DropLast(lookup[..j]) == lookup[..j-1];
+    }
+  }
+
+  lemma InterpretBucketStackEqInterpretLookup(
+      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
+      buckets: seq<Bucket>, lookup: P.Lookup, key: Key)
+  requires startKey == if start.NegativeInf? then [] else start.key;
+  requires P.LookupVisitsWFNodes(lookup)
+  requires |lookup| == |buckets|
+  requires (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
+  requires MS.InRange(start, key, end)
+  requires
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  ensures P.InterpretBucketStack(buckets, key)
+       == P.InterpretLookup(lookup, key)
+  {
+    InterpretBucketStackEqInterpretLookupIter(start, end, startKey, buckets, lookup, key, |lookup|);
+    assert buckets[..|buckets|] == buckets;
+    assert lookup[..|buckets|] == lookup;
   }
 
   lemma RefinesValidSuccQuery(sq: P.SuccQuery)
@@ -398,6 +465,7 @@ module PivotBetreeSpecRefinement {
   ensures B.ValidSuccQuery(ISuccQuery(sq))
   {
     var q := ISuccQuery(sq);
+    var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
 
     forall i | 0 <= i < |q.results|
     ensures B.LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value)
@@ -406,6 +474,8 @@ module PivotBetreeSpecRefinement {
 
       RefinesLookup(sq.lookup, sq.results[i].key);
       RefinesInterpretLookupAccountingForLeaf(sq.lookup, sq.results[i].key, sq.results[i].value);
+
+      InterpretBucketStackEqInterpretLookup(sq.start, sq.end, startKey, sq.buckets, sq.lookup, sq.results[i].key);
     }
 
     forall key | MS.InRange(q.start, key, q.end)
@@ -424,6 +494,8 @@ module PivotBetreeSpecRefinement {
       /*assert B.InterpretLookup(IReadOps(sq.lookup), key).value
           == P.InterpretLookupAccountingForLeaf(sq.lookup, key).value
           == MS.EmptyValue();*/
+
+      InterpretBucketStackEqInterpretLookup(sq.start, sq.end, startKey, sq.buckets, sq.lookup, key);
     }
   }
 
