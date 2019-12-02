@@ -13,7 +13,7 @@ module UI {
   datatype RangeStart = SInclusive(key: Key) | SExclusive(key: Key) | NegativeInf
   datatype RangeEnd = EInclusive(key: Key) | EExclusive(key: Key) | PositiveInf
 
-  datatype SuccResult = SuccKeyValue(key: Key, value: Value)
+  datatype SuccResult = SuccResult(key: Key, value: Value)
 
   datatype Op =
     | NoOp
