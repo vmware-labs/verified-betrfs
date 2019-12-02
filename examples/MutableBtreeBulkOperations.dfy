@@ -273,6 +273,8 @@ abstract module MutableBtreeBulkOperations {
     if 0 == nleft {
       if 0 < childidx {
         node.contents.pivots[childidx-1] := pivot;
+        assert I(node) == BS.ReplacePivot(old(I(node)), childidx as int - 1, pivot);
+        BS.IncreasePivotIsCorrect(old(I(node)), childidx as int - 1, pivot);
         pos := childidx as int64 - 1;
       } else {
         pos := -1;
@@ -280,6 +282,8 @@ abstract module MutableBtreeBulkOperations {
     } else if nleft == child.contents.nkeys {
       if childidx < node.contents.nchildren-1 {
         node.contents.pivots[childidx] := pivot;
+        assert I(node) == BS.ReplacePivot(old(I(node)), childidx as int, pivot);
+        BS.DecreasePivotIsCorrect(old(I(node)), childidx as int, pivot);
         pos := childidx as int64;
       } else {
         pos := node.contents.nchildren as int64 - 1;

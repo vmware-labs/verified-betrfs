@@ -801,6 +801,43 @@ abstract module BtreeSpec {
       Keys.LargestLteIsUnique2(node.pivots, key, childidx-1);
     }
   }
+
+  lemma IncreasePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= pivotidx < |node.pivots|
+    requires Keys.lte(node.pivots[pivotidx], pivot)
+    requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
+    ensures WF(ReplacePivot(node, pivotidx, pivot))
+    ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
+    ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
+  {
+    forall key | key in AllKeys(node.children[pivotidx])
+    ensures Keys.lt(key, pivot)
+    {
+      assert AllKeysBelowBound(node, pivotidx);
+    }
+    ReplacePivotIsCorrect(node, pivotidx, pivot);
+  }
+  
+  lemma DecreasePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= pivotidx < |node.pivots|
+    requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lt(key, pivot)
+    requires Keys.lte(pivot, node.pivots[pivotidx])
+    ensures WF(ReplacePivot(node, pivotidx, pivot))
+    ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
+    ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
+  {
+    //requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
+    forall key | key in AllKeys(node.children[pivotidx+1])
+    ensures Keys.lte(pivot, key)
+    {
+      assert AllKeysAboveBound(node, pivotidx+1);
+    }
+    ReplacePivotIsCorrect(node, pivotidx, pivot);
+  }
   
   function NumElementsOfChildren(nodes: seq<Node>) : nat
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
