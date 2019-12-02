@@ -746,7 +746,7 @@ abstract module BtreeSpec {
     requires WF(node)
     requires node.Index?
     requires 0 <= pivotidx < |node.pivots|
-    requires Keys.lte(node.pivots[pivotidx], pivot)
+    requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lte(key, pivot)
     requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
     ensures WF(ReplacePivot(node, pivotidx, pivot))
     ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
