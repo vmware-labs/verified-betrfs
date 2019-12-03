@@ -21,62 +21,56 @@ module ImplCache {
   returns (ref : Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
-  ensures ref == ImplModelCache.getFreeRef(s.I())
+  modifies s
+  ensures s.W()
+  ensures s.ready
+  // ensures WellUpdated(s)
+  ensures s == old(s)
+  ensures s.Repr() == old(s.Repr())
+  // ensures s.ephemeralIndirectionTable == old(s.ephemeralIndirectionTable)
+  // ensures s.lru == old(s.lru)
+  // ensures s.blockAllocator == old(s.blockAllocator)
+  // NOALIAS statically enforced no-aliasing would probably help here
+  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
+  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
+  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
+  ensures (
+    var (mS, mRef) := ImplModelCache.getFreeRef(old(s.I()));
+    && mS == s.I()
+    && mRef == ref)
   {
-    ImplModelCache.reveal_getFreeRef();
-    var i := 1;
-    while true
-    invariant i >= 1
-    invariant ImplModelCache.getFreeRefIterate(s.I(), i)
-           == ImplModelCache.getFreeRef(s.I())
-    decreases 0x1_0000_0000_0000_0000 - i as int
-    {
-      var lookup := s.ephemeralIndirectionTable.GetEntry(i);
-      if lookup.None? {
-        var cacheLookup := s.cache.GetOpt(i);
-        if cacheLookup.None? {
-          return Some(i);
-        }
-      }
-      
-      if i == 0xffff_ffff_ffff_ffff {
-        return None;
-      } else {
-        i := i + 1;
-      }
+    // ImplModelCache.reveal_getFreeRef();
+
+    if (s.nextFreeRef < 0xffff_ffff_ffff_ffff) {
+      ref := Some(s.nextFreeRef);
+      s.nextFreeRef := s.nextFreeRef + 1;
+    } else {
+      ref := None;
     }
   }
 
-  method getFreeRef2(s: ImplVariables, avoid: BT.G.Reference)
-  returns (ref : Option<BT.G.Reference>)
+  method get2FreeRefs(s: ImplVariables)
+  returns (refs : Option<(BT.G.Reference, BT.G.Reference)>)
   requires s.ready
   requires s.W()
-  ensures ref == ImplModelCache.getFreeRef2(s.I(), avoid)
-  ensures ref.Some? ==> ref.value != avoid;
+  modifies s
+  ensures s.W()
+  ensures s.ready
+  ensures s.Repr == old(s.Repr)
+  ensures (
+    var (mS, mRefs) := ImplModelCache.get2FreeRefs(old(s.I()));
+    && mS == s.I()
+    && mRefs == refs)
   {
-    ImplModelCache.reveal_getFreeRef2();
-    var i := 1;
-    while true
-    invariant i >= 1
-    invariant ImplModelCache.getFreeRef2Iterate(s.I(), avoid, i)
-           == ImplModelCache.getFreeRef2(s.I(), avoid)
-    decreases 0x1_0000_0000_0000_0000 - i as int
-    {
-      if i != avoid {
-        var lookup := s.ephemeralIndirectionTable.GetEntry(i);
-        if lookup.None? {
-          var cacheLookup := s.cache.GetOpt(i);
-          if cacheLookup.None? {
-            return Some(i);
-          }
-        }
-      }
-      
-      if i == 0xffff_ffff_ffff_ffff {
-        return None;
-      } else {
-        i := i + 1;
-      }
+    // ImplModelCache.reveal_get2FreeRefs();
+
+    if (s.nextFreeRef < (0xffff_ffff_ffff_ffff - 1)) {
+      var ref1 := s.nextFreeRef;
+      var ref2 := ref1 + 1;
+      refs := Some((ref1, ref2));
+      s.nextFreeRef := s.nextFreeRef + 2;
+    } else {
+      refs := None;
     }
   }
 
@@ -157,6 +151,7 @@ module ImplCache {
   requires ImplModelCache.WriteAllocConditions(Ic(k), s.I())
   requires ImplModelCache.ChildrenConditions(Ic(k), s.I(), children)
   requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
+  modifies s
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -171,6 +166,11 @@ module ImplCache {
     ImplModelCache.reveal_allocBookkeeping();
     
     ref := getFreeRef(s);
+    assert s.W();
+    assert s.Repr == old(s.Repr);
+    assert s.lru.Repr == old(s.lru.Repr);
+    assert s.ephemeralIndirectionTable.Repr == old(s.ephemeralIndirectionTable.Repr);
+    assert s.blockAllocator.Repr == old(s.blockAllocator.Repr);
     if (ref.Some?) {
       writeBookkeeping(k, s, ref.value, children);
     }

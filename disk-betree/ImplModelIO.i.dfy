@@ -351,7 +351,7 @@ module ImplModelIO {
   //   && exists i: uint64 :: forall ref | ref in indirectionTable :: ref.0 < i
   // }
 
-  function getFreeRef(indirectionTable: IndirectionTable) 
+  function getFreeRefFromTable(indirectionTable: IndirectionTable) 
   : (ref : Option<BT.G.Reference>)
   requires MutableMapModel.Inv(indirectionTable.t)
   ensures ref.Some? ==> RefIsUpperBoundForUsedRefs(ref.value, indirectionTable) && ref.value != BT.G.Root()
@@ -374,7 +374,7 @@ module ImplModelIO {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
       if succ then (
-        var nextFreeRef := getFreeRef(ephemeralIndirectionTable);
+        var nextFreeRef := getFreeRefFromTable(ephemeralIndirectionTable);
         if nextFreeRef.Some? then (
           var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
           var persistentIndirectionTable :=

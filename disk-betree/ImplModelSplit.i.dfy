@@ -416,18 +416,14 @@ module ImplModelSplit {
         // cuts off the node and doesn't split it.
         s
       ) else (
-        var left_childref := getFreeRef(s);
-        if left_childref.None? then (
+        var (s1, refs) := get2FreeRefs(s);
+        if refs.None? then (
           s
         ) else (
-          var right_childref := getFreeRef2(s, left_childref.value);
-          if right_childref.None? then (
-            s
-          ) else (
-            splitDoChanges(k, s, child, left_childref.value,
-                right_childref.value, parentref, fused_parent.children.value,
-                slot)
-          )
+          var (left_childref, right_childref) := refs.value;
+          splitDoChanges(k, s1, child, left_childref,
+              right_childref, parentref, fused_parent.children.value,
+              slot)
         )
       )
     )
@@ -476,98 +472,96 @@ module ImplModelSplit {
         // cuts off the node and doesn't split it.
         assert noop(k, IVars(s), IVars(s));
       } else {
-        var left_childref := getFreeRef(s);
-        if left_childref.None? {
+        var (s1, refs) := get2FreeRefs(s);
+        assert IVars(s1) == IVars(s);
+        if refs.None? {
           assert noop(k, IVars(s), IVars(s));
         } else {
-          var right_childref := getFreeRef2(s, left_childref.value);
-          if right_childref.None? {
-            assert noop(k, IVars(s), IVars(s));
-          } else {
-            var num_children_left := |child.buckets| / 2;
-            var pivot := child.pivotTable[num_children_left - 1];
-            PivotsLib.PivotNotMinimum(child.pivotTable, num_children_left - 1);
+          var (left_childref, right_childref) := refs.value;
 
-            lemmaChildrenConditionsSplitChild(k, s, child, num_children_left);
+          var num_children_left := |child.buckets| / 2;
+          var pivot := child.pivotTable[num_children_left - 1];
+          PivotsLib.PivotNotMinimum(child.pivotTable, num_children_left - 1);
 
-            var left_child := SplitChildLeft(child, num_children_left);
-            var right_child := SplitChildRight(child, num_children_left);
-            var split_parent := SplitParent(fused_parent, pivot, slot, left_childref.value, right_childref.value);
-            reveal_SplitParent();
+          lemmaChildrenConditionsSplitChild(k, s, child, num_children_left);
 
-            reveal_writeBookkeeping();
-            reveal_splitCacheChanges();
-            reveal_splitDoChanges();
-            reveal_splitBookkeeping();
+          var left_child := SplitChildLeft(child, num_children_left);
+          var right_child := SplitChildRight(child, num_children_left);
+          var split_parent := SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
+          reveal_SplitParent();
 
-            lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref.value, left_child.children, right_child.children);
-            lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref.value, left_child.children, fused_parent.children);
-            lemmaRefInGraphOfWriteBookkeeping(k, s, left_childref.value, left_child.children);
+          reveal_writeBookkeeping();
+          reveal_splitCacheChanges();
+          reveal_splitDoChanges();
+          reveal_splitBookkeeping();
 
-            var s1 := writeWithNode(k, s, left_childref.value, left_child);
-            var s2 := writeWithNode(k, s1, right_childref.value, right_child);
+          lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref, left_child.children, right_child.children);
+          lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref, left_child.children, fused_parent.children);
+          lemmaRefInGraphOfWriteBookkeeping(k, s, left_childref, left_child.children);
 
-            lemmaChildrenConditionsOfReplace1With2(k, s2, fused_parent.children.value, slot, left_childref.value, right_childref.value);
+          var s2 := writeWithNode(k, s1, left_childref, left_child);
+          var s3 := writeWithNode(k, s2, right_childref, right_child);
 
-            var s3 := writeWithNode(k, s2, parentref, split_parent);
-            assert s' == s3;
+          lemmaChildrenConditionsOfReplace1With2(k, s2, fused_parent.children.value, slot, left_childref, right_childref);
 
-            lemmaSplitChild(child, num_children_left);
-            SplitParentCorrect(parentref, fused_parent, pivot, slot, left_childref.value, right_childref.value);
+          var s4 := writeWithNode(k, s3, parentref, split_parent);
+          assert s' == s4;
 
-            lemmaBlockPointsToValidReferences(k, s, childref);
-            assert BC.BlockPointsToValidReferences(INode(fused_child), IIndirectionTable(s.ephemeralIndirectionTable).graph);
-            lemmaSplitChildValidReferences(INode(fused_child), INode(child), num_children_left, IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
+          lemmaSplitChild(child, num_children_left);
+          SplitParentCorrect(parentref, fused_parent, pivot, slot, left_childref, right_childref);
 
-            writeNewRefIsAlloc(k, s, left_childref.value, left_child);
-            writeNewRefIsAlloc(k, s1, right_childref.value, right_child);
+          lemmaBlockPointsToValidReferences(k, s, childref);
+          assert BC.BlockPointsToValidReferences(INode(fused_child), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+          lemmaSplitChildValidReferences(INode(fused_child), INode(child), num_children_left, IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
 
-            var inodeFusedParent := INode(fused_parent);
-            var inodeSplitParent := INode(split_parent);
+          writeNewRefIsAlloc(k, s, left_childref, left_child);
+          writeNewRefIsAlloc(k, s1, right_childref, right_child);
 
-            lemmaBlockPointsToValidReferences(k, s, parentref);
-            assert BC.BlockPointsToValidReferences(inodeFusedParent, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
-            lemmaSplitParentValidReferences(inodeFusedParent, pivot, slot, left_childref.value, right_childref.value, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+          var inodeFusedParent := INode(fused_parent);
+          var inodeSplitParent := INode(split_parent);
 
-            reveal_SplitChildLeft();
-            reveal_SplitChildRight();
+          lemmaBlockPointsToValidReferences(k, s, parentref);
+          assert BC.BlockPointsToValidReferences(inodeFusedParent, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+          lemmaSplitParentValidReferences(inodeFusedParent, pivot, slot, left_childref, right_childref, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
 
-            assert INode(child) == BT.CutoffNode(INode(fused_child), lbound, ubound);
-            assert 1 <= num_children_left < |child.buckets|;
+          reveal_SplitChildLeft();
+          reveal_SplitChildRight();
 
-            var splitStep := BT.NodeFusion(
-              parentref,
-              childref,
-              left_childref.value,
-              right_childref.value,
-              inodeFusedParent,
-              inodeSplitParent,
-              INode(fused_child),
-              INode(left_child),
-              INode(right_child),
-              slot,
-              num_children_left,
-              pivot
-            );
+          assert INode(child) == BT.CutoffNode(INode(fused_child), lbound, ubound);
+          assert 1 <= num_children_left < |child.buckets|;
 
-            LruModel.LruUse(s2.lru, parentref);
-            assert LruModel.WF(s'.lru);
+          var splitStep := BT.NodeFusion(
+            parentref,
+            childref,
+            left_childref,
+            right_childref,
+            inodeFusedParent,
+            inodeSplitParent,
+            INode(fused_child),
+            INode(left_child),
+            INode(right_child),
+            slot,
+            num_children_left,
+            pivot
+          );
 
-            assert splitStep.num_children_left == num_children_left;
-            assert splitStep.fused_child == INode(fused_child);
+          LruModel.LruUse(s3.lru, parentref);
+          assert LruModel.WF(s'.lru);
 
-            assert left_childref.value != right_childref.value;
-            assert BT.ValidSplit(splitStep);
-            var step := BT.BetreeSplit(splitStep);
-            var ops := [
-              BT.G.AllocOp(left_childref.value, INode(left_child)),
-              BT.G.AllocOp(right_childref.value, INode(right_child)),
-              BT.G.WriteOp(parentref, inodeSplitParent)
-            ];
-            assert ops == BT.BetreeStepOps(step);
-            BC.MakeTransaction3(Ik(k), IVars(s), IVars(s1), IVars(s2), IVars(s'), ops);
-            assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
-          }
+          assert splitStep.num_children_left == num_children_left;
+          assert splitStep.fused_child == INode(fused_child);
+
+          assert left_childref != right_childref;
+          assert BT.ValidSplit(splitStep);
+          var step := BT.BetreeSplit(splitStep);
+          var ops := [
+            BT.G.AllocOp(left_childref, INode(left_child)),
+            BT.G.AllocOp(right_childref, INode(right_child)),
+            BT.G.WriteOp(parentref, inodeSplitParent)
+          ];
+          assert ops == BT.BetreeStepOps(step);
+          BC.MakeTransaction3(Ik(k), IVars(s), IVars(s2), IVars(s3), IVars(s'), ops);
+          assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
         }
       }
     }

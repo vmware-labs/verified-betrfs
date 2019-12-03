@@ -177,16 +177,16 @@ module ImplIO {
     }
   }
 
-  method getFreeRef(indirectionTable: IS.MutIndirectionTable) returns (ref: Option<BT.G.Reference>)
+  method getFreeRefFromTable(indirectionTable: IS.MutIndirectionTable) returns (ref: Option<BT.G.Reference>)
   requires indirectionTable.Inv()
-  ensures ref.Some? ==> RefIsUpperBoundForUsedRefs(IS.IIndirectionTable(indirectionTable)) && ref.value != BT.G.Root()
+  ensures ref == ImplModelIO.getFreeRefFromTable(IIndirectionTable(indirectionTable))
   {
     var maxKey := indirectionTable.t.MaxKey();
     if maxKey < 0xffff_ffff_ffff_ffff {
       ref := Some(maxKey + 1);
     } else {
       ref := None;
-    )
+    }
   }
 
   method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
@@ -206,26 +206,31 @@ module ImplIO {
       //assert fresh({ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr);
       //assert fresh(ephemeralIndirectionTable.Repr);
 
-      var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
-      if succ {
-        var blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
-        var persistentIndirectionTable := sector.value.indirectionTable.Clone();
-        //assert fresh(ephemeralIndirectionTable.Repr);
-        //assert fresh(persistentIndirectionTable.Repr);
+      var nextFreeRef := getFreeRefFromTable(ephemeralIndirectionTable);
+      if nextFreeRef.Some? {
+        var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
+        if succ {
+          var blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
+          var persistentIndirectionTable := sector.value.indirectionTable.Clone();
+          //assert fresh(ephemeralIndirectionTable.Repr);
+          //assert fresh(persistentIndirectionTable.Repr);
 
-        s.ready := true;
-        s.persistentIndirectionTable := persistentIndirectionTable;
-        s.frozenIndirectionTable := null;
-        s.ephemeralIndirectionTable := ephemeralIndirectionTable;
-        s.nextFreeRef := getFreeRef(ephemeralIndirectionTable);
-        s.outstandingIndirectionTableWrite := None;
-        s.outstandingBlockWrites := map[];
-        s.outstandingBlockReads := map[];
-        s.cache := new MutCache();
-        s.lru := new MutableLru.MutableLruQueue();
-        s.blockAllocator := blockAllocator;
+          s.ready := true;
+          s.persistentIndirectionTable := persistentIndirectionTable;
+          s.frozenIndirectionTable := null;
+          s.ephemeralIndirectionTable := ephemeralIndirectionTable;
+          s.nextFreeRef := nextFreeRef.value;
+          s.outstandingIndirectionTableWrite := None;
+          s.outstandingBlockWrites := map[];
+          s.outstandingBlockReads := map[];
+          s.cache := new MutCache();
+          s.lru := new MutableLru.MutableLruQueue();
+          s.blockAllocator := blockAllocator;
+        } else {
+          print "InitLocBitmap failed\n";
+        }
       } else {
-        print "InitLocBitmap failed\n";
+        print "Ran out of refs\n";
       }
     } else {
       print "giving up; did not get indirectionTable when reading\n";

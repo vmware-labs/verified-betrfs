@@ -25,54 +25,38 @@ module ImplModelCache {
     && ref != BT.G.Root()
   }
 
-  function getFreeRefIterate(s: Variables, i: uint64) 
-  : (ref : Option<BT.G.Reference>)
+  function getFreeRef(s: Variables)
+  : (res: (Variables, Option<BT.G.Reference>))
   requires s.Ready?
-  requires i >= 1
-  ensures ref.Some? ==> RefAvailable(s, ref.value)
-  decreases 0x1_0000_0000_0000_0000 - i as int
+  ensures (
+    var (s', ref) := res;
+    && ref.Some? ==> RefAvailable(s, ref.value)
+  )
   {
-    if i !in s.ephemeralIndirectionTable.graph && i !in s.cache then (
-      Some(i)
-    ) else if i == 0xffff_ffff_ffff_ffff then (
-      None
+    if s.nextFreeRef < 0xffff_ffff_ffff_ffff then (
+      var ref := s.nextFreeRef;
+      var s' := s.(nextFreeRef := s.nextFreeRef + 1);
+      (s', Some(ref))
     ) else (
-      getFreeRefIterate(s, i+1) 
+      (s, None)
     )
   }
 
-  function {:opaque} getFreeRef(s: Variables)
-  : (ref : Option<BT.G.Reference>)
+  function get2FreeRefs(s: Variables)
+  : (res: (Variables, Option<(BT.G.Reference, BT.G.Reference)>))
   requires s.Ready?
-  ensures ref.Some? ==> RefAvailable(s, ref.value)
+  ensures (
+    var (s', refs) := res;
+    && refs.Some? ==> RefAvailable(s, refs.value.0) && RefAvailable(s, refs.value.1))
   {
-    getFreeRefIterate(s, 1)
-  }
-
-  function getFreeRef2Iterate(s: Variables, avoid: BT.G.Reference, i: uint64) 
-  : (ref : Option<BT.G.Reference>)
-  requires s.Ready?
-  requires i >= 1
-  ensures ref.Some? ==> RefAvailable(s, ref.value)
-  ensures ref.Some? ==> ref.value != avoid
-  decreases 0x1_0000_0000_0000_0000 - i as int
-  {
-    if i != avoid && i !in s.ephemeralIndirectionTable.graph && i !in s.cache then (
-      Some(i)
-    ) else if i == 0xffff_ffff_ffff_ffff then (
-      None
+    if s.nextFreeRef < (0xffff_ffff_ffff_ffff - 1) then (
+      var ref1 := s.nextFreeRef;
+      var ref2 := ref1 + 1;
+      var s' := s.(nextFreeRef := s.nextFreeRef + 2);
+      (s', Some((ref1, ref2)))
     ) else (
-      getFreeRef2Iterate(s, avoid, i+1) 
+      (s, None)
     )
-  }
-
-  function {:opaque} getFreeRef2(s: Variables, avoid: BT.G.Reference)
-  : (ref : Option<BT.G.Reference>)
-  requires s.Ready?
-  ensures ref.Some? ==> RefAvailable(s, ref.value)
-  ensures ref.Some? ==> ref.value != avoid
-  {
-    getFreeRef2Iterate(s, avoid, 1)
   }
 
   // Conditions that will hold intermediately between writes and allocs
@@ -192,9 +176,9 @@ module ImplModelCache {
     && WriteAllocConditions(k, s')
     && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
-    var ref := getFreeRef(s);
+    var (s1, ref) := getFreeRef(s);
     if ref.Some? then (
-      (writeBookkeeping(k, s, ref.value, children), ref)
+      (writeBookkeeping(k, s1, ref.value, children), ref)
     ) else (
       (s, None)
     )
@@ -241,9 +225,9 @@ module ImplModelCache {
       && WriteAllocConditions(k, s')
       && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
-    var ref := getFreeRef(s);
+    var (s1, ref) := getFreeRef(s);
     if ref.Some? then (
-      (writeWithNode(k, s, ref.value, node), ref)
+      (writeWithNode(k, s1, ref.value, node), ref)
     ) else (
       (s, None)
     )
@@ -428,14 +412,14 @@ module ImplModelCache {
     && (ref.Some? ==> TotalCacheSize(s') == TotalCacheSize(s) + 1)
     && WriteAllocConditions(k, s')
   {
-    var ref := getFreeRef(s);
+    var (s1, ref) := getFreeRef(s);
     if ref.Some? {
-      lemmaIndirectionTableLocIndexValid(k, s, ref.value);
+      lemmaIndirectionTableLocIndexValid(k, s1, ref.value);
       LruModel.LruUse(s.lru, ref.value);
-      writeBookkeepingBitmapCorrect(k, s, ref.value, node.children);
+      writeBookkeepingBitmapCorrect(k, s1, ref.value, node.children);
       reveal_writeBookkeeping();
 
-      var (s', ref0) := allocWithNode(k, s, node);
+      var (s', ref0) := allocWithNode(k, s1, node);
     }
   }
   
@@ -524,12 +508,16 @@ module ImplModelCache {
   lemma getFreeRefDoesntEqual(s: Variables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
-  ensures getFreeRef(s) != Some(ref)
+  ensures (
+    var (s', r) := getFreeRef(s);
+    && r != Some(ref))
 
-  lemma getFreeRef2DoesntEqual(s: Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
+  lemma get2FreeRefsDoesntEqual(s: Variables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
-  ensures getFreeRef2(s, avoid) != Some(ref)
+  ensures (
+    var (s', r) := get2FreeRefs(s);
+    && r.Some? ==> r.value.0 != ref && r.value.1 != ref)
 
   lemma lemmaChildrenConditionsOfNode(
       k: Constants, s: Variables, ref: BT.G.Reference)
