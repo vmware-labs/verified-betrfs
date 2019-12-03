@@ -26,14 +26,16 @@ module ImplModelSucc {
   import opened ModelBucket
   import opened Lexicographic_Byte_Order
 
-  import PBS = PivotBetreeSpec`Spec
+  import PBS = PivotBetreeSpec`Internal
 
   datatype PathResult =
       | Path(buckets: seq<Bucket>, upTo: Option<Key>)
       | Fetch(ref: BT.G.Reference)
       | Failure
 
-  function {:opaque} getPath(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64) : PathResult
+  // TODO update lru queue when traversing
+
+  function {:opaque} getPath(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64) : (pr : PathResult)
   requires Inv(k, s)
   requires s.Ready?
   decreases counter
@@ -43,26 +45,27 @@ module ImplModelSucc {
       var r := Pivots.Route(node.pivotTable, key);
       var bucket := node.buckets[r];
       var acc' := acc + [bucket];
+      var upTo' := 
+        if r == |node.pivotTable| then (
+          upTo
+        ) else (
+          var ub := node.pivotTable[r];
+          if upTo.Some? then (
+            var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
+            Some(k)
+          ) else (
+            Some(ub)
+          )
+        );
+
       if node.children.Some? then (
         if counter == 0 then (
           Failure
         ) else (
-          var upTo' := 
-            if r == |node.pivotTable| then (
-              upTo
-            ) else (
-              var ub := node.pivotTable[r];
-              if upTo.Some? then (
-                var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
-                Some(k)
-              ) else (
-                Some(ub)
-              )
-            );
           getPath(k, s, key, acc', upTo', node.children.value[r], counter - 1)
         )
       ) else (
-        Path(acc', upTo)
+        Path(acc', upTo')
       )
     ) else (
       Fetch(ref)
@@ -168,6 +171,124 @@ module ImplModelSucc {
   }
 
   ////////////////
+  //// initQueue
+
+  function initQueueIter(buckets: seq<Bucket>, start: UI.RangeStart, i: int, acc: seq<Iterator>) : (its : seq<Iterator>)
+  requires |acc| == i
+  requires 0 <= i <= |buckets|
+  requires forall i | 0 <= i < |acc| :: WFIter(buckets[i], acc[i])
+  ensures |its| == |buckets|
+  ensures forall i | 0 <= i < |its| :: WFIter(buckets[i], its[i])
+  decreases |buckets| - i
+  {
+    if i == |buckets| then (
+      acc
+    ) else (
+      var bucket := buckets[i];
+      var it := match start {
+        case SInclusive(key) => IterFindFirstGe(bucket, key)
+        case SExclusive(key) => IterFindFirstGt(bucket, key)
+        case NegativeInf => IterStart(bucket)
+      };
+      initQueueIter(buckets, start, i+1, acc + [it])
+    )
+  }
+
+  function {:opaque} initQueue(buckets: seq<Bucket>, start: UI.RangeStart) : (its : seq<Iterator>)
+  ensures |its| == |buckets|
+  ensures forall i | 0 <= i < |its| :: WFIter(buckets[i], its[i])
+  {
+    initQueueIter(buckets, start, 0, [])
+  }
+
+  ////////////////
+  //// collectSuccessors
+
+  datatype SuccCollectionResult =
+      SuccCollectionResult(results: seq<UI.SuccResult>, end: UI.RangeEnd)
+
+  function collectSuccessorsIter(buckets: seq<Bucket>, iters: seq<Iterator>, upTo: Option<Key>, maxToFind: int, acc: seq<UI.SuccResult>) : SuccCollectionResult
+  requires |buckets| == |iters|
+  requires forall j | 0 <= j < |iters| :: WFIter(buckets[j], iters[j])
+  requires |acc| <= maxToFind
+  requires maxToFind >= 1
+
+  decreases decreaserSum(iters)
+  {
+    if |acc| == maxToFind then (
+      SuccCollectionResult(acc, UI.EInclusive(Last(acc).key))
+    ) else (
+      var keyOpt := getMinKey(iters);
+      if keyOpt.Some? then (
+        var key := keyOpt.value;
+        var m := evalKey(buckets, iters, key);
+        var def := Messages.Merge(m, Messages.DefineDefault()).value;
+        var acc' :=
+          if def == Messages.DefaultValue() then (
+            acc
+          ) else (
+            acc + [UI.SuccResult(key, def)]
+          );
+
+        lemmaAdvanceDecreases(buckets, iters, upTo);
+        var iters' := advance(buckets, iters, key, upTo);
+
+        collectSuccessorsIter(buckets, iters', upTo, maxToFind, acc')
+      ) else (
+        var end := if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf;
+        SuccCollectionResult(acc, end)
+      )
+    )
+  }
+
+  function collectSuccessors(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int) : SuccCollectionResult
+  requires maxToFind >= 1
+  {
+    var iters := initQueue(buckets, start);
+    collectSuccessorsIter(buckets, iters, upTo, maxToFind, [])
+  }
+
+  ////////////////
+  //// doSucc
+
+  function doSucc(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
+    : (Variables, IO, Option<SuccCollectionResult>)
+  requires Inv(k, s)
+  requires io.IOInit?
+  requires maxToFind >= 1
+  {
+    if (s.Unready?) then (
+      var (s', io') := PageInIndirectionTableReq(k, s, io);
+      (s', io', None)
+    ) else (
+      var startKey := if start.NegativeInf? then [] else start.key;
+
+      lemmaGetPathValidFetch(k, s, startKey, 40);
+      var pr := getPath(k, s, startKey, [], None, BT.G.Root(), 40);
+
+      match pr {
+        case Path(buckets, upTo) => (
+          var res := collectSuccessors(buckets, start, upTo, maxToFind);
+          (s, io, Some(res))
+        )
+        case Fetch(ref) => (
+          var (s', io') := PageInReq(k, s, io, ref);
+          (s', io', None)
+        )
+        case Failure => (
+          (s, io, None)
+        )
+      }
+    )
+  }
+
+  /////////////////////////////////
+  /////////////////////////////////
+  ///////////////////////////////// Proof stuff
+  /////////////////////////////////
+  /////////////////////////////////
+
+  ////////////////
   //// some lemmas for termination
 
   lemma getMinKeyExistsIter(iters: seq<Iterator>, i: int, cur: Option<Key>, j0: int) returns (j : int)
@@ -256,54 +377,92 @@ module ImplModelSucc {
   }
 
   ////////////////
-  //// collectSuccessors
+  //// some more lemmas
 
-  datatype SuccCollectionResult =
-      SuccCollectionResult(results: seq<UI.SuccResult>, end: UI.RangeEnd)
-
-  function collectSuccessorsIter(buckets: seq<Bucket>, iters: seq<Iterator>, upTo: Option<Key>, maxToFind: int, acc: seq<UI.SuccResult>) : SuccCollectionResult
-  requires |buckets| == |iters|
-  requires forall j | 0 <= j < |iters| :: WFIter(buckets[j], iters[j])
-  requires |acc| <= maxToFind
-  requires maxToFind >= 1
-
-  decreases decreaserSum(iters)
+  predicate LookupBucketsProps(lookup: PBS.Lookup, buckets: seq<Bucket>, upTo: Option<Key>, startKey: Key)
   {
-    if |acc| == maxToFind then (
-      SuccCollectionResult(acc, UI.EInclusive(Last(acc).key))
-    ) else (
-      var keyOpt := getMinKey(iters);
-      if keyOpt.Some? then (
-        var key := keyOpt.value;
-        var m := evalKey(buckets, iters, key);
-        var def := Messages.Merge(m, Messages.DefineDefault()).value;
-        var acc' :=
-          if def == Messages.DefaultValue() then (
-            acc
+    && PBS.WFLookupForKey(lookup, startKey)
+    && upTo == PBS.LookupUpperBound(lookup, startKey)
+    && Last(lookup).node.children.None?
+    && |lookup| == |buckets|
+    && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
+  }
+
+  lemma lemmaGetPathResult(k: Constants, s: Variables, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64)
+  returns (lookup' : PBS.Lookup)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires ref in s.ephemeralIndirectionTable.graph
+  requires |lookup| > 0 ==> PBS.WFLookupForKey(lookup, startKey)
+  requires |lookup| > 0 ==> Last(lookup).node.children.Some?
+  requires |lookup| > 0 ==> ref == Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, startKey)]
+  requires |lookup| == 0 ==> ref == BT.G.Root()
+  requires upTo == PBS.LookupUpperBound(lookup, startKey)
+  requires |lookup| == |acc|
+  requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)]
+  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
+  decreases counter
+  ensures var pr := getPath(k, s, startKey, acc, upTo, ref, counter);
+      && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
+      && (pr.Path? ==> LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
+  {
+    reveal_getPath();
+
+    if ref in s.cache {
+      var node := s.cache[ref];
+      var r := Pivots.Route(node.pivotTable, startKey);
+      var bucket := node.buckets[r];
+      var acc1 := acc + [bucket];
+      var lookup1 := lookup + [BT.G.ReadOp(ref, INode(node))];
+
+      forall idx | PBS.ValidLayerIndex(lookup1, idx) && idx < |lookup1| - 1
+      ensures PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx)
+      {
+        if idx == |lookup1| - 2 {
+          assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx);
+        } else {
+          assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup, idx);
+          assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx);
+        }
+      }
+
+      var upTo' := 
+        if r == |node.pivotTable| then (
+          upTo
+        ) else (
+          var ub := node.pivotTable[r];
+          if upTo.Some? then (
+            var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
+            Some(k)
           ) else (
-            acc + [UI.SuccResult(key, def)]
-          );
+            Some(ub)
+          )
+        );
 
-        lemmaAdvanceDecreases(buckets, iters, upTo);
-        var iters' := advance(buckets, iters, key, upTo);
+      PBS.reveal_LookupUpperBound();
 
-        collectSuccessorsIter(buckets, iters', upTo, maxToFind, acc')
-      ) else (
-        var end := if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf;
-        SuccCollectionResult(acc, end)
-      )
-    )
+      if node.children.Some? {
+        if counter == 0 {
+        } else {
+          lemmaChildInGraph(k, s, ref, node.children.value[r]);
+
+          lookup' := lemmaGetPathResult(k, s, startKey, acc1, lookup1, upTo', node.children.value[r], counter - 1);
+        }
+      } else {
+        lookup' := lookup1;
+      }
+    } else {
+    }
   }
 
-  /*
-  function collectSuccessors(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int) : SuccCollectionResult
-  requires |buckets| == |iters|
-  requires forall i | 0 <= i < |iters| :: WFIter(buckets[i], iters[i])
-  requires |acc| <= maxToFind
-  requires maxToFind >= 1
+  lemma lemmaGetPathValidFetch(k: Constants, s: Variables, startKey: Key, counter: uint64)
+  requires Inv(k, s)
+  requires s.Ready?
+  decreases counter
+  ensures var pr := getPath(k, s, startKey, [], None, BT.G.Root(), counter);
+      && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
   {
-    var iters := 
-    collectSuccessorsIter(buckets, iters, upTo, maxToFind, [])
+    PBS.reveal_LookupUpperBound();
+    var _ := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
   }
-  */
 }

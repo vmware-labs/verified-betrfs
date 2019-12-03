@@ -13,7 +13,7 @@ module ModelBucket {
   datatype KeyMessage = KeyMessage(key: Key, msg: Message)
   datatype Iterator = Iterator(
     next: Option<KeyMessage>,
-    decreaser: int
+    ghost decreaser: int
   ) 
 
   predicate WFIter(bucket: Bucket, it: Iterator)
@@ -28,6 +28,15 @@ module ModelBucket {
       && it.decreaser == 0
     ))
   }
+
+  function IterStart(bucket: Bucket) : (it' : Iterator)
+  ensures WFIter(bucket, it')
+
+  function IterFindFirstGe(bucket: Bucket, key: Key) : (it' : Iterator)
+  ensures WFIter(bucket, it')
+
+  function IterFindFirstGt(bucket: Bucket, key: Key) : (it' : Iterator)
+  ensures WFIter(bucket, it')
 
   function IterInc(bucket: Bucket, it: Iterator) : (it' : Iterator)
   requires WFIter(bucket, it)
