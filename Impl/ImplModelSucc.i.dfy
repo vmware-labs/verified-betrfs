@@ -388,6 +388,31 @@ module ImplModelSucc {
     && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
   }
 
+  predicate KeyAccountedFor(
+      buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, key: Key)
+  requires |buckets| == |its|
+  {
+    || PBS.BufferDefinesEmptyValue(PBS.InterpretBucketStack(buckets, key))
+    || (exists j | 0 <= j < |succs| :: succs[j].key == key)
+    || (forall j | 0 <= j < |buckets| :: key in buckets[j] ==>
+          its[j].next.Some? ==> lte(its[j].next.value.key, key))
+  }
+
+  predicate IterProps(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd)
+  {
+    && |buckets| == |its|
+    && (forall key | MS.InRange(start, key, end) :: KeyAccountedFor(buckets, its, succs, key))
+    && (forall i | 0 <= i < |succs| ::
+      PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, succs[i].key), succs[i].value))
+    && (forall i | 0 <= i < |succs| :: succs[i].value != MS.EmptyValue())
+    && (forall i | 0 <= i < |succs| :: MS.InRange(start, succs[i].key, end))
+    && (forall i, j | 0 <= i < j < |succs| :: lt(succs[i].key, succs[j].key))
+    && (forall i, j | 0 <= i < |succs| && 0 <= j < |its| && its[j].next.Some? ::
+        lt(succs[i].key, its[j].next.value.key))
+    && (forall j | 0 <= j < |its| && its[j].next.Some? ::
+        MS.InRange(start, its[j].next.value.key, end))
+  }
+
   lemma lemmaGetPathResult(k: Constants, s: Variables, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64)
   returns (lookup' : PBS.Lookup)
   requires Inv(k, s)
@@ -521,4 +546,9 @@ module ImplModelSucc {
     getMinKeyLteAllIter(iters, 0, None, j);
   }
 
+  lemma evalKeyIsInterp(buckets: seq<Bucket>, iters: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd)
+  requires IterProps(buckets, iters, succs, start, end)
+  ensures getMinKey(iters).Some? ==>
+        evalKey(buckets, iters, getMinKey(iters).value)
+     == PBS.InterpretBucketStack(buckets, getMinKey(iters).value)
 }
