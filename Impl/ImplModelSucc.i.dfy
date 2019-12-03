@@ -465,4 +465,60 @@ module ImplModelSucc {
     PBS.reveal_LookupUpperBound();
     var _ := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
   }
+
+  lemma lemmaGetPathValidLookup(k: Constants, s: Variables, startKey: Key, counter: uint64)
+  returns (lookup' : PBS.Lookup)
+  requires Inv(k, s)
+  requires s.Ready?
+  decreases counter
+  ensures var pr := getPath(k, s, startKey, [], None, BT.G.Root(), counter);
+      && (pr.Path? ==> LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
+  {
+    PBS.reveal_LookupUpperBound();
+    lookup' := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
+  }
+
+  lemma getMinKeyLteAllIter(iters: seq<Iterator>, i: int, cur: Option<Key>, j: int)
+  requires 0 <= i <= |iters|
+  requires 0 <= j < |iters|
+  requires j < i ==> cur.Some? && iters[j].next.Some? ==> lte(cur.value, iters[j].next.value.key)
+  requires j < i ==> iters[j].next.Some? ==> cur.Some?
+  ensures var key := getMinKeyIter(iters, i, cur);
+      && (key.Some? && iters[j].next.Some? ==> lte(key.value, iters[j].next.value.key))
+      && (iters[j].next.Some? ==> key.Some?)
+  decreases |iters| - i
+  {
+    if i == |iters| {
+    } else {
+      var it := iters[i];
+      if it.next.Some? {
+        if cur.Some? {
+          var minK := if lt(cur.value, it.next.value.key) then Some(cur.value) else Some(it.next.value.key);
+          //assert lte(minK.value, cur.value);
+          //assert lte(minK.value, it.next.value.key);
+          if j == i {
+            assert j < i+1 ==> iters[j].next.Some? ==> lte(minK.value, iters[j].next.value.key);
+          } else {
+            assert j < i+1 ==> iters[j].next.Some? ==> lte(minK.value, iters[j].next.value.key);
+          }
+          getMinKeyLteAllIter(iters, i+1, minK, j);
+        } else {
+          getMinKeyLteAllIter(iters, i+1, Some(it.next.value.key), j);
+        }
+      } else {
+        getMinKeyLteAllIter(iters, i+1, cur, j);
+      }
+    }
+  }
+
+  lemma getMinKeyLteAll(iters: seq<Iterator>, j: int)
+  requires 0 <= j < |iters|
+  ensures var key := getMinKey(iters);
+      && (key.Some? && iters[j].next.Some? ==> lte(key.value, iters[j].next.value.key))
+      && (iters[j].next.Some? ==> key.Some?)
+  {
+    reveal_getMinKey();
+    getMinKeyLteAllIter(iters, 0, None, j);
+  }
+
 }
