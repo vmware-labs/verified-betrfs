@@ -27,9 +27,6 @@ module ImplCache {
   // ensures WellUpdated(s)
   ensures s == old(s)
   ensures s.Repr() == old(s.Repr())
-  // ensures s.ephemeralIndirectionTable == old(s.ephemeralIndirectionTable)
-  // ensures s.lru == old(s.lru)
-  // ensures s.blockAllocator == old(s.blockAllocator)
   // NOALIAS statically enforced no-aliasing would probably help here
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
@@ -166,11 +163,6 @@ module ImplCache {
     ImplModelCache.reveal_allocBookkeeping();
     
     ref := getFreeRef(s);
-    assert s.W();
-    assert s.Repr == old(s.Repr);
-    assert s.lru.Repr == old(s.lru.Repr);
-    assert s.ephemeralIndirectionTable.Repr == old(s.ephemeralIndirectionTable.Repr);
-    assert s.blockAllocator.Repr == old(s.blockAllocator.Repr);
     if (ref.Some?) {
       writeBookkeeping(k, s, ref.value, children);
     }
