@@ -173,7 +173,21 @@ module ImplModelSucc {
   ////////////////
   //// initQueue
 
-  function initQueueIter(buckets: seq<Bucket>, start: UI.RangeStart, i: int, acc: seq<Iterator>) : (its : seq<Iterator>)
+  function {:opaque} initIterator(bucket: Bucket, start: UI.RangeStart, upTo: Option<Key>) : (it : Iterator)
+  ensures WFIter(bucket, it)
+  {
+    var it := match start {
+      case SInclusive(key) => IterFindFirstGe(bucket, key)
+      case SExclusive(key) => IterFindFirstGt(bucket, key)
+      case NegativeInf => IterStart(bucket)
+    };
+    if it.next.Some? && (upTo.Some? ==> lt(it.next.value.key, upTo.value)) then
+      it
+    else
+      IterEnd(bucket)
+  }
+
+  function initQueueIter(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>, i: int, acc: seq<Iterator>) : (its : seq<Iterator>)
   requires |acc| == i
   requires 0 <= i <= |buckets|
   requires forall i | 0 <= i < |acc| :: WFIter(buckets[i], acc[i])
@@ -185,20 +199,16 @@ module ImplModelSucc {
       acc
     ) else (
       var bucket := buckets[i];
-      var it := match start {
-        case SInclusive(key) => IterFindFirstGe(bucket, key)
-        case SExclusive(key) => IterFindFirstGt(bucket, key)
-        case NegativeInf => IterStart(bucket)
-      };
-      initQueueIter(buckets, start, i+1, acc + [it])
+      var it := initIterator(buckets[i], start, upTo);
+      initQueueIter(buckets, start, upTo, i+1, acc + [it])
     )
   }
 
-  function {:opaque} initQueue(buckets: seq<Bucket>, start: UI.RangeStart) : (its : seq<Iterator>)
+  function {:opaque} initQueue(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>) : (its : seq<Iterator>)
   ensures |its| == |buckets|
   ensures forall i | 0 <= i < |its| :: WFIter(buckets[i], its[i])
   {
-    initQueueIter(buckets, start, 0, [])
+    initQueueIter(buckets, start, upTo, 0, [])
   }
 
   ////////////////
@@ -244,7 +254,7 @@ module ImplModelSucc {
   function collectSuccessors(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int) : SuccCollectionResult
   requires maxToFind >= 1
   {
-    var iters := initQueue(buckets, start);
+    var iters := initQueue(buckets, start, upTo);
     collectSuccessorsIter(buckets, iters, upTo, maxToFind, [])
   }
 
@@ -850,5 +860,89 @@ module ImplModelSucc {
     }
 
     advancePreservesSuccInvariants(buckets, its, succs, succs', start, end, upTo);
+  }
+
+  lemma initQueueResultIter(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>, i: int, acc: seq<Iterator>)
+  requires |acc| == i
+  requires 0 <= i <= |buckets|
+  requires forall i | 0 <= i < |acc| :: WFIter(buckets[i], acc[i])
+  requires forall i | 0 <= i < |acc| :: acc[i] == initIterator(buckets[i], start, upTo)
+  decreases |buckets| - i
+  ensures var its := initQueueIter(buckets, start, upTo, i, acc);
+      forall i | 0 <= i < |buckets| :: its[i] == initIterator(buckets[i], start, upTo)
+  {
+    if i == |buckets| {
+    } else {
+      var bucket := buckets[i];
+      var it := initIterator(buckets[i], start, upTo);
+      initQueueResultIter(buckets, start, upTo, i+1, acc + [it]);
+    }
+  }
+
+  lemma initQueueResult(buckets: seq<Bucket>, start: UI.RangeStart, upTo: Option<Key>)
+  ensures var its := initQueue(buckets, start, upTo);
+      forall i | 0 <= i < |buckets| :: its[i] == initIterator(buckets[i], start, upTo)
+  {
+    reveal_initQueue();
+    initQueueResultIter(buckets, start, upTo, 0, []);
+  }
+
+  lemma initQueueInvariant(buckets: seq<Bucket>, start: UI.RangeStart, end: UI.RangeEnd, upTo: Option<Key>)
+  requires upTo.Some? ==> end == UI.EExclusive(upTo.value)
+  requires upTo.None? ==> end == UI.PositiveInf
+  ensures IterProps(buckets, initQueue(buckets, start, upTo), [], start, end)
+  {
+    reveal_SuccKeysOrdered();
+    reveal_SuccsBeforeIts();
+    reveal_initIterator();
+
+    var its := initQueue(buckets, start, upTo);
+    initQueueResult(buckets, start, upTo);
+
+    forall key | MS.InRange(start, key, end)
+    ensures KeyAccountedFor(buckets, its, [], key)
+    {
+    }
+
+    forall j | 0 <= j < |its| && its[j].next.Some?
+    ensures MS.InRange(start, its[j].next.value.key, end)
+    {
+    }
+
+    forall key, i, j | 0 <= i < |its| && 0 <= j < |its| && MS.InRange(start, key, end)
+    ensures ItsConsistent(buckets, its, i, j, key)
+    {
+      //assert its[j] == initIterator(buckets[j], start, upTo);
+
+      /*var it := match start {
+        case SInclusive(k) => IterFindFirstGe(buckets[i], k)
+        case SExclusive(k) => IterFindFirstGt(buckets[i], k)
+        case NegativeInf => IterStart(buckets[i])
+      };*/
+
+      //assert upTo.Some? ==> lt(key, upTo.value);
+      if key in buckets[i] && key in buckets[j] &&
+          (its[i].next.Some? && lte(its[i].next.value.key, key)) {
+        if start.SInclusive? {
+          //assert lte(start.key, key);
+          noKeyBetweenIterFindFirstGe(buckets[j], start.key, key);
+          //assert it.next.Some?;
+          //assert lte(it.next.value.key, key);
+        }
+        else if start.SExclusive? {
+          //assert lt(start.key, key);
+          noKeyBetweenIterFindFirstGt(buckets[j], start.key, key);
+          //assert ItsConsistent(buckets, its, i, j, key);
+          //assert it.next.Some?;
+          //assert lte(it.next.value.key, key);
+        }
+        else {
+          noKeyBeforeIterStart(buckets[j], key);
+          //assert ItsConsistent(buckets, its, i, j, key);
+          //assert it.next.Some?;
+          //assert lte(it.next.value.key, key);
+        }
+      }
+    }
   }
 }

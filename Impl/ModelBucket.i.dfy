@@ -34,9 +34,11 @@ module ModelBucket {
 
   function IterFindFirstGe(bucket: Bucket, key: Key) : (it' : Iterator)
   ensures WFIter(bucket, it')
+  ensures it'.next.Some? ==> Keyspace.lte(key, it'.next.value.key)
 
   function IterFindFirstGt(bucket: Bucket, key: Key) : (it' : Iterator)
   ensures WFIter(bucket, it')
+  ensures it'.next.Some? ==> Keyspace.lt(key, it'.next.value.key)
 
   function IterInc(bucket: Bucket, it: Iterator) : (it' : Iterator)
   requires WFIter(bucket, it)
@@ -56,6 +58,7 @@ module ModelBucket {
 
   lemma noKeyBetweenIterAndIterInc(bucket: Bucket, it: Iterator, key: Key)
   requires WFIter(bucket, it)
+  requires key in bucket
   requires it.next.Some?
   ensures IterInc(bucket, it).next.Some? ==>
       (Keyspace.lte(key, it.next.value.key) || Keyspace.lte(IterInc(bucket, it).next.value.key, key))
@@ -67,4 +70,23 @@ module ModelBucket {
   requires it.next.Some?
   ensures IterInc(bucket, it).next.Some? ==>
       Keyspace.lt(it.next.value.key, IterInc(bucket, it).next.value.key)
+
+  lemma noKeyBetweenIterFindFirstGe(bucket: Bucket, key: Key, key0: Key)
+  requires key0 in bucket
+  ensures IterFindFirstGe(bucket, key).next.Some? ==>
+      (Keyspace.lt(key0, key) || Keyspace.lte(key, IterFindFirstGe(bucket, key).next.value.key))
+  ensures IterFindFirstGe(bucket, key).next.None? ==>
+      (Keyspace.lt(key0, key))
+
+  lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, key: Key, key0: Key)
+  requires key0 in bucket
+  ensures IterFindFirstGt(bucket, key).next.Some? ==>
+      (Keyspace.lte(key0, key) || Keyspace.lte(key, IterFindFirstGt(bucket, key).next.value.key))
+  ensures IterFindFirstGt(bucket, key).next.None? ==>
+      (Keyspace.lte(key0, key))
+
+  lemma noKeyBeforeIterStart(bucket: Bucket, key0: Key)
+  requires key0 in bucket
+  ensures IterStart(bucket).next.Some?
+  ensures Keyspace.lte(IterStart(bucket).next.value.key, key0)
 }
