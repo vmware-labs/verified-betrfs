@@ -53,4 +53,18 @@ module ModelBucket {
   {
     if |its| == 0 then 0 else decreaserSum(DropLast(its)) + Last(its).decreaser
   }
+
+  lemma noKeyBetweenIterAndIterInc(bucket: Bucket, it: Iterator, key: Key)
+  requires WFIter(bucket, it)
+  requires it.next.Some?
+  ensures IterInc(bucket, it).next.Some? ==>
+      (Keyspace.lte(key, it.next.value.key) || Keyspace.lte(IterInc(bucket, it).next.value.key, key))
+  ensures IterInc(bucket, it).next.None? ==>
+      Keyspace.lte(key, it.next.value.key)
+
+  lemma IterIncKeyGreater(bucket: Bucket, it: Iterator)
+  requires WFIter(bucket, it)
+  requires it.next.Some?
+  ensures IterInc(bucket, it).next.Some? ==>
+      Keyspace.lt(it.next.value.key, IterInc(bucket, it).next.value.key)
 }

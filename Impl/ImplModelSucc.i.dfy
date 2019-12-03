@@ -542,6 +542,16 @@ module ImplModelSucc {
        (its[j].next.Some? && lte(its[j].next.value.key, key)))
   }
 
+  predicate {:opaque} SuccKeysOrdered(succs: seq<UI.SuccResult>)
+  {
+    forall i, j | 0 <= i < j < |succs| :: lt(succs[i].key, succs[j].key)
+  }
+
+  predicate {:opaque} SuccsBeforeIts(its: seq<Iterator>, succs: seq<UI.SuccResult>)
+  {
+    forall i, j | 0 <= i < |succs| && 0 <= j < |its| && its[j].next.Some? :: lt(succs[i].key, its[j].next.value.key)
+  }
+
   predicate IterProps(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd)
   {
     && |buckets| == |its|
@@ -550,11 +560,10 @@ module ImplModelSucc {
     && (forall i | 0 <= i < |succs| :: PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, succs[i].key), succs[i].value))
     && (forall i | 0 <= i < |succs| :: succs[i].value != MS.EmptyValue())
     && (forall i | 0 <= i < |succs| :: MS.InRange(start, succs[i].key, end))
-    && (forall i, j | 0 <= i < j < |succs| :: lt(succs[i].key, succs[j].key))
-    && (forall i, j | 0 <= i < |succs| && 0 <= j < |its| && its[j].next.Some? :: lt(succs[i].key, its[j].next.value.key))
+    && SuccKeysOrdered(succs)
+    && SuccsBeforeIts(its, succs)
     && (forall j | 0 <= j < |its| && its[j].next.Some? :: MS.InRange(start, its[j].next.value.key, end))
-    && (forall j | 0 <= j < |its| && its[j].next.Some? :: MS.InRange(start, its[j].next.value.key, end))
-    && (forall key, i, j | 0 <= i < |its| && 0 <= j < |its| :: ItsConsistent(buckets, its, i, j, key))
+    && (forall key, i, j | 0 <= i < |its| && 0 <= j < |its| && MS.InRange(start, key, end) :: ItsConsistent(buckets, its, i, j, key))
   }
 
   lemma evalKeyIsInterpIter(buckets: seq<Bucket>, iters: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd, m: Message, i: int)
@@ -661,6 +670,56 @@ module ImplModelSucc {
     advanceResultIter(buckets, iters, key, upTo, 0, []);
   }
 
+  lemma advancePreservesSuccInvariants(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, succs': seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd, upTo: Option<Key>)
+  requires |buckets| == |its|
+  requires forall j | 0 <= j < |its| :: WFIter(buckets[j], its[j])
+  requires SuccKeysOrdered(succs)
+  requires SuccsBeforeIts(its, succs)
+
+  requires getMinKey(its).Some?
+  requires 
+    && (succs' != succs ==>
+      && |succs'| == |succs| + 1
+      && (forall j | 0 <= j < |succs| :: succs'[j] == succs[j])
+      && succs'[|succs'| - 1].key == getMinKey(its).value
+    )
+
+  ensures SuccKeysOrdered(succs')
+  ensures SuccsBeforeIts(advance(buckets, its, getMinKey(its).value, upTo), succs')
+  {
+    reveal_SuccKeysOrdered();
+    reveal_SuccsBeforeIts();
+    var key := getMinKey(its).value;
+    var its' := advance(buckets, its, getMinKey(its).value, upTo);
+
+    if (succs' != succs) {
+      forall i, j | 0 <= i < j < |succs'|
+      ensures lt(succs'[i].key, succs'[j].key)
+      {
+        if j == |succs'| - 1 {
+          var p := getMinKeyExists(its);
+          assert lt(succs[i].key, its[p].next.value.key);
+        }
+      }
+    }
+
+    forall i, j | 0 <= i < |succs'| && 0 <= j < |its'| && its'[j].next.Some?
+    ensures lt(succs'[i].key, its'[j].next.value.key)
+    {
+      advanceResult(buckets, its, key, upTo);
+      assert AdvanceRelation(buckets[j], its[j], its'[j], key, upTo);
+      IterIncKeyGreater(buckets[j], its[j]);
+
+      if i < |succs| {
+        assert lt(succs[i].key, its[j].next.value.key);
+        assert lt(succs'[i].key, its'[j].next.value.key);
+      } else {
+        getMinKeyLteAll(its, j);
+        assert lt(succs'[i].key, its'[j].next.value.key);
+      }
+    }
+  }
+
   lemma advancePreservesInvariants(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, succs': seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd, upTo: Option<Key>)
   requires IterProps(buckets, its, succs, start, end)
 
@@ -683,5 +742,113 @@ module ImplModelSucc {
       advance(buckets, its, getMinKey(its).value, upTo),
       succs', start, end)
   {
+    var key := getMinKey(its).value;
+    var m := evalKey(buckets, its, key);
+    var def := Messages.Merge(m, Messages.DefineDefault()).value;
+
+    evalKeyIsInterp(buckets, its, succs, start, end);
+
+    var its' := advance(buckets, its, getMinKey(its).value, upTo);
+
+    forall k | MS.InRange(start, k, end)
+    ensures KeyAccountedFor(buckets, its', succs', k)
+    {
+      assert KeyAccountedFor(buckets, its, succs, k);
+      if PBS.BufferDefinesEmptyValue(PBS.InterpretBucketStack(buckets, k)) {
+        assert KeyAccountedFor(buckets, its', succs', k);
+      } else if (exists j | 0 <= j < |succs| :: succs[j].key == k) {
+        assert KeyAccountedFor(buckets, its', succs', k);
+      } else {
+        assert forall j | 0 <= j < |buckets| :: k in buckets[j] ==>
+            its[j].next.Some? ==> lte(its[j].next.value.key, k);
+        if k == key {
+          if def == Messages.DefaultValue() {
+            assert PBS.BufferDefinesEmptyValue(PBS.InterpretBucketStack(buckets, k));
+            assert KeyAccountedFor(buckets, its', succs', k);
+          } else {
+            assert succs'[|succs'| - 1].key == k;
+            assert KeyAccountedFor(buckets, its', succs', k);
+          }
+        } else {
+          forall j | 0 <= j < |buckets| && k in buckets[j] && its'[j].next.Some?
+          ensures lte(its'[j].next.value.key, k);
+          {
+            advanceResult(buckets, its, key, upTo);
+            assert AdvanceRelation(buckets[j], its[j], its'[j], key, upTo);
+            noKeyBetweenIterAndIterInc(buckets[j], its[j], k);
+            assert its[j].next.Some?;
+            assert lte(its[j].next.value.key, k);
+          }
+          assert KeyAccountedFor(buckets, its', succs', k);
+        }
+      }
+    }
+
+    forall i | 0 <= i < |succs'|
+    ensures PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, succs'[i].key), succs'[i].value)
+    {
+      if i < |succs| {
+        assert PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, succs[i].key), succs[i].value);
+      }
+    }
+
+    forall i | 0 <= i < |succs'|
+    ensures MS.InRange(start, succs'[i].key, end)
+    {
+      if i < |succs| {
+        assert MS.InRange(start, succs[i].key, end);
+      } else {
+        var j := getMinKeyExists(its);
+        assert MS.InRange(start, its[j].next.value.key, end);
+      }
+    }
+
+    forall j | 0 <= j < |its'| && its'[j].next.Some?
+    ensures MS.InRange(start, its'[j].next.value.key, end)
+    {
+      advanceResult(buckets, its, key, upTo);
+      assert AdvanceRelation(buckets[j], its[j], its'[j], key, upTo);
+      IterIncKeyGreater(buckets[j], its[j]);
+
+      assert MS.InRange(start, its[j].next.value.key, end);
+      assert start.SInclusive? || start.SExclusive? ==>
+          lte(start.key, its[j].next.value.key);
+    }
+
+    forall k, i, j | 0 <= i < |its'| && 0 <= j < |its'| && MS.InRange(start, k, end)
+    ensures ItsConsistent(buckets, its', i, j, k)
+    {
+      assert ItsConsistent(buckets, its, i, j, k);
+
+      advanceResult(buckets, its, key, upTo);
+
+      if k in buckets[i] && k in buckets[j] &&
+            (its'[i].next.Some? && lte(its'[i].next.value.key, k)) {
+        assert AdvanceRelation(buckets[j], its[j], its'[j], key, upTo);
+        assert AdvanceRelation(buckets[i], its[i], its'[i], key, upTo);
+
+        IterIncKeyGreater(buckets[i], its[i]);
+
+        //assert its[j].next.Some?;
+        //assert lte(its[j].next.value.key, k);
+
+        noKeyBetweenIterAndIterInc(buckets[j], its[j], k);
+
+        getMinKeyLteAll(its, i);
+        assert k != key;
+
+        /*if its'[j] == its[j] {
+          assert its'[j].next.Some?;
+          assert lte(its'[j].next.value.key, k);
+        } else if its'[j] == IterEnd(buckets[j]) {
+          assert false;
+        } else if its'[j] == IterInc(buckets[j], its[j]) {
+          assert its'[j].next.Some?;
+          assert lte(its'[j].next.value.key, k);
+        }*/
+      }
+    }
+
+    advancePreservesSuccInvariants(buckets, its, succs, succs', start, end, upTo);
   }
 }
