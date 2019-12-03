@@ -388,30 +388,6 @@ module ImplModelSucc {
     && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
   }
 
-  predicate KeyAccountedFor(
-      buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, key: Key)
-  requires |buckets| == |its|
-  {
-    || PBS.BufferDefinesEmptyValue(PBS.InterpretBucketStack(buckets, key))
-    || (exists j | 0 <= j < |succs| :: succs[j].key == key)
-    || (forall j | 0 <= j < |buckets| :: key in buckets[j] ==>
-          its[j].next.Some? ==> lte(its[j].next.value.key, key))
-  }
-
-  predicate IterProps(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd)
-  {
-    && |buckets| == |its|
-    && (forall key | MS.InRange(start, key, end) :: KeyAccountedFor(buckets, its, succs, key))
-    && (forall i | 0 <= i < |succs| ::
-      PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, succs[i].key), succs[i].value))
-    && (forall i | 0 <= i < |succs| :: succs[i].value != MS.EmptyValue())
-    && (forall i | 0 <= i < |succs| :: MS.InRange(start, succs[i].key, end))
-    && (forall i, j | 0 <= i < j < |succs| :: lt(succs[i].key, succs[j].key))
-    && (forall i, j | 0 <= i < |succs| && 0 <= j < |its| && its[j].next.Some? ::
-        lt(succs[i].key, its[j].next.value.key))
-    && (forall j | 0 <= j < |its| && its[j].next.Some? ::
-        MS.InRange(start, its[j].next.value.key, end))
-  }
 
   lemma lemmaGetPathResult(k: Constants, s: Variables, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64)
   returns (lookup' : PBS.Lookup)
@@ -546,9 +522,166 @@ module ImplModelSucc {
     getMinKeyLteAllIter(iters, 0, None, j);
   }
 
+  predicate KeyAccountedFor(
+      buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, key: Key)
+  requires |buckets| == |its|
+  {
+    || PBS.BufferDefinesEmptyValue(PBS.InterpretBucketStack(buckets, key))
+    || (exists j | 0 <= j < |succs| :: succs[j].key == key)
+    || (forall j | 0 <= j < |buckets| :: key in buckets[j] ==>
+          its[j].next.Some? ==> lte(its[j].next.value.key, key))
+  }
+
+  predicate ItsConsistent(buckets: seq<Bucket>, its: seq<Iterator>, i: int, j: int, key: Key)
+  requires |buckets| == |its|
+  requires 0 <= i < |its|
+  requires 0 <= j < |its|
+  {
+    key in buckets[i] && key in buckets[j] ==>
+      ((its[i].next.Some? && lte(its[i].next.value.key, key)) ==>
+       (its[j].next.Some? && lte(its[j].next.value.key, key)))
+  }
+
+  predicate IterProps(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd)
+  {
+    && |buckets| == |its|
+    && (forall j | 0 <= j < |its| :: WFIter(buckets[j], its[j]))
+    && (forall key | MS.InRange(start, key, end) :: KeyAccountedFor(buckets, its, succs, key))
+    && (forall i | 0 <= i < |succs| :: PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, succs[i].key), succs[i].value))
+    && (forall i | 0 <= i < |succs| :: succs[i].value != MS.EmptyValue())
+    && (forall i | 0 <= i < |succs| :: MS.InRange(start, succs[i].key, end))
+    && (forall i, j | 0 <= i < j < |succs| :: lt(succs[i].key, succs[j].key))
+    && (forall i, j | 0 <= i < |succs| && 0 <= j < |its| && its[j].next.Some? :: lt(succs[i].key, its[j].next.value.key))
+    && (forall j | 0 <= j < |its| && its[j].next.Some? :: MS.InRange(start, its[j].next.value.key, end))
+    && (forall j | 0 <= j < |its| && its[j].next.Some? :: MS.InRange(start, its[j].next.value.key, end))
+    && (forall key, i, j | 0 <= i < |its| && 0 <= j < |its| :: ItsConsistent(buckets, its, i, j, key))
+  }
+
+  lemma evalKeyIsInterpIter(buckets: seq<Bucket>, iters: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd, m: Message, i: int)
+  requires 0 <= i <= |iters|
+  requires IterProps(buckets, iters, succs, start, end)
+  requires getMinKey(iters).Some?
+  requires m == PBS.InterpretBucketStack(buckets[..i], getMinKey(iters).value)
+  decreases |buckets| - i
+  ensures evalKeyIter(buckets, iters, getMinKey(iters).value, m, i)
+     == PBS.InterpretBucketStack(buckets, getMinKey(iters).value)
+  {
+    if i == |iters| {
+      assert buckets[..i] == buckets;
+    } else {
+      var key := getMinKey(iters).value;
+      if (key in buckets[i]) {
+        var j := getMinKeyExists(iters);
+        assert ItsConsistent(buckets, iters, j, i, key);
+        assert lte(iters[i].next.value.key, key);
+
+        getMinKeyLteAll(iters, i);
+        assert lte(key, iters[i].next.value.key);
+
+        assert iters[i].next.Some?;
+        assert iters[i].next.value.key == key;
+        assert buckets[i][key] == iters[i].next.value.msg;
+      } else {
+        assert !(iters[i].next.Some? && iters[i].next.value.key == key);
+      }
+      
+      var m' :=
+        if iters[i].next.Some? && iters[i].next.value.key == key then (
+          Messages.Merge(m, iters[i].next.value.msg)
+        ) else (
+          m
+        );
+      assert DropLast(buckets[..i+1]) == buckets[..i];
+      assert Last(buckets[..i+1]) == buckets[i];
+      evalKeyIsInterpIter(buckets, iters, succs, start, end, m', i+1);
+    }
+  }
+
   lemma evalKeyIsInterp(buckets: seq<Bucket>, iters: seq<Iterator>, succs: seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd)
   requires IterProps(buckets, iters, succs, start, end)
   ensures getMinKey(iters).Some? ==>
         evalKey(buckets, iters, getMinKey(iters).value)
      == PBS.InterpretBucketStack(buckets, getMinKey(iters).value)
+  {
+    reveal_evalKey();
+    if getMinKey(iters).Some? {
+      evalKeyIsInterpIter(buckets, iters, succs, start, end, Messages.Update(Messages.NopDelta()), 0);
+    }
+  }
+
+  predicate AdvanceRelation(bucket: Bucket, iter: Iterator, iter': Iterator, key: Key, upTo: Option<Key>)
+  {
+    && (iter.next.None? ==> iter' == iter)
+    && (iter.next.Some? && iter.next.value.key != key ==> iter' == iter)
+    && (iter.next.Some? && iter.next.value.key == key ==>
+      var next := IterInc(bucket, iter);
+      && (next.next.None? ==> iter' == IterEnd(bucket))
+      && (next.next.Some? && upTo.None? ==> iter' == next)
+      && (next.next.Some? && upTo.Some? && lt(next.next.value.key, upTo.value) ==> iter' == next)
+      && (next.next.Some? && upTo.Some? && lte(upTo.value, next.next.value.key) ==> iter' == IterEnd(bucket))
+    )
+  }
+
+  lemma advanceResultIter(buckets: seq<Bucket>, iters: seq<Iterator>, key: Key, upTo: Option<Key>, i: int, res: seq<Iterator>)
+  requires |buckets| == |iters|
+  requires forall j | 0 <= j < |iters| :: WFIter(buckets[j], iters[j])
+  requires 0 <= i <= |buckets|
+  requires |res| == i
+  requires forall j | 0 <= j < |res| :: WFIter(buckets[j], res[j])
+  requires forall i | 0 <= i < |res| :: AdvanceRelation(buckets[i], iters[i], res[i], key, upTo)
+  decreases |buckets| - i
+  ensures var iters' := advanceIter(buckets, iters, key, upTo, i, res);
+    forall i | 0 <= i < |iters| :: AdvanceRelation(buckets[i], iters[i], iters'[i], key, upTo)
+  {
+    if i == |iters| {
+    } else {
+      var newIter := 
+        if iters[i].next.Some? && iters[i].next.value.key == key then (
+          var next := IterInc(buckets[i], iters[i]);
+          if next.next.Some? && (upTo.Some? ==> lt(next.next.value.key, upTo.value)) then (
+            next
+          ) else (
+            IterEnd(buckets[i])
+          )
+        ) else (
+          iters[i]
+        );
+      assert AdvanceRelation(buckets[i], iters[i], newIter, key, upTo);
+      advanceResultIter(buckets, iters, key, upTo, i+1, res + [newIter]);
+    }
+  }
+
+  lemma advanceResult(buckets: seq<Bucket>, iters: seq<Iterator>, key: Key, upTo: Option<Key>)
+  requires |buckets| == |iters|
+  requires forall j | 0 <= j < |iters| :: WFIter(buckets[j], iters[j])
+  ensures var iters' := advance(buckets, iters, key, upTo);
+    forall i | 0 <= i < |iters| :: AdvanceRelation(buckets[i], iters[i], iters'[i], key, upTo)
+  {
+    reveal_advance();
+    advanceResultIter(buckets, iters, key, upTo, 0, []);
+  }
+
+  lemma advancePreservesInvariants(buckets: seq<Bucket>, its: seq<Iterator>, succs: seq<UI.SuccResult>, succs': seq<UI.SuccResult>, start: UI.RangeStart, end: UI.RangeEnd, upTo: Option<Key>)
+  requires IterProps(buckets, its, succs, start, end)
+
+  requires getMinKey(its).Some?
+  requires 
+    var key := getMinKey(its).value;
+    var m := evalKey(buckets, its, key);
+    var def := Messages.Merge(m, Messages.DefineDefault()).value;
+    && (def == Messages.DefaultValue() ==> succs' == succs)
+    && (def != Messages.DefaultValue() ==>
+      && |succs'| == |succs| + 1
+      && (forall j | 0 <= j < |succs| :: succs'[j] == succs[j])
+      && succs'[|succs'| - 1] == UI.SuccResult(key, def)
+    )
+
+  requires upTo.Some? ==> end == UI.EExclusive(upTo.value)
+  requires upTo.None? ==> end == UI.PositiveInf
+
+  ensures IterProps(buckets,
+      advance(buckets, its, getMinKey(its).value, upTo),
+      succs', start, end)
+  {
+  }
 }
