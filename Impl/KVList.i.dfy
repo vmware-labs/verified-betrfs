@@ -730,6 +730,7 @@ module KVList {
   ensures WF(left)
   ensures I(left) == SplitBucketLeft(I(kvl), pivot)
   {
+    reveal_SplitBucketLeft();
     var idx := ComputeCutoffPoint(kvl, pivot);
     left := Kvl(kvl.keys[..idx], kvl.values[..idx]);
 
@@ -765,6 +766,7 @@ module KVList {
   ensures WF(right)
   ensures I(right) == SplitBucketRight(I(kvl), pivot)
   {
+    reveal_SplitBucketRight();
     var idx := ComputeCutoffPoint(kvl, pivot);
     right := Kvl(kvl.keys[idx..], kvl.values[idx..]);
 

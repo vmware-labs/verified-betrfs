@@ -203,6 +203,7 @@ module BucketsLib {
   ensures WFPivots(pivots[.. i])
   ensures WFBucketAt(SplitBucketLeft(bucket, pivot), pivots[.. i], i)
   {
+    reveal_SplitBucketLeft();
     WFSlice(pivots, 0, i);
     forall key | key in SplitBucketLeft(bucket, pivot)
     ensures Route(pivots[.. i], key) == i
@@ -218,6 +219,7 @@ module BucketsLib {
   ensures WFPivots(pivots[i ..])
   ensures WFBucketAt(SplitBucketRight(bucket, pivot), pivots[i ..], 0)
   {
+    reveal_SplitBucketRight();
     WFSuffix(pivots, i);
     forall key | key in SplitBucketRight(bucket, pivot)
     ensures Route(pivots[i ..], key) == 0
@@ -231,6 +233,7 @@ module BucketsLib {
   requires CutoffForLeft(pivots, key) == cLeft
   ensures WFBucketList(SplitBucketListLeft(blist, pivots, cLeft, key), pivots[.. cLeft])
   {
+    reveal_SplitBucketLeft();
     WFSlice(pivots, 0, cLeft);
 
     var res := SplitBucketListLeft(blist, pivots, cLeft, key);
@@ -250,6 +253,7 @@ module BucketsLib {
   requires CutoffForRight(pivots, key) == cRight
   ensures WFBucketList(SplitBucketListRight(blist, pivots, cRight, key), pivots[cRight ..])
   {
+    reveal_SplitBucketRight();
     WFSuffix(pivots, cRight);
 
     var res := SplitBucketListRight(blist, pivots, cRight, key);
@@ -271,6 +275,8 @@ module BucketsLib {
   ensures WFPivots(insert(pivots, pivot, slot))
   ensures WFBucketList(SplitBucketInList(blist, slot, pivot), insert(pivots, pivot, slot))
   {
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
     reveal_SplitBucketInList();
 
     var blist' := SplitBucketInList(blist, slot, pivot);
@@ -342,6 +348,8 @@ module BucketsLib {
   ensures SplitBucketLeft(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot]
   ensures SplitBucketRight(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot+1]
   {
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
     reveal_MergeBucketsInList();
     reveal_MergeBuckets();
   }
