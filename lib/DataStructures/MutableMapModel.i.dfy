@@ -386,10 +386,14 @@ module MutableMapModel {
   }
 
   lemma allNonEmptyImpliesCountEqStorageSize<V>(self: FixedSizeLinearHashMap<V>)
-  requires FixedSizeInv(self)
+  requires FixedSizeInv(self)  // Not sure we need this requires; seems misleading.
   ensures (forall j | 0 <= j < |self.storage| :: !self.storage[j].Empty?)
       ==> self.count as int == |self.storage|
-  { assume false; }
+  {
+    assert self.count as int != |self.storage|;
+    assert (forall j | 0 <= j < |self.storage| :: !self.storage[j].Empty?)
+      ==> self.count as int == |self.storage|;
+  }
 
   function {:opaque} getEmptyWitness<V>(self: FixedSizeLinearHashMap<V>, i: uint64) : (res : uint64)
   requires FixedSizeInv(self)
