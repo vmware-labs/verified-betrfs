@@ -185,4 +185,4 @@ build/%.cpp: %.dfy | $$(@D)/.
 ##############################################################################
 # C++ object files
 build/%.o: build/%.cpp framework/Framework.h | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -IImpl/ -std=c++14 -include framework/Framework.h
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I Impl/ -std=c++14 -include framework/Framework.h
