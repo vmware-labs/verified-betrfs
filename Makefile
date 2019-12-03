@@ -6,7 +6,7 @@ DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
-DAFNY_EXE=$(DAFNY_ROOT)/Binaries/Dafny.exe
+DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 
 ##############################################################################
 # Automatic targets
@@ -120,14 +120,14 @@ build/%.dummydep: %.dfy | $$(@D)/.
 
 ##############################################################################
 # .synchk: Dafny syntax check
-build/%.synchk: %.dfy $(DAFNY_EXE) | $$(@D)/.
+build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.synchk,%.synchk-tmp,$@))
 	( $(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ##############################################################################
 # .verchk: Dafny file-local verification
-build/%.verchk: %.dfy $(DAFNY_EXE) | $$(@D)/.
+build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
 	( $(TIME) $(DAFNY_CMD) /compile:0 /timeLimit:20 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
@@ -166,7 +166,7 @@ build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) bu
 # .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
 # In principle, building code should depend on .verified! But we want
 # to play with perf with not-entirely-verifying trees.
-build/%.cs: %.dfy .dafny/dafny/Binaries/Dafny.exe | $$(@D)/.
+build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
 # Dafny irritatingly removes the '.i' presuffix, and has a weird behavior where it duplicates prefixes of relative paths. Bizarre.
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
@@ -176,7 +176,7 @@ build/%.cs: %.dfy .dafny/dafny/Binaries/Dafny.exe | $$(@D)/.
 
 ##############################################################################
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
-build/%.cpp: %.dfy $(DAFNY_EXE) | $$(@D)/.
+build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
 	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
 # Dafny irritatingly removes the '.i' presuffix.
