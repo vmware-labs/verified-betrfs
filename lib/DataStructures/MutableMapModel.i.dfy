@@ -877,7 +877,9 @@ module MutableMapModel {
   requires 0 <= i as int < |self.underlying.storage|
   requires self.underlying.storage[i].Entry?
   ensures self.underlying.storage[i].key in self.contents
-  { assume false; }
+  {
+    assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
+  }
 
   function ReallocIterate<V>(self: LinearHashMap<V>, newUnderlying: FixedSizeLinearHashMap<V>, i: uint64) : FixedSizeLinearHashMap<V>
     requires Inv(self)
