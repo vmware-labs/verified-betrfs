@@ -10,22 +10,22 @@ module BucketIterator {
   import opened ValueMessage
   import opened Sequences
 
-  datatype KeyMessage = KeyMessage(key: Key, msg: Message)
+  datatype IteratorOutput = Next(key: Key, msg: Message) | Done
 
   datatype Iterator = Iterator(
-    next: Option<KeyMessage>,
+    next: IteratorOutput,
     ghost decreaser: int
   ) 
 
   predicate WFIter(bucket: Bucket, it: Iterator)
   {
     && it.decreaser >= 0
-    && (it.next.Some? ==> (
-      && it.next.value.key in bucket
-      && bucket[it.next.value.key] == it.next.value.msg
+    && (it.next.Next? ==> (
+      && it.next.key in bucket
+      && bucket[it.next.key] == it.next.msg
       && it.decreaser > 0
     ))
-    && (it.next.None? ==> (
+    && (it.next.Done? ==> (
       && it.decreaser == 0
     ))
   }
@@ -36,13 +36,13 @@ module BucketIterator {
   {
     var setOfKeysGte := (set k | k in bucket && Keyspace.lte(key, k));
     assert key in setOfKeysGte;
-    Iterator(Some(KeyMessage(key, bucket[key])), |setOfKeysGte|)
+    Iterator(Next(key, bucket[key]), |setOfKeysGte|)
   }
 
   function iterEnd(bucket: Bucket) : (it: Iterator)
   ensures WFIter(bucket, it)
   {
-    Iterator(None, 0)
+    Iterator(Done, 0)
   }
 
   function iterForKeyOpt(bucket: Bucket, key: Option<Key>) : (it : Iterator)
@@ -62,7 +62,7 @@ module BucketIterator {
 
   function {:opaque} IterFindFirstGte(bucket: Bucket, key: Key) : (it' : Iterator)
   ensures WFIter(bucket, it')
-  ensures it'.next.Some? ==> Keyspace.lte(key, it'.next.value.key)
+  ensures it'.next.Next? ==> Keyspace.lte(key, it'.next.key)
   {
     iterForKeyOpt(bucket, Keyspace.minimumOpt(
         set k | k in bucket && Keyspace.lte(key, k)))
@@ -70,7 +70,7 @@ module BucketIterator {
 
   function {:opaque} IterFindFirstGt(bucket: Bucket, key: Key) : (it' : Iterator)
   ensures WFIter(bucket, it')
-  ensures it'.next.Some? ==> Keyspace.lt(key, it'.next.value.key)
+  ensures it'.next.Next? ==> Keyspace.lt(key, it'.next.key)
   {
     iterForKeyOpt(bucket, Keyspace.minimumOpt(
         set k | k in bucket && Keyspace.lt(key, k)))
@@ -78,14 +78,14 @@ module BucketIterator {
 
   function {:opaque} IterInc(bucket: Bucket, it: Iterator) : (it' : Iterator)
   requires WFIter(bucket, it)
-  requires it.next.Some?
+  requires it.next.Next?
   {
-    IterFindFirstGt(bucket, it.next.value.key)
+    IterFindFirstGt(bucket, it.next.key)
   }
 
   function {:opaque} IterEnd(bucket: Bucket) : (it' : Iterator)
   ensures WFIter(bucket, it')
-  ensures it'.next.None?
+  ensures it'.next.Done?
   {
     iterEnd(bucket)
   }
