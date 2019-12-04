@@ -1276,28 +1276,28 @@ module MutableMapModel {
   }
 
   //////// Iterator
-
+  datatype IteratorOutput<V> = Next(key: uint64, value: V) | Done
   datatype Iterator<V> = Iterator(
     i: uint64, // index in hash table item list
-    ghost s: set<uint64>,
+    ghost s: set<uint64>,   // set of values returned so far
     ghost decreaser: ORDINAL,
-    next: Option<(uint64, V)>)
+    next: IteratorOutput)
 
   protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  ensures WFIter(self, it) ==> (it.next.None? ==> it.s == self.contents.Keys)
-  ensures WFIter(self, it) ==> (it.next.Some? ==>
-      MapsTo(self.contents, it.next.value.0, it.next.value.1));
-  ensures WFIter(self, it) ==> (it.next.Some? ==> it.next.value.0 !in it.s)
+  ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
+  ensures WFIter(self, it) ==> (it.next.Next? ==>
+      MapsTo(self.contents, it.next.key, it.next.value));
+  ensures WFIter(self, it) ==> (it.next.Next? ==> it.next.key !in it.s)
   ensures WFIter(self, it) ==> it.s <= self.contents.Keys
   {
     && 0 <= it.i as int <= |self.underlying.storage|
-    && (it.next.Some? ==>
+    && (it.next.Next? ==>
       && it.i as int < |self.underlying.storage|
       && self.underlying.storage[it.i].Entry?
-      && self.underlying.storage[it.i].key == it.next.value.0
-      && self.underlying.storage[it.i].value == it.next.value.1
+      && self.underlying.storage[it.i].key == it.next.key
+      && self.underlying.storage[it.i].value == it.next.value
     )
-    && (it.next.None? ==> (
+    && (it.next.Done? ==> (
       && it.s == self.contents.Keys
       && it.i as int == |self.underlying.storage|
     ))
@@ -1308,14 +1308,14 @@ module MutableMapModel {
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key)
     && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
-    && (it.next.Some? ==> MapsTo(self.contents, it.next.value.0, it.next.value.1))
-    && (it.next.Some? ==> it.next.value.0 !in it.s)
+    && (it.next.Next? ==> MapsTo(self.contents, it.next.key, it.next.value))
+    && (it.next.Next? ==> it.next.key !in it.s)
     && it.s <= self.contents.Keys
   }
 
   lemma LemmaWFIterImpliesILt<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires WFIter(self, it)
-  ensures it.next.Some? ==> it.i as int < |self.underlying.storage|
+  ensures it.next.Next? ==> it.i as int < |self.underlying.storage|
   {
   }
 
@@ -1325,31 +1325,34 @@ module MutableMapModel {
         exists j | 0 <= j < it.i as int ::
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key)
-  requires (it.next.Some? ==>
+  requires (it.next.Next? ==>
       && it.i as int < |self.underlying.storage|
       && self.underlying.storage[it.i].Entry?
-      && self.underlying.storage[it.i].key == it.next.value.0
-      && self.underlying.storage[it.i].value == it.next.value.1
+      && self.underlying.storage[it.i].key == it.next.key
+      && self.underlying.storage[it.i].value == it.next.value
     )
-  ensures (it.next.Some? ==> it.next.value.0 !in it.s)
-  { assume false; }
+  ensures (it.next.Next? ==> it.next.key !in it.s)
+  {
+    // this proof will come down to CantEquivocateStorageKey.
+  assume false;
+  }
 
-  function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, Option<(uint64, V)>))
+  function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
-  ensures res.1.Some? ==> res.0 as int < |self.underlying.storage|
-  ensures res.1.Some? ==> self.underlying.storage[res.0].Entry?
-  ensures res.1.Some? ==> self.underlying.storage[res.0].key == res.1.value.0
-  ensures res.1.Some? ==> self.underlying.storage[res.0].value == res.1.value.1
-  ensures res.1.None? ==> res.0 as int == |self.underlying.storage|
+  ensures res.1.Next? ==> res.0 as int < |self.underlying.storage|
+  ensures res.1.Next? ==> self.underlying.storage[res.0].Entry?
+  ensures res.1.Next? ==> self.underlying.storage[res.0].key == res.1.key
+  ensures res.1.Next? ==> self.underlying.storage[res.0].value == res.1.value
+  ensures res.1.Done? ==> res.0 as int == |self.underlying.storage|
   ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
   ensures i <= res.0
   decreases |self.underlying.storage| - i as int
   {
     if i as int == |self.underlying.storage| then (
-      (i, None)
+      (i, Done)
     ) else if self.underlying.storage[i].Entry? then (
-      (i, Some((self.underlying.storage[i].key, self.underlying.storage[i].value)))
+      (i, Next(self.underlying.storage[i].key, self.underlying.storage[i].value))
     ) else (
       iterToNext(self, i+1)
     )
@@ -1358,10 +1361,10 @@ module MutableMapModel {
   lemma lemmaIterToNextValidKeyValuePair<V>(self: LinearHashMap<V>, i: uint64)
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
-  ensures iterToNext(self, i).1.Some? ==>
+  ensures iterToNext(self, i).1.Next? ==>
       MapsTo(self.contents, 
-          iterToNext(self, i).1.value.0,
-          iterToNext(self, i).1.value.1)
+          iterToNext(self, i).1.key,
+          iterToNext(self, i).1.value)
   { assume false; }
 
   function {:opaque} IterStart<V>(self: LinearHashMap<V>) : (it' : Iterator<V>)
@@ -1382,22 +1385,22 @@ module MutableMapModel {
   function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
   requires Inv(self)
   requires WFIter(self, it)
-  requires it.next.Some?
+  requires it.next.Next?
   ensures WFIter(self, it')
-  ensures it'.s == it.s + {it.next.value.0}
-  ensures it'.next.None? ==> it'.s == self.contents.Keys
+  ensures it'.s == it.s + {it.next.key}
+  ensures it'.next.Done? ==> it'.s == self.contents.Keys
   ensures it'.decreaser < it.decreaser
   {
     lemmaIterToNextValidKeyValuePair(self, it.i + 1);
 
     var (i, next) := iterToNext(self, it.i + 1);
-    var it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+    var it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
     assert (forall key | key in it'.s ::
         exists j | 0 <= j < it'.i as int ::
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key);
-    assert (it'.next.None? ==> it'.s == self.contents.Keys);
+    assert (it'.next.Done? ==> it'.s == self.contents.Keys);
 
     LemmaIterNextNotInS(self, it');
 
@@ -1406,7 +1409,7 @@ module MutableMapModel {
 
   lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires WFIter(self, it)
-  ensures it.next.Some? ==> |it.s| < self.count as int
+  ensures it.next.Next? ==> |it.s| < self.count as int
   { assume false; }
 
   function MaxKeyIterate<V>(self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
@@ -1416,10 +1419,10 @@ module MutableMapModel {
   ensures forall key | key in self.contents :: key <= res
   decreases it.decreaser
   {
-    if it.next.None? then (
+    if it.next.Done? then (
       m
     ) else (
-      var key := it.next.value.0;
+      var key := it.next.key;
       MaxKeyIterate(self, IterInc(self, it), if m < key then key else m)
     )
   }

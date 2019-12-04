@@ -436,7 +436,7 @@ module IndirectionTableImpl {
       t1.Insert(BT.G.Root(), oldEntry.(predCount := 1));
 
       var it := copy.IterStart();
-      while it.next.Some?
+      while it.next.Next?
       invariant t1.Inv()
       invariant copy.Inv()
       invariant copy.Repr !! t1.Repr
@@ -453,7 +453,7 @@ module IndirectionTableImpl {
 
         ghost var t0 := t1.I();
 
-        var succs := it.next.value.1.succs;
+        var succs := it.next.value.succs;
         var i: uint64 := 0;
         while i < |succs| as uint64
         invariant t1.Inv()
@@ -500,7 +500,7 @@ module IndirectionTableImpl {
 
       q := new MutableLru.MutableLruQueue();
       var it := t.IterStart();
-      while it.next.Some?
+      while it.next.Next?
       invariant q.Inv()
       invariant fresh(q.Repr)
       invariant MutableMapModel.Inv(t.I())
@@ -509,10 +509,10 @@ module IndirectionTableImpl {
              == IndirectionTableModel.makeGarbageQueueIterate(t.I(), q.Queue, it)
       decreases it.decreaser
       {
-        if it.next.value.1.predCount == 0 {
-          LruModel.LruUse(q.Queue, it.next.value.0);
+        if it.next.value.predCount == 0 {
+          LruModel.LruUse(q.Queue, it.next.key);
           assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
-          q.Use(it.next.value.0);
+          q.Use(it.next.key);
         }
         it := t.IterInc(it);
       }
@@ -597,7 +597,7 @@ module IndirectionTableImpl {
       var it := t.IterStart();
       var i: uint64 := 0;
       ghost var partial := map[];
-      while it.next.Some?
+      while it.next.Next?
       invariant Inv()
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant 0 <= i as int <= a.Length
@@ -618,7 +618,7 @@ module IndirectionTableImpl {
       invariant SeqSum(a[..i]) <= |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
       decreases it.decreaser
       {
-        var (ref, locOptGraph: IndirectionTableModel.Entry) := it.next.value;
+        var (ref, locOptGraph: IndirectionTableModel.Entry) := (it.next.key, it.next.value);
         assert ref in I().locs;
         // NOTE: deconstructing in two steps to work around c# translation bug
         var locOpt := locOptGraph.loc;
@@ -703,7 +703,7 @@ module IndirectionTableImpl {
       bm := new Bitmap.Bitmap(NumBlocksUint64());
       bm.Set(0);
       var it := t.IterStart();
-      while it.next.Some?
+      while it.next.Next?
       invariant t.Inv()
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant bm.Inv()
@@ -714,11 +714,9 @@ module IndirectionTableImpl {
       invariant fresh(bm.Repr)
       decreases it.decreaser
       {
-        var kv := it.next.value;
+        assert it.next.key in IndirectionTableModel.I(I()).locs;
 
-        assert kv.0 in IndirectionTableModel.I(I()).locs;
-
-        var loc: uint64 := kv.1.loc.value.addr;
+        var loc: uint64 := it.next.value.loc.value.addr;
         var locIndex: uint64 := loc / BlockSizeUint64();
         if locIndex < NumBlocksUint64() {
           var isSet := bm.GetIsSet(locIndex);
