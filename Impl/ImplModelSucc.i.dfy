@@ -972,4 +972,61 @@ module ImplModelSucc {
       }
     }
   }
+
+  predicate CompleteSuccessors(buckets: seq<Bucket>, start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
+  {
+    && MS.NonEmptyRange(start, end)
+    && (forall i | 0 <= i < |results| ::
+      PBS.BufferDefinesValue(PBS.InterpretBucketStack(buckets, results[i].key), results[i].value))
+    && (forall i | 0 <= i < |results| :: results[i].value != MS.EmptyValue())
+    && (forall i | 0 <= i < |results| :: MS.InRange(start, results[i].key, end))
+    && (forall i, j | 0 <= i < j < |results| :: lt(results[i].key, results[j].key))
+    && (forall key | MS.InRange(start, key, end) ::
+        (forall i | 0 <= i < |results| :: results[i].key != key) ==>
+        PBS.BufferDefinesEmptyValue(PBS.InterpretBucketStack(buckets, key))
+      )
+  }
+
+  lemma collectSuccessorsIterResult(
+    buckets: seq<Bucket>,
+    iters: seq<Iterator>,
+    start: UI.RangeStart,
+    end: UI.RangeEnd,
+    upTo: Option<Key>,
+    maxToFind: int,
+    acc: seq<UI.SuccResult>)
+  requires collectSuccessorsIter.requires(buckets, iters, upTo, maxToFind, acc)
+  requires upTo.Some? ==> end == UI.EExclusive(upTo.value)
+  requires upTo.None? ==> end == UI.PositiveInf
+  decreases decreaserSum(iters)
+  ensures CompleteSuccessors(buckets,
+        start,
+        collectSuccessorsIter(buckets, iters, upTo, maxToFind, acc).results,
+        collectSuccessorsIter(buckets, iters, upTo, maxToFind, acc).end)
+  {
+    if |acc| == maxToFind {
+      SuccCollectionResult(acc, UI.EInclusive(Last(acc).key))
+    } else {
+      var keyOpt := getMinKey(iters);
+      if keyOpt.Some? then (
+        var key := keyOpt.value;
+        var m := evalKey(buckets, iters, key);
+        var def := Messages.Merge(m, Messages.DefineDefault()).value;
+        var acc' :=
+          if def == Messages.DefaultValue() then (
+            acc
+          ) else (
+            acc + [UI.SuccResult(key, def)]
+          );
+
+        lemmaAdvanceDecreases(buckets, iters, upTo);
+        var iters' := advance(buckets, iters, key, upTo);
+
+        collectSuccessorsIter(buckets, iters', upTo, maxToFind, acc')
+      } else {
+        var end := if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf;
+        SuccCollectionResult(acc, end)
+      }
+    )
+  }
 }
