@@ -630,6 +630,7 @@ module ImplModelSucc {
 
   predicate AdvanceRelation(bucket: Bucket, iter: Iterator, iter': Iterator, key: Key, upTo: Option<Key>)
   {
+    && WFIter(bucket, iter)
     && (iter.next.None? ==> iter' == iter)
     && (iter.next.Some? && iter.next.value.key != key ==> iter' == iter)
     && (iter.next.Some? && iter.next.value.key == key ==>
@@ -902,6 +903,19 @@ module ImplModelSucc {
     forall key | MS.InRange(start, key, end)
     ensures KeyAccountedFor(buckets, its, [], key)
     {
+      forall j | 0 <= j < |buckets| && key in buckets[j] && its[j].next.Some?
+      ensures lte(its[j].next.value.key, key)
+      {
+        if start.SInclusive? {
+          noKeyBetweenIterFindFirstGe(buckets[j], start.key, key);
+        }
+        else if start.SExclusive? {
+          noKeyBetweenIterFindFirstGt(buckets[j], start.key, key);
+        }
+        else {
+          noKeyBeforeIterStart(buckets[j], key);
+        }
+      }
     }
 
     forall j | 0 <= j < |its| && its[j].next.Some?
@@ -915,32 +929,45 @@ module ImplModelSucc {
       //assert its[j] == initIterator(buckets[j], start, upTo);
 
       /*var it := match start {
-        case SInclusive(k) => IterFindFirstGe(buckets[i], k)
-        case SExclusive(k) => IterFindFirstGt(buckets[i], k)
-        case NegativeInf => IterStart(buckets[i])
+        case SInclusive(k) => IterFindFirstGe(buckets[j], k)
+        case SExclusive(k) => IterFindFirstGt(buckets[j], k)
+        case NegativeInf => IterStart(buckets[j])
       };*/
+      /*assert its[j] == 
+        if it.next.Some? && (upTo.Some? ==> lt(it.next.value.key, upTo.value)) then
+          it
+        else
+          IterEnd(buckets[j]);*/
 
       //assert upTo.Some? ==> lt(key, upTo.value);
       if key in buckets[i] && key in buckets[j] &&
           (its[i].next.Some? && lte(its[i].next.value.key, key)) {
+        //assert upTo.Some? ==> lt(its[i].next.value.key, upTo.value);
+
         if start.SInclusive? {
           //assert lte(start.key, key);
           noKeyBetweenIterFindFirstGe(buckets[j], start.key, key);
           //assert it.next.Some?;
           //assert lte(it.next.value.key, key);
+          //assert upTo.Some? ==> lt(it.next.value.key, upTo.value);
+          //assert its[j] == it;
+          //assert its[j].next.Some?;
+          //assert lte(its[j].next.value.key, key);
         }
         else if start.SExclusive? {
           //assert lt(start.key, key);
           noKeyBetweenIterFindFirstGt(buckets[j], start.key, key);
-          //assert ItsConsistent(buckets, its, i, j, key);
           //assert it.next.Some?;
           //assert lte(it.next.value.key, key);
+          //assert its[j].next.Some?;
+          //assert lte(its[j].next.value.key, key);
         }
         else {
           noKeyBeforeIterStart(buckets[j], key);
-          //assert ItsConsistent(buckets, its, i, j, key);
           //assert it.next.Some?;
           //assert lte(it.next.value.key, key);
+          //assert its[j].next.Some?;
+          //assert lte(its[j].next.value.key, key);
         }
       }
     }

@@ -74,14 +74,14 @@ module ModelBucket {
   lemma noKeyBetweenIterFindFirstGe(bucket: Bucket, key: Key, key0: Key)
   requires key0 in bucket
   ensures IterFindFirstGe(bucket, key).next.Some? ==>
-      (Keyspace.lt(key0, key) || Keyspace.lte(key, IterFindFirstGe(bucket, key).next.value.key))
+      (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGe(bucket, key).next.value.key, key0))
   ensures IterFindFirstGe(bucket, key).next.None? ==>
       (Keyspace.lt(key0, key))
 
   lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, key: Key, key0: Key)
   requires key0 in bucket
   ensures IterFindFirstGt(bucket, key).next.Some? ==>
-      (Keyspace.lte(key0, key) || Keyspace.lte(key, IterFindFirstGt(bucket, key).next.value.key))
+      (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, key).next.value.key, key0))
   ensures IterFindFirstGt(bucket, key).next.None? ==>
       (Keyspace.lte(key0, key))
 
