@@ -163,6 +163,49 @@ module BucketsLib {
     if |buckets| == 0 then map[] else Lump(LumpSeq(DropLast(buckets)), Last(buckets))
   }
 
+  lemma LumpSeq1(b: Bucket)
+  ensures LumpSeq([b]) == b
+  {
+    reveal_Lump();
+    reveal_LumpSeq();
+  }
+
+  lemma LumpAssoc(a: Bucket, b: Bucket, c: Bucket)
+  ensures Lump(Lump(a, b), c) == Lump(a, Lump(b, c))
+  {
+    reveal_Lump();
+    forall a, b, c ensures Merge(a, Merge(b, c)) == Merge(Merge(a, b), c)
+    {
+      MergeIsAssociative(a, b, c);
+    }
+  }
+
+  lemma LumpSeqAdditive(a: seq<Bucket>, b: seq<Bucket>)
+  ensures LumpSeq(a + b) == Lump(LumpSeq(a), LumpSeq(b))
+  {
+    reveal_LumpSeq();
+    reveal_Lump();
+    if |b| == 0 {
+      assert b == [];
+      assert a + b == a;
+      assert LumpSeq(a + b)
+          == LumpSeq(a)
+          == Lump(LumpSeq(a), map[])
+          == Lump(LumpSeq(a), LumpSeq(b));
+    } else {
+      LumpSeqAdditive(a, b[..|b|-1]);
+      assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
+      assert (a+b)[|a+b|-1] == b[|b|-1];
+      LumpAssoc(LumpSeq(a), LumpSeq(b[..|b|-1]), b[|b|-1]);
+      assert LumpSeq(a + b)
+          == Lump(LumpSeq((a + b)[..|a+b|-1]), (a+b)[|a+b|-1])
+          == Lump(LumpSeq(a + b[..|b|-1]), b[|b|-1])
+          == Lump(Lump(LumpSeq(a), LumpSeq(b[..|b|-1])), b[|b|-1])
+          == Lump(LumpSeq(a), Lump(LumpSeq(b[..|b|-1]), b[|b|-1]))
+          == Lump(LumpSeq(a), LumpSeq(b));
+    }
+  }
+
   ////// Clamping based on RangeStart and RangeEnd
 
   function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : Bucket
