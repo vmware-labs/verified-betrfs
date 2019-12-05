@@ -20,7 +20,10 @@ module BucketSuccessorLoop {
       results: seq<UI.SuccResult>) : UI.SuccResultList
   requires WF(g)
   requires |results| < maxToFind
+  decreases decreaser(g)
   {
+    lemmaDecreaserDecreases(g);
+
     var next := GenLeft(g);
     if next.Next? && (upTo.Some? ==> Keyspace.lt(next.key, upTo.value)) then (
       var v := Merge(next.msg, DefineDefault()).value;
@@ -73,7 +76,7 @@ module BucketSuccessorLoop {
     && |results| < maxToFind
   }
 
-  lemma ProcessGeneratorPreserves(
+  lemma ProcessGeneratorResult(
       bucket: Bucket,
       left: Bucket,
       right: Bucket,
@@ -87,11 +90,16 @@ module BucketSuccessorLoop {
           KeyValueMapOfBucket(
             ClampEnd(bucket, r.end)))
       && (upTo.Some? ==> !MS.UpperBound(upTo.value, r.end))
+      && (|r.results| == 0 ==>
+          r.end == (if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf))
+  decreases decreaser(g)
   {
     reveal_ProcessGenerator();
     reveal_SortedSeqOfKeyValueMap();
     reveal_KeyValueMapOfBucket();
     reveal_ClampEnd();
+
+    lemmaDecreaserDecreases(g);
 
     var next := GenLeft(g);
     GenLeftIsMinimum(g);
@@ -103,9 +111,6 @@ module BucketSuccessorLoop {
 
       var left' := left[next.key := next.msg];
       var right' := MapRemove1(right, next.key);
-      assert forall k | k in left' :: Keyspace.lte(k, next.key);
-      assert next.key == Keyspace.maximum(left'.Keys);
-      assert MapRemove1(left', Keyspace.maximum(left'.Keys)) == left;
 
       if v != DefaultValue() {
         var results' := results + [UI.SuccResult(next.key, v)];
@@ -118,7 +123,7 @@ module BucketSuccessorLoop {
 
         if |results'| < maxToFind {
           var g' := GenPop(g);
-          ProcessGeneratorPreserves(bucket, left', right', g', maxToFind, upTo, results');
+          ProcessGeneratorResult(bucket, left', right', g', maxToFind, upTo, results');
         } else {
           assert left' == ClampEnd(bucket, UI.EInclusive(next.key));
           //var r := UI.SuccResultList(results', UI.EInclusive(next.key));
@@ -128,13 +133,79 @@ module BucketSuccessorLoop {
         assert results == SortedSeqOfKeyValueMap(KeyValueMapOfBucket(left'));
 
         var g' := GenPop(g);
-        ProcessGeneratorPreserves(bucket, left', right', g', maxToFind, upTo, results);
+        ProcessGeneratorResult(bucket, left', right', g', maxToFind, upTo, results);
       }
     } else {
       assert left == ClampEnd(bucket, 
           if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
       //var r := UI.SuccResultList(results,
       //    if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
+    }
+  }
+
+  lemma InRangeImpliesNonEmpty(start: UI.RangeStart, key: Key, end: UI.RangeEnd)
+  requires MS.InRange(start, key, end)
+  ensures MS.NonEmptyRange(start, end)
+  {
+    assert start.SInclusive? ==> Keyspace.lte(start.key, key);
+    assert start.SExclusive? ==> Keyspace.lt(start.key, key);
+    assert end.EInclusive? ==> Keyspace.lte(key, end.key);
+    assert end.EExclusive? ==> Keyspace.lt(key, end.key);
+  }
+
+  lemma GetSuccessorInBucketStackResult(
+      buckets: seq<Bucket>,
+      maxToFind: int,
+      start: UI.RangeStart,
+      upTo: Option<Key>)
+  requires |buckets| >= 1
+  requires maxToFind >= 1
+  requires upTo.Some? && (start.SInclusive? || start.SExclusive?) ==>
+      Keyspace.lt(start.key, upTo.value)
+  ensures var r := GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+    && r.results ==
+        SortedSeqOfKeyValueMap(
+          KeyValueMapOfBucket(
+            ClampRange(LumpSeq(buckets), start, r.end)))
+    && (upTo.Some? ==> !MS.UpperBound(upTo.value, r.end))
+    && MS.NonEmptyRange(start, r.end)
+  {
+    reveal_GetSuccessorInBucketStack();
+    var g := GenFromBucketStackWithLowerBound(buckets, start);
+    GenFromBucketStackWithLowerBoundYieldsLumpSeq(buckets, start);
+    var bucket := BucketOf(g);
+    reveal_KeyValueMapOfBucket();
+    reveal_SortedSeqOfKeyValueMap();
+    ProcessGeneratorResult(bucket, map[], bucket, g, maxToFind, upTo, []);
+    var r := ProcessGenerator(g, maxToFind, upTo, []);
+    assert r == GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+
+    reveal_ClampRange();
+    reveal_ClampStart();
+    reveal_ClampEnd();
+    assert ClampRange(LumpSeq(buckets), start, r.end)
+        == ClampEnd(ClampStart(LumpSeq(buckets), start), r.end);
+
+    /*assert bucket == ClampStart(LumpSeq(buckets), start);
+
+    assert r.results
+        == SortedSeqOfKeyValueMap(
+             KeyValueMapOfBucket(
+               ClampEnd(bucket, r.end)))
+        == SortedSeqOfKeyValueMap(
+             KeyValueMapOfBucket(
+               ClampRange(LumpSeq(buckets), start, r.end)));*/
+
+    if |r.results| == 0 {
+      // In this case, the r.end will be upTo
+      assert MS.NonEmptyRange(start, r.end);
+    } else {
+      // There's at least 1 result, so the range has to be non-empty
+      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(
+               ClampRange(LumpSeq(buckets), start, r.end)), 0);
+      assert r.results[0].key in ClampRange(LumpSeq(buckets), start, r.end);
+      assert MS.InRange(start, r.results[0].key, r.end);
+      InRangeImpliesNonEmpty(start, r.results[0].key, r.end);
     }
   }
 }

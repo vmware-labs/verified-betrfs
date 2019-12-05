@@ -428,4 +428,33 @@ module BucketGenerator {
       }
     }
   }
+
+  ////// For termination
+
+  function {:opaque} decreaser(g: Generator) : nat
+  requires WF(g)
+  {
+    match g {
+      case BasicGenerator(bucket, it) => (
+        it.decreaser
+      )
+      case MergeGenerator(top, bot, next) => (
+        decreaser(top) + decreaser(bot) + (if next.Next? then 1 else 0)
+      )
+    }
+  }
+
+  lemma lemmaDecreaserDecreases(g: Generator)
+  requires WF(g)
+  ensures GenLeft(g).Next? ==> decreaser(GenPop(g)) < decreaser(g)
+  {
+    reveal_GenPop();
+    reveal_MergeGenPop();
+    reveal_BasicGenPop();
+    reveal_decreaser();
+    if g.MergeGenerator? {
+      lemmaDecreaserDecreases(g.top);
+      lemmaDecreaserDecreases(g.bot);
+    }
+  }
 }
