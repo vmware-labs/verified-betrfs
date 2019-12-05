@@ -216,6 +216,14 @@ module BucketsLib {
 
   lemma BucketGetLumpSeq(buckets: seq<Bucket>, key: Key)
   ensures BucketGet(LumpSeq(buckets), key) == InterpretBucketStack(buckets, key);
+  {
+    reveal_LumpSeq();
+    reveal_Lump();
+    if |buckets| == 0 {
+    } else {
+      BucketGetLumpSeq(DropLast(buckets), key);
+    }
+  }
 
   ////// Clamping based on RangeStart and RangeEnd
 
@@ -252,18 +260,57 @@ module BucketsLib {
           + [UI.SuccResult(max.value, m[max.value])]
   }
 
-  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
-  ensures var s := SortedSeqOfKeyValueMap(m);
-      forall i, j | 0 <= i < j < |s| :: Keyspace.lt(s[i].key, s[j].key)
-
   lemma SortedSeqOfKeyValueHasKey(m: map<Key, Value>, key: Key)
   requires key in m
   ensures var s := SortedSeqOfKeyValueMap(m);
       exists i :: 0 <= i < |s| && s[i].key == key
+  {
+    reveal_SortedSeqOfKeyValueMap();
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.Some? {
+      if key != max.value {
+        SortedSeqOfKeyValueHasKey(MapRemove1(m, max.value), key);
+        var i :| 0 <= i < |SortedSeqOfKeyValueMap(MapRemove1(m, max.value))| &&
+            SortedSeqOfKeyValueMap(MapRemove1(m, max.value))[i].key == key;
+        assert SortedSeqOfKeyValueMap(m)[i].key == key;
+      } else {
+        assert Last(SortedSeqOfKeyValueMap(m)).key == key;
+      }
+    }
+  }
 
   lemma SortedSeqOfKeyValueMaps(m: map<Key, Value>, i: int)
   requires 0 <= i < |SortedSeqOfKeyValueMap(m)|
   ensures MapsTo(m, SortedSeqOfKeyValueMap(m)[i].key, SortedSeqOfKeyValueMap(m)[i].value)
+  {
+    reveal_SortedSeqOfKeyValueMap();
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.Some? && i != |SortedSeqOfKeyValueMap(m)| - 1 {
+      SortedSeqOfKeyValueMaps(MapRemove1(m, max.value), i);
+    }
+  }
+
+  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
+  ensures var s := SortedSeqOfKeyValueMap(m);
+      forall i, j | 0 <= i < j < |s| :: Keyspace.lt(s[i].key, s[j].key)
+  {
+    var s := SortedSeqOfKeyValueMap(m);
+    reveal_SortedSeqOfKeyValueMap();
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.Some? {
+      SortedSeqOfKeyValueMapHasSortedKeys(MapRemove1(m, max.value));
+    }
+    forall i, j | 0 <= i < j < |s| ensures Keyspace.lt(s[i].key, s[j].key)
+    {
+      if j == |s| - 1 {
+        SortedSeqOfKeyValueMaps(MapRemove1(m, max.value), i);
+        assert Keyspace.lt(s[i].key, s[j].key);
+      } else {
+        var s1 := SortedSeqOfKeyValueMap(MapRemove1(m, max.value));
+        assert Keyspace.lt(s1[i].key, s1[j].key);
+      }
+    }
+  }
 
   ///// Splitting stuff
 
