@@ -14,6 +14,7 @@ module UI {
   datatype RangeEnd = EInclusive(key: Key) | EExclusive(key: Key) | PositiveInf
 
   datatype SuccResult = SuccResult(key: Key, value: Value)
+  datatype SuccResultList = SuccResultList(results: seq<SuccResult>, end: RangeEnd)
 
   datatype Op =
     | NoOp
