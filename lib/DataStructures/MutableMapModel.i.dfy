@@ -1321,6 +1321,8 @@ module MutableMapModel {
 
   lemma LemmaIterNextNotInS<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires 0 <= it.i as int <= |self.underlying.storage|
+  requires ValidElements(self.underlying.storage)
+  requires CantEquivocateStorageKey(self.underlying.storage)
   requires (forall key | key in it.s ::
         exists j | 0 <= j < it.i as int ::
         && self.underlying.storage[j].Entry?
@@ -1333,8 +1335,15 @@ module MutableMapModel {
     )
   ensures (it.next.Next? ==> it.next.key !in it.s)
   {
-    // this proof will come down to CantEquivocateStorageKey.
-  assume false;
+    if it.next.Next? {
+      if it.next.key in it.s {
+        var j :| 0 <= j < it.i as int
+          && self.underlying.storage[j].Entry?
+          && it.next.key == self.underlying.storage[j].key;
+        assert TwoNonEmptyValidSlotsWithSameKey<V>(self.underlying.storage, Slot(it.i as int), Slot(j));  // trigger
+        // assert false; // proof by contradiction
+      }
+    }
   }
 
   function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
