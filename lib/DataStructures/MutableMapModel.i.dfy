@@ -1283,13 +1283,14 @@ module MutableMapModel {
     ghost decreaser: ORDINAL,
     next: IteratorOutput)
 
-  predicate NextExplainedByI<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  predicate NextExplainedByI<V>(self: LinearHashMap<V>, i : uint64, output:IteratorOutput)
   {
-    it.next.Next? ==>
-      && it.i as int < |self.underlying.storage|
-      && self.underlying.storage[it.i].Entry?
-      && self.underlying.storage[it.i].key == it.next.key
-      && self.underlying.storage[it.i].value == it.next.value
+    && (output.Next? ==>
+      && i as int < |self.underlying.storage|
+      && self.underlying.storage[i].Entry?
+      && self.underlying.storage[i].key == output.key
+      && self.underlying.storage[i].value == output.value)
+    && (output.Done? ==> i as int == |self.underlying.storage|)
   }
 
   predicate ValidI<V>(self: LinearHashMap<V>, it: Iterator<V>)
@@ -1314,12 +1315,9 @@ module MutableMapModel {
   ensures WFIter(self, it) ==> it.s <= self.contents.Keys
   {
     && ValidI(self, it)
-    && NextExplainedByI(self, it)
+    && NextExplainedByI(self, it.i, it.next)
     // Done justified by exhausting i
-    && (it.next.Done? ==> (
-      && it.s == self.contents.Keys
-      && it.i as int == |self.underlying.storage|
-    ))
+    && (it.next.Done? ==> (it.s == self.contents.Keys))
     // Each passed index appears in s
     && (forall j | 0 <= j < it.i as int ::
         self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
@@ -1340,7 +1338,7 @@ module MutableMapModel {
   requires 0 <= it.i as int <= |self.underlying.storage|
   requires ValidElements(self.underlying.storage)
   requires CantEquivocateStorageKey(self.underlying.storage)
-  requires NextExplainedByI(self, it)
+  requires NextExplainedByI(self, it.i, it.next)
   requires EachReturnedKeyExplainedByPassedIndex(self, it)
   ensures (it.next.Next? ==> it.next.key !in it.s)
   {
@@ -1358,11 +1356,7 @@ module MutableMapModel {
   function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
-  ensures res.1.Next? ==> res.0 as int < |self.underlying.storage|
-  ensures res.1.Next? ==> self.underlying.storage[res.0].Entry?
-  ensures res.1.Next? ==> self.underlying.storage[res.0].key == res.1.key
-  ensures res.1.Next? ==> self.underlying.storage[res.0].value == res.1.value
-  ensures res.1.Done? ==> res.0 as int == |self.underlying.storage|
+  ensures NextExplainedByI(self, res.0, res.1)
   ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
   ensures i <= res.0
   decreases |self.underlying.storage| - i as int
