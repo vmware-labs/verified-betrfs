@@ -17,6 +17,13 @@ module Sets {
     assert b == a + (b - a);
   }
 
+  lemma {:opaque} SetInclusionImpliesStrictlySmallerCardinality<T>(a: set<T>, b: set<T>)
+    requires a < b
+    ensures |a| < |b|
+  {
+    assert b == a + (b - a);
+  }
+
   lemma {:opaque} SetInclusionAndEqualCardinalityImpliesSetEquality<T>(a: set<T>, b: set<T>)
     requires a <= b
     requires |a| == |b|

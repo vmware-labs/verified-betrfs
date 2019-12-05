@@ -1,10 +1,12 @@
 include "BucketsLib.i.dfy"
+include "../lib/Base/Sets.i.dfy"
 //
 // A mathematical description of bucket iterators.
 //
 
 module BucketIterator {
   import opened Options
+  import opened Sets
   import opened BucketsLib
   import opened PivotsLib
   import opened ValueMessage
@@ -17,13 +19,23 @@ module BucketIterator {
     ghost decreaser: int
   ) 
 
-  predicate WFIter(bucket: Bucket, it: Iterator)
+  function SetGte(bucket: Bucket, key: Key) : set<Key>
   {
-    && it.decreaser >= 0
+    set k | k in bucket && Keyspace.lte(key, k)
+  }
+
+  protected predicate WFIter(bucket: Bucket, it: Iterator)
+  ensures WFIter(bucket, it) ==>
+      && it.decreaser >= 0
+      && (it.next.Next? ==> (
+        && it.next.key in bucket
+        && bucket[it.next.key] == it.next.msg
+      ))
+  {
     && (it.next.Next? ==> (
       && it.next.key in bucket
       && bucket[it.next.key] == it.next.msg
-      && it.decreaser > 0
+      && it.decreaser == |SetGte(bucket, it.next.key)|
     ))
     && (it.next.Done? ==> (
       && it.decreaser == 0
@@ -34,7 +46,7 @@ module BucketIterator {
   requires key in bucket
   ensures WFIter(bucket, it)
   {
-    var setOfKeysGte := (set k | k in bucket && Keyspace.lte(key, k));
+    var setOfKeysGte := SetGte(bucket, key);
     assert key in setOfKeysGte;
     Iterator(Next(key, bucket[key]), |setOfKeysGte|)
   }
@@ -76,10 +88,28 @@ module BucketIterator {
         set k | k in bucket && Keyspace.lt(key, k)))
   }
 
+  lemma lemmaFindFirstGtSmallerSet(bucket: Bucket, it: Iterator)
+  requires WFIter(bucket, it)
+  requires it.next.Next?
+  ensures IterFindFirstGt(bucket, it.next.key).decreaser < it.decreaser
+  {
+    var it' := IterFindFirstGt(bucket, it.next.key);
+    assert it.next.key in SetGte(bucket, it.next.key);
+    if it'.next.Next? {
+      assert SetGte(bucket, it'.next.key) <= SetGte(bucket, it.next.key);
+      assert SetGte(bucket, it'.next.key) < SetGte(bucket, it.next.key);
+      SetInclusionImpliesStrictlySmallerCardinality(
+          SetGte(bucket, it'.next.key), SetGte(bucket, it.next.key));
+    }
+  }
+
   function {:opaque} IterInc(bucket: Bucket, it: Iterator) : (it' : Iterator)
   requires WFIter(bucket, it)
   requires it.next.Next?
+  ensures WFIter(bucket, it')
+  ensures it'.decreaser < it.decreaser
   {
+    lemmaFindFirstGtSmallerSet(bucket, it);
     IterFindFirstGt(bucket, it.next.key)
   }
 
