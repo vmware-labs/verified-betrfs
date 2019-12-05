@@ -241,6 +241,19 @@ module BucketsLib {
           + [UI.SuccResult(max.value, m[max.value])]
   }
 
+  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
+  ensures var s := SortedSeqOfKeyValueMap(m);
+      forall i, j | 0 <= i < j < |s| :: Keyspace.lt(s[i].key, s[j].key)
+
+  lemma SortedSeqOfKeyValueHasKey(m: map<Key, Value>, key: Key)
+  requires key in m
+  ensures var s := SortedSeqOfKeyValueMap(m);
+      exists i :: 0 <= i < |s| && s[i].key == key
+
+  lemma SortedSeqOfKeyValueMaps(m: map<Key, Value>, i: int)
+  requires 0 <= i < |SortedSeqOfKeyValueMap(m)|
+  ensures MapsTo(m, SortedSeqOfKeyValueMap(m)[i].key, SortedSeqOfKeyValueMap(m)[i].value)
+
   ///// Splitting stuff
 
   // NB(jonh): These definitions are timeout monsters.

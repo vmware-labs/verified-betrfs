@@ -460,12 +460,63 @@ module PivotBetreeSpecRefinement {
     assert lookup[..|buckets|] == lookup;
   }
 
+  lemma SuccQueryProperties(results: seq<UI.SuccResult>, buckets: seq<Bucket>,
+      start: UI.RangeStart, end: UI.RangeEnd)
+  requires results ==
+        SortedSeqOfKeyValueMap(
+          KeyValueMapOfBucket(
+            ClampRange(LumpSeq(buckets), start, end)))
+  ensures (forall i | 0 <= i < |results| ::
+      P.BufferDefinesValue(P.InterpretBucketStack(buckets, results[i].key), results[i].value))
+  ensures (forall i | 0 <= i < |results| :: results[i].value != MS.EmptyValue())
+  ensures (forall i | 0 <= i < |results| :: MS.InRange(start, results[i].key, end))
+  ensures (forall i, j | 0 <= i < j < |results| :: Keyspace.lt(results[i].key, results[j].key))
+  ensures (forall key | MS.InRange(start, key, end) ::
+        (forall i | 0 <= i < |results| :: results[i].key != key) ==>
+        P.BufferDefinesEmptyValue(P.InterpretBucketStack(buckets, key))
+      )
+  {
+    forall i | 0 <= i < |results|
+    ensures P.BufferDefinesValue(P.InterpretBucketStack(buckets, results[i].key), results[i].value)
+    ensures results[i].value != MS.EmptyValue()
+    ensures MS.InRange(start, results[i].key, end)
+    {
+      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end)), i);
+      reveal_KeyValueMapOfBucket();
+      reveal_ClampRange();
+
+      var m := LumpSeq(buckets)[results[i].key];
+      assert M.Merge(m, M.DefineDefault()).value == results[i].value;
+      assume m == P.InterpretBucketStack(buckets, results[i].key);
+    }
+
+    SortedSeqOfKeyValueMapHasSortedKeys(KeyValueMapOfBucket(
+            ClampRange(LumpSeq(buckets), start, end)));
+
+    forall key | MS.InRange(start, key, end) &&
+        (forall i | 0 <= i < |results| :: results[i].key != key)
+    ensures
+      P.BufferDefinesEmptyValue(P.InterpretBucketStack(buckets, key))
+    {
+      if !P.BufferDefinesEmptyValue(P.InterpretBucketStack(buckets, key)) {
+        reveal_KeyValueMapOfBucket();
+        reveal_ClampRange();
+
+        assume BucketGet(LumpSeq(buckets), key) == P.InterpretBucketStack(buckets, key);
+        assert key in KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end));
+        SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end)), key);
+      }
+    }
+  }
+
   lemma RefinesValidSuccQuery(sq: P.SuccQuery)
   requires P.ValidSuccQuery(sq)
   ensures B.ValidSuccQuery(ISuccQuery(sq))
   {
     var q := ISuccQuery(sq);
     var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
+
+    SuccQueryProperties(sq.results, sq.buckets, sq.start, sq.end);
 
     forall i | 0 <= i < |q.results|
     ensures B.LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value)
