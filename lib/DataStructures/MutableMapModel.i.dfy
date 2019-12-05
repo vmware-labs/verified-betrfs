@@ -1283,6 +1283,29 @@ module MutableMapModel {
     ghost decreaser: ORDINAL,
     next: IteratorOutput)
 
+  predicate NextExplainedByI<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  {
+    it.next.Next? ==>
+      && it.i as int < |self.underlying.storage|
+      && self.underlying.storage[it.i].Entry?
+      && self.underlying.storage[it.i].key == it.next.key
+      && self.underlying.storage[it.i].value == it.next.value
+  }
+
+  predicate ValidI<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  {
+    && 0 <= it.i as int <= |self.underlying.storage|
+  }
+
+  predicate EachReturnedKeyExplainedByPassedIndex<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  requires ValidI(self, it)
+  {
+    forall key | key in it.s ::
+        exists j | 0 <= j < it.i as int ::
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key
+  }
+
   protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
   ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
   ensures WFIter(self, it) ==> (it.next.Next? ==>
@@ -1290,23 +1313,17 @@ module MutableMapModel {
   ensures WFIter(self, it) ==> (it.next.Next? ==> it.next.key !in it.s)
   ensures WFIter(self, it) ==> it.s <= self.contents.Keys
   {
-    && 0 <= it.i as int <= |self.underlying.storage|
-    && (it.next.Next? ==>
-      && it.i as int < |self.underlying.storage|
-      && self.underlying.storage[it.i].Entry?
-      && self.underlying.storage[it.i].key == it.next.key
-      && self.underlying.storage[it.i].value == it.next.value
-    )
+    && ValidI(self, it)
+    && NextExplainedByI(self, it)
+    // Done justified by exhausting i
     && (it.next.Done? ==> (
       && it.s == self.contents.Keys
       && it.i as int == |self.underlying.storage|
     ))
+    // Each passed index appears in s
     && (forall j | 0 <= j < it.i as int ::
         self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
-    && (forall key | key in it.s ::
-        exists j | 0 <= j < it.i as int ::
-        && self.underlying.storage[j].Entry?
-        && key == self.underlying.storage[j].key)
+    && EachReturnedKeyExplainedByPassedIndex(self, it)
     && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
     && (it.next.Next? ==> MapsTo(self.contents, it.next.key, it.next.value))
     && (it.next.Next? ==> it.next.key !in it.s)
@@ -1323,16 +1340,8 @@ module MutableMapModel {
   requires 0 <= it.i as int <= |self.underlying.storage|
   requires ValidElements(self.underlying.storage)
   requires CantEquivocateStorageKey(self.underlying.storage)
-  requires (forall key | key in it.s ::
-        exists j | 0 <= j < it.i as int ::
-        && self.underlying.storage[j].Entry?
-        && key == self.underlying.storage[j].key)
-  requires (it.next.Next? ==>
-      && it.i as int < |self.underlying.storage|
-      && self.underlying.storage[it.i].Entry?
-      && self.underlying.storage[it.i].key == it.next.key
-      && self.underlying.storage[it.i].value == it.next.value
-    )
+  requires NextExplainedByI(self, it)
+  requires EachReturnedKeyExplainedByPassedIndex(self, it)
   ensures (it.next.Next? ==> it.next.key !in it.s)
   {
     if it.next.Next? {
