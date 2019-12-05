@@ -726,11 +726,16 @@ module MutableMapModel {
         dropLastMap
   }
 
+  predicate CantEquivocate<V>(elements: seq<Item<V>>)
+  {
+    forall slot1, slot2 :: ValidSlot(|elements|, slot1) && ValidSlot(|elements|, slot2) &&
+        elements[slot1.slot].Entry? && elements[slot2.slot].Entry? &&
+        elements[slot1.slot].key == elements[slot2.slot].key ==> slot1 == slot2
+  }
+
   lemma CantEquivocateMapFromStorageKey<V>(underlying: FixedSizeLinearHashMap<V>)
     requires FixedSizeInv(underlying)
-    ensures forall slot1, slot2 :: ValidSlot(|underlying.storage|, slot1) && ValidSlot(|underlying.storage|, slot2) &&
-        underlying.storage[slot1.slot].Entry? && underlying.storage[slot2.slot].Entry? &&
-        underlying.storage[slot1.slot].key == underlying.storage[slot2.slot].key ==> slot1 == slot2
+    ensures CantEquivocate(underlying.storage)
   {
     assert |underlying.storage| > 0;
     assert ValidSlot(|underlying.storage|, Slot(0));
@@ -757,9 +762,7 @@ module MutableMapModel {
   }
 
   lemma MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
-    requires forall slot1, slot2 :: ValidSlot(|elements|, slot1) && ValidSlot(|elements|, slot2) &&
-        elements[slot1.slot].Entry? && elements[slot2.slot].Entry? &&
-        elements[slot1.slot].key == elements[slot2.slot].key ==> slot1 == slot2
+    requires CantEquivocate(elements)
     requires MapFromStorage(elements) == result
     ensures forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Entry? ==>
         && var item := elements[slot.slot];
