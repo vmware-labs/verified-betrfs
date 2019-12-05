@@ -261,6 +261,13 @@ module PivotBetreeSpec {
     && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Pivots.Route(sq.lookup[i].node.pivotTable, startKey)])
 
     && MS.NonEmptyRange(sq.start, sq.end)
+
+    && sq.results ==
+        Buckets.SortedSeqOfKeyValueMap(
+          Buckets.KeyValueMapOfBucket(
+            Buckets.ClampRange(Buckets.LumpSeq(sq.buckets), sq.start, sq.end)))
+
+    /*
     && (forall i | 0 <= i < |sq.results| ::
       BufferDefinesValue(InterpretBucketStack(sq.buckets, sq.results[i].key), sq.results[i].value))
     && (forall i | 0 <= i < |sq.results| :: sq.results[i].value != MS.EmptyValue())
@@ -271,6 +278,7 @@ module PivotBetreeSpec {
         (forall i | 0 <= i < |sq.results| :: sq.results[i].key != key) ==>
         BufferDefinesEmptyValue(InterpretBucketStack(sq.buckets, key))
       )
+    */
   }
 
   function SuccQueryReads(q: SuccQuery): seq<ReadOp> {

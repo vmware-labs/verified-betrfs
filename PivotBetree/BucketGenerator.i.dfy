@@ -199,4 +199,11 @@ module BucketGenerator {
       )
     }
   }
+
+  function {:opaque} GenLump(top: Generator, bot: Generator) : (g : Generator)
+  requires WF(top)
+  requires WF(bot)
+  ensures WF(g)
+  {
+  }
 }

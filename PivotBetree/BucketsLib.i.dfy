@@ -15,6 +15,7 @@ module BucketsLib {
   import opened ValueMessage
   import opened Maps
   import opened Sequences
+  import UI
 
   type Bucket = map<Key, Message>
   type BucketList = seq<Bucket>
@@ -155,6 +156,46 @@ module BucketsLib {
     map key
     | key in (top.Keys + bot.Keys)
     :: Merge(BucketGet(top, key), BucketGet(bot, key))
+  }
+
+  function {:opaque} LumpSeq(buckets: seq<Bucket>) : Bucket
+  {
+    if |buckets| == 0 then map[] else Lump(LumpSeq(DropLast(buckets)), Last(buckets))
+  }
+
+  ////// Clamping based on RangeStart and RangeEnd
+
+  function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : Bucket
+  {
+    map key | key in bucket && MS.InRange(start, key, end) :: bucket[key]
+  }
+
+  function {:opaque} ClampStart(bucket: Bucket, start: UI.RangeStart) : Bucket
+  {
+    map key | key in bucket && MS.LowerBound(start, key) :: bucket[key]
+  }
+
+  function {:opaque} ClampEnd(bucket: Bucket, end: UI.RangeEnd) : Bucket
+  {
+    map key | key in bucket && MS.UpperBound(key, end) :: bucket[key]
+  }
+
+  ///// KeyValueMapOfBucket
+
+  function {:opaque} KeyValueMapOfBucket(bucket: Bucket) : map<Key, Value>
+  {
+    map key | key in bucket && Merge(bucket[key], DefineDefault()).value != DefaultValue()
+      :: Merge(bucket[key], DefineDefault()).value
+  }
+
+  function {:opaque} SortedSeqOfKeyValueMap(m: map<Key, Value>) : seq<UI.SuccResult>
+  {
+    var max := Keyspace.maximumOpt(m.Keys);
+    if max.None? then
+      []
+    else
+      SortedSeqOfKeyValueMap(MapRemove1(m, max.value))
+          + [UI.SuccResult(max.value, m[max.value])]
   }
 
   ///// Splitting stuff
