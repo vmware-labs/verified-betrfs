@@ -726,6 +726,9 @@ module MutableMapModel {
         dropLastMap
   }
 
+  // TODO(jonh): This should just be CantEquivocateStorageKey, because (a) it's
+  // the same and (b) this expression is a trigger nest.  But doing so will
+  // involve cleaning up the proofs that break when we re-hide the definition.
   predicate CantEquivocate<V>(elements: seq<Item<V>>)
   {
     forall slot1, slot2 :: ValidSlot(|elements|, slot1) && ValidSlot(|elements|, slot2) &&
@@ -1380,7 +1383,16 @@ module MutableMapModel {
       MapsTo(self.contents, 
           iterToNext(self, i).1.key,
           iterToNext(self, i).1.value)
-  { assume false; }
+  {
+    var j := iterToNext(self, i).0;
+    var next := iterToNext(self, i).1;
+    if next.Next? {
+      UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
+      CantEquivocateMapFromStorageKey(self.underlying);
+      MapFromStorageProperties(self.underlying.storage, self.contents);
+      assert self.underlying.storage[Slot(j as int).slot].value == next.value; // trigger
+    }
+  }
 
   function {:opaque} IterStart<V>(self: LinearHashMap<V>) : (it' : Iterator<V>)
   requires Inv(self)
