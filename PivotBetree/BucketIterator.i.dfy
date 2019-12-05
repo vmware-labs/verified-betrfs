@@ -96,8 +96,6 @@ module BucketIterator {
     var it' := IterFindFirstGt(bucket, it.next.key);
     assert it.next.key in SetGte(bucket, it.next.key);
     if it'.next.Next? {
-      assert SetGte(bucket, it'.next.key) <= SetGte(bucket, it.next.key);
-      assert SetGte(bucket, it'.next.key) < SetGte(bucket, it.next.key);
       SetInclusionImpliesStrictlySmallerCardinality(
           SetGte(bucket, it'.next.key), SetGte(bucket, it.next.key));
     }
@@ -119,4 +117,39 @@ module BucketIterator {
   {
     iterEnd(bucket)
   }
+
+  lemma noKeyBetweenIterAndIterInc(bucket: Bucket, it: Iterator, key: Key)
+  requires WFIter(bucket, it)
+  requires key in bucket
+  requires it.next.Next?
+  ensures IterInc(bucket, it).next.Next? ==>
+      (Keyspace.lte(key, it.next.key) || Keyspace.lte(IterInc(bucket, it).next.key, key))
+  ensures IterInc(bucket, it).next.Done? ==>
+      Keyspace.lte(key, it.next.key)
+
+  lemma IterIncKeyGreater(bucket: Bucket, it: Iterator)
+  requires WFIter(bucket, it)
+  requires it.next.Next?
+  ensures IterInc(bucket, it).next.Next? ==>
+      Keyspace.lt(it.next.key, IterInc(bucket, it).next.key)
+
+  lemma noKeyBetweenIterFindFirstGte(bucket: Bucket, key: Key, key0: Key)
+  requires key0 in bucket
+  ensures IterFindFirstGte(bucket, key).next.Next? ==>
+      (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGte(bucket, key).next.key, key0))
+  ensures IterFindFirstGte(bucket, key).next.Done? ==>
+      (Keyspace.lt(key0, key))
+
+  lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, key: Key, key0: Key)
+  requires key0 in bucket
+  ensures IterFindFirstGt(bucket, key).next.Next? ==>
+      (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, key).next.key, key0))
+  ensures IterFindFirstGt(bucket, key).next.Done? ==>
+      (Keyspace.lte(key0, key))
+
+  lemma noKeyBeforeIterStart(bucket: Bucket, key0: Key)
+  requires key0 in bucket
+  ensures IterStart(bucket).next.Next?
+  ensures Keyspace.lte(IterStart(bucket).next.key, key0)
+
 }

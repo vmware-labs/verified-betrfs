@@ -146,6 +146,17 @@ module BucketsLib {
     reveal_BucketComplement();
   }
 
+  ///// Lumping
+
+  // Note: does NOT necessarily return a WFBucket!
+  // It might contain NoOp messages
+  function {:opaque} Lump(top: Bucket, bot: Bucket) : Bucket
+  {
+    map key
+    | key in (top.Keys + bot.Keys)
+    :: Merge(BucketGet(top, key), BucketGet(bot, key))
+  }
+
   ///// Splitting stuff
 
   // NB(jonh): These definitions are timeout monsters.
