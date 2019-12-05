@@ -424,7 +424,7 @@ module PivotBetreeSpecRefinement {
     && P.WFLookupForKey(lookup, startKey)
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   requires 0 <= j <= |lookup|
-  ensures P.InterpretBucketStack(buckets[..j], key)
+  ensures InterpretBucketStack(buckets[..j], key)
        == P.InterpretLookup(lookup[..j], key)
   {
     if j == 0 {
@@ -452,7 +452,7 @@ module PivotBetreeSpecRefinement {
     var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
     && P.WFLookupForKey(lookup, startKey)
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
-  ensures P.InterpretBucketStack(buckets, key)
+  ensures InterpretBucketStack(buckets, key)
        == P.InterpretLookup(lookup, key)
   {
     InterpretBucketStackEqInterpretLookupIter(start, end, startKey, buckets, lookup, key, |lookup|);
@@ -467,17 +467,17 @@ module PivotBetreeSpecRefinement {
           KeyValueMapOfBucket(
             ClampRange(LumpSeq(buckets), start, end)))
   ensures (forall i | 0 <= i < |results| ::
-      P.BufferDefinesValue(P.InterpretBucketStack(buckets, results[i].key), results[i].value))
+      P.BufferDefinesValue(InterpretBucketStack(buckets, results[i].key), results[i].value))
   ensures (forall i | 0 <= i < |results| :: results[i].value != MS.EmptyValue())
   ensures (forall i | 0 <= i < |results| :: MS.InRange(start, results[i].key, end))
   ensures (forall i, j | 0 <= i < j < |results| :: Keyspace.lt(results[i].key, results[j].key))
   ensures (forall key | MS.InRange(start, key, end) ::
         (forall i | 0 <= i < |results| :: results[i].key != key) ==>
-        P.BufferDefinesEmptyValue(P.InterpretBucketStack(buckets, key))
+        P.BufferDefinesEmptyValue(InterpretBucketStack(buckets, key))
       )
   {
     forall i | 0 <= i < |results|
-    ensures P.BufferDefinesValue(P.InterpretBucketStack(buckets, results[i].key), results[i].value)
+    ensures P.BufferDefinesValue(InterpretBucketStack(buckets, results[i].key), results[i].value)
     ensures results[i].value != MS.EmptyValue()
     ensures MS.InRange(start, results[i].key, end)
     {
@@ -485,9 +485,10 @@ module PivotBetreeSpecRefinement {
       reveal_KeyValueMapOfBucket();
       reveal_ClampRange();
 
-      var m := LumpSeq(buckets)[results[i].key];
-      assert M.Merge(m, M.DefineDefault()).value == results[i].value;
-      assume m == P.InterpretBucketStack(buckets, results[i].key);
+      //var m := LumpSeq(buckets)[results[i].key];
+      //assert M.Merge(m, M.DefineDefault()).value == results[i].value;
+      BucketGetLumpSeq(buckets, results[i].key);
+      //assert m == InterpretBucketStack(buckets, results[i].key);
     }
 
     SortedSeqOfKeyValueMapHasSortedKeys(KeyValueMapOfBucket(
@@ -496,14 +497,15 @@ module PivotBetreeSpecRefinement {
     forall key | MS.InRange(start, key, end) &&
         (forall i | 0 <= i < |results| :: results[i].key != key)
     ensures
-      P.BufferDefinesEmptyValue(P.InterpretBucketStack(buckets, key))
+      P.BufferDefinesEmptyValue(InterpretBucketStack(buckets, key))
     {
-      if !P.BufferDefinesEmptyValue(P.InterpretBucketStack(buckets, key)) {
+      if !P.BufferDefinesEmptyValue(InterpretBucketStack(buckets, key)) {
         reveal_KeyValueMapOfBucket();
         reveal_ClampRange();
 
-        assume BucketGet(LumpSeq(buckets), key) == P.InterpretBucketStack(buckets, key);
-        assert key in KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end));
+        BucketGetLumpSeq(buckets, key);
+        //assert BucketGet(LumpSeq(buckets), key) == InterpretBucketStack(buckets, key);
+        //assert key in KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end));
         SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end)), key);
       }
     }

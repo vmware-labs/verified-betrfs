@@ -206,6 +206,17 @@ module BucketsLib {
     }
   }
 
+  function InterpretBucketStack(buckets: seq<Bucket>, key: Key) : Message
+  {
+    if |buckets| == 0 then
+      Update(NopDelta())
+    else
+      Merge(InterpretBucketStack(DropLast(buckets), key), BucketGet(Last(buckets), key))
+  }
+
+  lemma BucketGetLumpSeq(buckets: seq<Bucket>, key: Key)
+  ensures BucketGet(LumpSeq(buckets), key) == InterpretBucketStack(buckets, key);
+
   ////// Clamping based on RangeStart and RangeEnd
 
   function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : Bucket

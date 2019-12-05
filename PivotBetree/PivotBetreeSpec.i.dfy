@@ -173,14 +173,6 @@ module PivotBetreeSpec {
       G.M.Merge(InterpretLookup(lookup, key), M.DefineDefault())
   }
 
-  function InterpretBucketStack(buckets: seq<Bucket>, key: Key) : G.M.Message
-  {
-    if |buckets| == 0 then
-      G.M.Update(G.M.NopDelta())
-    else
-      G.M.Merge(InterpretBucketStack(DropLast(buckets), key), Buckets.BucketGet(Last(buckets), key))
-  }
-
   predicate WFLookupForKey(lookup: Lookup, key: Key)
   {
     && |lookup| > 0
@@ -266,19 +258,6 @@ module PivotBetreeSpec {
         Buckets.SortedSeqOfKeyValueMap(
           Buckets.KeyValueMapOfBucket(
             Buckets.ClampRange(Buckets.LumpSeq(sq.buckets), sq.start, sq.end)))
-
-    /*
-    && (forall i | 0 <= i < |sq.results| ::
-      BufferDefinesValue(InterpretBucketStack(sq.buckets, sq.results[i].key), sq.results[i].value))
-    && (forall i | 0 <= i < |sq.results| :: sq.results[i].value != MS.EmptyValue())
-    && (forall i | 0 <= i < |sq.results| :: MS.InRange(sq.start, sq.results[i].key, sq.end))
-    && (forall i, j | 0 <= i < j < |sq.results| :: Keyspace.lt(sq.results[i].key, sq.results[j].key))
-
-    && (forall key | MS.InRange(sq.start, key, sq.end) ::
-        (forall i | 0 <= i < |sq.results| :: sq.results[i].key != key) ==>
-        BufferDefinesEmptyValue(InterpretBucketStack(sq.buckets, key))
-      )
-    */
   }
 
   function SuccQueryReads(q: SuccQuery): seq<ReadOp> {
