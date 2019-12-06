@@ -7,15 +7,16 @@ module ImplBucketGenerator {
   import ModelBucketIterator = BucketIterator
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
+  import UI
 
-  class BucketGenerator {
+  class Generator {
     // For BasicGenerator
     var bucket: MutBucket?;
     var it: Iterator;
 
     // For ComposeGenerator
-    var top: BucketGenerator?;
-    var bot: BucketGenerator?;
+    var top: Generator?;
+    var bot: Generator?;
     var next: ModelBucketIterator.IteratorOutput;
 
     ghost var Repr: set<object>;
@@ -24,13 +25,31 @@ module ImplBucketGenerator {
 
     constructor() { assume false; }
 
-    protected predicate Inv()
+    // Question: Why is Inv marked opaque, and what's up with the reveal_Inv_for lemma?
+    //
+    // Answer: Typically, we mark the Inv() protected. This is because we want to
+    // access Inv within the module, but the user of a class doesn't need to care
+    // what's in Inv (except for the one ensures clause `this in this.Repr`).
+    // 
+    // This case is a bit different because the object is recursive: that is, the object
+    // is a user of itself. In other words, many of the methods in this class need
+    // to open up this.Inv() but not top.Inv() or bot.Inv(). Therefore, `protected`
+    // doesn't cut it: we need the more fine-grained reveal lemma we use here.
+
+    predicate {:opaque} Inv()
     reads this, this.Repr, this.ReadOnlyRepr
-    decreases Height
+    decreases Height, 1
     ensures Inv() ==> this in this.Repr
     {
+      Inv1()
+    }
+
+    predicate Inv1()
+    reads this, this.Repr, this.ReadOnlyRepr
+    decreases Height, 0
+    {
       && (bucket != null ==> (
-        && bucket in Repr
+        && bucket in ReadOnlyRepr
         && Repr == {this}
         && ReadOnlyRepr == bucket.Repr
         && bucket.Inv()
@@ -57,12 +76,20 @@ module ImplBucketGenerator {
       ))
     }
 
+    static lemma reveal_Inv_for(bg: Generator)
+    ensures bg.Inv() == bg.Inv1()
+    {
+      bg.reveal_Inv();
+    }
+
     protected function I() : ModelBucketGenerator.Generator
     requires Inv()
     reads this, this.Repr, this.ReadOnlyRepr
     decreases Height
     ensures ModelBucketGenerator.WF(I())
     {
+      reveal_Inv_for(this);
+
       if bucket != null then (
         ModelBucketGenerator.BasicGenerator(bucket.I(), IIterator(it))
       ) else (
@@ -74,6 +101,8 @@ module ImplBucketGenerator {
     requires Inv()
     ensures res == ModelBucketGenerator.GenLeft(I())
     {
+      reveal_Inv_for(this);
+
       if bucket != null {
         res := bucket.GetNext(it);
       } else {
@@ -92,6 +121,8 @@ module ImplBucketGenerator {
 
     decreases Height
     {
+      reveal_Inv_for(this);
+
       ModelBucketGenerator.reveal_BasicGenPop();
       ModelBucketGenerator.reveal_MergeGenPop();
       ModelBucketGenerator.reveal_GenPop();
@@ -124,6 +155,90 @@ module ImplBucketGenerator {
         ReadOnlyRepr := top.ReadOnlyRepr + bot.ReadOnlyRepr;
         Height := top.Height + bot.Height + 1;
       }
+
+      assert Inv1();
+      reveal_Inv_for(this);
+    }
+
+    static method GenCompose(top: Generator, bot: Generator)
+    returns (g: Generator)
+    requires top.Inv()
+    requires bot.Inv()
+    requires top.Repr !! bot.Repr
+    requires top.Repr !! bot.ReadOnlyRepr
+    requires bot.Repr !! top.ReadOnlyRepr
+    modifies top.Repr
+    modifies bot.Repr
+    ensures g.Inv()
+    ensures forall o | o in g.Repr :: fresh(o) || o in top.Repr || o in bot.Repr
+    ensures g.ReadOnlyRepr == top.ReadOnlyRepr + bot.ReadOnlyRepr
+    ensures g.I() == ModelBucketGenerator.GenCompose(old(top.I()), old(bot.I()))
+    {
+      g := new Generator();
+      g.bucket := null;
+      g.top := top;
+      g.bot := bot;
+
+      var top_next := top.GenLeft();
+      var bot_next := bot.GenLeft();
+      var c;
+      if (top_next.Next? && bot_next.Next?) {
+        c := cmp(top_next.key, bot_next.key);
+      }
+
+      if top_next.Next? && bot_next.Next? && c == 0 {
+        top.GenPop();
+        bot.GenPop();
+        g.next := ModelBucketIterator.Next(top_next.key,
+            Merge(top_next.msg, bot_next.msg));
+      } else if top_next.Next? && (bot_next.Next? ==> c < 0) {
+        top.GenPop();
+        g.next := top_next;
+      } else if bot_next.Next? {
+        bot.GenPop();
+        g.next := bot_next;
+      } else {
+        g.next := ModelBucketIterator.Done;
+      }
+
+      g.Repr := {g} + g.top.Repr + g.bot.Repr;
+      g.ReadOnlyRepr := g.top.ReadOnlyRepr + g.bot.ReadOnlyRepr;
+      g.Height := g.top.Height + g.bot.Height + 1;
+
+      assert g.Inv1();
+      reveal_Inv_for(g);
+      ModelBucketGenerator.reveal_GenCompose();
+    }
+
+    static method GenFromBucketWithLowerBound(bucket: MutBucket, start: UI.RangeStart)
+    returns (g: Generator)
+    requires bucket.Inv()
+    ensures g.Inv()
+    ensures fresh(g.Repr)
+    ensures g.ReadOnlyRepr == bucket.Repr
+    ensures g.I() == ModelBucketGenerator.GenFromBucketWithLowerBound(bucket.I(), start)
+    {
+      g := new Generator();
+      g.bucket := bucket;
+
+      match start {
+        case SExclusive(key) => {
+          g.it := bucket.IterFindFirstGt(key);
+        }
+        case SInclusive(key) => {
+          g.it := bucket.IterFindFirstGte(key);
+        }
+        case NegativeInf => {
+          g.it := bucket.IterStart();
+        }
+      }
+
+      g.Repr := {g};
+      g.ReadOnlyRepr := bucket.Repr;
+
+      assert g.Inv1();
+      reveal_Inv_for(g);
+      ModelBucketGenerator.reveal_GenFromBucketWithLowerBound();
     }
   }
 }

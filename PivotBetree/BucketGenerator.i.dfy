@@ -159,6 +159,7 @@ module BucketGenerator {
 
   function {:opaque} GenFromBucketStackWithLowerBound(buckets: seq<Bucket>, start: UI.RangeStart) : (g : Generator)
   requires |buckets| >= 1
+  decreases |buckets|
   ensures WF(g)
   {
     if |buckets| == 1 then (
