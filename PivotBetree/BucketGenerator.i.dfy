@@ -20,7 +20,7 @@ module BucketGenerator {
         bucket: Bucket,
         it: Iterator
       )
-    | MergeGenerator(
+    | ComposeGenerator(
         top: Generator,
         bot: Generator,
         next: IteratorOutput
@@ -31,7 +31,7 @@ module BucketGenerator {
     && (g.BasicGenerator? ==> (
       && WFIter(g.bucket, g.it)
     ))
-    && (g.MergeGenerator? ==> (
+    && (g.ComposeGenerator? ==> (
       && WF(g.top)
       && WF(g.bot)
     ))
@@ -43,7 +43,7 @@ module BucketGenerator {
       case BasicGenerator(bucket, it) => (
         g.it.next
       )
-      case MergeGenerator(top, bot, next) => (
+      case ComposeGenerator(top, bot, next) => (
         g.next
       )
     }
@@ -64,7 +64,7 @@ module BucketGenerator {
   function {:opaque} MergeGenPop(g: Generator) : (g' : Generator)
   requires WF(g)
   requires GenLeft(g).Next?
-  requires g.MergeGenerator?
+  requires g.ComposeGenerator?
   decreases g, 0
   ensures WF(g')
   {
@@ -72,24 +72,24 @@ module BucketGenerator {
     var bot := g.bot;
     if GenLeft(top).Next? && GenLeft(bot).Next?
         && GenLeft(top).key == GenLeft(bot).key then (
-      MergeGenerator(
+      ComposeGenerator(
         GenPop(top),
         GenPop(bot),
         Next(GenLeft(top).key,
             Merge(GenLeft(top).msg, GenLeft(bot).msg)))
     ) else if GenLeft(top).Next?
         && (GenLeft(bot).Next? ==> Keyspace.lt(GenLeft(top).key, GenLeft(bot).key)) then (
-      MergeGenerator(
+      ComposeGenerator(
         GenPop(top),
         bot,
         GenLeft(top))
     ) else if GenLeft(bot).Next? then (
-      MergeGenerator(
+      ComposeGenerator(
         top,
         GenPop(bot),
         GenLeft(bot))
     ) else (
-      MergeGenerator(
+      ComposeGenerator(
         top,
         bot,
         Done)
@@ -106,13 +106,13 @@ module BucketGenerator {
       case BasicGenerator(bucket, it) => (
         BasicGenPop(g)
       )
-      case MergeGenerator(top, bot, next) => (
+      case ComposeGenerator(top, bot, next) => (
         MergeGenPop(g)
       )
     }
   }
 
-  function {:opaque} GenLump(top: Generator, bot: Generator) : (g' : Generator)
+  function {:opaque} GenCompose(top: Generator, bot: Generator) : (g' : Generator)
   requires WF(top)
   requires WF(bot)
   ensures WF(g')
@@ -122,24 +122,24 @@ module BucketGenerator {
 
     if GenLeft(top).Next? && GenLeft(bot).Next?
         && GenLeft(top).key == GenLeft(bot).key then (
-      MergeGenerator(
+      ComposeGenerator(
         GenPop(top),
         GenPop(bot),
         Next(GenLeft(top).key,
             Merge(GenLeft(top).msg, GenLeft(bot).msg)))
     ) else if GenLeft(top).Next?
         && (GenLeft(bot).Next? ==> Keyspace.lt(GenLeft(top).key, GenLeft(bot).key)) then (
-      MergeGenerator(
+      ComposeGenerator(
         GenPop(top),
         bot,
         GenLeft(top))
     ) else if GenLeft(bot).Next? then (
-      MergeGenerator(
+      ComposeGenerator(
         top,
         GenPop(bot),
         GenLeft(bot))
     ) else (
-      MergeGenerator(
+      ComposeGenerator(
         top,
         bot,
         Done)
@@ -165,7 +165,7 @@ module BucketGenerator {
       GenFromBucketWithLowerBound(buckets[0], start)
     ) else (
       var mid := |buckets| / 2;
-      GenLump(
+      GenCompose(
         GenFromBucketStackWithLowerBound(buckets[..mid], start),
         GenFromBucketStackWithLowerBound(buckets[mid..], start)
       )
@@ -176,7 +176,7 @@ module BucketGenerator {
 
   protected predicate Monotonic(g: Generator)
   {
-    g.MergeGenerator? ==> (
+    g.ComposeGenerator? ==> (
       && (g.next.Next? && GenLeft(g.top).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.top).key))
       && (g.next.Next? && GenLeft(g.bot).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.bot).key))
       && (g.next.Done? ==> GenLeft(g.top).Done?)
@@ -192,16 +192,16 @@ module BucketGenerator {
       case BasicGenerator(bucket, it) =>
         if it.next.Done? then map[]
         else map k | k in bucket && Keyspace.lte(it.next.key, k) :: bucket[k]
-      case MergeGenerator(top, bot, next) =>
+      case ComposeGenerator(top, bot, next) =>
         if next.Done? then map[]
-        else Lump(BucketOf(top), BucketOf(bot))[next.key := next.msg]
+        else Compose(BucketOf(top), BucketOf(bot))[next.key := next.msg]
     }
   }
 
   lemma reveal_BucketOf_for_Merge(g: Generator)
-  ensures g.MergeGenerator? && g.next.Done? ==> BucketOf(g) == map[]
-  ensures g.MergeGenerator? && g.next.Next? ==> BucketOf(g) ==
-        Lump(BucketOf(g.top), BucketOf(g.bot))[g.next.key := g.next.msg]
+  ensures g.ComposeGenerator? && g.next.Done? ==> BucketOf(g) == map[]
+  ensures g.ComposeGenerator? && g.next.Next? ==> BucketOf(g) ==
+        Compose(BucketOf(g.top), BucketOf(g.bot))[g.next.key := g.next.msg]
   {
     reveal_BucketOf();
   }
@@ -222,8 +222,8 @@ module BucketGenerator {
   {
     reveal_BucketOf();
     if GenLeft(g).Next? {
-      if g.MergeGenerator? {
-        reveal_Lump();
+      if g.ComposeGenerator? {
+        reveal_Compose();
         GenLeftIsMinimum(g.top);
         GenLeftIsMinimum(g.bot);
         assert GenLeft(g).key in BucketOf(g);
@@ -266,7 +266,7 @@ module BucketGenerator {
       }
       assert b1 == b2;
     } else {
-      reveal_Lump();
+      reveal_Compose();
       reveal_MergeGenPop();
 
       GenLeftIsMinimum(g.top);
@@ -285,18 +285,18 @@ module BucketGenerator {
     }
   }
 
-  lemma GenLumpIsMonotonic(top: Generator, bot: Generator)
+  lemma GenComposeIsMonotonic(top: Generator, bot: Generator)
   requires WF(top)
   requires WF(bot)
   requires Monotonic(top)
   requires Monotonic(bot)
-  ensures Monotonic(GenLump(top, bot))
+  ensures Monotonic(GenCompose(top, bot))
   {
     GenLeftIsMinimum(top);
     GenLeftIsMinimum(bot);
     reveal_BucketOf();
 
-    reveal_GenLump();
+    reveal_GenCompose();
     if (GenLeft(top).Next?) {
       GenPopIsRemove(top);
       assert GenLeft(top).key in BucketOf(top).Keys;
@@ -307,18 +307,18 @@ module BucketGenerator {
     }
   }
 
-  lemma GenLumpIsLump(top: Generator, bot: Generator)
+  lemma GenComposeIsCompose(top: Generator, bot: Generator)
   requires WF(top)
   requires WF(bot)
   requires Monotonic(top)
   requires Monotonic(bot)
-  ensures YieldsSortedBucket(GenLump(top, bot), Lump(BucketOf(top), BucketOf(bot)))
+  ensures YieldsSortedBucket(GenCompose(top, bot), Compose(BucketOf(top), BucketOf(bot)))
   {
-    var g := GenLump(top, bot);
+    var g := GenCompose(top, bot);
 
-    GenLumpIsMonotonic(top, bot);
-    reveal_Lump();
-    reveal_GenLump();
+    GenComposeIsMonotonic(top, bot);
+    reveal_Compose();
+    reveal_GenCompose();
 
     GenLeftIsMinimum(top);
     GenLeftIsMinimum(bot);
@@ -336,24 +336,24 @@ module BucketGenerator {
     /*if GenLeft(top).Next? && GenLeft(bot).Next?
         && GenLeft(top).key == GenLeft(bot).key {
       assert BucketOf(g)
-          == Lump(BucketOf(top), BucketOf(bot));
+          == Compose(BucketOf(top), BucketOf(bot));
     } else if GenLeft(top).Next?
         && (GenLeft(bot).Next? ==> Keyspace.lt(GenLeft(top).key, GenLeft(bot).key)) {
       assert BucketOf(g)
-          == Lump(BucketOf(GenPop(top)), BucketOf(bot))
+          == Compose(BucketOf(GenPop(top)), BucketOf(bot))
                 [GenLeft(top).key := GenLeft(top).msg]
-          == Lump(MapRemove1(BucketOf(top), GenLeft(top).key), BucketOf(bot))
+          == Compose(MapRemove1(BucketOf(top), GenLeft(top).key), BucketOf(bot))
                 [GenLeft(top).key := GenLeft(top).msg]
-          == Lump(BucketOf(top), BucketOf(bot));
+          == Compose(BucketOf(top), BucketOf(bot));
     } else if GenLeft(bot).Next? {
       assert BucketOf(g)
-          == Lump(BucketOf(top), MapRemove1(BucketOf(bot), GenLeft(bot).key))
+          == Compose(BucketOf(top), MapRemove1(BucketOf(bot), GenLeft(bot).key))
                 [GenLeft(bot).key := GenLeft(bot).msg]
-          == Lump(BucketOf(top), BucketOf(bot));
+          == Compose(BucketOf(top), BucketOf(bot));
     } else {
       assert BucketOf(g)
           == map[]
-          == Lump(BucketOf(top), BucketOf(bot));
+          == Compose(BucketOf(top), BucketOf(bot));
     }*/
   }
 
@@ -389,42 +389,42 @@ module BucketGenerator {
     }
   }
 
-  lemma GenFromBucketStackWithLowerBoundYieldsLumpSeq(buckets: seq<Bucket>, start: UI.RangeStart)
+  lemma GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
   requires |buckets| >= 1
   ensures var g := GenFromBucketStackWithLowerBound(buckets, start);
-      YieldsSortedBucket(g, ClampStart(LumpSeq(buckets), start))
+      YieldsSortedBucket(g, ClampStart(ComposeSeq(buckets), start))
   {
     reveal_GenFromBucketStackWithLowerBound();
     var g := GenFromBucketStackWithLowerBound(buckets, start);
     if |buckets| == 1 {
-      LumpSeq1(buckets[0]);
+      ComposeSeq1(buckets[0]);
       assert [buckets[0]] == buckets;
       GenFromBucketWithLowerBoundYieldsClampStart(buckets[0], start);
     } else {
       var mid := |buckets| / 2;
       var g1 := GenFromBucketStackWithLowerBound(buckets[..mid], start);
       var g2 := GenFromBucketStackWithLowerBound(buckets[mid..], start);
-      GenLumpIsLump(g1, g2);
+      GenComposeIsCompose(g1, g2);
       calc {
         BucketOf(g);
-          { GenLumpIsLump(g1, g2); }
-        Lump(BucketOf(g1), BucketOf(g2));
+          { GenComposeIsCompose(g1, g2); }
+        Compose(BucketOf(g1), BucketOf(g2));
           {
-            GenFromBucketStackWithLowerBoundYieldsLumpSeq(buckets[..mid], start);
-            GenFromBucketStackWithLowerBoundYieldsLumpSeq(buckets[mid..], start);
+            GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets[..mid], start);
+            GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets[mid..], start);
           }
-        Lump(
-          ClampStart(LumpSeq(buckets[..mid]), start), 
-          ClampStart(LumpSeq(buckets[mid..]), start));
+        Compose(
+          ClampStart(ComposeSeq(buckets[..mid]), start), 
+          ClampStart(ComposeSeq(buckets[mid..]), start));
           {
-            reveal_Lump();
+            reveal_Compose();
             reveal_ClampStart();
           }
-        ClampStart(Lump(LumpSeq(buckets[..mid]), LumpSeq(buckets[mid..])), start);
-          { LumpSeqAdditive(buckets[..mid], buckets[mid..]); }
-        ClampStart(LumpSeq(buckets[..mid] + buckets[mid..]), start);
+        ClampStart(Compose(ComposeSeq(buckets[..mid]), ComposeSeq(buckets[mid..])), start);
+          { ComposeSeqAdditive(buckets[..mid], buckets[mid..]); }
+        ClampStart(ComposeSeq(buckets[..mid] + buckets[mid..]), start);
           { assert buckets[..mid] + buckets[mid..] == buckets; }
-        ClampStart(LumpSeq(buckets), start);
+        ClampStart(ComposeSeq(buckets), start);
       }
     }
   }
@@ -438,7 +438,7 @@ module BucketGenerator {
       case BasicGenerator(bucket, it) => (
         it.decreaser
       )
-      case MergeGenerator(top, bot, next) => (
+      case ComposeGenerator(top, bot, next) => (
         decreaser(top) + decreaser(bot) + (if next.Next? then 1 else 0)
       )
     }
@@ -452,7 +452,7 @@ module BucketGenerator {
     reveal_MergeGenPop();
     reveal_BasicGenPop();
     reveal_decreaser();
-    if g.MergeGenerator? {
+    if g.ComposeGenerator? {
       lemmaDecreaserDecreases(g.top);
       lemmaDecreaserDecreases(g.bot);
     }

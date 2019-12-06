@@ -166,13 +166,13 @@ module BucketSuccessorLoop {
     && r.results ==
         SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
-            ClampRange(LumpSeq(buckets), start, r.end)))
+            ClampRange(ComposeSeq(buckets), start, r.end)))
     && (upTo.Some? ==> !MS.UpperBound(upTo.value, r.end))
     && MS.NonEmptyRange(start, r.end)
   {
     reveal_GetSuccessorInBucketStack();
     var g := GenFromBucketStackWithLowerBound(buckets, start);
-    GenFromBucketStackWithLowerBoundYieldsLumpSeq(buckets, start);
+    GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets, start);
     var bucket := BucketOf(g);
     reveal_KeyValueMapOfBucket();
     reveal_SortedSeqOfKeyValueMap();
@@ -183,10 +183,10 @@ module BucketSuccessorLoop {
     reveal_ClampRange();
     reveal_ClampStart();
     reveal_ClampEnd();
-    assert ClampRange(LumpSeq(buckets), start, r.end)
-        == ClampEnd(ClampStart(LumpSeq(buckets), start), r.end);
+    assert ClampRange(ComposeSeq(buckets), start, r.end)
+        == ClampEnd(ClampStart(ComposeSeq(buckets), start), r.end);
 
-    /*assert bucket == ClampStart(LumpSeq(buckets), start);
+    /*assert bucket == ClampStart(ComposeSeq(buckets), start);
 
     assert r.results
         == SortedSeqOfKeyValueMap(
@@ -194,7 +194,7 @@ module BucketSuccessorLoop {
                ClampEnd(bucket, r.end)))
         == SortedSeqOfKeyValueMap(
              KeyValueMapOfBucket(
-               ClampRange(LumpSeq(buckets), start, r.end)));*/
+               ClampRange(ComposeSeq(buckets), start, r.end)));*/
 
     if |r.results| == 0 {
       // In this case, the r.end will be upTo
@@ -202,8 +202,8 @@ module BucketSuccessorLoop {
     } else {
       // There's at least 1 result, so the range has to be non-empty
       SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(
-               ClampRange(LumpSeq(buckets), start, r.end)), 0);
-      assert r.results[0].key in ClampRange(LumpSeq(buckets), start, r.end);
+               ClampRange(ComposeSeq(buckets), start, r.end)), 0);
+      assert r.results[0].key in ClampRange(ComposeSeq(buckets), start, r.end);
       assert MS.InRange(start, r.results[0].key, r.end);
       InRangeImpliesNonEmpty(start, r.results[0].key, r.end);
     }

@@ -257,7 +257,7 @@ module PivotBetreeSpec {
     && sq.results ==
         Buckets.SortedSeqOfKeyValueMap(
           Buckets.KeyValueMapOfBucket(
-            Buckets.ClampRange(Buckets.LumpSeq(sq.buckets), sq.start, sq.end)))
+            Buckets.ClampRange(Buckets.ComposeSeq(sq.buckets), sq.start, sq.end)))
   }
 
   function SuccQueryReads(q: SuccQuery): seq<ReadOp> {

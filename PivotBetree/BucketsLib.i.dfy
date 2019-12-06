@@ -147,62 +147,62 @@ module BucketsLib {
     reveal_BucketComplement();
   }
 
-  ///// Lumping
+  ///// Composeing
 
   // Note: does NOT necessarily return a WFBucket!
   // It might contain NoOp messages
-  function {:opaque} Lump(top: Bucket, bot: Bucket) : Bucket
+  function {:opaque} Compose(top: Bucket, bot: Bucket) : Bucket
   {
     map key
     | key in (top.Keys + bot.Keys)
     :: Merge(BucketGet(top, key), BucketGet(bot, key))
   }
 
-  function {:opaque} LumpSeq(buckets: seq<Bucket>) : Bucket
+  function {:opaque} ComposeSeq(buckets: seq<Bucket>) : Bucket
   {
-    if |buckets| == 0 then map[] else Lump(LumpSeq(DropLast(buckets)), Last(buckets))
+    if |buckets| == 0 then map[] else Compose(ComposeSeq(DropLast(buckets)), Last(buckets))
   }
 
-  lemma LumpSeq1(b: Bucket)
-  ensures LumpSeq([b]) == b
+  lemma ComposeSeq1(b: Bucket)
+  ensures ComposeSeq([b]) == b
   {
-    reveal_Lump();
-    reveal_LumpSeq();
+    reveal_Compose();
+    reveal_ComposeSeq();
   }
 
-  lemma LumpAssoc(a: Bucket, b: Bucket, c: Bucket)
-  ensures Lump(Lump(a, b), c) == Lump(a, Lump(b, c))
+  lemma ComposeAssoc(a: Bucket, b: Bucket, c: Bucket)
+  ensures Compose(Compose(a, b), c) == Compose(a, Compose(b, c))
   {
-    reveal_Lump();
+    reveal_Compose();
     forall a, b, c ensures Merge(a, Merge(b, c)) == Merge(Merge(a, b), c)
     {
       MergeIsAssociative(a, b, c);
     }
   }
 
-  lemma LumpSeqAdditive(a: seq<Bucket>, b: seq<Bucket>)
-  ensures LumpSeq(a + b) == Lump(LumpSeq(a), LumpSeq(b))
+  lemma ComposeSeqAdditive(a: seq<Bucket>, b: seq<Bucket>)
+  ensures ComposeSeq(a + b) == Compose(ComposeSeq(a), ComposeSeq(b))
   {
-    reveal_LumpSeq();
-    reveal_Lump();
+    reveal_ComposeSeq();
+    reveal_Compose();
     if |b| == 0 {
       assert b == [];
       assert a + b == a;
-      assert LumpSeq(a + b)
-          == LumpSeq(a)
-          == Lump(LumpSeq(a), map[])
-          == Lump(LumpSeq(a), LumpSeq(b));
+      assert ComposeSeq(a + b)
+          == ComposeSeq(a)
+          == Compose(ComposeSeq(a), map[])
+          == Compose(ComposeSeq(a), ComposeSeq(b));
     } else {
-      LumpSeqAdditive(a, b[..|b|-1]);
+      ComposeSeqAdditive(a, b[..|b|-1]);
       assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
       assert (a+b)[|a+b|-1] == b[|b|-1];
-      LumpAssoc(LumpSeq(a), LumpSeq(b[..|b|-1]), b[|b|-1]);
-      assert LumpSeq(a + b)
-          == Lump(LumpSeq((a + b)[..|a+b|-1]), (a+b)[|a+b|-1])
-          == Lump(LumpSeq(a + b[..|b|-1]), b[|b|-1])
-          == Lump(Lump(LumpSeq(a), LumpSeq(b[..|b|-1])), b[|b|-1])
-          == Lump(LumpSeq(a), Lump(LumpSeq(b[..|b|-1]), b[|b|-1]))
-          == Lump(LumpSeq(a), LumpSeq(b));
+      ComposeAssoc(ComposeSeq(a), ComposeSeq(b[..|b|-1]), b[|b|-1]);
+      assert ComposeSeq(a + b)
+          == Compose(ComposeSeq((a + b)[..|a+b|-1]), (a+b)[|a+b|-1])
+          == Compose(ComposeSeq(a + b[..|b|-1]), b[|b|-1])
+          == Compose(Compose(ComposeSeq(a), ComposeSeq(b[..|b|-1])), b[|b|-1])
+          == Compose(ComposeSeq(a), Compose(ComposeSeq(b[..|b|-1]), b[|b|-1]))
+          == Compose(ComposeSeq(a), ComposeSeq(b));
     }
   }
 
@@ -214,14 +214,14 @@ module BucketsLib {
       Merge(InterpretBucketStack(DropLast(buckets), key), BucketGet(Last(buckets), key))
   }
 
-  lemma BucketGetLumpSeq(buckets: seq<Bucket>, key: Key)
-  ensures BucketGet(LumpSeq(buckets), key) == InterpretBucketStack(buckets, key);
+  lemma BucketGetComposeSeq(buckets: seq<Bucket>, key: Key)
+  ensures BucketGet(ComposeSeq(buckets), key) == InterpretBucketStack(buckets, key);
   {
-    reveal_LumpSeq();
-    reveal_Lump();
+    reveal_ComposeSeq();
+    reveal_Compose();
     if |buckets| == 0 {
     } else {
-      BucketGetLumpSeq(DropLast(buckets), key);
+      BucketGetComposeSeq(DropLast(buckets), key);
     }
   }
 
