@@ -4,6 +4,7 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "ModelBucket.i.dfy"
+include "../PivotBetree/BucketSuccessorLoop.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
@@ -25,6 +26,7 @@ module ImplModelSucc {
 
   import opened ModelBucket
   import opened Lexicographic_Byte_Order
+  import BucketSuccessorLoop
 
   import PBS = PivotBetreeSpec`Internal
 
@@ -38,6 +40,7 @@ module ImplModelSucc {
   function {:opaque} getPath(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64) : (pr : PathResult)
   requires Inv(k, s)
   requires s.Ready?
+  ensures pr.Path? ==> |pr.buckets| > 0
   decreases counter
   {
     if ref in s.cache then (
@@ -75,8 +78,8 @@ module ImplModelSucc {
   ////////////////
   //// doSucc
 
-  function doSucc(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
-    : (Variables, IO, Option<SuccCollectionResult>)
+  function {:opaque} doSucc(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
+    : (Variables, IO, Option<UI.SuccResultList>)
   requires Inv(k, s)
   requires io.IOInit?
   requires maxToFind >= 1
@@ -92,12 +95,17 @@ module ImplModelSucc {
 
       match pr {
         case Path(buckets, upTo) => (
-          var res := GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+          var res :=
+              BucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
           (s, io, Some(res))
         )
         case Fetch(ref) => (
-          var (s', io') := PageInReq(k, s, io, ref);
-          (s', io', None)
+          if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+            var (s', io') := PageInReq(k, s, io, ref);
+            (s', io', None)
+          ) else (
+            (s, io, None)
+          )
         )
         case Failure => (
           (s, io, None)
@@ -133,11 +141,19 @@ module ImplModelSucc {
   requires upTo == PBS.LookupUpperBound(lookup, startKey)
   requires |lookup| == |acc|
   requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)]
+  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
+  requires upTo.Some? ==> lt(startKey, upTo.value)
   decreases counter
   ensures var pr := getPath(k, s, startKey, acc, upTo, ref, counter);
       && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
-      && (pr.Path? ==> LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
+      && (pr.Fetch? ==> pr.ref !in s.cache)
+      && (pr.Path? ==> (
+        && LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
+        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+        && (forall i | 0 <= i < |lookup'| :: MapsTo(ICache(s.cache), lookup'[i].ref, lookup'[i].node))
+        && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
+      )
   {
     reveal_getPath();
 
@@ -194,6 +210,7 @@ module ImplModelSucc {
   decreases counter
   ensures var pr := getPath(k, s, startKey, [], None, BT.G.Root(), counter);
       && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
+      && (pr.Fetch? ==> pr.ref !in s.cache)
   {
     PBS.reveal_LookupUpperBound();
     var _ := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
@@ -205,9 +222,72 @@ module ImplModelSucc {
   requires s.Ready?
   decreases counter
   ensures var pr := getPath(k, s, startKey, [], None, BT.G.Root(), counter);
-      && (pr.Path? ==> LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
+      && (pr.Path? ==> (
+        && LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
+        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+        && (forall i | 0 <= i < |lookup'| :: MapsTo(ICache(s.cache), lookup'[i].ref, lookup'[i].node))
+        && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
+      )
   {
     PBS.reveal_LookupUpperBound();
     lookup' := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
+  }
+
+  lemma doSuccCorrect(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
+  requires Inv(k, s)
+  requires io.IOInit?
+  requires maxToFind >= 1
+  ensures var (s', io', res) := doSucc(k, s, io, start, maxToFind);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'),
+        if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
+        diskOp(io'))
+  {
+    reveal_doSucc();
+
+    if (s.Unready?) {
+      PageInIndirectionTableReqCorrect(k, s, io);
+    } else {
+      var startKey := if start.NegativeInf? then [] else start.key;
+
+      lemmaGetPathValidFetch(k, s, startKey, 40);
+      var lookup := lemmaGetPathValidLookup(k, s, startKey, 40);
+      var pr := getPath(k, s, startKey, [], None, BT.G.Root(), 40);
+
+      match pr {
+        case Path(buckets, upTo) => {
+          assert upTo.Some? ==> lt(startKey, upTo.value);
+
+          var res :=
+              BucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+          BucketSuccessorLoop.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
+
+          var s' := s;
+          var io' := io;
+
+          var succStep := BT.SuccQuery(start, res.results, res.end, buckets, lookup);
+          assert BT.ValidSuccQuery(succStep);
+          var step := BT.BetreeSuccQuery(succStep);
+
+          assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'),
+            UI.SuccOp(start, res.results, res.end),
+            M.IDiskOp(diskOp(io)),
+            step);
+          assert stepsBetree(k, IVars(s), IVars(s'),
+            UI.SuccOp(start, res.results, res.end),
+            step);
+        }
+        case Fetch(ref) => {
+          if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+            PageInReqCorrect(k, s, io, ref);
+          } else {
+            assert noop(k, IVars(s), IVars(s));
+          }
+        }
+        case Failure => {
+          assert noop(k, IVars(s), IVars(s));
+        }
+      }
+    }
   }
 }
