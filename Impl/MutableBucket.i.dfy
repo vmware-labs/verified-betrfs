@@ -525,5 +525,10 @@ module MutableBucket {
     requires this.WFIter(it)
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIterator.IterInc(I(), IIterator(it))
+
+    method GetNext(it: Iterator) returns (next : BucketIterator.IteratorOutput)
+    requires Inv()
+    requires this.WFIter(it)
+    ensures next == IIterator(it).next
   }
 }
