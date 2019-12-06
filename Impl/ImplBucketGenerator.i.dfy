@@ -30,6 +30,7 @@ module ImplBucketGenerator {
     // Answer: Typically, we mark the Inv() protected. This is because we want to
     // access Inv within the module, but the user of a class doesn't need to care
     // what's in Inv (except for the one ensures clause `this in this.Repr`).
+    // This is crucial for keeping verification times reasonable.
     // 
     // This case is a bit different because the object is recursive: that is, the object
     // is a user of itself. In other words, many of the methods in this class need
@@ -52,6 +53,7 @@ module ImplBucketGenerator {
         && bucket in ReadOnlyRepr
         && Repr == {this}
         && ReadOnlyRepr == bucket.Repr
+        && this !in bucket.Repr
         && bucket.Inv()
         && bucket.WFIter(it)
       ))
@@ -170,7 +172,9 @@ module ImplBucketGenerator {
     modifies top.Repr
     modifies bot.Repr
     ensures g.Inv()
-    ensures forall o | o in g.Repr :: fresh(o) || o in top.Repr || o in bot.Repr
+    ensures forall o | o in g.Repr :: fresh(o) || o in old(top.Repr) || o in old(bot.Repr)
+    ensures top.ReadOnlyRepr == old(top.ReadOnlyRepr)
+    ensures bot.ReadOnlyRepr == old(bot.ReadOnlyRepr)
     ensures g.ReadOnlyRepr == top.ReadOnlyRepr + bot.ReadOnlyRepr
     ensures g.I() == ModelBucketGenerator.GenCompose(old(top.I()), old(bot.I()))
     {
@@ -240,5 +244,41 @@ module ImplBucketGenerator {
       reveal_Inv_for(g);
       ModelBucketGenerator.reveal_GenFromBucketWithLowerBound();
     }
+
+    static method GenFromBucketStackWithLowerBound(buckets: seq<MutBucket>, start: UI.RangeStart)
+    returns (g: Generator)
+    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    requires |buckets| >= 1
+    decreases |buckets|
+    ensures g.Inv()
+    ensures fresh(g.Repr)
+    ensures g.ReadOnlyRepr == MutBucket.ReprSeq(buckets)
+    ensures g.I() == ModelBucketGenerator.GenFromBucketStackWithLowerBound(
+        MutBucket.ISeq(buckets), start)
+    {
+      MutBucket.AllocatedReprSeq(buckets);
+
+      if |buckets| == 1 {
+        g := GenFromBucketWithLowerBound(buckets[0], start);
+
+        MutBucket.ReprSeq1Eq(buckets);
+      } else {
+        var mid := |buckets| / 2;
+
+        MutBucket.AllocatedReprSeq(buckets[..mid]);
+        MutBucket.AllocatedReprSeq(buckets[mid..]);
+
+        var g1 := GenFromBucketStackWithLowerBound(buckets[..mid], start);
+        var g2 := GenFromBucketStackWithLowerBound(buckets[mid..], start);
+        g := GenCompose(g1, g2);
+
+        assert buckets[..mid] + buckets[mid..] == buckets;
+        MutBucket.ReprSeqAdditive(buckets[..mid], buckets[mid..]);
+        MutBucket.ISeqAdditive(buckets[..mid], buckets[mid..]);
+      }
+
+      ModelBucketGenerator.reveal_GenFromBucketStackWithLowerBound();
+    }
+
   }
 }

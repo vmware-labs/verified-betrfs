@@ -200,6 +200,12 @@ module MutableBucket {
     requires |s| > 0
     ensures ISeq(s) == ISeq(DropLast(s)) + [Last(s).I()]
 
+    static lemma ISeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
+    ensures ISeq(a + b) == ISeq(a) + ISeq(b)
+
+    static twostate lemma AllocatedReprSeq(s: seq<MutBucket>)
+    ensures allocated(ReprSeq(s))
+
     static predicate {:opaque} ReprSeqDisjoint(buckets: seq<MutBucket>)
     reads set i | 0 <= i < |buckets| :: buckets[i]
     {
@@ -235,6 +241,13 @@ module MutableBucket {
     {
       reveal_ReprSeq();
     }
+
+    static lemma ReprSeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
+    ensures ReprSeq(a) + ReprSeq(b) == ReprSeq(a + b)
+
+    static lemma ReprSeq1Eq(a: seq<MutBucket>)
+    requires |a| == 1
+    ensures ReprSeq(a) == a[0].Repr
 
     static lemma LemmaReprBucketLeReprSeq(buckets: seq<MutBucket>, i: int)
     requires 0 <= i < |buckets|
