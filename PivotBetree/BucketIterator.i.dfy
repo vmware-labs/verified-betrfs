@@ -111,13 +111,6 @@ module BucketIterator {
     IterFindFirstGt(bucket, it.next.key)
   }
 
-  function {:opaque} IterEnd(bucket: Bucket) : (it' : Iterator)
-  ensures WFIter(bucket, it')
-  ensures it'.next.Done?
-  {
-    iterEnd(bucket)
-  }
-
   lemma noKeyBetweenIterAndIterInc(bucket: Bucket, it: Iterator, key: Key)
   requires WFIter(bucket, it)
   requires key in bucket
@@ -151,5 +144,4 @@ module BucketIterator {
   requires key0 in bucket
   ensures IterStart(bucket).next.Next?
   ensures Keyspace.lte(IterStart(bucket).next.key, key0)
-
 }
