@@ -465,7 +465,7 @@ module PivotBetreeSpecRefinement {
   requires results ==
         SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
-            ClampRange(LumpSeq(buckets), start, end)))
+            ClampRange(ComposeSeq(buckets), start, end)))
   ensures (forall i | 0 <= i < |results| ::
       P.BufferDefinesValue(InterpretBucketStack(buckets, results[i].key), results[i].value))
   ensures (forall i | 0 <= i < |results| :: results[i].value != MS.EmptyValue())
@@ -481,18 +481,18 @@ module PivotBetreeSpecRefinement {
     ensures results[i].value != MS.EmptyValue()
     ensures MS.InRange(start, results[i].key, end)
     {
-      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end)), i);
+      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end)), i);
       reveal_KeyValueMapOfBucket();
       reveal_ClampRange();
 
-      //var m := LumpSeq(buckets)[results[i].key];
+      //var m := ComposeSeq(buckets)[results[i].key];
       //assert M.Merge(m, M.DefineDefault()).value == results[i].value;
-      BucketGetLumpSeq(buckets, results[i].key);
+      BucketGetComposeSeq(buckets, results[i].key);
       //assert m == InterpretBucketStack(buckets, results[i].key);
     }
 
     SortedSeqOfKeyValueMapHasSortedKeys(KeyValueMapOfBucket(
-            ClampRange(LumpSeq(buckets), start, end)));
+            ClampRange(ComposeSeq(buckets), start, end)));
 
     forall key | MS.InRange(start, key, end) &&
         (forall i | 0 <= i < |results| :: results[i].key != key)
@@ -503,10 +503,10 @@ module PivotBetreeSpecRefinement {
         reveal_KeyValueMapOfBucket();
         reveal_ClampRange();
 
-        BucketGetLumpSeq(buckets, key);
-        //assert BucketGet(LumpSeq(buckets), key) == InterpretBucketStack(buckets, key);
-        //assert key in KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end));
-        SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(LumpSeq(buckets), start, end)), key);
+        BucketGetComposeSeq(buckets, key);
+        //assert BucketGet(ComposeSeq(buckets), key) == InterpretBucketStack(buckets, key);
+        //assert key in KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end));
+        SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end)), key);
       }
     }
   }

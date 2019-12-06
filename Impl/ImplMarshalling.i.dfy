@@ -483,7 +483,7 @@ module ImplMarshalling {
       reveal_WeightBucketList();
       MutableBucket.MutBucket.ISeqInduction(buckets);
       assert WeightBucketList(MutableBucket.MutBucket.ISeq(buckets))
-          == WeightBucketList(MutableBucket.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(MutableBucket.MutBucket.I(Last(buckets)));
+          == WeightBucketList(MutableBucket.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(Last(buckets).I());
 
       v := VArray(pref.a + [bucketVal]);
     }
