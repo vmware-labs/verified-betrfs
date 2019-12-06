@@ -35,6 +35,46 @@ module ImplModelSucc {
       | Fetch(ref: BT.G.Reference)
       | Failure
 
+  // Awkwardly split up for verification time reasons
+
+  function {:opaque} getPathInternal(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64, node: Node) : (res : (Variables, PathResult))
+  requires Inv(k, s)
+  requires s.Ready?
+  requires WFNode(node)
+  ensures var (s', pr) := res;
+    && WFVars(s')
+    && s'.Ready?
+    && s'.cache == s.cache
+    && (pr.Path? ==> |pr.buckets| > 0)
+  decreases counter, 0
+  {
+    var r := Pivots.Route(node.pivotTable, key);
+    var bucket := node.buckets[r];
+    var acc' := acc + [bucket];
+    var upTo' := 
+      if r == |node.pivotTable| then (
+        upTo
+      ) else (
+        var ub := node.pivotTable[r];
+        if upTo.Some? then (
+          var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
+          Some(k)
+        ) else (
+          Some(ub)
+        )
+      );
+
+    if node.children.Some? then (
+      if counter == 0 then (
+        (s, Failure)
+      ) else (
+        getPath(k, s, key, acc', upTo', node.children.value[r], counter - 1)
+      )
+    ) else (
+      (s, Path(acc', upTo'))
+    )
+  }
+
   function {:opaque} getPath(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64) : (res : (Variables, PathResult))
   requires Inv(k, s)
   requires s.Ready?
@@ -43,43 +83,14 @@ module ImplModelSucc {
     && s'.Ready?
     && s'.cache == s.cache
     && (pr.Path? ==> |pr.buckets| > 0)
-  decreases counter
+  decreases counter, 1
   {
     if ref in s.cache then (
       var node := s.cache[ref];
-      var r := Pivots.Route(node.pivotTable, key);
-      var bucket := node.buckets[r];
-      var acc' := acc + [bucket];
-      var upTo' := 
-        if r == |node.pivotTable| then (
-          upTo
-        ) else (
-          var ub := node.pivotTable[r];
-          if upTo.Some? then (
-            var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
-            Some(k)
-          ) else (
-            Some(ub)
-          )
-        );
+      var (s0, pr) := getPathInternal(k, s, key, acc, upTo, ref, counter, node);
 
-      var (s0, pr) := 
-        if node.children.Some? then (
-          if counter == 0 then (
-            (s, Failure)
-          ) else (
-            getPath(k, s, key, acc', upTo', node.children.value[r], counter - 1)
-          )
-        ) else (
-          (s, Path(acc', upTo'))
-        );
-   
       LruModel.LruUse(s0.lru, ref);
       var s' := s0.(lru := LruModel.Use(s0.lru, ref));
-
-      //assert LruModel.I(s'.lru) == LruModel.I(s0.lru)
-      //    == s0.cache.Keys;
-      //assert WFVars(s');
 
       (s', pr)
     ) else (
@@ -170,6 +181,7 @@ module ImplModelSucc {
       )
   {
     reveal_getPath();
+    reveal_getPathInternal();
 
     if ref in s.cache {
       var node := s.cache[ref];

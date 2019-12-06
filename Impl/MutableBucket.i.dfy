@@ -203,7 +203,7 @@ module MutableBucket {
     static lemma ISeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
     ensures ISeq(a + b) == ISeq(a) + ISeq(b)
 
-    static twostate lemma AllocatedReprSeq(s: seq<MutBucket>)
+    static twostate lemma AllocatedReprSeq(new s: seq<MutBucket>)
     ensures allocated(ReprSeq(s))
     {
       reveal_ReprSeq();
