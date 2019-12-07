@@ -81,7 +81,7 @@ abstract module BlockCache refines Transactable {
     && LBAType.ValidLocation(loc)
   }
 
-  predicate method GraphClosed(graph: map<Reference, seq<Reference>>)
+  predicate GraphClosed(graph: map<Reference, seq<Reference>>)
   {
     forall ref | ref in graph ::
       forall succ | succ in graph[ref] ::
@@ -161,7 +161,7 @@ abstract module BlockCache refines Transactable {
     )
   }
 
-  predicate method OutstandingBlockReadsDoesNotHaveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference)
+  predicate OutstandingBlockReadsDoesNotHaveRef(outstandingBlockReads: map<ReqId, OutstandingRead>, ref: Reference)
   {
     forall reqId | reqId in outstandingBlockReads :: outstandingBlockReads[reqId].ref != ref
   }
