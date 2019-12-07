@@ -217,12 +217,12 @@ abstract module BlockCache refines Transactable {
     && s' == s.(outstandingIndirectionTableWrite := Some(dop.id))
   }
 
-  function method syncReqs3to2(syncReqs: map<uint64, SyncReqStatus>) : map<uint64, SyncReqStatus>
+  function syncReqs3to2(syncReqs: map<uint64, SyncReqStatus>) : map<uint64, SyncReqStatus>
   {
     map id | id in syncReqs :: (if syncReqs[id] == State3 then State2 else syncReqs[id])
   }
 
-  function method syncReqs2to1(syncReqs: map<uint64, SyncReqStatus>) : map<uint64, SyncReqStatus>
+  function syncReqs2to1(syncReqs: map<uint64, SyncReqStatus>) : map<uint64, SyncReqStatus>
   {
     map id | id in syncReqs :: (if syncReqs[id] == State2 then State1 else syncReqs[id])
   }
