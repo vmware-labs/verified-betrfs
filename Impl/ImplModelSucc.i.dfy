@@ -132,6 +132,21 @@ module ImplModelSucc {
     )
   }
 
+  function {:opaque} doSucc(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
+  : (res : (Variables, IO, Option<UI.SuccResultList>))
+  requires Inv(k, s)
+  requires io.IOInit?
+  requires maxToFind >= 1
+  {
+    if (s.Unready?) then (
+      var (s', io') := PageInIndirectionTableReq(k, s, io);
+      (s', io', None)
+    ) else (
+      var startKey := if start.NegativeInf? then [] else start.key;
+      getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40)
+    )
+  }
+
   /////////////////////////////////
   /////////////////////////////////
   ///////////////////////////////// Proof stuff
@@ -280,7 +295,6 @@ module ImplModelSucc {
     }
   }
 
-  /*
   lemma doSuccCorrect(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
   requires Inv(k, s)
   requires io.IOInit?
@@ -292,53 +306,12 @@ module ImplModelSucc {
         diskOp(io'))
   {
     reveal_doSucc();
-
     if (s.Unready?) {
-      PageInIndirectionTableReqCorrect(k, s, io);
+      ImplModelIO.PageInIndirectionTableReqCorrect(k, s, io);
     } else {
+      PBS.reveal_LookupUpperBound();
       var startKey := if start.NegativeInf? then [] else start.key;
-
-      lemmaGetPathValidFetch(k, s, startKey, 40);
-      var lookup := lemmaGetPathValidLookup(k, s, startKey, 40);
-      var (s1, pr) := getPath(k, s, startKey, [], None, BT.G.Root(), 40);
-
-      assert IVars(s) == IVars(s1);
-
-      match pr {
-        case Path(buckets, upTo) => {
-          assert upTo.Some? ==> lt(startKey, upTo.value);
-
-          var res :=
-              BucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
-          BucketSuccessorLoop.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
-
-          var s' := s1;
-          var io' := io;
-
-          var succStep := BT.SuccQuery(start, res.results, res.end, buckets, lookup);
-          assert BT.ValidSuccQuery(succStep);
-          var step := BT.BetreeSuccQuery(succStep);
-
-          assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'),
-            UI.SuccOp(start, res.results, res.end),
-            M.IDiskOp(diskOp(io)),
-            step);
-          assert stepsBetree(k, IVars(s), IVars(s'),
-            UI.SuccOp(start, res.results, res.end),
-            step);
-        }
-        case Fetch(ref) => {
-          if TotalCacheSize(s1) <= MaxCacheSize() - 1 {
-            PageInReqCorrect(k, s1, io, ref);
-          } else {
-            assert noop(k, IVars(s), IVars(s1));
-          }
-        }
-        case Failure => {
-          assert noop(k, IVars(s), IVars(s1));
-        }
-      }
+      lemmaGetPathResult(k, s, io, startKey, [], [], start, None, maxToFind, BT.G.Root(), 40);
     }
   }
-  */
 }

@@ -190,4 +190,29 @@ module ImplSucc {
       res := None;
     }
   }
+
+  method doSucc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  returns (res : Option<UI.SuccResultList>)
+
+  requires Inv(k, s)
+  requires io.initialized()
+  requires io !in s.Repr()
+  requires maxToFind >= 1
+
+  modifies io
+  modifies s.Repr()
+
+  ensures WellUpdated(s)
+  ensures (s.I(), IIO(io), res) == ImplModelSucc.doSucc(Ic(k), old(s.I()), old(IIO(io)), start, maxToFind as int)
+  {
+    ImplModelSucc.reveal_doSucc();
+
+    if (!s.ready) {
+      PageInIndirectionTableReq(k, s, io);
+      res := None;
+    } else {
+      var startKey := if start.NegativeInf? then [] else start.key;
+      res := getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40);
+    }
+  }
 }
