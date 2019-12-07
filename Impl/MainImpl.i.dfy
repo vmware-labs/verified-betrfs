@@ -7,6 +7,7 @@ include "Marshalling.i.dfy"
 include "Impl.i.dfy"
 include "ImplInsert.i.dfy"
 include "ImplQuery.i.dfy"
+include "ImplSucc.i.dfy"
 include "ImplModelInsert.i.dfy"
 include "ImplModelQuery.i.dfy"
 include "ImplModelSync.i.dfy"
@@ -18,10 +19,12 @@ module {:extern} MainImpl refines Main {
   import opened ImplInsert
   import opened ImplQuery
   import opened ImplSync
+  import opened ImplSucc
   import ImplModelIO
   import ImplModelInsert
   import ImplModelQuery
   import ImplModelSync
+  import ImplModelSucc
 
   import ADM = Impl.ImplADM
 
@@ -127,6 +130,24 @@ module {:extern} MainImpl refines Main {
     success := succ;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
         if success then UI.PutOp(key, value) else UI.NoOp,
+        io.diskOp());
+  }
+
+  method handleSucc(k: Constants, hs: HeapState, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  returns (res: Option<UI.SuccResultList>)
+  {
+    var s := hs.s;
+    ioAndHsNotInReadSet(s, io, hs);
+    var value := doSucc(k, s, io, start, maxToFind);
+    ImplModelSucc.doSuccCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), start, maxToFind as int);
+    ioAndHsNotInReadSet(s, io, hs);
+    ghost var uiop := 
+      if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
+    BBC.NextPreservesInv(k, IM.IVars(old(s.I())), IM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
+    hs.Repr := s.Repr() + {s};
+    res := value;
+    assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
+        uiop,
         io.diskOp());
   }
 
