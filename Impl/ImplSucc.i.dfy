@@ -19,6 +19,8 @@ module ImplSucc {
   import opened MutableBucket
   import opened Lexicographic_Byte_Order
   import opened ImplNode
+  import ImplBucketSuccessorLoop
+  import BucketSuccessorLoop
 
   import opened Options
   import opened NativeTypes
@@ -32,42 +34,36 @@ module ImplSucc {
 
   import opened PBS = PivotBetreeSpec`Spec
 
-
-  predicate {:opaque} BucketListInCache(buckets: seq<MutBucket>, s: ImplVariables)
-  reads buckets, s, s.cache
-  {
-    && forall o | o in buckets :: o in s.cache.Repr
-    && MutBucket.ReprSeq(buckets) <= s.cache.Repr
-  }
-
-  lemma BucketListInCacheOfEmpty(s: ImplVariables)
-  ensures BucketListInCache([], s)
-
-  lemma BucketListInCacheOfAppend(buckets: seq<MutBucket>, s: ImplVariables, b: MutBucket)
-  requires BucketListInCache(buckets, s)
-  requires b.Repr <= s.cache.Repr
-  ensures BucketListInCache(buckets + [b], s)
-
-  lemma BucketListInCacheNotIn(buckets: seq<MutBucket>, s: ImplVariables, other: set<object>)
-  requires BucketListInCache(buckets, s)
-  requires s.cache.Repr !! other
-  ensures MutBucket.ReprSeq(buckets) !! other;
-  ensures forall o | o in buckets :: o !in other;
-
-  method getPathInternal(k: ImplConstants, s: ImplVariables, key: MS.Key, acc: seq<MutBucket>, upTo: Option<MS.Key>, ref: BT.G.Reference, counter: uint64, node: Node)
-  returns (pr : PathResult)
+  method getPathInternal(
+      k: ImplConstants,
+      s: ImplVariables,
+      io: DiskIOHandler,
+      key: MS.Key,
+      acc: seq<MutBucket>,
+      start: UI.RangeStart,
+      upTo: Option<MS.Key>,
+      maxToFind: uint64,
+      ref: BT.G.Reference,
+      counter: uint64,
+      node: Node)
+  returns (res : Option<UI.SuccResultList>)
   requires Inv(k, s)
   requires node.Inv()
   requires ImplModel.WFNode(node.I())
   requires s.ready
-  requires BucketListInCache(acc, s)
-  requires node.Repr <= s.cache.Repr
+  requires io.initialized()
+  requires ref in s.I().cache
+  requires ref in s.I().ephemeralIndirectionTable.graph
+  requires node.I() == s.I().cache[ref]
+  requires maxToFind >= 1
+  requires forall i | 0 <= i < |acc| :: acc[i].Inv()
+  requires io !in s.Repr()
   modifies s.Repr()
+  modifies io
   decreases counter, 0
-  ensures pr.Path? ==> BucketListInCache(pr.buckets, s)
   ensures WellUpdated(s)
-  ensures (s.I(), IPathResult(pr))
-       == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), key, old(MutBucket.ISeq(acc)), upTo, ref, counter, old(node.I()))
+  ensures (s.I(), IIO(io), res)
+       == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()))
   {
     ImplModelSucc.reveal_getPathInternal();
 
@@ -76,8 +72,6 @@ module ImplSucc {
     var acc' := acc + [bucket];
 
     assert bucket.I() == node.I().buckets[r];
-    assume bucket.Repr <= s.cache.Repr;
-    BucketListInCacheOfAppend(acc, s, bucket);
 
     //ghost var now_s := s.I();
     //ghost var now_acc' := MutBucket.ISeq(acc');
@@ -105,34 +99,71 @@ module ImplSucc {
     assert MutBucket.ISeq(acc')
         == old(MutBucket.ISeq(acc) + [node.I().buckets[r]]);
 
+    assert MutBucket.ISeq(acc')
+        == old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]];
+
     if node.children.Some? {
       if counter == 0 {
-        pr := Failure;
+        print "getPathInternal failure: count ran down\n";
+        res := None;
 
-        //assert (s.I(), IPathResult(pr)) == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), key, old(MutBucket.ISeq(acc)), upTo, ref, counter, old(node.I()));
+        assert (s.I(), IIO(io), res)
+         == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
       } else {
-        pr := getPath(k, s, key, acc', upTo', node.children.value[r], counter - 1);
+        ImplModelCache.lemmaChildInGraph(Ic(k), s.I(), ref, node.I().children.value[r]);
+        res := getPath(k, s, io, key, acc', start, upTo', maxToFind, node.children.value[r], counter - 1);
 
-        //assert (s.I(), IPathResult(pr)) == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), key, old(MutBucket.ISeq(acc)), upTo, ref, counter, old(node.I()));
+        assert (s.I(), IIO(io), res)
+         == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
       }
     } else {
-      pr := Path(acc', upTo');
+      //assert old(MutBucket.ISeq(acc)) == MutBucket.ISeq(acc);
 
-      //assert (s.I(), IPathResult(pr)) == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), key, old(MutBucket.ISeq(acc)), upTo, ref, counter, old(node.I()));
+      MutBucket.AllocatedReprSeq(acc');
+
+      //assert BucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(acc'), maxToFind as int, start, upTo')
+      //    == BucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
+
+      var res0 := ImplBucketSuccessorLoop.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
+      res := Some(res0);
+
+      //assert res0
+      //    == BucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
+
+      //assert ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I())).2
+      //    == Some(BucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
+      //    == res;
+
+      assert (s.I(), IIO(io), res)
+       == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
     }
   }
 
-  method getPath(k: ImplConstants, s: ImplVariables, key: MS.Key, acc: seq<MutBucket>, upTo: Option<MS.Key>, ref: BT.G.Reference, counter: uint64)
-  returns (pr : PathResult)
+  method getPath(
+      k: ImplConstants,
+      s: ImplVariables,
+      io: DiskIOHandler,
+      key: MS.Key,
+      acc: seq<MutBucket>,
+      start: UI.RangeStart,
+      upTo: Option<MS.Key>,
+      maxToFind: uint64,
+      ref: BT.G.Reference,
+      counter: uint64)
+  returns (res : Option<UI.SuccResultList>)
   requires Inv(k, s)
   requires s.ready
-  requires BucketListInCache(acc, s)
+  requires io.initialized()
+  requires maxToFind >= 1
+  requires ref in s.I().ephemeralIndirectionTable.graph
+  requires forall i | 0 <= i < |acc| :: acc[i].Inv()
+  requires io !in s.Repr()
   modifies s.Repr()
+  modifies io
   decreases counter, 1
-  ensures pr.Path? ==> BucketListInCache(pr.buckets, s)
   ensures WellUpdated(s)
-  ensures (s.I(), IPathResult(pr))
-       == ImplModelSucc.getPath(Ic(k), old(s.I()), key, old(MutBucket.ISeq(acc)), upTo, ref, counter)
+  ensures (s.I(), IIO(io), res)
+       == ImplModelSucc.getPath(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter)
   {
     ImplModelSucc.reveal_getPath();
 
@@ -143,22 +174,20 @@ module ImplSucc {
       var node := nodeOpt.value;
 
       assert node.I() == s.I().cache[ref];
-      s.cache.LemmaNodeReprLeRepr(ref);
 
-      pr := getPathInternal(k, s, key, acc, upTo, ref, counter, node);
-
-      ghost var ghosty := true;
-      if (ghosty && pr.Path?) {
-        // Preserve facts about the buckets across the LRU usage
-        // Use that the buckets are all in the cache
-        MutBucket.AllocatedReprSeq(pr.buckets);
-        BucketListInCacheNotIn(pr.buckets, s, s.lru.Repr);
-      }
+      res := getPathInternal(k, s, io, key, acc, start, upTo, maxToFind, ref, counter, node);
 
       LruModel.LruUse(s.I().lru, ref);
       s.lru.Use(ref);
     } else {
-      pr := Fetch(ref);
+      // TODO factor this out into something that checks (and if it's full, actually
+      // does something).
+      if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
+        PageInReq(k, s, io, ref);
+      } else {
+        print "getPath: Can't page in anything because cache is full\n";
+      }
+      res := None;
     }
   }
 }
