@@ -30,22 +30,25 @@ module ImplModelSucc {
 
   import PBS = PivotBetreeSpec`Internal
 
-  datatype PathResult =
-      | Path(buckets: seq<Bucket>, upTo: Option<Key>)
-      | Fetch(ref: BT.G.Reference)
-      | Failure
-
   // Awkwardly split up for verification time reasons
 
-  function {:opaque} getPathInternal(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64, node: Node) : (res : (Variables, PathResult))
+  function {:opaque} getPathInternal(
+      k: Constants,
+      s: Variables,
+      io: IO,
+      key: Key,
+      acc: seq<Bucket>,
+      start: UI.RangeStart,
+      upTo: Option<Key>,
+      maxToFind: int,
+      ref: BT.G.Reference,
+      counter: uint64,
+      node: Node)
+  : (res : (Variables, IO, Option<UI.SuccResultList>))
   requires Inv(k, s)
   requires s.Ready?
   requires WFNode(node)
-  ensures var (s', pr) := res;
-    && WFVars(s')
-    && s'.Ready?
-    && s'.cache == s.cache
-    && (pr.Path? ==> |pr.buckets| > 0)
+  requires maxToFind >= 1
   decreases counter, 0
   {
     var r := Pivots.Route(node.pivotTable, key);
@@ -66,74 +69,49 @@ module ImplModelSucc {
 
     if node.children.Some? then (
       if counter == 0 then (
-        (s, Failure)
+        (s, io, None)
       ) else (
-        getPath(k, s, key, acc', upTo', node.children.value[r], counter - 1)
+        getPath(k, s, io, key, acc', start, upTo', maxToFind, node.children.value[r], counter - 1)
       )
     ) else (
-      (s, Path(acc', upTo'))
+      var res :=
+          BucketSuccessorLoop.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
+      (s, io, Some(res))
     )
   }
 
-  function {:opaque} getPath(k: Constants, s: Variables, key: Key, acc: seq<Bucket>, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64) : (res : (Variables, PathResult))
+  function {:opaque} getPath(
+      k: Constants,
+      s: Variables,
+      io: IO,
+      key: Key,
+      acc: seq<Bucket>,
+      start: UI.RangeStart,
+      upTo: Option<Key>,
+      maxToFind: int,
+      ref: BT.G.Reference,
+      counter: uint64)
+  : (res : (Variables, IO, Option<UI.SuccResultList>))
   requires Inv(k, s)
   requires s.Ready?
-  ensures var (s', pr) := res;
-    && WFVars(s')
-    && s'.Ready?
-    && s'.cache == s.cache
-    && (pr.Path? ==> |pr.buckets| > 0)
+  requires maxToFind >= 1
   decreases counter, 1
   {
     if ref in s.cache then (
       var node := s.cache[ref];
-      var (s0, pr) := getPathInternal(k, s, key, acc, upTo, ref, counter, node);
+      var (s0, io', pr) := getPathInternal(k, s, io, key, acc, start, upTo, maxToFind, ref, counter, node);
 
       LruModel.LruUse(s0.lru, ref);
       var s' := s0.(lru := LruModel.Use(s0.lru, ref));
 
-      (s', pr)
+      (s', io', pr)
     ) else (
-      (s, Fetch(ref))
-    )
-  }
-
-  ////////////////
-  //// doSucc
-
-  function {:opaque} doSucc(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
-    : (Variables, IO, Option<UI.SuccResultList>)
-  requires Inv(k, s)
-  requires io.IOInit?
-  requires maxToFind >= 1
-  {
-    if (s.Unready?) then (
-      var (s', io') := PageInIndirectionTableReq(k, s, io);
-      (s', io', None)
-    ) else (
-      var startKey := if start.NegativeInf? then [] else start.key;
-
-      lemmaGetPathValidFetch(k, s, startKey, 40);
-      var (s1, pr) := getPath(k, s, startKey, [], None, BT.G.Root(), 40);
-
-      match pr {
-        case Path(buckets, upTo) => (
-          var res :=
-              BucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
-          (s1, io, Some(res))
-        )
-        case Fetch(ref) => (
-          if TotalCacheSize(s1) <= MaxCacheSize() - 1 then (
-            var (s', io') := PageInReq(k, s1, io, ref);
-            (s', io', None)
-          ) else (
-            (s1, io, None)
-          )
-        )
-        case Failure => (
-          (s1, io, None)
-        )
-      }
+      if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+        var (s', io') := PageInReq(k, s, io, ref);
+        (s', io', None)
+      ) else (
+        (s, io, None)
+      )
     )
   }
 
@@ -152,8 +130,7 @@ module ImplModelSucc {
     && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
   }
 
-  lemma lemmaGetPathResult(k: Constants, s: Variables, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, upTo: Option<Key>, ref: BT.G.Reference, counter: uint64)
-  returns (lookup' : PBS.Lookup)
+  lemma lemmaGetPathResult(k: Constants, s: Variables, io: IO, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
   requires Inv(k, s)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.graph
@@ -168,8 +145,12 @@ module ImplModelSucc {
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
   requires upTo.Some? ==> lt(startKey, upTo.value)
   decreases counter
-  ensures var (s1, pr) := getPath(k, s, startKey, acc, upTo, ref, counter);
-      && IVars(s1) == IVars(s)
+  ensures var (s', io', res) := getPath(k, s, io, startKey, acc, start, upTo, maxToFind, ref, counter);
+      && WFVars(s')
+      && M.Next(Ik(k), IVars(s), IVars(s'),
+          if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
+          diskOp(io'))
+    /*  && IVars(s1) == IVars(s)
       && s1.ephemeralIndirectionTable == s.ephemeralIndirectionTable
       && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
       && (pr.Fetch? ==> pr.ref !in s.cache)
@@ -178,7 +159,7 @@ module ImplModelSucc {
         && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
         && (forall i | 0 <= i < |lookup'| :: MapsTo(ICache(s.cache), lookup'[i].ref, lookup'[i].node))
         && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
-      )
+      ) */
   {
     reveal_getPath();
     reveal_getPathInternal();
@@ -218,48 +199,25 @@ module ImplModelSucc {
 
       if node.children.Some? {
         if counter == 0 {
+          assert noop(k, IVars(s), IVars(s));
         } else {
           lemmaChildInGraph(k, s, ref, node.children.value[r]);
 
-          lookup' := lemmaGetPathResult(k, s, startKey, acc1, lookup1, upTo', node.children.value[r], counter - 1);
+          lemmaGetPathResult(k, s, io, startKey, acc1, lookup1, start, upTo', maxToFind, node.children.value[r], counter - 1);
         }
       } else {
-        lookup' := lookup1;
+        if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+          PageInReqCorrect(k, s, io, ref);
+        } else {
+          assert noop(k, IVars(s), IVars(s));
+        }
       }
     } else {
+      assert noop(k, IVars(s), IVars(s));
     }
   }
 
-  lemma lemmaGetPathValidFetch(k: Constants, s: Variables, startKey: Key, counter: uint64)
-  requires Inv(k, s)
-  requires s.Ready?
-  decreases counter
-  ensures var (s1, pr) := getPath(k, s, startKey, [], None, BT.G.Root(), counter);
-      && (pr.Fetch? ==> pr.ref in s1.ephemeralIndirectionTable.locs)
-      && (pr.Fetch? ==> pr.ref !in s1.cache)
-  {
-    PBS.reveal_LookupUpperBound();
-    var _ := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
-  }
-
-  lemma lemmaGetPathValidLookup(k: Constants, s: Variables, startKey: Key, counter: uint64)
-  returns (lookup' : PBS.Lookup)
-  requires Inv(k, s)
-  requires s.Ready?
-  decreases counter
-  ensures var (s1, pr) := getPath(k, s, startKey, [], None, BT.G.Root(), counter);
-      && IVars(s1) == IVars(s)
-      && (pr.Path? ==> (
-        && LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
-        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
-        && (forall i | 0 <= i < |lookup'| :: MapsTo(ICache(s.cache), lookup'[i].ref, lookup'[i].node))
-        && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
-      )
-  {
-    PBS.reveal_LookupUpperBound();
-    lookup' := lemmaGetPathResult(k, s, startKey, [], [], None, BT.G.Root(), counter);
-  }
-
+  /*
   lemma doSuccCorrect(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
   requires Inv(k, s)
   requires io.IOInit?
@@ -319,4 +277,5 @@ module ImplModelSucc {
       }
     }
   }
+  */
 }
