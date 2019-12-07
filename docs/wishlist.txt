@@ -81,3 +81,11 @@ to it.
 Here's another one.
 on branch hard-to-trace-map-timeout
 tools/profile.sh PivotBetree/BucketWeights.i.dfy /proc:"*WeightBucketLinearInKeySetInner*"
+
+Here's a timeout: branch timeout-annoying
+/usr/bin/time .dafny/dafny//Binaries/dafny /compile:0 /timeLimit:20 lib/DataStructures/MutableMapModel.i.dfy /proc:"*allNonEmptyImpliesCountEqStorageSize*"
+Profile isn't particularly enlightening:
+Prover error: [quantifier_instances] Optionsd.2:36 :  10700 : 100 : 101
+Prover error: [quantifier_instances] unknown.0:0 :   9700 : 100 : 101
+Prover error: [quantifier_instances] MutableM.27:30 :   7300 : 100 : 101
+Prover error: [quantifier_instances] funType:_16_MutableMapModel.Item.value :   7200 : 100 : 101

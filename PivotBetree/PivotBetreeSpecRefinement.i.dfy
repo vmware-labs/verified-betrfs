@@ -339,6 +339,7 @@ module PivotBetreeSpecRefinement {
   ensures IBuffer(node)[key] == IBuffer(node')[key]
   ensures IMapsAgreeOnKey(IChildren(node), IChildren(node'), key)
   {
+    reveal_SplitBucketLeft();
     P.reveal_CutoffNodeAndKeepLeft();
     var i := Route(node'.pivotTable, key);
     RouteIs(node.pivotTable, key, i);
@@ -352,6 +353,7 @@ module PivotBetreeSpecRefinement {
   ensures IBuffer(node)[key] == IBuffer(node')[key]
   ensures IMapsAgreeOnKey(IChildren(node), IChildren(node'), key)
   {
+    reveal_SplitBucketRight();
     P.reveal_CutoffNodeAndKeepRight();
     var i := Route(node'.pivotTable, key);
     RouteIs(node.pivotTable, key, i + |node.pivotTable| - |node'.pivotTable|);
@@ -532,6 +534,8 @@ module PivotBetreeSpecRefinement {
   ensures forall key:Key | key !in PivotTableBucketKeySet(node.pivotTable, idx) ::
       IChildren(node)[key] == IChildren(node')[key]
   {
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
     forall key:Key
     ensures IBuffer(node)[key] == IBuffer(node')[key]
     ensures key !in PivotTableBucketKeySet(node.pivotTable, idx) ==> IChildren(node)[key] == IChildren(node')[key]

@@ -385,7 +385,7 @@ module ImplMarshalling {
   ensures |pivots[0]| != 0;
   {
     var e := Keyspace.SmallerElement(pivots[0]);
-    Keyspace.reveal_seq_lte();
+    //Keyspace.reveal_seq_lte();
   }
 
   method pivotsToVal(pivots: seq<Key>) returns (v : V)
