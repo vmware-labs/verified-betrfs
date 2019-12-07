@@ -1,13 +1,35 @@
 include "../lib/DataStructures/tttree.i.dfy"
+include "../lib/DataStructures/MutableBtree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
+
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
 // it is flushed into the root in a batch.
 // TODO(robj): Littered with assume false!?
 //
+
+module MessageBtreeSpec refines BtreeSpec {
+  import Keys = Lexicographic_Byte_Order
+  import VM = ValueMessage
+  type Value = VM.Message
+}
+
+module MessageMutableBtree refines MutableBtree {
+  import BS = MessageBtreeSpec
+
+  function method DefaultKey() : Key
+  {
+    []
+  }
+    
+  function method DefaultValue() : Value
+  {
+    BS.VM.DefineDefault()
+  }
+}
 
 module MutableBucket {
   import TTT = TwoThreeTree

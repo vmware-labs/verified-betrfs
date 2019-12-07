@@ -1,9 +1,9 @@
-include "../lib/Base/NativeTypes.s.dfy"
-include "../lib/Base/total_order.i.dfy"
-include "../lib/Base/sequences.i.dfy"
-include "../lib/Base/Arrays.i.dfy"
-include "../lib/Base/Maps.s.dfy"
-include "BtreeSpec.dfy"
+include "../Base/NativeTypes.s.dfy"
+include "../Base/total_order.i.dfy"
+include "../Base/sequences.i.dfy"
+include "../Base/Arrays.i.dfy"
+include "../Base/Maps.s.dfy"
+include "BtreeSpec.i.dfy"
 
 abstract module MutableBtree {
   import opened NativeTypes
@@ -52,7 +52,8 @@ abstract module MutableBtree {
   {
     if node.contents.Leaf? then
       && node.repr == { node, node.contents.keys, node.contents.values }
-      && node.contents.keys != node.contents.values
+      //&& node.contents.keys != node.contents.values
+      && |node.repr| == 3
       && node.height == 0
       && 0 <= node.contents.nkeys as int <= MaxKeysPerLeaf() as int == node.contents.keys.Length
       && node.contents.values.Length == node.contents.keys.Length
