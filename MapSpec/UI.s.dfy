@@ -1,6 +1,6 @@
 include "../lib/Base/KeyType.s.dfy"
 
-module UI {
+module {:extern} UI {
   //import Keyspace = Total_Order
   //import Keyspace = Lexicographic_Byte_Order
 

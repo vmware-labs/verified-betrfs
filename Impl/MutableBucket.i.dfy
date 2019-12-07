@@ -85,7 +85,7 @@ module MutableBucket {
     tree := TTT.NonEmptyTree(ar[0 as uint64].1);
   }
 
-  type Iterator
+  datatype Iterator = Iterator(i: uint64)
   function IIterator(it: Iterator) : BucketIterator.Iterator
 
   class MutBucket {
@@ -524,16 +524,46 @@ module MutableBucket {
     requires Inv()
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIterator.IterStart(I())
+    {
+      assume false;
+      it' := Iterator(0);
+    }
 
     method IterFindFirstGte(key: Key) returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIterator.IterFindFirstGte(I(), key)
+    {
+      assume false;
+      var i: uint64 := 0;
+      var kvl := GetKvl();
+      while i < |kvl.keys| as uint64 {
+        var c := cmp(kvl.keys[i], key);
+        if c >= 0 {
+          return Iterator(i);
+        }
+        i := i + 1;
+      }
+      return Iterator(|kvl.keys| as uint64);
+    }
 
     method IterFindFirstGt(key: Key) returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIterator.IterFindFirstGt(I(), key)
+    {
+      assume false;
+      var i: uint64 := 0;
+      var kvl := GetKvl();
+      while i < |kvl.keys| as uint64 {
+        var c := cmp(kvl.keys[i], key);
+        if c > 0 {
+          return Iterator(i);
+        }
+        i := i + 1;
+      }
+      return Iterator(|kvl.keys| as uint64);
+    }
 
     method IterInc(it: Iterator) returns (it': Iterator)
     requires Inv()
@@ -541,10 +571,23 @@ module MutableBucket {
     requires this.WFIter(it)
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIterator.IterInc(I(), IIterator(it))
+    {
+      assume false;
+      return Iterator(it.i + 1);
+    }
 
     method GetNext(it: Iterator) returns (next : BucketIterator.IteratorOutput)
     requires Inv()
     requires this.WFIter(it)
     ensures next == IIterator(it).next
+    {
+      assume false;
+      var kvl := GetKvl();
+      if it.i == |kvl.keys| as uint64 {
+        next := BucketIterator.Done;
+      } else {
+        next := BucketIterator.Next(kvl.keys[it.i], kvl.values[it.i]);
+      }
+    }
   }
 }
