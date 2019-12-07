@@ -5,22 +5,22 @@ module {:extern} NativeArrays {
   import opened NativeTypes
   import SeqComparison
 
-  method {:axiom} ByteSeqCmpByteSeq(s1: seq<byte>, s2: seq<byte>)
+  method {:extern "NativeArrays_Compile", "ByteSeqCmpByteSeq"} ByteSeqCmpByteSeq(s1: seq<byte>, s2: seq<byte>)
       returns (c : int32)
       ensures c < 0 ==> SeqComparison.lt(s1, s2)
       ensures c > 0 ==> SeqComparison.lt(s2, s1)
       ensures c == 0 ==> s1 == s2
 
-  method {:axiom} newArrayFill<T>(n: uint64, t: T) returns (ar: array<T>)
+  method {:extern "NativeArrays_Compile", "newArrayFill"} newArrayFill<T>(n: uint64, t: T) returns (ar: array<T>)
   ensures ar.Length == n as int
   ensures forall i | 0 <= i < n :: ar[i] == t
   ensures fresh(ar)
 
-  method {:axiom} newArrayClone<T>(ar: array<T>) returns (ar': array<T>)
+  method {:extern "NativeArrays_Compile", "newArrayClone"} newArrayClone<T>(ar: array<T>) returns (ar': array<T>)
   ensures ar[..] == ar'[..]
   ensures fresh(ar')
 
-  method {:axiom} CopySeqIntoArray<A>(src:seq<A>, srcIndex:uint64, dst:array<A>, dstIndex:uint64, len:uint64)
+  method {:extern "NativeArrays_Compile", "CopySeqIntoArray"} CopySeqIntoArray<A>(src:seq<A>, srcIndex:uint64, dst:array<A>, dstIndex:uint64, len:uint64)
       requires (srcIndex) as int + (len as int) <= |src|;
       requires (dstIndex as int) + (len as int) <= dst.Length;
       modifies dst;
