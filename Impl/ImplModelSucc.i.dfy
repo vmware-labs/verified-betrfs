@@ -47,8 +47,16 @@ module ImplModelSucc {
   : (res : (Variables, IO, Option<UI.SuccResultList>))
   requires Inv(k, s)
   requires s.Ready?
+  requires io.IOInit?
   requires WFNode(node)
+  requires ref in s.cache
+  requires ref in s.ephemeralIndirectionTable.graph
+  requires node == s.cache[ref]
   requires maxToFind >= 1
+  ensures var (s', io, sr) := res;
+    && s'.Ready?
+    && WFVars(s')
+    && s'.cache == s.cache
   decreases counter, 0
   {
     var r := Pivots.Route(node.pivotTable, key);
@@ -71,6 +79,7 @@ module ImplModelSucc {
       if counter == 0 then (
         (s, io, None)
       ) else (
+        lemmaChildInGraph(k, s, ref, node.children.value[r]);
         getPath(k, s, io, key, acc', start, upTo', maxToFind, node.children.value[r], counter - 1)
       )
     ) else (
@@ -94,7 +103,13 @@ module ImplModelSucc {
   : (res : (Variables, IO, Option<UI.SuccResultList>))
   requires Inv(k, s)
   requires s.Ready?
+  requires io.IOInit?
   requires maxToFind >= 1
+  requires ref in s.ephemeralIndirectionTable.graph
+  ensures var (s', io, sr) := res;
+    && s'.Ready?
+    && WFVars(s')
+    && s'.cache == s.cache
   decreases counter, 1
   {
     if ref in s.cache then (
@@ -104,10 +119,12 @@ module ImplModelSucc {
       LruModel.LruUse(s0.lru, ref);
       var s' := s0.(lru := LruModel.Use(s0.lru, ref));
 
+      assert WFVars(s');
       (s', io', pr)
     ) else (
       if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
         var (s', io') := PageInReq(k, s, io, ref);
+        assert WFVars(s');
         (s', io', None)
       ) else (
         (s, io, None)
@@ -130,9 +147,48 @@ module ImplModelSucc {
     && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
   }
 
+  lemma SatisfiesSuccBetreeStep(k: Constants, s: Variables, io: IO, start: UI.RangeStart,
+      res: UI.SuccResultList, buckets: seq<Bucket>, lookup: PBS.Lookup, maxToFind: int, startKey: Key, upTo: Option<Key>)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires io.IOInit?
+  requires maxToFind >= 1
+  requires LookupBucketsProps(lookup, buckets, upTo, startKey);
+  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
+  requires forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node)
+  requires (upTo.Some? ==> lt(startKey, upTo.value))
+  requires startKey == (if start.NegativeInf? then [] else start.key)
+  requires res == 
+     BucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+
+  ensures M.Next(Ik(k), IVars(s), IVars(s),
+      UI.SuccOp(start, res.results, res.end),
+      diskOp(io))
+  {
+    BucketSuccessorLoop.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
+
+    var succStep := BT.SuccQuery(start, res.results, res.end, buckets, lookup);
+    assert BT.ValidSuccQuery(succStep);
+    var step := BT.BetreeSuccQuery(succStep);
+
+    assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s),
+      UI.SuccOp(start, res.results, res.end),
+      M.IDiskOp(diskOp(io)),
+      step);
+    assert stepsBetree(k, IVars(s), IVars(s),
+      UI.SuccOp(start, res.results, res.end),
+      step);
+
+    assert M.Next(Ik(k), IVars(s), IVars(s),
+      UI.SuccOp(start, res.results, res.end),
+      diskOp(io));
+  }
+
   lemma lemmaGetPathResult(k: Constants, s: Variables, io: IO, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
   requires Inv(k, s)
   requires s.Ready?
+  requires io.IOInit?
+  requires maxToFind >= 1
   requires ref in s.ephemeralIndirectionTable.graph
   requires |lookup| > 0 ==> PBS.WFLookupForKey(lookup, startKey)
   requires |lookup| > 0 ==> Last(lookup).node.children.Some?
@@ -144,6 +200,7 @@ module ImplModelSucc {
   requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
   requires upTo.Some? ==> lt(startKey, upTo.value)
+  requires startKey == (if start.NegativeInf? then [] else start.key)
   decreases counter
   ensures var (s', io', res) := getPath(k, s, io, startKey, acc, start, upTo, maxToFind, ref, counter);
       && WFVars(s')
@@ -195,6 +252,8 @@ module ImplModelSucc {
           )
         );
 
+      assert upTo'.Some? ==> lt(startKey, upTo'.value);
+
       PBS.reveal_LookupUpperBound();
 
       if node.children.Some? {
@@ -206,14 +265,18 @@ module ImplModelSucc {
           lemmaGetPathResult(k, s, io, startKey, acc1, lookup1, start, upTo', maxToFind, node.children.value[r], counter - 1);
         }
       } else {
-        if TotalCacheSize(s) <= MaxCacheSize() - 1 {
-          PageInReqCorrect(k, s, io, ref);
-        } else {
-          assert noop(k, IVars(s), IVars(s));
-        }
+        var res :=
+          BucketSuccessorLoop.GetSuccessorInBucketStack(acc1, maxToFind, start, upTo');
+        SatisfiesSuccBetreeStep(k, s, io, start, res, acc1, lookup1, maxToFind, startKey, upTo');
       }
     } else {
-      assert noop(k, IVars(s), IVars(s));
+      if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+        assert ref in s.ephemeralIndirectionTable.graph;
+        assert ref in s.ephemeralIndirectionTable.locs;
+        PageInReqCorrect(k, s, io, ref);
+      } else {
+        assert noop(k, IVars(s), IVars(s));
+      }
     }
   }
 
