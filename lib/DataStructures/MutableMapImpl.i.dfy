@@ -461,20 +461,20 @@ module MutableMap {
       invariant iterToNext(self, 0) == iterToNext(self, i)
       {
         if Underlying.Storage[i].Entry? {
-          var next := Some((Underlying.Storage[i].key, Underlying.Storage[i].value));
+          var next := Next(Underlying.Storage[i].key, Underlying.Storage[i].value);
           it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
           return;
         }
         i := i + 1;
       }
 
-      var next := None;
+      var next := Done;
       it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
     }
 
     method IterInc(it: Iterator<V>) returns (it' : Iterator<V>)
     requires Inv()
-    requires it.next.Some?
+    requires it.next.Next?
     requires WFIter(I(), it)
     ensures it' == MutableMapModel.IterInc(I(), it)
     {
@@ -489,15 +489,15 @@ module MutableMap {
       invariant iterToNext(self, it.i + 1) == iterToNext(self, i)
       {
         if Underlying.Storage[i].Entry? {
-          var next := Some((Underlying.Storage[i].key, Underlying.Storage[i].value));
-          it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+          var next := Next(Underlying.Storage[i].key, Underlying.Storage[i].value);
+          it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
           return;
         }
         i := i + 1;
       }
 
-      var next := None;
-      it' := Iterator(i, it.s + {it.next.value.0}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+      var next := Done;
+      it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
     }
 
     method MaxKey() returns (res : uint64)
@@ -507,14 +507,14 @@ module MutableMap {
       MutableMapModel.reveal_MaxKey();
       var it := IterStart();
       var m: uint64 := 0;
-      while it.next.Some?
+      while it.next.Next?
       invariant Inv()
       invariant MutableMapModel.WFIter(I(), it)
       invariant forall key | key in it.s :: key <= m
       invariant MutableMapModel.MaxKeyIterate(I(), it, m) == MutableMapModel.MaxKey(I())
       decreases it.decreaser
       {
-        var key := it.next.value.0;
+        var key := it.next.key;
         if key > m {
           m := key;
         }

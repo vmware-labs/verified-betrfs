@@ -99,10 +99,10 @@ module ImplSync {
     assume false;
     var it := s.frozenIndirectionTable.t.IterStart();
 
-    while it.next.Some?
+    while it.next.Next?
     {
-      var ref := it.next.value.0;
-      var lbaGraph := it.next.value.1;
+      var ref := it.next.key;
+      var lbaGraph := it.next.value;
       var lba := lbaGraph.loc;
       if lba.None? {
         return Some(ref);

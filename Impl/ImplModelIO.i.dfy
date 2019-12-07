@@ -565,19 +565,16 @@ module ImplModelIO {
   ensures MutableMapModel.Inv(m')
   decreases it.decreaser
   {
-    if it.next.None? then
+    if it.next.Done? then
       m0
     else (
-      var key := it.next.value.0;
-      var value := it.next.value.1;
-
       MutableMapModel.LemmaIterIndexLtCount(m, it);
       MutableMapModel.CountBound(m);
       SyncReqs2to1Iterate(
         m,
         MutableMapModel.IterInc(m, it),
-        MutableMapModel.Insert(m0, key,
-            (if value == BC.State2 then BC.State1 else value))
+        MutableMapModel.Insert(m0, it.next.key,
+            (if it.next.value == BC.State2 then BC.State1 else it.next.value))
       )
     )
   }
@@ -599,7 +596,7 @@ module ImplModelIO {
     reveal_SyncReqs2to1();
     var it := MutableMapModel.IterStart(m);
     var m0 := MutableMapModel.Constructor(128);
-    while !it.next.None?
+    while !it.next.Done?
     invariant MutableMapModel.Inv(m)
     invariant MutableMapModel.WFIter(m, it)
     invariant MutableMapModel.Inv(m0)
@@ -609,12 +606,10 @@ module ImplModelIO {
     invariant SyncReqs2to1(m) == SyncReqs2to1Iterate(m, it, m0)
     decreases it.decreaser
     {
-      var key := it.next.value.0;
-      var value := it.next.value.1;
       MutableMapModel.LemmaIterIndexLtCount(m, it);
       MutableMapModel.CountBound(m);
-      m0 := MutableMapModel.Insert(m0, key,
-          (if value == BC.State2 then BC.State1 else value));
+      m0 := MutableMapModel.Insert(m0, it.next.key,
+          (if it.next.value == BC.State2 then BC.State1 else it.next.value));
       it := MutableMapModel.IterInc(m, it);
     }
   }
@@ -631,19 +626,16 @@ module ImplModelIO {
   ensures MutableMapModel.Inv(m')
   decreases it.decreaser
   {
-    if it.next.None? then
+    if it.next.Done? then
       m0
     else (
-      var key := it.next.value.0;
-      var value := it.next.value.1;
-
       MutableMapModel.LemmaIterIndexLtCount(m, it);
       MutableMapModel.CountBound(m);
       SyncReqs3to2Iterate(
         m,
         MutableMapModel.IterInc(m, it),
-        MutableMapModel.Insert(m0, key,
-            (if value == BC.State3 then BC.State2 else value))
+        MutableMapModel.Insert(m0, it.next.key,
+            (if it.next.value == BC.State3 then BC.State2 else it.next.value))
       )
     )
   }
@@ -665,7 +657,7 @@ module ImplModelIO {
     reveal_SyncReqs3to2();
     var it := MutableMapModel.IterStart(m);
     var m0 := MutableMapModel.Constructor(128);
-    while !it.next.None?
+    while !it.next.Done?
     invariant MutableMapModel.Inv(m)
     invariant MutableMapModel.WFIter(m, it)
     invariant MutableMapModel.Inv(m0)
@@ -675,12 +667,10 @@ module ImplModelIO {
     invariant SyncReqs3to2(m) == SyncReqs3to2Iterate(m, it, m0)
     decreases it.decreaser
     {
-      var key := it.next.value.0;
-      var value := it.next.value.1;
       MutableMapModel.LemmaIterIndexLtCount(m, it);
       MutableMapModel.CountBound(m);
-      m0 := MutableMapModel.Insert(m0, key,
-          (if value == BC.State3 then BC.State2 else value));
+      m0 := MutableMapModel.Insert(m0, it.next.key,
+          (if it.next.value == BC.State3 then BC.State2 else it.next.value));
       it := MutableMapModel.IterInc(m, it);
     }
   }

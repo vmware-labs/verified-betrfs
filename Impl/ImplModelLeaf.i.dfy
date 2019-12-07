@@ -67,6 +67,8 @@ module ImplModelLeaf {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
   {
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
     var s' := repivotLeaf(k, s, ref, node);
 
     reveal_repivotLeaf();

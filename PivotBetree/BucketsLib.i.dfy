@@ -51,11 +51,11 @@ module BucketsLib {
 
   function BucketInsert(bucket: Bucket, key: Key, msg: Message) : Bucket
   {
-    var msg := Merge(msg, BucketGet(bucket, key));
-    if msg == IdentityMessage() then
+    var mergedMsg := Merge(msg, BucketGet(bucket, key));
+    if mergedMsg == IdentityMessage() then
       MapRemove1(bucket, key)
     else
-      bucket[key := msg]
+      bucket[key := mergedMsg]
   }
 
   function BucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message) : BucketList
@@ -65,6 +65,8 @@ module BucketsLib {
     blist[i := BucketInsert(blist[i], key, msg)]
   }
 
+  // Gives a new child bucket that merges the old child bucket plus the
+  // messages from the parent destined for this child.
   function BucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int) : Bucket
   requires WFPivots(pivots)
   {
@@ -75,21 +77,23 @@ module BucketsLib {
     :: Merge(BucketGet(parent, key), BucketGet(child, key))
   }
 
-  function BucketListFlush'(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
+  function BucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
   requires WFPivots(pivots)
   requires 0 <= i <= |children|
   ensures |res| == i
+  ensures forall h :: 0 <= h < i ==> res[h] == BucketListItemFlush(parent, children[h], pivots, h);
   {
     if i == 0 then [] else (
-      BucketListFlush'(parent, children, pivots, i-1) + [BucketListItemFlush(parent, children[i-1], pivots, i-1)]
+      BucketListFlushPartial(parent, children, pivots, i-1) + [BucketListItemFlush(parent, children[i-1], pivots, i-1)]
     )
   }
 
   function BucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable) : (res : BucketList)
   requires WFPivots(pivots)
   ensures |res| == |children|
+  ensures forall h :: 0 <= h < |res| ==> res[h] == BucketListItemFlush(parent, children[h], pivots, h);
   {
-    BucketListFlush'(parent, children, pivots, |children|)
+    BucketListFlushPartial(parent, children, pivots, |children|)
   }
 
   function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)
@@ -144,12 +148,13 @@ module BucketsLib {
 
   ///// Splitting stuff
 
-  function SplitBucketLeft(bucket: Bucket, pivot: Key) : Bucket
+  // NB(jonh): These definitions are timeout monsters.
+  function {:opaque} SplitBucketLeft(bucket: Bucket, pivot: Key) : Bucket
   {
     map key | key in bucket && Keyspace.lt(key, pivot) :: bucket[key]
   }
 
-  function SplitBucketRight(bucket: Bucket, pivot: Key) : Bucket
+  function {:opaque} SplitBucketRight(bucket: Bucket, pivot: Key) : Bucket
   {
     map key | key in bucket && Keyspace.lte(pivot, key) :: bucket[key]
   }
@@ -198,6 +203,7 @@ module BucketsLib {
   ensures WFPivots(pivots[.. i])
   ensures WFBucketAt(SplitBucketLeft(bucket, pivot), pivots[.. i], i)
   {
+    reveal_SplitBucketLeft();
     WFSlice(pivots, 0, i);
     forall key | key in SplitBucketLeft(bucket, pivot)
     ensures Route(pivots[.. i], key) == i
@@ -213,6 +219,7 @@ module BucketsLib {
   ensures WFPivots(pivots[i ..])
   ensures WFBucketAt(SplitBucketRight(bucket, pivot), pivots[i ..], 0)
   {
+    reveal_SplitBucketRight();
     WFSuffix(pivots, i);
     forall key | key in SplitBucketRight(bucket, pivot)
     ensures Route(pivots[i ..], key) == 0
@@ -226,6 +233,7 @@ module BucketsLib {
   requires CutoffForLeft(pivots, key) == cLeft
   ensures WFBucketList(SplitBucketListLeft(blist, pivots, cLeft, key), pivots[.. cLeft])
   {
+    reveal_SplitBucketLeft();
     WFSlice(pivots, 0, cLeft);
 
     var res := SplitBucketListLeft(blist, pivots, cLeft, key);
@@ -245,6 +253,7 @@ module BucketsLib {
   requires CutoffForRight(pivots, key) == cRight
   ensures WFBucketList(SplitBucketListRight(blist, pivots, cRight, key), pivots[cRight ..])
   {
+    reveal_SplitBucketRight();
     WFSuffix(pivots, cRight);
 
     var res := SplitBucketListRight(blist, pivots, cRight, key);
@@ -266,6 +275,8 @@ module BucketsLib {
   ensures WFPivots(insert(pivots, pivot, slot))
   ensures WFBucketList(SplitBucketInList(blist, slot, pivot), insert(pivots, pivot, slot))
   {
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
     reveal_SplitBucketInList();
 
     var blist' := SplitBucketInList(blist, slot, pivot);
@@ -337,6 +348,8 @@ module BucketsLib {
   ensures SplitBucketLeft(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot]
   ensures SplitBucketRight(MergeBucketsInList(blist, slot)[slot], pivots[slot]) == blist[slot+1]
   {
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
     reveal_MergeBucketsInList();
     reveal_MergeBuckets();
   }
@@ -354,14 +367,14 @@ module BucketsLib {
     }
   }
 
-  lemma BucketListFlush'At(parent: Bucket, blist: BucketList, pivots: PivotTable, j: int, i: int)
+  lemma BucketListFlushPartialAt(parent: Bucket, blist: BucketList, pivots: PivotTable, j: int, i: int)
   requires 0 <= i < j <= |blist|
   requires WFPivots(pivots)
-  ensures BucketListFlush'(parent, blist, pivots, j)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
+  ensures BucketListFlushPartial(parent, blist, pivots, j)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
   {
     if j == i + 1 {
     } else {
-      BucketListFlush'At(parent, blist, pivots, j-1, i);
+      BucketListFlushPartialAt(parent, blist, pivots, j-1, i);
     }
   }
 
@@ -370,7 +383,7 @@ module BucketsLib {
   requires WFPivots(pivots)
   ensures BucketListFlush(parent, blist, pivots)[i] == BucketListItemFlush(parent, blist[i], pivots, i)
   {
-    BucketListFlush'At(parent, blist, pivots, |blist|, i);
+    BucketListFlushPartialAt(parent, blist, pivots, |blist|, i);
   }
 
   lemma WFBucketListFlush(parent: Bucket, blist: BucketList, pivots: PivotTable)

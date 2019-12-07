@@ -70,3 +70,26 @@ which is there to introduce an obligation, should it?
 warnings about unused non-ghost variables
 warnings about if/forall statements where condition is non-ghost but body is entirely ghost
 ghost { } blocks
+
+Here's a timeout case, memorialized in a branch:
+[map-comprehension-timeout 5a69ea2] map comprehension timeout. Hard to diagnose in profiler because it doesn't point to offending definitions. PivotBetree/BucketWeights.i.dfy /proc:'*WeightSplitBucketLeft*'
+
+Another slow trigger issue, this one hard to diagnose:
+on branch ugly-profile-maptype0select
+tools/profile.sh PivotBetree/BucketWeights.i.dfy /proc:"*WeightBucketListItmFlush*" > /tmp/qi.log
+funType:MapType0Select produces 600k triggers; profile doesn't show problem.
+Commenting out BucketWeights.i.dfy:89 "solves" the problem, but (a) I'm not
+sure that's actually the issue, and (b) the profiler sure didn't point me
+to it.
+
+Here's another one.
+on branch hard-to-trace-map-timeout
+tools/profile.sh PivotBetree/BucketWeights.i.dfy /proc:"*WeightBucketLinearInKeySetInner*"
+
+Here's a timeout: branch timeout-annoying
+/usr/bin/time .dafny/dafny//Binaries/dafny /compile:0 /timeLimit:20 lib/DataStructures/MutableMapModel.i.dfy /proc:"*allNonEmptyImpliesCountEqStorageSize*"
+Profile isn't particularly enlightening:
+Prover error: [quantifier_instances] Optionsd.2:36 :  10700 : 100 : 101
+Prover error: [quantifier_instances] unknown.0:0 :   9700 : 100 : 101
+Prover error: [quantifier_instances] MutableM.27:30 :   7300 : 100 : 101
+Prover error: [quantifier_instances] funType:_16_MutableMapModel.Item.value :   7200 : 100 : 101

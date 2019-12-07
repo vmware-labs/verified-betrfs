@@ -312,7 +312,7 @@ module ImplIO {
     ImplModelIO.reveal_SyncReqs2to1();
     var it := m.IterStart();
     var m0 := new MutableMap.ResizingHashMap(128);
-    while !it.next.None?
+    while !it.next.Done?
     invariant m.Inv()
     invariant fresh(m0.Repr)
     invariant m0.Inv()
@@ -323,11 +323,9 @@ module ImplIO {
 
     decreases it.decreaser
     {
-      var key := it.next.value.0;
-      var value := it.next.value.1;
       MutableMapModel.LemmaIterIndexLtCount(m.I(), it);
       MutableMapModel.CountBound(m.I());
-      m0.Insert(key, (if value == BC.State2 then BC.State1 else value));
+      m0.Insert(it.next.key, (if it.next.value == BC.State2 then BC.State1 else it.next.value));
       it := m.IterInc(it);
     }
     m' := m0;
@@ -343,7 +341,7 @@ module ImplIO {
     ImplModelIO.reveal_SyncReqs3to2();
     var it := m.IterStart();
     var m0 := new MutableMap.ResizingHashMap(128);
-    while !it.next.None?
+    while !it.next.Done?
     invariant m.Inv()
     invariant fresh(m0.Repr)
     invariant m0.Inv()
@@ -354,11 +352,9 @@ module ImplIO {
 
     decreases it.decreaser
     {
-      var key := it.next.value.0;
-      var value := it.next.value.1;
       MutableMapModel.LemmaIterIndexLtCount(m.I(), it);
       MutableMapModel.CountBound(m.I());
-      m0.Insert(key, (if value == BC.State3 then BC.State2 else value));
+      m0.Insert(it.next.key, (if it.next.value == BC.State3 then BC.State2 else it.next.value));
       it := m.IterInc(it);
     }
     m' := m0;
