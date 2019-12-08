@@ -33,6 +33,7 @@ module ImplMarshalling {
   import MutableMapModel
   import IndirectionTableImpl
   import KeyType
+  import SeqComparison
 
   import BT = PivotBetreeSpec`Internal
 
@@ -385,7 +386,7 @@ module ImplMarshalling {
   ensures |pivots[0]| != 0;
   {
     var e := Keyspace.SmallerElement(pivots[0]);
-    //Keyspace.reveal_seq_lte();
+    SeqComparison.reveal_lte();
   }
 
   method pivotsToVal(pivots: seq<Key>) returns (v : V)
