@@ -650,6 +650,7 @@ abstract module MutableBtree {
     {
       if i < childidx as int {
         assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
+        assert SubtreeUnchanged(node, i, i);
         assert inode.children[i] == ioldnode.children[i] == target[i];
       } else if i == childidx as int {
         assert inode.children[i] == ileft == target[i];
@@ -657,6 +658,7 @@ abstract module MutableBtree {
         assert inode.children[i] == iright == target[i];
       } else {
         assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));      
+        assert SubtreeUnchanged(node, i-1, i);
         assert inode.children[i] == ioldnode.children[i-1] == target[i];
       }
     }
