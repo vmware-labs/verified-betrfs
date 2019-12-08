@@ -3493,7 +3493,7 @@ method{:timeLimitMultiplier 4} MarshallMessageArrayContents(contents:seq<Message
             data.Length;
         }
         assert {:split_here} true;
-        assert marshalled_bytes == data[index..cur_index];
+        //assert marshalled_bytes == data[index..cur_index];
 
         // Prove the invariant about our index tracking correctly
         calc {
