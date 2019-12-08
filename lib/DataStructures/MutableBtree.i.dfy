@@ -639,7 +639,7 @@ abstract module MutableBtree {
     node.repr := node.repr + right.repr;
     wit := wit';
 
-    //assert node.contents.children[childidx] == old(node.contents.children[childidx]);
+    assert node.contents.children[childidx] == old(node.contents.children[childidx]);
     SplitChildOfIndexPreservesWFShape(node, childidx as int);
     
     ghost var inode := I(node);
