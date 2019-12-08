@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Automation for moving dfy files among directories, cleaning up include references.
 
 import os

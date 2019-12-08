@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Args: dep-graph <synchk|verchk> root.dfy output.dot
 # Gather the syntax or verification check output for all dfy files reachable
 # from root.dfy. Construct a GraphViz dot file as output.
