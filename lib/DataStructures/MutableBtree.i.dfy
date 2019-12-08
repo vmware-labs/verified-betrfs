@@ -105,10 +105,23 @@ abstract module MutableBtree {
     ensures I(node).children[childidx] == I(node.contents.children[childidx])
   {
   }
+
+  predicate WF(node: Node)
+    reads node, node.repr
+  {
+    && WFShape(node)
+    && BS.WF(I(node))
+  }
+
+  function Interpretation(node: Node) : map<Key, Value>
+    requires WF(node)
+    reads node, node.repr
+  {
+    BS.Interpretation(I(node))
+  }  
   
   method QueryLeaf(node: Node, needle: Key) returns (result: BS.QueryResult)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Leaf?
     ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
     ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
@@ -123,8 +136,7 @@ abstract module MutableBtree {
   }
 
   method QueryIndex(node: Node, needle: Key) returns (result: BS.QueryResult)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
     ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
@@ -135,8 +147,7 @@ abstract module MutableBtree {
   }
 
   method Query(node: Node, needle: Key) returns (result: BS.QueryResult)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     ensures needle in BS.Interpretation(I(node)) ==> result == BS.Found(BS.Interpretation(I(node))[needle])
     ensures needle !in BS.Interpretation(I(node)) ==> result == BS.NotFound
     decreases node.height, 1
@@ -157,8 +168,7 @@ abstract module MutableBtree {
   }
 
   method SplitLeaf(node: Node, nleft: uint64, ghost pivot: Key) returns (right: Node, ghost wit: Key)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Leaf?
     requires 0 < nleft < node.contents.nkeys
     requires BS.Keys.lt(node.contents.keys[nleft-1], pivot)
@@ -288,8 +298,7 @@ abstract module MutableBtree {
 
   
   method IndexPrefix(node: Node, newnchildren: uint64)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     requires 1 <= newnchildren
     requires 0 <= newnchildren <= node.contents.nchildren
@@ -313,8 +322,7 @@ abstract module MutableBtree {
   }
 
   method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     requires 1 < node.contents.nchildren
     requires 0 <= from < to <= node.contents.nchildren
@@ -345,7 +353,16 @@ abstract module MutableBtree {
     }
 
     SubReprLowerBound(node, from as int, to as int);
-
+    forall i | 0 <= i < subnode.contents.nchildren
+      ensures subnode.contents.children[i] in subnode.repr
+    {
+      assert subnode.contents.children[i] == node.contents.children[from + i];
+      assert WFShape(node.contents.children[from + i]);
+      assert node.contents.children[from + i] in node.contents.children[from + i].repr;
+      assert node.contents.children[from + i].repr <= subnode.repr;
+      assert node.contents.children[from + i] in subnode.repr;
+    }
+      
     ghost var isubnode := I(subnode);
     ghost var inode := I(node);
     assert isubnode.pivots == inode.pivots[from..to as int - 1];
@@ -371,8 +388,7 @@ abstract module MutableBtree {
   
 
   method SplitIndex(node: Node, nleft: uint64) returns (right: Node, ghost wit: Key, pivot: Key)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     requires 2 <= node.contents.nchildren
     requires 0 < nleft < node.contents.nchildren
@@ -405,8 +421,7 @@ abstract module MutableBtree {
   }
   
   method SplitNode(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires Full(node)
     ensures WFShape(node)
     ensures WFShape(right)
@@ -452,10 +467,151 @@ abstract module MutableBtree {
       }
     }
   }
+
+  twostate lemma SplitChildOfIndexPreservesDisjointSubtrees(node: Node, childidx: int)
+    requires old(WFShape(node))
+    requires old(node.contents).Index?
+    requires old(!Full(node))
+    requires 0 <= childidx < old(node.contents).nchildren as int
+    requires node.contents.Index?
+    requires node.contents.nchildren == old(node.contents).nchildren + 1
+    requires node.contents.children.Length == old(node.contents.children.Length)
+    requires forall i :: 0 <= i < node.contents.nchildren ==> node.contents.children[i] != null
+    requires forall i :: 0 <= i < childidx ==> node.contents.children[i].repr == old(node.contents.children[i].repr)
+    requires node.contents.children[childidx].repr <= old(node.contents.children[childidx].repr)
+    requires fresh(node.contents.children[childidx+1].repr - old(node.contents.children[childidx].repr))
+    requires forall i :: childidx+1 < i < node.contents.nchildren as int ==> node.contents.children[i].repr == old(node.contents.children[i-1].repr)
+    requires DisjointSubtrees(node.contents, childidx, (childidx + 1));
+    ensures forall i, j :: 0 <= i < j < node.contents.nchildren ==> DisjointSubtrees(node.contents, i as int, j as int)
+  {
+    forall i, j | 0 <= i < j < node.contents.nchildren as int
+      ensures DisjointSubtrees(node.contents, i, j)
+    {
+      if                           j <  childidx       {
+        assert old(DisjointSubtrees(node.contents, i, j));
+      } else if                    j == childidx       {
+        assert old(DisjointSubtrees(node.contents, i, j));
+      } else if i < childidx     && j == childidx+1     {
+        assert old(DisjointSubtrees(node.contents, i, j - 1));
+      } else if i == childidx    && j == childidx+1     {
+        assert DisjointSubtrees(node.contents, childidx, (childidx + 1));
+      } else if i < childidx     &&      childidx+1 < j {
+        assert old(DisjointSubtrees(node.contents, i, (j-1)));
+      } else if i == childidx    &&      childidx+1 < j {
+        assert old(DisjointSubtrees(node.contents, i, (j-1)));
+      } else if i == childidx+1  &&      childidx+1 < j {
+        assert old(DisjointSubtrees(node.contents, (i-1), (j-1)));
+      } else {
+        assert old(DisjointSubtrees(node.contents, (i-1), (j-1)));
+      }
+    }
+  }
+
+  twostate predicate SubtreeUnchanged(node: Node, oldchildidx: int, newchildidx: int)
+    requires old(WFShape(node))
+    requires old(node.contents).Index?
+    requires node.contents.Index?
+    requires node.contents.children == old(node.contents.children)
+    requires 0 <= oldchildidx < old(node.contents).nchildren as int
+    requires 0 <= newchildidx < node.contents.nchildren as int <= node.contents.children.Length
+    reads node, node.contents.children, node.contents.children[newchildidx]
+  {
+    && node.contents.children[newchildidx] == old(node.contents.children[oldchildidx])
+    && node.contents.children[newchildidx].repr == old(node.contents.children[oldchildidx].repr)
+    && unchanged(node.contents.children[newchildidx].repr)
+  }
+    
+  twostate lemma SplitChildOfIndexPreservesWFShape(node: Node, childidx: int)
+    requires old(WFShape(node))
+    requires old(node.contents).Index?
+    requires old(!Full(node))
+    requires 0 <= childidx < old(node.contents).nchildren as int
+    requires node.contents.Index?
+    requires node.contents.nchildren == old(node.contents).nchildren + 1
+    requires node.contents.children == old(node.contents.children)
+    requires node.contents.pivots == old(node.contents.pivots)
+    requires node.height == old(node.height)
+    requires unchanged(old(node.repr) - {node, node.contents.pivots, node.contents.children, node.contents.children[childidx]})
+    requires forall i :: 0 <= i < childidx ==> node.contents.children[i] == old(node.contents.children[i])
+    requires forall i :: childidx + 1 < i < node.contents.nchildren as int ==> node.contents.children[i] == old(node.contents.children[i-1])
+    requires node.contents.children[childidx] != null
+    requires WFShape(node.contents.children[childidx])
+    requires node.contents.children[childidx].repr <= old(node.contents.children[childidx].repr)
+    requires node.contents.children[childidx].height == old(node.contents.children[childidx].height)
+    requires node.contents.children[childidx+1] != null
+    requires WFShape(node.contents.children[childidx+1])
+    requires fresh(node.contents.children[childidx+1].repr - old(node.contents.children[childidx].repr))
+    requires node.contents.children[childidx+1].height == old(node.contents.children[childidx].height)
+    requires DisjointSubtrees(node.contents, childidx, (childidx + 1))
+    requires node.repr == old(node.repr) + node.contents.children[childidx+1].repr
+    ensures WFShape(node)
+  {
+    forall i | 0 <= i < node.contents.nchildren as int
+      ensures node.contents.children[i] != null
+      ensures node.contents.children[i] in node.repr
+      ensures node.contents.children[i].repr < node.repr
+      ensures node !in node.contents.children[i].repr
+      ensures node.contents.pivots !in node.contents.children[i].repr
+      ensures node.contents.children !in node.contents.children[i].repr
+      ensures node.contents.children[i].height < node.height
+      ensures WFShape(node.contents.children[i])
+    {
+      if i < childidx {
+        assert old(DisjointSubtrees(node.contents, i, childidx));
+        assert SubtreeUnchanged(node, i, i);
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert old(DisjointSubtrees(node.contents, childidx, i-1));
+        assert SubtreeUnchanged(node, i-1, i);
+      }
+    }
+
+    forall i, j | 0 <= i < j < node.contents.nchildren as int
+      ensures DisjointSubtrees(node.contents, i, j)
+    {
+      if                           j <  childidx       {
+        assert old(DisjointSubtrees(node.contents, i, childidx));
+        assert old(DisjointSubtrees(node.contents, j, childidx));
+        assert SubtreeUnchanged(node, i, i);
+        assert SubtreeUnchanged(node, j, j);
+        assert old(DisjointSubtrees(node.contents, i, j));
+      } else if                    j == childidx       {
+        assert old(DisjointSubtrees(node.contents, i, childidx));
+        assert SubtreeUnchanged(node, i, i);
+        assert old(DisjointSubtrees(node.contents, i, j));
+      } else if i < childidx     && j == childidx+1     {
+        assert old(DisjointSubtrees(node.contents, i, childidx));
+        assert SubtreeUnchanged(node, i, i);
+        assert old(DisjointSubtrees(node.contents, i, j - 1));
+      } else if i == childidx    && j == childidx+1     {
+        assert DisjointSubtrees(node.contents, childidx, (childidx + 1));
+      } else if i < childidx     &&      childidx+1 < j {
+        assert old(DisjointSubtrees(node.contents, i, childidx));
+        assert old(DisjointSubtrees(node.contents, childidx, (j-1)));
+        assert SubtreeUnchanged(node, i, i);
+        assert SubtreeUnchanged(node, j-1, j);
+        assert old(DisjointSubtrees(node.contents, i, (j-1)));
+      } else if i == childidx    &&      childidx+1 < j {
+        assert old(DisjointSubtrees(node.contents, childidx, (j-1)));
+        assert SubtreeUnchanged(node, j-1, j);
+        assert old(DisjointSubtrees(node.contents, i, (j-1)));
+      } else if i == childidx+1  &&      childidx+1 < j {
+        assert old(DisjointSubtrees(node.contents, childidx, (j-1)));
+        assert SubtreeUnchanged(node, j-1, j);
+        assert old(DisjointSubtrees(node.contents, (i-1), (j-1)));
+      } else {
+        assert old(DisjointSubtrees(node.contents, childidx, (i-1)));
+        assert old(DisjointSubtrees(node.contents, childidx, (j-1)));
+        assert SubtreeUnchanged(node, i-1, i);
+        assert SubtreeUnchanged(node, j-1, j);
+        assert old(DisjointSubtrees(node.contents, (i-1), (j-1)));
+      }
+    }
+  }
   
   method SplitChildOfIndex(node: Node, childidx: uint64)  returns (ghost wit: Key)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     requires !Full(node)
     requires 0 <= childidx < node.contents.nchildren
@@ -483,55 +639,9 @@ abstract module MutableBtree {
     node.repr := node.repr + right.repr;
     wit := wit';
 
-    forall i | 0 <= i < node.contents.nchildren
-      ensures node.contents.children[i] != null
-      ensures node.contents.children[i] in node.repr
-      ensures node.contents.children[i].repr < node.repr
-      ensures node !in node.contents.children[i].repr
-      ensures node.contents.pivots !in node.contents.children[i].repr
-      ensures node.contents.children !in node.contents.children[i].repr
-      ensures node.contents.children[i].height < node.height
-      ensures WFShape(node.contents.children[i])
-    {
-      if i < childidx {
-        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
-      } else if i == childidx {
-      } else if i == childidx + 1 {
-      } else {
-        assert node.contents.children[i] == old(node.contents.children[i-1]);
-        assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));
-      }
-    }
-
-    forall i: uint64, j: uint64 | 0 <= i < j < node.contents.nchildren
-      ensures DisjointSubtrees(node.contents, i as int, j as int)
-    {
-      if                           j <  childidx       {
-        assert old(DisjointSubtrees(node.contents, i as int, j as int));
-      } else if                    j == childidx       {
-        assert old(DisjointSubtrees(node.contents, i as int, j as int));
-      } else if i < childidx     && j == childidx+1     {
-        assert old(DisjointSubtrees(node.contents, i as int, j as int - 1));
-      } else if i == childidx    && j == childidx+1     {
-        assert node.contents.children[childidx+1] == right;
-        //assert node.contents.children[childidx].repr !! right.repr;
-        assert DisjointSubtrees(node.contents, childidx as int, (childidx + 1) as int);
-      } else if i < childidx     &&      childidx+1 < j {
-        assert node.contents.children[j] == old(node.contents.children[j-1]);
-        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
-      } else if i == childidx    &&      childidx+1 < j {
-        assert node.contents.children[j] == old(node.contents.children[j-1]);
-        assert old(DisjointSubtrees(node.contents, i as int, (j-1) as int));
-      } else if i == childidx+1  &&      childidx+1 < j {
-        assert node.contents.children[j] == old(node.contents.children[j-1]);
-        assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
-      } else {
-        assert node.contents.children[i] == old(node.contents.children[i-1]);
-        assert node.contents.children[j] == old(node.contents.children[j-1]);
-        assert old(DisjointSubtrees(node.contents, (i-1) as int, (j-1) as int));
-      }
-    }
-      
+    //assert node.contents.children[childidx] == old(node.contents.children[childidx]);
+    SplitChildOfIndexPreservesWFShape(node, childidx as int);
+    
     ghost var inode := I(node);
 
     ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
@@ -554,8 +664,7 @@ abstract module MutableBtree {
   }
 
   method InsertLeaf(node: Node, key: Key, value: Value)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Leaf?
     requires !Full(node)
     ensures WFShape(node)
@@ -578,8 +687,7 @@ abstract module MutableBtree {
   }
 
   method InsertIndexChildNotFull(node: Node, childidx: uint64, key: Key, value: Value)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     requires childidx as int == BS.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
     requires !Full(node.contents.children[childidx])
@@ -661,8 +769,7 @@ abstract module MutableBtree {
   }
 
   method InsertIndexSelectAndPrepareChild(node: Node, key: Key) returns (childidx: uint64)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires node.contents.Index?
     requires !Full(node)
     ensures WFShape(node)
@@ -700,9 +807,8 @@ abstract module MutableBtree {
   }
   
   method InsertIndex(node: Node, key: Key, value: Value)
-    requires WFShape(node)
+    requires WF(node)
     requires node.contents.Index?
-    requires BS.WF(I(node))
     requires !Full(node)
     ensures WFShape(node)
     ensures fresh(node.repr - old(node.repr))
@@ -718,8 +824,7 @@ abstract module MutableBtree {
   }
   
   method InsertNode(node: Node, key: Key, value: Value)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires !Full(node)
     ensures WFShape(node)
     ensures fresh(node.repr - old(node.repr))
@@ -738,8 +843,7 @@ abstract module MutableBtree {
   }
 
   method Grow(root: Node) returns (newroot: Node)
-    requires WFShape(root)
-    requires BS.WF(I(root))
+    requires WF(root)
     requires Full(root)
     ensures WFShape(newroot)
     ensures fresh(newroot.repr - root.repr)
@@ -760,8 +864,7 @@ abstract module MutableBtree {
   }
 
   lemma FullImpliesAllKeysNonEmpty(node: Node)
-    requires WFShape(node)
-    requires BS.WF(I(node))
+    requires WF(node)
     requires Full(node)
     ensures BS.AllKeys(I(node)) != {}
   {
@@ -774,10 +877,8 @@ abstract module MutableBtree {
   }
   
   method Insert(root: Node, key: Key, value: Value) returns (newroot: Node)
-    requires WFShape(root)
-    requires BS.WF(I(root))
-    ensures WFShape(newroot)
-    ensures BS.WF(I(newroot))
+    requires WF(root)
+    ensures WF(newroot)
     ensures fresh(newroot.repr - old(root.repr))
     ensures BS.Interpretation(I(newroot)) == BS.Interpretation(old(I(root)))[key := value]
     modifies root, root.repr
@@ -794,8 +895,7 @@ abstract module MutableBtree {
   }
 
   method EmptyTree() returns (root: Node)
-    ensures WFShape(root)
-    ensures BS.WF(I(root))
+    ensures WF(root)
     ensures fresh(root.repr)
     ensures BS.Interpretation(I(root)) == map[]
   {
