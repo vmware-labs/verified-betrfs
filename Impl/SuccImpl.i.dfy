@@ -5,7 +5,7 @@ include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
-include "ImplBucketSuccessorLoop.i.dfy"
+include "BucketSuccessorLoopImpl.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
@@ -19,8 +19,8 @@ module SuccImpl {
   import opened MutableBucket
   import opened Lexicographic_Byte_Order
   import opened ImplNode
-  import ImplBucketSuccessorLoop
-  import ModelBucketSuccessorLoop
+  import BucketSuccessorLoopImpl
+  import BucketSuccessorLoopModel
 
   import opened Options
   import opened NativeTypes
@@ -121,17 +121,17 @@ module SuccImpl {
 
       MutBucket.AllocatedReprSeq(acc');
 
-      //assert ModelBucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(acc'), maxToFind as int, start, upTo')
-      //    == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
+      //assert BucketSuccessorLoopModel.GetSuccessorInBucketStack(MutBucket.ISeq(acc'), maxToFind as int, start, upTo')
+      //    == BucketSuccessorLoopModel.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
 
-      var res0 := ImplBucketSuccessorLoop.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
+      var res0 := BucketSuccessorLoopImpl.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
       res := Some(res0);
 
       //assert res0
-      //    == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
+      //    == BucketSuccessorLoopModel.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
 
       //assert SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I())).2
-      //    == Some(ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
+      //    == Some(BucketSuccessorLoopModel.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
       //    == res;
 
       assert (s.I(), IIO(io), res)

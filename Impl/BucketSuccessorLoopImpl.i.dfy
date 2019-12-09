@@ -1,13 +1,13 @@
-include "ModelBucketSuccessorLoop.i.dfy"
-include "ImplBucketGenerator.i.dfy"
+include "BucketSuccessorLoopModel.i.dfy"
+include "BucketGeneratorImpl.i.dfy"
 
-module ImplBucketSuccessorLoop {
+module BucketSuccessorLoopImpl {
   import opened MutableBucket
-  import opened ImplBucketGenerator
+  import opened BucketGeneratorImpl
   import opened NativeTypes
   import opened Options
-  import ModelBucketSuccessorLoop
-  import ModelBucketGenerator
+  import BucketSuccessorLoopModel
+  import BucketGeneratorModel
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
 
@@ -20,11 +20,11 @@ module ImplBucketSuccessorLoop {
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
   requires |buckets| >= 1
   requires maxToFind >= 1
-  ensures res == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(
+  ensures res == BucketSuccessorLoopModel.GetSuccessorInBucketStack(
       MutBucket.ISeq(buckets), maxToFind as int, start, upTo)
   {
-    ModelBucketSuccessorLoop.reveal_GetSuccessorInBucketStack();
-    ModelBucketSuccessorLoop.reveal_ProcessGenerator();
+    BucketSuccessorLoopModel.reveal_GetSuccessorInBucketStack();
+    BucketSuccessorLoopModel.reveal_ProcessGenerator();
 
     var g := Generator.GenFromBucketStackWithLowerBound(buckets, start);
     var results := new UI.SuccResult[maxToFind];
@@ -37,11 +37,11 @@ module ImplBucketSuccessorLoop {
     invariant results !in g.Repr
     invariant results !in g.ReadOnlyRepr
     invariant 0 <= results_len < maxToFind
-    invariant ModelBucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(buckets), maxToFind as int, start, upTo) == ModelBucketSuccessorLoop.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len])
-    decreases ModelBucketGenerator.decreaser(g.I())
+    invariant BucketSuccessorLoopModel.GetSuccessorInBucketStack(MutBucket.ISeq(buckets), maxToFind as int, start, upTo) == BucketSuccessorLoopModel.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len])
+    decreases BucketGeneratorModel.decreaser(g.I())
     {
       //MutBucket.AllocatedReprSeq(buckets);
-      ModelBucketGenerator.lemmaDecreaserDecreases(g.I());
+      BucketGeneratorModel.lemmaDecreaserDecreases(g.I());
 
       //ghost var old_g := g.I();
       ghost var old_results := results[..results_len];
@@ -72,11 +72,11 @@ module ImplBucketSuccessorLoop {
 
             //ghost var new_results := old_results + [UI.SuccResult(next.key, v)];
             assert MutBucket.ISeq(buckets) == old_buckets;
-            //assert ModelBucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(buckets), maxToFind as int, start, upTo)
-            //    == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old_buckets, maxToFind as int, start, upTo)
-            //    == ModelBucketSuccessorLoop.ProcessGenerator(old_g, maxToFind as int, upTo, old_results)
-            //    == ModelBucketSuccessorLoop.ProcessGenerator(ModelBucketGenerator.GenPop(old_g), maxToFind as int, upTo, new_results)
-            //    == ModelBucketSuccessorLoop.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len]);
+            //assert BucketSuccessorLoopModel.GetSuccessorInBucketStack(MutBucket.ISeq(buckets), maxToFind as int, start, upTo)
+            //    == BucketSuccessorLoopModel.GetSuccessorInBucketStack(old_buckets, maxToFind as int, start, upTo)
+            //    == BucketSuccessorLoopModel.ProcessGenerator(old_g, maxToFind as int, upTo, old_results)
+            //    == BucketSuccessorLoopModel.ProcessGenerator(BucketGeneratorModel.GenPop(old_g), maxToFind as int, upTo, new_results)
+            //    == BucketSuccessorLoopModel.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len]);
           } else {
             return UI.SuccResultList(results[..results_len], UI.EInclusive(next.key));
           }
@@ -84,7 +84,7 @@ module ImplBucketSuccessorLoop {
           g.GenPop();
 
           assert MutBucket.ISeq(buckets) == old_buckets;
-          //assert ModelBucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(buckets), maxToFind as int, start, upTo) == ModelBucketSuccessorLoop.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len]);
+          //assert BucketSuccessorLoopModel.GetSuccessorInBucketStack(MutBucket.ISeq(buckets), maxToFind as int, start, upTo) == BucketSuccessorLoopModel.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len]);
         }
       } else {
         return UI.SuccResultList(results[..results_len],

@@ -1,6 +1,6 @@
-include "ModelBucketGenerator.i.dfy"
+include "BucketGeneratorModel.i.dfy"
 
-module ModelBucketSuccessorLoop {
+module BucketSuccessorLoopModel {
   import opened Options
   import opened Maps
   import opened BucketsLib
@@ -8,7 +8,7 @@ module ModelBucketSuccessorLoop {
   import opened ValueMessage
   import opened Sequences
   import opened ModelBucketIterator
-  import opened ModelBucketGenerator
+  import opened BucketGeneratorModel
   import UI
 
   // A straightforward loop using the generator machinery

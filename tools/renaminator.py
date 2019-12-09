@@ -75,6 +75,8 @@ class Renaminator:
 
         for referrer in self.paths:
             self.fixReferrer(referrer, sourceDir, sourceName, sourceDir, destName)
+        # print a suggested module renaming command
+        print("sed -i 's/\<%s\>/%s/g' *.dfy" % (sourceName.replace(".i.dfy", ""), destName.replace(".i.dfy", "")))
 
     def enact(self):
         for cmd in self.fixCmds + self.mkdirCmds + self.gitAddCmds + self.gitCmds:
@@ -93,6 +95,9 @@ def rename(sourceName, destName):
 #AsyncDiskModel.s.dfy
 #""")
 
-rename("ImplMarshalling.i.dfy", "MarshallingImpl.i.dfy")
+rename("ImplBucketGenerator.i.dfy", "BucketGeneratorImpl.i.dfy")
+rename("ModelBucketGenerator.i.dfy", "BucketGeneratorModel.i.dfy")
+rename("ImplBucketSuccessorLoop.i.dfy", "BucketSuccessorLoopImpl.i.dfy")
+rename("ModelBucketSuccessorLoop.i.dfy", "BucketSuccessorLoopModel.i.dfy")
 
 renaminator.enact()

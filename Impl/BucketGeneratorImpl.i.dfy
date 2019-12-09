@@ -1,9 +1,9 @@
-include "ModelBucketGenerator.i.dfy"
+include "BucketGeneratorModel.i.dfy"
 include "BucketImpl.i.dfy"
 
-module ImplBucketGenerator {
+module BucketGeneratorImpl {
   import opened MutableBucket
-  import ModelBucketGenerator
+  import BucketGeneratorModel
   import ModelBucketIterator
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
@@ -84,24 +84,24 @@ module ImplBucketGenerator {
       bg.reveal_Inv();
     }
 
-    protected function I() : ModelBucketGenerator.Generator
+    protected function I() : BucketGeneratorModel.Generator
     requires Inv()
     reads this, this.Repr, this.ReadOnlyRepr
     decreases Height
-    ensures ModelBucketGenerator.WF(I())
+    ensures BucketGeneratorModel.WF(I())
     {
       reveal_Inv_for(this);
 
       if bucket != null then (
-        ModelBucketGenerator.BasicGenerator(bucket.I(), IIterator(it))
+        BucketGeneratorModel.BasicGenerator(bucket.I(), IIterator(it))
       ) else (
-        ModelBucketGenerator.ComposeGenerator(top.I(), bot.I(), next)
+        BucketGeneratorModel.ComposeGenerator(top.I(), bot.I(), next)
       )
     }
 
     method GenLeft() returns (res : ModelBucketIterator.IteratorOutput)
     requires Inv()
-    ensures res == ModelBucketGenerator.GenLeft(I())
+    ensures res == BucketGeneratorModel.GenLeft(I())
     {
       reveal_Inv_for(this);
 
@@ -114,10 +114,10 @@ module ImplBucketGenerator {
 
     method GenPop()
     requires Inv()
-    requires ModelBucketGenerator.GenLeft(I()).Next?
+    requires BucketGeneratorModel.GenLeft(I()).Next?
     modifies Repr
     ensures Inv()
-    ensures I() == ModelBucketGenerator.GenPop(old(I()))
+    ensures I() == BucketGeneratorModel.GenPop(old(I()))
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     ensures ReadOnlyRepr == old(ReadOnlyRepr)
 
@@ -125,9 +125,9 @@ module ImplBucketGenerator {
     {
       reveal_Inv_for(this);
 
-      ModelBucketGenerator.reveal_BasicGenPop();
-      ModelBucketGenerator.reveal_MergeGenPop();
-      ModelBucketGenerator.reveal_GenPop();
+      BucketGeneratorModel.reveal_BasicGenPop();
+      BucketGeneratorModel.reveal_MergeGenPop();
+      BucketGeneratorModel.reveal_GenPop();
       if bucket != null {
         it := bucket.IterInc(it);
       } else {
@@ -176,7 +176,7 @@ module ImplBucketGenerator {
     ensures top.ReadOnlyRepr == old(top.ReadOnlyRepr)
     ensures bot.ReadOnlyRepr == old(bot.ReadOnlyRepr)
     ensures g.ReadOnlyRepr == top.ReadOnlyRepr + bot.ReadOnlyRepr
-    ensures g.I() == ModelBucketGenerator.GenCompose(old(top.I()), old(bot.I()))
+    ensures g.I() == BucketGeneratorModel.GenCompose(old(top.I()), old(bot.I()))
     {
       g := new Generator();
       g.bucket := null;
@@ -211,7 +211,7 @@ module ImplBucketGenerator {
 
       assert g.Inv1();
       reveal_Inv_for(g);
-      ModelBucketGenerator.reveal_GenCompose();
+      BucketGeneratorModel.reveal_GenCompose();
     }
 
     static method GenFromBucketWithLowerBound(bucket: MutBucket, start: UI.RangeStart)
@@ -220,7 +220,7 @@ module ImplBucketGenerator {
     ensures g.Inv()
     ensures fresh(g.Repr)
     ensures g.ReadOnlyRepr == bucket.Repr
-    ensures g.I() == ModelBucketGenerator.GenFromBucketWithLowerBound(bucket.I(), start)
+    ensures g.I() == BucketGeneratorModel.GenFromBucketWithLowerBound(bucket.I(), start)
     {
       g := new Generator();
       g.bucket := bucket;
@@ -242,7 +242,7 @@ module ImplBucketGenerator {
 
       assert g.Inv1();
       reveal_Inv_for(g);
-      ModelBucketGenerator.reveal_GenFromBucketWithLowerBound();
+      BucketGeneratorModel.reveal_GenFromBucketWithLowerBound();
     }
 
     static method GenFromBucketStackWithLowerBound(buckets: seq<MutBucket>, start: UI.RangeStart)
@@ -253,7 +253,7 @@ module ImplBucketGenerator {
     ensures g.Inv()
     ensures fresh(g.Repr)
     ensures g.ReadOnlyRepr == MutBucket.ReprSeq(buckets)
-    ensures g.I() == ModelBucketGenerator.GenFromBucketStackWithLowerBound(
+    ensures g.I() == BucketGeneratorModel.GenFromBucketStackWithLowerBound(
         MutBucket.ISeq(buckets), start)
     {
       MutBucket.AllocatedReprSeq(buckets);
@@ -277,7 +277,7 @@ module ImplBucketGenerator {
         MutBucket.ISeqAdditive(buckets[..mid], buckets[mid..]);
       }
 
-      ModelBucketGenerator.reveal_GenFromBucketStackWithLowerBound();
+      BucketGeneratorModel.reveal_GenFromBucketStackWithLowerBound();
     }
 
   }

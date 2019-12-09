@@ -5,7 +5,7 @@ include "ModelBucketIterator.i.dfy"
 // The bucket may be implicit.
 //
 
-module ModelBucketGenerator {
+module BucketGeneratorModel {
   import opened Options
   import opened Maps
   import opened BucketsLib
