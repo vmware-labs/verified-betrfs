@@ -49,7 +49,7 @@ module ImplSucc {
   returns (res : Option<UI.SuccResultList>)
   requires Inv(k, s)
   requires node.Inv()
-  requires ImplModel.WFNode(node.I())
+  requires StateModel.WFNode(node.I())
   requires s.ready
   requires io.initialized()
   requires ref in s.I().cache

@@ -1,7 +1,7 @@
 include "CacheModel.i.dfy"
 
 module ImplModelGrow { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
 

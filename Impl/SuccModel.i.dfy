@@ -1,4 +1,4 @@
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "CacheModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -8,7 +8,7 @@ include "ModelBucketSuccessorLoop.i.dfy"
 // See dependency graph in MainImpl.dfy
 
 module ImplModelSucc { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
 

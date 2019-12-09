@@ -19,7 +19,7 @@ module ImplFlush {
   import opened MutableBucket
 
   import opened NativeTypes
-  import ImplModel
+  import StateModel
   import ImplModelCache
   import ImplModelFlush
 

@@ -1,6 +1,6 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "ImplState.i.dfy"
-include "ModelState.i.dfy"
+include "StateImpl.i.dfy"
+include "StateModel.i.dfy"
 include "BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
@@ -9,7 +9,7 @@ include "Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
 
 module ImplMarshalling {
-  import IM = ImplModel
+  import IM = StateModel
   import IS = ImplState
   import opened ImplNode
   import opened ImplMutCache

@@ -1,7 +1,7 @@
 include "CacheModel.i.dfy"
 
 module ImplModelDealloc { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
   import opened Bounds

@@ -1,7 +1,7 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
@@ -28,7 +28,7 @@ module ImplMarshallingModel {
   import opened BucketWeights
   import opened Bounds
   import BC = BetreeGraphBlockCache
-  import IM = ImplModel
+  import SM = StateModel
   import KVList
   import Crypto
   import NativeArrays
@@ -56,8 +56,8 @@ module ImplMarshallingModel {
   type Reference = BC.Reference
   type LBA = BC.LBA
   type Location = BC.Location
-  type Sector = IM.Sector
-  type Node = IM.Node
+  type Sector = SM.Sector
+  type Node = SM.Node
 
   /////// Grammar
 
@@ -244,8 +244,8 @@ module ImplMarshallingModel {
   requires ValidVal(v)
   requires ValInGrammar(v, PivotNodeGrammar())
   // Pivots.NumBuckets(node.pivotTable) == |node.buckets|
-  ensures s.Some? ==> IM.WFNode(s.value)
-  ensures s.Some? ==> BT.WFNode(IM.INode(s.value))
+  ensures s.Some? ==> SM.WFNode(s.value)
+  ensures s.Some? ==> BT.WFNode(SM.INode(s.value))
   {
     assert ValidVal(v.t[0]);
     match valToPivots(v.t[0]) {
@@ -263,7 +263,7 @@ module ImplMarshallingModel {
                     && |buckets| <= MaxNumChildren()
                     && WeightBucketList(buckets) <= MaxTotalBucketWeight()
                   then (
-                    var node := IM.Node(pivots, if |children| == 0 then None else Some(children), buckets);
+                    var node := SM.Node(pivots, if |children| == 0 then None else Some(children), buckets);
                     Some(node)
                   ) else (
                     None
@@ -285,12 +285,12 @@ module ImplMarshallingModel {
   {
     if v.c == 0 then (
       match IndirectionTableModel.valToIndirectionTable(v.val) {
-        case Some(s) => Some(IM.SectorIndirectionTable(s))
+        case Some(s) => Some(SM.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(IM.SectorBlock(s))
+        case Some(s) => Some(SM.SectorBlock(s))
         case None => None
       }
     )
@@ -316,7 +316,7 @@ module ImplMarshallingModel {
   /////// Marshalling and de-marshalling
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> IM.WFSector(s.value)
+  ensures s.Some? ==> SM.WFSector(s.value)
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
       IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
   {
@@ -333,7 +333,7 @@ module ImplMarshallingModel {
   /////// Marshalling and de-marshalling with checksums
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> IM.WFSector(s.value)
+  ensures s.Some? ==> SM.WFSector(s.value)
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
       IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
   {

@@ -6,7 +6,7 @@ include "EvictModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module ImplModelFlushPolicy {
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
   import opened ImplModelFlush

@@ -2,7 +2,7 @@ include "CacheModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module ImplModelInsert { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
   import opened ImplModelFlushPolicy

@@ -55,7 +55,7 @@ module ImplQuery {
       while true
       invariant Inv(k, s)
       invariant s.ready
-      invariant ref in IM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
+      invariant ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
       invariant io.initialized()
       invariant ImplModelQuery.query(Ic(k), old(s.I()), old(IIO(io)), key)
              == ImplModelQuery.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter)
@@ -89,7 +89,7 @@ module ImplQuery {
           ghost var oldIVars := s.I();
           LruModel.LruUse(s.lru.Queue, ref);
           s.lru.Use(ref);
-          assert IM.IVars(oldIVars) == IM.IVars(s.I());
+          assert SM.IVars(oldIVars) == SM.IVars(s.I());
 
           var r := Pivots.ComputeRoute(node.pivotTable, key);
           var bucket := node.buckets[r];

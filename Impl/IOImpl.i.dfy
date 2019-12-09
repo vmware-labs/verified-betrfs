@@ -1,5 +1,5 @@
 include "Impl.i.dfy"
-include "ImplState.i.dfy"
+include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
 include "ImplMarshalling.i.dfy"
 
@@ -11,7 +11,7 @@ module ImplIO {
   import opened Maps
   import opened ImplNode
   import opened ImplMutCache
-  import ImplModel
+  import StateModel
   import ImplMarshalling
   import IMM = ImplMarshallingModel
   import ImplModelIO

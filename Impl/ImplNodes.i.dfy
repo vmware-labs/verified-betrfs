@@ -1,5 +1,5 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "BucketImpl.i.dfy"
 include "SplitModel.i.dfy"
@@ -10,7 +10,7 @@ module ImplNode {
   import opened Sequences
   import opened NativeTypes
 
-  import IM = ImplModel
+  import IM = StateModel
   import BT = PivotBetreeSpec`Internal
   import Pivots = PivotsLib
   import opened Bounds

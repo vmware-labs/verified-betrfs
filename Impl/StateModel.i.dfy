@@ -20,7 +20,7 @@ include "IndirectionTableModel.i.dfy"
 // than two maps, because real, mutable implementation uses a map to pairs.
 //
 
-module ImplModel {
+module StateModel {
   import opened Options
   import opened Sequences
   import opened NativeTypes

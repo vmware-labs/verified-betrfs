@@ -4,7 +4,7 @@ include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
 
 module ImplModelFlush { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
   import KVListPartialFlush

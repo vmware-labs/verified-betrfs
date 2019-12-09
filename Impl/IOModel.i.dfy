@@ -1,16 +1,16 @@
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "ByteBetreeBlockCache.i.dfy"
 //
-// IO functions used by various ImplModel verbs.
-// Updates data structures as defined in ImplModel.
-// Interacts with the disk via ImplModel.IO, which abstracts
+// IO functions used by various StateModel verbs.
+// Updates data structures as defined in StateModel.
+// Interacts with the disk via StateModel.IO, which abstracts
 // MainDiskIOHandlers.s.dfy.
 //
 // Also, the code that reads in indirection tables and nodes.
 //
 
 module ImplModelIO { 
-  import opened ImplModel
+  import opened StateModel
   import opened NativeTypes
   import opened Options
   import opened Maps

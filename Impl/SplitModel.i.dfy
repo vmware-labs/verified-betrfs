@@ -1,7 +1,7 @@
 include "CacheModel.i.dfy"
 
 module ImplModelSplit { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
 

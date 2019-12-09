@@ -1,9 +1,9 @@
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 
 module ImplModelCache { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
 
   import opened Options

@@ -5,7 +5,7 @@ include "../lib/Base/Option.s.dfy"
 include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "ImplState.i.dfy"
+include "StateImpl.i.dfy"
 
 include "../PivotBetree/PivotBetree_Refines_Map.i.dfy"
 include "ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"

@@ -1,6 +1,6 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "BucketImpl.i.dfy"
 include "ImplNodes.i.dfy"
@@ -12,7 +12,7 @@ module {:extern} ImplState {
   import opened Sequences
   import opened NativeTypes
   import TTT = TwoThreeTree
-  import IM = ImplModel
+  import SM = StateModel
   import opened ImplNode
   import opened ImplMutCache
   import BlockAllocatorImpl
@@ -84,7 +84,7 @@ module {:extern} ImplState {
     table.I()
   }
  
-  function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<IM.IndirectionTable>)
+  function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<SM.IndirectionTable>)
   reads if table != null then {table} + table.Repr else {}
   requires table != null ==> table.Inv()
   {
@@ -94,14 +94,14 @@ module {:extern} ImplState {
       None
   }
  
-  function ISector(sector: Sector) : IM.Sector
+  function ISector(sector: Sector) : SM.Sector
   requires WFSector(sector)
   reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {sector.block}
   reads SectorRepr(sector)
   {
     match sector {
-      case SectorBlock(node) => IM.SectorBlock(node.I())
-      case SectorIndirectionTable(indirectionTable) => IM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorBlock(node) => SM.SectorBlock(node.I())
+      case SectorIndirectionTable(indirectionTable) => SM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 
@@ -178,16 +178,16 @@ module {:extern} ImplState {
       && syncReqs.Inv()
     }
 
-    function I() : IM.Variables
+    function I() : SM.Variables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
         frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
     reads Repr()
     requires W()
     {
       if ready then (
-        IM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs.I(), cache.I(), lru.Queue, blockAllocator.I())
+        SM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs.I(), cache.I(), lru.Queue, blockAllocator.I())
       ) else (
-        IM.Unready(outstandingIndirectionTableRead, syncReqs.I())
+        SM.Unready(outstandingIndirectionTableRead, syncReqs.I())
       )
     }
 
@@ -197,7 +197,7 @@ module {:extern} ImplState {
     reads Repr()
     {
       && W()
-      && IM.WFVars(I())
+      && SM.WFVars(I())
     }
 
     constructor()
@@ -230,23 +230,23 @@ module {:extern} ImplState {
   reads s.Repr()
   {
     && s.W()
-    && IM.Inv(Ic(k), s.I())
+    && SM.Inv(Ic(k), s.I())
   }
 
-  function Ic(k: M.Constants) : IM.Constants
+  function Ic(k: M.Constants) : SM.Constants
   {
-    IM.Constants()
+    SM.Constants()
   }
 
-  function IIO(io: MainDiskIOHandler.DiskIOHandler) : IM.IO
+  function IIO(io: MainDiskIOHandler.DiskIOHandler) : SM.IO
   reads io
   {
     match io.diskOp() {
-      case NoDiskOp => IM.IOInit(io.reservedId())
-      case ReqReadOp(id, reqRead) => IM.IOReqRead(id, reqRead)
-      case ReqWriteOp(id, reqWrite) => IM.IOReqWrite(id, reqWrite)
-      case RespReadOp(id, respRead) => IM.IORespRead(id, respRead)
-      case RespWriteOp(id, respWrite) => IM.IORespWrite(id, respWrite)
+      case NoDiskOp => SM.IOInit(io.reservedId())
+      case ReqReadOp(id, reqRead) => SM.IOReqRead(id, reqRead)
+      case ReqWriteOp(id, reqWrite) => SM.IOReqWrite(id, reqWrite)
+      case RespReadOp(id, respRead) => SM.IORespRead(id, respRead)
+      case RespWriteOp(id, respWrite) => SM.IORespWrite(id, respWrite)
     }
   }
 

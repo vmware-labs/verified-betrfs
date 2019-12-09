@@ -14,7 +14,7 @@ include "MarshallingModel.i.dfy"
 
 module Marshalling {
   import IMM = ImplMarshallingModel
-  import IM = ImplModel
+  import IM = StateModel
   import opened GenericMarshalling
   import opened Options
   import opened NativeTypes

@@ -1,4 +1,4 @@
-include "ModelState.i.dfy"
+include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -7,7 +7,7 @@ include "../lib/Base/Sets.i.dfy"
 // See dependency graph in MainImpl.dfy
 
 module ImplModelSync { 
-  import opened ImplModel
+  import opened StateModel
   import opened ImplModelIO
   import opened ImplModelCache
   import opened ImplModelDealloc

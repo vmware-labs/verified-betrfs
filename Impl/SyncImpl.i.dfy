@@ -109,8 +109,8 @@ module ImplSync {
       }
       it := s.frozenIndirectionTable.t.IterInc(it);
     }
-    assert forall r | r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
-        :: r in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
+    assert forall r | r in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
+        :: r in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
     return None;
   }
 
@@ -162,7 +162,7 @@ module ImplSync {
     var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
 
     if (id.Some?) {
-      IM.reveal_ConsistentBitmap();
+      SM.reveal_ConsistentBitmap();
 
       AssignRefToLocEphemeral(k, s, ref, loc.value);
       AssignRefToLocFrozen(k, s, ref, loc.value);
@@ -171,7 +171,7 @@ module ImplSync {
       print "sync: giving up; write req failed\n";
     }
 
-    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(IM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
+    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
     assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
   }
 
@@ -190,8 +190,8 @@ module ImplSync {
   ensures WellUpdated(s)
   ensures ImplModelSync.syncFoundInFrozen(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    assert ref in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
-    assert ref !in IM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
+    assert ref in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
+    assert ref !in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
 
     var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {

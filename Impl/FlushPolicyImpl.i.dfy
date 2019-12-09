@@ -175,7 +175,7 @@ module ImplFlushPolicy {
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
-    assert IM.IVars(s.I()) == IM.IVars(old(s.I()));
+    assert SM.IVars(s.I()) == SM.IVars(old(s.I()));
 
     ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(k, s, [BT.G.Root()], []);
