@@ -10,10 +10,6 @@ abstract module BtreeSpec {
   type Key = Keys.Element
   type Value
     
-  datatype QueryResult =
-    | Found(value: Value)
-    | NotFound
-    
   datatype Node =
     | Leaf(keys: seq<Key>, values: seq<Value>)
     | Index(pivots: seq<Key>, children: seq<Node>)
