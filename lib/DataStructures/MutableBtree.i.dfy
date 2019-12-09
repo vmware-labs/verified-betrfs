@@ -1,4 +1,5 @@
 include "../Base/NativeTypes.s.dfy"
+include "../Base/NativeArrays.s.dfy"
 include "../Base/total_order.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Arrays.i.dfy"
@@ -7,6 +8,7 @@ include "BtreeSpec.i.dfy"
 
 abstract module MutableBtree {
   import opened NativeTypes
+  import opened NativeArrays
   import opened Seq = Sequences
   import opened Maps
   import Arrays
@@ -181,8 +183,8 @@ abstract module MutableBtree {
     ensures node.contents.nkeys == nleft
     modifies node
   {
-    var rightkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
-    var rightvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
+    var rightkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
+    var rightvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
     Arrays.Memcpy(rightkeys, 0, node.contents.keys[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
     Arrays.Memcpy(rightvalues, 0, node.contents.values[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
 
@@ -335,8 +337,8 @@ abstract module MutableBtree {
     ensures fresh(subnode.contents.pivots)
     ensures fresh(subnode.contents.children)
   {
-    var subpivots := new Key[MaxChildren()-1](_ => DefaultKey());
-    var subchildren := new Node?[MaxChildren()](_ => null);
+    var subpivots := newArrayFill(MaxChildren()-1, DefaultKey());
+    var subchildren := newArrayFill(MaxChildren(), null);
     Arrays.Memcpy(subpivots, 0, node.contents.pivots[from..to-1]); // FIXME: remove conversion to seq
     Arrays.Memcpy(subchildren, 0, node.contents.children[from..to]); // FIXME: remove conversion to seq
     subnode := new Node;
@@ -406,6 +408,9 @@ abstract module MutableBtree {
     SubReprsDisjoint(node, 0, nleft as int, nleft as int, node.contents.nchildren as int);
     right := SubIndex(node, nleft, node.contents.nchildren);
     pivot := node.contents.pivots[nleft-1];
+    assert BS.WF(I(node));
+    assert BS.AllKeys(I(node).children[0]) != {};
+    assert I(node).children[0] == I(node.contents.children[0]);
     assert BS.AllKeys(I(node.contents.children[0])) != {};
     wit :| wit in BS.AllKeys(I(node.contents.children[0]));
     IndexPrefix(node, nleft);
@@ -883,8 +888,8 @@ abstract module MutableBtree {
     ensures !Full(newroot)
   {
     newroot := new Node;
-    var newpivots := new Key[MaxChildren()-1](_ => DefaultKey());
-    var newchildren := new Node?[MaxChildren()](_ => null);
+    var newpivots := newArrayFill(MaxChildren()-1, DefaultKey());
+    var newchildren := newArrayFill(MaxChildren(), null);
     newchildren[0] := root;
     newroot.contents := Index(1, newpivots, newchildren);
     newroot.repr := {newroot, newpivots, newchildren} + root.repr;
@@ -930,8 +935,8 @@ abstract module MutableBtree {
     ensures fresh(root.repr)
     ensures BS.Interpretation(I(root)) == map[]
   {
-    var rootkeys := new Key[MaxKeysPerLeaf()](_ => DefaultKey());
-    var rootvalues := new Value[MaxKeysPerLeaf()](_ => DefaultValue());
+    var rootkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
+    var rootvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
     root := new Node;
     root.contents := Leaf(0, rootkeys, rootvalues);
     root.repr := {root, rootkeys, rootvalues};
