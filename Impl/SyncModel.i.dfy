@@ -40,18 +40,18 @@ module ImplModelSync {
   function {:opaque} AssignRefToLocEphemeral(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   ensures s'.Ready?
   ensures s'.frozenIndirectionTable == s.frozenIndirectionTable
   ensures s'.blockAllocator.frozen == s.blockAllocator.frozen
   ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
-  ensures ImplModelBlockAllocator.Inv(s'.blockAllocator)
+  ensures BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     var table := s.ephemeralIndirectionTable;
     var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
     if added then (
-      var blockAllocator' := ImplModelBlockAllocator.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
+      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
       s.(ephemeralIndirectionTable := table')
        .(blockAllocator := blockAllocator')
     ) else (
@@ -63,17 +63,17 @@ module ImplModelSync {
   requires s.Ready?
   requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   ensures s'.Ready?
   ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
-  ensures ImplModelBlockAllocator.Inv(s'.blockAllocator)
+  ensures BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     if s.frozenIndirectionTable.Some? then (
       var table := s.frozenIndirectionTable.value;
       var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
       if added then (
-        var blockAllocator' := ImplModelBlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+        var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
         s.(frozenIndirectionTable := Some(table'))
          .(blockAllocator := blockAllocator')
       ) else (
@@ -86,19 +86,19 @@ module ImplModelSync {
 
   function {:opaque} AssignIdRefLocOutstanding(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
   requires s.Ready?
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   {
      s
       .(outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)])
-      .(blockAllocator := ImplModelBlockAllocator.MarkUsedOutstanding(s.blockAllocator, loc.addr as int / BlockSize()))
+      .(blockAllocator := BlockAllocatorModel.MarkUsedOutstanding(s.blockAllocator, loc.addr as int / BlockSize()))
   }
 
   lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
   requires s.Ready?
   requires (forall i: int :: IsLocAllocOutstanding(s.outstandingBlockWrites, i)
           <==> IsLocAllocBitmap(s.blockAllocator.outstanding, i))
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   requires id !in s.outstandingBlockWrites
@@ -106,7 +106,7 @@ module ImplModelSync {
       && s'.Ready?
       && (forall i: int :: IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
           <==> IsLocAllocBitmap(s'.blockAllocator.outstanding, i))
-      && ImplModelBlockAllocator.Inv(s'.blockAllocator)
+      && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignIdRefLocOutstanding();
     Bitmap.reveal_BitSet();
@@ -226,14 +226,14 @@ module ImplModelSync {
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocEphemeral(k, s, ref, loc);
       && s'.Ready?
       && (forall i: int :: IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
-      && ImplModelBlockAllocator.Inv(s'.blockAllocator)
+      && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignRefToLocEphemeral();
     reveal_ConsistentBitmap();
@@ -246,7 +246,7 @@ module ImplModelSync {
     if (ref in table.graph && ref !in table.locs) {
       var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
       assert added;
-      var blockAllocator' := ImplModelBlockAllocator.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
+      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
       var s' := s
       .(ephemeralIndirectionTable := table')
       .(blockAllocator := blockAllocator');
@@ -286,7 +286,7 @@ module ImplModelSync {
   requires s.frozenIndirectionTable.Some? ==>
         (forall i: int :: IsLocAllocIndirectionTable(s.frozenIndirectionTable.value, i)
           <==> IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator)
+  requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocFrozen(k, s, ref, loc);
@@ -295,7 +295,7 @@ module ImplModelSync {
       && (s'.frozenIndirectionTable.Some? ==>
           (forall i: int :: IsLocAllocIndirectionTable(s'.frozenIndirectionTable.value, i)
           <==> IsLocAllocBitmap(s'.blockAllocator.frozen.value, i)))
-      && ImplModelBlockAllocator.Inv(s'.blockAllocator)
+      && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignRefToLocFrozen();
 
@@ -312,7 +312,7 @@ module ImplModelSync {
     var table := s.frozenIndirectionTable.value;
     var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
     if added {
-      var blockAllocator' := ImplModelBlockAllocator.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+      var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
       var s' := s
         .(frozenIndirectionTable := Some(table'))
         .(blockAllocator := blockAllocator');
@@ -380,7 +380,7 @@ module ImplModelSync {
       var s' := s
           .(frozenIndirectionTable := Some(IndirectionTableModel.clone(s.ephemeralIndirectionTable)))
           .(syncReqs := ImplModelIO.SyncReqs3to2(s.syncReqs))
-          .(blockAllocator := ImplModelBlockAllocator.CopyEphemeralToFrozen(s.blockAllocator));
+          .(blockAllocator := BlockAllocatorModel.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
     )
   }

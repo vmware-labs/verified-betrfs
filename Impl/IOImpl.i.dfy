@@ -196,7 +196,7 @@ module ImplIO {
 
       var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
       if succ {
-        var blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
+        var blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
         var persistentIndirectionTable := sector.value.indirectionTable.Clone();
         //assert fresh(ephemeralIndirectionTable.Repr);
         //assert fresh(persistentIndirectionTable.Repr);

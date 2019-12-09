@@ -8,7 +8,7 @@ include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/DataStructures/LRU.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/Bitmap.i.dfy"
-include "BlockAllocator.i.dfy"
+include "BlockAllocatorModel.i.dfy"
 include "IndirectionTableModel.i.dfy"
 //
 // This file represents immutability's last stand.
@@ -40,7 +40,7 @@ module ImplModel {
   import Bitmap
   import UI
   import MutableMapModel
-  import ImplModelBlockAllocator
+  import BlockAllocatorModel
   import IndirectionTableModel
 
   import ReferenceType`Internal
@@ -70,7 +70,7 @@ module ImplModel {
         syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue,
-        blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel
+        blockAllocator: BlockAllocatorModel.BlockAllocatorModel
       )
     | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
   datatype Sector =
@@ -97,7 +97,7 @@ module ImplModel {
       frozenIndirectionTable: Option<IndirectionTable>,
       persistentIndirectionTable: IndirectionTable,
       outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
-      blockAllocator: ImplModelBlockAllocator.BlockAllocatorModel)
+      blockAllocator: BlockAllocatorModel.BlockAllocatorModel)
   {
     && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
       <==> IsLocAllocBitmap(blockAllocator.ephemeral, i))
@@ -141,7 +141,7 @@ module ImplModel {
     && IndirectionTableModel.TrackingGarbage(ephemeralIndirectionTable)
     && IndirectionTableModel.Inv(persistentIndirectionTable)
     && (frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(frozenIndirectionTable.value))
-    && ImplModelBlockAllocator.Inv(s.blockAllocator)
+    && BlockAllocatorModel.Inv(s.blockAllocator)
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
   }

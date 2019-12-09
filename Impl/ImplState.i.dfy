@@ -4,6 +4,7 @@ include "MainDiskIOHandler.s.dfy"
 include "BucketImpl.i.dfy"
 include "ImplNodes.i.dfy"
 include "IndirectionTableImpl.i.dfy"
+include "BlockAllocatorImpl.i.dfy"
 
 module {:extern} ImplState {
   import opened Options
@@ -13,7 +14,7 @@ module {:extern} ImplState {
   import IM = ImplModel
   import opened ImplNode
   import opened ImplMutCache
-  import ImplBlockAllocator
+  import BlockAllocatorImpl
   import Bitmap
   import IndirectionTableImpl
   import IndirectionTableModel
@@ -117,7 +118,7 @@ module {:extern} ImplState {
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
     var cache: MutCache;
     var lru: MutableLru.MutableLruQueue;
-    var blockAllocator: ImplBlockAllocator.BlockAllocator;
+    var blockAllocator: BlockAllocatorImpl.BlockAllocator;
 
     // Unready
     var outstandingIndirectionTableRead: Option<D.ReqId>;
@@ -218,7 +219,7 @@ module {:extern} ImplState {
       cache := new MutCache();
 
       var bm := new Bitmap.Bitmap(NumBlocksUint64());
-      blockAllocator := new ImplBlockAllocator.BlockAllocator(bm);
+      blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
     }
   }
 

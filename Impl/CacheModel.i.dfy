@@ -86,7 +86,7 @@ module ImplModelCache {
           BC.ValidLocationForNode(loc))
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
-    && ImplModelBlockAllocator.Inv(s.blockAllocator)
+    && BlockAllocatorModel.Inv(s.blockAllocator)
     && BC.AllLocationsForDifferentRefsDontOverlap(
         IIndirectionTable(s.ephemeralIndirectionTable))
   }
@@ -138,7 +138,7 @@ module ImplModelCache {
     var (eph, oldLoc) := IndirectionTableModel.UpdateAndRemoveLoc(s.ephemeralIndirectionTable, ref,
         (if children.Some? then children.value else []));
     var blockAllocator' := if oldLoc.Some?
-      then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
       else s.blockAllocator;
     var s' := s.(ephemeralIndirectionTable := eph)
      .(lru := LruModel.Use(s.lru, ref))
@@ -165,7 +165,7 @@ module ImplModelCache {
     lemmaIndirectionTableLocIndexValid(k, s, ref);
     var (eph, oldLoc) := IndirectionTableModel.RemoveLoc(s.ephemeralIndirectionTable, ref);
     var blockAllocator' := if oldLoc.Some?
-      then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
       else s.blockAllocator;
     var s' := s.(ephemeralIndirectionTable := eph)
      .(lru := LruModel.Use(s.lru, ref))
@@ -217,7 +217,7 @@ module ImplModelCache {
     var (eph, oldLoc) := IndirectionTableModel.UpdateAndRemoveLoc(s.ephemeralIndirectionTable, ref,
         (if node.children.Some? then node.children.value else []));
     var blockAllocator' := if oldLoc.Some?
-      then ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
       else s.blockAllocator;
     var s' := s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
         .(lru := LruModel.Use(s.lru, ref))
@@ -262,12 +262,12 @@ module ImplModelCache {
   requires j.Some? ==> 0 <= j.value < NumBlocks()
   requires j.Some? ==> ref in IIndirectionTable(s.ephemeralIndirectionTable).locs
   requires j.Some? ==> IIndirectionTable(s.ephemeralIndirectionTable).locs[ref].addr as int == j.value * BlockSize()
-  requires j.Some? ==> s'.blockAllocator == ImplModelBlockAllocator.MarkFreeEphemeral(s.blockAllocator, j.value)
+  requires j.Some? ==> s'.blockAllocator == BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, j.value)
   requires j.None? ==> s'.blockAllocator == s.blockAllocator
   requires j.None? ==> ref !in IIndirectionTable(s.ephemeralIndirectionTable).locs
   ensures (forall i: int :: IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
       <==> IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
-  ensures ImplModelBlockAllocator.Inv(s'.blockAllocator)
+  ensures BlockAllocatorModel.Inv(s'.blockAllocator)
   ensures BC.AllLocationsForDifferentRefsDontOverlap(
         IIndirectionTable(s'.ephemeralIndirectionTable))
   ensures (forall loc |

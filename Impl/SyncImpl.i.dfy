@@ -18,7 +18,7 @@ module ImplSync {
   import ImplModelSync
   import ImplModelCache
   import ImplModelDealloc
-  import ImplModelBlockAllocator
+  import BlockAllocatorModel
   import opened ImplState
 
   import opened Options
@@ -33,7 +33,7 @@ module ImplSync {
   method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
   requires s.W()
   requires s.ready
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator.I())
+  requires BlockAllocatorModel.Inv(s.blockAllocator.I())
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   modifies s.Repr()
   ensures s.W()
@@ -54,7 +54,7 @@ module ImplSync {
   requires s.W()
   requires s.ready
   requires s.I().frozenIndirectionTable.Some? ==> s.I().blockAllocator.frozen.Some?
-  requires ImplModelBlockAllocator.Inv(s.blockAllocator.I())
+  requires BlockAllocatorModel.Inv(s.blockAllocator.I())
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   modifies s.Repr()
   ensures s.W()
@@ -76,7 +76,7 @@ module ImplSync {
   method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
   requires s.W()
   requires s.ready
-  requires ImplModelBlockAllocator.Inv(s.I().blockAllocator)
+  requires BlockAllocatorModel.Inv(s.I().blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   modifies s.Repr()
   ensures s.W()
