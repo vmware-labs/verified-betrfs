@@ -506,6 +506,7 @@ abstract module BtreeSpec {
         } else if i == childidx {
           assert key in {newindex.pivots[childidx]};
         } else if i == childidx + 1 {
+          assert key == oldindex.pivots[i-1];
         } else {
           assert key == oldindex.pivots[i-1];
         }
@@ -823,6 +824,7 @@ abstract module BtreeSpec {
       var childidx := Keys.LargestLte(node.pivots, key) + 1;
       InterpretationInheritance(node, key);
       Keys.LargestLteIsUnique2(newnode.pivots, key, childidx-1);
+      InterpretationDelegation(newnode, key);
     }
     forall key | key in Interpretation(newnode)
       ensures key in Interpretation(node)
