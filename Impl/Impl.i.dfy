@@ -29,6 +29,7 @@ module Impl {
   import opened BucketsLib
   import LBAType = LBAType
   import opened Sets
+  import StateImpl
   import SD = AsyncSectorDisk
   import opened NativeTypes
 
