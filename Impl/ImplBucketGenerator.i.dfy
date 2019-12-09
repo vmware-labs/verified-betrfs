@@ -1,10 +1,10 @@
-include "../PivotBetree/BucketGenerator.i.dfy"
+include "ModelBucketGenerator.i.dfy"
 include "MutableBucket.i.dfy"
 
 module ImplBucketGenerator {
   import opened MutableBucket
-  import ModelBucketGenerator = BucketGenerator
-  import ModelBucketIterator = BucketIterator
+  import ModelBucketGenerator
+  import ModelBucketIterator
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
   import UI

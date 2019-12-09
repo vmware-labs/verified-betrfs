@@ -1,18 +1,18 @@
-include "BucketIterator.i.dfy"
+include "ModelBucketIterator.i.dfy"
 //
 // A mathematical description of bucket generators.
 // It's like an iterator, but it doesn't directly refer to an actual bucket.
 // The bucket may be implicit.
 //
 
-module BucketGenerator {
+module ModelBucketGenerator {
   import opened Options
   import opened Maps
   import opened BucketsLib
   import opened PivotsLib
   import opened ValueMessage
   import opened Sequences
-  import opened BucketIterator
+  import opened ModelBucketIterator
   import UI
 
   datatype Generator =

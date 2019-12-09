@@ -3,7 +3,7 @@ include "ImplModelCache.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
-include "../PivotBetree/BucketSuccessorLoop.i.dfy"
+include "ModelBucketSuccessorLoop.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
@@ -24,7 +24,7 @@ module ImplModelSucc {
   import PivotsLib
 
   import opened Lexicographic_Byte_Order
-  import BucketSuccessorLoop
+  import ModelBucketSuccessorLoop
 
   import PBS = PivotBetreeSpec`Internal
 
@@ -82,7 +82,7 @@ module ImplModelSucc {
       )
     ) else (
       var res :=
-          BucketSuccessorLoop.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
+          ModelBucketSuccessorLoop.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
       (s, io, Some(res))
     )
   }
@@ -172,13 +172,13 @@ module ImplModelSucc {
   requires (upTo.Some? ==> lt(startKey, upTo.value))
   requires startKey == (if start.NegativeInf? then [] else start.key)
   requires res == 
-     BucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
+     ModelBucketSuccessorLoop.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
 
   ensures M.Next(Ik(k), IVars(s), IVars(s),
       UI.SuccOp(start, res.results, res.end),
       diskOp(io))
   {
-    BucketSuccessorLoop.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
+    ModelBucketSuccessorLoop.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
 
     var succStep := BT.SuccQuery(start, res.results, res.end, buckets, lookup);
     assert BT.ValidSuccQuery(succStep);
@@ -279,7 +279,7 @@ module ImplModelSucc {
         }
       } else {
         var res :=
-          BucketSuccessorLoop.GetSuccessorInBucketStack(acc1, maxToFind, start, upTo');
+          ModelBucketSuccessorLoop.GetSuccessorInBucketStack(acc1, maxToFind, start, upTo');
         SatisfiesSuccBetreeStep(k, s, io, start, res, acc1, lookup1, maxToFind, startKey, upTo');
       }
     } else {

@@ -2,7 +2,7 @@ include "../lib/DataStructures/tttree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
-include "../PivotBetree/BucketIterator.i.dfy"
+include "ModelBucketIterator.i.dfy"
 
 //
 // Collects singleton message insertions efficiently, avoiding repeated
@@ -24,7 +24,7 @@ module MutableBucket {
   import opened Bounds
   import opened BucketWeights
   import opened NativeTypes
-  import BucketIterator
+  import ModelBucketIterator
   import Pivots = PivotsLib
 
   type Key = Element
@@ -86,7 +86,7 @@ module MutableBucket {
   }
 
   datatype Iterator = Iterator(i: uint64)
-  function IIterator(it: Iterator) : BucketIterator.Iterator
+  function IIterator(it: Iterator) : ModelBucketIterator.Iterator
 
   class MutBucket {
     var is_tree: bool;
@@ -518,12 +518,12 @@ module MutableBucket {
     predicate WFIter(it: Iterator)
     reads this, this.Repr
     ensures this.WFIter(it) ==> this.Inv()
-    ensures this.WFIter(it) ==> BucketIterator.WFIter(I(), IIterator(it))
+    ensures this.WFIter(it) ==> ModelBucketIterator.WFIter(I(), IIterator(it))
 
     method IterStart() returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
-    ensures IIterator(it') == BucketIterator.IterStart(I())
+    ensures IIterator(it') == ModelBucketIterator.IterStart(I())
     {
       assume false;
       it' := Iterator(0);
@@ -532,7 +532,7 @@ module MutableBucket {
     method IterFindFirstGte(key: Key) returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
-    ensures IIterator(it') == BucketIterator.IterFindFirstGte(I(), key)
+    ensures IIterator(it') == ModelBucketIterator.IterFindFirstGte(I(), key)
     {
       assume false;
       var i: uint64 := 0;
@@ -550,7 +550,7 @@ module MutableBucket {
     method IterFindFirstGt(key: Key) returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
-    ensures IIterator(it') == BucketIterator.IterFindFirstGt(I(), key)
+    ensures IIterator(it') == ModelBucketIterator.IterFindFirstGt(I(), key)
     {
       assume false;
       var i: uint64 := 0;
@@ -570,13 +570,13 @@ module MutableBucket {
     requires IIterator(it).next.Next?
     requires this.WFIter(it)
     ensures this.WFIter(it')
-    ensures IIterator(it') == BucketIterator.IterInc(I(), IIterator(it))
+    ensures IIterator(it') == ModelBucketIterator.IterInc(I(), IIterator(it))
     {
       assume false;
       return Iterator(it.i + 1);
     }
 
-    method GetNext(it: Iterator) returns (next : BucketIterator.IteratorOutput)
+    method GetNext(it: Iterator) returns (next : ModelBucketIterator.IteratorOutput)
     requires Inv()
     requires this.WFIter(it)
     ensures next == IIterator(it).next
@@ -584,9 +584,9 @@ module MutableBucket {
       assume false;
       var kvl := GetKvl();
       if it.i == |kvl.keys| as uint64 {
-        next := BucketIterator.Done;
+        next := ModelBucketIterator.Done;
       } else {
-        next := BucketIterator.Next(kvl.keys[it.i], kvl.values[it.i]);
+        next := ModelBucketIterator.Next(kvl.keys[it.i], kvl.values[it.i]);
       }
     }
   }

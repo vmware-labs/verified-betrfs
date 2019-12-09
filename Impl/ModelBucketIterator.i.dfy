@@ -1,10 +1,10 @@
-include "BucketsLib.i.dfy"
+include "../PivotBetree/BucketsLib.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 //
 // A mathematical description of bucket iterators.
 //
 
-module BucketIterator {
+module ModelBucketIterator {
   import opened Options
   import opened Sets
   import opened BucketsLib

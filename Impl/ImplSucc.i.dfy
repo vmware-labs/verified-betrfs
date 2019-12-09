@@ -20,7 +20,7 @@ module ImplSucc {
   import opened Lexicographic_Byte_Order
   import opened ImplNode
   import ImplBucketSuccessorLoop
-  import BucketSuccessorLoop
+  import ModelBucketSuccessorLoop
 
   import opened Options
   import opened NativeTypes
@@ -121,17 +121,17 @@ module ImplSucc {
 
       MutBucket.AllocatedReprSeq(acc');
 
-      //assert BucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(acc'), maxToFind as int, start, upTo')
-      //    == BucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
+      //assert ModelBucketSuccessorLoop.GetSuccessorInBucketStack(MutBucket.ISeq(acc'), maxToFind as int, start, upTo')
+      //    == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
 
       var res0 := ImplBucketSuccessorLoop.GetSuccessorInBucketStack(acc', maxToFind, start, upTo');
       res := Some(res0);
 
       //assert res0
-      //    == BucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
+      //    == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
 
       //assert ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I())).2
-      //    == Some(BucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
+      //    == Some(ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
       //    == res;
 
       assert (s.I(), IIO(io), res)
