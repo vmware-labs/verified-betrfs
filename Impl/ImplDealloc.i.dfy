@@ -39,7 +39,8 @@ module ImplDealloc {
       }
     }
 
-    if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) {
+    var inReads := MutableMap.InValues(s.outstandingBlockReads, BC.OutstandingRead(ref));
+    if inReads {
       print "giving up; dealloc can't dealloc because of outstanding read\n";
       return;
     }

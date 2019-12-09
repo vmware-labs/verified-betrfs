@@ -182,7 +182,7 @@ module ImplSucc {
     } else {
       // TODO factor this out into something that checks (and if it's full, actually
       // does something).
-      if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
+      if s.cache.Count() + s.outstandingBlockReads.Count <= MaxCacheSizeUint64() - 1 {
         PageInReq(k, s, io, ref);
       } else {
         print "getPath: Can't page in anything because cache is full\n";

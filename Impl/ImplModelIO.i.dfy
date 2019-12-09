@@ -265,15 +265,16 @@ module ImplModelIO {
   : (res : (Variables, IO))
   requires s.Ready?
   requires io.IOInit?
+  requires WFVars(s)
   requires ref in s.ephemeralIndirectionTable.locs;
   {
-    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
+    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.contents.Values) then (
       (s, io)
     ) else (
       var loc := s.ephemeralIndirectionTable.locs[ref];
       var (id, io') := RequestRead(io, loc);
       var s' := s
-        .(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+        .(outstandingBlockReads := MutableMapModel.Insert(s.outstandingBlockReads, id, BC.OutstandingRead(ref)));
       (s', io')
     )
   }
@@ -290,14 +291,14 @@ module ImplModelIO {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
-    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
+    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.contents.Values) {
       assert noop(k, IVars(s), IVars(s));
     } else {
       var loc := s.ephemeralIndirectionTable.locs[ref];
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert BC.ValidLocationForNode(loc);
       var (id, io') := RequestRead(io, loc);
-      var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+      var s' := s.(outstandingBlockReads := MutableMapModel.Insert(s.outstandingBlockReads, id, BC.OutstandingRead(ref)));
 
       assert WFVars(s');
 
@@ -359,7 +360,7 @@ module ImplModelIO {
         var blockAllocator := ImplModelBlockAllocator.InitBlockAllocator(bm);
         var persistentIndirectionTable :=
             IndirectionTableModel.clone(sector.value.indirectionTable);
-        Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], map[], s.syncReqs, map[], LruModel.Empty(), blockAllocator)
+        Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, None, map[], MutableMapModel.Constructor(128), s.syncReqs, map[], LruModel.Empty(), blockAllocator)
       ) else (
         s
       )
@@ -414,17 +415,18 @@ module ImplModelIO {
   : (s': Variables)
   requires diskOp(io).RespReadOp?
   requires s.Ready?
+  requires WFVars(s)
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   {
     var (id, sector) := ReadSector(io);
 
-    if (id !in s.outstandingBlockReads) then (
+    if (id !in s.outstandingBlockReads.contents) then (
       s
     ) else (
       // TODO we should probably remove the id from outstandingBlockReads
       // even in the case we don't do anything with it
 
-      var ref := s.outstandingBlockReads[id].ref;
+      var ref := s.outstandingBlockReads.contents[id].ref;
 
       var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
       if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
@@ -434,9 +436,9 @@ module ImplModelIO {
         if (sector.Some? && sector.value.SectorBlock?) then (
           var node := sector.value.block;
           if (succs == (if node.children.Some? then node.children.value else [])
-              && id in s.outstandingBlockReads) then (
+              && id in s.outstandingBlockReads.contents) then (
             s.(cache := s.cache[ref := sector.value.block])
-             .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, id))
+             .(outstandingBlockReads := MutableMapModel.Remove(s.outstandingBlockReads, id))
              .(lru := LruModel.Use(s.lru, ref))
           ) else (
             s
@@ -466,12 +468,12 @@ module ImplModelIO {
     M.reveal_IBytes();
     M.reveal_Parse();
 
-    if (id !in s.outstandingBlockReads) {
+    if (id !in s.outstandingBlockReads.contents) {
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.NoOpStep);
       return;
     }
 
-    var ref := s.outstandingBlockReads[id].ref;
+    var ref := s.outstandingBlockReads.contents[id].ref;
     
     var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
     if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
@@ -484,13 +486,13 @@ module ImplModelIO {
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (succs == (if node.children.Some? then node.children.value else [])
-          && id in s.outstandingBlockReads) {
+          && id in s.outstandingBlockReads.contents) {
         WeightBucketEmpty();
 
         LruModel.LruUse(s.lru, ref);
 
         assert |s'.cache| == |s.cache| + 1;
-        assert |s'.outstandingBlockReads| == |s.outstandingBlockReads| - 1;
+        assert |s'.outstandingBlockReads.contents| == |s.outstandingBlockReads.contents| - 1;
 
         assert WFVars(s');
         assert BC.PageInResp(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io)));
@@ -506,6 +508,7 @@ module ImplModelIO {
   function readResponse(k: Constants, s: Variables, io: IO)
   : (s': Variables)
   requires diskOp(io).RespReadOp?
+  requires WFVars(s)
   requires s.Ready? ==> IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   {
     if (s.Unready?) then (

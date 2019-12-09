@@ -66,7 +66,7 @@ module ImplModel {
         ephemeralIndirectionTable: IndirectionTable,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
         outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
-        outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
+        outstandingBlockReads: MutableMapModel.LinearHashMap<BC.OutstandingRead>,
         syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue,
@@ -126,7 +126,7 @@ module ImplModel {
   function TotalCacheSize(s: Variables) : int
   requires s.Ready?
   {
-    |s.cache| + |s.outstandingBlockReads|
+    |s.cache| + |s.outstandingBlockReads.contents|
   }
 
   predicate WFVarsReady(s: Variables)
@@ -144,6 +144,7 @@ module ImplModel {
     && ImplModelBlockAllocator.Inv(s.blockAllocator)
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
+    && MutableMapModel.Inv(s.outstandingBlockReads)
   }
   predicate WFVars(vars: Variables)
   {
@@ -186,7 +187,7 @@ module ImplModel {
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
-        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs.contents, ICache(cache))
+        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads.contents, syncReqs.contents, ICache(cache))
       case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs.contents)
     }
   }

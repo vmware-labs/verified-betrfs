@@ -136,14 +136,15 @@ module ImplIO {
   ensures s.ready
   ensures (s.I(), IIO(io)) == ImplModelIO.PageInReq(Ic(k), old(s.I()), old(IIO(io)), ref)
   {
-    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
+    var inReads := MutableMap.InValues(s.outstandingBlockReads, BC.OutstandingRead(ref));
+    if inReads {
       print "giving up; already an outstanding read for this ref\n";
     } else {
       var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
       assert locGraph.Some?;
       var loc := locGraph.value.loc;
       var id := RequestRead(io, loc.value);
-      s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
+      s.outstandingBlockReads.Insert(id, BC.OutstandingRead(ref));
     }
   }
 
@@ -207,7 +208,7 @@ module ImplIO {
         s.ephemeralIndirectionTable := ephemeralIndirectionTable;
         s.outstandingIndirectionTableWrite := None;
         s.outstandingBlockWrites := map[];
-        s.outstandingBlockReads := map[];
+        s.outstandingBlockReads := new MutableMap.ResizingHashMap(128);
         s.cache := new MutCache();
         s.lru := new MutableLru.MutableLruQueue();
         s.blockAllocator := blockAllocator;
@@ -221,6 +222,7 @@ module ImplIO {
 
   method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires s.W()
+  requires s.WF()
   requires io.diskOp().RespReadOp?
   requires s.ready
   requires io !in s.Repr()
@@ -232,7 +234,9 @@ module ImplIO {
     assert sector.Some? ==> IS.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
-    if (id !in s.outstandingBlockReads) {
+    var readOpt := s.outstandingBlockReads.Get(id);
+
+    if readOpt.None? {
       print "PageInResp: unrecognized id from Read\n";
       return;
     }
@@ -240,7 +244,7 @@ module ImplIO {
     // TODO we should probably remove the id from outstandingBlockReads
     // even in the case we don't do anything with it
 
-    var ref := s.outstandingBlockReads[id].ref;
+    var ref := readOpt.value.ref;
 
     var lbaGraph := s.ephemeralIndirectionTable.GetEntry(ref);
     if (lbaGraph.None? || lbaGraph.value.loc.None?) {
@@ -273,7 +277,7 @@ module ImplIO {
         assume |s.cache.I()| <= MaxCacheSize();
         s.cache.Insert(ref, sector.value.block);
 
-        s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+        s.outstandingBlockReads.Remove(id);
       } else {
         print "giving up; block does not match graph\n";
       }
@@ -287,6 +291,7 @@ module ImplIO {
   requires io.diskOp().RespReadOp?
   requires s.W()
   requires io !in s.Repr()
+  requires s.WF()
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.I() == ImplModelIO.readResponse(Ic(k), old(s.I()), IIO(io))

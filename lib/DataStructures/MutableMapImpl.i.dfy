@@ -522,6 +522,25 @@ module MutableMap {
       }
       return m;
     }
+  }
 
+  // Split out so we can use V(==).
+  method InValues<V(==)>(t: ResizingHashMap<V>, v: V) returns (res : bool)
+  requires t.Inv()
+  ensures res == (v in t.I().contents.Values)
+  {
+    var it := t.IterStart();
+    while it.next.Next?
+    invariant t.Inv()
+    invariant MutableMapModel.WFIter(t.I(), it)
+    invariant forall k | k in it.s :: t.I().contents[k] != v
+    decreases it.decreaser
+    {
+      if it.next.value == v {
+        return true;
+      }
+      it := t.IterInc(it);
+    }
+    return false;
   }
 }
