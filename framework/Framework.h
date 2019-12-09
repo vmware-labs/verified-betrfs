@@ -12,7 +12,7 @@ namespace NativeArrays_Compile {
   shared_ptr<vector<T>> newArrayFill(uint64, T);
 
   template <typename T>
-  shared_ptr<vector<T>> newArrayClone(uint64, shared_ptr<vector<T>>);
+  shared_ptr<vector<T>> newArrayClone(shared_ptr<vector<T>>);
 
   template <typename T>
   void CopySeqIntoArray(
