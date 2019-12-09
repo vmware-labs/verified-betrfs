@@ -1,5 +1,5 @@
-include "ImplCache.i.dfy"
-include "ImplModelLeaf.i.dfy"
+include "CacheImpl.i.dfy"
+include "LeafModel.i.dfy"
 
 module ImplLeaf { 
   import opened Impl

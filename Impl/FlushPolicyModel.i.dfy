@@ -1,8 +1,8 @@
-include "ImplModelFlush.i.dfy"
-include "ImplModelGrow.i.dfy"
-include "ImplModelSplit.i.dfy"
-include "ImplModelLeaf.i.dfy"
-include "ImplModelEvict.i.dfy"
+include "FlushModel.i.dfy"
+include "GrowModel.i.dfy"
+include "SplitModel.i.dfy"
+include "LeafModel.i.dfy"
+include "EvictModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module ImplModelFlushPolicy {

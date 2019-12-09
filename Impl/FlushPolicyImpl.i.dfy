@@ -1,9 +1,9 @@
-include "ImplFlush.i.dfy"
-include "ImplGrow.i.dfy"
-include "ImplSplit.i.dfy"
-include "ImplLeaf.i.dfy"
-include "ImplEvict.i.dfy"
-include "ImplModelFlushPolicy.i.dfy"
+include "FlushImpl.i.dfy"
+include "GrowImpl.i.dfy"
+include "SplitImpl.i.dfy"
+include "LeafImpl.i.dfy"
+include "EvictImpl.i.dfy"
+include "FlushPolicyModel.i.dfy"
 
 module ImplFlushPolicy {
   import opened Impl

@@ -1,5 +1,5 @@
-include "ImplModel.i.dfy"
-include "ImplModelCache.i.dfy"
+include "ModelState.i.dfy"
+include "CacheModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"

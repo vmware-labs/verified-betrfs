@@ -1,5 +1,5 @@
-include "ImplCache.i.dfy"
-include "ImplModelDealloc.i.dfy"
+include "CacheImpl.i.dfy"
+include "DeallocModel.i.dfy"
 
 module ImplDealloc { 
   import opened Impl

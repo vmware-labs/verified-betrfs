@@ -5,12 +5,12 @@ include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 
 include "Impl.i.dfy"
-include "ImplInsert.i.dfy"
-include "ImplQuery.i.dfy"
-include "ImplSucc.i.dfy"
-include "ImplModelInsert.i.dfy"
-include "ImplModelQuery.i.dfy"
-include "ImplModelSync.i.dfy"
+include "InsertImpl.i.dfy"
+include "QueryImpl.i.dfy"
+include "SuccImpl.i.dfy"
+include "InsertModel.i.dfy"
+include "QueryModel.i.dfy"
+include "SyncModel.i.dfy"
 
 module {:extern} MainImpl refines Main { 
   import opened Impl

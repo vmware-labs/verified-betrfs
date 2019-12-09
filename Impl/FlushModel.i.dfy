@@ -1,5 +1,5 @@
-include "ImplModelCache.i.dfy"
-include "ImplModelIO.i.dfy"
+include "CacheModel.i.dfy"
+include "IOModel.i.dfy"
 include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
 

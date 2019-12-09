@@ -1,4 +1,4 @@
-include "ImplModelCache.i.dfy"
+include "CacheModel.i.dfy"
 
 module ImplModelSplit { 
   import opened ImplModel

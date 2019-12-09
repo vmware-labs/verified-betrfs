@@ -1,5 +1,5 @@
-include "ImplCache.i.dfy"
-include "ImplModelFlush.i.dfy"
+include "CacheImpl.i.dfy"
+include "FlushModel.i.dfy"
 
 module ImplFlush { 
   import opened Impl

@@ -1,5 +1,5 @@
-include "ImplCache.i.dfy"
-include "ImplModelSplit.i.dfy"
+include "CacheImpl.i.dfy"
+include "SplitModel.i.dfy"
 
 module ImplSplit { 
   import opened Impl

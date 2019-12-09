@@ -1,5 +1,5 @@
-include "ImplModelCache.i.dfy"
-include "ImplModelFlushPolicy.i.dfy"
+include "CacheModel.i.dfy"
+include "FlushPolicyModel.i.dfy"
 
 module ImplModelInsert { 
   import opened ImplModel

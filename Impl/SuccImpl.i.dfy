@@ -1,6 +1,6 @@
 include "Impl.i.dfy"
-include "ImplSync.i.dfy"
-include "ImplModelSucc.i.dfy"
+include "SyncImpl.i.dfy"
+include "SuccModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"

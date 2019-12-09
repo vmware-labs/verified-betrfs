@@ -1,5 +1,5 @@
-include "ImplModel.i.dfy"
-include "ImplModelIO.i.dfy"
+include "ModelState.i.dfy"
+include "IOModel.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 
 module ImplModelCache { 

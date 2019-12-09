@@ -1,5 +1,5 @@
-include "ImplIO.i.dfy"
-include "ImplModelCache.i.dfy"
+include "IOImpl.i.dfy"
+include "CacheModel.i.dfy"
 
 module ImplCache { 
   import opened Impl

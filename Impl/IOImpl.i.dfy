@@ -1,6 +1,6 @@
 include "Impl.i.dfy"
 include "ImplState.i.dfy"
-include "ImplModelIO.i.dfy"
+include "IOModel.i.dfy"
 include "ImplMarshalling.i.dfy"
 
 module ImplIO { 

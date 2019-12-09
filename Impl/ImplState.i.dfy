@@ -1,7 +1,7 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
-include "ImplModel.i.dfy"
+include "ModelState.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "MutableBucket.i.dfy"
+include "BucketImpl.i.dfy"
 include "ImplNodes.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 

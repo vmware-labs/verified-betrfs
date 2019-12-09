@@ -1,5 +1,5 @@
 include "ModelBucketGenerator.i.dfy"
-include "MutableBucket.i.dfy"
+include "BucketImpl.i.dfy"
 
 module ImplBucketGenerator {
   import opened MutableBucket
