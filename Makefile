@@ -150,7 +150,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # This is currently Travis's favorite build rule.
 
 build/%.okay: %.dfy | $$(@D)/.
-	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
+	$(TIME) $(DAFNY_CMD) /compile:0 $<
 	touch $@
 
 ##############################################################################
