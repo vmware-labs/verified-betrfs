@@ -15,7 +15,7 @@ module ImplFlushPolicy {
   import opened ImplLeaf
   import opened ImplEvict
   import FlushPolicyModel
-  import opened ImplState
+  import opened StateImpl
   import opened MutableBucket
 
   import opened Sequences

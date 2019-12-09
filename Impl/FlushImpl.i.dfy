@@ -4,7 +4,7 @@ include "FlushModel.i.dfy"
 module ImplFlush { 
   import opened Impl
   import opened ImplCache
-  import opened ImplState
+  import opened StateImpl
   import opened ImplNode
 
   import opened Options

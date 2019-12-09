@@ -6,7 +6,7 @@ module ImplLeaf {
   import opened ImplIO
   import opened ImplCache
   import opened LeafModel
-  import opened ImplState
+  import opened StateImpl
   import opened ImplNode
   import opened MutableBucket
   import IMM = ImplMarshallingModel

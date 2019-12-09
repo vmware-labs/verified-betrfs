@@ -4,7 +4,7 @@ include "CacheModel.i.dfy"
 module ImplCache { 
   import opened Impl
   import opened ImplIO
-  import opened ImplState
+  import opened StateImpl
   import CacheModel
   import LruModel
 

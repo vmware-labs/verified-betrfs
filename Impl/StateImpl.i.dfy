@@ -7,7 +7,7 @@ include "ImplNodes.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 
-module {:extern} ImplState {
+module {:extern} StateImpl {
   import opened Options
   import opened Sequences
   import opened NativeTypes

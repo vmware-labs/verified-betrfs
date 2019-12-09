@@ -14,7 +14,7 @@ module ImplQuery {
   import opened ImplIO
   import QueryModel
   import CacheModel
-  import opened ImplState
+  import opened StateImpl
   import opened MutableBucket
 
   import opened Options

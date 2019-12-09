@@ -9,7 +9,7 @@ module ImplEvict {
   import opened ImplDealloc
   import opened ImplSync
   import EvictModel
-  import opened ImplState
+  import opened StateImpl
 
   import opened Options
   import opened Maps

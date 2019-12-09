@@ -29,7 +29,6 @@ module Impl {
   import opened BucketsLib
   import LBAType = LBAType
   import opened Sets
-  import IS = ImplState
   import SD = AsyncSectorDisk
   import opened NativeTypes
 
@@ -41,7 +40,7 @@ module Impl {
   type Message = Messages.Message
 
   type ImplConstants = ImplADM.M.Constants
-  type ImplVariables = IS.Variables
+  type ImplVariables = StateImpl.Variables
 
   function Ik(k: ImplConstants) : ImplADM.M.Constants { k }
   // </deduplicate>

@@ -6,7 +6,7 @@ module ImplSplit {
   import opened ImplIO
   import opened ImplCache
   import SplitModel
-  import opened ImplState
+  import opened StateImpl
   import opened ImplNode
 
   import opened Options

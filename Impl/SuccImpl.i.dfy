@@ -15,7 +15,7 @@ module ImplSucc {
   import opened ImplIO
   import SuccModel
   import CacheModel
-  import opened ImplState
+  import opened StateImpl
   import opened MutableBucket
   import opened Lexicographic_Byte_Order
   import opened ImplNode

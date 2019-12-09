@@ -5,7 +5,7 @@ module ImplGrow {
   import opened Impl
   import opened ImplIO
   import opened ImplCache
-  import opened ImplState
+  import opened StateImpl
   import opened ImplNode
   import opened MutableBucket
   import GrowModel

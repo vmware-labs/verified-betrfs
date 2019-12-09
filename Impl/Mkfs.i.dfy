@@ -23,7 +23,7 @@ module {:extern} MkfsImpl {
   import ReferenceType`Internal
   import LBAType
   import ValueWithDefault`Internal
-  import IS = ImplState
+  import SI = StateImpl
   import D = AsyncDisk
 
   type LBA = LBAType.LBA
@@ -40,9 +40,9 @@ module {:extern} MkfsImpl {
 
     WeightBucketListOneEmpty();
     assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
-    ghost var sector:IS.Sector := IS.SectorBlock(node);
-    ghost var is:SM.Sector := IS.ISector(sector);
-    var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));
+    ghost var sector:SI.Sector := SI.SectorBlock(node);
+    ghost var is:SM.Sector := SI.ISector(sector);
+    var b1 := ImplMarshalling.MarshallCheckedSector(SI.SectorBlock(node));
 
     var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
     sectorIndirectionTable.InvForMkfs();
@@ -53,14 +53,14 @@ module {:extern} MkfsImpl {
     // Need to improve the contract between sectorIndirectionTable and here.
     assume sectorIndirectionTable.Inv();
 
-    assume SM.IIndirectionTable(IS.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
+    assume SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
       map[0 := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)],
       map[0 := []]
     );
 
-    //assert IS.WFSector(IS.SectorIndirectionTable(sectorIndirectionTable));
-    assume SM.WFSector(IS.ISector(IS.SectorIndirectionTable(sectorIndirectionTable)));
-    var b0 := ImplMarshalling.MarshallCheckedSector(IS.SectorIndirectionTable(sectorIndirectionTable));
+    //assert SI.WFSector(SI.SectorIndirectionTable(sectorIndirectionTable));
+    assume SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
+    var b0 := ImplMarshalling.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
     // TODO(jonh): MarshallCheckedSector owes us a promise that it can marshall
     // SectorIndirectionTables successfully. It can't make that promise right

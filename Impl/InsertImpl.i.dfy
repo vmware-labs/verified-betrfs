@@ -15,7 +15,7 @@ module ImplInsert {
   import opened ImplIO
   import opened ImplCache
   import opened InsertModel
-  import opened ImplState
+  import opened StateImpl
   import opened ImplFlushPolicy
   import opened MutableBucket
 

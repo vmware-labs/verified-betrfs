@@ -19,7 +19,7 @@ module ImplIO {
   import LruModel
   import LruImpl
   import opened Bounds
-  import opened IS = ImplState
+  import opened SI = StateImpl
   import MutableMapModel
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
@@ -41,10 +41,10 @@ module ImplIO {
     }
   }
 
-  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: IS.Sector)
+  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: SI.Sector)
   returns (id: Option<D.ReqId>)
-  requires IS.WFSector(sector)
-  requires IM.WFSector(IS.ISector(sector))
+  requires SI.WFSector(sector)
+  requires IM.WFSector(SI.ISector(sector))
   requires io.initialized()
   modifies io
   ensures IOModel.RequestWrite(old(IIO(io)), loc, old(ISector(sector)), id, IIO(io))
@@ -62,12 +62,12 @@ module ImplIO {
     }
   }
 
-  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: IS.Sector)
+  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: SI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
   requires s.WF()
   requires s.ready
-  requires IS.WFSector(sector)
-  requires IM.WFSector(IS.ISector(sector))
+  requires SI.WFSector(sector)
+  requires IM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
   modifies io
@@ -128,7 +128,7 @@ module ImplIO {
   requires io.initialized();
   requires s.ready
   requires s.WF()
-  requires ref in IS.IIndirectionTable(s.ephemeralIndirectionTable).locs
+  requires ref in SI.IIndirectionTable(s.ephemeralIndirectionTable).locs
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
@@ -149,21 +149,21 @@ module ImplIO {
 
   // == readResponse ==
 
-  function ISectorOpt(sector: Option<IS.Sector>) : Option<IM.Sector>
+  function ISectorOpt(sector: Option<SI.Sector>) : Option<IM.Sector>
   reads if sector.Some? then SectorObjectSet(sector.value) else {}
   reads if sector.Some? then SectorRepr(sector.value) else {}
-  requires sector.Some? ==> IS.WFSector(sector.value)
+  requires sector.Some? ==> SI.WFSector(sector.value)
   {
     match sector {
       case None => None
-      case Some(sector) => Some(IS.ISector(sector))
+      case Some(sector) => Some(SI.ISector(sector))
     }
   }
 
   method ReadSector(io: DiskIOHandler)
-  returns (id: D.ReqId, sector: Option<IS.Sector>)
+  returns (id: D.ReqId, sector: Option<SI.Sector>)
   requires io.diskOp().RespReadOp?
-  ensures sector.Some? ==> IS.WFSector(sector.value)
+  ensures sector.Some? ==> SI.WFSector(sector.value)
   ensures sector.Some? ==> fresh(SectorRepr(sector.value))
   ensures (id, ISectorOpt(sector)) == IOModel.ReadSector(old(IIO(io)))
   {
@@ -229,7 +229,7 @@ module ImplIO {
   ensures s.I() == IOModel.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
-    assert sector.Some? ==> IS.WFSector(sector.value);
+    assert sector.Some? ==> SI.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
     if (id !in s.outstandingBlockReads) {
@@ -253,7 +253,7 @@ module ImplIO {
       return;
     }
 
-    assert sector.Some? ==> IS.WFSector(sector.value);
+    assert sector.Some? ==> SI.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
     var lba := lbaGraph.value.loc.value;
@@ -263,11 +263,11 @@ module ImplIO {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
         assume |LruModel.I(s.lru.Queue)| <= 0x10000;
-        assert sector.Some? ==> IS.WFSector(sector.value);
+        assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
         s.lru.Use(ref);
 
-        assert sector.Some? ==> IS.WFSector(sector.value);
+        assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
         assume |s.cache.I()| <= MaxCacheSize();
@@ -364,7 +364,7 @@ module ImplIO {
 
   method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
-  requires IS.Inv(k, s)
+  requires SI.Inv(k, s)
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)

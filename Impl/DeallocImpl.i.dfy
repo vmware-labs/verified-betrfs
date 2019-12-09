@@ -6,7 +6,7 @@ module ImplDealloc {
   import opened ImplIO
   import opened ImplCache
   import DeallocModel
-  import opened ImplState
+  import opened StateImpl
   import opened Bounds
 
   import opened Options

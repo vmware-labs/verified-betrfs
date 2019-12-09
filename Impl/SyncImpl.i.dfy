@@ -19,7 +19,7 @@ module ImplSync {
   import CacheModel
   import DeallocModel
   import BlockAllocatorModel
-  import opened ImplState
+  import opened StateImpl
 
   import opened Options
   import opened Maps
