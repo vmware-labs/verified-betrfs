@@ -1,12 +1,12 @@
 include "DeallocModel.i.dfy"
 include "SyncModel.i.dfy"
 
-module ImplModelEvict {
+module EvictModel {
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
-  import opened ImplModelDealloc
-  import opened ImplModelSync
+  import opened IOModel
+  import opened CacheModel
+  import opened DeallocModel
+  import opened SyncModel
 
   import opened Options
   import opened Maps

@@ -2,9 +2,9 @@ include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-module ImplModelCache { 
+module CacheModel { 
   import opened StateModel
-  import opened ImplModelIO
+  import opened IOModel
 
   import opened Options
   import opened Maps

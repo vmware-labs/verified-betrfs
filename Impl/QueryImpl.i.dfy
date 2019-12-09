@@ -12,8 +12,8 @@ module ImplQuery {
   import opened Impl
   import opened ImplSync
   import opened ImplIO
-  import ImplModelQuery
-  import ImplModelCache
+  import QueryModel
+  import CacheModel
   import opened ImplState
   import opened MutableBucket
 
@@ -39,10 +39,10 @@ module ImplQuery {
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), res, IIO(io)) == ImplModelQuery.query(Ic(k), old(s.I()), old(IIO(io)), key)
+  ensures (s.I(), res, IIO(io)) == QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key)
   {
-    ImplModelQuery.reveal_query();
-    ImplModelQuery.reveal_queryIterate();
+    QueryModel.reveal_query();
+    QueryModel.reveal_queryIterate();
 
     if (!s.ready) {
       PageInIndirectionTableReq(k, s, io);
@@ -57,8 +57,8 @@ module ImplQuery {
       invariant s.ready
       invariant ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
       invariant io.initialized()
-      invariant ImplModelQuery.query(Ic(k), old(s.I()), old(IIO(io)), key)
-             == ImplModelQuery.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter)
+      invariant QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key)
+             == QueryModel.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter)
       invariant counter as int >= 0
       invariant io !in s.Repr()
       invariant WellUpdated(s)
@@ -102,7 +102,7 @@ module ImplQuery {
             return;
           } else {
             if node.children.Some? {
-              ImplModelCache.lemmaChildInGraph(Ic(k), s.I(), ref, node.children.value[r]);
+              CacheModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.children.value[r]);
               counter := counter - 1;
               ref := node.children.value[r];
             } else {

@@ -14,7 +14,7 @@ module ImplFlushPolicy {
   import opened ImplSplit
   import opened ImplLeaf
   import opened ImplEvict
-  import ImplModelFlushPolicy
+  import FlushPolicyModel
   import opened ImplState
   import opened MutableBucket
 
@@ -27,8 +27,8 @@ module ImplFlushPolicy {
 
   method biggestSlot(buckets: seq<MutBucket>) returns (res : (uint64, uint64))
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
-  requires ImplModelFlushPolicy.biggestSlot.requires(MutBucket.ISeq(buckets))
-  ensures res == ImplModelFlushPolicy.biggestSlot(old(MutBucket.ISeq(buckets)))
+  requires FlushPolicyModel.biggestSlot.requires(MutBucket.ISeq(buckets))
+  ensures res == FlushPolicyModel.biggestSlot(old(MutBucket.ISeq(buckets)))
   {
     // It's in the reads clause of ISeq:
     MutBucket.reveal_ReprSeq();
@@ -38,8 +38,8 @@ module ImplFlushPolicy {
     var bestIdx := 0;
     var bestWeight := buckets[0 as uint64].Weight;
     while j < |buckets| as uint64
-    invariant ImplModelFlushPolicy.biggestSlotIterate.requires(MutBucket.ISeq(buckets), j, bestIdx, bestWeight)
-    invariant ImplModelFlushPolicy.biggestSlotIterate(MutBucket.ISeq(buckets), j, bestIdx, bestWeight) == ImplModelFlushPolicy.biggestSlot(MutBucket.ISeq(buckets))
+    invariant FlushPolicyModel.biggestSlotIterate.requires(MutBucket.ISeq(buckets), j, bestIdx, bestWeight)
+    invariant FlushPolicyModel.biggestSlotIterate(MutBucket.ISeq(buckets), j, bestIdx, bestWeight) == FlushPolicyModel.biggestSlot(MutBucket.ISeq(buckets))
     {
       WeightBucketLeBucketList(MutBucket.ISeq(buckets), j as int);
       var w := buckets[j].Weight;
@@ -61,32 +61,32 @@ module ImplFlushPolicy {
     s.cache.Count() + (|s.outstandingBlockReads| as uint64)
   }
 
-  method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : ImplModelFlushPolicy.Action)
+  method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : FlushPolicyModel.Action)
   requires 0 <= i as int < |stack|
   requires Inv(k, s)
-  requires ImplModelFlushPolicy.ValidStackSlots(Ic(k), s.I(), stack, slots)
-  ensures action == ImplModelFlushPolicy.getActionToSplit(Ic(k), s.I(), stack, slots, i)
+  requires FlushPolicyModel.ValidStackSlots(Ic(k), s.I(), stack, slots)
+  ensures action == FlushPolicyModel.getActionToSplit(Ic(k), s.I(), stack, slots, i)
   {
-    ImplModelFlushPolicy.reveal_getActionToSplit();
+    FlushPolicyModel.reveal_getActionToSplit();
 
     if i == 0 {
       // Can't split root until we grow it.
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-        action := ImplModelFlushPolicy.ActionGrow;
+        action := FlushPolicyModel.ActionGrow;
       } else {
-        action := ImplModelFlushPolicy.ActionEvict;
+        action := FlushPolicyModel.ActionEvict;
       }
     } else {
       var nodePrev := s.cache.GetOpt(stack[i-1]);
       if |nodePrev.value.children.value| as uint64 < MaxNumChildrenUint64() {
         var nodeThis := s.cache.GetOpt(stack[i]);
         if |nodeThis.value.buckets| as uint64 == 1 {
-          action := ImplModelFlushPolicy.ActionRepivot(stack[i]);
+          action := FlushPolicyModel.ActionRepivot(stack[i]);
         } else {
           if TotalCacheSize(s) <= MaxCacheSizeUint64() - 2 {
-            action := ImplModelFlushPolicy.ActionSplit(stack[i-1], slots[i-1]);
+            action := FlushPolicyModel.ActionSplit(stack[i-1], slots[i-1]);
           } else {
-            action := ImplModelFlushPolicy.ActionEvict;
+            action := FlushPolicyModel.ActionEvict;
           }
         }
       } else {
@@ -95,20 +95,20 @@ module ImplFlushPolicy {
     }
   }
 
-  method getActionToFlush(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) returns (action : ImplModelFlushPolicy.Action)
+  method getActionToFlush(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) returns (action : FlushPolicyModel.Action)
   requires |stack| <= 40
   requires Inv(k, s)
-  requires ImplModelFlushPolicy.ValidStackSlots(Ic(k), s.I(), stack, slots)
+  requires FlushPolicyModel.ValidStackSlots(Ic(k), s.I(), stack, slots)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), action) == ImplModelFlushPolicy.getActionToFlush(Ic(k), old(s.I()), stack, slots)
+  ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(Ic(k), old(s.I()), stack, slots)
   {
-    ImplModelFlushPolicy.reveal_getActionToFlush();
+    FlushPolicyModel.reveal_getActionToFlush();
 
     if |stack| as uint64 == 40 {
-      action := ImplModelFlushPolicy.ActionFail;
+      action := FlushPolicyModel.ActionFail;
     } else {
       var ref := stack[|stack| as uint64 - 1];
       var nodeOpt := s.cache.GetOpt(ref);
@@ -137,18 +137,18 @@ module ImplFlushPolicy {
 
             if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
               if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-                action := ImplModelFlushPolicy.ActionFlush(ref, slot);
+                action := FlushPolicyModel.ActionFlush(ref, slot);
               } else {
-                action := ImplModelFlushPolicy.ActionEvict;
+                action := FlushPolicyModel.ActionEvict;
               }
             } else {
               action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
             }
           } else {
             if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-              action := ImplModelFlushPolicy.ActionPageIn(childref);
+              action := FlushPolicyModel.ActionPageIn(childref);
             } else {
-              action := ImplModelFlushPolicy.ActionEvict;
+              action := FlushPolicyModel.ActionEvict;
             }
           }
         } else {
@@ -169,15 +169,15 @@ module ImplFlushPolicy {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures ImplModelFlushPolicy.runFlushPolicy(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures FlushPolicyModel.runFlushPolicy(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
-    ImplModelFlushPolicy.reveal_runFlushPolicy();
+    FlushPolicyModel.reveal_runFlushPolicy();
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
     assert SM.IVars(s.I()) == SM.IVars(old(s.I()));
 
-    ImplModelFlushPolicy.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
+    FlushPolicyModel.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(k, s, [BT.G.Root()], []);
 
     match action {

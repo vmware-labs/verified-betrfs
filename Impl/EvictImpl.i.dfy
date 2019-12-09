@@ -8,7 +8,7 @@ module ImplEvict {
   import opened ImplCache
   import opened ImplDealloc
   import opened ImplSync
-  import ImplModelEvict
+  import EvictModel
   import opened ImplState
 
   import opened Options
@@ -27,18 +27,18 @@ module ImplEvict {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures s.I() == ImplModelEvict.Evict(Ic(k), old(s.I()), ref)
+  ensures s.I() == EvictModel.Evict(Ic(k), old(s.I()), ref)
   {
     s.lru.Remove(ref);
     s.cache.Remove(ref);
-    assert s.I().cache == ImplModelEvict.Evict(Ic(k), old(s.I()), ref).cache;
+    assert s.I().cache == EvictModel.Evict(Ic(k), old(s.I()), ref).cache;
   }
 
   method NeedToWrite(s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
   requires s.WF()
   requires s.ready
-  ensures b == ImplModelEvict.NeedToWrite(s.I(), ref)
+  ensures b == EvictModel.NeedToWrite(s.I(), ref)
   {
     var eph := s.ephemeralIndirectionTable.GetEntry(ref);
     if eph.Some? && eph.value.loc.None? {
@@ -61,7 +61,7 @@ module ImplEvict {
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.I().graph ==>
       ref in s.ephemeralIndirectionTable.I().locs
-  ensures b == ImplModelEvict.CanEvict(s.I(), ref)
+  ensures b == EvictModel.CanEvict(s.I(), ref)
   {
     var eph := s.ephemeralIndirectionTable.GetEntry(ref);
     if (eph.Some?) {
@@ -81,10 +81,10 @@ module ImplEvict {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures ImplModelEvict.EvictOrDealloc(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures EvictModel.EvictOrDealloc(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     var ref := FindDeallocable(s);
-    ImplModelDealloc.FindDeallocableCorrect(s.I());
+    DeallocModel.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
       Dealloc(k, s, io, ref.value);

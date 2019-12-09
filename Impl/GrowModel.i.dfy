@@ -1,9 +1,9 @@
 include "CacheModel.i.dfy"
 
-module ImplModelGrow { 
+module GrowModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
+  import opened IOModel
+  import opened CacheModel
 
   import opened Options
   import opened Maps

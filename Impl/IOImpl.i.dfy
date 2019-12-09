@@ -14,7 +14,7 @@ module ImplIO {
   import StateModel
   import ImplMarshalling
   import IMM = ImplMarshallingModel
-  import ImplModelIO
+  import IOModel
   import BucketsLib
   import LruModel
   import LruImpl
@@ -30,9 +30,9 @@ module ImplIO {
   requires s.ready
   requires s.WF()
   requires len <= LBAType.BlockSize()
-  ensures loc == ImplModelIO.getFreeLoc(s.I(), len)
+  ensures loc == IOModel.getFreeLoc(s.I(), len)
   {
-    ImplModelIO.reveal_getFreeLoc();
+    IOModel.reveal_getFreeLoc();
     var i := s.blockAllocator.Alloc();
     if i.Some? {
       loc := Some(LBAType.Location((i.value * BlockSizeUint64()), len));
@@ -47,11 +47,11 @@ module ImplIO {
   requires IM.WFSector(IS.ISector(sector))
   requires io.initialized()
   modifies io
-  ensures ImplModelIO.RequestWrite(old(IIO(io)), loc, old(ISector(sector)), id, IIO(io))
+  ensures IOModel.RequestWrite(old(IIO(io)), loc, old(ISector(sector)), id, IIO(io))
   ensures id.Some? ==> io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> old(IIO(io)) == IIO(io)
   {
-    ImplModelIO.reveal_RequestWrite();
+    IOModel.reveal_RequestWrite();
 
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
     if (bytes == null || bytes.Length as uint64 != loc.len) {
@@ -72,12 +72,12 @@ module ImplIO {
   requires io !in s.Repr()
   modifies io
   ensures s.W()
-  ensures ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
+  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
   ensures old(s.I()) == s.I();
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
   {
-    ImplModelIO.reveal_FindLocationAndRequestWrite();
+    IOModel.reveal_FindLocationAndRequestWrite();
 
     var bytes := ImplMarshalling.MarshallCheckedSector(sector);
     if (bytes == null) {
@@ -99,7 +99,7 @@ module ImplIO {
   returns (id: D.ReqId)
   requires io.initialized()
   modifies io
-  ensures (id, IIO(io)) == ImplModelIO.RequestRead(old(IIO(io)), loc)
+  ensures (id, IIO(io)) == IOModel.RequestRead(old(IIO(io)), loc)
   {
     id := io.read(loc.addr, loc.len);
   }
@@ -112,9 +112,9 @@ module ImplIO {
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), IIO(io)) == ImplModelIO.PageInIndirectionTableReq(Ic(k), old(s.I()), old(IIO(io)))
+  ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(Ic(k), old(s.I()), old(IIO(io)))
   {
-    ImplModelIO.reveal_PageInIndirectionTableReq();
+    IOModel.reveal_PageInIndirectionTableReq();
 
     if (s.outstandingIndirectionTableRead.None?) {
       var id := RequestRead(io, BC.IndirectionTableLocation());
@@ -134,7 +134,7 @@ module ImplIO {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), IIO(io)) == ImplModelIO.PageInReq(Ic(k), old(s.I()), old(IIO(io)), ref)
+  ensures (s.I(), IIO(io)) == IOModel.PageInReq(Ic(k), old(s.I()), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
@@ -165,7 +165,7 @@ module ImplIO {
   requires io.diskOp().RespReadOp?
   ensures sector.Some? ==> IS.WFSector(sector.value)
   ensures sector.Some? ==> fresh(SectorRepr(sector.value))
-  ensures (id, ISectorOpt(sector)) == ImplModelIO.ReadSector(old(IIO(io)))
+  ensures (id, ISectorOpt(sector)) == IOModel.ReadSector(old(IIO(io)))
   {
     var id1, bytes := io.getReadResult();
     id := id1;
@@ -184,7 +184,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
+  ensures s.I() == IOModel.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
@@ -226,7 +226,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
+  ensures s.I() == IOModel.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     assert sector.Some? ==> IS.WFSector(sector.value);
@@ -289,7 +289,7 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.readResponse(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == IOModel.readResponse(Ic(k), old(s.I()), IIO(io))
   {
     if (!s.ready) {
       PageInIndirectionTableResp(k, s, io);
@@ -307,9 +307,9 @@ module ImplIO {
   requires m.Inv()
   ensures fresh(m'.Repr)
   ensures m'.Inv()
-  ensures m'.I() == ImplModelIO.SyncReqs2to1(m.I())
+  ensures m'.I() == IOModel.SyncReqs2to1(m.I())
   {
-    ImplModelIO.reveal_SyncReqs2to1();
+    IOModel.reveal_SyncReqs2to1();
     var it := m.IterStart();
     var m0 := new MutableMap.ResizingHashMap(128);
     while !it.next.Done?
@@ -319,7 +319,7 @@ module ImplIO {
     invariant MutableMapModel.WFIter(m.I(), it)
     invariant m0.Inv()
     invariant m0.I().contents.Keys == it.s
-    invariant ImplModelIO.SyncReqs2to1(m.I()) == ImplModelIO.SyncReqs2to1Iterate(m.I(), it, m0.I())
+    invariant IOModel.SyncReqs2to1(m.I()) == IOModel.SyncReqs2to1Iterate(m.I(), it, m0.I())
 
     decreases it.decreaser
     {
@@ -336,9 +336,9 @@ module ImplIO {
   requires m.Inv()
   ensures fresh(m'.Repr)
   ensures m'.Inv()
-  ensures m'.I() == ImplModelIO.SyncReqs3to2(m.I())
+  ensures m'.I() == IOModel.SyncReqs3to2(m.I())
   {
-    ImplModelIO.reveal_SyncReqs3to2();
+    IOModel.reveal_SyncReqs3to2();
     var it := m.IterStart();
     var m0 := new MutableMap.ResizingHashMap(128);
     while !it.next.Done?
@@ -348,7 +348,7 @@ module ImplIO {
     invariant MutableMapModel.WFIter(m.I(), it)
     invariant m0.Inv()
     invariant m0.I().contents.Keys == it.s
-    invariant ImplModelIO.SyncReqs3to2(m.I()) == ImplModelIO.SyncReqs3to2Iterate(m.I(), it, m0.I())
+    invariant IOModel.SyncReqs3to2(m.I()) == IOModel.SyncReqs3to2Iterate(m.I(), it, m0.I())
 
     decreases it.decreaser
     {
@@ -368,11 +368,11 @@ module ImplIO {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelIO.writeResponse(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == IOModel.writeResponse(Ic(k), old(s.I()), IIO(io))
   {
     var id := io.getWriteResult();
     if (s.ready && s.outstandingIndirectionTableWrite == Some(id)) {
-      ImplModelIO.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
+      IOModel.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
 
       s.outstandingIndirectionTableWrite := None;
       s.persistentIndirectionTable := s.frozenIndirectionTable;
@@ -381,7 +381,7 @@ module ImplIO {
 
       s.blockAllocator.MoveFrozenToPersistent();
     } else if (s.ready && id in s.outstandingBlockWrites) {
-      ImplModelIO.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
+      IOModel.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
 
       s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64());
       s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);

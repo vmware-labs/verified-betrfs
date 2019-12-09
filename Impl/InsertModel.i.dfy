@@ -1,11 +1,11 @@
 include "CacheModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
-module ImplModelInsert { 
+module InsertModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
-  import opened ImplModelFlushPolicy
+  import opened IOModel
+  import opened CacheModel
+  import opened FlushPolicyModel
 
   import opened Options
   import opened Maps

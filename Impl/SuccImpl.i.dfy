@@ -13,8 +13,8 @@ module ImplSucc {
   import opened Impl
   import opened ImplSync
   import opened ImplIO
-  import ImplModelSucc
-  import ImplModelCache
+  import SuccModel
+  import CacheModel
   import opened ImplState
   import opened MutableBucket
   import opened Lexicographic_Byte_Order
@@ -63,9 +63,9 @@ module ImplSucc {
   decreases counter, 0
   ensures WellUpdated(s)
   ensures (s.I(), IIO(io), res)
-       == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()))
+       == SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()))
   {
-    ImplModelSucc.reveal_getPathInternal();
+    SuccModel.reveal_getPathInternal();
 
     var r := Pivots.ComputeRoute(node.pivotTable, key);
     var bucket := node.buckets[r];
@@ -108,13 +108,13 @@ module ImplSucc {
         res := None;
 
         assert (s.I(), IIO(io), res)
-         == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
+         == SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
       } else {
-        ImplModelCache.lemmaChildInGraph(Ic(k), s.I(), ref, node.I().children.value[r]);
+        CacheModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.I().children.value[r]);
         res := getPath(k, s, io, key, acc', start, upTo', maxToFind, node.children.value[r], counter - 1);
 
         assert (s.I(), IIO(io), res)
-         == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
+         == SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
       }
     } else {
       //assert old(MutBucket.ISeq(acc)) == MutBucket.ISeq(acc);
@@ -130,12 +130,12 @@ module ImplSucc {
       //assert res0
       //    == ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
 
-      //assert ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I())).2
+      //assert SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I())).2
       //    == Some(ModelBucketSuccessorLoop.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
       //    == res;
 
       assert (s.I(), IIO(io), res)
-       == ImplModelSucc.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
+       == SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
     }
   }
 
@@ -163,9 +163,9 @@ module ImplSucc {
   decreases counter, 1
   ensures WellUpdated(s)
   ensures (s.I(), IIO(io), res)
-       == ImplModelSucc.getPath(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter)
+       == SuccModel.getPath(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter)
   {
-    ImplModelSucc.reveal_getPath();
+    SuccModel.reveal_getPath();
 
     MutBucket.AllocatedReprSeq(acc);
 
@@ -203,9 +203,9 @@ module ImplSucc {
   modifies s.Repr()
 
   ensures WellUpdated(s)
-  ensures (s.I(), IIO(io), res) == ImplModelSucc.doSucc(Ic(k), old(s.I()), old(IIO(io)), start, maxToFind as int)
+  ensures (s.I(), IIO(io), res) == SuccModel.doSucc(Ic(k), old(s.I()), old(IIO(io)), start, maxToFind as int)
   {
-    ImplModelSucc.reveal_doSucc();
+    SuccModel.reveal_doSucc();
 
     if (!s.ready) {
       PageInIndirectionTableReq(k, s, io);

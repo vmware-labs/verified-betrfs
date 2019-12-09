@@ -15,9 +15,9 @@ module ImplSync {
   import opened ImplCache
   import opened ImplDealloc
   import opened Bounds
-  import ImplModelSync
-  import ImplModelCache
-  import ImplModelDealloc
+  import SyncModel
+  import CacheModel
+  import DeallocModel
   import BlockAllocatorModel
   import opened ImplState
 
@@ -38,10 +38,10 @@ module ImplSync {
   modifies s.Repr()
   ensures s.W()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelSync.AssignRefToLocEphemeral(Ic(k), old(s.I()), ref, loc)
+  ensures s.I() == SyncModel.AssignRefToLocEphemeral(Ic(k), old(s.I()), ref, loc)
   ensures s.ready
   {
-    ImplModelSync.reveal_AssignRefToLocEphemeral();
+    SyncModel.reveal_AssignRefToLocEphemeral();
 
     var table := s.ephemeralIndirectionTable;
     var added := table.AddLocIfPresent(ref, loc);
@@ -59,10 +59,10 @@ module ImplSync {
   modifies s.Repr()
   ensures s.W()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelSync.AssignRefToLocFrozen(Ic(k), old(s.I()), ref, loc)
+  ensures s.I() == SyncModel.AssignRefToLocFrozen(Ic(k), old(s.I()), ref, loc)
   ensures s.ready
   {
-    ImplModelSync.reveal_AssignRefToLocFrozen();
+    SyncModel.reveal_AssignRefToLocFrozen();
 
     if s.frozenIndirectionTable != null {
       var table := s.frozenIndirectionTable;
@@ -81,10 +81,10 @@ module ImplSync {
   modifies s.Repr()
   ensures s.W()
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelSync.AssignIdRefLocOutstanding(Ic(k), old(s.I()), id, ref, loc)
+  ensures s.I() == SyncModel.AssignIdRefLocOutstanding(Ic(k), old(s.I()), id, ref, loc)
   ensures s.ready
   {
-    ImplModelSync.reveal_AssignIdRefLocOutstanding();
+    SyncModel.reveal_AssignIdRefLocOutstanding();
 
     s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
     s.blockAllocator.MarkUsedOutstanding(loc.addr / BlockSizeUint64());
@@ -94,7 +94,7 @@ module ImplSync {
   requires s.WF()
   requires s.ready
   requires s.frozenIndirectionTable != null
-  ensures ref == ImplModelSync.FindRefInFrozenWithNoLoc(s.I())
+  ensures ref == SyncModel.FindRefInFrozenWithNoLoc(s.I())
   {
     assume false;
     var it := s.frozenIndirectionTable.t.IterStart();
@@ -125,10 +125,10 @@ module ImplSync {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), IIO(io)) == ImplModelSync.syncNotFrozen(Ic(k), old(s.I()), old(IIO(io)))
+  ensures (s.I(), IIO(io)) == SyncModel.syncNotFrozen(Ic(k), old(s.I()), old(IIO(io)))
   {
     var foundDeallocable := FindDeallocable(s);
-    ImplModelDealloc.FindDeallocableCorrect(s.I());
+    DeallocModel.FindDeallocableCorrect(s.I());
     if foundDeallocable.Some? {
       Dealloc(k, s, io, foundDeallocable.value);
       return;
@@ -153,7 +153,7 @@ module ImplSync {
   modifies io
   ensures WellUpdated(s)
   ensures s.ready
-  ensures ImplModelSync.TryToWriteBlock(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures SyncModel.TryToWriteBlock(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
     var nodeOpt := s.cache.GetOpt(ref);
     var node := nodeOpt.value;
@@ -171,8 +171,8 @@ module ImplSync {
       print "sync: giving up; write req failed\n";
     }
 
-    assert ImplModelIO.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
-    assert ImplModelSync.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
+    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
+    assert SyncModel.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
   }
 
   // TODO fix the name of this method
@@ -188,7 +188,7 @@ module ImplSync {
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures ImplModelSync.syncFoundInFrozen(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures SyncModel.syncFoundInFrozen(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
     assert ref in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
     assert ref !in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
@@ -211,9 +211,9 @@ module ImplSync {
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures ImplModelSync.sync(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures SyncModel.sync(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
-    ImplModelSync.reveal_sync();
+    SyncModel.reveal_sync();
     wait := false;
 
     if (!s.ready) {
@@ -233,7 +233,7 @@ module ImplSync {
       return;
     }
     var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-    ImplModelSync.FindRefInFrozenWithNoLocCorrect(s.I());
+    SyncModel.FindRefInFrozenWithNoLocCorrect(s.I());
 
     if foundInFrozen.Some? {
       syncFoundInFrozen(k, s, io, foundInFrozen.value);
@@ -258,9 +258,9 @@ module ImplSync {
 
   method freeId<A>(syncReqs: MutableMap.ResizingHashMap<A>) returns (id: uint64)
   requires syncReqs.Inv()
-  ensures id == ImplModelSync.freeId(syncReqs.I())
+  ensures id == SyncModel.freeId(syncReqs.I())
   {
-    ImplModelSync.reveal_freeId();
+    SyncModel.reveal_freeId();
     var maxId := syncReqs.MaxKey();
     if maxId == 0xffff_ffff_ffff_ffff {
       return 0;
@@ -274,7 +274,7 @@ module ImplSync {
   requires Inv(k, s)
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), id) == ImplModelSync.pushSync(Ic(k), old(s.I()))
+  ensures (s.I(), id) == SyncModel.pushSync(Ic(k), old(s.I()))
   {
     id := freeId(s.syncReqs);
     if id != 0 && s.syncReqs.Count < 0x2000_0000_0000_0000 {
@@ -294,7 +294,7 @@ module ImplSync {
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures ImplModelSync.popSync(Ic(k), old(s.I()), old(IIO(io)), id, s.I(), success, IIO(io))
+  ensures SyncModel.popSync(Ic(k), old(s.I()), old(IIO(io)), id, s.I(), success, IIO(io))
   {
     var g := s.syncReqs.Get(id);
     if (g.Some? && g.value == BC.State1) {

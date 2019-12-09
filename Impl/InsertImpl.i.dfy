@@ -14,7 +14,7 @@ module ImplInsert {
   import opened Impl
   import opened ImplIO
   import opened ImplCache
-  import opened ImplModelInsert
+  import opened InsertModel
   import opened ImplState
   import opened ImplFlushPolicy
   import opened MutableBucket
@@ -39,11 +39,11 @@ module ImplInsert {
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), success) == ImplModelInsert.InsertKeyValue(Ic(k), old(s.I()), key, value)
+  ensures (s.I(), success) == InsertModel.InsertKeyValue(Ic(k), old(s.I()), key, value)
   {
-    ImplModelInsert.reveal_InsertKeyValue();
+    InsertModel.reveal_InsertKeyValue();
 
-    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
 
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
@@ -70,9 +70,9 @@ module ImplInsert {
   modifies s.Repr()
   modifies io
   ensures WellUpdated(s)
-  ensures ImplModelInsert.insert(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), success, IIO(io))
+  ensures InsertModel.insert(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), success, IIO(io))
   {
-    ImplModelInsert.reveal_insert();
+    InsertModel.reveal_insert();
 
     if (!s.ready) {
       PageInIndirectionTableReq(k, s, io);

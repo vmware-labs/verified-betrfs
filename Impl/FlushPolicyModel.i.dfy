@@ -5,15 +5,15 @@ include "LeafModel.i.dfy"
 include "EvictModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
-module ImplModelFlushPolicy {
+module FlushPolicyModel {
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
-  import opened ImplModelFlush
-  import opened ImplModelGrow
-  import opened ImplModelSplit
-  import opened ImplModelLeaf
-  import opened ImplModelEvict
+  import opened IOModel
+  import opened CacheModel
+  import opened FlushModel
+  import opened GrowModel
+  import opened SplitModel
+  import opened LeafModel
+  import opened EvictModel
 
   import opened Sequences
 

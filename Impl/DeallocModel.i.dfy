@@ -1,9 +1,9 @@
 include "CacheModel.i.dfy"
 
-module ImplModelDealloc { 
+module DeallocModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
+  import opened IOModel
+  import opened CacheModel
   import opened Bounds
 
   import opened Options

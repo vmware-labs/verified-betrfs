@@ -3,10 +3,10 @@ include "IOModel.i.dfy"
 include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
 
-module ImplModelFlush { 
+module FlushModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
+  import opened IOModel
+  import opened CacheModel
   import KVListPartialFlush
 
   import opened Options

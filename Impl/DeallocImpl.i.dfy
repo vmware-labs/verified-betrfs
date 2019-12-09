@@ -5,7 +5,7 @@ module ImplDealloc {
   import opened Impl
   import opened ImplIO
   import opened ImplCache
-  import ImplModelDealloc
+  import DeallocModel
   import opened ImplState
   import opened Bounds
 
@@ -21,15 +21,15 @@ module ImplDealloc {
   method Dealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires Inv(k, s)
   requires io.initialized()
-  requires ImplModelDealloc.deallocable(s.I(), ref)
+  requires DeallocModel.deallocable(s.I(), ref)
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), IIO(io)) == ImplModelDealloc.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref);
+  ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref);
   {
-    ImplModelDealloc.reveal_Dealloc();
+    DeallocModel.reveal_Dealloc();
 
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
@@ -44,7 +44,7 @@ module ImplDealloc {
       return;
     }
 
-    ImplModelCache.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    CacheModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.RemoveRef(ref);
 
@@ -56,7 +56,7 @@ module ImplDealloc {
     }
 
     ghost var s1 := s.I();
-    ghost var s2 := ImplModelDealloc.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref).0;
+    ghost var s2 := DeallocModel.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref).0;
 
     //assert s1.persistentIndirectionTable == s2.persistentIndirectionTable;
     //assert s1.frozenIndirectionTable == s2.frozenIndirectionTable;
@@ -72,9 +72,9 @@ module ImplDealloc {
   method FindDeallocable(s: ImplVariables) returns (ref: Option<Reference>)
   requires s.WF()
   requires s.ready
-  ensures ref == ImplModelDealloc.FindDeallocable(s.I())
+  ensures ref == DeallocModel.FindDeallocable(s.I())
   {
-    ImplModelDealloc.reveal_FindDeallocable();
+    DeallocModel.reveal_FindDeallocable();
     ref := s.ephemeralIndirectionTable.FindDeallocable();
   }
 }

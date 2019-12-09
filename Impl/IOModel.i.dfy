@@ -9,7 +9,7 @@ include "ByteBetreeBlockCache.i.dfy"
 // Also, the code that reads in indirection tables and nodes.
 //
 
-module ImplModelIO { 
+module IOModel { 
   import opened StateModel
   import opened NativeTypes
   import opened Options

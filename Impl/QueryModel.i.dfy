@@ -6,10 +6,10 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplModelQuery { 
+module QueryModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
+  import opened IOModel
+  import opened CacheModel
 
   import opened Options
   import opened Maps

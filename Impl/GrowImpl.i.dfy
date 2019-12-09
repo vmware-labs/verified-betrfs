@@ -8,7 +8,7 @@ module ImplGrow {
   import opened ImplState
   import opened ImplNode
   import opened MutableBucket
-  import ImplModelGrow
+  import GrowModel
 
   import KVList
 
@@ -29,11 +29,11 @@ module ImplGrow {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures s.I() == ImplModelGrow.grow(Ic(k), old(s.I()))
+  ensures s.I() == GrowModel.grow(Ic(k), old(s.I()))
   {
-    ImplModelGrow.reveal_grow();
+    GrowModel.reveal_grow();
 
-    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
 
     assert s.blockAllocator.Repr <= s.Repr();
 
@@ -48,7 +48,7 @@ module ImplGrow {
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
 
-    ImplModelCache.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
+    CacheModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
     var newref := allocBookkeeping(k, s, oldroot.children);
 
     match newref {
@@ -74,7 +74,7 @@ module ImplGrow {
         s.cache.MoveAndReplace(BT.G.Root(), newref, newroot);
 
         ghost var a := s.I();
-        ghost var b := ImplModelGrow.grow(Ic(k), old(s.I()));
+        ghost var b := GrowModel.grow(Ic(k), old(s.I()));
         assert a.cache == b.cache;
         assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
         assert a.lru == b.lru;

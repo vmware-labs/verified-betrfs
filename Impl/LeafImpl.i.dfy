@@ -5,7 +5,7 @@ module ImplLeaf {
   import opened Impl
   import opened ImplIO
   import opened ImplCache
-  import opened ImplModelLeaf
+  import opened LeafModel
   import opened ImplState
   import opened ImplNode
   import opened MutableBucket
@@ -32,9 +32,9 @@ module ImplLeaf {
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)
-  ensures s.I() == ImplModelLeaf.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
+  ensures s.I() == LeafModel.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
   {
-    ImplModelLeaf.reveal_repivotLeaf();
+    LeafModel.reveal_repivotLeaf();
 
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
@@ -66,7 +66,7 @@ module ImplLeaf {
     assert s.W();
 
     ghost var a := s.I();
-    ghost var b := ImplModelLeaf.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
+    ghost var b := LeafModel.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
     assert newnode.I() == old(IM.Node(pivots, None, [
           SplitBucketLeft(node.I().buckets[0], pivot),
           SplitBucketRight(node.I().buckets[0], pivot)

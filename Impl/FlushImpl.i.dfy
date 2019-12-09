@@ -20,8 +20,8 @@ module ImplFlush {
 
   import opened NativeTypes
   import StateModel
-  import ImplModelCache
-  import ImplModelFlush
+  import CacheModel
+  import FlushModel
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)
@@ -44,7 +44,7 @@ module ImplFlush {
 
   ensures WellUpdated(s)
   ensures s.ready
-  ensures ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
+  ensures FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
   {
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
@@ -63,8 +63,8 @@ module ImplFlush {
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
-    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
-    ImplModelCache.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
+    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
+    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
 
     assert s.I().cache[parentref] == parent.I();
     assert parent.I().children == s.I().cache[parentref].children;
@@ -79,7 +79,7 @@ module ImplFlush {
     var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
-    ImplModelCache.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+    CacheModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
         Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
 
     var newchildref := allocBookkeeping(k, s, newchild.children);
@@ -123,7 +123,7 @@ module ImplFlush {
     //assert c2 == old(s.I()).cache
     //      [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))];
 
-    ghost var a := ImplModelFlush.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
+    ghost var a := FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
     ghost var b := s.I();
     assert a.cache
         /*== old(s.I()).cache

@@ -6,11 +6,11 @@ include "../lib/Base/Sets.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplModelSync { 
+module SyncModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
-  import opened ImplModelDealloc
+  import opened IOModel
+  import opened CacheModel
+  import opened DeallocModel
   import opened Bounds
 
   import IMM = ImplMarshallingModel
@@ -379,7 +379,7 @@ module ImplModelSync {
     ) else (
       var s' := s
           .(frozenIndirectionTable := Some(IndirectionTableModel.clone(s.ephemeralIndirectionTable)))
-          .(syncReqs := ImplModelIO.SyncReqs3to2(s.syncReqs))
+          .(syncReqs := IOModel.SyncReqs3to2(s.syncReqs))
           .(blockAllocator := BlockAllocatorModel.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
     )

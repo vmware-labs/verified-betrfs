@@ -20,11 +20,11 @@ module {:extern} MainImpl refines Main {
   import opened ImplQuery
   import opened ImplSync
   import opened ImplSucc
-  import ImplModelIO
-  import ImplModelInsert
-  import ImplModelQuery
-  import ImplModelSync
-  import ImplModelSucc
+  import IOModel
+  import InsertModel
+  import QueryModel
+  import SyncModel
+  import SuccModel
 
   import ADM = Impl.ImplADM
 
@@ -71,7 +71,7 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    ImplModelSync.pushSyncCorrect(IS.Ic(k), s.I());
+    SyncModel.pushSyncCorrect(IS.Ic(k), s.I());
     var id1 := pushSync(k, s);
     ioAndHsNotInReadSet(s, io, hs);
     id := id1;
@@ -87,7 +87,7 @@ module {:extern} MainImpl refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     var w, succ := popSync(k, s, io, id);
-    ImplModelSync.popSyncCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), id, s.I(), succ, IS.IIO(io));
+    SyncModel.popSyncCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), id, s.I(), succ, IS.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     success := succ;
     wait := w;
@@ -105,7 +105,7 @@ module {:extern} MainImpl refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     var value := query(k, s, io, key);
-    ImplModelQuery.queryCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key);
+    QueryModel.queryCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key);
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -122,7 +122,7 @@ module {:extern} MainImpl refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     var succ := insert(k, s, io, key, value);
-    ImplModelInsert.insertCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key, value, s.I(), succ, IS.IIO(io));
+    InsertModel.insertCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), key, value, s.I(), succ, IS.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -139,7 +139,7 @@ module {:extern} MainImpl refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     var value := doSucc(k, s, io, start, maxToFind);
-    ImplModelSucc.doSuccCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), start, maxToFind as int);
+    SuccModel.doSuccCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)), start, maxToFind as int);
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := 
       if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
@@ -156,7 +156,7 @@ module {:extern} MainImpl refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     ImplIO.readResponse(k, s, io);
-    ImplModelIO.readResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
+    IOModel.readResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -169,7 +169,7 @@ module {:extern} MainImpl refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     ImplIO.writeResponse(k, s, io);
-    ImplModelIO.writeResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
+    IOModel.writeResponseCorrect(IS.Ic(k), old(s.I()), old(IS.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));

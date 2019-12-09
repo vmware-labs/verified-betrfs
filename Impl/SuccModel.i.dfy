@@ -7,10 +7,10 @@ include "ModelBucketSuccessorLoop.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplModelSucc { 
+module SuccModel { 
   import opened StateModel
-  import opened ImplModelIO
-  import opened ImplModelCache
+  import opened IOModel
+  import opened CacheModel
 
   import opened Options
   import opened Maps
@@ -305,7 +305,7 @@ module ImplModelSucc {
   {
     reveal_doSucc();
     if (s.Unready?) {
-      ImplModelIO.PageInIndirectionTableReqCorrect(k, s, io);
+      IOModel.PageInIndirectionTableReqCorrect(k, s, io);
     } else {
       PBS.reveal_LookupUpperBound();
       var startKey := if start.NegativeInf? then [] else start.key;
