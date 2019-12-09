@@ -149,7 +149,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # verifies in dependency order.
 # This is currently Travis's favorite build rule.
 
-build/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
+build/%.okay: %.dfy | $$(@D)/.
 	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
 	touch $@
 
