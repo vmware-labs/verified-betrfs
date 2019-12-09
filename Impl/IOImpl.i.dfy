@@ -17,7 +17,7 @@ module ImplIO {
   import ImplModelIO
   import BucketsLib
   import LruModel
-  import MutableLru
+  import LruImpl
   import opened Bounds
   import opened IS = ImplState
   import MutableMapModel
@@ -209,7 +209,7 @@ module ImplIO {
         s.outstandingBlockWrites := map[];
         s.outstandingBlockReads := map[];
         s.cache := new MutCache();
-        s.lru := new MutableLru.MutableLruQueue();
+        s.lru := new LruImpl.LruImplQueue();
         s.blockAllocator := blockAllocator;
       } else {
         print "InitLocBitmap failed\n";

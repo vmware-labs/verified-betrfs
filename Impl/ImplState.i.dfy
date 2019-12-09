@@ -1,4 +1,5 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
+include "../lib/DataStructures/LruImpl.i.dfy"
 include "ModelState.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "BucketImpl.i.dfy"
@@ -30,7 +31,7 @@ module {:extern} ImplState {
   import D = AsyncSectorDisk
   import MainDiskIOHandler
   import LruModel
-  import MutableLru
+  import LruImpl
   import MutableBucket
   import opened Bounds
   import opened BucketsLib
@@ -117,7 +118,7 @@ module {:extern} ImplState {
     var outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>;
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
     var cache: MutCache;
-    var lru: MutableLru.MutableLruQueue;
+    var lru: LruImpl.LruImplQueue;
     var blockAllocator: BlockAllocatorImpl.BlockAllocator;
 
     // Unready
@@ -212,7 +213,7 @@ module {:extern} ImplState {
 
       // Unused for the `ready = false` state but we need to initialize them.
       // (could make them nullable instead).
-      lru := new MutableLru.MutableLruQueue();
+      lru := new LruImpl.LruImplQueue();
       ephemeralIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
       persistentIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
       frozenIndirectionTable := null;

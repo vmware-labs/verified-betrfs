@@ -2,7 +2,7 @@ include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
-include "../lib/DataStructures/LRU.i.dfy"
+include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
@@ -32,14 +32,14 @@ module IndirectionTableImpl {
   import Bitmap
   import opened Bounds
   import IndirectionTableModel
-  import MutableLru
+  import LruImpl
 
   type HashMap = MutableMap.ResizingHashMap<IndirectionTableModel.Entry>
 
   // TODO move bitmap in here?
   class IndirectionTable {
     var t: HashMap;
-    var garbageQueue: MutableLru.MutableLruQueue?;
+    var garbageQueue: LruImpl.LruImplQueue?;
     ghost var Repr: set<object>;
 
     lemma InvForMkfs()
@@ -215,7 +215,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
     }
 
-    static method PredInc(t: HashMap, q: MutableLru.MutableLruQueue, ref: BT.G.Reference)
+    static method PredInc(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -240,7 +240,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method PredDec(t: HashMap, q: MutableLru.MutableLruQueue, ref: BT.G.Reference)
+    static method PredDec(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -266,7 +266,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method UpdatePredCounts(t: HashMap, q: MutableLru.MutableLruQueue, ghost changingRef: BT.G.Reference,
+    static method UpdatePredCounts(t: HashMap, q: LruImpl.LruImplQueue, ghost changingRef: BT.G.Reference,
         newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
     requires t.Inv()
     requires q.Inv()
@@ -490,7 +490,7 @@ module IndirectionTableImpl {
     }
 
     static method MakeGarbageQueue(t: HashMap)
-    returns (q : MutableLru.MutableLruQueue)
+    returns (q : LruImpl.LruImplQueue)
     requires t.Inv()
     ensures q.Inv()
     ensures fresh(q.Repr)
@@ -498,7 +498,7 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_makeGarbageQueue();
 
-      q := new MutableLru.MutableLruQueue();
+      q := new LruImpl.LruImplQueue();
       var it := t.IterStart();
       while it.next.Next?
       invariant q.Inv()
