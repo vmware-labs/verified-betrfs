@@ -9,11 +9,11 @@ include "../lib/Base/Sets.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplSync { 
+module SyncImpl { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
-  import opened ImplDealloc
+  import opened IOImpl
+  import opened CacheImpl
+  import opened DeallocImpl
   import opened Bounds
   import SyncModel
   import CacheModel

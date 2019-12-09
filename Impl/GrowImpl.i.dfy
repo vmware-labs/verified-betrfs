@@ -1,10 +1,10 @@
 include "CacheImpl.i.dfy"
 include "GrowModel.i.dfy"
 
-module ImplGrow { 
+module GrowImpl { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
+  import opened IOImpl
+  import opened CacheImpl
   import opened StateImpl
   import opened ImplNode
   import opened MutableBucket

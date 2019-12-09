@@ -16,11 +16,11 @@ module {:extern} MainImpl refines Main {
   import opened Impl
   import SM = StateModel
   import SI = StateImpl
-  import ImplIO
-  import opened ImplInsert
-  import opened ImplQuery
-  import opened ImplSync
-  import opened ImplSucc
+  import IOImpl
+  import opened InsertImpl
+  import opened QueryImpl
+  import opened SyncImpl
+  import opened SuccImpl
   import IOModel
   import InsertModel
   import QueryModel
@@ -156,7 +156,7 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    ImplIO.readResponse(k, s, io);
+    IOImpl.readResponse(k, s, io);
     IOModel.readResponseCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
@@ -169,7 +169,7 @@ module {:extern} MainImpl refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    ImplIO.writeResponse(k, s, io);
+    IOImpl.writeResponse(k, s, io);
     IOModel.writeResponseCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;

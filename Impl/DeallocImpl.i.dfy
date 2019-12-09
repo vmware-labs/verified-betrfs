@@ -1,10 +1,10 @@
 include "CacheImpl.i.dfy"
 include "DeallocModel.i.dfy"
 
-module ImplDealloc { 
+module DeallocImpl { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
+  import opened IOImpl
+  import opened CacheImpl
   import DeallocModel
   import opened StateImpl
   import opened Bounds

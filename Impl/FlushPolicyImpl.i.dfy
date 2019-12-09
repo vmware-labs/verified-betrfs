@@ -5,15 +5,15 @@ include "LeafImpl.i.dfy"
 include "EvictImpl.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
-module ImplFlushPolicy {
+module FlushPolicyImpl {
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
-  import opened ImplFlush
-  import opened ImplGrow
-  import opened ImplSplit
-  import opened ImplLeaf
-  import opened ImplEvict
+  import opened IOImpl
+  import opened CacheImpl
+  import opened FlushImpl
+  import opened GrowImpl
+  import opened SplitImpl
+  import opened LeafImpl
+  import opened EvictImpl
   import FlushPolicyModel
   import opened StateImpl
   import opened MutableBucket

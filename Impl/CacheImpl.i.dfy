@@ -1,9 +1,9 @@
 include "IOImpl.i.dfy"
 include "CacheModel.i.dfy"
 
-module ImplCache { 
+module CacheImpl { 
   import opened Impl
-  import opened ImplIO
+  import opened IOImpl
   import opened StateImpl
   import CacheModel
   import LruModel

@@ -1,10 +1,10 @@
 include "CacheImpl.i.dfy"
 include "LeafModel.i.dfy"
 
-module ImplLeaf { 
+module LeafImpl { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
+  import opened IOImpl
+  import opened CacheImpl
   import opened LeafModel
   import opened StateImpl
   import opened ImplNode

@@ -9,10 +9,10 @@ include "ImplBucketSuccessorLoop.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplSucc { 
+module SuccImpl { 
   import opened Impl
-  import opened ImplSync
-  import opened ImplIO
+  import opened SyncImpl
+  import opened IOImpl
   import SuccModel
   import CacheModel
   import opened StateImpl

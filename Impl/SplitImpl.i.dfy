@@ -1,10 +1,10 @@
 include "CacheImpl.i.dfy"
 include "SplitModel.i.dfy"
 
-module ImplSplit { 
+module SplitImpl { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
+  import opened IOImpl
+  import opened CacheImpl
   import SplitModel
   import opened StateImpl
   import opened ImplNode

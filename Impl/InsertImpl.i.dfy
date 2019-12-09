@@ -10,13 +10,13 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 
 // See dependency graph in MainImpl.dfy
 
-module ImplInsert { 
+module InsertImpl { 
   import opened Impl
-  import opened ImplIO
-  import opened ImplCache
+  import opened IOImpl
+  import opened CacheImpl
   import opened InsertModel
   import opened StateImpl
-  import opened ImplFlushPolicy
+  import opened FlushPolicyImpl
   import opened MutableBucket
 
   import opened Options

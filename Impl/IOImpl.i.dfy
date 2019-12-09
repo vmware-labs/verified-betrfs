@@ -3,7 +3,7 @@ include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
 include "ImplMarshalling.i.dfy"
 
-module ImplIO { 
+module IOImpl { 
   import opened Impl
   import MainDiskIOHandler
   import opened NativeTypes

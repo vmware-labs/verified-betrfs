@@ -1,9 +1,9 @@
 include "CacheImpl.i.dfy"
 include "FlushModel.i.dfy"
 
-module ImplFlush { 
+module FlushImpl { 
   import opened Impl
-  import opened ImplCache
+  import opened CacheImpl
   import opened StateImpl
   import opened ImplNode
 
