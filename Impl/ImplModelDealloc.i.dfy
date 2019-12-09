@@ -32,7 +32,7 @@ module ImplModelDealloc {
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
     ) then (
       (s, io)
-    ) else if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) then (
+    ) else if BC.OutstandingRead(ref) in s.outstandingBlockReads.Values then (
       (s, io)
     ) else (
       var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
@@ -73,10 +73,12 @@ module ImplModelDealloc {
       return;
     }
 
-    if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) {
+    if BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
       assert noop(k, IVars(s), IVars(s'));
       return;
     }
+
+    assert BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref);
 
     lemmaIndirectionTableLocIndexValid(k, s, ref);
 

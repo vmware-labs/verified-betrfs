@@ -39,7 +39,7 @@ module ImplDealloc {
       }
     }
 
-    if !BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref) {
+    if BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
       print "giving up; dealloc can't dealloc because of outstanding read\n";
       return;
     }
