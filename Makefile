@@ -81,6 +81,9 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 .PHONY: faststatus
 syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
+.PHONY: verify-ordered
+verify-ordered: build/deps build/Impl/Bundle.i.okay
+
 ##############################################################################
 # C# executables
 
@@ -140,6 +143,15 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
 	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
+
+##############################################################################
+# .okay: Dafny file-level verification, no time limit,
+# verifies in dependency order.
+# This is currently Travis's favorite build rule.
+
+build/%.s.okay: $(ROOT)%.s.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 $(NOVERIFY) $<
+	touch $@
 
 ##############################################################################
 # .verified: Aggregate result of verification for this file and
