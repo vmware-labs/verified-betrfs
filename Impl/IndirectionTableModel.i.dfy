@@ -8,7 +8,7 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapModel.i.dfy"
 //
 // An IndirectionTable maps references to locations and tracks
 // dependencies (accounts for locations containing references).
@@ -36,7 +36,7 @@ module IndirectionTableModel {
   import MutableMapModel
   import LBAType
   import opened GenericMarshalling
-  import Bitmap
+  import BitmapModel
   import opened Bounds
   import SetBijectivity
 
@@ -1145,21 +1145,21 @@ module IndirectionTableModel {
     )
   }
 
-  predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
+  predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
   {
-    && 0 <= i < Bitmap.Len(bm)
-    && Bitmap.IsSet(bm, i)
+    && 0 <= i < BitmapModel.Len(bm)
+    && BitmapModel.IsSet(bm, i)
   }
 
   function InitLocBitmapIterate(indirectionTable: IndirectionTable,
       it: MutableMapModel.Iterator<Entry>,
-      bm: Bitmap.BitmapModel)
-  : (res : (bool, Bitmap.BitmapModel))
+      bm: BitmapModel.BitmapModelT)
+  : (res : (bool, BitmapModel.BitmapModelT))
   requires Inv(indirectionTable)
   requires MutableMapModel.WFIter(indirectionTable.t, it)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
-  requires Bitmap.Len(bm) == NumBlocks()
-  ensures Bitmap.Len(res.1) == NumBlocks()
+  requires BitmapModel.Len(bm) == NumBlocks()
+  ensures BitmapModel.Len(res.1) == NumBlocks()
   decreases it.decreaser
   {
     if it.next.Done? then (
@@ -1169,23 +1169,23 @@ module IndirectionTableModel {
 
       var loc: uint64 := it.next.value.loc.value.addr;
       var locIndex: uint64 := loc / BlockSize() as uint64;
-      if locIndex < NumBlocks() as uint64 && !Bitmap.IsSet(bm, locIndex as int) then (
+      if locIndex < NumBlocks() as uint64 && !BitmapModel.IsSet(bm, locIndex as int) then (
         InitLocBitmapIterate(indirectionTable,
             MutableMapModel.IterInc(indirectionTable.t, it),
-            Bitmap.BitSet(bm, locIndex as int))
+            BitmapModel.BitSet(bm, locIndex as int))
       ) else (
         (false, bm)
       )
     )
   }
 
-  function {:opaque} InitLocBitmap(indirectionTable: IndirectionTable) : (res : (bool, Bitmap.BitmapModel))
+  function {:opaque} InitLocBitmap(indirectionTable: IndirectionTable) : (res : (bool, BitmapModel.BitmapModelT))
   requires Inv(indirectionTable)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
-  ensures Bitmap.Len(res.1) == NumBlocks()
+  ensures BitmapModel.Len(res.1) == NumBlocks()
   {
-    var bm := Bitmap.EmptyBitmap(NumBlocks());
-    var bm' := Bitmap.BitSet(bm, 0);
+    var bm := BitmapModel.EmptyBitmap(NumBlocks());
+    var bm' := BitmapModel.BitSet(bm, 0);
     InitLocBitmapIterate(indirectionTable,
         MutableMapModel.IterStart(indirectionTable.t),
         bm')
@@ -1202,7 +1202,7 @@ module IndirectionTableModel {
 
   lemma InitLocBitmapIterateCorrect(indirectionTable: IndirectionTable,
       it: MutableMapModel.Iterator<Entry>,
-      bm: Bitmap.BitmapModel)
+      bm: BitmapModel.BitmapModelT)
   requires Inv(indirectionTable)
   requires InitLocBitmapIterate.requires(indirectionTable, it, bm);
   requires (forall i: int ::
@@ -1222,8 +1222,8 @@ module IndirectionTableModel {
     )
   decreases it.decreaser
   {
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
 
     var (succ, bm') := InitLocBitmapIterate(indirectionTable, it, bm);
     if it.next.Done? {
@@ -1249,9 +1249,9 @@ module IndirectionTableModel {
         assert locIndex as int * BlockSize() == loc as int;
 
         //assert locIndex < NumBlocks() as uint64;
-        //assert !Bitmap.IsSet(bm, locIndex as int);
+        //assert !BitmapModel.IsSet(bm, locIndex as int);
 
-        var bm0 := Bitmap.BitSet(bm, locIndex as int);
+        var bm0 := BitmapModel.BitSet(bm, locIndex as int);
         var it0 := MutableMapModel.IterInc(indirectionTable.t, it);
 
         forall i: int
@@ -1307,15 +1307,15 @@ module IndirectionTableModel {
                 var j2 := LBAType.ValidAddrDivisor(I(indirectionTable).locs[r2].addr);
                 if r1 !in it.s {
                   assert r2 in it.s;
-                  assert !Bitmap.IsSet(bm, j1);
+                  assert !BitmapModel.IsSet(bm, j1);
                   assert IsLocAllocBitmap(bm, j2);
-                  assert Bitmap.IsSet(bm, j2);
+                  assert BitmapModel.IsSet(bm, j2);
                   assert false;
                 } else {
                   assert r1 in it.s;
-                  assert !Bitmap.IsSet(bm, j2);
+                  assert !BitmapModel.IsSet(bm, j2);
                   assert IsLocAllocBitmap(bm, j1);
-                  assert Bitmap.IsSet(bm, j1);
+                  assert BitmapModel.IsSet(bm, j1);
                   assert false;
                 }
               } else {
@@ -1343,13 +1343,13 @@ module IndirectionTableModel {
     )
   {
     reveal_InitLocBitmap();
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
 
     var it := MutableMapModel.IterStart(indirectionTable.t);
 
-    var bm := Bitmap.EmptyBitmap(NumBlocks());
-    var bm' := Bitmap.BitSet(bm, 0);
+    var bm := BitmapModel.EmptyBitmap(NumBlocks());
+    var bm' := BitmapModel.BitSet(bm, 0);
 
     /*forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     ensures IsLocAllocBitmap(bm', i)
@@ -1361,8 +1361,8 @@ module IndirectionTableModel {
     ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     {
       if i != 0 {
-        assert Bitmap.IsSet(bm', i)
-            == Bitmap.IsSet(bm, i)
+        assert BitmapModel.IsSet(bm', i)
+            == BitmapModel.IsSet(bm, i)
             == false;
       }
       assert i == 0;

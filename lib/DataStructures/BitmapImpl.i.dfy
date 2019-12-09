@@ -1,109 +1,15 @@
-include "../Base/NativeTypes.s.dfy"
-include "../Base/Option.s.dfy"
-include "../Base/BitsetLemmas.i.dfy"
-include "../Base/NativeArrays.s.dfy"
+include "BitmapModel.i.dfy"
 //
-// A module that maintains a compact set of integers using a packed-uint64
-// bitmap representation.
-//
-// TODO(thance): This module has both the Model (BytemapModel) and the
-// Impl (class Bitmap) that implements it efficiently.
+// Maintains a compact set of integers using a packed-uint64 bitmap
+// representation.
 //
 
-module Bitmap {
+module BitmapImpl {
   import opened NativeTypes
   import opened Options
+  import opened BitmapModel
   import NativeArrays
   import BitsetLemmas
-
-  type BitmapModel = seq<bool>
-
-  function Len(bm: BitmapModel) : int
-  {
-    |bm|
-  }
-
-  function {:opaque} BitSet(bm: BitmapModel, i: int) : (bm' : BitmapModel)
-  requires 0 <= i < Len(bm)
-  ensures Len(bm') == Len(bm)
-  {
-    bm[i := true]
-  }
-
-  function {:opaque} BitUnset(bm: BitmapModel, i: int) : (bm' : BitmapModel)
-  requires 0 <= i < Len(bm)
-  ensures Len(bm') == Len(bm)
-  {
-    bm[i := false]
-  }
-
-  predicate {:opaque} IsSet(bm: BitmapModel, i: int)
-  requires 0 <= i < Len(bm)
-  {
-    bm[i]
-  }
-
-  function {:opaque} EmptyBitmap(n: int) : (bm : BitmapModel)
-  requires n >= 0
-  ensures Len(bm) == n
-  ensures forall i | 0 <= i < Len(bm) :: !IsSet(bm, i)
-  {
-    if n == 0 then [] else (
-      var bm := EmptyBitmap(n-1) + [false];
-
-      reveal_IsSet();
-      assert forall i | 0 <= i < n - 1 :: !IsSet(EmptyBitmap(n-1), i);
-      assert forall i | 0 <= i < n - 1 :: bm[i] == IsSet(bm, i);
-      assert forall i | 0 <= i < n - 1 :: EmptyBitmap(n-1)[i] == IsSet(EmptyBitmap(n-1), i);
-      assert forall i | 0 <= i < n - 1 :: bm[i] == EmptyBitmap(n-1)[i];
-      assert forall i | 0 <= i < n - 1 :: !IsSet(bm, i);
-      assert !IsSet(bm, n - 1);
-      assert forall i | 0 <= i < n :: !IsSet(bm, i);
-
-      bm
-    )
-  }
-
-  function BitAllocIter(bm: BitmapModel, i: int) : (res: Option<int>)
-  requires 0 <= i <= |bm|
-  decreases |bm| - i
-  ensures res.Some? ==> 0 <= res.value < |bm|
-  {
-    if i == |bm| then (
-      (None)
-    ) else if !bm[i] then (
-      Some(i)
-    ) else (
-      BitAllocIter(bm, i+1)
-    ) 
-  }
-
-  function {:opaque} BitAlloc(bm: BitmapModel) : (res: Option<int>)
-  ensures res.Some? ==> 0 <= res.value < Len(bm)
-  {
-    BitAllocIter(bm, 0)
-  }
-
-  function {:opaque} BitUnion(a: BitmapModel, b: BitmapModel) : (res: BitmapModel)
-  requires Len(a) == Len(b)
-  ensures Len(res) == Len(a)
-  ensures forall i | 0 <= i < Len(res) :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i))
-  {
-    reveal_IsSet();
-    if |a| == 0 then [] else (
-      var res := BitUnion(a[..|a|-1], b[..|b|-1]) + [a[|a|-1] || b[|b|-1]];
-      assert IsSet(res, |a|-1) == (IsSet(a, |a|-1) || IsSet(b, |a|-1));
-      assert forall i | 0 <= i < Len(res)-1 :: IsSet(a, i) == IsSet(a[..|a|-1], i);
-      assert forall i | 0 <= i < Len(res)-1 :: IsSet(b, i) == IsSet(b[..|a|-1], i);
-      assert forall i | 0 <= i < Len(res)-1 :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i));
-      assert forall i | 0 <= i < Len(res) :: IsSet(res, i) == (IsSet(a, i) || IsSet(b, i));
-      res
-    )
-  }
-
-  lemma LemmaBitAllocResult(bm: BitmapModel)
-  ensures var i := BitAlloc(bm);
-    && (i.Some? ==> (!IsSet(bm, i.value)))
 
   class Bitmap {
     var bits: array<uint64>;
@@ -156,7 +62,7 @@ module Bitmap {
       && ReprInv()
     }
 
-    static function {:opaque} IPrefix(bits: seq<uint64>, i: int) : (res : BitmapModel)
+    static function {:opaque} IPrefix(bits: seq<uint64>, i: int) : (res : BitmapModelT)
     requires 0 <= i <= 64 * |bits|
     ensures |res| == i
     ensures forall j | 0 <= j < i :: res[j] == BitsSetAtC(bits, j)
@@ -164,7 +70,7 @@ module Bitmap {
       if i == 0 then [] else IPrefix(bits, i-1) + [BitsSetAtC(bits, i-1)]
     }
 
-    protected function I() : BitmapModel
+    protected function I() : BitmapModelT
     reads this, this.Repr
     requires Inv()
     {

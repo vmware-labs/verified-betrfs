@@ -7,7 +7,7 @@ include "../lib/DataStructures/tttree.i.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapModel.i.dfy"
 include "BlockAllocatorModel.i.dfy"
 include "IndirectionTableModel.i.dfy"
 //
@@ -37,7 +37,7 @@ module ImplModel {
   import opened BucketWeights
   import opened Bounds
   import LruModel
-  import Bitmap
+  import BitmapModel
   import UI
   import MutableMapModel
   import BlockAllocatorModel
@@ -87,7 +87,7 @@ module ImplModel {
     !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * BlockSize() as int)
   }
 
-  predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
+  predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
   {
     IndirectionTableModel.IsLocAllocBitmap(bm, i)
   }

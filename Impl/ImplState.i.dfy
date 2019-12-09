@@ -16,7 +16,7 @@ module {:extern} ImplState {
   import opened ImplNode
   import opened ImplMutCache
   import BlockAllocatorImpl
-  import Bitmap
+  import BitmapImpl
   import IndirectionTableImpl
   import IndirectionTableModel
   import MutableMap
@@ -219,7 +219,7 @@ module {:extern} ImplState {
       frozenIndirectionTable := null;
       cache := new MutCache();
 
-      var bm := new Bitmap.Bitmap(NumBlocksUint64());
+      var bm := new BitmapImpl.Bitmap(NumBlocksUint64());
       blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
     }
   }

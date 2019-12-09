@@ -275,8 +275,8 @@ module ImplModelCache {
           BC.ValidLocationForNode(loc))
   {
     reveal_ConsistentBitmap();
-    Bitmap.reveal_IsSet();
-    Bitmap.reveal_BitUnset();
+    BitmapModel.reveal_IsSet();
+    BitmapModel.reveal_BitUnset();
     lemmaIndirectionTableLocIndexValid(k, s, ref);
 
     forall r1, r2 | r1 in IIndirectionTable(s'.ephemeralIndirectionTable).locs && r2 in IIndirectionTable(s'.ephemeralIndirectionTable).locs
@@ -371,20 +371,20 @@ module ImplModelCache {
 
     if j.Some? {
       forall i | 0 <= i < NumBlocks()
-      ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
-        || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
-        || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
-        || Bitmap.IsSet(s'.blockAllocator.persistent, i)
-        || Bitmap.IsSet(s'.blockAllocator.full, i)
+      ensures BitmapModel.IsSet(s'.blockAllocator.full, i) == (
+        || BitmapModel.IsSet(s'.blockAllocator.ephemeral, i)
+        || (s'.blockAllocator.frozen.Some? && BitmapModel.IsSet(s'.blockAllocator.frozen.value, i))
+        || BitmapModel.IsSet(s'.blockAllocator.persistent, i)
+        || BitmapModel.IsSet(s'.blockAllocator.full, i)
       )
       {
         if i == j.value {
         } else {
-          assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
-          assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
-          assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
-          assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
-          assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
+          assert BitmapModel.IsSet(s'.blockAllocator.full, i) == BitmapModel.IsSet(s.blockAllocator.full, i);
+          assert BitmapModel.IsSet(s'.blockAllocator.ephemeral, i) == BitmapModel.IsSet(s.blockAllocator.ephemeral, i);
+          assert s'.blockAllocator.frozen.Some? ==> BitmapModel.IsSet(s'.blockAllocator.frozen.value, i) == BitmapModel.IsSet(s.blockAllocator.frozen.value, i);
+          assert BitmapModel.IsSet(s'.blockAllocator.persistent, i) == BitmapModel.IsSet(s.blockAllocator.persistent, i);
+          assert BitmapModel.IsSet(s'.blockAllocator.outstanding, i) == BitmapModel.IsSet(s.blockAllocator.outstanding, i);
         }
       }
     } else {

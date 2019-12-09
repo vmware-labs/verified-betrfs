@@ -1,22 +1,24 @@
 include "BlockAllocatorModel.i.dfy"
+include "../lib/DataStructures/BitmapImpl.i.dfy"
 //
 // A BlockAllocator tracks which blocks are allocated, to safely allocate
 // blocks unused by any view.
 //
 
 module BlockAllocatorImpl {
-  import Bitmap
+  import BitmapModel
+  import BitmapImpl
   import opened Bounds
   import opened Options
   import BlockAllocatorModel
   import opened NativeTypes
 
   class BlockAllocator {
-    var ephemeral: Bitmap.Bitmap;
-    var frozen: Bitmap.Bitmap?;
-    var persistent: Bitmap.Bitmap;
-    var outstanding: Bitmap.Bitmap;
-    var full: Bitmap.Bitmap;
+    var ephemeral: BitmapImpl.Bitmap;
+    var frozen: BitmapImpl.Bitmap?;
+    var persistent: BitmapImpl.Bitmap;
+    var outstanding: BitmapImpl.Bitmap;
+    var full: BitmapImpl.Bitmap;
 
     ghost var Repr: set<object>
 
@@ -38,11 +40,11 @@ module BlockAllocatorImpl {
       && persistent.Inv()
       && outstanding.Inv()
       && full.Inv()
-      && Bitmap.Len(ephemeral.I()) == NumBlocks()
-      && (frozen != null ==> Bitmap.Len(frozen.I()) == NumBlocks())
-      && Bitmap.Len(persistent.I()) == NumBlocks()
-      && Bitmap.Len(outstanding.I()) == NumBlocks()
-      && Bitmap.Len(full.I()) == NumBlocks()
+      && BitmapModel.Len(ephemeral.I()) == NumBlocks()
+      && (frozen != null ==> BitmapModel.Len(frozen.I()) == NumBlocks())
+      && BitmapModel.Len(persistent.I()) == NumBlocks()
+      && BitmapModel.Len(outstanding.I()) == NumBlocks()
+      && BitmapModel.Len(full.I()) == NumBlocks()
     }
 
     protected function I() : BlockAllocatorModel.BlockAllocatorModel
@@ -56,18 +58,18 @@ module BlockAllocatorImpl {
           full.I())
     }
 
-    constructor(bm: Bitmap.Bitmap)
+    constructor(bm: BitmapImpl.Bitmap)
     requires bm.Inv()
-    requires Bitmap.Len(bm.I()) == NumBlocks()
+    requires BitmapModel.Len(bm.I()) == NumBlocks()
     ensures Inv()
     ensures forall o | o in Repr :: fresh(o) || o in bm.Repr
     ensures I() == BlockAllocatorModel.InitBlockAllocator(bm.I())
     {
       ephemeral := bm;
       frozen := null;
-      persistent := new Bitmap.Bitmap.Clone(bm);
-      outstanding := new Bitmap.Bitmap(NumBlocksUint64());
-      full := new Bitmap.Bitmap.Clone(bm);
+      persistent := new BitmapImpl.Bitmap.Clone(bm);
+      outstanding := new BitmapImpl.Bitmap(NumBlocksUint64());
+      full := new BitmapImpl.Bitmap.Clone(bm);
 
       new;
 
@@ -147,8 +149,8 @@ module BlockAllocatorImpl {
         }
       }
 
-      Bitmap.reveal_BitUnset();
-      Bitmap.reveal_IsSet();
+      BitmapModel.reveal_BitUnset();
+      BitmapModel.reveal_IsSet();
 
       assert Inv();
     }
@@ -178,10 +180,10 @@ module BlockAllocatorImpl {
         }
       }
 
-      Bitmap.reveal_BitUnset();
-      Bitmap.reveal_IsSet();
+      BitmapModel.reveal_BitUnset();
+      BitmapModel.reveal_IsSet();
 
-      assert forall j | 0 <= j < |ephemeral.I()| :: j != i as int ==> Bitmap.IsSet(ephemeral.I(), j) == Bitmap.IsSet(old(ephemeral.I()), j);
+      assert forall j | 0 <= j < |ephemeral.I()| :: j != i as int ==> BitmapModel.IsSet(ephemeral.I(), j) == BitmapModel.IsSet(old(ephemeral.I()), j);
 
       assert Inv();
     }
@@ -197,7 +199,7 @@ module BlockAllocatorImpl {
     {
       persistent := frozen;
       frozen := null;
-      full := new Bitmap.Bitmap.Union(ephemeral, persistent);
+      full := new BitmapImpl.Bitmap.Union(ephemeral, persistent);
 
       Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
     }
@@ -210,7 +212,7 @@ module BlockAllocatorImpl {
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     ensures I() == BlockAllocatorModel.CopyEphemeralToFrozen(old(I()))
     {
-      frozen := new Bitmap.Bitmap.Clone(ephemeral);
+      frozen := new BitmapImpl.Bitmap.Clone(ephemeral);
 
       Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
     }

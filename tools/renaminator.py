@@ -93,6 +93,6 @@ def rename(sourceName, destName):
 #AsyncDiskModel.s.dfy
 #""")
 
-rename("LRU.i.dfy", "LruModel.i.dfy")
+rename("Bitmap.i.dfy", "BitmapModel.i.dfy")
 
 renaminator.enact()

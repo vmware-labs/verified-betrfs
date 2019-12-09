@@ -1,4 +1,4 @@
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 //
 // A BlockAllocator tracks which blocks are allocated, to safely allocate
@@ -6,37 +6,37 @@ include "../PivotBetree/Bounds.i.dfy"
 //
 
 module BlockAllocatorModel {
-  import Bitmap
+  import BitmapModel
   import opened Bounds
   import opened Options
 
   datatype BlockAllocatorModel = BlockAllocatorModel(
-        ephemeral: Bitmap.BitmapModel,
-        frozen: Option<Bitmap.BitmapModel>,
-        persistent: Bitmap.BitmapModel,
-        outstanding: Bitmap.BitmapModel,
-        full: Bitmap.BitmapModel
+        ephemeral: BitmapModel.BitmapModelT,
+        frozen: Option<BitmapModel.BitmapModelT>,
+        persistent: BitmapModel.BitmapModelT,
+        outstanding: BitmapModel.BitmapModelT,
+        full: BitmapModel.BitmapModelT
       )
 
   predicate Inv(bam: BlockAllocatorModel) {
-    && Bitmap.Len(bam.ephemeral) == NumBlocks()
-    && (bam.frozen.Some? ==> Bitmap.Len(bam.frozen.value) == NumBlocks())
-    && Bitmap.Len(bam.persistent) == NumBlocks()
-    && Bitmap.Len(bam.outstanding) == NumBlocks()
+    && BitmapModel.Len(bam.ephemeral) == NumBlocks()
+    && (bam.frozen.Some? ==> BitmapModel.Len(bam.frozen.value) == NumBlocks())
+    && BitmapModel.Len(bam.persistent) == NumBlocks()
+    && BitmapModel.Len(bam.outstanding) == NumBlocks()
 
-    && Bitmap.Len(bam.full) == NumBlocks()
+    && BitmapModel.Len(bam.full) == NumBlocks()
     && (forall i | 0 <= i < NumBlocks() ::
-        Bitmap.IsSet(bam.full, i) == (
-          || Bitmap.IsSet(bam.ephemeral, i)
-          || (bam.frozen.Some? && Bitmap.IsSet(bam.frozen.value, i))
-          || Bitmap.IsSet(bam.persistent, i)
-          || Bitmap.IsSet(bam.full, i)
+        BitmapModel.IsSet(bam.full, i) == (
+          || BitmapModel.IsSet(bam.ephemeral, i)
+          || (bam.frozen.Some? && BitmapModel.IsSet(bam.frozen.value, i))
+          || BitmapModel.IsSet(bam.persistent, i)
+          || BitmapModel.IsSet(bam.full, i)
         ))
   }
 
   function Alloc(bam: BlockAllocatorModel) : (res: Option<int>)
   {
-    Bitmap.BitAlloc(bam.full)
+    BitmapModel.BitAlloc(bam.full)
   }
 
   function MarkUsedEphemeral(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
@@ -45,12 +45,12 @@ module BlockAllocatorModel {
   ensures Inv(bam')
   {
     var bam' := bam
-      .(ephemeral := Bitmap.BitSet(bam.ephemeral, i))
-      .(full := Bitmap.BitSet(bam.full, i));
+      .(ephemeral := BitmapModel.BitSet(bam.ephemeral, i))
+      .(full := BitmapModel.BitSet(bam.full, i));
 
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
-    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> Bitmap.IsSet(bam'.ephemeral, j) == Bitmap.IsSet(bam.ephemeral, j);
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> BitmapModel.IsSet(bam'.ephemeral, j) == BitmapModel.IsSet(bam.ephemeral, j);
 
     bam'
   }
@@ -62,12 +62,12 @@ module BlockAllocatorModel {
   ensures Inv(bam')
   {
     var bam' := bam
-      .(frozen := Some(Bitmap.BitSet(bam.frozen.value, i)))
-      .(full := Bitmap.BitSet(bam.full, i));
+      .(frozen := Some(BitmapModel.BitSet(bam.frozen.value, i)))
+      .(full := BitmapModel.BitSet(bam.full, i));
 
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
-    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> Bitmap.IsSet(bam'.ephemeral, j) == Bitmap.IsSet(bam.ephemeral, j);
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> BitmapModel.IsSet(bam'.ephemeral, j) == BitmapModel.IsSet(bam.ephemeral, j);
 
     bam'
   }
@@ -78,19 +78,19 @@ module BlockAllocatorModel {
   ensures Inv(bam')
   {
     var bam' := bam
-      .(outstanding := Bitmap.BitSet(bam.outstanding, i))
-      .(full := Bitmap.BitSet(bam.full, i));
+      .(outstanding := BitmapModel.BitSet(bam.outstanding, i))
+      .(full := BitmapModel.BitSet(bam.full, i));
 
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
-    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> Bitmap.IsSet(bam'.ephemeral, j) == Bitmap.IsSet(bam.ephemeral, j);
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+    assert forall j | 0 <= j < |bam.ephemeral| :: j != i ==> BitmapModel.IsSet(bam'.ephemeral, j) == BitmapModel.IsSet(bam.ephemeral, j);
 
     bam'
   }
 
-  function InitBlockAllocator(bm: Bitmap.BitmapModel) : BlockAllocatorModel
+  function InitBlockAllocator(bm: BitmapModel.BitmapModelT) : BlockAllocatorModel
   {
-    var empty := Bitmap.EmptyBitmap(NumBlocks());
+    var empty := BitmapModel.EmptyBitmap(NumBlocks());
     BlockAllocatorModel(bm, None, bm, empty, bm)
   }
 
@@ -98,14 +98,14 @@ module BlockAllocatorModel {
   requires Inv(bam)
   requires 0 <= i < NumBlocks()
   {
-    bam.(outstanding := Bitmap.BitUnset(bam.outstanding, i))
+    bam.(outstanding := BitmapModel.BitUnset(bam.outstanding, i))
        .(full :=
         if
-          && !Bitmap.IsSet(bam.ephemeral, i)
-          && !Bitmap.IsSet(bam.persistent, i)
-          && (bam.frozen.None? || !Bitmap.IsSet(bam.frozen.value, i))
+          && !BitmapModel.IsSet(bam.ephemeral, i)
+          && !BitmapModel.IsSet(bam.persistent, i)
+          && (bam.frozen.None? || !BitmapModel.IsSet(bam.frozen.value, i))
         then
-          Bitmap.BitUnset(bam.full, i)
+          BitmapModel.BitUnset(bam.full, i)
         else
           bam.full)
   }
@@ -114,14 +114,14 @@ module BlockAllocatorModel {
   requires Inv(bam)
   requires 0 <= i < NumBlocks()
   {
-    bam.(ephemeral := Bitmap.BitUnset(bam.ephemeral, i))
+    bam.(ephemeral := BitmapModel.BitUnset(bam.ephemeral, i))
        .(full :=
         if
-          && !Bitmap.IsSet(bam.outstanding, i)
-          && !Bitmap.IsSet(bam.persistent, i)
-          && (bam.frozen.None? || !Bitmap.IsSet(bam.frozen.value, i))
+          && !BitmapModel.IsSet(bam.outstanding, i)
+          && !BitmapModel.IsSet(bam.persistent, i)
+          && (bam.frozen.None? || !BitmapModel.IsSet(bam.frozen.value, i))
         then
-          Bitmap.BitUnset(bam.full, i)
+          BitmapModel.BitUnset(bam.full, i)
         else
           bam.full)
   }
@@ -135,7 +135,7 @@ module BlockAllocatorModel {
       None,
       bam.frozen.value,
       bam.outstanding,
-      Bitmap.BitUnion(bam.ephemeral, bam.frozen.value)
+      BitmapModel.BitUnion(bam.ephemeral, bam.frozen.value)
     )
   }
 
@@ -156,8 +156,8 @@ module BlockAllocatorModel {
   lemma LemmaAllocResult(bam: BlockAllocatorModel)
   requires Inv(bam)
   ensures var res := Alloc(bam);
-    && (res.Some? ==> !Bitmap.IsSet(bam.ephemeral, res.value))
-    && (res.Some? && bam.frozen.Some? ==> !Bitmap.IsSet(bam.frozen.value, res.value))
-    && (res.Some? ==> !Bitmap.IsSet(bam.persistent, res.value))
-    && (res.Some? ==> !Bitmap.IsSet(bam.outstanding, res.value))
+    && (res.Some? ==> !BitmapModel.IsSet(bam.ephemeral, res.value))
+    && (res.Some? && bam.frozen.Some? ==> !BitmapModel.IsSet(bam.frozen.value, res.value))
+    && (res.Some? ==> !BitmapModel.IsSet(bam.persistent, res.value))
+    && (res.Some? ==> !BitmapModel.IsSet(bam.outstanding, res.value))
 }

@@ -9,7 +9,7 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "IndirectionTableModel.i.dfy"
 //
@@ -30,7 +30,8 @@ module IndirectionTableImpl {
   import MutableMap
   import LBAType
   import opened GenericMarshalling
-  import Bitmap
+  import BitmapModel
+  import BitmapImpl
   import opened Bounds
   import IndirectionTableModel
   import LruImpl
@@ -692,7 +693,7 @@ module IndirectionTableImpl {
     // To bitmap
 
     method InitLocBitmap()
-    returns (success: bool, bm: Bitmap.Bitmap)
+    returns (success: bool, bm: BitmapImpl.Bitmap)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
     ensures bm.Inv()
@@ -701,7 +702,7 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_InitLocBitmap();
 
-      bm := new Bitmap.Bitmap(NumBlocksUint64());
+      bm := new BitmapImpl.Bitmap(NumBlocksUint64());
       bm.Set(0);
       var it := t.IterStart();
       while it.next.Next?
@@ -709,7 +710,7 @@ module IndirectionTableImpl {
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant bm.Inv()
       invariant MutableMapModel.WFIter(t.I(), it)
-      invariant Bitmap.Len(bm.I()) == NumBlocks()
+      invariant BitmapModel.Len(bm.I()) == NumBlocks()
       invariant IndirectionTableModel.InitLocBitmapIterate(I(), it, bm.I())
              == IndirectionTableModel.InitLocBitmap(I())
       invariant fresh(bm.Repr)

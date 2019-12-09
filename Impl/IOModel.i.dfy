@@ -721,8 +721,8 @@ module ImplModelIO {
       LBAType.reveal_ValidAddr();
       assert locIdx * BlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
 
-      Bitmap.reveal_BitUnset();
-      Bitmap.reveal_IsSet();
+      BitmapModel.reveal_BitUnset();
+      BitmapModel.reveal_IsSet();
 
       /*forall i | 0 <= i < NumBlocks()
       ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
