@@ -202,7 +202,6 @@ module IndirectionTableModel {
     && (!added ==> self'.locs == self.locs)
     && (TrackingGarbage(self) ==> TrackingGarbage(self'))
   {
-    assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8;
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var added := oldEntry.Some? && oldEntry.value.loc.None?;
     var t := (if added then
@@ -895,6 +894,47 @@ module IndirectionTableModel {
     LemmaComputeRefCountsEntryIterateGraphClosed(t, copy, it, 0);
   }
 
+  lemma PredecessorSetRestrictedSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+      dest: BT.G.Reference, domain: set<BT.G.Reference>)
+  requires |graph| <= MaxSize()
+  requires forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren()
+  ensures |PredecessorSetRestricted(graph, dest, domain)| <= MaxSize() * MaxNumChildren()
+  {
+    var s1 := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src in domain :: PredecessorEdge(src, idx);
+    var s2 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: PredecessorEdge(src, idx);
+    var s3 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: (src, idx);
+
+    assert s1 <= s2;
+    SetInclusionImpliesSmallerCardinality(s1, s2);
+    assert |s1| <= |s2|;
+
+    var relation := iset t : (PredecessorEdge, (BT.G.Reference, int)) | t.0.src == t.1.0 && t.0.idx == t.1.1;
+    forall a | a in s2 ensures exists b :: b in s3 && (a, b) in relation
+    {
+      var b := (a.src, a.idx);
+      assert b in s3;
+    }
+    forall b | b in s3 ensures exists a :: a in s2 && (a, b) in relation
+    {
+      var a := PredecessorEdge(b.0, b.1);
+      assert a in s2;
+    }
+    SetBijectivity.BijectivityImpliesEqualCardinality(s2, s3, relation);
+    assert |s2| == |s3|;
+
+    var x1 := graph.Keys;
+    var y1 := SetRange(MaxNumChildren());
+    var z1 := (set a, b | a in x1 && b in y1 :: (a,b));
+    SetBijectivity.CrossProductCardinality(x1, y1, z1);
+    assert |s3|
+        == |z1|
+        == |x1| * |y1|
+        == |graph.Keys| * |SetRange(MaxNumChildren())|;
+    assert |graph.Keys| <= MaxSize();
+    CardinalitySetRange(MaxNumChildren());
+    assert |SetRange(MaxNumChildren())| == MaxNumChildren();
+  }
+
   lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires BT.G.Root() in t.contents
@@ -905,7 +945,12 @@ module IndirectionTableModel {
     && (t0.Some? ==> ComputeRefCountsIterateInv(t0.value, copy, MutableMapModel.IterInc(copy, it)))
     && (t0.None? ==> !BC.GraphClosed(Graph(copy)))
   {
-    assume forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+    forall ref | ref in t.contents
+    ensures t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+    {
+      lemma_count_eq_graph_size(copy);
+      PredecessorSetRestrictedSizeBound(Graph(copy), ref, it.s);
+    }
     if it.next.Next? {
       assert |copy.contents[it.next.key].succs| <= MaxNumChildren();
       LemmaComputeRefCountsEntryIterateCorrect(t, copy, it);
@@ -1005,7 +1050,10 @@ module IndirectionTableModel {
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
+  requires |a| < 0x1_0000_0000_0000_0000 / 8
+  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+  ensures s.Some? ==> s.value.count as int == |a|
   ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
   ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
   ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
@@ -1028,7 +1076,6 @@ module IndirectionTableModel {
               if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
                 None
               ) else (
-                assume table.count as nat < 0x1_0000_0000_0000_0000 / 8;
                 Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0)))
               )
             )
@@ -1107,31 +1154,36 @@ module IndirectionTableModel {
   }
 
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
+  requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> Inv(s.value)
   ensures s.Some? ==> TrackingGarbage(s.value)
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
   {
-    var t := valToHashMap(v.a);
-    match t {
-      case Some(t) => (
-        if BT.G.Root() in t.contents && t.count as int <= MaxSize() then (
-          var t1 := ComputeRefCounts(t);
-          if t1.Some? then (
-            lemmaMakeGarbageQueueCorrect(t1.value);
-            lemma_count_eq_graph_size(t);
-            lemma_count_eq_graph_size(t1.value);
-            var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
-            Some(res)
+    if |v.a| <= MaxSize() then (
+      var t := valToHashMap(v.a);
+      match t {
+        case Some(t) => (
+          if BT.G.Root() in t.contents then (
+            var t1 := ComputeRefCounts(t);
+            if t1.Some? then (
+              lemmaMakeGarbageQueueCorrect(t1.value);
+              lemma_count_eq_graph_size(t);
+              lemma_count_eq_graph_size(t1.value);
+              var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
+              Some(res)
+            ) else (
+              None
+            )
           ) else (
             None
           )
-        ) else (
-          None
         )
-      )
-      case None => None
-    }
+        case None => None
+      }
+    ) else (
+      None
+    )
   }
 
   // To bitmap

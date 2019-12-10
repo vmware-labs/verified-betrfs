@@ -176,7 +176,6 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_AddLocIfPresent();
 
-      assume this.t.Count as nat < 0x10000000000000000 / 8;
       var oldEntry := this.t.Get(ref);
       added := oldEntry.Some? && oldEntry.value.loc.None?;
       if added {
@@ -528,31 +527,35 @@ module IndirectionTableImpl {
     ensures s == null ==> IndirectionTableModel.valToIndirectionTable(v).None?
     ensures s != null ==> IndirectionTableModel.valToIndirectionTable(v) == Some(s.I())
     {
-      var res := ValToHashMap(v.a);
-      match res {
-        case Some(t) => {
-          var rootRef := t.Get(BT.G.Root());
-          if rootRef.Some? && t.Count <= IndirectionTableModel.MaxSizeUint64() {
-            var t1 := ComputeRefCounts(t);
-            if t1 != null {
-              IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1.I());
-              IndirectionTableModel.lemma_count_eq_graph_size(t.I());
-              IndirectionTableModel.lemma_count_eq_graph_size(t1.I());
+      if |v.a| as uint64 <= IndirectionTableModel.MaxSizeUint64() {
+        var res := ValToHashMap(v.a);
+        match res {
+          case Some(t) => {
+            var rootRef := t.Get(BT.G.Root());
+            if rootRef.Some? {
+              var t1 := ComputeRefCounts(t);
+              if t1 != null {
+                IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1.I());
+                IndirectionTableModel.lemma_count_eq_graph_size(t.I());
+                IndirectionTableModel.lemma_count_eq_graph_size(t1.I());
 
-              var q := MakeGarbageQueue(t1);
-              s := new IndirectionTable(t1);
-              s.garbageQueue := q;
-              s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
+                var q := MakeGarbageQueue(t1);
+                s := new IndirectionTable(t1);
+                s.garbageQueue := q;
+                s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
+              } else {
+                s := null;
+              }
             } else {
               s := null;
             }
-          } else {
+          }
+          case None => {
             s := null;
           }
         }
-        case None => {
-          s := null;
-        }
+      } else {
+        s := null;
       }
     }
 

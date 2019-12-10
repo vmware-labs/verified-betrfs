@@ -176,7 +176,7 @@ module SplitImpl {
 
     SplitModel.lemmaChildrenConditionsCutoffNode(Ic(k), s.I(), fused_child.I(), lbound, ubound);
     SplitModel.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
-    var child := fused_child.CutoffNode(lbound, ubound);
+    var child := ImplNode.Node.CutoffNode(fused_child, lbound, ubound);
     assert IM.WFNode(child.I());
 
     if (|child.pivotTable| as uint64 == 0) {

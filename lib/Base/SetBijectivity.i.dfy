@@ -17,4 +17,8 @@ module SetBijectivity {
       BijectivityImpliesEqualCardinality(setA', setB', relation);
     }
   }
+
+  lemma CrossProductCardinality<A, B>(setA: set<A>, setB: set<B>, cp: set<(A,B)>)
+  requires cp == (set a, b | a in setA && b in setB :: (a,b))
+  ensures |cp| == |setA| * |setB|;
 }

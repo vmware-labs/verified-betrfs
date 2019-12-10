@@ -119,12 +119,27 @@ module ModelBucketIterator {
       (Keyspace.lte(key, it.next.key) || Keyspace.lte(IterInc(bucket, it).next.key, key))
   ensures IterInc(bucket, it).next.Done? ==>
       Keyspace.lte(key, it.next.key)
+  {
+    reveal_IterInc();
+    reveal_IterFindFirstGt();
+    var it' := IterInc(bucket, it);
+    if it'.next.Done? {
+      if !Keyspace.lte(key, it.next.key) {
+        assert key !in (set k | k in bucket && Keyspace.lt(it.next.key, k));
+        assert false;
+      }
+    }
+  }
 
   lemma IterIncKeyGreater(bucket: Bucket, it: Iterator)
   requires WFIter(bucket, it)
   requires it.next.Next?
   ensures IterInc(bucket, it).next.Next? ==>
       Keyspace.lt(it.next.key, IterInc(bucket, it).next.key)
+  {
+    reveal_IterInc();
+    reveal_IterFindFirstGt();
+  }
 
   lemma noKeyBetweenIterFindFirstGte(bucket: Bucket, key: Key, key0: Key)
   requires key0 in bucket
@@ -132,6 +147,18 @@ module ModelBucketIterator {
       (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGte(bucket, key).next.key, key0))
   ensures IterFindFirstGte(bucket, key).next.Done? ==>
       (Keyspace.lt(key0, key))
+  {
+    reveal_IterFindFirstGte();
+    var it := IterFindFirstGte(bucket, key);
+    if it.next.Done? {
+      //assert Keyspace.minimumOpt(set k | k in bucket && Keyspace.lte(key, k)) == None;
+      //assert (set k | k in bucket && Keyspace.lte(key, k)) == {};
+      if !Keyspace.lt(key0, key) {
+        assert key0 in (set k | k in bucket && Keyspace.lte(key, k));
+        assert false;
+      }
+    }
+  }
 
   lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, key: Key, key0: Key)
   requires key0 in bucket
@@ -139,9 +166,24 @@ module ModelBucketIterator {
       (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, key).next.key, key0))
   ensures IterFindFirstGt(bucket, key).next.Done? ==>
       (Keyspace.lte(key0, key))
+  {
+    reveal_IterFindFirstGt();
+    var it := IterFindFirstGt(bucket, key);
+    if it.next.Done? {
+      //assert Keyspace.minimumOpt(set k | k in bucket && Keyspace.lt(key, k)) == None;
+      //assert (set k | k in bucket && Keyspace.lt(key, k)) == {};
+      if !Keyspace.lte(key0, key) {
+        assert key0 in (set k | k in bucket && Keyspace.lt(key, k));
+        assert false;
+      }
+    }
+  }
 
   lemma noKeyBeforeIterStart(bucket: Bucket, key0: Key)
   requires key0 in bucket
   ensures IterStart(bucket).next.Next?
   ensures Keyspace.lte(IterStart(bucket).next.key, key0)
+  {
+    reveal_IterStart();
+  }
 }

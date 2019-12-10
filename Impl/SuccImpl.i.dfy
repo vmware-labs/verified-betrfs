@@ -56,6 +56,7 @@ module SuccImpl {
   requires ref in s.I().ephemeralIndirectionTable.graph
   requires node.I() == s.I().cache[ref]
   requires maxToFind >= 1
+  requires |acc| + counter as int < 0x1_0000_0000_0000_0000 - 1
   requires forall i | 0 <= i < |acc| :: acc[i].Inv()
   requires io !in s.Repr()
   modifies s.Repr()
@@ -158,6 +159,7 @@ module SuccImpl {
   requires ref in s.I().ephemeralIndirectionTable.graph
   requires forall i | 0 <= i < |acc| :: acc[i].Inv()
   requires io !in s.Repr()
+  requires |acc| + counter as int < 0x1_0000_0000_0000_0000 - 1
   modifies s.Repr()
   modifies io
   decreases counter, 1

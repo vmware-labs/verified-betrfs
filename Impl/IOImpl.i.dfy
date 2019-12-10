@@ -221,6 +221,7 @@ module IOImpl {
 
   method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires s.W()
+  requires s.WF()
   requires io.diskOp().RespReadOp?
   requires s.ready
   requires io !in s.Repr()
@@ -262,7 +263,7 @@ module IOImpl {
     if (sector.Some? && sector.value.SectorBlock?) {
       var node := sector.value.block;
       if (graph == (if node.children.Some? then node.children.value else [])) {
-        assume |LruModel.I(s.lru.Queue)| <= 0x10000;
+        assert|LruModel.I(s.lru.Queue)| <= 0x10000;
         assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
         s.lru.Use(ref);
@@ -270,7 +271,7 @@ module IOImpl {
         assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
-        assume |s.cache.I()| <= MaxCacheSize();
+        assert |s.cache.I()| <= MaxCacheSize();
         s.cache.Insert(ref, sector.value.block);
 
         s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
@@ -286,6 +287,7 @@ module IOImpl {
   method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
   requires s.W()
+  requires s.WF()
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)

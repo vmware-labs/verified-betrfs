@@ -49,9 +49,6 @@ module GrowModel {
     )
   }
 
-  lemma WeightOneEmpty()
-  ensures WeightBucketList([map[]]) == 0
-
   lemma growCorrect(k: Constants, s: Variables)
   requires Inv(k, s)
   requires s.Ready?
@@ -87,7 +84,7 @@ module GrowModel {
       }
       case Some(newref) => {
         var newroot := Node([], Some([newref]), [map[]]);
-        WeightOneEmpty();
+        WeightBucketListOneEmpty();
 
         assert BT.G.Root() in s.cache;
         assert BT.G.Root() in ICache(s.cache);
