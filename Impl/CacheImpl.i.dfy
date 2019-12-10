@@ -1,4 +1,8 @@
 include "NodeImpl.i.dfy"
+//
+// Implements map<Reference, Node> (There's no Model file
+// because that map is already a precise functional model of this code.)
+//
 
 module CacheImpl {
   import opened NodeImpl

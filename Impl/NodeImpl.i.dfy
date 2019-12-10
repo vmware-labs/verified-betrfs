@@ -4,6 +4,10 @@ include "MainDiskIOHandler.s.dfy"
 include "BucketImpl.i.dfy"
 include "SplitModel.i.dfy"
 include "InsertModel.i.dfy"
+//
+// Implements PivotBetree/PivotBetreeSpec.Node. (There's no Model file
+// because Node is already a precise functional model of this code.)
+//
 
 module NodeImpl {
   import opened Options
