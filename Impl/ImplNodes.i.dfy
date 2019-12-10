@@ -271,34 +271,34 @@ module ImplNode {
       assert node'.I().pivotTable == SplitModel.CutoffNodeAndKeepRight(old(I()), pivot).pivotTable;
     }
 
-    method CutoffNode(lbound: Option<Key>, rbound: Option<Key>)
+    static method CutoffNode(node: Node, lbound: Option<Key>, rbound: Option<Key>)
     returns (node' : Node)
-    requires Inv()
-    requires IM.WFNode(I())
+    requires node.Inv()
+    requires IM.WFNode(node.I())
     ensures node'.Inv()
     //ensures fresh(node'.Repr)
-    ensures node'.I() == SplitModel.CutoffNode(old(I()), lbound, rbound)
+    ensures node'.I() == SplitModel.CutoffNode(old(node.I()), lbound, rbound)
     {
       SplitModel.reveal_CutoffNode();
       match lbound {
         case None => {
           match rbound {
             case None => {
-              node' := this;
+              node' := node;
             }
             case Some(rbound) => {
-              node' := this.CutoffNodeAndKeepLeft(rbound);
+              node' := node.CutoffNodeAndKeepLeft(rbound);
             }
           }
         }
         case Some(lbound) => {
           match rbound {
             case None => {
-              node' := this.CutoffNodeAndKeepRight(lbound);
+              node' := node.CutoffNodeAndKeepRight(lbound);
             }
             case Some(rbound) => {
-              var node1 := this.CutoffNodeAndKeepLeft(rbound);
-              SplitModel.CutoffNodeAndKeepLeftCorrect(this.I(), rbound);
+              var node1 := node.CutoffNodeAndKeepLeft(rbound);
+              SplitModel.CutoffNodeAndKeepLeftCorrect(node.I(), rbound);
               node' := node1.CutoffNodeAndKeepRight(lbound);
             }
           }
