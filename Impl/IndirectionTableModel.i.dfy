@@ -894,6 +894,47 @@ module IndirectionTableModel {
     LemmaComputeRefCountsEntryIterateGraphClosed(t, copy, it, 0);
   }
 
+  lemma PredecessorSetRestrictedSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+      dest: BT.G.Reference, domain: set<BT.G.Reference>)
+  requires |graph| <= MaxSize()
+  requires forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren()
+  ensures |PredecessorSetRestricted(graph, dest, domain)| <= MaxSize() * MaxNumChildren()
+  {
+    var s1 := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src in domain :: PredecessorEdge(src, idx);
+    var s2 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: PredecessorEdge(src, idx);
+    var s3 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: (src, idx);
+
+    assert s1 <= s2;
+    SetInclusionImpliesSmallerCardinality(s1, s2);
+    assert |s1| <= |s2|;
+
+    var relation := iset t : (PredecessorEdge, (BT.G.Reference, int)) | t.0.src == t.1.0 && t.0.idx == t.1.1;
+    forall a | a in s2 ensures exists b :: b in s3 && (a, b) in relation
+    {
+      var b := (a.src, a.idx);
+      assert b in s3;
+    }
+    forall b | b in s3 ensures exists a :: a in s2 && (a, b) in relation
+    {
+      var a := PredecessorEdge(b.0, b.1);
+      assert a in s2;
+    }
+    SetBijectivity.BijectivityImpliesEqualCardinality(s2, s3, relation);
+    assert |s2| == |s3|;
+
+    var x1 := graph.Keys;
+    var y1 := SetRange(MaxNumChildren());
+    var z1 := (set a, b | a in x1 && b in y1 :: (a,b));
+    SetBijectivity.CrossProductCardinality(x1, y1, z1);
+    assert |s3|
+        == |z1|
+        == |x1| * |y1|
+        == |graph.Keys| * |SetRange(MaxNumChildren())|;
+    assert |graph.Keys| <= MaxSize();
+    CardinalitySetRange(MaxNumChildren());
+    assert |SetRange(MaxNumChildren())| == MaxNumChildren();
+  }
+
   lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires BT.G.Root() in t.contents
@@ -904,7 +945,12 @@ module IndirectionTableModel {
     && (t0.Some? ==> ComputeRefCountsIterateInv(t0.value, copy, MutableMapModel.IterInc(copy, it)))
     && (t0.None? ==> !BC.GraphClosed(Graph(copy)))
   {
-    assume forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+    forall ref | ref in t.contents
+    ensures t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+    {
+      lemma_count_eq_graph_size(copy);
+      PredecessorSetRestrictedSizeBound(Graph(copy), ref, it.s);
+    }
     if it.next.Next? {
       assert |copy.contents[it.next.key].succs| <= MaxNumChildren();
       LemmaComputeRefCountsEntryIterateCorrect(t, copy, it);

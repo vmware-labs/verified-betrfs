@@ -31,4 +31,13 @@ module Sets {
   {
     assert b == a + (b - a);
   }
+
+  function SetRange(n: int) : set<int>
+  {
+    set i | 0 <= i < n
+  }
+
+  lemma CardinalitySetRange(n: int)
+  requires n >= 0
+  ensures |SetRange(n)| == n
 }
