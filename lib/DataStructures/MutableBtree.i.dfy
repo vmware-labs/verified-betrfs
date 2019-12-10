@@ -17,7 +17,8 @@ abstract module MutableBtree {
   import Spec : BtreeSpec
 
   export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Spec, Options reveals Node, NodeContents, Key, Value
-  
+  export All reveals *
+    
   type Key = Spec.Keys.Element
   type Value = Spec.Value
 

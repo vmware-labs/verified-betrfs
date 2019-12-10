@@ -6,7 +6,19 @@ module Arrays {
   import Seq = Sequences
   //import Native
   import opened NativeTypes
-    
+
+  // This can be used in abstract modules (where you might not know in
+  // advance whether T == U) to state that two arrays cannot be aliased
+  predicate Aliases<T,U>(a1: array<T>, a2: array<U>) {
+    a1 == a2
+  }
+
+  lemma SequenceLength<T>(a: array<T>, start: uint64, end: uint64)
+    requires start as nat <= end as nat <= a.Length
+    ensures |a[start..end]| == (end - start) as nat
+  {
+  }
+  
   method Insert<T>(arr: array<T>, length: uint64, element: T, pos: uint64)
     requires 0 <= length as int < arr.Length < Uint64UpperBound()
     requires 0 <= pos <= length

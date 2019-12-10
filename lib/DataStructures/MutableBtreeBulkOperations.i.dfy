@@ -1,15 +1,15 @@
-include "MutableBtree.dfy"
+include "MutableBtree.i.dfy"
 
 abstract module MutableBtreeBulkOperations {
   import opened NativeTypes
   import opened Sequences
-  import opened MB : MutableBtree
+  import opened MB : MutableBtree`All
 
   method NumElements(node: Node) returns (count: uint64)
     requires WFShape(node)
-    requires BS.WF(I(node))
-    requires BS.NumElements(I(node)) < Uint64UpperBound()
-    ensures count as int == BS.NumElements(I(node))
+    requires Spec.WF(I(node))
+    requires Spec.NumElements(I(node)) < Uint64UpperBound()
+    ensures count as nat == Spec.NumElements(I(node))
     decreases node.height
   {
     if node.contents.Leaf? {
@@ -22,14 +22,14 @@ abstract module MutableBtreeBulkOperations {
       var i: uint64 := 0;
       while i < node.contents.nchildren
         invariant i <= node.contents.nchildren
-        invariant icount == BS.NumElementsOfChildren(inode.children[..i])
+        invariant icount == Spec.NumElementsOfChildren(inode.children[..i])
         invariant icount < Uint64UpperBound()
         invariant count == icount as uint64
       {
-        ghost var ichildcount := BS.NumElements(inode.children[i]);
+        ghost var ichildcount := Spec.NumElements(inode.children[i]);
         assert inode.children[..i+1][..i] == inode.children[..i];
-        BS.NumElementsOfChildrenNotZero(inode);
-        BS.NumElementsOfChildrenDecreases(inode.children, (i+1) as int);
+        Spec.NumElementsOfChildrenNotZero(inode);
+        Spec.NumElementsOfChildrenDecreases(inode.children, (i+1) as int);
         icount := icount + ichildcount;
         
         var childcount: uint64 := NumElements(node.contents.children[i]);
@@ -40,23 +40,22 @@ abstract module MutableBtreeBulkOperations {
     }
   }
 
-  method ToSeqSubTree(node: Node, keys: array<Key>, values: array<Value>, start: uint64) returns (nextstart: uint64)
+  method ToSeqSubtree(node: Node, keys: array<Key>, values: array<Value>, start: uint64) returns (nextstart: uint64)
     requires WFShape(node)
-    requires BS.WF(I(node))
+    requires Spec.WF(I(node))
+    requires !Arrays.Aliases(keys, values)
     requires keys.Length == values.Length
-    requires 0 <= start as int <= keys.Length
-    requires start as int + BS.NumElements(I(node)) <= keys.Length
-    requires start as int + BS.NumElements(I(node)) < Uint64UpperBound()
     requires keys !in node.repr
     requires values !in node.repr
-    requires keys != values
-    ensures nextstart as int == start as int + BS.NumElements(I(node))
+    requires start as nat + Spec.NumElements(I(node)) <= keys.Length
+    requires start as nat + Spec.NumElements(I(node)) < Uint64UpperBound()
+    ensures nextstart as nat == start as nat + Spec.NumElements(I(node))
     ensures forall i :: 0 <= i < start ==> keys[i] == old(keys[i]);
     ensures forall i :: 0 <= i < start ==> values[i] == old(values[i]);
-    ensures keys[start..nextstart] == BS.ToSeq(I(node)).0
-    ensures values[start..nextstart] == BS.ToSeq(I(node)).1
-    ensures forall i :: nextstart as int <= i < keys.Length ==> keys[i] == old(keys[i]);
-    ensures forall i :: nextstart as int <= i < values.Length ==> values[i] == old(values[i]);
+    ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
+      //ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
+    ensures forall i :: nextstart as nat <= i < keys.Length ==> keys[i] == old(keys[i]);
+    ensures forall i :: nextstart as nat <= i < values.Length ==> values[i] == old(values[i]);
     modifies keys, values
     decreases node.height
   {
@@ -65,75 +64,68 @@ abstract module MutableBtreeBulkOperations {
       Arrays.Memcpy(values, start, node.contents.values[..node.contents.nkeys]); // FIXME: remove conversion to seq
       nextstart := start + node.contents.nkeys;
     } else {
-      // forall i | 0 <= i < node.contents.nchildren
-      //   ensures BS.NumElementsOfChildren(I(node).children[..i]) <= BS.NumElements(I(node))
-      // {
-      //   BS.NumElementsOfChildrenNotZero(I(node));
-      //   BS.NumElementsOfChildrenDecreases(I(node).children, i as int);
-      // }
-      
       nextstart := start;
-      // ghost var inextstart := start as int;
+      ghost var inextstart := start as nat;
       var i: uint64 := 0;
+      Spec.NumElementsOfChildrenNotZero(I(node));
       while i < node.contents.nchildren
-      //   invariant 0 <= i <= node.contents.nchildren
-      //   invariant inextstart == start as int + BS.NumElementsOfChildren(I(node).children[..i])
-      //   invariant inextstart <= keys.Length
-      //   invariant i < node.contents.nchildren ==> inextstart < keys.Length
-      //   invariant nextstart as int == inextstart
-      //   invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
-      //   invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
-      //   //invariant keys[start..nextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0)
-      //   // invariant values[start..inextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).1)
-      //   invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
-      //   invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
+        invariant I(node) == old(I(node))
+        invariant 0 <= i <= node.contents.nchildren
+        invariant inextstart == start as nat + Spec.NumElementsOfChildren(I(node).children[..i])
+        invariant inextstart <= keys.Length
+        invariant i < node.contents.nchildren ==> inextstart < keys.Length
+        invariant nextstart as nat == inextstart
+        invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
+        invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
+        invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
+        //invariant values[start..inextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
+        invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
+        invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
       {
-        //   BS.NumElementsOfChildrenNotZero(I(node));
-        //   BS.NumElementsOfChildrenDecreases(I(node).children, i as int);
-        //   assert inextstart < keys.Length;
+        assert I(node).children[..i+1][..i] == I(node).children[..i];
+        inextstart := inextstart + Spec.NumElements(I(node).children[i]);
+        Spec.NumElementsOfChildrenNotZero(I(node));
+        Spec.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
         
-        //   assert I(node).children[..i+1][..i] == I(node).children[..i];
-        //   inextstart := inextstart + BS.NumElements(I(node).children[i]);
-        //   BS.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
+        nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
+        assert unchanged(node.repr);
+        assert I(node) == old(I(node));
         
-        //   ghost var oldnextstart := nextstart;
-        assume false;
-        nextstart := ToSeqSubTree(node.contents.children[i], keys, values, nextstart);
         i := i + 1;
+        
+        
+        ghost var target := Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0);
+        Spec.ToSeqChildrenLength(I(node).children[..i]);
+        assert |target| == (nextstart - start) as nat;
 
-        //   ghost var target := BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0);
-        //   BS.ToSeqChildrenLength(I(node).children[..i]);
-        //   assert |keys[start..nextstart]| == (nextstart - start) as int;
-        //   forall j | 0 <= j < (nextstart - start) as int
-        //     ensures keys[start..nextstart][j] == target[j]
-        //   {
-        //     if j < oldnextstart as int {
-        //       //var oldtarget := BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i-1]).0);
-        //       assume false;
-        //     } else {
-        //       assume false;
-        //     }
-        //   }
-        //   assert keys[start..nextstart] == target;
-        //   assert keys[start..nextstart] == BS.Seq.Flatten(BS.ToSeqChildren(I(node).children[..i]).0);
+        forall j | 0 <= j < (nextstart - start) as nat
+          ensures keys[start..nextstart][j] == target[j]
+        {
+          assume false;
+        }
+        assert start as nat <= nextstart as nat <= keys.Length;
+        Arrays.SequenceLength(keys, start, nextstart);
+        assert |keys[start..nextstart]| == (nextstart - start) as nat;
+        Spec.Seq.EqualExtensionality(keys[start..nextstart], target);
+        assert keys[start..nextstart] == target;
       }
-      // assert I(node).children[..node.contents.nchildren] == I(node).children;
+      assert I(node).children[..node.contents.nchildren] == I(node).children;
       assume false;
     }
   }
 
   method ToSeq(node: Node) returns (kvlists: (array<Key>, array<Value>))
     requires WFShape(node)
-    requires BS.WF(I(node))
-    requires BS.NumElements(I(node)) < Uint64UpperBound()
-    ensures (kvlists.0[..], kvlists.1[..]) == BS.ToSeq(I(node))
+    requires Spec.WF(I(node))
+    requires Spec.NumElements(I(node)) < Uint64UpperBound()
+    ensures (kvlists.0[..], kvlists.1[..]) == Spec.ToSeq(I(node))
     ensures fresh(kvlists.0)
     ensures fresh(kvlists.1)
   {
     var count := NumElements(node);
     var keys := new Key[count](_ => DefaultKey());
     var values := new Value[count](_ => DefaultValue());
-    var end := ToSeqSubTree(node, keys, values, 0);
+    var end := ToSeqSubtree(node, keys, values, 0);
     assert keys[..] == keys[0..end];
     assert values[..] == values[0..end];
     return (keys, values);
@@ -141,21 +133,21 @@ abstract module MutableBtreeBulkOperations {
 
   method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)
     requires WFShape(node)
-    requires BS.WF(I(node))
+    requires Spec.WF(I(node))
     requires node.contents.Index?
     requires !Full(node)
     requires 0 <= childidx < node.contents.nchildren
     requires node.contents.children[childidx].contents.Leaf?
     requires WFShape(node.contents.children[childidx])
-    requires BS.Keys.lt(node.contents.children[childidx].contents.keys[0], pivot)
-    requires BS.Keys.lte(pivot, node.contents.children[childidx].contents.keys[node.contents.children[childidx].contents.nkeys-1])
-    requires BS.Keys.IsSorted(node.contents.children[childidx].contents.keys[..node.contents.children[childidx].contents.nkeys])
-    requires nleft as int == BS.Keys.LargestLt(node.contents.children[childidx].contents.keys[..node.contents.children[childidx].contents.nkeys], pivot) + 1
+    requires Spec.Keys.lt(node.contents.children[childidx].contents.keys[0], pivot)
+    requires Spec.Keys.lte(pivot, node.contents.children[childidx].contents.keys[node.contents.children[childidx].contents.nkeys-1])
+    requires Spec.Keys.IsSorted(node.contents.children[childidx].contents.keys[..node.contents.children[childidx].contents.nkeys])
+    requires nleft as int == Spec.Keys.LargestLt(node.contents.children[childidx].contents.keys[..node.contents.children[childidx].contents.nkeys], pivot) + 1
     ensures WFShape(node)
     ensures node.contents.Index?
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures BS.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
+    ensures Spec.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
     ensures !Full(node.contents.children[childidx])
     ensures !Full(node.contents.children[childidx+1])
     ensures node.contents.pivots[childidx] == pivot
@@ -249,32 +241,32 @@ abstract module MutableBtreeBulkOperations {
 
   method EnsurePivotNotFullParentOfLeaf(node: Node, pivot: Key, childidx: uint64) returns (pos: int64)
     requires WFShape(node)
-    requires BS.WF(I(node))
-    requires BS.NumElements(I(node)) < Uint64UpperBound()
+    requires Spec.WF(I(node))
+    requires Spec.NumElements(I(node)) < Uint64UpperBound()
     requires node.contents.Index?
     requires !Full(node)
-    requires childidx as int == BS.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], pivot) + 1
+    requires childidx as int == Spec.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], pivot) + 1
     requires node.contents.children[childidx].contents.Leaf?
     ensures WFShape(node)
-    ensures BS.WF(I(node))
+    ensures Spec.WF(I(node))
     ensures node.contents.Index?
     ensures node.height == old(node.height)
     ensures fresh(node.repr - old(node.repr))
     ensures -1 <= pos as int < node.contents.nchildren as int
     ensures 0 <= pos as int < node.contents.nchildren as int - 1 ==> node.contents.pivots[pos] == pivot
-    ensures BS.Interpretation(I(node)) == BS.Interpretation(old(I(node)))
-    ensures BS.AllKeys(I(node)) <= BS.AllKeys(old(I(node))) + {pivot}
+    ensures Spec.Interpretation(I(node)) == Spec.Interpretation(old(I(node)))
+    ensures Spec.AllKeys(I(node)) <= Spec.AllKeys(old(I(node))) + {pivot}
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
     var child := node.contents.children[childidx];
     assert child.contents.keys[0..child.contents.nkeys] == child.contents.keys[..child.contents.nkeys];
-    var nleft := BS.Keys.ArrayLargestLtPlus1(child.contents.keys, 0, child.contents.nkeys, pivot);
+    var nleft := Spec.Keys.ArrayLargestLtPlus1(child.contents.keys, 0, child.contents.nkeys, pivot);
 
     if 0 == nleft {
       if 0 < childidx {
         node.contents.pivots[childidx-1] := pivot;
-        assert I(node) == BS.ReplacePivot(old(I(node)), childidx as int - 1, pivot);
-        BS.IncreasePivotIsCorrect(old(I(node)), childidx as int - 1, pivot);
+        assert I(node) == Spec.ReplacePivot(old(I(node)), childidx as int - 1, pivot);
+        Spec.IncreasePivotIsCorrect(old(I(node)), childidx as int - 1, pivot);
         pos := childidx as int64 - 1;
       } else {
         pos := -1;
@@ -282,8 +274,8 @@ abstract module MutableBtreeBulkOperations {
     } else if nleft == child.contents.nkeys {
       if childidx < node.contents.nchildren-1 {
         node.contents.pivots[childidx] := pivot;
-        assert I(node) == BS.ReplacePivot(old(I(node)), childidx as int, pivot);
-        BS.DecreasePivotIsCorrect(old(I(node)), childidx as int, pivot);
+        assert I(node) == Spec.ReplacePivot(old(I(node)), childidx as int, pivot);
+        Spec.DecreasePivotIsCorrect(old(I(node)), childidx as int, pivot);
         pos := childidx as int64;
       } else {
         pos := node.contents.nchildren as int64 - 1;
@@ -291,24 +283,24 @@ abstract module MutableBtreeBulkOperations {
     } else {
       ghost var wit := SplitLeafOfIndexAtKey(node, childidx, pivot, nleft);
       pos := childidx as int64;
-      BS.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
-      BS.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
-      BS.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
+      Spec.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
+      Spec.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
+      Spec.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
     }
   }
 
   // method EnsurePivotNotFull(node: Node, pivot: Key) returns (pos: int64)
   //   requires WFShape(node)
-  //   requires BS.WF(I(node))
-  //   requires BS.NumElements(I(node)) < Uint64UpperBound()
+  //   requires Spec.WF(I(node))
+  //   requires Spec.NumElements(I(node)) < Uint64UpperBound()
   //   requires node.contents.Index?
   //   requires !Full(node)
   //   ensures WFShape(node)
-  //   ensures BS.WF(I(node))
+  //   ensures Spec.WF(I(node))
   //   ensures -1 <= pos as int < node.contents.nchildren as int
   //   ensures 0 <= pos as int < node.contents.nchildren as int - 1 ==> node.contents.pivots[pos] == pivot
   // {
-  //   var childidx := BS.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, pivot);
+  //   var childidx := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, pivot);
   //   if 0 < childidx && node.contents.pivots[childidx-1] == pivot {
   //     pos := childidx as int64 - 1;
   //   } else {
@@ -318,12 +310,12 @@ abstract module MutableBtreeBulkOperations {
 
   // method EnsurePivot(node: Node, pivot: Key) returns (pos: int64)
   //   requires WFShape(node)
-  //   requires BS.WF(I(node))
-  //   requires BS.NumElements(I(node)) < Uint64UpperBound()
+  //   requires Spec.WF(I(node))
+  //   requires Spec.NumElements(I(node)) < Uint64UpperBound()
   //   requires node.contents.Index?
   //   requires !Full(node)
   //   ensures WFShape(node)
-  //   ensures BS.WF(I(node))
+  //   ensures Spec.WF(I(node))
   //   ensures -1 <= pos as int < node.contents.nchildren as int
   //   ensures 0 <= pos as int < node.contents.nchildren as int - 1 ==> node.contents.pivots[pos] == pivot
 

@@ -5,6 +5,13 @@ module Sequences {
   import opened Options
   import opened NativeTypes
 
+  lemma EqualExtensionality<E>(a: seq<E>, b: seq<E>)
+    requires |a| == |b|
+    requires forall i :: 0 <= i < |a| ==> a[i] == b[i]
+    ensures a == b
+  {
+  }
+  
   function Last<E>(run: seq<E>) : E
     requires |run| > 0;
   {
