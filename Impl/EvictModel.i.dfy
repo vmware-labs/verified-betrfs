@@ -4,7 +4,7 @@ include "SyncModel.i.dfy"
 module EvictModel {
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
   import opened DeallocModel
   import opened SyncModel
 

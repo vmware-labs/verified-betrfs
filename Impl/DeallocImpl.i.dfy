@@ -1,10 +1,10 @@
-include "CacheImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "DeallocModel.i.dfy"
 
 module DeallocImpl { 
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import DeallocModel
   import opened StateImpl
   import opened Bounds
@@ -44,7 +44,7 @@ module DeallocImpl {
       return;
     }
 
-    CacheModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    BookkeepingModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.RemoveRef(ref);
 

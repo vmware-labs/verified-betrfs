@@ -1,5 +1,5 @@
 include "StateModel.i.dfy"
-include "CacheModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
@@ -10,7 +10,7 @@ include "BucketSuccessorLoopModel.i.dfy"
 module SuccModel { 
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
 
   import opened Options
   import opened Maps

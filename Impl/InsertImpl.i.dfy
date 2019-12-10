@@ -1,6 +1,6 @@
 include "Impl.i.dfy"
 include "IOImpl.i.dfy"
-include "CacheImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "InsertModel.i.dfy"
 include "FlushPolicyImpl.i.dfy"
 include "MainDiskIOHandler.s.dfy"
@@ -13,7 +13,7 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 module InsertImpl { 
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened InsertModel
   import opened StateImpl
   import opened FlushPolicyImpl
@@ -43,7 +43,7 @@ module InsertImpl {
   {
     InsertModel.reveal_InsertKeyValue();
 
-    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
 
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());

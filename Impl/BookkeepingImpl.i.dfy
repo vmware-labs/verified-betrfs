@@ -1,11 +1,11 @@
 include "IOImpl.i.dfy"
-include "CacheModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 
-module CacheImpl { 
+module BookkeepingImpl { 
   import opened Impl
   import opened IOImpl
   import opened StateImpl
-  import CacheModel
+  import BookkeepingModel
   import LruModel
 
   import opened Options
@@ -21,14 +21,14 @@ module CacheImpl {
   returns (ref : Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
-  ensures ref == CacheModel.getFreeRef(s.I())
+  ensures ref == BookkeepingModel.getFreeRef(s.I())
   {
-    CacheModel.reveal_getFreeRef();
+    BookkeepingModel.reveal_getFreeRef();
     var i := 1;
     while true
     invariant i >= 1
-    invariant CacheModel.getFreeRefIterate(s.I(), i)
-           == CacheModel.getFreeRef(s.I())
+    invariant BookkeepingModel.getFreeRefIterate(s.I(), i)
+           == BookkeepingModel.getFreeRef(s.I())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       var lookup := s.ephemeralIndirectionTable.GetEntry(i);
@@ -51,15 +51,15 @@ module CacheImpl {
   returns (ref : Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
-  ensures ref == CacheModel.getFreeRef2(s.I(), avoid)
+  ensures ref == BookkeepingModel.getFreeRef2(s.I(), avoid)
   ensures ref.Some? ==> ref.value != avoid;
   {
-    CacheModel.reveal_getFreeRef2();
+    BookkeepingModel.reveal_getFreeRef2();
     var i := 1;
     while true
     invariant i >= 1
-    invariant CacheModel.getFreeRef2Iterate(s.I(), avoid, i)
-           == CacheModel.getFreeRef2(s.I(), avoid)
+    invariant BookkeepingModel.getFreeRef2Iterate(s.I(), avoid, i)
+           == BookkeepingModel.getFreeRef2(s.I(), avoid)
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
@@ -83,22 +83,22 @@ module CacheImpl {
   method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires CacheModel.WriteAllocConditions(Ic(k), s.I())
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), children)
+  requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), children)
   requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
   ensures s.W()
-  ensures s.I() == CacheModel.writeBookkeeping(Ic(k), old(s.I()), ref, children)
+  ensures s.I() == BookkeepingModel.writeBookkeeping(Ic(k), old(s.I()), ref, children)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
   {
-    CacheModel.reveal_writeBookkeeping();
+    BookkeepingModel.reveal_writeBookkeeping();
 
-    CacheModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    BookkeepingModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
 
@@ -118,21 +118,21 @@ module CacheImpl {
   method writeBookkeepingNoSuccsUpdate(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires CacheModel.WriteAllocConditions(Ic(k), s.I())
+  requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
   requires ref in s.ephemeralIndirectionTable.I().graph
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
   ensures s.W()
-  ensures s.I() == CacheModel.writeBookkeepingNoSuccsUpdate(Ic(k), old(s.I()), ref)
+  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(Ic(k), old(s.I()), ref)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
   {
-    CacheModel.reveal_writeBookkeepingNoSuccsUpdate();
+    BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();
 
-    CacheModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    BookkeepingModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.RemoveLoc(ref);
 
@@ -154,21 +154,21 @@ module CacheImpl {
   returns (ref: Option<BT.G.Reference>)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires CacheModel.WriteAllocConditions(Ic(k), s.I())
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), children)
+  requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), children)
   requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
   ensures s.ready
   ensures s.W()
-  ensures (s.I(), ref) == CacheModel.allocBookkeeping(Ic(k), old(s.I()), children)
+  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(Ic(k), old(s.I()), children)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
   ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
   {
-    CacheModel.reveal_allocBookkeeping();
+    BookkeepingModel.reveal_allocBookkeeping();
     
     ref := getFreeRef(s);
     if (ref.Some?) {

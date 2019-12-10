@@ -1,10 +1,10 @@
-include "CacheImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "GrowModel.i.dfy"
 
 module GrowImpl { 
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened StateImpl
   import opened ImplNode
   import opened MutableBucket
@@ -33,7 +33,7 @@ module GrowImpl {
   {
     GrowModel.reveal_grow();
 
-    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
 
     assert s.blockAllocator.Repr <= s.Repr();
 
@@ -48,7 +48,7 @@ module GrowImpl {
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
 
-    CacheModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
+    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
     var newref := allocBookkeeping(k, s, oldroot.children);
 
     match newref {

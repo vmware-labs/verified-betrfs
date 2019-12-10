@@ -14,7 +14,7 @@ module SuccImpl {
   import opened SyncImpl
   import opened IOImpl
   import SuccModel
-  import CacheModel
+  import BookkeepingModel
   import opened StateImpl
   import opened MutableBucket
   import opened Lexicographic_Byte_Order
@@ -111,7 +111,7 @@ module SuccImpl {
         assert (s.I(), IIO(io), res)
          == SuccModel.getPathInternal(Ic(k), old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I()));
       } else {
-        CacheModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.I().children.value[r]);
+        BookkeepingModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.I().children.value[r]);
         res := getPath(k, s, io, key, acc', start, upTo', maxToFind, node.children.value[r], counter - 1);
 
         assert (s.I(), IIO(io), res)

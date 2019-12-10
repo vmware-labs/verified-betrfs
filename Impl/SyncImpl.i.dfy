@@ -2,7 +2,7 @@ include "Impl.i.dfy"
 include "IOImpl.i.dfy"
 include "DeallocImpl.i.dfy"
 include "SyncModel.i.dfy"
-include "CacheModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -12,11 +12,11 @@ include "../lib/Base/Sets.i.dfy"
 module SyncImpl { 
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened DeallocImpl
   import opened Bounds
   import SyncModel
-  import CacheModel
+  import BookkeepingModel
   import DeallocModel
   import BlockAllocatorModel
   import opened StateImpl

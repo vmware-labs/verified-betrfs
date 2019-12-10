@@ -1,9 +1,9 @@
-include "CacheModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 
 module DeallocModel { 
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
   import opened Bounds
 
   import opened Options

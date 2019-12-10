@@ -5,7 +5,7 @@ include "SyncImpl.i.dfy"
 module EvictImpl {
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened DeallocImpl
   import opened SyncImpl
   import EvictModel

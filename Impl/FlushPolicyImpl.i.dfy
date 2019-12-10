@@ -8,7 +8,7 @@ include "FlushPolicyModel.i.dfy"
 module FlushPolicyImpl {
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened FlushImpl
   import opened GrowImpl
   import opened SplitImpl

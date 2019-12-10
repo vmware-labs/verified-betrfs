@@ -1,4 +1,4 @@
-include "CacheModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
@@ -6,7 +6,7 @@ include "KVListPartialFlush.i.dfy"
 module FlushModel { 
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
   import KVListPartialFlush
 
   import opened Options

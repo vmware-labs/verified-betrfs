@@ -13,7 +13,7 @@ module QueryImpl {
   import opened SyncImpl
   import opened IOImpl
   import QueryModel
-  import CacheModel
+  import BookkeepingModel
   import opened StateImpl
   import opened MutableBucket
 
@@ -102,7 +102,7 @@ module QueryImpl {
             return;
           } else {
             if node.children.Some? {
-              CacheModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.children.value[r]);
+              BookkeepingModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.children.value[r]);
               counter := counter - 1;
               ref := node.children.value[r];
             } else {

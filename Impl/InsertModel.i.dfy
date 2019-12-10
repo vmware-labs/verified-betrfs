@@ -1,10 +1,10 @@
-include "CacheModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module InsertModel { 
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
   import opened FlushPolicyModel
 
   import opened Options

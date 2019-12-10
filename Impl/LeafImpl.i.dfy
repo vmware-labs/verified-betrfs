@@ -1,10 +1,10 @@
-include "CacheImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "LeafModel.i.dfy"
 
 module LeafImpl { 
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened LeafModel
   import opened StateImpl
   import opened ImplNode

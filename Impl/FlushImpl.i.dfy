@@ -1,9 +1,9 @@
-include "CacheImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "FlushModel.i.dfy"
 
 module FlushImpl { 
   import opened Impl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import opened StateImpl
   import opened ImplNode
 
@@ -20,7 +20,7 @@ module FlushImpl {
 
   import opened NativeTypes
   import StateModel
-  import CacheModel
+  import BookkeepingModel
   import FlushModel
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
@@ -63,8 +63,8 @@ module FlushImpl {
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
-    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
-    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
 
     assert s.I().cache[parentref] == parent.I();
     assert parent.I().children == s.I().cache[parentref].children;
@@ -79,7 +79,7 @@ module FlushImpl {
     var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
-    CacheModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+    BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
         Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
 
     var newchildref := allocBookkeeping(k, s, newchild.children);

@@ -2,7 +2,7 @@ include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-module CacheModel { 
+module BookkeepingModel { 
   import opened StateModel
   import opened IOModel
 

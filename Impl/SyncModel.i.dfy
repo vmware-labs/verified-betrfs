@@ -9,7 +9,7 @@ include "../lib/Base/Sets.i.dfy"
 module SyncModel { 
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
   import opened DeallocModel
   import opened Bounds
 

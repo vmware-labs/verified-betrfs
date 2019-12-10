@@ -8,7 +8,7 @@ include "../PivotBetree/Bounds.i.dfy"
 module FlushPolicyModel {
   import opened StateModel
   import opened IOModel
-  import opened CacheModel
+  import opened BookkeepingModel
   import opened FlushModel
   import opened GrowModel
   import opened SplitModel

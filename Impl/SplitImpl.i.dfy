@@ -1,10 +1,10 @@
-include "CacheImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "SplitModel.i.dfy"
 
 module SplitImpl { 
   import opened Impl
   import opened IOImpl
-  import opened CacheImpl
+  import opened BookkeepingImpl
   import SplitModel
   import opened StateImpl
   import opened ImplNode
@@ -30,9 +30,9 @@ module SplitImpl {
   requires left_child.Repr !! s.Repr()
   requires right_child.Repr !! s.Repr()
   requires s.ready
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), left_child.children)
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), right_child.children)
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), left_child.children)
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), right_child.children)
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies s.lru.Repr
@@ -47,19 +47,19 @@ module SplitImpl {
   {
     SplitModel.reveal_splitBookkeeping();
 
-    CacheModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, right_child.children);
-    CacheModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, Some(fused_parent_children));
-    CacheModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, right_child.children);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, Some(fused_parent_children));
+    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children);
 
     writeBookkeeping(k, s, left_childref, left_child.children);
 
-    CacheModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, Some(fused_parent_children));
-    CacheModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children);
-    CacheModel.lemmaRefInGraphPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, left_childref);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, Some(fused_parent_children));
+    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children);
+    BookkeepingModel.lemmaRefInGraphPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, left_childref);
 
     writeBookkeeping(k, s, right_childref, right_child.children);
 
-    CacheModel.lemmaChildrenConditionsOfReplace1With2(Ic(k), s.I(), fused_parent_children, slot as int, left_childref, right_childref);
+    BookkeepingModel.lemmaChildrenConditionsOfReplace1With2(Ic(k), s.I(), fused_parent_children, slot as int, left_childref, right_childref);
 
     var rep := Replace1with2(fused_parent_children, left_childref, right_childref, slot);
     writeBookkeeping(k, s, parentref, Some(rep));
@@ -111,8 +111,8 @@ module SplitImpl {
   requires left_childref != parentref
   requires right_childref != parentref
   requires |child.buckets| >= 2
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
-  requires CacheModel.ChildrenConditions(Ic(k), s.I(), child.children)
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), child.children)
   requires |fused_parent_children| < MaxNumChildren()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
 
@@ -168,8 +168,8 @@ module SplitImpl {
     var fused_child_opt := s.cache.GetOpt(childref);
     var fused_child := fused_child_opt.value;
 
-    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
-    CacheModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
 
     var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
     var ubound := (if slot < |fused_parent.pivotTable| as uint64 then Some(fused_parent.pivotTable[slot]) else None);
@@ -186,7 +186,7 @@ module SplitImpl {
       return;
     }
 
-    CacheModel.getFreeRefDoesntEqual(s.I(), parentref);
+    BookkeepingModel.getFreeRefDoesntEqual(s.I(), parentref);
 
     var left_childref := getFreeRef(s);
     if left_childref.None? {
@@ -194,7 +194,7 @@ module SplitImpl {
       return;
     }
 
-    CacheModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref);
+    BookkeepingModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref);
 
     var right_childref := getFreeRef2(s, left_childref.value);
     if right_childref.None? {
