@@ -1,7 +1,7 @@
 include "Impl.i.dfy"
 include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
-include "ImplMarshalling.i.dfy"
+include "MarshallingImpl.i.dfy"
 
 module IOImpl { 
   import opened Impl
@@ -12,7 +12,7 @@ module IOImpl {
   import opened ImplNode
   import opened ImplMutCache
   import StateModel
-  import ImplMarshalling
+  import MarshallingImpl
   import IMM = ImplMarshallingModel
   import IOModel
   import BucketsLib
@@ -53,7 +53,7 @@ module IOImpl {
   {
     IOModel.reveal_RequestWrite();
 
-    var bytes := ImplMarshalling.MarshallCheckedSector(sector);
+    var bytes := MarshallingImpl.MarshallCheckedSector(sector);
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
     } else {
@@ -79,7 +79,7 @@ module IOImpl {
   {
     IOModel.reveal_FindLocationAndRequestWrite();
 
-    var bytes := ImplMarshalling.MarshallCheckedSector(sector);
+    var bytes := MarshallingImpl.MarshallCheckedSector(sector);
     if (bytes == null) {
       id := None;
       loc := None;
@@ -170,7 +170,7 @@ module IOImpl {
     var id1, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= BlockSizeUint64() {
-      var sectorOpt := ImplMarshalling.ParseCheckedSector(bytes);
+      var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {
       sector := None;

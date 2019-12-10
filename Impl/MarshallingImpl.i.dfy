@@ -8,7 +8,7 @@ include "../lib/Base/NativeArrays.s.dfy"
 include "Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
 
-module ImplMarshalling {
+module MarshallingImpl {
   import IM = StateModel
   import SI = StateImpl
   import opened ImplNode

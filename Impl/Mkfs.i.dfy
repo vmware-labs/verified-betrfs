@@ -1,11 +1,11 @@
 include "Marshalling.i.dfy"
 include "Impl.i.dfy"
 include "StateImpl.i.dfy"
-include "ImplMarshalling.i.dfy"
+include "MarshallingImpl.i.dfy"
 
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {
-  import ImplMarshalling
+  import MarshallingImpl
   import IMM = ImplMarshallingModel
   import opened Options
   import opened NativeTypes
@@ -42,7 +42,7 @@ module {:extern} MkfsImpl {
     assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
     ghost var sector:SI.Sector := SI.SectorBlock(node);
     ghost var is:SM.Sector := SI.ISector(sector);
-    var b1 := ImplMarshalling.MarshallCheckedSector(SI.SectorBlock(node));
+    var b1 := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
 
     var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
     sectorIndirectionTable.InvForMkfs();
@@ -60,7 +60,7 @@ module {:extern} MkfsImpl {
 
     //assert SI.WFSector(SI.SectorIndirectionTable(sectorIndirectionTable));
     assume SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
-    var b0 := ImplMarshalling.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
+    var b0 := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
     // TODO(jonh): MarshallCheckedSector owes us a promise that it can marshall
     // SectorIndirectionTables successfully. It can't make that promise right

@@ -95,9 +95,6 @@ def rename(sourceName, destName):
 #AsyncDiskModel.s.dfy
 #""")
 
-rename("ImplBucketGenerator.i.dfy", "BucketGeneratorImpl.i.dfy")
-rename("ModelBucketGenerator.i.dfy", "BucketGeneratorModel.i.dfy")
-rename("ImplBucketSuccessorLoop.i.dfy", "BucketSuccessorLoopImpl.i.dfy")
-rename("ModelBucketSuccessorLoop.i.dfy", "BucketSuccessorLoopModel.i.dfy")
+rename("ImplMarshalling.i.dfy", "MarshallingImpl.i.dfy")
 
 renaminator.enact()
