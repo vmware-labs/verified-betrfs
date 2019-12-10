@@ -6,7 +6,6 @@ include "EvictImpl.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module FlushPolicyImpl {
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened FlushImpl

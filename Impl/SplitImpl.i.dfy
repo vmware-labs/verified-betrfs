@@ -2,7 +2,6 @@ include "BookkeepingImpl.i.dfy"
 include "SplitModel.i.dfy"
 
 module SplitImpl { 
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import SplitModel

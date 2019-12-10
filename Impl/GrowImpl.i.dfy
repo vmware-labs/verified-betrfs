@@ -2,7 +2,6 @@ include "BookkeepingImpl.i.dfy"
 include "GrowModel.i.dfy"
 
 module GrowImpl { 
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened StateImpl

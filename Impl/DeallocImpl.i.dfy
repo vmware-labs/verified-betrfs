@@ -2,7 +2,6 @@ include "BookkeepingImpl.i.dfy"
 include "DeallocModel.i.dfy"
 
 module DeallocImpl { 
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import DeallocModel

@@ -3,7 +3,6 @@ include "DeallocImpl.i.dfy"
 include "SyncImpl.i.dfy"
 
 module EvictImpl {
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened DeallocImpl

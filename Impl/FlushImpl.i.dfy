@@ -2,7 +2,6 @@ include "BookkeepingImpl.i.dfy"
 include "FlushModel.i.dfy"
 
 module FlushImpl { 
-  import opened Impl
   import opened BookkeepingImpl
   import opened StateImpl
   import opened NodeImpl

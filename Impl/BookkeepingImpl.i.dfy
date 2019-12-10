@@ -2,7 +2,6 @@ include "IOImpl.i.dfy"
 include "BookkeepingModel.i.dfy"
 
 module BookkeepingImpl { 
-  import opened Impl
   import opened IOImpl
   import opened StateImpl
   import BookkeepingModel

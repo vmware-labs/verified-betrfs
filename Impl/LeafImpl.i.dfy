@@ -2,7 +2,6 @@ include "BookkeepingImpl.i.dfy"
 include "LeafModel.i.dfy"
 
 module LeafImpl { 
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened LeafModel

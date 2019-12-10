@@ -1,4 +1,3 @@
-include "Impl.i.dfy"
 include "SyncImpl.i.dfy"
 include "SuccModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
@@ -10,7 +9,6 @@ include "BucketSuccessorLoopImpl.i.dfy"
 // See dependency graph in MainImpl.dfy
 
 module SuccImpl { 
-  import opened Impl
   import opened SyncImpl
   import opened IOImpl
   import SuccModel

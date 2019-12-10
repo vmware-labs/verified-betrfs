@@ -1,4 +1,3 @@
-include "Impl.i.dfy"
 include "SyncImpl.i.dfy"
 include "QueryModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
@@ -9,7 +8,6 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 // See dependency graph in MainImpl.dfy
 
 module QueryImpl { 
-  import opened Impl
   import opened SyncImpl
   import opened IOImpl
   import QueryModel

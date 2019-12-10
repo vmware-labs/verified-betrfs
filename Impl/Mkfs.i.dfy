@@ -1,5 +1,4 @@
 include "Marshalling.i.dfy"
-include "Impl.i.dfy"
 include "StateImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
 
@@ -9,7 +8,6 @@ module {:extern} MkfsImpl {
   import IMM = ImplMarshallingModel
   import opened Options
   import opened NativeTypes
-  import opened Impl
   import opened BucketWeights
   import SM = StateModel
   import opened MutableBucket

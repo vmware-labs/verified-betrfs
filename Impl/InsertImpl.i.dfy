@@ -1,4 +1,3 @@
-include "Impl.i.dfy"
 include "IOImpl.i.dfy"
 include "BookkeepingImpl.i.dfy"
 include "InsertModel.i.dfy"
@@ -11,7 +10,6 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 // See dependency graph in MainImpl.dfy
 
 module InsertImpl { 
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened InsertModel

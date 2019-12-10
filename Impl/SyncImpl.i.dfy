@@ -1,4 +1,3 @@
-include "Impl.i.dfy"
 include "IOImpl.i.dfy"
 include "DeallocImpl.i.dfy"
 include "SyncModel.i.dfy"
@@ -10,7 +9,6 @@ include "../lib/Base/Sets.i.dfy"
 // See dependency graph in MainImpl.dfy
 
 module SyncImpl { 
-  import opened Impl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened DeallocImpl

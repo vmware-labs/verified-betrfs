@@ -1,10 +1,8 @@
-include "Impl.i.dfy"
 include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
 include "MarshallingImpl.i.dfy"
 
 module IOImpl { 
-  import opened Impl
   import MainDiskIOHandler
   import opened NativeTypes
   import opened Options

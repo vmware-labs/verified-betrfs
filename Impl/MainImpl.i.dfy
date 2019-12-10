@@ -4,7 +4,6 @@ include "../lib/Base/Sets.i.dfy"
 include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 
-include "Impl.i.dfy"
 include "InsertImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "SuccImpl.i.dfy"
@@ -13,7 +12,6 @@ include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
 
 module {:extern} MainImpl refines Main { 
-  import opened Impl
   import SM = StateModel
   import SI = StateImpl
   import IOImpl
