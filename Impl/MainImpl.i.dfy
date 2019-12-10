@@ -27,10 +27,12 @@ module {:extern} MainImpl refines Main {
   import SyncModel
   import SuccModel
 
-  import ADM = Impl.ImplADM
+  import BBC = BetreeBlockCache
+  import BC = BetreeGraphBlockCache
+  import ADM = ByteBetreeBlockCacheSystem
 
-  type Constants = ImplConstants
-  type Variables = ImplVariables
+  type Constants = SI.ImplConstants
+  type Variables = SI.ImplVariables
 
   function HeapSet(hs: HeapState) : set<object> { hs.Repr }
 
@@ -58,7 +60,7 @@ module {:extern} MainImpl refines Main {
     BBC.InitImpliesInv(Ik(k), I(k, hs));
   }
 
-  lemma ioAndHsNotInReadSet(s: ImplVariables, io: DiskIOHandler, hs: HeapState)
+  lemma ioAndHsNotInReadSet(s: Variables, io: DiskIOHandler, hs: HeapState)
   requires s.W()
   ensures io !in s.Repr()
   ensures hs !in s.Repr()

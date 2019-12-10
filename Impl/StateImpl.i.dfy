@@ -1,3 +1,4 @@
+include "ByteBetreeBlockCacheSystem.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"
@@ -21,6 +22,7 @@ module {:extern} StateImpl {
   import IndirectionTableModel
   import MutableMap
   import MutableMapModel
+  import ByteBetreeBlockCacheSystem
 
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
@@ -29,6 +31,7 @@ module {:extern} StateImpl {
   import BC = BetreeGraphBlockCache
   import M = BetreeBlockCache
   import D = AsyncSectorDisk
+  import LBAType = LBAType
   import MainDiskIOHandler
   import LruModel
   import LruImpl
@@ -38,6 +41,9 @@ module {:extern} StateImpl {
 
   import MM = MutableMap
   import ReferenceType`Internal
+
+  type ImplConstants = ByteBetreeBlockCacheSystem.M.Constants
+  type ImplVariables = Variables
 
   type Reference = BT.G.Reference
   type Key = MS.Key
