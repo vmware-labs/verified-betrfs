@@ -19,6 +19,7 @@ module BucketSuccessorLoopImpl {
   returns (res : UI.SuccResultList)
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
   requires |buckets| >= 1
+  requires |buckets| < 0x1_0000_0000_0000_0000
   requires maxToFind >= 1
   ensures res == BucketSuccessorLoopModel.GetSuccessorInBucketStack(
       MutBucket.ISeq(buckets), maxToFind as int, start, upTo)

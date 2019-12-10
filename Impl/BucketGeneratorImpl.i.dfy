@@ -7,6 +7,7 @@ module BucketGeneratorImpl {
   import ModelBucketIterator
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
+  import opened NativeTypes
   import UI
 
   class Generator {
@@ -249,6 +250,7 @@ module BucketGeneratorImpl {
     returns (g: Generator)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     requires |buckets| >= 1
+    requires |buckets| < 0x1_0000_0000_0000_0000
     decreases |buckets|
     ensures g.Inv()
     ensures fresh(g.Repr)
@@ -258,12 +260,12 @@ module BucketGeneratorImpl {
     {
       MutBucket.AllocatedReprSeq(buckets);
 
-      if |buckets| == 1 {
-        g := GenFromBucketWithLowerBound(buckets[0], start);
+      if |buckets| as uint64 == 1 {
+        g := GenFromBucketWithLowerBound(buckets[0 as uint64], start);
 
         MutBucket.ReprSeq1Eq(buckets);
       } else {
-        var mid := |buckets| / 2;
+        var mid := |buckets| as uint64 / 2;
 
         MutBucket.AllocatedReprSeq(buckets[..mid]);
         MutBucket.AllocatedReprSeq(buckets[mid..]);
