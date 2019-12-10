@@ -235,7 +235,7 @@ module ImplNode {
       node' := new Node(leftPivots, leftChildren, leftBuckets);
     }
 
-    lemma ReprSeqDisjointPrepend(t: MutBucket, s: seq<MutBucket>)
+    static lemma ReprSeqDisjointPrepend(t: MutBucket, s: seq<MutBucket>)
     requires MutBucket.ReprSeqDisjoint(s)
     requires MutBucket.ReprSeq(s) !! t.Repr
     ensures MutBucket.ReprSeqDisjoint([t] + s)
@@ -244,8 +244,12 @@ module ImplNode {
       MutBucket.reveal_ReprSeq();
     }
 
-    lemma ReprSeqPrepend(t: MutBucket, s: seq<MutBucket>)
+    static lemma ReprSeqPrepend(t: MutBucket, s: seq<MutBucket>)
     ensures MutBucket.ReprSeq([t] + s) == MutBucket.ReprSeq(s) + t.Repr
+    {
+      MutBucket.ReprSeqAdditive([t], s);
+      MutBucket.ReprSeq1Eq([t]);
+    }
 
     method CutoffNodeAndKeepRight(pivot: Key) returns (node': Node)
     requires Inv()

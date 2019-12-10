@@ -24,7 +24,7 @@ module BucketGeneratorImpl {
     ghost var ReadOnlyRepr: set<object>;
     ghost var Height: nat;
 
-    constructor() { assume false; }
+    constructor() { }
 
     // Question: Why is Inv marked opaque, and what's up with the reveal_Inv_for lemma?
     //
