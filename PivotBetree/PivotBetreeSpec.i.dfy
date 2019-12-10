@@ -196,44 +196,15 @@ module PivotBetreeSpec {
 
   //// Succ
 
-  /*
-  // A fork consists of two adjacent lookups. The `lastInCommon` field means that the lookups
-  // are identical up *through* the layer indexed `lastInCommon` (which will always be at least
-  // 0, since the roots are always identical).
-  // The next two layers will correspond to adjacent children.
-  // The `firstKey` is always used to generate the first lookup. It corresponds to the key
-  // used to make the successor query.
-  // The `cutoffKey` is the first key of the second lookup.
-  datatype ForkedLookup = ForkedLookup(
-    lookup1: Lookup,
-    lookup2: Lookup,
-    ghost lastInCommon: int,
-    firstKey: Key,
-    cutoffKey: Key)
-
   datatype SuccQuery = SuccQuery(
-    key: Key,
-    results: seq<UI.SuccResult>,
-    fork: ForkedLookup,
-    numResultsInLeft: int)
+      start: UI.RangeStart,
+      results: seq<UI.SuccResult>,
+      end: UI.RangeEnd,
+      buckets: seq<Bucket>,
+      lookup: Lookup)
 
-  predicate LookupNodeIsLastChild(lookup: Lookup, i: int)
-  requires 1 <= i < |lookup|
-  {
-    && lookup[i-1].node.children.Some?
-    && |lookup[i-1].node.children.value| > 0
-    && lookup[i].ref == Last(lookup[i-1].node.children.value)
-  }
-
-  predicate LookupNodeIsFirstChild(lookup: Lookup, i: int)
-  requires 1 <= i < |lookup|
-  {
-    && lookup[i-1].node.children.Some?
-    && |lookup[i-1].node.children.value| > 0
-    && lookup[i].ref == lookup[i-1].node.children.value[0]
-  }
-
-  function LookupUpperBoundAtLayer(layer: Layer, key: Key)
+  function LookupUpperBoundAtLayer(layer: Layer, key: Key) : Option<Key>
+  requires WFNode(layer.node)
   {
     var r := Pivots.Route(layer.node.pivotTable, key);
     if r < |layer.node.pivotTable|
@@ -241,67 +212,61 @@ module PivotBetreeSpec {
     else None
   }
 
-  function OptionKeyMin(k1: Option<Key>, k2: Option<Key>)
+  function OptionKeyMin(k1: Option<Key>, k2: Option<Key>) : Option<Key>
   {
-    match k1 (
-      case Some(key1) => match k2 (
-        case Some(key2) => if Keyspace.lt(key1, key2) then Some(key1) else Some(key2)
+    match k1 {
+      case Some(key1) => match k2 {
+        case Some(key2) => if Keyspace.lt(k1.value, k2.value) then Some(k1.value) else Some(k2.value)
         case None => k1
-      )
+      }
       case None => k2
-    )
+    }
   }
 
   function {:opaque} LookupUpperBound(lookup: Lookup, key: Key) : Option<Key>
+  requires LookupVisitsWFNodes(lookup)
   {
     if lookup == []
     then None
     else OptionKeyMin(
-        LookupUpperBound(DropLast(lookup)),
-        LookupUpperBoundAtLevel(Last(lookup), key)
+        LookupUpperBound(DropLast(lookup), key),
+        LookupUpperBoundAtLayer(Last(lookup), key)
       )
   }
 
-  predicate ValidForkedLookup(fork: ForkedLookup)
+  predicate BufferDefinesEmptyValue(m: G.M.Message)
   {
-    && LookupVisitsWFNodes(fork.lookup1)
-    && LookupVisitsWFNodes(fork.lookup2)
-
-    && WFLookupForKey(fork.firstKey, fork.lookup1)
-    && WFLookupForKey(fork.cutoffKey, fork.lookup2)
-
-    && 0 <= fork.lastInCommon < |fork.lookup1|
-    && 0 <= fork.lastInCommon < |fork.lookup2|
-    && (fork.lastInCommon == |fork.lookup1| - 1 <==>
-        fork.lastInCommon == |fork.lookup1| - 1)
-    // Paths must go all the way down to leaves
-    && Last(fork.lookup1).node.children.None?
-    && Last(fork.lookup2).node.children.None?
-
-    // In this case, lookup1 is the rightmost possible lookup.
-    && (LookupUpperBound(fork.lookup1, fork.firstKey).None? ==>
-        fork.lastInCommon == |fork.lookup1| - 1)
-
-    && (LookupUpperBound(fork.lookup1, fork.firstKey).Some? ==>
-      LookupUpperBoundAtLevel(fork.lookup1[fork.lastInCommon])
-          == LookupUpperBound(fork.lookup1, fork.firstKey)
-    )
+    G.M.Merge(m, M.DefineDefault()).value == M.DefaultValue()
   }
 
   predicate ValidSuccQuery(sq: SuccQuery)
   {
-    && sq.key == sq.fork.firstKey
-    && ValidForkedLookup(sq.fork)
-    && 0 <= sq.numResultsInLeft <= |sq.results|
-    && (forall i | 0 <= i < |sq.results| - 1 :: sq.results[i].SuccKeyValue?)
-    && (forall i | 0 <= i < sq.numResultsInLeft ::
-        IsValidSucc_1(sq.fork, if i == 0 then sq.key else sq.results[i-1].key, sq.results[i]))
-    && (sq.numResultsInLeft < |sq.results| ==>
-        IsValidSucc_1to2(sq.fork, if i == 0 then sq.key else sq.results[i-1].key, sq.results[i]))
-    && (forall i | sq.numResultsInLeft < i < |sq.results| ::
-        IsValidSucc_2(sq.fork, sq.results[i-1].key, sq.results[i]))
+    && var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
+    && WFLookupForKey(sq.lookup, startKey)
+
+    && var lookupUpperBound := LookupUpperBound(sq.lookup, startKey);
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
+
+    && Last(sq.lookup).node.children.None?
+
+    && |sq.lookup| == |sq.buckets|
+    && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Pivots.Route(sq.lookup[i].node.pivotTable, startKey)])
+
+    && MS.NonEmptyRange(sq.start, sq.end)
+
+    && sq.results ==
+        Buckets.SortedSeqOfKeyValueMap(
+          Buckets.KeyValueMapOfBucket(
+            Buckets.ClampRange(Buckets.ComposeSeq(sq.buckets), sq.start, sq.end)))
   }
-  */
+
+  function SuccQueryReads(q: SuccQuery): seq<ReadOp> {
+    q.lookup
+  }
+
+  function SuccQueryOps(q: SuccQuery): seq<Op> {
+    []
+  }
 
   //// Insert
   datatype MessageInsertion = MessageInsertion(key: Key, msg: Message, oldroot: Node)
@@ -420,6 +385,7 @@ module PivotBetreeSpec {
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
   {
+    Buckets.reveal_SplitBucketLeft();
     var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
@@ -441,6 +407,7 @@ module PivotBetreeSpec {
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
   {
+    Buckets.reveal_SplitBucketRight();
     var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
@@ -700,6 +667,7 @@ module PivotBetreeSpec {
 
   datatype BetreeStep =
     | BetreeQuery(q: LookupQuery)
+    | BetreeSuccQuery(sq: SuccQuery)
     | BetreeInsert(ins: MessageInsertion)
     | BetreeFlush(flush: NodeFlush)
     | BetreeGrow(growth: RootGrowth)
@@ -711,6 +679,7 @@ module PivotBetreeSpec {
   {
     match step {
       case BetreeQuery(q) => ValidQuery(q)
+      case BetreeSuccQuery(sq) => ValidSuccQuery(sq)
       case BetreeInsert(ins) => ValidInsertion(ins)
       case BetreeFlush(flush) => ValidFlush(flush)
       case BetreeGrow(growth) => ValidGrow(growth)
@@ -725,6 +694,7 @@ module PivotBetreeSpec {
   {
     match step {
       case BetreeQuery(q) => QueryReads(q)
+      case BetreeSuccQuery(sq) => SuccQueryReads(sq)
       case BetreeInsert(ins) => InsertionReads(ins)
       case BetreeFlush(flush) => FlushReads(flush)
       case BetreeGrow(growth) => GrowReads(growth)
@@ -739,6 +709,7 @@ module PivotBetreeSpec {
   {
     match step {
       case BetreeQuery(q) => QueryOps(q)
+      case BetreeSuccQuery(sq) => SuccQueryOps(sq)
       case BetreeInsert(ins) => InsertionOps(ins)
       case BetreeFlush(flush) => FlushOps(flush)
       case BetreeGrow(growth) => GrowOps(growth)
@@ -751,6 +722,7 @@ module PivotBetreeSpec {
   predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
     match step {
       case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
+      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.start, sq.results, sq.end)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
@@ -943,6 +915,7 @@ module PivotBetreeSpecWFNodes {
   {
     match betreeStep {
       case BetreeQuery(q) => {}
+      case BetreeSuccQuery(q) => {}
       case BetreeInsert(ins) => {
         ValidInsertWritesWFNodes(ins);
       }

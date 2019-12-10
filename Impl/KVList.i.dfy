@@ -210,7 +210,7 @@ module KVList {
     && (childrenIdx < |children| ==> 0 <= childIdx <= |children[childrenIdx].keys|)
     && |acc| == childrenIdx
     && (forall i | 0 <= i < childrenIdx :: WF(acc[i]))
-    && ISeq(acc) == BucketListFlush'(I(parent), ISeq(children), pivots, childrenIdx)
+    && ISeq(acc) == BucketListFlushPartial(I(parent), ISeq(children), pivots, childrenIdx)
     && WF(cur)
     && (childrenIdx < |children| ==> I(cur) == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx))
     && (childrenIdx < |children| && childIdx > 0 && parentIdx < |parent.keys| ==> lt(children[childrenIdx].keys[childIdx - 1], parent.keys[parentIdx]))
@@ -730,6 +730,7 @@ module KVList {
   ensures WF(left)
   ensures I(left) == SplitBucketLeft(I(kvl), pivot)
   {
+    reveal_SplitBucketLeft();
     var idx := ComputeCutoffPoint(kvl, pivot);
     left := Kvl(kvl.keys[..idx], kvl.values[..idx]);
 
@@ -765,6 +766,7 @@ module KVList {
   ensures WF(right)
   ensures I(right) == SplitBucketRight(I(kvl), pivot)
   {
+    reveal_SplitBucketRight();
     var idx := ComputeCutoffPoint(kvl, pivot);
     right := Kvl(kvl.keys[idx..], kvl.values[idx..]);
 

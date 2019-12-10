@@ -115,6 +115,18 @@ abstract module Main {
     if success then UI.PutOp(key, value) else UI.NoOp,
     io.diskOp())
 
+  method handleSucc(k: Constants, hs: HeapState, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  returns (res: Option<UI.SuccResultList>)
+  requires io.initialized()
+  requires Inv(k, hs)
+  requires maxToFind >= 1
+  modifies hs, HeapSet(hs)
+  modifies io
+  ensures Inv(k, hs)
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+    if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
+    io.diskOp())
+
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.
 

@@ -20,7 +20,7 @@ module MapSpec refines UIStateMachine {
 
   datatype Constants = Constants()
   type View = imap<Key, Value>
-  datatype Variables = Variables(view:View)
+  datatype Variables = Variables(ghost view:View)
 
   predicate ViewComplete(view:View)
   {

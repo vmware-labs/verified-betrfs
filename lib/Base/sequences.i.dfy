@@ -231,4 +231,23 @@ module Sequences {
   {
     s[..i] + [t] + s[i+1..]
   }
+
+  lemma CardinalityOfSetsOfSequenceIndices<T>(q:seq<T>, t:set<int>)
+    requires t == set i | 0 <= i < |q|
+    ensures |t| == |q|
+  {
+    if |q|>0 {
+      var sq := q[..|q|-1];
+      var st := set i | 0 <= i < |sq|;
+      calc {
+        |q|;
+        |sq| + 1;
+          { CardinalityOfSetsOfSequenceIndices(sq, st); }
+        |st| + 1;
+          { assert t == st + {|sq|}; }
+        |t|;
+      }
+    }
+  }
+
 }

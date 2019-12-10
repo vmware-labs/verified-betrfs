@@ -4,8 +4,18 @@
 # You can build anything reachable from these root files.
 DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
-DAFNY_ROOT?=".dafny/dafny/"
-DAFNY_CMD="$(DAFNY_ROOT)/Binaries/dafny"
+DAFNY_ROOT?=.dafny/dafny/
+DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
+DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
+
+ifndef TL
+	TL=20
+endif
+ifeq "$(TL)" "0"
+  TIMELIMIT=
+else
+  TIMELIMIT=/timeLimit:$(TL)
+endif
 
 ##############################################################################
 # Automatic targets
@@ -71,6 +81,9 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 .PHONY: faststatus
 syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
+.PHONY: verify-ordered
+verify-ordered: build/deps build/Impl/Bundle.i.okay
+
 ##############################################################################
 # C# executables
 
@@ -119,17 +132,26 @@ build/%.dummydep: %.dfy | $$(@D)/.
 
 ##############################################################################
 # .synchk: Dafny syntax check
-build/%.synchk: %.dfy | $$(@D)/.
+build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.synchk,%.synchk-tmp,$@))
 	( $(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ##############################################################################
 # .verchk: Dafny file-local verification
-build/%.verchk: %.dfy | $$(@D)/.
+build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 /timeLimit:20 $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
+
+##############################################################################
+# .okay: Dafny file-level verification, no time limit,
+# verifies in dependency order.
+# This is currently Travis's favorite build rule.
+
+build/%.okay: %.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 $<
+	touch $@
 
 ##############################################################################
 # .verified: Aggregate result of verification for this file and
@@ -165,9 +187,9 @@ build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) bu
 # .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
 # In principle, building code should depend on .verified! But we want
 # to play with perf with not-entirely-verifying trees.
-build/%.cs: %.dfy | $$(@D)/.
+build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
-	# Dafny irritatingly removes the '.i' presuffix, and has a weird behavior where it duplicates prefixes of relative paths. Bizarre.
+# Dafny irritatingly removes the '.i' presuffix, and has a weird behavior where it duplicates prefixes of relative paths. Bizarre.
 	$(eval TMPNAME=$(abspath $(patsubst %.s.cs,%-s.cs,$(patsubst %.i.cs,%-i.cs,$@))))
 	pwd
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) $<
@@ -175,7 +197,7 @@ build/%.cs: %.dfy | $$(@D)/.
 
 ##############################################################################
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
-build/%.cpp: %.dfy | $$(@D)/.
+build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
 	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
 # Dafny irritatingly removes the '.i' presuffix.

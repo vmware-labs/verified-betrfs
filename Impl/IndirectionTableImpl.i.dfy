@@ -2,14 +2,15 @@ include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
-include "../lib/DataStructures/LRU.i.dfy"
+include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapImpl.i.dfy"
+include "../lib/DataStructures/LruImpl.i.dfy"
 include "IndirectionTableModel.i.dfy"
 //
 // The heap-y implementation of IndirectionTableModel.
@@ -29,17 +30,18 @@ module IndirectionTableImpl {
   import MutableMap
   import LBAType
   import opened GenericMarshalling
-  import Bitmap
+  import BitmapModel
+  import BitmapImpl
   import opened Bounds
   import IndirectionTableModel
-  import MutableLru
+  import LruImpl
 
   type HashMap = MutableMap.ResizingHashMap<IndirectionTableModel.Entry>
 
   // TODO move bitmap in here?
   class IndirectionTable {
     var t: HashMap;
-    var garbageQueue: MutableLru.MutableLruQueue?;
+    var garbageQueue: LruImpl.LruImplQueue?;
     ghost var Repr: set<object>;
 
     lemma InvForMkfs()
@@ -174,7 +176,6 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_AddLocIfPresent();
 
-      assume this.t.Count as nat < 0x10000000000000000 / 8;
       var oldEntry := this.t.Get(ref);
       added := oldEntry.Some? && oldEntry.value.loc.None?;
       if added {
@@ -215,7 +216,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
     }
 
-    static method PredInc(t: HashMap, q: MutableLru.MutableLruQueue, ref: BT.G.Reference)
+    static method PredInc(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -240,7 +241,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method PredDec(t: HashMap, q: MutableLru.MutableLruQueue, ref: BT.G.Reference)
+    static method PredDec(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -266,7 +267,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method UpdatePredCounts(t: HashMap, q: MutableLru.MutableLruQueue, ghost changingRef: BT.G.Reference,
+    static method UpdatePredCounts(t: HashMap, q: LruImpl.LruImplQueue, ghost changingRef: BT.G.Reference,
         newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
     requires t.Inv()
     requires q.Inv()
@@ -436,7 +437,7 @@ module IndirectionTableImpl {
       t1.Insert(BT.G.Root(), oldEntry.(predCount := 1));
 
       var it := copy.IterStart();
-      while it.next.Some?
+      while it.next.Next?
       invariant t1.Inv()
       invariant copy.Inv()
       invariant copy.Repr !! t1.Repr
@@ -453,7 +454,7 @@ module IndirectionTableImpl {
 
         ghost var t0 := t1.I();
 
-        var succs := it.next.value.1.succs;
+        var succs := it.next.value.succs;
         var i: uint64 := 0;
         while i < |succs| as uint64
         invariant t1.Inv()
@@ -490,7 +491,7 @@ module IndirectionTableImpl {
     }
 
     static method MakeGarbageQueue(t: HashMap)
-    returns (q : MutableLru.MutableLruQueue)
+    returns (q : LruImpl.LruImplQueue)
     requires t.Inv()
     ensures q.Inv()
     ensures fresh(q.Repr)
@@ -498,9 +499,9 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_makeGarbageQueue();
 
-      q := new MutableLru.MutableLruQueue();
+      q := new LruImpl.LruImplQueue();
       var it := t.IterStart();
-      while it.next.Some?
+      while it.next.Next?
       invariant q.Inv()
       invariant fresh(q.Repr)
       invariant MutableMapModel.Inv(t.I())
@@ -509,10 +510,10 @@ module IndirectionTableImpl {
              == IndirectionTableModel.makeGarbageQueueIterate(t.I(), q.Queue, it)
       decreases it.decreaser
       {
-        if it.next.value.1.predCount == 0 {
-          LruModel.LruUse(q.Queue, it.next.value.0);
+        if it.next.value.predCount == 0 {
+          LruModel.LruUse(q.Queue, it.next.key);
           assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
-          q.Use(it.next.value.0);
+          q.Use(it.next.key);
         }
         it := t.IterInc(it);
       }
@@ -526,31 +527,35 @@ module IndirectionTableImpl {
     ensures s == null ==> IndirectionTableModel.valToIndirectionTable(v).None?
     ensures s != null ==> IndirectionTableModel.valToIndirectionTable(v) == Some(s.I())
     {
-      var res := ValToHashMap(v.a);
-      match res {
-        case Some(t) => {
-          var rootRef := t.Get(BT.G.Root());
-          if rootRef.Some? && t.Count <= IndirectionTableModel.MaxSizeUint64() {
-            var t1 := ComputeRefCounts(t);
-            if t1 != null {
-              IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1.I());
-              IndirectionTableModel.lemma_count_eq_graph_size(t.I());
-              IndirectionTableModel.lemma_count_eq_graph_size(t1.I());
+      if |v.a| as uint64 <= IndirectionTableModel.MaxSizeUint64() {
+        var res := ValToHashMap(v.a);
+        match res {
+          case Some(t) => {
+            var rootRef := t.Get(BT.G.Root());
+            if rootRef.Some? {
+              var t1 := ComputeRefCounts(t);
+              if t1 != null {
+                IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1.I());
+                IndirectionTableModel.lemma_count_eq_graph_size(t.I());
+                IndirectionTableModel.lemma_count_eq_graph_size(t1.I());
 
-              var q := MakeGarbageQueue(t1);
-              s := new IndirectionTable(t1);
-              s.garbageQueue := q;
-              s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
+                var q := MakeGarbageQueue(t1);
+                s := new IndirectionTable(t1);
+                s.garbageQueue := q;
+                s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
+              } else {
+                s := null;
+              }
             } else {
               s := null;
             }
-          } else {
+          }
+          case None => {
             s := null;
           }
         }
-        case None => {
-          s := null;
-        }
+      } else {
+        s := null;
       }
     }
 
@@ -597,7 +602,7 @@ module IndirectionTableImpl {
       var it := t.IterStart();
       var i: uint64 := 0;
       ghost var partial := map[];
-      while it.next.Some?
+      while it.next.Next?
       invariant Inv()
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant 0 <= i as int <= a.Length
@@ -618,7 +623,7 @@ module IndirectionTableImpl {
       invariant SeqSum(a[..i]) <= |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
       decreases it.decreaser
       {
-        var (ref, locOptGraph: IndirectionTableModel.Entry) := it.next.value;
+        var (ref, locOptGraph: IndirectionTableModel.Entry) := (it.next.key, it.next.value);
         assert ref in I().locs;
         // NOTE: deconstructing in two steps to work around c# translation bug
         var locOpt := locOptGraph.loc;
@@ -691,7 +696,7 @@ module IndirectionTableImpl {
     // To bitmap
 
     method InitLocBitmap()
-    returns (success: bool, bm: Bitmap.Bitmap)
+    returns (success: bool, bm: BitmapImpl.Bitmap)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
     ensures bm.Inv()
@@ -700,25 +705,23 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_InitLocBitmap();
 
-      bm := new Bitmap.Bitmap(NumBlocksUint64());
+      bm := new BitmapImpl.Bitmap(NumBlocksUint64());
       bm.Set(0);
       var it := t.IterStart();
-      while it.next.Some?
+      while it.next.Next?
       invariant t.Inv()
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant bm.Inv()
       invariant MutableMapModel.WFIter(t.I(), it)
-      invariant Bitmap.Len(bm.I()) == NumBlocks()
+      invariant BitmapModel.Len(bm.I()) == NumBlocks()
       invariant IndirectionTableModel.InitLocBitmapIterate(I(), it, bm.I())
              == IndirectionTableModel.InitLocBitmap(I())
       invariant fresh(bm.Repr)
       decreases it.decreaser
       {
-        var kv := it.next.value;
+        assert it.next.key in IndirectionTableModel.I(I()).locs;
 
-        assert kv.0 in IndirectionTableModel.I(I()).locs;
-
-        var loc: uint64 := kv.1.loc.value.addr;
+        var loc: uint64 := it.next.value.loc.value.addr;
         var locIndex: uint64 := loc / BlockSizeUint64();
         if locIndex < NumBlocksUint64() {
           var isSet := bm.GetIsSet(locIndex);

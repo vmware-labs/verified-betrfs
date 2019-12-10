@@ -1,24 +1,24 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
-include "ImplModel.i.dfy"
+include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "MutableBucket.i.dfy"
-include "ImplModelSplit.i.dfy"
-include "ImplModelInsert.i.dfy"
+include "BucketImpl.i.dfy"
+include "SplitModel.i.dfy"
+include "InsertModel.i.dfy"
 
 module ImplNode {
   import opened Options
   import opened Sequences
   import opened NativeTypes
 
-  import IM = ImplModel
+  import IM = StateModel
   import BT = PivotBetreeSpec`Internal
   import Pivots = PivotsLib
   import opened Bounds
   import opened MutableBucket
   import opened BucketsLib
   import opened BucketWeights
-  import ImplModelSplit
-  import ImplModelInsert
+  import SplitModel
+  import InsertModel
 
   import MM = MutableMap
   import ReferenceType`Internal
@@ -144,11 +144,11 @@ module ImplNode {
     requires children.Some?
     modifies Repr
     ensures Inv()
-    ensures I() == old(ImplModelSplit.SplitParent(I(), pivot, slot as int, left_childref, right_childref))
+    ensures I() == old(SplitModel.SplitParent(I(), pivot, slot as int, left_childref, right_childref))
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
     {
-      ghost var b := ImplModelSplit.SplitParent(I(), pivot, slot as int, left_childref, right_childref);
-      ImplModelSplit.reveal_SplitParent();
+      ghost var b := SplitModel.SplitParent(I(), pivot, slot as int, left_childref, right_childref);
+      SplitModel.reveal_SplitParent();
       //assert SplitBucketInList(I().buckets, slot as int, pivot)
       //    == b.buckets;
 
@@ -219,9 +219,9 @@ module ImplNode {
     requires IM.WFNode(I())
     ensures node'.Inv()
     //ensures fresh(node'.Repr)
-    ensures node'.I() == ImplModelSplit.CutoffNodeAndKeepLeft(old(I()), pivot);
+    ensures node'.I() == SplitModel.CutoffNodeAndKeepLeft(old(I()), pivot);
     {
-      ImplModelSplit.reveal_CutoffNodeAndKeepLeft();
+      SplitModel.reveal_CutoffNodeAndKeepLeft();
       var cLeft := Pivots.ComputeCutoffForLeft(this.pivotTable, pivot);
       var leftPivots := this.pivotTable[.. cLeft];
       var leftChildren := if this.children.Some? then Some(this.children.value[.. cLeft + 1]) else None;
@@ -235,7 +235,7 @@ module ImplNode {
       node' := new Node(leftPivots, leftChildren, leftBuckets);
     }
 
-    lemma ReprSeqDisjointPrepend(t: MutBucket, s: seq<MutBucket>)
+    static lemma ReprSeqDisjointPrepend(t: MutBucket, s: seq<MutBucket>)
     requires MutBucket.ReprSeqDisjoint(s)
     requires MutBucket.ReprSeq(s) !! t.Repr
     ensures MutBucket.ReprSeqDisjoint([t] + s)
@@ -244,17 +244,21 @@ module ImplNode {
       MutBucket.reveal_ReprSeq();
     }
 
-    lemma ReprSeqPrepend(t: MutBucket, s: seq<MutBucket>)
+    static lemma ReprSeqPrepend(t: MutBucket, s: seq<MutBucket>)
     ensures MutBucket.ReprSeq([t] + s) == MutBucket.ReprSeq(s) + t.Repr
+    {
+      MutBucket.ReprSeqAdditive([t], s);
+      MutBucket.ReprSeq1Eq([t]);
+    }
 
     method CutoffNodeAndKeepRight(pivot: Key) returns (node': Node)
     requires Inv()
     requires IM.WFNode(I())
     ensures node'.Inv()
     //ensures fresh(node'.Repr)
-    ensures node'.I() == ImplModelSplit.CutoffNodeAndKeepRight(old(I()), pivot);
+    ensures node'.I() == SplitModel.CutoffNodeAndKeepRight(old(I()), pivot);
     {
-      ImplModelSplit.reveal_CutoffNodeAndKeepRight();
+      SplitModel.reveal_CutoffNodeAndKeepRight();
       var cRight := Pivots.ComputeCutoffForRight(this.pivotTable, pivot);
       var rightPivots := this.pivotTable[cRight ..];
       var rightChildren := if this.children.Some? then Some(this.children.value[cRight ..]) else None;
@@ -266,39 +270,39 @@ module ImplNode {
       ReprSeqDisjointPrepend(splitBucket, slice);
       ReprSeqPrepend(splitBucket, slice);
       node' := new Node(rightPivots, rightChildren, rightBuckets);
-      assert node'.I().buckets == ImplModelSplit.CutoffNodeAndKeepRight(old(I()), pivot).buckets;
-      assert node'.I().children == ImplModelSplit.CutoffNodeAndKeepRight(old(I()), pivot).children;
-      assert node'.I().pivotTable == ImplModelSplit.CutoffNodeAndKeepRight(old(I()), pivot).pivotTable;
+      assert node'.I().buckets == SplitModel.CutoffNodeAndKeepRight(old(I()), pivot).buckets;
+      assert node'.I().children == SplitModel.CutoffNodeAndKeepRight(old(I()), pivot).children;
+      assert node'.I().pivotTable == SplitModel.CutoffNodeAndKeepRight(old(I()), pivot).pivotTable;
     }
 
-    method CutoffNode(lbound: Option<Key>, rbound: Option<Key>)
+    static method CutoffNode(node: Node, lbound: Option<Key>, rbound: Option<Key>)
     returns (node' : Node)
-    requires Inv()
-    requires IM.WFNode(I())
+    requires node.Inv()
+    requires IM.WFNode(node.I())
     ensures node'.Inv()
     //ensures fresh(node'.Repr)
-    ensures node'.I() == ImplModelSplit.CutoffNode(old(I()), lbound, rbound)
+    ensures node'.I() == SplitModel.CutoffNode(old(node.I()), lbound, rbound)
     {
-      ImplModelSplit.reveal_CutoffNode();
+      SplitModel.reveal_CutoffNode();
       match lbound {
         case None => {
           match rbound {
             case None => {
-              node' := this;
+              node' := node;
             }
             case Some(rbound) => {
-              node' := this.CutoffNodeAndKeepLeft(rbound);
+              node' := node.CutoffNodeAndKeepLeft(rbound);
             }
           }
         }
         case Some(lbound) => {
           match rbound {
             case None => {
-              node' := this.CutoffNodeAndKeepRight(lbound);
+              node' := node.CutoffNodeAndKeepRight(lbound);
             }
             case Some(rbound) => {
-              var node1 := this.CutoffNodeAndKeepLeft(rbound);
-              ImplModelSplit.CutoffNodeAndKeepLeftCorrect(this.I(), rbound);
+              var node1 := node.CutoffNodeAndKeepLeft(rbound);
+              SplitModel.CutoffNodeAndKeepLeftCorrect(node.I(), rbound);
               node' := node1.CutoffNodeAndKeepRight(lbound);
             }
           }
@@ -313,10 +317,10 @@ module ImplNode {
     requires this.children.Some? ==> 0 <= num_children_left as int <= |this.children.value|
     requires 0 <= num_children_left as int <= |this.buckets|
     ensures node'.Inv()
-    ensures node'.I() == old(ImplModelSplit.SplitChildLeft(I(), num_children_left as int))
+    ensures node'.I() == old(SplitModel.SplitChildLeft(I(), num_children_left as int))
     ensures fresh(node'.Repr)
     {
-      ImplModelSplit.reveal_SplitChildLeft();
+      SplitModel.reveal_SplitChildLeft();
       var slice := MutBucket.CloneSeq(this.buckets[ .. num_children_left]);
       node' := new Node(
         this.pivotTable[ .. num_children_left - 1 ],
@@ -332,10 +336,10 @@ module ImplNode {
     requires this.children.Some? ==> 0 <= num_children_left as int <= |this.children.value|
     requires 0 <= num_children_left as int <= |this.buckets|
     ensures node'.Inv()
-    ensures node'.I() == old(ImplModelSplit.SplitChildRight(I(), num_children_left as int))
+    ensures node'.I() == old(SplitModel.SplitChildRight(I(), num_children_left as int))
     ensures fresh(node'.Repr)
     {
-      ImplModelSplit.reveal_SplitChildRight();
+      SplitModel.reveal_SplitChildRight();
       var slice := MutBucket.CloneSeq(this.buckets[num_children_left .. ]);
       node' := new Node(
         this.pivotTable[ num_children_left .. ],
@@ -370,9 +374,9 @@ module ImplNode {
     modifies Repr
     ensures Inv();
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
-    ensures I() == ImplModelInsert.NodeInsertKeyValue(old(I()), key, value)
+    ensures I() == InsertModel.NodeInsertKeyValue(old(I()), key, value)
     {
-      ImplModelInsert.reveal_NodeInsertKeyValue();
+      InsertModel.reveal_NodeInsertKeyValue();
 
       var r := Pivots.ComputeRoute(pivotTable, key);
 
@@ -395,7 +399,7 @@ module ImplNode {
       Repr := {this} + MutBucket.ReprSeq(buckets);
       LemmaReprFacts();
       assert Inv();
-      assert I().buckets == ImplModelInsert.NodeInsertKeyValue(old(I()), key, value).buckets;
+      assert I().buckets == InsertModel.NodeInsertKeyValue(old(I()), key, value).buckets;
     }
 
     lemma LemmaReprSeqBucketsLeRepr()
@@ -617,7 +621,7 @@ module ImplMutCache {
     requires |I()| <= 0x10000
     modifies Repr
     ensures Inv()
-    ensures I() == old(I()[ref := ImplModelSplit.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
+    ensures I() == old(I()[ref := SplitModel.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       var nodeOpt := GetOpt(ref);
@@ -635,10 +639,10 @@ module ImplMutCache {
     requires WeightBucketList(I()[ref].buckets) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv()
-    ensures I() == old(ImplModelInsert.CacheInsertKeyValue(I(), ref, key, msg))
+    ensures I() == old(InsertModel.CacheInsertKeyValue(I(), ref, key, msg))
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      ImplModelInsert.reveal_CacheInsertKeyValue();
+      InsertModel.reveal_CacheInsertKeyValue();
 
       var nodeOpt := GetOpt(ref);
       var node := nodeOpt.value;
