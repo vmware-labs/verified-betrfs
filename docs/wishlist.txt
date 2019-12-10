@@ -66,3 +66,25 @@ which is there to introduce an obligation, should it?
 warnings about unused non-ghost variables
 warnings about if/forall statements where condition is non-ghost but body is entirely ghost
 ghost { } blocks
+
+
+2019.12.10 meeting, trying to sort out what we think is quadratic
+slowdown in Impl due to the 9 !! subobjects.
+
+/trace all the impl files; try dealloc
+  - Jon is tentatively interested in building a per-method time
+  collector.
+try axiom profiler
+  - Rob got bullied into saying "yes" to this, but nobody will
+  actually hold him to it.
+try our crappy profiler
+reproduce small quadratic example and observe verification times
+  - and then try one of the compartmentalization techniques
+  - jonh has this lock
+build rustny
+  - feels like more than a 1-week project
+  - Some question as to whether we could get the ownerships we need
+  for Nodes from the Cache. Maybe check them out like library books
+  and put them back later? Can't borrow because once you borrow the
+  first Node, you don't own the Cache and hence can't borrow a second
+  Node.
