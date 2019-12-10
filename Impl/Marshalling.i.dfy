@@ -35,12 +35,13 @@ module Marshalling {
 
   /////// Conversion to PivotNode
 
-  function valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
+  /*function valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
+  requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value)
   {
     MapOption(IndirectionTableModel.valToIndirectionTable(v), IM.IIndirectionTable)
-  }
+  }*/
 
   function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<map<Key, Message>>)
   requires ValidVal(v)

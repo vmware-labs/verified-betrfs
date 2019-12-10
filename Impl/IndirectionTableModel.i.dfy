@@ -1004,7 +1004,10 @@ module IndirectionTableModel {
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
+  requires |a| < 0x1_0000_0000_0000_0000 / 8
+  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+  ensures s.Some? ==> s.value.count as int == |a|
   ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
   ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
   ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
@@ -1027,7 +1030,6 @@ module IndirectionTableModel {
               if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
                 None
               ) else (
-                assume table.count as nat < 0x1_0000_0000_0000_0000 / 8;
                 Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0)))
               )
             )
@@ -1106,31 +1108,36 @@ module IndirectionTableModel {
   }
 
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
+  requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> Inv(s.value)
   ensures s.Some? ==> TrackingGarbage(s.value)
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
   {
-    var t := valToHashMap(v.a);
-    match t {
-      case Some(t) => (
-        if BT.G.Root() in t.contents && t.count as int <= MaxSize() then (
-          var t1 := ComputeRefCounts(t);
-          if t1.Some? then (
-            lemmaMakeGarbageQueueCorrect(t1.value);
-            lemma_count_eq_graph_size(t);
-            lemma_count_eq_graph_size(t1.value);
-            var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
-            Some(res)
+    if |v.a| <= MaxSize() then (
+      var t := valToHashMap(v.a);
+      match t {
+        case Some(t) => (
+          if BT.G.Root() in t.contents then (
+            var t1 := ComputeRefCounts(t);
+            if t1.Some? then (
+              lemmaMakeGarbageQueueCorrect(t1.value);
+              lemma_count_eq_graph_size(t);
+              lemma_count_eq_graph_size(t1.value);
+              var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
+              Some(res)
+            ) else (
+              None
+            )
           ) else (
             None
           )
-        ) else (
-          None
         )
-      )
-      case None => None
-    }
+        case None => None
+      }
+    ) else (
+      None
+    )
   }
 
   // To bitmap
