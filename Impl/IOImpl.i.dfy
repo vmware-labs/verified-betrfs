@@ -9,8 +9,8 @@ module IOImpl {
   import opened NativeTypes
   import opened Options
   import opened Maps
-  import opened ImplNode
-  import opened ImplMutCache
+  import opened NodeImpl
+  import opened CacheImpl
   import StateModel
   import MarshallingImpl
   import IMM = ImplMarshallingModel

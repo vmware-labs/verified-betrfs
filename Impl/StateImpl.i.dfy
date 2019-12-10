@@ -3,7 +3,7 @@ include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "BucketImpl.i.dfy"
-include "ImplNodes.i.dfy"
+include "CacheImpl.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 
@@ -13,8 +13,8 @@ module {:extern} StateImpl {
   import opened NativeTypes
   import TTT = TwoThreeTree
   import SM = StateModel
-  import opened ImplNode
-  import opened ImplMutCache
+  import opened NodeImpl
+  import opened CacheImpl
   import BlockAllocatorImpl
   import BitmapImpl
   import IndirectionTableImpl

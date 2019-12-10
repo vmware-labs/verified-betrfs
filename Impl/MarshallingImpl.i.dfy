@@ -11,8 +11,8 @@ include "MarshallingModel.i.dfy"
 module MarshallingImpl {
   import IM = StateModel
   import SI = StateImpl
-  import opened ImplNode
-  import opened ImplMutCache
+  import opened NodeImpl
+  import opened CacheImpl
   import Marshalling
   import IMM = ImplMarshallingModel
   import opened GenericMarshalling

@@ -6,7 +6,7 @@ module GrowImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened StateImpl
-  import opened ImplNode
+  import opened NodeImpl
   import opened MutableBucket
   import GrowModel
 
