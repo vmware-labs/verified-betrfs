@@ -31,15 +31,15 @@ class DafnyAssumeError(DafnyCondition):
 
 class DafnyTimeoutError(DafnyCondition):
     def __init__(self):
-        super().__init__(3, "untrusted file contains assumptions", "fillcolor=\"#555555\"; fontcolor=white; shape=octagon")
+        super().__init__(4, "verification timeout", "fillcolor=\"#555555\"; fontcolor=white; shape=octagon")
 
 class DafnyVerified(DafnyCondition):
     def __init__(self):
-        super().__init__(4, "verified successfully", "fillcolor=green; shape=ellipse")
+        super().__init__(5, "verified successfully", "fillcolor=green; shape=ellipse")
 
 class DafnySyntaxOK(DafnyCondition):
     def __init__(self):
-        super().__init__(4, "syntax ok", "fillcolor=green; shape=ellipse")
+        super().__init__(6, "syntax ok", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")

@@ -18,6 +18,8 @@ class Traverser:
         root = IncludeReference(None, 0, rootDfy)
         self.visit(root)
 
+        self.legend()
+
         self.addFillColors()
 
         self.createSubgraphs()
@@ -36,6 +38,30 @@ class Traverser:
             self.output.append('"%s" -> "%s";' % (iref.normPath, dep.normPath))
         for dep in childrenForIref(iref):
             self.visit(dep)
+
+    def legend(self):
+        if self.reportType == "synchk":
+            samples = [
+                DafnyParseError(), DafnyTypeError(), DafnyAssumeError(), DafnySyntaxOK() ]
+        elif self.reportType == "verchk":
+            samples = [
+                DafnyParseError(), DafnyTypeError(), DafnyVerificationError(), DafnyAssumeError(),
+                DafnyTimeoutError(), DafnyVerified(), DafnySyntaxOK()
+                ]
+        else:
+            assert False
+        for i in range(len(samples)-1):
+            left = samples[i]
+            right = samples[i+1]
+            self.output.append('"%s" -> "%s";' % (left.result, right.result))
+        self.output.append('subgraph cluster_legend {')
+        self.output.append('  label="legend"')
+        self.output.append('  style=filled')
+        self.output.append('  color=lightblue')
+        for sample in samples:
+            self.output.append('"%s" [style=filled; %s; label="%s"];' % (
+                sample.result, sample.style, sample.result))
+        self.output.append('}')
 
     def getSummary(self, iref):
         report = os.path.join(ROOT_PATH, "build", iref.normPath).replace(".dfy", "."+self.reportType)
