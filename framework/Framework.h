@@ -1,8 +1,11 @@
 #include "DafnyRuntime.h"
 
 namespace Maps_Compile {
-  template <typename K, typename V>
-  DafnyMap<K, V> ComputeMapRemove1(DafnyMap<K, V>, K);
+  class __default {
+    public:
+    template <typename K, typename V>
+    static DafnyMap<K, V> ComputeMapRemove1(DafnyMap<K, V>, K);
+  };
 }
 
 namespace NativeArrays_Compile {
@@ -27,5 +30,10 @@ namespace NativeArrays_Compile {
 }
 
 namespace Crypto_Compile {
-  DafnySequence<uint8> Crc32CArray(shared_ptr<vector<uint8>>, uint64 start, uint64 len);
+  class __default {
+    public:
+    static DafnySequence<uint8> Sha256(DafnySequence<uint8>);
+    static DafnySequence<uint8> Crc32C(DafnySequence<uint8>);
+    static DafnySequence<uint8> Crc32CArray(shared_ptr<vector<uint8>>, uint64 start, uint64 len);
+  };
 }

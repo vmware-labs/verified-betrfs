@@ -2,8 +2,9 @@
 
 #include "DafnyRuntime.h"
 
-namespace MainDiskIOHandler {
+namespace MainDiskIOHandler_Compile {
   class DiskIOHandler {
+    public:
     uint64 write(uint64 addr, shared_ptr<vector<uint8>> bytes);
     uint64 read(uint64 addr, uint64 len);
     uint64 getWriteResult();

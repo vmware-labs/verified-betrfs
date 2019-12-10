@@ -61,7 +61,7 @@ module {:extern} Maps {
     m'
   }
 
-  method {:axiom} ComputeMapRemove1<K,V>(m: map<K,V>, k:K) returns (m' : map<K,V>)
+  method {:extern "Maps_Compile", "ComputeMapRemove1"} ComputeMapRemove1<K,V>(m: map<K,V>, k:K) returns (m' : map<K,V>)
   ensures m' == MapRemove1(m, k)
 
   function {:opaque} MapRemove1Strong<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
