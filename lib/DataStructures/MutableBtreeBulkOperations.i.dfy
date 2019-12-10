@@ -41,8 +41,7 @@ abstract module MutableBtreeBulkOperations {
   }
 
   method ToSeqSubtree(node: Node, keys: array<Key>, values: array<Value>, start: uint64) returns (nextstart: uint64)
-    requires WFShape(node)
-    requires Spec.WF(I(node))
+    requires WF(node)
     requires !Arrays.Aliases(keys, values)
     requires keys.Length == values.Length
     requires keys !in node.repr
@@ -52,8 +51,8 @@ abstract module MutableBtreeBulkOperations {
     ensures nextstart as nat == start as nat + Spec.NumElements(I(node))
     ensures forall i :: 0 <= i < start ==> keys[i] == old(keys[i]);
     ensures forall i :: 0 <= i < start ==> values[i] == old(values[i]);
-    ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
-      //ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
+    //ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
+    //ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
     ensures forall i :: nextstart as nat <= i < keys.Length ==> keys[i] == old(keys[i]);
     ensures forall i :: nextstart as nat <= i < values.Length ==> values[i] == old(values[i]);
     modifies keys, values
@@ -77,7 +76,7 @@ abstract module MutableBtreeBulkOperations {
         invariant nextstart as nat == inextstart
         invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
         invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
-        invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
+        //invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
         //invariant values[start..inextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
         invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
         invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
@@ -86,31 +85,38 @@ abstract module MutableBtreeBulkOperations {
         inextstart := inextstart + Spec.NumElements(I(node).children[i]);
         Spec.NumElementsOfChildrenNotZero(I(node));
         Spec.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
-        
+
+        ghost var oldnextstart := nextstart;
         nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
         assert unchanged(node.repr);
         assert I(node) == old(I(node));
-        
+
         i := i + 1;
         
-        
-        ghost var target := Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0);
-        Spec.ToSeqChildrenLength(I(node).children[..i]);
-        assert |target| == (nextstart - start) as nat;
+        //ghost var target := Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0);
+        //Spec.ToSeqChildrenLength(I(node).children[..i]);
+        //assert |target| == (nextstart - start) as nat;
 
-        forall j | 0 <= j < (nextstart - start) as nat
-          ensures keys[start..nextstart][j] == target[j]
-        {
-          assume false;
-        }
-        assert start as nat <= nextstart as nat <= keys.Length;
-        Arrays.SequenceLength(keys, start, nextstart);
-        assert |keys[start..nextstart]| == (nextstart - start) as nat;
-        Spec.Seq.EqualExtensionality(keys[start..nextstart], target);
-        assert keys[start..nextstart] == target;
+        //Spec.ToSeqChildrenDecomposition(I(node).children, i as int);
+        //assert keys[start..nextstart] == keys[start..oldnextstart] + keys[oldnextstart..nextstart];
+        
+        // assert Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
+        //   == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i-1]).0) + Spec.ToSeq(I(node).children[i-1]).0;
+        // assert keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0);
+
+        // forall j | 0 <= j < (nextstart - start) as nat
+        //   ensures keys[start..nextstart][j] == target[j]
+        // {
+        //   assume false;
+        // }
+        // assert start as nat <= nextstart as nat <= keys.Length;
+        // Arrays.SequenceLength(keys, start, nextstart);
+        // assert |keys[start..nextstart]| == (nextstart - start) as nat;
+        // Spec.Seq.EqualExtensionality(keys[start..nextstart], target);
+        // assert keys[start..nextstart] == target;
+        //assume false;
       }
       assert I(node).children[..node.contents.nchildren] == I(node).children;
-      assume false;
     }
   }
 

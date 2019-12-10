@@ -942,6 +942,14 @@ abstract module BtreeSpec {
       (Flatten(keylists), Flatten(valuelists))
   }
 
+  lemma ToSeqChildrenDecomposition(nodes: seq<Node>, prefix: int)
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    requires 0 < prefix <= |nodes|
+    ensures Flatten(ToSeqChildren(nodes[..prefix]).0) == Flatten(ToSeqChildren(nodes[..prefix-1]).0) + ToSeq(nodes[prefix-1]).0
+  {
+    assume false;
+  }
+  
   lemma ToSeqChildrenLength(nodes: seq<Node>)
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
     ensures |Flatten(ToSeqChildren(nodes).0)| == NumElementsOfChildren(nodes)
