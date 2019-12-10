@@ -5,7 +5,7 @@ include "../lib/Base/Option.s.dfy"
 include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "ImplState.i.dfy"
+include "StateImpl.i.dfy"
 
 include "../PivotBetree/PivotBetree_Refines_Map.i.dfy"
 include "ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"
@@ -29,7 +29,7 @@ module Impl {
   import opened BucketsLib
   import LBAType = LBAType
   import opened Sets
-  import IS = ImplState
+  import StateImpl
   import SD = AsyncSectorDisk
   import opened NativeTypes
 
@@ -41,7 +41,7 @@ module Impl {
   type Message = Messages.Message
 
   type ImplConstants = ImplADM.M.Constants
-  type ImplVariables = IS.Variables
+  type ImplVariables = StateImpl.Variables
 
   function Ik(k: ImplConstants) : ImplADM.M.Constants { k }
   // </deduplicate>

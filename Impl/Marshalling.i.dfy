@@ -1,4 +1,4 @@
-include "ImplMarshallingModel.i.dfy"
+include "MarshallingModel.i.dfy"
 //
 // Raises ImpLMarshallingModel by converting indirection table sectors
 // up from IndirectionTableModel.IndirectionTable to
@@ -14,7 +14,7 @@ include "ImplMarshallingModel.i.dfy"
 
 module Marshalling {
   import IMM = ImplMarshallingModel
-  import IM = ImplModel
+  import IM = StateModel
   import opened GenericMarshalling
   import opened Options
   import opened NativeTypes

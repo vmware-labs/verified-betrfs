@@ -153,7 +153,7 @@ abstract module BlockCache refines Transactable {
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
-  function method assignRefToLocation(indirectionTable: IndirectionTable, ref: Reference, loc: Location) : IndirectionTable
+  function assignRefToLocation(indirectionTable: IndirectionTable, ref: Reference, loc: Location) : IndirectionTable
   {
     IndirectionTable(
       if ref in indirectionTable.graph && ref !in indirectionTable.locs then indirectionTable.locs[ref := loc] else indirectionTable.locs,

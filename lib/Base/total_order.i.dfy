@@ -2,10 +2,12 @@ include "sequences.i.dfy"
 include "NativeTypes.s.dfy"
 include "KeyType.s.dfy"
 include "NativeArrays.s.dfy"
+include "Option.s.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
   import opened NativeTypes
+  import opened Options
   import NativeArrays
     
 	type Element(!new,==)
@@ -434,6 +436,66 @@ abstract module Total_Order {
   lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
   requires SortedSeqForMap(s, m)
   ensures |s| == |m|
+
+  function {:opaque} minimum(s: set<Element>) : (x : Element)
+  requires |s| >= 1
+  ensures x in s
+  ensures forall y | y in s :: lte(x, y)
+  {
+    // Implementation is pretty unimportant, the ensures clauses will
+    // always suffice, as they uniquely determine the minimum.
+    var a :| a in s;
+    var s' := s - {a};
+    if s' == {} then (
+      assert s == {a};
+      a
+    ) else (
+      var m' := minimum(s');
+      if lt(a, m') then (
+        assert s == {a} + s';
+        a
+      ) else (
+        m'
+      )
+    )
+  }
+
+  function {:opaque} minimumOpt(s: set<Element>) : (x : Option<Element>)
+  ensures x.Some? ==> x.value in s
+  ensures x.Some? ==> forall y | y in s :: lte(x.value, y)
+  ensures x.None? ==> s == {}
+  {
+    if s == {} then None else Some(minimum(s))
+  }
+
+  function {:opaque} maximum(s: set<Element>) : (x : Element)
+  requires |s| >= 1
+  ensures x in s
+  ensures forall y | y in s :: lte(y, x)
+  {
+    var a :| a in s;
+    var s' := s - {a};
+    if s' == {} then (
+      assert s == {a};
+      a
+    ) else (
+      var m' := maximum(s');
+      if lt(m', a) then (
+        assert s == {a} + s';
+        a
+      ) else (
+        m'
+      )
+    )
+  }
+
+  function {:opaque} maximumOpt(s: set<Element>) : (x : Option<Element>)
+  ensures x.Some? ==> x.value in s
+  ensures x.Some? ==> forall y | y in s :: lte(y, x.value)
+  ensures x.None? ==> s == {}
+  {
+    if s == {} then None else Some(maximum(s))
+  }
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {
@@ -616,5 +678,11 @@ module Lexicographic_Byte_Order refines Total_Order {
   method cmp(a: Element, b: Element) returns (c: int32)
   {
     c := NativeArrays.ByteSeqCmpByteSeq(a, b);
+  }
+
+  lemma EmptyLte(x: Element)
+  ensures lte([], x)
+  {
+    SeqComparison.reveal_lte();
   }
 }

@@ -18,7 +18,7 @@ include "../PivotBetree/PivotsLib.i.dfy"
 module PivotBetreeSpecRefinement {
   import B = BetreeSpec`Internal
   import P = PivotBetreeSpec`Internal
-  import M = ValueMessage
+  import M = ValueMessage`Internal
   import MS = MapSpec
   import opened Maps
   import opened Sequences
@@ -104,6 +104,12 @@ module PivotBetreeSpecRefinement {
     B.LookupQuery(q.key, q.value, IReadOps(q.lookup))
   }
 
+  function ISuccQuery(q: P.SuccQuery) : B.SuccQuery
+  requires P.ValidSuccQuery(q)
+  {
+    B.SuccQuery(q.start, q.results, q.end, IReadOps(q.lookup))
+  }
+
   function IInsertion(ins: P.MessageInsertion) : B.MessageInsertion
   requires P.ValidInsertion(ins)
   {
@@ -182,6 +188,7 @@ module PivotBetreeSpecRefinement {
   {
     match betreeStep {
       case BetreeQuery(q) => B.BetreeQuery(IQuery(q))
+      case BetreeSuccQuery(sq) => B.BetreeSuccQuery(ISuccQuery(sq))
       case BetreeInsert(ins) => B.BetreeInsert(IInsertion(ins))
       case BetreeFlush(flush) => B.BetreeFlush(IFlush(flush))
       case BetreeGrow(growth) => B.BetreeGrow(IGrow(growth))
@@ -311,6 +318,238 @@ module PivotBetreeSpecRefinement {
   {
     RefinesLookup(q.lookup, q.key);
     RefinesInterpretLookupAccountingForLeaf(q.lookup, q.key, q.value);
+  }
+
+  lemma KeyWithinUpperBoundIsWithinLookup(
+      lookup: P.Lookup, startKey: Key, key: Key, idx: int)
+  requires P.LookupVisitsWFNodes(lookup)
+  requires 0 <= idx < |lookup|
+  requires var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && (lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value))
+  ensures var r := Route(lookup[idx].node.pivotTable, startKey);
+      r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(key, lookup[idx].node.pivotTable[r]);
+  {
+    P.reveal_LookupUpperBound();
+    if idx == |lookup| - 1 {
+    } else {
+      KeyWithinUpperBoundIsWithinLookup(DropLast(lookup), startKey, key, idx);
+    }
+  }
+
+  lemma InUpperBoundAndNot(a: Key, end: MS.UI.RangeEnd, b: Key)
+  requires MS.UpperBound(a, end)
+  requires !MS.UpperBound(b, end)
+  ensures Keyspace.lt(a, b)
+  {
+    match end {
+      case EInclusive(key) => {
+        assert Keyspace.lte(a, key);
+        assert Keyspace.lt(key, b);
+      }
+      case EExclusive(key) => {
+        assert Keyspace.lt(a, key);
+        assert Keyspace.lte(key, b);
+      }
+      case PositiveInf => { }
+    }
+  }
+
+  lemma InRangeImpliesSameRoute(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, lookup: P.Lookup, idx: int)
+  requires MS.InRange(start, key, end)
+  requires P.LookupVisitsWFNodes(lookup)
+  requires
+    var startKey := if start.NegativeInf? then [] else start.key;
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  requires 0 <= idx < |lookup|
+  ensures var startKey := if start.NegativeInf? then [] else start.key;
+        Route(lookup[idx].node.pivotTable, startKey)
+     == Route(lookup[idx].node.pivotTable, key)
+  {
+    var startKey := if start.NegativeInf? then [] else start.key;
+
+    var r := Route(lookup[idx].node.pivotTable, startKey);
+    //assert r > 0 ==> Keyspace.lte(lookup[idx].node.pivotTable[r-1], startKey);
+
+    Keyspace.EmptyLte(key);
+    //assert Keyspace.lte([], key);
+    //assert Keyspace.lte(startKey, key);
+
+    assert MS.InRange(start, key, end);
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end);
+    //assert MS.UpperBound(key, end);
+    if (lookupUpperBound.Some?) {
+      InUpperBoundAndNot(key, end, lookupUpperBound.value);
+    }
+    //assert lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value);
+    KeyWithinUpperBoundIsWithinLookup(lookup, startKey, key, idx);
+    //assert r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(q.key, lookup[idx].node.pivotTable[r]);
+
+    RouteIs(lookup[idx].node.pivotTable, key, r);
+  }
+
+  lemma InRangeImpliesValidLookup(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, lookup: P.Lookup)
+  requires MS.InRange(start, key, end)
+  requires P.LookupVisitsWFNodes(lookup)
+  requires
+    var startKey := if start.NegativeInf? then [] else start.key;
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  ensures P.WFLookupForKey(lookup, key)
+  {
+    var startKey := if start.NegativeInf? then [] else start.key;
+
+    forall idx | P.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 
+    ensures P.LookupFollowsChildRefAtLayer(key, lookup, idx)
+    {
+      assert P.LookupFollowsChildRefAtLayer(startKey, lookup, idx);
+      InRangeImpliesSameRoute(start, key, end, lookup, idx);
+    }
+  }
+
+  lemma InterpretBucketStackEqInterpretLookupIter(
+      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
+      buckets: seq<Bucket>, lookup: P.Lookup, key: Key,
+      j: int)
+  requires startKey == if start.NegativeInf? then [] else start.key;
+  requires P.LookupVisitsWFNodes(lookup)
+  requires |lookup| == |buckets|
+  requires (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
+  requires MS.InRange(start, key, end)
+  requires
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  requires 0 <= j <= |lookup|
+  ensures InterpretBucketStack(buckets[..j], key)
+       == P.InterpretLookup(lookup[..j], key)
+  {
+    if j == 0 {
+    } else {
+      InRangeImpliesSameRoute(start, key, end, lookup, j-1);
+      //var layer := lookup[j-1]
+      //assert Route(layer.node.pivotTable, key) == Route(layer.node.pivotTable, startKey);
+
+      InterpretBucketStackEqInterpretLookupIter(start, end, startKey,
+          buckets, lookup, key, j-1);
+      assert DropLast(buckets[..j]) == buckets[..j-1];
+      assert DropLast(lookup[..j]) == lookup[..j-1];
+    }
+  }
+
+  lemma InterpretBucketStackEqInterpretLookup(
+      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
+      buckets: seq<Bucket>, lookup: P.Lookup, key: Key)
+  requires startKey == if start.NegativeInf? then [] else start.key;
+  requires P.LookupVisitsWFNodes(lookup)
+  requires |lookup| == |buckets|
+  requires (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
+  requires MS.InRange(start, key, end)
+  requires
+    var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
+    && P.WFLookupForKey(lookup, startKey)
+    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
+  ensures InterpretBucketStack(buckets, key)
+       == P.InterpretLookup(lookup, key)
+  {
+    InterpretBucketStackEqInterpretLookupIter(start, end, startKey, buckets, lookup, key, |lookup|);
+    assert buckets[..|buckets|] == buckets;
+    assert lookup[..|buckets|] == lookup;
+  }
+
+  lemma SuccQueryProperties(results: seq<UI.SuccResult>, buckets: seq<Bucket>,
+      start: UI.RangeStart, end: UI.RangeEnd)
+  requires results ==
+        SortedSeqOfKeyValueMap(
+          KeyValueMapOfBucket(
+            ClampRange(ComposeSeq(buckets), start, end)))
+  ensures (forall i | 0 <= i < |results| ::
+      P.BufferDefinesValue(InterpretBucketStack(buckets, results[i].key), results[i].value))
+  ensures (forall i | 0 <= i < |results| :: results[i].value != MS.EmptyValue())
+  ensures (forall i | 0 <= i < |results| :: MS.InRange(start, results[i].key, end))
+  ensures (forall i, j | 0 <= i < j < |results| :: Keyspace.lt(results[i].key, results[j].key))
+  ensures (forall key | MS.InRange(start, key, end) ::
+        (forall i | 0 <= i < |results| :: results[i].key != key) ==>
+        P.BufferDefinesEmptyValue(InterpretBucketStack(buckets, key))
+      )
+  {
+    forall i | 0 <= i < |results|
+    ensures P.BufferDefinesValue(InterpretBucketStack(buckets, results[i].key), results[i].value)
+    ensures results[i].value != MS.EmptyValue()
+    ensures MS.InRange(start, results[i].key, end)
+    {
+      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end)), i);
+      reveal_KeyValueMapOfBucket();
+      reveal_ClampRange();
+
+      //var m := ComposeSeq(buckets)[results[i].key];
+      //assert M.Merge(m, M.DefineDefault()).value == results[i].value;
+      BucketGetComposeSeq(buckets, results[i].key);
+      //assert m == InterpretBucketStack(buckets, results[i].key);
+    }
+
+    SortedSeqOfKeyValueMapHasSortedKeys(KeyValueMapOfBucket(
+            ClampRange(ComposeSeq(buckets), start, end)));
+
+    forall key | MS.InRange(start, key, end) &&
+        (forall i | 0 <= i < |results| :: results[i].key != key)
+    ensures
+      P.BufferDefinesEmptyValue(InterpretBucketStack(buckets, key))
+    {
+      if !P.BufferDefinesEmptyValue(InterpretBucketStack(buckets, key)) {
+        reveal_KeyValueMapOfBucket();
+        reveal_ClampRange();
+
+        BucketGetComposeSeq(buckets, key);
+        //assert BucketGet(ComposeSeq(buckets), key) == InterpretBucketStack(buckets, key);
+        //assert key in KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end));
+        SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end)), key);
+      }
+    }
+  }
+
+  lemma RefinesValidSuccQuery(sq: P.SuccQuery)
+  requires P.ValidSuccQuery(sq)
+  ensures B.ValidSuccQuery(ISuccQuery(sq))
+  {
+    var q := ISuccQuery(sq);
+    var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
+
+    SuccQueryProperties(sq.results, sq.buckets, sq.start, sq.end);
+
+    forall i | 0 <= i < |q.results|
+    ensures B.LookupKeyValue(q.lookup, q.results[i].key, q.results[i].value)
+    {
+      InRangeImpliesValidLookup(sq.start, sq.results[i].key, sq.end, sq.lookup);
+
+      RefinesLookup(sq.lookup, sq.results[i].key);
+      RefinesInterpretLookupAccountingForLeaf(sq.lookup, sq.results[i].key, sq.results[i].value);
+
+      InterpretBucketStackEqInterpretLookup(sq.start, sq.end, startKey, sq.buckets, sq.lookup, sq.results[i].key);
+    }
+
+    forall key | MS.InRange(q.start, key, q.end)
+        && (forall i | 0 <= i < |q.results| :: q.results[i].key != key)
+    ensures B.LookupKeyValue(q.lookup, key, MS.EmptyValue())
+    {
+      InRangeImpliesValidLookup(sq.start, key, sq.end, sq.lookup);
+
+      RefinesLookup(sq.lookup, key);
+      RefinesInterpretLookupAccountingForLeaf(sq.lookup, key, MS.EmptyValue());
+      //assert P.BufferDefinesEmptyValue(P.InterpretLookup(sq.lookup, key));
+      //assert P.InterpretLookupAccountingForLeaf(sq.lookup, key) == M.DefineDefault();
+
+      //assert M.DefaultValue() == MS.EmptyValue();
+
+      /*assert B.InterpretLookup(IReadOps(sq.lookup), key).value
+          == P.InterpretLookupAccountingForLeaf(sq.lookup, key).value
+          == MS.EmptyValue();*/
+
+      InterpretBucketStackEqInterpretLookup(sq.start, sq.end, startKey, sq.buckets, sq.lookup, key);
+    }
   }
 
   lemma RefinesValidInsertion(ins: P.MessageInsertion)
@@ -793,6 +1032,7 @@ module PivotBetreeSpecRefinement {
   {
     match betreeStep {
       case BetreeQuery(q) => RefinesValidQuery(q);
+      case BetreeSuccQuery(sq) => RefinesValidSuccQuery(sq);
       case BetreeInsert(ins) => RefinesValidInsertion(ins);
       case BetreeFlush(flush) => RefinesValidFlush(flush);
       case BetreeGrow(growth) => RefinesValidGrow(growth);
@@ -1105,6 +1345,11 @@ module PivotBetreeSpecRefinement {
 
     match betreeStep {
       case BetreeQuery(q) => {
+        assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
+            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
+        assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
+      }
+      case BetreeSuccQuery(q) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
             P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));

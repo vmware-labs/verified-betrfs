@@ -2,14 +2,15 @@ include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
-include "../lib/DataStructures/LRU.i.dfy"
+include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapImpl.i.dfy"
+include "../lib/DataStructures/LruImpl.i.dfy"
 include "IndirectionTableModel.i.dfy"
 //
 // The heap-y implementation of IndirectionTableModel.
@@ -29,17 +30,18 @@ module IndirectionTableImpl {
   import MutableMap
   import LBAType
   import opened GenericMarshalling
-  import Bitmap
+  import BitmapModel
+  import BitmapImpl
   import opened Bounds
   import IndirectionTableModel
-  import MutableLru
+  import LruImpl
 
   type HashMap = MutableMap.ResizingHashMap<IndirectionTableModel.Entry>
 
   // TODO move bitmap in here?
   class IndirectionTable {
     var t: HashMap;
-    var garbageQueue: MutableLru.MutableLruQueue?;
+    var garbageQueue: LruImpl.LruImplQueue?;
     ghost var Repr: set<object>;
 
     lemma InvForMkfs()
@@ -215,7 +217,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
     }
 
-    static method PredInc(t: HashMap, q: MutableLru.MutableLruQueue, ref: BT.G.Reference)
+    static method PredInc(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -240,7 +242,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method PredDec(t: HashMap, q: MutableLru.MutableLruQueue, ref: BT.G.Reference)
+    static method PredDec(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -266,7 +268,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method UpdatePredCounts(t: HashMap, q: MutableLru.MutableLruQueue, ghost changingRef: BT.G.Reference,
+    static method UpdatePredCounts(t: HashMap, q: LruImpl.LruImplQueue, ghost changingRef: BT.G.Reference,
         newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
     requires t.Inv()
     requires q.Inv()
@@ -490,7 +492,7 @@ module IndirectionTableImpl {
     }
 
     static method MakeGarbageQueue(t: HashMap)
-    returns (q : MutableLru.MutableLruQueue)
+    returns (q : LruImpl.LruImplQueue)
     requires t.Inv()
     ensures q.Inv()
     ensures fresh(q.Repr)
@@ -498,7 +500,7 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_makeGarbageQueue();
 
-      q := new MutableLru.MutableLruQueue();
+      q := new LruImpl.LruImplQueue();
       var it := t.IterStart();
       while it.next.Next?
       invariant q.Inv()
@@ -691,7 +693,7 @@ module IndirectionTableImpl {
     // To bitmap
 
     method InitLocBitmap()
-    returns (success: bool, bm: Bitmap.Bitmap)
+    returns (success: bool, bm: BitmapImpl.Bitmap)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
     ensures bm.Inv()
@@ -700,7 +702,7 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_InitLocBitmap();
 
-      bm := new Bitmap.Bitmap(NumBlocksUint64());
+      bm := new BitmapImpl.Bitmap(NumBlocksUint64());
       bm.Set(0);
       var it := t.IterStart();
       while it.next.Next?
@@ -708,7 +710,7 @@ module IndirectionTableImpl {
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant bm.Inv()
       invariant MutableMapModel.WFIter(t.I(), it)
-      invariant Bitmap.Len(bm.I()) == NumBlocks()
+      invariant BitmapModel.Len(bm.I()) == NumBlocks()
       invariant IndirectionTableModel.InitLocBitmapIterate(I(), it, bm.I())
              == IndirectionTableModel.InitLocBitmap(I())
       invariant fresh(bm.Repr)

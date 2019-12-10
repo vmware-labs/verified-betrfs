@@ -8,6 +8,15 @@ DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 
+ifndef TL
+	TL=20
+endif
+ifeq "$(TL)" "0"
+  TIMELIMIT=
+else
+  TIMELIMIT=/timeLimit:$(TL)
+endif
+
 ##############################################################################
 # Automatic targets
 
@@ -72,6 +81,9 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 .PHONY: faststatus
 syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
+.PHONY: verify-ordered
+verify-ordered: build/deps build/Impl/Bundle.i.okay
+
 ##############################################################################
 # C# executables
 
@@ -129,8 +141,17 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 /timeLimit:20 $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
+
+##############################################################################
+# .okay: Dafny file-level verification, no time limit,
+# verifies in dependency order.
+# This is currently Travis's favorite build rule.
+
+build/%.okay: %.dfy | $$(@D)/.
+	$(TIME) $(DAFNY_CMD) /compile:0 $<
+	touch $@
 
 ##############################################################################
 # .verified: Aggregate result of verification for this file and
