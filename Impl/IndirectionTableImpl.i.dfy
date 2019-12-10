@@ -176,7 +176,6 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_AddLocIfPresent();
 
-      assume this.t.Count as nat < 0x10000000000000000 / 8;
       var oldEntry := this.t.Get(ref);
       added := oldEntry.Some? && oldEntry.value.loc.None?;
       if added {
