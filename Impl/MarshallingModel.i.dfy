@@ -161,6 +161,7 @@ module ImplMarshallingModel {
   requires ValidVal(v)
   requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Pivots.WFPivots(s.value)
+  ensures s.Some? ==> |s.value| == |v.baa|
   {
     var s := valToStrictlySortedKeySeq(v);
     if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
@@ -248,35 +249,46 @@ module ImplMarshallingModel {
   ensures s.Some? ==> BT.WFNode(SM.INode(s.value))
   {
     assert ValidVal(v.t[0]);
-    match valToPivots(v.t[0]) {
-      case None => None
-      case Some(pivots) => (
-        match valToChildren(v.t[1]) {
-          case None => None
-          case Some(children) => (
-            if ((|children| == 0 || |children| == |pivots| + 1) && |v.t[2].a| == |pivots| + 1) then (
+    assert ValidVal(v.t[1]);
+    assert ValidVal(v.t[2]);
+    var pivots_len := |v.t[0].baa| as uint64;
+    var children_len := |v.t[1].ua| as uint64;
+    var buckets_len := |v.t[2].a| as uint64;
+
+    if (
+       && pivots_len <= MaxNumChildrenUint64() - 1
+       && (children_len == 0 || children_len == pivots_len + 1)
+       && buckets_len == pivots_len + 1
+    ) then (
+      assert ValidVal(v.t[0]);
+      match valToPivots(v.t[0]) {
+        case None => None
+        case Some(pivots) => (
+          match valToChildren(v.t[1]) {
+            case None => None
+            case Some(children) => (
               assert ValidVal(v.t[2]);
               match valToBuckets(v.t[2].a, pivots) {
                 case None => None
                 case Some(buckets) => (
-                  if
-                    && |buckets| <= MaxNumChildren()
-                    && WeightBucketList(buckets) <= MaxTotalBucketWeight()
-                  then (
-                    var node := SM.Node(pivots, if |children| == 0 then None else Some(children), buckets);
+                  if WeightBucketList(buckets) <= MaxTotalBucketWeight() then (
+                    var node := SM.Node(
+                      pivots,
+                      if |children| == 0 then None else Some(children),
+                      buckets);
                     Some(node)
                   ) else (
                     None
                   )
                 )
               }
-            ) else (
-              None
             )
-          )
-        }
-      )
-    }
+          }
+        )
+      }
+    ) else (
+      None
+    )
   }
 
   function valToSector(v: V) : (s : Option<Sector>)

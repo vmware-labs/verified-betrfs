@@ -190,14 +190,13 @@ module MarshallingImpl {
 
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<BucketImpl.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
+  requires |a| < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
   ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
   ensures s.Some? ==> Some(BucketImpl.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
   {
-    assume |a| < 0x1_0000_0000_0000_0000;
-
     var ar := new BucketImpl.MutBucket?[|a| as uint64];
 
     var i: uint64 := 0;
@@ -250,6 +249,21 @@ module MarshallingImpl {
   ensures INodeOpt(s) == IMM.valToNode(v)
   {
     assert ValidVal(v.t[0]);
+    assert ValidVal(v.t[1]);
+    assert ValidVal(v.t[2]);
+
+    var pivots_len := |v.t[0 as uint64].baa| as uint64;
+    var children_len := |v.t[1 as uint64].ua| as uint64;
+    var buckets_len := |v.t[2 as uint64].a| as uint64;
+
+    if !(
+       && pivots_len <= MaxNumChildrenUint64() - 1
+       && (children_len == 0 || children_len == pivots_len + 1)
+       && buckets_len == pivots_len + 1
+    ) {
+      return None;
+    }
+
     var pivotsOpt := ValToPivots(v.t[0 as uint64]);
     if (pivotsOpt.None?) {
       return None;
@@ -262,14 +276,6 @@ module MarshallingImpl {
     }
     var children := childrenOpt.value;
 
-    assume |children| < 0x8000_0000_0000_0000;
-    assume |pivots| < 0x8000_0000_0000_0000;
-    assume |v.t[2 as uint64].a| < 0x1_0000_0000_0000_0000;
-
-    if (!((|children| as uint64 == 0 || |children| as uint64 == |pivots| as uint64 + 1) && |v.t[2 as uint64].a| as uint64 == |pivots| as uint64 + 1)) {
-      return None;
-    }
-
     assert ValidVal(v.t[2]);
     var bucketsOpt := ValToBuckets(v.t[2 as uint64].a, pivots);
     if (bucketsOpt.None?) {
@@ -277,7 +283,7 @@ module MarshallingImpl {
     }
     var buckets := bucketsOpt.value;
 
-    assume forall o | o in BucketImpl.MutBucket.ReprSeq(buckets) :: allocated(o);
+    BucketImpl.MutBucket.AllocatedReprSeq(buckets);
 
     if |buckets| as uint64 > MaxNumChildrenUint64() {
       return None;
