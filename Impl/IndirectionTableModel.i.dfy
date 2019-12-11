@@ -253,6 +253,31 @@ module IndirectionTableModel {
   lemma SeqCountPlusPredecessorSetExcept(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, except: BT.G.Reference)
   ensures var succs := if except in graph then graph[except] else [];
     SeqCount(succs, dest, 0) + |PredecessorSetExcept(graph, dest, except)| == |PredecessorSet(graph, dest)|
+  {
+    var succs := if except in graph then graph[except] else [];
+    var a1 := SeqCountSet(succs, dest, 0);
+    var a := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src == except :: PredecessorEdge(src, idx);
+    var b := PredecessorSetExcept(graph, dest, except);
+    var c := PredecessorSet(graph, dest);
+
+    assert a + b == c;
+    assert a !! b;
+    assert |a| + |b| == |c|;
+
+    var relation := iset p : (PredecessorEdge, int) | p.0.idx == p.1;
+    forall x | x in a ensures exists y :: y in a1 && (x, y) in relation
+    {
+      var y := x.idx;
+      assert y in a1 && (x, y) in relation;
+    }
+    forall y | y in a1 ensures exists x :: x in a && (x, y) in relation
+    {
+      var x := PredecessorEdge(except, y);
+      assert x in a && (x, y) in relation;
+    }
+    SetBijectivity.BijectivityImpliesEqualCardinality(a, a1, relation);
+    assert |a| == |a1|;
+  }
 
   predicate RefcountUpdateInv(
       t: HashMap,
@@ -616,6 +641,13 @@ module IndirectionTableModel {
   lemma lemma_count_eq_graph_size(t: HashMap)
   requires MutableMapModel.Inv(t)
   ensures t.count as int == |Graph(t)|
+  {
+    assert Graph(t).Keys == t.contents.Keys;
+    assert |Graph(t)|
+        == |Graph(t).Keys|
+        == |t.contents.Keys|
+        == t.count as int;
+  }
 
   function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
