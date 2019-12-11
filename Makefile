@@ -227,14 +227,20 @@ build/%.o: build/%.cpp | $$(@D)/.
 
 build/framework/%.o: framework/%.cpp | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall -Werror
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall -Werror
+
+# the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
+build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp | $$(@D)/.
+	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+# No -Werror
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=build/Bundle.o build/framework/Framework.o build/framework/Crc32.o
+VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
 	g++ -o $@ $(VERIBETRFS_O_FILES) -msse4.2

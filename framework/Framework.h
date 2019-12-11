@@ -2,6 +2,8 @@
 
 #include "DafnyRuntime.h"
 
+#include <map>
+
 namespace Maps_Compile {
   class __default {
     public:
@@ -75,11 +77,29 @@ namespace Crypto_Compile {
 }
 
 namespace MainDiskIOHandler_Compile {
+  struct ReadTask;
+  struct WriteTask;
+
   class DiskIOHandler {
     public:
     uint64 write(uint64 addr, shared_ptr<vector<uint8>> bytes);
     uint64 read(uint64 addr, uint64 len);
     uint64 getWriteResult();
     Tuple2<uint64, DafnySequence<uint8>> getReadResult();
+
+    DiskIOHandler();
+    bool prepareWriteResponse();
+    bool prepareReadResponse();
+
+    private:
+    uint64 readResponseId;
+    DafnySequence<uint8> readResponseBytes;
+
+    uint64 writeResponseId;
+
+    uint64 curId;
+
+    std::map<uint64, WriteTask> writeReqs;
+    std::map<uint64, ReadTask> readReqs;
   };
 }
