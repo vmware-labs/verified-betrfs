@@ -92,6 +92,9 @@ FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32
 .PHONY: exe
 exe: build/Veribetrfs.exe
 
+.PHONY: elf
+elf: build/Veribetrfs
+
 build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
 
@@ -100,7 +103,8 @@ exe-roslyn: build/Impl/Bundle.i.roslyn.exe
 
 build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
+#eval trick to assign make var inside rule
+	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))
 	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
 
 build/Veribetrfs.exe: build/Impl/Bundle.i.exe
@@ -197,14 +201,30 @@ build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
 
 ##############################################################################
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
+# Slow, but useful for iterating when working on the cpp compiler.
 build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
 	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
 # Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< MainDiskIOHandler.h
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
+	mv $(TMPNAME) $@
+
+# Build the main cpp file without building all the partial cpp files.
+build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) | $$(@D)/.
+#eval trick to assign make var inside rule
+	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
 ##############################################################################
 # C++ object files
-build/%.o: build/%.cpp framework/Framework.h | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I Impl/ -std=c++14 -include framework/Framework.h
+build/%.o: build/%.cpp framework/*.h | $$(@D)/.
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14
+
+build/framework/%.o: framework/*.cpp framework/*.h $(DAFNY_BINS) | $$(@D)/.
+	g++ -c framework/Framework.cpp -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14
+
+VERIBETRFS_O_FILES=build/Bundle.o build/framework/Framework.o
+
+build/Veribetrfs: $(VERIBETRFS_O_FILES)
+	g++ -o $@ $(VERIBETRFS_O_FILES)
