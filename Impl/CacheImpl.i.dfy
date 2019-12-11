@@ -92,10 +92,19 @@ module CacheImpl {
     lemma LemmaNodeReprLeRepr(ref: BT.G.Reference)
     requires Inv()
     ensures ptr(ref).Some? ==> ptr(ref).value.Repr <= Repr
+    {
+    }
 
     lemma LemmaSizeEqCount()
     requires Inv()
     ensures |I()| == |cache.Contents|
+    {
+      assert I().Keys == cache.Contents.Keys;
+      assert |I()|
+          == |I().Keys|
+          == |cache.Contents.Keys|
+          == |cache.Contents|;
+    }
 
     protected function method Count() : (c : uint64)
     reads this, Repr
@@ -249,4 +258,3 @@ module CacheImpl {
     }
   }
 }
-

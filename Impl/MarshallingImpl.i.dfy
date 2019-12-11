@@ -109,6 +109,7 @@ module MarshallingImpl {
 
   method ValToBucket(v: V, pivotTable: seq<Key>, i: uint64) returns (s : Option<KVList.Kvl>)
   requires IMM.valToBucket.requires(v, pivotTable, i as int)
+  requires |pivotTable| < MaxNumChildren()
   ensures s.Some? ==> KVList.WF(s.value)
   ensures s.Some? ==> WFBucketAt(KVList.I(s.value), pivotTable, i as int)
   ensures s == IMM.valToBucket(v, pivotTable, i as int)
@@ -143,8 +144,6 @@ module MarshallingImpl {
           return None;
         }
       }
-
-      assume |pivotTable| < 0x1_0000_0000_0000_0000;
 
       if i < |pivotTable| as uint64 {
         var c := Keyspace.cmp(pivotTable[i], kvl.keys[|kvl.keys| as uint64 - 1]);
@@ -190,14 +189,14 @@ module MarshallingImpl {
 
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<BucketImpl.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
+  requires |a| < 0x1_0000_0000_0000_0000
+  requires |pivotTable| < MaxNumChildren()
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
   ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
   ensures s.Some? ==> Some(BucketImpl.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
   {
-    assume |a| < 0x1_0000_0000_0000_0000;
-
     var ar := new BucketImpl.MutBucket?[|a| as uint64];
 
     var i: uint64 := 0;
@@ -248,8 +247,24 @@ module MarshallingImpl {
   ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value.buckets)
   ensures s.Some? ==> forall i | 0 <= i < |s.value.buckets| :: fresh(s.value.buckets[i].Repr)
   ensures INodeOpt(s) == IMM.valToNode(v)
+  ensures s.Some? ==> fresh(s.value.Repr)
   {
     assert ValidVal(v.t[0]);
+    assert ValidVal(v.t[1]);
+    assert ValidVal(v.t[2]);
+
+    var pivots_len := |v.t[0 as uint64].baa| as uint64;
+    var children_len := |v.t[1 as uint64].ua| as uint64;
+    var buckets_len := |v.t[2 as uint64].a| as uint64;
+
+    if !(
+       && pivots_len <= MaxNumChildrenUint64() - 1
+       && (children_len == 0 || children_len == pivots_len + 1)
+       && buckets_len == pivots_len + 1
+    ) {
+      return None;
+    }
+
     var pivotsOpt := ValToPivots(v.t[0 as uint64]);
     if (pivotsOpt.None?) {
       return None;
@@ -262,14 +277,6 @@ module MarshallingImpl {
     }
     var children := childrenOpt.value;
 
-    assume |children| < 0x8000_0000_0000_0000;
-    assume |pivots| < 0x8000_0000_0000_0000;
-    assume |v.t[2 as uint64].a| < 0x1_0000_0000_0000_0000;
-
-    if (!((|children| as uint64 == 0 || |children| as uint64 == |pivots| as uint64 + 1) && |v.t[2 as uint64].a| as uint64 == |pivots| as uint64 + 1)) {
-      return None;
-    }
-
     assert ValidVal(v.t[2]);
     var bucketsOpt := ValToBuckets(v.t[2 as uint64].a, pivots);
     if (bucketsOpt.None?) {
@@ -277,7 +284,8 @@ module MarshallingImpl {
     }
     var buckets := bucketsOpt.value;
 
-    assume forall o | o in BucketImpl.MutBucket.ReprSeq(buckets) :: allocated(o);
+    BucketImpl.MutBucket.AllocatedReprSeq(buckets);
+    BucketImpl.MutBucket.FreshReprSeqOfFreshEntries(buckets);
 
     if |buckets| as uint64 > MaxNumChildrenUint64() {
       return None;
@@ -313,6 +321,7 @@ module MarshallingImpl {
   ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures MapOption(s, SI.ISector) == IMM.valToSector(v)
+  ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     if v.c == 0 {
       var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
@@ -357,12 +366,37 @@ module MarshallingImpl {
 
   lemma lemmaSizeOfKeyArray(keys: seq<Key>)
   ensures 8 + WeightKeySeq(keys) == SizeOfV(VKeyArray(keys))
+  {
+    if |keys| == 0 {
+      reveal_SeqSumLens();
+    } else {
+      lemmaSizeOfKeyArray(DropLast(keys));
+      lemma_SeqSumLens_prefix(DropLast(keys), Last(keys));
+      assert DropLast(keys) + [Last(keys)] == keys;
+    }
+  }
 
   lemma lemmaSizeOfMessageArray(messages: seq<Message>)
   ensures 8 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
+  {
+    if |messages| == 0 {
+      reveal_SeqSumMessageLens();
+    } else {
+      lemmaSizeOfMessageArray(DropLast(messages));
+      lemma_SeqSumMessageLens_prefix(DropLast(messages), Last(messages));
+      assert DropLast(messages) + [Last(messages)] == messages;
+      reveal_MessageSizeUint64();
+    }
+  }
 
   lemma WeightKeySeqLe(keys: seq<Key>)
   ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
+  {
+    if |keys| == 0 {
+    } else {
+      WeightKeySeqLe(DropLast(keys));
+    }
+  }
 
   method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
   requires Keyspace.IsStrictlySorted(keys)
@@ -510,7 +544,7 @@ module MarshallingImpl {
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
   ensures SizeOfV(v) <= BlockSize() - 32 - 8
   {
-    assume forall o | o in BucketImpl.MutBucket.ReprSeq(node.buckets) :: allocated(o);
+    BucketImpl.MutBucket.AllocatedReprSeq(node.buckets);
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
     var pivots := pivotsToVal(node.pivotTable);
@@ -573,6 +607,7 @@ module MarshallingImpl {
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, IMM.SectorGrammar());
@@ -622,8 +657,6 @@ module MarshallingImpl {
     }
 
     IMM.reveal_parseCheckedSector();
-
-    assume s.Some? ==> fresh(SI.SectorRepr(s.value));
   }
 
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)

@@ -499,13 +499,6 @@ module BookkeepingModel {
     assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
   }
 
-  lemma lemmaGraphChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
-  requires s.Ready?
-  requires Inv(k, s)
-  requires ref in s.ephemeralIndirectionTable.graph
-  requires childref in s.ephemeralIndirectionTable.graph[ref]
-  ensures childref in s.ephemeralIndirectionTable.graph
-
   lemma lemmaBlockPointsToValidReferences(k: Constants, s: Variables, ref: BT.G.Reference)
   requires Inv(k, s)
   requires s.Ready?

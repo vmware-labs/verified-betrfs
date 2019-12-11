@@ -1,5 +1,7 @@
 // Needs to be compiled with -msse4.2
 
+#include "Crc32.h"
+
 #include <iostream>
 #include <cstring>
 #include <smmintrin.h>

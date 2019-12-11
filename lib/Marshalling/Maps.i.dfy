@@ -10,7 +10,7 @@ predicate eq_map<A(!new), B>(x:map<A, B>, y:map<A, B>)
  && (forall a :: a in x ==> x[a] == y[a])
 }
 
-function method domain<U(!new), V>(m: map<U,V>): set<U>
+function domain<U(!new), V>(m: map<U,V>): set<U>
    ensures forall i :: i in domain(m) <==> i in m;
 {
    set s | s in m
@@ -25,7 +25,7 @@ function union<U(!new), V>(m: map<U,V>, m': map<U,V>): map<U,V>
    map i{:auto_trigger} | i in (domain(m) + domain(m')) :: if i in m then m[i] else m'[i]
 }
 
-function method RemoveElt<U(!new),V>(m:map<U,V>, elt:U) : map<U,V>
+function RemoveElt<U(!new),V>(m:map<U,V>, elt:U) : map<U,V>
     requires elt in m;
     decreases |m|;
     ensures |RemoveElt(m, elt)| == |m| - 1;

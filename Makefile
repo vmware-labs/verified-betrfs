@@ -100,7 +100,8 @@ exe-roslyn: build/Impl/Bundle.i.roslyn.exe
 
 build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))	 #eval trick to assign make var inside rule
+#eval trick to assign make var inside rule
+	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))
 	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
 
 build/Veribetrfs.exe: build/Impl/Bundle.i.exe
@@ -114,6 +115,9 @@ allcpp: build/Impl/Bundle.i.cpp
 
 .PHONY: allo
 allo: build/Impl/Bundle.i.o
+
+.PHONY: elf
+elf: build/Veribetrfs
 
 ##############################################################################
 ##############################################################################
@@ -197,14 +201,40 @@ build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
 
 ##############################################################################
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
+# Slow, but useful for iterating when working on the cpp compiler.
 build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
 	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
 # Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $<
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
+	mv $(TMPNAME) $@
+
+# Build the main cpp file without building all the partial cpp files.
+build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) | $$(@D)/.
+#eval trick to assign make var inside rule
+	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
 ##############################################################################
 # C++ object files
-build/%.o: build/%.cpp framework/Framework.h | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -std=c++14 -include framework/Framework.h
+
+CPP_DEP_DIR=build/cppdeps
+
+build/%.o: build/%.cpp | $$(@D)/.
+	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall
+
+build/framework/%.o: framework/%.cpp | $$(@D)/.
+	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall -Werror
+
+# Include the .h depencies for all previously-built .o targets. If one of the .h files
+# changes, we'll rebuild the .o
+rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+-include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
+
+VERIBETRFS_O_FILES=build/Bundle.o build/framework/Framework.o build/framework/Crc32.o
+
+build/Veribetrfs: $(VERIBETRFS_O_FILES)
+	g++ -o $@ $(VERIBETRFS_O_FILES) -msse4.2

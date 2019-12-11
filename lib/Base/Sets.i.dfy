@@ -40,4 +40,12 @@ module Sets {
   lemma CardinalitySetRange(n: int)
   requires n >= 0
   ensures |SetRange(n)| == n
+  {
+    if n == 0 {
+    } else {
+      CardinalitySetRange(n-1);
+      assert SetRange(n)
+          == SetRange(n-1) + {n-1};
+    }
+  }
 }
