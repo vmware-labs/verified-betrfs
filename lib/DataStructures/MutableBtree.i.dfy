@@ -115,6 +115,7 @@ abstract module MutableBtree {
     requires 0 <= childidx < node.contents.nchildren as int
     ensures I(node).children[childidx] == I(node.contents.children[childidx])
   {
+    reveal_I();
   }
 
   predicate WF(node: Node)
@@ -140,6 +141,7 @@ abstract module MutableBtree {
     ensures needle !in Interpretation(node) ==> result == None
     decreases node.repr, 0
   {
+    reveal_I();
     var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == needle {
       result := Some(node.contents.values[posplus1-1]);
@@ -155,6 +157,7 @@ abstract module MutableBtree {
     ensures needle !in Spec.Interpretation(I(node)) ==> result == None
     decreases node.repr, 0
   {
+    reveal_I();
     var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     result := Query(node.contents.children[posplus1], needle);
   }
@@ -194,6 +197,7 @@ abstract module MutableBtree {
     ensures node.contents.nkeys == nleft
     modifies node
   {
+    reveal_I();
     var rightkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
     var rightvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
     Arrays.Memcpy(rightkeys, 0, node.contents.keys[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
@@ -330,7 +334,14 @@ abstract module MutableBtree {
     {
       assert old(DisjointSubtrees(node.contents, i, j));
     }
+    forall i | 0 <= i < newnchildren
+      ensures node.contents.children[i] in node.repr
+      {
+        assert WFShape(node.contents.children[i]);
+      }
+    assert WFShape(node);
     ghost var newinode := I(node);
+    reveal_I();
     assert newinode == Spec.SubIndex(oldinode, 0, newnchildren as int);
   }
 
@@ -378,6 +389,7 @@ abstract module MutableBtree {
       
     ghost var isubnode := I(subnode);
     ghost var inode := I(node);
+    reveal_I();
     assert isubnode.pivots == inode.pivots[from..to as int - 1];
     assert isubnode.children == inode.children[from..to];
   }
