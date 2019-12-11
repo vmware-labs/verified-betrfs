@@ -62,7 +62,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     size_t res = fwrite(sector, 1, len, f);
-    if (res == len) {
+    if (res != len) {
       fail("fwrite failed");
     }
 
@@ -168,6 +168,7 @@ void Application::initialize() {
 void Application::crash() {
   LOG("'crashing' and reinitializing");
   LOG("");
+  initialize();
 }
 
 void Application::Sync() {
@@ -303,8 +304,8 @@ void Mkfs() {
     fail("error: .veribetrfs-storage/ already exists");
   }
   std::filesystem::create_directory(".veribetrfs-storage");*/
-  struct stat st = {0};
-  if (stat("/some/directory", &st) != -1) {
+  struct stat info;
+  if (stat(".veribetrfs-storage", &info) != -1) {
     fail("error: .veribetrfs-storage/ already exists");
   }
   mkdir(".veribetrfs-storage", 0700);
