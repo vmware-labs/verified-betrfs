@@ -218,11 +218,21 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 
 ##############################################################################
 # C++ object files
-build/%.o: build/%.cpp framework/*.h | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2
 
-build/framework/%.o: framework/*.cpp framework/*.h $(DAFNY_BINS) | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2
+CPP_DEP_DIR=build/cppdeps
+
+build/%.o: build/%.cpp | $$(@D)/.
+	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)"
+
+build/framework/%.o: framework/*.cpp | $$(@D)/.
+	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)"
+
+# Include the .h depencies for all previously-built .o targets. If one of the .h files
+# changes, we'll rebuild the .o
+rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+-include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
 VERIBETRFS_O_FILES=build/Bundle.o build/framework/Framework.o build/framework/Crc32.o
 
