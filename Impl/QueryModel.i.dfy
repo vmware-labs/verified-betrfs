@@ -4,7 +4,7 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 
-// See dependency graph in MainImpl.dfy
+// See dependency graph in Handlers.dfy
 
 module QueryModel { 
   import opened StateModel

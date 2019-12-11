@@ -6,7 +6,7 @@ include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-// See dependency graph in MainImpl.dfy
+// See dependency graph in Handlers.dfy
 
 module SyncImpl { 
   import opened IOImpl

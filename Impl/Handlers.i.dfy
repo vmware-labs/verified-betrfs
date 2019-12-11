@@ -1,17 +1,18 @@
 include "Main.s.dfy"
-
 include "../lib/Base/Sets.i.dfy"
 include "ByteBetreeBlockCacheSystem.i.dfy"
 include "Marshalling.i.dfy"
-
 include "InsertImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "SuccImpl.i.dfy"
 include "InsertModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
+//
+// Implements the application-API-handler obligations laid out by Main.s.dfy.
+//
 
-module {:extern} MainImpl refines Main { 
+module {:extern} Handlers refines Main { 
   import SM = StateModel
   import SI = StateImpl
   import IOImpl

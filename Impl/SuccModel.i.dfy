@@ -5,7 +5,7 @@ include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "BucketSuccessorLoopModel.i.dfy"
 
-// See dependency graph in MainImpl.dfy
+// See dependency graph in Handlers.dfy
 
 module SuccModel { 
   import opened StateModel
