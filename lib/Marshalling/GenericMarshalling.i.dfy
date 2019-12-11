@@ -27,7 +27,8 @@ import ValueWithDefault`Internal
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
-      KeyType, ValueMessage, ValueWithDefault
+      KeyType, ValueMessage, ValueWithDefault, lemma_SeqSumLens_prefix,
+      lemma_SeqSumMessageLens_prefix
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
 
 export extends S

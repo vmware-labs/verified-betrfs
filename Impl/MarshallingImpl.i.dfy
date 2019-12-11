@@ -366,12 +366,37 @@ module MarshallingImpl {
 
   lemma lemmaSizeOfKeyArray(keys: seq<Key>)
   ensures 8 + WeightKeySeq(keys) == SizeOfV(VKeyArray(keys))
+  {
+    if |keys| == 0 {
+      reveal_SeqSumLens();
+    } else {
+      lemmaSizeOfKeyArray(DropLast(keys));
+      lemma_SeqSumLens_prefix(DropLast(keys), Last(keys));
+      assert DropLast(keys) + [Last(keys)] == keys;
+    }
+  }
 
   lemma lemmaSizeOfMessageArray(messages: seq<Message>)
   ensures 8 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
+  {
+    if |messages| == 0 {
+      reveal_SeqSumMessageLens();
+    } else {
+      lemmaSizeOfMessageArray(DropLast(messages));
+      lemma_SeqSumMessageLens_prefix(DropLast(messages), Last(messages));
+      assert DropLast(messages) + [Last(messages)] == messages;
+      reveal_MessageSizeUint64();
+    }
+  }
 
   lemma WeightKeySeqLe(keys: seq<Key>)
   ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
+  {
+    if |keys| == 0 {
+    } else {
+      WeightKeySeqLe(DropLast(keys));
+    }
+  }
 
   method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
   requires Keyspace.IsStrictlySorted(keys)
