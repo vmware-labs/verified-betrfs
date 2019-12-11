@@ -213,6 +213,10 @@ module BucketImpl {
       reveal_ReprSeq();
     }
 
+    static twostate lemma FreshReprSeqOfFreshEntries(new s: seq<MutBucket>)
+    ensures forall i | 0 <= i < |s| :: fresh(s[i].Repr)
+    ensures fresh(ReprSeq(s))
+
     static lemma ReprSeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
     ensures ReprSeq(a) + ReprSeq(b) == ReprSeq(a + b)
 
