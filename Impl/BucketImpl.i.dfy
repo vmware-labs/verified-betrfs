@@ -3,11 +3,11 @@ include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "ModelBucketIterator.i.dfy"
-
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
 // it is flushed into the root in a batch.
+// Implements PivotBetreeSpec.Bucket (hence no local model module).
 // TODO(robj): Littered with assume false!?
 //
 
