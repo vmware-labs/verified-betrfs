@@ -12,6 +12,7 @@ abstract module MutableBtreeBulkOperations {
     ensures count as nat == Spec.NumElements(I(node))
     decreases node.height
   {
+    reveal_I();
     if node.contents.Leaf? {
       count := node.contents.nkeys;
     } else {
