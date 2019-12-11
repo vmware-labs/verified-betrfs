@@ -94,6 +94,11 @@ Prover error: [quantifier_instances] unknown.0:0 :   9700 : 100 : 101
 Prover error: [quantifier_instances] MutableM.27:30 :   7300 : 100 : 101
 Prover error: [quantifier_instances] funType:_16_MutableMapModel.Item.value :   7200 : 100 : 101
 
+Timeout example:
+- branch timeout-mutable-btree-toseq <c68abe1104eb72b6f56bbab67cf9ee1f3178062a>
+- dafny lib/DataStructures/MutableBtreeBulkOperations.i.dfy /proc:*ToSeqSubtree
+
+
 2019.12.10 meeting, trying to sort out what we think is quadratic
 slowdown in Impl due to the 9 !! subobjects.
 
