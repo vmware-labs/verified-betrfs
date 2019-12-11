@@ -49,12 +49,12 @@ abstract module MutableBtreeBulkOperations {
     requires start as nat + Spec.NumElements(I(node)) <= keys.Length
     requires start as nat + Spec.NumElements(I(node)) < Uint64UpperBound()
     ensures nextstart as nat == start as nat + Spec.NumElements(I(node))
-    ensures forall i :: 0 <= i < start ==> keys[i] == old(keys[i]);
-    ensures forall i :: 0 <= i < start ==> values[i] == old(values[i]);
+    ensures keys[..start] == old(keys[..start])
     ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
+    ensures keys[nextstart..] == old(keys[nextstart..]);
+    ensures values[..start] == old(values[..start]);
     ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
-    ensures forall i :: nextstart as nat <= i < keys.Length ==> keys[i] == old(keys[i]);
-    ensures forall i :: nextstart as nat <= i < values.Length ==> values[i] == old(values[i]);
+    ensures values[nextstart..] == old(values[nextstart..])
     modifies keys, values
     decreases node.height
   {
@@ -70,34 +70,25 @@ abstract module MutableBtreeBulkOperations {
       }
     } else {
       nextstart := start;
-      ghost var inextstart := start as nat;
       var i: uint64 := 0;
-      Spec.NumElementsOfChildrenNotZero(I(node));
       while i < node.contents.nchildren
-        invariant I(node) == old(I(node))
         invariant 0 <= i <= node.contents.nchildren
-        invariant inextstart == start as nat + Spec.NumElementsOfChildren(I(node).children[..i])
-        invariant inextstart <= keys.Length
-        invariant i < node.contents.nchildren ==> inextstart < keys.Length
-        invariant nextstart as nat == inextstart
-        invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
-        invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
+        invariant nextstart as nat == start as nat + Spec.NumElementsOfChildren(I(node).children[..i])
+        invariant nextstart as nat <= keys.Length
+        invariant keys[..start] == old(keys[..start])
         invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
-        invariant values[start..inextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
-        invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
-        invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
+        invariant keys[nextstart..] == old(keys[nextstart..]);
+        invariant values[..start] == old(values[..start]);
+        invariant values[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
+        invariant values[nextstart..] == old(values[nextstart..])
       {
         assert I(node).children[..i+1][..i] == I(node).children[..i];
-        ghost var oldinextstart := inextstart;
-        inextstart := inextstart + Spec.NumElements(I(node).children[i]);
-        Spec.NumElementsOfChildrenNotZero(I(node));
         Spec.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
-
+        Spec.ToSeqChildrenDecomposition(I(node).children[..i+1]);
         IOfChild(node, i as int);
+
         nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
         i := i + 1;
-
-        Spec.ToSeqChildrenDecomposition(I(node).children[..i]);
       }
       assert I(node).children[..node.contents.nchildren] == I(node).children;
     }

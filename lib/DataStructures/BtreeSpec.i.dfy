@@ -906,10 +906,10 @@ abstract module BtreeSpec {
   
   lemma NumElementsOfChildrenDecreases(nodes: seq<Node>, prefix: int)
     requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-    requires forall i :: 0 <= i < |nodes| ==> 0 < NumElements(nodes[i])
+    //requires forall i :: 0 <= i < |nodes| ==> 0 < NumElements(nodes[i])
     requires 0 <= prefix <= |nodes|
     ensures NumElementsOfChildren(nodes[..prefix]) <= NumElementsOfChildren(nodes)
-    ensures prefix < |nodes| ==> NumElementsOfChildren(nodes[..prefix]) < NumElementsOfChildren(nodes)
+    //ensures prefix < |nodes| ==> NumElementsOfChildren(nodes[..prefix]) < NumElementsOfChildren(nodes)
   {
     if prefix == |nodes| {
       assert nodes[..prefix] == nodes;
