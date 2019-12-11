@@ -1,5 +1,7 @@
 #include "Framework.h"
 
+#include "Crc32.h"
+
 typedef uint8 byte;
 
 namespace NativeArrays_Compile {
@@ -29,12 +31,12 @@ namespace Crypto_Compile {
 
     DafnySequence<byte> padded;
     padded.seq.resize(32);
-    padded[0] = (uint8_t)(crc & 0xff);
-    padded[1] = (uint8_t)((crc >> 8) & 0xff);
-    padded[2] = (uint8_t)((crc >> 16) & 0xff);
-    padded[0] = (uint8_t)((crc >> 24) & 0xff);
+    padded.update(0, (uint8_t)(crc & 0xff));
+    padded.update(1, (uint8_t)((crc >> 8) & 0xff));
+    padded.update(2, (uint8_t)((crc >> 16) & 0xff));
+    padded.update(3, (uint8_t)((crc >> 24) & 0xff));
     for (int i = 4; i < 32; i++) {
-      padded[i] = 0;
+      padded.update(i, 0);
     }
 
     return padded;

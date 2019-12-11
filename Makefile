@@ -92,9 +92,6 @@ FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32
 .PHONY: exe
 exe: build/Veribetrfs.exe
 
-.PHONY: elf
-elf: build/Veribetrfs
-
 build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
 	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
 
@@ -118,6 +115,9 @@ allcpp: build/Impl/Bundle.i.cpp
 
 .PHONY: allo
 allo: build/Impl/Bundle.i.o
+
+.PHONY: elf
+elf: build/Veribetrfs
 
 ##############################################################################
 ##############################################################################
@@ -219,12 +219,12 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 ##############################################################################
 # C++ object files
 build/%.o: build/%.cpp framework/*.h | $$(@D)/.
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2
 
 build/framework/%.o: framework/*.cpp framework/*.h $(DAFNY_BINS) | $$(@D)/.
-	g++ -c framework/Framework.cpp -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2
 
-VERIBETRFS_O_FILES=build/Bundle.o build/framework/Framework.o
+VERIBETRFS_O_FILES=build/Bundle.o build/framework/Framework.o build/framework/Crc32.o
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	g++ -o $@ $(VERIBETRFS_O_FILES)
+	g++ -o $@ $(VERIBETRFS_O_FILES) -msse4.2
