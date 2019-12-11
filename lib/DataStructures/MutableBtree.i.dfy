@@ -96,7 +96,9 @@ abstract module MutableBtree {
   function {:opaque} I(node: Node) : (result: Spec.Node)
     requires WFShape(node)
     ensures node.contents.Leaf? <==> I(node).Leaf?
-    ensures node.contents.Leaf? ==> |I(node).keys| == node.contents.nkeys as int
+    ensures node.contents.Leaf? ==> I(node).keys == node.contents.keys[..node.contents.nkeys]
+    ensures node.contents.Leaf? ==> I(node).values == node.contents.values[..node.contents.nkeys]
+    ensures node.contents.Index? ==> I(node).pivots == node.contents.pivots[..node.contents.nchildren-1]
     ensures node.contents.Index? ==> |I(node).children| == node.contents.nchildren as int
     reads node, node.repr
     decreases node.height
@@ -222,10 +224,11 @@ abstract module MutableBtree {
     o in node.contents.children[i].repr
   }
 
-  function SubRepr(node: Node, from: int, to: int) : (result: set<object>)
+  function {:opaque} SubRepr(node: Node, from: int, to: int) : (result: set<object>)
     requires WFShape(node)
     requires node.contents.Index?
     requires 0 <= from <= to <= node.contents.nchildren as int
+    ensures {node, node.contents.pivots, node.contents.children} !! SubRepr(node, from, to)
     reads node.repr
   {
     set i: int, o | 0 <= from <= i < to && o in node.repr && ObjectIsInSubtree(node, o, i) :: o
@@ -239,6 +242,8 @@ abstract module MutableBtree {
     ensures SubRepr(node, from, to) <= node.repr - {node, node.contents.pivots, node.contents.children}
     ensures to - from < node.contents.nchildren as int ==> SubRepr(node, from, to) < node.repr - {node, node.contents.pivots, node.contents.children}
   {
+    reveal_SubRepr();
+    
     var subrepr := SubRepr(node, from, to);
     var nchildren := node.contents.nchildren;
     var pivots := node.contents.pivots;
@@ -292,6 +297,8 @@ abstract module MutableBtree {
     requires 0 <= from <= to <= node.contents.nchildren as int
     ensures forall i :: from <= i < to ==> node.contents.children[i].repr <= SubRepr(node, from, to)
   {
+    reveal_SubRepr();
+    
     var subrepr := SubRepr(node, from, to);
     var nchildren := node.contents.nchildren;
     var pivots := node.contents.pivots;
@@ -389,9 +396,11 @@ abstract module MutableBtree {
       
     ghost var isubnode := I(subnode);
     ghost var inode := I(node);
-    reveal_I();
-    assert isubnode.pivots == inode.pivots[from..to as int - 1];
-    assert isubnode.children == inode.children[from..to];
+    assert isubnode.pivots == inode.pivots[from..to - 1];
+    forall ensures isubnode.children == inode.children[from..to]
+    {
+      reveal_I();
+    }
   }
 
   lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
@@ -400,6 +409,7 @@ abstract module MutableBtree {
     requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
     ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
   {
+    reveal_SubRepr();
     var subrepr1 := SubRepr(node, from1, to1);
     var subrepr2 := SubRepr(node, from2, to2);
 
@@ -429,25 +439,21 @@ abstract module MutableBtree {
     modifies node
   {
     SubReprsDisjoint(node, 0, nleft as int, nleft as int, node.contents.nchildren as int);
+    SubReprUpperBound(node, 0, nleft as int);
+    SubReprUpperBound(node, nleft as int, node.contents.nchildren as int);
     right := SubIndex(node, nleft, node.contents.nchildren);
     pivot := node.contents.pivots[nleft-1];
-    assert Spec.WF(I(node));
-    assert Spec.AllKeys(I(node).children[0]) != {};
-    assert I(node).children[0] == I(node.contents.children[0]);
-    assert Spec.AllKeys(I(node.contents.children[0])) != {};
+    IOfChild(node, 0);
     wit :| wit in Spec.AllKeys(I(node.contents.children[0]));
     IndexPrefix(node, nleft);
     ghost var inode := old(I(node));
-    ghost var ileft := I(node);
-    ghost var iright := I(right);
     assert Spec.AllKeysBelowBound(inode, 0);
     Spec.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
     assert Spec.Keys.lt(wit, inode.pivots[0]);
-    assert Spec.Keys.lte(inode.pivots[0], pivot);
-    assert Spec.Keys.lt(wit, pivot);
     assert wit in Spec.AllKeys(inode);
+    reveal_I();
   }
-  
+
   method SplitNode(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
     requires WF(node)
     requires Full(node)
@@ -655,43 +661,40 @@ abstract module MutableBtree {
     ensures node.contents.pivots[childidx] in Spec.AllKeys(old(I(node)).children[childidx])
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
-    ChildrenAreDistinct(node);
+    forall i | 0 <= i < node.contents.nchildren
+      ensures I(node).children[i] == I(node.contents.children[i])
+    {
+      IOfChild(node, i as int);
+    }
     
-    ghost var ioldnode := I(node);
     var right, wit', pivot := SplitNode(node.contents.children[childidx]);
-    ghost var ileft := I(node.contents.children[childidx]);
-    ghost var iright := I(right);
-
     Arrays.Insert(node.contents.pivots, node.contents.nchildren-1, pivot, childidx);
     Arrays.Insert(node.contents.children, node.contents.nchildren, right, childidx + 1);
     node.contents := node.contents.(nchildren := node.contents.nchildren + 1);
     node.repr := node.repr + right.repr;
     wit := wit';
 
-    assert node.contents.children[childidx] == old(node.contents.children[childidx]);
     SplitChildOfIndexPreservesWFShape(node, childidx as int);
     
+    ghost var ioldnode := old(I(node));
     ghost var inode := I(node);
-
+    ghost var iright := I(right);
     ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
     forall i | 0 <= i < |inode.children|
       ensures inode.children[i] == target[i]
     {
+      IOfChild(node, i);
       if i < childidx as int {
         assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
-        assert SubtreeUnchanged(node, i, i);
-        assert inode.children[i] == ioldnode.children[i] == target[i];
       } else if i == childidx as int {
-        assert inode.children[i] == ileft == target[i];
       } else if i == (childidx + 1) as int {
-        assert inode.children[i] == iright == target[i];
       } else {
         assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));      
-        assert SubtreeUnchanged(node, i-1, i);
-        assert inode.children[i] == ioldnode.children[i-1] == target[i];
       }
     }
-    assert inode.children == Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
+
+    IOfChild(node, childidx as int);
+    IOfChild(node, childidx as int + 1);
   }
 
   method InsertLeaf(node: Node, key: Key, value: Value)
@@ -804,6 +807,12 @@ abstract module MutableBtree {
     modifies node, node.contents.children[childidx], node.contents.children[childidx].repr
     decreases node.height, 0
   {
+    forall i | 0 <= i < node.contents.nchildren
+      ensures I(node.contents.children[i]) == I(node).children[i]
+    {
+      IOfChild(node, i as int);
+    }
+    
     InsertNode(node.contents.children[childidx], key, value);
     node.repr := node.repr + node.contents.children[childidx].repr;
     
@@ -817,14 +826,17 @@ abstract module MutableBtree {
     forall i | 0 <= i < childidx as int
       ensures inode.children[i] == oldinode.children[i]
     {
+      IOfChild(node, i);
       assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
     }
     forall i | childidx as int < i < |inode.children|
       ensures inode.children[i] == oldinode.children[i]
     {
+      IOfChild(node, i);
       assert old(DisjointSubtrees(node.contents, childidx as int, i as int));
     }
 
+    IOfChild(node, childidx as int);
     Spec.RecursiveInsertIsCorrect(oldinode, key, value, childidx as int, inode, inode.children[childidx]);
   }
 
@@ -919,6 +931,7 @@ abstract module MutableBtree {
     newroot.height := root.height + 1;
 
     ghost var inewroot := I(newroot);
+    IOfChild(newroot, 0);
     assert inewroot.children == [ I(root) ];
   }
 
@@ -946,6 +959,7 @@ abstract module MutableBtree {
       FullImpliesAllKeysNonEmpty(root);
       Spec.GrowPreservesWF(I(root));
       newroot := Grow(root);
+      Spec.GrowPreservesInterpretation(I(root));
     } else {
       newroot := root;
     }
