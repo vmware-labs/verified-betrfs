@@ -35,7 +35,7 @@ module {:extern} StateImpl {
   import MainDiskIOHandler
   import LruModel
   import LruImpl
-  import MutableBucket
+  import BucketImpl
   import opened Bounds
   import opened BucketsLib
 

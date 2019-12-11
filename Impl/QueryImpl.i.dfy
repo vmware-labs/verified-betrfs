@@ -13,7 +13,7 @@ module QueryImpl {
   import QueryModel
   import BookkeepingModel
   import opened StateImpl
-  import opened MutableBucket
+  import opened BucketImpl
 
   import opened Options
   import opened NativeTypes

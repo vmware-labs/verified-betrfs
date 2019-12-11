@@ -14,7 +14,7 @@ module SuccImpl {
   import SuccModel
   import BookkeepingModel
   import opened StateImpl
-  import opened MutableBucket
+  import opened BucketImpl
   import opened Lexicographic_Byte_Order
   import opened NodeImpl
   import BucketSuccessorLoopImpl

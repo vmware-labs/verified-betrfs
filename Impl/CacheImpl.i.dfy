@@ -11,7 +11,7 @@ module CacheImpl {
   import opened Options
   import opened Maps
   import opened NativeTypes
-  import opened MutableBucket
+  import opened BucketImpl
   import opened BucketWeights
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type

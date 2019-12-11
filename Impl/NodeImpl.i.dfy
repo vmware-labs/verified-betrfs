@@ -18,7 +18,7 @@ module NodeImpl {
   import BT = PivotBetreeSpec`Internal
   import Pivots = PivotsLib
   import opened Bounds
-  import opened MutableBucket
+  import opened BucketImpl
   import opened BucketsLib
   import opened BucketWeights
   import SplitModel
@@ -31,13 +31,13 @@ module NodeImpl {
   {
     var pivotTable: Pivots.PivotTable;
     var children: Option<seq<BT.G.Reference>>;
-    var buckets: seq<MutableBucket.MutBucket>;
+    var buckets: seq<BucketImpl.MutBucket>;
     ghost var Repr: set<object>;
 
     constructor(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<BT.G.Reference>>,
-      buckets: seq<MutableBucket.MutBucket>)
+      buckets: seq<BucketImpl.MutBucket>)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     requires MutBucket.ReprSeqDisjoint(buckets)
     ensures this.pivotTable == pivotTable;
@@ -84,10 +84,10 @@ module NodeImpl {
     requires Inv()
     {
       IM.Node(pivotTable, children,
-        MutableBucket.MutBucket.ISeq(buckets))
+        BucketImpl.MutBucket.ISeq(buckets))
     }
 
-    method UpdateSlot(slot: uint64, bucket: MutableBucket.MutBucket, childref: BT.G.Reference)
+    method UpdateSlot(slot: uint64, bucket: BucketImpl.MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()
     requires children.Some?

@@ -2,7 +2,7 @@ include "BucketGeneratorModel.i.dfy"
 include "BucketImpl.i.dfy"
 
 module BucketGeneratorImpl {
-  import opened MutableBucket
+  import opened BucketImpl
   import BucketGeneratorModel
   import ModelBucketIterator
   import opened Lexicographic_Byte_Order

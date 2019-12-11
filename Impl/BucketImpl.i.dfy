@@ -11,7 +11,7 @@ include "ModelBucketIterator.i.dfy"
 // TODO(robj): Littered with assume false!?
 //
 
-module MutableBucket {
+module BucketImpl {
   import TTT = TwoThreeTree
   import KVList
   import KVListPartialFlush

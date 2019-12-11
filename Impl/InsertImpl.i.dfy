@@ -15,7 +15,7 @@ module InsertImpl {
   import opened InsertModel
   import opened StateImpl
   import opened FlushPolicyImpl
-  import opened MutableBucket
+  import opened BucketImpl
 
   import opened Options
   import opened Maps

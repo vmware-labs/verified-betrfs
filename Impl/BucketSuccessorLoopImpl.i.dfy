@@ -2,7 +2,7 @@ include "BucketSuccessorLoopModel.i.dfy"
 include "BucketGeneratorImpl.i.dfy"
 
 module BucketSuccessorLoopImpl {
-  import opened MutableBucket
+  import opened BucketImpl
   import opened BucketGeneratorImpl
   import opened NativeTypes
   import opened Options

@@ -15,7 +15,7 @@ module FlushPolicyImpl {
   import opened EvictImpl
   import FlushPolicyModel
   import opened StateImpl
-  import opened MutableBucket
+  import opened BucketImpl
 
   import opened Sequences
 

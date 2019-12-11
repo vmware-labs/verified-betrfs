@@ -24,7 +24,7 @@ module MarshallingImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import MutableBucket
+  import BucketImpl
   import BC = BetreeGraphBlockCache
   import StateImpl
   import KVList
@@ -188,17 +188,17 @@ module MarshallingImpl {
     }
   }
 
-  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<MutableBucket.MutBucket>>)
+  method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<BucketImpl.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
-  ensures s.Some? ==> MutableBucket.MutBucket.ReprSeqDisjoint(s.value)
+  ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
   ensures s.None? ==> IMM.valToBuckets(a, pivotTable) == None
-  ensures s.Some? ==> Some(MutableBucket.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
+  ensures s.Some? ==> Some(BucketImpl.MutBucket.ISeq(s.value)) == IMM.valToBuckets(a, pivotTable)
   {
     assume |a| < 0x1_0000_0000_0000_0000;
 
-    var ar := new MutableBucket.MutBucket?[|a| as uint64];
+    var ar := new BucketImpl.MutBucket?[|a| as uint64];
 
     var i: uint64 := 0;
     while i < |a| as uint64
@@ -210,7 +210,7 @@ module MarshallingImpl {
     invariant forall k: nat | k < i as int :: fresh(ar[k].Repr)
     invariant forall k: nat | k < i as int :: WFBucketAt(ar[k].Bucket, pivotTable, k)
     invariant IMM.valToBuckets(a[..i], pivotTable).Some?
-    invariant MutableBucket.MutBucket.ISeq(ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
+    invariant BucketImpl.MutBucket.ISeq(ar[..i]) == IMM.valToBuckets(a[..i], pivotTable).value
     {
       var b := ValToBucket(a[i], pivotTable, i);
       if (b.None?) {
@@ -221,7 +221,7 @@ module MarshallingImpl {
       }
 
       assume WeightBucket(KVList.I(b.value)) < 0x1_0000_0000_0000_0000;
-      var bucket := new MutableBucket.MutBucket(b.value);
+      var bucket := new BucketImpl.MutBucket(b.value);
       assert forall k: nat | k < i as int :: ar[k].Inv();
       ar[i] := bucket;
       assert forall k: nat | k < i as int :: ar[k].Inv();
@@ -239,13 +239,13 @@ module MarshallingImpl {
 
     s := Some(ar[..]);
 
-    MutableBucket.MutBucket.reveal_ReprSeqDisjoint();
+    BucketImpl.MutBucket.reveal_ReprSeqDisjoint();
   }
 
   method ValToNode(v: V) returns (s : Option<Node>)
   requires IMM.valToNode.requires(v)
   ensures s.Some? ==> s.value.Inv()
-  ensures s.Some? ==> MutableBucket.MutBucket.ReprSeqDisjoint(s.value.buckets)
+  ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value.buckets)
   ensures s.Some? ==> forall i | 0 <= i < |s.value.buckets| :: fresh(s.value.buckets[i].Repr)
   ensures INodeOpt(s) == IMM.valToNode(v)
   {
@@ -277,14 +277,14 @@ module MarshallingImpl {
     }
     var buckets := bucketsOpt.value;
 
-    assume forall o | o in MutableBucket.MutBucket.ReprSeq(buckets) :: allocated(o);
+    assume forall o | o in BucketImpl.MutBucket.ReprSeq(buckets) :: allocated(o);
 
     if |buckets| as uint64 > MaxNumChildrenUint64() {
       return None;
     }
 
-    assume WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
-    var w: uint64 := MutableBucket.MutBucket.computeWeightOfSeq(buckets);
+    assume WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
+    var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
     if (w > MaxTotalBucketWeightUint64()) {
       return None;
     }
@@ -421,7 +421,7 @@ module MarshallingImpl {
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel SizeOfV,3}
-  bucketToVal(bucket: MutableBucket.MutBucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
+  bucketToVal(bucket: BucketImpl.MutBucket, ghost pivotTable: Pivots.PivotTable, ghost i: int) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires bucket.Inv()
   requires WeightBucket(bucket.Bucket) <= MaxTotalBucketWeight()
@@ -449,25 +449,25 @@ module MarshallingImpl {
     assert ValInGrammar(v, IMM.BucketGrammar());
   }
 
-  method bucketsToVal(buckets: seq<MutableBucket.MutBucket>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
+  method bucketsToVal(buckets: seq<BucketImpl.MutBucket>, ghost pivotTable: Pivots.PivotTable) returns (v: V)
   requires Pivots.WFPivots(pivotTable)
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
   requires forall i | 0 <= i < |buckets| :: WFBucketAt(buckets[i].Bucket, pivotTable, i)
   requires |buckets| <= MaxNumChildren() as int
   requires |buckets| <= |pivotTable| + 1
-  requires WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) <= MaxTotalBucketWeight()
+  requires WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(IMM.BucketGrammar()))
   ensures |v.a| == |buckets|
-  ensures IMM.valToBuckets(v.a, pivotTable) == Some(MutableBucket.MutBucket.ISeq(buckets))
-  ensures SizeOfV(v) <= 8 + WeightBucketList(MutableBucket.MutBucket.ISeq(buckets)) + |buckets| * 16
+  ensures IMM.valToBuckets(v.a, pivotTable) == Some(BucketImpl.MutBucket.ISeq(buckets))
+  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 16
   {
     if |buckets| as uint64 == 0 {
       v := VArray([]);
     } else {
-      WeightBucketListSlice(MutableBucket.MutBucket.ISeq(buckets), 0, |buckets| - 1);
-      WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(buckets), |buckets| - 1);
-      MutableBucket.MutBucket.Islice(buckets, 0, |buckets| - 1);
+      WeightBucketListSlice(BucketImpl.MutBucket.ISeq(buckets), 0, |buckets| - 1);
+      WeightBucketLeBucketList(BucketImpl.MutBucket.ISeq(buckets), |buckets| - 1);
+      BucketImpl.MutBucket.Islice(buckets, 0, |buckets| - 1);
 
       var pref := bucketsToVal(buckets[..|buckets| as uint64 - 1], pivotTable);
       var bucket := buckets[|buckets| as uint64 - 1];
@@ -476,15 +476,15 @@ module MarshallingImpl {
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
       assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).Some?; // observe
-      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == MutableBucket.MutBucket.ISeq(buckets); // observe
-      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(MutableBucket.MutBucket.ISeq(buckets)); // observe (reduces verification time)
+      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable).value == BucketImpl.MutBucket.ISeq(buckets); // observe
+      assert IMM.valToBuckets(VArray(pref.a + [bucketVal]).a, pivotTable) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe (reduces verification time)
 
       assert buckets == DropLast(buckets) + [Last(buckets)];
 
       reveal_WeightBucketList();
-      MutableBucket.MutBucket.ISeqInduction(buckets);
-      assert WeightBucketList(MutableBucket.MutBucket.ISeq(buckets))
-          == WeightBucketList(MutableBucket.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(Last(buckets).I());
+      BucketImpl.MutBucket.ISeqInduction(buckets);
+      assert WeightBucketList(BucketImpl.MutBucket.ISeq(buckets))
+          == WeightBucketList(BucketImpl.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(Last(buckets).I());
 
       v := VArray(pref.a + [bucketVal]);
     }
@@ -510,7 +510,7 @@ module MarshallingImpl {
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
   ensures SizeOfV(v) <= BlockSize() - 32 - 8
   {
-    assume forall o | o in MutableBucket.MutBucket.ReprSeq(node.buckets) :: allocated(o);
+    assume forall o | o in BucketImpl.MutBucket.ReprSeq(node.buckets) :: allocated(o);
     var buckets := bucketsToVal(node.buckets, node.pivotTable);
 
     var pivots := pivotsToVal(node.pivotTable);

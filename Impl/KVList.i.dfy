@@ -7,7 +7,7 @@ include "../PivotBetree/BucketWeights.i.dfy"
 include "../lib/Marshalling/Seqs.i.dfy"
 //
 // A list of key-message pairs, with unique, sorted keys.
-// TODO(robj,thance): How is it used... in MutableBucket?
+// TODO(robj,thance): How is it used... in BucketImpl?
 //
 
 module KVList {

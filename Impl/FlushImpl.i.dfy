@@ -15,7 +15,7 @@ module FlushImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import opened MutableBucket
+  import opened BucketImpl
 
   import opened NativeTypes
   import StateModel
@@ -69,13 +69,13 @@ module FlushImpl {
     assert parent.I().children == s.I().cache[parentref].children;
     s.cache.LemmaNodeReprLeRepr(parentref);
 
-    WeightBucketLeBucketList(MutableBucket.MutBucket.ISeq(parent.buckets), slot as int);
+    WeightBucketLeBucketList(BucketImpl.MutBucket.ISeq(parent.buckets), slot as int);
 
     assert WeightBucketList(s.I().cache[childref].buckets) <= MaxTotalBucketWeight();
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
-    var newparentBucket, newbuckets := MutableBucket.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+    var newparentBucket, newbuckets := BucketImpl.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
