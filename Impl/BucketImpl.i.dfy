@@ -203,9 +203,25 @@ module BucketImpl {
     static lemma ISeqInduction(s: seq<MutBucket>)
     requires |s| > 0
     ensures ISeq(s) == ISeq(DropLast(s)) + [Last(s).I()]
+    {
+    }
 
     static lemma ISeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
     ensures ISeq(a + b) == ISeq(a) + ISeq(b)
+    {
+      if |b| == 0 {
+        assert ISeq(a + b)
+            == ISeq(a)
+            == ISeq(a) + ISeq(b);
+      } else {
+        ISeqAdditive(a, b[..|b|-1]);
+        assert ISeq(a + b)
+            == ISeq((a + b)[..|a+b|-1]) + [(a+b)[|a+b|-1].I()]
+            == ISeq(a + b[..|b|-1]) + [b[|b|-1].I()]
+            == ISeq(a) + ISeq(b[..|b|-1]) + [b[|b|-1].I()]
+            == ISeq(a) + ISeq(b);
+      }
+    }
 
     static twostate lemma AllocatedReprSeq(new s: seq<MutBucket>)
     ensures allocated(ReprSeq(s))
@@ -214,19 +230,50 @@ module BucketImpl {
     }
 
     static twostate lemma FreshReprSeqOfFreshEntries(new s: seq<MutBucket>)
-    ensures forall i | 0 <= i < |s| :: fresh(s[i].Repr)
+    requires forall i | 0 <= i < |s| :: fresh(s[i].Repr)
     ensures fresh(ReprSeq(s))
+    {
+      reveal_ReprSeq();
+    }
 
     static lemma ReprSeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
     ensures ReprSeq(a) + ReprSeq(b) == ReprSeq(a + b)
+    {
+      reveal_ReprSeq();
+      var x := ReprSeq(a) + ReprSeq(b);
+      var y := ReprSeq(a + b);
+      forall o | o in x ensures o in y {
+        if o in ReprSeq(a) {
+          var i :| 0 <= i < |a| && o in a[i].Repr;
+          assert o in (a+b)[i].Repr;
+        } else {
+          var i :| 0 <= i < |b| && o in b[i].Repr;
+          assert o in (a+b)[i + |a|].Repr;
+        }
+      }
+      forall o | o in y ensures o in x {
+        var i :| 0 <= i < |a+b| && o in (a+b)[i].Repr;
+        if i < |a| {
+          assert o in a[i].Repr;
+        } else {
+          assert o in b[i-|a|].Repr;
+        }
+      }
+    }
 
     static lemma ReprSeq1Eq(a: seq<MutBucket>)
     requires |a| == 1
     ensures ReprSeq(a) == a[0].Repr
+    {
+      reveal_ReprSeq();
+    }
 
     static lemma LemmaReprBucketLeReprSeq(buckets: seq<MutBucket>, i: int)
     requires 0 <= i < |buckets|
     ensures buckets[i].Repr <= ReprSeq(buckets)
+    {
+      reveal_ReprSeq();
+    }
 
     static predicate {:opaque} ReprSeqDisjoint(buckets: seq<MutBucket>)
     reads set i | 0 <= i < |buckets| :: buckets[i]
