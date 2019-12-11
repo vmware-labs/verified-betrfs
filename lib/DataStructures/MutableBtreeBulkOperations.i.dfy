@@ -51,7 +51,7 @@ abstract module MutableBtreeBulkOperations {
     ensures nextstart as nat == start as nat + Spec.NumElements(I(node))
     ensures forall i :: 0 <= i < start ==> keys[i] == old(keys[i]);
     ensures forall i :: 0 <= i < start ==> values[i] == old(values[i]);
-    //ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
+    ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
     //ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
     ensures forall i :: nextstart as nat <= i < keys.Length ==> keys[i] == old(keys[i]);
     ensures forall i :: nextstart as nat <= i < values.Length ==> values[i] == old(values[i]);
@@ -76,7 +76,7 @@ abstract module MutableBtreeBulkOperations {
         invariant nextstart as nat == inextstart
         invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
         invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
-        //invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
+        invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
         //invariant values[start..inextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
         invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
         invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
