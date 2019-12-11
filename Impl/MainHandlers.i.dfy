@@ -12,7 +12,7 @@ include "SyncModel.i.dfy"
 // Implements the application-API-handler obligations laid out by Main.s.dfy.
 //
 
-module {:extern} Handlers refines Main { 
+module {:extern} MainHandlers refines Main { 
   import SM = StateModel
   import SI = StateImpl
   import IOImpl

@@ -4,7 +4,7 @@ include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-// See dependency graph in Handlers.dfy
+// See dependency graph in MainHandlers.dfy
 
 module SyncModel { 
   import opened StateModel

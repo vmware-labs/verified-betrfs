@@ -6,7 +6,7 @@ include "../lib/Base/Sets.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "BucketSuccessorLoopImpl.i.dfy"
 
-// See dependency graph in Handlers.dfy
+// See dependency graph in MainHandlers.dfy
 
 module SuccImpl { 
   import opened SyncImpl
