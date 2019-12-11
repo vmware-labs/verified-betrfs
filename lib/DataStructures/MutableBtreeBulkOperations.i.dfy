@@ -51,8 +51,8 @@ abstract module MutableBtreeBulkOperations {
     ensures nextstart as nat == start as nat + Spec.NumElements(I(node))
     ensures forall i :: 0 <= i < start ==> keys[i] == old(keys[i]);
     ensures forall i :: 0 <= i < start ==> values[i] == old(values[i]);
-    //ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
-    //ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
+    ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
+    ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
     ensures forall i :: nextstart as nat <= i < keys.Length ==> keys[i] == old(keys[i]);
     ensures forall i :: nextstart as nat <= i < values.Length ==> values[i] == old(values[i]);
     modifies keys, values
@@ -62,6 +62,12 @@ abstract module MutableBtreeBulkOperations {
       Arrays.Memcpy(keys, start, node.contents.keys[..node.contents.nkeys]); // FIXME: remove conversion to seq
       Arrays.Memcpy(values, start, node.contents.values[..node.contents.nkeys]); // FIXME: remove conversion to seq
       nextstart := start + node.contents.nkeys;
+      forall
+        ensures keys[start..nextstart] == Spec.ToSeq(I(node)).0
+        ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
+      {
+        reveal_I();
+      }
     } else {
       nextstart := start;
       ghost var inextstart := start as nat;
@@ -76,45 +82,22 @@ abstract module MutableBtreeBulkOperations {
         invariant nextstart as nat == inextstart
         invariant forall i :: 0 <= i < start ==> keys[i] == old(keys[i])
         invariant forall i :: 0 <= i < start ==> values[i] == old(values[i])
-        //invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
-        //invariant values[start..inextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
+        invariant keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
+        invariant values[start..inextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
         invariant forall i :: inextstart <= i < keys.Length ==> keys[i] == old(keys[i])
         invariant forall i :: inextstart <= i < values.Length ==> values[i] == old(values[i])
       {
         assert I(node).children[..i+1][..i] == I(node).children[..i];
+        ghost var oldinextstart := inextstart;
         inextstart := inextstart + Spec.NumElements(I(node).children[i]);
         Spec.NumElementsOfChildrenNotZero(I(node));
         Spec.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
 
-        ghost var oldnextstart := nextstart;
+        IOfChild(node, i as int);
         nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
-        assert unchanged(node.repr);
-        assert I(node) == old(I(node));
-
         i := i + 1;
-        
-        //ghost var target := Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0);
-        //Spec.ToSeqChildrenLength(I(node).children[..i]);
-        //assert |target| == (nextstart - start) as nat;
 
-        //Spec.ToSeqChildrenDecomposition(I(node).children, i as int);
-        //assert keys[start..nextstart] == keys[start..oldnextstart] + keys[oldnextstart..nextstart];
-        
-        // assert Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0)
-        //   == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i-1]).0) + Spec.ToSeq(I(node).children[i-1]).0;
-        // assert keys[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).0);
-
-        // forall j | 0 <= j < (nextstart - start) as nat
-        //   ensures keys[start..nextstart][j] == target[j]
-        // {
-        //   assume false;
-        // }
-        // assert start as nat <= nextstart as nat <= keys.Length;
-        // Arrays.SequenceLength(keys, start, nextstart);
-        // assert |keys[start..nextstart]| == (nextstart - start) as nat;
-        // Spec.Seq.EqualExtensionality(keys[start..nextstart], target);
-        // assert keys[start..nextstart] == target;
-        //assume false;
+        Spec.ToSeqChildrenDecomposition(I(node).children[..i]);
       }
       assert I(node).children[..node.contents.nchildren] == I(node).children;
     }

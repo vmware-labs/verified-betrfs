@@ -93,8 +93,11 @@ abstract module MutableBtree {
     else Ichildren(DropLast(nodes), parentheight) + [I(Last(nodes))]
   }
   
-  function I(node: Node) : (result: Spec.Node)
+  function {:opaque} I(node: Node) : (result: Spec.Node)
     requires WFShape(node)
+    ensures node.contents.Leaf? <==> I(node).Leaf?
+    ensures node.contents.Leaf? ==> |I(node).keys| == node.contents.nkeys as int
+    ensures node.contents.Index? ==> |I(node).children| == node.contents.nchildren as int
     reads node, node.repr
     decreases node.height
   {

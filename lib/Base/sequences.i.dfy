@@ -269,7 +269,7 @@ module Sequences {
 
 
   
-  function FlattenShape<A>(seqs: seq<seq<A>>) : (shape: seq<nat>)
+  function {:opaque} FlattenShape<A>(seqs: seq<seq<A>>) : (shape: seq<nat>)
     ensures |shape| == |seqs|
     ensures forall i :: 0 <= i < |shape| ==> shape[i] == |seqs[i]|
   {
@@ -277,7 +277,7 @@ module Sequences {
     else FlattenShape(DropLast(seqs)) + [|Last(seqs)|]
   }
 
-  function FlattenLength(shape: seq<nat>) : nat
+  function {:opaque} FlattenLength(shape: seq<nat>) : nat
   {
     if |shape| == 0 then 0
     else FlattenLength(DropLast(shape)) + Last(shape)
@@ -287,6 +287,7 @@ module Sequences {
     requires prefix < |shape|
     ensures FlattenLength(shape[..prefix]) <= FlattenLength(shape)
   {
+    reveal_FlattenLength();
     if prefix == |shape|-1 {
     } else {
       FlattenLengthMonotonic(DropLast(shape), prefix);
@@ -294,9 +295,12 @@ module Sequences {
     }
   }
 
-  function Flatten<A>(seqs: seq<seq<A>>) : seq<A>
+  function {:opaque} Flatten<A>(seqs: seq<seq<A>>) : seq<A>
     ensures |Flatten(seqs)| == FlattenLength(FlattenShape(seqs))
+    ensures |seqs| == 0 ==> |Flatten(seqs)| == 0
   {
+    reveal_FlattenShape();
+    reveal_FlattenLength();
     if |seqs| == 0 then []
     else Flatten(DropLast(seqs)) + Last(seqs)
   }
@@ -311,6 +315,7 @@ module Sequences {
   function UnflattenIndex(shape: seq<nat>, i: nat) : (nat, nat)
     requires i < FlattenLength(shape)
   {
+    reveal_FlattenLength();
     if i < FlattenLength(DropLast(shape)) then UnflattenIndex(DropLast(shape), i)
     else (|shape|-1, i - FlattenLength(DropLast(shape)))
   }
@@ -320,6 +325,7 @@ module Sequences {
     requires j < shape[i]
     ensures FlattenIndex(shape, i, j) < FlattenLength(shape)
   {
+    reveal_FlattenLength();
     if i == |shape|-1 {
     } else {
       FlattenIndexInBounds(DropLast(shape), i, j);
@@ -373,6 +379,7 @@ module Sequences {
     requires il == jl ==> io < jo
     ensures FlattenIndex(shape, il, io) < FlattenIndex(shape, jl, jo)
   {
+    reveal_FlattenLength();
     if il < jl-1 {
       assert shape[..il] == shape[..il+1][..il];
       FlattenLengthMonotonic(shape[..jl], il+1);
@@ -397,6 +404,7 @@ module Sequences {
     ensures FlattenIndex(FlattenShape(seqs), i, j) < |Flatten(seqs)|
     ensures Flatten(seqs)[FlattenIndex(FlattenShape(seqs), i, j)] == seqs[i][j]
   {
+    reveal_Flatten();
     FlattenIndexInBounds(FlattenShape(seqs), i, j);
     if i == |seqs|-1 {
     } else {
@@ -413,6 +421,7 @@ module Sequences {
   {
     var shape := FlattenShape(seqs);
     UnflattenIndexInBounds(shape, i);
+    reveal_Flatten();
   }
 
   lemma CardinalityOfSetsOfSequenceIndices<T>(q:seq<T>, t:set<int>)
