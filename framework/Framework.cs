@@ -1,5 +1,6 @@
-using MainImpl_Compile;
+using Handlers_Compile;
 using MainDiskIOHandler_Compile;
+using UI_Compile;
 
 using System;
 using System.IO;
@@ -184,7 +185,7 @@ namespace MainDiskIOHandler_Compile {
 class Application {
   // TODO hard-coding these types is annoying... is there another option?
   public BetreeGraphBlockCache_Compile.Constants k;
-  public MainImpl_Compile.HeapState hs;
+  public Handlers_Compile.HeapState hs;
 
   public DiskIOHandler io;
 
@@ -321,6 +322,80 @@ class Application {
     throw new Exception("operation didn't finish");
   }
 
+  public SuccResult[] QuerySucc(string key, bool inclusive, ulong target)
+  {
+    if (verbose) log("Successor query: " + (inclusive ? ">=" : ">") + " " + key + " for " + target + " results");
+    SuccResult[] results = QuerySucc(string_to_bytes(key), inclusive, target);
+    if (verbose) {
+      log("Got " + results.Length + " results");
+      for (int i = 0; i < results.Length; i++) {
+        log("    " + bytes_to_string(results[i].key.Elements) + " : " + bytes_to_string(results[i].@value.Elements));
+      }
+    }
+    return results;
+  }
+
+  public SuccResult[] QuerySucc(byte[] key, bool inclusive, ulong target)
+  {
+    RangeStart start = inclusive ?
+        RangeStart.create_SInclusive(new Dafny.Sequence<byte>(key)) :
+        RangeStart.create_SExclusive(new Dafny.Sequence<byte>(key));
+    return QuerySucc(start, target);
+  }
+
+  public SuccResult[] QuerySucc(RangeStart start, ulong target)
+  {
+    SuccResult[] all_results = new SuccResult[target];
+    ulong found = 0;
+    while (found < target) {
+      SuccResultList srl = QuerySuccOnce(start, target - found);
+      for (int i = 0; i < srl.results.Count && found < target; i++) {
+        all_results[found] = srl.results.Elements[i];
+        found++;
+      }
+      if (found == target) {
+        break;
+      }
+      if (srl.end.is_PositiveInf) {
+        SuccResult[] trunc_results = new SuccResult[found];
+        for (ulong i = 0; i < found; i++) {
+          trunc_results[i] = all_results[i];
+        }
+        return trunc_results;
+      }
+      if (srl.end.is_EExclusive) {
+        start = RangeStart.create_SInclusive(srl.end.dtor_key);
+      } else {
+        start = RangeStart.create_SExclusive(srl.end.dtor_key);
+      }
+    }
+
+    return all_results;
+  }
+
+  public SuccResultList QuerySuccOnce(RangeStart start, ulong maxToFind)
+  {
+    if (verbose) log("Succ");
+
+    if (maxToFind == 0) {
+      throw new Exception("Succ query should have maxToFind >= 1");
+    }
+
+    for (int i = 0; i < 50; i++) {
+      var result = __default.handleSucc(k, hs, io, start, maxToFind);
+      this.maybeDoResponse();
+      if (result.is_Some) {
+        log("doing succ ... success!");
+        log("");
+        return result.dtor_value;
+      } else {
+        log("doing succ...");
+      }
+    }
+    log("giving up");
+    throw new Exception("operation didn't finish");
+  }
+
   public bool maybeDoResponse() {
     if (io.prepareReadResponse()) {
       __default.handleReadResponse(k, hs, io);
@@ -401,10 +476,21 @@ class Framework {
 
     app.Insert("abc", "def");
     app.Insert("xyq", "rawr");
+    app.Insert("blahblah", "moomoo");
     app.Sync();
     app.crash();
-    app.Query("abc");
-    app.Query("xyq");
+    //app.Query("abc");
+    //app.Query("xyq");
+
+
+    app.QuerySucc("abc", true, 0);
+    app.QuerySucc("abc", true, 1);
+    app.QuerySucc("abc", true, 2);
+    app.QuerySucc("abc", true, 3);
+    app.QuerySucc("abc", true, 4);
+    app.QuerySucc("abc", false, 4);
+    app.QuerySucc("blah", true, 2);
+    app.QuerySucc("zzz", true, 2);
 
     //for (int i = 0; i < 520; i++) {
     //  app.Insert("num" + i.ToString(), "llama");

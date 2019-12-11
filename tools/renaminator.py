@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Automation for moving dfy files among directories, cleaning up include references.
 
 import os
@@ -47,10 +47,10 @@ class Renaminator:
         contents = open(filepath).read()
         return testString in contents
 
-    def fixReferrer(self, referrer, targetFilename, sourceDir, destDir):
+    def fixReferrer(self, referrer, sourceDir, sourceFilename, destDir, destFilename):
         referrerPath = os.path.split(referrer)[0]
-        sourceRelative = os.path.relpath(os.path.join(sourceDir, targetFilename), referrerPath)
-        destRelative = os.path.relpath(os.path.join(destDir, targetFilename), referrerPath)
+        sourceRelative = os.path.relpath(os.path.join(sourceDir, sourceFilename), referrerPath)
+        destRelative = os.path.relpath(os.path.join(destDir, destFilename), referrerPath)
         expectInclude = 'include "%s"' % sourceRelative
         newInclude = 'include "%s"' % destRelative
         if self.containsLine(referrer, expectInclude):
@@ -65,7 +65,18 @@ class Renaminator:
         self.gitCmds.append(["git", "mv", sourceName, destName])
 
         for referrer in self.paths:
-            self.fixReferrer(referrer, filename, sourceDir, destDir)
+            self.fixReferrer(referrer, sourceDir, filename, destDir, filename)
+
+    def renameInPlace(self, sourceName, destName):
+        sourceDir = self.findSourceDir(sourceName)
+        sourcePath = os.path.join(sourceDir, sourceName)
+        destPath = os.path.join(sourceDir, destName)
+        self.gitCmds.append(["git", "mv", sourcePath, destPath])
+
+        for referrer in self.paths:
+            self.fixReferrer(referrer, sourceDir, sourceName, sourceDir, destName)
+        # print a suggested module renaming command
+        print("sed -i 's/\<%s\>/%s/g' *.dfy" % (sourceName.replace(".i.dfy", ""), destName.replace(".i.dfy", "")))
 
     def enact(self):
         for cmd in self.fixCmds + self.mkdirCmds + self.gitAddCmds + self.gitCmds:
@@ -77,9 +88,13 @@ def moveinto(destDir, filenamesStr):
     for filename in filenamesStr.strip().split():
         renaminator.relocate(filename, destDir)
 
+def rename(sourceName, destName):
+    renaminator.renameInPlace(sourceName, destName)
 
-moveinto("BlockCacheSystem", """
-AsyncDiskModel.s.dfy
-""")
+#moveinto("BlockCacheSystem", """
+#AsyncDiskModel.s.dfy
+#""")
+
+rename("ModelBucketIterator.i.dfy", "BucketIteratorModel.i.dfy")
 
 renaminator.enact()

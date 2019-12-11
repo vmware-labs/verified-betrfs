@@ -1,6 +1,6 @@
 include "../lib/Base/KeyType.s.dfy"
 
-module UI {
+module {:extern} UI {
   //import Keyspace = Total_Order
   //import Keyspace = Lexicographic_Byte_Order
 
@@ -13,7 +13,8 @@ module UI {
   datatype RangeStart = SInclusive(key: Key) | SExclusive(key: Key) | NegativeInf
   datatype RangeEnd = EInclusive(key: Key) | EExclusive(key: Key) | PositiveInf
 
-  datatype SuccResult = SuccKeyValue(key: Key, value: Value)
+  datatype SuccResult = SuccResult(key: Key, value: Value)
+  datatype SuccResultList = SuccResultList(results: seq<SuccResult>, end: RangeEnd)
 
   datatype Op =
     | NoOp

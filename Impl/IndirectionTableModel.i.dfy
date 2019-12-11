@@ -2,13 +2,13 @@ include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
-include "../lib/DataStructures/LRU.i.dfy"
+include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "../lib/DataStructures/Bitmap.i.dfy"
+include "../lib/DataStructures/BitmapModel.i.dfy"
 //
 // An IndirectionTable maps references to locations and tracks
 // dependencies (accounts for locations containing references).
@@ -36,7 +36,7 @@ module IndirectionTableModel {
   import MutableMapModel
   import LBAType
   import opened GenericMarshalling
-  import Bitmap
+  import BitmapModel
   import opened Bounds
   import SetBijectivity
 
@@ -202,7 +202,6 @@ module IndirectionTableModel {
     && (!added ==> self'.locs == self.locs)
     && (TrackingGarbage(self) ==> TrackingGarbage(self'))
   {
-    assume self.t.count as nat < 0x1_0000_0000_0000_0000 / 8;
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var added := oldEntry.Some? && oldEntry.value.loc.None?;
     var t := (if added then
@@ -254,6 +253,31 @@ module IndirectionTableModel {
   lemma SeqCountPlusPredecessorSetExcept(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, except: BT.G.Reference)
   ensures var succs := if except in graph then graph[except] else [];
     SeqCount(succs, dest, 0) + |PredecessorSetExcept(graph, dest, except)| == |PredecessorSet(graph, dest)|
+  {
+    var succs := if except in graph then graph[except] else [];
+    var a1 := SeqCountSet(succs, dest, 0);
+    var a := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src == except :: PredecessorEdge(src, idx);
+    var b := PredecessorSetExcept(graph, dest, except);
+    var c := PredecessorSet(graph, dest);
+
+    assert a + b == c;
+    assert a !! b;
+    assert |a| + |b| == |c|;
+
+    var relation := iset p : (PredecessorEdge, int) | p.0.idx == p.1;
+    forall x | x in a ensures exists y :: y in a1 && (x, y) in relation
+    {
+      var y := x.idx;
+      assert y in a1 && (x, y) in relation;
+    }
+    forall y | y in a1 ensures exists x :: x in a && (x, y) in relation
+    {
+      var x := PredecessorEdge(except, y);
+      assert x in a && (x, y) in relation;
+    }
+    SetBijectivity.BijectivityImpliesEqualCardinality(a, a1, relation);
+    assert |a| == |a1|;
+  }
 
   predicate RefcountUpdateInv(
       t: HashMap,
@@ -617,6 +641,13 @@ module IndirectionTableModel {
   lemma lemma_count_eq_graph_size(t: HashMap)
   requires MutableMapModel.Inv(t)
   ensures t.count as int == |Graph(t)|
+  {
+    assert Graph(t).Keys == t.contents.Keys;
+    assert |Graph(t)|
+        == |Graph(t).Keys|
+        == |t.contents.Keys|
+        == t.count as int;
+  }
 
   function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
@@ -895,6 +926,47 @@ module IndirectionTableModel {
     LemmaComputeRefCountsEntryIterateGraphClosed(t, copy, it, 0);
   }
 
+  lemma PredecessorSetRestrictedSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+      dest: BT.G.Reference, domain: set<BT.G.Reference>)
+  requires |graph| <= MaxSize()
+  requires forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren()
+  ensures |PredecessorSetRestricted(graph, dest, domain)| <= MaxSize() * MaxNumChildren()
+  {
+    var s1 := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src in domain :: PredecessorEdge(src, idx);
+    var s2 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: PredecessorEdge(src, idx);
+    var s3 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: (src, idx);
+
+    assert s1 <= s2;
+    SetInclusionImpliesSmallerCardinality(s1, s2);
+    assert |s1| <= |s2|;
+
+    var relation := iset t : (PredecessorEdge, (BT.G.Reference, int)) | t.0.src == t.1.0 && t.0.idx == t.1.1;
+    forall a | a in s2 ensures exists b :: b in s3 && (a, b) in relation
+    {
+      var b := (a.src, a.idx);
+      assert b in s3;
+    }
+    forall b | b in s3 ensures exists a :: a in s2 && (a, b) in relation
+    {
+      var a := PredecessorEdge(b.0, b.1);
+      assert a in s2;
+    }
+    SetBijectivity.BijectivityImpliesEqualCardinality(s2, s3, relation);
+    assert |s2| == |s3|;
+
+    var x1 := graph.Keys;
+    var y1 := SetRange(MaxNumChildren());
+    var z1 := (set a, b | a in x1 && b in y1 :: (a,b));
+    SetBijectivity.CrossProductCardinality(x1, y1, z1);
+    assert |s3|
+        == |z1|
+        == |x1| * |y1|
+        == |graph.Keys| * |SetRange(MaxNumChildren())|;
+    assert |graph.Keys| <= MaxSize();
+    CardinalitySetRange(MaxNumChildren());
+    assert |SetRange(MaxNumChildren())| == MaxNumChildren();
+  }
+
   lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires BT.G.Root() in t.contents
@@ -905,7 +977,12 @@ module IndirectionTableModel {
     && (t0.Some? ==> ComputeRefCountsIterateInv(t0.value, copy, MutableMapModel.IterInc(copy, it)))
     && (t0.None? ==> !BC.GraphClosed(Graph(copy)))
   {
-    assume forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+    forall ref | ref in t.contents
+    ensures t.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+    {
+      lemma_count_eq_graph_size(copy);
+      PredecessorSetRestrictedSizeBound(Graph(copy), ref, it.s);
+    }
     if it.next.Next? {
       assert |copy.contents[it.next.key].succs| <= MaxNumChildren();
       LemmaComputeRefCountsEntryIterateCorrect(t, copy, it);
@@ -1005,7 +1082,10 @@ module IndirectionTableModel {
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
+  requires |a| < 0x1_0000_0000_0000_0000 / 8
+  requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+  ensures s.Some? ==> s.value.count as int == |a|
   ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
   ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
   ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
@@ -1028,7 +1108,6 @@ module IndirectionTableModel {
               if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
                 None
               ) else (
-                assume table.count as nat < 0x1_0000_0000_0000_0000 / 8;
                 Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0)))
               )
             )
@@ -1107,31 +1186,36 @@ module IndirectionTableModel {
   }
 
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
+  requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> Inv(s.value)
   ensures s.Some? ==> TrackingGarbage(s.value)
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
   {
-    var t := valToHashMap(v.a);
-    match t {
-      case Some(t) => (
-        if BT.G.Root() in t.contents && t.count as int <= MaxSize() then (
-          var t1 := ComputeRefCounts(t);
-          if t1.Some? then (
-            lemmaMakeGarbageQueueCorrect(t1.value);
-            lemma_count_eq_graph_size(t);
-            lemma_count_eq_graph_size(t1.value);
-            var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
-            Some(res)
+    if |v.a| <= MaxSize() then (
+      var t := valToHashMap(v.a);
+      match t {
+        case Some(t) => (
+          if BT.G.Root() in t.contents then (
+            var t1 := ComputeRefCounts(t);
+            if t1.Some? then (
+              lemmaMakeGarbageQueueCorrect(t1.value);
+              lemma_count_eq_graph_size(t);
+              lemma_count_eq_graph_size(t1.value);
+              var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
+              Some(res)
+            ) else (
+              None
+            )
           ) else (
             None
           )
-        ) else (
-          None
         )
-      )
-      case None => None
-    }
+        case None => None
+      }
+    ) else (
+      None
+    )
   }
 
   // To bitmap
@@ -1145,21 +1229,21 @@ module IndirectionTableModel {
     )
   }
 
-  predicate IsLocAllocBitmap(bm: Bitmap.BitmapModel, i: int)
+  predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
   {
-    && 0 <= i < Bitmap.Len(bm)
-    && Bitmap.IsSet(bm, i)
+    && 0 <= i < BitmapModel.Len(bm)
+    && BitmapModel.IsSet(bm, i)
   }
 
   function InitLocBitmapIterate(indirectionTable: IndirectionTable,
       it: MutableMapModel.Iterator<Entry>,
-      bm: Bitmap.BitmapModel)
-  : (res : (bool, Bitmap.BitmapModel))
+      bm: BitmapModel.BitmapModelT)
+  : (res : (bool, BitmapModel.BitmapModelT))
   requires Inv(indirectionTable)
   requires MutableMapModel.WFIter(indirectionTable.t, it)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
-  requires Bitmap.Len(bm) == NumBlocks()
-  ensures Bitmap.Len(res.1) == NumBlocks()
+  requires BitmapModel.Len(bm) == NumBlocks()
+  ensures BitmapModel.Len(res.1) == NumBlocks()
   decreases it.decreaser
   {
     if it.next.Done? then (
@@ -1169,23 +1253,23 @@ module IndirectionTableModel {
 
       var loc: uint64 := it.next.value.loc.value.addr;
       var locIndex: uint64 := loc / BlockSize() as uint64;
-      if locIndex < NumBlocks() as uint64 && !Bitmap.IsSet(bm, locIndex as int) then (
+      if locIndex < NumBlocks() as uint64 && !BitmapModel.IsSet(bm, locIndex as int) then (
         InitLocBitmapIterate(indirectionTable,
             MutableMapModel.IterInc(indirectionTable.t, it),
-            Bitmap.BitSet(bm, locIndex as int))
+            BitmapModel.BitSet(bm, locIndex as int))
       ) else (
         (false, bm)
       )
     )
   }
 
-  function {:opaque} InitLocBitmap(indirectionTable: IndirectionTable) : (res : (bool, Bitmap.BitmapModel))
+  function {:opaque} InitLocBitmap(indirectionTable: IndirectionTable) : (res : (bool, BitmapModel.BitmapModelT))
   requires Inv(indirectionTable)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
-  ensures Bitmap.Len(res.1) == NumBlocks()
+  ensures BitmapModel.Len(res.1) == NumBlocks()
   {
-    var bm := Bitmap.EmptyBitmap(NumBlocks());
-    var bm' := Bitmap.BitSet(bm, 0);
+    var bm := BitmapModel.EmptyBitmap(NumBlocks());
+    var bm' := BitmapModel.BitSet(bm, 0);
     InitLocBitmapIterate(indirectionTable,
         MutableMapModel.IterStart(indirectionTable.t),
         bm')
@@ -1202,7 +1286,7 @@ module IndirectionTableModel {
 
   lemma InitLocBitmapIterateCorrect(indirectionTable: IndirectionTable,
       it: MutableMapModel.Iterator<Entry>,
-      bm: Bitmap.BitmapModel)
+      bm: BitmapModel.BitmapModelT)
   requires Inv(indirectionTable)
   requires InitLocBitmapIterate.requires(indirectionTable, it, bm);
   requires (forall i: int ::
@@ -1222,8 +1306,8 @@ module IndirectionTableModel {
     )
   decreases it.decreaser
   {
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
 
     var (succ, bm') := InitLocBitmapIterate(indirectionTable, it, bm);
     if it.next.Done? {
@@ -1249,9 +1333,9 @@ module IndirectionTableModel {
         assert locIndex as int * BlockSize() == loc as int;
 
         //assert locIndex < NumBlocks() as uint64;
-        //assert !Bitmap.IsSet(bm, locIndex as int);
+        //assert !BitmapModel.IsSet(bm, locIndex as int);
 
-        var bm0 := Bitmap.BitSet(bm, locIndex as int);
+        var bm0 := BitmapModel.BitSet(bm, locIndex as int);
         var it0 := MutableMapModel.IterInc(indirectionTable.t, it);
 
         forall i: int
@@ -1307,15 +1391,15 @@ module IndirectionTableModel {
                 var j2 := LBAType.ValidAddrDivisor(I(indirectionTable).locs[r2].addr);
                 if r1 !in it.s {
                   assert r2 in it.s;
-                  assert !Bitmap.IsSet(bm, j1);
+                  assert !BitmapModel.IsSet(bm, j1);
                   assert IsLocAllocBitmap(bm, j2);
-                  assert Bitmap.IsSet(bm, j2);
+                  assert BitmapModel.IsSet(bm, j2);
                   assert false;
                 } else {
                   assert r1 in it.s;
-                  assert !Bitmap.IsSet(bm, j2);
+                  assert !BitmapModel.IsSet(bm, j2);
                   assert IsLocAllocBitmap(bm, j1);
-                  assert Bitmap.IsSet(bm, j1);
+                  assert BitmapModel.IsSet(bm, j1);
                   assert false;
                 }
               } else {
@@ -1343,13 +1427,13 @@ module IndirectionTableModel {
     )
   {
     reveal_InitLocBitmap();
-    Bitmap.reveal_BitSet();
-    Bitmap.reveal_IsSet();
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
 
     var it := MutableMapModel.IterStart(indirectionTable.t);
 
-    var bm := Bitmap.EmptyBitmap(NumBlocks());
-    var bm' := Bitmap.BitSet(bm, 0);
+    var bm := BitmapModel.EmptyBitmap(NumBlocks());
+    var bm' := BitmapModel.BitSet(bm, 0);
 
     /*forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     ensures IsLocAllocBitmap(bm', i)
@@ -1361,8 +1445,8 @@ module IndirectionTableModel {
     ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     {
       if i != 0 {
-        assert Bitmap.IsSet(bm', i)
-            == Bitmap.IsSet(bm, i)
+        assert BitmapModel.IsSet(bm', i)
+            == BitmapModel.IsSet(bm, i)
             == false;
       }
       assert i == 0;

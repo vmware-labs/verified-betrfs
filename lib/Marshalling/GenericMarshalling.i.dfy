@@ -27,7 +27,8 @@ import ValueWithDefault`Internal
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
-      KeyType, ValueMessage, ValueWithDefault
+      KeyType, ValueMessage, ValueWithDefault, lemma_SeqSumLens_prefix,
+      lemma_SeqSumMessageLens_prefix
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
 
 export extends S
@@ -3493,7 +3494,7 @@ method{:timeLimitMultiplier 4} MarshallMessageArrayContents(contents:seq<Message
             data.Length;
         }
         assert {:split_here} true;
-        assert marshalled_bytes == data[index..cur_index];
+        //assert marshalled_bytes == data[index..cur_index];
 
         // Prove the invariant about our index tracking correctly
         calc {

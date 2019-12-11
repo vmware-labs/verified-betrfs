@@ -1,19 +1,17 @@
 include "Marshalling.i.dfy"
-include "Impl.i.dfy"
-include "ImplState.i.dfy"
-include "ImplMarshalling.i.dfy"
+include "StateImpl.i.dfy"
+include "MarshallingImpl.i.dfy"
 
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {
-  import ImplMarshalling
+  import MarshallingImpl
   import IMM = ImplMarshallingModel
   import opened Options
   import opened NativeTypes
-  import opened Impl
   import opened BucketWeights
-  import IM = ImplModel
-  import opened MutableBucket
-  import opened ImplNode
+  import SM = StateModel
+  import opened BucketImpl
+  import opened NodeImpl
   import KVList
   import IndirectionTableModel
   import IndirectionTableImpl
@@ -23,7 +21,7 @@ module {:extern} MkfsImpl {
   import ReferenceType`Internal
   import LBAType
   import ValueWithDefault`Internal
-  import IS = ImplState
+  import SI = StateImpl
   import D = AsyncDisk
 
   type LBA = LBAType.LBA
@@ -39,10 +37,10 @@ module {:extern} MkfsImpl {
     var node := new Node([], None, [empty]);
 
     WeightBucketListOneEmpty();
-    assert node.I().buckets == [MutBucket.I(empty)];    // OBSERVE (trigger)
-    ghost var sector:IS.Sector := IS.SectorBlock(node);
-    ghost var is:IM.Sector := IS.ISector(sector);
-    var b1 := ImplMarshalling.MarshallCheckedSector(IS.SectorBlock(node));
+    assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
+    ghost var sector:SI.Sector := SI.SectorBlock(node);
+    ghost var is:SM.Sector := SI.ISector(sector);
+    var b1 := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
 
     var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
     sectorIndirectionTable.InvForMkfs();
@@ -53,14 +51,14 @@ module {:extern} MkfsImpl {
     // Need to improve the contract between sectorIndirectionTable and here.
     assume sectorIndirectionTable.Inv();
 
-    assume IM.IIndirectionTable(IS.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
+    assume SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
       map[0 := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)],
       map[0 := []]
     );
 
-    //assert IS.WFSector(IS.SectorIndirectionTable(sectorIndirectionTable));
-    assume IM.WFSector(IS.ISector(IS.SectorIndirectionTable(sectorIndirectionTable)));
-    var b0 := ImplMarshalling.MarshallCheckedSector(IS.SectorIndirectionTable(sectorIndirectionTable));
+    //assert SI.WFSector(SI.SectorIndirectionTable(sectorIndirectionTable));
+    assume SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
+    var b0 := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
     // TODO(jonh): MarshallCheckedSector owes us a promise that it can marshall
     // SectorIndirectionTables successfully. It can't make that promise right

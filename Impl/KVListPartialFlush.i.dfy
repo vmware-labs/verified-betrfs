@@ -1,4 +1,4 @@
-include "../Impl/KVList.i.dfy"
+include "KVList.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "../PivotBetree/PivotsLib.i.dfy"
 //
