@@ -240,7 +240,7 @@ build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp | 
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
+VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
 	g++ -o $@ $(VERIBETRFS_O_FILES) -msse4.2

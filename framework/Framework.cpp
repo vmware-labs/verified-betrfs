@@ -84,6 +84,8 @@ namespace MainDiskIOHandler_Compile {
     }
   }
 
+  DiskIOHandler::DiskIOHandler() : curId(0) { }
+
   uint64 DiskIOHandler::write(uint64 addr, shared_ptr<vector<uint8>> bytes)
   {
     writeSync(addr, &(*bytes)[0], (*bytes).size());
@@ -232,8 +234,10 @@ ByteString Application::Query(ByteString key)
     if (result.first) {
       DafnySequence<byte> val_bytes = result.second;
       LOG("doing query... success!");
+      ByteString val(val_bytes);
+      LOG("query result is \"" + key.as_string() + "\" -> \"" + val.as_string() + "\"");
       LOG("");
-      return ByteString(val_bytes);
+      return val;
     } else {
       LOG("doing query...");
     }
@@ -265,6 +269,16 @@ bool Application::maybeDoResponse()
   else {
     return false;
   }
+}
+
+void Application::Insert(std::string const& key, std::string const& val)
+{
+  Insert(ByteString(key), ByteString(val));
+}
+
+ByteString Application::Query(std::string const& key)
+{
+  return Query(ByteString(key));
 }
 
 void Application::log(std::string const& s) {

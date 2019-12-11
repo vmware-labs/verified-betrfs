@@ -5,16 +5,16 @@
 namespace BetreeGraphBlockCache_Compile {
   struct Constants;
 }
-namespace Handlers_Compile {
+namespace MainHandlers_Compile {
   class HeapState;
 }
 
-class Constants {
+struct Constants {
   std::shared_ptr<BetreeGraphBlockCache_Compile::Constants> k;
 };
 
-class Variables {
-  std::shared_ptr<Handlers_Compile::HeapState> hs;
+struct Variables {
+  std::shared_ptr<MainHandlers_Compile::HeapState> hs;
 };
 
 std::pair<Constants, Variables> handle_InitState();

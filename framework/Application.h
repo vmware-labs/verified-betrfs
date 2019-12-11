@@ -51,6 +51,9 @@ public:
   void initialize();
   void crash();
 
+  void Insert(string const& key, string const& val);
+  ByteString Query(string const& key);
+
   void Sync();
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);

@@ -103,3 +103,6 @@ namespace MainDiskIOHandler_Compile {
     std::map<uint64, ReadTask> readReqs;
   };
 }
+
+void ClearIfExists();
+void Mkfs();
