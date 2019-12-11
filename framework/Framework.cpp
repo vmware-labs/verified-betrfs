@@ -1,6 +1,11 @@
 #include "BundleWrapper.h"
 #include "Application.h"
 
+//#include <filesystem> // c++17 lol
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 [[ noreturn ]]
 void fail(string err)
 {
@@ -283,4 +288,28 @@ ByteString Application::Query(std::string const& key)
 
 void Application::log(std::string const& s) {
   std::cout << s << endl;
+}
+
+void Mkfs() {
+  DafnyMap<uint64, shared_ptr<vector<byte>>> daf_map = handle_InitDiskBytes();
+
+  unordered_map<uint64, shared_ptr<vector<byte>>> m = daf_map.map;
+
+  if (m.size() == 0) {
+    fail("InitDiskBytes failed.");
+  }
+
+  /*if (std::filesystem::exists(".veribetrfs-storage")) {
+    fail("error: .veribetrfs-storage/ already exists");
+  }
+  std::filesystem::create_directory(".veribetrfs-storage");*/
+  struct stat st = {0};
+  if (stat("/some/directory", &st) != -1) {
+    fail("error: .veribetrfs-storage/ already exists");
+  }
+  mkdir(".veribetrfs-storage", 0700);
+
+  for (auto p : m) {
+    MainDiskIOHandler_Compile::writeSync(p.first, &(*p.second)[0], p.second->size());
+  }
 }

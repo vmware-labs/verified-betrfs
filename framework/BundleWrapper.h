@@ -18,6 +18,7 @@ struct Variables {
 };
 
 std::pair<Constants, Variables> handle_InitState();
+DafnyMap<uint64, shared_ptr<vector<uint8>>> handle_InitDiskBytes();
 uint64 handle_PushSync(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 std::pair<bool, bool> handle_PopSync(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, uint64);
 bool handle_Insert(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>, DafnySequence<uint8>);
