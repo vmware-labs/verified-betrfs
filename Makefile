@@ -223,11 +223,11 @@ CPP_DEP_DIR=build/cppdeps
 
 build/%.o: build/%.cpp | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)"
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall
 
-build/framework/%.o: framework/*.cpp | $$(@D)/.
+build/framework/%.o: framework/%.cpp | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)"
+	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall -Werror
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o

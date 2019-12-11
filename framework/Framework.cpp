@@ -4,6 +4,16 @@
 
 typedef uint8 byte;
 
+namespace Maps_Compile {
+  template <typename K, typename V>
+  DafnyMap<K, V> __default::ComputeMapRemove1(DafnyMap<K, V> m, K key)
+  {
+    DafnyMap<K, V> dm(m);
+    dm.map.erase(key);
+    return dm;
+  }
+}
+
 namespace NativeArrays_Compile {
   int32_t __default::ByteSeqCmpByteSeq(
       DafnySequence<byte> b1,
@@ -21,6 +31,22 @@ namespace NativeArrays_Compile {
     } else {
       return result;
     }
+  }
+
+  template <typename T>
+  shared_ptr<vector<T>> __default::newArrayFill(uint64 len, T val)
+  {
+    shared_ptr<vector<T>> ar { new vector<T>(len) };
+    for (int i = 0; i < len; i++) {
+      (*ar)[i] = val;
+    }
+  }
+
+  template <typename T>
+  shared_ptr<vector<T>> __default::newArrayClone(shared_ptr<vector<T>> ar)
+  {
+    shared_ptr<vector<T>> clone { new vector<T>(ar) };
+    return clone;
   }
 }
 
