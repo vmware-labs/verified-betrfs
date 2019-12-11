@@ -2,9 +2,11 @@ include "../PivotBetree/BucketsLib.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 //
 // A mathematical description of bucket iterators.
+// This model is used directly as the iterator for BucketImpl,
+// hence there is no corresponding BucketIteratorImpl class.
 //
 
-module ModelBucketIterator {
+module BucketIteratorModel {
   import opened Options
   import opened Sets
   import opened BucketsLib

@@ -2,12 +2,16 @@ include "../lib/DataStructures/tttree.i.dfy"
 include "KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
-include "ModelBucketIterator.i.dfy"
+include "BucketIteratorModel.i.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
 // it is flushed into the root in a batch.
-// Implements PivotBetreeSpec.Bucket (hence no local model module).
+// This module implements PivotBetreeSpec.Bucket (the model for class
+// MutBucket).
+// The MutBucket class also supplies Iterators using the functional
+// Iterator datatype from BucketIteratorModel, which is why there is no
+// BucketIteratorImpl module/class.
 // TODO(robj): Littered with assume false!?
 //
 
@@ -24,7 +28,7 @@ module BucketImpl {
   import opened Bounds
   import opened BucketWeights
   import opened NativeTypes
-  import ModelBucketIterator
+  import BucketIteratorModel
   import Pivots = PivotsLib
 
   type Key = Element
@@ -86,7 +90,7 @@ module BucketImpl {
   }
 
   datatype Iterator = Iterator(i: uint64)
-  function IIterator(it: Iterator) : ModelBucketIterator.Iterator
+  function IIterator(it: Iterator) : BucketIteratorModel.Iterator
 
   class MutBucket {
     var is_tree: bool;
@@ -518,12 +522,12 @@ module BucketImpl {
     predicate WFIter(it: Iterator)
     reads this, this.Repr
     ensures this.WFIter(it) ==> this.Inv()
-    ensures this.WFIter(it) ==> ModelBucketIterator.WFIter(I(), IIterator(it))
+    ensures this.WFIter(it) ==> BucketIteratorModel.WFIter(I(), IIterator(it))
 
     method IterStart() returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
-    ensures IIterator(it') == ModelBucketIterator.IterStart(I())
+    ensures IIterator(it') == BucketIteratorModel.IterStart(I())
     {
       assume false;
       it' := Iterator(0);
@@ -532,7 +536,7 @@ module BucketImpl {
     method IterFindFirstGte(key: Key) returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
-    ensures IIterator(it') == ModelBucketIterator.IterFindFirstGte(I(), key)
+    ensures IIterator(it') == BucketIteratorModel.IterFindFirstGte(I(), key)
     {
       assume false;
       var i: uint64 := 0;
@@ -550,7 +554,7 @@ module BucketImpl {
     method IterFindFirstGt(key: Key) returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
-    ensures IIterator(it') == ModelBucketIterator.IterFindFirstGt(I(), key)
+    ensures IIterator(it') == BucketIteratorModel.IterFindFirstGt(I(), key)
     {
       assume false;
       var i: uint64 := 0;
@@ -570,13 +574,13 @@ module BucketImpl {
     requires IIterator(it).next.Next?
     requires this.WFIter(it)
     ensures this.WFIter(it')
-    ensures IIterator(it') == ModelBucketIterator.IterInc(I(), IIterator(it))
+    ensures IIterator(it') == BucketIteratorModel.IterInc(I(), IIterator(it))
     {
       assume false;
       return Iterator(it.i + 1);
     }
 
-    method GetNext(it: Iterator) returns (next : ModelBucketIterator.IteratorOutput)
+    method GetNext(it: Iterator) returns (next : BucketIteratorModel.IteratorOutput)
     requires Inv()
     requires this.WFIter(it)
     ensures next == IIterator(it).next
@@ -584,9 +588,9 @@ module BucketImpl {
       assume false;
       var kvl := GetKvl();
       if it.i == |kvl.keys| as uint64 {
-        next := ModelBucketIterator.Done;
+        next := BucketIteratorModel.Done;
       } else {
-        next := ModelBucketIterator.Next(kvl.keys[it.i], kvl.values[it.i]);
+        next := BucketIteratorModel.Next(kvl.keys[it.i], kvl.values[it.i]);
       }
     }
   }

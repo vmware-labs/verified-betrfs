@@ -95,6 +95,6 @@ def rename(sourceName, destName):
 #AsyncDiskModel.s.dfy
 #""")
 
-rename("MainImpl.i.dfy", "Handlers.i.dfy")
+rename("ModelBucketIterator.i.dfy", "BucketIteratorModel.i.dfy")
 
 renaminator.enact()

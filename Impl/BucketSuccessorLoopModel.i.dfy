@@ -7,7 +7,7 @@ module BucketSuccessorLoopModel {
   import opened PivotsLib
   import opened ValueMessage
   import opened Sequences
-  import opened ModelBucketIterator
+  import opened BucketIteratorModel
   import opened BucketGeneratorModel
   import UI
 

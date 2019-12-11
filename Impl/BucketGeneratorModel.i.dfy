@@ -1,4 +1,4 @@
-include "ModelBucketIterator.i.dfy"
+include "BucketIteratorModel.i.dfy"
 //
 // A mathematical description of bucket generators.
 // It's like an iterator, but it doesn't directly refer to an actual bucket.
@@ -12,7 +12,7 @@ module BucketGeneratorModel {
   import opened PivotsLib
   import opened ValueMessage
   import opened Sequences
-  import opened ModelBucketIterator
+  import opened BucketIteratorModel
   import UI
 
   datatype Generator =

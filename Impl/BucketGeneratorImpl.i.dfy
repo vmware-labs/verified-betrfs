@@ -4,7 +4,7 @@ include "BucketImpl.i.dfy"
 module BucketGeneratorImpl {
   import opened BucketImpl
   import BucketGeneratorModel
-  import ModelBucketIterator
+  import BucketIteratorModel
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
   import opened NativeTypes
@@ -18,7 +18,7 @@ module BucketGeneratorImpl {
     // For ComposeGenerator
     var top: Generator?;
     var bot: Generator?;
-    var next: ModelBucketIterator.IteratorOutput;
+    var next: BucketIteratorModel.IteratorOutput;
 
     ghost var Repr: set<object>;
     ghost var ReadOnlyRepr: set<object>;
@@ -100,7 +100,7 @@ module BucketGeneratorImpl {
       )
     }
 
-    method GenLeft() returns (res : ModelBucketIterator.IteratorOutput)
+    method GenLeft() returns (res : BucketIteratorModel.IteratorOutput)
     requires Inv()
     ensures res == BucketGeneratorModel.GenLeft(I())
     {
@@ -142,7 +142,7 @@ module BucketGeneratorImpl {
         if top_next.Next? && bot_next.Next? && c == 0 {
           top.GenPop();
           bot.GenPop();
-          next := ModelBucketIterator.Next(top_next.key,
+          next := BucketIteratorModel.Next(top_next.key,
               Merge(top_next.msg, bot_next.msg));
         } else if top_next.Next? && (bot_next.Next? ==> c < 0) {
           top.GenPop();
@@ -151,7 +151,7 @@ module BucketGeneratorImpl {
           bot.GenPop();
           next := bot_next;
         } else {
-          next := ModelBucketIterator.Done;
+          next := BucketIteratorModel.Done;
         }
 
         Repr := {this} + top.Repr + bot.Repr;
@@ -194,7 +194,7 @@ module BucketGeneratorImpl {
       if top_next.Next? && bot_next.Next? && c == 0 {
         top.GenPop();
         bot.GenPop();
-        g.next := ModelBucketIterator.Next(top_next.key,
+        g.next := BucketIteratorModel.Next(top_next.key,
             Merge(top_next.msg, bot_next.msg));
       } else if top_next.Next? && (bot_next.Next? ==> c < 0) {
         top.GenPop();
@@ -203,7 +203,7 @@ module BucketGeneratorImpl {
         bot.GenPop();
         g.next := bot_next;
       } else {
-        g.next := ModelBucketIterator.Done;
+        g.next := BucketIteratorModel.Done;
       }
 
       g.Repr := {g} + g.top.Repr + g.bot.Repr;
