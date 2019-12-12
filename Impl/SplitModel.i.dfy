@@ -14,6 +14,7 @@ module SplitModel {
   import opened BucketWeights
   import opened Bounds
   import PivotsLib
+  import BT = PivotBetreeSpec`Internal
 
   import opened NativeTypes
 
@@ -32,7 +33,7 @@ module SplitModel {
 
   lemma CutoffNodeAndKeepLeftCorrect(node: Node, pivot: Key)
   requires WFNode(node)
-  requires BT.WFNode(INode(node))
+  requires G.WFNode(INode(node))
   ensures var node' := CutoffNodeAndKeepLeft(node, pivot);
     && WFNode(node')
     && INode(node') == BT.CutoffNodeAndKeepLeft(INode(node), pivot)
@@ -65,7 +66,7 @@ module SplitModel {
 
   lemma CutoffNodeAndKeepRightCorrect(node: Node, pivot: Key)
   requires WFNode(node)
-  requires BT.WFNode(INode(node))
+  requires G.WFNode(INode(node))
   ensures var node' := CutoffNodeAndKeepRight(node, pivot);
     && WFNode(node')
     && INode(node') == BT.CutoffNodeAndKeepRight(INode(node), pivot)
@@ -116,7 +117,7 @@ module SplitModel {
 
   lemma CutoffNodeCorrect(node: Node, lbound: Option<Key>, rbound: Option<Key>)
   requires WFNode(node)
-  requires BT.WFNode(INode(node))
+  requires G.WFNode(INode(node))
   ensures var node' := CutoffNode(node, lbound, rbound);
     && WFNode(node')
     && INode(node') == BT.CutoffNode(INode(node), lbound, rbound)
@@ -187,7 +188,7 @@ module SplitModel {
 
   lemma lemmaSplitChild(child: Node, num_children_left: int)
   requires WFNode(child)
-  requires BT.WFNode(INode(child))
+  requires G.WFNode(INode(child))
   requires 1 <= num_children_left <= |child.buckets| - 1
   ensures WFNode(SplitChildLeft(child, num_children_left))
   ensures WFNode(SplitChildRight(child, num_children_left))
@@ -222,8 +223,8 @@ module SplitModel {
   // TODO can we get BetreeBlockCache to ensure that will be true generally whenever taking a betree step?
   // This sort of proof logic shouldn't have to be in the implementation.
   lemma lemmaSplitChildValidReferences(child1: BT.G.Node, child: BT.G.Node, num_children_left: int, graph: map<BT.G.Reference, seq<BT.G.Reference>>, lbound: Option<Key>, rbound: Option<Key>)
-  requires BT.WFNode(child1)
-  requires BT.WFNode(child)
+  requires G.WFNode(child1)
+  requires G.WFNode(child)
   requires 1 <= num_children_left <= |child.buckets| - 1
   requires BC.BlockPointsToValidReferences(child1, graph);
   requires child == BT.CutoffNode(child1, lbound, rbound);
@@ -249,7 +250,7 @@ module SplitModel {
 
   lemma SplitParentCorrect(parentref: BT.G.Reference, fused_parent: Node, pivot: Key, slot: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
   requires WFNode(fused_parent)
-  requires BT.WFNode(INode(fused_parent))
+  requires G.WFNode(INode(fused_parent))
   requires 0 <= slot < |fused_parent.buckets|
   requires PivotsLib.PivotInsertable(fused_parent.pivotTable, slot, pivot)
   requires |fused_parent.buckets| <= MaxNumChildren() - 1
@@ -271,7 +272,7 @@ module SplitModel {
   }
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
-  requires BT.WFNode(fused_parent)
+  requires G.WFNode(fused_parent)
   requires 0 <= slot < |fused_parent.buckets|
   requires fused_parent.children.Some?
   requires BC.BlockPointsToValidReferences(fused_parent, graph);

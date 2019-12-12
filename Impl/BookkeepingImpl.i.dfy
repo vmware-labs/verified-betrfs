@@ -17,7 +17,7 @@ module BookkeepingImpl {
   import opened Bounds
 
   method getFreeRef(s: ImplVariables)
-  returns (ref : Option<BT.G.Reference>)
+  returns (ref : Option<G.Reference>)
   requires s.ready
   requires s.W()
   ensures ref == BookkeepingModel.getFreeRef(s.I())
@@ -46,8 +46,8 @@ module BookkeepingImpl {
     }
   }
 
-  method getFreeRef2(s: ImplVariables, avoid: BT.G.Reference)
-  returns (ref : Option<BT.G.Reference>)
+  method getFreeRef2(s: ImplVariables, avoid: G.Reference)
+  returns (ref : Option<G.Reference>)
   requires s.ready
   requires s.W()
   ensures ref == BookkeepingModel.getFreeRef2(s.I(), avoid)
@@ -79,7 +79,7 @@ module BookkeepingImpl {
     }
   }
 
-  method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: G.Reference, children: Option<seq<G.Reference>>)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
@@ -114,7 +114,7 @@ module BookkeepingImpl {
         == |LruModel.I(old(s.lru.Queue))| + 1;
   }
 
-  method writeBookkeepingNoSuccsUpdate(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
+  method writeBookkeepingNoSuccsUpdate(k: ImplConstants, s: ImplVariables, ref: G.Reference)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
@@ -149,8 +149,8 @@ module BookkeepingImpl {
   }
 
 
-  method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<BT.G.Reference>>)
-  returns (ref: Option<BT.G.Reference>)
+  method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<G.Reference>>)
+  returns (ref: Option<G.Reference>)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())

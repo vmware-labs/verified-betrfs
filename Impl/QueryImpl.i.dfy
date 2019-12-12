@@ -47,7 +47,7 @@ module QueryImpl {
       PageInIndirectionTableReq(k, s, io);
       res := None;
     } else {
-      var ref := BT.G.Root();
+      var ref := G.Root();
       var msg := Messages.IdentityMessage();
       var counter: uint64 := 40;
 

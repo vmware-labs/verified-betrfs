@@ -23,8 +23,10 @@ module IOModel {
   import LruModel
   import M = ByteBetreeBlockCache
   import UI
+  import BT = PivotBetreeSpec`Spec
 
   // Misc utilities
+  // TODO(tjhance) this is awkward place for these functions
 
   predicate stepsBetree(k: Constants, s: BBC.Variables, s': BBC.Variables, uiop: UI.Op, step: BT.BetreeStep)
   {
@@ -122,7 +124,7 @@ module IOModel {
   lemma RequestWriteCorrect(io: IO, loc: LBAType.Location, sector: Sector,
       id: Option<D.ReqId>, io': IO)
   requires WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
+  requires sector.SectorBlock? ==> G.WFNode(INode(sector.block))
   requires LBAType.ValidLocation(loc)
   requires RequestWrite(io, loc, sector, id, io');
   ensures M.ValidDiskOp(diskOp(io'))
@@ -174,7 +176,7 @@ module IOModel {
   requires WFVars(s)
   requires s.Ready?
   requires WFSector(sector)
-  requires sector.SectorBlock? ==> BT.WFNode(INode(sector.block))
+  requires sector.SectorBlock? ==> G.WFNode(INode(sector.block))
   requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures M.ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?

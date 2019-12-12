@@ -24,7 +24,7 @@ module {:extern} StateImpl {
   import MutableMapModel
   import ByteBetreeBlockCacheSystem
 
-  import BT = PivotBetreeSpec`Internal
+  import G = PivotBetreeGraph
   import Messages = ValueMessage
   import MS = MapSpec
   import Pivots = PivotsLib
@@ -45,7 +45,7 @@ module {:extern} StateImpl {
   type ImplConstants = ByteBetreeBlockCacheSystem.M.Constants
   type ImplVariables = Variables
 
-  type Reference = BT.G.Reference
+  type Reference = G.Reference
   type Key = MS.Key
   type Message = Messages.Message
   type TreeMap = TTT.Tree<Message>

@@ -17,7 +17,7 @@ module DeallocImpl {
 
   import opened NativeTypes
 
-  method Dealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  method Dealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: G.Reference)
   requires Inv(k, s)
   requires io.initialized()
   requires DeallocModel.deallocable(s.I(), ref)

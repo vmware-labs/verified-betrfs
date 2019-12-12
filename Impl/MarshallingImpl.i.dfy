@@ -11,7 +11,7 @@ include "MarshallingModel.i.dfy"
 module MarshallingImpl {
   export S
 	    provides MarshallCheckedSector, ParseCheckedSector,
-	        NativeTypes, StateImpl, Options, IM, MarshallingModel, BT, Bounds
+	        NativeTypes, StateImpl, Options, IM, MarshallingModel, BTG, Bounds
       reveals Sector, ISectorOpt
 
 	export Internal reveals *
@@ -43,8 +43,7 @@ module MarshallingImpl {
   import KeyType
   import SeqComparison
 
-  import BT = PivotBetreeSpec
-  import PivotBetreeSpec`Internal
+  import BTG = PivotBetreeGraph
 
   import ValueWithDefault`Internal
   import M = ValueMessage`Internal
@@ -547,7 +546,7 @@ module MarshallingImpl {
   method {:fuel SizeOfV,4} nodeToVal(node: Node) returns (v : V)
   requires node.Inv()
   requires IM.WFNode(node.I())
-  requires BT.WFNode(IM.INode(node.I()))
+  requires BTG.WFNode(IM.INode(node.I()))
   ensures ValidVal(v)
   ensures ValInGrammar(v, IMM.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
@@ -580,7 +579,7 @@ module MarshallingImpl {
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
+  requires sector.SectorBlock? ==> BTG.WFNode(IM.INode(sector.block.I()))
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
   ensures v.Some? ==> ValidVal(v.value)
@@ -615,7 +614,7 @@ module MarshallingImpl {
   ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures s.Some? && s.value.SectorBlock? ==> BTG.WFNode(IM.INode(s.value.block.I()))
   ensures s.Some? ==> fresh(StateImpl.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
@@ -653,7 +652,7 @@ module MarshallingImpl {
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures s.Some? && s.value.SectorBlock? ==> BTG.WFNode(IM.INode(s.value.block.I()))
   ensures s.Some? ==> fresh(StateImpl.SectorRepr(s.value))
   {
     s := None;
@@ -672,7 +671,7 @@ module MarshallingImpl {
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
+  requires sector.SectorBlock? ==> BTG.WFNode(IM.INode(sector.block.I()))
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
       && IM.ISector(MarshallingModel.parseCheckedSector(data[..]).value)

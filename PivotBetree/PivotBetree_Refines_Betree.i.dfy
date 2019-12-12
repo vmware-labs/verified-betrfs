@@ -48,7 +48,7 @@ module PivotBetreeInvAndRefinement {
 
   predicate ViewHasWFNodes(view: imap<Reference, PNode>)
   {
-    forall ref | ref in view :: WFNode(view[ref])
+    forall ref | ref in view :: PG.WFNode(view[ref])
   }
 
   function IView(view: imap<Reference, PNode>) : imap<Reference, Node>
@@ -70,7 +70,7 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma OpRefines(k: Constants, s: Variables, s': Variables, op: PG.Op)
-  requires WFNode(op.node)
+  requires PG.WFNode(op.node)
   requires ViewHasWFNodes(s.bcv.view)
   requires PBI.OpStep(k.bck, s.bcv, s'.bcv, op)
   ensures ViewHasWFNodes(s'.bcv.view)
@@ -80,8 +80,8 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma IOpsAdditive(ops1: seq<PG.Op>, ops2: seq<PG.Op>)
-  requires forall i | 0 <= i < |ops1| :: WFNode(ops1[i].node)
-  requires forall i | 0 <= i < |ops2| :: WFNode(ops2[i].node)
+  requires forall i | 0 <= i < |ops1| :: PG.WFNode(ops1[i].node)
+  requires forall i | 0 <= i < |ops2| :: PG.WFNode(ops2[i].node)
   ensures SpecRef.IOps(ops1 + ops2) == SpecRef.IOps(ops1) + SpecRef.IOps(ops2)
   {
     if (|ops2| == 0) {
@@ -102,7 +102,7 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma TransactionRefines(k: Constants, s: Variables, s': Variables, ops: seq<PG.Op>)
-  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].node)
+  requires forall i | 0 <= i < |ops| :: PG.WFNode(ops[i].node)
   requires ViewHasWFNodes(s.bcv.view)
   requires PBI.Transaction(k.bck, s.bcv, s'.bcv, ops)
   ensures ViewHasWFNodes(s'.bcv.view)
@@ -116,11 +116,11 @@ module PivotBetreeInvAndRefinement {
       var ops1, mid, ops2 := PBI.SplitTransaction(k.bck, s.bcv, s'.bcv, ops);
       var smid := PB.Variables(mid);
 
-      forall i | 0 <= i < |ops1| ensures WFNode(ops1[i].node)
+      forall i | 0 <= i < |ops1| ensures PG.WFNode(ops1[i].node)
       {
         assert ops1[i].node == ops[i].node;
       }
-      forall i | 0 <= i < |ops2| ensures WFNode(ops2[i].node)
+      forall i | 0 <= i < |ops2| ensures PG.WFNode(ops2[i].node)
       {
         assert ops2[i].node == ops[i + |ops1|].node;
       }
@@ -134,7 +134,7 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma ReadsRefines(k: Constants, s: Variables, ops: seq<PG.ReadOp>)
-  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].node)
+  requires forall i | 0 <= i < |ops| :: PG.WFNode(ops[i].node)
   requires ViewHasWFNodes(s.bcv.view)
   requires PBI.Reads(k.bck, s.bcv, ops)
   ensures BI.Reads(Ik(k).bck, I(k, s).bcv, SpecRef.IReadOps(ops))

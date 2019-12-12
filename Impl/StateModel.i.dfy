@@ -25,7 +25,7 @@ module StateModel {
   import opened Sequences
   import opened NativeTypes
 
-  import BT = PivotBetreeSpec`Internal
+  import G = PivotBetreeGraph
   import Messages = ValueMessage
   import MS = MapSpec
   import Pivots = PivotsLib
@@ -45,7 +45,7 @@ module StateModel {
 
   import ReferenceType`Internal
 
-  type Reference = BT.G.Reference
+  type Reference = G.Reference
   type Key = MS.Key
   type Message = Messages.Message
   type DiskOp = BBC.DiskOp
@@ -161,11 +161,11 @@ module StateModel {
     }
   }
 
-  function INode(node: Node) : (result: BT.G.Node)
+  function INode(node: Node) : (result: G.Node)
   {
-    BT.G.Node(node.pivotTable, node.children, node.buckets)
+    G.Node(node.pivotTable, node.children, node.buckets)
   }
-  function ICache(cache: map<Reference, Node>): map<Reference, BT.G.Node>
+  function ICache(cache: map<Reference, Node>): map<Reference, G.Node>
   requires WFCache(cache)
   {
     map ref | ref in cache :: INode(cache[ref])

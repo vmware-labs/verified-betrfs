@@ -32,7 +32,7 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
 
   predicate Inv(k: Constants, s: Variables) {
     && BC.Inv(k, s)
-    && (s.Ready? ==> (forall ref | ref in s.cache :: PivotBetreeSpec.WFNode(s.cache[ref])))
+    && (s.Ready? ==> (forall ref | ref in s.cache :: G.WFNode(s.cache[ref])))
   }
 
   datatype Step =
@@ -57,7 +57,7 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
 
     && BC.NextStep(k, s, s', dop, step)
     && (dop.RespReadOp? && dop.respRead.sector.Some? && dop.respRead.sector.value.SectorBlock? ==>
-      WFNode(dop.respRead.sector.value.block)
+      G.WFNode(dop.respRead.sector.value.block)
     )
   }
 

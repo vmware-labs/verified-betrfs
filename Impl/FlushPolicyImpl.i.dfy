@@ -60,7 +60,7 @@ module FlushPolicyImpl {
     s.cache.Count() + (|s.outstandingBlockReads| as uint64)
   }
 
-  method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : FlushPolicyModel.Action)
+  method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<G.Reference>, slots: seq<uint64>, i: uint64) returns (action : FlushPolicyModel.Action)
   requires 0 <= i as int < |stack|
   requires Inv(k, s)
   requires FlushPolicyModel.ValidStackSlots(Ic(k), s.I(), stack, slots)
@@ -94,7 +94,7 @@ module FlushPolicyImpl {
     }
   }
 
-  method getActionToFlush(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) returns (action : FlushPolicyModel.Action)
+  method getActionToFlush(k: ImplConstants, s: ImplVariables, stack: seq<G.Reference>, slots: seq<uint64>) returns (action : FlushPolicyModel.Action)
   requires |stack| <= 40
   requires Inv(k, s)
   requires FlushPolicyModel.ValidStackSlots(Ic(k), s.I(), stack, slots)
@@ -161,7 +161,7 @@ module FlushPolicyImpl {
   requires Inv(k, s)
   requires io.initialized()
   requires s.ready
-  requires BT.G.Root() in s.cache.I()
+  requires G.Root() in s.cache.I()
   requires io !in s.Repr()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
   modifies io
@@ -172,12 +172,12 @@ module FlushPolicyImpl {
   {
     FlushPolicyModel.reveal_runFlushPolicy();
 
-    LruModel.LruUse(s.lru.Queue, BT.G.Root());
-    s.lru.Use(BT.G.Root());
+    LruModel.LruUse(s.lru.Queue, G.Root());
+    s.lru.Use(G.Root());
     assert SM.IVars(s.I()) == SM.IVars(old(s.I()));
 
-    FlushPolicyModel.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
-    var action := getActionToFlush(k, s, [BT.G.Root()], []);
+    FlushPolicyModel.getActionToFlushValidAction(Ic(k), s.I(), [G.Root()], []);
+    var action := getActionToFlush(k, s, [G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => {

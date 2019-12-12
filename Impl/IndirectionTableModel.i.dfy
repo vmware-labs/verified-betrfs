@@ -25,10 +25,10 @@ include "../lib/DataStructures/BitmapModel.i.dfy"
 
 module IndirectionTableModel {
   export S
-    provides HashMap, GarbageQueue, BT, Inv, TrackingGarbage,
+    provides HashMap, GarbageQueue, BTG, Inv, TrackingGarbage,
         HasEmptyLoc, AddLocIfPresent, UpdateAndRemoveLoc, RemoveLoc, RemoveRef,
         InitLocBitmap, FindDeallocable, FindDeallocableCorrect,
-        BC, BT, Options, BitmapModel, Bounds, Maps, clone, GetEntry, NativeTypes
+        BC, Options, BitmapModel, Bounds, Maps, clone, GetEntry, NativeTypes
     reveals IndirectionTable, deallocable, MaxSize, MaxSizeUint64, I, SuccsValid,
         IsLocAllocIndirectionTable, IsLocAllocBitmap, Entry
 
@@ -41,7 +41,7 @@ module IndirectionTableModel {
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
-  import BT = PivotBetreeSpec`Internal
+  import BTG = PivotBetreeGraph
   import BC = BetreeGraphBlockCache
   import LruModel
   import MutableMapModel
@@ -51,7 +51,7 @@ module IndirectionTableModel {
   import opened Bounds
   import SetBijectivity
 
-  datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
+  datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BTG.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
   type GarbageQueue = Option<LruModel.LruQueue>
 
@@ -62,51 +62,51 @@ module IndirectionTableModel {
 
     // These are for easy access in proof code, but all the relevant data
     // is contained in the `t: HashMap` field.
-    ghost locs: map<BT.G.Reference, BC.Location>,
-    ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>,
-    ghost predCounts: map<BT.G.Reference, int>
+    ghost locs: map<BTG.Reference, BC.Location>,
+    ghost graph: map<BTG.Reference, seq<BTG.Reference>>,
+    ghost predCounts: map<BTG.Reference, int>
   )
 
-  function Locs(t: HashMap) : map<BT.G.Reference, BC.Location>
+  function Locs(t: HashMap) : map<BTG.Reference, BC.Location>
   {
     map ref | ref in t.contents && t.contents[ref].loc.Some? :: t.contents[ref].loc.value
   }
 
-  function Graph(t: HashMap) : map<BT.G.Reference, seq<BT.G.Reference>>
+  function Graph(t: HashMap) : map<BTG.Reference, seq<BTG.Reference>>
   {
     map ref | ref in t.contents :: t.contents[ref].succs
   }
 
-  function PredCounts(t: HashMap) : map<BT.G.Reference, int>
+  function PredCounts(t: HashMap) : map<BTG.Reference, int>
   {
     map ref | ref in t.contents :: t.contents[ref].predCount as int
   }
 
-  datatype PredecessorEdge = PredecessorEdge(src: BT.G.Reference, ghost idx: int)
+  datatype PredecessorEdge = PredecessorEdge(src: BTG.Reference, ghost idx: int)
 
-  function PredecessorSet(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference) : set<PredecessorEdge>
+  function PredecessorSet(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference) : set<PredecessorEdge>
   {
     set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest :: PredecessorEdge(src, idx)
   }
 
-  function PredecessorSetRestricted(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>) : set<PredecessorEdge>
+  function PredecessorSetRestricted(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference, domain: set<BTG.Reference>) : set<PredecessorEdge>
   {
     set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src in domain :: PredecessorEdge(src, idx)
   }
 
-  function PredecessorSetRestrictedPartial(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int) : set<PredecessorEdge>
+  function PredecessorSetRestrictedPartial(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference, domain: set<BTG.Reference>, next: BTG.Reference, j: int) : set<PredecessorEdge>
   {
     set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && (src in domain || (src == next && idx < j)) :: PredecessorEdge(src, idx)
   }
 
-  predicate GraphClosedRestricted(graph: map<BT.G.Reference, seq<BT.G.Reference>>, domain: set<BT.G.Reference>)
+  predicate GraphClosedRestricted(graph: map<BTG.Reference, seq<BTG.Reference>>, domain: set<BTG.Reference>)
   {
     forall ref | ref in graph && ref in domain ::
       forall i | 0 <= i < |graph[ref]| ::
         graph[ref][i] in graph
   }
 
-  predicate GraphClosedRestrictedPartial(graph: map<BT.G.Reference, seq<BT.G.Reference>>, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
+  predicate GraphClosedRestrictedPartial(graph: map<BTG.Reference, seq<BTG.Reference>>, domain: set<BTG.Reference>, next: BTG.Reference, j: int)
   requires next in graph
   requires 0 <= j <= |graph[next]|
   {
@@ -114,12 +114,12 @@ module IndirectionTableModel {
     && (forall i | 0 <= i < j :: graph[next][i] in graph)
   }
 
-  function IsRoot(ref: BT.G.Reference) : int
+  function IsRoot(ref: BTG.Reference) : int
   {
-    if ref == BT.G.Root() then 1 else 0
+    if ref == BTG.Root() then 1 else 0
   }
 
-  predicate ValidPredCounts(predCounts: map<BT.G.Reference, int>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  predicate ValidPredCounts(predCounts: map<BTG.Reference, int>, graph: map<BTG.Reference, seq<BTG.Reference>>)
   {
     forall ref | ref in predCounts ::
         predCounts[ref] == |PredecessorSet(graph, ref)| + IsRoot(ref)
@@ -160,7 +160,7 @@ module IndirectionTableModel {
       && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in LruModel.I(self.garbageQueue.value))
       && (forall ref | ref in LruModel.I(self.garbageQueue.value) :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
     )
-    && BT.G.Root() in self.t.contents
+    && BTG.Root() in self.t.contents
     && self.t.count as int <= MaxSize()
   }
 
@@ -184,7 +184,7 @@ module IndirectionTableModel {
     IndirectionTable(m, q, Locs(m), Graph(m), PredCounts(m))
   }
 
-  function {:opaque} GetEntry(self: IndirectionTable, ref: BT.G.Reference) : (e : Option<Entry>)
+  function {:opaque} GetEntry(self: IndirectionTable, ref: BTG.Reference) : (e : Option<Entry>)
   requires Inv(self)
   ensures e.None? ==> ref !in self.graph
   ensures e.Some? ==> ref in self.graph
@@ -196,7 +196,7 @@ module IndirectionTableModel {
     MutableMapModel.Get(self.t, ref)
   }
 
-  predicate {:opaque} HasEmptyLoc(self: IndirectionTable, ref: BT.G.Reference)
+  predicate {:opaque} HasEmptyLoc(self: IndirectionTable, ref: BTG.Reference)
   requires Inv(self)
   ensures HasEmptyLoc(self, ref) == (ref in self.graph && ref !in self.locs)
   {
@@ -204,7 +204,7 @@ module IndirectionTableModel {
     entry.Some? && entry.value.loc.None?
   }
 
-  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (IndirectionTable, bool)
+  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BTG.Reference, loc: BC.Location) : (IndirectionTable, bool)
   requires Inv(self)
   ensures var (self', added) := AddLocIfPresent(self, ref, loc);
     && Inv(self')
@@ -229,28 +229,28 @@ module IndirectionTableModel {
 
   /////// Reference count updating
 
-  function SeqCountSet(s: seq<BT.G.Reference>, ref: BT.G.Reference, lb: int) : set<int>
+  function SeqCountSet(s: seq<BTG.Reference>, ref: BTG.Reference, lb: int) : set<int>
   requires 0 <= lb <= |s|
   {
     set i | lb <= i < |s| && s[i] == ref
   }
 
-  function SeqCount(s: seq<BT.G.Reference>, ref: BT.G.Reference, lb: int) : int
+  function SeqCount(s: seq<BTG.Reference>, ref: BTG.Reference, lb: int) : int
   requires 0 <= lb <= |s|
   {
     |SeqCountSet(s, ref, lb)|
   }
 
-  function PredecessorSetExcept(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, except: BT.G.Reference) : set<PredecessorEdge>
+  function PredecessorSetExcept(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference, except: BTG.Reference) : set<PredecessorEdge>
   {
     set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src != except :: PredecessorEdge(src, idx)
   }
 
   predicate ValidPredCountsIntermediate(
-      predCounts: map<BT.G.Reference, int>,
-      graph: map<BT.G.Reference, seq<BT.G.Reference>>,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>,
+      predCounts: map<BTG.Reference, int>,
+      graph: map<BTG.Reference, seq<BTG.Reference>>,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>,
       newIdx: int,
       oldIdx: int)
   requires 0 <= newIdx <= |newSuccs|
@@ -262,7 +262,7 @@ module IndirectionTableModel {
           + SeqCount(oldSuccs, ref, oldIdx)
   }
 
-  lemma SeqCountPlusPredecessorSetExcept(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, except: BT.G.Reference)
+  lemma SeqCountPlusPredecessorSetExcept(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference, except: BTG.Reference)
   ensures var succs := if except in graph then graph[except] else [];
     SeqCount(succs, dest, 0) + |PredecessorSetExcept(graph, dest, except)| == |PredecessorSet(graph, dest)|
   {
@@ -294,9 +294,9 @@ module IndirectionTableModel {
   predicate RefcountUpdateInv(
       t: HashMap,
       q: LruModel.LruQueue,
-      changingRef: BT.G.Reference,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>,
+      changingRef: BTG.Reference,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>,
       newIdx: int,
       oldIdx: int)
   {
@@ -315,13 +315,13 @@ module IndirectionTableModel {
     && BC.GraphClosed(Graph(t))
     && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in LruModel.I(q))
     && (forall ref | ref in LruModel.I(q) :: ref in t.contents && t.contents[ref].predCount == 0)
-    && BT.G.Root() in t.contents
+    && BTG.Root() in t.contents
   }
 
   lemma SeqCountLePredecessorSet(
-      graph: map<BT.G.Reference, seq<BT.G.Reference>>,
-      ref: BT.G.Reference,
-      r: BT.G.Reference,
+      graph: map<BTG.Reference, seq<BTG.Reference>>,
+      ref: BTG.Reference,
+      r: BTG.Reference,
       lb: int)
   requires r in graph
   requires 0 <= lb <= |graph[r]|
@@ -361,8 +361,8 @@ module IndirectionTableModel {
   }
 
   lemma SeqCountInc(
-      s: seq<BT.G.Reference>,
-      ref: BT.G.Reference,
+      s: seq<BTG.Reference>,
+      ref: BTG.Reference,
       idx: int)
   requires 0 <= idx < |s|
   requires s[idx] == ref
@@ -375,8 +375,8 @@ module IndirectionTableModel {
   }
 
   lemma SeqCountIncOther(
-      s: seq<BT.G.Reference>,
-      ref: BT.G.Reference,
+      s: seq<BTG.Reference>,
+      ref: BTG.Reference,
       idx: int)
   requires 0 <= idx < |s|
   requires s[idx] != ref
@@ -391,9 +391,9 @@ module IndirectionTableModel {
   lemma LemmaUpdatePredCountsDecStuff(
       t: HashMap,
       q: LruModel.LruQueue,
-      changingRef: BT.G.Reference,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>,
+      changingRef: BTG.Reference,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>,
       idx: int)
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, |newSuccs|, idx)
   ensures idx < |oldSuccs| ==> oldSuccs[idx] in t.contents
@@ -451,9 +451,9 @@ module IndirectionTableModel {
   lemma LemmaUpdatePredCountsIncStuff(
       t: HashMap,
       q: LruModel.LruQueue,
-      changingRef: BT.G.Reference,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>,
+      changingRef: BTG.Reference,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>,
       idx: int)
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, idx, 0)
   ensures idx < |newSuccs| ==> newSuccs[idx] in t.contents
@@ -502,7 +502,7 @@ module IndirectionTableModel {
     }
   }
 
-  function PredInc(t: HashMap, q: LruModel.LruQueue, ref: BT.G.Reference) : (HashMap, LruModel.LruQueue)
+  function PredInc(t: HashMap, q: LruModel.LruQueue, ref: BTG.Reference) : (HashMap, LruModel.LruQueue)
   requires MutableMapModel.Inv(t)
   requires t.count as nat < 0x1_0000_0000_0000_0000 / 8
   requires ref in t.contents
@@ -515,7 +515,7 @@ module IndirectionTableModel {
     (t', q')
   }
 
-  function PredDec(t: HashMap, q: LruModel.LruQueue, ref: BT.G.Reference) : (HashMap, LruModel.LruQueue)
+  function PredDec(t: HashMap, q: LruModel.LruQueue, ref: BTG.Reference) : (HashMap, LruModel.LruQueue)
   requires MutableMapModel.Inv(t)
   requires t.count as nat < 0x1_0000_0000_0000_0000 / 8
   requires ref in t.contents
@@ -531,9 +531,9 @@ module IndirectionTableModel {
   function UpdatePredCountsDec(
       t: HashMap,
       q: LruModel.LruQueue,
-      changingRef: BT.G.Reference,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>,
+      changingRef: BTG.Reference,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>,
       idx: uint64) : (res : (HashMap, LruModel.LruQueue))
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, |newSuccs|, idx as int)
   decreases |oldSuccs| - idx as int
@@ -555,9 +555,9 @@ module IndirectionTableModel {
   function {:fuel RefcountUpdateInv,0} UpdatePredCountsInc(
       t: HashMap,
       q: LruModel.LruQueue,
-      changingRef: BT.G.Reference,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>,
+      changingRef: BTG.Reference,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>,
       idx: uint64) : (res : (HashMap, LruModel.LruQueue))
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, idx as int, 0)
   decreases |newSuccs| - idx as int
@@ -576,12 +576,12 @@ module IndirectionTableModel {
     )
   }
 
-  predicate SuccsValid(succs: seq<BT.G.Reference>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  predicate SuccsValid(succs: seq<BTG.Reference>, graph: map<BTG.Reference, seq<BTG.Reference>>)
   {
     forall ref | ref in succs :: ref in graph
   }
 
-  lemma LemmaUpdateAndRemoveLocStuff(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+  lemma LemmaUpdateAndRemoveLocStuff(self: IndirectionTable, ref: BTG.Reference, succs: seq<BTG.Reference>)
   requires Inv(self)
   requires TrackingGarbage(self)
   requires |succs| <= MaxNumChildren()
@@ -641,10 +641,10 @@ module IndirectionTableModel {
   }
 
   lemma LemmaValidPredCountsOfValidPredCountsIntermediate(
-      predCounts: map<BT.G.Reference, int>,
-      graph: map<BT.G.Reference, seq<BT.G.Reference>>,
-      newSuccs: seq<BT.G.Reference>,
-      oldSuccs: seq<BT.G.Reference>)
+      predCounts: map<BTG.Reference, int>,
+      graph: map<BTG.Reference, seq<BTG.Reference>>,
+      newSuccs: seq<BTG.Reference>,
+      oldSuccs: seq<BTG.Reference>)
   requires ValidPredCountsIntermediate(predCounts, graph, newSuccs, oldSuccs, |newSuccs|, |oldSuccs|)
   ensures ValidPredCounts(predCounts, graph)
   {
@@ -661,7 +661,7 @@ module IndirectionTableModel {
         == t.count as int;
   }
 
-  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
+  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BTG.Reference, succs: seq<BTG.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires |self.graph| < MaxSize()
@@ -697,7 +697,7 @@ module IndirectionTableModel {
     (self', oldLoc)
   }
 
-  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BT.G.Reference) : (res : (IndirectionTable, Option<BC.Location>))
+  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BTG.Reference) : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires ref in self.graph
@@ -725,7 +725,7 @@ module IndirectionTableModel {
 
   ////// Parsing stuff
 
-  function ComputeRefCountsEntryIterate(t: HashMap, succs: seq<BT.G.Reference>, i: uint64) : (t' : Option<HashMap>)
+  function ComputeRefCountsEntryIterate(t: HashMap, succs: seq<BTG.Reference>, i: uint64) : (t' : Option<HashMap>)
   requires MutableMapModel.Inv(t)
   requires 0 <= i as int <= |succs|
   requires |succs| <= MaxNumChildren()
@@ -764,7 +764,7 @@ module IndirectionTableModel {
     && (t.count as int <= MaxSize())
   }
 
-  lemma LemmaPredecessorSetRestrictedPartialAdd1Self(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
+  lemma LemmaPredecessorSetRestrictedPartialAdd1Self(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference, domain: set<BTG.Reference>, next: BTG.Reference, j: int)
   requires next in graph
   requires 0 <= j < |graph[next]|
   requires dest == graph[next][j]
@@ -776,7 +776,7 @@ module IndirectionTableModel {
         == PredecessorSetRestrictedPartial(graph, dest, domain, next, j) + {PredecessorEdge(next, j)};
   }
 
-  lemma LemmaPredecessorSetRestrictedPartialAdd1Other(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
+  lemma LemmaPredecessorSetRestrictedPartialAdd1Other(graph: map<BTG.Reference, seq<BTG.Reference>>, dest: BTG.Reference, domain: set<BTG.Reference>, next: BTG.Reference, j: int)
   requires next in graph
   requires 0 <= j < |graph[next]|
   requires dest != graph[next][j]
@@ -799,7 +799,7 @@ module IndirectionTableModel {
   requires t.count == copy.count
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.key].succs, i)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.key, i as int)| + IsRoot(ref)
-  requires BT.G.Root() in t.contents
+  requires BTG.Root() in t.contents
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.key].succs, i);
     && (t'.Some? ==>
       && MutableMapModel.Inv(t'.value)
@@ -809,7 +809,7 @@ module IndirectionTableModel {
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].loc == copy.contents[ref].loc)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].succs == copy.contents[ref].succs)
       && t'.value.count == copy.count
-      && BT.G.Root() in t'.value.contents
+      && BTG.Root() in t'.value.contents
     )
     && (t'.None? ==> !BC.GraphClosed(Graph(copy)))
   decreases |copy.contents[it.next.key].succs| - i as int
@@ -914,7 +914,7 @@ module IndirectionTableModel {
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.key].succs, 0)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref)
-  requires BT.G.Root() in t.contents
+  requires BTG.Root() in t.contents
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.key].succs, 0);
     && (t'.Some? ==>
       && MutableMapModel.Inv(t'.value)
@@ -938,8 +938,8 @@ module IndirectionTableModel {
     LemmaComputeRefCountsEntryIterateGraphClosed(t, copy, it, 0);
   }
 
-  lemma PredecessorSetRestrictedSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>,
-      dest: BT.G.Reference, domain: set<BT.G.Reference>)
+  lemma PredecessorSetRestrictedSizeBound(graph: map<BTG.Reference, seq<BTG.Reference>>,
+      dest: BTG.Reference, domain: set<BTG.Reference>)
   requires |graph| <= MaxSize()
   requires forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren()
   ensures |PredecessorSetRestricted(graph, dest, domain)| <= MaxSize() * MaxNumChildren()
@@ -952,7 +952,7 @@ module IndirectionTableModel {
     SetInclusionImpliesSmallerCardinality(s1, s2);
     assert |s1| <= |s2|;
 
-    var relation := iset t : (PredecessorEdge, (BT.G.Reference, int)) | t.0.src == t.1.0 && t.0.idx == t.1.1;
+    var relation := iset t : (PredecessorEdge, (BTG.Reference, int)) | t.0.src == t.1.0 && t.0.idx == t.1.1;
     forall a | a in s2 ensures exists b :: b in s3 && (a, b) in relation
     {
       var b := (a.src, a.idx);
@@ -981,7 +981,7 @@ module IndirectionTableModel {
 
   lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
-  requires BT.G.Root() in t.contents
+  requires BTG.Root() in t.contents
   ensures forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000
   ensures it.next.Next? ==>
     var succs := it.next.value.succs;
@@ -1025,13 +1025,13 @@ module IndirectionTableModel {
   // as we don't need to prove anything about iterator preservation.
   function ComputeRefCountsIterate(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>) : (t' : Option<HashMap>)
   requires ComputeRefCountsIterateInv(t, copy, it)
-  requires BT.G.Root() in t.contents
+  requires BTG.Root() in t.contents
   ensures t'.Some? ==> MutableMapModel.Inv(t'.value)
   ensures t'.Some? <==> BC.GraphClosed(Graph(copy))
   ensures t'.Some? ==> Graph(copy) == Graph(t'.value)
   ensures t'.Some? ==> Locs(copy) == Locs(t'.value)
   ensures t'.Some? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
-  ensures t'.Some? ==> BT.G.Root() in t'.value.contents
+  ensures t'.Some? ==> BTG.Root() in t'.value.contents
   decreases it.decreaser
   {
     LemmaComputeRefCountsIterateStuff(t, copy, it);
@@ -1055,14 +1055,14 @@ module IndirectionTableModel {
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
   requires t.count as int <= MaxSize()
-  requires BT.G.Root() in t.contents
+  requires BTG.Root() in t.contents
   ensures
-    var oldEntry := t.contents[BT.G.Root()];
-    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    var oldEntry := t.contents[BTG.Root()];
+    var t0 := MutableMapModel.Insert(t, BTG.Root(), oldEntry.(predCount := 1));
     ComputeRefCountsIterateInv(t0, t, MutableMapModel.IterStart(t))
   {
-    var oldEntry := t.contents[BT.G.Root()];
-    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    var oldEntry := t.contents[BTG.Root()];
+    var t0 := MutableMapModel.Insert(t, BTG.Root(), oldEntry.(predCount := 1));
 
     var it := MutableMapModel.IterStart(t);
     forall ref | ref in t0.contents
@@ -1078,17 +1078,17 @@ module IndirectionTableModel {
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
   requires t.count as int <= MaxSize()
-  requires BT.G.Root() in t.contents
+  requires BTG.Root() in t.contents
   ensures BC.GraphClosed(Graph(t)) <==> t'.Some?
   ensures t'.Some? ==> Graph(t) == Graph(t'.value)
   ensures t'.Some? ==> Locs(t) == Locs(t'.value)
   ensures t'.Some? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
-  ensures t'.Some? ==> BT.G.Root() in t'.value.contents
+  ensures t'.Some? ==> BTG.Root() in t'.value.contents
   {
     LemmaComputeRefCountsIterateInvInit(t);
 
-    var oldEntry := t.contents[BT.G.Root()];
-    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    var oldEntry := t.contents[BTG.Root()];
+    var t0 := MutableMapModel.Insert(t, BTG.Root(), oldEntry.(predCount := 1));
 
     ComputeRefCountsIterate(t0, t, MutableMapModel.IterStart(t))
   }
@@ -1208,7 +1208,7 @@ module IndirectionTableModel {
       var t := valToHashMap(v.a);
       match t {
         case Some(t) => (
-          if BT.G.Root() in t.contents then (
+          if BTG.Root() in t.contents then (
             var t1 := ComputeRefCounts(t);
             if t1.Some? then (
               lemmaMakeGarbageQueueCorrect(t1.value);
@@ -1469,15 +1469,15 @@ module IndirectionTableModel {
 
   ///// Dealloc stuff
 
-  predicate deallocable(self: IndirectionTable, ref: BT.G.Reference)
+  predicate deallocable(self: IndirectionTable, ref: BTG.Reference)
   {
     && ref in I(self).graph
-    && ref != BT.G.Root()
+    && ref != BTG.Root()
     && (forall r | r in I(self).graph :: ref !in I(self).graph[r])
   }
 
   function {:opaque} FindDeallocable(self: IndirectionTable)
-  : (ref: Option<BT.G.Reference>)
+  : (ref: Option<BTG.Reference>)
   requires Inv(self)
   requires TrackingGarbage(self)
   {
@@ -1498,7 +1498,7 @@ module IndirectionTableModel {
       forall r | r in I(self).graph ensures !deallocable(self, r)
       {
         assert self.t.contents[r].predCount != 0;
-        if r == BT.G.Root() {
+        if r == BTG.Root() {
           assert !deallocable(self, r);
         } else {
           assert |PredecessorSet(self.graph, r)| > 0;
@@ -1523,7 +1523,7 @@ module IndirectionTableModel {
     }
   }
 
-  lemma LemmaRemoveRefStuff(self: IndirectionTable, ref: BT.G.Reference)
+  lemma LemmaRemoveRefStuff(self: IndirectionTable, ref: BTG.Reference)
   requires Inv(self)
   requires TrackingGarbage(self)
   requires ref in self.t.contents
@@ -1588,7 +1588,7 @@ module IndirectionTableModel {
     }
   }
 
-  function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
+  function {:opaque} RemoveRef(self: IndirectionTable, ref: BTG.Reference)
     : (res : (IndirectionTable, Option<BC.Location>))
   requires Inv(self)
   requires TrackingGarbage(self)

@@ -43,7 +43,7 @@ module MarshallingModel {
   import IndirectionTableModelExport = IndirectionTableModel
   import SeqComparison
 
-  import BT = PivotBetreeSpec`Internal
+  import BTG = PivotBetreeGraph
 
   // This is one of the few places where we actually
   // care what a reference, lba etc. are,
@@ -254,7 +254,7 @@ module MarshallingModel {
   requires ValInGrammar(v, PivotNodeGrammar())
   // Pivots.NumBuckets(node.pivotTable) == |node.buckets|
   ensures s.Some? ==> SM.WFNode(s.value)
-  ensures s.Some? ==> BT.WFNode(SM.INode(s.value))
+  ensures s.Some? ==> BTG.WFNode(SM.INode(s.value))
   {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);

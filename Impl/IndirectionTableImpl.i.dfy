@@ -33,7 +33,7 @@ module IndirectionTableImpl {
         IndirectionTable.FindDeallocable,
         IndirectionTable.GetSize,
         IndirectionTable.InitLocBitmap,
-        IndirectionTableModelExport, BT, BC, Options, NativeTypes, Bounds,
+        IndirectionTableModelExport, BTG, BC, Options, NativeTypes, Bounds,
         IndirectionTable.HasOneElement,
         BitmapImpl
       reveals IndirectionTableNullable
@@ -49,7 +49,7 @@ module IndirectionTableImpl {
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
-  import BT = PivotBetreeSpec`Internal
+  import BTG = PivotBetreeGraph
   import BC = BetreeGraphBlockCache
   import LruModel
   import MutableMapModel
@@ -102,7 +102,7 @@ module IndirectionTableImpl {
         && (forall ref | ref in this.t.I().contents && t.I().contents[ref].predCount == 0 :: ref in LruModel.I(garbageQueue.Queue))
         && (forall ref | ref in LruModel.I(garbageQueue.Queue) :: ref in t.I().contents && t.I().contents[ref].predCount == 0)
       ))
-      && BT.G.Root() in t.I().contents
+      && BTG.Root() in t.I().contents
       && this.t.Count as int <= IndirectionTableModel.MaxSize()
     }
 
@@ -134,7 +134,7 @@ module IndirectionTableImpl {
       this.t := new MutableMap.ResizingHashMap(128);
       new;
       // This is not important, but needed to satisfy the Inv:
-      this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
+      this.t.Insert(BTG.Root(), IndirectionTableModel.Entry(None, [], 1));
       this.garbageQueue := null;
       Repr := {this} + this.t.Repr;
     }
@@ -161,7 +161,7 @@ module IndirectionTableImpl {
       IndirectionTableModel.reveal_clone();
     }
 
-    method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
+    method GetEntry(ref: BTG.Reference) returns (e : Option<IndirectionTableModel.Entry>)
     requires Inv()
     ensures e == IndirectionTableModel.GetEntry(I(), ref)
     {
@@ -169,7 +169,7 @@ module IndirectionTableImpl {
       e := this.t.Get(ref);
     }
 
-    method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
+    method HasEmptyLoc(ref: BTG.Reference) returns (b: bool)
     requires Inv()
     ensures b == IndirectionTableModel.HasEmptyLoc(I(), ref)
     {
@@ -177,7 +177,7 @@ module IndirectionTableImpl {
       b := entry.Some? && entry.value.loc.None?;
     }
 
-    method RemoveLoc(ref: BT.G.Reference)
+    method RemoveLoc(ref: BTG.Reference)
     returns (oldLoc: Option<BC.Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
@@ -200,7 +200,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.RemoveLoc(old(I()), ref);
     }
 
-    method AddLocIfPresent(ref: BT.G.Reference, loc: BC.Location)
+    method AddLocIfPresent(ref: BTG.Reference, loc: BC.Location)
     returns (added : bool)
     requires Inv()
     modifies Repr
@@ -220,7 +220,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.AddLocIfPresent(old(I()), ref, loc);
     }
 
-    method RemoveRef(ref: BT.G.Reference)
+    method RemoveRef(ref: BTG.Reference)
     returns (oldLoc : Option<BC.Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
@@ -250,7 +250,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
     }
 
-    static method PredInc(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
+    static method PredInc(t: HashMap, q: LruImpl.LruImplQueue, ref: BTG.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -275,7 +275,7 @@ module IndirectionTableImpl {
       }
     }
 
-    static method PredDec(t: HashMap, q: LruImpl.LruImplQueue, ref: BT.G.Reference)
+    static method PredDec(t: HashMap, q: LruImpl.LruImplQueue, ref: BTG.Reference)
     requires t.Inv()
     requires q.Inv()
     requires t.Count as nat < 0x1_0000_0000_0000_0000 / 8
@@ -301,8 +301,8 @@ module IndirectionTableImpl {
       }
     }
 
-    static method UpdatePredCounts(t: HashMap, q: LruImpl.LruImplQueue, ghost changingRef: BT.G.Reference,
-        newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
+    static method UpdatePredCounts(t: HashMap, q: LruImpl.LruImplQueue, ghost changingRef: BTG.Reference,
+        newSuccs: seq<BTG.Reference>, oldSuccs: seq<BTG.Reference>)
     requires t.Inv()
     requires q.Inv()
     requires t.Repr !! q.Repr
@@ -355,7 +355,7 @@ module IndirectionTableImpl {
       }
     }
 
-    method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+    method UpdateAndRemoveLoc(ref: BTG.Reference, succs: seq<BTG.Reference>)
     returns (oldLoc : Option<BC.Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
@@ -455,7 +455,7 @@ module IndirectionTableImpl {
     requires forall ref | ref in t.I().contents :: t.I().contents[ref].predCount == 0
     requires forall ref | ref in t.I().contents :: |t.I().contents[ref].succs| <= MaxNumChildren()
     requires t.I().count as int <= IndirectionTableModel.MaxSize()
-    requires BT.G.Root() in t.I().contents
+    requires BTG.Root() in t.I().contents
     ensures t' == null ==> IndirectionTableModel.ComputeRefCounts(old(t.I())) == None
     ensures t' != null ==> t'.Inv()
     ensures t' != null ==> IndirectionTableModel.ComputeRefCounts(old(t.I())) == Some(t'.I())
@@ -466,9 +466,9 @@ module IndirectionTableImpl {
       var copy := t;
       var t1 := t.Clone();
 
-      var oldEntryOpt := t1.Get(BT.G.Root());
+      var oldEntryOpt := t1.Get(BTG.Root());
       var oldEntry := oldEntryOpt.value;
-      t1.Insert(BT.G.Root(), oldEntry.(predCount := 1));
+      t1.Insert(BTG.Root(), oldEntry.(predCount := 1));
 
       var it := copy.IterStart();
       while it.next.Next?
@@ -478,7 +478,7 @@ module IndirectionTableImpl {
       invariant fresh(t1.Repr)
 
       invariant IndirectionTableModel.ComputeRefCountsIterateInv(t1.I(), copy.I(), it)
-      invariant BT.G.Root() in t1.I().contents
+      invariant BTG.Root() in t1.I().contents
       invariant IndirectionTableModel.ComputeRefCounts(old(t.I()))
              == IndirectionTableModel.ComputeRefCountsIterate(t1.I(), copy.I(), it)
       decreases it.decreaser
@@ -496,7 +496,7 @@ module IndirectionTableImpl {
         invariant copy.Repr !! t1.Repr
         invariant fresh(t1.Repr)
 
-        invariant BT.G.Root() in t1.I().contents
+        invariant BTG.Root() in t1.I().contents
         invariant 0 <= i as int <= |succs|
         invariant |succs| <= MaxNumChildren()
         invariant t1.I().count as int <= IndirectionTableModel.MaxSize()
@@ -565,7 +565,7 @@ module IndirectionTableImpl {
         var res := ValToHashMap(v.a);
         match res {
           case Some(t) => {
-            var rootRef := t.Get(BT.G.Root());
+            var rootRef := t.Get(BTG.Root());
             if rootRef.Some? {
               var t1 : MutableMap.ResizingHashMapOpt<IndirectionTableModel.Entry> := ComputeRefCounts(t);
               if t1 != null {
@@ -605,7 +605,7 @@ module IndirectionTableImpl {
       assert a[..i-1] + [a[i-1]] == a[..i];
     }
 
-    lemma {:fuel SizeOfV,5} lemma_tuple_size(a: uint64, b: uint64, c: uint64, succs: seq<BT.G.Reference>)
+    lemma {:fuel SizeOfV,5} lemma_tuple_size(a: uint64, b: uint64, c: uint64, succs: seq<BTG.Reference>)
     requires|succs| <= MaxNumChildren()
     ensures SizeOfV(VTuple([VUint64(a), VUint64(b), VUint64(c), VUint64Array(succs)]))
          <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
@@ -719,7 +719,7 @@ module IndirectionTableImpl {
 
       /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
       assert t0.Some?;
-      assert BT.G.Root() in t0.value.contents;
+      assert BTG.Root() in t0.value.contents;
       assert t0.value.count <= MaxSizeUint64();
       ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
       assert t1.Some?;*/
@@ -777,7 +777,7 @@ module IndirectionTableImpl {
     
     ///// Dealloc stuff
 
-    method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+    method FindDeallocable() returns (ref: Option<BTG.Reference>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     ensures ref == IndirectionTableModel.FindDeallocable(I())

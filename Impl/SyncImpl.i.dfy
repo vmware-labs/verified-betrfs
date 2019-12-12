@@ -29,7 +29,7 @@ module SyncImpl {
 
   import opened NativeTypes
 
-  method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: G.Reference, loc: BC.Location)
   requires s.W()
   requires s.ready
   requires BlockAllocatorModel.Inv(s.blockAllocator.I())
@@ -49,7 +49,7 @@ module SyncImpl {
     }
   }
 
-  method AssignRefToLocFrozen(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  method AssignRefToLocFrozen(k: ImplConstants, s: ImplVariables, ref: G.Reference, loc: BC.Location)
   requires s.W()
   requires s.ready
   requires s.I().frozenIndirectionTable.Some? ==> s.I().blockAllocator.frozen.Some?
@@ -72,7 +72,7 @@ module SyncImpl {
     }
   }
 
-  method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
+  method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: G.Reference, loc: BC.Location)
   requires s.W()
   requires s.ready
   requires BlockAllocatorModel.Inv(s.I().blockAllocator)
@@ -142,7 +142,7 @@ module SyncImpl {
     return;
   }
 
-  method TryToWriteBlock(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  method TryToWriteBlock(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: G.Reference)
   requires s.ready
   requires Inv(k, s)
   requires io.initialized()

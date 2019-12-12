@@ -22,11 +22,11 @@ module QueryModel {
   import opened Bounds
   import PivotsLib
 
-  import PBS = PivotBetreeSpec`Spec
+  import BT = PivotBetreeSpec`Internal
 
   // == query ==
 
-  function {:opaque} queryIterate(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64)
+  function {:opaque} queryIterate(k: Constants, s: Variables, key: Key, msg: Message, ref: G.Reference, io: IO, counter: uint64)
   : (r : (Variables, Option<MS.Value>, IO))
   requires s.Ready?
   requires Inv(k, s)
@@ -81,18 +81,18 @@ module QueryModel {
       var (s', io') := PageInIndirectionTableReq(k, s, io);
       (s', None, io')
     ) else (
-      queryIterate(k, s, key, Messages.IdentityMessage(), BT.G.Root(), io, 40)
+      queryIterate(k, s, key, Messages.IdentityMessage(), G.Root(), io, 40)
     )
   }
 
-  predicate queryInv(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>)
+  predicate queryInv(k: Constants, s: Variables, key: Key, msg: Message, ref: G.Reference, io: IO, counter: uint64, lookup: seq<G.ReadOp>)
   {
     && s.Ready?
     && Inv(k, s)
     && io.IOInit?
     && ref in s.ephemeralIndirectionTable.graph
     && counter >= 0
-    && (|lookup| == 0 ==> ref == BT.G.Root())
+    && (|lookup| == 0 ==> ref == G.Root())
     && (msg.Define? ==> |lookup| > 0)
     && (|lookup| > 0 ==> BT.WFLookupForKey(lookup, key))
     && (!msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.Some?)
@@ -103,15 +103,15 @@ module QueryModel {
     && msg == BT.InterpretLookup(lookup, key)
   }
 
-  lemma AugmentLookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: MS.Key, cache: map<BT.G.Reference, BT.G.Node>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
-  returns (lookup' : seq<BT.G.ReadOp>)
+  lemma AugmentLookup(lookup: seq<G.ReadOp>, ref: G.Reference, node: G.Node, key: MS.Key, cache: map<G.Reference, G.Node>, graph: map<G.Reference, seq<G.Reference>>)
+  returns (lookup' : seq<G.ReadOp>)
   requires |lookup| > 0 ==> BT.WFLookupForKey(lookup, key)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in graph
   requires forall i | 0 <= i < |lookup| :: MapsTo(cache, lookup[i].ref, lookup[i].node)
-  requires |lookup| == 0 ==> ref == BT.G.Root()
+  requires |lookup| == 0 ==> ref == G.Root()
   requires |lookup| > 0 ==> Last(lookup).node.children.Some?
   requires |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref
-  requires BT.WFNode(node)
+  requires G.WFNode(node)
   requires MapsTo(cache, ref, node);
   requires ref in graph;
   ensures BT.WFLookupForKey(lookup', key)
@@ -120,7 +120,7 @@ module QueryModel {
   ensures forall i | 0 <= i < |lookup'| :: lookup'[i].ref in graph
   ensures forall i | 0 <= i < |lookup'| :: MapsTo(cache, lookup'[i].ref, lookup'[i].node)
   {
-    lookup' := lookup + [BT.G.ReadOp(ref, node)];
+    lookup' := lookup + [G.ReadOp(ref, node)];
 
     forall idx | BT.ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
     ensures BT.LookupFollowsChildRefAtLayer(key, lookup', idx)
@@ -135,7 +135,7 @@ module QueryModel {
     assert BT.LookupFollowsChildRefs(key, lookup');
   }
 
-  lemma queryIterateCorrect(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>)
+  lemma queryIterateCorrect(k: Constants, s: Variables, key: Key, msg: Message, ref: G.Reference, io: IO, counter: uint64, lookup: seq<G.ReadOp>)
   requires queryInv(k, s, key, msg, ref, io, counter, lookup)
   requires !msg.Define?
   ensures var (s', res, io') := queryIterate(k, s, key, msg, ref, io, counter);
@@ -194,7 +194,7 @@ module QueryModel {
                 newlookup);
           } else {
             assert BC.OpTransaction(Ik(k), IVars(s), IVars(s'),
-              PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
+              BT.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
 
             assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'),
               if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
@@ -223,7 +223,7 @@ module QueryModel {
     if (s.Unready?) {
       PageInIndirectionTableReqCorrect(k, s, io);
     } else {
-      queryIterateCorrect(k, s, key, Messages.IdentityMessage(), BT.G.Root(), io, 40, []);
+      queryIterateCorrect(k, s, key, Messages.IdentityMessage(), G.Root(), io, 40, []);
     }
   }
 }

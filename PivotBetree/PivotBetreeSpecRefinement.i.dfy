@@ -79,19 +79,19 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma WFNodeRefinesWFNode(node: PNode)
-  requires P.WFNode(node)
+  requires P.G.WFNode(node)
   ensures B.WFNode(INode(node))
   {
   }
 
   function IReadOp(readOp: P.G.ReadOp) : B.G.ReadOp
-  requires P.WFNode(readOp.node)
+  requires P.G.WFNode(readOp.node)
   {
     B.G.ReadOp(readOp.ref, INode(readOp.node))
   }
 
   function IReadOps(readOps: seq<P.G.ReadOp>) : seq<B.G.ReadOp>
-  requires forall i | 0 <= i < |readOps| :: P.WFNode(readOps[i].node)
+  requires forall i | 0 <= i < |readOps| :: P.G.WFNode(readOps[i].node)
   ensures |readOps| == |IReadOps(readOps)|
   {
     if |readOps| == 0 then [] else
@@ -571,8 +571,8 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma CutoffNodeAndKeepLeftAgree(node: PNode, node': PNode, pivot: Key, key: Key)
-  requires P.WFNode(node)
-  requires P.WFNode(node')
+  requires P.G.WFNode(node)
+  requires P.G.WFNode(node')
   requires node' == P.CutoffNodeAndKeepLeft(node, pivot);
   requires Keyspace.lt(key, pivot);
   ensures IBuffer(node)[key] == IBuffer(node')[key]
@@ -585,8 +585,8 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma CutoffNodeAndKeepRightAgree(node: PNode, node': PNode, pivot: Key, key: Key)
-  requires P.WFNode(node)
-  requires P.WFNode(node')
+  requires P.G.WFNode(node)
+  requires P.G.WFNode(node')
   requires node' == P.CutoffNodeAndKeepRight(node, pivot);
   requires Keyspace.lte(pivot, key);
   ensures IBuffer(node)[key] == IBuffer(node')[key]
@@ -599,8 +599,8 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma CutoffNodeAgree(node: PNode, node': PNode, l: Option<Key>, r: Option<Key>, key: Key)
-  requires P.WFNode(node)
-  requires P.WFNode(node')
+  requires P.G.WFNode(node)
+  requires P.G.WFNode(node')
   requires node' == P.CutoffNode(node, l, r);
   requires l.Some? ==> Keyspace.lte(l.value, key);
   requires r.Some? ==> Keyspace.lt(key, r.value);
@@ -625,9 +625,9 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma WriteFusedChildInTermsOfLeftAndRight(l: PNode, r: PNode, child: PNode, pivot: Key, num_children_left: int)
-  requires P.WFNode(l)
-  requires P.WFNode(r)
-  requires P.WFNode(child)
+  requires P.G.WFNode(l)
+  requires P.G.WFNode(r)
+  requires P.G.WFNode(child)
   requires 1 <= num_children_left < |child.buckets|
   requires l == P.G.Node(
       child.pivotTable[ .. num_children_left - 1 ],
@@ -658,9 +658,9 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma MergedNodeAndLeftAgree(l: PNode, r: PNode, node: PNode, pivot: Key, key: Key)
-  requires P.WFNode(l)
-  requires P.WFNode(r)
-  requires P.WFNode(node)
+  requires P.G.WFNode(l)
+  requires P.G.WFNode(r)
+  requires P.G.WFNode(node)
   requires l.children.Some? <==> r.children.Some?
   requires node == P.G.Node(
       concat3(l.pivotTable, pivot, r.pivotTable),
@@ -676,9 +676,9 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma MergedNodeAndRightAgree(l: PNode, r: PNode, node: PNode, pivot: Key, key: Key)
-  requires P.WFNode(l)
-  requires P.WFNode(r)
-  requires P.WFNode(node)
+  requires P.G.WFNode(l)
+  requires P.G.WFNode(r)
+  requires P.G.WFNode(node)
   requires l.children.Some? <==> r.children.Some?
   requires node == P.G.Node(
       concat3(l.pivotTable, pivot, r.pivotTable),
@@ -752,8 +752,8 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma SplitMergeBuffersChildrenEq(node: PNode, node': PNode, idx: int)
-  requires P.WFNode(node)
-  requires P.WFNode(node')
+  requires P.G.WFNode(node)
+  requires P.G.WFNode(node')
   requires |node'.buckets| == |node.buckets| + 1
   requires 0 <= idx < |node.buckets|
   requires forall i | 0 <= i < idx :: node.buckets[i] == node'.buckets[i]
@@ -819,14 +819,14 @@ module PivotBetreeSpecRefinement {
   requires P.ValidMerge(f)
   ensures B.ValidRedirect(IMerge(f))
   {
-    assert P.WFNode(f.split_parent);
-    assert P.WFNode(f.left_child);
-    assert P.WFNode(f.right_child);
+    assert P.G.WFNode(f.split_parent);
+    assert P.G.WFNode(f.left_child);
+    assert P.G.WFNode(f.right_child);
     var redirect := IMerge(f);
     PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(f);
 
-    assert P.WFNode(P.MergeOps(f)[0].node);
-    assert P.WFNode(P.MergeOps(f)[1].node);
+    assert P.G.WFNode(P.MergeOps(f)[0].node);
+    assert P.G.WFNode(P.MergeOps(f)[1].node);
 
     forall ref | ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
     ensures ref in redirect.old_childrefs
@@ -1074,7 +1074,7 @@ module PivotBetreeSpecRefinement {
 
   // interpret the pivot-y Ops (from our little cache DSL) to their Betree (non-pivot) versions.
   function IOp(op: P.G.Op) : B.G.Op
-  requires P.WFNode(op.node)
+  requires P.G.WFNode(op.node)
   {
     match op {
       case AllocOp(ref, block) => B.G.AllocOp(ref, INode(block))
@@ -1083,7 +1083,7 @@ module PivotBetreeSpecRefinement {
   }
 
   function IOps(ops: seq<P.G.Op>) : seq<B.G.Op>
-  requires forall i | 0 <= i < |ops| :: P.WFNode(ops[i].node)
+  requires forall i | 0 <= i < |ops| :: P.G.WFNode(ops[i].node)
   {
     if |ops| == 0 then [] else
       IOps(ops[..|ops|-1]) + [IOp(ops[|ops|-1])]
@@ -1093,7 +1093,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidInsertion(ins)
   requires B.ValidInsertion(IInsertion(ins))
   ensures forall i | 0 <= i < |P.InsertionOps(ins)| ::
-      P.WFNode(P.InsertionOps(ins)[i].node)
+      P.G.WFNode(P.InsertionOps(ins)[i].node)
   ensures IOps(P.InsertionOps(ins)) == B.InsertionOps(IInsertion(ins))
   {
     PivotBetreeSpecWFNodes.ValidInsertWritesWFNodes(ins);
@@ -1131,7 +1131,7 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma AddMessagesToNodeResult(node: PNode, bucket: map<Key, M.Message>, node': PNode, key: Key)
-  requires P.WFNode(node)
+  requires P.G.WFNode(node)
   requires node' == P.AddMessagesToNode(node, bucket);
   ensures WFBucketList(node'.buckets, node'.pivotTable);
   ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
@@ -1144,7 +1144,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidFlush(flush)
   requires B.ValidFlush(IFlush(flush))
   ensures forall i | 0 <= i < |P.FlushOps(flush)| ::
-      P.WFNode(P.FlushOps(flush)[i].node)
+      P.G.WFNode(P.FlushOps(flush)[i].node)
   ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
   {
     PivotBetreeSpecWFNodes.ValidFlushWritesWFNodes(flush);
@@ -1161,14 +1161,14 @@ module PivotBetreeSpecRefinement {
     var allocop := P.G.AllocOp(flush.newchildref, newchild);
     var writeop := P.G.WriteOp(flush.parentref, newparent);
 
-    assert P.WFNode(newchild);
-    assert P.WFNode(newparent);
+    assert P.G.WFNode(newchild);
+    assert P.G.WFNode(newparent);
 
     /*
     assert |newchild.buckets| == |flush.child.buckets|;
     assert |newchild.pivotTable| == |flush.child.pivotTable|;
-    assert P.WFNode(newchild);
-    assert P.WFNode(newparent);
+    assert P.G.WFNode(newchild);
+    assert P.G.WFNode(newparent);
     */
 
     var flush' := IFlush(flush);
@@ -1226,7 +1226,7 @@ module PivotBetreeSpecRefinement {
     {
       assert P.NodeHasWFBucketAt(flush.parent, i);
     }*/
-    //assert P.WFNode(newparent);
+    //assert P.G.WFNode(newparent);
 
     //assert IChildren(newchild) == newchild'.children;
     //assert IBuffer(newchild) == newbuffer;
@@ -1258,7 +1258,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidGrow(growth)
   requires B.ValidGrow(IGrow(growth))
   ensures forall i | 0 <= i < |P.GrowOps(growth)| ::
-      P.WFNode(P.GrowOps(growth)[i].node)
+      P.G.WFNode(P.GrowOps(growth)[i].node)
   ensures IOps(P.GrowOps(growth)) == B.GrowOps(IGrow(growth))
   {
     PivotBetreeSpecWFNodes.ValidGrowWritesWFNodes(growth);
@@ -1290,7 +1290,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidSplit(f)
   requires B.ValidRedirect(ISplit(f))
   ensures forall i | 0 <= i < |P.SplitOps(f)| ::
-      P.WFNode(P.SplitOps(f)[i].node)
+      P.G.WFNode(P.SplitOps(f)[i].node)
   ensures IOps(P.SplitOps(f)) == B.RedirectOps(ISplit(f))
   {
     PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(f);
@@ -1324,7 +1324,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidMerge(f)
   requires B.ValidRedirect(IMerge(f))
   ensures forall i | 0 <= i < |P.MergeOps(f)| ::
-      P.WFNode(P.MergeOps(f)[i].node)
+      P.G.WFNode(P.MergeOps(f)[i].node)
   ensures IOps(P.MergeOps(f)) == B.RedirectOps(IMerge(f))
   {
     PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(f);
@@ -1338,7 +1338,7 @@ module PivotBetreeSpecRefinement {
   requires !betreeStep.BetreeRepivot?
   ensures B.ValidBetreeStep(IStep(betreeStep))
   ensures forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-      P.WFNode(P.BetreeStepOps(betreeStep)[i].node)
+      P.G.WFNode(P.BetreeStepOps(betreeStep)[i].node)
   ensures IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep))
   {
     RefinesValidBetreeStep(betreeStep);
@@ -1346,12 +1346,12 @@ module PivotBetreeSpecRefinement {
     match betreeStep {
       case BetreeQuery(q) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
+            P.G.WFNode(P.BetreeStepOps(betreeStep)[i].node);
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
       }
       case BetreeSuccQuery(q) => {
         assert forall i | 0 <= i < |P.BetreeStepOps(betreeStep)| ::
-            P.WFNode(P.BetreeStepOps(betreeStep)[i].node);
+            P.G.WFNode(P.BetreeStepOps(betreeStep)[i].node);
         assert IOps(P.BetreeStepOps(betreeStep)) == B.BetreeStepOps(IStep(betreeStep));
       }
       case BetreeInsert(ins) => {
@@ -1373,7 +1373,7 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma IBufferLeafEqJoin(node: PNode)
-  requires P.WFNode(node)
+  requires P.G.WFNode(node)
   ensures IBufferLeaf(node) == imap key :: M.Merge(BucketGet(JoinBucketList(node.buckets), key), M.DefineDefault())
   {
     forall key:Key
@@ -1390,7 +1390,7 @@ module PivotBetreeSpecRefinement {
 
   lemma RepivotPreservesNode(r: P.Repivot)
   requires P.ValidRepivot(r)
-  ensures P.WFNode(P.ApplyRepivot(r.leaf, r.pivots))
+  ensures P.G.WFNode(P.ApplyRepivot(r.leaf, r.pivots))
   ensures INode(r.leaf) == INode(P.ApplyRepivot(r.leaf, r.pivots))
   {
     PivotBetreeSpecWFNodes.WFApplyRepivot(r.leaf, r.pivots);

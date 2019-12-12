@@ -35,7 +35,7 @@ module InsertImpl {
   returns (success: bool)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache.I()
+  requires G.Root() in s.cache.I()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
@@ -43,10 +43,10 @@ module InsertImpl {
   {
     InsertModel.reveal_InsertKeyValue();
 
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), G.Root());
 
     if s.frozenIndirectionTable != null {
-      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      var b := s.frozenIndirectionTable.HasEmptyLoc(G.Root());
       if b {
         success := false;
         print "giving up; can't dirty root because frozen isn't written";
@@ -55,9 +55,9 @@ module InsertImpl {
     }
 
     var msg := Messages.Define(value);
-    s.cache.InsertKeyValue(BT.G.Root(), key, msg);
+    s.cache.InsertKeyValue(G.Root(), key, msg);
 
-    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
+    writeBookkeepingNoSuccsUpdate(k, s, G.Root());
 
     success := true;
   }
@@ -86,10 +86,10 @@ module InsertImpl {
       return;
     }
 
-    var rootLookup := s.cache.GetOpt(BT.G.Root());
+    var rootLookup := s.cache.GetOpt(G.Root());
     if (rootLookup.None?) {
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-        PageInReq(k, s, io, BT.G.Root());
+        PageInReq(k, s, io, G.Root());
         success := false;
       } else {
         print "insert: root not in cache, but cache is full\n";

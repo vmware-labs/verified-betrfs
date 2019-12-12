@@ -19,7 +19,7 @@ module EvictImpl {
 
   import LruModel
 
-  method Evict(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
+  method Evict(k: ImplConstants, s: ImplVariables, ref: G.Reference)
   requires s.WF()
   requires s.ready
   requires ref in s.cache.I()
@@ -33,7 +33,7 @@ module EvictImpl {
     assert s.I().cache == EvictModel.Evict(Ic(k), old(s.I()), ref).cache;
   }
 
-  method NeedToWrite(s: ImplVariables, ref: BT.G.Reference)
+  method NeedToWrite(s: ImplVariables, ref: G.Reference)
   returns (b: bool)
   requires s.WF()
   requires s.ready
@@ -54,7 +54,7 @@ module EvictImpl {
     return false;
   }
 
-  method CanEvict(s: ImplVariables, ref: BT.G.Reference)
+  method CanEvict(s: ImplVariables, ref: G.Reference)
   returns (b: bool)
   requires s.WF()
   requires s.ready
@@ -89,7 +89,7 @@ module EvictImpl {
       Dealloc(k, s, io, ref.value);
     } else {
       var ref := s.lru.Next();
-      if ref == BT.G.Root() {
+      if ref == G.Root() {
       } else {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {

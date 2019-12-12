@@ -28,7 +28,7 @@ module Marshalling {
   import opened Sequences
   import opened BucketsLib
   import BC = BetreeGraphBlockCache
-  import BT = PivotBetreeSpec`Internal
+  import BTG = PivotBetreeGraph
   import M = ValueMessage`Internal
   import Pivots = PivotsLib
   import KVList
@@ -38,7 +38,7 @@ module Marshalling {
   type LBA = BC.LBA
   type Location = BC.Location
   type Sector = BC.Sector
-  type Node = BT.G.Node
+  type Node = BTG.Node
 
   /////// Conversion to PivotNode
 
@@ -73,7 +73,7 @@ module Marshalling {
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValidVal(v)
   requires ValInGrammar(v, IMM.PivotNodeGrammar())
-  ensures s.Some? ==> BT.WFNode(s.value)
+  ensures s.Some? ==> BTG.WFNode(s.value)
   {
     MapOption(IMM.valToNode(v), IM.INode)
   }
