@@ -533,7 +533,7 @@ module IndirectionTableImpl {
           case Some(t) => {
             var rootRef := t.Get(BT.G.Root());
             if rootRef.Some? {
-              var t1 := ComputeRefCounts(t);
+              var t1 : MutableMap.ResizingHashMapOpt<IndirectionTableModel.Entry> := ComputeRefCounts(t);
               if t1 != null {
                 IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1.I());
                 IndirectionTableModel.lemma_count_eq_graph_size(t.I());

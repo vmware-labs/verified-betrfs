@@ -35,9 +35,9 @@ module CacheImpl {
 
     protected function MutCacheBucketRepr() : set<object>
     reads this, cache
-    reads set ref | ref in cache.Contents :: cache.Contents[ref]
+    reads set ref | ref in cache.I().contents :: cache.I().contents[ref]
     {
-      set ref, o | ref in cache.Contents && o in cache.Contents[ref].Repr :: o
+      set ref, o | ref in cache.I().contents && o in cache.I().contents[ref].Repr :: o
     }
 
     protected predicate CacheReprDisjoint(contents: map<BT.G.Reference, Node>)
@@ -52,21 +52,21 @@ module CacheImpl {
     ensures Inv() ==> this in Repr
     {
       && cache in Repr
-      && (forall ref | ref in cache.Contents :: cache.Contents[ref] in Repr)
+      && (forall ref | ref in cache.I().contents :: cache.I().contents[ref] in Repr)
       && Repr == {this} + cache.Repr + MutCacheBucketRepr()
-      && CacheReprDisjoint(cache.Contents)
-      && (forall ref | ref in cache.Contents :: cache.Contents[ref].Repr !! cache.Repr)
-      && (forall ref | ref in cache.Contents :: this !in cache.Contents[ref].Repr)
+      && CacheReprDisjoint(cache.I().contents)
+      && (forall ref | ref in cache.I().contents :: cache.I().contents[ref].Repr !! cache.Repr)
+      && (forall ref | ref in cache.I().contents :: this !in cache.I().contents[ref].Repr)
       && this !in cache.Repr
       && cache.Inv()
-      && (forall ref | ref in cache.Contents :: cache.Contents[ref].Inv())
+      && (forall ref | ref in cache.I().contents :: cache.I().contents[ref].Inv())
     }
 
     protected function I() : map<BT.G.Reference, IM.Node>
     reads this, Repr
     requires Inv()
     {
-      map ref | ref in cache.Contents :: cache.Contents[ref].I()
+      map ref | ref in cache.I().contents :: cache.I().contents[ref].I()
     }
 
     protected function ptr(ref: BT.G.Reference) : Option<Node>
@@ -78,7 +78,7 @@ module CacheImpl {
         && ptr(ref).value.Inv()
         && I()[ref] == ptr(ref).value.I()
     {
-      if ref in cache.Contents then Some(cache.Contents[ref]) else None
+      if ref in cache.I().contents then Some(cache.I().contents[ref]) else None
     }
 
     method GetOpt(ref: BT.G.Reference)
@@ -97,13 +97,13 @@ module CacheImpl {
 
     lemma LemmaSizeEqCount()
     requires Inv()
-    ensures |I()| == |cache.Contents|
+    ensures |I()| == |cache.I().contents|
     {
-      assert I().Keys == cache.Contents.Keys;
+      assert I().Keys == cache.I().contents.Keys;
       assert |I()|
           == |I().Keys|
-          == |cache.Contents.Keys|
-          == |cache.Contents|;
+          == |cache.I().contents.Keys|
+          == |cache.I().contents|;
     }
 
     protected function method Count() : (c : uint64)
@@ -127,7 +127,7 @@ module CacheImpl {
     {
       LemmaSizeEqCount();
       cache.Insert(ref, node);
-      assert cache.Contents[ref] == node;
+      assert cache.I().contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();
@@ -174,7 +174,7 @@ module CacheImpl {
     requires Inv()
     requires node.Inv()
     requires ref in I()
-    requires forall o | o in node.Repr :: o in cache.Contents[ref].Repr || o !in Repr
+    requires forall o | o in node.Repr :: o in cache.I().contents[ref].Repr || o !in Repr
     requires |I()| <= 0x10000
     modifies Repr
     ensures Inv()
@@ -183,7 +183,7 @@ module CacheImpl {
     {
       LemmaSizeEqCount();
       cache.Insert(ref, node);
-      assert cache.Contents[ref] == node;
+      assert cache.I().contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();

@@ -10,6 +10,21 @@ include "MutableMapModel.i.dfy"
 //
 
 module MutableMap {
+  export S
+	    provides ResizingHashMap, ResizingHashMap.I, ResizingHashMap.Inv,
+	        ResizingHashMap.Repr, MutableMapModel, ResizingHashMap.Count,
+	        NativeTypes, ResizingHashMap._ctor, ResizingHashMap.Get,
+	        ResizingHashMap.InsertAndGetOld, ResizingHashMap.Insert,
+          ResizingHashMap.RemoveAndGet, ResizingHashMap.Remove,
+          ResizingHashMap.Get, ResizingHashMap.Clone, ResizingHashMap.IterStart,
+          ResizingHashMap.IterInc, ResizingHashMap.MaxKey, Options
+      reveals ResizingHashMapOpt
+
+  type ResizingHashMapOpt(==)<T> = ResizingHashMap?<T>
+
+	export Internal reveals *
+	export extends S
+
   import opened NativeTypes
   import opened Options
   import opened Sequences
@@ -247,7 +262,6 @@ module MutableMap {
 
     protected predicate Inv()
       ensures Inv() ==> this in this.Repr
-      ensures Inv() ==> |Contents| == Count as nat
       reads this, this.Repr
     {
       && ReprInv()
@@ -262,10 +276,6 @@ module MutableMap {
       requires Inv()
       ensures MutableMapModel.Inv(I())
       ensures this.I().count == Count
-
-      // TODO users of this class should just use I().contents,
-      // which would make this unnecessary
-      ensures this.I().contents == Contents
     {
       ModelI(this)
     }

@@ -125,7 +125,7 @@ module LruImpl {
       tail_node := null;
 
       Queue := [];
-      Repr := {this} + m.Repr + m.Contents.Values;
+      Repr := {this} + m.Repr + m.I().contents.Values;
     }
 
     method Remove(x: uint64)
