@@ -7,12 +7,34 @@ include "NodeImpl.i.dfy"
 //
 
 module CacheImpl {
+  export Basic
+      provides MutCache, MutCache.Inv, MutCache.I, MutCache.Repr,
+          MutCache._ctor,
+          MutCache.CacheReprDisjoint,
+          MutCache.ptr,
+          MutCache.GetOpt,
+          MutCache.LemmaNodeReprLeRepr,
+          MutCache.Count,
+          MutCache.Insert,
+          MutCache.Remove,
+          MutCache.MoveAndReplace,
+          MutCache.SplitParent,
+          MutCache.InsertKeyValue,
+          NodeImpl, BT, Options, NativeTypes, KeyType, BucketWeights, Maps
+  export WithBuckets extends Basic
+      provides MutCache.UpdateNodeSlot, BucketImpl
+
+	export Internal reveals *
+	export extends Basic
+
   import opened NodeImpl
   import opened Options
   import opened Maps
   import opened NativeTypes
   import opened BucketImpl
   import opened BucketWeights
+  import BT = PivotBetreeSpec
+  import KeyType
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -170,7 +192,7 @@ module CacheImpl {
     }
 
     // Like Insert, but with slightly different requires
-    method Overwrite(ref: BT.G.Reference, node: Node)
+    /*method Overwrite(ref: BT.G.Reference, node: Node)
     requires Inv()
     requires node.Inv()
     requires ref in I()
@@ -187,7 +209,7 @@ module CacheImpl {
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();
-    }
+    }*/
 
     method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
     requires Inv()
@@ -216,7 +238,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+    method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: KeyType.Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
     requires Inv()
     requires ref in I()
     requires IM.WFNode(I()[ref])
@@ -237,7 +259,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: IM.Message)
+    method InsertKeyValue(ref: BT.G.Reference, key: KeyType.Key, msg: IM.Message)
     requires Inv()
     requires ref in I()
     requires IM.WFNode(I()[ref])

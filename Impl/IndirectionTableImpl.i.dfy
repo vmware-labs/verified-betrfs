@@ -33,7 +33,7 @@ module IndirectionTableImpl {
         IndirectionTable.FindDeallocable,
         IndirectionTable.GetSize,
         IndirectionTable.InitLocBitmap,
-        IndirectionTableModel, BT, BC, Options, NativeTypes, Bounds,
+        IndirectionTableModelExport, BT, BC, Options, NativeTypes, Bounds,
         IndirectionTable.HasOneElement,
         BitmapImpl
       reveals IndirectionTableNullable
@@ -59,7 +59,8 @@ module IndirectionTableImpl {
   import BitmapModel
   import BitmapImpl
   import opened Bounds
-  import IndirectionTableModel
+  import IndirectionTableModel`Internal
+  import IndirectionTableModelExport = IndirectionTableModel
   import LruImpl
 
   type HashMap = MutableMap.ResizingHashMap<IndirectionTableModel.Entry>
@@ -115,7 +116,10 @@ module IndirectionTableImpl {
       res
     }
 
-    predicate HasOneElement() {
+    predicate HasOneElement()
+    requires Inv()
+    reads this, Repr
+    {
       t.Count == 1
     }
 

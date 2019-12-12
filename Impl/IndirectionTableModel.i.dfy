@@ -24,6 +24,17 @@ include "../lib/DataStructures/BitmapModel.i.dfy"
 //
 
 module IndirectionTableModel {
+  export S
+    provides HashMap, GarbageQueue, BT, Inv, TrackingGarbage,
+        HasEmptyLoc, AddLocIfPresent, UpdateAndRemoveLoc, RemoveLoc, RemoveRef,
+        InitLocBitmap, FindDeallocable, FindDeallocableCorrect,
+        BC, BT, Options, BitmapModel, Bounds, Maps, clone, GetEntry, NativeTypes
+    reveals IndirectionTable, deallocable, MaxSize, MaxSizeUint64, I, SuccsValid,
+        IsLocAllocIndirectionTable, IsLocAllocBitmap, Entry
+
+	export Internal reveals *
+	export extends S
+
   import opened Maps
   import opened Sets
   import opened Options
@@ -42,11 +53,12 @@ module IndirectionTableModel {
 
   datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
+  type GarbageQueue = Option<LruModel.LruQueue>
 
   // TODO move bitmap in here?
   datatype IndirectionTable = IndirectionTable(
     t: HashMap,
-    garbageQueue: Option<LruModel.LruQueue>,
+    garbageQueue: GarbageQueue,
 
     // These are for easy access in proof code, but all the relevant data
     // is contained in the `t: HashMap` field.

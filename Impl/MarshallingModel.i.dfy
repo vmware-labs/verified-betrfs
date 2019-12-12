@@ -20,7 +20,7 @@ include "KVList.i.dfy"
 
 module MarshallingModel {
   export S
-	    provides parseCheckedSector, NativeTypes, Options, SM, IndirectionTableModel
+	    provides parseCheckedSector, NativeTypes, Options, SM, IndirectionTableModelExport
 	    reveals Sector
 
 	export Internal reveals *
@@ -39,7 +39,8 @@ module MarshallingModel {
   import KVList
   import Crypto
   import NativeArrays
-  import IndirectionTableModel
+  import IndirectionTableModel`Internal
+  import IndirectionTableModelExport = IndirectionTableModel
   import SeqComparison
 
   import BT = PivotBetreeSpec`Internal
@@ -337,7 +338,7 @@ module MarshallingModel {
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
   ensures s.Some? ==> SM.WFSector(s.value)
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
-      IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
+      IndirectionTableModelExport.TrackingGarbage(s.value.indirectionTable)
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -354,7 +355,7 @@ module MarshallingModel {
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
   ensures s.Some? ==> SM.WFSector(s.value)
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
-      IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
+      IndirectionTableModelExport.TrackingGarbage(s.value.indirectionTable)
   {
     if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
       parseSector(data[32..])

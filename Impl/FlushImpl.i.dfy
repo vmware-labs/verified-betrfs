@@ -21,6 +21,7 @@ module FlushImpl {
   import StateModel
   import BookkeepingModel
   import FlushModel
+  import CacheImpl`WithBuckets
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)
