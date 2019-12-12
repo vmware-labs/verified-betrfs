@@ -18,7 +18,7 @@ module NodeImpl {
   import BT = PivotBetreeSpec`Internal
   import Pivots = PivotsLib
   import opened Bounds
-  import opened BucketImpl
+  import opened BucketImpl`Basic
   import opened BucketsLib
   import opened BucketWeights
   import SplitModel

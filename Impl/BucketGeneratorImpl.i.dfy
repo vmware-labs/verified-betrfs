@@ -2,7 +2,7 @@ include "BucketGeneratorModel.i.dfy"
 include "BucketImpl.i.dfy"
 
 module BucketGeneratorImpl {
-  import opened BucketImpl
+  import opened BucketImpl`BasicWithIters
   import BucketGeneratorModel
   import BucketIteratorModel
   import opened Lexicographic_Byte_Order
@@ -12,7 +12,7 @@ module BucketGeneratorImpl {
 
   class Generator {
     // For BasicGenerator
-    var bucket: MutBucket?;
+    var bucket: MutBucketOpt;
     var it: Iterator;
 
     // For ComposeGenerator

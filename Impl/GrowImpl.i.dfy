@@ -6,7 +6,7 @@ module GrowImpl {
   import opened BookkeepingImpl
   import opened StateImpl
   import opened NodeImpl
-  import opened BucketImpl
+  import opened BucketImpl`Internal
   import GrowModel
 
   import KVList

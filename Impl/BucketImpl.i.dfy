@@ -16,6 +16,36 @@ include "BucketIteratorModel.i.dfy"
 //
 
 module BucketImpl {
+  export Minimal
+      provides MutBucket, MutBucket.Repr, MutBucket.Bucket, MutBucket.Weight,
+          MutBucket.Inv, MutBucket.ReprSeq, MutBucket.InvSeq, MutBucket.ISeq,
+          MutBucket.Weight, BucketWeights,
+          NativeTypes, Lexicographic_Byte_Order, ValueMessage, BucketsLib
+      reveals Key, MutBucketOpt
+  export Basic extends Minimal
+      provides
+          MutBucket.ISeqInduction, MutBucket.ISeqAdditive, MutBucket.AllocatedReprSeq,
+          MutBucket.FreshReprSeqOfFreshEntries, MutBucket.ReprSeqAdditive,
+          MutBucket.ReprSeq1Eq, MutBucket.LemmaReprBucketLeReprSeq,
+          MutBucket.ReprSeqDisjoint, MutBucket.ReprSeqDisjointOfLen1,
+          MutBucket.ReprSeqDisjointOfLen2, MutBucket.ListReprOfLen1,
+          MutBucket.ListReprOfLen2, MutBucket.PartialFlush,
+          MutBucket.Insert, MutBucket.Query, MutBucket.SplitLeft,
+          MutBucket.SplitRight, MutBucket.SplitLeftRight, MutBucket.SplitOneInList,
+          MutBucket.Islice, MutBucket.Isuffix, MutBucket.Clone, MutBucket.CloneSeq,
+          Options, Sequences, MutBucket.I, Bounds, KVListPartialFlush
+      reveals MutBucket.ReprSeq, MutBucket.ReprSeqDisjoint
+  export BasicWithIters extends Basic
+      provides
+          MutBucket.WFIter, MutBucket.IterStart, MutBucket.IterFindFirstGte,
+          MutBucket.IterFindFirstGt, MutBucket.IterInc, MutBucket.GetNext,
+          Iterator, IIterator, BucketIteratorModel
+
+  type MutBucketOpt(==) = MutBucket?
+
+	export Internal reveals *
+	export extends Minimal
+
   import TTT = TwoThreeTree
   import KVList
   import KVListPartialFlush

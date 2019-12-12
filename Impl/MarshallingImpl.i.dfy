@@ -9,8 +9,15 @@ include "Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
 
 module MarshallingImpl {
+  export S
+	    provides MarshallCheckedSector, ParseCheckedSector,
+	        NativeTypes, StateImpl, Options, IM, IMM, BT, Bounds
+      reveals Sector, ISectorOpt
+
+	export Internal reveals *
+	export extends S
+
   import IM = StateModel
-  import SI = StateImpl
   import opened NodeImpl
   import opened CacheImpl
   import Marshalling
@@ -24,7 +31,7 @@ module MarshallingImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import BucketImpl
+  import BucketImpl`Internal
   import BC = BetreeGraphBlockCache
   import StateImpl
   import KVList
@@ -35,7 +42,8 @@ module MarshallingImpl {
   import KeyType
   import SeqComparison
 
-  import BT = PivotBetreeSpec`Internal
+  import BT = PivotBetreeSpec
+  import PivotBetreeSpec`Internal
 
   import ValueWithDefault`Internal
   import M = ValueMessage`Internal
@@ -50,7 +58,7 @@ module MarshallingImpl {
   type Reference = IMM.Reference
   type LBA = IMM.LBA
   type Location = IMM.Location
-  type Sector = SI.Sector
+  type Sector = StateImpl.Sector
 
   /////// Conversion to PivotNode
 
@@ -307,7 +315,7 @@ module MarshallingImpl {
   requires s.Some? ==> StateImpl.WFSector(s.value)
   requires s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   reads if s.Some? then (if s.value.SectorIndirectionTable? then {s.value.indirectionTable} else {s.value.block}) else {}
-  reads if s.Some? then SI.SectorRepr(s.value) else {}
+  reads if s.Some? then StateImpl.SectorRepr(s.value) else {}
   {
     if s.Some? then
       Some(StateImpl.ISector(s.value))
@@ -320,8 +328,8 @@ module MarshallingImpl {
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  ensures MapOption(s, SI.ISector) == IMM.valToSector(v)
-  ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
+  ensures MapOption(s, StateImpl.ISector) == IMM.valToSector(v)
+  ensures s.Some? ==> fresh(StateImpl.SectorRepr(s.value));
   {
     if v.c == 0 {
       var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
@@ -607,7 +615,7 @@ module MarshallingImpl {
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
-  ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
+  ensures s.Some? ==> fresh(StateImpl.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, IMM.SectorGrammar());
@@ -645,7 +653,7 @@ module MarshallingImpl {
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
   ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
   ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
-  ensures s.Some? ==> fresh(SI.SectorRepr(s.value))
+  ensures s.Some? ==> fresh(StateImpl.SectorRepr(s.value))
   {
     s := None;
 

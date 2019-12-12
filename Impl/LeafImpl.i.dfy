@@ -7,7 +7,7 @@ module LeafImpl {
   import opened LeafModel
   import opened StateImpl
   import opened NodeImpl
-  import opened BucketImpl
+  import opened BucketImpl`Internal
   import IMM = ImplMarshallingModel
 
   import opened Options
