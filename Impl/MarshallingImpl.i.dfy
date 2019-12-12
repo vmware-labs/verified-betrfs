@@ -39,7 +39,7 @@ module MarshallingImpl {
   import Crypto
   import NativeArrays
   import MutableMapModel
-  import IndirectionTableImpl
+  import IndirectionTableImpl`Internal
   import KeyType
   import SeqComparison
 

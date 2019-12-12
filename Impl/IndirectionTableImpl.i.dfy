@@ -17,6 +17,32 @@ include "IndirectionTableModel.i.dfy"
 //
 
 module IndirectionTableImpl {
+  export S
+      provides IndirectionTable,
+        IndirectionTable.Repr,
+        IndirectionTable.I,
+        IndirectionTable.Inv,
+        IndirectionTable.Empty,
+        IndirectionTable.Clone,
+        IndirectionTable.GetEntry,
+        IndirectionTable.HasEmptyLoc,
+        IndirectionTable.RemoveLoc,
+        IndirectionTable.AddLocIfPresent,
+        IndirectionTable.RemoveRef,
+        IndirectionTable.UpdateAndRemoveLoc,
+        IndirectionTable.FindDeallocable,
+        IndirectionTable.GetSize,
+        IndirectionTable.InitLocBitmap,
+        IndirectionTableModel, BT, BC, Options, NativeTypes, Bounds,
+        IndirectionTable.HasOneElement,
+        BitmapImpl
+      reveals IndirectionTableNullable
+
+  type IndirectionTableNullable(==) = IndirectionTable?
+
+	export Internal reveals *
+	export extends S
+
   import opened Maps
   import opened Sets
   import opened Options
@@ -89,13 +115,17 @@ module IndirectionTableImpl {
       res
     }
 
+    predicate HasOneElement() {
+      t.Count == 1
+    }
+
     // Dummy constructor only used when ImplVariables is in a state with no indirection
     // table. We could use a null indirection table instead, it's just slightly more
     // annoying to do that because we'd need additional invariants.
     constructor Empty()
     ensures Inv()
     ensures fresh(Repr)
-    ensures t.Count == 1;   // TODO(jonh): Kind of a gross contract. I needed it to bodge Mkfs together.
+    ensures HasOneElement();   // TODO(jonh): Kind of a gross contract. I needed it to bodge Mkfs together.
     {
       this.t := new MutableMap.ResizingHashMap(128);
       new;

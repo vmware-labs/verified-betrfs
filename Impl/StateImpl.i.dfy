@@ -51,7 +51,7 @@ module {:extern} StateImpl {
   type TreeMap = TTT.Tree<Message>
 
   type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
-  type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
+  type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTableNullable
 
   datatype Sector =
     | SectorBlock(block: Node)

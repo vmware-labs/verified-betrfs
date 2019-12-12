@@ -14,7 +14,7 @@ module {:extern} MkfsImpl {
   import opened NodeImpl
   import KVList
   import IndirectionTableModel
-  import IndirectionTableImpl
+  import IndirectionTableImpl`Internal
 
   import BT = PivotBetreeSpec
   import BC = BetreeGraphBlockCache

@@ -18,6 +18,7 @@ module SyncImpl {
   import DeallocModel
   import BlockAllocatorModel
   import opened StateImpl
+  import IndirectionTableImpl`Internal
 
   import opened Options
   import opened Maps
