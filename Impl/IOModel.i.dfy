@@ -201,7 +201,7 @@ module IOModel {
     }
   }
 
-  function RequestRead(io: IO, loc: LBAType.Location)
+  function {:opaque} RequestRead(io: IO, loc: LBAType.Location)
   : (res : (D.ReqId, IO))
   requires io.IOInit?
   {
@@ -215,6 +215,7 @@ module IOModel {
     && M.ValidDiskOp(diskOp(io))
     && M.IDiskOp(diskOp(io)) == SD.ReqReadOp(id, SD.ReqRead(loc))
   {
+    reveal_RequestRead();
   }
 
   lemma LemmaIndirectionTableLBAValid()
@@ -248,6 +249,7 @@ module IOModel {
     && M.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp, diskOp(io'))
   {
     reveal_PageInIndirectionTableReq();
+    reveal_RequestRead();
     var (s', io') := PageInIndirectionTableReq(k, s, io);
     if (s.outstandingIndirectionTableRead.None?) {
       LemmaIndirectionTableLBAValid();
@@ -261,7 +263,7 @@ module IOModel {
     }
   }
 
-  function PageInReq(k: Constants, s: Variables, io: IO, ref: BC.Reference)
+  function {:opaque} PageInReq(k: Constants, s: Variables, io: IO, ref: BC.Reference)
   : (res : (Variables, IO))
   requires s.Ready?
   requires io.IOInit?
@@ -290,6 +292,7 @@ module IOModel {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
+    reveal_PageInReq();
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       assert noop(k, IVars(s), IVars(s));
     } else {
@@ -297,6 +300,7 @@ module IOModel {
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
       assert BC.ValidLocationForNode(loc);
       var (id, io') := RequestRead(io, loc);
+      reveal_RequestRead();
       var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
 
       assert WFVars(s');
@@ -317,7 +321,7 @@ module IOModel {
     }
   }
 
-  function ReadSector(io: IO)
+  function {:opaque} ReadSector(io: IO)
   : (res : (D.ReqId, Option<Sector>))
   requires diskOp(io).RespReadOp?
   {
@@ -337,6 +341,7 @@ module IOModel {
     && sector.Some? ==> WFSector(sector.value)
     && M.IDiskOp(diskOp(io)) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
   {
+    reveal_ReadSector();
     Marshalling.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();
     IMM.reveal_parseCheckedSector();
@@ -346,11 +351,12 @@ module IOModel {
     D.reveal_ChecksumChecksOut();
   }
 
-  function PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
+  function {:opaque} PageInIndirectionTableResp(k: Constants, s: Variables, io: IO)
   : (s' : Variables)
   requires diskOp(io).RespReadOp?
   requires s.Unready?
   {
+    ReadSectorCorrect(io);
     var (id, sector) := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var ephemeralIndirectionTable := sector.value.indirectionTable;
@@ -376,6 +382,8 @@ module IOModel {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
+    reveal_PageInIndirectionTableResp(); 
+    reveal_ReadSector(); 
     var (id, sector) := ReadSector(io);
     ReadSectorCorrect(io);
 
@@ -410,7 +418,7 @@ module IOModel {
     assert stepsBC(k, IVars(s), IVars(s), UI.NoOp, io, BC.NoOpStep);
   }
 
-  function PageInResp(k: Constants, s: Variables, io: IO)
+  function {:opaque} PageInResp(k: Constants, s: Variables, io: IO)
   : (s': Variables)
   requires diskOp(io).RespReadOp?
   requires s.Ready?
@@ -457,6 +465,7 @@ module IOModel {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
+    reveal_PageInResp();
     var s' := PageInResp(k, s, io);
 
     var (id, sector) := ReadSector(io);
@@ -503,7 +512,7 @@ module IOModel {
     }
   }
 
-  function readResponse(k: Constants, s: Variables, io: IO)
+  function {:opaque} readResponse(k: Constants, s: Variables, io: IO)
   : (s': Variables)
   requires diskOp(io).RespReadOp?
   requires s.Ready? ==> IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -522,6 +531,7 @@ module IOModel {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
+    reveal_readResponse();
     if (s.Unready?) {
       PageInIndirectionTableRespCorrect(k, s, io);
     } else {
@@ -675,7 +685,7 @@ module IOModel {
     }
   }
 
-  function writeResponse(k: Constants, s: Variables, io: IO)
+  function {:opaque} writeResponse(k: Constants, s: Variables, io: IO)
   : (s': Variables)
   requires Inv(k, s)
   requires diskOp(io).RespWriteOp?
@@ -706,6 +716,7 @@ module IOModel {
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
+    reveal_writeResponse();
     reveal_ConsistentBitmap();
     var id := io.id;
     var s' := writeResponse(k, s, io);

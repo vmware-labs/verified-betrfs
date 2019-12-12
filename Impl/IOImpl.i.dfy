@@ -99,6 +99,7 @@ module IOImpl {
   modifies io
   ensures (id, IIO(io)) == IOModel.RequestRead(old(IIO(io)), loc)
   {
+    IOModel.reveal_RequestRead();
     id := io.read(loc.addr, loc.len);
   }
 
@@ -134,6 +135,7 @@ module IOImpl {
   ensures s.ready
   ensures (s.I(), IIO(io)) == IOModel.PageInReq(Ic(k), old(s.I()), old(IIO(io)), ref)
   {
+    IOModel.reveal_PageInReq();
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
     } else {
@@ -165,6 +167,7 @@ module IOImpl {
   ensures sector.Some? ==> fresh(SectorRepr(sector.value))
   ensures (id, ISectorOpt(sector)) == IOModel.ReadSector(old(IIO(io)))
   {
+    IOModel.reveal_ReadSector();
     var id1, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= BlockSizeUint64() {
@@ -184,6 +187,9 @@ module IOImpl {
   ensures WellUpdated(s)
   ensures s.I() == IOModel.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
   {
+    IOModel.reveal_PageInIndirectionTableResp(); 
+    IOModel.ReadSectorCorrect(IIO(io));
+
     var id, sector := ReadSector(io);
     if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
@@ -227,6 +233,8 @@ module IOImpl {
   ensures WellUpdated(s)
   ensures s.I() == IOModel.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
   {
+    IOModel.reveal_PageInResp();
+
     var id, sector := ReadSector(io);
     assert sector.Some? ==> SI.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
@@ -291,6 +299,7 @@ module IOImpl {
   ensures WellUpdated(s)
   ensures s.I() == IOModel.readResponse(Ic(k), old(s.I()), IIO(io))
   {
+    IOModel.reveal_readResponse();
     if (!s.ready) {
       PageInIndirectionTableResp(k, s, io);
     } else {
@@ -370,6 +379,8 @@ module IOImpl {
   ensures WellUpdated(s)
   ensures s.I() == IOModel.writeResponse(Ic(k), old(s.I()), IIO(io))
   {
+    IOModel.reveal_writeResponse();
+
     var id := io.getWriteResult();
     if (s.ready && s.outstandingIndirectionTableWrite == Some(id)) {
       IOModel.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
