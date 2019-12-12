@@ -41,7 +41,7 @@ module SuccImpl {
       start: UI.RangeStart,
       upTo: Option<MS.Key>,
       maxToFind: uint64,
-      ref: BT.G.Reference,
+      ref: G.Reference,
       counter: uint64,
       node: Node)
   returns (res : Option<UI.SuccResultList>)
@@ -147,7 +147,7 @@ module SuccImpl {
       start: UI.RangeStart,
       upTo: Option<MS.Key>,
       maxToFind: uint64,
-      ref: BT.G.Reference,
+      ref: G.Reference,
       counter: uint64)
   returns (res : Option<UI.SuccResultList>)
   requires Inv(k, s)
@@ -212,7 +212,7 @@ module SuccImpl {
       res := None;
     } else {
       var startKey := if start.NegativeInf? then [] else start.key;
-      res := getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40);
+      res := getPath(k, s, io, startKey, [], start, None, maxToFind, G.Root(), 40);
     }
   }
 }

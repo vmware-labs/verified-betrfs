@@ -25,7 +25,7 @@ module PivotBetreeSpecRefinement {
   import opened Options
   import opened PivotsLib
   import opened BucketsLib
-  import PivotBetreeSpecWFNodes
+  import PivotBetreeSpecWFNodes`Internal
 
   type Node = B.G.Node
   type PNode = P.G.Node

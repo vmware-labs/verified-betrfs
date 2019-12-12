@@ -18,7 +18,7 @@ module LeafImpl {
 
   import opened NativeTypes
 
-  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: Node)
+  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: G.Reference, node: Node)
   requires Inv(k, s)
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.I().graph

@@ -739,7 +739,12 @@ module PivotBetreeSpec {
 }
 
 module PivotBetreeSpecWFNodes {
+  export MainLemma provides ValidStepWritesWFNodes, PBS
+  export Internal reveals *
+  export extends MainLemma
+
   import opened Options
+  import PBS = PivotBetreeSpec`Spec
   import opened PivotBetreeSpec`Internal
   import opened Maps
   import opened Sequences
@@ -914,9 +919,9 @@ module PivotBetreeSpecWFNodes {
   }
 
   // This lemma is useful for BetreeBlockCache
-  lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
-  requires ValidBetreeStep(betreeStep)
-  ensures forall i | 0 <= i < |BetreeStepOps(betreeStep)| :: G.WFNode(BetreeStepOps(betreeStep)[i].node)
+  lemma ValidStepWritesWFNodes(betreeStep: PBS.BetreeStep)
+  requires PBS.ValidBetreeStep(betreeStep)
+  ensures forall i | 0 <= i < |PBS.BetreeStepOps(betreeStep)| :: G.WFNode(PBS.BetreeStepOps(betreeStep)[i].node)
   {
     match betreeStep {
       case BetreeQuery(q) => {}

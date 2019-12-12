@@ -23,7 +23,7 @@ module FlushImpl {
   import FlushModel
   import CacheImpl`WithBuckets
 
-  method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
+  method flush(k: ImplConstants, s: ImplVariables, parentref: G.Reference, slot: uint64, childref: G.Reference, child: Node)
   requires Inv(k, s)
   requires s.ready
 

@@ -23,7 +23,7 @@ module GrowImpl {
   method grow(k: ImplConstants, s: ImplVariables)
   requires Inv(k, s)
   requires s.ready
-  requires BT.G.Root() in s.cache.I()
+  requires G.Root() in s.cache.I()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
   modifies s.Repr()
   ensures WellUpdated(s)
@@ -32,19 +32,19 @@ module GrowImpl {
   {
     GrowModel.reveal_grow();
 
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), G.Root());
 
     assert s.blockAllocator.Repr <= s.Repr();
 
     if s.frozenIndirectionTable != null {
-      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      var b := s.frozenIndirectionTable.HasEmptyLoc(G.Root());
       if b {
         print "giving up; grow can't run because frozen isn't written";
         return;
       }
     }
 
-    var oldrootOpt := s.cache.GetOpt(BT.G.Root());
+    var oldrootOpt := s.cache.GetOpt(G.Root());
     var oldroot := oldrootOpt.value;
 
     BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
@@ -65,12 +65,12 @@ module GrowImpl {
         var newroot := new Node([], Some([newref]), [mutbucket]);
         
         assert newroot.I() == IM.Node([], Some([newref]), [map[]]);
-        assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
+        assert s.I().cache[G.Root()] == old(s.I().cache[G.Root()]);
         assert fresh(newroot.Repr);
 
-        writeBookkeeping(k, s, BT.G.Root(), newroot.children);
+        writeBookkeeping(k, s, G.Root(), newroot.children);
 
-        s.cache.MoveAndReplace(BT.G.Root(), newref, newroot);
+        s.cache.MoveAndReplace(G.Root(), newref, newroot);
 
         ghost var a := s.I();
         ghost var b := GrowModel.grow(Ic(k), old(s.I()));

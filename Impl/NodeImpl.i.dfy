@@ -11,7 +11,7 @@ include "InsertModel.i.dfy"
 
 module NodeImpl {
   export Minimal
-    provides Node, Node.Inv, Node.I, Node.Repr, IM, Node.BucketsInv, Node.children, BT, Options
+    provides Node, Node.Inv, Node.I, Node.Repr, IM, Node.BucketsInv, Node.children, BTG, Options
   export Basic extends Minimal
     provides
         Node._ctor,
@@ -21,7 +21,7 @@ module NodeImpl {
         Node.UpdateSlot,
         Node.LemmaRepr,
         Node.LemmaReprSeqBucketsLeRepr,
-        Pivots, BT, Options, NativeTypes, BucketImpl, BucketWeights
+        Pivots, BTG, Options, NativeTypes, BucketImpl, BucketWeights
     reveals Node.BucketsInv
   export BasicWithSplitting extends Basic
     provides
@@ -42,7 +42,7 @@ module NodeImpl {
   import opened NativeTypes
 
   import IM = StateModel
-  import BT = PivotBetreeSpec`Internal
+  import BTG = PivotBetreeGraph
   import Pivots = PivotsLib
   import opened Bounds
   import opened BucketImpl`Basic
@@ -57,13 +57,13 @@ module NodeImpl {
   class Node
   {
     var pivotTable: Pivots.PivotTable;
-    var children: Option<seq<BT.G.Reference>>;
+    var children: Option<seq<BTG.Reference>>;
     var buckets: seq<BucketImpl.MutBucket>;
     ghost var Repr: set<object>;
 
     constructor(
       pivotTable: Pivots.PivotTable,
-      children: Option<seq<BT.G.Reference>>,
+      children: Option<seq<BTG.Reference>>,
       buckets: seq<BucketImpl.MutBucket>)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     requires MutBucket.ReprSeqDisjoint(buckets)
@@ -118,7 +118,7 @@ module NodeImpl {
         BucketImpl.MutBucket.ISeq(buckets))
     }
 
-    method UpdateSlot(slot: uint64, bucket: BucketImpl.MutBucket, childref: BT.G.Reference)
+    method UpdateSlot(slot: uint64, bucket: BucketImpl.MutBucket, childref: BTG.Reference)
     requires Inv()
     requires bucket.Inv()
     requires children.Some?
@@ -170,7 +170,7 @@ module NodeImpl {
       }
     }
 
-    method SplitParent(slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+    method SplitParent(slot: uint64, pivot: Key, left_childref: BTG.Reference, right_childref: BTG.Reference)
     requires Inv()
     requires IM.WFNode(I())
     requires children.Some?

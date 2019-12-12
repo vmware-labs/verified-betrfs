@@ -20,7 +20,7 @@ module SplitImpl {
 
   import opened NativeTypes
 
-  method splitBookkeeping(k: ImplConstants, s: ImplVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: uint64)
+  method splitBookkeeping(k: ImplConstants, s: ImplVariables, left_childref: G.Reference, right_childref: G.Reference, parentref: G.Reference, fused_parent_children: seq<G.Reference>, left_child: Node, right_child: Node, slot: uint64)
   requires Inv(k, s)
   requires 0 <= slot as int < |fused_parent_children|
   requires slot as int < MaxNumChildren()
@@ -64,8 +64,8 @@ module SplitImpl {
     writeBookkeeping(k, s, parentref, Some(rep));
   }
 
-  method splitCacheChanges(s: ImplVariables, left_childref: BT.G.Reference,
-      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: uint64, num_children_left: uint64, pivot: Key, left_child: Node, right_child: Node)
+  method splitCacheChanges(s: ImplVariables, left_childref: G.Reference,
+      right_childref: G.Reference, parentref: G.Reference, slot: uint64, num_children_left: uint64, pivot: Key, left_child: Node, right_child: Node)
   requires s.ready
   requires s.W()
   requires s.cache.ptr(parentref).Some?
@@ -95,8 +95,8 @@ module SplitImpl {
   }
 
   method splitDoChanges(k: ImplConstants, s: ImplVariables, child: Node,
-      left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
-      fused_parent_children: seq<BT.G.Reference>, slot: uint64)
+      left_childref: G.Reference, right_childref: G.Reference, parentref: G.Reference,
+      fused_parent_children: seq<G.Reference>, slot: uint64)
   requires Inv(k, s)
   requires child.Inv()
 
@@ -135,7 +135,7 @@ module SplitImpl {
     SplitModel.reveal_splitDoChanges();
   }
 
-  method doSplit(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64)
+  method doSplit(k: ImplConstants, s: ImplVariables, parentref: G.Reference, childref: G.Reference, slot: uint64)
   requires s.ready
   requires Inv(k, s)
   requires childref in s.ephemeralIndirectionTable.I().graph
