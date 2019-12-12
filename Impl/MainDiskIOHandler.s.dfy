@@ -5,7 +5,7 @@ include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
 
 module {:extern "MainDiskIOHandler_Compile"} MainDiskIOHandler {
   import opened NativeTypes
-  import D = AsyncDisk
+  import D = DiskOps
 
   class {:extern} DiskIOHandler {
     method {:extern "MainDiskIOHandler_Compile", "write"} 

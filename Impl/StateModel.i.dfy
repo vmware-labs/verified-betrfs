@@ -32,7 +32,7 @@ module StateModel {
   import BC = BetreeGraphBlockCache
   import BBC = BetreeBlockCache
   import SD = AsyncSectorDisk
-  import D = AsyncDisk
+  import D = DiskOps
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds

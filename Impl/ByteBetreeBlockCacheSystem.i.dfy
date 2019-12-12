@@ -22,30 +22,31 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import BBCS = BetreeBlockCacheSystem
   import SD = AsyncSectorDisk
   import LBAType
+  import DiskOps
   type Location = BBC.Location
 
-  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp<BBC.Sector>
+  function IDiskOp(diskOp: DiskOps.DiskOp) : SD.DiskOp<BBC.Sector>
   requires M.ValidDiskOp(diskOp)
   {
     M.IDiskOp(diskOp)
   }
 
-  function IReqReads(reqReads: map<D.ReqId, D.ReqRead>) : map<SD.ReqId, SD.ReqRead>
+  function IReqReads(reqReads: map<DiskOps.ReqId, DiskOps.ReqRead>) : map<SD.ReqId, SD.ReqRead>
   requires forall id | id in reqReads :: M.ValidReqRead(reqReads[id])
   {
     map id | id in reqReads :: M.IReqRead(reqReads[id])
   }
-  function IReqWrites(reqWrites: map<D.ReqId, D.ReqWrite>) : map<SD.ReqId, SD.ReqWrite<BBC.Sector>>
+  function IReqWrites(reqWrites: map<DiskOps.ReqId, DiskOps.ReqWrite>) : map<SD.ReqId, SD.ReqWrite<BBC.Sector>>
   requires forall id | id in reqWrites :: M.ValidReqWrite(reqWrites[id])
   {
     map id | id in reqWrites :: M.IReqWrite(reqWrites[id])
   }
-  function IRespReads(respReads: map<D.ReqId, D.RespRead>) : map<SD.ReqId, SD.RespRead<BBC.Sector>>
+  function IRespReads(respReads: map<DiskOps.ReqId, DiskOps.RespRead>) : map<SD.ReqId, SD.RespRead<BBC.Sector>>
   requires forall id | id in respReads :: M.ValidRespRead(respReads[id])
   {
     map id | id in respReads :: M.IRespRead(respReads[id])
   }
-  function IRespWrites(respWrites: map<D.ReqId, D.RespWrite>) : map<SD.ReqId, SD.RespWrite>
+  function IRespWrites(respWrites: map<DiskOps.ReqId, DiskOps.RespWrite>) : map<SD.ReqId, SD.RespWrite>
   requires forall id | id in respWrites :: M.ValidRespWrite(respWrites[id])
   {
     map id | id in respWrites :: M.IRespWrite(respWrites[id])
@@ -212,7 +213,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   }
 
   lemma {:fuel M.IBytes,0} {:fuel BC.Inv,0} {:fuel BC.WFIndirectionTable,0} {:fuel BC.WFCompleteIndirectionTable,0} {:fuel BC.GraphClosed,0}
-  ProcessReadRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+  ProcessReadRefines(k: Constants, s: Variables, s': Variables, id: DiskOps.ReqId)
   requires Inv(k, s)
   requires D.ProcessRead(k.disk, s.disk, s'.disk, id)
   ensures ValidDisk(s'.disk)
@@ -220,7 +221,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   {
   }
 
-  lemma ProcessReadFailureRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma ProcessReadFailureRefines(k: Constants, s: Variables, s': Variables, id: DiskOps.ReqId, fakeContents: seq<byte>)
   requires Inv(k, s)
   requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id, fakeContents)
   ensures ValidDisk(s'.disk)
@@ -269,7 +270,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   }
 
   lemma {:fuel M.IBytes,0}
-  ProcessWriteRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+  ProcessWriteRefines(k: Constants, s: Variables, s': Variables, id: DiskOps.ReqId)
   requires Inv(k, s)
   requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
   ensures ValidDisk(s'.disk)
@@ -306,7 +307,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     assert i == j;
   }
 
-  lemma HavocConflictingWriteReadStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
+  lemma HavocConflictingWriteReadStepImpossible(k: Constants, s: Variables, s': Variables, id: DiskOps.ReqId, id': DiskOps.ReqId)
   requires Inv(k, s)
   requires D.HavocConflictingWriteRead(k.disk, s.disk, s'.disk, id, id')
   ensures false
@@ -318,7 +319,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
         == IReqReads(s.disk.reqReads)[id'].loc.addr;
   }
 
-  lemma HavocConflictingWritesStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
+  lemma HavocConflictingWritesStepImpossible(k: Constants, s: Variables, s': Variables, id: DiskOps.ReqId, id': DiskOps.ReqId)
   requires Inv(k, s)
   requires D.HavocConflictingWrites(k.disk, s.disk, s'.disk, id, id')
   ensures false

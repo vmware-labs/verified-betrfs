@@ -13,11 +13,9 @@ module AsyncDiskModelTypes {
   datatype AsyncDiskModelVariables<M,D> = AsyncDiskModelVariables(machine: M, disk: D)
 }
 
-module AsyncDisk {
+module DiskOps {
   import opened NativeTypes
-  import opened Maps
   import Crypto
-
   type ReqId = uint64
 
   datatype ReqRead = ReqRead(addr: uint64, len: uint64)
@@ -31,6 +29,17 @@ module AsyncDisk {
     | RespReadOp(id: ReqId, respRead: RespRead)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
+
+  predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
+    && |s| >= 32
+    && s[0..32] == Crypto.Crc32C(s[32..])
+  }
+}
+
+module AsyncDisk {
+  import opened DiskOps
+  import opened Maps
+  import opened NativeTypes
 
   datatype Constants = Constants()
   datatype Variables = Variables(
@@ -127,11 +136,6 @@ module AsyncDisk {
               .(respReads := s.respReads[id := RespRead(s.contents[req.addr .. req.addr as int + req.len as int])])
   }
 
-  predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
-    && |s| >= 32
-    && s[0..32] == Crypto.Crc32C(s[32..])
-  }
-
   predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
   {
     && id in s.reqReads
@@ -224,7 +228,7 @@ module AsyncDisk {
 
 // Interface to the implementer-supplied program that is getting verified.
 abstract module AsyncDiskMachine {
-  import D = AsyncDisk
+  import D = DiskOps
   import UI
 
   type Variables

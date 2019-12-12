@@ -19,7 +19,7 @@ module FlushModel {
   import opened Bounds
 
   import opened NativeTypes
-  import D = AsyncDisk
+  import D = DiskOps
 
   function flush(k: Constants, s: Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
   : Variables
