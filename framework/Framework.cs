@@ -1,4 +1,4 @@
-using Handlers_Compile;
+using MainHandlers_Compile;
 using MainDiskIOHandler_Compile;
 using UI_Compile;
 
@@ -185,7 +185,7 @@ namespace MainDiskIOHandler_Compile {
 class Application {
   // TODO hard-coding these types is annoying... is there another option?
   public BetreeGraphBlockCache_Compile.Constants k;
-  public Handlers_Compile.HeapState hs;
+  public MainHandlers_Compile.HeapState hs;
 
   public DiskIOHandler io;
 
