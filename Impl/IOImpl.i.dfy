@@ -11,7 +11,7 @@ module IOImpl {
   import opened CacheImpl
   import StateModel
   import MarshallingImpl
-  import IMM = ImplMarshallingModel
+  import IMM = MarshallingModel
   import IOModel
   import BucketsLib
   import LruModel

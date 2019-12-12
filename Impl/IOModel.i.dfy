@@ -16,7 +16,7 @@ module IOModel {
   import opened Maps
   import opened Bounds
   import opened BucketWeights
-  import IMM = ImplMarshallingModel
+  import IMM = MarshallingModel
   import Marshalling = Marshalling
   import LBAType
   import BucketsLib

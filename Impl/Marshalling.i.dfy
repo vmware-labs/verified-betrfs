@@ -13,7 +13,14 @@ include "MarshallingModel.i.dfy"
 //
 
 module Marshalling {
-  import IMM = ImplMarshallingModel
+  export S
+	    provides parseCheckedSector, parseSector,
+	        NativeTypes, Options, BC
+
+	export Internal reveals *
+	export extends S
+
+  import IMM = MarshallingModel`Internal
   import IM = StateModel
   import opened GenericMarshalling
   import opened Options

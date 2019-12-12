@@ -18,7 +18,14 @@ include "KVList.i.dfy"
 // TODO(jonh): rename to ModelParsing.
 //
 
-module ImplMarshallingModel {
+module MarshallingModel {
+  export S
+	    provides parseCheckedSector, NativeTypes, Options, SM, IndirectionTableModel
+	    reveals Sector
+
+	export Internal reveals *
+	export extends S
+
   import opened GenericMarshalling
   import opened Options
   import opened NativeTypes

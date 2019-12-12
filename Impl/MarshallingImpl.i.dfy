@@ -11,7 +11,7 @@ include "MarshallingModel.i.dfy"
 module MarshallingImpl {
   export S
 	    provides MarshallCheckedSector, ParseCheckedSector,
-	        NativeTypes, StateImpl, Options, IM, IMM, BT, Bounds
+	        NativeTypes, StateImpl, Options, IM, MarshallingModel, BT, Bounds
       reveals Sector, ISectorOpt
 
 	export Internal reveals *
@@ -20,8 +20,9 @@ module MarshallingImpl {
   import IM = StateModel
   import opened NodeImpl
   import opened CacheImpl
-  import Marshalling
-  import IMM = ImplMarshallingModel
+  import Marshalling`Internal
+  import IMM = MarshallingModel`Internal
+  import MarshallingModel
   import opened GenericMarshalling
   import opened Options
   import opened NativeTypes
@@ -674,7 +675,7 @@ module MarshallingImpl {
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
-      && IM.ISector(IMM.parseCheckedSector(data[..]).value)
+      && IM.ISector(MarshallingModel.parseCheckedSector(data[..]).value)
       == IM.ISector(StateImpl.ISector(sector))
   ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length

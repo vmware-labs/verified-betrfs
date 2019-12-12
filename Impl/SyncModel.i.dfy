@@ -13,8 +13,6 @@ module SyncModel {
   import opened DeallocModel
   import opened Bounds
 
-  import IMM = ImplMarshallingModel
-
   import opened Options
   import opened Maps
   import opened Sequences

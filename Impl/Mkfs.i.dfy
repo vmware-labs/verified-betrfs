@@ -5,7 +5,7 @@ include "MarshallingImpl.i.dfy"
 // TODO make separate spec abstract module
 module {:extern} MkfsImpl {
   import MarshallingImpl
-  import IMM = ImplMarshallingModel
+  import IMM = MarshallingModel
   import opened Options
   import opened NativeTypes
   import opened BucketWeights
