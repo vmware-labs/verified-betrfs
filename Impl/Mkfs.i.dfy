@@ -11,7 +11,7 @@ module {:extern} MkfsImpl {
   import opened BucketWeights
   import SM = StateModel
   import opened BucketImpl`Internal
-  import opened NodeImpl
+  import opened NodeImpl`Basic
   import KVList
   import IndirectionTableModel
   import IndirectionTableImpl`Internal

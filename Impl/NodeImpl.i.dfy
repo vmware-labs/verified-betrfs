@@ -10,6 +10,33 @@ include "InsertModel.i.dfy"
 //
 
 module NodeImpl {
+  export Minimal
+    provides Node, Node.Inv, Node.I, Node.Repr, IM, Node.BucketsInv, Node.children, BT, Options
+  export Basic extends Minimal
+    provides
+        Node._ctor,
+        Node.buckets,
+        Node.pivotTable,
+        Node.children,
+        Node.UpdateSlot,
+        Node.LemmaRepr,
+        Node.LemmaReprSeqBucketsLeRepr,
+        Pivots, BT, Options, NativeTypes, BucketImpl, BucketWeights
+    reveals Node.BucketsInv
+  export BasicWithSplitting extends Basic
+    provides
+        Node.SplitParent,
+        Node.SplitChildLeft,
+        Node.SplitChildRight,
+        Node.CutoffNode,
+        SplitModel
+  export BasicWithInserting extends Basic
+    provides
+        Node.InsertKeyValue,
+        InsertModel
+  export Internal reveals *
+  export extends Minimal
+
   import opened Options
   import opened Sequences
   import opened NativeTypes
@@ -56,11 +83,15 @@ module NodeImpl {
       MutBucket.reveal_ReprSeq();
     }
 
+    predicate BucketsInv()
+    {
+      forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    }
+
     protected predicate Inv()
     reads this, Repr
     ensures Inv() ==> this in Repr
-    ensures Inv() ==>
-      forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    ensures Inv() ==> BucketsInv()
     {
       && (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
       && Repr == {this} + MutBucket.ReprSeq(buckets)

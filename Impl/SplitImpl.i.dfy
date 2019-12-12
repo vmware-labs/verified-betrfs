@@ -6,7 +6,7 @@ module SplitImpl {
   import opened BookkeepingImpl
   import SplitModel
   import opened StateImpl
-  import opened NodeImpl
+  import opened NodeImpl`BasicWithSplitting
 
   import opened Options
   import opened Maps

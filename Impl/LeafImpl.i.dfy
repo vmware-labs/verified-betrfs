@@ -6,7 +6,7 @@ module LeafImpl {
   import opened BookkeepingImpl
   import opened LeafModel
   import opened StateImpl
-  import opened NodeImpl
+  import opened NodeImpl`Basic
   import opened BucketImpl`Internal
 
   import opened Options

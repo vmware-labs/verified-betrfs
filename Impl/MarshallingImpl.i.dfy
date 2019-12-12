@@ -18,7 +18,7 @@ module MarshallingImpl {
 	export extends S
 
   import IM = StateModel
-  import opened NodeImpl
+  import opened NodeImpl`Basic
   import opened CacheImpl
   import Marshalling`Internal
   import IMM = MarshallingModel`Internal

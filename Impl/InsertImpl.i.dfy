@@ -27,6 +27,8 @@ module InsertImpl {
   import opened BucketWeights
   import opened Bounds
 
+  import NodeImpl`BasicWithInserting
+
   import opened PBS = PivotBetreeSpec`Spec
 
   method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)

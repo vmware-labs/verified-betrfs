@@ -4,7 +4,7 @@ include "FlushModel.i.dfy"
 module FlushImpl { 
   import opened BookkeepingImpl
   import opened StateImpl
-  import opened NodeImpl
+  import opened NodeImpl`Basic
 
   import opened Options
   import opened MainDiskIOHandler

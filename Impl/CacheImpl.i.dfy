@@ -27,7 +27,8 @@ module CacheImpl {
 	export Internal reveals *
 	export extends Basic
 
-  import opened NodeImpl
+  import opened NodeImpl`Minimal
+  import NI = NodeImpl`Internal
   import opened Options
   import opened Maps
   import opened NativeTypes
@@ -35,6 +36,9 @@ module CacheImpl {
   import opened BucketWeights
   import BT = PivotBetreeSpec
   import KeyType
+  import MM = MutableMap
+  import SplitModel
+  import InsertModel
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field

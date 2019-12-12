@@ -14,6 +14,7 @@ module QueryImpl {
   import BookkeepingModel
   import opened StateImpl
   import opened BucketImpl
+  import NodeImpl`Basic
 
   import opened Options
   import opened NativeTypes

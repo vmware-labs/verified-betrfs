@@ -16,7 +16,7 @@ module SuccImpl {
   import opened StateImpl
   import opened BucketImpl
   import opened Lexicographic_Byte_Order
-  import opened NodeImpl
+  import opened NodeImpl`Basic
   import BucketSuccessorLoopImpl
   import BucketSuccessorLoopModel
 
