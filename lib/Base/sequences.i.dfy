@@ -247,7 +247,7 @@ module Sequences {
     s[..i] + [t] + s[i+1..]
   }
 
-  function Zip<A,B>(a: seq<A>, b: seq<B>) : seq<(A,B)>
+  function {:opaque} Zip<A,B>(a: seq<A>, b: seq<B>) : seq<(A,B)>
     requires |a| == |b|
     ensures |Zip(a, b)| == |a|
     ensures forall i :: 0 <= i < |Zip(a, b)| ==> Zip(a, b)[i] == (a[i], b[i])
@@ -256,7 +256,7 @@ module Sequences {
     else Zip(DropLast(a), DropLast(b)) + [(Last(a), Last(b))]
   }
 
-  function Unzip<A,B>(z: seq<(A, B)>) : (seq<A>, seq<B>)
+  function {:opaque} Unzip<A,B>(z: seq<(A, B)>) : (seq<A>, seq<B>)
     ensures |Unzip(z).0| == |Unzip(z).1| == |z|
     ensures forall i :: 0 <= i < |z| ==> (Unzip(z).0[i], Unzip(z).1[i]) == z[i]
   {
@@ -266,8 +266,17 @@ module Sequences {
       (a + [Last(z).0], b + [Last(z).1])
   }
 
-
-
+  lemma ZipOfUnzip<A,B>(s: seq<(A,B)>)
+    ensures Zip(Unzip(s).0, Unzip(s).1) == s
+  {
+  }
+  
+  lemma UnzipOfZip<A,B>(sa: seq<A>, sb: seq<B>)
+    requires |sa| == |sb|
+    ensures Unzip(Zip(sa, sb)).0 == sa
+    ensures Unzip(Zip(sa, sb)).1 == sb
+  {
+  }
   
   function {:opaque} FlattenShape<A>(seqs: seq<seq<A>>) : (shape: seq<nat>)
     ensures |shape| == |seqs|

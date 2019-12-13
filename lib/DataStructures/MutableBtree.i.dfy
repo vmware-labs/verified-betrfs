@@ -23,10 +23,10 @@ abstract module MutableBtree {
   type Value = Spec.Value
 
   function method MaxKeysPerLeaf() : uint64
-    ensures 1 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 2
+    ensures 1 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 4
 
   function method MaxChildren() : uint64
-    ensures 3 < MaxChildren() as int < Uint64UpperBound() / 2
+    ensures 3 < MaxChildren() as int < Uint64UpperBound() / 4
 
   function method DefaultValue() : Value
   function method DefaultKey() : Key
@@ -176,6 +176,39 @@ abstract module MutableBtree {
     }
   }
 
+  method EmptyTree() returns (root: Node)
+    ensures WF(root)
+    ensures fresh(root.repr)
+    ensures Interpretation(root) == map[]
+    ensures root.contents.Leaf?
+  {
+    var rootkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
+    var rootvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
+    root := new Node;
+    root.contents := Leaf(0, rootkeys, rootvalues);
+    root.repr := {root, rootkeys, rootvalues};
+    root.height := 0;
+  }
+
+  method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
+    returns (node: Node)
+    requires |keys| == |values| <= MaxKeysPerLeaf() as int
+    requires Spec.Keys.IsStrictlySorted(keys)
+    ensures WF(node)
+    ensures node.contents.Leaf?
+    ensures fresh(node.repr)
+    ensures node.contents.keys[..node.contents.nkeys] == keys
+    ensures node.contents.values[..node.contents.nkeys] == values
+    ensures Spec.Keys.SortedSeqForMap(Zip(keys, values), Interpretation(node))
+  {
+    node := EmptyTree();
+    Arrays.Memcpy(node.contents.keys, 0, keys);
+    Arrays.Memcpy(node.contents.values, 0, values);
+    node.contents := node.contents.(nkeys := |keys|);
+    assert node.contents.keys[..node.contents.nkeys] == keys;
+    Spec.ToSeqIsSortedSeqForInterpretation(I(node));
+  }
+
   predicate method Full(node: Node)
     reads node
   {
@@ -200,15 +233,9 @@ abstract module MutableBtree {
     modifies node
   {
     reveal_I();
-    var rightkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
-    var rightvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
-    Arrays.Memcpy(rightkeys, 0, node.contents.keys[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
-    Arrays.Memcpy(rightvalues, 0, node.contents.values[nleft..node.contents.nkeys]); // FIXME: remove conversion to seq
-
-    right := new Node;
-    right.repr := {right, rightkeys, rightvalues};
-    right.height := 0;
-    right.contents := Leaf(node.contents.nkeys - nleft, rightkeys, rightvalues);
+    Spec.Keys.StrictlySortedSubsequence(node.contents.keys[..node.contents.nkeys], nleft as int, node.contents.nkeys as int);
+    assert node.contents.keys[nleft..node.contents.nkeys] == node.contents.keys[..node.contents.nkeys][nleft..node.contents.nkeys];
+    right := LeafFromSeqs(node.contents.keys[nleft..node.contents.nkeys], node.contents.values[nleft..node.contents.nkeys]);
 
     node.contents := Leaf(nleft, node.contents.keys, node.contents.values);
     wit := node.contents.keys[0];
@@ -396,7 +423,6 @@ abstract module MutableBtree {
       
     ghost var isubnode := I(subnode);
     ghost var inode := I(node);
-    assert isubnode.pivots == inode.pivots[from..to - 1];
     forall ensures isubnode.children == inode.children[from..to]
     {
       reveal_I();
@@ -966,20 +992,6 @@ abstract module MutableBtree {
     assert Spec.Interpretation(I(newroot)) == Spec.Interpretation(old(I(root)));
     InsertNode(newroot, key, value);
   }
-
-  method EmptyTree() returns (root: Node)
-    ensures WF(root)
-    ensures fresh(root.repr)
-    ensures Interpretation(root) == map[]
-  {
-    var rootkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
-    var rootvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
-    root := new Node;
-    root.contents := Leaf(0, rootkeys, rootvalues);
-    root.repr := {root, rootkeys, rootvalues};
-    root.height := 0;
-  }
-
 }
 
 module TestBtreeSpec refines BtreeSpec {

@@ -1083,5 +1083,20 @@ abstract module BtreeSpec {
       }
     }
   }
+
+  lemma ToSeqIsSortedSeqForInterpretation(node: Node)
+    requires WF(node)
+    ensures Keys.SortedSeqForMap(Zip(ToSeq(node).0, ToSeq(node).1), Interpretation(node))
+  {
+    ToSeqIsStrictlySorted(node);
+    ToSeqInInterpretation(node);
+    ToSeqCoversInterpretation(node);
+    Keys.reveal_SortedSeqForMap();
+
+    var (keys, values) := ToSeq(node);
+    var kvlist := Zip(keys, values);
+    assert keys == Unzip(kvlist).0;
+    // assert Keys.IsStrictlySorted(keys);
+  }
 }
 
