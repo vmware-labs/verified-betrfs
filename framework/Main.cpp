@@ -9,7 +9,7 @@ int main()
   app.Insert("abc", "def");
   app.Insert("xyq", "rawr");
   app.Query("abc");
-  /*
+
   app.Query("xyq");
   app.Query("blahblah");
   app.crash();
@@ -23,5 +23,4 @@ int main()
   app.crash();
   app.Query("abc");
   app.Query("xyq");
-  */
 }
