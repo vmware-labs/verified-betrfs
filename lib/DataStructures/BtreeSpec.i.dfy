@@ -933,7 +933,7 @@ abstract module BtreeSpec {
       (kv1.0 + [kv2.0], kv1.1 + [kv2.1])
   }
     
-  function ToSeq(node: Node) : (kvlists : (seq<Key>, seq<Value>))
+  function {:opaque} ToSeq(node: Node) : (kvlists : (seq<Key>, seq<Value>))
     requires WF(node)
     ensures |kvlists.0| == |kvlists.1|
   {
@@ -968,6 +968,7 @@ abstract module BtreeSpec {
     requires WF(node)
     ensures |ToSeq(node).0| == NumElements(node)
   {
+    reveal_ToSeq();
     if node.Leaf? {
     } else {
       ToSeqChildrenLength(node.children);
@@ -979,6 +980,7 @@ abstract module BtreeSpec {
     ensures forall key :: key in ToSeq(node).0 ==> key in AllKeys(node)
   {
     var (keys, values) := ToSeq(node);
+    reveal_ToSeq();
     
     if node.Index? {
       var (childkeys, chilvalues) := ToSeqChildren(node.children);
@@ -1000,6 +1002,8 @@ abstract module BtreeSpec {
     ensures Keys.IsStrictlySorted(ToSeq(node).0);
   {
     var (keys, values) := ToSeq(node);
+
+    reveal_ToSeq();
     
     if node.Index? {
       var (keylists, valuelists) := ToSeqChildren(node.children);
@@ -1032,6 +1036,8 @@ abstract module BtreeSpec {
   {
     var (keys, values) := ToSeq(node);
     var interp := Interpretation(node);
+    
+    reveal_ToSeq();
     
     if node.Leaf? {
       forall i | 0 <= i < |keys|
@@ -1069,6 +1075,8 @@ abstract module BtreeSpec {
   {
     var (keys, values) := ToSeq(node);
     var interp := Interpretation(node);
+    
+    reveal_ToSeq();
     
     if node.Index? {
       var (keylists, valuelists) := ToSeqChildren(node.children);
@@ -1158,6 +1166,13 @@ abstract module BtreeSpec {
     }
   }
 
+  lemma BoundaryPivotsStrictlySorted(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
+    requires Keys.IsStrictlySorted(keys)
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires |pivots| == |boundaries| - 2
+    requires forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]]
+    ensures Keys.IsStrictlySorted(pivots)
+  
   lemma FromSeqWF(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>, children: seq<Node>)
     requires Keys.IsStrictlySorted(keys)
     requires ValidBoundariesForKeys(|keys|, boundaries)
@@ -1165,9 +1180,31 @@ abstract module BtreeSpec {
     requires |children| == |pivots| + 1
     requires forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]]
     requires forall i :: 0 <= i < |children| ==> WF(children[i])
-    requires forall i :: 0 <= i  < |children| ==> AllKeys(children[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
+    requires forall i :: 0 <= i  < |children| ==> {} < AllKeys(children[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
     ensures WF(Index(pivots, children))
   {
+    var node := Index(pivots, children);
+    forall i | 0 <= i < |children|-1
+      ensures AllKeysBelowBound(node, i)
+    {
+      forall k | k in AllKeys(node.children[i])
+        ensures Keys.lt(k, node.pivots[i])
+      {
+        var j :| boundaries[i] <= j < boundaries[i+1] && keys[j] == k;
+        Keys.IsStrictlySortedImpliesLt(keys, j, boundaries[i+1]);
+      }
+    }
+    forall i | 0 < i < |children|
+      ensures AllKeysAboveBound(node, i)
+    {
+      forall k | k in AllKeys(node.children[i])
+        ensures Keys.lte(node.pivots[i-1], k)
+      {
+        var j :| boundaries[i] <= j < boundaries[i+1] && keys[j] == k;
+        Keys.IsStrictlySortedImpliesLte(keys, boundaries[i], j);
+      }
+    }
+    BoundaryPivotsStrictlySorted(keys, boundaries, pivots);
   }
 }
 
