@@ -1,11 +1,13 @@
 include "MutableBtree.i.dfy"
-
+  include "../Base/mathematics.i.dfy"
+  
 abstract module MutableBtreeBulkOperations {
   import opened NativeTypes
   import opened NativeArrays
   import opened Sequences
   import opened MB : MutableBtree`All
-
+  import Mathematics
+  
   method NumElements(node: Node) returns (count: uint64)
     requires WFShape(node)
     requires Spec.WF(I(node))
@@ -33,7 +35,8 @@ abstract module MutableBtreeBulkOperations {
         Spec.NumElementsOfChildrenNotZero(inode);
         Spec.NumElementsOfChildrenDecreases(inode.children, (i+1) as int);
         icount := icount + ichildcount;
-        
+
+        IOfChild(node, i as int);
         var childcount: uint64 := NumElements(node.contents.children[i]);
         count := count + childcount;
         i := i + 1;
@@ -112,14 +115,6 @@ abstract module MutableBtreeBulkOperations {
     assert values[..] == values[0..end];
     return (keys, values);
   }
-
-  method IndexFromChildren(children: seq<Node>, pivots: seq<Key>) returns (node: Node)
-    requires 0 < |children| <= MB.MaxChildren() as int
-    requires |pivots| == |children|-1
-    requires forall i :: 0 <= i < |children| ==> WF(children[i])
-    requires forall i :: 0 <= i < |pivots| ==> forall k :: k in Spec.AllKeys(I(children[i])) ==> Spec.Keys.lt(k, pivots[i])
-    requires forall i :: 1 <= i < |children| ==> forall k :: k in Spec.AllKeys(I(children[i])) ==> Spec.Keys.lte(pivots[i-1], k)
-    
 
   method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (pivots: array<Key>, leaves: array<Node?>, ghost ileaves: seq<Spec.Node>)
     requires Spec.Keys.IsStrictlySorted(keys)
@@ -216,6 +211,46 @@ abstract module MutableBtreeBulkOperations {
     Spec.FromSeqWF(keys, boundaries, pivots[..], ileaves);
 
     assert Spec.ToSeq(Spec.Index(pivots[..], ileaves)) == (keys, values);
+  }
+
+  function MaxHeight(nodes: seq<Node>) : int
+    ensures forall i :: 0 <= i < |nodes| ==> nodes[i].height <= MaxHeight(nodes)
+    reads Set(nodes)
+  {
+    if |nodes| == 0 then 0
+    else
+      var h1 := MaxHeight(DropLast(nodes));
+      var h2 := Last(nodes).height;
+      Mathematics.max(h1, h2)
+  }
+  
+  method IndexFromChildren(pivots: seq<Key>, children: seq<Node>) returns (node: Node)
+    requires 0 < |children| <= MB.MaxChildren() as int
+    requires |pivots| == |children|-1
+    requires forall i :: 0 <= i < |children| ==> WFShape(children[i])
+    requires forall i, j :: 0 <= i < j < |children| ==> children[i].repr !! children[j].repr
+    ensures WFShape(node)
+    ensures node.contents.Index?
+    ensures node.contents.nchildren == |children| as uint64
+    ensures node.contents.pivots[..node.contents.nchildren-1] == pivots
+    ensures node.contents.children[..node.contents.nchildren] == children
+    ensures fresh(node)
+    ensures fresh(node.contents.pivots)
+    ensures fresh(node.contents.children)
+    ensures node.repr == {node, node.contents.pivots, node.contents.children} + MB.SeqRepr(children)
+  {
+    var pivotarray := newArrayFill(MB.MaxChildren()-1, MB.DefaultKey());
+    var childarray := newArrayFill(MB.MaxChildren(), null);
+    Arrays.Memcpy(pivotarray, 0, pivots);
+    Arrays.Memcpy(childarray, 0, children);
+    node := new Node;
+    node.contents := MB.Index(|children| as uint64, pivotarray, childarray);
+    node.repr := {node, node.contents.pivots, node.contents.children} + MB.SeqRepr(children);
+    node.height := MaxHeight(children) + 1;
+  }
+
+  method FromSeqIndexLayer(pivots: seq<Key>, children: seq<Node>) returns (newpivots: array<Key>, parents: array<Node>)
+  {
   }
   
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)

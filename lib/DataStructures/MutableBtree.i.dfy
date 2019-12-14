@@ -206,6 +206,7 @@ abstract module MutableBtree {
     Arrays.Memcpy(node.contents.values, 0, values);
     node.contents := node.contents.(nkeys := |keys|);
     assert node.contents.keys[..node.contents.nkeys] == keys;
+    Spec.reveal_ToSeq();
     Spec.ToSeqIsSortedSeqForInterpretation(I(node));
   }
 
