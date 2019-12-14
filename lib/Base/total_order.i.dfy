@@ -878,7 +878,7 @@ abstract module Total_Order {
   }
 }*/
 
-/*module Integer_Order refines Total_Order {
+module Integer_Order refines Total_Order {
   type Element = int
 
   function SomeElement() : Element { 0 }
@@ -896,7 +896,7 @@ abstract module Total_Order {
   {
     return if a < b then -1 else if a > b then 1 else 0;
   }
-}*/
+}
 
 module Uint64_Order refines Total_Order {
   type Element = uint64

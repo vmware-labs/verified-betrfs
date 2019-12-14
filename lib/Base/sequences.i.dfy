@@ -71,7 +71,7 @@ module Sequences {
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
-    reads f.reads
+    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
   {
     if |run| == 0 then []
     else  [f(run[0])] + Apply(f, run[1..])

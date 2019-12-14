@@ -120,23 +120,31 @@ abstract module MutableBtreeBulkOperations {
     requires forall i :: 0 <= i < |pivots| ==> forall k :: k in Spec.AllKeys(I(children[i])) ==> Spec.Keys.lt(k, pivots[i])
     requires forall i :: 1 <= i < |children| ==> forall k :: k in Spec.AllKeys(I(children[i])) ==> Spec.Keys.lte(pivots[i-1], k)
     
-    
-  method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (leaves: array<Node?>)
+
+  method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (pivots: array<Key>, leaves: array<Node?>, ghost ileaves: seq<Spec.Node>)
     requires Spec.Keys.IsStrictlySorted(keys)
     requires 0 < |keys| == |values| < Uint64UpperBound() / 2
+    ensures fresh(pivots)
+    ensures fresh(leaves)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves[i] != null
     ensures forall i :: 0 <= i < leaves.Length ==> MB.WF(leaves[i])
     ensures forall i :: 0 <= i < leaves.Length ==> leaves[i].contents.Leaf?
     ensures forall i :: 0 <= i < leaves.Length ==> fresh(leaves[i].repr)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves !in leaves[i].repr
+    ensures forall i :: 0 <= i < leaves.Length ==> pivots !in leaves[i].repr
     ensures forall i, j :: 0 <= i < j < leaves.Length ==> leaves[i].repr !! leaves[j].repr
+    ensures |ileaves| == leaves.Length
+    ensures forall i :: 0 <= i < |ileaves| ==> ileaves[i] == I(leaves[i])
+    ensures Spec.WF(Spec.Index(pivots[..], ileaves))
+    ensures Spec.ToSeq(Spec.Index(pivots[..], ileaves)) == (keys, values)
   {
-    var keysperleaf := 3 * MB.MaxKeysPerLeaf() / 4;
+    var keysperleaf: uint64 := 3 * MB.MaxKeysPerLeaf() / 4;
     var numleaves: uint64 := (|keys| as uint64 + keysperleaf - 1) / keysperleaf;
     assert (numleaves as int - 1) * keysperleaf as int < |keys| <= (numleaves * keysperleaf) as int;
 
+    pivots := newArrayFill(numleaves-1, MB.DefaultKey());
     leaves := newArrayFill(numleaves, null);
-    ghost var ileaves: seq<Spec.Node> := [];
+    ileaves := [];
 
     forall i: int | i < numleaves as int - 1
       ensures i * keysperleaf as int + keysperleaf as int < |keys|
@@ -154,22 +162,31 @@ abstract module MutableBtreeBulkOperations {
       invariant leafidx <= numleaves-1
       invariant keyidx == leafidx * keysperleaf
       invariant fresh(leaves)
+      invariant fresh(pivots)
+      invariant !Arrays.Aliases(pivots, leaves)
       invariant forall i :: 0 <= i < leafidx ==> leaves[i] != null
       invariant forall i :: leafidx <= i < numleaves ==> leaves[i] == null
       invariant forall i :: 0 <= i < leafidx ==> MB.WF(leaves[i])
       invariant forall i :: 0 <= i < leafidx ==> leaves[i].contents.Leaf?
       invariant forall i :: 0 <= i < leafidx ==> fresh(leaves[i].repr)
       invariant forall i :: 0 <= i < leafidx ==> leaves !in leaves[i].repr
+      invariant forall i :: 0 <= i < leafidx ==> pivots !in leaves[i].repr
       invariant forall i, j :: 0 <= i < j < leafidx ==> leaves[i].repr !! leaves[j].repr
       invariant |ileaves| == leafidx as int
       invariant forall i :: 0 <= i < leafidx ==> ileaves[i] == I(leaves[i])
       invariant forall i :: 0 <= i < leafidx ==> ileaves[i].keys == keys[i * keysperleaf..i * keysperleaf + keysperleaf]
+      invariant forall i :: 0 <= i < leafidx ==> ileaves[i].values == values[i * keysperleaf..i * keysperleaf + keysperleaf]
+      invariant forall i :: 0 <= i < leafidx as int - 1 ==> pivots[i] == keys[(i+1) * keysperleaf as int]
     {
       var nextkeyidx := keyidx + keysperleaf;
       Spec.Keys.StrictlySortedSubsequence(keys, keyidx as int, nextkeyidx as int);
       leaves[leafidx] := LeafFromSeqs(keys[keyidx..nextkeyidx], values[keyidx..nextkeyidx]);
       ileaves := ileaves + [I(leaves[leafidx])];
 
+      if 0 < leafidx {
+        pivots[leafidx-1] := keys[keyidx];
+      }
+      
       leafidx := leafidx + 1;
       keyidx := nextkeyidx;
     }
@@ -182,53 +199,23 @@ abstract module MutableBtreeBulkOperations {
       keysperleaf as int;
     }
     leaves[leafidx] := LeafFromSeqs(keys[keyidx..|keys|], values[keyidx..|keys|]);
+    if 0 < leafidx {
+      pivots[leafidx-1] := keys[keyidx];
+    }
     ileaves := ileaves + [I(leaves[leafidx])];
 
-    ghost var pivots := seq(numleaves-1, i requires 0 <= i < numleaves as int - 1 => ileaves[i+1].keys[0]);
-    forall ensures Spec.Keys.IsStrictlySorted(pivots) {
-      forall i, j | 0 <= i < j < |pivots|
-        ensures Spec.Keys.lt(pivots[i], pivots[j])
-      {
-        Spec.Keys.IsStrictlySortedImpliesLt(keys, (i+1) * keysperleaf as int, (j+1) * keysperleaf as int);
-      }
-      Spec.Keys.reveal_IsStrictlySorted();
-    }
+    ghost var boundaries := seq(numleaves, i => i * keysperleaf as int) + [|keys|];
+    Spec.RegularBoundaryIsValid(|keys|, keysperleaf as int);
+    Spec.ToSeqChildrenOfChildrenFromSeq(keys, values, boundaries, ileaves);
 
+    assert forall i :: 0 <= i < pivots.Length ==> pivots[i] == keys[boundaries[i+1]];
     forall i | 0 <= i < |ileaves|
-      ensures Spec.AllKeys(ileaves[i]) != {}
+      ensures Spec.AllKeys(ileaves[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
     {
-      assert ileaves[i].keys[0] in Spec.AllKeys(ileaves[i]);
     }
+    Spec.FromSeqWF(keys, boundaries, pivots[..], ileaves);
 
-    ghost var iroot := Spec.Index(pivots, ileaves);
-
-    forall j | 0 <= j < |ileaves| - 1
-      ensures Spec.AllKeysBelowBound(iroot, j)
-    {
-      forall i | 0 <= i < |ileaves[j].keys|
-        ensures Spec.Keys.lt(ileaves[j].keys[i], pivots[j])
-      {
-        assert ileaves[j].keys[i] == keys[j * keysperleaf as int + i];
-        assert pivots[j] == keys[(j+1) * keysperleaf as int];
-        assert j * keysperleaf as int + i < (j+1) * keysperleaf as int;
-        Spec.Keys.IsStrictlySortedImpliesLt(keys, j * keysperleaf as int + i, (j+1) * keysperleaf as int);
-      }
-    }
-    
-    forall i | 1 <= i < |ileaves|
-      ensures Spec.AllKeysAboveBound(iroot, i)
-    {
-      forall j | 0 <= j < |ileaves[i].keys|
-        ensures Spec.Keys.lte(pivots[i-1], ileaves[i].keys[j])
-      {
-        assert pivots[i-1] == keys[i * keysperleaf as int];
-        assert ileaves[i].keys[j] == keys[i * keysperleaf as int + j];
-        assert i * keysperleaf as int <= i * keysperleaf as int + j;
-        Spec.Keys.IsStrictlySortedImpliesLte(keys, i * keysperleaf as int, i * keysperleaf as int + j);
-      }
-    }
-    
-    assert Spec.WF(iroot);
+    assert Spec.ToSeq(Spec.Index(pivots[..], ileaves)) == (keys, values);
   }
   
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)

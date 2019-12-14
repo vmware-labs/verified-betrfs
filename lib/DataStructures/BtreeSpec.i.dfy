@@ -6,6 +6,7 @@ abstract module BtreeSpec {
   import opened Seq = Sequences
   import opened Maps
   import Keys : Total_Order
+  import Integer_Order
 
   type Key = Keys.Element
   type Value
@@ -948,7 +949,7 @@ abstract module BtreeSpec {
     ensures Flatten(ToSeqChildren(nodes).0) == Flatten(ToSeqChildren(DropLast(nodes)).0) + ToSeq(Last(nodes)).0
     ensures Flatten(ToSeqChildren(nodes).1) == Flatten(ToSeqChildren(DropLast(nodes)).1) + ToSeq(Last(nodes)).1
   {
-    assume false;
+    reveal_Flatten();
   }
   
   lemma ToSeqChildrenLength(nodes: seq<Node>)
@@ -1097,6 +1098,76 @@ abstract module BtreeSpec {
     var kvlist := Zip(keys, values);
     assert keys == Unzip(kvlist).0;
     // assert Keys.IsStrictlySorted(keys);
+  }
+
+  predicate ValidBoundariesForKeys(nkeys: int, boundaries: seq<nat>)
+  {
+    && 0 < |boundaries|
+    && boundaries[0] == 0
+    && Last(boundaries) == nkeys
+    && Integer_Order.IsStrictlySorted(boundaries)
+    && (forall i :: 0 <= i < |boundaries|-1 ==> boundaries[i] < boundaries[i+1]) // Redundant
+    && (forall i :: 0 <= i < |boundaries|-1 ==> boundaries[i] < nkeys) // Redundant
+  }
+
+  lemma RegularBoundaryIsValid(nkeys: nat, keyspernode: nat)
+    requires 0 < keyspernode
+    ensures ValidBoundariesForKeys(nkeys, seq((nkeys + keyspernode - 1) / keyspernode, i => i * keyspernode) + [nkeys])
+  {
+    var boundaries := seq((nkeys + keyspernode - 1) / keyspernode, i => i * keyspernode) + [nkeys];
+    forall i, j | 0 <= i < j < |boundaries|
+      ensures boundaries[i] < boundaries[j]
+    {
+      if j < |boundaries| - 1 {
+      } else {
+        assert i * keyspernode <= ((nkeys + keyspernode - 1) / keyspernode - 1) * keyspernode;
+      }
+    }
+    Integer_Order.reveal_IsStrictlySorted();
+    assert ValidBoundariesForKeys(nkeys, boundaries);
+  }
+  
+  lemma ToSeqChildrenOfChildrenFromSeq(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, children: seq<Node>)
+    requires |keys| == |values|
+    requires Keys.IsStrictlySorted(keys)
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires |boundaries| == |children| + 1
+    requires forall i :: 0 <= i < |children| ==> WF(children[i])
+    requires forall i :: 0 <= i < |children| ==> ToSeq(children[i]) == (keys[boundaries[i]..boundaries[i+1]], values[boundaries[i]..boundaries[i+1]])
+    ensures Flatten(ToSeqChildren(children).0) == keys
+    ensures Flatten(ToSeqChildren(children).1) == values
+  {
+    if |children| == 1 {
+      ToSeqChildrenDecomposition(children);
+    } else {
+      var i := 0;
+      while i < |children|
+        invariant i <= |children|
+        invariant Flatten(ToSeqChildren(children[..i]).0) == keys[..boundaries[i]]
+        invariant Flatten(ToSeqChildren(children[..i]).1) == values[..boundaries[i]]
+      {
+        ToSeqChildrenDecomposition(children[..i+1]);
+        assert children[..i] == children[..i+1][..i];
+        assert keys[..boundaries[i+1]] == keys[..boundaries[i]] + keys[boundaries[i]..boundaries[i+1]];
+        assert values[..boundaries[i+1]] == values[..boundaries[i]] + values[boundaries[i]..boundaries[i+1]];
+        i := i + 1;
+      }
+      assert children[..|children|] == children;
+      assert keys[..boundaries[|children|]] == keys;
+      assert values[..boundaries[|children|]] == values;
+    }
+  }
+
+  lemma FromSeqWF(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>, children: seq<Node>)
+    requires Keys.IsStrictlySorted(keys)
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires |boundaries| == |children| + 1
+    requires |children| == |pivots| + 1
+    requires forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]]
+    requires forall i :: 0 <= i < |children| ==> WF(children[i])
+    requires forall i :: 0 <= i  < |children| ==> AllKeys(children[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
+    ensures WF(Index(pivots, children))
+  {
   }
 }
 
