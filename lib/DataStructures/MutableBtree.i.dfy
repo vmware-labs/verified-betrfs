@@ -251,6 +251,14 @@ abstract module MutableBtree {
     o in node.contents.children[i].repr
   }
 
+  function {:opaque} SeqRepr(nodes: seq<Node>) : set<object>
+    ensures forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= SeqRepr(nodes)
+    reads Set(nodes)
+  {
+    if |nodes| == 0 then {}
+    else SeqRepr(DropLast(nodes)) + Last(nodes).repr
+  }
+  
   function {:opaque} SubRepr(node: Node, from: int, to: int) : (result: set<object>)
     requires WFShape(node)
     requires node.contents.Index?
