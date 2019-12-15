@@ -1105,7 +1105,6 @@ abstract module BtreeSpec {
     var (keys, values) := ToSeq(node);
     var kvlist := Zip(keys, values);
     assert keys == Unzip(kvlist).0;
-    // assert Keys.IsStrictlySorted(keys);
   }
 
   predicate ValidBoundariesForKeys(nkeys: int, boundaries: seq<nat>)
@@ -1128,6 +1127,7 @@ abstract module BtreeSpec {
     {
       if j < |boundaries| - 1 {
       } else {
+        assert i <= ((nkeys + keyspernode - 1) / keyspernode - 1);
         assert i * keyspernode <= ((nkeys + keyspernode - 1) / keyspernode - 1) * keyspernode;
       }
     }
@@ -1135,6 +1135,38 @@ abstract module BtreeSpec {
     assert ValidBoundariesForKeys(nkeys, boundaries);
   }
   
+  predicate PivotsMatchBoundaries(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+  {
+    && |pivots| == |boundaries| - 2
+    && (forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]])
+  }
+  
+  lemma BoundaryPivotsStrictlySorted(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
+    requires Keys.IsStrictlySorted(keys)
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires PivotsMatchBoundaries(keys, boundaries, pivots)
+    ensures Keys.IsStrictlySorted(pivots)
+  {
+    forall i, j | 0 <= i < j < |pivots|
+      ensures Keys.lt(pivots[i], pivots[j])
+    {
+      Integer_Order.IsStrictlySortedImpliesLt(boundaries, i+1, j+1);
+      Keys.IsStrictlySortedImpliesLt(keys, boundaries[i+1], boundaries[j+1]);
+    }
+    Keys.reveal_IsStrictlySorted();
+  }
+  
+  predicate LeavesMatchBoundaries(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Node>)
+    requires |keys| == |values|
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+  {
+    && |boundaries| == |leaves| + 1
+    && (forall i :: 0 <= i < |leaves| ==> leaves[i].Leaf?)
+    && (forall i :: 0 <= i < |leaves| ==> leaves[i].keys == keys[boundaries[i]..boundaries[i+1]])
+    && (forall i :: 0 <= i < |leaves| ==> leaves[i].values == values[boundaries[i]..boundaries[i+1]])
+  }
+    
   lemma ToSeqChildrenOfChildrenFromSeq(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, children: seq<Node>)
     requires |keys| == |values|
     requires Keys.IsStrictlySorted(keys)
@@ -1166,19 +1198,11 @@ abstract module BtreeSpec {
     }
   }
 
-  lemma BoundaryPivotsStrictlySorted(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
-    requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForKeys(|keys|, boundaries)
-    requires |pivots| == |boundaries| - 2
-    requires forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]]
-    ensures Keys.IsStrictlySorted(pivots)
-  
   lemma FromSeqWF(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>, children: seq<Node>)
     requires Keys.IsStrictlySorted(keys)
     requires ValidBoundariesForKeys(|keys|, boundaries)
     requires |boundaries| == |children| + 1
-    requires |children| == |pivots| + 1
-    requires forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]]
+    requires PivotsMatchBoundaries(keys, boundaries, pivots)
     requires forall i :: 0 <= i < |children| ==> WF(children[i])
     requires forall i :: 0 <= i  < |children| ==> {} < AllKeys(children[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
     ensures WF(Index(pivots, children))

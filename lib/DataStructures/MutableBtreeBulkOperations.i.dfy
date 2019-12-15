@@ -72,6 +72,7 @@ abstract module MutableBtreeBulkOperations {
         ensures values[start..nextstart] == Spec.ToSeq(I(node)).1
       {
         reveal_I();
+        Spec.reveal_ToSeq();
       }
     } else {
       nextstart := start;
@@ -96,6 +97,7 @@ abstract module MutableBtreeBulkOperations {
         i := i + 1;
       }
       assert I(node).children[..node.contents.nchildren] == I(node).children;
+      Spec.reveal_ToSeq();
     }
   }
 
@@ -116,22 +118,22 @@ abstract module MutableBtreeBulkOperations {
     return (keys, values);
   }
 
-  method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (pivots: array<Key>, leaves: array<Node?>, ghost ileaves: seq<Spec.Node>)
-    requires Spec.Keys.IsStrictlySorted(keys)
+  method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (pivots: array<Key>, leaves: array<Node?>, ghost boundaries: seq<nat>, ghost ileaves: seq<Spec.Node>)
     requires 0 < |keys| == |values| < Uint64UpperBound() / 2
     ensures fresh(pivots)
     ensures fresh(leaves)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves[i] != null
-    ensures forall i :: 0 <= i < leaves.Length ==> MB.WF(leaves[i])
+    ensures forall i :: 0 <= i < leaves.Length ==> MB.WFShape(leaves[i])
     ensures forall i :: 0 <= i < leaves.Length ==> leaves[i].contents.Leaf?
     ensures forall i :: 0 <= i < leaves.Length ==> fresh(leaves[i].repr)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves !in leaves[i].repr
     ensures forall i :: 0 <= i < leaves.Length ==> pivots !in leaves[i].repr
     ensures forall i, j :: 0 <= i < j < leaves.Length ==> leaves[i].repr !! leaves[j].repr
+    ensures Spec.ValidBoundariesForKeys(|keys|, boundaries)
+    ensures Spec.PivotsMatchBoundaries(keys, boundaries, pivots[..])
     ensures |ileaves| == leaves.Length
     ensures forall i :: 0 <= i < |ileaves| ==> ileaves[i] == I(leaves[i])
-    ensures Spec.WF(Spec.Index(pivots[..], ileaves))
-    ensures Spec.ToSeq(Spec.Index(pivots[..], ileaves)) == (keys, values)
+    ensures Spec.LeavesMatchBoundaries(keys, values, boundaries, ileaves)
   {
     var keysperleaf: uint64 := 3 * MB.MaxKeysPerLeaf() / 4;
     var numleaves: uint64 := (|keys| as uint64 + keysperleaf - 1) / keysperleaf;
@@ -161,7 +163,7 @@ abstract module MutableBtreeBulkOperations {
       invariant !Arrays.Aliases(pivots, leaves)
       invariant forall i :: 0 <= i < leafidx ==> leaves[i] != null
       invariant forall i :: leafidx <= i < numleaves ==> leaves[i] == null
-      invariant forall i :: 0 <= i < leafidx ==> MB.WF(leaves[i])
+      invariant forall i :: 0 <= i < leafidx ==> MB.WFShape(leaves[i])
       invariant forall i :: 0 <= i < leafidx ==> leaves[i].contents.Leaf?
       invariant forall i :: 0 <= i < leafidx ==> fresh(leaves[i].repr)
       invariant forall i :: 0 <= i < leafidx ==> leaves !in leaves[i].repr
@@ -174,7 +176,6 @@ abstract module MutableBtreeBulkOperations {
       invariant forall i :: 0 <= i < leafidx as int - 1 ==> pivots[i] == keys[(i+1) * keysperleaf as int]
     {
       var nextkeyidx := keyidx + keysperleaf;
-      Spec.Keys.StrictlySortedSubsequence(keys, keyidx as int, nextkeyidx as int);
       leaves[leafidx] := LeafFromSeqs(keys[keyidx..nextkeyidx], values[keyidx..nextkeyidx]);
       ileaves := ileaves + [I(leaves[leafidx])];
 
@@ -185,7 +186,6 @@ abstract module MutableBtreeBulkOperations {
       leafidx := leafidx + 1;
       keyidx := nextkeyidx;
     }
-    Spec.Keys.StrictlySortedSubsequence(keys, keyidx as int, |keys|);
     calc <= {
       |keys| - keyidx as int;
       |keys| - (numleaves-1) as int * keysperleaf as int;
@@ -199,18 +199,8 @@ abstract module MutableBtreeBulkOperations {
     }
     ileaves := ileaves + [I(leaves[leafidx])];
 
-    ghost var boundaries := seq(numleaves, i => i * keysperleaf as int) + [|keys|];
+    boundaries := seq(numleaves, i => i * keysperleaf as int) + [|keys|];
     Spec.RegularBoundaryIsValid(|keys|, keysperleaf as int);
-    Spec.ToSeqChildrenOfChildrenFromSeq(keys, values, boundaries, ileaves);
-
-    assert forall i :: 0 <= i < pivots.Length ==> pivots[i] == keys[boundaries[i+1]];
-    forall i | 0 <= i < |ileaves|
-      ensures Spec.AllKeys(ileaves[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
-    {
-    }
-    Spec.FromSeqWF(keys, boundaries, pivots[..], ileaves);
-
-    assert Spec.ToSeq(Spec.Index(pivots[..], ileaves)) == (keys, values);
   }
 
   function MaxHeight(nodes: seq<Node>) : int
