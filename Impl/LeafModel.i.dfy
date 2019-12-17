@@ -41,8 +41,6 @@ module LeafModel {
       var pivot := KVList.getMiddleKey(node.buckets[0]);
       var pivots := [pivot];
 
-      assume PivotsLib.WFPivots(pivots);
-
       var buckets' := [
           SplitBucketLeft(node.buckets[0], pivot),
           SplitBucketRight(node.buckets[0], pivot)
@@ -88,7 +86,7 @@ module LeafModel {
     var pivot := KVList.getMiddleKey(node.buckets[0]);
     var pivots := [pivot];
 
-    assume PivotsLib.WFPivots(pivots);
+    KVList.WFPivotsOfGetMiddleKey(node.buckets[0]);
 
     var buckets' := [
         SplitBucketLeft(node.buckets[0], pivot),

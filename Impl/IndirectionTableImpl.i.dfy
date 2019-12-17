@@ -648,8 +648,7 @@ module IndirectionTableImpl {
 
         MutableMapModel.LemmaIterIndexLtCount(t.I(), it);
 
-        // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
-        assume |succs| < 0x1_0000_0000_0000_0000;
+        assert |succs| < 0x1_0000_0000_0000_0000;
         assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
 
         assert |MutableMapModel.IterInc(t.I(), it).s| == |it.s| + 1;

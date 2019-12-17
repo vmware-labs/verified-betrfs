@@ -27,8 +27,14 @@ namespace MainDiskIOHandler_Compile {
   };
 
   string getFilename(uint64 addr) {
-    // TODO hex representation would be nicer and match the c#
-    return ".veribetrfs-storage/" + to_string(addr);
+    // Convert to hex
+    char num[17];
+    for (int i = 0; i < 16; i++) {
+      int digit = (addr >> (4 * i)) & 0xf;
+      num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
+    }
+    num[16] = '\0';
+    return ".veribetrfs-storage/" + string(num);
   }
 
   int readFile(string const& filename, byte* res, int len)

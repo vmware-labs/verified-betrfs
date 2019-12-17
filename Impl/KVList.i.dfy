@@ -21,6 +21,7 @@ module KVList {
   import opened NativeTypes
   import NativeArrays
   import P = PivotsLib
+  import SeqComparison
 
   type Key = Element
 
@@ -1299,4 +1300,12 @@ module KVList {
     }
   }
 
+  lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
+  requires WFBucket(bucket)
+  ensures P.WFPivots([getMiddleKey(bucket)])
+  {
+    reveal_IsStrictlySorted();
+    SeqComparison.reveal_lte();
+    IsNotMinimum([], getMiddleKey(bucket));
+  }
 }

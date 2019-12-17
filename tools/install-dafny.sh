@@ -33,3 +33,7 @@ echo "#! /bin/bash" > bin/dafny
 echo "mono `pwd`/dafny/Binaries/Dafny.exe \"\$@\"" >> bin/dafny
 chmod +x bin/dafny
 
+# This is needed in case you want to call the Boogie binary directly.
+# See the documentation: https://github.com/dafny-lang/dafny/blob/master/INSTALL.md
+rm -f boogie/Binaries/z3.exe
+cp dafny/Binaries/z3/bin/z3 boogie/Binaries/z3.exe
