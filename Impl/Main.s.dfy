@@ -127,6 +127,8 @@ abstract module Main {
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
     io.diskOp())
 
+  // These are proof obligations for the refining module to fill in.
+
   // TODO add proof obligation that the InitState together with the initial disk state
   // from mkfs together refine to the initial state of the BlockCacheSystem.
 
@@ -139,7 +141,6 @@ abstract module Main {
   requires ADM.Init(k, s)
   ensures ADM.Inv(k, s)
   ensures ThreeStateVersionedMap.Init(SystemIk(k), SystemI(k, s))
-  // TODO (jonh): is this an obligation for the refining module, or an unintentional axiom?
 
   lemma SystemRefinesCrashSafeMapNext(
     k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
