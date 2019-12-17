@@ -560,6 +560,15 @@ module BookkeepingModel {
     getFreeRef2IterateDoesntEqual(s, avoid, 1, ref);
   }
 
+  lemma allocRefDoesntEqual(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
+  requires allocBookkeeping.requires(k, s, children);
+  requires ref in s.cache
+  ensures allocBookkeeping(k, s, children).1 != Some(ref)
+  {
+    reveal_allocBookkeeping();
+    getFreeRefDoesntEqual(s, ref);
+  }
+
   lemma lemmaChildrenConditionsOfNode(
       k: Constants, s: Variables, ref: BT.G.Reference)
   requires s.Ready?
