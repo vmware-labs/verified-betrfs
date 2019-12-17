@@ -53,7 +53,7 @@ abstract module Main {
 
   method InitState() returns (k: Constants, hs: HeapState)
     ensures Inv(k, hs)
-
+    ensures ADM.M.Init(Ik(k), I(k, hs))
 
   // Implementation of the state transitions
 
@@ -127,10 +127,34 @@ abstract module Main {
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
     io.diskOp())
 
-  // These are proof obligations for the refining module to fill in.
+  // TODO implement this, and update the framework to call this
+  // method rather than the existing one.
+  // The post-condition basically says that if the disk starts with
+  // the bytes that the method returns, then we're in a valid initial
+  // state.
+  method Mkfs(k: Constants)
+  returns (diskContents: map<uint64, seq<byte>>)
+  ensures
+    forall s_machine | ADM.M.Init(Ik(k), s_machine) ::
+    forall byteSeq | ADM.BlocksWrittenInByteSeq(diskContents, byteSeq) ::
+      ADM.Init(
+        ADM.AsyncDiskModelTypes.AsyncDiskModelConstants(
+          Ik(k),
+          ADM.D.Constants()),
+        ADM.AsyncDiskModelTypes.AsyncDiskModelVariables(
+          s_machine,
+          ADM.D.Variables(map[], map[], map[], map[], byteSeq))
+      )
 
-  // TODO add proof obligation that the InitState together with the initial disk state
-  // from mkfs together refine to the initial state of the BlockCacheSystem.
+  // These are proof obligations for the refining module to fill in.
+  // The refining module must
+  //
+  //  * Supply an abstraction function from the abstract disk
+  //    state machine to the high-level MapSpec (by implementing
+  //    the SystemI function)
+  //
+  //  * Prove the lemmas that show that this abstraction function
+  //    yields a valid state machine refinement.
 
   function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants
   function SystemI(k: ADM.Constants, s: ADM.Variables) : ThreeStateVersionedMap.Variables
