@@ -8,7 +8,7 @@ cd .dafny
 
 git clone https://github.com/boogie-org/boogie
 cd boogie
-wget https://nuget.org/nuget.exe
+wget https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
 mono ./nuget.exe restore Source/Boogie.sln
 msbuild /p:Configuration=Release Source/Boogie.sln
 cd ..
