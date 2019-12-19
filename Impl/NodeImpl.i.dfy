@@ -339,6 +339,7 @@ module NodeImpl {
     requires 0 <= num_children_left as int <= |this.pivotTable|
     requires this.children.Some? ==> 0 <= num_children_left as int <= |this.children.value|
     requires 0 <= num_children_left as int <= |this.buckets|
+    requires |this.buckets| < 0x1_0000_0000_0000_0000
     ensures node'.Inv()
     ensures node'.I() == old(SplitModel.SplitChildRight(I(), num_children_left as int))
     ensures fresh(node'.Repr)
