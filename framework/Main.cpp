@@ -1,6 +1,32 @@
 #include "Application.h"
+#include "Benchmarks.h"
 
-int main()
+using namespace std;
+
+int main(int argc, char* argv[]) {
+  bool allBenchmarks = false;
+  string benchmark;
+
+  for (int i = 1; i < argc; i++) {
+    string arg = string(argv[i]);
+
+    if (arg == "--all-benchmarks") {
+      allBenchmarks = true;
+    } else if (arg.substr(0, 12) == "--benchmark=") {
+      benchmark = arg.substr(12);
+    }
+  }
+
+  if (allBenchmarks) {
+    RunAllBenchmarks();
+  } else if (benchmark != "") {
+    RunBenchmark(benchmark);
+  } else {
+    cout << "Use --all-benchmarks or --benchmark" << endl;
+  }
+}
+
+/*int main()
 {
   Mkfs();
   cout << "Mkfs done" << endl;
@@ -23,4 +49,4 @@ int main()
   app.crash();
   app.Query("abc");
   app.Query("xyq");
-}
+}*/

@@ -158,7 +158,11 @@ namespace MainDiskIOHandler_Compile {
 
 using MainDiskIOHandler_Compile::DiskIOHandler;
 
-#define LOG log
+#ifdef VERBOSE
+  #define LOG log
+#else
+  #define LOG(x)
+#endif
 
 Application::Application() {
   initialize();
@@ -318,5 +322,13 @@ void Mkfs() {
 
   for (auto p : m) {
     MainDiskIOHandler_Compile::writeSync(p.first, &(*p.second)[0], p.second->size());
+  }
+}
+
+void ClearIfExists() {
+  struct stat info;
+  if (stat(".veribetrfs-storage", &info) != -1) {
+		// TODO use std::filesystem::remove_all
+		system("rm -rf .veribetrfs-storage"); 
   }
 }

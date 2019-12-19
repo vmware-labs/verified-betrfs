@@ -8,6 +8,8 @@ using namespace std;
 struct ByteString {
   shared_ptr<vector<uint8>> bytes;
 
+  ByteString() { }
+
   ByteString(std::string const& s)
   {
     bytes = shared_ptr<vector<uint8>>(new vector<uint8>(s.size()));
@@ -39,8 +41,16 @@ struct ByteString {
     return bytes->size();  
   }
 
-  bool operator==(ByteString const& other) const& {
+  bool operator==(ByteString const& other) const {
     return *bytes == *(other.bytes);
+  }
+
+  bool operator<(ByteString const& other) const {
+    int m = std::min(bytes->size(), other.bytes->size());
+    int c = memcmp(&(*bytes)[0], &(*other.bytes)[0], m);
+    if (c < 0) return true;
+    if (c > 0) return false;
+    return bytes->size() < other.bytes->size();
   }
 };
 
