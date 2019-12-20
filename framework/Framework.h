@@ -22,11 +22,11 @@ namespace NativeArrays_Compile {
     public:
     static int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2)
     {
-      int result = memcmp(&b1.seq[0], &b2.seq[0], b1.seq.size() < b2.seq.size() ? b1.seq.size() : b2.seq.size());
+      int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
       if (result == 0) {
-        if (b1.seq.size() == b2.seq.size()) {
+        if (b1.size() == b2.size()) {
           return 0;
-        } else if (b1.seq.size() > b2.seq.size()) {
+        } else if (b1.size() > b2.size()) {
           return 1;
         } else {
           return -1;
@@ -61,7 +61,7 @@ namespace NativeArrays_Compile {
       uint64 dstIndex,
       uint64 len)
     {
-      std::copy(src.seq.begin() + srcIndex, src.seq.begin() + (srcIndex + len),
+      std::copy(src.ptr() + srcIndex, src.ptr() + (srcIndex + len),
           (*dst).begin() + dstIndex);
     }
   };

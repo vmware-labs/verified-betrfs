@@ -20,10 +20,8 @@ struct ByteString {
 
   ByteString(DafnySequence<uint8> seq)
   {
-    bytes = shared_ptr<vector<uint8>>(new vector<uint8>(seq.seq.size()));
-    for (int i = 0; i < seq.seq.size(); i++) {
-      (*bytes)[i] = seq.seq[i];
-    }
+    bytes = shared_ptr<vector<uint8>>(new vector<uint8>(seq.size()));
+    std::copy(seq.ptr(), seq.ptr() + seq.size(), (*bytes).begin());
   }
 
   std::string as_string() {
@@ -32,8 +30,7 @@ struct ByteString {
 
   DafnySequence<uint8> as_dafny_seq()
   {
-    DafnySequence<uint8> s;
-    s.seq = *bytes;
+    DafnySequence<uint8> s(bytes);
     return s;
   }
 
