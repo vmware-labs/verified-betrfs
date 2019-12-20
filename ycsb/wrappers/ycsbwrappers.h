@@ -19,7 +19,9 @@ namespace ycsbcwrappers {
         }
 
         ~TxRead() {
-            delete this->fields;
+            if (this->fields != NULL) {
+                delete this->fields;
+            }
         }
     };
 
@@ -33,6 +35,7 @@ namespace ycsbcwrappers {
             const std::string key,
             const std::vector<ycsbc::DB::KVPair>* values) :
                 table(table), key(key), values(values) {
+            assert(values != NULL);
         }
         
         ~TxInsert() {
@@ -40,6 +43,47 @@ namespace ycsbcwrappers {
         }
     };
 
+    struct TxUpdate {
+        const std::string table;
+        const std::string key;
+        const std::vector<std::pair<std::string, std::string>>* values;
+
+        TxUpdate(
+            const std::string table,
+            const std::string key,
+            const std::vector<ycsbc::DB::KVPair>* values) :
+                table(table), key(key), values(values) {
+
+            assert(values != NULL);
+        }
+        
+        ~TxUpdate() {
+            delete this->values;
+        }
+    };
+
+    struct TxScan {
+        const std::string table;
+        const std::string key;
+        int scan_length;
+        const std::vector<std::string>* fields;
+
+        TxScan(
+            const std::string table,
+            const std::string key,
+            const std::vector<std::string>* fields) :
+                table(table), key(key), fields(fields) {
+        }
+        
+        ~TxScan() {
+            if (this->fields != NULL) {
+                delete this->fields;
+            }
+        }
+    };
+
     const TxRead TransactionRead(ycsbc::CoreWorkload&workload);
     const TxInsert TransactionInsert(ycsbc::CoreWorkload&workload);
+    const TxUpdate TransactionUpdate(ycsbc::CoreWorkload&workload);
+    const TxScan TransactionScan(ycsbc::CoreWorkload&workload);
 }
