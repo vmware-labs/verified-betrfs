@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <random>
+#include <algorithm>
 
 #include "Application.h"
 
@@ -107,7 +108,7 @@ public:
 
 class BenchmarkRandomInserts : public Benchmark {
 public:
-  int count = 50000;
+  int count = 500000;
 
   virtual string name() override { return "RandomInserts"; }
   virtual int opCount() override { return count; }

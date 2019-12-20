@@ -3,6 +3,7 @@
 #include "DafnyRuntime.h"
 
 #include <map>
+#include <cstring>
 
 namespace Maps_Compile {
   class __default {

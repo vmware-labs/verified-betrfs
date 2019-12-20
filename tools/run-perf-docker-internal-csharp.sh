@@ -19,18 +19,19 @@ rm -R .veribetrfs-storage || true
 mkdir .veribetrfs-storage
 
 set +e
-rm build/*.o
-rm build/framework/*.o
-rm build/Veribetrfs
+rm build/disk-betree/Bundle.i.roslyn.exe
 set -e
 
-make CC=clang++ CCFLAGS="-g -fpermissive" build/Veribetrfs
+cd disk-betree
+make exe-roslyn
+cd ..
 
 echo "==== starting benchmark ===="
 echo "flags: $@"
 
-./build/Veribetrfs $@ &
+COMPlus_PerfMapEnabled=1 dotnet build/roslyn-veribetrfs.exe $@ &
 PID=$!
+read -n 1 -s -r -p "Press any key to start recording with perf (preferably before veribetrfs exits)"
 perf record -p $PID -g -F$frequency &
 PERF_PID=$!
 sleep 1
