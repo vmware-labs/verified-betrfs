@@ -1,0 +1,3 @@
+[submodule "vendor/YCSB-C"]
+	path = vendor/YCSB-C
+	url = git@github.com:utaal/YCSB-C.git

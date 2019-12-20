@@ -26,6 +26,7 @@ all: status exe
 
 clean:
 	rm -rf build
+	@$(MAKE) -C ycsb clean
 
 ##############################################################################
 # Build dir and dependency setup
@@ -267,3 +268,17 @@ VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o b
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
 	$(CC) -o $@ $(VERIBETRFS_O_FILES) -msse4.2
+
+##############################################################################
+# YCSB
+
+VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
+
+libycsbc:
+	@$(MAKE) -C ycsb build/libycsbc.a
+
+.PHONY: libycsbc
+
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc ycsb/YcsbMain.cpp
+	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
+

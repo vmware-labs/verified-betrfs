@@ -10,6 +10,7 @@
 *.output
 .build_info
 /build/
+/ycsb/build/
 
 /.veribetrfs-storage/
 /perf.data*
