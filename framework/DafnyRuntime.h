@@ -295,10 +295,10 @@ struct DafnySequence {
     }
     
     DafnySequence<char>(string s) {
+      len = s.size();
       sptr = shared_ptr<char> (new char[len], std::default_delete<char[]>());
       memcpy(&*sptr, s.c_str(), s.size());
       start = &*sptr;
-      len = s.size();
     }
     
     DafnySequence(const DafnySequence<T>& other) {
