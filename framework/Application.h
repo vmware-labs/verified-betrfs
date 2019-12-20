@@ -6,48 +6,41 @@
 using namespace std;
 
 struct ByteString {
-  shared_ptr<vector<uint8>> bytes;
+  DafnySequence<uint8> seq;
 
   ByteString() { }
 
-  ByteString(std::string const& s)
-  {
-    bytes = shared_ptr<vector<uint8>>(new vector<uint8>(s.size()));
-    for (int i = 0; i < s.size(); i++) {
-      (*bytes)[i] = (uint8) s[i];
-    }
-  }
+  explicit ByteString(int n) : seq(n) { }
+  explicit ByteString(DafnySequence<uint8> seq) : seq(seq) { }
 
-  ByteString(DafnySequence<uint8> seq)
-  {
-    bytes = shared_ptr<vector<uint8>>(new vector<uint8>(seq.size()));
-    std::copy(seq.ptr(), seq.ptr() + seq.size(), (*bytes).begin());
+  explicit ByteString(std::string const& s) : seq(s.size()) {
+    uint8* ptr = (uint8*) &s[0];
+    std::copy(ptr, ptr + size(), seq.ptr());
   }
 
   std::string as_string() {
-    return std::string((char*)&(*bytes)[0], bytes->size());
+    return std::string((char *)seq.ptr(), seq.size());
   }
 
   DafnySequence<uint8> as_dafny_seq()
   {
-    DafnySequence<uint8> s(bytes);
-    return s;
+    return seq;
   }
 
   size_t size() {
-    return bytes->size();  
+    return seq.size();  
   }
 
   bool operator==(ByteString const& other) const {
-    return *bytes == *(other.bytes);
+    return seq.equals(other.seq);
   }
 
   bool operator<(ByteString const& other) const {
-    int m = std::min(bytes->size(), other.bytes->size());
-    int c = memcmp(&(*bytes)[0], &(*other.bytes)[0], m);
+    int m = std::min(seq.size(), other.seq.size());
+    int c = memcmp(seq.ptr(), other.seq.ptr(), m);
     if (c < 0) return true;
     if (c > 0) return false;
-    return bytes->size() < other.bytes->size();
+    return seq.size() < other.seq.size();
   }
 };
 

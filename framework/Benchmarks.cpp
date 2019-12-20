@@ -46,11 +46,10 @@ public:
 
     vector<ByteString> l(n);
     for (int i = 0; i < n; i++) {
-      shared_ptr<vector<uint8>> bytes { new vector<uint8>(len) };
+      l[i] = ByteString(len);
       for (int j = 0; j < len; j++) {
-        (*bytes)[j] = (uint8) distribution(gen);
+        l[i].seq.ptr()[j] = (uint8) distribution(gen);
       }
-      l[i] = ByteString(bytes);
     }
     return l;
   }
@@ -80,8 +79,7 @@ public:
     std::uniform_int_distribution<int> rand_byte(0, 255);
     std::uniform_int_distribution<int> rand_idx(0, insertedKeys.size() - 1);
     
-    shared_ptr<vector<uint8>> emptyBytesVec { new vector<uint8>(0) };
-    ByteString emptyBytes(emptyBytesVec);
+    ByteString emptyBytes(0);
 
     vector<ByteString> queryKeys(n);
     vector<ByteString> queryValues(n);
@@ -89,11 +87,11 @@ public:
     for (int i = 0; i < n; i++) {
       if (rand_bool(gen) == 0) {
         // Min length 20 so probability of collision is miniscule
-        shared_ptr<vector<uint8>> bytes { new vector<uint8>(20) };
-        for (int j = 0; j < emptyBytesVec->size(); j++) {
-          (*bytes)[j] = rand_byte(gen);
+        ByteString bytes(20);
+        for (int j = 0; j < bytes.size(); j++) {
+          bytes.seq.ptr()[j] = rand_byte(gen);
         }
-        queryKeys[i] = ByteString(bytes);
+        queryKeys[i] = bytes;
         queryValues[i] = emptyBytes;
       } else {
         int idx = rand_idx(gen);

@@ -289,13 +289,13 @@ struct DafnySequence {
     DafnySequence() {    
     }
     
-    DafnySequence(uint64 len) {
+    explicit DafnySequence(uint64 len) {
       sptr = shared_ptr<T> (new T[len], std::default_delete<T[]>());
       start = &*sptr;
       this->len = len;
     }
-    
-    DafnySequence<char>(string s) {
+
+    explicit DafnySequence<char>(string const& s) {
       len = s.size();
       sptr = shared_ptr<char> (new char[len], std::default_delete<char[]>());
       memcpy(&*sptr, s.c_str(), s.size());
@@ -320,7 +320,7 @@ struct DafnySequence {
       start[i] = t;
     }
     
-    DafnySequence(shared_ptr<vector<T>> arr) {
+    explicit DafnySequence(shared_ptr<vector<T>> arr) {
       len = arr->size();
       sptr = shared_ptr<T> (new T[len], std::default_delete<T[]>());
       start = &*sptr;
@@ -434,7 +434,7 @@ struct DafnySequence {
       return true;
     }
 
-    T* ptr() { return start; }
+    T* ptr() const { return start; }
     
     // TODO: toString
     

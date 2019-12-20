@@ -136,7 +136,7 @@ namespace MainDiskIOHandler_Compile {
     auto it = this->readReqs.begin();
     if (it != this->readReqs.end()) {
       this->readResponseId = it->first;
-      this->readResponseBytes = it->second.bytes;
+      this->readResponseBytes = DafnySequence<uint8>(it->second.bytes);
       this->readReqs.erase(it);
       return true;
     } else {
