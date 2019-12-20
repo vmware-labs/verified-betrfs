@@ -107,7 +107,7 @@ public:
 
 class BenchmarkRandomInserts : public Benchmark {
 public:
-  int count = 50;
+  int count = 50000;
 
   virtual string name() override { return "RandomInserts"; }
   virtual int opCount() override { return count; }
@@ -134,7 +134,7 @@ public:
 
 class BenchmarkRandomQueries : public Benchmark {
 public:
-  int count = 50;
+  int count = 50000;
 
   virtual string name() override { return "RandomQueries"; }
   virtual int opCount() override { return count; }
