@@ -184,5 +184,5 @@ shared_ptr<Benchmark> benchmark_by_name(string const& name) {
 }
 
 void RunBenchmark(string const& name) {
-  benchmark_by_name(name);
+  benchmark_by_name(name)->run();
 }
