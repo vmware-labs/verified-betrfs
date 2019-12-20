@@ -374,13 +374,9 @@ struct DafnySequence {
     // TODO: isPrefixOf, isProperPrefixOf
     
     DafnySequence<T> concatenate(DafnySequence<T> other) {
-        DafnySequence<T> ret(size() + other.size());
-        for (uint64 i = 0; i < size(); i++) {
-            ret.start[i] = start[i];
-        }            
-        for (uint64 i = 0; i < other.size(); i++) {
-            ret.start[i + size()] = other.start[i];
-        }
+        DafnySequence<T> ret(this->size() + other.size());
+        std::copy(this->ptr(), this->ptr() + this->size(), ret.ptr());
+        std::copy(other.ptr(), other.ptr() + other.size(), ret.ptr() + this->size());
         return ret; 
     }
     
