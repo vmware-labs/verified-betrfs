@@ -88,6 +88,7 @@ abstract module MutableBtreeBulkOperations {
         invariant values[start..nextstart] == Spec.Seq.Flatten(Spec.ToSeqChildren(I(node).children[..i]).1)
         invariant values[nextstart..] == old(values[nextstart..])
       {
+        assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
         assert I(node).children[..i+1][..i] == I(node).children[..i];
         Spec.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
         Spec.ToSeqChildrenDecomposition(I(node).children[..i+1]);
@@ -95,6 +96,7 @@ abstract module MutableBtreeBulkOperations {
 
         nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
         i := i + 1;
+        Spec.reveal_ToSeq();
       }
       assert I(node).children[..node.contents.nchildren] == I(node).children;
       Spec.reveal_ToSeq();
@@ -217,8 +219,6 @@ abstract module MutableBtreeBulkOperations {
   method IndexFromChildren(pivots: seq<Key>, children: seq<Node>) returns (node: Node)
     requires 0 < |children| <= MB.MaxChildren() as int
     requires |pivots| == |children|-1
-    requires forall i :: 0 <= i < |children| ==> WFShape(children[i])
-    requires forall i, j :: 0 <= i < j < |children| ==> children[i].repr !! children[j].repr
     ensures WFShape(node)
     ensures node.contents.Index?
     ensures node.contents.nchildren == |children| as uint64
@@ -239,8 +239,33 @@ abstract module MutableBtreeBulkOperations {
     node.height := MaxHeight(children) + 1;
   }
 
-  method FromSeqIndexLayer(pivots: seq<Key>, children: seq<Node>) returns (newpivots: array<Key>, parents: array<Node>)
+  method FromSeqIndexLayer(pivots: seq<Key>, children: seq<Node>) returns (newpivots: array<Key>, parents: array<Node?>)
+    requires 0 < |children| < Uint64UpperBound() / 2
+    requires |children| == |pivots| + 1
   {
+    var childrenperparent: uint64 := 3 * MB.MaxChildren() / 4;
+    var numparents: uint64 := (|children| as uint64 + childrenperparent - 1) / childrenperparent;
+
+    newpivots := newArrayFill(numparents-1, DefaultKey());
+    parents := newArrayFill(numparents, null);
+
+    var i: uint64 := 0;
+    while i < numparents - 1
+      invariant i <= numparents - 1
+    {
+      calc <= {
+        (i+1) * childrenperparent - 1;
+        |pivots| as uint64;
+      }
+      var parentpivots   :=   pivots[i * childrenperparent..(i+1) * childrenperparent - 1];
+      var parentchildren := children[i * childrenperparent..(i+1) * childrenperparent];
+      parents[i] := IndexFromChildren(parentpivots, parentchildren);
+      newpivots[i] := pivots[(i+1) * childrenperparent - 1];
+      i := i + 1;
+    }
+    var parentpivots   :=   pivots[i * childrenperparent..];
+    var parentchildren := children[i * childrenperparent..];
+    parents[i] := IndexFromChildren(parentpivots, parentchildren);
   }
   
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)
