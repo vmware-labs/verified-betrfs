@@ -57,7 +57,7 @@ abstract module MutableBtree {
     && (forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= parentRepr)
     && (forall i :: 0 <= i < |nodes| ==> nodes[i].height < parentHeight)
     && (forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i]))
-    && (forall i, j :: 0 <= i < j < |nodes| as int ==> DisjointReprs(nodes[i], nodes[j]))
+    && (forall i, j {:trigger DisjointReprs(nodes[i], nodes[j]) } :: 0 <= i < j < |nodes| as int ==> DisjointReprs(nodes[i], nodes[j]))
   }
 
   predicate DisjointSubtrees(contents: NodeContents, i: int, j: int)
@@ -452,6 +452,11 @@ abstract module MutableBtree {
       ensures subnode.contents.children[i].height < subnode.height
     {
     }
+    forall i, j | 0 <= i < j < subnode.contents.nchildren
+      ensures DisjointReprs(subnode.contents.children[i], subnode.contents.children[j])
+    {
+      assert DisjointReprs(node.contents.children[from + i], node.contents.children[from + j]);
+    }
     assert WFShapeChildren(subnode.contents.children[..subnode.contents.nchildren], subnode.repr, subnode.height);
     ghost var isubnode := I(subnode);
     ghost var inode := I(node);
@@ -665,7 +670,7 @@ abstract module MutableBtree {
     }
 
     forall i, j | 0 <= i < j < node.contents.nchildren as int
-      ensures DisjointSubtrees(node.contents, i, j)
+      ensures DisjointReprs(node.contents.children[i], node.contents.children[j])
     {
       if                           j <  childidx       {
         assert old(DisjointSubtrees(node.contents, i, childidx));
@@ -830,7 +835,7 @@ abstract module MutableBtree {
     }
 
     forall i, j | 0 <= i < j < node.contents.nchildren as int
-      ensures DisjointSubtrees(node.contents, i, j)
+      ensures DisjointReprs(node.contents.children[i], node.contents.children[j])
     {
       if                           j <  childidx       {
         assert old(DisjointSubtrees(node.contents, i, childidx));
@@ -900,13 +905,13 @@ abstract module MutableBtree {
       ensures inode.children[i] == oldinode.children[i]
     {
       IOfChild(node, i);
-      assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
+      assert old(DisjointReprs(node.contents.children[i], node.contents.children[childidx]));
     }
     forall i | childidx as int < i < |inode.children|
       ensures inode.children[i] == oldinode.children[i]
     {
       IOfChild(node, i);
-      assert old(DisjointSubtrees(node.contents, childidx as int, i as int));
+      assert old(DisjointReprs(node.contents.children[childidx], node.contents.children[i]));
     }
 
     IOfChild(node, childidx as int);

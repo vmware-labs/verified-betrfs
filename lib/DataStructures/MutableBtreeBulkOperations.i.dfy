@@ -140,8 +140,6 @@ abstract module MutableBtreeBulkOperations {
     requires 1 < x
     ensures (x + d - 1) / d < x
   {
-    // assert 0 < id-1;
-    // assert 0 < ix-1;
     PosMulPosIsPos(d-1, x-1);
   }
 
@@ -151,27 +149,27 @@ abstract module MutableBtreeBulkOperations {
   {
   }
 
-  lemma WFShapeChildrenExtend(children: seq<Node?>, parentHeight: int, child: Node)
-    requires forall i :: 0 <= i < |children| ==> children[i] != null
-    requires MB.WFShapeChildren(children, MB.SeqRepr(children), parentHeight)
-    requires MB.WFShape(child)
-    requires child.height < parentHeight
-    requires forall i :: 0 <= i < |children| ==> children[i].repr !! child.repr
-    ensures MB.WFShapeChildren(children + [child], MB.SeqRepr(children + [child]), parentHeight)
-  {
-    assume false;
-  }
+  // lemma WFShapeChildrenExtend(children: seq<Node?>, parentHeight: int, child: Node)
+  //   requires forall i :: 0 <= i < |children| ==> children[i] != null
+  //   requires MB.WFShapeChildren(children, MB.SeqRepr(children), parentHeight)
+  //   requires MB.WFShape(child)
+  //   requires child.height < parentHeight
+  //   requires forall i :: 0 <= i < |children| ==> children[i].repr !! child.repr
+  //   ensures MB.WFShapeChildren(children + [child], MB.SeqRepr(children + [child]), parentHeight)
+  // {
+  //   assume false;
+  // }
   
-  lemma LeavesMatchBoundariesExtension(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Spec.Node>, leaf: Spec.Node)
-    requires |keys| == |values|
-    requires leaf.Leaf?
-    requires Spec.ValidBoundariesForKeys(|keys|, boundaries)
-    requires Spec.LeavesMatchBoundaries(keys, values, boundaries, leaves)
-    ensures Spec.ValidBoundariesForKeys(|keys| + |leaf.keys|, boundaries + [Last(boundaries) + |leaf.keys|])
-    ensures Spec.LeavesMatchBoundaries(keys + leaf.keys, values + leaf.values, boundaries + [Last(boundaries) + |leaf.keys|], leaves + [leaf])
-  {
-    assume false;
-  }
+  // lemma LeavesMatchBoundariesExtension(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Spec.Node>, leaf: Spec.Node)
+  //   requires |keys| == |values|
+  //   requires leaf.Leaf?
+  //   requires Spec.ValidBoundariesForKeys(|keys|, boundaries)
+  //   requires Spec.LeavesMatchBoundaries(keys, values, boundaries, leaves)
+  //   ensures Spec.ValidBoundariesForKeys(|keys| + |leaf.keys|, boundaries + [Last(boundaries) + |leaf.keys|])
+  //   ensures Spec.LeavesMatchBoundaries(keys + leaf.keys, values + leaf.values, boundaries + [Last(boundaries) + |leaf.keys|], leaves + [leaf])
+  // {
+  //   assume false;
+  // }
   
   method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (leaves: array<Node?>, ghost boundaries: seq<nat>)
     requires 0 < |keys| == |values| < Uint64UpperBound() / 2
@@ -181,6 +179,7 @@ abstract module MutableBtreeBulkOperations {
     ensures forall i :: 0 <= i < leaves.Length ==> fresh(leaves[i].repr)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves !in leaves[i].repr
     ensures WFShapeChildren(leaves[..], MB.SeqRepr(leaves[..]), 1)
+    ensures forall i :: 0 <= i < leaves.Length ==> MB.WFShape(leaves[i])
     ensures forall i :: 0 <= i < leaves.Length ==> leaves[i].contents.Leaf?
     ensures Spec.ValidBoundariesForKeys(|keys|, boundaries)
     ensures |boundaries| == leaves.Length + 1
@@ -208,7 +207,9 @@ abstract module MutableBtreeBulkOperations {
       invariant forall i :: 0 <= i < leafidx ==> leaves[i] != null
       invariant forall i :: 0 <= i < leafidx ==> fresh(leaves[i].repr)
       invariant forall i :: 0 <= i < leafidx ==> leaves !in leaves[i].repr
+      invariant forall i :: 0 <= i < leafidx ==> leaves[i].contents.Leaf?
       invariant WFShapeChildren(leaves[..leafidx], SeqRepr(leaves[..leafidx]), 1)
+      invariant forall i :: 0 <= i < leafidx ==> Spec.LeafMatchesBoundary(keys, values, boundaries, I(leaves[i]), i as nat)
     {
       assert (leafidx + 1) as nat <= (numleaves - 1) as nat;
       PosMulPreservesOrder((leafidx + 1) as nat, (numleaves - 1) as nat, keysperleaf as nat);
@@ -244,8 +245,11 @@ abstract module MutableBtreeBulkOperations {
       }
       assert |keys[keyidx..]| as uint64 <= keysperleaf;
     }
-    leaves[leafidx] := LeafFromSeqs(keys[keyidx..], values[keyidx..]);
-
+    leaves[leafidx] := LeafFromSeqs(keys[keyidx..|keys|], values[keyidx..|keys|]);
+    assert keyidx == boundaries[leafidx] as uint64;
+    assert |keys| == boundaries[leafidx+1];
+    assert Spec.LeafMatchesBoundary(keys, values, boundaries, I(leaves[leafidx]), leafidx as nat);
+    
     assert leaves[..leafidx+1] == leaves[..];
   }
 
