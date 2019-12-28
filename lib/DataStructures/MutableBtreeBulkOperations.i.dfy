@@ -120,89 +120,133 @@ abstract module MutableBtreeBulkOperations {
     return (keys, values);
   }
 
-  method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (pivots: array<Key>, leaves: array<Node?>, ghost boundaries: seq<nat>, ghost ileaves: seq<Spec.Node>)
+  function method DivCeilUint64(x: uint64, d: uint64) : (y: uint64)
+    requires 0 < d
+    requires x as int + d as int < Uint64UpperBound()
+    ensures d as int *(y as int - 1) < x as int <= d as int * y as int
+  {
+    (x + d - 1) / d
+  }
+
+  lemma PosMulPosIsPos(x: int, y: int)
+    requires 0 < x
+    requires 0 < y
+    ensures 0 < x * y
+  {
+  }
+  
+  lemma DivCeilLT(x: int, d: int)
+    requires 1 < d
+    requires 1 < x
+    ensures (x + d - 1) / d < x
+  {
+    // assert 0 < id-1;
+    // assert 0 < ix-1;
+    PosMulPosIsPos(d-1, x-1);
+  }
+
+  lemma PosMulPreservesOrder(x: nat, y: nat, m: nat)
+    requires x <= y
+    ensures x * m <= y * m
+  {
+  }
+
+  lemma WFShapeChildrenExtend(children: seq<Node?>, parentHeight: int, child: Node)
+    requires forall i :: 0 <= i < |children| ==> children[i] != null
+    requires MB.WFShapeChildren(children, MB.SeqRepr(children), parentHeight)
+    requires MB.WFShape(child)
+    requires child.height < parentHeight
+    requires forall i :: 0 <= i < |children| ==> children[i].repr !! child.repr
+    ensures MB.WFShapeChildren(children + [child], MB.SeqRepr(children + [child]), parentHeight)
+  {
+    assume false;
+  }
+  
+  lemma LeavesMatchBoundariesExtension(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Spec.Node>, leaf: Spec.Node)
+    requires |keys| == |values|
+    requires leaf.Leaf?
+    requires Spec.ValidBoundariesForKeys(|keys|, boundaries)
+    requires Spec.LeavesMatchBoundaries(keys, values, boundaries, leaves)
+    ensures Spec.ValidBoundariesForKeys(|keys| + |leaf.keys|, boundaries + [Last(boundaries) + |leaf.keys|])
+    ensures Spec.LeavesMatchBoundaries(keys + leaf.keys, values + leaf.values, boundaries + [Last(boundaries) + |leaf.keys|], leaves + [leaf])
+  {
+    assume false;
+  }
+  
+  method FromSeqLeaves(keys: seq<Key>, values: seq<Value>) returns (leaves: array<Node?>, ghost boundaries: seq<nat>)
     requires 0 < |keys| == |values| < Uint64UpperBound() / 2
-    ensures fresh(pivots)
+    ensures leaves.Length <= |keys|
     ensures fresh(leaves)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves[i] != null
-    ensures forall i :: 0 <= i < leaves.Length ==> MB.WFShape(leaves[i])
-    ensures forall i :: 0 <= i < leaves.Length ==> leaves[i].contents.Leaf?
     ensures forall i :: 0 <= i < leaves.Length ==> fresh(leaves[i].repr)
     ensures forall i :: 0 <= i < leaves.Length ==> leaves !in leaves[i].repr
-    ensures forall i :: 0 <= i < leaves.Length ==> pivots !in leaves[i].repr
-    ensures forall i, j :: 0 <= i < j < leaves.Length ==> leaves[i].repr !! leaves[j].repr
+    ensures WFShapeChildren(leaves[..], MB.SeqRepr(leaves[..]), 1)
+    ensures forall i :: 0 <= i < leaves.Length ==> leaves[i].contents.Leaf?
     ensures Spec.ValidBoundariesForKeys(|keys|, boundaries)
-    ensures Spec.PivotsMatchBoundaries(keys, boundaries, pivots[..])
-    ensures |ileaves| == leaves.Length
-    ensures forall i :: 0 <= i < |ileaves| ==> ileaves[i] == I(leaves[i])
-    ensures Spec.LeavesMatchBoundaries(keys, values, boundaries, ileaves)
+    ensures |boundaries| == leaves.Length + 1
+    ensures forall i :: 0 <= i < leaves.Length ==> Spec.LeafMatchesBoundary(keys, values, boundaries, I(leaves[i]), i)
   {
     var keysperleaf: uint64 := 3 * MB.MaxKeysPerLeaf() / 4;
-    var numleaves: uint64 := (|keys| as uint64 + keysperleaf - 1) / keysperleaf;
-    assert (numleaves as int - 1) * keysperleaf as int < |keys| <= (numleaves * keysperleaf) as int;
-
-    pivots := newArrayFill(numleaves-1, MB.DefaultKey());
-    leaves := newArrayFill(numleaves, null);
-    ileaves := [];
-
-    forall i: int | i < numleaves as int - 1
-      ensures i * keysperleaf as int + keysperleaf as int < |keys|
-    {
-      calc <= {
-        i                      * keysperleaf as int + keysperleaf as int;
-        (numleaves as int - 2) * keysperleaf as int + keysperleaf as int;
-        |keys|;
-      }
+    var numleaves: uint64 := DivCeilUint64(|keys| as uint64, keysperleaf);
+    if |keys| == 1 {
+    } else {
+      DivCeilLT(|keys|, keysperleaf as int);
     }
     
+    leaves := newArrayFill(numleaves, null);
+    
+    boundaries := seq(numleaves, i => i * keysperleaf as int) + [|keys|];
+    Spec.RegularBoundaryIsValid(|keys|, keysperleaf as int);
+
     var leafidx: uint64 := 0;
     var keyidx: uint64 := 0;
     while leafidx < numleaves-1
       invariant leafidx <= numleaves-1
       invariant keyidx == leafidx * keysperleaf
+      invariant keyidx < |keys| as uint64
       invariant fresh(leaves)
-      invariant fresh(pivots)
-      invariant !Arrays.Aliases(pivots, leaves)
       invariant forall i :: 0 <= i < leafidx ==> leaves[i] != null
-      invariant forall i :: leafidx <= i < numleaves ==> leaves[i] == null
-      invariant forall i :: 0 <= i < leafidx ==> MB.WFShape(leaves[i])
-      invariant forall i :: 0 <= i < leafidx ==> leaves[i].contents.Leaf?
       invariant forall i :: 0 <= i < leafidx ==> fresh(leaves[i].repr)
       invariant forall i :: 0 <= i < leafidx ==> leaves !in leaves[i].repr
-      invariant forall i :: 0 <= i < leafidx ==> pivots !in leaves[i].repr
-      invariant forall i, j :: 0 <= i < j < leafidx ==> leaves[i].repr !! leaves[j].repr
-      invariant |ileaves| == leafidx as int
-      invariant forall i :: 0 <= i < leafidx ==> ileaves[i] == I(leaves[i])
-      invariant forall i :: 0 <= i < leafidx ==> ileaves[i].keys == keys[i * keysperleaf..i * keysperleaf + keysperleaf]
-      invariant forall i :: 0 <= i < leafidx ==> ileaves[i].values == values[i * keysperleaf..i * keysperleaf + keysperleaf]
-      invariant forall i :: 0 <= i < leafidx as int - 1 ==> pivots[i] == keys[(i+1) * keysperleaf as int]
+      invariant WFShapeChildren(leaves[..leafidx], SeqRepr(leaves[..leafidx]), 1)
     {
-      var nextkeyidx := keyidx + keysperleaf;
-      leaves[leafidx] := LeafFromSeqs(keys[keyidx..nextkeyidx], values[keyidx..nextkeyidx]);
-      ileaves := ileaves + [I(leaves[leafidx])];
-
-      if 0 < leafidx {
-        pivots[leafidx-1] := keys[keyidx];
+      assert (leafidx + 1) as nat <= (numleaves - 1) as nat;
+      PosMulPreservesOrder((leafidx + 1) as nat, (numleaves - 1) as nat, keysperleaf as nat);
+      calc <= {
+        keyidx as nat + keysperleaf as nat;
+        (leafidx + 1) as nat * keysperleaf as nat;
+        (numleaves - 1) as nat * keysperleaf as nat;
+        |keys|;
       }
-      
+      var nextkeyidx := keyidx + keysperleaf;
+      calc {
+        nextkeyidx;
+        keyidx + keysperleaf;
+        leafidx * keysperleaf + keysperleaf;
+        (leafidx+1) * keysperleaf;
+      }
+      leaves[leafidx] := LeafFromSeqs(keys[keyidx..nextkeyidx], values[keyidx..nextkeyidx]);
+
       leafidx := leafidx + 1;
       keyidx := nextkeyidx;
     }
-    calc <= {
-      |keys| - keyidx as int;
-      |keys| - (numleaves-1) as int * keysperleaf as int;
-      |keys| - numleaves as int * keysperleaf as int + keysperleaf as int;
-      |keys| - |keys| + keysperleaf as int;
-      keysperleaf as int;
+    if |keys| == 1 {
+      assert |keys[keyidx..]| as uint64 < keysperleaf;
+    } else {
+      calc <= {
+        |keys[keyidx..]|;
+        |keys| - keyidx as int;
+        |keys| - leafidx as int * keysperleaf as int;
+        |keys| - (numleaves-1) as int * keysperleaf as int;
+        |keys| - numleaves as int * keysperleaf as int + keysperleaf as int;
+        |keys| - |keys| + keysperleaf as int;
+        keysperleaf as int;
+      }
+      assert |keys[keyidx..]| as uint64 <= keysperleaf;
     }
-    leaves[leafidx] := LeafFromSeqs(keys[keyidx..|keys|], values[keyidx..|keys|]);
-    if 0 < leafidx {
-      pivots[leafidx-1] := keys[keyidx];
-    }
-    ileaves := ileaves + [I(leaves[leafidx])];
+    leaves[leafidx] := LeafFromSeqs(keys[keyidx..], values[keyidx..]);
 
-    boundaries := seq(numleaves, i => i * keysperleaf as int) + [|keys|];
-    Spec.RegularBoundaryIsValid(|keys|, keysperleaf as int);
+    assert leaves[..leafidx+1] == leaves[..];
   }
 
   function MaxHeight(nodes: seq<Node>) : int
@@ -240,11 +284,16 @@ abstract module MutableBtreeBulkOperations {
   }
 
   method FromSeqIndexLayer(pivots: seq<Key>, children: seq<Node>) returns (newpivots: array<Key>, parents: array<Node?>)
-    requires 0 < |children| < Uint64UpperBound() / 2
+    requires 1 < |children| < Uint64UpperBound() / 2
     requires |children| == |pivots| + 1
+    ensures parents.Length == newpivots.Length + 1
+    ensures parents.Length < |children|
+    ensures forall i :: 0 <= i < parents.Length ==> parents[i] != null
   {
     var childrenperparent: uint64 := 3 * MB.MaxChildren() / 4;
-    var numparents: uint64 := (|children| as uint64 + childrenperparent - 1) / childrenperparent;
+    var numparents: uint64 := DivCeilUint64(|children| as uint64, childrenperparent); //(|children| as uint64 + childrenperparent - 1) / childrenperparent;
+    DivCeilLT(|children|, childrenperparent as int);
+    assert numparents as int < |children|;
 
     newpivots := newArrayFill(numparents-1, DefaultKey());
     parents := newArrayFill(numparents, null);
@@ -255,11 +304,16 @@ abstract module MutableBtreeBulkOperations {
     {
       calc <= {
         (i+1) * childrenperparent - 1;
-        |pivots| as uint64;
+        (numparents - 1) * childrenperparent - 1;
+        |children| as uint64 - 2;
+        |pivots| as uint64 - 1;
       }
+      assert (i+1) * childrenperparent <= |children| as uint64;
+      
       var parentpivots   :=   pivots[i * childrenperparent..(i+1) * childrenperparent - 1];
       var parentchildren := children[i * childrenperparent..(i+1) * childrenperparent];
       parents[i] := IndexFromChildren(parentpivots, parentchildren);
+      assert 0 <=  (i+1) * childrenperparent - 1;
       newpivots[i] := pivots[(i+1) * childrenperparent - 1];
       i := i + 1;
     }
@@ -267,6 +321,20 @@ abstract module MutableBtreeBulkOperations {
     var parentchildren := children[i * childrenperparent..];
     parents[i] := IndexFromChildren(parentpivots, parentchildren);
   }
+
+  // method FromSeq(keys: seq<Key>, values: seq<Value>) returns (node: Node)
+  //   requires 0 < |keys| == |values| < Uint64UpperBound() / 2
+  // {
+  //   var nodes: array<Node?>, boundaries, inodes := FromSeqLeaves(keys, values);
+  //   while 1 < nodes.Length
+  //     invariant nodes.Length < Uint64UpperBound() / 2
+  //     invariant forall i :: 0 <= i < nodes.Length ==> nodes[i] != null
+  //     invariant nodes.Length == pivots.Length + 1
+  //   {
+  //     pivots, nodes := FromSeqIndexLayer(pivots[..], nodes[..]);
+  //   }
+  //   node := nodes[0];
+  // }
   
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)
   //   requires WFShape(node)

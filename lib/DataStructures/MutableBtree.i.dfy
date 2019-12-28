@@ -23,7 +23,7 @@ abstract module MutableBtree {
   type Value = Spec.Value
 
   function method MaxKeysPerLeaf() : uint64
-    ensures 1 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 4
+    ensures 2 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 4
 
   function method MaxChildren() : uint64
     ensures 3 < MaxChildren() as int < Uint64UpperBound() / 4
@@ -54,7 +54,7 @@ abstract module MutableBtree {
   {
     && (forall i :: 0 <= i < |nodes| ==> nodes[i] != null)
     && (forall i :: 0 <= i < |nodes| ==> nodes[i] in parentRepr)
-    && (forall i :: 0 <= i < |nodes| ==> nodes[i].repr < parentRepr)
+    && (forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= parentRepr)
     && (forall i :: 0 <= i < |nodes| ==> nodes[i].height < parentHeight)
     && (forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i]))
     && (forall i, j :: 0 <= i < j < |nodes| as int ==> DisjointReprs(nodes[i], nodes[j]))

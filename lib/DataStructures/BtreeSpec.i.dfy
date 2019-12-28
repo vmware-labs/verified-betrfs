@@ -1156,6 +1156,16 @@ abstract module BtreeSpec {
     }
     Keys.reveal_IsStrictlySorted();
   }
+
+  predicate LeafMatchesBoundary(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaf: Node, i: nat)
+    requires |keys| == |values|
+    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires i + 2 <= |boundaries|
+    requires leaf.Leaf?
+  {
+    && leaf.keys == keys[boundaries[i]..boundaries[i+1]]
+    && leaf.values == values[boundaries[i]..boundaries[i+1]]
+  }
   
   predicate LeavesMatchBoundaries(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Node>)
     requires |keys| == |values|
