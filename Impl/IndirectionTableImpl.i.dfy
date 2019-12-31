@@ -759,5 +759,27 @@ module IndirectionTableImpl {
       IndirectionTableModel.lemma_count_eq_graph_size(I().t);
       return this.t.Count;
     }
+
+    method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+    requires Inv()
+    ensures ref == IndirectionTableModel.FindRefWithNoLoc(old(I()))
+    {
+      IndirectionTableModel.reveal_FindRefWithNoLoc();
+
+      var it := this.t.IterStart();
+      while it.next.Next?
+      invariant MutableMapModel.WFIter(this.t.I(), it)
+      invariant IndirectionTableModel.FindRefWithNoLoc(old(I()))
+          == IndirectionTableModel.FindRefWithNoLocIterate(old(I()), it)
+      decreases it.decreaser
+      {
+        if it.next.value.loc.None? {
+          return Some(it.next.key);
+        } else {
+          it := this.t.IterInc(it);
+        }
+      }
+      return None;
+    }
   }
 }

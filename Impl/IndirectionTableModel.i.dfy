@@ -1641,4 +1641,35 @@ module IndirectionTableModel {
   {
     FromHashMap(self.t, None)
   }
+
+  function FindRefWithNoLocIterate(self: IndirectionTable, it: MutableMapModel.Iterator<Entry>) : (ref: Option<BT.G.Reference>)
+  requires Inv(self)
+  requires MutableMapModel.WFIter(self.t, it)
+  decreases it.decreaser
+  ensures
+    && (ref.Some? ==> ref.value in self.graph)
+    && (ref.Some? ==> ref.value !in self.locs)
+    && (ref.None? ==> forall r | r in self.graph && r !in it.s :: r in self.locs)
+  {
+    if it.next.Next? then (
+      if it.next.value.loc.None? then (
+        Some(it.next.key)
+      ) else (
+        FindRefWithNoLocIterate(self,
+            MutableMapModel.IterInc(self.t, it))
+      )
+    ) else (
+      None
+    )
+  }
+
+  function {:opaque} FindRefWithNoLoc(self: IndirectionTable) : (ref: Option<BT.G.Reference>)
+  requires Inv(self)
+  ensures
+    && (ref.Some? ==> ref.value in self.graph)
+    && (ref.Some? ==> ref.value !in self.locs)
+    && (ref.None? ==> forall r | r in self.graph :: r in self.locs)
+  {
+    FindRefWithNoLocIterate(self, MutableMapModel.IterStart(self.t))
+  }
 }
