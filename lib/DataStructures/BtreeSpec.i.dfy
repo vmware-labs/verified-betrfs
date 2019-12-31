@@ -1107,19 +1107,43 @@ abstract module BtreeSpec {
     assert keys == Unzip(kvlist).0;
   }
 
-  predicate ValidBoundariesForKeys(nkeys: int, boundaries: seq<nat>)
+  predicate ValidBoundariesForSeq(nkeys: int, boundaries: seq<nat>)
   {
     && 0 < |boundaries|
     && boundaries[0] == 0
     && Last(boundaries) == nkeys
     && Integer_Order.IsStrictlySorted(boundaries)
-    && (forall i :: 0 <= i < |boundaries|-1 ==> boundaries[i] < boundaries[i+1]) // Redundant
     && (forall i :: 0 <= i < |boundaries|-1 ==> boundaries[i] < nkeys) // Redundant
   }
 
+  lemma ValidBoundaryLength(nkeys: int, boundaries: seq<nat>)
+    requires ValidBoundariesForSeq(nkeys, boundaries)
+    ensures |boundaries| <= nkeys + 1
+  {
+    var i := 0;
+    while i < |boundaries|-1
+      invariant i <= |boundaries|-1
+      invariant i <= boundaries[i]
+    {
+      Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
+      i := i + 1;
+    }
+  }
+  
+  function ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<nat>, i: int) : seq<T>
+    requires ValidBoundariesForSeq(|things|, boundaries)
+    requires 0 <= i < |boundaries|-1
+  {
+    assert boundaries[i] <= boundaries[i+1] by
+    {
+      Integer_Order.IsStrictlySortedImpliesLte(boundaries, i, i+1);
+    }
+    things[boundaries[i]..boundaries[i+1]]
+  }
+  
   lemma RegularBoundaryIsValid(nkeys: nat, keyspernode: nat)
     requires 0 < keyspernode
-    ensures ValidBoundariesForKeys(nkeys, seq((nkeys + keyspernode - 1) / keyspernode, i => i * keyspernode) + [nkeys])
+    ensures ValidBoundariesForSeq(nkeys, seq((nkeys + keyspernode - 1) / keyspernode, i => i * keyspernode) + [nkeys])
   {
     var boundaries := seq((nkeys + keyspernode - 1) / keyspernode, i => i * keyspernode) + [nkeys];
     forall i, j | 0 <= i < j < |boundaries|
@@ -1132,11 +1156,11 @@ abstract module BtreeSpec {
       }
     }
     Integer_Order.reveal_IsStrictlySorted();
-    assert ValidBoundariesForKeys(nkeys, boundaries);
+    assert ValidBoundariesForSeq(nkeys, boundaries);
   }
   
   predicate PivotsMatchBoundaries(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
-    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires ValidBoundariesForSeq(|keys|, boundaries)
   {
     && |pivots| == |boundaries| - 2
     && (forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]])
@@ -1144,7 +1168,7 @@ abstract module BtreeSpec {
   
   lemma BoundaryPivotsStrictlySorted(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
     requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires ValidBoundariesForSeq(|keys|, boundaries)
     requires PivotsMatchBoundaries(keys, boundaries, pivots)
     ensures Keys.IsStrictlySorted(pivots)
   {
@@ -1159,31 +1183,31 @@ abstract module BtreeSpec {
 
   predicate LeafMatchesBoundary(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaf: Node, i: nat)
     requires |keys| == |values|
-    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires ValidBoundariesForSeq(|keys|, boundaries)
     requires i + 2 <= |boundaries|
     requires leaf.Leaf?
   {
-    && leaf.keys == keys[boundaries[i]..boundaries[i+1]]
-    && leaf.values == values[boundaries[i]..boundaries[i+1]]
+    && leaf.keys == ExtractBoundedSubsequence(keys, boundaries, i)
+    && leaf.values == ExtractBoundedSubsequence(values, boundaries, i)
   }
   
   predicate LeavesMatchBoundaries(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Node>)
     requires |keys| == |values|
-    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires ValidBoundariesForSeq(|keys|, boundaries)
   {
     && |boundaries| == |leaves| + 1
     && (forall i :: 0 <= i < |leaves| ==> leaves[i].Leaf?)
-    && (forall i :: 0 <= i < |leaves| ==> leaves[i].keys == keys[boundaries[i]..boundaries[i+1]])
-    && (forall i :: 0 <= i < |leaves| ==> leaves[i].values == values[boundaries[i]..boundaries[i+1]])
+    && (forall i :: 0 <= i < |leaves| ==> leaves[i].keys == ExtractBoundedSubsequence(keys, boundaries, i))
+    && (forall i :: 0 <= i < |leaves| ==> leaves[i].values == ExtractBoundedSubsequence(values, boundaries, i))
   }
     
   lemma ToSeqChildrenOfChildrenFromSeq(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, children: seq<Node>)
     requires |keys| == |values|
     requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires ValidBoundariesForSeq(|keys|, boundaries)
     requires |boundaries| == |children| + 1
     requires forall i :: 0 <= i < |children| ==> WF(children[i])
-    requires forall i :: 0 <= i < |children| ==> ToSeq(children[i]) == (keys[boundaries[i]..boundaries[i+1]], values[boundaries[i]..boundaries[i+1]])
+    requires forall i :: 0 <= i < |children| ==> ToSeq(children[i]) == (ExtractBoundedSubsequence(keys, boundaries, i), ExtractBoundedSubsequence(values, boundaries, i))
     ensures Flatten(ToSeqChildren(children).0) == keys
     ensures Flatten(ToSeqChildren(children).1) == values
   {
@@ -1198,8 +1222,9 @@ abstract module BtreeSpec {
       {
         ToSeqChildrenDecomposition(children[..i+1]);
         assert children[..i] == children[..i+1][..i];
-        assert keys[..boundaries[i+1]] == keys[..boundaries[i]] + keys[boundaries[i]..boundaries[i+1]];
-        assert values[..boundaries[i+1]] == values[..boundaries[i]] + values[boundaries[i]..boundaries[i+1]];
+        Integer_Order.IsStrictlySortedImpliesLte(boundaries, i, i+1);
+        assert keys[..boundaries[i+1]] == keys[..boundaries[i]] + ExtractBoundedSubsequence(keys, boundaries, i);
+        assert values[..boundaries[i+1]] == values[..boundaries[i]] + ExtractBoundedSubsequence(values, boundaries, i);
         i := i + 1;
       }
       assert children[..|children|] == children;
@@ -1208,13 +1233,155 @@ abstract module BtreeSpec {
     }
   }
 
+  predicate TreeMatchesSequence(node: Node, keys: seq<Key>, values: seq<Value>)
+    requires WF(node)
+  {
+    Keys.SortedSeqForMap(Zip(keys, values), Interpretation(node))
+  }
+
+  datatype Configuration = Configuration(maxChildren: nat, maxKeys: nat)
+
+  predicate ValidConfiguration(config: Configuration)
+  {
+    && 0 < config.maxKeys
+    && 0 < config.maxChildren
+  }
+    
+  predicate FitsConfig(node: Node, config: Configuration)
+  {
+    && WF(node)
+    && (if node.Index? then
+         && |node.children| <= config.maxChildren
+         && (forall i :: 0 <= i < |node.children| ==> FitsConfig(node.children[i], config))
+       else
+         && |node.keys| <= config.maxKeys
+      )
+  }
+
+  datatype KVList = KVList(keys: seq<Key>, values: seq<Value>)
+  
+  predicate WFKVList(kvlist: KVList)
+  {
+    && |kvlist.keys| == |kvlist.values|
+    && Keys.IsStrictlySorted(kvlist.keys)
+  }
+
+  function DropLastPiece<T>(things: seq<T>, boundaries: seq<nat>) : seq<T>
+    requires ValidBoundariesForSeq(|things|, boundaries)
+    ensures ValidBoundariesForSeq(|things|, DropLast(boundaries))
+  {
+    things[..boundaries[|boundaries|-2]]
+  }
+
+  function DropLastKVListPiece(kvlist: KVList, boundaries: seq<nat>) : (sublist: KVList)
+    requires WFKVList(kvlist)
+    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
+    ensures ValidBoundariesForSeq(|sublist.keys|, DropLast(boundaries))
+    ensures WFKVList(sublist)
+  {
+    KVList(DropLastPiece(kvlist.keys, boundaries), DropLastPiece(kvlist.values, boundaries))
+  }
+
+  function DropLastPivotsPiece(pivots: seq<Key>, boundaries: seq<nat>) : (subpivots: seq<Key>)
+    requires 2 < |boundaries|
+    requires ValidBoundariesForSeq(|pivots| + 1, boundaries)
+    ensures ValidBoundariesForSeq(|subpivots| + 1, DropLast(boundaries))
+  {
+    pivots[..boundaries[|boundaries|-2] - 1]
+  }
+  
+  function BuildLeafForSequence(kvlist: KVList, boundaries: seq<nat>, i: nat) : (node: Node)
+    requires WFKVList(kvlist)
+    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
+    requires i < |boundaries|-1
+  {
+    Leaf(ExtractBoundedSubsequence(kvlist.keys, boundaries, i), ExtractBoundedSubsequence(kvlist.values, boundaries, i))
+  }
+  
+  function BuildLeavesForSequence(kvlist: KVList, boundaries: seq<nat>) : (nodes: seq<Node>)
+    requires WFKVList(kvlist)
+    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
+  {
+    if |boundaries| == 1 then
+      [BuildLeafForSequence(kvlist, boundaries, 0)]
+    else
+      var subboundaries := DropLast(boundaries);
+      var subkvlist := DropLastKVListPiece(kvlist, boundaries);
+      BuildLeavesForSequence(subkvlist, subboundaries) + [BuildLeafForSequence(kvlist, boundaries, |boundaries|-2)]
+  }
+
+  function ExtractPivotsForBoundaries(pivots: seq<Key>, boundaries: seq<nat>) : (subpivots: seq<Key>)
+    requires ValidBoundariesForSeq(|pivots|+1, boundaries)
+  {
+    seq(|boundaries|-2, i => pivots[boundaries[i+1]])
+  }
+  
+  function ExtractPivotsFromKVList(kvlist: KVList) : (pivots: seq<Key>)
+    requires 0 < |kvlist.keys|
+  {
+    kvlist.keys[1..]
+  }
+
+  function BuildParentForSequence(nodes: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, i: nat) : (node: Node)
+    requires ValidBoundariesForSeq(|nodes|, boundaries)
+    requires |pivots| == |nodes|-1
+    requires i < |boundaries|-1
+  {
+    Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
+    var mypivots := pivots[boundaries[i]..boundaries[i+1]-1];
+    Index(mypivots, ExtractBoundedSubsequence(nodes, boundaries, i))
+  }
+  
+  function BuildParentsFromChildren(nodes: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>) : (parents: seq<Node>)
+    requires ValidBoundariesForSeq(|nodes|, boundaries)
+    requires |pivots| == |nodes| - 1
+  {
+    if |boundaries| == 2 then
+      [BuildParentForSequence(nodes, pivots, boundaries, 0)]
+    else
+      var subboundaries := DropLast(boundaries);
+      var subnodes := DropLastPiece(nodes, boundaries);
+      var subpivots := DropLastPivotsPiece(pivots, boundaries);
+      BuildParentsFromChildren(subnodes, subpivots, subboundaries) + [BuildParentForSequence(nodes, pivots, boundaries, |boundaries|-2)]
+  }
+
+  function BuildBoundaries(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
+    requires 0 < groupSize
+    ensures ValidBoundariesForSeq(numthings, boundaries)
+  {
+    var tmp := seq((numthings + groupSize - 1) / groupSize, i => i * groupSize);
+    if Last(tmp) == numthings then tmp
+    else tmp + [numthings]
+  }
+
+  function BuildTreeFromChildren(nodes: seq<Node>, pivots: seq<Key>, config: Configuration) : Node
+  {
+    if |nodes| == 1 then
+      nodes[0]
+    else
+      var boundaries := BuildBoundaries(|nodes|, config.maxChildren);
+      var parents := BuildParentsFromChildren(nodes, pivots, boundaries);
+      var newpivots := ExtractPivotsForBoundaries(pivots, boundaries);
+      BuildTreeFromChildren(parents, newpivots, config)
+  }
+  
+  function BuildTreeForSequence(kvlist: KVList, config: Configuration) : (node: Node)
+    requires WFKVList(kvlist)
+    ensures FitsConfig(node, config)
+  {
+    var boundaries := BuildBoundaries(|kvlist.keys|, config.maxKeys);
+    var leaves := BuildLeavesForSequence(kvlist, boundaries);
+    var pivots := ExtractPivotsForBoundaries(ExtractPivotsFromKVList(kvlist), boundaries);
+    BuildTreeFromChildren(leaves, pivots, config)
+  }
+    
   lemma FromSeqWF(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>, children: seq<Node>)
     requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForKeys(|keys|, boundaries)
+    requires ValidBoundariesForSeq(|keys|, boundaries)
     requires |boundaries| == |children| + 1
     requires PivotsMatchBoundaries(keys, boundaries, pivots)
     requires forall i :: 0 <= i < |children| ==> WF(children[i])
-    requires forall i :: 0 <= i  < |children| ==> {} < AllKeys(children[i]) <= Set(keys[boundaries[i]..boundaries[i+1]])
+    requires forall i :: 0 <= i  < |children| ==> {} < AllKeys(children[i]) <= Set(ExtractBoundedSubsequence(keys, boundaries, i))
     ensures WF(Index(pivots, children))
   {
     var node := Index(pivots, children);
@@ -1224,6 +1391,7 @@ abstract module BtreeSpec {
       forall k | k in AllKeys(node.children[i])
         ensures Keys.lt(k, node.pivots[i])
       {
+        Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
         var j :| boundaries[i] <= j < boundaries[i+1] && keys[j] == k;
         Keys.IsStrictlySortedImpliesLt(keys, j, boundaries[i+1]);
       }
@@ -1234,6 +1402,7 @@ abstract module BtreeSpec {
       forall k | k in AllKeys(node.children[i])
         ensures Keys.lte(node.pivots[i-1], k)
       {
+        Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
         var j :| boundaries[i] <= j < boundaries[i+1] && keys[j] == k;
         Keys.IsStrictlySortedImpliesLte(keys, boundaries[i], j);
       }

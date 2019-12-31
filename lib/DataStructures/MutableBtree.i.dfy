@@ -222,6 +222,52 @@ abstract module MutableBtree {
     assert node.contents.keys[..node.contents.nkeys] == keys;
   }
 
+  function {:opaque} SeqRepr(nodes: seq<Node>) : set<object>
+    ensures forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= SeqRepr(nodes)
+    reads Set(nodes)
+  {
+    set i, o | 0 <= i < |nodes| && o in nodes[i].repr :: o
+  }
+
+  lemma SeqReprSubsequence(nodes: seq<Node>, from: int, to: int)
+    requires 0 <= from <= to <= |nodes|
+    ensures SeqRepr(nodes[from..to]) <= SeqRepr(nodes)
+  {
+    reveal_SeqRepr();
+  }
+
+  lemma WFShapeChildrenSeqRepr(nodes: seq<Node>, repr: set<object>, height: int)
+    requires WFShapeChildren(nodes, repr, height)
+    ensures SeqRepr(nodes) <= repr
+  {
+    reveal_SeqRepr();
+  }
+  
+  method IndexFromChildren(pivots: seq<Key>, children: seq<Node>, ghost height: nat) returns (node: Node)
+    requires 0 < |children| <= MaxChildren() as int
+    requires |pivots| == |children|-1
+    ensures node.contents.Index?
+    ensures node.contents.pivots.Length == MaxChildren() as int - 1
+    ensures node.contents.children.Length == MaxChildren() as int
+    ensures node.contents.nchildren == |children| as uint64
+    ensures node.contents.pivots[..node.contents.nchildren-1] == pivots
+    ensures node.contents.children[..node.contents.nchildren] == children
+    ensures fresh(node)
+    ensures fresh(node.contents.pivots)
+    ensures fresh(node.contents.children)
+    ensures node.repr == {node, node.contents.pivots, node.contents.children} + SeqRepr(children)
+    ensures node.height == height
+  {
+    var pivotarray := newArrayFill(MaxChildren()-1, DefaultKey());
+    var childarray := newArrayFill(MaxChildren(), null);
+    Arrays.Memcpy(pivotarray, 0, pivots);
+    Arrays.Memcpy(childarray, 0, children);
+    node := new Node;
+    node.contents := Index(|children| as uint64, pivotarray, childarray);
+    node.repr := {node, node.contents.pivots, node.contents.children} + SeqRepr(children);
+    node.height := height;
+  }
+  
   predicate method Full(node: Node)
     reads node
   {
@@ -265,22 +311,16 @@ abstract module MutableBtree {
     o in node.contents.children[i].repr
   }
 
-  function {:opaque} SeqRepr(nodes: seq<Node>) : set<object>
-    ensures forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= SeqRepr(nodes)
-    reads Set(nodes)
-  {
-    if |nodes| == 0 then {}
-    else SeqRepr(DropLast(nodes)) + Last(nodes).repr
-  }
-  
-  function {:opaque} SubRepr(node: Node, from: int, to: int) : (result: set<object>)
+  function SubRepr(node: Node, from: int, to: int) : (result: set<object>)
     requires WFShape(node)
     requires node.contents.Index?
     requires 0 <= from <= to <= node.contents.nchildren as int
-    ensures {node, node.contents.pivots, node.contents.children} !! SubRepr(node, from, to)
     reads node.repr
   {
-    set i: int, o | 0 <= from <= i < to && o in node.repr && ObjectIsInSubtree(node, o, i) :: o
+    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
+    assert forall i :: from <= i < to ==> node.contents.children[i] != null;
+    assert forall i :: from <= i < to ==> node.contents.children[i] in node.repr;
+    SeqRepr(node.contents.children[from..to])
   }
 
   lemma SubReprUpperBound(node: Node, from: int, to: int)
@@ -291,13 +331,18 @@ abstract module MutableBtree {
     ensures SubRepr(node, from, to) <= node.repr - {node, node.contents.pivots, node.contents.children}
     ensures to - from < node.contents.nchildren as int ==> SubRepr(node, from, to) < node.repr - {node, node.contents.pivots, node.contents.children}
   {
-    reveal_SubRepr();
+    reveal_SeqRepr();
     
     var subrepr := SubRepr(node, from, to);
     var nchildren := node.contents.nchildren;
     var pivots := node.contents.pivots;
     var children := node.contents.children;
-    
+
+    forall o | o in subrepr
+      ensures o in node.repr
+    {
+      var i :| from <= i < to && o in node.contents.children[i].repr;
+    }
     assert subrepr <= node.repr;
     assert pivots !in subrepr;
     assert children !in subrepr;
@@ -316,7 +361,7 @@ abstract module MutableBtree {
           if o == pivots {
           } else if o == children {
           } else {
-            var i :| from <= i < to && o in node.repr && ObjectIsInSubtree(node, o, i);
+            var i :| from <= i < to && o in node.repr && o in node.contents.children[i].repr; 
             assert DisjointSubtrees(node.contents, 0, i);
           }
         }
@@ -329,7 +374,7 @@ abstract module MutableBtree {
           if o == pivots {
           } else if o == children {
           } else {
-            var i :| from <= i < to && o in node.repr && ObjectIsInSubtree(node, o, i);
+            var i :| from <= i < to && o in node.repr && o in node.contents.children[i].repr; 
             assert DisjointSubtrees(node.contents, i, nchildren as int - 1);
           }
         }
@@ -348,13 +393,18 @@ abstract module MutableBtree {
     ensures forall i :: from <= i < to ==> node.contents.children[i] != null
     ensures forall i :: from <= i < to ==> node.contents.children[i].repr <= SubRepr(node, from, to)
   {
-    reveal_SubRepr();
+    reveal_SeqRepr();
     
     var subrepr := SubRepr(node, from, to);
     var nchildren := node.contents.nchildren;
     var pivots := node.contents.pivots;
     var children := node.contents.children;
     
+    forall o | o in subrepr
+      ensures o in node.repr
+    {
+      var i :| from <= i < to && o in node.contents.children[i].repr;
+    }
     assert subrepr <= node.repr;
     assert pivots !in subrepr;
     assert children !in subrepr;
@@ -419,14 +469,20 @@ abstract module MutableBtree {
     ensures fresh(subnode.contents.children)
   {
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-    var subpivots := newArrayFill(MaxChildren()-1, DefaultKey());
-    var subchildren := newArrayFill(MaxChildren(), null);
-    Arrays.Memcpy(subpivots, 0, node.contents.pivots[from..to-1]); // FIXME: remove conversion to seq
-    Arrays.Memcpy(subchildren, 0, node.contents.children[from..to]); // FIXME: remove conversion to seq
-    subnode := new Node;
-    subnode.repr := SubRepr(node, from as int, to as int) + {subnode, subpivots, subchildren};
-    subnode.height := node.height;
-    subnode.contents := Index(to - from, subpivots, subchildren);
+    forall i | 0 <= i < |node.contents.children[from..to]|
+      ensures node.contents.children[from..to][i] != null
+    {
+      assert node.contents.children[from as int + i] != null;
+    }
+    subnode := IndexFromChildren(node.contents.pivots[from..to-1], node.contents.children[from..to], node.height);
+    // var subpivots := newArrayFill(MaxChildren()-1, DefaultKey());
+    // var subchildren := newArrayFill(MaxChildren(), null);
+    // Arrays.Memcpy(subpivots, 0, node.contents.pivots[from..to-1]); // FIXME: remove conversion to seq
+    // Arrays.Memcpy(subchildren, 0, node.contents.children[from..to]); // FIXME: remove conversion to seq
+    // subnode := new Node;
+    // subnode.repr := SubRepr(node, from as int, to as int) + {subnode, subpivots, subchildren};
+    // subnode.height := node.height;
+    // subnode.contents := Index(to - from, subpivots, subchildren);
 
     //assert forall i :: 0 <= i < to - from ==> subnode.contents.children[i as int] == node.contents.children[(from + i) as int];
 
@@ -472,18 +528,17 @@ abstract module MutableBtree {
     requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
     ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
   {
-    reveal_SubRepr();
+    reveal_SeqRepr();
     var subrepr1 := SubRepr(node, from1, to1);
     var subrepr2 := SubRepr(node, from2, to2);
 
     if o :| o in subrepr1 && o in subrepr2 {
-      var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && ObjectIsInSubtree(node, o, i1);
-      var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && ObjectIsInSubtree(node, o, i2);
+      var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && o in node.contents.children[i1].repr; 
+      var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && o in node.contents.children[i2].repr; 
       assert i1 < i2;
       assert DisjointSubtrees(node.contents, i1, i2);
     }
   }
-  
 
   method SplitIndex(node: Node, nleft: uint64) returns (right: Node, ghost wit: Key, pivot: Key)
     requires WF(node)
