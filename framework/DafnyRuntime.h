@@ -277,6 +277,9 @@ inline int64 EuclideanDivision_int64(int64 a, int64 b) {
     }    
 }
 
+template <typename T>
+T* global_empty_ptr = new T[0];
+
 /*********************************************************
  *  SEQUENCES                                            *
  *********************************************************/
@@ -286,9 +289,12 @@ struct DafnySequence {
     T* start;
     size_t len;
 
-    DafnySequence() {    
+    DafnySequence() {
+      sptr = nullptr;
+      start = global_empty_ptr<T>;
+      len = 0;
     }
-    
+
     explicit DafnySequence(uint64 len) {
       sptr = shared_ptr<T> (new T[len], std::default_delete<T[]>());
       start = &*sptr;
@@ -301,25 +307,23 @@ struct DafnySequence {
       memcpy(&*sptr, s.c_str(), s.size());
       start = &*sptr;
     }
-    
+
     DafnySequence(const DafnySequence<T>& other) {
       sptr = other.sptr;
       start = other.start;
       len = other.len;
     }
- 
+
     // Update one element
     DafnySequence(const DafnySequence<T>& other, uint64 i, T t) {
       len = other.length();
       sptr = shared_ptr<T> (new T[len], std::default_delete<T[]>());
       start = &*sptr;
 
-      for (int j = 0; j < len; j++) {
-        start[j] = other.start[j];
-      }
+      std::copy(other.start, other.start + len, start);
       start[i] = t;
     }
-    
+
     explicit DafnySequence(shared_ptr<vector<T>> arr) {
       len = arr->size();
       sptr = shared_ptr<T> (new T[len], std::default_delete<T[]>());
@@ -333,7 +337,7 @@ struct DafnySequence {
       start = &*sptr;
       std::copy(arr->begin() + lo, arr->begin() + hi, start);
     }
-    
+
     DafnySequence(initializer_list<T> il) {
       len = il.size();
       sptr = shared_ptr<T> (new T[len], std::default_delete<T[]>());
@@ -345,9 +349,9 @@ struct DafnySequence {
         i++;
       }
     }
-    
+
     static DafnySequence<T> SeqFromArray(shared_ptr<vector<T>> arr) {
-        DafnySequence<T> ret(arr);         
+        DafnySequence<T> ret(arr);
         return ret;
     }
 
@@ -368,30 +372,30 @@ struct DafnySequence {
 
     static DafnySequence<T> Create(initializer_list<T> il) {
         DafnySequence<T> ret(il);
-        return ret;            
+        return ret;
     }
-    
+
     // TODO: isPrefixOf, isProperPrefixOf
-    
+
     DafnySequence<T> concatenate(DafnySequence<T> other) {
         DafnySequence<T> ret(this->size() + other.size());
         std::copy(this->ptr(), this->ptr() + this->size(), ret.ptr());
         std::copy(other.ptr(), other.ptr() + other.size(), ret.ptr() + this->size());
-        return ret; 
+        return ret;
     }
-    
+
     T select(uint64 i) const {
         return start[i];
     }
-    
+
     uint64 length () const { return len; }
     uint64 size() const { return len; }
-    
+
     DafnySequence<T> update(uint64 i, T t) const {
         DafnySequence<T> ret(*this, i, t);
         return ret;
     }
-    
+
     bool contains(T t) const {
         for (uint64 i = 0; i < size(); i++) {
             if (select(i) == t) {
@@ -400,7 +404,7 @@ struct DafnySequence {
         }
         return false;
     }
-    
+
     // Returns the subsequence of values [lo..hi)
     DafnySequence<T> subsequence(uint64 lo, uint64 hi) const {
         DafnySequence<T> ret;
@@ -409,20 +413,20 @@ struct DafnySequence {
         ret.len = hi - lo;
         return ret;
     }
-    
+
     // Returns the subsequence of values [lo..length())
     DafnySequence<T> drop(uint64 lo) const {
         return subsequence(lo, size());
     }
-    
+
     // Returns the subsequence of values [0..hi)
     DafnySequence<T> take(uint64 hi) const {
         return subsequence(0, hi);
     }
-    
+
     // TODO: slice
 
-    bool equals(const DafnySequence<T> other) const {        
+    bool equals(const DafnySequence<T> other) const {
       if (size() != other.size()) {
         return false;
       }
@@ -435,9 +439,8 @@ struct DafnySequence {
     }
 
     T* ptr() const { return start; }
-    
+
     // TODO: toString
-    
 };
 
 template <typename T>
@@ -474,7 +477,7 @@ bool operator!=(const DafnySequence<U> &s0, const DafnySequence<U> &s1) {
 inline ostream& operator<<(ostream& out, const DafnySequence<char>& val){
     for (int i = 0; i < val.size(); i++) {
         out << val.select(i);
-    }    
+    }
     return out;
 }
 
