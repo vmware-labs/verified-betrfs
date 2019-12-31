@@ -13,8 +13,11 @@ mono ./nuget.exe restore Source/Boogie.sln
 msbuild /p:Configuration=Release Source/Boogie.sln
 cd ..
 
-git clone --branch fast-array-slicing https://github.com/secure-foundations/dafny.git
+#git clone --branch fast-array-slicing https://github.com/secure-foundations/dafny.git
+git clone https://github.com/secure-foundations/dafny.git
 cd dafny
+git checkout 3a1533e99d7a568686630b99c88fa12dc1b0ba08
+
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
 
