@@ -1178,6 +1178,15 @@ module KVList {
   lemma kvlSeqWeightEq(kvls: seq<Kvl>)
   requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
   ensures WeightKvlSeq(kvls) == WeightBucketList(ISeq(kvls))
+  {
+    reveal_WeightBucketList();
+    if |kvls| == 0 {
+    } else {
+      kvlSeqWeightEq(DropLast(kvls));
+      Islice(kvls, 0, |kvls| - 1);
+      kvlWeightEq(Last(kvls));
+    }
+  }
 
   lemma kvlWeightPrefixLe(kvl: Kvl, j: int)
   requires WF(kvl)
@@ -1293,6 +1302,10 @@ module KVList {
     )
   }
 
+  lemma toKvlI_eq(kvl: Kvl)
+  requires WF(kvl)
+  ensures toKvl(I(kvl)) == kvl
+
   function getMiddleKey(bucket: Bucket) : Key
   requires WFBucket(bucket)
   {
@@ -1316,7 +1329,7 @@ module KVList {
   {
     WFImpliesWFBucket(kvl); 
     lenKeysLeWeight(kvl);
-    assume kvl == toKvl(I(kvl));
+    toKvlI_eq(kvl);
     if |kvl.keys| as uint64 == 0 {
       return [0];
     } else {
