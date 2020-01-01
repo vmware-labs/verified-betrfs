@@ -371,7 +371,6 @@ module IndirectionTableImpl {
     ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
     {
-      assume |a| < 0x1_0000_0000_0000_0000;
       if |a| as uint64 == 0 {
         var newHashMap := new MutableMap.ResizingHashMap<IndirectionTableModel.Entry>(1024); // TODO(alattuada) magic numbers
         s := Some(newHashMap);
