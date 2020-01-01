@@ -1261,10 +1261,24 @@ module KVList {
     assert prefix(kvl, |kvl.keys|) == kvl;
   }
 
-  function toKvl(bucket: Bucket) : (kvl: Kvl)
+  function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
   ensures WF(kvl)
   ensures I(kvl) == bucket
+  {
+    reveal_I();
+    reveal_IsStrictlySorted();
+    reveal_WFBucket();
+
+    if bucket.Keys == {} then (
+      Kvl([], [])
+    ) else (
+      var key := maximum(bucket.Keys);
+      var kvl1 := toKvl(MapRemove1(bucket, key));
+      StrictlySortedAugment(kvl1.keys, key);
+      Kvl(kvl1.keys + [key], kvl1.values + [bucket[key]])
+    )
+  }
 
   function toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
