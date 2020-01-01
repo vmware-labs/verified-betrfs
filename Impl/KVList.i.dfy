@@ -1104,6 +1104,8 @@ module KVList {
     reveal_replace1with2();
   }
 
+  // TODO remove kvlOfSeq and related stuff when memtable lands
+
   function kvlOfSeq(s: seq<(Key, Message)>) : (kvl: Kvl)
   requires |s| < 0x1_0000_0000_0000_0000
   ensures WF(kvl)
@@ -1226,6 +1228,12 @@ module KVList {
   ensures WeightKvl(prefix(kvl, j as int)) +
       WeightKey(kvl.keys[j]) + WeightMessage(kvl.values[j])
           == WeightKvl(prefix(kvl, j as int + 1));
+  {
+    assert DropLast(prefix(kvl, j as int + 1).values)
+        == prefix(kvl, j as int).values;
+    assert DropLast(prefix(kvl, j as int + 1).keys)
+        == prefix(kvl, j as int).keys;
+  }
 
   method computeWeightKvl(kvl: Kvl)
   returns (weight: uint64)
