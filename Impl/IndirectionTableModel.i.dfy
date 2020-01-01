@@ -639,6 +639,17 @@ module IndirectionTableModel {
     forall ref | ref in succs :: ref in graph
   }
 
+  lemma QueueSizeBound(self: IndirectionTable)
+  requires Inv(self)
+  ensures self.garbageQueue.Some? ==>
+      |LruModel.I(self.garbageQueue.value)| <= 0x1_0000_0000;
+  {
+    if self.garbageQueue.Some? {
+      SetInclusionImpliesSmallerCardinality(LruModel.I(self.garbageQueue.value), self.t.contents.Keys);
+      assert |self.t.contents.Keys| == |self.t.contents|;
+    }
+  }
+
   lemma LemmaUpdateAndRemoveLocStuff(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>)
   requires Inv(self)
   requires TrackingGarbage(self)
@@ -652,7 +663,10 @@ module IndirectionTableModel {
     var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
     RefcountUpdateInv(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0, 0)
+  ensures |LruModel.I(self.garbageQueue.value)| <= 0x1_0000_0000;
   {
+    QueueSizeBound(self);
+
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));

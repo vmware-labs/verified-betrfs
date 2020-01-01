@@ -341,7 +341,6 @@ module IndirectionTableImpl {
       var oldEntry := this.t.Get(ref);
       var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
       if oldEntry.None? {
-        assume |LruModel.I(this.garbageQueue.Queue)| <= 0x1_0000_0000;
         this.garbageQueue.Use(ref);
       }
       this.t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
