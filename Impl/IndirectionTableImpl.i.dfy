@@ -648,8 +648,7 @@ module IndirectionTableImpl {
 
         MutableMapModel.LemmaIterIndexLtCount(t.I(), it);
 
-        // TODO this probably warrants a new invariant, or may leverage the weights branch, see TODO in BlockCache
-        assume |succs| < 0x1_0000_0000_0000_0000;
+        assert |succs| < 0x1_0000_0000_0000_0000;
         assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
 
         assert |MutableMapModel.IterInc(t.I(), it).s| == |it.s| + 1;
@@ -759,6 +758,28 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.lemma_count_eq_graph_size(I().t);
       return this.t.Count;
+    }
+
+    method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+    requires Inv()
+    ensures ref == IndirectionTableModel.FindRefWithNoLoc(old(I()))
+    {
+      IndirectionTableModel.reveal_FindRefWithNoLoc();
+
+      var it := this.t.IterStart();
+      while it.next.Next?
+      invariant MutableMapModel.WFIter(this.t.I(), it)
+      invariant IndirectionTableModel.FindRefWithNoLoc(old(I()))
+          == IndirectionTableModel.FindRefWithNoLocIterate(old(I()), it)
+      decreases it.decreaser
+      {
+        if it.next.value.loc.None? {
+          return Some(it.next.key);
+        } else {
+          it := this.t.IterInc(it);
+        }
+      }
+      return None;
     }
   }
 }

@@ -187,10 +187,12 @@ module MarshallingImpl {
     }
   }
 
+
   method ValToBuckets(a: seq<V>, pivotTable: seq<Key>) returns (s : Option<seq<BucketImpl.MutBucket>>)
   requires IMM.valToBuckets.requires(a, pivotTable)
   requires |a| < 0x1_0000_0000_0000_0000
   requires |pivotTable| < MaxNumChildren()
+  requires forall i | 0 <= i < |a| :: SizeOfV(a[i]) < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
   ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value)
   ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
@@ -219,7 +221,9 @@ module MarshallingImpl {
         return;
       }
 
-      assume WeightBucket(KVList.I(b.value)) < 0x1_0000_0000_0000_0000;
+      IMM.WeightBucketLteSize(a[i], pivotTable, i as int, b.value);
+      assert WeightBucket(KVList.I(b.value)) < 0x1_0000_0000_0000_0000;
+
       var bucket := new BucketImpl.MutBucket(b.value);
       assert forall k: nat | k < i as int :: ar[k].Inv();
       ar[i] := bucket;
@@ -243,6 +247,7 @@ module MarshallingImpl {
 
   method ValToNode(v: V) returns (s : Option<Node>)
   requires IMM.valToNode.requires(v)
+  requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> s.value.Inv()
   ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value.buckets)
   ensures s.Some? ==> forall i | 0 <= i < |s.value.buckets| :: fresh(s.value.buckets[i].Repr)
@@ -278,6 +283,10 @@ module MarshallingImpl {
     var children := childrenOpt.value;
 
     assert ValidVal(v.t[2]);
+
+    IMM.SizeOfVTupleElem_le_SizeOfV(v, 2);
+    IMM.SizeOfVArrayElem_le_SizeOfV_forall(v.t[2]);
+
     var bucketsOpt := ValToBuckets(v.t[2 as uint64].a, pivots);
     if (bucketsOpt.None?) {
       return None;
@@ -291,7 +300,9 @@ module MarshallingImpl {
       return None;
     }
 
-    assume WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000; // TODO we should be able to prove this using the fact that it was deserialized:
+    IMM.WeightBucketListLteSize(v.t[2 as uint64], pivots, BucketImpl.MutBucket.ISeq(buckets));
+    assert WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000;
+
     var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
     if (w > MaxTotalBucketWeightUint64()) {
       return None;
@@ -317,6 +328,7 @@ module MarshallingImpl {
 
   method ValToSector(v: V) returns (s : Option<StateImpl.Sector>)
   requires IMM.valToSector.requires(v)
+  requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
@@ -611,6 +623,7 @@ module MarshallingImpl {
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, IMM.SectorGrammar());
+    assume SizeOfV(v) < 0x1_0000_0000_0000_0000; // TODO looks like we need to modify GenericMarshalling to get this fact out? (the reason we need this is to show that BucketWeightList of the resulting node lists are small enough)
     if success {
       var s := ValToSector(v);
       return s;

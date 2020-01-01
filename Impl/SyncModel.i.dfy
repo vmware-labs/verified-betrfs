@@ -4,7 +4,7 @@ include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-// See dependency graph in Handlers.dfy
+// See dependency graph in MainHandlers.dfy
 
 module SyncModel { 
   import opened StateModel
@@ -347,21 +347,6 @@ module SyncModel {
     }
   }
 
-  function {:opaque} FindRefInFrozenWithNoLoc(s: Variables) : (ref: Option<Reference>)
-  requires WFVars(s)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
-
-  lemma FindRefInFrozenWithNoLocCorrect(s: Variables)
-  requires WFVars(s)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
-  ensures var ref := FindRefInFrozenWithNoLoc(s);
-    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value.graph)
-    && (ref.Some? ==> ref.value !in s.frozenIndirectionTable.value.locs)
-    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value.graph
-        :: r in s.frozenIndirectionTable.value.locs)
-
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: Constants, s: Variables, io: IO)
   : (res: (Variables, IO))
@@ -564,8 +549,7 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) then (
           (s', io') == syncNotFrozen(k, s, io)
         ) else (
-          var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-          FindRefInFrozenWithNoLocCorrect(s);
+          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
           if foundInFrozen.Some? then (
             syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
           ) else if (s.outstandingBlockWrites != map[]) then (
@@ -606,8 +590,7 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) {
           syncNotFrozenCorrect(k, s, io);
         } else {
-          var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-          FindRefInFrozenWithNoLocCorrect(s);
+          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
           if foundInFrozen.Some? {
             syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
           } else if (s.outstandingBlockWrites != map[]) {

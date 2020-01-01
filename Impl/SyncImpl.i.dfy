@@ -6,7 +6,7 @@ include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-// See dependency graph in Handlers.dfy
+// See dependency graph in MainHandlers.dfy
 
 module SyncImpl { 
   import opened IOImpl
@@ -86,30 +86,6 @@ module SyncImpl {
 
     s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
     s.blockAllocator.MarkUsedOutstanding(loc.addr / BlockSizeUint64());
-  }
-
-  method FindRefInFrozenWithNoLoc(s: ImplVariables) returns (ref: Option<Reference>)
-  requires s.WF()
-  requires s.ready
-  requires s.frozenIndirectionTable != null
-  ensures ref == SyncModel.FindRefInFrozenWithNoLoc(s.I())
-  {
-    assume false;
-    var it := s.frozenIndirectionTable.t.IterStart();
-
-    while it.next.Next?
-    {
-      var ref := it.next.key;
-      var lbaGraph := it.next.value;
-      var lba := lbaGraph.loc;
-      if lba.None? {
-        return Some(ref);
-      }
-      it := s.frozenIndirectionTable.t.IterInc(it);
-    }
-    assert forall r | r in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph
-        :: r in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
-    return None;
   }
 
   method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
@@ -230,8 +206,7 @@ module SyncImpl {
       syncNotFrozen(k, s, io);
       return;
     }
-    var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-    SyncModel.FindRefInFrozenWithNoLocCorrect(s.I());
+    var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
 
     if foundInFrozen.Some? {
       syncFoundInFrozen(k, s, io, foundInFrozen.value);

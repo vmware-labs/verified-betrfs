@@ -308,6 +308,38 @@ module ImplMarshallingModel {
     )
   }
 
+  /////// Some lemmas that are useful in Impl
+
+  lemma WeightBucketLteSize(v: V, pivotTable: seq<Key>, i: int, kvl: KVList.Kvl)
+  requires valToBucket.requires(v, pivotTable, i)
+  requires valToBucket(v, pivotTable, i) == Some(kvl)
+  ensures WeightBucket(KVList.I(kvl)) <= SizeOfV(v)
+
+  lemma WeightBucketListLteSize(v: V, pivotTable: seq<Key>, buckets: seq<Bucket>)
+  requires v.VArray?
+  requires valToBuckets.requires(v.a, pivotTable)
+  requires valToBuckets(v.a, pivotTable) == Some(buckets)
+  ensures WeightBucketList(buckets) <= SizeOfV(v)
+
+  lemma SizeOfVTupleElem_le_SizeOfV(v: V, i: int)
+  requires v.VTuple?
+  requires 0 <= i < |v.t|
+  ensures SizeOfV(v.t[i]) <= SizeOfV(v)
+
+  lemma SizeOfVArrayElem_le_SizeOfV(v: V, i: int)
+  requires v.VArray?
+  requires 0 <= i < |v.a|
+  ensures SizeOfV(v.a[i]) <= SizeOfV(v)
+
+  lemma SizeOfVArrayElem_le_SizeOfV_forall(v: V)
+  requires v.VArray?
+  ensures forall i | 0 <= i < |v.a| :: SizeOfV(v.a[i]) <= SizeOfV(v)
+  {
+    forall i | 0 <= i < |v.a| ensures SizeOfV(v.a[i]) <= SizeOfV(v)
+    {
+      SizeOfVArrayElem_le_SizeOfV(v, i);
+    }
+  }
 
   /////// Conversion from PivotNode to a val
 

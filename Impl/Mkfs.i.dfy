@@ -2,7 +2,11 @@ include "Marshalling.i.dfy"
 include "StateImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
 
-// TODO make separate spec abstract module
+//
+// TODO implement this so that it matches the spec of Mkfs
+// provided in Main.s.dfy.
+//
+
 module {:extern} MkfsImpl {
   import MarshallingImpl
   import IMM = ImplMarshallingModel
@@ -26,9 +30,6 @@ module {:extern} MkfsImpl {
 
   type LBA = LBAType.LBA
 
-  // TODO spec out that the data returned by this function
-  // satisfies the initial conditions
-  // TODO prove that this always returns an answer (that is, marshalling always succeeds)
   method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
   {
     WeightBucketEmpty();

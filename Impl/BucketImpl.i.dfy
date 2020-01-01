@@ -553,21 +553,32 @@ module BucketImpl {
 
     static method CloneSeq(buckets: seq<MutBucket>) returns (buckets': seq<MutBucket>)
     requires InvSeq(buckets)
+    requires |buckets| < 0x1_0000_0000_0000_0000;
     ensures InvSeq(buckets')
     ensures fresh(ReprSeq(buckets'))
     ensures |buckets'| == |buckets|
     ensures ISeq(buckets) == ISeq(buckets')
     ensures ReprSeqDisjoint(buckets')
     {
-      assume false;
       var ar := new MutBucket?[|buckets| as uint64];
       var j: uint64 := 0;
       while j < |buckets| as uint64
+      invariant 0 <= j as int <= |buckets|
+      invariant ar.Length == |buckets|
+      invariant forall i | 0 <= i < j as int :: ar[i] != null
+      invariant forall i | 0 <= i < j as int :: ar[i].Inv()
+      invariant forall i | 0 <= i < j as int :: ar[i].I() == buckets[i].I()
+      invariant forall i | 0 <= i < j as int :: fresh(ar[i].Repr)
+      invariant forall i, i' | 0 <= i < j as int && 0 <= i' < j as int && i != i' :: ar[i].Repr !! ar[i'].Repr
       {
         ar[j] := buckets[j].Clone();
         j := j + 1;
       }
       buckets' := ar[..];
+
+      reveal_InvSeq();
+      reveal_ReprSeq();
+      reveal_ReprSeqDisjoint();
     }
 
     predicate WFIter(it: Iterator)

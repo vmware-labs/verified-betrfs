@@ -247,6 +247,7 @@ abstract module AsyncDiskModel {
   import D = AsyncDisk
   import M : AsyncDiskMachine
   import AsyncDiskModelTypes
+  import opened NativeTypes
 
   type DiskOp = M.DiskOp
   type Constants = AsyncDiskModelTypes.AsyncDiskModelConstants<M.Constants, D.Constants>
@@ -302,4 +303,16 @@ abstract module AsyncDiskModel {
     requires Inv(k, s)
     requires Next(k, s, s', uiop)
     ensures Inv(k, s')
+
+  predicate BlocksWrittenInByteSeq(
+      contents: map<uint64, seq<byte>>,
+      byteSeq: seq<byte>)
+  {
+    && (forall addr: uint64 | addr in contents ::
+        && 0 <= addr as int <= |byteSeq|
+        && addr as int + |contents[addr]| <= |byteSeq|
+        && byteSeq[addr .. addr as int + |contents[addr]|] == contents[addr])
+    && (forall addr1, addr2 | addr1 in contents && addr2 in contents
+        && addr1 != addr2 :: !D.overlap(addr1 as int, |contents[addr1]|, addr2 as int, |contents[addr2]|))
+  }
 }
