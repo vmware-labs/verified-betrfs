@@ -389,7 +389,12 @@ module IndirectionTableModel {
   ensures idx < |oldSuccs| ==>
     var (t', q') := PredDec(t, q, oldSuccs[idx]);
     RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
+  ensures |LruModel.I(q)| <= 0x1_0000_0000
   {
+    assert LruModel.I(q) <= t.contents.Keys;
+    SetInclusionImpliesSmallerCardinality(LruModel.I(q), t.contents.Keys);
+    assert |t.contents.Keys| == |t.contents|;
+
     if idx < |oldSuccs| {
       var graph := Graph(t);
 

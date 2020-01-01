@@ -248,6 +248,7 @@ module IndirectionTableImpl {
     requires ref in t.I().contents
     requires t.I().contents[ref].predCount > 0
     requires t.Repr !! q.Repr
+    requires |LruModel.I(q.Queue)| <= 0x1_0000_0000;
     modifies t.Repr
     modifies q.Repr
     ensures forall o | o in t.Repr :: o in old(t.Repr) || fresh(o)
@@ -262,7 +263,6 @@ module IndirectionTableImpl {
       var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
       t.Insert(ref, newEntry);
       if oldEntry.predCount == 1 {
-        assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
         q.Use(ref);
       }
     }
@@ -493,6 +493,7 @@ module IndirectionTableImpl {
     static method MakeGarbageQueue(t: HashMap)
     returns (q : LruImpl.LruImplQueue)
     requires t.Inv()
+    requires |t.I().contents| <= 0x1_0000_0000
     ensures q.Inv()
     ensures fresh(q.Repr)
     ensures q.Queue == IndirectionTableModel.makeGarbageQueue(t.I())
@@ -508,11 +509,18 @@ module IndirectionTableImpl {
       invariant MutableMapModel.WFIter(t.I(), it)
       invariant IndirectionTableModel.makeGarbageQueue(t.I())
              == IndirectionTableModel.makeGarbageQueueIterate(t.I(), q.Queue, it)
+      invariant LruModel.I(q.Queue) <= t.I().contents.Keys
+      invariant |t.I().contents| <= 0x1_0000_0000
       decreases it.decreaser
       {
         if it.next.value.predCount == 0 {
           LruModel.LruUse(q.Queue, it.next.key);
           assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
+
+          SetInclusionImpliesSmallerCardinality(
+              LruModel.I(q.Queue), t.I().contents.Keys);
+          assert |t.I().contents.Keys| == |t.I().contents|;
+
           q.Use(it.next.key);
         }
         it := t.IterInc(it);
