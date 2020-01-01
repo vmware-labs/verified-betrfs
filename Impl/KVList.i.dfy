@@ -1280,11 +1280,18 @@ module KVList {
     )
   }
 
-  function toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
+  function {:opaque} toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   ensures |kvls| == |buckets|
   ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
   ensures ISeq(kvls) == buckets
+  {
+    if |buckets| == 0 then (
+      []
+    ) else (
+      toKvlSeq(DropLast(buckets)) + [toKvl(Last(buckets))]
+    )
+  }
 
   function getMiddleKey(bucket: Bucket) : Key
   requires WFBucket(bucket)
