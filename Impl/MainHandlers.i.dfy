@@ -8,6 +8,7 @@ include "SuccImpl.i.dfy"
 include "InsertModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
+include "ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
 //
 // Implements the application-API-handler obligations laid out by Main.s.dfy.
 //
@@ -30,6 +31,8 @@ module {:extern} MainHandlers refines Main {
   import BC = BetreeGraphBlockCache
   import ADM = ByteBetreeBlockCacheSystem
 
+  import System_Ref = ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap
+
   type Constants = SI.ImplConstants
   type Variables = SI.ImplVariables
 
@@ -47,6 +50,7 @@ module {:extern} MainHandlers refines Main {
     && SI.Inv(k, hs.s)
   }
 
+  function Ik(k: Constants) : ADM.M.Constants { BC.Constants() }
   function I(k: Constants, hs: HeapState) : ADM.M.Variables { SM.IVars(hs.s.I()) }
 
   method InitState() returns (k: Constants, hs: HeapState)
@@ -177,5 +181,27 @@ module {:extern} MainHandlers refines Main {
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
+  }
+
+  function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants
+  {
+    System_Ref.Ik(k)
+  }
+
+  function SystemI(k: ADM.Constants, s: ADM.Variables) : ThreeStateVersionedMap.Variables
+  {
+    System_Ref.I(k, s)
+  }
+
+  lemma SystemRefinesCrashSafeMapInit(
+    k: ADM.Constants, s: ADM.Variables)
+  {
+    System_Ref.RefinesInit(k, s);
+  }
+
+  lemma SystemRefinesCrashSafeMapNext(
+    k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
+  {
+    System_Ref.RefinesNext(k, s, s', uiop);
   }
 }
