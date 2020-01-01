@@ -1306,12 +1306,30 @@ module KVList {
   requires WF(kvl)
   requires |kvl.keys| > 0
   ensures maximumOpt(I(kvl).Keys) == Some(Last(kvl.keys))
+  {
+    Imaps(kvl, |kvl.keys| - 1);
+    assert Last(kvl.keys) in I(kvl).Keys;
+    forall key | key in I(kvl).Keys
+    ensures lte(key, Last(kvl.keys))
+    {
+      var i := IndexOfKey(kvl, key);
+      reveal_IsStrictlySorted();
+    }
+  }
 
   lemma lastIsNotInDropLast(kvl: Kvl)
   requires WF(kvl)
   requires |kvl.keys| > 0
   ensures WF(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))
   ensures Last(kvl.keys) !in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values)));
+  {
+    WFPrefix(kvl, |kvl.keys| - 1);
+    if Last(kvl.keys) in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values))) {
+      var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.values)), Last(kvl.keys));
+      assert kvl.keys[i] == Last(kvl.keys);
+      reveal_IsStrictlySorted();
+    }
+  }
 
   lemma I_injective(kvl1: Kvl, kvl2: Kvl)
   requires WF(kvl1)
