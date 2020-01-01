@@ -1125,7 +1125,7 @@ module IndirectionTableModel {
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
-  requires |a| < 0x1_0000_0000_0000_0000 / 8
+  requires |a| <= MaxSize()
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> s.value.count as int == |a|

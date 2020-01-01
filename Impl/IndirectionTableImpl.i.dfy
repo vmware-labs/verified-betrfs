@@ -401,8 +401,6 @@ module IndirectionTableImpl {
                 } else {
                   mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
                   s := Some(mutMap);
-                  assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
-                  assume s.value.Count as nat == |a|;
                 }
               }
             }
