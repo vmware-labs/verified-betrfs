@@ -514,7 +514,6 @@ module IndirectionTableImpl {
       {
         if it.next.value.predCount == 0 {
           LruModel.LruUse(q.Queue, it.next.key);
-          assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
 
           SetInclusionImpliesSmallerCardinality(
               LruModel.I(q.Queue), t.I().contents.Keys);
