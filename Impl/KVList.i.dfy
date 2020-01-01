@@ -1302,9 +1302,61 @@ module KVList {
     )
   }
 
+  lemma lastIsMax(kvl: Kvl)
+  requires WF(kvl)
+  requires |kvl.keys| > 0
+  ensures maximumOpt(I(kvl).Keys) == Some(Last(kvl.keys))
+
+  lemma lastIsNotInDropLast(kvl: Kvl)
+  requires WF(kvl)
+  requires |kvl.keys| > 0
+  ensures WF(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))
+  ensures Last(kvl.keys) !in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values)));
+
+  lemma I_injective(kvl1: Kvl, kvl2: Kvl)
+  requires WF(kvl1)
+  requires WF(kvl2)
+  requires I(kvl1) == I(kvl2)
+  ensures kvl1 == kvl2
+  decreases |kvl1.keys|
+  {
+    reveal_I();
+    reveal_IsStrictlySorted();
+    if |kvl1.keys| == 0 {
+    } else {
+      lastIsMax(kvl1);
+      lastIsMax(kvl2);
+      assert Some(Last(kvl1.keys))
+          == maximumOpt(I(kvl1).Keys)
+          == maximumOpt(I(kvl2).Keys)
+          == Some(Last(kvl2.keys));
+
+      var key := Last(kvl1.keys);
+      assert key == Last(kvl2.keys);
+      lastIsNotInDropLast(kvl1);
+      lastIsNotInDropLast(kvl2);
+      //assert key !in I(Kvl(DropLast(kvl1.keys), DropLast(kvl1.values)));
+      //assert key !in I(Kvl(DropLast(kvl2.keys), DropLast(kvl2.values)));
+      assert I(Kvl(DropLast(kvl1.keys), DropLast(kvl1.values)))
+          == MapRemove1(I(kvl1), key)
+          == MapRemove1(I(kvl2), key)
+          == I(Kvl(DropLast(kvl2.keys), DropLast(kvl2.values)));
+      I_injective(
+        prefix(kvl1, |kvl1.keys| - 1),
+        prefix(kvl2, |kvl2.keys| - 1));
+      assert Last(kvl1.values) == Last(kvl2.values);
+    }
+  }
+
   lemma toKvlI_eq(kvl: Kvl)
   requires WF(kvl)
+  ensures WFBucket(I(kvl))
   ensures toKvl(I(kvl)) == kvl
+  {
+    WFImpliesWFBucket(kvl);
+    assert I(toKvl(I(kvl))) == I(kvl);
+    I_injective(toKvl(I(kvl)), kvl);
+  }
 
   function getMiddleKey(bucket: Bucket) : Key
   requires WFBucket(bucket)
