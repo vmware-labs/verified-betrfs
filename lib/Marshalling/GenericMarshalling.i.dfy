@@ -1118,6 +1118,37 @@ lemma lemma_parse_Val_view_Message(data:seq<byte>, v:V, grammar:G, index:int)
              ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m))));
     ensures  forall bound :: index+SizeOfV(v) <= bound <= |data| ==>
              parse_Message(data[index..bound]).0 == Some(v.m) ==> parse_Message(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+{
+    reveal_MessageSizeUint64();
+
+    forall bound {:trigger Trigger(bound)} | Trigger(bound)
+        ensures index+SizeOfV(v) <= bound <= |data| ==> ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m)));
+    {
+        if (v.m.Define?) {
+          if index+SizeOfV(v) <= bound <= |data| {
+              var narrow_tuple := parse_Message(data[index..index+SizeOfV(v)]);
+              var bound_tuple := parse_Message(data[index..bound]);
+              var narrow_len_tuple := parse_Uint64(data[index..index+SizeOfV(v)]);
+              var bound_len_tuple := parse_Uint64(data[index..bound]);
+              assert narrow_len_tuple.0 == bound_len_tuple.0;
+
+              if bound_tuple.0 == Some(v.m) {
+                  assert bound_len_tuple.1[0..bound_len_tuple.0.value.u] == narrow_len_tuple.1[0..bound_len_tuple.0.value.u];     // OBSERVE
+              }
+
+              if narrow_tuple.0 == Some(v.m) {
+                  assert bound_len_tuple.1[0..bound_len_tuple.0.value.u] == narrow_len_tuple.1[0..bound_len_tuple.0.value.u];       // OBSERVE
+              }
+              assert ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m)));
+          }
+          assert index+SizeOfV(v) <= bound <= |data| ==> ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m)));
+        }
+    }
+    assert forall bound :: Trigger(bound) ==> (index+SizeOfV(v) <= bound <= |data| ==>
+             ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m))));
+    assert forall bound :: index+SizeOfV(v) <= bound <= |data| ==>
+             parse_Message(data[index..bound]).0 == Some(v.m) ==> parse_Message(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
+}
 
 lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int)
     requires |data| < 0x1_0000_0000_0000_0000;
