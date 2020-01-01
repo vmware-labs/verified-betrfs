@@ -297,6 +297,18 @@ module BucketImpl {
       reveal_ReprSeqDisjoint();
     }
 
+    static lemma ReprSeqDisjointOfReplace1with2(
+        buckets: seq<MutBucket>,
+        l: MutBucket,
+        r: MutBucket,
+        slot: int)
+    requires 0 <= slot < |buckets|
+    requires ReprSeqDisjoint(buckets)
+    requires l.Repr !! ReprSeq(buckets)
+    requires r.Repr !! ReprSeq(buckets)
+    requires l.Repr !! r.Repr
+    ensures ReprSeqDisjoint(replace1with2(buckets, l, r, slot))
+
     static lemma ListReprOfLen1(buckets: seq<MutBucket>)
     requires |buckets| == 1
     ensures ReprSeq(buckets) == buckets[0].Repr
@@ -472,15 +484,55 @@ module BucketImpl {
     static method SplitOneInList(buckets: seq<MutBucket>, slot: uint64, pivot: Key)
     returns (buckets' : seq<MutBucket>)
     requires InvSeq(buckets)
+    requires ReprSeqDisjoint(buckets)
     requires 0 <= slot as int < |buckets|
+    requires |buckets| < 0xffff_ffff_ffff_ffff
     ensures InvSeq(buckets')
     ensures ReprSeqDisjoint(buckets')
     ensures ISeq(buckets') == old(SplitBucketInList(ISeq(buckets), slot as int, pivot))
     ensures forall o | o in ReprSeq(buckets') :: o in old(ReprSeq(buckets)) || fresh(o)
     {
-      assume false;
+      AllocatedReprSeq(buckets);
+
       var l, r := buckets[slot].SplitLeftRight(pivot);
       buckets' := Replace1with2(buckets, l, r, slot);
+
+      ghost var ghosty := true;
+      if ghosty {
+        reveal_SplitBucketInList();
+        assume ISeq(replace1with2(buckets, l, r, slot as int))
+            == replace1with2(ISeq(buckets), l.I(), r.I(), slot as int);
+        ReprSeqDisjointOfReplace1with2(buckets, l, r, slot as int);
+        forall i | 0 <= i < |buckets'| ensures buckets'[i].Inv()
+        {
+          if i < slot as int {
+            assert buckets[i].Inv();
+            assert buckets'[i].Inv();
+          } else if i == slot as int  {
+            assert buckets'[i].Inv();
+          } else if i == slot as int + 1 {
+            assert buckets'[i].Inv();
+          } else {
+            assert buckets[i-1].Inv();
+            assert buckets'[i].Inv();
+          }
+        }
+        forall o | o in ReprSeq(buckets')
+        ensures o in old(ReprSeq(buckets)) || fresh(o)
+        {
+          reveal_ReprSeq();
+          var i :| 0 <= i < |buckets'| && o in buckets'[i].Repr;
+          if i < slot as int {
+            assert o in buckets[i].Repr;
+          } else if i == slot as int {
+            assert fresh(o);
+          } else if i == slot as int + 1 {
+            assert fresh(o);
+          } else {
+            assert o in buckets[i-1].Repr;
+          }
+        }
+      }
     }
 
     static method computeWeightOfSeq(buckets: seq<MutBucket>)
