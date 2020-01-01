@@ -374,7 +374,6 @@ module IndirectionTableImpl {
       if |a| as uint64 == 0 {
         var newHashMap := new MutableMap.ResizingHashMap<IndirectionTableModel.Entry>(1024); // TODO(alattuada) magic numbers
         s := Some(newHashMap);
-        assume s.value.Count as nat == |a|;
       } else {
         var res := ValToHashMap(a[..|a| as uint64 - 1]);
         match res {
@@ -392,7 +391,9 @@ module IndirectionTableImpl {
                 var graphRef := mutMap.Get(ref);
                 var loc := LBAType.Location(lba, len);
 
-                assume |succs| < 0x1_0000_0000_0000_0000; // should follow from ValidVal, just need to add that as precondition
+                assert ValidVal(tuple);
+                assert ValidVal(tuple.t[3]);
+                assert |succs| < 0x1_0000_0000_0000_0000;
 
                 if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
                     || |succs| as uint64 > MaxNumChildrenUint64() {
