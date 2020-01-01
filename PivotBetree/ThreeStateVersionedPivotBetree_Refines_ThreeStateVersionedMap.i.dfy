@@ -34,7 +34,7 @@ module ThreeStateVersionedPivotBetree_Refines_ThreeStateVersionedMap {
       s.outstandingSyncReqs)
   }
 
-  lemma ThreeStateVersionedPivotBetreeRefinesThreeStateVersionedMapInit(k: A.Constants, s: A.Variables)
+  lemma RefinesInit(k: A.Constants, s: A.Variables)
     requires A.Init(k, s)
     ensures A.Inv(k, s)
     ensures B.Init(Ik(k), I(k, s))
@@ -44,7 +44,7 @@ module ThreeStateVersionedPivotBetree_Refines_ThreeStateVersionedMap {
     Ref.PivotBetreeRefinesMapInit(k.k, s.s3);
   }
 
-  lemma ThreeStateVersionedPivotBetreeRefinesThreeStateVersionedMapNextStep(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UI.Op, step: A.Step)
+  lemma RefinesNextStep(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UI.Op, step: A.Step)
     requires A.Inv(k, s)
     requires A.NextStep(k, s, s', uiop, step)
     ensures A.Inv(k, s')
@@ -73,13 +73,13 @@ module ThreeStateVersionedPivotBetree_Refines_ThreeStateVersionedMap {
     }
   }
 
-  lemma ThreeStateVersionedPivotBetreeRefinesThreeStateVersionedMapNext(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UI.Op)
+  lemma RefinesNext(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UI.Op)
     requires A.Inv(k, s)
     requires A.Next(k, s, s', uiop)
     ensures A.Inv(k, s')
     ensures B.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     var step :| A.NextStep(k, s, s', uiop, step);
-    ThreeStateVersionedPivotBetreeRefinesThreeStateVersionedMapNextStep(k, s, s', uiop, step);
+    RefinesNextStep(k, s, s', uiop, step);
   }
 }
