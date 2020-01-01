@@ -314,6 +314,18 @@ module ImplMarshallingModel {
   requires valToBucket.requires(v, pivotTable, i)
   requires valToBucket(v, pivotTable, i) == Some(kvl)
   ensures WeightBucket(KVList.I(kvl)) <= SizeOfV(v)
+  {
+    KVList.kvlWeightEq(kvl);
+    assume WeightKeySeq(kvl.keys) == SeqSumLens(kvl.keys);
+    assume WeightMessageSeq(kvl.values) == SeqSumMessageLens(kvl.values);
+    reveal_SeqSum();
+    assert SizeOfV(v)
+        == SeqSum(v.t)
+        == SizeOfV(v.t[0]) + SeqSum(v.t[1..])
+        == SizeOfV(v.t[0]) + SizeOfV(v.t[1]) + SeqSum([])
+        == SizeOfV(v.t[0]) + SizeOfV(v.t[1])
+        == 8 + SeqSumLens(v.t[0].baa) + 8 + SeqSumMessageLens(v.t[1].ma);
+  }
 
   lemma WeightBucketListLteSize(v: V, pivotTable: seq<Key>, buckets: seq<Bucket>)
   requires v.VArray?
@@ -321,15 +333,54 @@ module ImplMarshallingModel {
   requires valToBuckets(v.a, pivotTable) == Some(buckets)
   ensures WeightBucketList(buckets) <= SizeOfV(v)
 
+  decreases |v.a|
+  {
+    reveal_WeightBucketList();
+    if |v.a| == 0 {
+    } else {
+      WeightBucketListLteSize(VArray(DropLast(v.a)), pivotTable, DropLast(buckets));
+      lemma_SeqSum_prefix(DropLast(v.a), Last(v.a));
+
+      var pref := valToBuckets(DropLast(v.a), pivotTable).value;
+      var kvl := valToBucket(Last(v.a), pivotTable, |pref|).value;
+      WeightBucketLteSize(Last(v.a), pivotTable, |pref|, kvl);
+
+      assert DropLast(v.a) + [Last(v.a)] == v.a;
+      assert WeightBucketList(buckets)
+          == WeightBucketList(DropLast(buckets)) + WeightBucket(Last(buckets))
+          <= SizeOfV(VArray(DropLast(v.a))) + WeightBucket(Last(buckets))
+          <= SizeOfV(VArray(DropLast(v.a))) + SizeOfV(Last(v.a))
+          == SizeOfV(v);
+    }
+  }
+
   lemma SizeOfVTupleElem_le_SizeOfV(v: V, i: int)
   requires v.VTuple?
   requires 0 <= i < |v.t|
   ensures SizeOfV(v.t[i]) <= SizeOfV(v)
 
+  decreases |v.t|
+  {
+    lemma_SeqSum_prefix(DropLast(v.t), Last(v.t));
+    assert DropLast(v.t) + [Last(v.t)] == v.t;
+    if i < |v.t| - 1 {
+      SizeOfVTupleElem_le_SizeOfV(VTuple(DropLast(v.t)), i);
+    }
+  }
+
   lemma SizeOfVArrayElem_le_SizeOfV(v: V, i: int)
   requires v.VArray?
   requires 0 <= i < |v.a|
   ensures SizeOfV(v.a[i]) <= SizeOfV(v)
+
+  decreases |v.a|
+  {
+    lemma_SeqSum_prefix(DropLast(v.a), Last(v.a));
+    assert DropLast(v.a) + [Last(v.a)] == v.a;
+    if i < |v.a| - 1 {
+      SizeOfVArrayElem_le_SizeOfV(VArray(DropLast(v.a)), i);
+    }
+  }
 
   lemma SizeOfVArrayElem_le_SizeOfV_forall(v: V)
   requires v.VArray?
