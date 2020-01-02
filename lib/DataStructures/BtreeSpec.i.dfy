@@ -1483,11 +1483,15 @@ abstract module BtreeSpec {
   }
 
 
-  function SplitFirstChildAlongLastBoundary(node: Node, boundaries: seq<nat>) : (newnode: Node)
+  function SplitFirstChildAlongBoundaries(node: Node, boundaries: seq<nat>) : (newnode: Node)
     requires WF(node)
     requires node.Index?
     requires node.children[0].Index?
     requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
+    ensures WF(newnode)
+    ensures AllKeys(newnode) == AllKeys(node)
+    ensures Interpretation(newnode) == Interpretation(node)
+    decreases |boundaries|
   {
     if |boundaries| == 2 then
       node
@@ -1496,30 +1500,17 @@ abstract module BtreeSpec {
       var leftchild := SubIndex(node.children[0], 0, Last(subboundaries));
       var rightchild := SubIndex(node.children[0], Last(subboundaries), Last(boundaries));
       var pivot := node.children[0].pivots[Last(subboundaries)-1];
-      Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..])
-  }
-
-  lemma SplitFirstChildAlongLastBoundaryEquivalence(node: Node, boundaries: seq<nat>, newnode: Node)
-    requires WF(node)
-    requires node.Index?
-    requires node.children[0].Index?
-    requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
-    requires newnode == SplitFirstChildAlongLastBoundary(node, boundaries)
-    ensures WF(newnode)
-    ensures AllKeys(newnode) == AllKeys(node)
-    ensures Interpretation(newnode) == Interpretation(node)
-  {
-    if |boundaries| == 2 {
-    } else {
-      SplitChildOfIndexPreservesWF(node, newnode, 0);
-      SplitChildOfIndexPreservesAllKeys(node, newnode, 0);
+      var tmpnode := Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..]);
+      SplitChildOfIndexPreservesWF(node, tmpnode, 0);
+      SplitChildOfIndexPreservesAllKeys(node, tmpnode, 0);
       var subboundaries := DropLast(boundaries);
       assert node.children[0].pivots[Last(subboundaries)-1] in AllKeys(node.children[0]);
       assert node.children[0].pivots[Last(subboundaries)-1] in AllKeys(node);
-      SplitChildOfIndexPreservesInterpretation(node, newnode, 0);
-    }
+      SplitChildOfIndexPreservesInterpretation(node, tmpnode, 0);
+      assert leftchild.children == DropLastPiece(node.children[0].children, boundaries);
+      SplitFirstChildAlongBoundaries(tmpnode, subboundaries)
   }
-  
+
   lemma ParentsMatchPivots(nodes: seq<Node>, pivots: seq<Key>, config: Configuration, boundaries: seq<nat>, parents: seq<Node>, newpivots: seq<Key>)
     requires WF(Index(pivots, nodes))
     requires ValidConfiguration(config)
