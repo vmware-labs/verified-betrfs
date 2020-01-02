@@ -119,3 +119,9 @@ build rustny
   and put them back later? Can't borrow because once you borrow the
   first Node, you don't own the Cache and hence can't borrow a second
   Node.
+
+2019/12/31 Timeout with almost no quantifier instantiations:
+           commit bdf3df8e82c50f0f1afeea1621c31d623032a779
+           cd lib/DataStructures
+           dafny BtreeSpec.i.dfy /proc:*BuildTreeForSequence
+
