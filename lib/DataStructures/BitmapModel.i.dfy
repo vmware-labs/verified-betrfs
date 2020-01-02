@@ -98,7 +98,25 @@ module BitmapModel {
     )
   }
 
+  lemma LemmaBitAllocIterResult(bm: BitmapModelT, i: int)
+  requires 0 <= i <= |bm|
+  ensures var j := BitAllocIter(bm, i);
+    && (j.Some? ==> (!IsSet(bm, j.value)))
+  decreases |bm| - i
+  {
+    reveal_IsSet();
+    if i == |bm| {
+    } else if !bm[i] {
+    } else {
+      LemmaBitAllocIterResult(bm, i+1);
+    }
+  }
+
   lemma LemmaBitAllocResult(bm: BitmapModelT)
-  ensures var i := BitAlloc(bm);
-    && (i.Some? ==> (!IsSet(bm, i.value)))
+  ensures var j := BitAlloc(bm);
+    && (j.Some? ==> (!IsSet(bm, j.value)))
+  {
+    reveal_BitAlloc();
+    LemmaBitAllocIterResult(bm, 0);
+  }
 }
