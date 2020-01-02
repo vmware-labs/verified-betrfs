@@ -1483,7 +1483,7 @@ abstract module BtreeSpec {
   }
 
 
-  function SplitFirstChildAlongBoundaries(node: Node, boundaries: seq<nat>) : (newnode: Node)
+  function SplitFirstChildAlongLastBoundary(node: Node, boundaries: seq<nat>) : (newnode: Node)
     requires WF(node)
     requires node.Index?
     requires node.children[0].Index?
@@ -1499,23 +1499,24 @@ abstract module BtreeSpec {
       Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..])
   }
 
-  lemma SplitFirstChildAlongBoundariesEquivalence(node: Node, boundaries: seq<nat>, newnode: Node)
+  lemma SplitFirstChildAlongLastBoundaryEquivalence(node: Node, boundaries: seq<nat>, newnode: Node)
     requires WF(node)
     requires node.Index?
     requires node.children[0].Index?
     requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
-    requires newnode == SplitFirstChildAlongBoundaries(node, boundaries)
+    requires newnode == SplitFirstChildAlongLastBoundary(node, boundaries)
     ensures WF(newnode)
     ensures AllKeys(newnode) == AllKeys(node)
     ensures Interpretation(newnode) == Interpretation(node)
   {
     if |boundaries| == 2 {
     } else {
-      // assert SplitIndex(node.children[0], newnode.children[0], newnode.children[1],
-      //                   newnode.children[0].pivots[0], newnode.pivots[0]);
-      // SplitChildOfIndexPreservesWF(node, newnode, 0, newnode.children[0].pivots[0]);
-      // assert WF(newnode);
-      assume false;
+      SplitChildOfIndexPreservesWF(node, newnode, 0);
+      SplitChildOfIndexPreservesAllKeys(node, newnode, 0);
+      var subboundaries := DropLast(boundaries);
+      assert node.children[0].pivots[Last(subboundaries)-1] in AllKeys(node.children[0]);
+      assert node.children[0].pivots[Last(subboundaries)-1] in AllKeys(node);
+      SplitChildOfIndexPreservesInterpretation(node, newnode, 0);
     }
   }
   
