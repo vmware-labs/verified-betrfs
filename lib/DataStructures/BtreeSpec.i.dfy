@@ -1,13 +1,15 @@
 include "../Base/sequences.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/total_order.i.dfy"
+include "../Base/mathematics.i.dfy"
 
 abstract module BtreeSpec {
   import opened Seq = Sequences
   import opened Maps
   import Keys : Total_Order
   import Integer_Order
-
+  import Math = Mathematics
+  
   type Key = Keys.Element
   type Value
     
@@ -292,7 +294,8 @@ abstract module BtreeSpec {
     SplitIndexInterpretation2(oldindex, leftindex, rightindex, wit, pivot);
   }
 
-  
+  // TODO: maybe eliminate wit by just requiring pivot to be larger
+  // than the lower-bounding pivot in SplitChildOfIndex.
   predicate SplitNode(oldnode: Node, leftnode: Node, rightnode: Node, wit: Key, pivot: Key)
   {
     || SplitLeaf(oldnode, leftnode, rightnode, wit, pivot)
@@ -1233,6 +1236,7 @@ abstract module BtreeSpec {
         assert children[..i] == children[..i+1][..i];
         Integer_Order.IsStrictlySortedImpliesLte(boundaries, i, i+1);
         assert keys[..boundaries[i+1]] == keys[..boundaries[i]] + ExtractBoundedSubsequence(keys, boundaries, i);
+        assert values[boundaries[i]..boundaries[i+1]] == ExtractBoundedSubsequence(values, boundaries, i);
         assert values[..boundaries[i+1]] == values[..boundaries[i]] + ExtractBoundedSubsequence(values, boundaries, i);
         i := i + 1;
       }
@@ -1443,18 +1447,19 @@ abstract module BtreeSpec {
 
   function {:opaque} BuildBoundariesInner(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
     requires 0 < numthings
-    requires 1 < groupSize
+    requires 0 < groupSize
   {
     var tmp := Apply(i => i * groupSize, Range((numthings + groupSize - 1) / groupSize));
     if Last(tmp) == numthings then tmp
     else tmp + [numthings]
   }
 
+
   lemma BuildBoundariesProperties(numthings: nat, groupSize: nat)
     requires 0 < numthings
-    requires 1 < groupSize
+    requires 0 < groupSize
     ensures ValidBoundariesForSeq(numthings, BuildBoundariesInner(numthings, groupSize))
-    ensures 1 < numthings ==> |BuildBoundariesInner(numthings, groupSize)| - 1 < numthings
+    ensures 1 < numthings && 1 < groupSize ==> |BuildBoundariesInner(numthings, groupSize)| - 1 < numthings
   {
     reveal_BuildBoundariesInner();
     var tmp := Apply(i => i * groupSize, Range((numthings + groupSize - 1) / groupSize));
@@ -1467,28 +1472,59 @@ abstract module BtreeSpec {
     if Last(tmp) == numthings {
     } else {
       Integer_Order.StrictlySortedAugment(tmp, numthings);
-      if 1 < numthings {
-        calc {
-          |BuildBoundariesInner(numthings, groupSize)| - 1;
-          (numthings + groupSize - 1) / groupSize + 1 - 1;
-          (numthings + groupSize - 1) / groupSize;
-          <
-          numthings;
-        }
+      if 1 < numthings && 1 < groupSize {
+        Math.DivCeilLT(numthings, groupSize);
       }
     }
   }
 
   function BuildBoundaries(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
     requires 0 < numthings
-    requires 1 < groupSize
+    requires 0 < groupSize
     ensures ValidBoundariesForSeq(numthings, boundaries)
-    ensures 1 < numthings ==> |BuildBoundaries(numthings, groupSize)| - 1 < numthings
+    ensures 1 < numthings && 1 < groupSize ==> |BuildBoundaries(numthings, groupSize)| - 1 < numthings
   {
     BuildBoundariesProperties(numthings, groupSize);
     BuildBoundariesInner(numthings, groupSize)
   }
 
+
+  function SplitFirstChildAlongBoundaries(node: Node, boundaries: seq<nat>) : (newnode: Node)
+    requires WF(node)
+    requires node.Index?
+    requires node.children[0].Index?
+    requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
+  {
+    if |boundaries| == 2 then
+      node
+    else
+      var subboundaries := DropLast(boundaries);
+      var leftchild := SubIndex(node.children[0], 0, Last(subboundaries));
+      var rightchild := SubIndex(node.children[0], Last(subboundaries), Last(boundaries));
+      var pivot := node.children[0].pivots[Last(subboundaries)-1];
+      Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..])
+  }
+
+  lemma SplitFirstChildAlongBoundariesEquivalence(node: Node, boundaries: seq<nat>, newnode: Node)
+    requires WF(node)
+    requires node.Index?
+    requires node.children[0].Index?
+    requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
+    requires newnode == SplitFirstChildAlongBoundaries(node, boundaries)
+    ensures WF(newnode)
+    ensures AllKeys(newnode) == AllKeys(node)
+    ensures Interpretation(newnode) == Interpretation(node)
+  {
+    if |boundaries| == 2 {
+    } else {
+      // assert SplitIndex(node.children[0], newnode.children[0], newnode.children[1],
+      //                   newnode.children[0].pivots[0], newnode.pivots[0]);
+      // SplitChildOfIndexPreservesWF(node, newnode, 0, newnode.children[0].pivots[0]);
+      // assert WF(newnode);
+      assume false;
+    }
+  }
+  
   lemma ParentsMatchPivots(nodes: seq<Node>, pivots: seq<Key>, config: Configuration, boundaries: seq<nat>, parents: seq<Node>, newpivots: seq<Key>)
     requires WF(Index(pivots, nodes))
     requires ValidConfiguration(config)
@@ -1497,33 +1533,34 @@ abstract module BtreeSpec {
     requires newpivots == ExtractPivotsForBoundaries(pivots, boundaries)
     ensures WF(Index(newpivots, parents))
   {
-    ExtractPivotsForBoundariesPreservesSort(pivots, boundaries);
-    var pnode := Index(newpivots, parents);
-    forall i | 0 <= i < |pnode.children|-1
-      ensures AllKeysBelowBound(pnode, i)
-    {
-      forall key | key in AllKeys(pnode.children[i])
-        ensures Keys.lt(key, pnode.pivots[i])
-      {
-        assert pnode.pivots[i] == pivots[boundaries[i+1]-1];
-        if j :| key == pnode.children[i].pivots[j] {
-          assert pnode.children[i].pivots[j] == pivots[boundaries[i]-1+j];
-          Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1+j, boundaries[i+1]-1);
-        } else {
-          var j :| key in AllKeys(pnode.children[i].children[j]);
-          assert AllKeysBelowBound(pnode.children[i], j);
-          assert Keys.lt(key, pnode.children[i].pivots[j]);
-          assert pnode.children[i].pivots[j] == pivots[boundaries[i]-1+j];
-          Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1+j, boundaries[i+1]-1);
-          assert Keys.lt(pnode.children[i].pivots[j], pnode.pivots[i]);
-        }
-      }
-    }
-    forall i | 0 < i < |pnode.children|
-      ensures AllKeysAboveBound(pnode, i)
-    {
-      assume false;
-    }
+    assume false;
+    // ExtractPivotsForBoundariesPreservesSort(pivots, boundaries);
+    // var pnode := Index(newpivots, parents);
+    // forall i | 0 <= i < |pnode.children|-1
+    //   ensures AllKeysBelowBound(pnode, i)
+    // {
+    //   forall key | key in AllKeys(pnode.children[i])
+    //     ensures Keys.lt(key, pnode.pivots[i])
+    //   {
+    //     assert pnode.pivots[i] == pivots[boundaries[i+1]-1];
+    //     if j :| key == pnode.children[i].pivots[j] {
+    //       assert pnode.children[i].pivots[j] == pivots[boundaries[i]-1+j];
+    //       Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1+j, boundaries[i+1]-1);
+    //     } else {
+    //       var j :| key in AllKeys(pnode.children[i].children[j]);
+    //       assert AllKeysBelowBound(pnode.children[i], j);
+    //       assert Keys.lt(key, pnode.children[i].pivots[j]);
+    //       assert pnode.children[i].pivots[j] == pivots[boundaries[i]-1+j];
+    //       Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1+j, boundaries[i+1]-1);
+    //       assert Keys.lt(pnode.children[i].pivots[j], pnode.pivots[i]);
+    //     }
+    //   }
+    // }
+    // forall i | 0 < i < |pnode.children|
+    //   ensures AllKeysAboveBound(pnode, i)
+    // {
+    //   assume false;
+    // }
   }
   
   function BuildTreeFromChildren(nodes: seq<Node>, pivots: seq<Key>, config: Configuration) : (node: Node)
@@ -1543,13 +1580,15 @@ abstract module BtreeSpec {
   }
   
   function BuildTreeForSequence(kvlist: KVList, config: Configuration) : (node: Node)
+    requires 0 < |kvlist.keys|
     requires WFKVList(kvlist)
-    //requires ValidConfiguration(config)
+    requires ValidConfiguration(config)
     ensures FitsConfig(node, config)
   {
     var boundaries := BuildBoundaries(|kvlist.keys|, config.maxKeys);
     var leaves := BuildLeavesForSequence(kvlist, boundaries);
     var pivots := ExtractPivotsForBoundaries(ExtractPivotsFromKVList(kvlist), boundaries);
+    assume false;
     BuildTreeFromChildren(leaves, pivots, config)
   }
     

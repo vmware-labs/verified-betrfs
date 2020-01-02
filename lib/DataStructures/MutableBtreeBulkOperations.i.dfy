@@ -129,27 +129,6 @@ abstract module MutableBtreeBulkOperations {
     (x + d - 1) / d
   }
 
-  lemma PosMulPosIsPos(x: int, y: int)
-    requires 0 < x
-    requires 0 < y
-    ensures 0 < x * y
-  {
-  }
-  
-  lemma DivCeilLT(x: int, d: int)
-    requires 1 < d
-    requires 1 < x
-    ensures (x + d - 1) / d < x
-  {
-    PosMulPosIsPos(d-1, x-1);
-  }
-
-  lemma PosMulPreservesOrder(x: nat, y: nat, m: nat)
-    requires x <= y
-    ensures x * m <= y * m
-  {
-  }
-
   predicate BoundaryFits(boundaries: seq<uint64>, max: nat, i: int)
     requires 0 <= i < |boundaries| - 1
   {
