@@ -30,7 +30,7 @@ module BlockAllocatorModel {
           || BitmapModel.IsSet(bam.ephemeral, i)
           || (bam.frozen.Some? && BitmapModel.IsSet(bam.frozen.value, i))
           || BitmapModel.IsSet(bam.persistent, i)
-          || BitmapModel.IsSet(bam.full, i)
+          || BitmapModel.IsSet(bam.outstanding, i)
         ))
   }
 
@@ -160,4 +160,11 @@ module BlockAllocatorModel {
     && (res.Some? && bam.frozen.Some? ==> !BitmapModel.IsSet(bam.frozen.value, res.value))
     && (res.Some? ==> !BitmapModel.IsSet(bam.persistent, res.value))
     && (res.Some? ==> !BitmapModel.IsSet(bam.outstanding, res.value))
+  {
+    BitmapModel.LemmaBitAllocResult(bam.full);
+    var res := Alloc(bam);
+    if res.Some? {
+      assert !BitmapModel.IsSet(bam.full, res.value);
+    }
+  }
 }
