@@ -135,7 +135,8 @@ module BlockAllocatorModel {
       None,
       bam.frozen.value,
       bam.outstanding,
-      BitmapModel.BitUnion(bam.ephemeral, bam.frozen.value)
+      BitmapModel.BitUnion(bam.ephemeral,
+        BitmapModel.BitUnion(bam.frozen.value, bam.outstanding))
     )
   }
 
