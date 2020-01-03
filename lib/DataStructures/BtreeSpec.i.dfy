@@ -431,7 +431,7 @@ abstract module BtreeSpec {
     && |newindex.pivots| == |oldindex.pivots| + 1
     && |oldindex.pivots| == |oldindex.children| - 1
     && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
-    && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
+    && newindex.pivots == Seq.insert2(oldindex.pivots, newindex.pivots[childidx], childidx)
     && newindex.children == Seq.replace1with2(oldindex.children, newindex.children[childidx], newindex.children[childidx+1], childidx)
   }
 
@@ -639,7 +639,7 @@ abstract module BtreeSpec {
       Leaf(leaf.keys, leaf.values[llte := value])
     else
       Keys.strictlySortedInsert(leaf.keys, key, llte);
-      Leaf(Seq.insert(leaf.keys, key, llte+1), Seq.insert(leaf.values, value, llte+1))
+      Leaf(Seq.insert2(leaf.keys, key, llte+1), Seq.insert2(leaf.values, value, llte+1))
   }
 
   lemma InsertLeafIsCorrect(leaf: Node, key: Key, value: Value)
@@ -1180,7 +1180,7 @@ abstract module BtreeSpec {
     }
   }
   
-  function ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<nat>, i: int) : seq<T>
+  function {:opaque} ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<nat>, i: int) : seq<T>
     requires ValidBoundariesForSeq(|things|, boundaries)
     requires 0 <= i < |boundaries|-1
   {
@@ -1437,6 +1437,8 @@ abstract module BtreeSpec {
     ensures AllKeys(newnode) == AllKeys(node)
     ensures Interpretation(newnode) == Interpretation(node)
     ensures |newnode.children| == |node.children| + |boundaries| - 2
+    ensures forall i :: 0 <= i < |boundaries|-1 ==> newnode.children[i].Index?
+    ensures forall i :: 0 <= i < |boundaries|-1 ==> newnode.children[i].children == ExtractBoundedSubsequence(node.children[0].children, boundaries, i)
     decreases |boundaries|
   {
     if |boundaries| == 2 then
@@ -1445,6 +1447,9 @@ abstract module BtreeSpec {
       var subboundaries := DropLast(boundaries);
       var leftchild := SubIndex(node.children[0], 0, Last(subboundaries));
       var rightchild := SubIndex(node.children[0], Last(subboundaries), Last(boundaries));
+      assert rightchild.children == ExtractBoundedSubsequence(node.children[0].children, boundaries, |boundaries|-2) by {
+        reveal_ExtractBoundedSubsequence();
+      }
       var pivot := node.children[0].pivots[Last(subboundaries)-1];
       var tmpnode := Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..]);
       SplitChildOfIndexPreservesWF(node, tmpnode, 0);
@@ -1457,16 +1462,24 @@ abstract module BtreeSpec {
       SplitFirstChildAlongBoundaries(tmpnode, subboundaries)
   }
 
-  // lemma SplitFirstChildAlongBoundariesFitsConfig(node: Node, boundaries: seq<nat>, config: Configuration, newnode: Node)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   requires node.children[0].Index?
-  //   requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
-  //   requires BoundariesFit(boundaries, config.maxChildren)
-  //   requires newnode == SplitFirstChildAlongBoundaries(node, boundaries)
-  //   ensures forall i :: 0 <= i < |boundaries|-2 ==> FitsConfig(newnode.children[i], config)
-  // {
-  // }
+  lemma SplitFirstChildAlongBoundariesFitsConfig(node: Node, boundaries: seq<nat>, config: Configuration, newnode: Node)
+    requires WF(node)
+    requires node.Index?
+    requires node.children[0].Index?
+    requires forall i :: 0 <= i < |node.children[0].children| ==> FitsConfig(node.children[0].children[i], config)
+    requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
+    requires BoundariesFit(boundaries, config.maxChildren)
+    requires newnode == SplitFirstChildAlongBoundaries(node, boundaries)
+    ensures forall i :: 0 <= i < |boundaries|-1 ==> FitsConfig(newnode.children[i], config)
+  {
+    forall i | 0 <= i < |boundaries|-1
+      ensures FitsConfig(newnode.children[i], config)
+    {
+      reveal_BoundariesFit();
+      reveal_ExtractBoundedSubsequence();
+      Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
+    }
+  }
     
   // This function clumps node.children together into config-sized parents,
   // recursing until there's only one node left.
@@ -1490,6 +1503,7 @@ abstract module BtreeSpec {
       WFIndexAllKeys(node);
       GrowPreservesWF(node);
       var newpnode := SplitFirstChildAlongBoundaries(tmpparent, boundaries);
+      SplitFirstChildAlongBoundariesFitsConfig(tmpparent, boundaries, config, newpnode);
       ReshapeTreeToConfig(newpnode, config)
   }
 

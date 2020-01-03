@@ -118,6 +118,13 @@ module Sequences {
     s[..pos] + [a] + s[pos..]
   }
 
+  function insert2<A>(s: seq<A>, a: A, pos: int) : seq<A>
+  requires 0 <= pos <= |s|;
+  //ensures insert(s, a, pos) == s[..pos] + [a] + s[pos..]
+  {
+    s[..pos] + [a] + s[pos..]
+  }
+
   method Insert<A>(s: seq<A>, a: A, pos: uint64) returns (res: seq<A>)
   requires 0 <= pos as int <= |s|;
   ensures res == insert(s, a, pos as int);
