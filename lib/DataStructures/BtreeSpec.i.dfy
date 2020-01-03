@@ -59,7 +59,15 @@ abstract module BtreeSpec {
       && (forall i :: 0 < i < |node.children|   ==> AllKeysAboveBound(node, i))
   }
 
-  function Interpretation(node: Node) : map<Key, Value>
+  lemma WFIndexAllKeys(node: Node)
+    requires node.Index?
+    requires WF(node)
+    ensures AllKeys(node) != {}
+  {
+    var x :| x in AllKeys(node.children[0]);
+  }
+  
+  function {:opaque} Interpretation(node: Node) : map<Key, Value>
     requires WF(node)
     decreases node
   {
@@ -79,6 +87,7 @@ abstract module BtreeSpec {
     requires key in Interpretation(node)
     ensures MapsTo(Interpretation(node.children[Keys.LargestLte(node.pivots, key)+1]), key, Interpretation(node)[key])
   {
+    reveal_Interpretation();
   }
 
   lemma InterpretationDelegation(node: Node, key: Key)
@@ -87,6 +96,7 @@ abstract module BtreeSpec {
     requires key in Interpretation(node.children[Keys.LargestLte(node.pivots, key)+1])
     ensures MapsTo(Interpretation(node), key, Interpretation(node.children[Keys.LargestLte(node.pivots, key)+1])[key])
   {
+    reveal_Interpretation();
     var interp := Interpretation(node);
     assert key in interp;
   }
@@ -97,6 +107,7 @@ abstract module BtreeSpec {
     ensures key in AllKeys(node)
     ensures node.Index? ==> WF(node) && key in AllKeys(node.children[Keys.LargestLte(node.pivots, key) + 1])
   {
+    reveal_Interpretation();
     if node.Index? {
       assert key in Interpretation(node.children[Keys.LargestLte(node.pivots, key) + 1]);
     }
@@ -134,6 +145,7 @@ abstract module BtreeSpec {
     requires WF(rightleaf)
     ensures Interpretation(oldleaf) == Keys.MapPivotedUnion(Interpretation(leftleaf), pivot, Interpretation(rightleaf))
   {
+    reveal_Interpretation();
     var oldint := Interpretation(oldleaf);
     var leftint := Interpretation(leftleaf);
     var rightint := Interpretation(rightleaf);
@@ -224,6 +236,7 @@ abstract module BtreeSpec {
     ensures forall key :: key in Interpretation(oldindex) ==>
     MapsTo(Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)), key, Interpretation(oldindex)[key])
   {
+    reveal_Interpretation();
     var oldint := Interpretation(oldindex);
     var leftint := Interpretation(leftindex);
     var rightint := Interpretation(rightindex);
@@ -255,6 +268,7 @@ abstract module BtreeSpec {
     ensures Interpretation(oldindex).Keys >=
             Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)).Keys
   {
+    reveal_Interpretation();
     var oldint := Interpretation(oldindex);
     var leftint := Interpretation(leftindex);
     var rightint := Interpretation(rightindex);
@@ -287,6 +301,7 @@ abstract module BtreeSpec {
     ensures Interpretation(oldindex) ==
     Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
   {
+    reveal_Interpretation();
     SplitIndexInterpretation1(oldindex, leftindex, rightindex, pivot);
     SplitIndexInterpretation2(oldindex, leftindex, rightindex, pivot);
   }
@@ -513,6 +528,7 @@ abstract module BtreeSpec {
     requires WF(newindex);
     ensures forall key :: key in Interpretation(oldindex) ==> MapsTo(Interpretation(newindex), key, Interpretation(oldindex)[key])
   {
+    reveal_Interpretation();
     var newint := Interpretation(newindex);
     var oldint := Interpretation(oldindex);
 
@@ -564,6 +580,7 @@ abstract module BtreeSpec {
     ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
       //ensures Interpretation(newindex) == Interpretation(oldindex)
   {
+    reveal_Interpretation();
     var newint := Interpretation(newindex);
     var oldint := Interpretation(oldindex);
 
@@ -606,6 +623,7 @@ abstract module BtreeSpec {
     //ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
     ensures Interpretation(newindex) == Interpretation(oldindex)
   {
+    reveal_Interpretation();
     SplitChildOfIndexPreservesInterpretationA(oldindex, newindex, childidx);
     SplitChildOfIndexPreservesInterpretationB(oldindex, newindex, childidx);
   }
@@ -630,6 +648,7 @@ abstract module BtreeSpec {
     ensures Interpretation(InsertLeaf(leaf, key, value)) == Interpretation(leaf)[key := value]
     ensures AllKeys(InsertLeaf(leaf, key, value)) == AllKeys(leaf) + {key}
   {
+    reveal_Interpretation();
     var result := InsertLeaf(leaf, key, value);
     var llte := Keys.LargestLte(leaf.keys, key);
     if 0 <= llte && leaf.keys[llte] == key {
@@ -669,6 +688,7 @@ abstract module BtreeSpec {
     ensures Interpretation(newnode) == Interpretation(node)[key := value]
     ensures AllKeys(newnode) <= AllKeys(node) + {key}
   {
+    reveal_Interpretation();
     var oldint := Interpretation(node);
     AllKeysIsConsistentWithInterpretation(newchild, key);
     forall i | 0 <= i < |newnode.children| - 1
@@ -757,6 +777,7 @@ abstract module BtreeSpec {
     ensures WF(Grow(node))
     ensures Interpretation(Grow(node)) == Interpretation(node)
   {
+    reveal_Interpretation();
     var interp := Interpretation(node);
     var ginterp := Interpretation(Grow(node));
     
@@ -775,6 +796,7 @@ abstract module BtreeSpec {
     node.(pivots := node.pivots[pivotidx := pivot])
   }
 
+  // Used in splitting a tree into two trees.
   lemma ReplacePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
     requires WF(node)
     requires node.Index?
@@ -785,6 +807,7 @@ abstract module BtreeSpec {
     ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
     ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
   {
+    reveal_Interpretation();
     var newnode := ReplacePivot(node, pivotidx, pivot);
     
     if pivotidx < |node.pivots|-1 {
@@ -1031,6 +1054,7 @@ abstract module BtreeSpec {
     requires WF(node)
     ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
   {
+    reveal_Interpretation();
     var (keys, values) := ToSeq(node);
     var interp := Interpretation(node);
     
@@ -1070,6 +1094,7 @@ abstract module BtreeSpec {
     requires WF(node)
     ensures forall key :: key in Interpretation(node) ==> key in ToSeq(node).0
   {
+    reveal_Interpretation();
     var (keys, values) := ToSeq(node);
     var interp := Interpretation(node);
     
@@ -1094,6 +1119,7 @@ abstract module BtreeSpec {
     requires WF(node)
     ensures Keys.SortedSeqForMap(Zip(ToSeq(node).0, ToSeq(node).1), Interpretation(node))
   {
+    reveal_Interpretation();
     ToSeqIsStrictlySorted(node);
     ToSeqInInterpretation(node);
     ToSeqCoversInterpretation(node);
@@ -1165,80 +1191,49 @@ abstract module BtreeSpec {
     things[boundaries[i]..boundaries[i+1]]
   }
   
-  predicate PivotsMatchBoundaries(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
-    requires ValidBoundariesForSeq(|keys|, boundaries)
-  {
-    && |pivots| == |boundaries| - 2
-    && (forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]])
-  }
-  
-  lemma BoundaryPivotsStrictlySorted(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>)
-    requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForSeq(|keys|, boundaries)
-    requires PivotsMatchBoundaries(keys, boundaries, pivots)
-    ensures Keys.IsStrictlySorted(pivots)
-  {
-    forall i, j | 0 <= i < j < |pivots|
-      ensures Keys.lt(pivots[i], pivots[j])
-    {
-      Integer_Order.IsStrictlySortedImpliesLt(boundaries, i+1, j+1);
-      Keys.IsStrictlySortedImpliesLt(keys, boundaries[i+1], boundaries[j+1]);
-    }
-    Keys.reveal_IsStrictlySorted();
-  }
+  // lemma ToSeqChildrenOfChildrenFromSeq(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, children: seq<Node>)
+  //   requires |keys| == |values|
+  //   requires Keys.IsStrictlySorted(keys)
+  //   requires ValidBoundariesForSeq(|keys|, boundaries)
+  //   requires |boundaries| == |children| + 1
+  //   requires forall i :: 0 <= i < |children| ==> WF(children[i])
+  //   requires forall i :: 0 <= i < |children| ==> ToSeq(children[i]) == (ExtractBoundedSubsequence(keys, boundaries, i), ExtractBoundedSubsequence(values, boundaries, i))
+  //   ensures Flatten(ToSeqChildren(children).0) == keys
+  //   ensures Flatten(ToSeqChildren(children).1) == values
+  // {
+  //   if |children| == 1 {
+  //     ToSeqChildrenDecomposition(children);
+  //   } else {
+  //     var i := 0;
+  //     while i < |children|
+  //       invariant i <= |children|
+  //       invariant Flatten(ToSeqChildren(children[..i]).0) == keys[..boundaries[i]]
+  //       invariant Flatten(ToSeqChildren(children[..i]).1) == values[..boundaries[i]]
+  //     {
+  //       ToSeqChildrenDecomposition(children[..i+1]);
+  //       assert children[..i] == children[..i+1][..i];
+  //       Integer_Order.IsStrictlySortedImpliesLte(boundaries, i, i+1);
+  //       assert keys[..boundaries[i+1]] == keys[..boundaries[i]] + ExtractBoundedSubsequence(keys, boundaries, i);
+  //       assert values[boundaries[i]..boundaries[i+1]] == ExtractBoundedSubsequence(values, boundaries, i);
+  //       assert values[..boundaries[i+1]] == values[..boundaries[i]] + ExtractBoundedSubsequence(values, boundaries, i);
+  //       i := i + 1;
+  //     }
+  //     assert children[..|children|] == children;
+  //     assert keys[..boundaries[|children|]] == keys;
+  //     assert values[..boundaries[|children|]] == values;
+  //   }
+  // }
 
-  predicate LeafMatchesBoundary(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaf: Node, i: nat)
-    requires |keys| == |values|
-    requires ValidBoundariesForSeq(|keys|, boundaries)
-    requires i + 2 <= |boundaries|
-    requires leaf.Leaf?
-  {
-    && leaf.keys == ExtractBoundedSubsequence(keys, boundaries, i)
-    && leaf.values == ExtractBoundedSubsequence(values, boundaries, i)
-  }
-  
-  predicate LeavesMatchBoundaries(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, leaves: seq<Node>)
-    requires |keys| == |values|
-    requires ValidBoundariesForSeq(|keys|, boundaries)
-  {
-    && |boundaries| == |leaves| + 1
-    && (forall i :: 0 <= i < |leaves| ==> leaves[i].Leaf?)
-    && (forall i :: 0 <= i < |leaves| ==> leaves[i].keys == ExtractBoundedSubsequence(keys, boundaries, i))
-    && (forall i :: 0 <= i < |leaves| ==> leaves[i].values == ExtractBoundedSubsequence(values, boundaries, i))
-  }
-    
-  lemma ToSeqChildrenOfChildrenFromSeq(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, children: seq<Node>)
-    requires |keys| == |values|
-    requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForSeq(|keys|, boundaries)
-    requires |boundaries| == |children| + 1
-    requires forall i :: 0 <= i < |children| ==> WF(children[i])
-    requires forall i :: 0 <= i < |children| ==> ToSeq(children[i]) == (ExtractBoundedSubsequence(keys, boundaries, i), ExtractBoundedSubsequence(values, boundaries, i))
-    ensures Flatten(ToSeqChildren(children).0) == keys
-    ensures Flatten(ToSeqChildren(children).1) == values
-  {
-    if |children| == 1 {
-      ToSeqChildrenDecomposition(children);
-    } else {
-      var i := 0;
-      while i < |children|
-        invariant i <= |children|
-        invariant Flatten(ToSeqChildren(children[..i]).0) == keys[..boundaries[i]]
-        invariant Flatten(ToSeqChildren(children[..i]).1) == values[..boundaries[i]]
-      {
-        ToSeqChildrenDecomposition(children[..i+1]);
-        assert children[..i] == children[..i+1][..i];
-        Integer_Order.IsStrictlySortedImpliesLte(boundaries, i, i+1);
-        assert keys[..boundaries[i+1]] == keys[..boundaries[i]] + ExtractBoundedSubsequence(keys, boundaries, i);
-        assert values[boundaries[i]..boundaries[i+1]] == ExtractBoundedSubsequence(values, boundaries, i);
-        assert values[..boundaries[i+1]] == values[..boundaries[i]] + ExtractBoundedSubsequence(values, boundaries, i);
-        i := i + 1;
-      }
-      assert children[..|children|] == children;
-      assert keys[..boundaries[|children|]] == keys;
-      assert values[..boundaries[|children|]] == values;
-    }
-  }
+  // TODO: generalize KVLists and define equivalence in terms of their
+  // interpretation as maps.  (To handle key-message lists, we can
+  // break the merging process into a sorted-merge step and a
+  // message-amalgamation step.)  (robj)
+  // predicate TreeMatchesKVList(node: Node, kvlist: KVList)
+  //   requires WF(node)
+  //   requires WFKVList(kvlist)
+  // {
+  //   Keys.SortedSeqForMap(Zip(kvlist.keys, kvlist.values), Interpretation(node))
+  // }
 
   datatype Configuration = Configuration(maxChildren: nat, maxKeys: nat)
 
@@ -1267,13 +1262,13 @@ abstract module BtreeSpec {
     && Keys.IsStrictlySorted(kvlist.keys)
   }
 
-  predicate TreeMatchesKVList(node: Node, kvlist: KVList)
-    requires WF(node)
+  function KVListInterpretation(kvlist: KVList) : map<Key, Value>
     requires WFKVList(kvlist)
   {
-    Keys.SortedSeqForMap(Zip(kvlist.keys, kvlist.values), Interpretation(node))
+    var keys := Set(kvlist.keys);
+    map k | k in keys :: kvlist.values[Keys.LargestLte(kvlist.keys, k)]
   }
-
+  
   function DropLastPiece<T>(things: seq<T>, boundaries: seq<nat>) : (subthings: seq<T>)
     requires 2 < |boundaries|
     requires ValidBoundariesForSeq(|things|, boundaries)
@@ -1303,31 +1298,54 @@ abstract module BtreeSpec {
     pivots[..boundaries[|boundaries|-2] - 1]
   }
   
-  function BuildLeafForSequence(kvlist: KVList, boundaries: seq<nat>, i: nat) : (node: Node)
-    requires WFKVList(kvlist)
-    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
-    requires i < |boundaries|-1
-    ensures WF(node)
+  predicate {:opaque} BoundariesFit(boundaries: seq<nat>, groupSize: nat)
   {
-    var mykeys := ExtractBoundedSubsequence(kvlist.keys, boundaries, i);
-    var myvals := ExtractBoundedSubsequence(kvlist.values, boundaries, i);
-    Integer_Order.IsSortedImpliesLte(boundaries, i, i+1);
-    Keys.StrictlySortedSubsequence(kvlist.keys, boundaries[i], boundaries[i+1]);
-    Leaf(mykeys, myvals)
+    forall i :: 0 <= i < |boundaries| - 1 ==> boundaries[i+1] - boundaries[i] <= groupSize
   }
   
-  function BuildLeavesForSequence(kvlist: KVList, boundaries: seq<nat>) : (nodes: seq<Node>)
-    requires WFKVList(kvlist)
-    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
-    ensures forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-    decreases |boundaries|
+  function {:opaque} BuildBoundariesInner(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
+    requires 0 < numthings
+    requires 0 < groupSize
   {
-    if |boundaries| == 2 then
-      [BuildLeafForSequence(kvlist, boundaries, 0)]
-    else
-      var subboundaries := DropLast(boundaries);
-      var subkvlist := DropLastKVListPiece(kvlist, boundaries);
-      BuildLeavesForSequence(subkvlist, subboundaries) + [BuildLeafForSequence(kvlist, boundaries, |boundaries|-2)]
+    var tmp := Apply(i => i * groupSize, Range((numthings + groupSize - 1) / groupSize));
+    if Last(tmp) == numthings then tmp
+    else tmp + [numthings]
+  }
+
+  lemma BuildBoundariesProperties(numthings: nat, groupSize: nat)
+    requires 0 < numthings
+    requires 0 < groupSize
+    ensures ValidBoundariesForSeq(numthings, BuildBoundariesInner(numthings, groupSize))
+    ensures 1 < numthings && 1 < groupSize ==> |BuildBoundariesInner(numthings, groupSize)| - 1 < numthings
+    ensures BoundariesFit(BuildBoundariesInner(numthings, groupSize), groupSize)
+  {
+    reveal_BuildBoundariesInner();
+    reveal_BoundariesFit();
+    var tmp := Apply(i => i * groupSize, Range((numthings + groupSize - 1) / groupSize));
+    forall i, j | 0 <= i < j < |tmp|
+      ensures tmp[i] < tmp[j]
+    {
+      assert i * groupSize < j * groupSize;
+    }
+    Integer_Order.reveal_IsStrictlySorted();
+    if Last(tmp) == numthings {
+    } else {
+      Integer_Order.StrictlySortedAugment(tmp, numthings);
+      if 1 < numthings && 1 < groupSize {
+        Math.DivCeilLT(numthings, groupSize);
+      }
+    }
+  }
+
+  function BuildBoundaries(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
+    requires 0 < numthings
+    requires 0 < groupSize
+    ensures ValidBoundariesForSeq(numthings, boundaries)
+    ensures 1 < numthings && 1 < groupSize ==> |BuildBoundaries(numthings, groupSize)| - 1 < numthings
+    ensures BoundariesFit(BuildBoundaries(numthings, groupSize), groupSize)
+  {
+    BuildBoundariesProperties(numthings, groupSize);
+    BuildBoundariesInner(numthings, groupSize)
   }
 
   function {:opaque} ExtractPivotsForBoundaries(pivots: seq<Key>, boundaries: seq<nat>) : (subpivots: seq<Key>)
@@ -1362,135 +1380,63 @@ abstract module BtreeSpec {
   
   function ExtractPivotsFromKVList(kvlist: KVList) : (pivots: seq<Key>)
     requires 0 < |kvlist.keys|
+    requires WFKVList(kvlist)
+    ensures Keys.IsStrictlySorted(pivots)
   {
+    Keys.StrictlySortedSubsequence(kvlist.keys, 1, |kvlist.keys|);
+    assert kvlist.keys[1..] == kvlist.keys[1..|kvlist.keys|];
     kvlist.keys[1..]
   }
 
-  function BuildParentForSequenceInner(nodes: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, i: nat) : (node: Node)
-    requires ValidBoundariesForSeq(|nodes|, boundaries)
-    requires |pivots| == |nodes|-1
-    requires Keys.IsStrictlySorted(pivots)
-    requires i < |boundaries|-1
-  {
-    Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
-    var mypivots := pivots[boundaries[i]..boundaries[i+1]-1];
-    var mychildren := ExtractBoundedSubsequence(nodes, boundaries, i);
-    var pnode := Index(pivots, nodes);
-    var node := Index(mypivots, mychildren);
-    node
-  }
-
-  lemma BuildParentForSequenceProperties(nodes: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, i: nat)
-    requires WF(Index(pivots, nodes))
-    requires ValidBoundariesForSeq(|nodes|, boundaries)
-    requires |pivots| == |nodes|-1
-    requires Keys.IsStrictlySorted(pivots)
-    requires i < |boundaries|-1
-    ensures WF(BuildParentForSequenceInner(nodes, pivots, boundaries, i))
-    ensures AllKeys(BuildParentForSequenceInner(nodes, pivots, boundaries, i)) != {}
-  {
-    Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
-    Keys.StrictlySortedSubsequence(pivots, boundaries[i], boundaries[i+1]-1);
-    var mypivots := pivots[boundaries[i]..boundaries[i+1]-1];
-    var mychildren := ExtractBoundedSubsequence(nodes, boundaries, i);
-    var pnode := Index(pivots, nodes);
-    var node := Index(mypivots, mychildren);
-    forall j | 0 <= j < |node.children| - 1
-      ensures AllKeysBelowBound(node, j)
-    {
-      assert AllKeysBelowBound(pnode, boundaries[i] + j);
-    }
-    forall j | 0 < j < |node.children|
-      ensures AllKeysAboveBound(node, j)
-    {
-      assert AllKeysAboveBound(pnode, boundaries[i] + j);
-    }
-    assert node.children[0] == nodes[boundaries[i]];
-  }
-    
-  function BuildParentForSequence(nodes: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, i: nat) : (node: Node)
-    requires WF(Index(pivots, nodes))
-    requires ValidBoundariesForSeq(|nodes|, boundaries)
-    requires |pivots| == |nodes|-1
-    requires Keys.IsStrictlySorted(pivots)
+  function BuildLeafForSequence(kvlist: KVList, boundaries: seq<nat>, i: nat) : (node: Node)
+    requires WFKVList(kvlist)
+    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
     requires i < |boundaries|-1
     ensures WF(node)
     ensures AllKeys(node) != {}
   {
-    BuildParentForSequenceProperties(nodes, pivots, boundaries, i);
-    BuildParentForSequenceInner(nodes, pivots, boundaries, i)
+    var mykeys := ExtractBoundedSubsequence(kvlist.keys, boundaries, i);
+    var myvals := ExtractBoundedSubsequence(kvlist.values, boundaries, i);
+    var node := Leaf(mykeys, myvals);
+    Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
+    Keys.StrictlySortedSubsequence(kvlist.keys, boundaries[i], boundaries[i+1]);
+    assert node.keys[0] in AllKeys(node);
+    node
   }
   
-  function BuildParentsFromChildren(nodes: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>) : (parents: seq<Node>)
-    requires WF(Index(pivots, nodes))
-    requires ValidBoundariesForSeq(|nodes|, boundaries)
-    requires |pivots| == |nodes| - 1
-    ensures |parents| == |boundaries|-1
-    ensures forall i :: 0 <= i < |parents| ==> WF(parents[i])
-    ensures forall i :: 0 <= i < |parents| ==> AllKeys(parents[i]) != {}
+  lemma BuildLeafLength(kvlist: KVList, boundaries: seq<nat>, i: nat)
+    requires WFKVList(kvlist)
+    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
+    requires i < |boundaries|-1
+    ensures |BuildLeafForSequence(kvlist, boundaries, i).keys| == boundaries[i+1] as int - boundaries[i]
+  {
+  }
+    
+  function BuildLeavesForSequence(kvlist: KVList, boundaries: seq<nat>) : (nodes: seq<Node>)
+    requires WFKVList(kvlist)
+    requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
+    ensures |nodes| == |boundaries| - 1
+    ensures forall i :: 0 <= i < |nodes| ==> nodes[i] == BuildLeafForSequence(kvlist, boundaries, i)
+    decreases |boundaries|
   {
     if |boundaries| == 2 then
-      [BuildParentForSequence(nodes, pivots, boundaries, 0)]
+      [BuildLeafForSequence(kvlist, boundaries, 0)]
     else
       var subboundaries := DropLast(boundaries);
-      var subnodes := DropLastPiece(nodes, boundaries);
-      var subpivots := DropLastPivotsPiece(pivots, boundaries);
-      SubIndexPreservesWF(Index(pivots, nodes), 0, boundaries[|boundaries|-2]);
-      BuildParentsFromChildren(subnodes, subpivots, subboundaries) + [BuildParentForSequence(nodes, pivots, boundaries, |boundaries|-2)]
+      var subkvlist := DropLastKVListPiece(kvlist, boundaries);
+      BuildLeavesForSequence(subkvlist, subboundaries) + [BuildLeafForSequence(kvlist, boundaries, |boundaries|-2)]
   }
-
-  function {:opaque} BuildBoundariesInner(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
-    requires 0 < numthings
-    requires 0 < groupSize
-  {
-    var tmp := Apply(i => i * groupSize, Range((numthings + groupSize - 1) / groupSize));
-    if Last(tmp) == numthings then tmp
-    else tmp + [numthings]
-  }
-
-
-  lemma BuildBoundariesProperties(numthings: nat, groupSize: nat)
-    requires 0 < numthings
-    requires 0 < groupSize
-    ensures ValidBoundariesForSeq(numthings, BuildBoundariesInner(numthings, groupSize))
-    ensures 1 < numthings && 1 < groupSize ==> |BuildBoundariesInner(numthings, groupSize)| - 1 < numthings
-  {
-    reveal_BuildBoundariesInner();
-    var tmp := Apply(i => i * groupSize, Range((numthings + groupSize - 1) / groupSize));
-    forall i, j | 0 <= i < j < |tmp|
-      ensures tmp[i] < tmp[j]
-    {
-      assert i * groupSize < j * groupSize;
-    }
-    Integer_Order.reveal_IsStrictlySorted();
-    if Last(tmp) == numthings {
-    } else {
-      Integer_Order.StrictlySortedAugment(tmp, numthings);
-      if 1 < numthings && 1 < groupSize {
-        Math.DivCeilLT(numthings, groupSize);
-      }
-    }
-  }
-
-  function BuildBoundaries(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
-    requires 0 < numthings
-    requires 0 < groupSize
-    ensures ValidBoundariesForSeq(numthings, boundaries)
-    ensures 1 < numthings && 1 < groupSize ==> |BuildBoundaries(numthings, groupSize)| - 1 < numthings
-  {
-    BuildBoundariesProperties(numthings, groupSize);
-    BuildBoundariesInner(numthings, groupSize)
-  }
-
 
   function SplitFirstChildAlongBoundaries(node: Node, boundaries: seq<nat>) : (newnode: Node)
     requires WF(node)
     requires node.Index?
     requires node.children[0].Index?
     requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
+    ensures newnode.Index?
     ensures WF(newnode)
     ensures AllKeys(newnode) == AllKeys(node)
     ensures Interpretation(newnode) == Interpretation(node)
+    ensures |newnode.children| == |node.children| + |boundaries| - 2
     decreases |boundaries|
   {
     if |boundaries| == 2 then
@@ -1511,58 +1457,116 @@ abstract module BtreeSpec {
       SplitFirstChildAlongBoundaries(tmpnode, subboundaries)
   }
 
-  lemma ParentsMatchPivots(nodes: seq<Node>, pivots: seq<Key>, config: Configuration, boundaries: seq<nat>, parents: seq<Node>, newpivots: seq<Key>)
-    requires WF(Index(pivots, nodes))
+  // lemma SplitFirstChildAlongBoundariesFitsConfig(node: Node, boundaries: seq<nat>, config: Configuration, newnode: Node)
+  //   requires WF(node)
+  //   requires node.Index?
+  //   requires node.children[0].Index?
+  //   requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
+  //   requires BoundariesFit(boundaries, config.maxChildren)
+  //   requires newnode == SplitFirstChildAlongBoundaries(node, boundaries)
+  //   ensures forall i :: 0 <= i < |boundaries|-2 ==> FitsConfig(newnode.children[i], config)
+  // {
+  // }
+    
+  // This function clumps node.children together into config-sized parents,
+  // recursing until there's only one node left.
+  function ReshapeTreeToConfig(node: Node, config: Configuration) : (newnode: Node)
+    requires WF(node)
+    requires node.Index?
     requires ValidConfiguration(config)
-    requires boundaries == BuildBoundaries(|nodes|, config.maxChildren)
-    requires parents == BuildParentsFromChildren(nodes, pivots, boundaries)
-    requires newpivots == ExtractPivotsForBoundaries(pivots, boundaries)
-    ensures WF(Index(newpivots, parents))
+    requires forall i :: 0 <= i < |node.children| ==> FitsConfig(node.children[i], config)
+    ensures WF(newnode)
+    ensures AllKeys(newnode) == AllKeys(node)
+    ensures Interpretation(newnode) == Interpretation(node)
+    ensures FitsConfig(newnode, config)
+    decreases |node.children|
   {
-    assume false;
-    // ExtractPivotsForBoundariesPreservesSort(pivots, boundaries);
-    // var pnode := Index(newpivots, parents);
-    // forall i | 0 <= i < |pnode.children|-1
-    //   ensures AllKeysBelowBound(pnode, i)
-    // {
-    //   forall key | key in AllKeys(pnode.children[i])
-    //     ensures Keys.lt(key, pnode.pivots[i])
-    //   {
-    //     assert pnode.pivots[i] == pivots[boundaries[i+1]-1];
-    //     if j :| key == pnode.children[i].pivots[j] {
-    //       assert pnode.children[i].pivots[j] == pivots[boundaries[i]-1+j];
-    //       Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1+j, boundaries[i+1]-1);
-    //     } else {
-    //       var j :| key in AllKeys(pnode.children[i].children[j]);
-    //       assert AllKeysBelowBound(pnode.children[i], j);
-    //       assert Keys.lt(key, pnode.children[i].pivots[j]);
-    //       assert pnode.children[i].pivots[j] == pivots[boundaries[i]-1+j];
-    //       Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1+j, boundaries[i+1]-1);
-    //       assert Keys.lt(pnode.children[i].pivots[j], pnode.pivots[i]);
-    //     }
-    //   }
-    // }
-    // forall i | 0 < i < |pnode.children|
-    //   ensures AllKeysAboveBound(pnode, i)
-    // {
-    //   assume false;
-    // }
-  }
-  
-  function BuildTreeFromChildren(nodes: seq<Node>, pivots: seq<Key>, config: Configuration) : (node: Node)
-    requires WF(Index(pivots, nodes))
-    requires ValidConfiguration(config)
-    ensures WF(node)
-    decreases |nodes|
-  {
-    if |nodes| == 1 then
-      nodes[0]
+    reveal_Interpretation();
+    if |node.children| <= config.maxChildren then
+      node
     else
-      var boundaries := BuildBoundaries(|nodes|, config.maxChildren);
-      var parents := BuildParentsFromChildren(nodes, pivots, boundaries);
-      var newpivots := ExtractPivotsForBoundaries(pivots, boundaries);
-      ParentsMatchPivots(nodes, pivots, config, boundaries, parents, newpivots);
-      BuildTreeFromChildren(parents, newpivots, config)
+      var boundaries := BuildBoundaries(|node.children|, config.maxChildren);
+      var tmpparent := Grow(node);
+      WFIndexAllKeys(node);
+      GrowPreservesWF(node);
+      var newpnode := SplitFirstChildAlongBoundaries(tmpparent, boundaries);
+      ReshapeTreeToConfig(newpnode, config)
+  }
+
+  lemma LeavesProperties(kvlist: KVList, config: Configuration, boundaries: seq<nat>, node: Node)
+    requires 0 < |kvlist.keys|
+    requires WFKVList(kvlist)
+    requires ValidConfiguration(config)
+    requires boundaries == BuildBoundaries(|kvlist.keys|, config.maxKeys)
+    requires node.Index?
+    requires node.children == BuildLeavesForSequence(kvlist, boundaries)
+    requires node.pivots == ExtractPivotsForBoundaries(ExtractPivotsFromKVList(kvlist), boundaries)
+    ensures WF(node)
+    ensures Interpretation(node) == KVListInterpretation(kvlist)
+    ensures forall i :: 0 <= i < |node.children| ==> FitsConfig(node.children[i], config)
+  {
+    ExtractPivotsForBoundariesPreservesSort(ExtractPivotsFromKVList(kvlist), boundaries);
+    reveal_ExtractPivotsForBoundaries();
+    forall i | 0 <= i < |node.children| - 1
+      ensures AllKeysBelowBound(node, i)
+    {
+      forall j | 0 <= j < |node.children[i].keys|
+        ensures Keys.lt(node.children[i].keys[j], node.pivots[i])
+      {
+        Keys.IsStrictlySortedImpliesLt(kvlist.keys, boundaries[i] + j, boundaries[i+1]);
+      }
+    }
+    forall i | 0 < i < |node.children|
+      ensures AllKeysAboveBound(node, i)
+    {
+      forall j | 0 <= j < |node.children[i].keys|
+        ensures Keys.lte(node.pivots[i-1], node.children[i].keys[j])
+      {
+        Keys.IsStrictlySortedImpliesLte(kvlist.keys, boundaries[i], boundaries[i] + j);
+      }
+    }
+
+    forall i | 0 <= i < |node.children|
+      ensures FitsConfig(node.children[i], config)
+    {
+       reveal_BoundariesFit();
+    }
+    
+    var inode := Interpretation(node);
+    var ikvlist := KVListInterpretation(kvlist);
+    
+    forall k | k in inode
+      ensures MapsTo(ikvlist, k, inode[k])
+    {
+      var childidx := Keys.LargestLte(node.pivots, k) + 1;
+      var child := node.children[childidx];
+      InterpretationInheritance(node, k);
+      assert k in child.keys by { reveal_Interpretation(); }
+      var j := Keys.LargestLte(child.keys, k);
+      Keys.PosEqLargestLte(kvlist.keys, k, boundaries[childidx] + j);
+      assert child.values[j] == inode[k] by { reveal_Interpretation(); }
+    }
+
+    forall k | k in ikvlist
+      ensures k in inode
+    {
+      var pos := Keys.LargestLte(kvlist.keys, k);
+      assert 0 <= pos;
+      var childidx := Integer_Order.LargestLte(boundaries, pos);
+      assert 0 <= childidx;
+      var j := pos - boundaries[childidx];
+      if 0 <= childidx - 1 {
+      }
+      if childidx - 1 < |node.pivots|-1 {
+      }
+      Keys.LargestLteIsUnique2(node.pivots, k, childidx-1);
+      assert childidx-1 == Keys.LargestLte(node.pivots, k);
+      var child := node.children[childidx];
+      assert child.keys[j] == k;
+      assert k in Interpretation(child) by { reveal_Interpretation(); }
+      InterpretationDelegation(node, k);
+    }
+    
   }
   
   function BuildTreeForSequence(kvlist: KVList, config: Configuration) : (node: Node)
@@ -1570,47 +1574,14 @@ abstract module BtreeSpec {
     requires WFKVList(kvlist)
     requires ValidConfiguration(config)
     ensures FitsConfig(node, config)
+    ensures Interpretation(node) == KVListInterpretation(kvlist)
   {
     var boundaries := BuildBoundaries(|kvlist.keys|, config.maxKeys);
     var leaves := BuildLeavesForSequence(kvlist, boundaries);
     var pivots := ExtractPivotsForBoundaries(ExtractPivotsFromKVList(kvlist), boundaries);
-    assume false;
-    BuildTreeFromChildren(leaves, pivots, config)
-  }
-    
-  lemma FromSeqWF(keys: seq<Key>, boundaries: seq<nat>, pivots: seq<Key>, children: seq<Node>)
-    requires Keys.IsStrictlySorted(keys)
-    requires ValidBoundariesForSeq(|keys|, boundaries)
-    requires |boundaries| == |children| + 1
-    requires PivotsMatchBoundaries(keys, boundaries, pivots)
-    requires forall i :: 0 <= i < |children| ==> WF(children[i])
-    requires forall i :: 0 <= i  < |children| ==> {} < AllKeys(children[i]) <= Set(ExtractBoundedSubsequence(keys, boundaries, i))
-    ensures WF(Index(pivots, children))
-  {
-    var node := Index(pivots, children);
-    forall i | 0 <= i < |children|-1
-      ensures AllKeysBelowBound(node, i)
-    {
-      forall k | k in AllKeys(node.children[i])
-        ensures Keys.lt(k, node.pivots[i])
-      {
-        Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
-        var j :| boundaries[i] <= j < boundaries[i+1] && keys[j] == k;
-        Keys.IsStrictlySortedImpliesLt(keys, j, boundaries[i+1]);
-      }
-    }
-    forall i | 0 < i < |children|
-      ensures AllKeysAboveBound(node, i)
-    {
-      forall k | k in AllKeys(node.children[i])
-        ensures Keys.lte(node.pivots[i-1], k)
-      {
-        Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i+1);
-        var j :| boundaries[i] <= j < boundaries[i+1] && keys[j] == k;
-        Keys.IsStrictlySortedImpliesLte(keys, boundaries[i], j);
-      }
-    }
-    BoundaryPivotsStrictlySorted(keys, boundaries, pivots);
+    var node := Index(pivots, leaves);
+    LeavesProperties(kvlist, config, boundaries, node);
+    ReshapeTreeToConfig(node, config)
   }
 }
 

@@ -125,3 +125,21 @@ build rustny
            cd lib/DataStructures
            dafny BtreeSpec.i.dfy /proc:*BuildTreeForSequence
 
+2020/01/02 See lib/Base/total_order.i.dfy:IsStrictlySorted()
+           It originally was just
+           {
+             reveal_IsSorted();
+             forall i, j ...
+           }
+           but the body of IsSorted would leak to callers of
+           reveal_IsStrictlySorted().
+
+2020/01/02 See lib/Base/insert()
+           It ensures something that appears to have a trigger trap
+           in the ensure itself.  Consider rewriting
+              ensures forall i :: pos <= i < |s| ==> insert(s, a, pos)[i+1] == s[i];
+           as
+              ensures insert(s, a, pos) == s[..pos] + [a] + s[pos..]
+           (but this willd likely cause massive breakage throughout code)
+
+
