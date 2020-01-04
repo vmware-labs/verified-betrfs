@@ -9,6 +9,8 @@ include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/BitmapModel.i.dfy"
+include "Marshalling.i.dfy"
+
 //
 // An IndirectionTable maps references to locations and tracks
 // dependencies (accounts for locations containing references).
@@ -39,6 +41,7 @@ module IndirectionTableModel {
   import BitmapModel
   import opened Bounds
   import SetBijectivity
+  import Marshalling
 
   datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
@@ -115,12 +118,12 @@ module IndirectionTableModel {
 
   function MaxSize() : int
   {
-    0x1_0000_0000
+    IndirectionTableMaxSize()
   }
 
   function method MaxSizeUint64() : uint64
   {
-    0x1_0000_0000
+    IndirectionTableMaxSizeUint64()
   }
 
   protected predicate Inv(self: IndirectionTable)
@@ -1132,9 +1135,15 @@ module IndirectionTableModel {
   ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
   ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
   ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
+  ensures s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value))
+  ensures s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?
   {
     if |a| == 0 then
-      Some(MutableMapModel.Constructor(1024))
+      var s := Some(MutableMapModel.Constructor(1024));
+      assert Locs(s.value) == map[];
+      assert Graph(s.value) == map[];
+      //assert s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value));
+      s
     else (
       var res := valToHashMap(DropLast(a));
       match res {
@@ -1151,7 +1160,11 @@ module IndirectionTableModel {
               if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
                 None
               ) else (
-                Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0)))
+                var res := MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0));
+                assert Locs(res) == Locs(table)[ref := loc];
+                assert Graph(res) == Graph(table)[ref := succs];
+                //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
+                Some(res)
               )
             )
           }
@@ -1234,6 +1247,8 @@ module IndirectionTableModel {
   ensures s.Some? ==> Inv(s.value)
   ensures s.Some? ==> TrackingGarbage(s.value)
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
+  ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(I(s.value))
+  ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
   {
     if |v.a| <= MaxSize() then (
       var t := valToHashMap(v.a);
