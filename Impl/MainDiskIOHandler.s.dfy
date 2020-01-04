@@ -1,7 +1,7 @@
 // DiskInterface
 
 include "../lib/Base/NativeTypes.s.dfy"
-include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
+include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 
 module {:extern "MainDiskIOHandler_Compile"} MainDiskIOHandler {
   import opened NativeTypes

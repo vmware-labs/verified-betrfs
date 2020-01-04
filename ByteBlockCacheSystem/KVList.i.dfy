@@ -8,6 +8,7 @@ include "../lib/Marshalling/Seqs.i.dfy"
 //
 // A list of key-message pairs, with unique, sorted keys.
 // TODO(robj,thance): How is it used... in BucketImpl?
+// NOTE(tjhance): this is mostly Impl-related stuff, but a bit of it is used by the Marshalling file
 //
 
 module KVList {

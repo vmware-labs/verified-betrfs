@@ -1,5 +1,5 @@
 include "StateModel.i.dfy"
-include "ByteBetreeBlockCache.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCache.i.dfy"
 include "MarshallingModel.i.dfy"
 
 //

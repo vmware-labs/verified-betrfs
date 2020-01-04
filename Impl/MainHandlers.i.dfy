@@ -1,14 +1,14 @@
 include "Main.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "ByteBetreeBlockCacheSystem.i.dfy"
-include "Marshalling.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
+include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "InsertImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "SuccImpl.i.dfy"
 include "InsertModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
-include "ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
 //
 // Implements the application-API-handler obligations laid out by Main.s.dfy.
 //

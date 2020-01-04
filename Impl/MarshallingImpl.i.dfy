@@ -5,7 +5,7 @@ include "BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
 
-include "Marshalling.i.dfy"
+include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
 
 module MarshallingImpl {
