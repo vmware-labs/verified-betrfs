@@ -578,6 +578,7 @@ module PivotBetreeSpecRefinement {
   ensures IBuffer(node)[key] == IBuffer(node')[key]
   ensures IMapsAgreeOnKey(IChildren(node), IChildren(node'), key)
   {
+    assume false;
     reveal_SplitBucketLeft();
     P.reveal_CutoffNodeAndKeepLeft();
     var i := Route(node'.pivotTable, key);
