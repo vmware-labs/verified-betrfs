@@ -1,4 +1,4 @@
-include "Marshalling.i.dfy"
+include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "StateModel.i.dfy"
 include "IndirectionTableModel.i.dfy"
 

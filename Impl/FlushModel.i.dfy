@@ -1,6 +1,6 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
-include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
+include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
 
 module FlushModel { 
