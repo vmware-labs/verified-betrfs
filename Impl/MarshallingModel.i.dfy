@@ -13,7 +13,7 @@ include "IndirectionTableModel.i.dfy"
 // TODO(jonh): rename to ModelParsing.
 //
 
-module ImplMarshallingModel {
+module MarshallingModel {
   import opened GenericMarshalling
   import opened Options
   import opened NativeTypes

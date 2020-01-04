@@ -1,5 +1,7 @@
 include "StateModel.i.dfy"
 include "ByteBetreeBlockCache.i.dfy"
+include "MarshallingModel.i.dfy"
+
 //
 // IO functions used by various StateModel verbs.
 // Updates data structures as defined in StateModel.
@@ -16,7 +18,7 @@ module IOModel {
   import opened Maps
   import opened Bounds
   import opened BucketWeights
-  import IMM = ImplMarshallingModel
+  import IMM = MarshallingModel
   import Marshalling = Marshalling
   import LBAType
   import BucketsLib
@@ -131,6 +133,8 @@ module IOModel {
   {
     reveal_RequestWrite();
     IMM.reveal_parseCheckedSector();
+    IMM.reveal_parseSector();
+    Marshalling.reveal_parseSector();
     M.reveal_IBytes();
     M.reveal_ValidCheckedBytes();
     M.reveal_Parse();
@@ -185,7 +189,9 @@ module IOModel {
   ensures id.None? ==> io' == io
   {
     reveal_FindLocationAndRequestWrite();
+    IMM.reveal_parseSector();
     IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
     M.reveal_IBytes();
     M.reveal_ValidCheckedBytes();
     M.reveal_Parse();
@@ -337,9 +343,9 @@ module IOModel {
     && sector.Some? ==> WFSector(sector.value)
     && M.IDiskOp(diskOp(io)) == SD.RespReadOp(id, SD.RespRead(ISectorOpt(sector)))
   {
-    Marshalling.reveal_parseCheckedSector();
-    Marshalling.reveal_parseSector();
     IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    IMM.reveal_parseSector();
     M.reveal_IBytes();
     M.reveal_ValidCheckedBytes();
     M.reveal_Parse();
