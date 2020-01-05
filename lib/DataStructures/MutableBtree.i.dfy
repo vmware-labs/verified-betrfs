@@ -159,6 +159,7 @@ abstract module MutableBtree {
     decreases node.repr, 0
   {
     reveal_I();
+    Spec.reveal_Interpretation();
     var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == needle {
       result := Some(node.contents.values[posplus1-1]);
@@ -175,6 +176,8 @@ abstract module MutableBtree {
     decreases node.repr, 0
   {
     reveal_I();
+    Spec.reveal_Interpretation();
+    Spec.reveal_AllKeys();
     var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
     result := Query(node.contents.children[posplus1], needle);
@@ -204,6 +207,7 @@ abstract module MutableBtree {
     root.contents := Leaf(0, rootkeys, rootvalues);
     root.repr := {root, rootkeys, rootvalues};
     root.height := 0;
+    Spec.reveal_Interpretation();
   }
 
   method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
@@ -287,7 +291,7 @@ abstract module MutableBtree {
     ensures WFShape(right)
     ensures node.repr == old(node.repr)
     ensures fresh(right.repr)
-    ensures Spec.SplitLeaf(old(I(node)), I(node), I(right), wit, pivot)
+    ensures Spec.SplitLeaf(old(I(node)), I(node), I(right), pivot)
     ensures node.contents.nkeys == nleft
     modifies node
   {
@@ -551,7 +555,7 @@ abstract module MutableBtree {
     ensures node.repr !! right.repr
     ensures fresh(right.repr - old(node.repr))
     ensures node.height == old(node.height) == right.height
-    ensures Spec.SplitIndex(old(I(node)), I(node), I(right), wit, pivot)
+    ensures Spec.SplitIndex(old(I(node)), I(node), I(right), pivot)
     ensures node.contents.nchildren == nleft
     ensures pivot == old(node.contents.pivots[nleft-1])
     modifies node
@@ -568,7 +572,7 @@ abstract module MutableBtree {
     assert Spec.AllKeysBelowBound(inode, 0);
     Spec.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
     assert Spec.Keys.lt(wit, inode.pivots[0]);
-    assert wit in Spec.AllKeys(inode);
+    assert wit in Spec.AllKeys(inode) by { Spec.reveal_AllKeys(); }
     reveal_I();
   }
 
@@ -584,7 +588,7 @@ abstract module MutableBtree {
     ensures node.repr !! right.repr
     ensures !Full(node)
     ensures !Full(right)
-    ensures Spec.SplitNode(old(I(node)), I(node), I(right), wit, pivot)
+    ensures Spec.SplitNode(old(I(node)), I(node), I(right), pivot)
     ensures pivot in Spec.AllKeys(old(I(node)))
     modifies node
   {
@@ -597,6 +601,7 @@ abstract module MutableBtree {
       var boundary := node.contents.nchildren/2;
       right, wit, pivot := SplitIndex(node, boundary);
     }
+    Spec.reveal_AllKeys();
   }
 
   lemma ChildrenAreDistinct(node: Node)
@@ -778,7 +783,7 @@ abstract module MutableBtree {
     ensures node.contents.Index?
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures Spec.SplitChildOfIndex(old(I(node)), I(node), childidx as int, wit)
+    ensures Spec.SplitChildOfIndex(old(I(node)), I(node), childidx as int)
     ensures node.contents.children[childidx] != null
     ensures node.contents.children[childidx+1] != null
     ensures !Full(node.contents.children[childidx])
@@ -989,6 +994,7 @@ abstract module MutableBtree {
     ensures Spec.AllKeys(I(node)) == Spec.AllKeys(old(I(node)))
     modifies node, node.repr
   {
+    Spec.reveal_AllKeys();
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
 
     childidx := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
@@ -996,9 +1002,9 @@ abstract module MutableBtree {
       ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
       var wit := SplitChildOfIndex(node, childidx);
       ghost var newpivots := node.contents.pivots[..node.contents.nchildren-1];
-      Spec.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int, wit);
-      Spec.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int, wit);
-      Spec.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int, wit);
+      Spec.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
+      Spec.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
+      Spec.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
 
       var t: int32 := Spec.Keys.cmp(node.contents.pivots[childidx], key);
       if  t <= 0 {
@@ -1078,9 +1084,9 @@ abstract module MutableBtree {
   {
     var inode := I(node);
     if inode.Leaf? {
-      assert inode.keys[0] in Spec.AllKeys(inode);
+      assert inode.keys[0] in Spec.AllKeys(inode) by { Spec.reveal_AllKeys(); }
     } else {
-      assert inode.pivots[0] in Spec.AllKeys(inode);
+      assert inode.pivots[0] in Spec.AllKeys(inode) by { Spec.reveal_AllKeys(); }
     }
   }
   
