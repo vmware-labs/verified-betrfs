@@ -281,7 +281,7 @@ abstract module MutableBtree {
     }
   }
 
-  method SplitLeaf(node: Node, nleft: uint64, ghost pivot: Key) returns (right: Node, ghost wit: Key)
+  method SplitLeaf(node: Node, nleft: uint64, ghost pivot: Key) returns (right: Node)
     requires WF(node)
     requires node.contents.Leaf?
     requires 0 < nleft < node.contents.nkeys
@@ -301,7 +301,6 @@ abstract module MutableBtree {
     right := LeafFromSeqs(node.contents.keys[nleft..node.contents.nkeys], node.contents.values[nleft..node.contents.nkeys]);
 
     node.contents := Leaf(nleft, node.contents.keys, node.contents.values);
-    wit := node.contents.keys[0];
     Spec.Keys.IsStrictlySortedImpliesLt(old(node.contents.keys[..node.contents.nkeys]), nleft as int - 1, nleft as int);
   }
 
@@ -544,7 +543,7 @@ abstract module MutableBtree {
     }
   }
 
-  method SplitIndex(node: Node, nleft: uint64) returns (right: Node, ghost wit: Key, pivot: Key)
+  method SplitIndex(node: Node, nleft: uint64) returns (right: Node, pivot: Key)
     requires WF(node)
     requires node.contents.Index?
     requires 2 <= node.contents.nchildren
@@ -566,17 +565,14 @@ abstract module MutableBtree {
     right := SubIndex(node, nleft, node.contents.nchildren);
     pivot := node.contents.pivots[nleft-1];
     IOfChild(node, 0);
-    wit :| wit in Spec.AllKeys(I(node.contents.children[0]));
     IndexPrefix(node, nleft);
     ghost var inode := old(I(node));
     assert Spec.AllKeysBelowBound(inode, 0);
     Spec.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
-    assert Spec.Keys.lt(wit, inode.pivots[0]);
-    assert wit in Spec.AllKeys(inode) by { Spec.reveal_AllKeys(); }
     reveal_I();
   }
 
-  method SplitNode(node: Node) returns (right: Node, ghost wit: Key, pivot: Key)
+  method SplitNode(node: Node) returns (right: Node, pivot: Key)
     requires WF(node)
     requires Full(node)
     ensures WFShape(node)
@@ -596,10 +592,10 @@ abstract module MutableBtree {
       var boundary := node.contents.nkeys/2;
       pivot := node.contents.keys[boundary];
       Spec.Keys.IsStrictlySortedImpliesLt(node.contents.keys[..node.contents.nkeys], boundary as int - 1, boundary as int);
-      right, wit := SplitLeaf(node, node.contents.nkeys / 2, pivot);
+      right := SplitLeaf(node, node.contents.nkeys / 2, pivot);
     } else {
       var boundary := node.contents.nchildren/2;
-      right, wit, pivot := SplitIndex(node, boundary);
+      right, pivot := SplitIndex(node, boundary);
     }
     Spec.reveal_AllKeys();
   }
@@ -772,7 +768,7 @@ abstract module MutableBtree {
     }
   }
   
-  method SplitChildOfIndex(node: Node, childidx: uint64)  returns (ghost wit: Key)
+  method SplitChildOfIndex(node: Node, childidx: uint64)
     requires WF(node)
     requires node.contents.Index?
     requires !Full(node)
@@ -799,12 +795,11 @@ abstract module MutableBtree {
       IOfChild(node, i as int);
     }
     
-    var right, wit', pivot := SplitNode(node.contents.children[childidx]);
+    var right, pivot := SplitNode(node.contents.children[childidx]);
     Arrays.Insert(node.contents.pivots, node.contents.nchildren-1, pivot, childidx);
     Arrays.Insert(node.contents.children, node.contents.nchildren, right, childidx + 1);
     node.contents := node.contents.(nchildren := node.contents.nchildren + 1);
     node.repr := node.repr + right.repr;
-    wit := wit';
 
     SplitChildOfIndexPreservesWFShape(node, childidx as int);
     
@@ -1000,7 +995,7 @@ abstract module MutableBtree {
     childidx := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
     if Full(node.contents.children[childidx]) {
       ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
-      var wit := SplitChildOfIndex(node, childidx);
+      SplitChildOfIndex(node, childidx);
       ghost var newpivots := node.contents.pivots[..node.contents.nchildren-1];
       Spec.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
       Spec.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
