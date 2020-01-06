@@ -1,7 +1,6 @@
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "StateImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
-include "../lib/Marshalling/Math.i.dfy"
 
 //
 // TODO implement this so that it matches the spec of Mkfs
@@ -32,13 +31,6 @@ module {:extern} MkfsImpl {
   type LBA = LBAType.LBA
   import Math
 
-  lemma LemmaValidAddrBlockSize()
-  ensures LBAType.ValidAddr(LBAType.BlockSize())
-  {
-    LBAType.reveal_ValidAddr();
-    Math.lemma_mod_multiples_basic(1, LBAType.BlockSize() as int);
-  }
-
   method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
   {
     WeightBucketEmpty();
@@ -60,7 +52,7 @@ module {:extern} MkfsImpl {
       map[0 := []]
     );
 
-    LemmaValidAddrBlockSize();
+    LBAType.ValidAddrMul(1);
     assert LBAType.ValidLocation(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64));
     assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
     assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
