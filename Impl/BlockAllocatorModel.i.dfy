@@ -97,7 +97,11 @@ module BlockAllocatorModel {
   function MarkFreeOutstanding(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
   requires Inv(bam)
   requires 0 <= i < NumBlocks()
+  ensures Inv(bam')
   {
+    BitmapModel.reveal_BitUnset();
+    BitmapModel.reveal_IsSet();
+
     bam.(outstanding := BitmapModel.BitUnset(bam.outstanding, i))
        .(full :=
         if

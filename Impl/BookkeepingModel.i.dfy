@@ -402,7 +402,7 @@ module BookkeepingModel {
     var s' := writeBookkeeping(k, s, ref, children);
 
     lemmaIndirectionTableLocIndexValid(k, s, ref);
-    assume s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
+    assert s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
     var (eph, oldEntry) := MutableMapModel.InsertAndGetOld(s.ephemeralIndirectionTable, ref,
         (None, if children.Some? then children.value else []));
 

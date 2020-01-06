@@ -84,6 +84,9 @@ module SyncImpl {
   {
     SyncModel.reveal_AssignIdRefLocOutstanding();
 
+    if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64() < NumBlocksUint64() {
+      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64());
+    }
     s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
     s.blockAllocator.MarkUsedOutstanding(loc.addr / BlockSizeUint64());
   }
