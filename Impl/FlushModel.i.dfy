@@ -114,7 +114,6 @@ module FlushModel {
       assert childref in s.cache;
       assert childref in s.ephemeralIndirectionTable.graph;
       assert child == s.cache[childref];
-      assume childref != BT.G.Root();
 
       assert parentref in s.cache;
       assert parentref in s.ephemeralIndirectionTable.graph;
