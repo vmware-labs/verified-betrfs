@@ -1,6 +1,7 @@
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "StateImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
+include "../lib/Marshalling/Math.i.dfy"
 
 //
 // TODO implement this so that it matches the spec of Mkfs
@@ -29,6 +30,14 @@ module {:extern} MkfsImpl {
   import D = AsyncDisk
 
   type LBA = LBAType.LBA
+  import Math
+
+  lemma LemmaValidAddrBlockSize()
+  ensures LBAType.ValidAddr(LBAType.BlockSize())
+  {
+    LBAType.reveal_ValidAddr();
+    Math.lemma_mod_multiples_basic(1, LBAType.BlockSize() as int);
+  }
 
   method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
   {
@@ -51,8 +60,10 @@ module {:extern} MkfsImpl {
       map[0 := []]
     );
 
-    //assert SI.WFSector(SI.SectorIndirectionTable(sectorIndirectionTable));
-    assume SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
+    LemmaValidAddrBlockSize();
+    assert LBAType.ValidLocation(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64));
+    assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
+    assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
     var b0 := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
     // TODO(jonh): MarshallCheckedSector owes us a promise that it can marshall
