@@ -326,7 +326,6 @@ module Marshalling {
   /////// Marshalling and de-marshalling
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
-  //ensures s.Some? ==> SM.WFSector(s.value)
   {
     if |data| < 0x1_0000_0000_0000_0000 then (
       match parse_Val(data, SectorGrammar()).0 {
@@ -336,5 +335,13 @@ module Marshalling {
     ) else (
       None
     )
+  }
+
+  function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
+  {
+    if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
+      parseSector(data[32..])
+    else
+      None
   }
 }

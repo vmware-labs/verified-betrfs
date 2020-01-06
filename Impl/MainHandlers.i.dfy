@@ -8,9 +8,10 @@ include "SuccImpl.i.dfy"
 include "InsertModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
+include "Mkfs.i.dfy"
 include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
 //
-// Implements the application-API-handler obligations laid out by Main.s.dfy.
+// Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
 
 module {:extern} MainHandlers refines Main { 
@@ -26,6 +27,8 @@ module {:extern} MainHandlers refines Main {
   import QueryModel
   import SyncModel
   import SuccModel
+  import MkfsImpl
+  import MkfsModel
 
   import BBC = BetreeBlockCache
   import BC = BetreeGraphBlockCache
@@ -181,6 +184,25 @@ module {:extern} MainHandlers refines Main {
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
+  }
+
+  predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
+  {
+    MkfsModel.InitDiskContents(diskContents)
+  }
+
+  method Mkfs()
+  returns (diskContents: map<uint64, seq<byte>>)
+  {
+    diskContents := MkfsImpl.Mkfs();
+  }
+
+  lemma InitialStateSatisfiesSystemInit(
+      k: ADM.Constants, 
+      s: ADM.Variables,
+      diskContents: map<uint64, seq<byte>>)
+  {
+    MkfsModel.InitialStateSatisfiesSystemInit(k, s, diskContents);
   }
 
   function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants

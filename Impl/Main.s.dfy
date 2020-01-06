@@ -127,24 +127,27 @@ abstract module Main {
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
     io.diskOp())
 
-  // TODO implement this, and update the framework to call this
-  // method rather than the existing one.
-  // The post-condition basically says that if the disk starts with
-  // the bytes that the method returns, then we're in a valid initial
-  // state.
-  method Mkfs(k: Constants)
+  // Mkfs
+  // You have to prove that, if the blocks returned by Mkfs are
+  // written to disk, then the initial conditions of the
+  // disk system are satisfied.
+  
+  predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
+
+  method Mkfs()
   returns (diskContents: map<uint64, seq<byte>>)
-  ensures
-    forall s_machine | ADM.M.Init(Ik(k), s_machine) ::
-    forall byteSeq | ADM.BlocksWrittenInByteSeq(diskContents, byteSeq) ::
-      ADM.Init(
-        ADM.AsyncDiskModelTypes.AsyncDiskModelConstants(
-          Ik(k),
-          ADM.D.Constants()),
-        ADM.AsyncDiskModelTypes.AsyncDiskModelVariables(
-          s_machine,
-          ADM.D.Variables(map[], map[], map[], map[], byteSeq))
-      )
+  ensures InitDiskContents(diskContents)
+  ensures ADM.BlocksDontIntersect(diskContents)
+
+  lemma InitialStateSatisfiesSystemInit(
+      k: ADM.Constants, 
+      s: ADM.Variables,
+      diskContents: map<uint64, seq<byte>>)
+  requires ADM.M.Init(k.machine, s.machine)
+  requires ADM.D.Init(k.disk, s.disk)
+  requires InitDiskContents(diskContents)
+  requires ADM.BlocksWrittenInByteSeq(diskContents, s.disk.contents)
+  ensures ADM.Init(k, s)
 
   // These are proof obligations for the refining module to fill in.
   // The refining module must

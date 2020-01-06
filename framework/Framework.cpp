@@ -302,9 +302,9 @@ void Application::log(std::string const& s) {
 }
 
 void Mkfs() {
-  DafnyMap<uint64, shared_ptr<vector<byte>>> daf_map = handle_InitDiskBytes();
+  DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
 
-  unordered_map<uint64, shared_ptr<vector<byte>>> m = daf_map.map;
+  unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
 
   if (m.size() == 0) {
     fail("InitDiskBytes failed.");
@@ -321,7 +321,8 @@ void Mkfs() {
   mkdir(".veribetrfs-storage", 0700);
 
   for (auto p : m) {
-    MainDiskIOHandler_Compile::writeSync(p.first, &(*p.second)[0], p.second->size());
+    MainDiskIOHandler_Compile::writeSync(
+        p.first, p.second.ptr(), p.second.size());
   }
 }
 

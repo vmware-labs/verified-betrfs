@@ -312,6 +312,10 @@ abstract module AsyncDiskModel {
         && 0 <= addr as int <= |byteSeq|
         && addr as int + |contents[addr]| <= |byteSeq|
         && byteSeq[addr .. addr as int + |contents[addr]|] == contents[addr])
+  }
+
+  predicate BlocksDontIntersect(contents: map<uint64, seq<byte>>)
+  {
     && (forall addr1, addr2 | addr1 in contents && addr2 in contents
         && addr1 != addr2 :: !D.overlap(addr1 as int, |contents[addr1]|, addr2 as int, |contents[addr2]|))
   }
