@@ -60,6 +60,7 @@ module BitmapImpl {
     reads this, this.Repr
     {
       && ReprInv()
+      && bits.Length < 0x1_0000_0000_0000_0000 / 128
     }
 
     static function {:opaque} IPrefix(bits: seq<uint64>, i: int) : (res : BitmapModelT)
@@ -239,19 +240,42 @@ module BitmapImpl {
     ensures I() == BitUnion(a.I(), b.I())
     ensures fresh(Repr)
     {
-      assume false;
-
       bits := new uint64[a.bits.Length as uint64];
       new;
 
       var i: uint64 := 0;
       while i < a.bits.Length as uint64
+      invariant 0 <= i as int <= a.bits.Length;
+      invariant fresh(bits);
+      invariant a.I() == old(a.I())
+      invariant b.I() == old(b.I())
+      invariant bits.Length == a.bits.Length
+      invariant forall j | 0 <= j < i as int ::
+          bits[j] == BitsetLemmas.bit_or_uint64(a.bits[j], b.bits[j]);
       {
         bits[i] := BitsetLemmas.bit_or_uint64(a.bits[i], b.bits[i]);
         i := i + 1;
       }
 
       Repr := { this, this.bits };
+
+      ghost var x := I();
+      ghost var y := BitUnion(a.I(), b.I());
+      assert |x| == |y|;
+      forall c:uint64 | 0 <= c as int < |x| ensures x[c] == y[c]
+      {
+        reveal_IsSet();
+        var i: uint64 := c / 64;
+        var t: uint64 := c % 64;
+        calc {
+          x[c];
+          BitBSet(this.bits[i], t);
+            { BitsetLemmas.bit_or_is_union_uint64(a.bits[i], b.bits[i], t); }
+          (BitBSet(a.bits[i], t) || BitBSet(b.bits[i], t));
+          IsSet(y, c as int);
+          y[c];
+        }
+      }
     }
 
     constructor Clone(a: Bitmap)

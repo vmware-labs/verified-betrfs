@@ -94,6 +94,21 @@ module BitsetLemmas {
     reveal_bit_or();
   }
 
+  lemma bit_or_result_0_implies_args_0(a: bv64, b: bv64)
+  requires bit_or(a, b) == 0
+  ensures a == 0
+  ensures b == 0
+  {
+    reveal_bit_or();
+  }
+
+  lemma zero_or_zero_eq_zero()
+  ensures bit_or(0, 0) == 0
+  {
+    reveal_bit_or();
+  }
+
+
   lemma bit_ne(i: uint64, j: uint64)
   requires i != j
   requires i < 64
@@ -238,6 +253,26 @@ module BitsetLemmas {
     }
   }
 
+  lemma bit_or_is_union(a: bv64, b: bv64, i: uint64)
+  requires i < 64
+  ensures in_set(i, bit_or(a, b)) == (in_set(i, a) || in_set(i, b))
+  {
+    reveal_in_set();
+
+    calc {
+      bit_and(bit_or(a, b), bit(i));
+        { and_or_dist(a, b, bit(i)); }
+      bit_or(bit_and(a, bit(i)), bit_and(b, bit(i)));
+    }
+
+    if !in_set(i, bit_or(a, b)) {
+      bit_or_result_0_implies_args_0(
+          bit_and(a, bit(i)), bit_and(b, bit(i)));
+    } else {
+      zero_or_zero_eq_zero();
+    }
+  }
+
   // uint64
 
   function method {:opaque} bit_or_uint64(a: uint64, b: uint64) : uint64
@@ -311,5 +346,16 @@ module BitsetLemmas {
     bv64cast(set_bit_to_0(a as bv64, i));
     reveal_in_set_uint64();
     reveal_set_bit_to_0_uint64();
+  }
+
+  lemma bit_or_is_union_uint64(a: uint64, b: uint64, i: uint64)
+  requires i < 64
+  ensures in_set_uint64(i, bit_or_uint64(a, b))
+      == (in_set_uint64(i, a) || in_set_uint64(i, b))
+  {
+    bit_or_is_union(a as bv64, b as bv64, i);
+    bv64cast(bit_or(a as bv64, b as bv64));
+    reveal_bit_or_uint64();
+    reveal_in_set_uint64();
   }
 }
