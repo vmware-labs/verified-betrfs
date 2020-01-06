@@ -28,7 +28,8 @@ export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
       KeyType, ValueMessage, ValueWithDefault, lemma_SeqSumLens_prefix,
-      lemma_SeqSumMessageLens_prefix
+      lemma_SeqSumMessageLens_prefix,
+      lemma_SizeOfV_parse_Val
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
 
 export extends S
@@ -3524,7 +3525,7 @@ method{:timeLimitMultiplier 4} MarshallMessageArrayContents(contents:seq<Message
             (index as int) + SeqSumMessageLens(contents);
             data.Length;
         }
-        assert {:split_here} true;
+        //assert {:split_here} true;
         //assert marshalled_bytes == data[index..cur_index];
 
         // Prove the invariant about our index tracking correctly
@@ -3661,5 +3662,200 @@ method Marshall(val:V, ghost grammar:G) returns (data:array<byte>)
     lemma_parse_Val_view_specific(data[..], val, grammar, 0, (size as int));
 }
 
+lemma lemma_SizeOfV_parse_Val_Uint64(data: seq<byte>)
+requires |data| < 0x1_0000_0000_0000_0000;
+ensures var (v, rest) := parse_Uint64(data);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+}
+
+lemma lemma_SizeOfV_parse_Val_Array_contents(data: seq<byte>, eltType: G, len: uint64)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires ValidGrammar(eltType);
+decreases eltType, 1, len;
+ensures var (v, rest) := parse_Array_contents(data, eltType, len);
+  v.Some? ==> SeqSum(v.value) + |rest| == |data|
+{
+  reveal_parse_Array_contents();
+  reveal_SeqSum();
+  if len == 0 {
+  } else {
+    lemma_SizeOfV_parse_Val(data, eltType);
+    var (val, rest1) := parse_Val(data, eltType);
+    lemma_SizeOfV_parse_Val_Array_contents(rest1, eltType, len - 1);
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_Array(data: seq<byte>, eltType: G)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires ValidGrammar(eltType)
+decreases eltType;
+ensures var (v, rest) := parse_Array(data, eltType);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+  lemma_SizeOfV_parse_Val_Uint64(data);
+  var (len, rest) := parse_Uint64(data);
+  if !len.None? {
+    lemma_SizeOfV_parse_Val_Array_contents(rest, eltType, len.value.u);
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_Tuple_contents(data: seq<byte>, eltTypes: seq<G>)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires |eltTypes| < 0x1_0000_0000_0000_0000;
+requires forall elt | elt in eltTypes :: ValidGrammar(elt);
+decreases eltTypes, 0
+ensures var (v, rest) := parse_Tuple_contents(data, eltTypes);
+  v.Some? ==> SeqSum(v.value) + |rest| == |data|
+{
+  reveal_parse_Tuple_contents();
+  reveal_SeqSum();
+  if eltTypes == [] {
+  } else {
+    lemma_SizeOfV_parse_Val(data, eltTypes[0]);
+    var (val, rest1) := parse_Val(data, eltTypes[0]);
+    lemma_SizeOfV_parse_Val_Tuple_contents(rest1, eltTypes[1..]);
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_Tuple(data: seq<byte>, eltTypes: seq<G>)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires |eltTypes| < 0x1_0000_0000_0000_0000;
+requires forall elt | elt in eltTypes :: ValidGrammar(elt);
+decreases eltTypes, 1;
+ensures var (v, rest) := parse_Tuple(data, eltTypes);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+  lemma_SizeOfV_parse_Val_Tuple_contents(data, eltTypes);
+}
+
+lemma lemma_SizeOfV_parse_Val_Case(data: seq<byte>, cases: seq<G>)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires |cases| < 0x1_0000_0000_0000_0000;
+requires forall elt :: elt in cases ==> ValidGrammar(elt);
+decreases cases;
+ensures var (v, rest) := parse_Case(data, cases);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+  lemma_SizeOfV_parse_Val_Uint64(data);
+  var (caseID, rest1) := parse_Uint64(data);
+  if !caseID.None? && caseID.value.u < (|cases| as uint64) {
+    lemma_SizeOfV_parse_Val(rest1, cases[caseID.value.u]);
+    var (val, rest2) := parse_Val(rest1, cases[caseID.value.u]);
+    if !val.None? {
+      assert |data| - |rest1| == 8;
+      assert |rest1| - |rest2| == SizeOfV(val.value);
+    }
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_ByteArray(data: seq<byte>)
+requires |data| < 0x1_0000_0000_0000_0000;
+ensures var (v, rest) := parse_ByteArray(data);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+}
+
+lemma lemma_SizeOfV_parse_Val_Message(data: seq<byte>)
+requires |data| < 0x1_0000_0000_0000_0000;
+ensures var (v, rest) := parse_Message(data);
+  v.Some? ==> SizeOfV(VMessage(v.value)) + |rest| == |data|
+{
+  reveal_MessageSizeUint64();
+}
+
+lemma lemma_SizeOfV_parse_Val_Uint64Array(data: seq<byte>)
+requires |data| < 0x1_0000_0000_0000_0000;
+ensures var (v, rest) := parse_Uint64Array(data);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+}
+
+lemma lemma_SizeOfV_parse_Val_KeyArray_contents(data: seq<byte>, len: uint64)
+requires |data| < 0x1_0000_0000_0000_0000;
+decreases len;
+ensures var (v, rest) := parse_KeyArray_contents(data, len);
+  v.Some? ==> SeqSumLens(v.value) + |rest| == |data|
+{
+  reveal_parse_KeyArray_contents();
+  reveal_SeqSumLens();
+  if len == 0 {
+  } else {
+    lemma_SizeOfV_parse_Val_ByteArray(data);
+    var (val, rest1) := parse_ByteArray(data);
+    lemma_SizeOfV_parse_Val_KeyArray_contents(rest1, len - 1);
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_KeyArray(data: seq<byte>)
+requires |data| < 0x1_0000_0000_0000_0000;
+ensures var (v, rest) := parse_KeyArray(data);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+  lemma_SizeOfV_parse_Val_Uint64(data);
+  var (len, rest) := parse_Uint64(data);
+  if !len.None? {
+    lemma_SizeOfV_parse_Val_KeyArray_contents(rest, len.value.u);
+    var (contents, remainder) := parse_KeyArray_contents(rest, len.value.u);
+    if !contents.None? {
+      assert |data| - |rest| == 8;
+      assert |rest| - |remainder| == SeqSumLens(contents.value);
+    }
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_MessageArray_contents(data: seq<byte>, len: uint64)
+requires |data| < 0x1_0000_0000_0000_0000;
+decreases len;
+ensures var (v, rest) := parse_MessageArray_contents(data, len);
+  v.Some? ==> SeqSumMessageLens(v.value) + |rest| == |data|
+{
+  reveal_parse_MessageArray_contents();
+  reveal_SeqSumMessageLens();
+  if len == 0 {
+  } else {
+    lemma_SizeOfV_parse_Val_Message(data);
+    var (val, rest1) := parse_Message(data);
+    lemma_SizeOfV_parse_Val_MessageArray_contents(rest1, len - 1);
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val_MessageArray(data: seq<byte>)
+requires |data| < 0x1_0000_0000_0000_0000;
+ensures var (v, rest) := parse_MessageArray(data);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+  lemma_SizeOfV_parse_Val_Uint64(data);
+  var (len, rest) := parse_Uint64(data);
+  if !len.None? {
+    lemma_SizeOfV_parse_Val_MessageArray_contents(rest, len.value.u);
+    var (contents, remainder) := parse_MessageArray_contents(rest, len.value.u);
+    if !contents.None? {
+      assert |data| - |rest| == 8;
+      assert |rest| - |remainder| == SeqSumMessageLens(contents.value);
+    }
+  }
+}
+
+lemma lemma_SizeOfV_parse_Val(data: seq<byte>, grammar: G)
+requires |data| < 0x1_0000_0000_0000_0000;
+requires ValidGrammar(grammar);
+decreases grammar, 0
+ensures var (v, rest) := parse_Val(data, grammar);
+  v.Some? ==> SizeOfV(v.value) + |rest| == |data|
+{
+  reveal_parse_Val();
+  match grammar {
+    case GUint64             => lemma_SizeOfV_parse_Val_Uint64(data);
+    case GArray(elt)         => lemma_SizeOfV_parse_Val_Array(data, elt);
+    case GTuple(t)           => lemma_SizeOfV_parse_Val_Tuple(data, t);
+    case GByteArray          => lemma_SizeOfV_parse_Val_ByteArray(data);
+    case GMessage            => lemma_SizeOfV_parse_Val_Message(data);
+    case GUint64Array        => lemma_SizeOfV_parse_Val_Uint64Array(data);
+    case GKeyArray           => lemma_SizeOfV_parse_Val_KeyArray(data);
+    case GMessageArray       => lemma_SizeOfV_parse_Val_MessageArray(data);
+    case GTaggedUnion(cases) => lemma_SizeOfV_parse_Val_Case(data, cases);
+  }
+}
 
 } 

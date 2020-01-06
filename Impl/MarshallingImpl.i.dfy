@@ -610,8 +610,11 @@ module MarshallingImpl {
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
-    assume SizeOfV(v) < 0x1_0000_0000_0000_0000; // TODO looks like we need to modify GenericMarshalling to get this fact out? (the reason we need this is to show that BucketWeightList of the resulting node lists are small enough)
+
     if success {
+      lemma_SizeOfV_parse_Val(data[start..], Marshalling.SectorGrammar());
+      assert SizeOfV(v) < 0x1_0000_0000_0000_0000;
+
       var s := ValToSector(v);
       return s;
     } else {
