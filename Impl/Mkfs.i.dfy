@@ -43,16 +43,10 @@ module {:extern} MkfsImpl {
     ghost var is:SM.Sector := SI.ISector(sector);
     var b1 := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
 
-    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
-    sectorIndirectionTable.InvForMkfs();
-    sectorIndirectionTable.t.Insert(0, IndirectionTableModel.Entry(Some(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)), [], 1));
+    var loc := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64);
+    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(loc);
 
-    // TODO(jonh): We're reaching right into sectorIndirectionTable.t above to
-    // wangle it. No reason that should preserve sectorIndirectionTable.Inv!
-    // Need to improve the contract between sectorIndirectionTable and here.
-    assume sectorIndirectionTable.Inv();
-
-    assume SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
+    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
       map[0 := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)],
       map[0 := []]
     );

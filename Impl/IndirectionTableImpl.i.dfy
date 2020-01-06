@@ -44,14 +44,6 @@ module IndirectionTableImpl {
     var garbageQueue: LruImpl.LruImplQueue?;
     ghost var Repr: set<object>;
 
-    lemma InvForMkfs()
-        requires Inv()
-        ensures this.t in Repr
-        ensures this.t.Repr <= Repr
-        ensures this.t.Inv()
-    {
-    }
-
     protected predicate Inv()
     reads this, Repr
     ensures Inv() ==> this in Repr
@@ -95,7 +87,6 @@ module IndirectionTableImpl {
     constructor Empty()
     ensures Inv()
     ensures fresh(Repr)
-    ensures t.Count == 1;   // TODO(jonh): Kind of a gross contract. I needed it to bodge Mkfs together.
     {
       this.t := new MutableMap.ResizingHashMap(128);
       new;
@@ -103,6 +94,19 @@ module IndirectionTableImpl {
       this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
       this.garbageQueue := null;
       Repr := {this} + this.t.Repr;
+    }
+
+    constructor RootOnly(loc: BC.Location)
+    ensures Inv()
+    ensures fresh(Repr)
+    ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
+    {
+      this.t := new MutableMap.ResizingHashMap(128);
+      new;
+      this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
+      this.garbageQueue := null;
+      Repr := {this} + this.t.Repr;
+      IndirectionTableModel.reveal_ConstructorRootOnly();
     }
 
     constructor(t: HashMap)

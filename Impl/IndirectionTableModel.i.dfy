@@ -1706,4 +1706,17 @@ module IndirectionTableModel {
   {
     FindRefWithNoLocIterate(self, MutableMapModel.IterStart(self.t))
   }
+
+  function {:opaque} ConstructorRootOnly(loc: BC.Location) : (self' : IndirectionTable)
+  ensures Inv(self')
+  ensures self'.graph == map[BT.G.Root() := []]
+  ensures self'.locs == map[BT.G.Root() := loc]
+  {
+    var t0 := MutableMapModel.Constructor(128);
+    var t1 := MutableMapModel.Insert(t0, BT.G.Root(),
+        Entry(Some(loc), [], 1));
+    var self' := FromHashMap(t1, None);
+
+    self'
+  }
 }
