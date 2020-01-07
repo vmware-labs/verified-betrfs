@@ -99,6 +99,21 @@ abstract module MutableBtree {
     idx :| 0 <= idx < |nodes| && o in nodes[idx].repr;
   }
   
+  lemma DisjointSubSeqReprsAreDisjoint(nodes: seq<Node>, lo1: int, hi1: int, lo2: int, hi2: int)
+    requires 0 <= lo1 <= hi1 <= lo2 <= hi2 <= |nodes|
+    requires forall i, j :: 0 <= i < j < |nodes| ==> DisjointReprs(nodes, i, j)
+    ensures SeqRepr(nodes[lo1..hi1]) !! SeqRepr(nodes[lo2..hi2])
+  {
+    reveal_SeqRepr();
+    var s1 := SeqRepr(nodes[lo1..hi1]);
+    var s2 := SeqRepr(nodes[lo2..hi2]);
+    if o :| o in s1 && o in s2 {
+      var i1 :| lo1 <= i1 < hi1 && o in nodes[i1].repr;
+      var i2 :| lo2 <= i2 < hi2 && o in nodes[i2].repr;
+      assert !DisjointReprs(nodes, i1, i2);
+    }
+  }
+  
   predicate WFShapeSiblings(nodes: seq<Node>)
     reads Set(nodes), SeqRepr(nodes)
     decreases MaxSiblingHeight(nodes) + 1, 0

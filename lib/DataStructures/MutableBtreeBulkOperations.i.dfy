@@ -304,97 +304,84 @@ abstract module MutableBtreeBulkOperations {
     nodes := anodes[..];
   }
 
-  // method FromSeqPivots(keys: seq<Key>, boundaries: seq<uint64>) returns (pivots: seq<Key>)
-  //   requires 1 < |keys|
-  //   requires |boundaries| < Uint64UpperBound()
-  //   requires Spec.ValidBoundariesForSeq(|keys|, NatBoundaries(boundaries))
-  //   ensures |pivots| == |boundaries| - 2
-  //   ensures forall i :: 0 <= i < |pivots| ==> pivots[i] == keys[boundaries[i+1]]
-  // {
-  //   var apivots := newArrayFill(|boundaries| as uint64 - 2, MB.DefaultKey());
+  method BuildParent(children: seq<Node>, pivots: seq<Key>, boundaries: seq<uint64>, i: uint64, ghost height: nat)
+    returns (parent: Node)
+    requires |children| < Uint64UpperBound()
+    requires |boundaries| < Uint64UpperBound()
+    requires WFShapeSiblings(children)
+    requires forall j :: 0 <= j < |children| ==> children[j].height < height
+    requires Spec.WF(Spec.Index(pivots, ISiblings(children)))
+    requires ValidBoundariesForSeq(|children| as uint64, boundaries)
+    requires BoundariesFit(boundaries, MaxChildren())
+    requires 0 <= i < |boundaries| as uint64 - 1
+    ensures WFShape(parent)
+    ensures parent.contents.Index?
+    ensures boundaries[i] < boundaries[i+1]
+    ensures fresh(parent)
+    ensures fresh(parent.contents.pivots)
+    ensures fresh(parent.contents.children)
+    ensures parent.repr == {parent, parent.contents.pivots, parent.contents.children} + SeqRepr(children[boundaries[i]..boundaries[i+1]])
+    ensures I(parent) == Spec.BuildParent(ISiblings(children), pivots, NatBoundaries(boundaries), i as nat)
+  {
+    Uint64_Order.IsStrictlySortedImpliesLt(boundaries, i as int, i as int + 1);
+    var mychildren := children[boundaries[i]..boundaries[i+1]];
+    var mypivots := pivots[boundaries[i]..boundaries[i+1]-1];
+    assert |mychildren| <= MaxChildren() as int by { Spec.reveal_BoundariesFit(); }
+    parent := IndexFromChildren(mypivots, mychildren, height);
+    forall j, k | 0 <= j < k < |mychildren|
+      ensures DisjointReprs(mychildren, j, k)
+    {
+      assert DisjointReprs(children, boundaries[i] as int + j, boundaries[i] as int + k);
+    }
+    assert SeqRepr(mychildren) <= SeqRepr(children) by { reveal_SeqRepr(); }
 
-  //   forall i | 0 <= i < |boundaries|-1
-  //     ensures boundaries[i] as int < |keys|
-  //   {
-  //     Integer_Order.IsStrictlySortedImpliesLt(NatBoundaries(boundaries), i, |boundaries|-1);
-  //   }
+    reveal_I();
+    ghost var iparent := I(parent);
+    ghost var target := Spec.BuildParent(ISiblings(children), pivots, NatBoundaries(boundaries), i as nat);
+    assert iparent.pivots == target.pivots;
+  }
+
+  method BuildParents(children: seq<Node>, pivots: seq<Key>, boundaries: seq<uint64>, ghost height: nat)
+    returns (parents: seq<Node>)
+    requires |children| < Uint64UpperBound()
+    requires |boundaries| < Uint64UpperBound()
+    requires WFShapeSiblings(children)
+    requires forall j :: 0 <= j < |children| ==> children[j].height < height
+    requires Spec.WF(Spec.Index(pivots, ISiblings(children)))
+    requires ValidBoundariesForSeq(|children| as uint64, boundaries)
+    requires BoundariesFit(boundaries, MaxChildren())
+    //ensures WFShapeSiblings(parents)
+    //ensures fresh(SeqRepr(parents) - SeqRepr(children))
+    //ensures ISiblings(parents) == Spec.BuildParents(ISiblings(children), pivots, NatBoundaries(boundaries))
+  {
+    var aparents: array<Node?> := newArrayFill(|boundaries| as uint64 - 1, null);
+
+    assert aparents !in SeqRepr(children) by { reveal_SeqRepr(); }
+
+    var i: uint64 := 0;
+    while i < aparents.Length as uint64
+      invariant i <= aparents.Length as uint64
+      invariant forall j :: 0 <= j < i ==> aparents[j] != null
+      invariant forall j :: 0 <= j < i ==> aparents !in aparents[j].repr
+      invariant forall j :: 0 <= j < i ==> aparents[j].contents.Index?
+      invariant forall j :: 0 <= j < i ==> fresh(aparents[j])
+      invariant forall j :: 0 <= j < i ==> fresh(aparents[j].contents.pivots)
+      invariant forall j :: 0 <= j < i ==> fresh(aparents[j].contents.children)
+      invariant forall j :: 0 <= j < i ==> boundaries[j] < boundaries[j+1]
+      invariant forall j :: 0 <= j < i ==>
+           aparents[j].repr == {aparents[j], aparents[j].contents.pivots, aparents[j].contents.children} +
+           SeqRepr(children[boundaries[j]..boundaries[j+1]])
+      invariant WFShapeSiblings(aparents[..i])
+    {
+      aparents[i] := BuildParent(children, pivots, boundaries, i, height);
+      i := i + 1;
+
+      assert SeqRepr(children[boundaries[i-1]..boundaries[i]]) <= SeqRepr(children) by { reveal_SeqRepr(); }
+    }
+
+    parents := aparents[..aparents.Length];
+  }
     
-  //   var pidx: uint64 := 0;
-  //   while pidx < apivots.Length as uint64
-  //     invariant pidx <= apivots.Length as uint64
-  //     invariant forall i :: 0 <= i < pidx ==> apivots[i] == keys[boundaries[i+1]]
-  //   {
-  //     apivots[pidx] := keys[boundaries[pidx+1]];
-  //     pidx := pidx + 1;
-  //   }
-  //   pivots := apivots[..];
-  // }
-
-  // lemma WFShapeChildrenAugment(nodes: seq<Node>, height: nat, node: Node)
-  //   requires WFShapeChildren(nodes, SeqRepr(nodes), height)
-  //   requires WFShape(node)
-  //   requires node.height < height
-  //   requires forall i :: 0 <= i < |nodes| ==> node.repr !! nodes[i].repr
-  //   ensures WFShapeChildren(nodes + [node], SeqRepr(nodes + [node]), height)
-  // {
-  //   assume false;
-  // }
-  
-  // method ParentsFromChildren(pivots: seq<Key>, children: seq<Node>, boundaries: seq<uint64>, ghost repr: set<object>, ghost height: nat) returns (parents: seq<Node>)
-  //   requires |children| < Uint64UpperBound() / 2
-  //   requires WFShapeChildren(children, repr, height)
-  //   requires |children| == |pivots| + 1
-  //   requires Spec.ValidBoundariesForSeq(|children|, NatBoundaries(boundaries))
-  //   requires BoundariesFit(boundaries, MB.MaxChildren() as nat)
-  // {
-  //   Spec.ValidBoundaryLength(|children|, NatBoundaries(boundaries));
-  //   var aparents: array<Node?> := newArrayFill(|boundaries| as uint64 - 1, null);
-
-  //   var pidx: uint64 := 0;
-  //   while pidx < aparents.Length as uint64
-  //     invariant pidx <= aparents.Length as uint64
-  //     invariant fresh(aparents)
-  //     invariant forall i :: 0 <= i < pidx ==> aparents[i] != null
-  //     invariant forall i :: 0 <= i < pidx ==> aparents[i].contents.Index?
-  //     invariant forall i :: 0 <= i < pidx ==> aparents !in aparents[i].repr
-  //     invariant forall i :: 0 <= i < pidx ==> fresh(aparents[i].repr - repr)
-  //     invariant WFShapeChildren(aparents[..pidx], SeqRepr(aparents[..pidx]), height + 1)
-  //     //invariant forall i :: 0 <= i < pidx ==> Spec.LeafMatchesBoundary(keys, values, nboundaries, I(aparents[i]), i as nat)
-  //   {
-  //     Integer_Order.IsStrictlySortedImpliesLt(NatBoundaries(boundaries), pidx as int, pidx as int + 1);
-  //     assert BoundaryFits(boundaries, MB.MaxChildren() as nat, pidx as nat);
-      
-  //     var tchildren := children[boundaries[pidx]..boundaries[pidx+1]];
-  //     var tpivots := pivots[boundaries[pidx]..boundaries[pidx+1]-1];
-  //     aparents[pidx] := IndexFromChildren(tpivots, tchildren, height);
-
-  //     MB.SeqReprSubsequence(children, boundaries[pidx] as int, boundaries[pidx+1] as int);
-  //     MB.WFShapeChildrenSeqRepr(children, repr, height);
-
-  //     assume forall i :: 0 <= i < pidx ==> aparents[i].repr !! aparents[pidx].repr;
-  //     WFShapeChildrenAugment(aparents[..pidx], height + 1, aparents[pidx]);
-  //     assert aparents[..pidx+1] == aparents[..pidx] + [aparents[pidx]];
-      
-  //     pidx := pidx + 1;
-
-  //   }
-  //   parents := aparents[..];
-  // }
-
-  // method FromSeq(keys: seq<Key>, values: seq<Value>) returns (node: Node)
-  //   requires 0 < |keys| == |values| < Uint64UpperBound() / 2
-  // {
-  //   var nodes: array<Node?>, boundaries, inodes := FromSeqLeaves(keys, values);
-  //   while 1 < nodes.Length
-  //     invariant nodes.Length < Uint64UpperBound() / 2
-  //     invariant forall i :: 0 <= i < nodes.Length ==> nodes[i] != null
-  //     invariant nodes.Length == pivots.Length + 1
-  //   {
-  //     pivots, nodes := FromSeqIndexLayer(pivots[..], nodes[..]);
-  //   }
-  //   node := nodes[0];
-  // }
-  
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)
   //   requires WFShape(node)
   //   requires Spec.WF(I(node))
