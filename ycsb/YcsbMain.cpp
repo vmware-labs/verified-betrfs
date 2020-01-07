@@ -6,6 +6,7 @@
 #include "hdrhist.hpp"
 
 #include <strstream>
+#include <chrono>
 
 using namespace std;
 
@@ -70,9 +71,13 @@ void ycsbRun(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool 
     cerr << "[step] running experiment (num ops: " << num_ops << ")" << endl;
 
     // TODO: how frequently should we sync?
+ 
+    auto clock_start = chrono::high_resolution_clock::now();
+    auto clock_prev = clock_start;
 
     for (int i = 0; i < num_ops; ++i) {
-        switch (workload.NextOperation()) {
+        auto next_operation = workload.NextOperation();
+        switch (next_operation) {
             case ycsbc::READ:
                 performYcsbRead(app, workload, verbose);
                 break;
@@ -94,9 +99,18 @@ void ycsbRun(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool 
                 cerr << "error: invalid NextOperation" << endl;
                 exit(-1);
         }
+
+        clock_prev = chrono::high_resolution_clock::now();
     }
 
+    auto clock_end = chrono::high_resolution_clock::now();
+    long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
+
+    double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
+
     cerr << "[step] experiment complete" << endl;
+    cout << "duration(ns)\toperations\tops/s" << endl;
+    cout << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
 }
 
 int main(int argc, char* argv[]) {
