@@ -3,6 +3,8 @@
 #include "core_workload.h"
 #include "ycsbwrappers.h"
 
+#include "hdrhist.hpp"
+
 #include <strstream>
 
 using namespace std;

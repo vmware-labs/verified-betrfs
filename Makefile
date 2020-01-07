@@ -280,5 +280,6 @@ libycsbc:
 .PHONY: libycsbc
 
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc ycsb/YcsbMain.cpp
-	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
+	# NOTE: this uses c++17, which is required by hdrhist
+	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -std=c++17 -msse4.2 -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
 
