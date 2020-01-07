@@ -1784,81 +1784,6 @@ abstract module BtreeSpec {
     BuildLeavesForSequenceInner(kvlist, boundaries, |boundaries|-1)
   }
 
-  function SplitFirstChildAlongBoundaries(node: Node, boundaries: seq<nat>) : (newnode: Node)
-    requires WF(node)
-    requires node.Index?
-    requires node.children[0].Index?
-    requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
-    ensures newnode.Index?
-    ensures WF(newnode)
-    decreases |boundaries|
-  {
-    if |boundaries| == 2 then
-      node
-    else
-      var subboundaries := DropLast(boundaries);
-      var leftchild := SubIndex(node.children[0], 0, Last(subboundaries));
-      var rightchild := SubIndex(node.children[0], Last(subboundaries), Last(boundaries));
-      var pivot := node.children[0].pivots[Last(subboundaries)-1];
-      var tmpnode := Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..]);
-      SplitChildOfIndexPreservesWF(node, tmpnode, 0);
-      Integer_Order.StrictlySortedSubsequence(boundaries, 0, |boundaries|-1);
-      SplitFirstChildAlongBoundaries(tmpnode, subboundaries)
-  }
-
-  lemma SplitFirstChildAlongBoundariesProperties(node: Node, boundaries: seq<nat>, config: Configuration, newnode: Node)
-    requires WF(node)
-    requires node.Index?
-    requires node.children[0].Index?
-    requires forall i :: 0 <= i < |node.children[0].children| ==> FitsConfig(node.children[0].children[i], config)
-    requires ValidBoundariesForSeq(|node.children[0].children|, boundaries)
-    requires BoundariesFit(boundaries, config.maxChildren)
-    requires newnode == SplitFirstChildAlongBoundaries(node, boundaries)
-    ensures AllKeys(newnode) == AllKeys(node)
-    ensures Interpretation(newnode) == Interpretation(node)
-    ensures |newnode.children| == |node.children| + |boundaries| - 2
-    ensures newnode.children[|boundaries| - 1..] == node.children[1..]
-    ensures forall i :: 0 <= i < |boundaries|-1 ==> FitsConfig(newnode.children[i], config)
-    decreases |boundaries|
-  {
-    if |boundaries| == 2 {
-      assert |newnode.children[0].children| <= config.maxChildren by { reveal_BoundariesFit(); }
-    } else {
-      var subboundaries := DropLast(boundaries);
-      var leftchild := SubIndex(node.children[0], 0, Last(subboundaries));
-      var rightchild := SubIndex(node.children[0], Last(subboundaries), Last(boundaries));
-      var pivot := node.children[0].pivots[Last(subboundaries)-1];
-      var tmpnode := Index([pivot] + node.pivots, [leftchild, rightchild] + node.children[1..]);
-      SplitChildOfIndexPreservesWF(node, tmpnode, 0);
-      Integer_Order.StrictlySortedSubsequence(boundaries, 0, |boundaries|-1);
-      assert newnode == SplitFirstChildAlongBoundaries(tmpnode, subboundaries);
-
-      SplitChildOfIndexPreservesAllKeys(node, tmpnode, 0);
-      assert node.children[0].pivots[Last(subboundaries)-1] in AllKeys(node.children[0]) by { reveal_AllKeys(); }
-      assert node.children[0].pivots[Last(subboundaries)-1] in AllKeys(node) by { reveal_AllKeys(); }
-      SplitChildOfIndexPreservesInterpretation(node, tmpnode, 0);
-
-      assert BoundariesFit(subboundaries, config.maxChildren) by {
-        reveal_BoundariesFit();
-      }
-      
-      SplitFirstChildAlongBoundariesProperties(tmpnode, subboundaries, config, newnode);
-
-      forall i | 0 <= i < |boundaries|-1
-        ensures FitsConfig(newnode.children[i], config)
-      {
-        if i < |subboundaries| - 1 {
-        } else {
-          assert boundaries[|boundaries|-1] - boundaries[|boundaries|-2] <= config.maxChildren by
-          {
-            reveal_BoundariesFit();
-          }
-        }
-      }
-      
-    }
-  }
-
   function BuildParent(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, i: nat) : (parent: Node)
     requires WF(Index(pivots, children))
     requires ValidBoundariesForSeq(|children|, boundaries)
@@ -2038,6 +1963,7 @@ abstract module BtreeSpec {
           assert key == grandparent.pivots[i] by { reveal_ExtractPivotsForBoundaries(); }
         } else {
           assert grandparent.children[i].pivots == pivots[boundaries[i]..boundaries[i+1]-1];
+          assert key == grandparent.children[i].pivots[j - boundaries[i]];
           assert key in AllKeys(grandparent.children[i]);
         }
       } else {
@@ -2099,6 +2025,7 @@ abstract module BtreeSpec {
       }
       if j' < |grandparent.children[i].pivots| {
         assert AllKeysBelowBound(oldparent, j);
+        assert grandparent.children[i].pivots == pivots[boundaries[i]..boundaries[i+1]-1];
         assert grandparent.children[i].pivots[j'] == pivots[j];
         assert Keys.lt(key, grandparent.children[i].pivots[j']);
       }
@@ -2116,7 +2043,26 @@ abstract module BtreeSpec {
       InterpretationDelegation(grandparent, key);
     }
   }
-  
+
+  lemma ParentsFitConfig(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, config: Configuration)
+    requires WF(Index(pivots, children))
+    requires ValidBoundariesForSeq(|children|, boundaries)
+    requires ValidConfiguration(config)
+    requires forall i :: 0 <= i < |children| ==> FitsConfig(children[i], config)
+    requires BoundariesFit(boundaries, config.maxChildren)
+    ensures forall i :: 0 <= i < |BuildParents(children, pivots, boundaries)| ==>
+      FitsConfig(BuildParents(children, pivots, boundaries)[i], config)
+  {
+    var parents := BuildParents(children, pivots, boundaries);
+    BuildParentsInnerProperties(children, pivots, boundaries, |boundaries|-1, parents);
+    reveal_BoundariesFit();
+    forall i | 0 <= i < |parents|
+      ensures FitsConfig(parents[i], config)
+    {
+      assert |parents[i].children| == boundaries[i+1] - boundaries[i];
+    }
+  }
+
   // This function clumps node.children together into config-sized parents,
   // recursing until there's only one node left.
   function BuildLayers(children: seq<Node>, pivots: seq<Key>, config: Configuration) : (newnode: Node)
@@ -2131,12 +2077,19 @@ abstract module BtreeSpec {
   {
     reveal_Interpretation();
     if |children| == 1  then
+      GrowPreservesAllKeys(children[0]);
+      assert children == [children[0]];
+      GrowPreservesInterpretation(children[0]);
       children[0]
     else
-      var boundaries := BuildBoundaries(|node.children|, config.maxChildren);
+      var boundaries := BuildBoundaries(|children|, config.maxChildren);
       var parents := BuildParents(children, pivots, boundaries);
       var ppivots := ExtractPivotsForBoundaries(pivots, boundaries);
-      ReshapeTreeToConfig(parents, ppivots, config)
+      GrandparentWF(children, pivots, boundaries);
+      GrandparentAllKeys(children, pivots, boundaries);
+      GrandparentInterpretation(children, pivots, boundaries);
+      ParentsFitConfig(children, pivots, boundaries, config);
+      BuildLayers(parents, ppivots, config)
   }
 
   lemma LeavesProperties(kvlist: KVList, config: Configuration, boundaries: seq<nat>, node: Node)
@@ -2236,7 +2189,7 @@ abstract module BtreeSpec {
     var pivots := ExtractPivotsForBoundaries(ExtractPivotsFromKVList(kvlist), boundaries);
     var node := Index(pivots, leaves);
     LeavesProperties(kvlist, config, boundaries, node);
-    ReshapeTreeToConfig(node, config)
+    BuildLayers(leaves, pivots, config)
   }
 }
 
