@@ -1,3 +1,6 @@
 [submodule "vendor/YCSB-C"]
 	path = vendor/YCSB-C
 	url = git@github.com:utaal/YCSB-C.git
+[submodule "vendor/hdrhist"]
+	path = vendor/hdrhist
+	url = git@github.com:utaal/hdrhist-cpp.git
