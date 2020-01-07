@@ -76,7 +76,9 @@ abstract module MutableBtree {
 
   function {:opaque} SeqRepr(nodes: seq<Node>) : set<object>
     ensures forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= SeqRepr(nodes)
+    ensures nodes == [] ==> SeqRepr(nodes) == {}
     reads Set(nodes)
+    decreases nodes
   {
     set i, o | 0 <= i < |nodes| && o in nodes[i].repr :: o
   }
@@ -86,6 +88,15 @@ abstract module MutableBtree {
     ensures SeqRepr(nodes) <= parentRepr
   {
     reveal_SeqRepr();
+  }
+
+  lemma SeqReprDelegation(nodes: seq<Node>, o: object) returns (idx: nat)
+    requires o in SeqRepr(nodes)
+    ensures 0 <= idx < |nodes|
+    ensures o in nodes[idx].repr
+  {
+    reveal_SeqRepr();
+    idx :| 0 <= idx < |nodes| && o in nodes[idx].repr;
   }
   
   predicate WFShapeSiblings(nodes: seq<Node>)
@@ -132,7 +143,7 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < nchildren ==> children !in children[i].repr)
   }
 
-  function Ichildren(nodes: seq<Node>, parentheight: int) : (result: seq<Spec.Node>)
+  function IChildren(nodes: seq<Node>, parentheight: int) : (result: seq<Spec.Node>)
     requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
     requires forall i :: 0 <= i < |nodes| ==> nodes[i].height < parentheight
     ensures |result| == |nodes|
@@ -142,7 +153,7 @@ abstract module MutableBtree {
     decreases parentheight, |nodes|
   {
     if |nodes| == 0 then []
-    else Ichildren(DropLast(nodes), parentheight) + [I(Last(nodes))]
+    else IChildren(DropLast(nodes), parentheight) + [I(Last(nodes))]
   }
   
   function {:opaque} I(node: Node) : (result: Spec.Node)
@@ -159,7 +170,7 @@ abstract module MutableBtree {
       case Leaf(nkeys, keys, values) => Spec.Leaf(keys[..nkeys], values[..nkeys])
       case Index(nchildren, pivots, children) =>
         assert WFShapeChildren(children[..nchildren], node.repr, node.height);
-        var bschildren := Ichildren(children[..nchildren], node.height);
+        var bschildren := IChildren(children[..nchildren], node.height);
         Spec.Index(pivots[..nchildren-1], bschildren)
     }
   }
@@ -176,6 +187,16 @@ abstract module MutableBtree {
     reveal_I();
   }
 
+  function ISiblings(nodes: seq<Node>) : (result: seq<Spec.Node>)
+    requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
+    ensures |result| == |nodes|
+    ensures forall i :: 0 <= i < |result| ==> result[i] == I(nodes[i])
+    reads set i | 0 <= i < |nodes| :: nodes[i]
+    reads set i, o | 0 <= i < |nodes| && o in nodes[i].repr :: o
+  {
+    IChildren(nodes, MaxSiblingHeight(nodes) + 1)
+  }
+  
   predicate WF(node: Node)
     ensures WF(node) ==> node in node.repr
     reads node, node.repr

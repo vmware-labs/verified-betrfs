@@ -155,6 +155,27 @@ abstract module BtreeSpec {
     assert rightleaf.keys == oldleaf.keys[|leftleaf.keys|..|oldleaf.keys|];
   }
 
+  lemma MergeLeafPreservesWF(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
+    requires WF(leftleaf)
+    requires WF(rightleaf)
+    requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
+    ensures WF(oldleaf)
+  {
+    forall i, j | 0 <= i < j < |oldleaf.keys|
+      ensures Keys.lt(oldleaf.keys[i], oldleaf.keys[j])
+    {
+      if j < |leftleaf.keys| {
+        Keys.IsStrictlySortedImpliesLt(leftleaf.keys, i, j);
+      } else if i < |leftleaf.keys| {
+        Keys.IsStrictlySortedImpliesLte(leftleaf.keys, i, |leftleaf.keys|-1);
+        Keys.IsStrictlySortedImpliesLte(rightleaf.keys, 0, j - |leftleaf.keys|);
+      } else {
+        Keys.IsStrictlySortedImpliesLt(rightleaf.keys, i - |leftleaf.keys|, j - |leftleaf.keys|);
+      }
+    }
+    Keys.reveal_IsStrictlySorted();
+  }
+  
   lemma SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
     requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
     requires WF(oldleaf)
@@ -198,8 +219,8 @@ abstract module BtreeSpec {
   }
 
   function SubIndex(node: Node, from: int, to: int) : Node
-    requires WF(node)
     requires node.Index?
+    requires |node.children| == |node.pivots| + 1
     requires 0 <= from < to <= |node.children|
   {
     Index(node.pivots[from..to-1], node.children[from..to])
@@ -230,14 +251,17 @@ abstract module BtreeSpec {
     && oldindex.Index?
     && leftindex.Index?
     && rightindex.Index?
-    && WF(oldindex)
     && 0 < |leftindex.children| < |oldindex.children|
+    && |oldindex.children| == |oldindex.pivots| + 1
     && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
     && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
+    && (forall key :: key in AllKeys(Last(leftindex.children)) ==> Keys.lt(key, pivot))
+    && (forall key :: key in AllKeys(rightindex.children[0]) ==> Keys.lte(pivot, key))
     && pivot == oldindex.pivots[|leftindex.pivots|]
   }
 
   lemma SplitIndexPreservesWF(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+    requires WF(oldindex)
     requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures WF(leftindex)
     ensures WF(rightindex)
@@ -246,10 +270,64 @@ abstract module BtreeSpec {
     SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
   }
   
-  lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+  lemma MergeIndexPreservesWF(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires WF(leftindex)
     requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    ensures WF(oldindex)
+  {
+    forall i, j | 0 <= i < j < |oldindex.pivots|
+      ensures Keys.lt(oldindex.pivots[i], oldindex.pivots[j])
+    {
+      if j < |leftindex.pivots| {
+        Keys.IsStrictlySortedImpliesLt(leftindex.pivots, i, j);
+      } else if j == |leftindex.pivots| {
+        Keys.IsStrictlySortedImpliesLte(leftindex.pivots, i, j-1);
+        assert AllKeysAboveBound(leftindex, j);
+      } else if i <  |leftindex.pivots| {
+        Keys.IsStrictlySortedImpliesLte(leftindex.pivots, i, |leftindex.pivots|-1);
+        assert AllKeysAboveBound(leftindex, |leftindex.pivots|);
+        var lwit :| lwit in AllKeys(Last(leftindex.children));
+        var rwit :| rwit in AllKeys(rightindex.children[0]);
+        assert AllKeysBelowBound(rightindex, 0);
+        Keys.IsStrictlySortedImpliesLte(rightindex.pivots, 0, j - |leftindex.children|);
+      } else if i == |leftindex.pivots| {
+        assert AllKeysBelowBound(rightindex, 0);
+        Keys.IsStrictlySortedImpliesLte(rightindex.pivots, 0, j - |leftindex.children|);
+      } else {
+        Keys.IsStrictlySortedImpliesLt(rightindex.pivots, i - |leftindex.children|, j - |leftindex.children|);
+      }
+    }
+    Keys.reveal_IsStrictlySorted();
+
+    forall i | 0 <= i < |oldindex.children|-1
+      ensures AllKeysBelowBound(oldindex, i)
+    {
+      if i < |leftindex.children|-1 {
+        assert AllKeysBelowBound(leftindex, i);
+      } else if i == |leftindex.children|-1 {
+      } else {
+        assert AllKeysBelowBound(rightindex, i - |leftindex.children|);
+      }
+    }
+    forall i | 0 < i < |oldindex.children|
+      ensures AllKeysAboveBound(oldindex, i)
+    {
+      if i < |leftindex.children| {
+        assert AllKeysAboveBound(leftindex, i);
+      } else if i == |leftindex.children| {
+      } else {
+        assert AllKeysAboveBound(rightindex, i - |leftindex.children|);
+      }
+    }
+    assert WF(oldindex);
+  }
+  
+  lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+    requires WF(oldindex)
+    requires WF(leftindex)
+    requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures forall key :: key in Interpretation(oldindex) ==>
     MapsTo(Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)), key, Interpretation(oldindex)[key])
   {
@@ -280,9 +358,10 @@ abstract module BtreeSpec {
   }
   
   lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    requires WF(oldindex)
     requires WF(leftindex)
     requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures Interpretation(oldindex).Keys >=
             Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)).Keys
   {
@@ -314,9 +393,10 @@ abstract module BtreeSpec {
   }
 
   lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    requires WF(oldindex)
     requires WF(leftindex)
     requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures Interpretation(oldindex) ==
     Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
   {
@@ -334,8 +414,8 @@ abstract module BtreeSpec {
   }
 
   lemma SplitNodePreservesWF(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-    requires WF(oldnode)
     requires SplitNode(oldnode, leftnode, rightnode, pivot)
+    requires WF(oldnode)
     ensures WF(leftnode)
     ensures WF(rightnode)
   {
@@ -346,11 +426,24 @@ abstract module BtreeSpec {
     }
   }
     
-  lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+  lemma MergeNodePreservesWF(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires SplitNode(oldnode, leftnode, rightnode, pivot)
+    requires WF(leftnode)
+    requires WF(rightnode)
+    ensures WF(oldnode)
+  {
+    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
+      MergeLeafPreservesWF(oldnode, leftnode, rightnode, pivot);
+    } else {
+      MergeIndexPreservesWF(oldnode, leftnode, rightnode, pivot);
+    }
+  }
+    
+  lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires WF(oldnode)
     requires WF(leftnode)
     requires WF(rightnode)
+    requires SplitNode(oldnode, leftnode, rightnode, pivot)
     ensures Interpretation(oldnode) == Keys.MapPivotedUnion(Interpretation(leftnode), pivot, Interpretation(rightnode))
   {
     if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
@@ -362,6 +455,8 @@ abstract module BtreeSpec {
 
   lemma SplitLeafAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
     requires SplitLeaf(oldnode, leftnode, rightnode, pivot)
     ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode)
     ensures AllKeys(leftnode) != {}
@@ -388,6 +483,8 @@ abstract module BtreeSpec {
 
   lemma SplitIndexAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
     requires SplitIndex(oldnode, leftnode, rightnode, pivot)
     ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
     ensures AllKeys(leftnode) != {}
@@ -427,6 +524,8 @@ abstract module BtreeSpec {
   
   lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
     requires SplitNode(oldnode, leftnode, rightnode, pivot)
     ensures AllKeys(oldnode) <= AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
     ensures AllKeys(leftnode) + AllKeys(rightnode) <= AllKeys(oldnode)
@@ -446,7 +545,6 @@ abstract module BtreeSpec {
   {
     && oldindex.Index?
     && newindex.Index?
-    && WF(oldindex)
     && 0 <= childidx < |oldindex.children|
     && |newindex.children| == |oldindex.children| + 1 // FIXME: WTF?  Dafny can't get these from WF?
     && |newindex.pivots| == |oldindex.pivots| + 1
@@ -465,6 +563,7 @@ abstract module BtreeSpec {
     var oldchild := oldindex.children[childidx];
     var leftchild := newindex.children[childidx];
     var rightchild := newindex.children[childidx+1];
+    SplitNodePreservesWF(oldchild, leftchild, rightchild, pivot);
     SplitNodeAllKeys(oldchild, leftchild, rightchild, pivot);
     SplitNodePreservesWF(oldchild, leftchild, rightchild, pivot);
     assert 0 < childidx ==> AllKeysAboveBound(oldindex, childidx);
@@ -512,15 +611,57 @@ abstract module BtreeSpec {
         assert AllKeysAboveBound(oldindex, i-1);
       }      
     }
-    
+  }
+
+  lemma MergeChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(newindex)
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    ensures WF(oldindex)
+  {
+    assert Keys.IsStrictlySorted(oldindex.pivots) by { Keys.reveal_IsStrictlySorted(); }
+    forall i | 0 <= i < |oldindex.children|
+      ensures WF(oldindex.children[i])
+    {
+      if i < childidx {
+      } else if i == childidx {
+        MergeNodePreservesWF(oldindex.children[childidx],
+          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+      } else {
+      }
+    }
+    forall i | 0 <= i < |oldindex.children|-1
+      ensures AllKeysBelowBound(oldindex, i)
+    {
+      if i < childidx {
+        assert AllKeysBelowBound(newindex, i);
+      } else if i == childidx {
+        SplitNodeAllKeys(oldindex.children[childidx],
+          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+      } else {
+        assert AllKeysBelowBound(newindex, i+1);
+      }
+    }
+    forall i | 0 < i < |oldindex.children|
+      ensures AllKeysAboveBound(oldindex, i)
+    {
+      if i < childidx {
+        assert AllKeysAboveBound(newindex, i);
+      } else if i == childidx {
+        SplitNodeAllKeys(oldindex.children[childidx],
+          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+      } else {
+        assert AllKeysAboveBound(newindex, i+1);
+      }
+    }
   }
   
   lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(oldindex)
+    requires WF(newindex)
     requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures AllKeys(newindex) == AllKeys(oldindex) + {newindex.pivots[childidx]}
   {
     reveal_AllKeys();
-    assert WF(oldindex);
     SplitChildOfIndexPreservesWF(oldindex, newindex, childidx);
     SplitNodeAllKeys(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
     
@@ -549,8 +690,9 @@ abstract module BtreeSpec {
   }
   
   lemma SplitChildOfIndexPreservesInterpretationA(oldindex: Node, newindex: Node, childidx: int)
-    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    requires WF(oldindex);
     requires WF(newindex);
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures forall key :: key in Interpretation(oldindex) ==> MapsTo(Interpretation(newindex), key, Interpretation(oldindex)[key])
   {
     reveal_Interpretation();
@@ -600,8 +742,9 @@ abstract module BtreeSpec {
   }
 
   lemma SplitChildOfIndexPreservesInterpretationB(oldindex: Node, newindex: Node, childidx: int)
-    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    requires WF(oldindex);
     requires WF(newindex);
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
       //ensures Interpretation(newindex) == Interpretation(oldindex)
   {
@@ -644,8 +787,9 @@ abstract module BtreeSpec {
   }
 
   lemma SplitChildOfIndexPreservesInterpretation(oldindex: Node, newindex: Node, childidx: int)
-    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    requires WF(oldindex);
     requires WF(newindex);
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
     //ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
     ensures Interpretation(newindex) == Interpretation(oldindex)
   {
@@ -1476,7 +1620,6 @@ abstract module BtreeSpec {
       BuildLeavesForSequenceInner(kvlist, boundaries, count-1) + [BuildLeafForSequence(kvlist, boundaries, count-1)]
   }
   
-  
   function BuildLeavesForSequence(kvlist: KVList, boundaries: seq<nat>) : (nodes: seq<Node>)
     requires WFKVList(kvlist)
     requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
@@ -1561,6 +1704,82 @@ abstract module BtreeSpec {
     }
   }
 
+  function BuildParent(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, i: nat) : (parent: Node)
+    requires WF(Index(pivots, children))
+    requires ValidBoundariesForSeq(|children|, boundaries)
+    requires 0 <= i < |boundaries|-1
+    ensures WF(parent)
+    ensures AllKeys(parent) != {}
+  {
+    ValidBoundariesForSeqBounds(|children|, boundaries);
+    Integer_Order.IsStrictlySortedImpliesLt(boundaries, i, i + 1);
+    var gparent := Index([], [Index(pivots, children)]);
+    assert WF(gparent.children[0]);
+    SubIndexPreservesWF(gparent.children[0], boundaries[i], boundaries[i+1]);
+    var wit :| wit in AllKeys(children[boundaries[i]]);
+    var parent := Index(pivots[boundaries[i]..boundaries[i+1]-1], children[boundaries[i]..boundaries[i+1]]);
+    assert wit in AllKeys(parent) by { reveal_AllKeys(); }
+    parent
+  }
+
+  function BuildParentsInner(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, count: nat) :
+    (parents: seq<Node>)
+    requires WF(Index(pivots, children))
+    requires ValidBoundariesForSeq(|children|, boundaries)
+    requires 0 <= count <= |boundaries|-1
+    ensures |parents| == count
+    ensures forall i :: 0 <= i < |parents| ==> WF(parents[i])
+    ensures forall i :: 0 <= i < |parents| ==> AllKeys(parents[i]) != {}
+  {
+    if count == 0 then
+      []
+    else
+      BuildParentsInner(children, pivots, boundaries, count-1) +
+      [BuildParent(children, pivots, boundaries, count-1)]
+  }
+
+  function BuildParents(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>) :
+    (parents: seq<Node>)
+    requires WF(Index(pivots, children))
+    requires ValidBoundariesForSeq(|children|, boundaries)
+    ensures forall i :: 0 <= i < |parents| ==> WF(parents[i])
+    ensures forall i :: 0 <= i < |parents| ==> AllKeys(parents[i]) != {}
+  {
+    BuildParentsInner(children, pivots, boundaries, |boundaries| - 1)
+  }
+
+  lemma BuildParentsInnerProperties(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, count: nat,
+                               parents: seq<Node>, ppivots: seq<Key>)
+    requires WF(Index(pivots, children))
+    requires ValidBoundariesForSeq(|children|, boundaries)
+    requires 0 < count <= |boundaries|-1
+    requires parents == BuildParentsInner(children, pivots, boundaries, count)
+    requires ppivots == ExtractPivotsForBoundaries(pivots, boundaries)
+    ensures count <= |ppivots| + 1
+    ensures WF(Index(ppivots[..count-1], parents))
+    ensures WF(SubIndex(Index(pivots, children), 0, boundaries[count]))
+    ensures Interpretation(Index(ppivots[..count-1], parents)) ==
+            Interpretation(SubIndex(Index(pivots, children), 0, boundaries[count]))
+  {
+    ValidBoundaryLength(|children|, boundaries);
+
+    var newgparent := Index(ppivots[..count-1], parents);
+    ExtractPivotsForBoundariesPreservesSort(pivots, boundaries);
+    Keys.StrictlySortedSubsequence(ppivots, 0, count-1);
+    forall i | 0 <= i < |newgparent.children|-1
+      ensures AllKeysBelowBound(newgparent, i)
+    {
+      
+    }
+    forall i | 0 < i < |newgparent.children|
+      ensures AllKeysAboveBound(newgparent, i)
+    {
+    }
+    assert WF(newgparent);
+
+    assume false;
+  }
+    
   // This function clumps node.children together into config-sized parents,
   // recursing until there's only one node left.
   function ReshapeTreeToConfig(node: Node, config: Configuration) : (newnode: Node)
