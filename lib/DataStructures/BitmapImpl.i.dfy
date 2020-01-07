@@ -205,31 +205,103 @@ module BitmapImpl {
       result := BitsetLemmas.in_set_uint64(b, this.bits[i]);
     }
 
+    lemma lemma_IsAllocNone()
+    requires Inv()
+    requires forall k | 0 <= k < this.bits.Length ::
+        this.bits[k] == 0xffff_ffff_ffff_ffff
+    ensures BitAlloc(I()).None?
+    {
+      BitmapModel.reveal_IsSet();
+      var bm := I();
+      if BitAlloc(bm).Some? {
+        var c := BitAlloc(bm).value as uint64;
+        LemmaBitAllocResult(bm);
+        var i: uint64 := c / 64;
+        var b: uint64 := c % 64;
+
+        assert this.bits[i] == 0xffff_ffff_ffff_ffff;
+        BitsetLemmas.all1s_is_set_uint64(b);
+      }
+    }
+
+    lemma lemma_IsAllocSome(i: uint64, b: uint64)
+    requires Inv()
+    requires 0 <= i as int < this.bits.Length
+    requires 0 <= b < 64
+    requires forall k | 0 <= k < i as int ::
+        this.bits[k] == 0xffff_ffff_ffff_ffff
+    requires forall l | 0 <= l < b ::
+        BitsetLemmas.in_set_uint64(l, this.bits[i])
+    requires !BitsetLemmas.in_set_uint64(b, this.bits[i])
+    ensures BitAlloc(I()) == Some(64 * i as int + b as int)
+    {
+      BitmapModel.reveal_IsSet();
+      var bm := I();
+
+      var c: uint64 := 64 * i + b;
+      assert !bm[c];
+      LemmaBitAllocResultStronger(bm);
+      if (BitAlloc(bm).None?) {
+        assert c as int < |bm|;
+        assert IsSet(bm, c as int);
+        assert false;
+      }
+      if (BitAlloc(bm).Some? && BitAlloc(bm).value > c as int) {
+        assert IsSet(bm, c as int);
+        assert false;
+      }
+
+      if (BitAlloc(bm).Some? && BitAlloc(bm).value < c as int) {
+        var c0 := BitAlloc(bm).value as uint64;
+        var i0 : uint64 := c0 / 64;
+        var b0 : uint64 := c0 % 64;
+        if i0 == i {
+          assert b0 < b;
+          assert false;
+        } else {
+          assert bits[i0] == 0xffff_ffff_ffff_ffff;
+          BitsetLemmas.all1s_is_set_uint64(b0);
+          assert false;
+        }
+      }
+    }
+
     method Alloc() returns (res: Option<uint64>)
     requires Inv()
     ensures res.Some? <==> BitAlloc(I()).Some?
     ensures res.Some? ==> res.value as int == BitAlloc(I()).value
     {
-      assume false;
-
       var i: uint64 := 0;
       while i < this.bits.Length as uint64
+      invariant 0 <= i as int <= this.bits.Length
+      invariant forall k | 0 <= k < i ::
+          this.bits[k] == 0xffff_ffff_ffff_ffff
       {
         if this.bits[i] != 0xffff_ffff_ffff_ffff {
           // TODO this could be done faster:
           var j: uint64 := 0;
-          while j < 64 {
+          while j < 64
+          invariant 0 <= j <= 64
+          invariant forall l | 0 <= l < j ::
+              BitsetLemmas.in_set_uint64(l, this.bits[i])
+          {
             if !BitsetLemmas.in_set_uint64(j, this.bits[i]) {
+              lemma_IsAllocSome(i, j);
               res := Some(64 * i + j);
               return;
             }
             j := j + 1;
           }
+
+          // Can't get here
+          BitsetLemmas.all_in_set_implies_all1s_uint64(this.bits[i]);
+          assert false;
         }
         i := i + 1;
       }
 
       res := None;
+      lemma_IsAllocNone();
     }
 
     constructor Union(a: Bitmap, b: Bitmap)

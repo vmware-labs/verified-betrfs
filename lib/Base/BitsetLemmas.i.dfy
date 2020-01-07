@@ -273,6 +273,96 @@ module BitsetLemmas {
     }
   }
 
+  lemma all1s_and_bit_eq(i: uint64)
+  requires i < 64
+  ensures bit_and(0xffff_ffff_ffff_ffff, bit(i)) == bit(i)
+  {
+    reveal_bit_and();
+    reveal_bit();
+  }
+
+  lemma all1s_is_set(i: uint64)
+  requires i < 64
+  ensures in_set(i, 0xffff_ffff_ffff_ffff)
+  {
+    reveal_in_set();
+    all1s_and_bit_eq(i);
+    bit_ne_0(i);
+  }
+
+  lemma all_in_set_implies_all1s(a: bv64)
+  requires forall i | 0 <= i < 64 :: in_set(i, a)
+  ensures a == 0xffff_ffff_ffff_ffff
+  {
+    reveal_in_set();
+    reveal_bit_and();
+    reveal_bit();
+    assert a & 1 == 1 by { assert in_set(0, a); }
+    assert a & 2 == 2 by { assert in_set(1, a); }
+    assert a & 4 == 4 by { assert in_set(2, a); }
+    assert a & 8 == 8 by { assert in_set(3, a); }
+    assert a & 16 == 16 by { assert in_set(4, a); }
+    assert a & 32 == 32 by { assert in_set(5, a); }
+    assert a & 64 == 64 by { assert in_set(6, a); }
+    assert a & 128 == 128 by { assert in_set(7, a); }
+    assert a & 256 == 256 by { assert in_set(8, a); }
+    assert a & 512 == 512 by { assert in_set(9, a); }
+    assert a & 1024 == 1024 by { assert in_set(10, a); }
+    assert a & 2048 == 2048 by { assert in_set(11, a); }
+    assert a & 4096 == 4096 by { assert in_set(12, a); }
+    assert a & 8192 == 8192 by { assert in_set(13, a); }
+    assert a & 16384 == 16384 by { assert in_set(14, a); }
+    assert a & 32768 == 32768 by { assert in_set(15, a); }
+    assert a & 65536 == 65536 by { assert in_set(16, a); }
+    assert a & 131072 == 131072 by { assert in_set(17, a); }
+    assert a & 262144 == 262144 by { assert in_set(18, a); }
+    assert a & 524288 == 524288 by { assert in_set(19, a); }
+    assert a & 1048576 == 1048576 by { assert in_set(20, a); }
+    assert a & 2097152 == 2097152 by { assert in_set(21, a); }
+    assert a & 4194304 == 4194304 by { assert in_set(22, a); }
+    assert a & 8388608 == 8388608 by { assert in_set(23, a); }
+    assert a & 16777216 == 16777216 by { assert in_set(24, a); }
+    assert a & 33554432 == 33554432 by { assert in_set(25, a); }
+    assert a & 67108864 == 67108864 by { assert in_set(26, a); }
+    assert a & 134217728 == 134217728 by { assert in_set(27, a); }
+    assert a & 268435456 == 268435456 by { assert in_set(28, a); }
+    assert a & 536870912 == 536870912 by { assert in_set(29, a); }
+    assert a & 1073741824 == 1073741824 by { assert in_set(30, a); }
+    assert a & 2147483648 == 2147483648 by { assert in_set(31, a); }
+    assert a & 4294967296 == 4294967296 by { assert in_set(32, a); }
+    assert a & 8589934592 == 8589934592 by { assert in_set(33, a); }
+    assert a & 17179869184 == 17179869184 by { assert in_set(34, a); }
+    assert a & 34359738368 == 34359738368 by { assert in_set(35, a); }
+    assert a & 68719476736 == 68719476736 by { assert in_set(36, a); }
+    assert a & 137438953472 == 137438953472 by { assert in_set(37, a); }
+    assert a & 274877906944 == 274877906944 by { assert in_set(38, a); }
+    assert a & 549755813888 == 549755813888 by { assert in_set(39, a); }
+    assert a & 1099511627776 == 1099511627776 by { assert in_set(40, a); }
+    assert a & 2199023255552 == 2199023255552 by { assert in_set(41, a); }
+    assert a & 4398046511104 == 4398046511104 by { assert in_set(42, a); }
+    assert a & 8796093022208 == 8796093022208 by { assert in_set(43, a); }
+    assert a & 17592186044416 == 17592186044416 by { assert in_set(44, a); }
+    assert a & 35184372088832 == 35184372088832 by { assert in_set(45, a); }
+    assert a & 70368744177664 == 70368744177664 by { assert in_set(46, a); }
+    assert a & 140737488355328 == 140737488355328 by { assert in_set(47, a); }
+    assert a & 281474976710656 == 281474976710656 by { assert in_set(48, a); }
+    assert a & 562949953421312 == 562949953421312 by { assert in_set(49, a); }
+    assert a & 1125899906842624 == 1125899906842624 by { assert in_set(50, a); }
+    assert a & 2251799813685248 == 2251799813685248 by { assert in_set(51, a); }
+    assert a & 4503599627370496 == 4503599627370496 by { assert in_set(52, a); }
+    assert a & 9007199254740992 == 9007199254740992 by { assert in_set(53, a); }
+    assert a & 18014398509481984 == 18014398509481984 by { assert in_set(54, a); }
+    assert a & 36028797018963968 == 36028797018963968 by { assert in_set(55, a); }
+    assert a & 72057594037927936 == 72057594037927936 by { assert in_set(56, a); }
+    assert a & 144115188075855872 == 144115188075855872 by { assert in_set(57, a); }
+    assert a & 288230376151711744 == 288230376151711744 by { assert in_set(58, a); }
+    assert a & 576460752303423488 == 576460752303423488 by { assert in_set(59, a); }
+    assert a & 1152921504606846976 == 1152921504606846976 by { assert in_set(60, a); }
+    assert a & 2305843009213693952 == 2305843009213693952 by { assert in_set(61, a); }
+    assert a & 4611686018427387904 == 4611686018427387904 by { assert in_set(62, a); }
+    assert a & 9223372036854775808 == 9223372036854775808 by { assert in_set(63, a); }
+  }
+
   // uint64
 
   function method {:opaque} bit_or_uint64(a: uint64, b: uint64) : uint64
@@ -357,5 +447,26 @@ module BitsetLemmas {
     bv64cast(bit_or(a as bv64, b as bv64));
     reveal_bit_or_uint64();
     reveal_in_set_uint64();
+  }
+
+  lemma all1s_is_set_uint64(i: uint64)
+  requires i < 64
+  ensures in_set_uint64(i, 0xffff_ffff_ffff_ffff)
+  {
+    all1s_is_set(i);
+    reveal_in_set_uint64();
+  }
+
+  lemma all_in_set_implies_all1s_uint64(a: uint64)
+  requires forall i | 0 <= i < 64 :: in_set_uint64(i, a)
+  ensures a == 0xffff_ffff_ffff_ffff
+  {
+    forall i | 0 <= i < 64 ensures in_set(i, a as bv64)
+    {
+      reveal_in_set_uint64();
+      assert in_set_uint64(i, a);
+    }
+    reveal_in_set();
+    all_in_set_implies_all1s(a as bv64);
   }
 }
