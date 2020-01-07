@@ -2119,29 +2119,24 @@ abstract module BtreeSpec {
   
   // This function clumps node.children together into config-sized parents,
   // recursing until there's only one node left.
-  function ReshapeTreeToConfig(node: Node, config: Configuration) : (newnode: Node)
-    requires WF(node)
-    requires node.Index?
+  function BuildLayers(children: seq<Node>, pivots: seq<Key>, config: Configuration) : (newnode: Node)
+    requires WF(Index(pivots, children))
     requires ValidConfiguration(config)
-    requires forall i :: 0 <= i < |node.children| ==> FitsConfig(node.children[i], config)
+    requires forall i :: 0 <= i < |children| ==> FitsConfig(children[i], config)
     ensures WF(newnode)
-    ensures AllKeys(newnode) == AllKeys(node)
-    ensures Interpretation(newnode) == Interpretation(node)
+    ensures AllKeys(newnode) == AllKeys(Index(pivots, children))
+    ensures Interpretation(newnode) == Interpretation(Index(pivots, children))
     ensures FitsConfig(newnode, config)
-    decreases |node.children|
+    decreases |children|
   {
     reveal_Interpretation();
-    if |node.children| <= config.maxChildren then
-      node
+    if |children| == 1  then
+      children[0]
     else
       var boundaries := BuildBoundaries(|node.children|, config.maxChildren);
-      var tmpparent := Grow(node);
-      WFIndexAllKeys(node);
-      GrowPreservesWF(node);
-      GrowPreservesAllKeys(node);
-      var newpnode := SplitFirstChildAlongBoundaries(tmpparent, boundaries);
-      SplitFirstChildAlongBoundariesProperties(tmpparent, boundaries, config, newpnode);
-      ReshapeTreeToConfig(newpnode, config)
+      var parents := BuildParents(children, pivots, boundaries);
+      var ppivots := ExtractPivotsForBoundaries(pivots, boundaries);
+      ReshapeTreeToConfig(parents, ppivots, config)
   }
 
   lemma LeavesProperties(kvlist: KVList, config: Configuration, boundaries: seq<nat>, node: Node)
