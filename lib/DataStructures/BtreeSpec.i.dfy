@@ -1445,7 +1445,6 @@ abstract module BtreeSpec {
     requires i < |boundaries|-1
     ensures WF(node)
     ensures AllKeys(node) != {}
-    
   {
     var mykeys := ExtractBoundedSubsequence(kvlist.keys, boundaries, i);
     var myvals := ExtractBoundedSubsequence(kvlist.values, boundaries, i);
