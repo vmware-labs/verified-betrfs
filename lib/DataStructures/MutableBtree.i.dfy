@@ -83,6 +83,27 @@ abstract module MutableBtree {
     set i, o | 0 <= i < |nodes| && o in nodes[i].repr :: o
   }
 
+  lemma SeqReprUnion(left: seq<Node>, right: seq<Node>)
+    ensures SeqRepr(left + right) == SeqRepr(left) + SeqRepr(right)
+  {
+    reveal_SeqRepr();
+    forall o | o in SeqRepr(left + right)
+      ensures o in SeqRepr(left) + SeqRepr(right)
+    {
+    }
+    forall o | o in SeqRepr(left) + SeqRepr(right)
+      ensures o in SeqRepr(left + right)
+    {
+      if o in SeqRepr(left) {
+        var i :| 0 <= i < |left| && o in left[i].repr;
+        assert o in (left + right)[i].repr;
+      } else {
+        var i :| 0 <= i < |right| && o in right[i].repr;
+        assert o in (left + right)[|left| + i].repr;
+      }
+    }
+  }
+  
   lemma SeqReprSubsetExtensionality(nodes: seq<Node>, parentRepr: set<object>)
     requires forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= parentRepr
     ensures SeqRepr(nodes) <= parentRepr
@@ -97,6 +118,13 @@ abstract module MutableBtree {
   {
     reveal_SeqRepr();
     idx :| 0 <= idx < |nodes| && o in nodes[idx].repr;
+  }
+
+  lemma SubSeqRepr(nodes: seq<Node>, from: nat, to: nat)
+    requires 0 <= from <= to <= |nodes|
+    ensures SeqRepr(nodes[from..to]) <= SeqRepr(nodes)
+  {
+    reveal_SeqRepr();
   }
   
   lemma DisjointSubSeqReprsAreDisjoint(nodes: seq<Node>, lo1: int, hi1: int, lo2: int, hi2: int)
@@ -113,7 +141,7 @@ abstract module MutableBtree {
       assert !DisjointReprs(nodes, i1, i2);
     }
   }
-  
+
   predicate WFShapeSiblings(nodes: seq<Node>)
     reads Set(nodes), SeqRepr(nodes)
     decreases MaxSiblingHeight(nodes) + 1, 0
@@ -158,6 +186,13 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < nchildren ==> children !in children[i].repr)
   }
 
+  lemma SeqReprSet(nodes: seq<Node>)
+    requires WFShapeSiblings(nodes)
+    ensures Set(nodes) <= SeqRepr(nodes)
+  {
+    reveal_SeqRepr();
+  }
+  
   function IChildren(nodes: seq<Node>, parentheight: int) : (result: seq<Spec.Node>)
     requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
     requires forall i :: 0 <= i < |nodes| ==> nodes[i].height < parentheight
@@ -400,17 +435,14 @@ abstract module MutableBtree {
     requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
     ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
   {
-    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-    reveal_SeqRepr();
-    var subrepr1 := SubRepr(node, from1, to1);
-    var subrepr2 := SubRepr(node, from2, to2);
-
-    if o :| o in subrepr1 && o in subrepr2 {
-      var i1 :| 0 <= from1 <= i1 < to1 && o in node.repr && o in node.contents.children[i1].repr; 
-      var i2 :| 0 <= from2 <= i2 < to2 && o in node.repr && o in node.contents.children[i2].repr; 
-      assert i1 < i2;
-      assert DisjointReprs(node.contents.children[..node.contents.nchildren], i1, i2);
-    }
+    assert node.contents.children[..node.contents.nchildren][from1..to1]
+      == node.contents.children[from1..to1];
+    assert node.contents.children[..node.contents.nchildren][from2..to2]
+      == node.contents.children[from2..to2];
+    assert WFShapeSiblings(node.contents.children[..node.contents.nchildren]);
+    // assert forall i, j :: 0 <= i < j < node.contents.nchildren ==>
+    //     DisjointReprs(node.contents.children[..node.contents.nchildren], i as int, j as int);
+    DisjointSubSeqReprsAreDisjoint(node.contents.children[..node.contents.nchildren], from1, to1, from2, to2);
   }
 
   lemma SubReprUpperBound(node: Node, from: int, to: int)
@@ -597,6 +629,8 @@ abstract module MutableBtree {
     SubReprsDisjoint(node, 0, nleft as int, nleft as int, node.contents.nchildren as int);
     SubReprUpperBound(node, 0, nleft as int);
     SubReprUpperBound(node, nleft as int, node.contents.nchildren as int);
+    assert Spec.AllKeysBelowBound(I(node), nleft as int - 1);
+    assert Spec.AllKeysAboveBound(I(node), nleft as int);
     right := SubIndex(node, nleft, node.contents.nchildren);
     pivot := node.contents.pivots[nleft-1];
     IOfChild(node, 0);

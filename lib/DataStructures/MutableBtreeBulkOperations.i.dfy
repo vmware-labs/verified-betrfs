@@ -304,83 +304,406 @@ abstract module MutableBtreeBulkOperations {
     nodes := anodes[..];
   }
 
-  method BuildParent(children: seq<Node>, pivots: seq<Key>, boundaries: seq<uint64>, i: uint64, ghost height: nat)
-    returns (parent: Node)
-    requires |children| < Uint64UpperBound()
-    requires |boundaries| < Uint64UpperBound()
-    requires WFShapeSiblings(children)
-    requires forall j :: 0 <= j < |children| ==> children[j].height < height
-    requires Spec.WF(Spec.Index(pivots, ISiblings(children)))
-    requires ValidBoundariesForSeq(|children| as uint64, boundaries)
-    requires BoundariesFit(boundaries, MaxChildren())
-    requires 0 <= i < |boundaries| as uint64 - 1
-    ensures WFShape(parent)
-    ensures parent.contents.Index?
-    ensures boundaries[i] < boundaries[i+1]
-    ensures fresh(parent)
-    ensures fresh(parent.contents.pivots)
-    ensures fresh(parent.contents.children)
-    ensures parent.repr == {parent, parent.contents.pivots, parent.contents.children} + SeqRepr(children[boundaries[i]..boundaries[i+1]])
-    ensures I(parent) == Spec.BuildParent(ISiblings(children), pivots, NatBoundaries(boundaries), i as nat)
+  function ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<uint64>, i: uint64) :  seq<T>
+    requires |things| < Uint64UpperBound()
+    requires ValidBoundariesForSeq(|things| as uint64, boundaries)
+    requires 0 <= i as int < |boundaries|-1
   {
+    Spec.ExtractBoundedSubsequence(things, NatBoundaries(boundaries), i as int)
+  }
+
+  lemma ExtractBoundedSubsequenceFacts<T>(things: seq<T>, boundaries: seq<uint64>, i: uint64)
+    requires |things| < Uint64UpperBound() - 1
+    requires ValidBoundariesForSeq(|things| as uint64, boundaries)
+    requires 0 <= i as int < |boundaries|-1
+    ensures |boundaries| <= |things| + 1
+    ensures boundaries[i] < boundaries[i+1]
+    ensures ExtractBoundedSubsequence(things, boundaries, i) == things[boundaries[i]..boundaries[i+1]]
+  {
+    Spec.ValidBoundaryLength(|things|, NatBoundaries(boundaries));
     Uint64_Order.IsStrictlySortedImpliesLt(boundaries, i as int, i as int + 1);
-    var mychildren := children[boundaries[i]..boundaries[i+1]];
-    var mypivots := pivots[boundaries[i]..boundaries[i+1]-1];
+    Spec.reveal_ExtractBoundedSubsequence();
+  }
+    
+  lemma ExtractBoundedSubsequenceRepr(nodes: seq<Node>, boundaries: seq<uint64>, i: uint64)
+    requires |nodes| < Uint64UpperBound() - 1
+    requires ValidBoundariesForSeq(|nodes| as uint64, boundaries)
+    requires 0 <= i as int < |boundaries|-1
+    ensures SeqRepr(ExtractBoundedSubsequence(nodes, boundaries, i)) <= SeqRepr(nodes)
+  {
+    ExtractBoundedSubsequenceFacts(nodes, boundaries, i);
+    SubSeqRepr(nodes, boundaries[i] as nat, boundaries[i+1] as nat);
+  }
+  
+  datatype BuildParentsArgs = BuildParentsArgs(children: seq<Node>,
+                                               pivots: seq<Key>, 
+                                               boundaries: seq<uint64>,
+                                               ghost height: nat)
+
+                                               
+                                               
+  predicate ValidBuildParentsArgs(bpa: BuildParentsArgs)
+    ensures ValidBuildParentsArgs(bpa) ==> |bpa.boundaries| <= |bpa.children| + 1
+    reads Set(bpa.children), SeqRepr(bpa.children)
+  {
+    && |bpa.children| < Uint64UpperBound() - 1
+    && WFShapeSiblings(bpa.children)
+    && (forall j :: 0 <= j < |bpa.children| ==> bpa.children[j].height < bpa.height)
+    && Spec.WF(Spec.Index(bpa.pivots, ISiblings(bpa.children)))
+    && ValidBoundariesForSeq(|bpa.children| as uint64, bpa.boundaries)
+    && (Spec.ValidBoundaryLength(|bpa.children|, NatBoundaries(bpa.boundaries));
+       && BoundariesFit(bpa.boundaries, MaxChildren()))
+  }
+
+  predicate BuildParentRequires(bpa: BuildParentsArgs, i: uint64)
+    reads Set(bpa.children), SeqRepr(bpa.children)
+  {
+    && ValidBuildParentsArgs(bpa)
+    && 0 <= i < |bpa.boundaries| as uint64 - 1
+  }
+  
+  twostate predicate BuildParentShapeProperties(bpa: BuildParentsArgs, i: uint64, new parent: Node)
+    requires BuildParentRequires(bpa, i)
+    reads Set(bpa.children), SeqRepr(bpa.children), parent, parent.repr
+  {
+    var mychildren := ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i);
+    ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+    ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+    && WFShape(parent)
+    && fresh(parent.repr - SeqRepr(mychildren))
+  }
+
+  predicate MatchesSpecBuildParent(bpa: BuildParentsArgs, i: uint64, parent: Node)
+    requires BuildParentRequires(bpa, i)
+    requires WFShape(parent)
+    reads Set(bpa.children), SeqRepr(bpa.children), parent, parent.repr
+  {
+    I(parent) == Spec.BuildParent(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries), i as nat)
+  }
+  
+  method BuildParent(bpa: BuildParentsArgs, i: uint64) returns (parent: Node)
+    requires BuildParentRequires(bpa, i)
+    ensures BuildParentShapeProperties(bpa, i, parent)
+    ensures MatchesSpecBuildParent(bpa, i, parent)
+  {
+    ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+    var mychildren := bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]];
+    var mypivots   := bpa.pivots[bpa.boundaries[i]..bpa.boundaries[i+1]-1];
     assert |mychildren| <= MaxChildren() as int by { Spec.reveal_BoundariesFit(); }
-    parent := IndexFromChildren(mypivots, mychildren, height);
+    parent := IndexFromChildren(mypivots, mychildren, bpa.height);
     forall j, k | 0 <= j < k < |mychildren|
       ensures DisjointReprs(mychildren, j, k)
     {
-      assert DisjointReprs(children, boundaries[i] as int + j, boundaries[i] as int + k);
+      assert DisjointReprs(bpa.children, bpa.boundaries[i] as int + j, bpa.boundaries[i] as int + k);
     }
-    assert SeqRepr(mychildren) <= SeqRepr(children) by { reveal_SeqRepr(); }
+    assert SeqRepr(mychildren) <= SeqRepr(bpa.children) by { reveal_SeqRepr(); }
+    SeqReprSet(mychildren);
 
+    assert WFShape(parent);
     reveal_I();
     ghost var iparent := I(parent);
-    ghost var target := Spec.BuildParent(ISiblings(children), pivots, NatBoundaries(boundaries), i as nat);
+    ghost var target := Spec.BuildParent(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries), i as nat);
     assert iparent.pivots == target.pivots;
   }
 
-  method BuildParents(children: seq<Node>, pivots: seq<Key>, boundaries: seq<uint64>, ghost height: nat)
-    returns (parents: seq<Node>)
-    requires |children| < Uint64UpperBound()
-    requires |boundaries| < Uint64UpperBound()
-    requires WFShapeSiblings(children)
-    requires forall j :: 0 <= j < |children| ==> children[j].height < height
-    requires Spec.WF(Spec.Index(pivots, ISiblings(children)))
-    requires ValidBoundariesForSeq(|children| as uint64, boundaries)
-    requires BoundariesFit(boundaries, MaxChildren())
-    //ensures WFShapeSiblings(parents)
-    //ensures fresh(SeqRepr(parents) - SeqRepr(children))
-    //ensures ISiblings(parents) == Spec.BuildParents(ISiblings(children), pivots, NatBoundaries(boundaries))
-  {
-    var aparents: array<Node?> := newArrayFill(|boundaries| as uint64 - 1, null);
+  
+  
+  // predicate BuildParentsLoopStateRequirements(boundaries: seq<uint64>,
+  //   sparents: seq<Node?>, i: nat, allReprs: set<object>)
+  //   requires i as int <= |sparents|
+  //   reads Set(sparents[..i])
+  // {
+  //   && |sparents| == |boundaries| -1
+  //   && (forall j :: 0 <= j < i ==> sparents[j] != null)
+  //   && SeqRepr(sparents[..i]) <= allReprs
+  // }
 
-    assert aparents !in SeqRepr(children) by { reveal_SeqRepr(); }
+  // twostate lemma BuildParentsLoopPreservesStateRequirements(children: seq<Node>, pivots: seq<Key>,
+  //   boundaries: seq<uint64>, height: nat, new sparents: seq<Node?>, i: uint64, new allReprs: set<object>)
+  //   requires BuildParentsArgRequirements(children, pivots, boundaries, height)
+  //   requires i as int <= |sparents|
+  //   requires BuildParentsLoopStateRequirements(boundaries, sparents, i as nat, allReprs)
+  //   requires i as int < |sparents|
+  //   requires sparents[i] != null
+  //   ensures BuildParentsLoopStateRequirements(boundaries, sparents, i as nat + 1, allReprs + sparents[i].repr)
+  // {
+  //   reveal_SeqRepr();
+  // }
+    
+  // twostate predicate {:opaque} BuildParentsLoopShapeInvariant(children: seq<Node>, pivots: seq<Key>,
+  //   boundaries: seq<uint64>, height: nat, new sparents: seq<Node?>, i: uint64, new allReprs: set<object>)
+  //   requires BuildParentsArgRequirements(children, pivots, boundaries, height)
+  //   requires i as int <= |sparents|
+  //   requires BuildParentsLoopStateRequirements(boundaries, sparents, i as nat, allReprs)
+  //   ensures i == 0 && allReprs == {} ==>
+  //      BuildParentsLoopShapeInvariant(children, pivots, boundaries, height, sparents, i, allReprs)
+  //   reads Set(children), SeqRepr(children), Set(sparents[..i]), SeqRepr(sparents[..i])
+  // {
+  //   // && (forall j :: 0 <= j < i ==> aparents[j].contents.Index?)
+  //   // && (forall j :: 0 <= j < i ==>
+  //   //   var subchildren := Spec.ExtractBoundedSubsequence(children, NatBoundaries(boundaries), j as int);
+  //   //   assume Set(subchildren) <= Set(children);
+  //   //   fresh(aparents[j].repr - SeqRepr(subchildren)))
+  //   && fresh(allReprs - SeqRepr(children))
+  //   && WFShapeSiblings(sparents[..i])
+  // }
+
+  // twostate lemma BuildParentsLoopPreservesShapeInvariant(children: seq<Node>, pivots: seq<Key>,
+  //   boundaries: seq<uint64>, height: nat, new sparents: seq<Node?>, i: uint64, new allReprs: set<object>)
+  //   requires BuildParentsArgRequirements(children, pivots, boundaries, height)
+  //   requires i as int <= |sparents|
+  //   requires BuildParentsLoopStateRequirements(boundaries, sparents, i as nat, allReprs)
+  //   requires BuildParentsLoopShapeInvariant(children, pivots, boundaries, height, sparents, i, allReprs)
+  //   requires i as int < |sparents|
+  //   requires sparents[i] != null
+  //   requires sparents[i].repr !! allReprs
+  //   requires BuildParentShapeProperties(children, pivots, boundaries, i, height, sparents[i])
+  //   requires BuildParentsLoopStateRequirements(boundaries, sparents, i as nat + 1, allReprs + sparents[i].repr)
+  //   ensures  BuildParentsLoopShapeInvariant(children, pivots, boundaries,
+  //                                           height, sparents, i + 1, allReprs + sparents[i].repr)
+  // {
+  //   var nodes := sparents[..i+1];
+  //   assert forall j :: 0 <= j < |nodes| ==> WFShape(nodes[j]) by {
+  //     reveal_BuildParentsLoopShapeInvariant();
+  //   }
+  //   forall k, j | 0 <= k < j < |nodes| as int
+  //     ensures DisjointReprs(nodes, k, j)
+  //   {
+  //     if j < i as int {
+  //       reveal_BuildParentsLoopShapeInvariant();
+  //       assert DisjointReprs(sparents[..i], k, j);
+  //     } else {
+  //     }
+  //   }
+  //   Uint64_Order.IsStrictlySortedImpliesLt(boundaries, i as int, i as int + 1);
+  //   SubSeqRepr(children, boundaries[i] as nat, boundaries[i+1] as nat);
+  //   forall o | o in (allReprs + sparents[i].repr) - SeqRepr(children)
+  //     ensures fresh(o)
+  //     {
+  //       if o in allReprs - SeqRepr(children) {
+  //         reveal_BuildParentsLoopShapeInvariant();
+  //       } else {
+  //         assert o in sparents[i].repr - SeqRepr(children);
+  //         SubSeqRepr(children, boundaries[i] as nat, boundaries[i+1] as nat);
+  //         assert Spec.ExtractBoundedSubsequence(children, NatBoundaries(boundaries), i as int) ==
+  //           children[boundaries[i]..boundaries[i+1]] by {
+  //             Spec.reveal_ExtractBoundedSubsequence();
+  //         }
+  //         assert o in sparents[i].repr -
+  //           SeqRepr(Spec.ExtractBoundedSubsequence(children, NatBoundaries(boundaries), i as int));
+  //         assert o == sparents[i] || o == sparents[i].contents.pivots || o == sparents[i].contents.children;
+  //       }
+  //   }
+  //   reveal_BuildParentsLoopShapeInvariant();
+  //   assert BuildParentsLoopShapeInvariant(children, pivots, boundaries,
+  //                                           height, sparents, i + 1, allReprs + sparents[i].repr);
+  // }
+
+  //twostate lemma BuildParentsLoopInvariant(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+
+  twostate lemma BuildParentsLoopInvariant1(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+    requires ValidBuildParentsArgs(bpa)
+    requires aparents.Length == |bpa.boundaries|-1
+    requires i as int < aparents.Length
+    requires forall j :: 0 <= j <= i ==> aparents[j] != null
+    requires aparents !in SeqRepr(aparents[..i])
+    requires aparents !in aparents[i].repr;
+    requires fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)))
+    ensures aparents !in SeqRepr(aparents[..i+1])
+  {
+    assert SeqRepr(aparents[..i+1]) == SeqRepr(aparents[..i]) + aparents[i].repr by {
+      reveal_SeqRepr();
+    }
+    assert aparents !in SeqRepr(aparents[..i]);
+  }
+
+  twostate predicate Stale(new a: set<object>)
+  {
+    forall o :: o in a ==> !fresh(o)
+  }
+  
+  twostate lemma BuildParentsLoopInvariant2(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+    requires ValidBuildParentsArgs(bpa)
+    requires aparents.Length == |bpa.boundaries|-1
+    requires i as int < aparents.Length
+    requires forall j :: 0 <= j <= i ==> aparents[j] != null
+    requires Stale(SeqRepr(bpa.children))
+    requires SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
+    requires fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)))
+    ensures SeqRepr(aparents[..i+1]) !! SeqRepr(bpa.children[bpa.boundaries[i+1]..])
+  {
+    var srpi  := SeqRepr(aparents[..i]);
+    var srpii := SeqRepr(aparents[..i+1]);
+    var src   := SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i));
+    var srci  := SeqRepr(bpa.children[bpa.boundaries[i]..]);
+    var srcii := SeqRepr(bpa.children[bpa.boundaries[i+1]..]);
+
+    assert srpi !! srci;
+    
+    assert srpii == srpi + aparents[i].repr by {
+      reveal_SeqRepr();
+    }
+    
+    assert srci == src + srcii by {
+      ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+      ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+      SeqReprUnion(bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]], bpa.children[bpa.boundaries[i+1]..]);
+      assert bpa.children[bpa.boundaries[i]..] ==
+        bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]] + bpa.children[bpa.boundaries[i+1]..];
+    }
+    assert src !! srcii by {
+      ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+      DisjointSubSeqReprsAreDisjoint(bpa.children,
+        bpa.boundaries[i] as int, bpa.boundaries[i+1] as int,
+        bpa.boundaries[i+1] as int, |bpa.children|);
+      assert bpa.children[bpa.boundaries[i]..] == bpa.children[bpa.boundaries[i]..|bpa.children|];
+      assert bpa.children[bpa.boundaries[i+1]..] == bpa.children[bpa.boundaries[i+1]..|bpa.children|];
+    }
+    assert srcii == srci - src;
+
+    assert fresh(aparents[i].repr - src);
+    assert Stale(srci) by {
+      SubSeqRepr(bpa.children, bpa.boundaries[i] as nat, |bpa.children|);
+      assert bpa.children[bpa.boundaries[i]..|bpa.children|] == bpa.children[bpa.boundaries[i]..];
+      assert srci <= SeqRepr(bpa.children);
+    }
+    assert (aparents[i].repr - src) !! (srci - src);
+  }
+
+  twostate lemma BuildParentsLoopInvariant3(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+    requires ValidBuildParentsArgs(bpa)
+    requires aparents.Length == |bpa.boundaries|-1
+    requires i as int < aparents.Length
+    requires forall j :: 0 <= j <= i ==> aparents[j] != null
+    requires fresh(SeqRepr(aparents[..i]) - SeqRepr(bpa.children))
+    requires BuildParentShapeProperties(bpa, i, aparents[i])
+    ensures fresh(SeqRepr(aparents[..i+1]) - SeqRepr(bpa.children))
+  {
+    assert SeqRepr(aparents[..i+1]) == SeqRepr(aparents[..i]) + aparents[i].repr by {
+      reveal_SeqRepr();
+    }
+    assert fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)));
+    ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+  }
+  
+  twostate lemma BuildParentsLoopInvariant4(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+    requires ValidBuildParentsArgs(bpa)
+    requires aparents.Length == |bpa.boundaries|-1
+    requires i as int < aparents.Length
+    requires forall j :: 0 <= j <= i ==> aparents[j] != null
+    requires SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
+    requires WFShapeSiblings(aparents[..i])
+    requires BuildParentShapeProperties(bpa, i, aparents[i])
+    requires aparents[i].repr * SeqRepr(aparents[..i]) <=
+             SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i))
+    ensures WFShapeSiblings(aparents[..i+1])
+  {
+    forall j, k | 0 <= j < k < i+1
+      ensures DisjointReprs(aparents[..i+1], j as int, k as int)
+    {
+      if k < i {
+        assert DisjointReprs(aparents[..i], j as int, k as int);
+      } else {
+        assume false;
+      }
+    }
+    
+    assert WFShapeSiblings(aparents[..i+1]);
+  }
+  
+  method BuildParents(bpa: BuildParentsArgs) returns (parents: seq<Node>)
+    requires ValidBuildParentsArgs(bpa)
+    ensures WFShapeSiblings(parents)
+    ensures fresh(SeqRepr(parents) - SeqRepr(bpa.children))
+    ensures ISiblings(parents) == Spec.BuildParents(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries))
+    ensures |parents| < |bpa.children|
+  {
+    // assert Stale(SeqRepr(bpa.children)) by {
+    //   reveal_SeqRepr();
+    // }
+    
+    var aparents: array<Node?> := newArrayFill(|bpa.boundaries| as uint64 - 1, null);
+    //assert aparents !in SeqRepr(bpa.children) by { reveal_SeqRepr(); }
 
     var i: uint64 := 0;
     while i < aparents.Length as uint64
-      invariant i <= aparents.Length as uint64
+      invariant i as int <= aparents.Length
       invariant forall j :: 0 <= j < i ==> aparents[j] != null
-      invariant forall j :: 0 <= j < i ==> aparents !in aparents[j].repr
-      invariant forall j :: 0 <= j < i ==> aparents[j].contents.Index?
-      invariant forall j :: 0 <= j < i ==> fresh(aparents[j])
-      invariant forall j :: 0 <= j < i ==> fresh(aparents[j].contents.pivots)
-      invariant forall j :: 0 <= j < i ==> fresh(aparents[j].contents.children)
-      invariant forall j :: 0 <= j < i ==> boundaries[j] < boundaries[j+1]
-      invariant forall j :: 0 <= j < i ==>
-           aparents[j].repr == {aparents[j], aparents[j].contents.pivots, aparents[j].contents.children} +
-           SeqRepr(children[boundaries[j]..boundaries[j+1]])
-      invariant WFShapeSiblings(aparents[..i])
+      // invariant aparents !in SeqRepr(aparents[..i])
+      // invariant Stale(SeqRepr(bpa.children))
+      // invariant SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
+      // invariant fresh(SeqRepr(aparents[..i]) - SeqRepr(bpa.children))
+      // invariant forall j :: 0 <= j < i ==> WF(aparents[j])
+      modifies aparents
     {
-      aparents[i] := BuildParent(children, pivots, boundaries, i, height);
-      i := i + 1;
+      //ghost var oldrepr := SeqRepr(aparents[..i]);
+      aparents[i] := BuildParent(bpa, i);
 
-      assert SeqRepr(children[boundaries[i-1]..boundaries[i]]) <= SeqRepr(children) by { reveal_SeqRepr(); }
+      // assert aparents !in aparents[i].repr by {
+      //   ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+      // }
+      // BuildParentsLoopInvariant1(bpa, aparents, i);
+      // BuildParentsLoopInvariant2(bpa, aparents, i);
+      // BuildParentsLoopInvariant3(bpa, aparents, i);
+
+      
+      i := i + 1;
     }
 
     parents := aparents[..aparents.Length];
+    assume false;
   }
+
+  method BuildLayers(children: seq<Node>, pivots: seq<Key>, ghost height: nat) returns (newnode: Node)
+    requires 0 < |children|
+    requires |children| < Uint64UpperBound() - 1
+    requires |children| == |pivots| + 1
+    requires WFShapeSiblings(children)
+    requires Spec.WF(Spec.Index(pivots, ISiblings(children)))
+    ensures WF(newnode)
+    ensures Interpretation(newnode) == Spec.Interpretation(Spec.Index(pivots, ISiblings(children)))
+  {
+    var currChildren := children;
+    var currPivots := pivots;
+    ghost var currHeight := height;
+    
+    while 1 < |currChildren| as uint64
+      invariant 0 < |currChildren|
+      //invariant |currChildren| < Uint64UpperBound() - 1
+      //invariant |currChildren| == |currPivots| + 1
+      //invariant WFShapeSiblings(currChildren)
+      //invariant Spec.WF(Spec.Index(currPivots, ISiblings(currChildren)))
+      decreases |currChildren|
+    {
+      assume false;
+      var boundaries := BuildBoundaries(|currChildren| as uint64, 3 * MaxChildren() / 4);
+      var newPivots := ExtractPivotsForBoundaries(currPivots, boundaries);
+      var bpa := BuildParentsArgs(currChildren, currPivots, boundaries, currHeight);
+      var parents := BuildParents(bpa);
+
+      currChildren := parents;
+      currPivots := newPivots;
+      currHeight := currHeight + 1;
+    }
+
+    newnode := currChildren[0];
+    assume false;
+  }
+
+  method BuildTreeForSequence(kvlist: Spec.KVList) returns (node: Node)
+    requires 0 < |kvlist.keys| < Uint64UpperBound() - 1
+    requires Spec.WFKVList(kvlist)
+    ensures WF(node)
+    ensures Interpretation(node) == Spec.KVListInterpretation(kvlist)
+    ensures fresh(node.repr)
+  {
+    assume false;
+    var boundaries := BuildBoundaries(|kvlist.keys| as uint64, MaxKeysPerLeaf());
+    var leaves := BuildLeavesForSequence(kvlist, boundaries);
+    var pivots := ExtractPivotsForBoundaries(kvlist.keys[1..], boundaries);
+    node := BuildLayers(leaves, pivots, 1);
+  }
+
     
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)
   //   requires WFShape(node)
