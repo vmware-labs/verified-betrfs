@@ -188,6 +188,18 @@ build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) bu
 	@tred < $(DOTNAME) | dot -Tpdf -o$@
 
 ##############################################################################
+# .lcreport: Tabular data on line counts of {spec, impl, proof}
+#.PRECIOUS: build/%.lc --Why isn't this necessary?
+LC_TOOL=tools/line_counter.py
+LC_DEPS=tools/line_count_lib.py tools/lib_aggregate.py tools/lib_deps.py
+build/%.lc: %.dfy build/%.syntax $(LC_TOOL) $(LC_DEPS)
+		$(LC_TOOL) --mode count --input $< --output $@
+
+LC_REPORT_DEPS=tools/line_counter_report_lib.py
+build/%.lcreport: %.dfy build/%.lc $(LC_TOOL) $(LC_DEPS) $(LC_REPORT_DEPS)
+		$(LC_TOOL) --mode report --input $< --output $@
+
+##############################################################################
 # .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
 # In principle, building code should depend on .verified! But we want
 # to play with perf with not-entirely-verifying trees.

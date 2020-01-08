@@ -7,11 +7,6 @@ import sys
 import glob
 from lib_deps import *
 
-def targetName(iref, suffix):
-    targetRootRelPath = iref.normPath.replace(".dfy", suffix)
-    result = "build/%s" % targetRootRelPath
-    return result
-
 def deps(iref):
     return target(iref, ".deps")
 
@@ -59,6 +54,9 @@ class Veridepend:
                     # depend on all included dfys, but don't require building
                     # all prior .cs files.
                     (".cs", ".dummydep"),
+                    # depend on all included dfys, but don't require building
+                    # all prior report files.
+                    (".lc", ".dummydep"),
                     # For now, depend on all prior .cpps, to make development
                     # of cpp backend easier.
                     (".cpp", ".cpp"),
@@ -68,6 +66,7 @@ class Veridepend:
                     # Corresponding recursive tree for synchk.
                     (".syntax", ".syntax"),
                     (".okay", ".okay"),
+                    (".lcreport", ".lcreport"),
 
                     # When we build X.o, we first want to build Y.cpp and Y.o.
                     # These aren't true dependencies, but they make the ordering
@@ -80,6 +79,7 @@ class Veridepend:
             # dependencies from this file to type parents
             output.append("%s: %s" % (targetName(iref, ".verified"), targetName(dep, ".verchk")))
             output.append("%s: %s" % (targetName(iref, ".syntax"), targetName(dep, ".synchk")))
+            output.append("%s: %s" % (targetName(iref, ".lcreport"), targetName(dep, ".lc")))
         # The dirDeps file depends on each target it describes.
         output.append("%s: %s" % (self.depFilename(), iref.normPath))
         return output

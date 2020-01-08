@@ -1,6 +1,10 @@
 import sys
 import re
 
+# report file types
+SYNCHK = "synchk"
+VERCHK = "verchk"
+
 class DafnyCondition:
     def __init__(self, level, result, style):
         self.level = level
@@ -74,9 +78,9 @@ def extractCondition(reportType, report, content):
         if rawTimeoutCount != None and int(rawTimeoutCount) > 0:
             return DafnyTimeoutError()
         return DafnyVerified()
-    if reportType=="verchk":
+    if reportType==VERCHK:
         raise Exception("build system error: couldn't summarize %s\n" % report)
-    elif reportType=="synchk":
+    elif reportType==SYNCHK:
         #  Report assumes even in syntax-only mode.
         if hasDisallowedAssumptions(report):
             return DafnyAssumeError()

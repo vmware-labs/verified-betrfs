@@ -148,6 +148,11 @@ def depsFromDfySource(initialRef):
     visited.remove(initialRef)
     return visited
 
+def targetName(iref, suffix):
+    targetRootRelPath = iref.normPath.replace(".dfy", suffix)
+    result = "build/%s" % targetRootRelPath
+    return result
+
 def toposortGroup(candidateIrefs):
     """Given a set of IRefs, returns a list of irefs toposorted based on the include graph."""
     graph = {}
