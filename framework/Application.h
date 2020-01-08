@@ -27,7 +27,7 @@ struct ByteString {
     return seq;
   }
 
-  size_t size() {
+  size_t size() const {
     return seq.size();  
   }
 
