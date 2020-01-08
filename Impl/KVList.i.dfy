@@ -9,6 +9,9 @@ include "../lib/Marshalling/Seqs.i.dfy"
 // A list of key-message pairs, with unique, sorted keys.
 // TODO(robj,thance): How is it used... in BucketImpl?
 //
+// VESTIGIAL -- do not bother trying to prove stuff here because this
+// file is marked for deletion or major renovation.
+//
 
 module KVList {
   import opened ValueMessage`Internal

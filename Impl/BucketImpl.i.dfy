@@ -14,6 +14,9 @@ include "BucketIteratorModel.i.dfy"
 // BucketIteratorImpl module/class.
 // TODO(robj): Littered with assume false!?
 //
+// VESTIGIAL -- do not bother trying to prove stuff here because this
+// file is marked for deletion or major renovation.
+//
 
 module BucketImpl {
   import TTT = TwoThreeTree
