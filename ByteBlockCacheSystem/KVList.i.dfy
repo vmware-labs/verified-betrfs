@@ -8,6 +8,10 @@ include "../lib/Marshalling/Seqs.i.dfy"
 //
 // A list of key-message pairs, with unique, sorted keys.
 // TODO(robj,thance): How is it used... in BucketImpl?
+// NOTE(tjhance): this is mostly Impl-related stuff, but a bit of it is used by the Marshalling file
+//
+// VESTIGIAL -- do not bother trying to prove stuff here because this
+// file is marked for deletion or major renovation.
 //
 
 module KVList {
@@ -21,6 +25,7 @@ module KVList {
   import opened NativeTypes
   import NativeArrays
   import P = PivotsLib
+  import SeqComparison
 
   type Key = Element
 
@@ -1103,6 +1108,8 @@ module KVList {
     reveal_replace1with2();
   }
 
+  // TODO remove kvlOfSeq and related stuff when memtable lands
+
   function kvlOfSeq(s: seq<(Key, Message)>) : (kvl: Kvl)
   requires |s| < 0x1_0000_0000_0000_0000
   ensures WF(kvl)
@@ -1175,6 +1182,15 @@ module KVList {
   lemma kvlSeqWeightEq(kvls: seq<Kvl>)
   requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
   ensures WeightKvlSeq(kvls) == WeightBucketList(ISeq(kvls))
+  {
+    reveal_WeightBucketList();
+    if |kvls| == 0 {
+    } else {
+      kvlSeqWeightEq(DropLast(kvls));
+      Islice(kvls, 0, |kvls| - 1);
+      kvlWeightEq(Last(kvls));
+    }
+  }
 
   lemma kvlWeightPrefixLe(kvl: Kvl, j: int)
   requires WF(kvl)
@@ -1225,6 +1241,12 @@ module KVList {
   ensures WeightKvl(prefix(kvl, j as int)) +
       WeightKey(kvl.keys[j]) + WeightMessage(kvl.values[j])
           == WeightKvl(prefix(kvl, j as int + 1));
+  {
+    assert DropLast(prefix(kvl, j as int + 1).values)
+        == prefix(kvl, j as int).values;
+    assert DropLast(prefix(kvl, j as int + 1).keys)
+        == prefix(kvl, j as int).keys;
+  }
 
   method computeWeightKvl(kvl: Kvl)
   returns (weight: uint64)
@@ -1252,16 +1274,111 @@ module KVList {
     assert prefix(kvl, |kvl.keys|) == kvl;
   }
 
-  function toKvl(bucket: Bucket) : (kvl: Kvl)
+  function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
   ensures WF(kvl)
   ensures I(kvl) == bucket
+  {
+    reveal_I();
+    reveal_IsStrictlySorted();
+    reveal_WFBucket();
 
-  function toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
+    if bucket.Keys == {} then (
+      Kvl([], [])
+    ) else (
+      var key := maximum(bucket.Keys);
+      var kvl1 := toKvl(MapRemove1(bucket, key));
+      StrictlySortedAugment(kvl1.keys, key);
+      Kvl(kvl1.keys + [key], kvl1.values + [bucket[key]])
+    )
+  }
+
+  function {:opaque} toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   ensures |kvls| == |buckets|
   ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
   ensures ISeq(kvls) == buckets
+  {
+    if |buckets| == 0 then (
+      []
+    ) else (
+      toKvlSeq(DropLast(buckets)) + [toKvl(Last(buckets))]
+    )
+  }
+
+  lemma lastIsMax(kvl: Kvl)
+  requires WF(kvl)
+  requires |kvl.keys| > 0
+  ensures maximumOpt(I(kvl).Keys) == Some(Last(kvl.keys))
+  {
+    Imaps(kvl, |kvl.keys| - 1);
+    assert Last(kvl.keys) in I(kvl).Keys;
+    forall key | key in I(kvl).Keys
+    ensures lte(key, Last(kvl.keys))
+    {
+      var i := IndexOfKey(kvl, key);
+      reveal_IsStrictlySorted();
+    }
+  }
+
+  lemma lastIsNotInDropLast(kvl: Kvl)
+  requires WF(kvl)
+  requires |kvl.keys| > 0
+  ensures WF(Kvl(DropLast(kvl.keys), DropLast(kvl.values)))
+  ensures Last(kvl.keys) !in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values)));
+  {
+    WFPrefix(kvl, |kvl.keys| - 1);
+    if Last(kvl.keys) in I(Kvl(DropLast(kvl.keys), DropLast(kvl.values))) {
+      var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.values)), Last(kvl.keys));
+      assert kvl.keys[i] == Last(kvl.keys);
+      reveal_IsStrictlySorted();
+    }
+  }
+
+  lemma I_injective(kvl1: Kvl, kvl2: Kvl)
+  requires WF(kvl1)
+  requires WF(kvl2)
+  requires I(kvl1) == I(kvl2)
+  ensures kvl1 == kvl2
+  decreases |kvl1.keys|
+  {
+    reveal_I();
+    reveal_IsStrictlySorted();
+    if |kvl1.keys| == 0 {
+    } else {
+      lastIsMax(kvl1);
+      lastIsMax(kvl2);
+      assert Some(Last(kvl1.keys))
+          == maximumOpt(I(kvl1).Keys)
+          == maximumOpt(I(kvl2).Keys)
+          == Some(Last(kvl2.keys));
+
+      var key := Last(kvl1.keys);
+      assert key == Last(kvl2.keys);
+      lastIsNotInDropLast(kvl1);
+      lastIsNotInDropLast(kvl2);
+      //assert key !in I(Kvl(DropLast(kvl1.keys), DropLast(kvl1.values)));
+      //assert key !in I(Kvl(DropLast(kvl2.keys), DropLast(kvl2.values)));
+      assert I(Kvl(DropLast(kvl1.keys), DropLast(kvl1.values)))
+          == MapRemove1(I(kvl1), key)
+          == MapRemove1(I(kvl2), key)
+          == I(Kvl(DropLast(kvl2.keys), DropLast(kvl2.values)));
+      I_injective(
+        prefix(kvl1, |kvl1.keys| - 1),
+        prefix(kvl2, |kvl2.keys| - 1));
+      assert Last(kvl1.values) == Last(kvl2.values);
+    }
+  }
+
+  lemma toKvlI_eq(kvl: Kvl)
+  requires WF(kvl)
+  ensures WFBucket(I(kvl))
+  ensures toKvl(I(kvl)) == kvl
+  {
+    WFImpliesWFBucket(kvl);
+    assert I(toKvl(I(kvl))) == I(kvl);
+    I_injective(toKvl(I(kvl)), kvl);
+  }
 
   function getMiddleKey(bucket: Bucket) : Key
   requires WFBucket(bucket)
@@ -1286,7 +1403,7 @@ module KVList {
   {
     WFImpliesWFBucket(kvl); 
     lenKeysLeWeight(kvl);
-    assume kvl == toKvl(I(kvl));
+    toKvlI_eq(kvl);
     if |kvl.keys| as uint64 == 0 {
       return [0];
     } else {
@@ -1299,4 +1416,12 @@ module KVList {
     }
   }
 
+  lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
+  requires WFBucket(bucket)
+  ensures P.WFPivots([getMiddleKey(bucket)])
+  {
+    reveal_IsStrictlySorted();
+    SeqComparison.reveal_lte();
+    IsNotMinimum([], getMiddleKey(bucket));
+  }
 }

@@ -1,4 +1,4 @@
-include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
+include "AsyncDiskModel.s.dfy"
 include "ByteBetreeBlockCache.i.dfy"
 include "../BlockCacheSystem/BetreeBlockCacheSystem.i.dfy"
 //
@@ -13,7 +13,6 @@ include "../BlockCacheSystem/BetreeBlockCacheSystem.i.dfy"
 module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import M = ByteBetreeBlockCache
 
-  import opened NativeTypes
   import opened AsyncSectorDiskModelTypes
   import opened Maps
   import BC = BetreeGraphBlockCache

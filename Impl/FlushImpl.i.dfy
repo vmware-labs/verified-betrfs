@@ -81,6 +81,7 @@ module FlushImpl {
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
         Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
 
+    BookkeepingModel.allocRefDoesntEqual(Ic(k), s.I(), newchild.children, parentref);
     var newchildref := allocBookkeeping(k, s, newchild.children);
     if newchildref.None? {
       print "giving up; could not get parentref\n";
@@ -94,7 +95,7 @@ module FlushImpl {
 
     writeBookkeeping(k, s, parentref, Some(newparent_children));
 
-    assume parentref != newchildref.value;
+    assert parentref != newchildref.value;
 
     ghost var c1 := s.cache.I();
     assert c1 == old(s.cache.I());

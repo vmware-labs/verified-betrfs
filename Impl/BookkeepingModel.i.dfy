@@ -402,7 +402,7 @@ module BookkeepingModel {
     var s' := writeBookkeeping(k, s, ref, children);
 
     lemmaIndirectionTableLocIndexValid(k, s, ref);
-    assume s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
+    assert s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
     var (eph, oldEntry) := MutableMapModel.InsertAndGetOld(s.ephemeralIndirectionTable, ref,
         (None, if children.Some? then children.value else []));
 
@@ -514,15 +514,60 @@ module BookkeepingModel {
     }
   }
 
+  lemma getFreeRefIterateDoesntEqual(s: Variables, i: uint64, ref: BT.G.Reference)
+  requires s.Ready?
+  requires ref in s.cache
+  requires i >= 1
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  ensures getFreeRefIterate(s, i) != Some(ref)
+  {
+    if i !in s.ephemeralIndirectionTable.graph && i !in s.cache {
+    } else if i == 0xffff_ffff_ffff_ffff {
+    } else {
+      getFreeRefIterateDoesntEqual(s, i+1, ref);
+    }
+  }
+
   lemma getFreeRefDoesntEqual(s: Variables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   ensures getFreeRef(s) != Some(ref)
+  {
+    reveal_getFreeRef();
+    getFreeRefIterateDoesntEqual(s, 1, ref);
+  }
+
+  lemma getFreeRef2IterateDoesntEqual(s: Variables, avoid: BT.G.Reference, i: uint64, ref: BT.G.Reference)
+  requires s.Ready?
+  requires ref in s.cache
+  requires i >= 1
+  ensures getFreeRef2Iterate(s, avoid, i) != Some(ref)
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  {
+    if i != avoid && i !in s.ephemeralIndirectionTable.graph && i !in s.cache {
+    } else if i == 0xffff_ffff_ffff_ffff {
+    } else {
+      getFreeRef2IterateDoesntEqual(s, avoid, i+1, ref);
+    }
+  }
 
   lemma getFreeRef2DoesntEqual(s: Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   ensures getFreeRef2(s, avoid) != Some(ref)
+  {
+    reveal_getFreeRef2();
+    getFreeRef2IterateDoesntEqual(s, avoid, 1, ref);
+  }
+
+  lemma allocRefDoesntEqual(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
+  requires allocBookkeeping.requires(k, s, children);
+  requires ref in s.cache
+  ensures allocBookkeeping(k, s, children).1 != Some(ref)
+  {
+    reveal_allocBookkeeping();
+    getFreeRefDoesntEqual(s, ref);
+  }
 
   lemma lemmaChildrenConditionsOfNode(
       k: Constants, s: Variables, ref: BT.G.Reference)

@@ -98,7 +98,52 @@ module BitmapModel {
     )
   }
 
+  lemma LemmaBitAllocIterResult(bm: BitmapModelT, i: int)
+  requires 0 <= i <= |bm|
+  ensures var j := BitAllocIter(bm, i);
+    && (j.Some? ==> (!IsSet(bm, j.value)))
+  decreases |bm| - i
+  {
+    reveal_IsSet();
+    if i == |bm| {
+    } else if !bm[i] {
+    } else {
+      LemmaBitAllocIterResult(bm, i+1);
+    }
+  }
+
   lemma LemmaBitAllocResult(bm: BitmapModelT)
-  ensures var i := BitAlloc(bm);
-    && (i.Some? ==> (!IsSet(bm, i.value)))
+  ensures var j := BitAlloc(bm);
+    && (j.Some? ==> (!IsSet(bm, j.value)))
+  {
+    reveal_BitAlloc();
+    LemmaBitAllocIterResult(bm, 0);
+  }
+
+  lemma LemmaBitAllocIterResultStronger(bm: BitmapModelT, i: int)
+  requires 0 <= i <= |bm|
+  ensures var j := BitAllocIter(bm, i);
+    && (j.Some? ==> (!IsSet(bm, j.value)))
+    && (j.Some? ==> (forall k | i <= k < j.value :: IsSet(bm, k)))
+    && (j.None? ==> (forall k | i <= k < Len(bm) :: IsSet(bm, k)))
+  decreases |bm| - i
+  {
+    reveal_IsSet();
+    if i == |bm| {
+    } else if !bm[i] {
+    } else {
+      LemmaBitAllocIterResultStronger(bm, i+1);
+    }
+  }
+
+  lemma LemmaBitAllocResultStronger(bm: BitmapModelT)
+  ensures var j := BitAlloc(bm);
+    && (j.Some? ==> (!IsSet(bm, j.value)))
+    && (j.Some? ==> (forall i | 0 <= i < j.value :: IsSet(bm, i)))
+    && (j.None? ==> (forall i | 0 <= i < Len(bm) :: IsSet(bm, i)))
+  {
+    reveal_BitAlloc();
+    reveal_IsSet();
+    LemmaBitAllocIterResultStronger(bm, 0);
+  }
 }

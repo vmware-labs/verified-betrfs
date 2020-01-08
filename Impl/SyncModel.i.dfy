@@ -4,7 +4,7 @@ include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 
-// See dependency graph in Handlers.dfy
+// See dependency graph in MainHandlers.dfy
 
 module SyncModel { 
   import opened StateModel
@@ -12,8 +12,6 @@ module SyncModel {
   import opened BookkeepingModel
   import opened DeallocModel
   import opened Bounds
-
-  import IMM = ImplMarshallingModel
 
   import opened Options
   import opened Maps
@@ -89,9 +87,21 @@ module SyncModel {
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
   {
-     s
-      .(outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)])
-      .(blockAllocator := BlockAllocatorModel.MarkUsedOutstanding(s.blockAllocator, loc.addr as int / BlockSize()))
+    var blockAllocator0 := if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / BlockSize() < NumBlocks() then
+      // This case shouldn't actually occur but it's annoying to prove from this point.
+      // So I just chose to handle it instead.
+      // Yeah, it's kind of annoying.
+      BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / BlockSize())
+    else
+      s.blockAllocator;
+
+    var outstandingBlockWrites' := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
+
+    var blockAllocator' := BlockAllocatorModel.MarkUsedOutstanding(blockAllocator0, loc.addr as int / BlockSize());
+
+    s
+      .(outstandingBlockWrites := outstandingBlockWrites')
+      .(blockAllocator := blockAllocator')
   }
 
   lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
@@ -101,7 +111,8 @@ module SyncModel {
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
   requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
-  requires id !in s.outstandingBlockWrites
+  requires BC.AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
+  requires BC.OutstandingWriteValidLocation(s.outstandingBlockWrites)
   ensures var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
       && s'.Ready?
       && (forall i: int :: IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
@@ -109,6 +120,7 @@ module SyncModel {
       && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignIdRefLocOutstanding();
+    BitmapModel.reveal_BitUnset();
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
 
@@ -123,7 +135,20 @@ module SyncModel {
     | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
     ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     {
-      if i != j {
+      if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / BlockSize() < NumBlocks() && i == s.outstandingBlockWrites[id].loc.addr as int / BlockSize() {
+        if i == j {
+          assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+        } else {
+          var id0 :| id0 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id0].loc.addr as int == i * BlockSize() as int;
+          assert LBAType.ValidAddr(s.outstandingBlockWrites[id0].loc.addr);
+          assert LBAType.ValidAddr(s.outstandingBlockWrites[id].loc.addr);
+          assert s.outstandingBlockWrites[id0].loc.addr as int
+              == i * BlockSize() as int
+              == s.outstandingBlockWrites[id].loc.addr as int;
+          assert id == id0;
+          assert false;
+        }
+      } else if i != j {
         assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
         assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
         assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
@@ -347,21 +372,6 @@ module SyncModel {
     }
   }
 
-  function {:opaque} FindRefInFrozenWithNoLoc(s: Variables) : (ref: Option<Reference>)
-  requires WFVars(s)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
-
-  lemma FindRefInFrozenWithNoLocCorrect(s: Variables)
-  requires WFVars(s)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
-  ensures var ref := FindRefInFrozenWithNoLoc(s);
-    && (ref.Some? ==> ref.value in s.frozenIndirectionTable.value.graph)
-    && (ref.Some? ==> ref.value !in s.frozenIndirectionTable.value.locs)
-    && (ref.None? ==> forall r | r in s.frozenIndirectionTable.value.graph
-        :: r in s.frozenIndirectionTable.value.locs)
-
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
   syncNotFrozen(k: Constants, s: Variables, io: IO)
   : (res: (Variables, IO))
@@ -473,8 +483,6 @@ module SyncModel {
       var s0 := AssignRefToLocEphemeral(k, s, ref, loc.value);
       var s1 := AssignRefToLocFrozen(k, s0, ref, loc.value);
 
-      assume id.value !in s.outstandingBlockWrites; // TODO figure out how to deal with this?
-
       LemmaAssignRefToLocEphemeralCorrect(k, s, ref, loc.value);
       LemmaAssignRefToLocFrozenCorrect(k, s0, ref, loc.value);
       LemmaAssignIdRefLocOutstandingCorrect(k, s1, id.value, ref, loc.value);
@@ -564,8 +572,7 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) then (
           (s', io') == syncNotFrozen(k, s, io)
         ) else (
-          var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-          FindRefInFrozenWithNoLocCorrect(s);
+          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
           if foundInFrozen.Some? then (
             syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
           ) else if (s.outstandingBlockWrites != map[]) then (
@@ -606,8 +613,7 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) {
           syncNotFrozenCorrect(k, s, io);
         } else {
-          var foundInFrozen := FindRefInFrozenWithNoLoc(s);
-          FindRefInFrozenWithNoLocCorrect(s);
+          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
           if foundInFrozen.Some? {
             syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
           } else if (s.outstandingBlockWrites != map[]) {

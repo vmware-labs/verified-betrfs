@@ -798,10 +798,6 @@ abstract module Total_Order {
     && (forall key :: key in m ==> (exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key]))
   }
 
-  lemma lenSortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
-  requires SortedSeqForMap(s, m)
-  ensures |s| == |m|
-
   function {:opaque} minimum(s: set<Element>) : (x : Element)
   requires |s| >= 1
   ensures x in s

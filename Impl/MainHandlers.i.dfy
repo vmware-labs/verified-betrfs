@@ -1,18 +1,20 @@
 include "Main.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "ByteBetreeBlockCacheSystem.i.dfy"
-include "Marshalling.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
+include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "InsertImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "SuccImpl.i.dfy"
 include "InsertModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
+include "Mkfs.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
 //
-// Implements the application-API-handler obligations laid out by Main.s.dfy.
+// Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
 
-module {:extern} Handlers refines Main { 
+module {:extern} MainHandlers refines Main { 
   import SM = StateModel
   import SI = StateImpl
   import IOImpl
@@ -25,10 +27,14 @@ module {:extern} Handlers refines Main {
   import QueryModel
   import SyncModel
   import SuccModel
+  import MkfsImpl
+  import MkfsModel
 
   import BBC = BetreeBlockCache
   import BC = BetreeGraphBlockCache
   import ADM = ByteBetreeBlockCacheSystem
+
+  import System_Ref = ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap
 
   type Constants = SI.ImplConstants
   type Variables = SI.ImplVariables
@@ -47,6 +53,7 @@ module {:extern} Handlers refines Main {
     && SI.Inv(k, hs.s)
   }
 
+  function Ik(k: Constants) : ADM.M.Constants { BC.Constants() }
   function I(k: Constants, hs: HeapState) : ADM.M.Variables { SM.IVars(hs.s.I()) }
 
   method InitState() returns (k: Constants, hs: HeapState)
@@ -177,5 +184,46 @@ module {:extern} Handlers refines Main {
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
+  }
+
+  predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
+  {
+    MkfsModel.InitDiskContents(diskContents)
+  }
+
+  method Mkfs()
+  returns (diskContents: map<uint64, seq<byte>>)
+  {
+    diskContents := MkfsImpl.Mkfs();
+  }
+
+  lemma InitialStateSatisfiesSystemInit(
+      k: ADM.Constants, 
+      s: ADM.Variables,
+      diskContents: map<uint64, seq<byte>>)
+  {
+    MkfsModel.InitialStateSatisfiesSystemInit(k, s, diskContents);
+  }
+
+  function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants
+  {
+    System_Ref.Ik(k)
+  }
+
+  function SystemI(k: ADM.Constants, s: ADM.Variables) : ThreeStateVersionedMap.Variables
+  {
+    System_Ref.I(k, s)
+  }
+
+  lemma SystemRefinesCrashSafeMapInit(
+    k: ADM.Constants, s: ADM.Variables)
+  {
+    System_Ref.RefinesInit(k, s);
+  }
+
+  lemma SystemRefinesCrashSafeMapNext(
+    k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
+  {
+    System_Ref.RefinesNext(k, s, s', uiop);
   }
 }

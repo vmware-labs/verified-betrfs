@@ -41,8 +41,6 @@ module LeafModel {
       var pivot := KVList.getMiddleKey(node.buckets[0]);
       var pivots := [pivot];
 
-      assume PivotsLib.WFPivots(pivots);
-
       var buckets' := [
           SplitBucketLeft(node.buckets[0], pivot),
           SplitBucketRight(node.buckets[0], pivot)
@@ -88,7 +86,7 @@ module LeafModel {
     var pivot := KVList.getMiddleKey(node.buckets[0]);
     var pivots := [pivot];
 
-    assume PivotsLib.WFPivots(pivots);
+    KVList.WFPivotsOfGetMiddleKey(node.buckets[0]);
 
     var buckets' := [
         SplitBucketLeft(node.buckets[0], pivot),
@@ -112,7 +110,15 @@ module LeafModel {
 
     //assert IVars(s1).cache == IVars(s).cache[ref := INode(newnode)];
 
-    assume PivotBetreeSpec.ApplyRepivot(INode(node), [pivot]) == INode(newnode);
+    assert JoinBucketList(node.buckets)
+        == MapUnion(JoinBucketList([]), node.buckets[0])
+        == MapUnion(map[], node.buckets[0])
+        == node.buckets[0];
+    assert SplitBucketOnPivots(JoinBucketList(node.buckets), pivots)
+        == SplitBucketOnPivots(node.buckets[0], pivots)
+        == buckets';
+
+    assert PivotBetreeSpec.ApplyRepivot(INode(node), [pivot]) == INode(newnode);
 
     assert BT.ValidRepivot(BT.Repivot(ref, INode(node), pivots));
     var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));

@@ -197,9 +197,10 @@ module BlockAllocatorImpl {
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     ensures I() == BlockAllocatorModel.MoveFrozenToPersistent(old(I()))
     {
+      var fo := new BitmapImpl.Bitmap.Union(frozen, outstanding);
+      full := new BitmapImpl.Bitmap.Union(ephemeral, fo);
       persistent := frozen;
       frozen := null;
-      full := new BitmapImpl.Bitmap.Union(ephemeral, persistent);
 
       Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
     }

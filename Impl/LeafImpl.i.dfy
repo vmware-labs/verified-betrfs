@@ -8,7 +8,6 @@ module LeafImpl {
   import opened StateImpl
   import opened NodeImpl
   import opened BucketImpl
-  import IMM = ImplMarshallingModel
 
   import opened Options
   import opened Maps

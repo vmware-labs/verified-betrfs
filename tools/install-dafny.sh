@@ -8,13 +8,17 @@ cd .dafny
 
 git clone https://github.com/boogie-org/boogie
 cd boogie
-wget https://nuget.org/nuget.exe
+wget https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
 mono ./nuget.exe restore Source/Boogie.sln
 msbuild /p:Configuration=Release Source/Boogie.sln
 cd ..
 
-git clone --branch cpp https://github.com/secure-foundations/dafny.git
+git clone https://github.com/secure-foundations/dafny.git
 cd dafny
+
+# cpp branch
+git checkout 11b2cba54aae8bb115407a68903dc37797f776ce
+
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
 
@@ -33,3 +37,7 @@ echo "#! /bin/bash" > bin/dafny
 echo "mono `pwd`/dafny/Binaries/Dafny.exe \"\$@\"" >> bin/dafny
 chmod +x bin/dafny
 
+# This is needed in case you want to call the Boogie binary directly.
+# See the documentation: https://github.com/dafny-lang/dafny/blob/master/INSTALL.md
+rm -f boogie/Binaries/z3.exe
+cp dafny/Binaries/z3/bin/z3 boogie/Binaries/z3.exe
