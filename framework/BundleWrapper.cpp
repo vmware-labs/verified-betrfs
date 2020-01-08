@@ -14,9 +14,9 @@ std::pair<Constants, Variables> handle_InitState()
   return make_pair(k, hs);
 }
 
-DafnyMap<uint64, shared_ptr<vector<uint8>>> handle_InitDiskBytes()
+DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 {
-  return MkfsImpl_Compile::__default::InitDiskBytes();
+  return MkfsImpl_Compile::__default::Mkfs();
 }
 
 uint64 handle_PushSync(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)

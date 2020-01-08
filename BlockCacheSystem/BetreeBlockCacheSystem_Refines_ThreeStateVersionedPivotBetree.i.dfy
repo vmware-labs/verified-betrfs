@@ -6,7 +6,7 @@ include "../lib/Base/sequences.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy"
-include "../BlockCacheSystem/ThreeStateVersionedPivotBetree.i.dfy"
+include "../PivotBetree/ThreeStateVersionedPivotBetree.i.dfy"
 include "../BlockCacheSystem/BetreeBlockCacheSystem.i.dfy"
 //
 // Take the whole crash-safe BlockCacheSystem, and constrain it to

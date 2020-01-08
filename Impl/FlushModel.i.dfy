@@ -1,6 +1,6 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
-include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
+include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "KVListPartialFlush.i.dfy"
 
 module FlushModel { 
@@ -111,10 +111,9 @@ module FlushModel {
       WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
 
       // TODO these are actually kind of annoying right now
-      assume childref in s.cache;
-      assume childref in s.ephemeralIndirectionTable.graph;
-      assume child == s.cache[childref];
-      assume childref != BT.G.Root();
+      assert childref in s.cache;
+      assert childref in s.ephemeralIndirectionTable.graph;
+      assert child == s.cache[childref];
 
       assert parentref in s.cache;
       assert parentref in s.ephemeralIndirectionTable.graph;
@@ -153,9 +152,6 @@ module FlushModel {
 
         WeightBucketListFlush(parent.buckets[slot], child.buckets, child.pivotTable);
         WeightBucketListClearEntry(parent.buckets, slot);
-
-        assume parent.buckets[slot := newparentBucket]
-            == parent.buckets[slot := newparentBucket];
 
         allocCorrect(k, s, newchild);
         writeCorrect(k, s2, parentref, newparent);

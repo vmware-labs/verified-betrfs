@@ -1,4 +1,4 @@
-include "ByteBetreeBlockCacheSystem.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"

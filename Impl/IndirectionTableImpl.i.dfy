@@ -44,14 +44,6 @@ module IndirectionTableImpl {
     var garbageQueue: LruImpl.LruImplQueue?;
     ghost var Repr: set<object>;
 
-    lemma InvForMkfs()
-        requires Inv()
-        ensures this.t in Repr
-        ensures this.t.Repr <= Repr
-        ensures this.t.Inv()
-    {
-    }
-
     protected predicate Inv()
     reads this, Repr
     ensures Inv() ==> this in Repr
@@ -95,7 +87,6 @@ module IndirectionTableImpl {
     constructor Empty()
     ensures Inv()
     ensures fresh(Repr)
-    ensures t.Count == 1;   // TODO(jonh): Kind of a gross contract. I needed it to bodge Mkfs together.
     {
       this.t := new MutableMap.ResizingHashMap(128);
       new;
@@ -103,6 +94,19 @@ module IndirectionTableImpl {
       this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
       this.garbageQueue := null;
       Repr := {this} + this.t.Repr;
+    }
+
+    constructor RootOnly(loc: BC.Location)
+    ensures Inv()
+    ensures fresh(Repr)
+    ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
+    {
+      this.t := new MutableMap.ResizingHashMap(128);
+      new;
+      this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
+      this.garbageQueue := null;
+      Repr := {this} + this.t.Repr;
+      IndirectionTableModel.reveal_ConstructorRootOnly();
     }
 
     constructor(t: HashMap)
@@ -248,6 +252,7 @@ module IndirectionTableImpl {
     requires ref in t.I().contents
     requires t.I().contents[ref].predCount > 0
     requires t.Repr !! q.Repr
+    requires |LruModel.I(q.Queue)| <= 0x1_0000_0000;
     modifies t.Repr
     modifies q.Repr
     ensures forall o | o in t.Repr :: o in old(t.Repr) || fresh(o)
@@ -262,7 +267,6 @@ module IndirectionTableImpl {
       var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
       t.Insert(ref, newEntry);
       if oldEntry.predCount == 1 {
-        assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
         q.Use(ref);
       }
     }
@@ -341,7 +345,6 @@ module IndirectionTableImpl {
       var oldEntry := this.t.Get(ref);
       var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
       if oldEntry.None? {
-        assume |LruModel.I(this.garbageQueue.Queue)| <= 0x1_0000_0000;
         this.garbageQueue.Use(ref);
       }
       this.t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
@@ -372,11 +375,9 @@ module IndirectionTableImpl {
     ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
     {
-      assume |a| < 0x1_0000_0000_0000_0000;
       if |a| as uint64 == 0 {
         var newHashMap := new MutableMap.ResizingHashMap<IndirectionTableModel.Entry>(1024); // TODO(alattuada) magic numbers
         s := Some(newHashMap);
-        assume s.value.Count as nat == |a|;
       } else {
         var res := ValToHashMap(a[..|a| as uint64 - 1]);
         match res {
@@ -394,7 +395,9 @@ module IndirectionTableImpl {
                 var graphRef := mutMap.Get(ref);
                 var loc := LBAType.Location(lba, len);
 
-                assume |succs| < 0x1_0000_0000_0000_0000; // should follow from ValidVal, just need to add that as precondition
+                assert ValidVal(tuple);
+                assert ValidVal(tuple.t[3]);
+                assert |succs| < 0x1_0000_0000_0000_0000;
 
                 if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
                     || |succs| as uint64 > MaxNumChildrenUint64() {
@@ -402,8 +405,6 @@ module IndirectionTableImpl {
                 } else {
                   mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
                   s := Some(mutMap);
-                  assume s.Some? ==> s.value.Count as nat < 0x10000000000000000 / 8; // TODO(alattuada) removing this results in trigger loop
-                  assume s.value.Count as nat == |a|;
                 }
               }
             }
@@ -493,6 +494,7 @@ module IndirectionTableImpl {
     static method MakeGarbageQueue(t: HashMap)
     returns (q : LruImpl.LruImplQueue)
     requires t.Inv()
+    requires |t.I().contents| <= 0x1_0000_0000
     ensures q.Inv()
     ensures fresh(q.Repr)
     ensures q.Queue == IndirectionTableModel.makeGarbageQueue(t.I())
@@ -508,11 +510,17 @@ module IndirectionTableImpl {
       invariant MutableMapModel.WFIter(t.I(), it)
       invariant IndirectionTableModel.makeGarbageQueue(t.I())
              == IndirectionTableModel.makeGarbageQueueIterate(t.I(), q.Queue, it)
+      invariant LruModel.I(q.Queue) <= t.I().contents.Keys
+      invariant |t.I().contents| <= 0x1_0000_0000
       decreases it.decreaser
       {
         if it.next.value.predCount == 0 {
           LruModel.LruUse(q.Queue, it.next.key);
-          assume |LruModel.I(q.Queue)| <= 0x1_0000_0000;
+
+          SetInclusionImpliesSmallerCardinality(
+              LruModel.I(q.Queue), t.I().contents.Keys);
+          assert |t.I().contents.Keys| == |t.I().contents|;
+
           q.Use(it.next.key);
         }
         it := t.IterInc(it);
@@ -758,6 +766,28 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.lemma_count_eq_graph_size(I().t);
       return this.t.Count;
+    }
+
+    method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+    requires Inv()
+    ensures ref == IndirectionTableModel.FindRefWithNoLoc(old(I()))
+    {
+      IndirectionTableModel.reveal_FindRefWithNoLoc();
+
+      var it := this.t.IterStart();
+      while it.next.Next?
+      invariant MutableMapModel.WFIter(this.t.I(), it)
+      invariant IndirectionTableModel.FindRefWithNoLoc(old(I()))
+          == IndirectionTableModel.FindRefWithNoLocIterate(old(I()), it)
+      decreases it.decreaser
+      {
+        if it.next.value.loc.None? {
+          return Some(it.next.key);
+        } else {
+          it := this.t.IterInc(it);
+        }
+      }
+      return None;
     }
   }
 }

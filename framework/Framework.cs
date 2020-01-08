@@ -442,7 +442,7 @@ public class FSUtil {
   }
 
   public static void Mkfs() {
-    Dafny.Map<ulong, byte[]> m = MkfsImpl_Compile.__default.InitDiskBytes();
+    Dafny.Map<ulong, Dafny.Sequence<byte>> m = __default.Mkfs();
 
     if (m.Count == 0) {
       throw new Exception("InitDiskBytes failed.");
@@ -456,7 +456,9 @@ public class FSUtil {
     DiskIOHandler io = new DiskIOHandler();
 
     foreach (ulong lba in m.Keys.Elements) {
-      byte[] bytes = m.Select(lba);
+      IList<byte> ilist = m.Select(lba).Elements;
+      byte[] bytes = new byte[ilist.Count];
+      ilist.CopyTo(bytes, 0);
       io.writeSync(lba, bytes);
     }
   }

@@ -402,7 +402,7 @@ module BookkeepingModel {
     var s' := writeBookkeeping(k, s, ref, children);
 
     lemmaIndirectionTableLocIndexValid(k, s, ref);
-    assume s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
+    assert s.ephemeralIndirectionTable.count as nat < 0x10000000000000000 / 8;
     var (eph, oldEntry) := MutableMapModel.InsertAndGetOld(s.ephemeralIndirectionTable, ref,
         (None, if children.Some? then children.value else []));
 
@@ -558,6 +558,15 @@ module BookkeepingModel {
   {
     reveal_getFreeRef2();
     getFreeRef2IterateDoesntEqual(s, avoid, 1, ref);
+  }
+
+  lemma allocRefDoesntEqual(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
+  requires allocBookkeeping.requires(k, s, children);
+  requires ref in s.cache
+  ensures allocBookkeeping(k, s, children).1 != Some(ref)
+  {
+    reveal_allocBookkeeping();
+    getFreeRefDoesntEqual(s, ref);
   }
 
   lemma lemmaChildrenConditionsOfNode(

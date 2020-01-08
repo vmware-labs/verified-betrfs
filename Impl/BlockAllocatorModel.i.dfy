@@ -30,7 +30,7 @@ module BlockAllocatorModel {
           || BitmapModel.IsSet(bam.ephemeral, i)
           || (bam.frozen.Some? && BitmapModel.IsSet(bam.frozen.value, i))
           || BitmapModel.IsSet(bam.persistent, i)
-          || BitmapModel.IsSet(bam.full, i)
+          || BitmapModel.IsSet(bam.outstanding, i)
         ))
   }
 
@@ -97,7 +97,11 @@ module BlockAllocatorModel {
   function MarkFreeOutstanding(bam: BlockAllocatorModel, i: int) : (bam': BlockAllocatorModel)
   requires Inv(bam)
   requires 0 <= i < NumBlocks()
+  ensures Inv(bam')
   {
+    BitmapModel.reveal_BitUnset();
+    BitmapModel.reveal_IsSet();
+
     bam.(outstanding := BitmapModel.BitUnset(bam.outstanding, i))
        .(full :=
         if
@@ -135,7 +139,8 @@ module BlockAllocatorModel {
       None,
       bam.frozen.value,
       bam.outstanding,
-      BitmapModel.BitUnion(bam.ephemeral, bam.frozen.value)
+      BitmapModel.BitUnion(bam.ephemeral,
+        BitmapModel.BitUnion(bam.frozen.value, bam.outstanding))
     )
   }
 
@@ -160,4 +165,11 @@ module BlockAllocatorModel {
     && (res.Some? && bam.frozen.Some? ==> !BitmapModel.IsSet(bam.frozen.value, res.value))
     && (res.Some? ==> !BitmapModel.IsSet(bam.persistent, res.value))
     && (res.Some? ==> !BitmapModel.IsSet(bam.outstanding, res.value))
+  {
+    BitmapModel.LemmaBitAllocResult(bam.full);
+    var res := Alloc(bam);
+    if res.Some? {
+      assert !BitmapModel.IsSet(bam.full, res.value);
+    }
+  }
 }

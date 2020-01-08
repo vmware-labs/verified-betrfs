@@ -19,16 +19,14 @@ module Bounds {
 
   function method NumBlocksUint64() : uint64 { 0x1_0000 }
 
+  function method IndirectionTableMaxSizeUint64() : uint64 { 0x1_0000_0000 }
 
   function BlockSize() : int { BlockSizeUint64() as int }
-
   function MaxNumChildren() : int { MaxNumChildrenUint64() as int }
   function MaxTotalBucketWeight() : int { MaxTotalBucketWeightUint64() as int }
-
   function MaxCacheSize() : int { MaxCacheSizeUint64() as int }
-
-  // Minimum weight a bucket needs to have before we consider flushing it.
   function FlushTriggerWeight() : int { FlushTriggerWeightUint64() as int }
-
   function NumBlocks() : int { NumBlocksUint64() as int }
+  function IndirectionTableMaxSize() : int { IndirectionTableMaxSizeUint64() as int }
+
 }

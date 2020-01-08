@@ -1,6 +1,6 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../MapSpec/ThreeStateVersionedMap.s.dfy"
-include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
+include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "MainDiskIOHandler.s.dfy"
 
@@ -53,7 +53,7 @@ abstract module Main {
 
   method InitState() returns (k: Constants, hs: HeapState)
     ensures Inv(k, hs)
-
+    ensures ADM.M.Init(Ik(k), I(k, hs))
 
   // Implementation of the state transitions
 
@@ -127,8 +127,37 @@ abstract module Main {
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
     io.diskOp())
 
-  // TODO add proof obligation that the InitState together with the initial disk state
-  // from mkfs together refine to the initial state of the BlockCacheSystem.
+  // Mkfs
+  // You have to prove that, if the blocks returned by Mkfs are
+  // written to disk, then the initial conditions of the
+  // disk system are satisfied.
+  
+  predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
+
+  method Mkfs()
+  returns (diskContents: map<uint64, seq<byte>>)
+  ensures InitDiskContents(diskContents)
+  ensures ADM.BlocksDontIntersect(diskContents)
+
+  lemma InitialStateSatisfiesSystemInit(
+      k: ADM.Constants, 
+      s: ADM.Variables,
+      diskContents: map<uint64, seq<byte>>)
+  requires ADM.M.Init(k.machine, s.machine)
+  requires ADM.D.Init(k.disk, s.disk)
+  requires InitDiskContents(diskContents)
+  requires ADM.BlocksWrittenInByteSeq(diskContents, s.disk.contents)
+  ensures ADM.Init(k, s)
+
+  // These are proof obligations for the refining module to fill in.
+  // The refining module must
+  //
+  //  * Supply an abstraction function from the abstract disk
+  //    state machine to the high-level MapSpec (by implementing
+  //    the SystemI function)
+  //
+  //  * Prove the lemmas that show that this abstraction function
+  //    yields a valid state machine refinement.
 
   function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants
   function SystemI(k: ADM.Constants, s: ADM.Variables) : ThreeStateVersionedMap.Variables
@@ -139,7 +168,6 @@ abstract module Main {
   requires ADM.Init(k, s)
   ensures ADM.Inv(k, s)
   ensures ThreeStateVersionedMap.Init(SystemIk(k), SystemI(k, s))
-  // TODO (jonh): is this an obligation for the refining module, or an unintentional axiom?
 
   lemma SystemRefinesCrashSafeMapNext(
     k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)

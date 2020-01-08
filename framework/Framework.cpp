@@ -136,7 +136,7 @@ namespace MainDiskIOHandler_Compile {
     auto it = this->readReqs.begin();
     if (it != this->readReqs.end()) {
       this->readResponseId = it->first;
-      this->readResponseBytes = it->second.bytes;
+      this->readResponseBytes = DafnySequence<uint8>(it->second.bytes);
       this->readReqs.erase(it);
       return true;
     } else {
@@ -158,7 +158,11 @@ namespace MainDiskIOHandler_Compile {
 
 using MainDiskIOHandler_Compile::DiskIOHandler;
 
-#define LOG log
+#ifdef VERBOSE
+  #define LOG log
+#else
+  #define LOG(x)
+#endif
 
 Application::Application() {
   initialize();
@@ -298,9 +302,9 @@ void Application::log(std::string const& s) {
 }
 
 void Mkfs() {
-  DafnyMap<uint64, shared_ptr<vector<byte>>> daf_map = handle_InitDiskBytes();
+  DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
 
-  unordered_map<uint64, shared_ptr<vector<byte>>> m = daf_map.map;
+  unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
 
   if (m.size() == 0) {
     fail("InitDiskBytes failed.");
@@ -317,6 +321,15 @@ void Mkfs() {
   mkdir(".veribetrfs-storage", 0700);
 
   for (auto p : m) {
-    MainDiskIOHandler_Compile::writeSync(p.first, &(*p.second)[0], p.second->size());
+    MainDiskIOHandler_Compile::writeSync(
+        p.first, p.second.ptr(), p.second.size());
+  }
+}
+
+void ClearIfExists() {
+  struct stat info;
+  if (stat(".veribetrfs-storage", &info) != -1) {
+		// TODO use std::filesystem::remove_all
+		system("rm -rf .veribetrfs-storage"); 
   }
 }
