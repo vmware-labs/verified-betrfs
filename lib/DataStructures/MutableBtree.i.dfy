@@ -6,7 +6,7 @@ include "../Base/Arrays.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/mathematics.i.dfy"
-include "BtreeSpec.i.dfy"
+include "BtreeModel.i.dfy"
 
 abstract module MutableBtree {
   import opened NativeTypes
@@ -16,13 +16,13 @@ abstract module MutableBtree {
   import opened Maps
   import Math = Mathematics
   import Arrays
-  import Spec : BtreeSpec
+  import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Spec, Options reveals Node, NodeContents, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options reveals Node, NodeContents, Key, Value
   export All reveals *
     
-  type Key = Spec.Keys.Element
-  type Value = Spec.Value
+  type Key = Model.Keys.Element
+  type Value = Model.Value
 
   function method MaxKeysPerLeaf() : uint64
     ensures 2 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 4
@@ -193,7 +193,7 @@ abstract module MutableBtree {
     reveal_SeqRepr();
   }
   
-  function IChildren(nodes: seq<Node>, parentheight: int) : (result: seq<Spec.Node>)
+  function IChildren(nodes: seq<Node>, parentheight: int) : (result: seq<Model.Node>)
     requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
     requires forall i :: 0 <= i < |nodes| ==> nodes[i].height < parentheight
     ensures |result| == |nodes|
@@ -206,7 +206,7 @@ abstract module MutableBtree {
     else IChildren(DropLast(nodes), parentheight) + [I(Last(nodes))]
   }
   
-  function {:opaque} I(node: Node) : (result: Spec.Node)
+  function {:opaque} I(node: Node) : (result: Model.Node)
     requires WFShape(node)
     ensures node.contents.Leaf? <==> I(node).Leaf?
     ensures node.contents.Leaf? ==> I(node).keys == node.contents.keys[..node.contents.nkeys]
@@ -217,11 +217,11 @@ abstract module MutableBtree {
     decreases node.height
   {
     match node.contents {
-      case Leaf(nkeys, keys, values) => Spec.Leaf(keys[..nkeys], values[..nkeys])
+      case Leaf(nkeys, keys, values) => Model.Leaf(keys[..nkeys], values[..nkeys])
       case Index(nchildren, pivots, children) =>
         assert WFShapeChildren(children[..nchildren], node.repr, node.height);
         var bschildren := IChildren(children[..nchildren], node.height);
-        Spec.Index(pivots[..nchildren-1], bschildren)
+        Model.Index(pivots[..nchildren-1], bschildren)
     }
   }
 
@@ -237,7 +237,7 @@ abstract module MutableBtree {
     reveal_I();
   }
 
-  function ISiblings(nodes: seq<Node>) : (result: seq<Spec.Node>)
+  function ISiblings(nodes: seq<Node>) : (result: seq<Model.Node>)
     requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
     ensures |result| == |nodes|
     ensures forall i :: 0 <= i < |result| ==> result[i] == I(nodes[i])
@@ -252,14 +252,14 @@ abstract module MutableBtree {
     reads node, node.repr
   {
     && WFShape(node)
-    && Spec.WF(I(node))
+    && Model.WF(I(node))
   }
 
   function Interpretation(node: Node) : map<Key, Value>
     requires WF(node)
     reads node.repr
   {
-    Spec.Interpretation(I(node))
+    Model.Interpretation(I(node))
   }
     
 
@@ -271,8 +271,8 @@ abstract module MutableBtree {
     decreases node.repr, 0
   {
     reveal_I();
-    Spec.reveal_Interpretation();
-    var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
+    Model.reveal_Interpretation();
+    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == needle {
       result := Some(node.contents.values[posplus1-1]);
     } else {
@@ -283,14 +283,14 @@ abstract module MutableBtree {
   method QueryIndex(node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
     requires node.contents.Index?
-    ensures needle in Spec.Interpretation(I(node)) ==> result == Some(Spec.Interpretation(I(node))[needle])
-    ensures needle !in Spec.Interpretation(I(node)) ==> result == None
+    ensures needle in Model.Interpretation(I(node)) ==> result == Some(Model.Interpretation(I(node))[needle])
+    ensures needle !in Model.Interpretation(I(node)) ==> result == None
     decreases node.repr, 0
   {
     reveal_I();
-    Spec.reveal_Interpretation();
-    Spec.reveal_AllKeys();
-    var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
+    Model.reveal_Interpretation();
+    Model.reveal_AllKeys();
+    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
     result := Query(node.contents.children[posplus1], needle);
   }
@@ -319,7 +319,7 @@ abstract module MutableBtree {
     root.contents := Leaf(0, rootkeys, rootvalues);
     root.repr := {root, rootkeys, rootvalues};
     root.height := 0;
-    Spec.reveal_Interpretation();
+    Model.reveal_Interpretation();
   }
 
   method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
@@ -376,23 +376,23 @@ abstract module MutableBtree {
     requires WF(node)
     requires node.contents.Leaf?
     requires 0 < nleft < node.contents.nkeys
-    requires Spec.Keys.lt(node.contents.keys[nleft-1], pivot)
-    requires Spec.Keys.lte(pivot, node.contents.keys[nleft])
+    requires Model.Keys.lt(node.contents.keys[nleft-1], pivot)
+    requires Model.Keys.lte(pivot, node.contents.keys[nleft])
     ensures WFShape(node)
     ensures WFShape(right)
     ensures node.repr == old(node.repr)
     ensures fresh(right.repr)
-    ensures Spec.SplitLeaf(old(I(node)), I(node), I(right), pivot)
+    ensures Model.SplitLeaf(old(I(node)), I(node), I(right), pivot)
     ensures node.contents.nkeys == nleft
     modifies node
   {
     reveal_I();
-    Spec.Keys.StrictlySortedSubsequence(node.contents.keys[..node.contents.nkeys], nleft as int, node.contents.nkeys as int);
+    Model.Keys.StrictlySortedSubsequence(node.contents.keys[..node.contents.nkeys], nleft as int, node.contents.nkeys as int);
     assert node.contents.keys[nleft..node.contents.nkeys] == node.contents.keys[..node.contents.nkeys][nleft..node.contents.nkeys];
     right := LeafFromSeqs(node.contents.keys[nleft..node.contents.nkeys], node.contents.values[nleft..node.contents.nkeys]);
 
     node.contents := Leaf(nleft, node.contents.keys, node.contents.values);
-    Spec.Keys.IsStrictlySortedImpliesLt(old(node.contents.keys[..node.contents.nkeys]), nleft as int - 1, nleft as int);
+    Model.Keys.IsStrictlySortedImpliesLt(old(node.contents.keys[..node.contents.nkeys]), nleft as int - 1, nleft as int);
   }
 
   predicate ObjectIsInSubtree(node: Node, o: object, i: int)
@@ -554,7 +554,7 @@ abstract module MutableBtree {
     ensures WFShape(node)
     ensures node.repr == old({node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, newnchildren as int))
     ensures node.height == old(node.height)
-    ensures I(node) == Spec.SubIndex(old(I(node)), 0, newnchildren as int)
+    ensures I(node) == Model.SubIndex(old(I(node)), 0, newnchildren as int)
     modifies node
   {
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
@@ -575,7 +575,7 @@ abstract module MutableBtree {
     assert WFShape(node);
     ghost var newinode := I(node);
     reveal_I();
-    assert newinode == Spec.SubIndex(oldinode, 0, newnchildren as int);
+    assert newinode == Model.SubIndex(oldinode, 0, newnchildren as int);
   }
 
   method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
@@ -587,7 +587,7 @@ abstract module MutableBtree {
     ensures subnode.contents.Index?
     ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode, subnode.contents.pivots, subnode.contents.children}
     ensures subnode.height == node.height
-    ensures I(subnode) == Spec.SubIndex(I(node), from as int, to as int)
+    ensures I(subnode) == Model.SubIndex(I(node), from as int, to as int)
     ensures fresh(subnode)
     ensures fresh(subnode.contents.pivots)
     ensures fresh(subnode.contents.children)
@@ -621,7 +621,7 @@ abstract module MutableBtree {
     ensures node.repr !! right.repr
     ensures fresh(right.repr - old(node.repr))
     ensures node.height == old(node.height) == right.height
-    ensures Spec.SplitIndex(old(I(node)), I(node), I(right), pivot)
+    ensures Model.SplitIndex(old(I(node)), I(node), I(right), pivot)
     ensures node.contents.nchildren == nleft
     ensures pivot == old(node.contents.pivots[nleft-1])
     modifies node
@@ -629,15 +629,17 @@ abstract module MutableBtree {
     SubReprsDisjoint(node, 0, nleft as int, nleft as int, node.contents.nchildren as int);
     SubReprUpperBound(node, 0, nleft as int);
     SubReprUpperBound(node, nleft as int, node.contents.nchildren as int);
-    assert Spec.AllKeysBelowBound(I(node), nleft as int - 1);
-    assert Spec.AllKeysAboveBound(I(node), nleft as int);
+    assert Model.AllKeysBelowBound(I(node), nleft as int - 1);
+    assert Model.AllKeysAboveBound(I(node), nleft as int);
     right := SubIndex(node, nleft, node.contents.nchildren);
     pivot := node.contents.pivots[nleft-1];
     IOfChild(node, 0);
     IndexPrefix(node, nleft);
     ghost var inode := old(I(node));
-    assert Spec.AllKeysBelowBound(inode, 0);
-    Spec.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
+    ghost var iright := I(right);
+    assert Model.AllKeysBelowBound(inode, 0);
+    assert iright.children[0] == inode.children[nleft];
+    Model.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
     reveal_I();
   }
 
@@ -653,20 +655,20 @@ abstract module MutableBtree {
     ensures node.repr !! right.repr
     ensures !Full(node)
     ensures !Full(right)
-    ensures Spec.SplitNode(old(I(node)), I(node), I(right), pivot)
-    ensures pivot in Spec.AllKeys(old(I(node)))
+    ensures Model.SplitNode(old(I(node)), I(node), I(right), pivot)
+    ensures pivot in Model.AllKeys(old(I(node)))
     modifies node
   {
     if node.contents.Leaf? {
       var boundary := node.contents.nkeys/2;
       pivot := node.contents.keys[boundary];
-      Spec.Keys.IsStrictlySortedImpliesLt(node.contents.keys[..node.contents.nkeys], boundary as int - 1, boundary as int);
+      Model.Keys.IsStrictlySortedImpliesLt(node.contents.keys[..node.contents.nkeys], boundary as int - 1, boundary as int);
       right := SplitLeaf(node, node.contents.nkeys / 2, pivot);
     } else {
       var boundary := node.contents.nchildren/2;
       right, pivot := SplitIndex(node, boundary);
     }
-    Spec.reveal_AllKeys();
+    Model.reveal_AllKeys();
   }
 
   // twostate lemma SplitChildOfIndexPreservesDisjointSubtrees(node: Node, childidx: int)
@@ -813,12 +815,12 @@ abstract module MutableBtree {
     ensures node.contents.Index?
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures Spec.SplitChildOfIndex(old(I(node)), I(node), childidx as int)
+    ensures Model.SplitChildOfIndex(old(I(node)), I(node), childidx as int)
     ensures node.contents.children[childidx] != null
     ensures node.contents.children[childidx+1] != null
     ensures !Full(node.contents.children[childidx])
     ensures !Full(node.contents.children[childidx+1])
-    ensures node.contents.pivots[childidx] in Spec.AllKeys(old(I(node)).children[childidx])
+    ensures node.contents.pivots[childidx] in Model.AllKeys(old(I(node)).children[childidx])
     modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
   {
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
@@ -864,13 +866,13 @@ abstract module MutableBtree {
     requires !Full(node)
     ensures WFShape(node)
     ensures node.repr == old(node.repr)
-    ensures I(node) == Spec.InsertLeaf(old(I(node)), key, value)
-    ensures Spec.WF(I(node))
-    ensures Spec.Interpretation(I(node)) == Spec.Interpretation(old(I(node)))[key := value]
-    ensures Spec.AllKeys(I(node)) == Spec.AllKeys(old(I(node))) + {key}
+    ensures I(node) == Model.InsertLeaf(old(I(node)), key, value)
+    ensures Model.WF(I(node))
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
+    ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node))) + {key}
     modifies node, node.contents.keys, node.contents.values
   {
-    var posplus1: uint64 := Spec.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
+    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == key {
       node.contents.values[posplus1-1] := value;
     } else {
@@ -878,7 +880,7 @@ abstract module MutableBtree {
       Arrays.Insert(node.contents.values, node.contents.nkeys, value, posplus1);
       node.contents := node.contents.(nkeys := node.contents.nkeys + 1);
     }
-    Spec.InsertLeafIsCorrect(old(I(node)), key, value);
+    Model.InsertLeafIsCorrect(old(I(node)), key, value);
   }
 
   twostate lemma InsertIndexChildNotFullPreservesWFShape(node: Node, childidx: int)
@@ -947,15 +949,15 @@ abstract module MutableBtree {
   method InsertIndexChildNotFull(node: Node, childidx: uint64, key: Key, value: Value)
     requires WF(node)
     requires node.contents.Index?
-    requires childidx as int == Spec.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
+    requires childidx as int == Model.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
     requires node.contents.children[childidx] != null
     requires !Full(node.contents.children[childidx])
     ensures WFShape(node)
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures Spec.WF(I(node))
-    ensures Spec.Interpretation(I(node)) == Spec.Interpretation(old(I(node)))[key := value]
-    ensures Spec.AllKeys(I(node)) <= Spec.AllKeys(old(I(node))) + {key}
+    ensures Model.WF(I(node))
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
+    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
     modifies node, node.contents.children[childidx], node.contents.children[childidx].repr
     decreases node.height, 0
   {
@@ -991,7 +993,7 @@ abstract module MutableBtree {
     }
 
     IOfChild(node, childidx as int);
-    Spec.RecursiveInsertIsCorrect(oldinode, key, value, childidx as int, inode, inode.children[childidx]);
+    Model.RecursiveInsertIsCorrect(oldinode, key, value, childidx as int, inode, inode.children[childidx]);
   }
 
   method InsertIndexSelectAndPrepareChild(node: Node, key: Key) returns (childidx: uint64)
@@ -1001,37 +1003,37 @@ abstract module MutableBtree {
     ensures WFShape(node)
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures Spec.WF(I(node))
+    ensures Model.WF(I(node))
     ensures node.contents.Index?
-    ensures childidx as int == Spec.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
+    ensures childidx as int == Model.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
     ensures node.contents.children[childidx] != null
     ensures !Full(node.contents.children[childidx])
-    ensures Spec.Interpretation(I(node)) == Spec.Interpretation(old(I(node)))
-    ensures Spec.AllKeys(I(node)) == Spec.AllKeys(old(I(node)))
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))
+    ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node)))
     modifies node, node.repr
   {
-    Spec.reveal_AllKeys();
+    Model.reveal_AllKeys();
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
 
-    childidx := Spec.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
+    childidx := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
     if Full(node.contents.children[childidx]) {
       ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
       SplitChildOfIndex(node, childidx);
       ghost var newpivots := node.contents.pivots[..node.contents.nchildren-1];
-      Spec.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
-      Spec.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
-      Spec.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
+      Model.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
+      Model.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
+      Model.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
 
-      var t: int32 := Spec.Keys.cmp(node.contents.pivots[childidx], key);
+      var t: int32 := Model.Keys.cmp(node.contents.pivots[childidx], key);
       if  t <= 0 {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |newpivots|
-          ensures Spec.Keys.lt(key, newpivots[i])
+          ensures Model.Keys.lt(key, newpivots[i])
         {
           assert newpivots[i] == oldpivots[i-1];
         }
       }
-      Spec.Keys.LargestLteIsUnique(node.contents.pivots[..node.contents.nchildren-1], key, childidx as int - 1);
+      Model.Keys.LargestLteIsUnique(node.contents.pivots[..node.contents.nchildren-1], key, childidx as int - 1);
     }
   }
   
@@ -1042,9 +1044,9 @@ abstract module MutableBtree {
     ensures WFShape(node)
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures Spec.WF(I(node))
-    ensures Spec.Interpretation(I(node)) == Spec.Interpretation(old(I(node)))[key := value]
-    ensures Spec.AllKeys(I(node)) <= Spec.AllKeys(old(I(node))) + {key}
+    ensures Model.WF(I(node))
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
+    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
     modifies node, node.repr
     decreases node.height, 1
   {
@@ -1058,9 +1060,9 @@ abstract module MutableBtree {
     ensures WFShape(node)
     ensures fresh(node.repr - old(node.repr))
     ensures node.height == old(node.height)
-    ensures Spec.WF(I(node))
-    ensures Spec.Interpretation(I(node)) == Spec.Interpretation(old(I(node)))[key := value]
-    ensures Spec.AllKeys(I(node)) <= Spec.AllKeys(old(I(node))) + {key}
+    ensures Model.WF(I(node))
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
+    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
     modifies node, node.repr
     decreases node.height, 2
   {
@@ -1077,7 +1079,7 @@ abstract module MutableBtree {
     ensures WFShape(newroot)
     ensures fresh(newroot.repr - root.repr)
     ensures newroot.height == root.height + 1
-    ensures I(newroot) == Spec.Grow(I(root))
+    ensures I(newroot) == Model.Grow(I(root))
     ensures !Full(newroot)
   {
     newroot := new Node;
@@ -1098,13 +1100,13 @@ abstract module MutableBtree {
   lemma FullImpliesAllKeysNonEmpty(node: Node)
     requires WF(node)
     requires Full(node)
-    ensures Spec.AllKeys(I(node)) != {}
+    ensures Model.AllKeys(I(node)) != {}
   {
     var inode := I(node);
     if inode.Leaf? {
-      assert inode.keys[0] in Spec.AllKeys(inode) by { Spec.reveal_AllKeys(); }
+      assert inode.keys[0] in Model.AllKeys(inode) by { Model.reveal_AllKeys(); }
     } else {
-      assert inode.pivots[0] in Spec.AllKeys(inode) by { Spec.reveal_AllKeys(); }
+      assert inode.pivots[0] in Model.AllKeys(inode) by { Model.reveal_AllKeys(); }
     }
   }
   
@@ -1117,25 +1119,25 @@ abstract module MutableBtree {
   {
     if Full(root) {
       FullImpliesAllKeysNonEmpty(root);
-      Spec.GrowPreservesWF(I(root));
+      Model.GrowPreservesWF(I(root));
       newroot := Grow(root);
-      Spec.GrowPreservesInterpretation(I(root));
+      Model.GrowPreservesInterpretation(I(root));
     } else {
       newroot := root;
     }
-    assert Spec.Interpretation(I(newroot)) == Spec.Interpretation(old(I(root)));
+    assert Model.Interpretation(I(newroot)) == Model.Interpretation(old(I(root)));
     InsertNode(newroot, key, value);
   }
 }
 
-module TestBtreeSpec refines BtreeSpec {
+module TestBtreeModel refines BtreeModel {
   import opened NativeTypes
   import Keys = Uint64_Order
   type Value = uint64
 }
 
 module TestMutableBtree refines MutableBtree {
-  import Spec = TestBtreeSpec
+  import Model = TestBtreeModel
     
   function method MaxKeysPerLeaf() : uint64 { 64 }
   function method MaxChildren() : uint64 { 64 }

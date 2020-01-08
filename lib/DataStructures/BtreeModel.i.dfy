@@ -3,7 +3,7 @@ include "../Base/Maps.s.dfy"
 include "../Base/total_order.i.dfy"
 include "../Base/mathematics.i.dfy"
 
-abstract module BtreeSpec {
+abstract module BtreeModel {
   import opened Seq = Sequences
   import opened Maps
   import Keys : Total_Order
@@ -637,6 +637,9 @@ abstract module BtreeSpec {
       } else if i == childidx {
         SplitNodeAllKeys(oldindex.children[childidx],
           newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+        assert AllKeysBelowBound(newindex, childidx);
+        assert AllKeysBelowBound(newindex, childidx+1);
+        Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx, childidx + 1);
       } else {
         assert AllKeysBelowBound(newindex, i+1);
       }
@@ -1921,6 +1924,7 @@ abstract module BtreeSpec {
           Keys.IsStrictlySortedImpliesLt(pivots, boundaries[i]-1, boundaries[i] + j);
         } else {
           var j :| 0 <= j < |parent.children| && key in AllKeys(parent.children[j]);
+          assert boundaries[i] + j < boundaries[i+1];
           assert AllKeysAboveBound(oldparent, boundaries[i] + j);
           Keys.IsStrictlySortedImpliesLte(pivots, boundaries[i]-1, boundaries[i] + j-1);
         }
