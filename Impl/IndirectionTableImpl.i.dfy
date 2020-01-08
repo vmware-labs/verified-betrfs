@@ -593,16 +593,16 @@ module IndirectionTableImpl {
     }
 
     method indirectionTableToVal()
-    returns (v : Option<V>)
+    returns (v : V)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-    ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableModel.IndirectionTableGrammar())
-    ensures v.Some? ==> ValidVal(v.value)
-    ensures v.Some? ==> IndirectionTableModel.valToIndirectionTable(v.value).Some?
-    ensures v.Some? ==>
-          IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v.value).value)
+    ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
+    ensures ValidVal(v)
+    ensures IndirectionTableModel.valToIndirectionTable(v).Some?
+    ensures
+          IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
        == IndirectionTableModel.I(I())
-    ensures v.Some? ==> SizeOfV(v.value) <= MaxIndirectionTableByteSize()
+    ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     {
       assert t.Count <= IndirectionTableModel.MaxSizeUint64();
       lemma_SeqSum_empty();
@@ -688,7 +688,7 @@ module IndirectionTableImpl {
       SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.I().contents.Keys);
 
       assert a[..i] == a[..]; // observe
-      v := Some(VArray(a[..]));
+      v := VArray(a[..]);
 
       /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
       assert t0.Some?;

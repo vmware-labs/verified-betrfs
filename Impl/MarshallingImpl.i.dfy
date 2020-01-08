@@ -566,32 +566,27 @@ module MarshallingImpl {
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
   }
 
-  method sectorToVal(sector: StateImpl.Sector) returns (v : Option<V>)
+  method sectorToVal(sector: StateImpl.Sector) returns (v : V)
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
   requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
-  ensures v.Some? ==> ValidVal(v.value)
-  ensures v.Some? ==> ValInGrammar(v.value, Marshalling.SectorGrammar());
-  ensures v.Some? ==> Marshalling.valToSector(v.value) == Some(IM.ISector(StateImpl.ISector(sector)))
-  ensures sector.SectorBlock? ==> v.Some?
-  ensures sector.SectorBlock? ==> SizeOfV(v.value) <= BlockSize() as int - 32
-  ensures v.Some? ==> SizeOfV(v.value) < 0x1_0000_0000_0000_0000 - 32
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, Marshalling.SectorGrammar());
+  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures sector.SectorBlock? ==> SizeOfV(v) <= BlockSize() as int - 32
+  ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {
         var v := indirectionTable.indirectionTableToVal();
-        if v.Some? {
-          return Some(VCase(0, v.value));
-        } else {
-          return None;
-        }
+        return VCase(0, v);
       }
       case SectorBlock(node) => {
         var v := nodeToVal(node);
-        return Some(VCase(1, v));
+        return VCase(1, v);
       }
     }
   }
@@ -677,41 +672,36 @@ module MarshallingImpl {
   ensures sector.SectorBlock? ==> data != null;
   {
     var v := sectorToVal(sector);
-    match v {
-      case None => return null;
-      case Some(v) => {
-        var computedSize := GenericMarshalling.ComputeSizeOf(v);
+    var computedSize := GenericMarshalling.ComputeSizeOf(v);
 
-        if (computedSize + 32 <= BlockSizeUint64()) {
-          var size := if sector.SectorIndirectionTable? then BlockSizeUint64() else computedSize + 32;
+    if (computedSize + 32 <= BlockSizeUint64()) {
+      var size := if sector.SectorIndirectionTable? then BlockSizeUint64() else computedSize + 32;
 
-          //Native.BenchmarkingUtil.start();
-          var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
-          //Native.BenchmarkingUtil.end();
+      //Native.BenchmarkingUtil.start();
+      var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
+      //Native.BenchmarkingUtil.end();
 
-          IMM.reveal_parseSector();
-          IMM.reveal_parseCheckedSector();
+      IMM.reveal_parseSector();
+      IMM.reveal_parseCheckedSector();
 
-          var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
-          assert data[32..] == data[32..data.Length];
-          assert hash == Crypto.Crc32C(data[32..]);
-          ghost var data_suffix := data[32..];
-          NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
-          assert data_suffix == data[32..];
+      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      assert data[32..] == data[32..data.Length];
+      assert hash == Crypto.Crc32C(data[32..]);
+      ghost var data_suffix := data[32..];
+      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      assert data_suffix == data[32..];
 
-          /*ghost var data_seq := data[..];
-          assert |data_seq| >= 32;
-          assert Crypto.Crc32C(data_seq[32..])
-              == Crypto.Crc32C(data[32..])
-              == hash
-              == data[..32]
-              == data_seq[..32];*/
+      /*ghost var data_seq := data[..];
+      assert |data_seq| >= 32;
+      assert Crypto.Crc32C(data_seq[32..])
+          == Crypto.Crc32C(data[32..])
+          == hash
+          == data[..32]
+          == data_seq[..32];*/
 
-          return data;
-        } else {
-          return null;
-        }
-      }
+      return data;
+    } else {
+      return null;
     }
   }
 }
