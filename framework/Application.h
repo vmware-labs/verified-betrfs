@@ -47,7 +47,6 @@ struct ByteString {
 class Application {
 public:
   Application();
-  void log(std::string const&);
   void initialize();
   void crash();
 
@@ -58,10 +57,16 @@ public:
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);
   void QueryAndExpect(ByteString key, ByteString expected_val);
-  bool maybeDoResponse();
+  vector<pair<ByteString, ByteString>> Succ(
+      ByteString lowerBound, bool inclusive, uint64 targetCount);
 
 private:
   Constants k;
   Variables hs;
   shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;
+
+  bool maybeDoResponse();
+  void log(std::string const&);
+
+  UI_Compile::SuccResultList SuccOnce(UI_Compile::RangeStart start, uint64 maxToFind);
 };

@@ -1,6 +1,8 @@
 #include "BundleWrapper.h"
 #include "Application.h"
 
+#include "Bundle.h"
+
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -233,7 +235,7 @@ void Application::Insert(ByteString key, ByteString val)
     }
   }
   LOG("giving up");
-  fail("operation didn't finish");
+  fail("Insert operation didn't finish");
 }
 
 ByteString Application::Query(ByteString key)
@@ -259,7 +261,7 @@ ByteString Application::Query(ByteString key)
     }
   }
   LOG("giving up");
-  fail("operation didn't finish");
+  fail("Query operation didn't finish");
 }
 
 void Application::QueryAndExpect(ByteString key, ByteString expected_val)
@@ -296,6 +298,61 @@ ByteString Application::Query(std::string const& key)
 {
   return Query(ByteString(key));
 }
+
+UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, uint64 maxToFind)
+{
+  LOG("Succ");
+
+  if (maxToFind == 0) {
+    fail("SuccOnce should have maxToFind >= 1");
+  }
+
+  for (int i = 0; i < 50; i++) {
+    auto result = handle_Succ(k, hs, io, start, maxToFind);
+    this->maybeDoResponse();
+    if (result.first) {
+      LOG("doing succ ... success!");
+      LOG("");
+      return result.second;
+    } else {
+      LOG("doing succ...");
+    }
+  }
+  LOG("giving up");
+  fail("Succ operation didn't finish");
+}
+
+vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bool inclusive, uint64 targetCount)
+{
+  UI_Compile::RangeStart start = inclusive ?
+      UI_Compile::RangeStart::create_SInclusive(lowerBound.as_dafny_seq()) :
+      UI_Compile::RangeStart::create_SExclusive(lowerBound.as_dafny_seq());
+  vector<pair<ByteString, ByteString>> all_results(targetCount);
+  uint64 found = 0;
+  while (found < targetCount) {
+    UI_Compile::SuccResultList srl = SuccOnce(start, targetCount - found);
+    for (int i = 0; i < srl.results.size(); i++) {
+      UI_Compile::SuccResult sr = srl.results.select(i);
+      all_results[found] = make_pair(ByteString(sr.key), ByteString(sr.value));
+      found++;
+    }
+    if (found == targetCount) {
+      break;
+    }
+    if (srl.end.is_PositiveInf()) {
+      all_results.resize(found);
+      return all_results;
+    }
+    if (srl.end.is_EExclusive()) {
+      start = UI_Compile::RangeStart::create_SInclusive(srl.end.dtor_key());
+    } else {
+      start = UI_Compile::RangeStart::create_SExclusive(srl.end.dtor_key());
+    }
+  }
+  return all_results;
+}
+
+
 
 void Application::log(std::string const& s) {
   std::cout << s << endl;
