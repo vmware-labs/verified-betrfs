@@ -386,27 +386,20 @@ module IndirectionTableImpl {
             var ref := tuple.t[0 as uint64].u;
             var lba := tuple.t[1 as uint64].u;
             var len := tuple.t[2 as uint64].u;
-            var succs := Some(tuple.t[3 as uint64].ua);
-            match succs {
-              case None => {
-                s := None;
-              }
-              case Some(succs) => {
-                var graphRef := mutMap.Get(ref);
-                var loc := LBAType.Location(lba, len);
+            var succs := tuple.t[3 as uint64].ua;
+            var graphRef := mutMap.Get(ref);
+            var loc := LBAType.Location(lba, len);
 
-                assert ValidVal(tuple);
-                assert ValidVal(tuple.t[3]);
-                assert |succs| < 0x1_0000_0000_0000_0000;
+            assert ValidVal(tuple);
+            assert ValidVal(tuple.t[3]);
+            assert |succs| < 0x1_0000_0000_0000_0000;
 
-                if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
-                    || |succs| as uint64 > MaxNumChildrenUint64() {
-                  s := None;
-                } else {
-                  mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
-                  s := Some(mutMap);
-                }
-              }
+            if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
+                || |succs| as uint64 > MaxNumChildrenUint64() {
+              s := None;
+            } else {
+              mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
+              s := Some(mutMap);
             }
           }
           case None => {

@@ -266,18 +266,13 @@ module Marshalling {
           var ref := tuple.t[0].u;
           var lba := tuple.t[1].u;
           var len := tuple.t[2].u;
-          var succs := Some(tuple.t[3].ua);
-          match succs {
-            case None => None
-            case Some(succs) => (
-              var loc := LBAType.Location(lba, len);
-              if ref in table.graph || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
-                None
-              ) else (
-                Some(BC.IndirectionTable(table.locs[ref := loc], table.graph[ref := succs]))
-              )
-            )
-          }
+          var succs := tuple.t[3].ua;
+          var loc := LBAType.Location(lba, len);
+          if ref in table.graph || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
+            None
+          ) else (
+            Some(BC.IndirectionTable(table.locs[ref := loc], table.graph[ref := succs]))
+          )
         )
         case None => None
       }
@@ -343,5 +338,86 @@ module Marshalling {
       parseSector(data[32..])
     else
       None
+  }
+
+  /////// Lemmas
+
+  lemma singleMapRemove1<K,V>(m0: map<K, V>, m: map<K, V>, k: K, v: V)
+  requires m == m0[k := v];
+  requires k !in m0;
+  requires m.Keys == {k};
+  ensures m0 == map[];
+  {
+    assert m0.Keys <= m.Keys;
+  }
+
+  predicate IsInitIndirectionTable(table: BC.IndirectionTable)
+  {
+    && BC.WFCompleteIndirectionTable(table)
+    && table.graph.Keys == {BT.G.Root()}
+    && table.graph[BT.G.Root()] == []
+  }
+
+  lemma
+    {:fuel valToIndirectionTableMaps,4}
+    {:fuel ValidVal,10}
+    {:fuel ValInGrammar,10}
+    {:fuel SizeOfV,10}
+    {:fuel SeqSum,10}
+  InitIndirectionTableSizeOfV(table: BC.IndirectionTable, v: V)
+  requires IsInitIndirectionTable(table)
+  requires ValidVal(v)
+  requires ValInGrammar(v, SectorGrammar())
+  requires valToSector(v) == Some(BC.SectorIndirectionTable(table))
+  ensures SizeOfV(v) == 48
+  {
+    var ref := BT.G.Root();
+    var loc := table.locs[BT.G.Root()];
+    //assert table.locs.Keys == {BT.G.Root()};
+
+    //assert v.c == 0;
+    //assert valToIndirectionTable(v.val) == Some(table);
+
+    //assert valToIndirectionTableMaps(v.val.a) == Some(table);
+
+    assert ValInGrammar(Last(v.val.a), GTuple([GUint64, GUint64, GUint64, GUint64Array]));
+
+    assert Last(v.val.a).t[0].u in table.graph;
+
+    assert ref == Last(v.val.a).t[0].u;
+    assert loc.addr == Last(v.val.a).t[1].u;
+    assert loc.len == Last(v.val.a).t[2].u;
+    assert [] == Last(v.val.a).t[3].ua;
+
+    var locs1 := valToIndirectionTableMaps(DropLast(v.val.a)).value.locs;
+    singleMapRemove1(locs1, table.locs, ref, loc);
+
+    assert valToIndirectionTableMaps(DropLast(v.val.a)).value.graph == map[];
+
+    //assert valToIndirectionTableMaps(DropLast(v.val.a))
+    //    == Some(BC.IndirectionTable(map[], map[]));
+
+    assert DropLast(v.val.a) == [];
+
+    assert v.val.a[0] == VTuple([
+        VUint64(BT.G.Root()),
+        VUint64(loc.addr),
+        VUint64(loc.len),
+        VUint64Array([])]);
+
+    assert v == VCase(0, VArray([
+      VTuple([
+        VUint64(BT.G.Root()),
+        VUint64(loc.addr),
+        VUint64(loc.len),
+        VUint64Array([])])
+    ]));
+
+    reveal_SeqSum();
+    /*assert SizeOfV(VTuple([
+        VUint64(BT.G.Root()),
+        VUint64(loc.addr),
+        VUint64(loc.len),
+        VUint64Array([])])) == 32;*/
   }
 }

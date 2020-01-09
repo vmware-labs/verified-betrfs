@@ -66,10 +66,7 @@ module {:extern} MkfsImpl {
     assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
     var b0_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
-    // TODO(jonh): MarshallCheckedSector owes us a promise that it can marshall
-    // SectorIndirectionTables successfully. It can't make that promise right
-    // now, since it only bounds the marshalled size of an indirection table to a gazillion.
-    assume b0_array != null;
+    assert b0_array != null;
 
     var b0 := b0_array[..];
 
