@@ -1162,7 +1162,7 @@ module MainModule {
   import opened NativeTypes
   import TMB = TestMutableBtree`API
   
-  method Main()
+  method Test()
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
