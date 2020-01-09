@@ -34,7 +34,7 @@ module Arrays {
     var curelement := arr[pos];
     arr[pos] := element;
 
-    var i := pos+1;
+    var i: uint64 := pos+1;
     while i <= length
       invariant pos+1 <= i <= length+1
       invariant arr == old(arr)
@@ -66,22 +66,5 @@ module Arrays {
     assert arr[pos] == replaced[pos];
     assert arr[pos+1] == replaced[pos+1];
     assert forall i :: pos+2 <= i < length+1 ==> arr[i] == old(arr[i-1]);
-  }
-  
-  method Memcpy<T>(dest: array<T>, destoffset: uint64, src: seq<T>)
-    requires 0 <= destoffset as int <= dest.Length - |src|
-    ensures dest[..] == old(dest[..destoffset]) + src + old(dest[destoffset as int + |src|..])
-    modifies dest
-  {
-    var i := 0;
-    while i < |src|
-      invariant 0 <= i <= |src|
-      invariant forall j :: 0                     <= j < destoffset             ==> dest[j] == old(dest[j])
-      invariant forall j :: destoffset as int     <= j < destoffset as int + i  ==> dest[j] == src[j-destoffset as int]
-      invariant forall j :: destoffset as int + i <= j < dest.Length            ==> dest[j] == old(dest[j])
-    {
-      dest[destoffset as int + i] := src[i];
-      i := i + 1;
-    }
   }
 }

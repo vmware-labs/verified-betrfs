@@ -133,7 +133,7 @@ module Sequences {
     assert s == s[..pos] + s[pos..];
   }
   
-  function method {:opaque} replace1with2<A>(s: seq<A>, a: A, b: A, pos: int) : seq<A>
+  function {:opaque} replace1with2<A>(s: seq<A>, a: A, b: A, pos: int) : seq<A>
   requires 0 <= pos < |s|;
   ensures |replace1with2(s,a,b,pos)| == |s| + 1;
   ensures forall i :: 0 <= i < pos ==> replace1with2(s, a, b, pos)[i] == s[i];
