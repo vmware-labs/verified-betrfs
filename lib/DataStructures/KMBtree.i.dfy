@@ -2,7 +2,7 @@ include "MutableBtreeBulkOperations.i.dfy"
 include "../Base/Message.i.dfy"
   
 module KMBtreeModel refines BtreeModel {
-  import Keys = Lexicographic_Byte_Order
+  //import Keys = Lexicographic_Byte_Order
   import Messages = ValueMessage`Internal
   type Value = Messages.Message
 }

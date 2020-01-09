@@ -6,7 +6,7 @@ include "../Base/mathematics.i.dfy"
 abstract module BtreeModel {
   import opened Seq = Sequences
   import opened Maps
-  import Keys : Total_Order
+  import Keys = Lexicographic_Byte_Order
   import Integer_Order
   import Math = Mathematics
   
