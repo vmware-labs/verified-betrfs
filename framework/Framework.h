@@ -40,11 +40,10 @@ namespace NativeArrays_Compile {
     template <typename T>
     static DafnyArray<T> newArrayFill(uint64 len, T val)
     {
-      DafnyArray<T> ar(len);
-      for (int i = 0; i < len; i++) {
-        ar.at(i) = val;
-      }
-      return ar;
+      shared_ptr<vector<T>> filled { new vector<T>(len, val) };
+      DafnyArray<T> filled_ar;
+      filled_ar.vec = filled;
+      return filled_ar;
     }
 
     template <typename T>
