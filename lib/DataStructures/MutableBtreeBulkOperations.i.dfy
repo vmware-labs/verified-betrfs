@@ -72,8 +72,10 @@ abstract module MutableBtreeBulkOperations {
     decreases node.height
   {
     if node.contents.Leaf? {
-      CopySeqIntoArray(node.contents.keys[..node.contents.nkeys], 0, keys, start, node.contents.nkeys);
-      CopySeqIntoArray(node.contents.values[..node.contents.nkeys], 0, values, start, node.contents.nkeys);
+      CopyArrayIntoDifferentArray(node.contents.keys, 0, keys, start, node.contents.nkeys);
+      CopyArrayIntoDifferentArray(node.contents.values, 0, values, start, node.contents.nkeys);
+      //CopySeqIntoArray(node.contents.keys[..node.contents.nkeys], 0, keys, start, node.contents.nkeys);
+      //CopySeqIntoArray(node.contents.values[..node.contents.nkeys], 0, values, start, node.contents.nkeys);
       nextstart := start + node.contents.nkeys;
       forall
         ensures keys[start..nextstart] == Model.ToSeq(I(node)).0
