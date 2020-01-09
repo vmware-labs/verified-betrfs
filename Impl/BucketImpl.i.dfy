@@ -641,16 +641,8 @@ module BucketImpl {
     ensures IIterator(it') == BucketIteratorModel.IterFindFirstGte(I(), key)
     {
       assume false;
-      var i: uint64 := 0;
-      var kvl := GetKvl();
-      while i < |kvl.keys| as uint64 {
-        var c := cmp(kvl.keys[i], key);
-        if c >= 0 {
-          return Iterator(i);
-        }
-        i := i + 1;
-      }
-      return Iterator(|kvl.keys| as uint64);
+      var i: uint64 := KVList.IndexOfFirstKeyGte(kvl, key);
+      return Iterator(i);
     }
 
     method IterFindFirstGt(key: Key) returns (it': Iterator)
@@ -659,16 +651,8 @@ module BucketImpl {
     ensures IIterator(it') == BucketIteratorModel.IterFindFirstGt(I(), key)
     {
       assume false;
-      var i: uint64 := 0;
-      var kvl := GetKvl();
-      while i < |kvl.keys| as uint64 {
-        var c := cmp(kvl.keys[i], key);
-        if c > 0 {
-          return Iterator(i);
-        }
-        i := i + 1;
-      }
-      return Iterator(|kvl.keys| as uint64);
+      var i: uint64 := KVList.IndexOfFirstKeyGt(kvl, key);
+      return Iterator(i);
     }
 
     method IterInc(it: Iterator) returns (it': Iterator)
