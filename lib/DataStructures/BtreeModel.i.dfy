@@ -1251,6 +1251,13 @@ abstract module BtreeModel {
     else NumElementsOfChildren(node.children)
   }
 
+  lemma NumElementsMatchesInterpretation(node: Node)
+    requires WF(node)
+    ensures NumElements(node) == |Interpretation(node)|
+  {
+    assume false;
+  }
+  
   lemma NumElementsOfChildrenNotZero(node: Node)
     requires WF(node)
     requires node.Index?
