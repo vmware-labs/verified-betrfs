@@ -19,5 +19,5 @@ set -e
 set -x
 
 # https://github.com/secure-foundations/dafny.git
-# cpp branch
-git checkout 11b2cba54aae8bb115407a68903dc37797f776ce
+# DafnyArray branch
+git checkout 17395be55e810c173dfddb496ac0042df391d2e0

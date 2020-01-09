@@ -23,9 +23,9 @@ namespace MainDiskIOHandler_Compile {
   struct WriteTask { };
 
   struct ReadTask {
-    shared_ptr<vector<byte>> bytes;
+    DafnyArray<byte> bytes;
 
-    ReadTask(shared_ptr<vector<byte>> s) : bytes(s) { }
+    ReadTask(DafnyArray<byte> s) : bytes(s) { }
   };
 
   string getFilename(uint64 addr) {
@@ -99,9 +99,9 @@ namespace MainDiskIOHandler_Compile {
 
   DiskIOHandler::DiskIOHandler() : curId(0) { }
 
-  uint64 DiskIOHandler::write(uint64 addr, shared_ptr<vector<uint8>> bytes)
+  uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
   {
-    writeSync(addr, &(*bytes)[0], (*bytes).size());
+    writeSync(addr, &bytes.at(0), bytes.size());
 
     uint64 id = this->curId;
     this->curId++;
@@ -119,7 +119,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
-    readReqs.insert(make_pair(id, ReadTask(bytes)));
+    DafnyArray<byte> dar;
+    dar.vec = bytes;
+    readReqs.insert(make_pair(id, ReadTask(dar)));
 
     return id;
   }
