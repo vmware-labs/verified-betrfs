@@ -386,27 +386,20 @@ module IndirectionTableImpl {
             var ref := tuple.t[0 as uint64].u;
             var lba := tuple.t[1 as uint64].u;
             var len := tuple.t[2 as uint64].u;
-            var succs := Some(tuple.t[3 as uint64].ua);
-            match succs {
-              case None => {
-                s := None;
-              }
-              case Some(succs) => {
-                var graphRef := mutMap.Get(ref);
-                var loc := LBAType.Location(lba, len);
+            var succs := tuple.t[3 as uint64].ua;
+            var graphRef := mutMap.Get(ref);
+            var loc := LBAType.Location(lba, len);
 
-                assert ValidVal(tuple);
-                assert ValidVal(tuple.t[3]);
-                assert |succs| < 0x1_0000_0000_0000_0000;
+            assert ValidVal(tuple);
+            assert ValidVal(tuple.t[3]);
+            assert |succs| < 0x1_0000_0000_0000_0000;
 
-                if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
-                    || |succs| as uint64 > MaxNumChildrenUint64() {
-                  s := None;
-                } else {
-                  mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
-                  s := Some(mutMap);
-                }
-              }
+            if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
+                || |succs| as uint64 > MaxNumChildrenUint64() {
+              s := None;
+            } else {
+              mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
+              s := Some(mutMap);
             }
           }
           case None => {
@@ -593,16 +586,16 @@ module IndirectionTableImpl {
     }
 
     method indirectionTableToVal()
-    returns (v : Option<V>)
+    returns (v : V)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-    ensures v.Some? ==> ValInGrammar(v.value, IndirectionTableModel.IndirectionTableGrammar())
-    ensures v.Some? ==> ValidVal(v.value)
-    ensures v.Some? ==> IndirectionTableModel.valToIndirectionTable(v.value).Some?
-    ensures v.Some? ==>
-          IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v.value).value)
+    ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
+    ensures ValidVal(v)
+    ensures IndirectionTableModel.valToIndirectionTable(v).Some?
+    ensures
+          IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
        == IndirectionTableModel.I(I())
-    ensures v.Some? ==> SizeOfV(v.value) <= MaxIndirectionTableByteSize()
+    ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     {
       assert t.Count <= IndirectionTableModel.MaxSizeUint64();
       lemma_SeqSum_empty();
@@ -688,7 +681,7 @@ module IndirectionTableImpl {
       SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.I().contents.Keys);
 
       assert a[..i] == a[..]; // observe
-      v := Some(VArray(a[..]));
+      v := VArray(a[..]);
 
       /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
       assert t0.Some?;

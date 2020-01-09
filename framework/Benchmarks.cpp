@@ -4,6 +4,7 @@
 #include <iostream>
 #include <random>
 #include <algorithm>
+#include <cstdio>
 
 #include "Application.h"
 
@@ -102,6 +103,25 @@ public:
 
     return make_pair(move(queryKeys), move(queryValues));
   }
+
+  [[ noreturn ]]
+  void fail(string err)
+  {
+    cout << "fatal error: " << err << endl;
+    exit(1);
+  }
+
+  string to_hex(ByteString const& b) {
+    vector<char> ch(b.size() * 2);
+    for (int i = 0; i < b.size(); i++) {
+      uint8 by = b.seq.select(i);
+      int x = by >> 4;
+      int y = by & 0xf;
+      ch[2*i] = (x < 10 ? x + '0' : x + 'a' - 10);
+      ch[2*i + 1] = (y < 10 ? y + '0' : y + 'a' - 10);
+    }
+    return string(&ch[0], ch.size());
+  }
 };
 
 class BenchmarkRandomInserts : public Benchmark {
@@ -169,14 +189,98 @@ public:
   }
 };
 
+int get_first_idx_ge(vector<pair<ByteString, ByteString>> const& v, ByteString key)
+{
+  int lo = 0;
+  int hi = v.size() + 1;
+  while (hi > lo + 1) {
+    int mid = (lo + hi) / 2;
+    if (v[mid-1].first < key) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+class BenchmarkRandomSuccQueries : public Benchmark {
+public:
+  int insertCount = 50000;
+  int queryCount = 1000;
+
+  int targetCount = 100;
+
+  virtual string name() override { return "RandomSuccQueries"; }
+  virtual int opCount() override { return queryCount; }
+
+  vector<pair<ByteString, ByteString>> keys_values;
+  vector<ByteString> queries;
+  vector<vector<pair<ByteString, ByteString>>> query_results;
+
+  BenchmarkRandomSuccQueries() {
+    int seed1 = 1234;
+    int seed2 = 527;
+    int seed3 = 9001;
+    vector<ByteString> keys = RandomKeys(insertCount, seed1);
+    vector<ByteString> values = RandomValues(insertCount, seed2);
+    sort(keys.begin(), keys.end());
+    for (int i = 0; i < insertCount; i++) {
+      keys_values.push_back(make_pair(keys[i], values[i]));
+    }
+
+    queries = RandomKeys(queryCount, seed3);
+    for (int i = 0; i < queries.size(); i++) {
+      int idx = get_first_idx_ge(keys_values, queries[i]);
+      vector<pair<ByteString, ByteString>> query_result;
+      while (query_result.size() < targetCount && idx < keys_values.size()) {
+        query_result.push_back(keys_values[idx]);
+        idx++;
+      }
+      query_results.push_back(move(query_result));
+    }
+  }
+
+  virtual void prepare(Application& app) override {
+    for (int i = 0; i < keys_values.size(); i++) {
+      //cout << "Inserting " << to_hex(keys_values[i].first) << " -> " << to_hex(keys_values[i].second) << endl;
+      app.Insert(keys_values[i].first, keys_values[i].second);
+    }
+    app.Sync();
+    app.crash();
+  }
+
+  virtual void go(Application& app) override {
+    for (int i = 0; i < queries.size(); i++) {
+      auto result = app.Succ(queries[i], true /* inclusive */, targetCount);
+      if (result != query_results[i]) {
+        cout << "query " << to_hex(queries[i]) << endl;
+        cout << "result: " << endl;
+        for (auto p : result) {
+          cout << "    " << to_hex(p.first) << " : " << to_hex(p.second) << endl;
+        }
+        cout << "expected result: " << endl;
+        for (auto p : query_results[i]) {
+          cout << "    " << to_hex(p.first) << " : " << to_hex(p.second) << endl;
+        }
+        fail("Incorrect succ result");
+      }
+    }
+    app.Sync();
+  }
+};
+
+
 void RunAllBenchmarks() {
   { BenchmarkRandomInserts q; q.run(); }
   { BenchmarkRandomQueries q; q.run(); }
+  { BenchmarkRandomSuccQueries q; q.run(); }
 }
 
 shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   if (name == "random-queries") { return shared_ptr<Benchmark>(new BenchmarkRandomQueries()); }
   if (name == "random-inserts") { return shared_ptr<Benchmark>(new BenchmarkRandomInserts()); }
+  if (name == "random-succs") { return shared_ptr<Benchmark>(new BenchmarkRandomSuccQueries()); }
 
   cerr << "No benchmark found by name " << name << endl;
   exit(1);

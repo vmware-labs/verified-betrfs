@@ -693,10 +693,10 @@ module KVList {
   }
 
   /////////////////////////
-  //// Splitting
+  //// Binary searching
   /////////////////////////
 
-  method ComputeCutoffPoint(kvl: Kvl, key: Key)
+  method IndexOfFirstKeyGte(kvl: Kvl, key: Key)
   returns (idx: uint64)
   requires WF(kvl)
   requires |kvl.keys| < 0x8000_0000_0000_0000
@@ -728,6 +728,42 @@ module KVList {
     idx := lo;
   }
 
+  method IndexOfFirstKeyGt(kvl: Kvl, key: Key)
+  returns (idx: uint64)
+  requires WF(kvl)
+  requires |kvl.keys| < 0x8000_0000_0000_0000
+  ensures 0 <= idx as int <= |kvl.keys|
+  ensures forall i | 0 <= i < idx as int :: lte(kvl.keys[i], key)
+  ensures forall i | idx as int <= i as int < |kvl.keys| :: lt(key, kvl.keys[i])
+  {
+    var lo: uint64 := 0;
+    var hi: uint64 := |kvl.keys| as uint64;
+
+    while lo < hi
+    invariant 0 <= lo as int <= |kvl.keys|
+    invariant 0 <= hi as int <= |kvl.keys|
+    invariant forall i | 0 <= i < lo as int :: lte(kvl.keys[i], key)
+    invariant forall i | hi as int <= i < |kvl.keys| :: lt(key, kvl.keys[i])
+    decreases hi as int - lo as int
+    {
+      reveal_IsStrictlySorted();
+
+      var mid: uint64 := (lo + hi) / 2;
+      var c := cmp(key, kvl.keys[mid]);
+      if (c >= 0) {
+        lo := mid + 1;
+      } else {
+        hi := mid;
+      }
+    }
+
+    idx := lo;
+  }
+
+  /////////////////////////
+  //// Splitting
+  /////////////////////////
+
   method SplitLeft(kvl: Kvl, pivot: Key)
   returns (left: Kvl)
   requires WF(kvl)
@@ -736,7 +772,7 @@ module KVList {
   ensures I(left) == SplitBucketLeft(I(kvl), pivot)
   {
     reveal_SplitBucketLeft();
-    var idx := ComputeCutoffPoint(kvl, pivot);
+    var idx := IndexOfFirstKeyGte(kvl, pivot);
     left := Kvl(kvl.keys[..idx], kvl.values[..idx]);
 
     reveal_IsStrictlySorted();
@@ -772,7 +808,7 @@ module KVList {
   ensures I(right) == SplitBucketRight(I(kvl), pivot)
   {
     reveal_SplitBucketRight();
-    var idx := ComputeCutoffPoint(kvl, pivot);
+    var idx := IndexOfFirstKeyGte(kvl, pivot);
     right := Kvl(kvl.keys[idx..], kvl.values[idx..]);
 
     reveal_IsStrictlySorted();

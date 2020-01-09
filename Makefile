@@ -230,23 +230,30 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
+# XXX(travis) this is a dumb hack to extract from the cpp file
+# part of it that we want to use as a .h
+# Ideally the dafny compiler would build this for us.
+build/Bundle.h: build/Bundle.cpp
+	python tools/hack_make_Bundle_h.py > $@
+
 ##############################################################################
 # C++ object files
 
 CPP_DEP_DIR=build/cppdeps
+GEN_H_FILES=build/Bundle.h
 
-build/%.o: build/%.cpp | $$(@D)/.
+build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) -Wall
 
 OPT_FLAG=-O2
 
-build/framework/%.o: framework/%.cpp | $$(@D)/.
+build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) -Wall -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
-build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp | $$(@D)/.
+build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
 	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) -Wall

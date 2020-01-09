@@ -26,8 +26,17 @@ int main(int argc, char* argv[]) {
   }
 }
 
-/*int main()
+/*void test_succ(Application& app, string s, bool inclusive, int num) {
+  auto res = app.Succ(ByteString(s), inclusive, num);
+  cout << "Succ for " << s << " " << (inclusive ? "inclusive" : "exclusive") << " for " << num << endl;
+  for (auto p : res) {
+    cout << "    " << p.first.as_string() << " : " << p.second.as_string() << endl;
+  }
+}
+
+int main()
 {
+  ClearIfExists();
   Mkfs();
   cout << "Mkfs done" << endl;
 
@@ -47,6 +56,26 @@ int main(int argc, char* argv[]) {
   app.Insert("blahblah", "moomoo");
   app.Sync();
   app.crash();
+
   app.Query("abc");
   app.Query("xyq");
+
+  test_succ(app, "abc", true, 1);
+  test_succ(app, "abc", true, 2);
+  test_succ(app, "abc", true, 3);
+  test_succ(app, "abc", true, 4);
+  test_succ(app, "abc", true, 5);
+  test_succ(app, "abc", false, 5);
+
+  test_succ(app, "blahblah", true, 5);
+  test_succ(app, "blahblah", false, 5);
+
+  test_succ(app, "car", true, 5);
+  test_succ(app, "car", false, 5);
+
+  test_succ(app, "xyq", true, 5);
+  test_succ(app, "xyq", false, 5);
+
+  test_succ(app, "zaz", true, 5);
+  test_succ(app, "zaz", false, 5);
 }*/
