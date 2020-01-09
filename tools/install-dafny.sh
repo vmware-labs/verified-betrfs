@@ -16,8 +16,7 @@ cd ..
 git clone https://github.com/secure-foundations/dafny.git
 cd dafny
 
-# cpp branch
-git checkout 11b2cba54aae8bb115407a68903dc37797f776ce
+../../tools/checkout-dafny-commit.sh
 
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
