@@ -246,7 +246,9 @@ build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) -Wall
 
-OPT_FLAG=-O2
+# _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
+# (but also makes stuff not thread-safe)
+OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
