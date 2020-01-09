@@ -32,6 +32,7 @@ module MarshallingImpl {
   import NativeArrays
   import MutableMapModel
   import IndirectionTableImpl
+  import IndirectionTableModel
   import KeyType
   import SeqComparison
 
@@ -670,9 +671,17 @@ module MarshallingImpl {
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length == BlockSize() as int
   ensures sector.SectorBlock? ==> data != null;
+  ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
   {
     var v := sectorToVal(sector);
     var computedSize := GenericMarshalling.ComputeSizeOf(v);
+
+    ghost var ghosty := true;
+    if ghosty {
+      if sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) {
+        Marshalling.InitIndirectionTableSizeOfV(IndirectionTableModel.I(sector.indirectionTable.I()), v);
+      }
+    }
 
     if (computedSize + 32 <= BlockSizeUint64()) {
       var size := if sector.SectorIndirectionTable? then BlockSizeUint64() else computedSize + 32;

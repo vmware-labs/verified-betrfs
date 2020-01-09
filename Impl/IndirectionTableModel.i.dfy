@@ -1152,22 +1152,17 @@ module IndirectionTableModel {
           var ref := tuple.t[0].u;
           var lba := tuple.t[1].u;
           var len := tuple.t[2].u;
-          var succs := Some(tuple.t[3].ua);
-          match succs {
-            case None => None
-            case Some(succs) => (
-              var loc := LBAType.Location(lba, len);
-              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
-                None
-              ) else (
-                var res := MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0));
-                assert Locs(res) == Locs(table)[ref := loc];
-                assert Graph(res) == Graph(table)[ref := succs];
-                //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
-                Some(res)
-              )
-            )
-          }
+          var succs := tuple.t[3].ua;
+          var loc := LBAType.Location(lba, len);
+          if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
+            None
+          ) else (
+            var res := MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0));
+            assert Locs(res) == Locs(table)[ref := loc];
+            assert Graph(res) == Graph(table)[ref := succs];
+            //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
+            Some(res)
+          )
         )
         case None => None
       }

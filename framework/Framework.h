@@ -38,32 +38,33 @@ namespace NativeArrays_Compile {
     }
 
     template <typename T>
-    static shared_ptr<vector<T>> newArrayFill(uint64 len, T val)
+    static DafnyArray<T> newArrayFill(uint64 len, T val)
     {
-      shared_ptr<vector<T>> ar { new vector<T>(len) };
-      for (int i = 0; i < len; i++) {
-        (*ar)[i] = val;
-      }
-      return ar;
+      shared_ptr<vector<T>> filled { new vector<T>(len, val) };
+      DafnyArray<T> filled_ar;
+      filled_ar.vec = filled;
+      return filled_ar;
     }
 
     template <typename T>
-    static shared_ptr<vector<T>> newArrayClone(shared_ptr<vector<T>> ar)
+    static DafnyArray<T> newArrayClone(DafnyArray<T> ar)
     {
-      shared_ptr<vector<T>> clone { new vector<T>(*ar) };
-      return clone;
+      shared_ptr<vector<T>> clone { new vector<T>(*ar.vec) };
+      DafnyArray<T> clone_ar;
+      clone_ar.vec = clone;
+      return clone_ar;
     }
 
     template <typename T>
     static void CopySeqIntoArray(
       DafnySequence<T> src,
       uint64 srcIndex,
-      shared_ptr<vector<T>> dst,
+      DafnyArray<T> dst,
       uint64 dstIndex,
       uint64 len)
     {
       std::copy(src.ptr() + srcIndex, src.ptr() + (srcIndex + len),
-          (*dst).begin() + dstIndex);
+          dst.begin() + dstIndex);
     }
   };
 }
@@ -73,7 +74,7 @@ namespace Crypto_Compile {
     public:
     static DafnySequence<uint8> Sha256(DafnySequence<uint8>);
     static DafnySequence<uint8> Crc32C(DafnySequence<uint8>);
-    static DafnySequence<uint8> Crc32CArray(shared_ptr<vector<uint8>>, uint64 start, uint64 len);
+    static DafnySequence<uint8> Crc32CArray(DafnyArray<uint8>, uint64 start, uint64 len);
   };
 }
 
@@ -83,7 +84,7 @@ namespace MainDiskIOHandler_Compile {
 
   class DiskIOHandler {
     public:
-    uint64 write(uint64 addr, shared_ptr<vector<uint8>> bytes);
+    uint64 write(uint64 addr, DafnyArray<uint8> bytes);
     uint64 read(uint64 addr, uint64 len);
     uint64 getWriteResult();
     Tuple2<uint64, DafnySequence<uint8>> getReadResult();

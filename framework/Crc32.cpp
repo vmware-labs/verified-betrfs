@@ -69,9 +69,9 @@ namespace Crypto_Compile {
     return padded_crc32(bytes.ptr(), bytes.size());
   }
 
-  DafnySequence<uint8> __default::Crc32CArray(shared_ptr<vector<uint8>> bytes, uint64 start, uint64 len)
+  DafnySequence<uint8> __default::Crc32CArray(DafnyArray<uint8> bytes, uint64 start, uint64 len)
   {
-    return padded_crc32(&(*bytes)[start], len);
+    return padded_crc32(&bytes.at(start), len);
   }
 }
 
