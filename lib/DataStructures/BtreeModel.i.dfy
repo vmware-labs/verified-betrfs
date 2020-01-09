@@ -1595,7 +1595,7 @@ abstract module BtreeModel {
   //   Keys.SortedSeqForMap(Zip(kvlist.keys, kvlist.values), Interpretation(node))
   // }
 
-  datatype Configuration = Configuration(maxChildren: nat, maxKeys: nat)
+  datatype Configuration = Configuration(ghost maxChildren: nat, ghost maxKeys: nat)
 
   predicate ValidConfiguration(config: Configuration)
   {
