@@ -9,11 +9,17 @@ abstract module MutableBtreeBulkOperations {
   import Mathematics
   import Integer_Order
   import Uint64_Order
+
+  function NumElements(node: Node) : nat
+    requires WF(node)
+  {
+    Model.NumElements(I(node))
+  }
   
-  method NumElements(node: Node) returns (count: uint64)
+  method CountElements(node: Node) returns (count: uint64)
     requires WFShape(node)
     requires Model.WF(I(node))
-    requires Model.NumElements(I(node)) < Uint64UpperBound()
+    requires NumElements(node) < Uint64UpperBound()
     ensures count as nat == Model.NumElements(I(node))
     decreases node.height
   {
@@ -39,7 +45,7 @@ abstract module MutableBtreeBulkOperations {
         icount := icount + ichildcount;
 
         IOfChild(node, i as int);
-        var childcount: uint64 := NumElements(node.contents.children[i]);
+        var childcount: uint64 := CountElements(node.contents.children[i]);
         count := count + childcount;
         i := i + 1;
       }
@@ -53,9 +59,9 @@ abstract module MutableBtreeBulkOperations {
     requires keys.Length == values.Length
     requires keys !in node.repr
     requires values !in node.repr
-    requires start as nat + Model.NumElements(I(node)) <= keys.Length
-    requires start as nat + Model.NumElements(I(node)) < Uint64UpperBound()
-    ensures nextstart as nat == start as nat + Model.NumElements(I(node))
+    requires start as nat + NumElements(node) <= keys.Length
+    requires start as nat + NumElements(node) < Uint64UpperBound()
+    ensures nextstart as nat == start as nat + NumElements(node)
     ensures keys[..start] == old(keys[..start])
     ensures keys[start..nextstart] == Model.ToSeq(I(node)).0
     ensures keys[nextstart..] == old(keys[nextstart..]);
@@ -106,14 +112,13 @@ abstract module MutableBtreeBulkOperations {
   }
 
   method ToSeq(node: Node) returns (kvlists: (array<Key>, array<Value>))
-    requires WFShape(node)
-    requires Model.WF(I(node))
-    requires Model.NumElements(I(node)) < Uint64UpperBound()
+    requires WF(node)
+    requires NumElements(node) < Uint64UpperBound()
     ensures (kvlists.0[..], kvlists.1[..]) == Model.ToSeq(I(node))
     ensures fresh(kvlists.0)
     ensures fresh(kvlists.1)
   {
-    var count := NumElements(node);
+    var count := CountElements(node);
     var keys := newArrayFill(count, DefaultKey());
     var values := newArrayFill(count, DefaultValue());
     var end := ToSeqSubtree(node, keys, values, 0);
@@ -691,17 +696,21 @@ abstract module MutableBtreeBulkOperations {
   }
 
   method BuildTreeForSequence(kvlist: Model.KVList) returns (node: Node)
-    requires 0 < |kvlist.keys| < Uint64UpperBound() - 1
+    requires |kvlist.keys| < Uint64UpperBound() - 1
     requires Model.WFKVList(kvlist)
     ensures WF(node)
     ensures Interpretation(node) == Model.KVListInterpretation(kvlist)
     ensures fresh(node.repr)
   {
-    assume false;
-    var boundaries := BuildBoundaries(|kvlist.keys| as uint64, MaxKeysPerLeaf());
-    var leaves := BuildLeavesForSequence(kvlist, boundaries);
-    var pivots := ExtractPivotsForBoundaries(kvlist.keys[1..], boundaries);
-    node := BuildLayers(leaves, pivots, 1);
+    if |kvlist.keys| == 0 {
+      node := EmptyTree();
+    } else {
+      assume false;
+      var boundaries := BuildBoundaries(|kvlist.keys| as uint64, MaxKeysPerLeaf());
+      var leaves := BuildLeavesForSequence(kvlist, boundaries);
+      var pivots := ExtractPivotsForBoundaries(kvlist.keys[1..], boundaries);
+      node := BuildLayers(leaves, pivots, 1);
+    }
   }
 
     

@@ -18,7 +18,7 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options reveals Node, NodeContents, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
   export All reveals *
     
   type Key = Model.Keys.Element
@@ -261,13 +261,11 @@ abstract module MutableBtree {
   {
     Model.Interpretation(I(node))
   }
-    
 
   method QueryLeaf(node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
     requires node.contents.Leaf?
-    ensures needle in Interpretation(node) ==> result == Some(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == None
+    ensures result == MapLookupOption(Interpretation(node), needle)
     decreases node.repr, 0
   {
     reveal_I();
@@ -283,8 +281,7 @@ abstract module MutableBtree {
   method QueryIndex(node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
     requires node.contents.Index?
-    ensures needle in Model.Interpretation(I(node)) ==> result == Some(Model.Interpretation(I(node))[needle])
-    ensures needle !in Model.Interpretation(I(node)) ==> result == None
+    ensures result == MapLookupOption(Interpretation(node), needle)
     decreases node.repr, 0
   {
     reveal_I();
@@ -297,8 +294,7 @@ abstract module MutableBtree {
 
   method Query(node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
-    ensures needle in Interpretation(node) ==> result == Some(Interpretation(node)[needle])
-    ensures needle !in Interpretation(node) ==> result == None
+    ensures result == MapLookupOption(Interpretation(node), needle)
     decreases node.repr, 1
   {
     match node.contents {
@@ -860,7 +856,7 @@ abstract module MutableBtree {
     IOfChild(node, childidx as int + 1);
   }
 
-  method InsertLeaf(node: Node, key: Key, value: Value)
+  method InsertLeaf(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
     requires WF(node)
     requires node.contents.Leaf?
     requires !Full(node)
@@ -870,12 +866,18 @@ abstract module MutableBtree {
     ensures Model.WF(I(node))
     ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
     ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node))) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key);
     modifies node, node.contents.keys, node.contents.values
   {
+    reveal_I();
+    Model.reveal_Interpretation();
+    Model.reveal_AllKeys();
     var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == key {
+      oldvalue := Some(node.contents.values[posplus1-1]);
       node.contents.values[posplus1-1] := value;
     } else {
+      oldvalue := None;
       Arrays.Insert(node.contents.keys, node.contents.nkeys, key, posplus1);
       Arrays.Insert(node.contents.values, node.contents.nkeys, value, posplus1);
       node.contents := node.contents.(nkeys := node.contents.nkeys + 1);
@@ -947,6 +949,7 @@ abstract module MutableBtree {
   }
 
   method InsertIndexChildNotFull(node: Node, childidx: uint64, key: Key, value: Value)
+    returns (oldvalue: Option<Value>)
     requires WF(node)
     requires node.contents.Index?
     requires childidx as int == Model.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
@@ -958,6 +961,7 @@ abstract module MutableBtree {
     ensures Model.WF(I(node))
     ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
     ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
     modifies node, node.contents.children[childidx], node.contents.children[childidx].repr
     decreases node.height, 0
   {
@@ -969,7 +973,12 @@ abstract module MutableBtree {
       IOfChild(node, i as int);
     }
     
-    InsertNode(node.contents.children[childidx], key, value);
+    oldvalue := InsertNode(node.contents.children[childidx], key, value);
+    assert oldvalue == MapLookupOption(old(Interpretation(node)), key) by {
+      reveal_I();
+      Model.reveal_Interpretation();
+      Model.reveal_AllKeys();
+    }
     node.repr := node.repr + node.contents.children[childidx].repr;
     
     InsertIndexChildNotFullPreservesWFShape(node, childidx as int);
@@ -1037,7 +1046,7 @@ abstract module MutableBtree {
     }
   }
   
-  method InsertIndex(node: Node, key: Key, value: Value)
+  method InsertIndex(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
     requires WF(node)
     requires node.contents.Index?
     requires !Full(node)
@@ -1047,14 +1056,15 @@ abstract module MutableBtree {
     ensures Model.WF(I(node))
     ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
     ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
     modifies node, node.repr
     decreases node.height, 1
   {
     var childidx: uint64 := InsertIndexSelectAndPrepareChild(node, key);
-    InsertIndexChildNotFull(node, childidx, key, value);
+    oldvalue := InsertIndexChildNotFull(node, childidx, key, value);
   }
   
-  method InsertNode(node: Node, key: Key, value: Value)
+  method InsertNode(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
     requires WF(node)
     requires !Full(node)
     ensures WFShape(node)
@@ -1063,13 +1073,14 @@ abstract module MutableBtree {
     ensures Model.WF(I(node))
     ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
     ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
     modifies node, node.repr
     decreases node.height, 2
   {
     if node.contents.Leaf? {
-      InsertLeaf(node, key, value);
+      oldvalue := InsertLeaf(node, key, value);
     } else {
-      InsertIndex(node, key, value);
+      oldvalue := InsertIndex(node, key, value);
     }
   }
 
@@ -1110,11 +1121,12 @@ abstract module MutableBtree {
     }
   }
   
-  method Insert(root: Node, key: Key, value: Value) returns (newroot: Node)
+  method Insert(root: Node, key: Key, value: Value) returns (newroot: Node, oldvalue: Option<Value>)
     requires WF(root)
     ensures WF(newroot)
     ensures fresh(newroot.repr - old(root.repr))
     ensures Interpretation(newroot) == old(Interpretation(root))[key := value]
+    ensures oldvalue == MapLookupOption(old(Interpretation(root)), key)
     modifies root.repr
   {
     if Full(root) {
@@ -1126,7 +1138,7 @@ abstract module MutableBtree {
       newroot := root;
     }
     assert Model.Interpretation(I(newroot)) == Model.Interpretation(old(I(root)));
-    InsertNode(newroot, key, value);
+    oldvalue := InsertNode(newroot, key, value);
   }
 }
 
@@ -1165,7 +1177,8 @@ module MainModule {
       invariant TMB.WF(t)
       invariant fresh(t.repr)
     {
-      t := TMB.Insert(t, ((i * p) % n), i);
+      var oldvalue;
+      t, oldvalue := TMB.Insert(t, ((i * p) % n), i);
       i := i + 1;
     }
 
