@@ -207,7 +207,7 @@ int get_first_idx_ge(vector<pair<ByteString, ByteString>> const& v, ByteString k
 class BenchmarkRandomSuccQueries : public Benchmark {
 public:
   int insertCount = 50000;
-  int queryCount = 100;
+  int queryCount = 1000;
 
   int targetCount = 100;
 
