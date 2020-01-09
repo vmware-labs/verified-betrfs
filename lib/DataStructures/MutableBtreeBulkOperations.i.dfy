@@ -305,7 +305,7 @@ abstract module MutableBtreeBulkOperations {
       assert fresh(seqrepr);
     }
 
-    assert anodes[..] == anodes[..anodes.Length];
+    assert anodes[..] == anodes[..anodes.Length as uint64];
     nodes := anodes[..];
   }
 
@@ -655,7 +655,7 @@ abstract module MutableBtreeBulkOperations {
       i := i + 1;
     }
 
-    parents := aparents[..aparents.Length];
+    parents := aparents[..aparents.Length as uint64];
     assume false;
   }
 
