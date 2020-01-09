@@ -330,7 +330,7 @@ abstract module MutableBtree {
     node := EmptyTree();
     Arrays.Memcpy(node.contents.keys, 0, keys);
     Arrays.Memcpy(node.contents.values, 0, values);
-    node.contents := node.contents.(nkeys := |keys|);
+    node.contents := node.contents.(nkeys := |keys| as uint64);
     assert node.contents.keys[..node.contents.nkeys] == keys;
   }
 
