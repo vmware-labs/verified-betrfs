@@ -25,17 +25,16 @@ inline void performYcsbRead(Application& app, ycsbc::CoreWorkload& workload, boo
 
 inline void performYcsbInsert(Application& app, ycsbc::CoreWorkload& workload, bool verbose) {
     ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
-    strstream valuestream;
-    for (const ycsbc::DB::KVPair& kv : *txinsert.values) {
-        valuestream << kv.first << ":" << kv.second << ",";
+    if (txinsert.values->size() != 1) {
+        cerr << "error: only fieldcount=1 is supported" << endl;
+        exit(-1);
     }
-    valuestream << ends;
+    const std::string& value = (*txinsert.values)[0].second;
     if (verbose) {
-        cerr << "[op] INSERT " << txinsert.table << " " << txinsert.key << " {" << valuestream.str() << "}" << endl;
+        cerr << "[op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
     }
     // TODO use the table name?
-    app.Insert(txinsert.key, valuestream.str());
-    valuestream.freeze(false); // ensure deallocation of the buffer
+    app.Insert(txinsert.key, value);
 }
 
 inline void performYcsbUpdate(Application& app, ycsbc::CoreWorkload& workload, bool verbose) {
@@ -44,17 +43,16 @@ inline void performYcsbUpdate(Application& app, ycsbc::CoreWorkload& workload, b
         cerr << "error: not writing all fields unsupported" << endl;
         exit(-1);
     }
-    strstream valuestream;
-    for (const ycsbc::DB::KVPair& kv : *txupdate.values) {
-        valuestream << kv.first << ":" << kv.second << ",";
+    if (txupdate.values->size() != 1) {
+        cerr << "error: only fieldcount=1 is supported" << endl;
+        exit(-1);
     }
-    valuestream << ends;
+    const std::string& value = (*txupdate.values)[0].second;
     if (verbose) {
-        cerr << "[op] UPDATE " << txupdate.table << " " << txupdate.key << " {" << valuestream.str() << "}" << endl;
+        cerr << "[op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
     }
     // TODO use the table name?
-    app.Insert(txupdate.key, valuestream.str());
-    valuestream.freeze(false); // ensure deallocation of the buffer
+    app.Insert(txupdate.key, value);
 }
 
 void ycsbLoad(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
@@ -67,13 +65,22 @@ void ycsbLoad(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool
     cerr << "[step] loading complete" << endl;
 }
 
-void ycsbRun(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
-    cerr << "[step] running experiment (num ops: " << num_ops << ")" << endl;
 
-    // TODO: how frequently should we sync?
+void ycsbRun(
+    Application& app,
+    ycsbc::CoreWorkload& workload,
+    int num_ops,
+    int sync_interval_ms,
+    bool verbose) {
+
+    cerr << "[step] running experiment (num ops: " << num_ops << ", sync interval " <<
+        sync_interval_ms << "ms)" << endl;
+
+    // TODO: sync every k seconds
  
     auto clock_start = chrono::high_resolution_clock::now();
     auto clock_prev = clock_start;
+    auto clock_last_sync = clock_start;
 
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
@@ -100,7 +107,20 @@ void ycsbRun(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool 
                 exit(-1);
         }
 
-        clock_prev = chrono::high_resolution_clock::now();
+        auto clock_op_completed = chrono::high_resolution_clock::now();
+
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            clock_op_completed - clock_last_sync).count() > sync_interval_ms) {
+
+            cerr << "[op] sync (completed " << i << " ops)" << endl;
+            app.Sync();
+
+            auto sync_completed = chrono::high_resolution_clock::now();
+            clock_last_sync = sync_completed;
+            clock_prev = sync_completed;
+        } else {
+            clock_prev = clock_op_completed;
+        }
     }
 
     auto clock_end = chrono::high_resolution_clock::now();
@@ -132,6 +152,13 @@ int main(int argc, char* argv[]) {
     unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
     int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
 
+    auto properties_map = props.properties();
+    if (properties_map.find("syncintervalms") == properties_map.end()) {
+        cerr << "error: spec must provide syncintervalms" << endl;
+        exit(-1);
+    }
+    int sync_interval_ms = stoi(props["syncintervalms"]);
+
     ycsbLoad(app, *workload, record_count, verbose);
 
     cerr << "[step] sync" << endl;
@@ -139,6 +166,6 @@ int main(int argc, char* argv[]) {
 
     int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
 
-    ycsbRun(app, *workload, num_ops, verbose);
+    ycsbRun(app, *workload, num_ops, sync_interval_ms, verbose);
 }
 
