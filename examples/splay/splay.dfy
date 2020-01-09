@@ -3,6 +3,7 @@ method
 splay(node: Node,
     ghost root: Node,
     ghost full_value_set: set<uint64>)
+modifies root.node_set
 requires root.p == null
 requires is_valid_node(root)
 requires node in node_set(root)

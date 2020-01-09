@@ -5,6 +5,13 @@ module Sequences {
   import opened Options
   import opened NativeTypes
 
+  lemma EqualExtensionality<E>(a: seq<E>, b: seq<E>)
+    requires |a| == |b|
+    requires forall i :: 0 <= i < |a| ==> a[i] == b[i]
+    ensures a == b
+  {
+  }
+  
   function Last<E>(run: seq<E>) : E
     requires |run| > 0;
   {
@@ -64,7 +71,7 @@ module Sequences {
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
-    reads f.reads
+    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
   {
     if |run| == 0 then []
     else  [f(run[0])] + Apply(f, run[1..])
@@ -118,6 +125,14 @@ module Sequences {
     return s[..pos] + [a] + s[pos..];
   }
 
+  lemma InsertMultiset<A>(s: seq<A>, a: A, pos: int)
+    requires 0 <= pos <= |s|;
+    ensures multiset(insert(s, a, pos)) == multiset(s) + multiset{a}
+  {
+    reveal_insert();
+    assert s == s[..pos] + s[pos..];
+  }
+  
   function {:opaque} replace1with2<A>(s: seq<A>, a: A, b: A, pos: int) : seq<A>
   requires 0 <= pos < |s|;
   ensures |replace1with2(s,a,b,pos)| == |s| + 1;
@@ -230,6 +245,192 @@ module Sequences {
   ensures SeqIndexUpdate(s, i, t) == s[i as int := t]
   {
     s[..i] + [t] + s[i+1..]
+  }
+
+  function {:opaque} Zip<A,B>(a: seq<A>, b: seq<B>) : seq<(A,B)>
+    requires |a| == |b|
+    ensures |Zip(a, b)| == |a|
+    ensures forall i :: 0 <= i < |Zip(a, b)| ==> Zip(a, b)[i] == (a[i], b[i])
+  {
+    if |a| == 0 then []
+    else Zip(DropLast(a), DropLast(b)) + [(Last(a), Last(b))]
+  }
+
+  function {:opaque} Unzip<A,B>(z: seq<(A, B)>) : (seq<A>, seq<B>)
+    ensures |Unzip(z).0| == |Unzip(z).1| == |z|
+    ensures forall i :: 0 <= i < |z| ==> (Unzip(z).0[i], Unzip(z).1[i]) == z[i]
+  {
+    if |z| == 0 then ([], [])
+    else
+      var (a, b) := Unzip(DropLast(z));
+      (a + [Last(z).0], b + [Last(z).1])
+  }
+
+  lemma ZipOfUnzip<A,B>(s: seq<(A,B)>)
+    ensures Zip(Unzip(s).0, Unzip(s).1) == s
+  {
+  }
+  
+  lemma UnzipOfZip<A,B>(sa: seq<A>, sb: seq<B>)
+    requires |sa| == |sb|
+    ensures Unzip(Zip(sa, sb)).0 == sa
+    ensures Unzip(Zip(sa, sb)).1 == sb
+  {
+  }
+  
+  function {:opaque} FlattenShape<A>(seqs: seq<seq<A>>) : (shape: seq<nat>)
+    ensures |shape| == |seqs|
+    ensures forall i :: 0 <= i < |shape| ==> shape[i] == |seqs[i]|
+  {
+    if |seqs| == 0 then []
+    else FlattenShape(DropLast(seqs)) + [|Last(seqs)|]
+  }
+
+  function {:opaque} FlattenLength(shape: seq<nat>) : nat
+  {
+    if |shape| == 0 then 0
+    else FlattenLength(DropLast(shape)) + Last(shape)
+  }
+  
+  lemma FlattenLengthMonotonic(shape: seq<nat>, prefix: nat)
+    requires prefix < |shape|
+    ensures FlattenLength(shape[..prefix]) <= FlattenLength(shape)
+  {
+    reveal_FlattenLength();
+    if prefix == |shape|-1 {
+    } else {
+      FlattenLengthMonotonic(DropLast(shape), prefix);
+      assert DropLast(shape)[..prefix] == shape[..prefix];
+    }
+  }
+
+  function {:opaque} Flatten<A>(seqs: seq<seq<A>>) : seq<A>
+    ensures |Flatten(seqs)| == FlattenLength(FlattenShape(seqs))
+    ensures |seqs| == 0 ==> |Flatten(seqs)| == 0
+  {
+    reveal_FlattenShape();
+    reveal_FlattenLength();
+    if |seqs| == 0 then []
+    else Flatten(DropLast(seqs)) + Last(seqs)
+  }
+
+  function FlattenIndex(shape: seq<nat>, i: nat, j: nat) : nat
+    requires i < |shape|
+    requires j < shape[i]
+  {
+    FlattenLength(shape[..i]) + j
+  }
+
+  function UnflattenIndex(shape: seq<nat>, i: nat) : (nat, nat)
+    requires i < FlattenLength(shape)
+  {
+    reveal_FlattenLength();
+    if i < FlattenLength(DropLast(shape)) then UnflattenIndex(DropLast(shape), i)
+    else (|shape|-1, i - FlattenLength(DropLast(shape)))
+  }
+
+  lemma FlattenIndexInBounds(shape: seq<nat>, i: nat, j: nat)
+    requires i < |shape|
+    requires j < shape[i]
+    ensures FlattenIndex(shape, i, j) < FlattenLength(shape)
+  {
+    reveal_FlattenLength();
+    if i == |shape|-1 {
+    } else {
+      FlattenIndexInBounds(DropLast(shape), i, j);
+      assert DropLast(shape)[..i] == shape[..i];
+    }
+  }
+  
+  lemma UnflattenIndexInBounds(shape: seq<nat>, i: nat)
+    requires i < FlattenLength(shape)
+    ensures UnflattenIndex(shape, i).0 < |shape|
+    ensures UnflattenIndex(shape, i).1 < shape[UnflattenIndex(shape, i).0]
+  {
+    var shapeidx := UnflattenIndex(shape, i).0;
+  }
+
+  lemma FlattenUnflattenIdentity(shape: seq<nat>, i: nat)
+    requires i < FlattenLength(shape)
+    ensures UnflattenIndex(shape, i).0 < |shape|
+    ensures UnflattenIndex(shape, i).1 < shape[UnflattenIndex(shape, i).0]
+    ensures i == FlattenIndex(shape, UnflattenIndex(shape, i).0, UnflattenIndex(shape, i).1)
+  {
+    UnflattenIndexInBounds(shape, i);
+    var (shapeidx, shapeoff) := UnflattenIndex(shape, i);
+    if shapeidx == |shape|-1 {
+    } else {
+      FlattenUnflattenIdentity(DropLast(shape), i);
+      assert DropLast(shape)[..shapeidx] == shape[..shapeidx];
+    }
+  }
+  
+  lemma UnflattenFlattenIdentity(shape: seq<nat>, i: nat, j: nat)
+    requires i < |shape|
+    requires j < shape[i]
+    ensures FlattenIndex(shape, i, j) < FlattenLength(shape)
+    ensures (i, j) == UnflattenIndex(shape, FlattenIndex(shape, i, j))
+  {
+    FlattenIndexInBounds(shape, i, j);
+    if i == |shape| - 1 {
+    } else {
+      UnflattenFlattenIdentity(DropLast(shape), i, j);
+      assert DropLast(shape)[..i] == shape[..i];
+    }
+  }
+  
+  lemma FlattenIndexOrdering(shape: seq<nat>, il: nat, io: nat, jl: nat, jo: nat)
+    requires il < |shape|
+    requires io < shape[il]
+    requires jl < |shape|
+    requires jo < shape[jl]
+    requires il <= jl
+    requires il == jl ==> io < jo
+    ensures FlattenIndex(shape, il, io) < FlattenIndex(shape, jl, jo)
+  {
+    reveal_FlattenLength();
+    if il < jl-1 {
+      assert shape[..il] == shape[..il+1][..il];
+      FlattenLengthMonotonic(shape[..jl], il+1);
+      assert shape[..jl][..il+1] == shape[..il+1];
+    } else if il == jl - 1 {
+      assert shape[..il] == shape[..il+1][..il];
+    } else {
+    }
+  }
+
+  lemma UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
+    requires i < j < FlattenLength(shape)
+    ensures UnflattenIndex(shape, i).0 <= UnflattenIndex(shape, j).0
+    ensures UnflattenIndex(shape, i).0 == UnflattenIndex(shape, j).0 ==> UnflattenIndex(shape, i).1 < UnflattenIndex(shape, j).1
+  {
+    FlattenUnflattenIdentity(shape, i);
+  }
+
+  lemma FlattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat, j: nat)
+    requires i < |seqs|
+    requires j < |seqs[i]|
+    ensures FlattenIndex(FlattenShape(seqs), i, j) < |Flatten(seqs)|
+    ensures Flatten(seqs)[FlattenIndex(FlattenShape(seqs), i, j)] == seqs[i][j]
+  {
+    reveal_Flatten();
+    FlattenIndexInBounds(FlattenShape(seqs), i, j);
+    if i == |seqs|-1 {
+    } else {
+      FlattenIndexIsCorrect(DropLast(seqs), i, j);
+      assert DropLast(FlattenShape(seqs))[..i] == FlattenShape(seqs)[..i];
+    }
+  }
+
+  lemma UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
+    requires i < FlattenLength(FlattenShape(seqs))
+    ensures UnflattenIndex(FlattenShape(seqs), i).0 < |seqs|
+    ensures UnflattenIndex(FlattenShape(seqs), i).1 < |seqs[UnflattenIndex(FlattenShape(seqs), i).0]|
+    ensures Flatten(seqs)[i] == seqs[UnflattenIndex(FlattenShape(seqs), i).0][UnflattenIndex(FlattenShape(seqs), i).1]
+  {
+    var shape := FlattenShape(seqs);
+    UnflattenIndexInBounds(shape, i);
+    reveal_Flatten();
   }
 
   lemma CardinalityOfSetsOfSequenceIndices<T>(q:seq<T>, t:set<int>)

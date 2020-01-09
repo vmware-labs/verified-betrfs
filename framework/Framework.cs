@@ -560,6 +560,10 @@ namespace NativeArrays_Compile {
       return res;
     }
 
+    public static void @CopyArrayIntoArray<A>(A[] src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+        System.Array.Copy(src, (long)srcIndex, dst, (long)dstIndex, (long)len);
+    }
+
     public static T[] @newArrayClone<T>(T[] ar)
     {
       T[] res = new T[ar.Length];

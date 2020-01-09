@@ -1,4 +1,4 @@
-include "../lib/DataStructures/tttree.i.dfy"
+include "../lib/DataStructures/KMBtree.i.dfy"
 include "../ByteBlockCacheSystem/KVList.i.dfy"
 include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
@@ -13,13 +13,10 @@ include "BucketIteratorModel.i.dfy"
 // Iterator datatype from BucketIteratorModel, which is why there is no
 // BucketIteratorImpl module/class.
 // TODO(robj): Littered with assume false!?
-//
-// VESTIGIAL -- do not bother trying to prove stuff here because this
-// file is marked for deletion or major renovation.
-//
 
 module BucketImpl {
-  import TTT = TwoThreeTree
+  import KMB = KMBtree`API
+  import KMBBOps = KMBtreeBulkOperations
   import KVList
   import KVListPartialFlush
   import opened ValueMessage`Internal
@@ -36,60 +33,30 @@ module BucketImpl {
 
   type Key = Element
   type Kvl = KVList.Kvl
-  type TreeMap = TTT.Tree<Message>
+  type TreeMap = KMB.Node
 
   method tree_to_kvl(tree: TreeMap)
   returns (kvl : Kvl)
-  requires TTT.TTTree(tree)
+  requires KMB.WF(tree)
+  requires KMBBOps.NumElements(tree) < Uint64UpperBound()
   ensures KVList.WF(kvl)
-  ensures KVList.I(kvl) == TTT.I(tree)
+  ensures KVList.I(kvl) == KMB.Interpretation(tree)
   {
+    var s := KMBBOps.ToSeq(tree);
+    kvl := KVList.Kvl(s.0[..], s.1[..]);
     assume false;
-    var s := TTT.AsSeq(tree);
-    kvl := KVList.KvlOfSeq(s, TTT.I(tree));
   }
 
   method kvl_to_tree(kvl : Kvl)
   returns (tree: TreeMap)
   requires KVList.WF(kvl)
-  ensures TTT.TTTree(tree)
-  ensures KVList.I(kvl) == TTT.I(tree)
+  requires |kvl.keys| < Uint64UpperBound() - 1
+  ensures KMB.WF(tree)
+  ensures KVList.I(kvl) == KMB.Interpretation(tree)
   {
+    var modelkvl := KMB.Model.KVList(kvl.keys, kvl.values);
+    tree := KMBBOps.BuildTreeForSequence(modelkvl);
     assume false;
-    if (|kvl.keys| as uint64 == 0) {
-      return TTT.EmptyTree;
-    }
-
-    var ar := new (Key, TTT.Node)[|kvl.keys| as uint64];
-    var j := 0;
-    while j < |kvl.keys| as uint64 {
-      ar[j] := (kvl.keys[j], TTT.Leaf(kvl.keys[j], kvl.values[j]));
-      j := j + 1;
-    }
-    var len := |kvl.keys| as uint64;
-    while len > 1 {
-      var k := 0;
-      var newlen := 0;
-      while k + 4 < len {
-        ar[newlen] := (ar[k].0, TTT.ThreeNode(ar[k].1, ar[k+1].0, ar[k+1].1, ar[k+2].0, ar[k+2].1));
-        k := k + 3;
-        newlen := newlen + 1;
-      }
-      if (k + 4 == len) {
-        ar[newlen] := (ar[k].0, TTT.TwoNode(ar[k].1, ar[k+1].0, ar[k+1].1));
-        newlen := newlen + 1;
-        ar[newlen] := (ar[k+2].0, TTT.TwoNode(ar[k+2].1, ar[k+3].0, ar[k+3].1));
-        newlen := newlen + 1;
-      } else if (k + 3 == len) {
-        ar[newlen] := (ar[k].0, TTT.ThreeNode(ar[k].1, ar[k+1].0, ar[k+1].1, ar[k+2].0, ar[k+2].1));
-        newlen := newlen + 1;
-      } else {
-        ar[newlen] := (ar[k].0, TTT.TwoNode(ar[k].1, ar[k+1].0, ar[k+1].1));
-        newlen := newlen + 1;
-      }
-      len := newlen;
-    }
-    tree := TTT.NonEmptyTree(ar[0 as uint64].1);
   }
 
   datatype Iterator = Iterator(i: uint64)
@@ -98,7 +65,7 @@ module BucketImpl {
   class MutBucket {
     var is_tree: bool;
 
-    var tree: TreeMap;
+    var tree: KMB.Node?;
     var kvl: Kvl;
 
     var Weight: uint64;
@@ -112,29 +79,36 @@ module BucketImpl {
     ensures Inv() ==> Weight as int == WeightBucket(Bucket)
     ensures Inv() ==> WFBucket(Bucket)
     {
-      && Repr == {this}
+      && this in Repr
       && (!is_tree ==> (
+        && tree == null
         && KVList.WF(kvl)
+        && WeightBucket(KVList.I(kvl)) < Uint64UpperBound()
         && Weight as int == WeightBucket(KVList.I(kvl))
         && Bucket == KVList.I(kvl)
       ))
       && (is_tree ==> (
-        && TTT.TTTree(tree)
-        && Weight as int == WeightBucket(TTT.I(tree))
-        && Bucket == TTT.I(tree)
+        && tree != null
+        && tree in Repr
+        && tree.repr <= Repr
+        && KMB.WF(tree)
+        && Weight as int == WeightBucket(KMB.Interpretation(tree))
+        && Weight as int < Uint64UpperBound()
+        && Bucket == KMB.Interpretation(tree)
       ))
       && WFBucket(Bucket)
     }
 
     constructor(kv: Kvl)
     requires KVList.WF(kv)
-    requires WeightBucket(KVList.I(kv)) < 0x1_0000_0000_0000_0000
+    requires WeightBucket(KVList.I(kv)) < Uint64UpperBound()
     ensures Bucket == KVList.I(kv)
     ensures Inv()
     ensures fresh(Repr)
     {
       this.is_tree := false;
       this.kvl := kv;
+      this.tree := null;
       this.Repr := {this};
       var w := KVList.computeWeightKvl(kv);
       this.Weight := w;
@@ -145,24 +119,34 @@ module BucketImpl {
     constructor InitWithWeight(kv: Kvl, w: uint64)
     requires KVList.WF(kv)
     requires WeightBucket(KVList.I(kv)) == w as int
+    requires w as int < Uint64UpperBound()
     ensures Bucket == KVList.I(kv)
     ensures Inv()
     ensures fresh(Repr)
     {
       this.is_tree := false;
       this.kvl := kv;
+      this.tree := null;
       this.Repr := {this};
       this.Weight := w;
       this.Bucket := KVList.I(kv);
       KVList.WFImpliesWFBucket(kv);
     }
 
+    lemma NumElementsLteWeight(bucket: Bucket)
+      ensures |bucket| < WeightBucket(bucket)
+    {
+      assume false;
+    }
+    
     method GetKvl() returns (kv: Kvl)
     requires Inv()
     ensures KVList.WF(kv)
     ensures KVList.I(kv) == Bucket
     {
       if (is_tree) {
+        NumElementsLteWeight(KMB.Interpretation(tree));
+        assume false;
         kv := tree_to_kvl(tree);
       } else {
         kv := kvl;
@@ -391,6 +375,7 @@ module BucketImpl {
     {
       if !is_tree {
         is_tree := true;
+        assume false; // NumElements issue
         tree := kvl_to_tree(kvl);
         kvl := KVList.Kvl([], []); // not strictly necessary, but frees memory
       }
@@ -399,15 +384,15 @@ module BucketImpl {
 
       if value.Define? {
         var cur;
-        tree, cur := TTT.Insert(tree, key, value);
-        if (cur.ValueForKey?) {
+        tree, cur := KMB.Insert(tree, key, value);
+        if (cur.Some?) {
           Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {
           Weight := Weight + WeightKeyUint64(key) + WeightMessageUint64(value);
         }
       }
 
-      Bucket := TTT.I(tree);
+      Bucket := KMB.Interpretation(tree);
     }
 
     method Query(key: Key)
@@ -417,12 +402,7 @@ module BucketImpl {
     ensures m.Some? ==> key in Bucket && Bucket[key] == m.value
     {
       if is_tree {
-        var res := TTT.Query(tree, key);
-        if res.ValueForKey? {
-          m := Some(res.value);
-        } else {
-          m := None;
-        }
+        m := KMB.Query(tree, key);
       } else {
         KVList.lenKeysLeWeightOver8(kvl);
         m := KVList.Query(kvl, key);
@@ -438,6 +418,7 @@ module BucketImpl {
     {
       var kv;
       if is_tree {
+        assume false; // NumElements issue
         kv := tree_to_kvl(tree);
       } else {
         kv := kvl;
@@ -458,6 +439,7 @@ module BucketImpl {
     {
       var kv;
       if is_tree {
+        assume false; // NumElements issue
         kv := tree_to_kvl(tree);
       } else {
         kv := kvl;
@@ -599,6 +581,7 @@ module BucketImpl {
     {
       var kv;
       if is_tree {
+        assume false; // NumElements issue
         kv := tree_to_kvl(tree);
       } else {
         kv := kvl;
@@ -621,10 +604,12 @@ module BucketImpl {
       invariant 0 <= j as int <= |buckets|
       invariant ar.Length == |buckets|
       invariant forall i | 0 <= i < j as int :: ar[i] != null
+      invariant forall i | 0 <= i < j as int :: ar !in ar[i].Repr
       invariant forall i | 0 <= i < j as int :: ar[i].Inv()
       invariant forall i | 0 <= i < j as int :: ar[i].I() == buckets[i].I()
       invariant forall i | 0 <= i < j as int :: fresh(ar[i].Repr)
       invariant forall i, i' | 0 <= i < j as int && 0 <= i' < j as int && i != i' :: ar[i].Repr !! ar[i'].Repr
+      modifies ar
       {
         ar[j] := buckets[j].Clone();
         j := j + 1;
@@ -696,3 +681,4 @@ module BucketImpl {
     }
   }
 }
+

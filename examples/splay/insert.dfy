@@ -40,8 +40,8 @@ ghost method insert_init(root: Node, all_nodes: set<Node>, node: Node, value: ui
 returns (path: seq<Node>, l: uint64, u: uint64)
 requires is_valid_node(root)
 requires root == node
-ensures forall t : uint64 :: t in value_set(root) ==> l < t < u
-ensures l < value < u
+ensures forall t : uint64 :: t in value_set(root) ==> l <= t <= u
+ensures l <= value <= u
 ensures is_valid_wrt_path(
         all_nodes,
         root, path, node, value,
@@ -50,12 +50,10 @@ ensures is_valid_wrt_path(
   var s := value_set(root) + {value};
   l := minimum(s);
   u := maximum(s);
-  l := l - 1;
-  u := u + 1;
   path := [root];
 
-  assert forall t : uint64 :: t in s ==> l < t < u;
-  assert forall t : uint64 :: t in value_set(root) ==> l < t < u;
+  assert forall t : uint64 :: t in s ==> l <= t <= u;
+  assert forall t : uint64 :: t in value_set(root) ==> l <= t <= u;
 }
 
 ghost method lemma_is_okay_when_do_nothing(tree: Tree, root: Node, old_ts: set<uint64>,
@@ -91,7 +89,7 @@ ensures tree_set(tree) == old_ts + {value}
 method
 {:fuel is_valid_wrt_path, 0, 0}
 insert(tree: Tree, value: uint64)
-modifies tree
+modifies tree, tree.root, if tree.root != null then tree.root.node_set else {}
 requires is_valid_tree(tree)
 ensures is_valid_tree(tree)
 ensures tree_set(tree) == old(tree_set(tree)) + {value}
@@ -134,7 +132,7 @@ ensures tree_set(tree) == old(tree_set(tree)) + {value}
     invariant node_set(node) <= node_set(root)
     invariant root == tree.root
     invariant all_nodes == node_set(root)
-    invariant forall t : uint64 :: t in value_set(root) ==> l < t < u;
+    invariant forall t : uint64 :: t in value_set(root) ==> l <= t <= u;
     invariant is_valid_wrt_path(
         all_nodes,
         root, path, node, value,
@@ -240,8 +238,8 @@ decreases |path|
     (
       if |path| == 1 then (
         root == final &&
-        l < fv < r &&
-        forall v:uint64 :: v in fvs ==> l < v < r
+        l <= fv <= r &&
+        forall v:uint64 :: v in fvs ==> l <= v <= r
       ) else (
        root != final &&
        root in all_nodes &&
@@ -254,15 +252,15 @@ decreases |path|
           (if root.l == final then fn else node_set(root.l)) +
           (if root.r == final then fn else node_set(root.r))
        ) &&
-       (root.value > l) &&
-       (root.value < r) &&
+       (root.value >= l) &&
+       (root.value <= r) &&
        (
           (value < root.value &&
             root.l == path[1] &&
             (root.r != null ==> root.r in (all_nodes - {final})) &&
             node_set(root.r) <= all_nodes - {final} &&
             is_valid_node(root.r) &&
-            (forall t : uint64 :: t in value_set(root.r) ==> root.value < t < r) &&
+            (forall t : uint64 :: t in value_set(root.r) ==> root.value < t <= r) &&
             is_valid_wrt_path(all_nodes,
               root.l, path[1..], final, value, fv, fp, fn, fvs, l, root.value)
           ) ||
@@ -271,7 +269,7 @@ decreases |path|
             (root.l != null ==> root.l in (all_nodes - {final})) &&
             node_set(root.l) <= all_nodes - {final} &&
             is_valid_node(root.l) &&
-            (forall t : uint64 :: t in value_set(root.l) ==> l < t < root.value) &&
+            (forall t : uint64 :: t in value_set(root.l) ==> l <= t < root.value) &&
             is_valid_wrt_path(all_nodes,
               root.r, path[1..], final, value, fv, fp, fn, fvs, root.value, r)
           )
@@ -594,7 +592,7 @@ requires final.l == newnode ==> value_set(final.r) <= old_final_value_set
 requires final.r == newnode ==> value_set(final.l) <= old_final_value_set
 requires newnode.node_set == {newnode}
 requires newnode.value == value
-requires l < value < u
+requires l <= value <= u
 requires (forall t: uint64 :: t in value_set(final.l) ==> t < final.value);
 requires (forall t: uint64 :: t in value_set(final.r) ==> t > final.value);
 requires root.p == null
@@ -883,7 +881,7 @@ requires is_valid_wrt_path(
               all_nodes,
               root, path, final, value,
               final.value, final.p, final.node_set, old_final_value_set, l, u)
-requires |path| > 1
+requires 1 < |path| < 0x1_0000_0000_0000_0000
 ensures value < root.value ==> forall k: int :: 0 <= k < |path| ==> path[k] !in node_set(root.r)
 ensures value > root.value ==> forall k: int :: 0 <= k < |path| ==> path[k] !in node_set(root.l)
 {
@@ -891,9 +889,9 @@ ensures value > root.value ==> forall k: int :: 0 <= k < |path| ==> path[k] !in 
     lemma_path_is_le(all_nodes, root, path, final, value, old_final_value_set, newnode, l, u);
     assert (forall t : uint64 :: t in value_set(root.r) ==> t > root.value);
 
-    var k1 := 0;
-    while (k1 < |path|)
-    invariant forall k:uint64 :: 0 <= k < k1 ==> k < |path| && path[k] !in node_set(root.r)
+    var k1: uint64 := 0;
+    while (k1 < |path| as uint64)
+    invariant forall k:uint64 :: 0 <= k < k1 ==> k < |path| as uint64 && path[k] !in node_set(root.r)
     {
       assert path[k1].value <= root.value;
       if (path[k1] in node_set(root.r)) {
@@ -908,9 +906,9 @@ ensures value > root.value ==> forall k: int :: 0 <= k < |path| ==> path[k] !in 
     lemma_path_is_ge(all_nodes, root, path, final, value, old_final_value_set, newnode, l, u);
     assert (forall t : uint64 :: t in value_set(root.l) ==> t < root.value);
 
-    var k1 := 0;
-    while (k1 < |path|)
-    invariant forall k:uint64 :: 0 <= k < k1 ==> k < |path| && path[k] !in node_set(root.l)
+    var k1: uint64 := 0;
+    while (k1 < |path| as uint64)
+    invariant forall k:uint64 :: 0 <= k < k1 ==> k < |path| as uint64 && path[k] !in node_set(root.l)
     {
       assert path[k1].value >= root.value;
       if (path[k1] in node_set(root.l)) {

@@ -66,6 +66,21 @@ namespace NativeArrays_Compile {
       std::copy(src.ptr() + srcIndex, src.ptr() + (srcIndex + len),
           dst.begin() + dstIndex);
     }
+
+    template <typename T>
+    static void CopyArrayIntoDifferentArray(
+      DafnyArray<T> src,
+      uint64 srcIndex,
+      DafnyArray<T> dst,
+      uint64 dstIndex,
+      uint64 len)
+    {
+      // We're allowed to do this without checking the ranges overlap
+      // because CopyArrayIntoDifferentArray has the condition
+      // src != dst.
+      std::copy(src.begin() + srcIndex, src.begin() + (srcIndex + len),
+          dst.begin() + dstIndex);
+    }
   };
 }
 

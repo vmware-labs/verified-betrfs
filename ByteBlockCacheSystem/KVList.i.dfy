@@ -1144,39 +1144,6 @@ module KVList {
     reveal_replace1with2();
   }
 
-  // TODO remove kvlOfSeq and related stuff when memtable lands
-
-  function kvlOfSeq(s: seq<(Key, Message)>) : (kvl: Kvl)
-  requires |s| < 0x1_0000_0000_0000_0000
-  ensures WF(kvl)
-
-  lemma kvlOfSeqRes(s: seq<(Key, Message)>, m: map<Key, Message>)
-  requires |s| < 0x1_0000_0000_0000_0000
-  requires SortedSeqForMap(s, m)
-  ensures WF(kvlOfSeq(s))
-  ensures I(kvlOfSeq(s)) == m
-
-  method KvlOfSeq(s: seq<(Key, Message)>, ghost m: map<Key, Message>) returns (kvl: Kvl)
-  requires SortedSeqForMap(s, m)
-  requires |s| < 0x1_0000_0000_0000_0000
-  ensures kvl == kvlOfSeq(s)
-  {
-    assume false;
-
-    var keys := new Key[|s| as uint64];
-    var values := new Message[|s| as uint64];
-
-    var i := 0;
-    while i < |s| as uint64
-    {
-      keys[i] := s[i].0;
-      values[i] := s[i].1;
-      i := i + 1;
-    }
-
-    kvl := Kvl(keys[..], values[..]);
-  }
-
   /////////////////////////
   //// Weight stuff
   /////////////////////////
