@@ -10,6 +10,9 @@
 
 using namespace std;
 
+constexpr int KEY_SIZE = 20;
+constexpr int VALUE_SIZE = 400;
+
 class Benchmark {
 public:
   virtual ~Benchmark() {}
@@ -56,11 +59,11 @@ public:
   }
 
   vector<ByteString> RandomKeys(int n, int seed) {
-    return RandomSeqs(n, seed, 20);
+    return RandomSeqs(n, seed, KEY_SIZE);
   }
 
   vector<ByteString> RandomValues(int n, int seed) {
-    return RandomSeqs(n, seed, 400);
+    return RandomSeqs(n, seed, VALUE_SIZE);
   }
 
   vector<ByteString> RandomSortedKeys(int n, int seed) {
@@ -150,6 +153,50 @@ public:
     app.Sync();
   }
 };
+
+class BenchmarkLongRandomInserts : public Benchmark {
+public:
+  int count = 5000000;
+
+  virtual string name() override { return "LongRandomInserts"; }
+  virtual int opCount() override { return count; }
+
+  uint32_t rngState = 198432;
+
+  uint32_t NextPseudoRandom() {
+    rngState = (uint32_t) (((uint64_t) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  BenchmarkLongRandomInserts() {
+  }
+
+  virtual void prepare(Application& app) override {
+  }
+
+  virtual void go(Application& app) override {
+    static_assert (KEY_SIZE % 4 == 0, "");
+    static_assert (VALUE_SIZE % 4 == 0, "");
+
+    for (int i = 0; i < count; i++) {
+      ByteString key(KEY_SIZE);
+      for (int j = 0; j < KEY_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+      ByteString value(VALUE_SIZE);
+      for (int j = 0; j < VALUE_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+
+      app.Insert(key, value);
+    }
+
+    app.Sync();
+  }
+};
+
 
 class BenchmarkRandomQueries : public Benchmark {
 public:
@@ -280,6 +327,7 @@ void RunAllBenchmarks() {
 shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   if (name == "random-queries") { return shared_ptr<Benchmark>(new BenchmarkRandomQueries()); }
   if (name == "random-inserts") { return shared_ptr<Benchmark>(new BenchmarkRandomInserts()); }
+  if (name == "long-random-inserts") { return shared_ptr<Benchmark>(new BenchmarkLongRandomInserts()); }
   if (name == "random-succs") { return shared_ptr<Benchmark>(new BenchmarkRandomSuccQueries()); }
 
   cerr << "No benchmark found by name " << name << endl;
