@@ -19,5 +19,5 @@ set -e
 set -x
 
 # https://github.com/secure-foundations/dafny.git
-# DafnyArray branch
-git checkout 807c3ef12775f6f1cef3ea55033202c9ae22c11f
+# dafny-array-no-vector branch
+git checkout 1dc46253400a262a511f600dd17820cdef2bd8a4

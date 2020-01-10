@@ -40,18 +40,18 @@ namespace NativeArrays_Compile {
     template <typename T>
     static DafnyArray<T> newArrayFill(uint64 len, T val)
     {
-      shared_ptr<vector<T>> filled { new vector<T>(len, val) };
-      DafnyArray<T> filled_ar;
-      filled_ar.vec = filled;
-      return filled_ar;
+      DafnyArray<T> ar(len);
+      for (size_t i = 0; i < len; i++) {
+        ar.at(i) = val;
+      }
+      return ar;
     }
 
     template <typename T>
     static DafnyArray<T> newArrayClone(DafnyArray<T> ar)
     {
-      shared_ptr<vector<T>> clone { new vector<T>(*ar.vec) };
-      DafnyArray<T> clone_ar;
-      clone_ar.vec = clone;
+      DafnyArray<T> clone_ar(ar.size());
+      std::copy(ar.begin(), ar.end(), clone_ar.begin());
       return clone_ar;
     }
 
