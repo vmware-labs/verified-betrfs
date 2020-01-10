@@ -79,6 +79,16 @@ namespace MainDiskIOHandler_Compile {
       fail("fflush failed");
     }
 
+    // TODO according to the fsync documentation, we also need to fsync
+    // the directory that the file is in.
+    // But really, we should probably be writing straight to a device
+    // instead.
+
+    int fsync_res = fsync(fileno(f));
+    if (fsync_res != 0) {
+      fail("fsync failed");
+    }
+
     int close_res = fclose(f);
     if (close_res != 0) {
       fail("write fclose failed");
