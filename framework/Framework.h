@@ -107,6 +107,8 @@ namespace MainDiskIOHandler_Compile {
     DiskIOHandler();
     bool prepareWriteResponse();
     bool prepareReadResponse();
+    void completeWriteTasks();
+    void waitForOne();
 
     private:
     uint64 readResponseId;
@@ -116,7 +118,7 @@ namespace MainDiskIOHandler_Compile {
 
     uint64 curId;
 
-    std::map<uint64, WriteTask> writeReqs;
+    std::map<uint64, std::shared_ptr<WriteTask>> writeReqs;
     std::map<uint64, ReadTask> readReqs;
   };
 }

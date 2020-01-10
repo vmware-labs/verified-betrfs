@@ -7,6 +7,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <aio.h>
+#include <stdio.h>
 
 [[ noreturn ]]
 void fail(string err)
@@ -20,7 +22,90 @@ typedef uint8 byte;
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
-  struct WriteTask { };
+  struct WriteTask {
+    FILE* f;
+
+    vector<byte> bytes;
+    aiocb aio_req_write;
+    aiocb aio_req_fsync;
+
+    bool done;
+    
+    WriteTask(FILE* f, byte* buf, size_t len) {
+      // TODO would be good to eliminate this copy,
+      // but the application code might have lingering references
+      // to the array.
+
+      // TODO we actually need to fsync the directory too,
+      // but it would be even better to just write straight to a device.
+
+      bytes.resize(len);
+      std::copy(buf, buf + len, bytes.begin());
+
+      this->f = f;
+      this->done = false;
+
+      aio_req_write.aio_fildes = fileno(f);
+      aio_req_write.aio_offset = 0;
+      aio_req_write.aio_buf = &bytes[0];
+      aio_req_write.aio_nbytes = len;
+      aio_req_write.aio_reqprio = 0;
+      aio_req_write.aio_sigevent.sigev_notify = SIGEV_NONE;
+
+      int ret = aio_write(&aio_req_write);
+      if (ret != 0) {
+        fail("aio_write failed");
+      }
+
+      aio_req_fsync.aio_fildes = fileno(f);
+      aio_req_fsync.aio_reqprio = 0;
+      aio_req_fsync.aio_sigevent.sigev_notify = SIGEV_NONE;
+
+      ret = aio_fsync(O_SYNC, &aio_req_fsync);
+      if (ret != 0) {
+        fail("aio_fsync failed");
+      }
+    }
+
+    void wait() {
+      if (!done) {
+        aiocb* aiolist[1];
+        aiolist[0] = &aio_req_fsync;
+        aio_suspend(aiolist, 1, NULL);
+
+        check_if_complete();
+        if (!done) {
+          fail("wait failed to complete");
+        }
+      }
+    }
+
+    void check_if_complete() {
+      if (!done) {
+        int status = aio_error(&aio_req_fsync);
+        if (status == 0) {
+          status = aio_error(&aio_req_write);
+          if (status != 0) {
+            fail("fsync finished but write somehow did not");
+          }
+
+          int ret = aio_return(&aio_req_fsync);
+          if (ret != 0) {
+            fail("fsync returned nonzero");
+          }
+
+          ret = aio_return(&aio_req_write);
+          if (ret != (int)bytes.size()) {
+            fail("fwrite did not write all bytes");
+          }
+
+          done = true;
+        } else if (status != EINPROGRESS) {
+          fail("aio_error returned that fsync has failed");
+        }
+      }
+    }
+  };
 
   struct ReadTask {
     DafnySequence<byte> bytes;
@@ -111,12 +196,23 @@ namespace MainDiskIOHandler_Compile {
 
   uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
   {
-    writeSync(addr, &bytes.at(0), bytes.size());
+    size_t len = bytes.size();
+    if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
+      fail("write not implemented for these arguments");
+    }
+
+    FILE* f = fopen(getFilename(addr).c_str(), "w");
+    if (f == NULL) {
+      fail("write fopen failed");
+    }
+
+    shared_ptr<WriteTask> writeTask {
+      new WriteTask(f, &bytes.at(0), len) };
 
     uint64 id = this->curId;
     this->curId++;
 
-    writeReqs.insert(make_pair(id, WriteTask()));
+    writeReqs.insert(make_pair(id, writeTask));
 
     return id;
   }
@@ -157,14 +253,40 @@ namespace MainDiskIOHandler_Compile {
   }
 
   bool DiskIOHandler::prepareWriteResponse() {
-    auto it = this->writeReqs.begin();
-    if (it != this->writeReqs.end()) {
-      this->writeResponseId = it->first;
-      this->writeReqs.erase(it);
-      return true;
-    } else {
-      return false;
+    for (auto it = this->writeReqs.begin();
+        it != this->writeReqs.end(); ++it) {
+      shared_ptr<WriteTask> writeTask = it->second;
+      writeTask->check_if_complete();
+      if (writeTask->done) {
+        this->writeResponseId = it->first;
+        this->writeReqs.erase(it);
+        return true;
+      }
     }
+    return false;
+  }
+
+  void DiskIOHandler::completeWriteTasks() {
+    for (auto p : this->writeReqs) {
+      p.second->wait();
+    }
+  }
+  void DiskIOHandler::waitForOne() {
+    vector<aiocb*> tasks;
+    tasks.resize(this->writeReqs.size());
+    int i = 0;
+    for (auto p : this->writeReqs) {
+      if (p.second->done) {
+        return;
+      } else {
+        tasks[i] = &p.second->aio_req_fsync;
+        i++;
+      }
+    }
+    if (i == 0) {
+      fail("waitForOne called with no tasks\n");
+    }
+    aio_suspend(&tasks[0], i, NULL);
   }
 }
 
@@ -213,7 +335,7 @@ void Application::Sync() {
       return;
     } else if (wait) {
       LOG("doing wait...");
-      //io.waitForOne();
+      io->waitForOne();
     } else {
       LOG("doing sync...");
     }
@@ -234,7 +356,7 @@ void Application::Insert(ByteString key, ByteString val)
   for (int i = 0; i < 50; i++) {
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
-    //io.completeWriteTasks();
+    io->completeWriteTasks();
     this->maybeDoResponse();
     if (success) {
       LOG("doing insert... success!");
