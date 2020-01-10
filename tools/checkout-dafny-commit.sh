@@ -20,4 +20,4 @@ set -x
 
 # https://github.com/secure-foundations/dafny.git
 # DafnyArray branch
-git checkout 9f710ce3910893cb4d4f32cedc37078d888fed3f
+git checkout 807c3ef12775f6f1cef3ea55033202c9ae22c11f
