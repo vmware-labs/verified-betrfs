@@ -99,6 +99,11 @@ namespace MainDiskIOHandler_Compile {
             fail("fwrite did not write all bytes");
           }
 
+          int close_res = fclose(f);
+          if (close_res != 0) {
+            fail("read fclose failed");
+          }
+
           done = true;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that fsync has failed");
