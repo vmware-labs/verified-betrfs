@@ -10,6 +10,9 @@
 
 using namespace std;
 
+void benchmark_start(string const& name);
+void benchmark_end(string const& name);
+
 constexpr int KEY_SIZE = 20;
 constexpr int VALUE_SIZE = 400;
 
@@ -334,6 +337,71 @@ shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   exit(1);
 }
 
+class StopwatchEntry {
+public:
+  long long ns;
+  bool in_progress;
+  int count;
+  std::chrono::time_point<std::chrono::high_resolution_clock> last;
+
+  StopwatchEntry() {
+    ns = 0;
+    in_progress = false;
+    count = 0;
+  }
+
+  void start() {
+    assert(!in_progress);
+    in_progress = true;
+    last = chrono::high_resolution_clock::now();
+  }
+
+  void end() {
+    assert(in_progress);
+    in_progress = false;
+    auto t2 = chrono::high_resolution_clock::now();
+    ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - last).count();
+    count++;
+  }
+};
+map<string, StopwatchEntry> sw;
+
+string nameToString(DafnySequence<char> dafnyName) {
+  return string(dafnyName.ptr(), dafnyName.size());
+}
+
+void benchmark_start(string const& name) {
+  auto it = sw.find(name);
+  if (it == sw.end()) {
+    sw.insert(make_pair(name, StopwatchEntry()));
+  }
+  sw[name].start();
+}
+
+void benchmark_end(string const& name) {
+  sw[name].end();
+}
+
+void dump() {
+  for (auto& p : sw) {
+    string name = p.first;
+    int count = p.second.count;
+    long long ms = p.second.ns / 1000000;
+    cout << name << " " << ms << " ms, " << count << " ticks" << endl;
+  }
+}
+
+namespace NativeBenchmarking_Compile {
+  void __default::start(DafnySequence<char> dafnyName) {
+    benchmark_start(nameToString(dafnyName));
+  }
+
+  void __default::end(DafnySequence<char> dafnyName) {
+    benchmark_end(nameToString(dafnyName));
+  }
+}
+
 void RunBenchmark(string const& name) {
   benchmark_by_name(name)->run();
+  dump();
 }

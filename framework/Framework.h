@@ -123,5 +123,13 @@ namespace MainDiskIOHandler_Compile {
   };
 }
 
+namespace NativeBenchmarking_Compile {
+  class __default {
+  public:
+    static void start(DafnySequence<char> dafnyName);
+    static void end(DafnySequence<char> dafnyName);
+  };
+}
+
 void ClearIfExists();
 void Mkfs();
