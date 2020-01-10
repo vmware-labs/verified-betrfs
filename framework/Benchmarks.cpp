@@ -92,7 +92,7 @@ public:
       if (rand_bool(gen) == 0) {
         // Min length 20 so probability of collision is miniscule
         ByteString bytes(20);
-        for (int j = 0; j < bytes.size(); j++) {
+        for (size_t j = 0; j < bytes.size(); j++) {
           bytes.seq.ptr()[j] = rand_byte(gen);
         }
         queryKeys[i] = bytes;
@@ -116,7 +116,7 @@ public:
 
   string to_hex(ByteString const& b) {
     vector<char> ch(b.size() * 2);
-    for (int i = 0; i < b.size(); i++) {
+    for (size_t i = 0; i < b.size(); i++) {
       uint8 by = b.seq.select(i);
       int x = by >> 4;
       int y = by & 0xf;
@@ -147,7 +147,7 @@ public:
   virtual void prepare(Application& app) override {
   }
   virtual void go(Application& app) override {
-    for (int i = 0; i < keys.size(); i++) {
+    for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
     app.Sync();
@@ -223,14 +223,14 @@ public:
   }
 
   virtual void prepare(Application& app) override {
-    for (int i = 0; i < keys.size(); i++) {
+    for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
     app.Sync();
     app.crash();
   }
   virtual void go(Application& app) override {
-    for (int i = 0; i < query_keys.size(); i++) {
+    for (size_t i = 0; i < query_keys.size(); i++) {
       app.QueryAndExpect(query_keys[i], query_values[i]);
     }
   }
@@ -256,7 +256,7 @@ public:
   int insertCount = 50000;
   int queryCount = 1000;
 
-  int targetCount = 100;
+  size_t targetCount = 100;
 
   virtual string name() override { return "RandomSuccQueries"; }
   virtual int opCount() override { return queryCount; }
@@ -277,10 +277,10 @@ public:
     }
 
     queries = RandomKeys(queryCount, seed3);
-    for (int i = 0; i < queries.size(); i++) {
+    for (size_t i = 0; i < queries.size(); i++) {
       int idx = get_first_idx_ge(keys_values, queries[i]);
       vector<pair<ByteString, ByteString>> query_result;
-      while (query_result.size() < targetCount && idx < keys_values.size()) {
+      while (query_result.size() < targetCount && idx < (int)keys_values.size()) {
         query_result.push_back(keys_values[idx]);
         idx++;
       }
@@ -289,7 +289,7 @@ public:
   }
 
   virtual void prepare(Application& app) override {
-    for (int i = 0; i < keys_values.size(); i++) {
+    for (size_t i = 0; i < keys_values.size(); i++) {
       //cout << "Inserting " << to_hex(keys_values[i].first) << " -> " << to_hex(keys_values[i].second) << endl;
       app.Insert(keys_values[i].first, keys_values[i].second);
     }
@@ -298,7 +298,7 @@ public:
   }
 
   virtual void go(Application& app) override {
-    for (int i = 0; i < queries.size(); i++) {
+    for (size_t i = 0; i < queries.size(); i++) {
       auto result = app.Succ(queries[i], true /* inclusive */, targetCount);
       if (result != query_results[i]) {
         cout << "query " << to_hex(queries[i]) << endl;

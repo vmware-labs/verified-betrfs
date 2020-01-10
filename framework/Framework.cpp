@@ -59,7 +59,7 @@ namespace MainDiskIOHandler_Compile {
     return count;
   }
 
-  void writeSync(uint64 addr, byte* sector, int len) {
+  void writeSync(uint64 addr, byte* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
       fail("writeSync not implemented for these arguments");
     }
@@ -216,10 +216,10 @@ void Application::Sync() {
 
 void Application::Insert(ByteString key, ByteString val)
 {
-  if (key.size() > (int)MaxKeyLen()) {
+  if (key.size() > MaxKeyLen()) {
     fail("Insert: key is too long");
   }
-  if (val.size() > (int)MaxValueLen()) {
+  if (val.size() > MaxValueLen()) {
     fail("Insert: value is too long");
   }
 
@@ -244,7 +244,7 @@ ByteString Application::Query(ByteString key)
 {
   LOG("Query \"" + key.as_string() + "\"");
 
-  if (key.size() > (int)MaxKeyLen()) {
+  if (key.size() > MaxKeyLen()) {
     fail("Query: key is too long");
   }
 
@@ -326,6 +326,10 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
 
 vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bool inclusive, uint64 targetCount)
 {
+  if (lowerBound.size() > MaxKeyLen()) {
+    fail("Query: key is too long");
+  }
+
   UI_Compile::RangeStart start = inclusive ?
       UI_Compile::RangeStart::create_SInclusive(lowerBound.as_dafny_seq()) :
       UI_Compile::RangeStart::create_SExclusive(lowerBound.as_dafny_seq());
@@ -333,7 +337,7 @@ vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bo
   uint64 found = 0;
   while (found < targetCount) {
     UI_Compile::SuccResultList srl = SuccOnce(start, targetCount - found);
-    for (int i = 0; i < srl.results.size(); i++) {
+    for (size_t i = 0; i < srl.results.size(); i++) {
       UI_Compile::SuccResult sr = srl.results.select(i);
       all_results[found] = make_pair(ByteString(sr.key), ByteString(sr.value));
       found++;
@@ -389,6 +393,9 @@ void ClearIfExists() {
   struct stat info;
   if (stat(".veribetrfs-storage", &info) != -1) {
 		// TODO use std::filesystem::remove_all
-		system("rm -rf .veribetrfs-storage"); 
+		int ret = system("rm -rf .veribetrfs-storage"); 
+		if (ret != 0) {
+		  fail("failed to delete .veribetrfs-storage");
+		}
   }
 }

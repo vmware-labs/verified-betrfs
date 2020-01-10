@@ -243,9 +243,11 @@ build/Bundle.h: build/Bundle.cpp
 CPP_DEP_DIR=build/cppdeps
 GEN_H_FILES=build/Bundle.h
 
+WARNINGS=-Wall -Wsign-compare
+
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) -Wall
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(WARNINGS)
 
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
@@ -253,13 +255,13 @@ OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) -Wall -Werror
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
 build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) -Wall
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o
