@@ -572,12 +572,12 @@ namespace NativeArrays_Compile {
     }
 
     public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-        //Native_Compile.BenchmarkingUtil.start();
-
         ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
         System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
+    }
 
-        //Native_Compile.BenchmarkingUtil.end();
+    public static void @CopyArrayIntoDifferentArray<A>(A[] src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+        System.Array.Copy(src, (long)srcIndex, dst, (long)dstIndex, (long)len);
     }
 
     //[DllImport("c", CallingConvention = CallingConvention.Cdecl)]
