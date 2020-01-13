@@ -32,7 +32,49 @@ module InsertImpl {
 
   import opened PBS = PivotBetreeSpec`Spec
 
-  method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: Key, value: Value)
+  method passiveAggressive(k: ImplConstants, s: ImplVariables, key: Key, value: Value)
+  returns (theRef: BT.G.Reference)
+  {
+    var ref := BT.G.Root();
+    var root := s.cache.GetOpt(ref);
+    var node := root.value;
+    while true
+    {
+      if node.children.None? {
+        return ref;
+      }
+      var r := Pivots.ComputeRoute(node.pivotTable, key);
+      //var q := node.buckets[r].Query(key);
+      //if q.Some? {
+      //  return ref;
+      //}
+      if node.buckets[r].Weight != 0 {
+        return ref;
+      }
+      var childref := node.children.value[r];
+
+      var childNode := s.cache.GetOpt(childref);
+      if childNode.None? {
+        return ref;
+      }
+
+      var entry := s.ephemeralIndirectionTable.t.Get(childref);
+      if entry.value.loc.Some? {
+        return ref;
+      }
+
+      //var weightSeq := MutBucket.computeWeightOfSeq(childNode.value.buckets);
+      //if !(WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) + weightSeq
+      //    <= MaxTotalBucketWeightUint64()) {
+      //  return ref;
+      //}
+
+      ref := childref;
+      node := childNode.value;
+    }
+  }
+
+  method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: Key, value: Value, ref: BT.G.Reference)
   returns (success: bool)
   requires Inv(k, s)
   requires s.ready
@@ -44,10 +86,10 @@ module InsertImpl {
   {
     InsertModel.reveal_InsertKeyValue();
 
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), ref);
 
     if s.frozenIndirectionTable != null {
-      var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
+      var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
       if b {
         success := false;
         print "giving up; can't dirty root because frozen isn't written";
@@ -56,9 +98,9 @@ module InsertImpl {
     }
 
     var msg := ValueMessage.Define(value);
-    s.cache.InsertKeyValue(BT.G.Root(), key, msg);
+    s.cache.InsertKeyValue(ref, key, msg);
 
-    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
+    writeBookkeepingNoSuccsUpdate(k, s, ref);
 
     success := true;
   }
@@ -87,8 +129,8 @@ module InsertImpl {
       return;
     }
 
-    var rootLookup := s.cache.GetOpt(BT.G.Root());
-    if (rootLookup.None?) {
+    var rootOpt := s.cache.GetOpt(BT.G.Root());
+    if (rootOpt.None?) {
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
         PageInReq(k, s, io, BT.G.Root());
         success := false;
@@ -99,13 +141,17 @@ module InsertImpl {
       return;
     }
 
-    var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.buckets);
+    var ref := passiveAggressive(k, s, key, value);
+    var nodeOpt := s.cache.GetOpt(ref);
+    var node := nodeOpt.value;
+
+    var weightSeq := MutBucket.computeWeightOfSeq(nodeOpt.value.buckets);
 
     if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
-      success := InsertKeyValue(k, s, key, value);
+      success := InsertKeyValue(k, s, key, value, ref);
     } else {
-      runFlushPolicy(k, s, io);
+      runFlushPolicy(k, s, io, key, ref);
       success := false;
     }
   }

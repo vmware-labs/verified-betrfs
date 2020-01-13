@@ -23,6 +23,7 @@ module FlushPolicyImpl {
   import opened NativeTypes
   import opened BucketsLib
   import opened BucketWeights
+  import opened KeyType
 
   method biggestSlot(buckets: seq<MutBucket>) returns (res : (uint64, uint64))
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
@@ -149,7 +150,74 @@ module FlushPolicyImpl {
     }
   }
 
-  method runFlushPolicy(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method getActionToFlush1(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, key: Key, startRef: BT.G.Reference) returns (action : FlushPolicyModel.Action)
+  requires |stack| <= 40
+  requires Inv(k, s)
+  requires FlushPolicyModel.ValidStackSlots(Ic(k), s.I(), stack, slots)
+  decreases 0x1_0000_0000_0000_0000 - |stack|
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(Ic(k), old(s.I()), stack, slots)
+  {
+    FlushPolicyModel.reveal_getActionToFlush();
+
+    if |stack| as uint64 == 40 {
+      action := FlushPolicyModel.ActionFail;
+    } else {
+      var ref := stack[|stack| as uint64 - 1];
+      var nodeOpt := s.cache.GetOpt(ref);
+      var node := nodeOpt.value;
+      MutBucket.reveal_ReprSeq();
+      if node.children.None? || |node.buckets| as uint64 == MaxNumChildrenUint64() {
+        action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
+      } else {
+        var slot := Pivots.ComputeRoute(node.pivotTable, key);
+
+        if ref != startRef {
+          var childref := node.children.value[slot];
+          action := getActionToFlush1(k, s, stack + [childref], slots + [slot], key, startRef);
+        } else {
+          if |node.buckets| as uint64 < 8 {
+            var childref := node.children.value[slot];
+            var childOpt := s.cache.GetOpt(childref);
+            if childOpt.Some? {
+              s.cache.LemmaNodeReprLeRepr(childref);
+              var child := childOpt.value;
+              child.LemmaReprSeqBucketsLeRepr();
+              //assert forall i | 0 <= i < |child.buckets| ensures child.buckets[i].Repr !! s.lru.Repr;
+              assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
+              s.lru.Use(childref);
+              assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
+              LruModel.LruUse(old(s.lru.Queue), childref);
+
+              var childTotalWeight: uint64 := MutBucket.computeWeightOfSeq(child.buckets);
+
+              if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
+                if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+                  action := FlushPolicyModel.ActionFlush(ref, slot);
+                } else {
+                  action := FlushPolicyModel.ActionEvict;
+                }
+              } else {
+                action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
+              }
+            } else {
+              if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+                action := FlushPolicyModel.ActionPageIn(childref);
+              } else {
+                action := FlushPolicyModel.ActionEvict;
+              }
+            }
+          } else {
+            action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
+          }
+        }
+      }
+    }
+  }
+
+  method runFlushPolicy(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: Key, ref: BT.G.Reference)
   requires Inv(k, s)
   requires io.initialized()
   requires s.ready
@@ -169,7 +237,7 @@ module FlushPolicyImpl {
     assert SM.IVars(s.I()) == SM.IVars(old(s.I()));
 
     FlushPolicyModel.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
-    var action := getActionToFlush(k, s, [BT.G.Root()], []);
+    var action := getActionToFlush1(k, s, [BT.G.Root()], [], key, ref);
 
     match action {
       case ActionPageIn(ref) => {
