@@ -917,22 +917,23 @@ module Lexicographic_Byte_Order refines Total_Order {
   {
     reveal_IsSorted();
     var lo := start;
-    var hi := end;
-    while 64 < hi - lo 
-      invariant start <= lo <= hi <= end
+    var hi := end + 1;
+    while 1 < hi - lo 
+      invariant start <= lo < hi <= end + 1
       invariant forall i :: start <= i < lo ==> lte(run[i], needle)
-      invariant forall i :: hi <= i < end ==> lt(needle, run[i])
+      invariant forall i :: hi - 1 <= i < end ==> lt(needle, run[i])
       decreases hi - lo
     {
       var mid := (lo + hi) / 2;
-      var t := cmp(run[mid], needle);
+      var t := cmp(run[mid-1], needle);
       if t <= 0 {
-        lo := mid+1;
+        lo := mid;
       } else {
         hi := mid;
       }
     }
     var i: uint64 := lo;
+    /*
     var t;
     if i < hi {
       t := cmp(run[i], needle);
@@ -954,6 +955,7 @@ module Lexicographic_Byte_Order refines Total_Order {
       assert lt(needle, run[i]);
       assert lte(run[i], run[j]);
     }
+    */
     LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
     posplus1 := i;
   }
@@ -965,22 +967,23 @@ module Lexicographic_Byte_Order refines Total_Order {
   {
     reveal_IsSorted();
     var lo := start;
-    var hi := end;
-    while 64 < hi - lo 
-      invariant start <= lo <= hi <= end
+    var hi := end + 1;
+    while 1 < hi - lo 
+      invariant start <= lo < hi <= end + 1
       invariant forall i :: start <= i < lo ==> lt(run[i], needle)
-      invariant forall i :: hi <= i < end ==> lte(needle, run[i])
+      invariant forall i :: hi - 1 <= i < end ==> lte(needle, run[i])
       decreases hi - lo
     {
       var mid := (lo + hi) / 2;
-      var t := cmp(run[mid], needle);
+      var t := cmp(run[mid-1], needle);
       if t < 0 {
         lo := mid;
       } else {
-        hi := mid + 1;
+        hi := mid;
       }
     }
     var i: uint64 := lo;
+    /*
     var t;
     if i < hi {
       t := cmp(run[i], needle);
@@ -995,6 +998,7 @@ module Lexicographic_Byte_Order refines Total_Order {
         t := cmp(run[i], needle);
       }
     }
+    */
     LargestLtIsUnique(run[start..end], needle, i as int - start as int - 1);
     posplus1 := i;
   }
