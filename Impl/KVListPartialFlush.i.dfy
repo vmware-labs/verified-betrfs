@@ -151,6 +151,19 @@ module KVListPartialFlush {
   requires WeightBucketList(ISeq(children)) <= MaxTotalBucketWeight()
   requires childrenWeight as int == WeightKvlSeq(children)*/
   //ensures (newParent, newChildren) == partialFlush(parent, children, pivots)
+  requires parentMutBucket.Inv()
+  requires MutBucket.InvSeq(childrenMutBuckets)
+  requires WFBucketList(MutBucket.ISeq(childrenMutBuckets), pivots)
+  requires WeightBucket(parentMutBucket.I()) <= MaxTotalBucketWeight() as int
+  requires WeightBucketList(MutBucket.ISeq(childrenMutBuckets)) <= MaxTotalBucketWeight() as int
+  ensures newParent.Inv()
+  ensures MutBucket.InvSeq(newChildren)
+  ensures fresh(newParent.Repr)
+  ensures fresh(MutBucket.ReprSeq(newChildren))
+  ensures newParent.Repr !! MutBucket.ReprSeq(newChildren)
+  ensures MutBucket.ReprSeqDisjoint(newChildren)
+  ensures bucketPartialFlush(old(parentMutBucket.Bucket), old(MutBucket.ISeq(childrenMutBuckets)), pivots)
+      == (newParent.Bucket, MutBucket.ISeq(newChildren))
   {
     assume false;
     reveal_partialFlush();
