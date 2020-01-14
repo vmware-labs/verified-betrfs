@@ -1,5 +1,6 @@
 include "BookkeepingImpl.i.dfy"
 include "FlushModel.i.dfy"
+include "KVListPartialFlush.i.dfy"
 
 module FlushImpl { 
   import opened BookkeepingImpl
@@ -21,6 +22,7 @@ module FlushImpl {
   import StateModel
   import BookkeepingModel
   import FlushModel
+  import KVListPartialFlush
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)
@@ -75,7 +77,7 @@ module FlushImpl {
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
-    var newparentBucket, newbuckets := BucketImpl.MutBucket.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+    var newparentBucket, newbuckets := KVListPartialFlush.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(

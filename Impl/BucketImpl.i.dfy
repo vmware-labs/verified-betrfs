@@ -1,6 +1,5 @@
 include "../lib/DataStructures/KMBtree.i.dfy"
 include "../ByteBlockCacheSystem/KVList.i.dfy"
-include "KVListPartialFlush.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 //
@@ -18,7 +17,6 @@ module BucketImpl {
   import KMB = KMBtree`API
   import KMBBOps = KMBtreeBulkOperations
   import KVList
-  import KVListPartialFlush
   import opened ValueMessage`Internal
   import opened Lexicographic_Byte_Order
   import opened Sequences
@@ -32,11 +30,10 @@ module BucketImpl {
   import Pivots = PivotsLib
 
   type Key = Element
-  type Kvl = KVList.Kvl
   type TreeMap = KMB.Node
 
   method tree_to_kvl(tree: TreeMap)
-  returns (kvl : Kvl)
+  returns (kvl : KVList.Kvl)
   requires KMB.WF(tree)
   requires KMBBOps.NumElements(tree) < Uint64UpperBound()
   ensures KVList.WF(kvl)
@@ -47,7 +44,7 @@ module BucketImpl {
     assume false;
   }
 
-  method kvl_to_tree(kvl : Kvl)
+  method kvl_to_tree(kvl : KVList.Kvl)
   returns (tree: TreeMap)
   requires KVList.WF(kvl)
   requires |kvl.keys| < Uint64UpperBound() - 1
@@ -66,7 +63,7 @@ module BucketImpl {
     var is_tree: bool;
 
     var tree: KMB.Node?;
-    var kvl: Kvl;
+    var kvl: KVList.Kvl;
 
     var Weight: uint64;
 
@@ -99,7 +96,7 @@ module BucketImpl {
       && WFBucket(Bucket)
     }
 
-    constructor(kv: Kvl)
+    constructor(kv: KVList.Kvl)
     requires KVList.WF(kv)
     requires WeightBucket(KVList.I(kv)) < Uint64UpperBound()
     ensures Bucket == KVList.I(kv)
@@ -116,7 +113,7 @@ module BucketImpl {
       KVList.WFImpliesWFBucket(kv);
     }
 
-    constructor InitWithWeight(kv: Kvl, w: uint64)
+    constructor InitWithWeight(kv: KVList.Kvl, w: uint64)
     requires KVList.WF(kv)
     requires WeightBucket(KVList.I(kv)) == w as int
     requires w as int < Uint64UpperBound()
@@ -139,7 +136,7 @@ module BucketImpl {
       assume false;
     }
     
-    method GetKvl() returns (kv: Kvl)
+    method GetKvl() returns (kv: KVList.Kvl)
     requires Inv()
     ensures KVList.WF(kv)
     ensures KVList.I(kv) == Bucket
@@ -310,7 +307,7 @@ module BucketImpl {
       reveal_ReprSeq();
     }
 
-    static method kvlSeqToMutBucketSeq(kvls: seq<Kvl>)
+    static method kvlSeqToMutBucketSeq(kvls: seq<KVList.Kvl>)
     returns (buckets : seq<MutBucket>)
     requires |kvls| < 0x1_0000_0000_0000_0000
     {
@@ -326,11 +323,11 @@ module BucketImpl {
     }
 
     static method mutBucketSeqToKvlSeq(buckets: seq<MutBucket>)
-    returns (kvls : seq<Kvl>)
+    returns (kvls : seq<KVList.Kvl>)
     requires |buckets| < 0x1_0000_0000_0000_0000
     {
       assume false;
-      var ar := new Kvl[|buckets| as uint64];
+      var ar := new KVList.Kvl[|buckets| as uint64];
       var j: uint64 := 0;
       while j < |buckets| as uint64
       {
@@ -338,31 +335,6 @@ module BucketImpl {
         j := j + 1;
       }
       return ar[..];
-    }
-
-    static method PartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)
-    returns (newParent: MutBucket, newChildren: seq<MutBucket>)
-    requires parent.Inv()
-    requires InvSeq(children)
-    requires WFBucketList(ISeq(children), pivots)
-    requires WeightBucket(parent.I()) <= MaxTotalBucketWeight() as int
-    requires WeightBucketList(ISeq(children)) <= MaxTotalBucketWeight() as int
-    ensures newParent.Inv()
-    ensures InvSeq(newChildren)
-    ensures fresh(newParent.Repr)
-    ensures fresh(ReprSeq(newChildren))
-    ensures newParent.Repr !! ReprSeq(newChildren)
-    ensures ReprSeqDisjoint(newChildren)
-    ensures KVListPartialFlush.bucketPartialFlush(parent.Bucket, ISeq(children), pivots)
-        == (newParent.Bucket, ISeq(newChildren))
-    {
-      assume false;
-      var kvlParent := parent.GetKvl();
-      var kvlChildren := mutBucketSeqToKvlSeq(children);
-      var childrenWeight := computeWeightOfSeq(children);
-      var kvlNewParent, kvlNewChildren := KVListPartialFlush.PartialFlush(kvlParent, kvlChildren, pivots, childrenWeight);
-      newParent := new MutBucket(kvlNewParent);
-      newChildren := kvlSeqToMutBucketSeq(kvlNewChildren);
     }
 
     method Insert(key: Key, value: Message)
