@@ -6,6 +6,7 @@ using namespace std;
 int main(int argc, char* argv[]) {
   bool allBenchmarks = false;
   string benchmark;
+  bool skipPrepare = false;
 
   for (int i = 1; i < argc; i++) {
     string arg = string(argv[i]);
@@ -14,13 +15,15 @@ int main(int argc, char* argv[]) {
       allBenchmarks = true;
     } else if (arg.substr(0, 12) == "--benchmark=") {
       benchmark = arg.substr(12);
+    } else if (arg == "--skip-prepare") {
+      skipPrepare = true;
     }
   }
 
   if (allBenchmarks) {
     RunAllBenchmarks();
   } else if (benchmark != "") {
-    RunBenchmark(benchmark);
+    RunBenchmark(benchmark, skipPrepare);
   } else {
     cout << "Use --all-benchmarks or --benchmark" << endl;
   }

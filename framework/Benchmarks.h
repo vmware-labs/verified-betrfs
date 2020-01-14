@@ -3,4 +3,4 @@
 #include <string>
 
 void RunAllBenchmarks();
-void RunBenchmark(std::string const& name);
+void RunBenchmark(std::string const& name, bool skipPrepare);

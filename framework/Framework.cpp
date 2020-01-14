@@ -383,7 +383,7 @@ ByteString Application::Query(ByteString key)
     fail("Query: key is too long");
   }
 
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 5000; i++) {
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
     this->maybeDoResponse();
     if (result.first) {

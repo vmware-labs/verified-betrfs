@@ -25,13 +25,17 @@ public:
   virtual void prepare(Application& app) = 0;
   virtual void go(Application& app) = 0;
 
-  void run() {
-    ClearIfExists();
-    Mkfs();
+  void run(bool skipPrepare = false) {
+    if (!skipPrepare) {
+      ClearIfExists();
+      Mkfs();
+    }
 
     Application app;
 
-    prepare(app);
+    if (!skipPrepare) {
+      prepare(app);
+    }
 
     auto t1 = chrono::high_resolution_clock::now();
     go(app);
@@ -200,6 +204,76 @@ public:
   }
 };
 
+class BenchmarkBigTreeQueries : public Benchmark {
+public:
+  int insertCount = 5000000;
+  int queryCount  =    2000;
+
+  virtual string name() override { return "BigTreeQueries"; }
+  virtual int opCount() override { return queryCount; }
+
+  uint32_t rngState;
+
+  void resetRng() {
+    rngState = 198432;
+  }
+
+  uint32_t NextPseudoRandom() {
+    rngState = (uint32_t) (((uint64_t) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  BenchmarkBigTreeQueries() {
+  }
+
+  virtual void prepare(Application& app) override {
+    static_assert (KEY_SIZE % 4 == 0, "");
+    static_assert (VALUE_SIZE % 4 == 0, "");
+
+    resetRng();
+
+    for (int i = 0; i < insertCount; i++) {
+      ByteString key(KEY_SIZE);
+      for (int j = 0; j < KEY_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+      ByteString value(VALUE_SIZE);
+      for (int j = 0; j < VALUE_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+
+      app.Insert(key, value);
+    }
+    app.Sync();
+    app.crash();
+  }
+
+  virtual void go(Application& app) override {
+    resetRng();
+
+    for (int i = 0; i < queryCount; i++) {
+      ByteString key(KEY_SIZE);
+      ByteString value(VALUE_SIZE);
+
+      for (int k = 0; k < insertCount / queryCount; k++) {
+        for (int j = 0; j < KEY_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+        for (int j = 0; j < VALUE_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+      }
+
+      app.QueryAndExpect(key, value);
+    }
+
+    app.Sync();
+  }
+};
 
 class BenchmarkRandomQueries : public Benchmark {
 public:
@@ -331,6 +405,7 @@ shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   if (name == "random-queries") { return shared_ptr<Benchmark>(new BenchmarkRandomQueries()); }
   if (name == "random-inserts") { return shared_ptr<Benchmark>(new BenchmarkRandomInserts()); }
   if (name == "long-random-inserts") { return shared_ptr<Benchmark>(new BenchmarkLongRandomInserts()); }
+  if (name == "big-tree-queries") { return shared_ptr<Benchmark>(new BenchmarkBigTreeQueries()); }
   if (name == "random-succs") { return shared_ptr<Benchmark>(new BenchmarkRandomSuccQueries()); }
 
   cerr << "No benchmark found by name " << name << endl;
@@ -401,7 +476,7 @@ namespace NativeBenchmarking_Compile {
   }
 }
 
-void RunBenchmark(string const& name) {
-  benchmark_by_name(name)->run();
+void RunBenchmark(string const& name, bool skipPrepare) {
+  benchmark_by_name(name)->run(skipPrepare);
   dump();
 }
