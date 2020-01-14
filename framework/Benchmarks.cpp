@@ -270,8 +270,6 @@ public:
 
       app.QueryAndExpect(key, value);
     }
-
-    app.Sync();
   }
 };
 
