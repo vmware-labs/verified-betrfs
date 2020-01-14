@@ -114,7 +114,7 @@ module {:extern} MainHandlers refines Main {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     var value := query(k, s, io, key);
-    QueryModel.queryCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key);
+    QueryModel.queryCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key, s.I(), value, SI.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));

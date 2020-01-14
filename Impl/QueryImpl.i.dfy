@@ -1,5 +1,6 @@
 include "SyncImpl.i.dfy"
 include "QueryModel.i.dfy"
+include "EvictImpl.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -14,6 +15,7 @@ module QueryImpl {
   import BookkeepingModel
   import opened StateImpl
   import opened BucketImpl
+  import opened EvictImpl
 
   import opened Options
   import opened NativeTypes
@@ -37,7 +39,7 @@ module QueryImpl {
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), res, IIO(io)) == QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key)
+  ensures QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key, s.I(), res, IIO(io))
   {
     QueryModel.reveal_query();
     QueryModel.reveal_queryIterate();
@@ -50,13 +52,15 @@ module QueryImpl {
       var msg := Messages.IdentityMessage();
       var counter: uint64 := 40;
 
+      // TODO write this in recursive style, it would be a lot simpler?
       while true
       invariant Inv(k, s)
       invariant s.ready
       invariant ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
       invariant io.initialized()
-      invariant QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key)
-             == QueryModel.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter)
+      invariant forall s', r, io' ::
+          QueryModel.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter, s', r, io') ==>
+          QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key, s', r, io')
       invariant counter as int >= 0
       invariant io !in s.Repr()
       invariant WellUpdated(s)
@@ -69,14 +73,9 @@ module QueryImpl {
 
         var nodeOpt := s.cache.GetOpt(ref);
         if (nodeOpt.None?) {
-          if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
-            PageInReq(k, s, io, ref);
-            res := None;
-            return;
-          } else {
-            res := None;
-            return;
-          }
+          PageInReqOrMakeRoom(k, s, io, ref);
+          res := None;
+          return;
         } else {
           var node := nodeOpt.value;
 

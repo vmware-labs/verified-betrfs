@@ -262,4 +262,12 @@ module {:extern} StateImpl {
     && s.W()
     && (forall o | o in s.Repr() :: o in old(s.Repr()) || fresh(o))
   }
+
+  function method TotalCacheSize(s: ImplVariables) : (res : uint64)
+  reads s, s.cache, s.cache.Repr
+  requires s.cache.Inv()
+  requires |s.cache.I()| + |s.outstandingBlockReads| < 0x1_0000_0000_0000_0000
+  {
+    s.cache.Count() + (|s.outstandingBlockReads| as uint64)
+  }
 }
