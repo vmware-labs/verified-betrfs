@@ -5,6 +5,7 @@
 #include <random>
 #include <algorithm>
 #include <cstdio>
+#include <cassert>
 
 #include "Application.h"
 

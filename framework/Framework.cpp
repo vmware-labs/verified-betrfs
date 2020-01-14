@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <aio.h>
 #include <stdio.h>
+#include <fcntl.h>
 
 [[ noreturn ]]
 void fail(string err)
