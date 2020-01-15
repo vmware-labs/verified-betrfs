@@ -17,6 +17,9 @@ int main(int argc, char* argv[]) {
       benchmark = arg.substr(12);
     } else if (arg == "--skip-prepare") {
       skipPrepare = true;
+    } else {
+      cout << "Unrecognized argument: " << arg << endl;
+      return 1;
     }
   }
 
