@@ -29,6 +29,7 @@ module QueryImpl {
   import opened Bounds
   import opened BucketsLib
   import PivotsLib
+  import NativeBenchmarking
 
   import opened PBS = PivotBetreeSpec`Spec
 
@@ -44,12 +45,14 @@ module QueryImpl {
   ensures WellUpdated(s)
   ensures QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key, s.I(), res, IIO(io))
   {
+    NativeBenchmarking.start("query");
     QueryModel.reveal_query();
     QueryModel.reveal_queryIterate();
 
     if (!s.ready) {
       PageInIndirectionTableReq(k, s, io);
       res := None;
+      NativeBenchmarking.end("query");
     } else {
       var ref := BT.G.Root();
       var msg := ValueMessage.IdentityMessage();
@@ -71,6 +74,7 @@ module QueryImpl {
       {
         if counter == 0 {
           res := None;
+          NativeBenchmarking.end("query");
           return;
         }
 
@@ -78,6 +82,7 @@ module QueryImpl {
         if (nodeOpt.None?) {
           PageInReqOrMakeRoom(k, s, io, ref);
           res := None;
+          NativeBenchmarking.end("query");
           return;
         } else {
           var node := nodeOpt.value;
@@ -99,6 +104,7 @@ module QueryImpl {
 
           if (newmsg.Define?) {
             res := Some(newmsg.value);
+            NativeBenchmarking.end("query");
             return;
           } else {
             if node.children.Some? {
@@ -107,6 +113,7 @@ module QueryImpl {
               ref := node.children.value[r];
             } else {
               res := Some(ValueType.DefaultValue());
+              NativeBenchmarking.end("query");
               return;
             }
           }

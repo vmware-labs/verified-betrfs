@@ -18,6 +18,7 @@ module IOImpl {
   import opened Bounds
   import opened SI = StateImpl
   import MutableMapModel
+  import NativeBenchmarking
 
   type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
@@ -98,7 +99,9 @@ module IOImpl {
   modifies io
   ensures (id, IIO(io)) == IOModel.RequestRead(old(IIO(io)), loc)
   {
+    NativeBenchmarking.start("io.read");
     id := io.read(loc.addr, loc.len);
+    NativeBenchmarking.end("io.read");
   }
 
   method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)

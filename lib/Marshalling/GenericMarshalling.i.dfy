@@ -8,6 +8,8 @@ include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/PackedInts.s.dfy"
 include "../Buckets/PackedKV.i.dfy"
+include "../DataStructures/PackedKV.i.dfy"
+include "../Base/NativeBenchmarking.s.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -26,6 +28,7 @@ import ValueType`Internal
 import opened NativePackedInts
 import opened PackedKV
 import opened BucketWeights
+import NativeBenchmarking
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
@@ -643,7 +646,9 @@ method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:seq
              var v_opt := if success then Some(VByteArray(v)) else None();
              v_opt == v' && data[rest_index..] == rest';
 {
+    NativeBenchmarking.start("ParseUint64");
     var some, len, rest := ParseUint64(data, index);
+    NativeBenchmarking.end("ParseUint64");
     if some && len.u <= (|data| as uint64) - rest {
         ghost var rest_seq := data[rest..];
         assert len.u <= (|rest_seq| as uint64);

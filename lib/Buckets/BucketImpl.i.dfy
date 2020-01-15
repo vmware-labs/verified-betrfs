@@ -31,6 +31,7 @@ module BucketImpl {
   import opened KeyType
   import BucketIteratorModel
   import Pivots = PivotsLib
+  import NativeBenchmarking
 
   type TreeMap = KMB.Node
 
@@ -448,7 +449,9 @@ module BucketImpl {
         KVList.lenKeysLeWeightOver4(kvl);
         m := KVList.Query(kvl, key);
       } else if format.BFPkv? {
+        NativeBenchmarking.start("PackedKV.Query");
         m := PackedKV.BinarySearchQuery(pkv, key);
+        NativeBenchmarking.end("PackedKV.Query");
       }
     }
 

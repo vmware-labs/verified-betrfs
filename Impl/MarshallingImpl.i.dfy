@@ -4,6 +4,7 @@ include "StateModel.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
@@ -35,6 +36,7 @@ module MarshallingImpl {
   import IndirectionTableModel
   import KeyType
   import SeqComparison
+  import NativeBenchmarking
 
   import BT = PivotBetreeSpec`Internal
 
@@ -511,13 +513,17 @@ module MarshallingImpl {
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
+    NativeBenchmarking.start("ParseVal");
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
+    NativeBenchmarking.end("ParseVal");
 
     if success {
       lemma_SizeOfV_parse_Val(data[start..], Marshalling.SectorGrammar());
       assert SizeOfV(v) < 0x1_0000_0000_0000_0000;
 
+      NativeBenchmarking.start("ValToSector");
       var s := ValToSector(v);
+      NativeBenchmarking.end("ValToSector");
       return s;
     } else {
       return None;
@@ -555,7 +561,9 @@ module MarshallingImpl {
     s := None;
 
     if |data| as uint64 >= 32 {
+      NativeBenchmarking.start("crc-32");
       var hash := Crypto.Crc32C(data[32 as uint64..]);
+      NativeBenchmarking.end("crc-32");
       if hash == data[..32 as uint64] {
         s := ParseSector(data, 32);
       }
