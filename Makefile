@@ -270,8 +270,18 @@ rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o build/framework/Benchmarks.o
 
+LDFLAGS=-msse4.2
+
+# On linux we need the -lrt (for aio functions),
+# but on mac it doesn't exist.
+UNAME := $(shell uname)
+ifeq ($(UNAME), Darwin)
+else
+	LDFLAGS += -lrt
+endif
+
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) -o $@ $(VERIBETRFS_O_FILES) -msse4.2
+	$(CC) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS)
 
 ##############################################################################
 # YCSB
@@ -285,5 +295,5 @@ libycsbc:
 
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
-	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -std=c++17 -msse4.2 -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
+	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -std=c++17 $(LDFLAGS) -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
 
