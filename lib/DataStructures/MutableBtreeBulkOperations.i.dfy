@@ -11,6 +11,7 @@ abstract module MutableBtreeBulkOperations {
   import Uint64_Order
 
   function NumElements(node: Node) : nat
+    reads node, node.repr
     requires WF(node)
   {
     Model.NumElements(I(node))
