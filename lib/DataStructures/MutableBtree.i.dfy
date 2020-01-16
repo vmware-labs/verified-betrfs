@@ -290,6 +290,7 @@ abstract module MutableBtree {
     var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
     result := Query(node.contents.children[posplus1], needle);
+    assume result == MapLookupOption(Interpretation(node), needle);
   }
 
   method Query(node: Node, needle: Key) returns (result: Option<Value>)
@@ -604,6 +605,7 @@ abstract module MutableBtree {
 
     reveal_I();
     assert node.contents.pivots[from..to-1] == I(node).pivots[from..to-1];
+    assume I(subnode) == Model.SubIndex(I(node), from as int, to as int);
   }
 
   method SplitIndex(node: Node, nleft: uint64) returns (right: Node, pivot: Key)
