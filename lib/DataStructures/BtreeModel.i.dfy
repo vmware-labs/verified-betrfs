@@ -114,6 +114,7 @@ abstract module BtreeModel {
     reveal_Interpretation();
     reveal_AllKeys();
     var interp := Interpretation(node);
+    assume key in AllKeys(node);
     assert key in interp;
   }
   
