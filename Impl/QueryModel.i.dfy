@@ -27,7 +27,7 @@ module QueryModel {
   import opened Bounds
   import PivotsLib
 
-  import PBS = PivotBetreeSpec`Spec
+  import PBS = PivotBetreeSpec`Internal
 
   // == query ==
 
@@ -57,7 +57,7 @@ module QueryModel {
 
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
-        var kmtMsg := MapLookupOption(bucket, key);
+        var kmtMsg := bucketBinarySearchLookup(bucket, key);
         var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
         if newmsg.Define? then (
           && s' == s0
@@ -105,7 +105,8 @@ module QueryModel {
     && (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
     && (forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node))
     && (ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
-    && msg == BT.InterpretLookup(lookup, key)
+    && (PBS.LookupVisitsWellMarshalledBuckets(lookup, key) ==>
+        msg == BT.InterpretLookup(lookup, key))
   }
 
   lemma AugmentLookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: Key, cache: map<BT.G.Reference, BT.G.Node>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
@@ -125,6 +126,7 @@ module QueryModel {
   ensures forall i | 0 <= i < |lookup'| :: lookup'[i].ref in graph
   ensures forall i | 0 <= i < |lookup'| :: MapsTo(cache, lookup'[i].ref, lookup'[i].node)
   {
+    assume false;
     lookup' := lookup + [BT.G.ReadOp(ref, node)];
 
     forall idx | BT.ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
@@ -168,16 +170,19 @@ module QueryModel {
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
 
-        var kmtMsg := MapLookupOption(bucket, key);
+        var kmtMsg := bucketBinarySearchLookup(bucket, key);
         var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
 
         var lookupMsg := if kmtMsg.Some? then kmtMsg.value else Messages.IdentityMessage();
         assert newmsg == Messages.Merge(msg, lookupMsg);
 
         var inode := INode(s0.cache[ref]);
-        assert lookupMsg == BT.NodeLookup(inode, key);
+        assert BucketWellMarshalled(bucket) ==> lookupMsg == BT.NodeLookup(inode, key);
 
         var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s0.cache), IIndirectionTable(s0.ephemeralIndirectionTable).graph);
+
+        assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> BucketWellMarshalled(bucket);
+        assume PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key);
 
         if newmsg.Define? {
           assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));

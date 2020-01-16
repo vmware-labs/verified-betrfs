@@ -38,22 +38,25 @@ int main(int argc, char* argv[]) {
   for (auto p : res) {
     cout << "    " << p.first.as_string() << " : " << p.second.as_string() << endl;
   }
-}
+}*/
 
-int main()
+/*int main()
 {
   ClearIfExists();
   Mkfs();
   cout << "Mkfs done" << endl;
 
   Application app;
+  cout << "Inserting..." << endl;
   app.Insert("abc", "def");
+  cout << "done first insert..." << endl;
   app.Insert("xyq", "rawr");
   app.Query("abc");
 
   app.Query("xyq");
   app.Query("blahblah");
   app.crash();
+  cout << "crashed" << endl;
   app.Query("abc");
   app.Query("xyq");
 

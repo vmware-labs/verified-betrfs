@@ -6,6 +6,7 @@ module MkfsModel {
   import opened Sets
   import opened Sequences
   import opened NativeTypes
+  import opened BucketsLib
   import BT = PivotBetree
   import ADM = ByteBetreeBlockCacheSystem
   import LBAType
@@ -29,7 +30,7 @@ module MkfsModel {
         map[BT.G.Root() := []]
       )))
     && Marshalling.parseCheckedSector(b1)
-      == Some(BC.SectorBlock(BT.G.Node([], None, [map[]])))
+      == Some(BC.SectorBlock(BT.G.Node([], None, [B(map[])])))
   }
 
   lemma InitialStateSatisfiesSystemInit(
@@ -77,12 +78,12 @@ module MkfsModel {
     LBAType.ValidAddrMul(1);
     assert loc1 in ADM.IContents(s.disk.contents);
     assert ADM.IContents(s.disk.contents)[loc1] == 
-      BC.SectorBlock(BT.G.Node([], None, [map[]]));
+      BC.SectorBlock(BT.G.Node([], None, [B(map[])]));
 
     Ref.reveal_PersistentGraph();
     assert BBCS.PersistentBetree(ADM.Ik(k), ADM.I(k, s))
         == BT.Variables(BI.Variables(
-          imap[BT.G.Root() := BT.G.Node([], None, [map[]])]));
+          imap[BT.G.Root() := BT.G.Node([], None, [B(map[])])]));
 
     assert BCS.Init(ADM.Ik(k), ADM.I(k, s));
     assert BT.Init(

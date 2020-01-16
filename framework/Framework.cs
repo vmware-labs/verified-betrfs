@@ -548,6 +548,84 @@ namespace Maps_Compile {
   }
 }
 
+namespace NativePackedInts_Compile {
+  public partial class __default
+  {
+    public static uint Unpack__LittleEndian__Uint32(Dafny.Sequence<byte> packed, ulong idx)
+    {
+      return (uint)packed.Elements[(int)idx]
+           + (uint)packed.Elements[(int)idx+1] * 0x100
+           + (uint)packed.Elements[(int)idx+2] * 0x10000
+           + (uint)packed.Elements[(int)idx+3] * 0x1000000;
+    }
+
+    public static ulong Unpack__LittleEndian__Uint64(Dafny.Sequence<byte> packed, ulong idx)
+    {
+      return (ulong)packed.Elements[(int)idx]
+           + (ulong)packed.Elements[(int)idx+1] * 0x100
+           + (ulong)packed.Elements[(int)idx+2] * 0x10000
+           + (ulong)packed.Elements[(int)idx+3] * 0x1000000
+           + (ulong)packed.Elements[(int)idx+4] * 0x100000000
+           + (ulong)packed.Elements[(int)idx+5] * 0x10000000000
+           + (ulong)packed.Elements[(int)idx+6] * 0x1000000000000
+           + (ulong)packed.Elements[(int)idx+7] * 0x100000000000000;
+    }
+
+    public static void Pack__LittleEndian__Uint32__into__Array(uint i, byte[] ar, ulong idx)
+    {
+      ar[idx] = (byte)(i & 0xff);
+      ar[idx+1] = (byte)((i >> 8) & 0xff);
+      ar[idx+2] = (byte)((i >> 16) & 0xff);
+      ar[idx+3] = (byte)((i >> 24) & 0xff);
+    }
+
+    public static void Pack__LittleEndian__Uint64__into__Array(ulong i, byte[] ar, ulong idx)
+    {
+      ar[idx] = (byte)(i & 0xff);
+      ar[idx+1] = (byte)((i >> 8) & 0xff);
+      ar[idx+2] = (byte)((i >> 16) & 0xff);
+      ar[idx+3] = (byte)((i >> 24) & 0xff);
+      ar[idx+4] = (byte)((i >> 32) & 0xff);
+      ar[idx+5] = (byte)((i >> 40) & 0xff);
+      ar[idx+6] = (byte)((i >> 48) & 0xff);
+      ar[idx+7] = (byte)((i >> 56) & 0xff);
+    }
+
+    public static Dafny.Sequence<uint> Unpack__LittleEndian__Uint32__Seq(Dafny.Sequence<byte> packed, ulong idx, ulong len)
+    {
+      uint[] ar = new uint[len];
+      for (ulong i = 0; i < len; i++) {
+        ar[i] = Unpack__LittleEndian__Uint32(packed, idx + 4*i);
+      }
+      return new Dafny.Sequence<uint>(ar);
+    }
+
+    public static Dafny.Sequence<ulong> Unpack__LittleEndian__Uint64__Seq(Dafny.Sequence<byte> packed, ulong idx, ulong len)
+    {
+      ulong[] ar = new ulong[len];
+      for (ulong i = 0; i < len; i++) {
+        ar[i] = Unpack__LittleEndian__Uint64(packed, idx + 8*i);
+      }
+      return new Dafny.Sequence<ulong>(ar);
+    }
+    
+    public static void Pack__LittleEndian__Uint32__Seq__into__Array(Dafny.Sequence<uint> unpacked, byte[] ar, ulong idx)
+    {
+      for (int i = 0; i < unpacked.Count; i++) {
+        Pack__LittleEndian__Uint32__into__Array(unpacked.Elements[i], ar, idx + 4*(ulong)i);
+      }
+    }
+ 
+    public static void Pack__LittleEndian__Uint64__Seq__into__Array(Dafny.Sequence<ulong> unpacked, byte[] ar, ulong idx)
+    {
+      for (int i = 0; i < unpacked.Count; i++) {
+        Pack__LittleEndian__Uint64__into__Array(unpacked.Elements[i], ar, idx + 8*(ulong)i);
+      }
+    }
+
+  }
+}
+
 namespace NativeArrays_Compile {
   public partial class __default
   {
