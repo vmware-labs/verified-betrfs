@@ -2908,7 +2908,6 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
     parse_Uint64Array_eq_seq(data_seq, val.ua);
 }
 
-
 method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VCase?;
     requires ValidGrammar(grammar);
@@ -2935,7 +2934,8 @@ method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) retu
 
     var val_size := MarshallVal(val.val, grammar.cases[val.c], data, index + 8);
 
-    ghost var new_int_bytes := data[index..index+Uint64Size()];
+    ghost var data_seq := data[..];
+    ghost var new_int_bytes := data_seq[index..index+Uint64Size()];
     assert forall i {:auto_trigger} :: 0 <= i < Uint64Size() ==> int_bytes[i] == new_int_bytes[i];
     assert int_bytes == new_int_bytes;
 
@@ -2943,7 +2943,7 @@ method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) retu
     assert grammar.GTaggedUnion?; 
     assert (val.c as int) < |grammar.cases|;
 
-    ghost var bytes := data[index..(index as int) + SizeOfV(val)];
+    ghost var bytes := data_seq[index..(index as int) + SizeOfV(val)];
     assert bytes[..8] == new_int_bytes;
     calc {
         parse_Val(bytes, grammar);
