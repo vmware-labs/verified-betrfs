@@ -2363,7 +2363,8 @@ method{:timeLimitMultiplier 4} MarshallKeyArrayContents(contents:seq<Key>, data:
         var item_size := MarshallByteArrayInterior(contents[i], data, cur_index);
         //var item_size := ComputeSizeOf(contents[uint64(i)]);
 
-        ghost var fresh_bytes := data[cur_index..cur_index + item_size];
+        ghost var data_seq := data[..];
+        ghost var fresh_bytes := data_seq[cur_index..cur_index + item_size];
         marshalled_bytes := marshalled_bytes + fresh_bytes;
         forall () 
             ensures var (val, rest) := parse_ByteArray(fresh_bytes);
@@ -2390,10 +2391,10 @@ method{:timeLimitMultiplier 4} MarshallKeyArrayContents(contents:seq<Key>, data:
                 SeqSumLens(contents);
             }
             (index as int) + SeqSumLens(contents);
-            data.Length;
+            |data_seq|;
         }
         //assert {:split_here} true;
-        assert marshalled_bytes == data[index..cur_index];
+        assert marshalled_bytes == data_seq[index..cur_index];
 
         // Prove the invariant about our index tracking correctly
         calc {
@@ -2405,7 +2406,7 @@ method{:timeLimitMultiplier 4} MarshallKeyArrayContents(contents:seq<Key>, data:
             (index as int) + SeqSumLens(contents[..i]);
         }
         assert (cur_index as int) == (index as int) + SeqSumLens(contents[..i]);
-        assert marshalled_bytes == data[index..cur_index];
+        assert marshalled_bytes == data_seq[index..cur_index];
     }
 
     // Prove that parsing will produce the correct result
