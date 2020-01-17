@@ -73,7 +73,7 @@ abstract module Message {
 }
 
 module ValueMessage refines Message {
-  import V = ValueWithDefault
+  import V = ValueType
 
   type Value = V.Value
   datatype Delta = NoDelta

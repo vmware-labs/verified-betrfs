@@ -22,12 +22,12 @@ import NativeArrays
 import opened Math
 import KeyType
 import ValueMessage`Internal
-import ValueWithDefault`Internal
+import ValueType`Internal
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
-      KeyType, ValueMessage, ValueWithDefault, lemma_SeqSumLens_prefix,
+      KeyType, ValueMessage, ValueType, lemma_SeqSumLens_prefix,
       lemma_SeqSumMessageLens_prefix,
       lemma_SizeOfV_parse_Val
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
@@ -2974,7 +2974,7 @@ function parse_Message(data:seq<byte>)
     ensures |res.1| < 0x1_0000_0000_0000_0000;
 {
   var (val, rest1) := parse_ByteArray(data);
-  if !val.None? && |val.value.b| as uint64 <= ValueWithDefault.MaxLen() then
+  if !val.None? && |val.value.b| as uint64 <= ValueType.MaxLen() then
     (Some(ValueMessage.Define(val.value.b)), rest1)
   else
     (None, [])
@@ -2990,7 +2990,7 @@ method ParseMessage(data:seq<byte>, index:uint64) returns (success:bool, v:Messa
 {
   var bytes;
   success, bytes, rest_index := ParseByteArray(data, index);
-  if success && |bytes| as uint64 <= ValueWithDefault.MaxLen() {
+  if success && |bytes| as uint64 <= ValueType.MaxLen() {
     v := ValueMessage.Define(bytes);
   } else {
     success := false;
@@ -3079,7 +3079,7 @@ lemma lemma_MessageArrayContents_helper_bailout(data:seq<byte>, len:uint64, trac
     requires forall j :: 0 < j < |trace| - 1 ==> trace[j].val.Some?;
     //requires forall j :: 0 < j < |trace| - 1 ==> v[j-1] == trace[j].val.value;
     requires trace[|trace|-1].val.Some? ==> trace[|trace|-1].val.value.Define?
-    requires trace[|trace|-1].val.None? || |trace[|trace|-1].val.value.value| > ValueWithDefault.MaxLen() as int
+    requires trace[|trace|-1].val.None? || |trace[|trace|-1].val.value.value| > ValueType.MaxLen() as int
     //requires v == ExtractValues(trace[1..]);
     decreases len;
     ensures  var (v', rest') := parse_MessageArray_contents(data, len);
@@ -3094,7 +3094,7 @@ lemma lemma_MessageArrayContents_helper_bailout(data:seq<byte>, len:uint64, trac
         assert val.None?;
       }
         
-      assert val.None? || !(|val.value.value| as uint64 <= ValueWithDefault.MaxLen());
+      assert val.None? || !(|val.value.value| as uint64 <= ValueType.MaxLen());
       var tuple' := parse_MessageArray_contents(data, len);
       var v', rest' := tuple'.0, tuple'.1;
       assert v'.None?;
@@ -3142,7 +3142,7 @@ method{:timeLimitMultiplier 2} ParseMessageArrayContents(data:seq<byte>, index:u
         ghost var step := MessageArray_ContentsTraceStep(data[rest1..], if some1 then Some(val) else None());
         ghost var old_trace := trace;
         trace := trace + [step];
-        if !some1 || |val.value| as uint64 > ValueWithDefault.MaxLen() {
+        if !some1 || |val.value| as uint64 > ValueType.MaxLen() {
             success := false;
             rest_index := (|data| as uint64);
             lemma_MessageArrayContents_helper_bailout(data[index..], len, trace);
@@ -3392,7 +3392,7 @@ lemma lemma_marshall_messagearray_contents(contents:seq<Message>, marshalled_byt
         calc {
             target;
                 { reveal_parse_MessageArray_contents(); }
-            if !val.None? && !others.None? && |val.value.value| as uint64 <= ValueWithDefault.MaxLen() then Some([val.value] + others.value) else None;
+            if !val.None? && !others.None? && |val.value.value| as uint64 <= ValueType.MaxLen() then Some([val.value] + others.value) else None;
         }
 
         calc {

@@ -10,7 +10,7 @@ module BucketWeights {
   import opened PivotsLib
   import opened Lexicographic_Byte_Order
   import opened ValueMessage`Internal
-  import ValueWithDefault`Internal
+  import ValueType`Internal
   import opened Maps
   import opened Sequences
   import opened BucketsLib
@@ -32,7 +32,7 @@ module BucketWeights {
   ensures w >= 0
   {
     match msg {
-      case Define(value) => 8 + ValueWithDefault.Len(value)
+      case Define(value) => 8 + ValueType.Len(value)
       case Update(delta) => 0
     }
   }

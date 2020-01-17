@@ -64,5 +64,5 @@ uint64 MaxKeyLen()
 
 uint64 MaxValueLen()
 {
-  return ValueWithDefault_Compile::__default::MaxLen();
+  return ValueType_Compile::__default::MaxLen();
 }

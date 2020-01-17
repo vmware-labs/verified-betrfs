@@ -4,7 +4,7 @@ include "../MapSpec/UI.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 
 module MapSpec refines UIStateMachine {
-  import V = ValueWithDefault
+  import V = ValueType
   import K = KeyType
   import SeqComparison
   import Options

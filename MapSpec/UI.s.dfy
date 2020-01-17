@@ -4,7 +4,7 @@ module {:extern} UI {
   //import Keyspace = Total_Order
   //import Keyspace = Lexicographic_Byte_Order
 
-  import V = ValueWithDefault
+  import V = ValueType
   import K = KeyType
 
   type Value = V.Value

@@ -38,7 +38,7 @@ module MarshallingImpl {
 
   import BT = PivotBetreeSpec`Internal
 
-  import ValueWithDefault`Internal
+  import ValueType`Internal
   import M = ValueMessage`Internal
   import LBAType
 
