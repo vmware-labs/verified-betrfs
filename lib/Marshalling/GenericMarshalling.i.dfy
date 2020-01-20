@@ -4,9 +4,9 @@ include "../Math/bases.i.dfy"
 include "Maps.i.dfy"
 include "Seqs.i.dfy"
 include "Util.i.dfy"
-include "MarshallInt.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
+include "../Base/PackedInts.s.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -14,7 +14,6 @@ import opened NativeTypes
 import opened Collections__Maps_i
 import opened Collections__Seqs_i 
 import opened Common__Util_i
-import opened Common__MarshallInt_i
 import opened Libraries__base_s
 import opened Options
 //import opened Math__power2_i
@@ -23,6 +22,7 @@ import opened Math
 import KeyType
 import ValueMessage`Internal
 import ValueType`Internal
+import opened PackedInts
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
@@ -157,11 +157,11 @@ function SizeOfV(val:V) : int
         case VCase(c, v)  => 8 + SizeOfV(v)     // 8 bytes for the case identifier
 }
 
-function method parse_Uint64(data:seq<byte>) : (Option<V>, seq<byte>)
+function parse_Uint64(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
 {
     if (|data| as uint64) >= Uint64Size() then
-        (Some(VUint64(SeqByteToUint64(data[..Uint64Size()]))), data[Uint64Size()..])
+        (Some(VUint64(unpack_LittleEndian_Uint64(data[..Uint64Size()]))), data[Uint64Size()..])
     else
         (None, [])
 }
@@ -811,7 +811,7 @@ method ParseTuple(data:seq<byte>, index:uint64, eltTypes:seq<G>) returns (succes
     }
 }
 
-function method parse_ByteArray(data:seq<byte>) : (res: (Option<V>, seq<byte>))
+function parse_ByteArray(data:seq<byte>) : (res: (Option<V>, seq<byte>))
     requires |data| < 0x1_0000_0000_0000_0000;
     ensures |res.1| < 0x1_0000_0000_0000_0000;
 {
@@ -847,19 +847,12 @@ method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:seq
     }
 }
 
-function SeqByteToSeqUint64(bytes: seq<byte>, l: int) : (us : seq<uint64>)
-  requires |bytes| == Uint64Size() as int * l
-  ensures |us| == l
-{
-  if l == 0 then [] else SeqByteToSeqUint64(bytes[0 .. (l-1) * Uint64Size() as int], l-1) + [SeqByteToUint64(bytes[(l-1) * Uint64Size() as int .. ])]
-}
-
 function parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
 {
     var (len, rest) := parse_Uint64(data);
     if !len.None? && len.value.u <= (|rest| as uint64) / Uint64Size() then
-        (Some(VUint64Array(SeqByteToSeqUint64(rest[..Uint64Size()*len.value.u], len.value.u as int))), rest[Uint64Size()*len.value.u..])
+        (Some(VUint64Array(unpack_LittleEndian_Uint64_Seq(rest[..Uint64Size()*len.value.u], len.value.u as int))), rest[Uint64Size()*len.value.u..])
     else
         (None, [])
 }
@@ -867,7 +860,7 @@ function parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
 method parseUint64ArrayContents(data:seq<byte>, index: uint64, len: uint64) returns (s : seq<uint64>)
     requires (index as int) + (Uint64Size() as int) * (len as int) <= |data|;
     requires |data| < 0x1_0000_0000_0000_0000;
-    ensures  s == SeqByteToSeqUint64(data[index .. index as int + len as int * Uint64Size() as int], len as int)
+    ensures  s == unpack_LittleEndian_Uint64_Seq(data[index .. index as int + len as int * Uint64Size() as int], len as int)
 {
   lemma_2toX();
 
@@ -875,7 +868,7 @@ method parseUint64ArrayContents(data:seq<byte>, index: uint64, len: uint64) retu
   var j: uint64 := 0;
   while j < len
   invariant 0 <= j <= len
-  invariant ar[..j] == SeqByteToSeqUint64(data[index .. index as int + j as int * Uint64Size() as int], j as int)
+  invariant ar[..j] == unpack_LittleEndian_Uint64_Seq(data[index .. index as int + j as int * Uint64Size() as int], j as int)
   {
     ar[j] :=    (data[index + 8*j + (0 as uint64)] as uint64) * 0x1_00_0000_0000_0000
               + (data[index + 8*j + (1 as uint64)] as uint64) * 0x1_00_0000_0000_00
@@ -886,7 +879,7 @@ method parseUint64ArrayContents(data:seq<byte>, index: uint64, len: uint64) retu
               + (data[index + 8*j + (6 as uint64)] as uint64) * 0x1_00
               + (data[index + 8*j + (7 as uint64)] as uint64);
 
-    assert ar[j] == SeqByteToUint64(data[index + 8*j .. index + 8*(j+1)]);
+    assert ar[j] == unpack_LittleEndian_Uint64(data[index + 8*j .. index + 8*(j+1)]);
     assert ar[..j] == ar[..j+1][..j];
     assert data[index .. index as int + j as int * Uint64Size() as int]
         == data[index .. index as int + (j + 1) as int * Uint64Size() as int][0 .. j * Uint64Size()];
@@ -1990,7 +1983,7 @@ method MarshallUint64(n:uint64, data:array<byte>, index:uint64)
     requires 0 <= (index as int) + (Uint64Size() as int) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
     requires data.Length < 0x1_0000_0000_0000_0000;
     modifies data;
-    ensures  SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == n;
+    ensures  unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == n;
     ensures  !parse_Uint64(data[index .. index+(Uint64Size() as uint64)]).0.None?;
     ensures  !parse_Uint64(data[index .. ]).0.None?;
     ensures  var tuple := parse_Uint64(data[index .. index+(Uint64Size() as uint64)]);
@@ -2002,7 +1995,7 @@ method MarshallUint64(n:uint64, data:array<byte>, index:uint64)
     ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
     ensures  forall i :: (index as int) + (Uint64Size() as int) <= i < data.Length ==> data[i] == old(data[i]);
 {
-    MarshallUint64_guts(n, data, index);
+    Pack_LittleEndian_Uint64_into_Array(n, data, index);
 
     forall i | 0 <= i < index ensures data[i] == old(data[i])
     {
@@ -2693,7 +2686,7 @@ method MarshallUint64s(ints:seq<uint64>, data:array<byte>, index:uint64)
     requires data.Length < 0x1_0000_0000_0000_0000;
     modifies data;
     ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
-    ensures forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
+    ensures forall i :: 0 <= i < |ints| ==> unpack_LittleEndian_Uint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
     ensures  forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
 {
     //NativeArrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
@@ -2703,7 +2696,7 @@ method MarshallUint64s(ints:seq<uint64>, data:array<byte>, index:uint64)
     while (j < |ints| as uint64)
         invariant 0 <= (j as int) <= |ints|;
         invariant forall i :: 0 <= i < index ==> data[i] == old(data[i]);
-        invariant forall i :: 0 <= i < j as int ==> SeqByteToUint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
+        invariant forall i :: 0 <= i < j as int ==> unpack_LittleEndian_Uint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
         invariant forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
     {
         MarshallUint64(ints[j], data, index + 8*j);
@@ -2750,7 +2743,7 @@ method MarshallByteArrayInterior(b:seq<byte>, data:array<byte>, index:uint64) re
     ensures  (size as int) == SizeOfV(VByteArray(b));
 {
     MarshallUint64((|b| as uint64), data, index);
-    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|b| as uint64);
+    assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|b| as uint64);
     MarshallBytes(b, data, index + 8);
 
     calc {
@@ -2805,7 +2798,7 @@ method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64)
     ensures  (size as int) == SizeOfV(val);
 {
     MarshallUint64((|val.b| as uint64), data, index);
-    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|val.b| as uint64);
+    assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|val.b| as uint64);
     MarshallBytes(val.b, data, index + 8);
 
     calc {
@@ -2829,13 +2822,13 @@ method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64)
 lemma parse_Uint64ArrayContents_eq_seq(data: seq<byte>, ints: seq<uint64>)
   requires |data| < 0x1_0000_0000_0000_0000;
   requires |data| == 8 * |ints|
-  requires forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[i*8 .. (i+1)*8]) == ints[i]
-  ensures SeqByteToSeqUint64(data, |ints|) == ints
+  requires forall i :: 0 <= i < |ints| ==> unpack_LittleEndian_Uint64(data[i*8 .. (i+1)*8]) == ints[i]
+  ensures unpack_LittleEndian_Uint64_Seq(data, |ints|) == ints
 {
   if (|ints| == 0) {
   } else {
     forall i | 0 <= i < |ints| - 1
-    ensures SeqByteToUint64(data[.. (|ints| - 1) * 8][i*8 .. (i+1)*8]) == ints[.. |ints| - 1][i]
+    ensures unpack_LittleEndian_Uint64(data[.. (|ints| - 1) * 8][i*8 .. (i+1)*8]) == ints[.. |ints| - 1][i]
     {
     }
     parse_Uint64ArrayContents_eq_seq(data[.. (|ints| - 1) * 8], ints[.. |ints| - 1]);
@@ -2845,12 +2838,12 @@ lemma parse_Uint64ArrayContents_eq_seq(data: seq<byte>, ints: seq<uint64>)
 lemma parse_Uint64Array_eq_seq(data: seq<byte>, ints: seq<uint64>)
   requires |data| < 0x1_0000_0000_0000_0000;
   requires |data| == 8 + 8 * |ints|
-  requires SeqByteToUint64(data[0..8]) as int == |ints|
-  requires forall i :: 0 <= i < |ints| ==> SeqByteToUint64(data[8 + i*8 .. 8 + (i+1)*8]) == ints[i]
+  requires unpack_LittleEndian_Uint64(data[0..8]) as int == |ints|
+  requires forall i :: 0 <= i < |ints| ==> unpack_LittleEndian_Uint64(data[8 + i*8 .. 8 + (i+1)*8]) == ints[i]
   ensures parse_Uint64Array(data).0.Some?
   ensures parse_Uint64Array(data).0.value.ua == ints
 {
-  forall i | 0 <= i < |ints| ensures SeqByteToUint64(data[8..][i*8 .. (i+1)*8]) == ints[i]
+  forall i | 0 <= i < |ints| ensures unpack_LittleEndian_Uint64(data[8..][i*8 .. (i+1)*8]) == ints[i]
   {
     assert data[8..][i*8 .. (i+1)*8] == data[8 + i*8 .. 8 + (i+1)*8];
   }
@@ -2875,9 +2868,9 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
     ensures  (size as int) == SizeOfV(val);
 {
     MarshallUint64((|val.ua| as uint64), data, index);
-    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
+    assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
     MarshallUint64s(val.ua, data, index + 8);
-    assert SeqByteToUint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
+    assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
 
     calc {
         parse_Val(data[index..(index as int) + SizeOfV(val)], grammar);
@@ -2891,9 +2884,9 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
     //assert{:split_here} true;
     assert data[index..(index as int) + SizeOfV(val)][..8] == data[index..index+8];
     assert len.value.u
-        == SeqByteToUint64(data_seq[..8])
-        == SeqByteToUint64(data[index .. index + 8])
-        == SeqByteToUint64(data[index .. index + (Uint64Size() as uint64)])
+        == unpack_LittleEndian_Uint64(data_seq[..8])
+        == unpack_LittleEndian_Uint64(data[index .. index + 8])
+        == unpack_LittleEndian_Uint64(data[index .. index + (Uint64Size() as uint64)])
         == (|val.ua| as uint64);
     
     //assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.ua;
@@ -2902,7 +2895,7 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
     size := 8 + (Uint64Size() * |val.ua| as uint64);
 
     forall i | 0 <= i < |val.ua|
-    ensures SeqByteToUint64(data_seq[8 + i*8 .. 8 + (i+1)*8]) == val.ua[i]
+    ensures unpack_LittleEndian_Uint64(data_seq[8 + i*8 .. 8 + (i+1)*8]) == val.ua[i]
     {
       MarshallUint64_index_splicing(data, index, val, i);
     }
