@@ -174,21 +174,13 @@ method ParseUint64(data:seq<byte>, index:uint64) returns (success:bool, v:V, res
              var v_opt := if success then Some(v) else None();
              v_opt == v' && data[rest_index..] == rest';
 {
-    lemma_2toX();
-
-    if (|data| as uint64) >= 8 && index <= (|data| as uint64) - 8 {
-    // Avoids overflow and equvalent to: if index + 8 < uint64(data.Length) 
-        var result := (data[index + (0 as uint64)] as uint64) * 0x1_00_0000_0000_0000
-                    + (data[index + (1 as uint64)] as uint64) * 0x1_00_0000_0000_00
-                    + (data[index + (2 as uint64)] as uint64) * 0x1_00_0000_0000
-                    + (data[index + (3 as uint64)] as uint64) * 0x1_00_0000_00
-                    + (data[index + (4 as uint64)] as uint64) * 0x1_00_0000
-                    + (data[index + (5 as uint64)] as uint64) * 0x1_00_00
-                    + (data[index + (6 as uint64)] as uint64) * 0x1_00
-                    + (data[index + (7 as uint64)] as uint64);
+    if |data| as uint64 - index >= 8 {
+        var result := Unpack_LittleEndian_Uint64(data, index);
         success := true;
         v := VUint64(result);
         rest_index := index + Uint64Size();
+
+        assert data[index..][..Uint64Size()] == data[index .. index + Uint64Size()];
     } else {
         success := false;
         rest_index := (|data| as uint64);
@@ -857,38 +849,6 @@ function parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
         (None, [])
 }
 
-method parseUint64ArrayContents(data:seq<byte>, index: uint64, len: uint64) returns (s : seq<uint64>)
-    requires (index as int) + (Uint64Size() as int) * (len as int) <= |data|;
-    requires |data| < 0x1_0000_0000_0000_0000;
-    ensures  s == unpack_LittleEndian_Uint64_Seq(data[index .. index as int + len as int * Uint64Size() as int], len as int)
-{
-  lemma_2toX();
-
-  var ar := new uint64[len];
-  var j: uint64 := 0;
-  while j < len
-  invariant 0 <= j <= len
-  invariant ar[..j] == unpack_LittleEndian_Uint64_Seq(data[index .. index as int + j as int * Uint64Size() as int], j as int)
-  {
-    ar[j] :=    (data[index + 8*j + (0 as uint64)] as uint64) * 0x1_00_0000_0000_0000
-              + (data[index + 8*j + (1 as uint64)] as uint64) * 0x1_00_0000_0000_00
-              + (data[index + 8*j + (2 as uint64)] as uint64) * 0x1_00_0000_0000
-              + (data[index + 8*j + (3 as uint64)] as uint64) * 0x1_00_0000_00
-              + (data[index + 8*j + (4 as uint64)] as uint64) * 0x1_00_0000
-              + (data[index + 8*j + (5 as uint64)] as uint64) * 0x1_00_00
-              + (data[index + 8*j + (6 as uint64)] as uint64) * 0x1_00
-              + (data[index + 8*j + (7 as uint64)] as uint64);
-
-    assert ar[j] == unpack_LittleEndian_Uint64(data[index + 8*j .. index + 8*(j+1)]);
-    assert ar[..j] == ar[..j+1][..j];
-    assert data[index .. index as int + j as int * Uint64Size() as int]
-        == data[index .. index as int + (j + 1) as int * Uint64Size() as int][0 .. j * Uint64Size()];
-
-    j := j + 1;
-  }
-  s := ar[..];
-}
-
 method ParseUint64Array(data:seq<byte>, index: uint64) returns (success:bool, v:V, rest_index:uint64)
     requires (index as int) <= |data|;
     requires |data| < 0x1_0000_0000_0000_0000;
@@ -907,7 +867,7 @@ method ParseUint64Array(data:seq<byte>, index: uint64) returns (success:bool, v:
             data[rest..rest + len.u];
         }
         success := true;
-        var contents := parseUint64ArrayContents(data, index + Uint64Size(), len.u);
+        var contents := Unpack_LittleEndian_Uint64_Seq(data, index + Uint64Size(), len.u);
         v := VUint64Array(contents);
         rest_index := rest + len.u * Uint64Size();
 
@@ -1082,6 +1042,8 @@ lemma lemma_parse_Val_view_ByteArray(data:seq<byte>, v:V, grammar:G, index:int)
             var bound_tuple := parse_ByteArray(data[index..bound]);
             var narrow_len_tuple := parse_Uint64(data[index..index+SizeOfV(v)]);
             var bound_len_tuple := parse_Uint64(data[index..bound]);
+            assert data[index..index+SizeOfV(v)][..Uint64Size()]
+                == data[index..bound][..Uint64Size()];
             assert narrow_len_tuple.0 == bound_len_tuple.0;
 
             if bound_tuple.0 == Some(v) {
@@ -1124,6 +1086,8 @@ lemma lemma_parse_Val_view_Message(data:seq<byte>, v:V, grammar:G, index:int)
               var bound_tuple := parse_Message(data[index..bound]);
               var narrow_len_tuple := parse_Uint64(data[index..index+SizeOfV(v)]);
               var bound_len_tuple := parse_Uint64(data[index..bound]);
+              assert data[index..index+SizeOfV(v)][..Uint64Size()]
+                  == data[index..bound][..Uint64Size()];
               assert narrow_len_tuple.0 == bound_len_tuple.0;
 
               if bound_tuple.0 == Some(v.m) {
@@ -1162,6 +1126,8 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
   {
     var len := |v.ua|;
 
+    assert data[index..bound][..Uint64Size()]
+        == data[index..index + SizeOfV(v)][..Uint64Size()];
     assert parse_Uint64(data[index..bound]).0
         == parse_Uint64(data[index..index + SizeOfV(v)]).0;
     assert parse_Uint64(data[index..bound]).1 == data[index..bound][8..];
@@ -1170,6 +1136,8 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
 
     var l := parse_Uint64(data[index..]).0;
     if (l.Some? && l.value.u as int == len) {
+      assert data[index..bound][..Uint64Size()]
+          == data[index..index + SizeOfV(v)][..Uint64Size()];
       assert parse_Uint64Array(data[index..bound]).0
           == parse_Uint64Array(data[index..index + SizeOfV(v)]).0;
     }
@@ -1450,6 +1418,8 @@ lemma lemma_parse_Val_view_Array(data:seq<byte>, v:V, grammar:G, index:int, boun
     var narrow_contents_tuple := parse_Array_contents(narrow_len_tuple.1, grammar.elt, narrow_len_tuple.0.value.u);
     var bound_contents_tuple := parse_Array_contents(bound_len_tuple.1, grammar.elt, bound_len_tuple.0.value.u);
 
+    assert data[index..index+SizeOfV(v)][..Uint64Size()]
+        == data[index..bound][..Uint64Size()];
     assert narrow_len_tuple.0 == bound_len_tuple.0;
 
     if bound_tuple.0 == Some(v) {
@@ -1613,6 +1583,8 @@ lemma lemma_parse_Val_view_KeyArray(data:seq<byte>, v:V, grammar: G, index:int, 
     var narrow_contents_tuple := parse_KeyArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u);
     var bound_contents_tuple := parse_KeyArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u);
 
+    assert data[index..index+SizeOfV(v)][..Uint64Size()]
+        == data[index..bound][..Uint64Size()];
     assert narrow_len_tuple.0 == bound_len_tuple.0;
 
     if bound_tuple.0 == Some(v) {
@@ -1773,6 +1745,8 @@ lemma lemma_parse_Val_view_Union(data:seq<byte>, v:V, grammar:G, index:int, boun
     var bound_tuple := parse_Case(data[index..bound], grammar.cases);
     var narrow_caseID_tuple := parse_Uint64(data[index..index+SizeOfV(v)]);
     var bound_caseID_tuple := parse_Uint64(data[index..bound]);
+    assert data[index..index+SizeOfV(v)][..Uint64Size()]
+        == data[index..bound][..Uint64Size()];
     assert narrow_caseID_tuple.0.value == bound_caseID_tuple.0.value;
 
     if parse_Case(data[index..bound], grammar.cases).0 == Some(v) {
@@ -2680,30 +2654,6 @@ method MarshallTuple(val:V, ghost grammar:G, data:array<byte>, index:uint64) ret
     }
 }
 
-method MarshallUint64s(ints:seq<uint64>, data:array<byte>, index:uint64)
-    requires (index as int) + (Uint64Size() as int)*|ints| <= data.Length;
-    requires 0 <= (index as int) + (Uint64Size() as int)*|ints| < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
-    requires data.Length < 0x1_0000_0000_0000_0000;
-    modifies data;
-    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
-    ensures forall i :: 0 <= i < |ints| ==> unpack_LittleEndian_Uint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
-    ensures  forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
-{
-    //NativeArrays.CopySeqIntoArray(bytes, 0, data, index, (|bytes| as uint64));
-
-    var j:uint64 := 0;
-
-    while (j < |ints| as uint64)
-        invariant 0 <= (j as int) <= |ints|;
-        invariant forall i :: 0 <= i < index ==> data[i] == old(data[i]);
-        invariant forall i :: 0 <= i < j as int ==> unpack_LittleEndian_Uint64(data[index as int + i*(Uint64Size() as int) .. index as int + (i+1)*(Uint64Size() as int)]) == ints[i]
-        invariant forall i :: (index as int) + (Uint64Size() as int)*|ints| <= i < data.Length ==> data[i] == old(data[i]);
-    {
-        MarshallUint64(ints[j], data, index + 8*j);
-        j := j + 1;
-    }
-}
-
 method MarshallBytes(bytes:seq<byte>, data:array<byte>, index:uint64)
     requires (index as int) + |bytes| <= data.Length;
     requires 0 <= (index as int) + |bytes| < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
@@ -2819,38 +2769,6 @@ method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64)
     size := 8 + (|val.b| as uint64);
 }
 
-lemma parse_Uint64ArrayContents_eq_seq(data: seq<byte>, ints: seq<uint64>)
-  requires |data| < 0x1_0000_0000_0000_0000;
-  requires |data| == 8 * |ints|
-  requires forall i :: 0 <= i < |ints| ==> unpack_LittleEndian_Uint64(data[i*8 .. (i+1)*8]) == ints[i]
-  ensures unpack_LittleEndian_Uint64_Seq(data, |ints|) == ints
-{
-  if (|ints| == 0) {
-  } else {
-    forall i | 0 <= i < |ints| - 1
-    ensures unpack_LittleEndian_Uint64(data[.. (|ints| - 1) * 8][i*8 .. (i+1)*8]) == ints[.. |ints| - 1][i]
-    {
-    }
-    parse_Uint64ArrayContents_eq_seq(data[.. (|ints| - 1) * 8], ints[.. |ints| - 1]);
-  }
-}
-
-lemma parse_Uint64Array_eq_seq(data: seq<byte>, ints: seq<uint64>)
-  requires |data| < 0x1_0000_0000_0000_0000;
-  requires |data| == 8 + 8 * |ints|
-  requires unpack_LittleEndian_Uint64(data[0..8]) as int == |ints|
-  requires forall i :: 0 <= i < |ints| ==> unpack_LittleEndian_Uint64(data[8 + i*8 .. 8 + (i+1)*8]) == ints[i]
-  ensures parse_Uint64Array(data).0.Some?
-  ensures parse_Uint64Array(data).0.value.ua == ints
-{
-  forall i | 0 <= i < |ints| ensures unpack_LittleEndian_Uint64(data[8..][i*8 .. (i+1)*8]) == ints[i]
-  {
-    assert data[8..][i*8 .. (i+1)*8] == data[8 + i*8 .. 8 + (i+1)*8];
-  }
-  parse_Uint64ArrayContents_eq_seq(data[8..], ints);
-  assert data[8..] == data[8..][..8*|ints|];
-}
-
 method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VUint64Array?;
     requires ValidGrammar(grammar);
@@ -2868,38 +2786,7 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
     ensures  (size as int) == SizeOfV(val);
 {
     MarshallUint64((|val.ua| as uint64), data, index);
-    assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
-    MarshallUint64s(val.ua, data, index + 8);
-    assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|val.ua| as uint64);
-
-    calc {
-        parse_Val(data[index..(index as int) + SizeOfV(val)], grammar);
-            { reveal_parse_Val(); }
-        parse_Uint64Array(data[index..(index as int) + SizeOfV(val)]);
-    }
-    ghost var data_seq := data[index..(index as int) + SizeOfV(val)];
-    ghost var tuple := parse_Uint64(data_seq);
-    ghost var len := tuple.0;
-    ghost var rest := tuple.1;
-    //assert{:split_here} true;
-    assert data[index..(index as int) + SizeOfV(val)][..8] == data[index..index+8];
-    assert len.value.u
-        == unpack_LittleEndian_Uint64(data_seq[..8])
-        == unpack_LittleEndian_Uint64(data[index .. index + 8])
-        == unpack_LittleEndian_Uint64(data[index .. index + (Uint64Size() as uint64)])
-        == (|val.ua| as uint64);
-    
-    //assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.ua;
-    assert !len.None? && (len.value.u as int) <= |rest|;
-    //assert rest[0..len.value.u] == val.ua;       // OBSERVE
-    size := 8 + (Uint64Size() * |val.ua| as uint64);
-
-    forall i | 0 <= i < |val.ua|
-    ensures unpack_LittleEndian_Uint64(data_seq[8 + i*8 .. 8 + (i+1)*8]) == val.ua[i]
-    {
-      MarshallUint64_index_splicing(data, index, val, i);
-    }
-    parse_Uint64Array_eq_seq(data_seq, val.ua);
+    Pack_LittleEndian_Uint64_Seq_into_Array(val.ua, data, index + 8);
 }
 
 method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
