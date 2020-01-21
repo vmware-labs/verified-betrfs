@@ -59,18 +59,39 @@ module PackedInts {
     )
   }
 
+  method {:axiom} Unpack_LittleEndian_Uint32(packed: seq<byte>, idx: uint64)
+  returns (i: uint32)
+  requires 0 <= idx
+  requires idx as int + 4 <= |packed|
+  ensures i == unpack_LittleEndian_Uint32(packed[idx .. idx + 4])
+
   method {:axiom} Unpack_LittleEndian_Uint64(packed: seq<byte>, idx: uint64)
   returns (i: uint64)
   requires 0 <= idx
   requires idx as int + 8 <= |packed|
   ensures i == unpack_LittleEndian_Uint64(packed[idx .. idx + 8])
 
+  method {:axiom} Pack_LittleEndian_Uint32_into_Array(i: uint32, ar: array<byte>, idx: uint64)
+  requires 0 <= idx
+  requires idx as int + 4 <= ar.Length
+  modifies ar
+  ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
+  ensures unpack_LittleEndian_Uint32(ar[idx .. idx + 4]) == i
+  ensures forall j | idx as int + 4 <= j < ar.Length :: ar[j] == old(ar[j])
+
   method {:axiom} Pack_LittleEndian_Uint64_into_Array(i: uint64, ar: array<byte>, idx: uint64)
   requires 0 <= idx
   requires idx as int + 8 <= ar.Length
+  modifies ar
   ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
   ensures unpack_LittleEndian_Uint64(ar[idx .. idx + 8]) == i
   ensures forall j | idx as int + 8 <= j < ar.Length :: ar[j] == old(ar[j])
+
+  method {:axiom} Unpack_LittleEndian_Uint32_Seq(packed: seq<byte>, idx: uint64, len: uint64)
+  returns (unpacked: seq<uint32>)
+  requires 0 <= idx
+  requires idx as int + 4 * len as int <= |packed|
+  ensures unpacked == unpack_LittleEndian_Uint32_Seq(packed[idx .. idx + 4*len], len as int)
 
   method {:axiom} Unpack_LittleEndian_Uint64_Seq(packed: seq<byte>, idx: uint64, len: uint64)
   returns (unpacked: seq<uint64>)
@@ -78,9 +99,18 @@ module PackedInts {
   requires idx as int + 8 * len as int <= |packed|
   ensures unpacked == unpack_LittleEndian_Uint64_Seq(packed[idx .. idx + 8*len], len as int)
 
+  method {:axiom} Pack_LittleEndian_Uint32_Seq_into_Array(unpacked: seq<uint32>, ar: array<byte>, idx: uint64)
+  requires 0 <= idx
+  requires idx as int + 4 * |unpacked| <= ar.Length
+  modifies ar
+  ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
+  ensures unpack_LittleEndian_Uint32_Seq(ar[idx .. idx as int + 4*|unpacked|], |unpacked|) == unpacked
+  ensures forall j | idx as int + 4 * |unpacked| <= j < ar.Length :: ar[j] == old(ar[j])
+
   method {:axiom} Pack_LittleEndian_Uint64_Seq_into_Array(unpacked: seq<uint64>, ar: array<byte>, idx: uint64)
   requires 0 <= idx
   requires idx as int + 8 * |unpacked| <= ar.Length
+  modifies ar
   ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
   ensures unpack_LittleEndian_Uint64_Seq(ar[idx .. idx as int + 8*|unpacked|], |unpacked|) == unpacked
   ensures forall j | idx as int + 8 * |unpacked| <= j < ar.Length :: ar[j] == old(ar[j])

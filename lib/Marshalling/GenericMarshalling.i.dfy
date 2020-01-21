@@ -7,6 +7,7 @@ include "Util.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/PackedInts.s.dfy"
+include "../Base/PackedStringArray.s.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -23,6 +24,7 @@ import KeyType
 import ValueMessage`Internal
 import ValueType`Internal
 import opened PackedInts
+import opened PackedStringArray
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
@@ -46,6 +48,7 @@ datatype G = GUint64
            | GKeyArray
            | GMessageArray
            | GTaggedUnion(cases:seq<G>)
+           | GPackedStringArray
 
 datatype V = VUint64(u:uint64)
            | VArray(a:seq<V>)
@@ -56,6 +59,7 @@ datatype V = VUint64(u:uint64)
            | VMessageArray(ma:seq<Message>)
            | VUint64Array(ua:seq<uint64>)
            | VCase(c:uint64, val:V)
+           | VPackedStringArray(psa: Psa)
 
 predicate ValInGrammar(val:V, grammar:G)
 {
@@ -105,6 +109,7 @@ predicate ValidVal(val:V)
         case VMessageArray(ma) => |ma| < 0x1_0000_0000_0000_0000 && forall v :: v in ma ==> ValidMessage(v)
         case VUint64Array(ua) => |ua| < 0x1_0000_0000_0000_0000
         case VCase(c, v) => ValidVal(v)
+        case VPackedStringArray(psa) => PackedStringArray.WF(psa)
 
 }
 
@@ -929,6 +934,14 @@ method ParseCase(data:seq<byte>, index:uint64, cases:seq<G>) returns (success:bo
     }
 }
 
+function parse_PackedStringArray(data:seq<byte>) : (Option<V>, seq<byte>)
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures var (opt_val, rest) := parse_PackedStringArray(data, cases);
+            |rest| <= |data| && (opt_val.Some? ==> ValidVal(opt_val.value) && ValInGrammar(opt_val.value, GPackedStringArray(cases)));
+{
+  parse_Psa(data)
+}
+
 function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     requires ValidGrammar(grammar);
@@ -949,6 +962,7 @@ function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
         case GKeyArray           => parse_KeyArray(data)
         case GMessageArray       => parse_MessageArray(data)
         case GTaggedUnion(cases) => parse_Case(data, cases)
+        case GPackedStringArray  => parse_PackedStringArray(data)
 }
 
 method ParseVal(data:seq<byte>, index:uint64, grammar:G) returns (success:bool, v:V, rest_index:uint64)
