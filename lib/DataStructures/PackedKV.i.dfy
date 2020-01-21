@@ -11,6 +11,7 @@ module PackedKV {
   import opened ValueType`Internal
   import opened ValueMessage
   import opened BucketsLib
+  import opened Options
 
   datatype Pkv = Pkv(
       keys: PackedStringArray.Psa,
@@ -131,5 +132,61 @@ module PackedKV {
     }
 
     return true;
+  }
+
+  function parse_Pkv(data: seq<byte>) : (res : (Option<Pkv>, seq<byte>))
+  ensures res.0.Some? ==> WF(res.0.value)
+  {
+    var (keys, rest1) := PackedStringArray.parse_Psa(data);
+    if keys.Some? then (
+      if ValidKeyLens(keys.value) then (
+        var (messages, rest2) := PackedStringArray.parse_Psa(rest1);
+        if messages.Some?
+            && |keys.value.offsets| == |messages.value.offsets| then (
+          var res := Pkv(keys.value, messages.value);
+          (Some(res), rest2)
+        ) else (
+          (None, [])
+        )
+      ) else (
+        (None, [])
+      )
+    ) else (
+      (None, [])
+    )
+  }
+
+  method Parse_Pkv(data: seq<byte>, index:uint64)
+  returns (pkv: Option<Pkv>, rest_index: uint64)
+  requires index as int <= |data|
+  requires |data| < 0x1_0000_0000_0000_0000
+  ensures rest_index as int <= |data|
+  ensures var (pkv', rest') := parse_Pkv(data[index..]);
+      && pkv == pkv'
+      && data[rest_index..] == rest'
+  {
+    var keys, rest1 := PackedStringArray.Parse_Psa(data, index);
+    if keys.Some? {
+      // TODO we iterate twice, once to check sortedness, another
+      // to check lengths, we could consolidate.
+      var isValidKeyLens := ComputeValidKeyLens(keys.value);
+      if isValidKeyLens {
+        var messages, rest2 := PackedStringArray.Parse_Psa(data, rest1);
+        if messages.Some?
+            && |keys.value.offsets| as uint64 == |messages.value.offsets| as uint64 {
+          pkv := Some(Pkv(keys.value, messages.value));
+          rest_index := rest2;
+        } else {
+          pkv := None;
+          rest_index := |data| as uint64;
+        }
+      } else {
+        pkv := None;
+        rest_index := |data| as uint64;
+      }
+    } else {
+      pkv := None;
+      rest_index := |data| as uint64;
+    }
   }
 }
