@@ -18,18 +18,16 @@ module PackedKV {
     |s| <= ValueWithDefault.MaxLen()
   }
 
-  predicate ValidKeyByteStringSeq(s: seq<seq<byte>>)
+  predicate ValidKeyLens(psa: PackedStringArray.Psa)
   {
-    forall i | 0 <= i < |s| :: ValidKeyByteString(s[i])
-  }
-
-  predicate ValidMessageByteStringSeq(s: seq<seq<byte>>)
-  {
-    forall i | 0 <= i < |s| :: ValidMessageByteString(s[i])
+    forall i | 0 <= i < |psa.offsets| ::
+        PackedStringArray.psaEnd(psa, i) - PackedStringArray.psaStart(psa, i) <= KeyType.MaxLen()
   }
 
   predicate WF(pkv: Pkv) {
     && PackedStringArray.WF(pkv.keys)
     && PackedStringArray.WF(pkv.values)
+    && ValidKeyLens(pkv.keys)
+    && ValidMessageLens(pkv.messages)
   }
 }
