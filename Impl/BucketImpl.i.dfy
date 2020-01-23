@@ -150,7 +150,7 @@ module BucketImpl {
       }
     }
 
-    static function {:opaque} ReprSeq(s: seq<MutBucket>) : set<object>
+    static function ReprSeq(s: seq<MutBucket>) : set<object>
     reads s
     {
       set i, o | 0 <= i < |s| && o in s[i].Repr :: o
@@ -163,7 +163,7 @@ module BucketImpl {
     // but this keeps the reveal_ReprSeq() from escaping
     ensures InvSeq(s) == (forall i | 0 <= i < |s| :: s[i].Inv())
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
       forall i | 0 <= i < |s| :: s[i].Inv()
     }
 
@@ -180,7 +180,7 @@ module BucketImpl {
     ensures forall i | 0 <= i < |s| :: bs[i] == s[i].Bucket
     decreases |s|
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
       if |s| == 0 then [] else ISeq(DropLast(s)) + [Last(s).I()]
     }
 
@@ -210,20 +210,20 @@ module BucketImpl {
     static twostate lemma AllocatedReprSeq(new s: seq<MutBucket>)
     ensures allocated(ReprSeq(s))
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
     }
 
     static twostate lemma FreshReprSeqOfFreshEntries(new s: seq<MutBucket>)
     requires forall i | 0 <= i < |s| :: fresh(s[i].Repr)
     ensures fresh(ReprSeq(s))
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
     }
 
     static lemma ReprSeqAdditive(a: seq<MutBucket>, b: seq<MutBucket>)
     ensures ReprSeq(a) + ReprSeq(b) == ReprSeq(a + b)
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
       var x := ReprSeq(a) + ReprSeq(b);
       var y := ReprSeq(a + b);
       forall o | o in x ensures o in y {
@@ -249,17 +249,17 @@ module BucketImpl {
     requires |a| == 1
     ensures ReprSeq(a) == a[0].Repr
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
     }
 
     static lemma LemmaReprBucketLeReprSeq(buckets: seq<MutBucket>, i: int)
     requires 0 <= i < |buckets|
     ensures buckets[i].Repr <= ReprSeq(buckets)
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
     }
 
-    static predicate {:opaque} ReprSeqDisjoint(buckets: seq<MutBucket>)
+    static predicate ReprSeqDisjoint(buckets: seq<MutBucket>)
     reads set i | 0 <= i < |buckets| :: buckets[i]
     {
       forall i, j | 0 <= i < |buckets| && 0 <= j < |buckets| && i != j ::
@@ -270,7 +270,7 @@ module BucketImpl {
     requires |buckets| <= 1
     ensures ReprSeqDisjoint(buckets)
     {
-      reveal_ReprSeqDisjoint();
+      //reveal_ReprSeqDisjoint();
     }
 
     static lemma ReprSeqDisjointOfLen2(buckets: seq<MutBucket>)
@@ -278,7 +278,7 @@ module BucketImpl {
     requires buckets[0].Repr !! buckets[1].Repr
     ensures ReprSeqDisjoint(buckets)
     {
-      reveal_ReprSeqDisjoint();
+      //reveal_ReprSeqDisjoint();
     }
 
     static lemma ReprSeqDisjointOfReplace1with2(
@@ -297,14 +297,14 @@ module BucketImpl {
     requires |buckets| == 1
     ensures ReprSeq(buckets) == buckets[0].Repr
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
     }
 
     static lemma ListReprOfLen2(buckets: seq<MutBucket>)
     requires |buckets| == 2
     ensures ReprSeq(buckets) == buckets[0].Repr + buckets[1].Repr
     {
-      reveal_ReprSeq();
+      //reveal_ReprSeq();
     }
 
     static method kvlSeqToMutBucketSeq(kvls: seq<KVList.Kvl>)
@@ -477,7 +477,7 @@ module BucketImpl {
         forall o | o in ReprSeq(buckets')
         ensures o in old(ReprSeq(buckets)) || fresh(o)
         {
-          reveal_ReprSeq();
+          //reveal_ReprSeq();
           var i :| 0 <= i < |buckets'| && o in buckets'[i].Repr;
           if i < slot as int {
             assert o in buckets[i].Repr;
@@ -589,8 +589,8 @@ module BucketImpl {
       buckets' := ar[..];
 
       reveal_InvSeq();
-      reveal_ReprSeq();
-      reveal_ReprSeqDisjoint();
+      //reveal_ReprSeq();
+      //reveal_ReprSeqDisjoint();
     }
 
     predicate WFIter(it: Iterator)

@@ -55,7 +55,7 @@ module NodeImpl {
       new;
 
       this.Repr := {this} + MutBucket.ReprSeq(buckets);
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeq();
     }
 
     protected predicate Inv()
@@ -69,7 +69,7 @@ module NodeImpl {
       && MutBucket.ReprSeqDisjoint(buckets)
 
       && (
-        MutBucket.reveal_ReprSeq();
+        //MutBucket.reveal_ReprSeq();
         && (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
         && (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
       )
@@ -109,8 +109,8 @@ module NodeImpl {
       buckets := SeqIndexUpdate(buckets, slot, bucket);
       children := Some(SeqIndexUpdate(children.value, slot, childref));
 
-      MutBucket.reveal_ReprSeq();
-      MutBucket.reveal_ReprSeqDisjoint();
+      //MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeqDisjoint();
 
       Repr := {this} + MutBucket.ReprSeq(buckets);
       assert Inv();
@@ -122,7 +122,7 @@ module NodeImpl {
     ensures (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
     //ensures (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
     {
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeq();
     }
 
     twostate lemma SplitParentReprSeqFacts(new s: seq<MutBucket>)
@@ -132,7 +132,7 @@ module NodeImpl {
     ensures this !in MutBucket.ReprSeq(s);
     ensures forall o :: o in MutBucket.ReprSeq(s) ==> allocated(o);
     {
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeq();
       forall i | 0 <= i < |s| ensures this !in s[i].Repr
       {
         if this in s[i].Repr {
@@ -197,14 +197,14 @@ module NodeImpl {
     requires MutBucket.ReprSeq(s) !! t.Repr
     ensures MutBucket.ReprSeqDisjoint(s + [t])
     {
-      MutBucket.reveal_ReprSeqDisjoint();
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeqDisjoint();
+      //MutBucket.reveal_ReprSeq();
     }
 
     lemma ReprSeqAppend(s: seq<MutBucket>, t: MutBucket)
     ensures MutBucket.ReprSeq(s + [t]) == MutBucket.ReprSeq(s) + t.Repr
     {
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeq();
       var a := MutBucket.ReprSeq(s + [t]);
       var b := MutBucket.ReprSeq(s) + t.Repr;
       forall o | o in a ensures o in b { }
@@ -246,8 +246,8 @@ module NodeImpl {
     requires MutBucket.ReprSeq(s) !! t.Repr
     ensures MutBucket.ReprSeqDisjoint([t] + s)
     {
-      MutBucket.reveal_ReprSeqDisjoint();
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeqDisjoint();
+      //MutBucket.reveal_ReprSeq();
     }
 
     static lemma ReprSeqPrepend(t: MutBucket, s: seq<MutBucket>)
@@ -362,8 +362,8 @@ module NodeImpl {
     requires forall i | 0 <= i < |buckets| && i != r :: buckets[i].Repr == old(buckets[i].Repr)
     ensures MutBucket.ReprSeqDisjoint(buckets)
     {
-      MutBucket.reveal_ReprSeqDisjoint();
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeqDisjoint();
+      //MutBucket.reveal_ReprSeq();
     }
 
     twostate lemma ReprSeqReplace(buckets: seq<MutBucket>, r: int)
@@ -371,7 +371,7 @@ module NodeImpl {
     requires forall i | 0 <= i < |buckets| && i != r :: buckets[i].Repr == old(buckets[i].Repr)
     ensures MutBucket.ReprSeq(buckets) <= old(MutBucket.ReprSeq(buckets)) + buckets[r].Repr
     {
-      MutBucket.reveal_ReprSeq();
+      //MutBucket.reveal_ReprSeq();
     }
 
     method InsertKeyValue(key: Key, msg: Message)
@@ -398,7 +398,7 @@ module NodeImpl {
       ensures i != r as int ==> buckets[i].Repr == old(buckets[i].Repr)
       ensures this !in buckets[i].Repr
       {
-        MutBucket.reveal_ReprSeqDisjoint();
+        //MutBucket.reveal_ReprSeqDisjoint();
       }
       ReprSeqDisjointAfterUpdate(buckets, r as int);
       ReprSeqReplace(buckets, r as int);
