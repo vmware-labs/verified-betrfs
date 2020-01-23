@@ -24,5 +24,6 @@ COPY test.dfy /home/dafnyserver
 RUN mkdir bin
 #RUN ln -s /home/dafnyserver/.dafny/dafny/Binaries/dafny bin/dafny
 COPY bin_dafny_sh bin/dafny
+COPY bin_dafny_exe_sh bin/dafny_exe
 COPY bashrc-appendage /tmp
 RUN cat /tmp/bashrc-appendage >> /home/dafnyserver/.bashrc
