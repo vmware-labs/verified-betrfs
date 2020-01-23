@@ -123,13 +123,13 @@ module MarshallingImpl {
       return None;
     }
 
-    var values := ValToMessageSeq(v.t[1 as uint64]);
+    var messages := ValToMessageSeq(v.t[1 as uint64]);
 
-    if values.None? {
+    if messages.None? {
       return None;
     }
 
-    var kvl := KVList.Kvl(keys.value, values.value);
+    var kvl := KVList.Kvl(keys.value, messages.value);
 
     var wf := KVList.IsWF(kvl);
     if !wf {
@@ -473,10 +473,10 @@ module MarshallingImpl {
     KVList.kvlWeightEq(kvl);
     KVList.lenKeysLeWeight(kvl);
     var keys := strictlySortedKeySeqToVal(kvl.keys);
-    var values := messageSeqToVal(kvl.values);
-    v := VTuple([keys, values]);
+    var messages := messageSeqToVal(kvl.messages);
+    v := VTuple([keys, messages]);
 
-    assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(values);
+    assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(messages);
 
     // FIXME dafny goes nuts with trigger loops here some unknown reason
     // without these obvious asserts.

@@ -51,7 +51,7 @@ module BucketImpl {
   ensures KMB.WF(tree)
   ensures KVList.I(kvl) == KMB.Interpretation(tree)
   {
-    var modelkvl := KMB.Model.KVList(kvl.keys, kvl.values);
+    var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
     assume false;
   }
@@ -648,7 +648,7 @@ module BucketImpl {
       if it.i == |kvl.keys| as uint64 {
         next := BucketIteratorModel.Done;
       } else {
-        next := BucketIteratorModel.Next(kvl.keys[it.i], kvl.values[it.i]);
+        next := BucketIteratorModel.Next(kvl.keys[it.i], kvl.messages[it.i]);
       }
     }
   }
