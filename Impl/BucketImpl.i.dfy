@@ -63,6 +63,19 @@ module BucketImpl {
   requires PackedKV.WF(pkv)
   ensures KVList.WF(kvl)
   ensures KVList.I(kvl) == PackedKV.I(pkv)
+  {
+    assume false;
+    var n := |pkv.keys.offsets| as uint64;
+    var keys := new Key[n];
+    var messages := new Message[n];
+    var i: uint64 := 0;
+    while i < n {
+      keys[i] := PackedKV.GetKey(pkv, i);
+      messages[i] := PackedKV.GetMessage(pkv, i);
+      i := i + 1;
+    }
+    return KVList.Kvl(keys[..], messages[..]);
+  }
 
   method pkv_to_tree(pkv: PackedKV.Pkv)
   returns (tree: TreeMap)

@@ -6,7 +6,7 @@ include "../Base/total_order.i.dfy"
 module PackedStringArray {
   import opened NativeTypes
   import opened Options
-  import opened PackedInts
+  import opened NativePackedInts
   import opened NativeArrays
   import Uint32_Order
   
@@ -35,7 +35,9 @@ module PackedStringArray {
   requires 0 <= i as int < |psa.offsets|
   ensures psaStart(psa, i) as int <= end as int <= |psa.data|
   {
-    var _ := if i > 0 then Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, i as int); 0 else 0;
+    ghost var _ := if i > 0 then
+      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, i as int);
+      false else false;
     Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int, |psa.offsets| - 1);
 
     psa.offsets[i]

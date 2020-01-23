@@ -201,12 +201,6 @@ module PackedKV {
     }
   }
 
-  method Query(pkv: Pkv, key: Key)
-  returns (msg: Option<Message>)
-  requires WF(pkv)
-  ensures msg.None? ==> key !in I(pkv)
-  ensures msg.Some? ==> key in I(pkv) && I(pkv)[key] == msg.value
-
   function method FirstKey(pkv: Pkv) : Key
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
@@ -219,5 +213,47 @@ module PackedKV {
   requires |pkv.keys.offsets| > 0
   {
     PackedStringArray.LastElement(pkv.keys)
+  }
+
+  function method GetKey(pkv: Pkv, i: uint64) : Key
+  requires WF(pkv)
+  requires 0 <= i as int < |pkv.keys.offsets|
+  {
+    PackedStringArray.psaElement(pkv.keys, i)
+  }
+
+  function method GetMessage(pkv: Pkv, i: uint64) : Message
+  requires WF(pkv)
+  requires 0 <= i as int < |pkv.messages.offsets|
+  {
+    byteString_to_Message(PackedStringArray.psaElement(pkv.messages, i))
+  }
+
+  method Query(pkv: Pkv, key: Key)
+  returns (msg: Option<Message>)
+  requires WF(pkv)
+  ensures msg.None? ==> key !in I(pkv)
+  ensures msg.Some? ==> key in I(pkv) && I(pkv)[key] == msg.value
+  {
+    assume false;
+
+    var lo: uint64 := 0;
+    var hi: uint64 := |pkv.keys.offsets| as uint64;
+
+    while lo < hi
+    {
+      var mid: uint64 := (lo + hi) / 2;
+      var c := Keyspace.cmp(key, GetKey(pkv, mid));
+      if c == 0 {
+        msg := Some(GetMessage(pkv, mid));
+        return;
+      } else if (c < 0) {
+        hi := mid;
+      } else {
+        lo := mid + 1;
+      }
+    }
+
+    msg := None;
   }
 }

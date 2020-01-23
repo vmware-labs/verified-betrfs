@@ -23,7 +23,7 @@ import opened Math
 import KeyType
 import ValueMessage`Internal
 import ValueType`Internal
-import opened PackedInts
+import opened NativePackedInts
 import opened PackedKV
 
 export S
@@ -509,63 +509,6 @@ lemma lemma_KeyArrayContents_helper_bailout(data:seq<byte>, len:uint64, trace:se
     }
 }
 
-method{:timeLimitMultiplier 2} ParseKeyArrayContents(data:seq<byte>, index:uint64, len:uint64) 
-       returns (success:bool, v:seq<Key>, rest_index:uint64)
-    requires (index as int) <= |data|;
-    requires |data| < 0x1_0000_0000_0000_0000;
-    ensures  (rest_index as int) <= |data|;
-    ensures  var (v', rest') := parse_KeyArray_contents(data[index..], len);
-             var v_opt := if success then Some(v) else None();
-             v_opt == v' && data[rest_index..] == rest';
-    ensures  success ==> ValidVal(VKeyArray(v));
-{
-    reveal_parse_KeyArray_contents();
-    var vArr := new Key[len];
-    ghost var g_v := [];
-    success := true;
-    var i:uint64 := 0;
-    var next_val_index:uint64 := index;
-    ghost var trace := [KeyArray_ContentsTraceStep(data[index..], None())];
-
-    while i < len
-        invariant 0 <= i <= len;
-        invariant index <= next_val_index <= (|data| as uint64);
-        invariant |trace| == (i as int) + 1;
-        invariant |g_v| == (i as int);
-        invariant vArr[..i] == g_v;
-        invariant trace[0].data == data[index..];
-        invariant forall j :: 0 <= j < (i as int)+1 ==> |trace[j].data| < 0x1_0000_0000_0000_0000;
-        invariant trace[i].data == data[next_val_index..];
-        invariant forall j :: 0 < j <= i ==> trace[j].val.Some?;
-        invariant forall j :: 0 < j <= i ==> g_v[j-1] == trace[j].val.value;
-        invariant forall j :: 0 < j < (i as int)+1 ==> 
-            Some(VByteArray(trace[j].val.value)) == parse_ByteArray(trace[j-1].data).0
-         && trace[j].data == parse_ByteArray(trace[j-1].data).1
-        invariant ValidVal(VKeyArray(vArr[..i]));
-    {
-        var some1, val, rest1 := ParseByteArray(data, next_val_index);
-        ghost var step := KeyArray_ContentsTraceStep(data[rest1..], if some1 then Some(val) else None());
-        ghost var old_trace := trace;
-        trace := trace + [step];
-        if !some1 || |val| as uint64 > KeyType.MaxLen() {
-            success := false;
-            rest_index := (|data| as uint64);
-            lemma_KeyArrayContents_helper_bailout(data[index..], len, trace);
-            return;
-        }
-        g_v := g_v + [val];
-        vArr[i] := val;
-        next_val_index := rest1;
-
-        i := i + 1;
-    }
-
-    success := true;
-    rest_index := next_val_index;
-    v := vArr[..];               
-    lemma_KeyArrayContents_helper(data[index..], len, v, trace);
-}
-
 function parse_KeyArray(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     ensures var (opt_val, rest) := parse_KeyArray(data);
@@ -593,21 +536,25 @@ method ParseKeyArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, r
              v_opt == v' && data[rest_index..] == rest';
     ensures  success ==> ValidVal(v);
 {
-    var some1, len, rest := ParseUint64(data, index);
-    if some1 {
-        var some2, contents, remainder := ParseKeyArrayContents(data, rest, len.u);
-        if some2 {
-            success := true;
-            v := VKeyArray(contents);
-            rest_index := remainder;
-        } else {
-            success := false;
-            rest_index := (|data| as uint64);
-        }
-    } else {
-        success := false;
-        rest_index := (|data| as uint64);
+  assume false;
+  var psa, index1 := PackedStringArray.Parse_Psa(data, index);
+  if psa.Some? {
+    var n := |psa.value.offsets| as uint64;
+    var keys := new Key[n];
+    var i: uint64 := 0;
+    while i < n
+    {
+      keys[i] := PackedStringArray.psaElement(psa.value, i);
+      i := i + 1;
     }
+
+    success := true;
+    v := VKeyArray(keys[..]);
+    rest_index := index1;
+  } else {
+    success := false;
+    rest_index := (|data| as uint64);
+  }
 }
 
 function {:opaque} parse_Tuple_contents(data:seq<byte>, eltTypes:seq<G>) : (Option<seq<V>>, seq<byte>)

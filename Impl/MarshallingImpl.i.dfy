@@ -46,8 +46,6 @@ module MarshallingImpl {
   import MS = MapSpec
   import Keyspace = Lexicographic_Byte_Order
 
-  import MM = MutableMap
-
   type Reference = IMM.Reference
   type LBA = IMM.LBA
   type Location = IMM.Location
