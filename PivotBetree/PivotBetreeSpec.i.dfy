@@ -23,10 +23,10 @@ module PivotBetreeGraph refines Graph {
   import MS = MapSpec
   import opened Options
   import M = ValueMessage
+  import opened KeyType
+  import opened ValueType
 
   import Keyspace = Lexicographic_Byte_Order
-  type Key = Keyspace.Element
-  type Value = BG.Value
 
   //type Reference = BG.Reference
   //function Root() : Reference { BG.Root() }
@@ -64,6 +64,8 @@ module PivotBetreeSpec {
   import Buckets = BucketsLib
   import opened BucketWeights
   import UI
+  import opened KeyType
+  import opened ValueType
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
   export Internal reveals *
@@ -743,10 +745,10 @@ module PivotBetreeSpecWFNodes {
   import opened Bounds
   import Pivots = PivotsLib
   import M = ValueMessage
+  import opened KeyType
 
   import MS = MapSpec
   import Keyspace = Lexicographic_Byte_Order
-  type Key = Keyspace.Element
 
   lemma ValidFlushWritesWFNodes(f: NodeFlush)
   requires ValidFlush(f)

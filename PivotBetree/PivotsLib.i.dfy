@@ -10,10 +10,10 @@ include "../lib/Base/total_order.i.dfy"
 module PivotsLib {
   import opened Sequences
   import opened NativeTypes
+  import opened KeyType
 
   import MS = MapSpec
   import Keyspace = Lexicographic_Byte_Order
-  type Key = Keyspace.Element
 
   // A PivotTable of length n breaks the keyspace into n "buckets"
   // If the pivots are (a_1,...,a_n) then the buckets are

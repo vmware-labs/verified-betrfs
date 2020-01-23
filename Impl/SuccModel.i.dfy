@@ -11,6 +11,7 @@ module SuccModel {
   import opened StateModel
   import opened IOModel
   import opened BookkeepingModel
+  import opened KeyType
 
   import opened Options
   import opened Maps

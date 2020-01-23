@@ -26,10 +26,10 @@ module BucketImpl {
   import opened Bounds
   import opened BucketWeights
   import opened NativeTypes
+  import opened KeyType
   import BucketIteratorModel
   import Pivots = PivotsLib
 
-  type Key = Element
   type TreeMap = KMB.Node
 
   method tree_to_kvl(tree: TreeMap)

@@ -33,13 +33,13 @@ module PivotBetreeInvAndRefinement {
   import PG = PivotBetreeGraph
   import BI = BetreeBlockInterface
   import SpecRef = PivotBetreeSpecRefinement
+  import UI
 
   type Constants = PB.Constants
   type Variables = PB.Variables
   type Reference = BG.Reference
   type PNode = PG.Node
   type Node = BG.Node
-  type UIOp = B.UIOp
 
   function Ik(k: Constants) : B.Constants
   {
@@ -168,7 +168,7 @@ module PivotBetreeInvAndRefinement {
     }
   }
 
-  lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
+  lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   requires Inv(k, s)
   requires PB.NextStep(k, s, s', uiop, PB.BetreeStep(betreeStep))
   ensures Inv(k, s')
@@ -210,7 +210,7 @@ module PivotBetreeInvAndRefinement {
     }
   }
 
-  lemma GCStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>)
+  lemma GCStepRefines(k: Constants, s: Variables, s': Variables, uiop: UI.Op, refs: iset<Reference>)
   requires Inv(k, s)
   requires PB.NextStep(k, s, s', uiop, PB.GCStep(refs))
   ensures Inv(k, s')
@@ -220,7 +220,7 @@ module PivotBetreeInvAndRefinement {
     BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
-  lemma StutterStepRefines(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma StutterStepRefines(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
   requires Inv(k, s)
   requires PB.NextStep(k, s, s', uiop, PB.StutterStep)
   ensures Inv(k, s')
@@ -228,7 +228,7 @@ module PivotBetreeInvAndRefinement {
   {
   }
 
-  lemma PivotBetreeRefinesBetreeNextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: PB.Step)
+  lemma PivotBetreeRefinesBetreeNextStep(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: PB.Step)
     requires Inv(k, s)
     requires PB.NextStep(k, s, s', uiop, step)
     ensures Inv(k, s')
@@ -248,7 +248,7 @@ module PivotBetreeInvAndRefinement {
     RefinesInit(k, s);
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
     requires Inv(k, s)
     requires PB.Next(k, s, s', uiop)
     ensures Inv(k, s')
@@ -268,7 +268,7 @@ module PivotBetreeInvAndRefinement {
     BInv.InitImpliesInv(Ik(k), I(k, s));
   }
 
-  lemma RefinesNext(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma RefinesNext(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
     requires Inv(k, s)
     requires PB.Next(k, s, s', uiop)
     ensures Inv(k, s')

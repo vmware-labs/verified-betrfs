@@ -13,13 +13,14 @@ module DiskTypes {
 abstract module Main {
   import ADM : AsyncDiskModel
 
-  import MS = MapSpec
   import ThreeStateVersionedMap
   import opened NativeTypes
   import opened Options
   import DiskTypes
   import UI
   import opened MainDiskIOHandler
+  import opened KeyType
+  import opened ValueType
 
   type UIOp = ADM.M.UIOp
 
@@ -93,8 +94,8 @@ abstract module Main {
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
-  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
-  returns (v: Option<MS.Value>)
+  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: Key)
+  returns (v: Option<Value>)
   requires io.initialized()
   requires Inv(k, hs)
   modifies hs, HeapSet(hs)
@@ -104,7 +105,7 @@ abstract module Main {
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
     io.diskOp())
 
-  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
   requires Inv(k, hs)

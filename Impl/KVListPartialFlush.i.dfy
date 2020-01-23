@@ -18,8 +18,9 @@ module KVListPartialFlush {
   import Pivots = PivotsLib
   import opened Bounds
   import opened BucketImpl
+  import opened KeyType
 
-  function partialFlushIterate(parent: Kvl, children: seq<Kvl>, pivots: seq<KVList.Key>,
+  function partialFlushIterate(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl, newParent: Kvl, weightSlack: int) : (Kvl, seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -92,7 +93,7 @@ module KVListPartialFlush {
     )
   }
 
-  function {:opaque} partialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<KVList.Key>) : (Kvl, seq<Kvl>)
+  function {:opaque} partialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>) : (Kvl, seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires |pivots| + 1 == |children|
@@ -100,7 +101,7 @@ module KVListPartialFlush {
     partialFlushIterate(parent, children, pivots, 0, 0, 0, [], Kvl([], []), Kvl([], []), MaxTotalBucketWeight() - WeightKvlSeq(children))
   }
 
-  lemma partialFlushWF(parent: Kvl, children: seq<Kvl>, pivots: seq<KVList.Key>)
+  lemma partialFlushWF(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
   requires WF(parent)
   requires Pivots.WFPivots(pivots)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -110,7 +111,7 @@ module KVListPartialFlush {
       && WF(newParent)
       && (forall i | 0 <= i < |newChildren| :: WF(newChildren[i]))
 
-  function bucketPartialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<KVList.Key>) : (res:(Bucket, seq<Bucket>))
+  function bucketPartialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>) : (res:(Bucket, seq<Bucket>))
   requires WFBucket(parent)
   requires Pivots.WFPivots(pivots)
   requires |pivots| + 1 == |children|
@@ -123,8 +124,8 @@ module KVListPartialFlush {
     (I(newParent), ISeq(newChildren))
   }
 
-  lemma bucketPartialFlushRes(parent: Bucket, children: seq<Bucket>, pivots: seq<KVList.Key>)
-  returns (flushedKeys: set<KVList.Key>)
+  lemma bucketPartialFlushRes(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>)
+  returns (flushedKeys: set<Key>)
   requires WFBucket(parent)
   requires Pivots.WFPivots(pivots)
   requires forall i | 0 <= i < |children| :: WFBucket(children[i])
@@ -141,7 +142,7 @@ module KVListPartialFlush {
   method PartialFlush(
     parentMutBucket: MutBucket,
     childrenMutBuckets: seq<MutBucket>,
-    pivots: seq<KVList.Key>)
+    pivots: seq<Key>)
   returns (newParent: MutBucket, newChildren: seq<MutBucket>)
   /*requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -197,11 +198,11 @@ module KVListPartialFlush {
     var childIdx: uint64 := 0;
     var acc := [];
 
-    var cur_keys := new KVList.Key[maxChildLen + |parent.keys| as uint64];
+    var cur_keys := new Key[maxChildLen + |parent.keys| as uint64];
     var cur_values := new Message[maxChildLen + |parent.keys| as uint64];
     var cur_idx: uint64 := 0;
 
-    var newParent_keys := new KVList.Key[|parent.keys| as uint64];
+    var newParent_keys := new Key[|parent.keys| as uint64];
     var newParent_values := new Message[|parent.keys| as uint64];
     var newParent_idx: uint64 := 0;
 

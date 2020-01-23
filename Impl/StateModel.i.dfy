@@ -45,8 +45,6 @@ module StateModel {
   import ReferenceType`Internal
 
   type Reference = BT.G.Reference
-  type Key = MS.Key
-  type Message = Messages.Message
   type DiskOp = BBC.DiskOp
   
   type IndirectionTable = IndirectionTableModel.IndirectionTable

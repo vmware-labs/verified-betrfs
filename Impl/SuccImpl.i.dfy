@@ -25,6 +25,7 @@ module SuccImpl {
   import opened Maps
   import opened Sets
   import opened Sequences
+  import opened KeyType
 
   import opened Bounds
   import opened BucketsLib
@@ -36,10 +37,10 @@ module SuccImpl {
       k: ImplConstants,
       s: ImplVariables,
       io: DiskIOHandler,
-      key: MS.Key,
+      key: Key,
       acc: seq<MutBucket>,
       start: UI.RangeStart,
-      upTo: Option<MS.Key>,
+      upTo: Option<Key>,
       maxToFind: uint64,
       ref: BT.G.Reference,
       counter: uint64,
@@ -88,7 +89,7 @@ module SuccImpl {
       var ub := node.pivotTable[r];
       if upTo.Some? {
         var c := cmp(upTo.value, ub);
-        var k: MS.Key := if c < 0 then upTo.value else ub;
+        var k: Key := if c < 0 then upTo.value else ub;
         upTo' := Some(k);
       } else {
         upTo' := Some(ub);
@@ -142,10 +143,10 @@ module SuccImpl {
       k: ImplConstants,
       s: ImplVariables,
       io: DiskIOHandler,
-      key: MS.Key,
+      key: Key,
       acc: seq<MutBucket>,
       start: UI.RangeStart,
-      upTo: Option<MS.Key>,
+      upTo: Option<Key>,
       maxToFind: uint64,
       ref: BT.G.Reference,
       counter: uint64)

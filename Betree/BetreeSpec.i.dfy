@@ -18,12 +18,10 @@ include "../lib/Base/total_order.i.dfy"
 //
 
 module BetreeGraph refines Graph {
-  import MS = MapSpec
   import M = ValueMessage
+  import opened KeyType
+  import opened ValueType
 
-  type Value = M.Value
-
-  type Key = MS.Key
   type BufferEntry = M.Message
   type Buffer = imap<Key, BufferEntry>
   datatype Node = Node(children: imap<Key, Reference>, buffer: Buffer)
@@ -43,10 +41,12 @@ module BetreeSpec {
   import opened G = BetreeGraph
   import opened Sequences
   import opened Maps
+  import opened KeyType
+  import opened ValueType
   import UI
   import Keyspace = Lexicographic_Byte_Order
 
-  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G
+  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, UI
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
@@ -408,11 +408,11 @@ module BetreeSpec {
     }
   }
 
-  predicate BetreeStepUI(step: BetreeStep, uiop: MS.UI.Op) {
+  predicate BetreeStepUI(step: BetreeStep, uiop: UI.Op) {
     match step {
-      case BetreeQuery(q) => uiop == MS.UI.GetOp(q.key, q.value)
-      case BetreeSuccQuery(sq) => uiop == MS.UI.SuccOp(sq.start, sq.results, sq.end)
-      case BetreeInsert(ins) => ins.msg.Define? && uiop == MS.UI.PutOp(ins.key, ins.msg.value)
+      case BetreeQuery(q) => uiop == UI.GetOp(q.key, q.value)
+      case BetreeSuccQuery(sq) => uiop == UI.SuccOp(sq.start, sq.results, sq.end)
+      case BetreeInsert(ins) => ins.msg.Define? && uiop == UI.PutOp(ins.key, ins.msg.value)
       case BetreeFlush(flush) => uiop.NoOp?
       case BetreeGrow(growth) => uiop.NoOp?
       case BetreeRedirect(redirect) => uiop.NoOp?

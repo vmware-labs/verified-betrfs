@@ -16,12 +16,14 @@ module InsertModel {
   import opened BucketWeights
   import opened BucketsLib
   import opened Bounds
+  import opened KeyType
+  import opened ValueMessage
 
   import PBS = PivotBetreeSpec`Spec
 
   // == insert ==
 
-  function {:opaque} NodeInsertKeyValue(node: Node, key: MS.Key, msg: Message) : Node
+  function {:opaque} NodeInsertKeyValue(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
   {
     var r := Pivots.Route(node.pivotTable, key);
@@ -30,14 +32,14 @@ module InsertModel {
     node.(buckets := node.buckets[r := newBucket])
   }
 
-  function {:opaque} CacheInsertKeyValue(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, key: MS.Key, msg: Message) : map<BT.G.Reference, Node>
+  function {:opaque} CacheInsertKeyValue(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, key: Key, msg: Message) : map<BT.G.Reference, Node>
   requires ref in cache
   requires WFNode(cache[ref])
   {
     cache[ref := NodeInsertKeyValue(cache[ref], key, msg)]
   }
 
-  function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
+  function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: Key, value: Value)
   : (Variables, bool)
   requires Inv(k, s)
   requires s.Ready?
@@ -61,7 +63,7 @@ module InsertModel {
     )
   }
 
-  lemma InsertKeyValueCorrect(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
+  lemma InsertKeyValueCorrect(k: Constants, s: Variables, key: Key, value: Value)
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
@@ -130,7 +132,7 @@ module InsertModel {
         M.Step(BBC.BetreeMoveStep(btStep)));
   }
 
-  predicate {:opaque} insert(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value,
+  predicate {:opaque} insert(k: Constants, s: Variables, io: IO, key: Key, value: Value,
       s': Variables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
@@ -163,7 +165,7 @@ module InsertModel {
     )
   }
 
-  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value,
+  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: Key, value: Value,
       s': Variables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)

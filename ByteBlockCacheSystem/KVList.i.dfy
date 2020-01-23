@@ -26,8 +26,7 @@ module KVList {
   import NativeArrays
   import P = PivotsLib
   import SeqComparison
-
-  type Key = Element
+  import opened KeyType
 
   datatype Kvl = Kvl(keys: seq<Key>, values: seq<Message>)
 

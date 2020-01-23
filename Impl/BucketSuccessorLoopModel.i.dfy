@@ -10,6 +10,7 @@ module BucketSuccessorLoopModel {
   import opened BucketIteratorModel
   import opened BucketGeneratorModel
   import UI
+  import opened KeyType
 
   // A straightforward loop using the generator machinery
 

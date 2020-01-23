@@ -15,6 +15,7 @@ module BucketWeights {
   import opened Sequences
   import opened BucketsLib
   import opened NativeTypes
+  import opened KeyType
 
   function WeightKey(key: Key) : (w:int)
   ensures w >= 0
