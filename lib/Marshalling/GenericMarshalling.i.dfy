@@ -158,9 +158,9 @@ function SizeOfV(val:V) : int
         case VArray(a)      => 8 + SeqSum(a)     // 8 bytes for length
         case VTuple(t)      => SeqSum(t)
         case VByteArray(b)  => 8 + |b|          // 8 bytes for a length field
-        case VKeyArray(b)  => 8 + SeqSumLens(b)
+        case VKeyArray(b)  => 4 + SeqSumLens(b)
         case VMessage(m)  => MessageSize(m)
-        case VMessageArray(b)  => 8 + SeqSumMessageLens(b)
+        case VMessageArray(b)  => 4 + SeqSumMessageLens(b)
         case VUint64Array(b)  => 8 + 8*|b|          // 8 bytes for a length field
         case VCase(c, v)  => 8 + SizeOfV(v)     // 8 bytes for the case identifier
         case VPackedKV(pkv)  => PackedKV.SizeOfPkv(pkv)
@@ -885,6 +885,26 @@ method ParseCase(data:seq<byte>, index:uint64, cases:seq<G>) returns (success:bo
     }
 }
 
+method ParsePackedKV(data:seq<byte>, index:uint64) returns (success:bool, v:V, rest_index:uint64)
+    requires (index as int) <= |data|;
+    requires |data| < 0x1_0000_0000_0000_0000;
+    ensures  (rest_index as int) <= |data|;
+    ensures  var (v', rest') := parse_PackedKV(data[index..]);
+             var v_opt := if success then Some(v) else None();
+             v_opt == v' && data[rest_index..] == rest';
+    ensures  success ==> ValidVal(v);
+{
+  var pkv, index1 := PackedKV.Parse_Pkv(data, index);
+  if pkv.Some? {
+    success := true;
+    v := VPackedKV(pkv.value);
+    rest_index := index1;
+  } else {
+    success := false;
+    rest_index := (|data| as uint64);
+  }
+}
+
 function parse_PackedKV(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
     ensures var (opt_val, rest) := parse_PackedKV(data);
@@ -952,6 +972,8 @@ method ParseVal(data:seq<byte>, index:uint64, grammar:G) returns (success:bool, 
         case GKeyArray           => success, v, rest_index := ParseKeyArray(data, index);
         case GMessageArray       => success, v, rest_index := ParseMessageArray(data, index);
         case GTaggedUnion(cases) => success, v, rest_index := ParseCase(data, index, cases);
+
+        case GPackedKV           => success, v, rest_index := ParsePackedKV(data, index);
     }
 }
 
@@ -1854,28 +1876,33 @@ method ComputeSizeOf(val:V) returns (size:uint64)
     requires ValidVal(val);
     ensures (size as int) == SizeOfV(val);
 {
-    match val
-        case VUint64(_)     => size := 8;
-        case VArray(a)      => var v := ComputeSeqSum(a);
-                               if v == 0 {
-                                   size := 8;
-                               } else {
-                                   size := 8 + v;
-                               }
-        case VTuple(t)      => size := ComputeSeqSum(t);
-        case VByteArray(b)  => size := 8 + (|b| as uint64);
-        case VMessage(m)    => size := MessageSizeUint64(m);
-        case VUint64Array(b)  => size := 8 + 8*(|b| as uint64);
-        case VKeyArray(b)  => {
-          var v := ComputeSeqSumLens(b);
-          size := 8 + v;
-        }
-        case VMessageArray(b)  => {
-          var v := ComputeSeqSumMessageLens(b);
-          size := 8 + v;
-        }
-        case VCase(c, v)    => var vs := ComputeSizeOf(v);
-                               size := 8 + vs;
+  match val {
+    case VUint64(_)     => size := 8;
+    case VArray(a)      => var v := ComputeSeqSum(a);
+                           if v == 0 {
+                               size := 8;
+                           } else {
+                               size := 8 + v;
+                           }
+    case VTuple(t)      => size := ComputeSeqSum(t);
+    case VByteArray(b)  => size := 8 + (|b| as uint64);
+    case VMessage(m)    => size := MessageSizeUint64(m);
+    case VUint64Array(b)  => size := 8 + 8*(|b| as uint64);
+    case VKeyArray(b)  => {
+      var v := ComputeSeqSumLens(b);
+      size := 4 + v;
+    }
+    case VMessageArray(b)  => {
+      var v := ComputeSeqSumMessageLens(b);
+      size := 4 + v;
+    }
+    case VCase(c, v)    => var vs := ComputeSizeOf(v);
+                           size := 8 + vs;
+
+    case VPackedKV(pkv: Pkv) => {
+      size := PackedKV.SizeOfPkvUint64(pkv);
+    }
+  }
 }
 
 lemma seq_ext(a: seq<byte>, b: seq<byte>)
@@ -2266,7 +2293,7 @@ method MarshallKeyArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) 
 {
   assume false;
   Pack_LittleEndian_Uint32_into_Array(|val.ka| as uint32, data, index);
-  
+
   var i: uint64 := 0;
   var offset: uint64 := 0;
   while i < |val.ka| as uint64
@@ -2642,6 +2669,7 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
 {
     MarshallUint64((|val.ua| as uint64), data, index);
     Pack_LittleEndian_Uint64_Seq_into_Array(val.ua, data, index + 8);
+    return 8 + |val.ua| as uint64 * 8;
 }
 
 method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)

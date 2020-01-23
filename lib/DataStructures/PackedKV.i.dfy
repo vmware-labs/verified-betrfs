@@ -138,6 +138,10 @@ module PackedKV {
     PackedStringArray.SizeOfPsa(pkv.keys) + PackedStringArray.SizeOfPsa(pkv.messages)
   }
 
+  function method SizeOfPkvUint64(pkv: Pkv) : uint64 {
+    PackedStringArray.SizeOfPsaUint64(pkv.keys) + PackedStringArray.SizeOfPsaUint64(pkv.messages)
+  }
+
   function method WeightPkv(pkv: Pkv) : uint64
   requires WF(pkv)
   {
