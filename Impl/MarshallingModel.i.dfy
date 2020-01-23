@@ -59,7 +59,8 @@ module MarshallingModel {
 
   lemma WeightBucketLteSize(v: V, pivotTable: seq<Key>, i: int, kvl: KVList.Kvl)
   requires Marshalling.valToBucket.requires(v, pivotTable, i)
-  requires Marshalling.valToBucket(v, pivotTable, i) == Some(kvl)
+  requires KVList.WF(kvl)
+  requires Marshalling.valToBucket(v, pivotTable, i) == Some(KVList.I(kvl))
   ensures WeightBucket(KVList.I(kvl)) <= SizeOfV(v)
   {
     KVList.kvlWeightEq(kvl);
@@ -71,7 +72,7 @@ module MarshallingModel {
         == SizeOfV(v.t[0]) + SeqSum(v.t[1..])
         == SizeOfV(v.t[0]) + SizeOfV(v.t[1]) + SeqSum([])
         == SizeOfV(v.t[0]) + SizeOfV(v.t[1])
-        == 8 + SeqSumLens(v.t[0].baa) + 8 + SeqSumMessageLens(v.t[1].ma);
+        == 8 + SeqSumLens(v.t[0].ka) + 8 + SeqSumMessageLens(v.t[1].ma);
   }
 
   lemma WeightBucketListLteSize(v: V, pivotTable: seq<Key>, buckets: seq<Bucket>)

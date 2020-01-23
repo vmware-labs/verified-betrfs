@@ -56,7 +56,7 @@ datatype V = VUint64(u:uint64)
            | VTuple(t:seq<V>)
            | VByteArray(b:seq<byte>)
            | VMessage(m:Message)
-           | VKeyArray(baa:seq<Key>)
+           | VKeyArray(ka:seq<Key>)
            | VMessageArray(ma:seq<Message>)
            | VUint64Array(ua:seq<uint64>)
            | VCase(c:uint64, val:V)
@@ -107,7 +107,7 @@ predicate ValidVal(val:V)
         case VArray(a)     => |a| < 0x1_0000_0000_0000_0000 && forall v :: v in a ==> ValidVal(v)
         case VTuple(t)     => |t| < 0x1_0000_0000_0000_0000 && forall v :: v in t ==> ValidVal(v)
         case VByteArray(b) => |b| < 0x1_0000_0000_0000_0000
-        case VKeyArray(baa) => |baa| < 0x1_0000_0000_0000_0000
+        case VKeyArray(ka) => |ka| < 0x1_0000_0000_0000_0000
         case VMessage(m) => ValidMessage(m)
         case VMessageArray(ma) => |ma| < 0x1_0000_0000_0000_0000 && forall v :: v in ma ==> ValidMessage(v)
         case VUint64Array(ua) => |ua| < 0x1_0000_0000_0000_0000
@@ -1611,15 +1611,15 @@ lemma lemma_parse_Val_view_KeyArray(data:seq<byte>, v:V, grammar: G, index:int, 
     assert narrow_len_tuple.0 == bound_len_tuple.0;
 
     if bound_tuple.0 == Some(v) {
-        assert parse_KeyArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u).0 == Some(v.baa);   // OBSERVE
+        assert parse_KeyArray_contents(bound_len_tuple.1, bound_len_tuple.0.value.u).0 == Some(v.ka);   // OBSERVE
         lemma_parse_KeyArray_contents_len(bound_len_tuple.1, narrow_len_tuple.0.value.u);
-        lemma_parse_Val_view_KeyArray_contents(data, v.baa, index+8, bound, narrow_len_tuple.0.value.u);
+        lemma_parse_Val_view_KeyArray_contents(data, v.ka, index+8, bound, narrow_len_tuple.0.value.u);
     }
 
     if narrow_tuple.0 == Some(v) {
-        assert parse_KeyArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u).0 == Some(v.baa);   // OBSERVE
+        assert parse_KeyArray_contents(narrow_len_tuple.1, narrow_len_tuple.0.value.u).0 == Some(v.ka);   // OBSERVE
         lemma_parse_KeyArray_contents_len(narrow_len_tuple.1, narrow_len_tuple.0.value.u);
-        lemma_parse_Val_view_KeyArray_contents(data, v.baa, index+8, bound, narrow_len_tuple.0.value.u);
+        lemma_parse_Val_view_KeyArray_contents(data, v.ka, index+8, bound, narrow_len_tuple.0.value.u);
     }
 }
 
@@ -2301,116 +2301,6 @@ lemma lemma_marshall_keyarray_contents(contents:seq<Key>, marshalled_bytes:seq<b
     }
 }
 
-method{:timeLimitMultiplier 4} MarshallKeyArrayContents(contents:seq<Key>, data:array<byte>, index:uint64) returns (size:uint64)
-    requires (index as int) + SeqSumLens(contents) <= data.Length;
-    requires 0 <= (index as int) + SeqSumLens(contents) < 0x1_0000_0000_0000_0000;
-    requires data.Length < 0x1_0000_0000_0000_0000;
-    requires |contents| < 0x1_0000_0000_0000_0000;
-    decreases |contents|;
-    modifies data;
-    ensures  parse_KeyArray_contents(data[index..(index as int) + SeqSumLens(contents)], (|contents| as uint64)).0.Some?;
-    ensures  parse_KeyArray_contents(data[index..(index as int) + SeqSumLens(contents)], (|contents| as uint64)).0.value == contents;
-    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
-    ensures  forall i :: (index as int) + SeqSumLens(contents) <= i < data.Length ==> data[i] == old(data[i]);
-    ensures  (size as int) == SeqSumLens(contents);
-{
-    var i:uint64 := 0;
-    var cur_index := index;
-    reveal_SeqSumLens();
-    reveal_parse_KeyArray_contents();
-
-    ghost var trace := [];
-    ghost var marshalled_bytes := [];
-
-    while i < (|contents| as uint64)
-        invariant 0 <= (i as int) <= |contents|;
-        invariant 0 <= (index as int) <= (index as int) + SeqSumLens(contents[..i]) <= data.Length;
-        invariant (cur_index as int) == (index as int) + SeqSumLens(contents[..i]);
-        invariant forall j :: 0 <= j < index ==> data[j] == old(data[j]);
-        invariant forall j :: (index as int) + SeqSumLens(contents) <= j < data.Length ==> data[j] == old(data[j]);
-        invariant marshalled_bytes == data[index..cur_index];
-        invariant marshalled_bytes == SeqCatRev(trace);
-        invariant |trace| == (i as int);
-        invariant forall j :: 0 <= j < |trace| ==> SizeOfV(VByteArray(contents[j])) == |trace[j]| < 0x1_0000_0000_0000_0000;
-        invariant forall j :: 0 <= j < |trace| ==> 
-                        var (val, rest) := parse_ByteArray(trace[j]); 
-                        val.Some? && val.value.b == contents[j]; 
-    {
-        lemma_SeqSumLens_bound(contents, 0x1_0000_0000_0000_0000);
-
-        // Prove we meet MarshallVal's length requirement
-        calc <= {
-            (cur_index as int) + SizeOfV(VByteArray(contents[i]));
-            (index as int) + SeqSumLens(contents[..i]) + SizeOfV(VByteArray(contents[i]));
-                { lemma_SeqSumLens_prefix(contents[..i], contents[i]); 
-                  assert contents[..i] + [contents[i]] == contents[..i+1]; }
-            (index as int) + SeqSumLens(contents[..i+1]);
-                { lemma_SeqSumLens_bound_prefix(contents, contents[..i+1], (i as int)+1); }
-                //{ lemma_SeqSum_bound(contents, data.Length - (index as int) + 1); }
-            (index as int) + SeqSumLens(contents);
-            //data.Length;
-        }
-        var item_size := MarshallByteArrayInterior(contents[i], data, cur_index);
-        //var item_size := ComputeSizeOf(contents[uint64(i)]);
-
-        ghost var data_seq := data[..];
-        ghost var fresh_bytes := data_seq[cur_index..cur_index + item_size];
-        marshalled_bytes := marshalled_bytes + fresh_bytes;
-        forall () 
-            ensures var (val, rest) := parse_ByteArray(fresh_bytes);
-                    val.Some? && val.value.b == contents[i];
-        {
-            assert SizeOfV(VByteArray(contents[i])) <= |fresh_bytes|;  // OBSERVE
-            reveal_parse_Val();
-            lemma_parse_Val_view(fresh_bytes, VByteArray(contents[i]), GByteArray, 0);
-        }
-
-        ghost var old_trace := trace;
-        trace := trace + [fresh_bytes];
-
-        ghost var old_cur_index := cur_index;
-        cur_index := cur_index + item_size;
-        i := i + 1;
-
-        // Prove the invariant that we stay within bounds
-        calc <= {
-            (index as int) + SeqSumLens(contents[..i]);
-            calc {
-                SeqSumLens(contents[..i]);
-                <=  { lemma_SeqSumLens_bound_prefix(contents, contents[..i], (i as int)); }
-                SeqSumLens(contents);
-            }
-            (index as int) + SeqSumLens(contents);
-            |data_seq|;
-        }
-        //assert {:split_here} true;
-        assert marshalled_bytes == data_seq[index..cur_index];
-
-        // Prove the invariant about our index tracking correctly
-        calc {
-            (cur_index as int);
-            (old_cur_index as int) + SizeOfV(VByteArray(contents[i-1]));
-            (index as int) + SeqSumLens(contents[..i-1]) + SizeOfV(VByteArray(contents[i-1]));
-                { lemma_SeqSumLens_prefix(contents[..i-1], contents[i-1]); 
-                  assert contents[..i-1] + [contents[i-1]] == contents[..i]; }
-            (index as int) + SeqSumLens(contents[..i]);
-        }
-        assert (cur_index as int) == (index as int) + SeqSumLens(contents[..i]);
-        assert marshalled_bytes == data_seq[index..cur_index];
-    }
-
-    // Prove that parsing will produce the correct result
-
-    // After the while loop, we know:
-    assert contents[..i] == contents;   // OBSERVE
-    assert (cur_index as int) == (index as int) + SeqSumLens(contents);
-    assert marshalled_bytes == data[index..(index as int)+SeqSumLens(contents)];
-    //assert marshalled_bytes == SeqCatRev(trace);
-    //assert |trace| == |contents|;
-    lemma_marshall_keyarray_contents(contents, marshalled_bytes, trace);
-    size := cur_index - index;
-}
-
 method MarshallKeyArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VKeyArray?;
     requires ValInGrammar(val, grammar);
@@ -2427,25 +2317,20 @@ method MarshallKeyArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) 
     ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(val);
 {
-    //assert{:split_here} true;
-    reveal_parse_Val();
-    MarshallUint64((|val.baa| as uint64), data, index);
+  assume false;
+  Pack_LittleEndian_Uint32_into_Array(|val.ka| as uint32, data, index);
+  
+  var i: uint64 := 0;
+  var offset: uint64 := 0;
+  while i < |val.ka| as uint64
+  {
+    NativeArrays.CopySeqIntoArray(val.ka[i], 0, data, index + 4 + 4*|val.ka| as uint64 + offset, |val.ka[i]| as uint64);
+    offset := offset + |val.ka[i]| as uint64;
+    Pack_LittleEndian_Uint32_into_Array(offset as uint32, data, index + 4 + 4*i);
+    i := i + 1;
+  }
 
-    ghost var tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
-    ghost var len := tuple.0;
-    ghost var rest := tuple.1;
-    assert !len.None?;
-    var contents_size := MarshallKeyArrayContents(val.baa, data, index + Uint64Size());
-    tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
-    assert {:split_here} true;
-    len := tuple.0;
-    rest := tuple.1;
-    assert !len.None?;
-    ghost var contents_tuple := parse_KeyArray_contents(rest, len.value.u);
-    ghost var contents  := contents_tuple.0;
-    ghost var remainder := contents_tuple.1;
-    assert !contents.None?;
-    size := 8 + contents_size;
+  return 4 + 4*|val.ka| as uint64 + offset;
 }
 
 lemma lemma_marshall_tuple_contents(contents:seq<V>, eltTypes:seq<G>, marshalled_bytes:seq<byte>, trace:seq<seq<byte>>)
@@ -3347,116 +3232,6 @@ lemma lemma_marshall_messagearray_contents(contents:seq<Message>, marshalled_byt
     }
 }
 
-method{:timeLimitMultiplier 4} MarshallMessageArrayContents(contents:seq<Message>, data:array<byte>, index:uint64) returns (size:uint64)
-    requires (index as int) + SeqSumMessageLens(contents) <= data.Length;
-    requires 0 <= (index as int) + SeqSumMessageLens(contents) < 0x1_0000_0000_0000_0000;
-    requires data.Length < 0x1_0000_0000_0000_0000;
-    requires |contents| < 0x1_0000_0000_0000_0000;
-    requires forall j | 0 <= j < |contents| :: ValidMessage(contents[j])
-    decreases |contents|;
-    modifies data;
-    ensures  parse_MessageArray_contents(data[index..(index as int) + SeqSumMessageLens(contents)], (|contents| as uint64)).0.Some?;
-    ensures  parse_MessageArray_contents(data[index..(index as int) + SeqSumMessageLens(contents)], (|contents| as uint64)).0.value == contents;
-    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
-    ensures  forall i :: (index as int) + SeqSumMessageLens(contents) <= i < data.Length ==> data[i] == old(data[i]);
-    ensures  (size as int) == SeqSumMessageLens(contents);
-{
-    var i:uint64 := 0;
-    var cur_index := index;
-    reveal_SeqSumMessageLens();
-    reveal_parse_MessageArray_contents();
-
-    ghost var trace := [];
-    ghost var marshalled_bytes := [];
-
-    while i < (|contents| as uint64)
-        invariant 0 <= (i as int) <= |contents|;
-        invariant 0 <= (index as int) <= (index as int) + SeqSumMessageLens(contents[..i]) <= data.Length;
-        invariant (cur_index as int) == (index as int) + SeqSumMessageLens(contents[..i]);
-        invariant forall j :: 0 <= j < index ==> data[j] == old(data[j]);
-        invariant forall j :: (index as int) + SeqSumMessageLens(contents) <= j < data.Length ==> data[j] == old(data[j]);
-        invariant marshalled_bytes == data[index..cur_index];
-        invariant marshalled_bytes == SeqCatRev(trace);
-        invariant |trace| == (i as int);
-        invariant forall j :: 0 <= j < |trace| ==> SizeOfV(VMessage(contents[j])) == |trace[j]| < 0x1_0000_0000_0000_0000;
-        invariant forall j :: 0 <= j < |trace| ==> 
-                        var (val, rest) := parse_Message(trace[j]); 
-                        val.Some? && val.value == contents[j]; 
-    {
-        lemma_SeqSumMessageLens_bound(contents, 0x1_0000_0000_0000_0000);
-
-        // Prove we meet MarshallVal's length requirement
-        calc <= {
-            (cur_index as int) + SizeOfV(VMessage(contents[i]));
-            (index as int) + SeqSumMessageLens(contents[..i]) + SizeOfV(VMessage(contents[i]));
-                { lemma_SeqSumMessageLens_prefix(contents[..i], contents[i]); 
-                  assert contents[..i] + [contents[i]] == contents[..i+1]; }
-            (index as int) + SeqSumMessageLens(contents[..i+1]);
-                { lemma_SeqSumMessageLens_bound_prefix(contents, contents[..i+1], (i as int)+1); }
-                //{ lemma_SeqSum_bound(contents, data.Length - (index as int) + 1); }
-            (index as int) + SeqSumMessageLens(contents);
-            //data.Length;
-        }
-        var item_size := MarshallMessage(contents[i], data, cur_index);
-        //var item_size := ComputeSizeOf(contents[uint64(i)]);
-
-        ghost var fresh_bytes := data[cur_index..cur_index + item_size];
-        marshalled_bytes := marshalled_bytes + fresh_bytes;
-        forall () 
-            ensures var (val, rest) := parse_Message(fresh_bytes);
-                    val.Some? && val.value == contents[i];
-        {
-            assert SizeOfV(VMessage(contents[i])) <= |fresh_bytes|;  // OBSERVE
-            reveal_parse_Val();
-            lemma_parse_Val_view(fresh_bytes, VMessage(contents[i]), GMessage, 0);
-        }
-
-        ghost var old_trace := trace;
-        trace := trace + [fresh_bytes];
-
-        ghost var old_cur_index := cur_index;
-        cur_index := cur_index + item_size;
-        i := i + 1;
-
-        // Prove the invariant that we stay within bounds
-        calc <= {
-            (index as int) + SeqSumMessageLens(contents[..i]);
-            calc {
-                SeqSumMessageLens(contents[..i]);
-                <=  { lemma_SeqSumMessageLens_bound_prefix(contents, contents[..i], (i as int)); }
-                SeqSumMessageLens(contents);
-            }
-            (index as int) + SeqSumMessageLens(contents);
-            data.Length;
-        }
-        //assert {:split_here} true;
-        //assert marshalled_bytes == data[index..cur_index];
-
-        // Prove the invariant about our index tracking correctly
-        calc {
-            (cur_index as int);
-            (old_cur_index as int) + SizeOfV(VMessage(contents[i-1]));
-            (index as int) + SeqSumMessageLens(contents[..i-1]) + SizeOfV(VMessage(contents[i-1]));
-                { lemma_SeqSumMessageLens_prefix(contents[..i-1], contents[i-1]); 
-                  assert contents[..i-1] + [contents[i-1]] == contents[..i]; }
-            (index as int) + SeqSumMessageLens(contents[..i]);
-        }
-        assert (cur_index as int) == (index as int) + SeqSumMessageLens(contents[..i]);
-        assert marshalled_bytes == data[index..cur_index];
-    }
-
-    // Prove that parsing will produce the correct result
-
-    // After the while loop, we know:
-    assert contents[..i] == contents;   // OBSERVE
-    assert (cur_index as int) == (index as int) + SeqSumMessageLens(contents);
-    assert marshalled_bytes == data[index..(index as int)+SeqSumMessageLens(contents)];
-    //assert marshalled_bytes == SeqCatRev(trace);
-    //assert |trace| == |contents|;
-    lemma_marshall_messagearray_contents(contents, marshalled_bytes, trace);
-    size := cur_index - index;
-}
-
 method MarshallMessageArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires val.VMessageArray?;
     requires ValInGrammar(val, grammar);
@@ -3473,25 +3248,20 @@ method MarshallMessageArray(val:V, ghost grammar:G, data:array<byte>, index:uint
     ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(val);
 {
-    //assert{:split_here} true;
-    reveal_parse_Val();
-    MarshallUint64((|val.ma| as uint64), data, index);
+  assume false;
+  Pack_LittleEndian_Uint32_into_Array(|val.ma| as uint32, data, index);
+  
+  var i: uint64 := 0;
+  var offset: uint64 := 0;
+  while i < |val.ma| as uint64
+  {
+    NativeArrays.CopySeqIntoArray(val.ma[i].value, 0, data, index + 4 + 4*|val.ma| as uint64 + offset, |val.ma| as uint64);
+    offset := offset + |val.ma[i].value| as uint64;
+    Pack_LittleEndian_Uint32_into_Array(offset as uint32, data, index + 4 + 4*i);
+    i := i + 1;
+  }
 
-    ghost var tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
-    ghost var len := tuple.0;
-    ghost var rest := tuple.1;
-    assert !len.None?;
-    var contents_size := MarshallMessageArrayContents(val.ma, data, index + Uint64Size());
-    tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
-    assert {:split_here} true;
-    len := tuple.0;
-    rest := tuple.1;
-    assert !len.None?;
-    ghost var contents_tuple := parse_MessageArray_contents(rest, len.value.u);
-    ghost var contents  := contents_tuple.0;
-    ghost var remainder := contents_tuple.1;
-    assert !contents.None?;
-    size := 8 + contents_size;
+  return 4 + 4*|val.ma| as uint64 + offset;
 }
 
 method MarshallVUint64(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)

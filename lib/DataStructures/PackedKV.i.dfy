@@ -31,7 +31,7 @@ module PackedKV {
   requires PackedStringArray.WF(psa)
   {
     forall i | 0 <= i < |psa.offsets| ::
-        PackedStringArray.psaEnd(psa, i) as int - PackedStringArray.psaStart(psa, i) as int <= KeyType.MaxLen() as int
+        PackedStringArray.psaEnd(psa, i as uint64) as int - PackedStringArray.psaStart(psa, i as uint64) as int <= KeyType.MaxLen() as int
   }
 
   predicate WF(pkv: Pkv) {
@@ -46,9 +46,9 @@ module PackedKV {
   requires ValidKeyLens(psa)
   requires 0 <= i <= |psa.offsets|
   ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == PackedStringArray.psaElement(psa, j)
+  ensures forall j | 0 <= j < i :: res[j] == PackedStringArray.psaElement(psa, j as uint64)
   {
-    if i == 0 then [] else psaSeq_Keys(psa, i-1) + [PackedStringArray.psaElement(psa, i-1)]
+    if i == 0 then [] else psaSeq_Keys(psa, i-1) + [PackedStringArray.psaElement(psa, (i-1) as uint64)]
   }
 
   function IKeys(psa: PackedStringArray.Psa) : (res : seq<Key>)
@@ -75,10 +75,10 @@ module PackedKV {
   requires PackedStringArray.WF(psa)
   requires 0 <= i <= |psa.offsets|
   ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == byteString_to_Message(PackedStringArray.psaElement(psa, j))
+  ensures forall j | 0 <= j < i :: res[j] == byteString_to_Message(PackedStringArray.psaElement(psa, j as uint64))
   {
     if i == 0 then [] else psaSeq_Messages(psa, i-1) + [
-        byteString_to_Message(PackedStringArray.psaElement(psa, i-1))]
+        byteString_to_Message(PackedStringArray.psaElement(psa, (i-1) as uint64))]
   }
 
   function IMessages(psa: PackedStringArray.Psa) : (res : seq<Message>)
@@ -95,8 +95,8 @@ module PackedKV {
     reveal_WFBucket();
 
     if i == 0 then map[] else (
-      var key : Key := PackedStringArray.psaElement(pkv.keys, i-1);
-      var msg : Message := byteString_to_Message(PackedStringArray.psaElement(pkv.keys, i-1));
+      var key : Key := PackedStringArray.psaElement(pkv.keys, (i-1) as uint64);
+      var msg : Message := byteString_to_Message(PackedStringArray.psaElement(pkv.keys, (i-1) as uint64));
       Imap(pkv, i-1)[key := msg]
     )
   }
@@ -203,6 +203,7 @@ module PackedKV {
 
   method Query(pkv: Pkv, key: Key)
   returns (msg: Option<Message>)
+  requires WF(pkv)
   ensures msg.None? ==> key !in I(pkv)
   ensures msg.Some? ==> key in I(pkv) && I(pkv)[key] == msg.value
 

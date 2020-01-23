@@ -105,12 +105,12 @@ module Marshalling {
   requires ValidVal(v)
   requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
-  ensures s.Some? ==> |s.value| == |v.baa|
-  decreases |v.baa|
+  ensures s.Some? ==> |s.value| == |v.ka|
+  decreases |v.ka|
   {
-    if isStrictlySortedKeySeq(v.baa) then
-      var blah : seq<Key> := v.baa;
-      Some(v.baa)
+    if isStrictlySortedKeySeq(v.ka) then
+      var blah : seq<Key> := v.ka;
+      Some(v.ka)
     else
       None
   }
@@ -119,7 +119,7 @@ module Marshalling {
   requires ValidVal(v)
   requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Pivots.WFPivots(s.value)
-  ensures s.Some? ==> |s.value| == |v.baa|
+  ensures s.Some? ==> |s.value| == |v.ka|
   {
     var s := valToStrictlySortedKeySeq(v);
     if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
@@ -154,7 +154,7 @@ module Marshalling {
   {
     var pkv := v.pkv;
     var bucket := PackedKV.I(pkv);
-    if PackedKV.KeysSorted(pkv) && WFBucketAt(bucket, pivotTable, i) then
+    if WFBucketAt(bucket, pivotTable, i) then
       Some(bucket)
     else
       None
@@ -198,7 +198,7 @@ module Marshalling {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
-    var pivots_len := |v.t[0].baa| as uint64;
+    var pivots_len := |v.t[0].ka| as uint64;
     var children_len := |v.t[1].ua| as uint64;
     var buckets_len := |v.t[2].a| as uint64;
 

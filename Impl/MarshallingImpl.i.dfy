@@ -83,9 +83,9 @@ module MarshallingImpl {
   requires Marshalling.valToStrictlySortedKeySeq.requires(v)
   ensures s == Marshalling.valToStrictlySortedKeySeq(v)
   {
-    var is_sorted := IsStrictlySortedKeySeq(v.baa);
+    var is_sorted := IsStrictlySortedKeySeq(v.ka);
     if is_sorted {
-      return Some(v.baa);
+      return Some(v.ka);
     } else {
       return None;
     }
@@ -108,35 +108,37 @@ module MarshallingImpl {
     }
   }
 
-  method ValToBucket(v: V, pivotTable: seq<Key>, i: uint64) returns (s : Option<KVList.Kvl>)
+  method ValToBucket(v: V, pivotTable: seq<Key>, i: uint64) returns (s : BucketImpl.MutBucket?)
   requires Marshalling.valToBucket.requires(v, pivotTable, i as int)
   requires |pivotTable| < MaxNumChildren()
-  ensures s.Some? ==> KVList.WF(s.value)
-  ensures s.Some? ==> WFBucketAt(KVList.I(s.value), pivotTable, i as int)
-  ensures s == Marshalling.valToBucket(v, pivotTable, i as int)
+  ensures s != null ==> fresh(s.Repr)
+  ensures s != null ==> s.Inv()
+  ensures s != null ==> WFBucketAt(s.I(), pivotTable, i as int)
+  ensures s == null ==> Marshalling.valToBucket(v, pivotTable, i as int).None?
+  ensures s != null ==> Some(s.I()) == Marshalling.valToBucket(v, pivotTable, i as int)
   { 
     var pkv := v.pkv;
  
     // Check that the keys fit in the desired bucket
-    if |pkv.offsets| as uint64 > 0 {
+    if |pkv.keys.offsets| as uint64 > 0 {
       if i > 0 {
         var c := Keyspace.cmp(pivotTable[i-1], PackedKV.FirstKey(pkv));
         if (c > 0) {
-          return None;
+          return null;
         }
       }
 
       if i < |pivotTable| as uint64 {
         var c := Keyspace.cmp(pivotTable[i], PackedKV.LastKey(pkv));
         if (c <= 0) {
-          return None;
+          return null;
         }
       }
     }
 
-    assert WFBucketAt(KVList.I(kvl), pivotTable, i as int);
+    assert WFBucketAt(PackedKV.I(pkv), pivotTable, i as int);
 
-    s := Some(kvl);
+    s := new BucketImpl.MutBucket.InitFromPkv(pkv);
   }
 
   lemma LemmaValToBucketNone(a: seq<V>, pivotTable: seq<Key>, i: int)
@@ -180,18 +182,14 @@ module MarshallingImpl {
     invariant Marshalling.valToBuckets(a[..i], pivotTable).Some?
     invariant BucketImpl.MutBucket.ISeq(ar[..i]) == Marshalling.valToBuckets(a[..i], pivotTable).value
     {
-      var b := ValToBucket(a[i], pivotTable, i);
-      if (b.None?) {
+      var bucket := ValToBucket(a[i], pivotTable, i);
+      if (bucket == null) {
         s := None;
 
         LemmaValToBucketNone(a, pivotTable, i as int);
         return;
       }
 
-      IMM.WeightBucketLteSize(a[i], pivotTable, i as int, b.value);
-      assert WeightBucket(KVList.I(b.value)) < 0x1_0000_0000_0000_0000;
-
-      var bucket := new BucketImpl.MutBucket(b.value);
       assert forall k: nat | k < i as int :: ar[k].Inv();
       ar[i] := bucket;
       assert forall k: nat | k < i as int :: ar[k].Inv();
@@ -225,7 +223,7 @@ module MarshallingImpl {
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
 
-    var pivots_len := |v.t[0 as uint64].baa| as uint64;
+    var pivots_len := |v.t[0 as uint64].ka| as uint64;
     var children_len := |v.t[1 as uint64].ua| as uint64;
     var buckets_len := |v.t[2 as uint64].a| as uint64;
 
@@ -371,7 +369,7 @@ module MarshallingImpl {
   requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
   ensures ValInGrammar(v, GKeyArray)
-  ensures v.baa == keys
+  ensures v.ka == keys
   ensures Marshalling.valToStrictlySortedKeySeq(v) == Some(keys)
   ensures SizeOfV(v) <= 8 + |keys| * (8 + KeyType.MaxLen() as int)
   ensures SizeOfV(v) == 8 + WeightKeySeq(keys)
@@ -396,7 +394,7 @@ module MarshallingImpl {
   requires |pivots| <= MaxNumChildren() as int - 1
   ensures ValidVal(v)
   ensures ValInGrammar(v, GKeyArray)
-  ensures |v.baa| == |pivots|
+  ensures |v.ka| == |pivots|
   ensures Marshalling.valToPivots(v) == Some(pivots)
   ensures SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int)
   {
@@ -432,7 +430,7 @@ module MarshallingImpl {
   ensures ValInGrammar(v, Marshalling.BucketGrammar())
   ensures ValidVal(v)
   ensures Marshalling.valToBucket(v, pivotTable, i).Some?;
-  ensures KVList.I(Marshalling.valToBucket(v, pivotTable, i).value) == bucket.Bucket
+  ensures Marshalling.valToBucket(v, pivotTable, i).value == bucket.Bucket
   ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 16
   {
     var kvl := bucket.GetKvl();
