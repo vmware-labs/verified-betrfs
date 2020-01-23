@@ -15,7 +15,7 @@ module PackedKV {
 
   datatype Pkv = Pkv(
       keys: PackedStringArray.Psa,
-      values: PackedStringArray.Psa)
+      messages: PackedStringArray.Psa)
 
   predicate ValidKeyByteString(s: seq<byte>)
   {
@@ -36,9 +36,9 @@ module PackedKV {
 
   predicate WF(pkv: Pkv) {
     && PackedStringArray.WF(pkv.keys)
-    && PackedStringArray.WF(pkv.values)
+    && PackedStringArray.WF(pkv.messages)
     && ValidKeyLens(pkv.keys)
-    && |pkv.keys.offsets| == |pkv.values.offsets|
+    && |pkv.keys.offsets| == |pkv.messages.offsets|
   }
 
   function {:opaque} psaSeq_Keys(psa: PackedStringArray.Psa, i: int) : (res : seq<Key>)
@@ -134,6 +134,17 @@ module PackedKV {
     return true;
   }
 
+  function SizeOfPkv(pkv: Pkv) : int {
+    PackedStringArray.SizeOfPsa(pkv.keys) + PackedStringArray.SizeOfPsa(pkv.messages)
+  }
+
+  function method WeightPkv(pkv: Pkv) : uint64
+  requires WF(pkv)
+  {
+    4 * |pkv.keys.offsets| as uint64 + |pkv.keys.data| as uint64 +
+    4 * |pkv.messages.offsets| as uint64 + |pkv.messages.data| as uint64
+  }
+
   function parse_Pkv(data: seq<byte>) : (res : (Option<Pkv>, seq<byte>))
   ensures res.0.Some? ==> WF(res.0.value)
   {
@@ -188,5 +199,24 @@ module PackedKV {
       pkv := None;
       rest_index := |data| as uint64;
     }
+  }
+
+  method Query(pkv: Pkv, key: Key)
+  returns (msg: Option<Message>)
+  ensures msg.None? ==> key !in I(pkv)
+  ensures msg.Some? ==> key in I(pkv) && I(pkv)[key] == msg.value
+
+  function method FirstKey(pkv: Pkv) : Key
+  requires WF(pkv)
+  requires |pkv.keys.offsets| > 0
+  {
+    PackedStringArray.FirstElement(pkv.keys)
+  }
+
+  function method LastKey(pkv: Pkv) : Key
+  requires WF(pkv)
+  requires |pkv.keys.offsets| > 0
+  {
+    PackedStringArray.LastElement(pkv.keys)
   }
 }

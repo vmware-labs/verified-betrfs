@@ -1214,15 +1214,15 @@ module KVList {
     }
   }
 
-  lemma lenKeysLeWeightOver8(kvl: Kvl)
+  lemma lenKeysLeWeightOver4(kvl: Kvl)
   requires WF(kvl)
-  ensures 8*|kvl.keys| <= WeightBucket(I(kvl))
+  ensures 4*|kvl.keys| <= WeightBucket(I(kvl))
   decreases |kvl.keys|
   {
     if |kvl.keys| == 0 {
     } else {
       WFPrefix(kvl, |kvl.keys| - 1);
-      lenKeysLeWeightOver8(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
+      lenKeysLeWeightOver4(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
       kvlWeightEq(kvl);
       kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
     }
@@ -1235,7 +1235,7 @@ module KVList {
   requires WF(kvl)
   ensures |kvl.keys| <= WeightBucket(I(kvl))
   {
-    lenKeysLeWeightOver8(kvl);
+    lenKeysLeWeightOver4(kvl);
   }
 
   lemma WeightKvlInduct(kvl: Kvl, j: int)

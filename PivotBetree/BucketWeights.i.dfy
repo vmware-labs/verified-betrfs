@@ -20,7 +20,7 @@ module BucketWeights {
   function WeightKey(key: Key) : (w:int)
   ensures w >= 0
   {
-    8 + |key|
+    4 + |key|
   }
  
   function WeightKeySeq(keys: seq<Key>) : (w:int)
@@ -33,7 +33,7 @@ module BucketWeights {
   ensures w >= 0
   {
     match msg {
-      case Define(value) => 8 + ValueType.Len(value)
+      case Define(value) => 4 + ValueType.Len(value)
       case Update(delta) => 0
     }
   }
@@ -49,14 +49,14 @@ module BucketWeights {
   function method WeightKeyUint64(key: Key) : (w:uint64)
   ensures w as int == WeightKey(key)
   {
-    8 + |key| as uint64
+    4 + |key| as uint64
   }
 
   function method WeightMessageUint64(msg: Message) : (w:uint64)
   ensures w as int == WeightMessage(msg)
   {
     match msg {
-      case Define(value) => 8 + |value| as uint64
+      case Define(value) => 4 + |value| as uint64
       case Update(delta) => 0
     }
   }
@@ -1164,6 +1164,6 @@ module BucketWeights {
   }
 
   lemma WeightMessageBound(msg: Message)
-  ensures WeightMessage(msg) <= 8 + 1024
+  ensures WeightMessage(msg) <= 4 + 1024
   { }
 }

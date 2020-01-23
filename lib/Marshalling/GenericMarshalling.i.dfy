@@ -7,7 +7,7 @@ include "Util.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/PackedInts.s.dfy"
-include "../Base/PackedStringArray.s.dfy"
+include "../DataStructures/PackedKV.i.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -24,14 +24,15 @@ import KeyType
 import ValueMessage`Internal
 import ValueType`Internal
 import opened PackedInts
-import opened PackedStringArray
+import opened PackedKV
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
       KeyType, ValueMessage, ValueType, lemma_SeqSumLens_prefix,
       lemma_SeqSumMessageLens_prefix,
-      lemma_SizeOfV_parse_Val
+      lemma_SizeOfV_parse_Val,
+      PackedKV
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
 
 export extends S
@@ -48,7 +49,7 @@ datatype G = GUint64
            | GKeyArray
            | GMessageArray
            | GTaggedUnion(cases:seq<G>)
-           | GPackedStringArray
+           | GPackedKV
 
 datatype V = VUint64(u:uint64)
            | VArray(a:seq<V>)
@@ -59,7 +60,7 @@ datatype V = VUint64(u:uint64)
            | VMessageArray(ma:seq<Message>)
            | VUint64Array(ua:seq<uint64>)
            | VCase(c:uint64, val:V)
-           | VPackedStringArray(psa: Psa)
+           | VPackedKV(pkv: Pkv)
 
 predicate ValInGrammar(val:V, grammar:G)
 {
@@ -74,6 +75,7 @@ predicate ValInGrammar(val:V, grammar:G)
         case VMessageArray(b) => grammar.GMessageArray?
         case VUint64Array(ua) => grammar.GUint64Array?
         case VCase(c, v) => grammar.GTaggedUnion? && (c as int) < |grammar.cases| && ValInGrammar(v, grammar.cases[c])
+        case VPackedKV(pkv) => grammar.GPackedKV?
 }
 
 // We only support reasonably sized grammars
@@ -89,6 +91,7 @@ predicate ValidGrammar(grammar:G)
         case GMessageArray => true
         case GUint64Array => true
         case GTaggedUnion(cases) => |cases| < 0x1_0000_0000_0000_0000 && (forall g :: g in cases ==> ValidGrammar(g))
+        case GPackedKV => true
 }
 
 predicate ValidMessage(m: Message)
@@ -109,7 +112,7 @@ predicate ValidVal(val:V)
         case VMessageArray(ma) => |ma| < 0x1_0000_0000_0000_0000 && forall v :: v in ma ==> ValidMessage(v)
         case VUint64Array(ua) => |ua| < 0x1_0000_0000_0000_0000
         case VCase(c, v) => ValidVal(v)
-        case VPackedStringArray(psa) => PackedStringArray.WF(psa)
+        case VPackedKV(pkv) => PackedKV.WF(pkv)
 
 }
 
@@ -160,6 +163,7 @@ function SizeOfV(val:V) : int
         case VMessageArray(b)  => 8 + SeqSumMessageLens(b)
         case VUint64Array(b)  => 8 + 8*|b|          // 8 bytes for a length field
         case VCase(c, v)  => 8 + SizeOfV(v)     // 8 bytes for the case identifier
+        case VPackedKV(pkv)  => PackedKV.SizeOfPkv(pkv)
 }
 
 function parse_Uint64(data:seq<byte>) : (Option<V>, seq<byte>)
@@ -934,12 +938,17 @@ method ParseCase(data:seq<byte>, index:uint64, cases:seq<G>) returns (success:bo
     }
 }
 
-function parse_PackedStringArray(data:seq<byte>) : (Option<V>, seq<byte>)
+function parse_PackedKV(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
-    ensures var (opt_val, rest) := parse_PackedStringArray(data, cases);
-            |rest| <= |data| && (opt_val.Some? ==> ValidVal(opt_val.value) && ValInGrammar(opt_val.value, GPackedStringArray(cases)));
+    ensures var (opt_val, rest) := parse_PackedKV(data);
+            |rest| <= |data| && (opt_val.Some? ==> ValidVal(opt_val.value) && ValInGrammar(opt_val.value, GPackedKV));
 {
-  parse_Psa(data)
+  var (pkv, rest) := parse_Pkv(data);
+  if pkv.Some? then (
+    (Some(VPackedKV(pkv.value)), rest)
+  ) else (
+    (None, rest)
+  )
 }
 
 function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
@@ -962,7 +971,7 @@ function {:opaque} parse_Val(data:seq<byte>, grammar:G) : (Option<V>, seq<byte>)
         case GKeyArray           => parse_KeyArray(data)
         case GMessageArray       => parse_MessageArray(data)
         case GTaggedUnion(cases) => parse_Case(data, cases)
-        case GPackedStringArray  => parse_PackedStringArray(data)
+        case GPackedKV           => parse_PackedKV(data)
 }
 
 method ParseVal(data:seq<byte>, index:uint64, grammar:G) returns (success:bool, v:V, rest_index:uint64)
@@ -3509,6 +3518,25 @@ method MarshallVUint64(val:V, ghost grammar:G, data:array<byte>, index:uint64) r
     return 8;
 }
 
+method MarshallPackedKV(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
+    requires val.VPackedKV?;
+    requires ValidGrammar(grammar);
+    requires ValInGrammar(val, grammar);
+    requires ValidVal(val);
+    requires (index as int) + SizeOfV(val) <= data.Length;
+    requires 0 <= (index as int) + SizeOfV(val) < 0x1_0000_0000_0000_0000;  // Needed to prevent overflow below
+    requires data.Length < 0x1_0000_0000_0000_0000;
+    modifies data;
+    decreases grammar, -1;
+    ensures  parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.Some? &&
+             parse_Val(data[index..(index as int) + SizeOfV(val)], grammar).0.value == val;
+    ensures  forall i :: 0 <= i < index ==> data[i] == old(data[i]);
+    ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
+    ensures  (size as int) == SizeOfV(val);
+{
+  assume false;
+}
+
 method MarshallVal(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
@@ -3534,6 +3562,7 @@ method MarshallVal(val:V, ghost grammar:G, data:array<byte>, index:uint64) retur
         case VMessage(_) => size := MarshallMessage(val.m, data, index);
         case VMessageArray(_) => size := MarshallMessageArray(val, grammar, data, index);
         case VCase(_,_)    => size := MarshallCase(val, grammar, data, index);
+        case VPackedKV(_)    => size := MarshallPackedKV(val, grammar, data, index);
 }
 
 method Marshall(val:V, ghost grammar:G) returns (data:array<byte>)

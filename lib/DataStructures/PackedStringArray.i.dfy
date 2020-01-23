@@ -20,30 +20,30 @@ module PackedStringArray {
     && Uint32_Order.IsSorted(psa.offsets)
   }
 
-  function psaStart(psa: Psa, i: int) : (start : uint32)
+  function method psaStart(psa: Psa, i: uint64) : (start : uint32)
   requires WF(psa)
-  requires 0 <= i < |psa.offsets|
+  requires 0 <= i as int < |psa.offsets|
   ensures 0 <= start as int <= |psa.data|
   {
     if i == 0 then 0 else
-      Uint32_Order.IsSortedImpliesLte(psa.offsets, i-1, |psa.offsets| - 1);
+      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, |psa.offsets| - 1);
       psa.offsets[i-1]
   }
 
-  function psaEnd(psa: Psa, i: int) : (end : uint32)
+  function method psaEnd(psa: Psa, i: uint64) : (end : uint32)
   requires WF(psa)
-  requires 0 <= i < |psa.offsets|
+  requires 0 <= i as int < |psa.offsets|
   ensures psaStart(psa, i) as int <= end as int <= |psa.data|
   {
-    var _ := if i > 0 then Uint32_Order.IsSortedImpliesLte(psa.offsets, i-1, i); 0 else 0;
-    Uint32_Order.IsSortedImpliesLte(psa.offsets, i, |psa.offsets| - 1);
+    var _ := if i > 0 then Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, i as int); 0 else 0;
+    Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int, |psa.offsets| - 1);
 
     psa.offsets[i]
   }
 
-  function psaElement(psa: Psa, i: int) : seq<byte>
+  function method psaElement(psa: Psa, i: uint64) : seq<byte>
   requires WF(psa)
-  requires 0 <= i < |psa.offsets|
+  requires 0 <= i as int < |psa.offsets|
   {
     psa.data[psaStart(psa, i) .. psaEnd(psa, i)]
   }
@@ -52,9 +52,9 @@ module PackedStringArray {
   requires WF(psa)
   requires 0 <= i <= |psa.offsets|
   ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == psaElement(psa, j)
+  ensures forall j | 0 <= j < i :: res[j] == psaElement(psa, j as uint64)
   {
-    if i == 0 then [] else psaSeq(psa, i-1) + [psaElement(psa, i-1)]
+    if i == 0 then [] else psaSeq(psa, i-1) + [psaElement(psa, (i-1) as uint64)]
   }
 
   function I(psa: Psa) : seq<seq<byte>>
@@ -65,6 +65,12 @@ module PackedStringArray {
 
   function SizeOfPsa(psa: Psa) : int {
     4 + 4 * |psa.offsets| + |psa.data|
+  }
+
+  function method SizeOfPsaUint64(psa: Psa) : uint64
+  requires WF(psa)
+  {
+    4 + 4 * |psa.offsets| as uint64 + |psa.data| as uint64
   }
 
   function parse_Psa(data: seq<byte>) : (res : (Option<Psa>, seq<byte>))
@@ -229,5 +235,19 @@ module PackedStringArray {
     assert unpack_LittleEndian_Uint32_Seq(data_seq3[4..4+4*len], len as int) == psa.offsets;
     lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), (4+4*len) as int, (4+4*len+dataLen) as int);
     assert data_seq3[4+4*len..4+4*len+dataLen] == psa.data;
+  }
+
+  function method FirstElement(psa: Psa) : seq<byte>
+  requires WF(psa)
+  requires |psa.offsets| > 0
+  {
+    psaElement(psa, 0)
+  }
+
+  function method LastElement(psa: Psa) : seq<byte>
+  requires WF(psa)
+  requires |psa.offsets| > 0
+  {
+    psaElement(psa, |psa.offsets| as uint64 - 1)
   }
 }

@@ -29,6 +29,7 @@ module Marshalling {
   import LBAType
   import ReferenceType`Internal
   import Crypto
+  import PackedKV
 
   type Reference = BC.Reference
   type LBA = BC.LBA
@@ -41,10 +42,7 @@ module Marshalling {
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
-    GTuple([
-      GKeyArray,
-      GMessageArray
-    ])
+    GPackedKV
   }
 
   function method PivotNodeGrammar() : G
@@ -148,25 +146,18 @@ module Marshalling {
     Some(v.ma)
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KVList.Kvl>)
+  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<Bucket>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   requires Pivots.WFPivots(pivotTable)
   requires 0 <= i <= |pivotTable|
   {
-    var keys := valToStrictlySortedKeySeq(v.t[0]);
-    var values := valToMessageSeq(v.t[1]);
-
-    if keys.Some? && values.Some? then (
-      var kvl := KVList.Kvl(keys.value, values.value);
-
-      if KVList.WF(kvl) && WFBucketAt(KVList.I(kvl), pivotTable, i) then
-        Some(kvl)
-      else
-        None
-    ) else (
+    var pkv := v.pkv;
+    var bucket := PackedKV.I(pkv);
+    if PackedKV.KeysSorted(pkv) && WFBucketAt(bucket, pivotTable, i) then
+      Some(bucket)
+    else
       None
-    )
   }
 
   function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<Bucket>>)
@@ -184,7 +175,7 @@ module Marshalling {
         case None => None
         case Some(pref) => (
           match valToBucket(Last(a), pivotTable, |pref|) {
-            case Some(bucket) => Some(pref + [KVList.I(bucket)])
+            case Some(bucket) => Some(pref + [bucket])
             case None => None
           }
         )

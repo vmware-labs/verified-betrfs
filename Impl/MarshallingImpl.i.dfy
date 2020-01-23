@@ -114,58 +114,24 @@ module MarshallingImpl {
   ensures s.Some? ==> KVList.WF(s.value)
   ensures s.Some? ==> WFBucketAt(KVList.I(s.value), pivotTable, i as int)
   ensures s == Marshalling.valToBucket(v, pivotTable, i as int)
-  {
-    assert ValidVal(v.t[0]);
-
-    var keys := ValToStrictlySortedKeySeq(v.t[0 as uint64]);
-
-    if keys.None? {
-      return None;
-    }
-
-    var messages := ValToMessageSeq(v.t[1 as uint64]);
-
-    if messages.None? {
-      return None;
-    }
-
-    var kvl := KVList.Kvl(keys.value, messages.value);
-
-    var wf := KVList.IsWF(kvl);
-    if !wf {
-      return None;
-    }
-
+  { 
+    var pkv := v.pkv;
+ 
     // Check that the keys fit in the desired bucket
-    if |kvl.keys| as uint64 > 0 {
+    if |pkv.offsets| as uint64 > 0 {
       if i > 0 {
-        var c := Keyspace.cmp(pivotTable[i-1], kvl.keys[0 as uint64]);
+        var c := Keyspace.cmp(pivotTable[i-1], PackedKV.FirstKey(pkv));
         if (c > 0) {
-          KVList.Imaps(kvl, 0);
           return None;
         }
       }
 
       if i < |pivotTable| as uint64 {
-        var c := Keyspace.cmp(pivotTable[i], kvl.keys[|kvl.keys| as uint64 - 1]);
+        var c := Keyspace.cmp(pivotTable[i], PackedKV.LastKey(pkv));
         if (c <= 0) {
-          KVList.Imaps(kvl, |kvl.keys| - 1);
           return None;
         }
       }
-    }
-
-    forall key | key in KVList.I(kvl)
-    ensures Pivots.Route(pivotTable, key) == i as int
-    ensures KVList.I(kvl)[key] != M.IdentityMessage()
-    {
-      var j := KVList.IndexOfKey(kvl, key);
-      KVList  .Imaps(kvl, j);
-      if |kvl.keys| > 0 {
-        Keyspace.IsStrictlySortedImpliesLte(kvl.keys, 0, j);
-        Keyspace.IsStrictlySortedImpliesLte(kvl.keys, j, |kvl.keys| - 1);
-      }
-      Pivots.RouteIs(pivotTable, key, i as int);
     }
 
     assert WFBucketAt(KVList.I(kvl), pivotTable, i as int);
