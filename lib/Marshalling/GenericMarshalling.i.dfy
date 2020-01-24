@@ -2416,13 +2416,14 @@ method MarshallMessageArray(val:V, ghost grammar:G, data:array<byte>, index:uint
     ensures  (size as int) == SizeOfV(val);
 {
   assume false;
+
   Pack_LittleEndian_Uint32_into_Array(|val.ma| as uint32, data, index);
   
   var i: uint64 := 0;
   var offset: uint64 := 0;
   while i < |val.ma| as uint64
   {
-    NativeArrays.CopySeqIntoArray(val.ma[i].value, 0, data, index + 4 + 4*|val.ma| as uint64 + offset, |val.ma| as uint64);
+    NativeArrays.CopySeqIntoArray(val.ma[i].value, 0, data, index + 4 + 4*|val.ma| as uint64 + offset, |val.ma[i].value| as uint64);
     offset := offset + |val.ma[i].value| as uint64;
     Pack_LittleEndian_Uint32_into_Array(offset as uint32, data, index + 4 + 4*i);
     i := i + 1;
