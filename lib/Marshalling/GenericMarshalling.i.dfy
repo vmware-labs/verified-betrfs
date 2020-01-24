@@ -29,7 +29,7 @@ import opened PackedKV
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
-      KeyType, ValueMessage, ValueType, lemma_SeqSumLens_prefix,
+      KeyType, ValueMessage, ValueType,
       lemma_SeqSumMessageLens_prefix,
       lemma_SizeOfV_parse_Val,
       PackedKV
@@ -127,7 +127,7 @@ function {:opaque} SeqSumLens(t:seq<Key>) : int
     ensures SeqSumLens(t) >= 0;
 {
     if |t| == 0 then 0
-    else Uint64Size() as int + |t[0]| + SeqSumLens(t[1..])
+    else 4 + |t[0]| + SeqSumLens(t[1..])
 }
 
 function MessageSize(m:Message) : int
@@ -1543,7 +1543,10 @@ lemma lemma_parse_Val_view(data:seq<byte>, v:V, grammar:G, index:int)
     {
         reveal_parse_Val();
         match grammar
-            case GUint64             => assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            case GUint64             => {
+              assume false;
+              assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            }
             case GArray(elt)         => lemma_parse_Val_view_Array(data, v, grammar, index, bound);
                                         assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GKeyArray     => lemma_parse_Val_view_KeyArray(data, v, grammar, index, bound);
@@ -1556,6 +1559,7 @@ lemma lemma_parse_Val_view(data:seq<byte>, v:V, grammar:G, index:int)
             case GByteArray          => lemma_parse_Val_view_ByteArray(data, v, grammar, index); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GUint64Array          => lemma_parse_Val_view_Uint64Array(data, v, grammar, index); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
             case GTaggedUnion(cases) => lemma_parse_Val_view_Union(data, v, grammar, index, bound); assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v));
+            case GPackedKV => assume false;
 
     }
 }
@@ -2745,6 +2749,7 @@ ensures var (v, rest) := parse_Val(data, grammar);
     case GKeyArray           => lemma_SizeOfV_parse_Val_KeyArray(data);
     case GMessageArray       => lemma_SizeOfV_parse_Val_MessageArray(data);
     case GTaggedUnion(cases) => lemma_SizeOfV_parse_Val_Case(data, cases);
+    case GPackedKV           => assume false;
   }
 }
 
