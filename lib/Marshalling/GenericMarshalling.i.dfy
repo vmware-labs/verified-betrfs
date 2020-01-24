@@ -25,15 +25,15 @@ import ValueMessage`Internal
 import ValueType`Internal
 import opened NativePackedInts
 import opened PackedKV
+import opened BucketWeights
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
       KeyType, ValueMessage, ValueType,
-      lemma_SeqSumMessageLens_prefix,
       lemma_SizeOfV_parse_Val,
-      PackedKV
-  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, SeqSumLens, Key, Message, ValidMessage, MessageSize, MessageSizeUint64, SeqSumMessageLens
+      PackedKV, BucketWeights
+  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, Key, Message, ValidMessage
 
 export extends S
 
@@ -123,33 +123,6 @@ function {:opaque} SeqSum(t:seq<V>) : int
     else SizeOfV(t[0]) + SeqSum(t[1..])
 }
 
-function {:opaque} SeqSumLens(t:seq<Key>) : int
-    ensures SeqSumLens(t) >= 0;
-{
-    if |t| == 0 then 0
-    else 4 + |t[0]| + SeqSumLens(t[1..])
-}
-
-function MessageSize(m:Message) : int
-ensures MessageSize(m) >= 0
-{
-  MessageSizeUint64(m) as int
-}
-
-function method {:opaque} MessageSizeUint64(m:Message) : uint64
-ensures MessageSizeUint64(m) >= 0
-{
-  if m.Define? then Uint64Size() + |m.value| as uint64 else 0
-}
-
-
-function {:opaque} SeqSumMessageLens(t:seq<Message>) : int
-    ensures SeqSumMessageLens(t) >= 0;
-{
-    if |t| == 0 then 0
-    else MessageSize(t[0]) + SeqSumMessageLens(t[1..])
-}
-
 function SizeOfV(val:V) : int
     ensures SizeOfV(val) >= 0;
 {
@@ -158,9 +131,9 @@ function SizeOfV(val:V) : int
         case VArray(a)      => 8 + SeqSum(a)     // 8 bytes for length
         case VTuple(t)      => SeqSum(t)
         case VByteArray(b)  => 8 + |b|          // 8 bytes for a length field
-        case VKeyArray(b)  => 4 + SeqSumLens(b)
-        case VMessage(m)  => MessageSize(m)
-        case VMessageArray(b)  => 4 + SeqSumMessageLens(b)
+        case VKeyArray(ka)  => 4 + WeightKeySeq(ka)
+        case VMessage(m)  => 4 + WeightMessage(m)
+        case VMessageArray(ma)  => 4 + WeightMessageSeq(ma)
         case VUint64Array(b)  => 8 + 8*|b|          // 8 bytes for a length field
         case VCase(c, v)  => 8 + SizeOfV(v)     // 8 bytes for the case identifier
         case VPackedKV(pkv)  => PackedKV.SizeOfPkv(pkv)
@@ -690,11 +663,15 @@ method ParseByteArray(data:seq<byte>, index:uint64) returns (success:bool, v:seq
 function parse_Uint64Array(data:seq<byte>) : (Option<V>, seq<byte>)
     requires |data| < 0x1_0000_0000_0000_0000;
 {
-    var (len, rest) := parse_Uint64(data);
-    if !len.None? && len.value.u <= (|rest| as uint64) / Uint64Size() then
-        (Some(VUint64Array(unpack_LittleEndian_Uint64_Seq(rest[..Uint64Size()*len.value.u], len.value.u as int))), rest[Uint64Size()*len.value.u..])
+  if |data| >= 8 then (
+    var len := unpack_LittleEndian_Uint64(data[..8]);
+    if len <= (|data| as uint64 - 8) / 8 then
+        (Some(VUint64Array(unpack_LittleEndian_Uint64_Seq(data[8..8 + 8*len], len as int))), data[8 + 8*len..])
     else
         (None, [])
+  ) else (
+    (None, [])
+  )
 }
 
 method ParseUint64Array(data:seq<byte>, index: uint64) returns (success:bool, v:V, rest_index:uint64)
@@ -706,25 +683,24 @@ method ParseUint64Array(data:seq<byte>, index: uint64) returns (success:bool, v:
              && v_opt == v'
              && data[rest_index..] == rest';
 {
-    var some, len, rest := ParseUint64(data, index);
-    if some && len.u <= ((|data| as uint64) - rest) / Uint64Size() {
-        ghost var rest_seq := data[rest..];
-        assert len.u as int * Uint64Size() as int <= |rest_seq|;
-        calc {
-            rest_seq[0..len.u];
-            data[rest..rest + len.u];
-        }
-        success := true;
-        var contents := Unpack_LittleEndian_Uint64_Seq(data, index + Uint64Size(), len.u);
-        v := VUint64Array(contents);
-        rest_index := rest + len.u * Uint64Size();
+  if |data| as uint64 - index >= 8 {
+    var len := Unpack_LittleEndian_Uint64(data, index);
+    assert data[index..][..8] == data[index..index+8];
+    if len <= ((|data| as uint64) - index - 8) / Uint64Size() {
+      success := true;
+      var contents := Unpack_LittleEndian_Uint64_Seq(data, index + Uint64Size(), len);
+      v := VUint64Array(contents);
+      rest_index := index + 8 + len * Uint64Size();
 
-        assert data[index as int + Uint64Size() as int .. index as int + Uint64Size() as int + len.u as int * Uint64Size() as int]
-            == rest_seq[..Uint64Size() as int * len.u as int];
+      assert data[index..][8..8+8*len] == data[index+8..index+8+8*len];
     } else {
-        success := false;
-        rest_index := (|data| as uint64);
+      success := false;
+      rest_index := (|data| as uint64);
     }
+  } else {
+    success := false;
+    rest_index := (|data| as uint64);
+  }
 }
 
 function parse_Case(data:seq<byte>, cases:seq<G>) : (Option<V>, seq<byte>)
@@ -959,8 +935,6 @@ lemma lemma_parse_Val_view_Message(data:seq<byte>, v:V, grammar:G, index:int)
     ensures  forall bound :: index+SizeOfV(v) <= bound <= |data| ==>
              parse_Message(data[index..bound]).0 == Some(v.m) ==> parse_Message(data[index..bound]).1 == data[index+SizeOfV(v)..bound];
 {
-    reveal_MessageSizeUint64();
-
     forall bound {:trigger Trigger(bound)} | Trigger(bound)
         ensures index+SizeOfV(v) <= bound <= |data| ==> ((parse_Message(data[index..bound]).0 == Some(v.m)) <==> (parse_Message(data[index..index+SizeOfV(v)]).0 == Some(v.m)));
     {
@@ -1016,7 +990,9 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
         == parse_Uint64(data[index..index + SizeOfV(v)]).0;
     assert parse_Uint64(data[index..bound]).1 == data[index..bound][8..];
     assert parse_Uint64(data[index..index + SizeOfV(v)]).1 == data[index..index + SizeOfV(v)][8..];
-    assert data[index..bound][8..][..8*len] == data[index..index + SizeOfV(v)][8..][..8*len];
+    PackedStringArray.lemma_seq_slice_slice(data, index, bound, 8, 8+8*len);
+    PackedStringArray.lemma_seq_slice_slice(data, index, index + SizeOfV(v), 8, 8+8*len);
+    assert data[index..bound][8..8+8*len] == data[index..index + SizeOfV(v)][8..8+8*len];
 
     reveal_unpack_LittleEndian_Uint64();
     if index + 8 <= |data| {
@@ -1044,43 +1020,6 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
   }
 }
 
-lemma lemma_SeqSumLens_prefix(s:seq<Key>, v:Key)
-    ensures SeqSumLens(s + [v]) == SeqSumLens(s) + 8 + |v|
-{
-    reveal_SeqSumLens();
-    if |s| == 0 {
-    } else {
-        calc {
-            SeqSumLens(s + [v]);
-                { assert (s + [v])[0] == s[0];  
-                  assert (s + [v])[1..] == s[1..]+[v]; }
-            8 + |s[0]| + SeqSumLens(s[1..] + [v]);
-                { lemma_SeqSumLens_prefix(s[1..], v); }
-            8 + |s[0]| + SeqSumLens(s[1..]) + 8 + |v|;
-            SeqSumLens(s) + 8 + |v|;
-        }
-    }
-}
-
-lemma lemma_SeqSumMessageLens_prefix(s:seq<Message>, v:Message)
-    ensures SeqSumMessageLens(s + [v]) == SeqSumMessageLens(s) + MessageSize(v)
-{
-    reveal_SeqSumMessageLens();
-    if |s| == 0 {
-    } else {
-        calc {
-            SeqSumMessageLens(s + [v]);
-                { assert (s + [v])[0] == s[0];  
-                  assert (s + [v])[1..] == s[1..]+[v]; }
-            MessageSize(s[0]) + SeqSumMessageLens(s[1..] + [v]);
-                { lemma_SeqSumMessageLens_prefix(s[1..], v); }
-            MessageSize(s[0]) + SeqSumMessageLens(s[1..]) + MessageSize(v);
-            SeqSumMessageLens(s) + MessageSize(v);
-        }
-    }
-}
-
-
 lemma lemma_SeqSum_prefix(s:seq<V>, v:V)
     ensures SeqSum(s + [v]) == SeqSum(s) + SizeOfV(v);
 {
@@ -1099,33 +1038,6 @@ lemma lemma_SeqSum_prefix(s:seq<V>, v:V)
     }
 }
 
-lemma lemma_SeqSumLens_bound(s:seq<Key>, bound:int)
-    requires SeqSumLens(s) < bound;
-    ensures  forall v :: v in s ==> 8 + |v| < bound;
-{
-    reveal_SeqSumLens();
-    if |s| == 0 {
-    } else {
-        assert 8 + |s[0]| + SeqSumLens(s[1..]) < bound;
-        assert 8 + |s[0]| < bound;
-        lemma_SeqSumLens_bound(s[1..], bound);
-    }
-}
-
-lemma lemma_SeqSumMessageLens_bound(s:seq<Message>, bound:int)
-    requires SeqSumMessageLens(s) < bound;
-    ensures  forall v :: v in s ==> MessageSize(v) < bound;
-{
-    reveal_MessageSizeUint64();
-    reveal_SeqSumMessageLens();
-    if |s| == 0 {
-    } else {
-        assert MessageSize(s[0]) + SeqSumMessageLens(s[1..]) < bound;
-        assert MessageSize(s[0]) < bound;
-        lemma_SeqSumMessageLens_bound(s[1..], bound);
-    }
-}
-
 lemma lemma_SeqSum_bound(s:seq<V>, bound:int)
     requires SeqSum(s) < bound;
     ensures  forall v :: v in s ==> SizeOfV(v) < bound;
@@ -1138,32 +1050,6 @@ lemma lemma_SeqSum_bound(s:seq<V>, bound:int)
         lemma_SeqSum_bound(s[1..], bound);
     }
 }
-
-lemma lemma_SeqSumLens_bound_prefix(s:seq<Key>, prefix:seq<Key>, index:int)
-    requires 0 <= index <= |s|;
-    requires prefix == s[..index];
-    ensures  SeqSumLens(prefix) <= SeqSumLens(s);
-{
-    reveal_SeqSumLens();
-    if |prefix| == 0 {
-    } else {
-        lemma_SeqSumLens_bound_prefix(s[1..], prefix[1..], index - 1);
-    }
-}
-
-lemma lemma_SeqSumMessageLens_bound_prefix(s:seq<Message>, prefix:seq<Message>, index:int)
-    requires 0 <= index <= |s|;
-    requires prefix == s[..index];
-    ensures  SeqSumMessageLens(prefix) <= SeqSumMessageLens(s);
-{
-    reveal_SeqSumMessageLens();
-    if |prefix| == 0 {
-    } else {
-        lemma_SeqSumMessageLens_bound_prefix(s[1..], prefix[1..], index - 1);
-    }
-}
-
-
 
 lemma lemma_SeqSum_bound_prefix(s:seq<V>, prefix:seq<V>, index:int)
     requires 0 <= index <= |s|;
@@ -1611,34 +1497,34 @@ method ComputeSeqSum(s:seq<V>) returns (size:uint64)
     }
 }
 
-method ComputeSeqSumLens(s:seq<Key>) returns (size:uint64)
+method ComputeWeightKeySeq(s: seq<Key>) returns (size:uint64)
     requires |s| < 0x1_0000_0000_0000_0000;
-    requires 0 <= SeqSumLens(s) < 0x1_0000_0000_0000_0000;
-    ensures (size as int) == SeqSumLens(s);
+    requires 0 <= WeightKeySeq(s) < 0x1_0000_0000_0000_0000;
+    ensures (size as int) == WeightKeySeq(s);
 {
-    reveal_SeqSumLens();
-    if (|s| as uint64) == 0 {
-        size := 0;
-    } else {
-        var v_size := 4 + |s[0 as uint64]| as uint64;
-        var rest_size := ComputeSeqSumLens(s[(1 as uint64)..]);
-        size := v_size + rest_size;
-    }
+  assume false;
+  if (|s| as uint64) == 0 {
+    size := 0;
+  } else {
+    var v_size := 4 + |s[0 as uint64]| as uint64;
+    var rest_size := ComputeWeightKeySeq(s[(1 as uint64)..]);
+    size := v_size + rest_size;
+  }
 }
 
-method ComputeSeqSumMessageLens(s:seq<Message>) returns (size:uint64)
+method ComputeWeightMessageSeq(s:seq<Message>) returns (size:uint64)
     requires |s| < 0x1_0000_0000_0000_0000;
-    requires 0 <= SeqSumMessageLens(s) < 0x1_0000_0000_0000_0000;
-    ensures (size as int) == SeqSumMessageLens(s);
+    requires 0 <= WeightMessageSeq(s) < 0x1_0000_0000_0000_0000;
+    ensures (size as int) == WeightMessageSeq(s);
 {
-    reveal_SeqSumMessageLens();
-    if (|s| as uint64) == 0 {
-        size := 0;
-    } else {
-        var v_size := MessageSizeUint64(s[0 as uint64]);
-        var rest_size := ComputeSeqSumMessageLens(s[(1 as uint64)..]);
-        size := v_size + rest_size;
-    }
+  assume false;
+  if (|s| as uint64) == 0 {
+    size := 0;
+  } else {
+    var v_size := WeightMessageUint64(s[0 as uint64]);
+    var rest_size := ComputeWeightMessageSeq(s[(1 as uint64)..]);
+    size := v_size + rest_size;
+  }
 }
 
 method ComputeSizeOf(val:V) returns (size:uint64)
@@ -1656,14 +1542,14 @@ method ComputeSizeOf(val:V) returns (size:uint64)
                            }
     case VTuple(t)      => size := ComputeSeqSum(t);
     case VByteArray(b)  => size := 8 + (|b| as uint64);
-    case VMessage(m)    => size := MessageSizeUint64(m);
+    case VMessage(m)    => size := 4 + WeightMessageUint64(m);
     case VUint64Array(b)  => size := 8 + 8*(|b| as uint64);
     case VKeyArray(b)  => {
-      var v := ComputeSeqSumLens(b);
+      var v := ComputeWeightKeySeq(b);
       size := 4 + v;
     }
     case VMessageArray(b)  => {
-      var v := ComputeSeqSumMessageLens(b);
+      var v := ComputeWeightMessageSeq(b);
       size := 4 + v;
     }
     case VCase(c, v)    => var vs := ComputeSizeOf(v);
@@ -1744,6 +1630,8 @@ method MarshallUint64(n:uint64, data:array<byte>, index:uint64)
     }
 
     assert |data[index .. index+(Uint64Size() as uint64)]| == 8;
+
+    reveal_unpack_LittleEndian_Uint64();
 }
 
 lemma lemma_marshall_array_contents(contents:seq<V>, eltType:G, marshalled_bytes:seq<byte>, trace:seq<seq<byte>>)
@@ -1950,6 +1838,7 @@ method MarshallArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) ret
 {
     //assert{:split_here} true;
     reveal_parse_Val();
+    reveal_unpack_LittleEndian_Uint64();
     MarshallUint64((|val.a| as uint64), data, index);
 
     ghost var tuple := parse_Uint64(data[index..(index as int) + SizeOfV(val)]);
@@ -1966,6 +1855,8 @@ method MarshallArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) ret
     ghost var contents  := contents_tuple.0;
     ghost var remainder := contents_tuple.1;
     assert !contents.None?;
+    assert len.value.u as int == |val.a|;
+    assert contents.value == val.a;
     size := 8 + contents_size;
 }
 
@@ -2268,6 +2159,7 @@ method MarshallByteArrayInterior(b:seq<byte>, data:array<byte>, index:uint64) re
     ensures  forall i :: (index as int) + SizeOfV(VByteArray(b)) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(VByteArray(b));
 {
+    reveal_unpack_LittleEndian_Uint64();
     MarshallUint64((|b| as uint64), data, index);
     assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|b| as uint64);
     MarshallBytes(b, data, index + 8);
@@ -2281,7 +2173,8 @@ method MarshallByteArrayInterior(b:seq<byte>, data:array<byte>, index:uint64) re
     ghost var tuple := parse_Uint64(data_seq);
     ghost var len := tuple.0;
     ghost var rest := tuple.1;
-    assert{:split_here} true;
+    //assert{:split_here} true;
+    assert data_seq[..8] == data[index .. index + 8];
     assert len.value.u == (|b| as uint64);
     
     assert rest == data[index + 8..(index as int) + SizeOfV(VByteArray(b))] == b;
@@ -2302,7 +2195,6 @@ method MarshallMessage(m:Message, data:array<byte>, index:uint64) returns (size:
     ensures  forall i :: (index as int) + SizeOfV(VMessage(m)) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(VMessage(m));
 {
-  reveal_MessageSizeUint64();
   reveal_parse_Val();
   size := MarshallByteArrayInterior(m.value, data, index);
 }
@@ -2323,6 +2215,7 @@ method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64)
     ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(val);
 {
+    reveal_unpack_LittleEndian_Uint64();
     MarshallUint64((|val.b| as uint64), data, index);
     assert unpack_LittleEndian_Uint64(data[index..index+(Uint64Size() as uint64)]) == (|val.b| as uint64);
     MarshallBytes(val.b, data, index + 8);
@@ -2336,7 +2229,7 @@ method MarshallByteArray(val:V, ghost grammar:G, data:array<byte>, index:uint64)
     ghost var tuple := parse_Uint64(data_seq);
     ghost var len := tuple.0;
     ghost var rest := tuple.1;
-    assert{:split_here} true;
+    //assert{:split_here} true;
     assert len.value.u == (|val.b| as uint64);
     
     assert rest == data[index + 8..(index as int) + SizeOfV(val)] == val.b;
@@ -2361,9 +2254,33 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
     ensures  forall i :: (index as int) + SizeOfV(val) <= i < data.Length ==> data[i] == old(data[i]);
     ensures  (size as int) == SizeOfV(val);
 {
-    MarshallUint64((|val.ua| as uint64), data, index);
-    Pack_LittleEndian_Uint64_Seq_into_Array(val.ua, data, index + 8);
-    return 8 + |val.ua| as uint64 * 8;
+  reveal_unpack_LittleEndian_Uint64();
+  reveal_parse_Val();
+
+  ghost var data_seq0 := data[index..(index as int) + SizeOfV(val)];
+
+  MarshallUint64((|val.ua| as uint64), data, index);
+
+  ghost var data_seq1 := data[index..(index as int) + SizeOfV(val)];
+  assert unpack_LittleEndian_Uint64(data_seq1[..8]) as int == |val.ua|;
+
+  Pack_LittleEndian_Uint64_Seq_into_Array(val.ua, data, index + 8);
+
+  ghost var data_seq2 := data[index..(index as int) + SizeOfV(val)];
+  assert unpack_LittleEndian_Uint64(data_seq2[..8]) as int == |val.ua|;
+  PackedStringArray.lemma_array_slice_slice(data, index as int, (index as int) + SizeOfV(val), 8, 8 + 8*|val.ua|);
+  assert unpack_LittleEndian_Uint64_Seq(
+      data_seq2[8..8 + 8*|val.ua|], |val.ua|) == val.ua;
+
+  /*ghost var len := unpack_LittleEndian_Uint64(data_seq2[..8]);
+  assert |data_seq2| >= 8;
+  assert len <= (|data_seq2| as uint64 - 8) / 8;
+  assert parse_Uint64Array(data_seq2).0.Some?;
+  assert parse_Val(data_seq2, grammar).0.Some?;
+  assert parse_Uint64Array(data_seq2).0.value.ua == val.ua;
+  assert parse_Val(data_seq2, grammar).0.value.ua == val.ua;*/
+
+  size := 8 + |val.ua| as uint64 * 8;
 }
 
 method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) returns (size:uint64)
@@ -2705,7 +2622,6 @@ requires |data| < 0x1_0000_0000_0000_0000;
 ensures var (v, rest) := parse_Message(data);
   v.Some? ==> SizeOfV(VMessage(v.value)) + |rest| == |data|
 {
-  reveal_MessageSizeUint64();
 }
 
 lemma lemma_SizeOfV_parse_Val_Uint64Array(data: seq<byte>)
