@@ -114,10 +114,19 @@ module PackedStringArray {
     return true;
   }
 
+  // TODO move these somewhere more reasonable
+
   lemma lemma_seq_suffix_slice<T>(s: seq<T>, i: int, j: int, k: int)
   requires 0 <= i <= |s|
   requires 0 <= j <= k <= |s| - i
   ensures s[i..][j..k] == s[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_slice_suffix<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= j <= |s|
+  requires k <= j - i
+  ensures s[i..j][k..] == s[i+k..j];
   {
   }
 
