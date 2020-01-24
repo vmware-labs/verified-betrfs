@@ -1850,7 +1850,7 @@ method ComputeSeqSumLens(s:seq<Key>) returns (size:uint64)
     if (|s| as uint64) == 0 {
         size := 0;
     } else {
-        var v_size := Uint64Size() + |s[0 as uint64]| as uint64;
+        var v_size := 4 + |s[0 as uint64]| as uint64;
         var rest_size := ComputeSeqSumLens(s[(1 as uint64)..]);
         size := v_size + rest_size;
     }

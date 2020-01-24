@@ -134,11 +134,14 @@ module PackedKV {
     return true;
   }
 
-  function SizeOfPkv(pkv: Pkv) : int {
+  function SizeOfPkv(pkv: Pkv) : int
+  {
     PackedStringArray.SizeOfPsa(pkv.keys) + PackedStringArray.SizeOfPsa(pkv.messages)
   }
 
-  function method SizeOfPkvUint64(pkv: Pkv) : uint64 {
+  function method SizeOfPkvUint64(pkv: Pkv) : uint64
+  requires WF(pkv)
+  {
     PackedStringArray.SizeOfPsaUint64(pkv.keys) + PackedStringArray.SizeOfPsaUint64(pkv.messages)
   }
 
