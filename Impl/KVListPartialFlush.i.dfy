@@ -18,8 +18,9 @@ module KVListPartialFlush {
   import Pivots = PivotsLib
   import opened Bounds
   import opened BucketImpl
+  import opened KeyType
 
-  function partialFlushIterate(parent: Kvl, children: seq<Kvl>, pivots: seq<KVList.Key>,
+  function partialFlushIterate(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl, newParent: Kvl, weightSlack: int) : (Kvl, seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -42,24 +43,24 @@ module KVListPartialFlush {
         //) else if |cur.keys| == 0 then (
         //  partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], Kvl([], []))
         ) else (
-          partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.values[childIdx]), newParent, weightSlack)
+          partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]), newParent, weightSlack)
         )
       ) else (
         if childIdx == |child.keys| then (
           if childrenIdx == |children| - 1 then (
-            var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.values[parentIdx]);
+            var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.messages[parentIdx]);
             if w <= weightSlack then (
-              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.values[parentIdx]), newParent, weightSlack - w)
+              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]), newParent, weightSlack - w)
             ) else (
-              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.values[parentIdx]), weightSlack)
+              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.messages[parentIdx]), weightSlack)
             )
           ) else (
             if lt(parent.keys[parentIdx], pivots[childrenIdx]) then (
-              var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.values[parentIdx]);
+              var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.messages[parentIdx]);
               if w <= weightSlack then (
-                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.values[parentIdx]), newParent, weightSlack - w)
+                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]), newParent, weightSlack - w)
               ) else (
-                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.values[parentIdx]), weightSlack)
+                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.messages[parentIdx]), weightSlack)
               )
             ) else (
               partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl([], []), newParent, weightSlack)
@@ -67,24 +68,24 @@ module KVListPartialFlush {
           )
         ) else (
           if child.keys[childIdx] == parent.keys[parentIdx] then (
-            var m := Merge(parent.values[parentIdx], child.values[childIdx]);
+            var m := Merge(parent.messages[parentIdx], child.messages[childIdx]);
             if m == IdentityMessage() then (
-              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, cur, newParent, weightSlack + WeightKey(child.keys[childIdx]) + WeightMessage(child.values[childIdx]))
+              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, cur, newParent, weightSlack + WeightKey(child.keys[childIdx]) + WeightMessage(child.messages[childIdx]))
             ) else (
-              if weightSlack + WeightMessage(child.values[childIdx]) >= WeightMessage(m) then (
-                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m), newParent, weightSlack + WeightMessage(child.values[childIdx]) - WeightMessage(m))
+              if weightSlack + WeightMessage(child.messages[childIdx]) >= WeightMessage(m) then (
+                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m), newParent, weightSlack + WeightMessage(child.messages[childIdx]) - WeightMessage(m))
               ) else (
-                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.values[childIdx]), append(newParent, parent.keys[parentIdx], parent.values[parentIdx]), weightSlack)
+                partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]), append(newParent, parent.keys[parentIdx], parent.messages[parentIdx]), weightSlack)
               )
             )
           ) else if lt(child.keys[childIdx], parent.keys[parentIdx]) then (
-            partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.values[childIdx]), newParent, weightSlack)
+            partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]), newParent, weightSlack)
           ) else (
-            var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.values[parentIdx]);
+            var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.messages[parentIdx]);
             if w <= weightSlack then (
-              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.values[parentIdx]), newParent, weightSlack - w)
+              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]), newParent, weightSlack - w)
             ) else (
-              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.values[parentIdx]), weightSlack)
+              partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.messages[parentIdx]), weightSlack)
             )
           )
         )
@@ -92,7 +93,7 @@ module KVListPartialFlush {
     )
   }
 
-  function {:opaque} partialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<KVList.Key>) : (Kvl, seq<Kvl>)
+  function {:opaque} partialFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>) : (Kvl, seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires |pivots| + 1 == |children|
@@ -100,7 +101,7 @@ module KVListPartialFlush {
     partialFlushIterate(parent, children, pivots, 0, 0, 0, [], Kvl([], []), Kvl([], []), MaxTotalBucketWeight() - WeightKvlSeq(children))
   }
 
-  lemma partialFlushWF(parent: Kvl, children: seq<Kvl>, pivots: seq<KVList.Key>)
+  lemma partialFlushWF(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
   requires WF(parent)
   requires Pivots.WFPivots(pivots)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -110,7 +111,7 @@ module KVListPartialFlush {
       && WF(newParent)
       && (forall i | 0 <= i < |newChildren| :: WF(newChildren[i]))
 
-  function bucketPartialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<KVList.Key>) : (res:(Bucket, seq<Bucket>))
+  function bucketPartialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>) : (res:(Bucket, seq<Bucket>))
   requires WFBucket(parent)
   requires Pivots.WFPivots(pivots)
   requires |pivots| + 1 == |children|
@@ -123,8 +124,8 @@ module KVListPartialFlush {
     (I(newParent), ISeq(newChildren))
   }
 
-  lemma bucketPartialFlushRes(parent: Bucket, children: seq<Bucket>, pivots: seq<KVList.Key>)
-  returns (flushedKeys: set<KVList.Key>)
+  lemma bucketPartialFlushRes(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>)
+  returns (flushedKeys: set<Key>)
   requires WFBucket(parent)
   requires Pivots.WFPivots(pivots)
   requires forall i | 0 <= i < |children| :: WFBucket(children[i])
@@ -141,7 +142,7 @@ module KVListPartialFlush {
   method PartialFlush(
     parentMutBucket: MutBucket,
     childrenMutBuckets: seq<MutBucket>,
-    pivots: seq<KVList.Key>)
+    pivots: seq<Key>)
   returns (newParent: MutBucket, newChildren: seq<MutBucket>)
   /*requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
@@ -197,12 +198,12 @@ module KVListPartialFlush {
     var childIdx: uint64 := 0;
     var acc := [];
 
-    var cur_keys := new KVList.Key[maxChildLen + |parent.keys| as uint64];
-    var cur_values := new Message[maxChildLen + |parent.keys| as uint64];
+    var cur_keys := new Key[maxChildLen + |parent.keys| as uint64];
+    var cur_messages := new Message[maxChildLen + |parent.keys| as uint64];
     var cur_idx: uint64 := 0;
 
-    var newParent_keys := new KVList.Key[|parent.keys| as uint64];
-    var newParent_values := new Message[|parent.keys| as uint64];
+    var newParent_keys := new Key[|parent.keys| as uint64];
+    var newParent_messages := new Message[|parent.keys| as uint64];
     var newParent_idx: uint64 := 0;
 
     var initChildrenWeight := childrenWeight;
@@ -218,7 +219,7 @@ module KVListPartialFlush {
     invariant 0 <= newParent_idx <= parentIdx
     invariant childrenIdx as int < |children| ==> cur_idx as int <= parentIdx as int + childIdx as int
     invariant childrenIdx as int == |children| ==> cur_idx == 0
-    //invariant partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int)
+    //invariant partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int)
         //== partialFlush(parent, children, pivots)
     decreases |children| - childrenIdx as int
     decreases |parent.keys| - parentIdx as int +
@@ -226,77 +227,77 @@ module KVListPartialFlush {
     {
       ghost var ghosty := true;
       if ghosty {
-        if parentIdx as int < |parent.values| { WeightMessageBound(parent.values[parentIdx]); }
-        if childIdx as int < |children[childrenIdx].values| { WeightMessageBound(children[childrenIdx].values[childIdx]); }
+        if parentIdx as int < |parent.messages| { WeightMessageBound(parent.messages[parentIdx]); }
+        if childIdx as int < |children[childrenIdx].messages| { WeightMessageBound(children[childrenIdx].messages[childIdx]); }
       }
 
       var child := children[childrenIdx];
       if parentIdx == |parent.keys| as uint64 {
         if childIdx == |child.keys| as uint64 {
           var bucket := new MutBucket.InitWithWeight(
-            Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]),
+            Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]),
             childrenMutBuckets[childrenIdx].Weight + bucketStartWeightSlack - weightSlack);
           bucketStartWeightSlack := weightSlack;
           childrenIdx := childrenIdx + 1;
           childIdx := 0;
           acc := acc + [bucket];
           cur_idx := 0;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
         } else {
           cur_keys[cur_idx] := child.keys[childIdx];
-          cur_values[cur_idx] := child.values[childIdx];
-          assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), child.keys[childIdx], child.values[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+          cur_messages[cur_idx] := child.messages[childIdx];
+          assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), child.keys[childIdx], child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
           childIdx := childIdx + 1;
           cur_idx := cur_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
         }
       } else {
         if childIdx == |child.keys| as uint64 {
           if childrenIdx == |children| as uint64 - 1 {
-            var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.values[parentIdx]);
+            var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.messages[parentIdx]);
             if w <= weightSlack {
               cur_keys[cur_idx] := parent.keys[parentIdx];
-              cur_values[cur_idx] := parent.values[parentIdx];
-              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              cur_messages[cur_idx] := parent.messages[parentIdx];
+              assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
               weightSlack := weightSlack - w;
               parentIdx := parentIdx + 1;
               cur_idx := cur_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
             } else {
               newParent_keys[newParent_idx] := parent.keys[parentIdx];
-              newParent_values[newParent_idx] := parent.values[parentIdx];
+              newParent_messages[newParent_idx] := parent.messages[parentIdx];
 
-              assert append(Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_values[..newParent_idx+1]);
+              assert append(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_messages[..newParent_idx+1]);
 
               parentIdx := parentIdx + 1;
               newParent_idx := newParent_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
             }
           } else {
             var c := cmp(parent.keys[parentIdx], pivots[childrenIdx]);
             if c < 0 {
-              var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.values[parentIdx]);
+              var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.messages[parentIdx]);
               if w <= weightSlack {
                 cur_keys[cur_idx] := parent.keys[parentIdx];
-                cur_values[cur_idx] := parent.values[parentIdx];
-                assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+                cur_messages[cur_idx] := parent.messages[parentIdx];
+                assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
                 weightSlack := weightSlack - w;
                 parentIdx := parentIdx + 1;
                 cur_idx := cur_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
               } else {
                 newParent_keys[newParent_idx] := parent.keys[parentIdx];
-                newParent_values[newParent_idx] := parent.values[parentIdx];
+                newParent_messages[newParent_idx] := parent.messages[parentIdx];
 
-                assert append(Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_values[..newParent_idx+1]);
+                assert append(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_messages[..newParent_idx+1]);
 
                 parentIdx := parentIdx + 1;
                 newParent_idx := newParent_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
               }
             } else {
               var bucket := new MutBucket.InitWithWeight(
-                Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]),
+                Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]),
                 childrenMutBuckets[childrenIdx].Weight + bucketStartWeightSlack - weightSlack);
               bucketStartWeightSlack := weightSlack;
 
@@ -304,74 +305,74 @@ module KVListPartialFlush {
               childrenIdx := childrenIdx + 1;
               childIdx := 0;
               cur_idx := 0;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
             }
           }
         } else {
           var c := cmp(child.keys[childIdx], parent.keys[parentIdx]);
           if c == 0 {
-            var m := Merge(parent.values[parentIdx], child.values[childIdx]);
+            var m := Merge(parent.messages[parentIdx], child.messages[childIdx]);
             if m == IdentityMessage() {
-              weightSlack := weightSlack + WeightKeyUint64(child.keys[childIdx]) + WeightMessageUint64(child.values[childIdx]);
+              weightSlack := weightSlack + WeightKeyUint64(child.keys[childIdx]) + WeightMessageUint64(child.messages[childIdx]);
               parentIdx := parentIdx + 1;
               childIdx := childIdx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
             } else {
               assume weightSlack <= 0x1_0000_0000;
               WeightMessageBound(m);
 
-              if weightSlack + WeightMessageUint64(child.values[childIdx]) >= WeightMessageUint64(m) {
+              if weightSlack + WeightMessageUint64(child.messages[childIdx]) >= WeightMessageUint64(m) {
                 cur_keys[cur_idx] := parent.keys[parentIdx];
-                cur_values[cur_idx] := m;
-                assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], m) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
-                weightSlack := (weightSlack + WeightMessageUint64(child.values[childIdx])) - WeightMessageUint64(m);
+                cur_messages[cur_idx] := m;
+                assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), parent.keys[parentIdx], m) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
+                weightSlack := (weightSlack + WeightMessageUint64(child.messages[childIdx])) - WeightMessageUint64(m);
                 cur_idx := cur_idx + 1;
                 parentIdx := parentIdx + 1;
                 childIdx := childIdx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
               } else {
                 cur_keys[cur_idx] := parent.keys[parentIdx];
-                cur_values[cur_idx] := child.values[childIdx];
+                cur_messages[cur_idx] := child.messages[childIdx];
 
                 newParent_keys[newParent_idx] := parent.keys[parentIdx];
-                newParent_values[newParent_idx] := parent.values[parentIdx];
+                newParent_messages[newParent_idx] := parent.messages[parentIdx];
 
-                assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], child.values[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
-                assert append(Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_values[..newParent_idx+1]);
+                assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), parent.keys[parentIdx], child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
+                assert append(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_messages[..newParent_idx+1]);
 
                 newParent_idx := newParent_idx + 1;
                 cur_idx := cur_idx + 1;
                 parentIdx := parentIdx + 1;
                 childIdx := childIdx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
               }
             }
           } else if c < 0 {
             cur_keys[cur_idx] := child.keys[childIdx];
-            cur_values[cur_idx] := child.values[childIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), child.keys[childIdx], child.values[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            cur_messages[cur_idx] := child.messages[childIdx];
+            assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), child.keys[childIdx], child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
             childIdx := childIdx + 1;
             cur_idx := cur_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
           } else {
-            var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.values[parentIdx]);
+            var w := WeightKeyUint64(parent.keys[parentIdx]) + WeightMessageUint64(parent.messages[parentIdx]);
             if w <= weightSlack {
               cur_keys[cur_idx] := parent.keys[parentIdx];
-              cur_values[cur_idx] := parent.values[parentIdx];
-              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              cur_messages[cur_idx] := parent.messages[parentIdx];
+              assert append(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_messages[..cur_idx+1]);
               weightSlack := weightSlack - w;
               parentIdx := parentIdx + 1;
               cur_idx := cur_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
             } else {
               newParent_keys[newParent_idx] := parent.keys[parentIdx];
-              newParent_values[newParent_idx] := parent.values[parentIdx];
+              newParent_messages[newParent_idx] := parent.messages[parentIdx];
 
-              assert append(Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), parent.keys[parentIdx], parent.values[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_values[..newParent_idx+1]);
+              assert append(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(newParent_keys[..newParent_idx+1], newParent_messages[..newParent_idx+1]);
 
               parentIdx := parentIdx + 1;
               newParent_idx := newParent_idx + 1;
-//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
+//assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
             }
           }
         }
@@ -380,7 +381,7 @@ module KVListPartialFlush {
 
     newChildren := acc;
     newParent := new MutBucket(
-      Kvl(newParent_keys[..newParent_idx], newParent_values[..newParent_idx])
+      Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx])
     );
   }
 

@@ -16,6 +16,7 @@ module SplitImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import opened KeyType
   import PivotsLib
 
   import opened NativeTypes

@@ -4,18 +4,16 @@ include "../MapSpec/UI.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 
 module MapSpec refines UIStateMachine {
-  import V = ValueWithDefault
-  import K = KeyType
+  import opened ValueType
+  import opened KeyType
   import SeqComparison
   import Options
 
   import UI
-  type Key = K.Key
-  type Value = V.Value
 
   // Users must provide a definition of EmptyValue
   function EmptyValue() : Value {
-    V.DefaultValue()
+    ValueType.DefaultValue()
   }
 
   datatype Constants = Constants()

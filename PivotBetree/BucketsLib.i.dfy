@@ -15,6 +15,7 @@ module BucketsLib {
   import opened ValueMessage
   import opened Maps
   import opened Sequences
+  import opened KeyType
   import UI
 
   type Bucket = map<Key, Message>

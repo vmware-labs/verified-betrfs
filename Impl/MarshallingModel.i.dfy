@@ -41,7 +41,7 @@ module MarshallingModel {
   import M = ValueMessage`Internal
   import ReferenceType`Internal
   import LBAType
-  import ValueWithDefault`Internal
+  import ValueType`Internal
 
   import Pivots = PivotsLib
   import MS = MapSpec

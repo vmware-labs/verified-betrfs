@@ -25,12 +25,13 @@ module PivotBetreeSpecRefinement {
   import opened Options
   import opened PivotsLib
   import opened BucketsLib
+  import opened ValueType
+  import opened KeyType
   import PivotBetreeSpecWFNodes
 
   type Node = B.G.Node
   type PNode = P.G.Node
 
-  type Value = B.G.Value
   type Reference = B.G.Reference
   type Buffer = B.G.Buffer
 

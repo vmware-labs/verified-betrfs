@@ -302,13 +302,23 @@ module LruImpl {
             } else if i < j-1 {
               assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
             } else {
-              assert nodemap.I().contents[Queue[i]].next == nodemap.I().contents[Queue[i+1]];
+              assert nodemap.I().contents[Queue[i]].next
+                  == old(nodemap.I()).contents[old(Queue)[i+1]].next
+                  == old(nodemap.I()).contents[old(Queue)[i+2]]
+                  == nodemap.I().contents[Queue[i+1]];
             }
           }
 
-          forall i | 0 <= i < |Queue| - 1
-          ensures nodemap.I().contents[Queue[i]] == nodemap.I().contents[Queue[i+1]].prev
+          forall k | 0 <= k < |Queue| - 1
+          ensures nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev
           {
+            if k < j-1 {
+              assert nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev;
+            } else if k == j-1 {
+              assert nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev;
+            } else {
+              assert nodemap.I().contents[Queue[k]] == nodemap.I().contents[Queue[k+1]].prev;
+            }
           }
         } else {
           Repr := {this} + nodemap.Repr + nodemap.I().contents.Values;

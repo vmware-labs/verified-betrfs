@@ -13,6 +13,7 @@ module BucketIteratorModel {
   import opened PivotsLib
   import opened ValueMessage
   import opened Sequences
+  import opened KeyType
 
   datatype IteratorOutput = Next(key: Key, msg: Message) | Done
 

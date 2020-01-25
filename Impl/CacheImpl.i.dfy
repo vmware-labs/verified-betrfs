@@ -13,6 +13,8 @@ module CacheImpl {
   import opened NativeTypes
   import opened BucketImpl
   import opened BucketWeights
+  import opened KeyType
+  import opened ValueMessage
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -237,7 +239,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: IM.Message)
+    method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: Message)
     requires Inv()
     requires ref in I()
     requires IM.WFNode(I()[ref])

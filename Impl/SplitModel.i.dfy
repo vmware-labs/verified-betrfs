@@ -14,6 +14,7 @@ module SplitModel {
   import opened BucketWeights
   import opened Bounds
   import PivotsLib
+  import opened KeyType
 
   import opened NativeTypes
 
