@@ -8,7 +8,6 @@ include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/PackedInts.s.dfy"
 include "../Buckets/PackedKV.i.dfy"
-include "../DataStructures/PackedKV.i.dfy"
 include "../Base/NativeBenchmarking.s.dfy"
 
 module GenericMarshalling {
