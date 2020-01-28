@@ -7,10 +7,10 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Message.i.dfy"
 include "../Betree/BetreeSpec.i.dfy"
 include "../Betree/Betree.i.dfy"
-include "../PivotBetree/PivotsLib.i.dfy"
-include "../PivotBetree/BucketsLib.i.dfy"
+include "../lib/Buckets/PivotsLib.i.dfy"
+include "../lib/Buckets/BucketsLib.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
-include "../PivotBetree/BucketWeights.i.dfy"
+include "../lib/Buckets/BucketWeights.i.dfy"
 //
 // A PivotBetree refines a Betree, carrying forward the tree structure
 // but refining the abstract infinite key maps with key ranges separated
@@ -90,7 +90,6 @@ module PivotBetreeSpec {
 
   function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
-  requires node.buckets[Route(node.pivotTable, key)].Bucket?
   {
     var newnode := node.(
       buckets := BucketListInsert(node.buckets, node.pivotTable, key, msg)
@@ -101,7 +100,6 @@ module PivotBetreeSpec {
   function AddMessagesToNode(node: Node, msgs: Bucket) : Node
   requires WFNode(node)
   requires BucketListWellMarshalled(node.buckets)
-  requires msgs.Bucket?
   {
     WFBucketListFlush(msgs, node.buckets, node.pivotTable);
 
@@ -143,7 +141,7 @@ module PivotBetreeSpec {
   predicate LookupVisitsWellMarshalledBuckets(lookup: Lookup, key: Key)
   requires LookupVisitsWFNodes(lookup)
   {
-    forall i :: 0 <= i < |lookup| ==> lookup[i].node.buckets[Route(lookup[i].node.pivotTable, key)].Bucket?
+    forall i :: 0 <= i < |lookup| ==> BucketWellMarshalled(lookup[i].node.buckets[Route(lookup[i].node.pivotTable, key)])
   }
 
   predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
@@ -163,7 +161,6 @@ module PivotBetreeSpec {
 
   function NodeLookup(node: Node, key: Key) : Message
   requires WFBucketList(node.buckets, node.pivotTable)
-  requires node.buckets[Route(node.pivotTable, key)].Bucket?
   {
     BucketListGet(node.buckets, node.pivotTable, key)
   }
@@ -295,7 +292,7 @@ module PivotBetreeSpec {
     && WFNode(ins.oldroot)
     && WeightBucketList(ins.oldroot.buckets) + WeightKey(ins.key) + WeightMessage(ins.msg)
         <= MaxTotalBucketWeight()
-    && ins.oldroot.buckets[Route(ins.oldroot.pivotTable, ins.key)].Bucket?
+    && BucketWellMarshalled(ins.oldroot.buckets[Route(ins.oldroot.pivotTable, ins.key)])
   }
 
   function InsertionReads(ins: MessageInsertion): seq<ReadOp>
@@ -324,7 +321,7 @@ module PivotBetreeSpec {
     && f.parent.children.Some?
     && f.parent.children.value[f.slotIndex] == f.childref
     && BucketListWellMarshalled(f.child.buckets)
-    && f.parent.buckets[f.slotIndex].Bucket?
+    && BucketWellMarshalled(f.parent.buckets[f.slotIndex])
     && WeightBucketList(BucketListFlush(BucketIntersect(
         f.parent.buckets[f.slotIndex], f.keys),
         f.child.buckets,
@@ -372,7 +369,7 @@ module PivotBetreeSpec {
   function GrowOps(growth: RootGrowth) : seq<Op>
   requires ValidGrow(growth)
   {
-    var newroot := Node([], Some([growth.newchildref]), [Bucket(map[])]);
+    var newroot := Node([], Some([growth.newchildref]), [B(map[])]);
     var allocop := G.AllocOp(growth.newchildref, growth.oldroot);
     var writeop := G.WriteOp(Root(), newroot);
     [allocop, writeop]
@@ -545,7 +542,7 @@ module PivotBetreeSpec {
   requires fused_parent.children.Some?
   requires fused_parent.children.Some? ==> 0 <= slot_idx < |fused_parent.children.value|
   requires 0 <= slot_idx < |fused_parent.buckets|
-  requires fused_parent.buckets[slot_idx].Bucket?
+  requires BucketWellMarshalled(fused_parent.buckets[slot_idx])
   {
     Node(
       insert(fused_parent.pivotTable, pivot, slot_idx),
@@ -564,7 +561,7 @@ module PivotBetreeSpec {
     && |f.fused_parent.buckets| <= MaxNumChildren() - 1
 
     && BucketListWellMarshalled(f.fused_child.buckets)
-    && f.fused_parent.buckets[f.slot_idx].Bucket?
+    && BucketWellMarshalled(f.fused_parent.buckets[f.slot_idx])
 
     && var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
     && var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
@@ -620,8 +617,8 @@ module PivotBetreeSpec {
 
     && BucketListWellMarshalled(f.left_child.buckets)
     && BucketListWellMarshalled(f.right_child.buckets)
-    && f.split_parent.buckets[f.slot_idx].Bucket?
-    && f.split_parent.buckets[f.slot_idx + 1].Bucket?
+    && BucketWellMarshalled(f.split_parent.buckets[f.slot_idx])
+    && BucketWellMarshalled(f.split_parent.buckets[f.slot_idx + 1])
 
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
 
@@ -947,7 +944,7 @@ module PivotBetreeSpecWFNodes {
   ensures WFNode(GrowOps(g)[0].node)
   ensures WFNode(GrowOps(g)[1].node)
   {
-    var newroot := G.Node([], Some([g.newchildref]), [Bucket(map[])]);
+    var newroot := G.Node([], Some([g.newchildref]), [B(map[])]);
     WeightBucketListOneEmpty();
     assert WFNode(newroot);
   }

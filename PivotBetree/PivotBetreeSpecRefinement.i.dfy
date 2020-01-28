@@ -9,7 +9,6 @@ include "../Betree/BetreeSpec.i.dfy"
 include "../Betree/Betree.i.dfy"
 include "../Betree/BetreeInv.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
-include "../PivotBetree/PivotsLib.i.dfy"
 //
 // Lays out the abstraction function between the datatypes, setting
 // up for PivotBetree_Refines_Betree.
@@ -48,8 +47,7 @@ module PivotBetreeSpecRefinement {
 
   function BucketOptGet(bucket: Bucket, key: Key) : Message
   {
-    // For ill-formed bucket (!bucket.Bucket?) return whatever
-    if bucket.Bucket? && key in bucket.b then bucket.b[key] else IdentityMessage()
+    if key in bucket.b then bucket.b[key] else IdentityMessage()
   }
 
   function BucketOptListGet(blist: BucketList, pivots: PivotTable, key: Key) : Message
@@ -100,7 +98,7 @@ module PivotBetreeSpecRefinement {
   {
     forall i | 0 <= i < |readOps| ::
       forall j | 0 <= j < |readOps[i].node.buckets| ::
-        readOps[i].node.buckets[j].Bucket?
+        BucketWellMarshalled(readOps[i].node.buckets[j])
   }
 
   function IReadOp(readOp: P.G.ReadOp) : B.G.ReadOp
@@ -812,8 +810,8 @@ module PivotBetreeSpecRefinement {
   //requires node.buckets[idx] == map[]
   //requires node'.buckets[idx] == map[]
   //requires node'.buckets[idx+1] == map[]
-  requires node'.buckets[idx] == SplitBucketLeft(node.buckets[idx], node'.pivotTable[idx])
-  requires node'.buckets[idx+1] == SplitBucketRight(node.buckets[idx], node'.pivotTable[idx])
+  requires node'.buckets[idx].b == SplitBucketLeft(node.buckets[idx], node'.pivotTable[idx]).b
+  requires node'.buckets[idx+1].b == SplitBucketRight(node.buckets[idx], node'.pivotTable[idx]).b
   requires forall i | idx + 2 <= i < |node'.buckets| :: node'.buckets[i] == node.buckets[i-1]
   requires forall i | 0 <= i < idx :: node.pivotTable[i] == node'.pivotTable[i]
   requires forall i | idx < i < |node'.pivotTable| :: node'.pivotTable[i] == node.pivotTable[i-1]
@@ -1213,7 +1211,7 @@ module PivotBetreeSpecRefinement {
 
   lemma AddMessagesToNodeResult(node: PNode, bucket: Bucket, node': PNode, key: Key)
   requires P.WFNode(node)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires BucketListWellMarshalled(node.buckets)
   requires node' == P.AddMessagesToNode(node, bucket);
   ensures WFBucketList(node'.buckets, node'.pivotTable);
@@ -1346,7 +1344,7 @@ module PivotBetreeSpecRefinement {
   {
     PivotBetreeSpecWFNodes.ValidGrowWritesWFNodes(growth);
 
-    var newroot := P.G.Node([], Some([growth.newchildref]), [Bucket(map[])]);
+    var newroot := P.G.Node([], Some([growth.newchildref]), [BucketsLib.B(map[])]);
     var newroot' := B.G.Node(
         imap key | MS.InDomain(key) :: IGrow(growth).newchildref,
         imap key | MS.InDomain(key) :: Update(NopDelta()));

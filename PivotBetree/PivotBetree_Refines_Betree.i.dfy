@@ -25,6 +25,7 @@ module PivotBetreeInvAndRefinement {
   import opened PivotBetreeSpec`Spec
   import opened Sequences
   import opened BucketWeights
+  import opened BucketsLib
   import PB = PivotBetree
   import PBI = PivotBetreeBlockInterface
   import B = Betree
@@ -67,7 +68,7 @@ module PivotBetreeInvAndRefinement {
   {
     forall ref | ref in s.bcv.view ::
       forall i | 0 <= i < |s.bcv.view[ref].buckets| ::
-        s.bcv.view[ref].buckets[i].Bucket?
+        BucketWellMarshalled(s.bcv.view[ref].buckets[i])
   }
 
   predicate Inv(k: Constants, s: Variables)
@@ -186,7 +187,7 @@ module PivotBetreeInvAndRefinement {
     forall i, j |
       0 <= i < |readOps| &&
       0 <= j < |readOps[i].node.buckets|
-    ensures readOps[i].node.buckets[j].Bucket?
+    ensures BucketWellMarshalled(readOps[i].node.buckets[j])
     {
       assert PBI.ReadStep(k.bck, s.bcv, readOps[i]);
       assert readOps[i].node == s.bcv.view[readOps[i].ref];
