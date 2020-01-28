@@ -24,6 +24,7 @@ module PivotBetree refines UIStateMachine {
   import MS = MapSpec
   import opened Maps
   import opened Options
+  import opened BucketsLib
 
   import opened G = PivotBetreeGraph
 
@@ -32,7 +33,7 @@ module PivotBetree refines UIStateMachine {
 
   function EmptyNode() : Node
   {
-    Node([], None, [map[]])
+    Node([], None, [Bucket(map[])])
   }
 
   predicate Init(k: Constants, s: Variables) {

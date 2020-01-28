@@ -63,10 +63,18 @@ module PivotBetreeInvAndRefinement {
     B.Variables(BI.Variables(IView(s.bcv.view)))
   }
 
+  predicate AllBucketsWellMarshalled(k: Constants, s: Variables) 
+  {
+    forall ref | ref in s.bcv.view ::
+      forall i | 0 <= i < |s.bcv.view[ref].buckets| ::
+        s.bcv.view[ref].buckets[i].Bucket?
+  }
+
   predicate Inv(k: Constants, s: Variables)
   {
     && ViewHasWFNodes(s.bcv.view)
     && BInv.Inv(Ik(k), I(k, s))
+    && AllBucketsWellMarshalled(k, s)
   }
 
   lemma OpRefines(k: Constants, s: Variables, s': Variables, op: PG.Op)
@@ -168,6 +176,23 @@ module PivotBetreeInvAndRefinement {
     }
   }
 
+  lemma ReadOpsBucketsWellMarshalledOfValidStep(k: Constants, s: Variables, betreeStep: BetreeStep)
+  requires ValidBetreeStep(betreeStep)
+  requires PBI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
+  requires AllBucketsWellMarshalled(k, s)
+  ensures SpecRef.ReadOpsBucketsWellMarshalled(BetreeStepReads(betreeStep))
+  {
+    var readOps := BetreeStepReads(betreeStep);
+    forall i, j |
+      0 <= i < |readOps| &&
+      0 <= j < |readOps[i].node.buckets|
+    ensures readOps[i].node.buckets[j].Bucket?
+    {
+      assert PBI.ReadStep(k.bck, s.bcv, readOps[i]);
+      assert readOps[i].node == s.bcv.view[readOps[i].ref];
+    }
+  }
+
   lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   requires Inv(k, s)
   requires PB.NextStep(k, s, s', uiop, PB.BetreeStep(betreeStep))
@@ -181,6 +206,7 @@ module PivotBetreeInvAndRefinement {
       assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.StutterStep);
       BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
     } else {
+      ReadOpsBucketsWellMarshalledOfValidStep(k, s, betreeStep);
       SpecRef.RefinesValidBetreeStep(betreeStep);
       SpecRef.RefinesReadOps(betreeStep);
       SpecRef.RefinesOps(betreeStep);
@@ -207,6 +233,8 @@ module PivotBetreeInvAndRefinement {
       */
       assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
       BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+
+      assume AllBucketsWellMarshalled(k, s');
     }
   }
 
