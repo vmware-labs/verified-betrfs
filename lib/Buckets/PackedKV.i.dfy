@@ -1,6 +1,6 @@
 include "PackedStringArray.i.dfy"
 include "../Base/total_order.i.dfy"
-include "../../ByteBlockCacheSystem/KVList.i.dfy"
+include "KVList.i.dfy"
 
 module PackedKV {
   import PackedStringArray
@@ -122,7 +122,7 @@ module PackedKV {
       Bucket(IMap(pkv))
     else (
       reveal_WFBucket();
-      IllMarshalledBucket
+      IllMarshalledBucket(IKeys(pkv.keys), IMessages(pkv.messages))
     )
   }
 

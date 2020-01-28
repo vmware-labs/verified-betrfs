@@ -1,7 +1,7 @@
-include "../lib/DataStructures/KMBtree.i.dfy"
-include "../lib/DataStructures/PackedKV.i.dfy"
-include "../ByteBlockCacheSystem/KVList.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
+include "../DataStructures/KMBtree.i.dfy"
+include "PackedKV.i.dfy"
+include "KVList.i.dfy"
+include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated

@@ -1,5 +1,5 @@
-include "../lib/Base/Sets.i.dfy"
-include "../PivotBetree/BucketsLib.i.dfy"
+include "../Base/Sets.i.dfy"
+include "BucketsLib.i.dfy"
 //
 // Assigning weights to buckets guides the flushing algorithm to decide
 // which child to push messages towards. TODO(thance): help!

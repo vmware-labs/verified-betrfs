@@ -1,7 +1,9 @@
-include "../PivotBetree/PivotsLib.i.dfy"
-include "../lib/Base/Message.i.dfy"
-include "../lib/Base/Maps.s.dfy"
-include "../lib/Base/total_order.i.dfy"
+include "PivotsLib.i.dfy"
+include "../Base/Message.i.dfy"
+include "../Base/Maps.s.dfy"
+include "../Base/total_order.i.dfy"
+include "../../MapSpec/UI.s.dfy"
+include "../../MapSpec/MapSpec.s.dfy"
 //
 // A Bucket maps keys to Messages. A BucketList imparts a Message meaning
 // to every key obeying the Message composition rules. This module shows
@@ -17,18 +19,31 @@ module BucketsLib {
   import opened Sequences
   import opened KeyType
   import UI
+  import MS = MapSpec
 
   // If a bucket on disk is ill-formed, but in a way
-  // that our basic sanity checks don't detect, then
-  // it will map to a bucket with wellMarshalled=false
+  // that our basic sanity checks don't detect (namely,
+  // the keys aren't in sorted order), then
+  // it will map to an IllMarshalledBucket.
+
+  // It's convenient to be able to functionally describe things like
+  // "what happens when you binary search on an IllMarshalledBuckt"
+  // so we still track the order of the keys and messages,
+  // even though it's kind of annoying.
+
+  // We use the normal Bucket almost everywhere, so we just have
+  // to cart around conditions bucket.Bucket? everywhere :|
 
   type BucketMap = map<Key, Message>
-  datatype Bucket = Bucket(b: BucketMap) | IllMarshalledBucket
+  datatype Bucket = Bucket(b: BucketMap) | IllMarshalledBucket(keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
 
   predicate {:opaque} WFBucket(bucket: Bucket)
+  ensures WFBucket(bucket) ==>
+    bucket.IllMarshalledBucket? ==> |bucket.keys| == |bucket.msgs|
   {
-    bucket.Bucket? ==> (forall key | key in bucket.b :: bucket.b[key] != IdentityMessage())
+    && (bucket.Bucket? ==> (forall key | key in bucket.b :: bucket.b[key] != IdentityMessage()))
+    && (bucket.IllMarshalledBucket? ==> |bucket.keys| == |bucket.msgs|)
   }
 
   predicate BucketListWellMarshalled(blist: BucketList)

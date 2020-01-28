@@ -1,6 +1,6 @@
-include "../ByteBlockCacheSystem/KVList.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
-include "../PivotBetree/PivotsLib.i.dfy"
+include "KVList.i.dfy"
+include "../../PivotBetree/Bounds.i.dfy"
+include "PivotsLib.i.dfy"
 include "BucketImpl.i.dfy"
 //
 // I guess sometimes we want to flush only part of a node's effective KVList,
