@@ -90,7 +90,7 @@ module PackedKV {
   function IMapi(pkv: Pkv, i: int) : (bucket : BucketMap)
   requires WF(pkv)
   requires 0 <= i <= |pkv.keys.offsets|
-  ensures WFBucket(Bucket(bucket))
+  ensures WFBucketMap(bucket)
   {
     reveal_WFBucket();
 
@@ -103,7 +103,7 @@ module PackedKV {
 
   function IMap(pkv: Pkv) : (bucket : BucketMap)
   requires WF(pkv)
-  ensures WFBucket(Bucket(bucket))
+  ensures WFBucketMap(bucket)
   {
     IMapi(pkv, |pkv.keys.offsets|)
   }
@@ -118,12 +118,8 @@ module PackedKV {
   requires WF(pkv)
   ensures WFBucket(bucket)
   {
-    if SortedKeys(pkv) then
-      Bucket(IMap(pkv))
-    else (
-      reveal_WFBucket();
-      IllMarshalledBucket(IKeys(pkv.keys), IMessages(pkv.messages))
-    )
+    // Note that this might not be WellMarshalled
+    B(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
   method ComputeValidKeyLens(psa: PackedStringArray.Psa)

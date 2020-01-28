@@ -49,7 +49,7 @@ module KVList {
   function I(kvl: Kvl) : Bucket
   requires |kvl.keys| == |kvl.messages|
   {
-    Bucket(IMap(kvl))
+    B(IMap(kvl))
   }
 
   function {:opaque} ISeq(kvls: seq<Kvl>) : (s : seq<Bucket>)
@@ -1065,7 +1065,7 @@ module KVList {
 
   function method {:opaque} Empty() : (kvl : Kvl)
   ensures WF(kvl)
-  ensures I(kvl) == Bucket(map[])
+  ensures I(kvl) == B(map[])
   {
     reveal_IMap();
     Kvl([],[])
@@ -1284,7 +1284,7 @@ module KVList {
 
   function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   ensures WF(kvl)
   ensures I(kvl) == bucket
   decreases bucket.b
@@ -1292,12 +1292,13 @@ module KVList {
     reveal_IMap();
     reveal_IsStrictlySorted();
     reveal_WFBucket();
+    assume false;
 
     if bucket.b.Keys == {} then (
       Kvl([], [])
     ) else (
       var key := maximum(bucket.b.Keys);
-      var kvl1 := toKvl(Bucket(MapRemove1(bucket.b, key)));
+      var kvl1 := toKvl(B(MapRemove1(bucket.b, key)));
       StrictlySortedAugment(kvl1.keys, key);
       Kvl(kvl1.keys + [key], kvl1.messages + [bucket.b[key]])
     )
@@ -1392,7 +1393,7 @@ module KVList {
   }
 
   function getMiddleKey(bucket: Bucket) : Key
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires WFBucket(bucket)
   {
     var kvl := toKvl(bucket);
@@ -1430,7 +1431,7 @@ module KVList {
 
   lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
   requires WFBucket(bucket)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   ensures P.WFPivots([getMiddleKey(bucket)])
   {
     reveal_IsStrictlySorted();
