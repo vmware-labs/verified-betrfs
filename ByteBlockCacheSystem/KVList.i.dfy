@@ -37,14 +37,20 @@ module KVList {
     && (forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage())
   }
 
-  function {:opaque} I(kvl: Kvl) : Bucket
+  function {:opaque} IMap(kvl: Kvl) : BucketMap
   requires |kvl.keys| == |kvl.messages|
-  ensures |kvl.keys| == 0 ==> |I(kvl).Keys| == 0    // empty input -> empty output.
+  ensures |kvl.keys| == 0 ==> |IMap(kvl).Keys| == 0    // empty input -> empty output.
   decreases |kvl.keys|
   {
     if |kvl.keys| == 0 then map[] else (
-      I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))[Last(kvl.keys) := Last(kvl.messages)]
+      IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))[Last(kvl.keys) := Last(kvl.messages)]
     )
+  }
+
+  function I(kvl: Kvl) : Bucket
+  requires |kvl.keys| == |kvl.messages|
+  {
+    Bucket(IMap(kvl))
   }
 
   function {:opaque} ISeq(kvls: seq<Kvl>) : (s : seq<Bucket>)
@@ -72,12 +78,12 @@ module KVList {
 
   lemma IndexOfKey(kvl: Kvl, key: Key) returns (i : int)
   requires |kvl.keys| == |kvl.messages|
-  requires key in I(kvl)
+  requires key in IMap(kvl)
   ensures 0 <= i < |kvl.keys|
   ensures kvl.keys[i] == key
   decreases |kvl.keys|
   {
-    reveal_I();
+    reveal_IMap();
     if key == Last(kvl.keys) {
       i := |kvl.keys| - 1;
     } else {
@@ -88,10 +94,10 @@ module KVList {
   lemma Imaps(kvl: Kvl, i: int)
   requires WF(kvl)
   requires 0 <= i < |kvl.keys|
-  ensures MapsTo(I(kvl), kvl.keys[i], kvl.messages[i])
+  ensures MapsTo(IMap(kvl), kvl.keys[i], kvl.messages[i])
   decreases |kvl.keys|
   {
-    reveal_I();
+    reveal_IMap();
     if (i == |kvl.keys| - 1) {
     } else {
       reveal_IsStrictlySorted();
@@ -105,7 +111,7 @@ module KVList {
   ensures WFBucket(I(kvl))
   decreases |kvl.keys|
   {
-    reveal_I();
+    reveal_IMap();
     reveal_WFBucket();
     if |kvl.keys| == 0 {
     } else {
@@ -127,15 +133,15 @@ module KVList {
 
   lemma Iappend(kvl: Kvl, key: Key, value: Message)
   requires |kvl.keys| == |kvl.messages|
-  ensures I(append(kvl, key, value)) == I(kvl)[key := value]
+  ensures IMap(append(kvl, key, value)) == IMap(kvl)[key := value]
   {
-    reveal_I();
+    reveal_IMap();
   }
 
   lemma Iprefix_append(kvl: Kvl, i: int)
   requires |kvl.keys| == |kvl.messages|
   requires 0 <= i < |kvl.keys|
-  ensures I(prefix(kvl, i + 1)) == I(prefix(kvl, i))[kvl.keys[i] := kvl.messages[i]]
+  ensures IMap(prefix(kvl, i + 1)) == IMap(prefix(kvl, i))[kvl.keys[i] := kvl.messages[i]]
   {
     assert prefix(kvl, i + 1) == append(prefix(kvl, i), kvl.keys[i], kvl.messages[i]);
     Iappend(prefix(kvl, i), kvl.keys[i], kvl.messages[i]);
@@ -231,12 +237,12 @@ module KVList {
   ensures |cur.keys| > 0 && parentIdx < |parent.keys| ==> lt(cur.keys[|cur.keys| - 1], parent.keys[parentIdx])
   ensures |cur.keys| > 0 && childIdx < |children[childrenIdx].keys| ==> lt(cur.keys[|cur.keys| - 1], children[childrenIdx].keys[childIdx])
   {
-    reveal_I();
+    reveal_IMap();
     if (|cur.keys| > 0) {
       var lastCurKey := cur.keys[|cur.keys| - 1];
-      assert lastCurKey in I(cur);
-      assert lastCurKey in (I(prefix(parent, parentIdx)).Keys + I(prefix(children[childrenIdx], childIdx)).Keys);
-      if lastCurKey in I(prefix(parent, parentIdx)).Keys {
+      assert lastCurKey in IMap(cur);
+      assert lastCurKey in (IMap(prefix(parent, parentIdx)).Keys + IMap(prefix(children[childrenIdx], childIdx)).Keys);
+      if lastCurKey in IMap(prefix(parent, parentIdx)).Keys {
         var i := IndexOfKey(prefix(parent, parentIdx), lastCurKey);
         assert parent.keys[i] == lastCurKey;
         if parentIdx < |parent.keys| {
@@ -262,24 +268,24 @@ module KVList {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx < |children|
-  ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in I(prefix(parent, parentIdx))
-  ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in I(prefix(children[childrenIdx], childIdx))
-  ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in I(prefix(parent, parentIdx))
-  ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in I(prefix(children[childrenIdx], childIdx))
+  ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in IMap(prefix(parent, parentIdx))
+  ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in IMap(prefix(children[childrenIdx], childIdx))
+  ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in IMap(prefix(parent, parentIdx))
+  ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in IMap(prefix(children[childrenIdx], childIdx))
   {
-    if parentIdx < |parent.keys| && parent.keys[parentIdx] in I(prefix(parent, parentIdx)) {
+    if parentIdx < |parent.keys| && parent.keys[parentIdx] in IMap(prefix(parent, parentIdx)) {
       var i := IndexOfKey(prefix(parent, parentIdx), parent.keys[parentIdx]);
       IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
     }
-    if parentIdx < |parent.keys| && parent.keys[parentIdx] in I(prefix(children[childrenIdx], childIdx)) {
+    if parentIdx < |parent.keys| && parent.keys[parentIdx] in IMap(prefix(children[childrenIdx], childIdx)) {
       var i := IndexOfKey(prefix(children[childrenIdx], childIdx), parent.keys[parentIdx]);
       IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
     }
-    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in I(prefix(parent, parentIdx)) {
+    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in IMap(prefix(parent, parentIdx)) {
       var i := IndexOfKey(prefix(parent, parentIdx), children[childrenIdx].keys[childIdx]);
       IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
     }
-    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in I(prefix(children[childrenIdx], childIdx)) {
+    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in IMap(prefix(children[childrenIdx], childIdx)) {
       var i := IndexOfKey(prefix(children[childrenIdx], childIdx), children[childrenIdx].keys[childIdx]);
       IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
     }
@@ -329,7 +335,7 @@ module KVList {
 
     assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
     Imaps(child, childIdx);
-    assert child.keys[childIdx] in I(children[childrenIdx]);
+    assert child.keys[childIdx] in IMap(children[childrenIdx]);
     assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
 
     Iappend(cur, child.keys[childIdx], child.messages[childIdx]);
@@ -364,7 +370,7 @@ module KVList {
 
     assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
     Imaps(child, childIdx);
-    assert child.keys[childIdx] in I(children[childrenIdx]);
+    assert child.keys[childIdx] in IMap(children[childrenIdx]);
     assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
 
     Iappend(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]));
@@ -387,14 +393,14 @@ module KVList {
   ensures I(cur) == BucketListItemFlush(I(parent), I(children[childrenIdx]), pivots, childrenIdx)
   {
     forall key | P.Route(pivots, key) == childrenIdx
-    ensures MapsAgreeOnKey(I(prefix(parent, parentIdx)), I(parent), key)
+    ensures MapsAgreeOnKey(IMap(prefix(parent, parentIdx)), IMap(parent), key)
     {
       WFPrefix(parent, parentIdx);
-      if (key in I(prefix(parent, parentIdx))) {
+      if (key in IMap(prefix(parent, parentIdx))) {
         var i := IndexOfKey(prefix(parent, parentIdx), key);
         Imaps(parent, i);
         Imaps(prefix(parent, parentIdx), i);
-      } else if (key in I(parent)) {
+      } else if (key in IMap(parent)) {
         var i := IndexOfKey(parent, key);
         if (i < parentIdx) {
           Imaps(parent, i);
@@ -427,11 +433,11 @@ module KVList {
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(parent.keys[parentIdx - 1], pivots[childrenIdx])
   ensures childrenIdx + 1 < |children| ==>
-         I(Kvl([],[]))
-      == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1)
+         I(Kvl([],[])).b
+      == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1).b
   {
-    reveal_I();
-    forall key | key in I(prefix(parent, parentIdx))
+    reveal_IMap();
+    forall key | key in IMap(prefix(parent, parentIdx))
     ensures P.Route(pivots, key) != childrenIdx + 1
     {
       var i := IndexOfKey(prefix(parent, parentIdx), key);
@@ -524,7 +530,7 @@ module KVList {
       && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
-    reveal_I();
+    reveal_IMap();
     flushIterateRes(parent, children, pivots, 0, 0, 0, [], Kvl([], []));
   }
 
@@ -657,8 +663,8 @@ module KVList {
   method Query(kvl: Kvl, key: Key) returns (m: Option<Message>)
   requires WF(kvl)
   requires |kvl.keys| < 0x8000_0000_0000_0000
-  ensures m.None? ==> key !in I(kvl)
-  ensures m.Some? ==> key in I(kvl) && I(kvl)[key] == m.value
+  ensures m.None? ==> key !in I(kvl).b
+  ensures m.Some? ==> key in I(kvl).b && I(kvl).b[key] == m.value
   {
     var lo: uint64 := 0;
     var hi: uint64 := |kvl.keys| as uint64;
@@ -683,7 +689,7 @@ module KVList {
       }
     }
 
-    if (key in I(kvl)) {
+    if (key in IMap(kvl)) {
       ghost var j := IndexOfKey(kvl, key);
       if (lo > 0) { IsStrictlySortedImpliesLtIndices(kvl.keys, lo as int - 1, j as int); }
       if (hi as int < |kvl.keys|) { IsStrictlySortedImpliesLtIndices(kvl.keys, j as int, hi as int); }
@@ -777,8 +783,8 @@ module KVList {
 
     reveal_IsStrictlySorted();
 
-    ghost var a := I(left);
-    ghost var b := SplitBucketLeft(I(kvl), pivot);
+    ghost var a := IMap(left);
+    ghost var b := SplitBucketLeft(I(kvl), pivot).b;
 
     forall key | key in a
     ensures key in b
@@ -813,8 +819,8 @@ module KVList {
 
     reveal_IsStrictlySorted();
 
-    ghost var a := I(right);
-    ghost var b := SplitBucketRight(I(kvl), pivot);
+    ghost var a := IMap(right);
+    ghost var b := SplitBucketRight(I(kvl), pivot).b;
 
     forall key | key in a
     ensures key in b
@@ -1010,7 +1016,7 @@ module KVList {
   ensures ISeq(kvls) == SplitBucketOnPivots(I(kvl), pivots)
   ensures kvls == splitOnPivots(kvl, pivots)
   {
-    reveal_I();
+    reveal_IMap();
     kvls := Flush(kvl, EmptySeq(|pivots| + 1), pivots);
 
     forall key | key in I(kvl)
@@ -1060,9 +1066,9 @@ module KVList {
 
   function method {:opaque} Empty() : (kvl : Kvl)
   ensures WF(kvl)
-  ensures I(kvl) == map[]
+  ensures I(kvl) == Bucket(map[])
   {
-    reveal_I();
+    reveal_IMap();
     Kvl([],[])
   }
 
@@ -1072,7 +1078,7 @@ module KVList {
   ensures forall i | 0 <= i < |kvls[a..b]| :: WF(kvls[a..b][i])
   ensures ISeq(kvls[a..b]) == ISeq(kvls)[a..b]
   {
-    reveal_I();
+    reveal_IMap();
     if b == |kvls| {
       if (a == b) {
       } else {
@@ -1163,13 +1169,13 @@ module KVList {
   ensures WeightKvl(kvl) == WeightBucket(I(kvl))
   decreases |kvl.keys|
   {
-    reveal_I();
+    reveal_IMap();
     if |kvl.keys| == 0 {
       WeightBucketEmpty();
     } else {
       WFPrefix(kvl, |kvl.keys| - 1);
       kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-      if Last(kvl.keys) in I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
+      if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
         var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
         reveal_IsStrictlySorted();
       }
@@ -1279,24 +1285,27 @@ module KVList {
 
   function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
+  requires bucket.Bucket?
   ensures WF(kvl)
   ensures I(kvl) == bucket
+  decreases bucket.b
   {
-    reveal_I();
+    reveal_IMap();
     reveal_IsStrictlySorted();
     reveal_WFBucket();
 
-    if bucket.Keys == {} then (
+    if bucket.b.Keys == {} then (
       Kvl([], [])
     ) else (
-      var key := maximum(bucket.Keys);
-      var kvl1 := toKvl(MapRemove1(bucket, key));
+      var key := maximum(bucket.b.Keys);
+      var kvl1 := toKvl(Bucket(MapRemove1(bucket.b, key)));
       StrictlySortedAugment(kvl1.keys, key);
-      Kvl(kvl1.keys + [key], kvl1.messages + [bucket[key]])
+      Kvl(kvl1.keys + [key], kvl1.messages + [bucket.b[key]])
     )
   }
 
   function {:opaque} toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
+  requires BucketListWellMarshalled(buckets)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   ensures |kvls| == |buckets|
   ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
@@ -1312,11 +1321,11 @@ module KVList {
   lemma lastIsMax(kvl: Kvl)
   requires WF(kvl)
   requires |kvl.keys| > 0
-  ensures maximumOpt(I(kvl).Keys) == Some(Last(kvl.keys))
+  ensures maximumOpt(I(kvl).b.Keys) == Some(Last(kvl.keys))
   {
     Imaps(kvl, |kvl.keys| - 1);
-    assert Last(kvl.keys) in I(kvl).Keys;
-    forall key | key in I(kvl).Keys
+    assert Last(kvl.keys) in IMap(kvl).Keys;
+    forall key | key in IMap(kvl).Keys
     ensures lte(key, Last(kvl.keys))
     {
       var i := IndexOfKey(kvl, key);
@@ -1328,10 +1337,10 @@ module KVList {
   requires WF(kvl)
   requires |kvl.keys| > 0
   ensures WF(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))
-  ensures Last(kvl.keys) !in I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
+  ensures Last(kvl.keys) !in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
   {
     WFPrefix(kvl, |kvl.keys| - 1);
-    if Last(kvl.keys) in I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
+    if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
       var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
       assert kvl.keys[i] == Last(kvl.keys);
       reveal_IsStrictlySorted();
@@ -1341,31 +1350,31 @@ module KVList {
   lemma I_injective(kvl1: Kvl, kvl2: Kvl)
   requires WF(kvl1)
   requires WF(kvl2)
-  requires I(kvl1) == I(kvl2)
+  requires IMap(kvl1) == IMap(kvl2)
   ensures kvl1 == kvl2
   decreases |kvl1.keys|
   {
-    reveal_I();
+    reveal_IMap();
     reveal_IsStrictlySorted();
     if |kvl1.keys| == 0 {
     } else {
       lastIsMax(kvl1);
       lastIsMax(kvl2);
       assert Some(Last(kvl1.keys))
-          == maximumOpt(I(kvl1).Keys)
-          == maximumOpt(I(kvl2).Keys)
+          == maximumOpt(IMap(kvl1).Keys)
+          == maximumOpt(IMap(kvl2).Keys)
           == Some(Last(kvl2.keys));
 
       var key := Last(kvl1.keys);
       assert key == Last(kvl2.keys);
       lastIsNotInDropLast(kvl1);
       lastIsNotInDropLast(kvl2);
-      //assert key !in I(Kvl(DropLast(kvl1.keys), DropLast(kvl1.messages)));
-      //assert key !in I(Kvl(DropLast(kvl2.keys), DropLast(kvl2.messages)));
-      assert I(Kvl(DropLast(kvl1.keys), DropLast(kvl1.messages)))
-          == MapRemove1(I(kvl1), key)
-          == MapRemove1(I(kvl2), key)
-          == I(Kvl(DropLast(kvl2.keys), DropLast(kvl2.messages)));
+      //assert key !in IMap(Kvl(DropLast(kvl1.keys), DropLast(kvl1.messages)));
+      //assert key !in IMap(Kvl(DropLast(kvl2.keys), DropLast(kvl2.messages)));
+      assert IMap(Kvl(DropLast(kvl1.keys), DropLast(kvl1.messages)))
+          == MapRemove1(IMap(kvl1), key)
+          == MapRemove1(IMap(kvl2), key)
+          == IMap(Kvl(DropLast(kvl2.keys), DropLast(kvl2.messages)));
       I_injective(
         prefix(kvl1, |kvl1.keys| - 1),
         prefix(kvl2, |kvl2.keys| - 1));
@@ -1384,6 +1393,7 @@ module KVList {
   }
 
   function getMiddleKey(bucket: Bucket) : Key
+  requires bucket.Bucket?
   requires WFBucket(bucket)
   {
     var kvl := toKvl(bucket);
@@ -1421,6 +1431,7 @@ module KVList {
 
   lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
   requires WFBucket(bucket)
+  requires bucket.Bucket?
   ensures P.WFPivots([getMiddleKey(bucket)])
   {
     reveal_IsStrictlySorted();
