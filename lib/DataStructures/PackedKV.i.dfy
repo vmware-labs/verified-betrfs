@@ -87,25 +87,43 @@ module PackedKV {
     psaSeq_Messages(psa, |psa.offsets|)
   }
 
-  function Imap(pkv: Pkv, i: int) : (bucket : Bucket)
+  function IMapi(pkv: Pkv, i: int) : (bucket : BucketMap)
   requires WF(pkv)
   requires 0 <= i <= |pkv.keys.offsets|
-  ensures WFBucket(bucket)
+  ensures WFBucket(Bucket(bucket))
   {
     reveal_WFBucket();
 
     if i == 0 then map[] else (
       var key : Key := PackedStringArray.psaElement(pkv.keys, (i-1) as uint64);
       var msg : Message := byteString_to_Message(PackedStringArray.psaElement(pkv.keys, (i-1) as uint64));
-      Imap(pkv, i-1)[key := msg]
+      IMapi(pkv, i-1)[key := msg]
     )
+  }
+
+  function IMap(pkv: Pkv) : (bucket : BucketMap)
+  requires WF(pkv)
+  ensures WFBucket(Bucket(bucket))
+  {
+    IMapi(pkv, |pkv.keys.offsets|)
+  }
+
+  predicate SortedKeys(pkv: Pkv)
+  requires WF(pkv)
+  {
+    Keyspace.IsStrictlySorted(IKeys(pkv.keys))
   }
 
   function I(pkv: Pkv) : (bucket : Bucket)
   requires WF(pkv)
   ensures WFBucket(bucket)
   {
-    Imap(pkv, |pkv.keys.offsets|)
+    if SortedKeys(pkv) then
+      Bucket(IMap(pkv))
+    else (
+      reveal_WFBucket();
+      IllMarshalledBucket
+    )
   }
 
   method ComputeValidKeyLens(psa: PackedStringArray.Psa)
@@ -236,11 +254,16 @@ module PackedKV {
     byteString_to_Message(PackedStringArray.psaElement(pkv.messages, i))
   }
 
-  method Query(pkv: Pkv, key: Key)
+  function binarySearchQuery(bucket: Bucket, key: Key)
+    : (msg : Option<Message>)
+  ensures bucket.Bucket? ==> msg.None? ==> key !in bucket.b
+  ensures bucket.Bucket? ==> msg.Some? ==>
+      key in bucket.b && bucket.b[key] == msg.value
+
+  method BinarySearchQuery(pkv: Pkv, key: Key)
   returns (msg: Option<Message>)
   requires WF(pkv)
-  ensures msg.None? ==> key !in I(pkv)
-  ensures msg.Some? ==> key in I(pkv) && I(pkv)[key] == msg.value
+  ensures msg == binarySearchQuery(I(pkv), key)
   {
     assume false;
 
