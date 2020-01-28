@@ -22,18 +22,16 @@ module PivotBetreeGraph refines Graph {
 
   import MS = MapSpec
   import opened Options
-  import M = ValueMessage
+  import opened ValueMessage
   import opened KeyType
-  import opened ValueType
+  import opened BucketsLib
 
   import Keyspace = Lexicographic_Byte_Order
 
   //type Reference = BG.Reference
   //function Root() : Reference { BG.Root() }
-  type Message = M.Message
 
   type PivotTable = seq<Key>
-  type Bucket = map<Key, Message>
   datatype Node = Node(
       pivotTable: PivotTable,
       children: Option<seq<Reference>>,
@@ -60,12 +58,12 @@ module PivotBetreeSpec {
   import opened Maps
   import opened Options
   import opened Bounds
-  import Pivots = PivotsLib
-  import Buckets = BucketsLib
+  import opened PivotsLib
+  import opened BucketsLib
   import opened BucketWeights
   import UI
   import opened KeyType
-  import opened ValueType
+  import opened ValueMessage
 
   export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
   export Internal reveals *
@@ -83,31 +81,34 @@ module PivotBetreeSpec {
   //  - No default values at leaves
   predicate WFNode(node: Node)
   {
-    && Pivots.NumBuckets(node.pivotTable) == |node.buckets|
+    && NumBuckets(node.pivotTable) == |node.buckets|
     && (node.children.Some? ==> |node.buckets| == |node.children.value|)
-    && Pivots.WFPivots(node.pivotTable)
-    && Buckets.WFBucketList(node.buckets, node.pivotTable)
+    && WFPivots(node.pivotTable)
+    && WFBucketList(node.buckets, node.pivotTable)
     && BoundedNode(node)
   }
 
   function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
+  requires node.buckets[Route(node.pivotTable, key)].Bucket?
   {
     var newnode := node.(
-      buckets := Buckets.BucketListInsert(node.buckets, node.pivotTable, key, msg)
+      buckets := BucketListInsert(node.buckets, node.pivotTable, key, msg)
     );
     newnode
   }
 
-  function AddMessagesToNode(node: Node, buffer: map<Key, Message>) : Node
+  function AddMessagesToNode(node: Node, msgs: Bucket) : Node
   requires WFNode(node)
+  requires BucketListWellMarshalled(node.buckets)
+  requires msgs.Bucket?
   {
-    Buckets.WFBucketListFlush(buffer, node.buckets, node.pivotTable);
+    WFBucketListFlush(msgs, node.buckets, node.pivotTable);
 
     Node(
       node.pivotTable,
       node.children,
-      Buckets.BucketListFlush(buffer, node.buckets, node.pivotTable)
+      BucketListFlush(msgs, node.buckets, node.pivotTable)
     )
   }
 
@@ -118,21 +119,31 @@ module PivotBetreeSpec {
 
   datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
 
-  predicate BufferIsDefining(entry: M.Message) {
+  predicate BufferIsDefining(entry: Message)
+  {
     && entry.Define?
   }
 
-  predicate BufferDefinesValue(log: M.Message, value: Value) {
+  predicate BufferDefinesValue(log: Message, value: Value)
+  {
     && BufferIsDefining(log)
     && log.value == value
   }
 
-  predicate ValidLayerIndex(lookup: Lookup, idx: int) {
+  predicate ValidLayerIndex(lookup: Lookup, idx: int)
+  {
     && 0 <= idx < |lookup|
   }
 
-  predicate LookupVisitsWFNodes(lookup: Lookup) {
+  predicate LookupVisitsWFNodes(lookup: Lookup)
+  {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
+  }
+
+  predicate LookupVisitsWellMarshalledBuckets(lookup: Lookup, key: Key)
+  requires LookupVisitsWFNodes(lookup)
+  {
+    forall i :: 0 <= i < |lookup| ==> lookup[i].node.buckets[Route(lookup[i].node.pivotTable, key)].Bucket?
   }
 
   predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
@@ -141,7 +152,7 @@ module PivotBetreeSpec {
   requires WFNode(lookup[idx].node)
   {
     && lookup[idx].node.children.Some?
-    && lookup[idx].node.children.value[Pivots.Route(lookup[idx].node.pivotTable, key)] == lookup[idx+1].ref
+    && lookup[idx].node.children.value[Route(lookup[idx].node.pivotTable, key)] == lookup[idx+1].ref
   }
 
   predicate LookupFollowsChildRefs(key: Key, lookup: Lookup)
@@ -151,28 +162,31 @@ module PivotBetreeSpec {
   }
 
   function NodeLookup(node: Node, key: Key) : Message
-  requires Buckets.WFBucketList(node.buckets, node.pivotTable)
+  requires WFBucketList(node.buckets, node.pivotTable)
+  requires node.buckets[Route(node.pivotTable, key)].Bucket?
   {
-    Buckets.BucketListGet(node.buckets, node.pivotTable, key)
+    BucketListGet(node.buckets, node.pivotTable, key)
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  function InterpretLookup(lookup: Lookup, key: Key) : Message
   requires LookupVisitsWFNodes(lookup)
+  requires LookupVisitsWellMarshalledBuckets(lookup, key)
   {
     if |lookup| == 0 then
-      G.M.Update(G.M.NopDelta())
+      Update(NopDelta())
     else
-      G.M.Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
+      Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
   }
 
-  function InterpretLookupAccountingForLeaf(lookup: Lookup, key: Key) : G.M.Message
+  function InterpretLookupAccountingForLeaf(lookup: Lookup, key: Key) : Message
   requires |lookup| > 0
   requires LookupVisitsWFNodes(lookup)
+  requires LookupVisitsWellMarshalledBuckets(lookup, key)
   {
     if Last(lookup).node.children.Some? then
       InterpretLookup(lookup, key)
     else
-      G.M.Merge(InterpretLookup(lookup, key), M.DefineDefault())
+      Merge(InterpretLookup(lookup, key), DefineDefault())
   }
 
   predicate WFLookupForKey(lookup: Lookup, key: Key)
@@ -185,7 +199,9 @@ module PivotBetreeSpec {
 
   predicate ValidQuery(q: LookupQuery) {
     && WFLookupForKey(q.lookup, q.key)
-    && BufferDefinesValue(InterpretLookupAccountingForLeaf(q.lookup, q.key), q.value)
+    && (LookupVisitsWellMarshalledBuckets(q.lookup, q.key) ==>
+        BufferDefinesValue(InterpretLookupAccountingForLeaf(q.lookup, q.key), q.value)
+    )
   }
 
   function QueryReads(q: LookupQuery): seq<ReadOp> {
@@ -208,7 +224,7 @@ module PivotBetreeSpec {
   function LookupUpperBoundAtLayer(layer: Layer, key: Key) : Option<Key>
   requires WFNode(layer.node)
   {
-    var r := Pivots.Route(layer.node.pivotTable, key);
+    var r := Route(layer.node.pivotTable, key);
     if r < |layer.node.pivotTable|
     then Some(layer.node.pivotTable[r])
     else None
@@ -236,9 +252,9 @@ module PivotBetreeSpec {
       )
   }
 
-  predicate BufferDefinesEmptyValue(m: G.M.Message)
+  predicate BufferDefinesEmptyValue(m: Message)
   {
-    G.M.Merge(m, M.DefineDefault()).value == M.DefaultValue()
+    Merge(m, DefineDefault()).value == DefaultValue()
   }
 
   predicate ValidSuccQuery(sq: SuccQuery)
@@ -252,14 +268,16 @@ module PivotBetreeSpec {
     && Last(sq.lookup).node.children.None?
 
     && |sq.lookup| == |sq.buckets|
-    && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Pivots.Route(sq.lookup[i].node.pivotTable, startKey)])
+    && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Route(sq.lookup[i].node.pivotTable, startKey)])
 
     && MS.NonEmptyRange(sq.start, sq.end)
 
-    && sq.results ==
-        Buckets.SortedSeqOfKeyValueMap(
-          Buckets.KeyValueMapOfBucket(
-            Buckets.ClampRange(Buckets.ComposeSeq(sq.buckets), sq.start, sq.end)))
+    && (BucketListWellMarshalled(sq.buckets) ==> (
+      sq.results ==
+        SortedSeqOfKeyValueMap(
+          KeyValueMapOfBucket(
+            ClampRange(ComposeSeq(sq.buckets), sq.start, sq.end)))
+    ))
   }
 
   function SuccQueryReads(q: SuccQuery): seq<ReadOp> {
@@ -277,6 +295,7 @@ module PivotBetreeSpec {
     && WFNode(ins.oldroot)
     && WeightBucketList(ins.oldroot.buckets) + WeightKey(ins.key) + WeightMessage(ins.msg)
         <= MaxTotalBucketWeight()
+    && ins.oldroot.buckets[Route(ins.oldroot.pivotTable, ins.key)].Bucket?
   }
 
   function InsertionReads(ins: MessageInsertion): seq<ReadOp>
@@ -304,7 +323,9 @@ module PivotBetreeSpec {
     && 0 <= f.slotIndex < |f.parent.buckets|
     && f.parent.children.Some?
     && f.parent.children.value[f.slotIndex] == f.childref
-    && WeightBucketList(Buckets.BucketListFlush(Buckets.BucketIntersect(
+    && BucketListWellMarshalled(f.child.buckets)
+    && f.parent.buckets[f.slotIndex].Bucket?
+    && WeightBucketList(BucketListFlush(BucketIntersect(
         f.parent.buckets[f.slotIndex], f.keys),
         f.child.buckets,
         f.child.pivotTable)) <= MaxTotalBucketWeight()
@@ -325,9 +346,9 @@ module PivotBetreeSpec {
     var newparent := Node(
         f.parent.pivotTable,
         Some(f.parent.children.value[f.slotIndex := f.newchildref]),
-        f.parent.buckets[f.slotIndex := Buckets.BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
+        f.parent.buckets[f.slotIndex := BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
       );
-    var newchild := AddMessagesToNode(f.child, Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
+    var newchild := AddMessagesToNode(f.child, BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
     var allocop := G.AllocOp(f.newchildref, newchild);
     var writeop := G.WriteOp(f.parentref, newparent);
     [allocop, writeop]
@@ -351,7 +372,7 @@ module PivotBetreeSpec {
   function GrowOps(growth: RootGrowth) : seq<Op>
   requires ValidGrow(growth)
   {
-    var newroot := Node([], Some([growth.newchildref]), [map[]]);
+    var newroot := Node([], Some([growth.newchildref]), [Bucket(map[])]);
     var allocop := G.AllocOp(growth.newchildref, growth.oldroot);
     var writeop := G.WriteOp(Root(), newroot);
     [allocop, writeop]
@@ -379,21 +400,23 @@ module PivotBetreeSpec {
 
   function {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
+  requires BucketListWellMarshalled(node.buckets)
+  ensures BucketListWellMarshalled(node'.buckets)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), pivot)
-  ensures forall key | key in Last(node'.buckets) :: Keyspace.lt(key, pivot)
+  ensures forall key | key in Last(node'.buckets).b :: Keyspace.lt(key, pivot)
   ensures G.Successors(node') <= G.Successors(node)
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
   {
-    Buckets.reveal_SplitBucketLeft();
-    var cLeft := Pivots.CutoffForLeft(node.pivotTable, pivot);
+    reveal_SplitBucketLeft();
+    var cLeft := CutoffForLeft(node.pivotTable, pivot);
     var leftPivots := node.pivotTable[.. cLeft];
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
-    var leftBuckets := Buckets.SplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
+    var leftBuckets := SplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
 
-    Buckets.WFSplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
+    WFSplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
     WeightSplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
 
     Node(leftPivots, leftChildren, leftBuckets)
@@ -401,21 +424,23 @@ module PivotBetreeSpec {
 
   function {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
+  requires BucketListWellMarshalled(node.buckets)
+  ensures BucketListWellMarshalled(node'.buckets)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(pivot, node'.pivotTable[0])
-  ensures forall key | key in node'.buckets[0] :: Keyspace.lte(pivot, key)
+  ensures forall key | key in node'.buckets[0].b :: Keyspace.lte(pivot, key)
   ensures G.Successors(node') <= G.Successors(node)
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
   {
-    Buckets.reveal_SplitBucketRight();
-    var cRight := Pivots.CutoffForRight(node.pivotTable, pivot);
+    reveal_SplitBucketRight();
+    var cRight := CutoffForRight(node.pivotTable, pivot);
     var rightPivots := node.pivotTable[cRight ..];
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
-    var rightBuckets := Buckets.SplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
+    var rightBuckets := SplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
 
-    Buckets.WFSplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
+    WFSplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
     WeightSplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
 
     Node(rightPivots, rightChildren, rightBuckets)
@@ -423,12 +448,13 @@ module PivotBetreeSpec {
 
   lemma CutoffNodeCorrect(node: Node, node1: Node, node2: Node, lpivot: Key, rpivot: Key)
   requires WFNode(node)
+  requires BucketListWellMarshalled(node.buckets)
   requires node1 == CutoffNodeAndKeepLeft(node, rpivot);
   requires node2 == CutoffNodeAndKeepRight(node1, lpivot);
   ensures |node2.pivotTable| > 0 ==> Keyspace.lt(lpivot, node2.pivotTable[0])
   ensures |node2.pivotTable| > 0 ==> Keyspace.lt(Last(node2.pivotTable), rpivot)
-  ensures forall key | key in node2.buckets[0] :: Keyspace.lte(lpivot, key)
-  ensures forall key | key in Last(node2.buckets) :: Keyspace.lt(key, rpivot)
+  ensures forall key | key in node2.buckets[0].b :: Keyspace.lte(lpivot, key)
+  ensures forall key | key in Last(node2.buckets).b :: Keyspace.lt(key, rpivot)
   {
     reveal_CutoffNodeAndKeepLeft();
     reveal_CutoffNodeAndKeepRight();
@@ -439,18 +465,20 @@ module PivotBetreeSpec {
     }
     assert |node2.pivotTable| > 0 ==> Keyspace.lt(lpivot, node2.pivotTable[0]);
     assert |node2.pivotTable| > 0 ==> Keyspace.lt(Last(node2.pivotTable), rpivot);
-    assert forall key | key in node2.buckets[0] :: Keyspace.lte(lpivot, key);
-    assert forall key | key in Last(node2.buckets) :: Keyspace.lt(key, rpivot);
+    assert forall key | key in node2.buckets[0].b :: Keyspace.lte(lpivot, key);
+    assert forall key | key in Last(node2.buckets).b :: Keyspace.lt(key, rpivot);
   }
 
   function {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
   requires WFNode(node)
+  requires BucketListWellMarshalled(node.buckets)
+  ensures BucketListWellMarshalled(node'.buckets)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
   ensures lpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(lpivot.value, node'.pivotTable[0])
   ensures rpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), rpivot.value)
-  ensures lpivot.Some? ==> forall key | key in node'.buckets[0] :: Keyspace.lte(lpivot.value, key)
-  ensures rpivot.Some? ==> forall key | key in Last(node'.buckets) :: Keyspace.lt(key, rpivot.value)
+  ensures lpivot.Some? ==> forall key | key in node'.buckets[0].b :: Keyspace.lte(lpivot.value, key)
+  ensures rpivot.Some? ==> forall key | key in Last(node'.buckets).b :: Keyspace.lt(key, rpivot.value)
   ensures G.Successors(node') <= G.Successors(node)
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
@@ -487,6 +515,7 @@ module PivotBetreeSpec {
   //// Split
 
   function SplitChildLeft(child: Node, num_children_left: int) : Node
+  requires BucketListWellMarshalled(child.buckets)
   requires 0 <= num_children_left - 1 <= |child.pivotTable|
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|
@@ -499,6 +528,7 @@ module PivotBetreeSpec {
   }
 
   function SplitChildRight(child: Node, num_children_left: int) : Node
+  requires BucketListWellMarshalled(child.buckets)
   requires 0 <= num_children_left <= |child.pivotTable|
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|
@@ -515,11 +545,12 @@ module PivotBetreeSpec {
   requires fused_parent.children.Some?
   requires fused_parent.children.Some? ==> 0 <= slot_idx < |fused_parent.children.value|
   requires 0 <= slot_idx < |fused_parent.buckets|
+  requires fused_parent.buckets[slot_idx].Bucket?
   {
     Node(
       insert(fused_parent.pivotTable, pivot, slot_idx),
       Some(replace1with2(fused_parent.children.value, left_childref, right_childref, slot_idx)),
-      Buckets.SplitBucketInList(fused_parent.buckets, slot_idx, pivot)
+      SplitBucketInList(fused_parent.buckets, slot_idx, pivot)
     )
   }
 
@@ -532,6 +563,9 @@ module PivotBetreeSpec {
     && 0 <= f.slot_idx < |f.fused_parent.buckets|
     && |f.fused_parent.buckets| <= MaxNumChildren() - 1
 
+    && BucketListWellMarshalled(f.fused_child.buckets)
+    && f.fused_parent.buckets[f.slot_idx].Bucket?
+
     && var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
     && var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
     && var child := CutoffNode(f.fused_child, lbound, ubound);
@@ -539,7 +573,7 @@ module PivotBetreeSpec {
     && 1 <= f.num_children_left < |child.buckets|
     && f.fused_parent.children.value[f.slot_idx] == f.fused_childref
     && child.pivotTable[f.num_children_left - 1] == f.pivot
-    && Pivots.Route(f.fused_parent.pivotTable, f.pivot) == f.slot_idx
+    && Route(f.fused_parent.pivotTable, f.pivot) == f.slot_idx
 
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
 
@@ -584,12 +618,17 @@ module PivotBetreeSpec {
     && WeightBucketList(f.left_child.buckets) + WeightBucketList(f.right_child.buckets) <= MaxTotalBucketWeight()
     && |f.left_child.buckets| + |f.right_child.buckets| <= MaxNumChildren()
 
+    && BucketListWellMarshalled(f.left_child.buckets)
+    && BucketListWellMarshalled(f.right_child.buckets)
+    && f.split_parent.buckets[f.slot_idx].Bucket?
+    && f.split_parent.buckets[f.slot_idx + 1].Bucket?
+
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
 
     && f.fused_parent == Node(
       remove(f.split_parent.pivotTable, f.slot_idx),
       Some(replace2with1(f.split_parent.children.value, f.fused_childref, f.slot_idx)),
-      Buckets.MergeBucketsInList(f.split_parent.buckets, f.slot_idx)
+      MergeBucketsInList(f.split_parent.buckets, f.slot_idx)
     )
 
     // this is actually an invariant which follows from fixed height of the tree,
@@ -637,8 +676,9 @@ module PivotBetreeSpec {
   {
     && WFNode(r.leaf)
     && r.leaf.children.None?
-    && Pivots.WFPivots(r.pivots)
+    && WFPivots(r.pivots)
     && |r.pivots| <= MaxNumChildren() - 1
+    && BucketListWellMarshalled(r.leaf.buckets)
   }
 
   function RepivotReads(r: Repivot) : seq<ReadOp>
@@ -652,9 +692,10 @@ module PivotBetreeSpec {
   function ApplyRepivot(leaf: Node, pivots: seq<Key>) : (leaf': Node)
   requires WFNode(leaf)
   requires leaf.children.None?
-  requires Pivots.WFPivots(pivots)
+  requires WFPivots(pivots)
+  requires BucketListWellMarshalled(leaf.buckets)
   {
-    Node(pivots, None, Buckets.SplitBucketOnPivots(Buckets.JoinBucketList(leaf.buckets), pivots))
+    Node(pivots, None, SplitBucketOnPivots(JoinBucketList(leaf.buckets), pivots))
   }
 
   function RepivotOps(r: Repivot) : seq<Op>
@@ -743,8 +784,8 @@ module PivotBetreeSpecWFNodes {
   import opened BucketWeights
   import opened BucketsLib
   import opened Bounds
-  import Pivots = PivotsLib
-  import M = ValueMessage
+  import opened PivotsLib
+  import opened ValueMessage
   import opened KeyType
 
   import MS = MapSpec
@@ -759,18 +800,18 @@ module PivotBetreeSpecWFNodes {
     var newparent := G.Node(
         f.parent.pivotTable,
         Some(f.parent.children.value[f.slotIndex := f.newchildref]),
-        f.parent.buckets[f.slotIndex := Buckets.BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
+        f.parent.buckets[f.slotIndex := BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
       );
-    var newchild := AddMessagesToNode(f.child, Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
+    var newchild := AddMessagesToNode(f.child, BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
 
     WFBucketsOfWFBucketList(f.parent.buckets, f.parent.pivotTable);
     WFBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
     WFBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
     WeightBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
     WeightBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
-    WFBucketListFlush(Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
-    WeightBucketListFlush(Buckets.BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
-    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, Buckets.BucketComplement(f.parent.buckets[f.slotIndex], f.keys));
+    WFBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
+    WeightBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
+    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, BucketComplement(f.parent.buckets[f.slotIndex], f.keys));
 
     /*forall i | 0 <= i < |newparent.buckets|
     ensures NodeHasWFBucketAt(newparent, i)
@@ -783,7 +824,7 @@ module PivotBetreeSpecWFNodes {
       //}
     }*/
 
-    Buckets.reveal_BucketComplement();
+    reveal_BucketComplement();
 
     assert WFNode(newparent);
     assert WFNode(newchild);
@@ -808,20 +849,20 @@ module PivotBetreeSpecWFNodes {
     var slot_idx := f.slot_idx;
     var pivot := f.pivot;
 
-    Pivots.PivotNotMinimum(child.pivotTable, f.num_children_left - 1);
-    Pivots.WFPivotsInsert(fused_parent.pivotTable, slot_idx, pivot);
+    PivotNotMinimum(child.pivotTable, f.num_children_left - 1);
+    WFPivotsInsert(fused_parent.pivotTable, slot_idx, pivot);
 
-    Buckets.WFSplitBucketInList(fused_parent.buckets, slot_idx, pivot, fused_parent.pivotTable);
+    WFSplitBucketInList(fused_parent.buckets, slot_idx, pivot, fused_parent.pivotTable);
     WeightSplitBucketInList(fused_parent.buckets, slot_idx, pivot);
 
     assert WFNode(split_parent);
 
-    Pivots.WFSlice(child.pivotTable, 0, f.num_children_left - 1);
-    Pivots.WFSuffix(child.pivotTable, f.num_children_left);
+    WFSlice(child.pivotTable, 0, f.num_children_left - 1);
+    WFSuffix(child.pivotTable, f.num_children_left);
 
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(child.buckets, child.pivotTable, left_child.buckets, left_child.pivotTable, 0, |left_child.buckets| - 1, 0);
+    BucketListHasWFBucketAtIdenticalSlice(child.buckets, child.pivotTable, left_child.buckets, left_child.pivotTable, 0, |left_child.buckets| - 1, 0);
     assert child.buckets[f.num_children_left..] == f.right_child.buckets;
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(child.buckets, child.pivotTable, right_child.buckets, right_child.pivotTable, 0, |right_child.buckets| - 1, -f.num_children_left);
+    BucketListHasWFBucketAtIdenticalSlice(child.buckets, child.pivotTable, right_child.buckets, right_child.pivotTable, 0, |right_child.buckets| - 1, -f.num_children_left);
 
     WeightBucketListSlice(child.buckets, 0, f.num_children_left);
     WeightBucketListSuffix(child.buckets, f.num_children_left);
@@ -848,21 +889,21 @@ module PivotBetreeSpecWFNodes {
 
     WeightBucketListConcat(left_child.buckets, right_child.buckets);
 
-    Pivots.WFPivotsRemoved(split_parent.pivotTable, slot_idx);
+    WFPivotsRemoved(split_parent.pivotTable, slot_idx);
     
     reveal_MergeBucketsInList();
 
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, 0, slot_idx - 1, 0);
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, slot_idx + 1, |fused_parent.buckets| - 1, -1);
+    BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, 0, slot_idx - 1, 0);
+    BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, slot_idx + 1, |fused_parent.buckets| - 1, -1);
 
     WFMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
     WeightMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
     assert WFNode(fused_parent);
-    Pivots.PivotNotMinimum(split_parent.pivotTable, slot_idx);
-    Pivots.WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
+    PivotNotMinimum(split_parent.pivotTable, slot_idx);
+    WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
 
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(left_child.buckets, left_child.pivotTable, fused_child.buckets, fused_child.pivotTable, 0, |left_child.buckets| - 1, 0);
-    Buckets.BucketListHasWFBucketAtIdenticalSlice(right_child.buckets, right_child.pivotTable, fused_child.buckets, fused_child.pivotTable, |left_child.buckets|, |fused_child.buckets| - 1, |left_child.buckets|);
+    BucketListHasWFBucketAtIdenticalSlice(left_child.buckets, left_child.pivotTable, fused_child.buckets, fused_child.pivotTable, 0, |left_child.buckets| - 1, 0);
+    BucketListHasWFBucketAtIdenticalSlice(right_child.buckets, right_child.pivotTable, fused_child.buckets, fused_child.pivotTable, |left_child.buckets|, |fused_child.buckets| - 1, |left_child.buckets|);
 
     assert WFNode(fused_child);
   }
@@ -870,15 +911,16 @@ module PivotBetreeSpecWFNodes {
   lemma WFApplyRepivot(leaf: G.Node, pivots: seq<Key>)
   requires WFNode(leaf)
   requires leaf.children.None?
-  requires Pivots.WFPivots(pivots)
+  requires WFPivots(pivots)
   requires |pivots| <= MaxNumChildren() - 1
+  requires BucketListWellMarshalled(leaf.buckets)
   ensures WFNode(ApplyRepivot(leaf, pivots))
   {
-    var j := Buckets.JoinBucketList(leaf.buckets);
-    var s := Buckets.SplitBucketOnPivots(j, pivots);
-    Buckets.WFBucketsOfWFBucketList(leaf.buckets, leaf.pivotTable);
-    Buckets.WFJoinBucketList(leaf.buckets);
-    Buckets.JoinBucketsSplitBucketOnPivotsCancel(j, pivots);
+    var j := JoinBucketList(leaf.buckets);
+    var s := SplitBucketOnPivots(j, pivots);
+    WFBucketsOfWFBucketList(leaf.buckets, leaf.pivotTable);
+    WFJoinBucketList(leaf.buckets);
+    JoinBucketsSplitBucketOnPivotsCancel(j, pivots);
     WeightJoinBucketList(leaf.buckets);
     WeightSplitBucketOnPivots(j, pivots);
   }
@@ -905,7 +947,7 @@ module PivotBetreeSpecWFNodes {
   ensures WFNode(GrowOps(g)[0].node)
   ensures WFNode(GrowOps(g)[1].node)
   {
-    var newroot := G.Node([], Some([g.newchildref]), [map[]]);
+    var newroot := G.Node([], Some([g.newchildref]), [Bucket(map[])]);
     WeightBucketListOneEmpty();
     assert WFNode(newroot);
   }

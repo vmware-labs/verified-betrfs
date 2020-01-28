@@ -60,7 +60,7 @@ module BucketsLib {
 
   function BucketListGet(blist: BucketList, pivots: PivotTable, key: Key) : Message
   requires WFBucketList(blist, pivots)
-  requires BucketListWellMarshalled(blist);
+  requires blist[Route(pivots, key)].Bucket?
   {
     BucketGet(blist[Route(pivots, key)], key)
   }
@@ -280,20 +280,23 @@ module BucketsLib {
 
   ////// Clamping based on RangeStart and RangeEnd
 
-  function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : Bucket
+  function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : (res : Bucket)
   requires bucket.Bucket?
+  ensures res.Bucket?
   {
     Bucket(map key | key in bucket.b && MS.InRange(start, key, end) :: bucket.b[key])
   }
 
-  function {:opaque} ClampStart(bucket: Bucket, start: UI.RangeStart) : Bucket
+  function {:opaque} ClampStart(bucket: Bucket, start: UI.RangeStart) : (res : Bucket)
   requires bucket.Bucket?
+  ensures res.Bucket?
   {
     Bucket(map key | key in bucket.b && MS.LowerBound(start, key) :: bucket.b[key])
   }
 
-  function {:opaque} ClampEnd(bucket: Bucket, end: UI.RangeEnd) : Bucket
+  function {:opaque} ClampEnd(bucket: Bucket, end: UI.RangeEnd) : (res : Bucket)
   requires bucket.Bucket?
+  ensures res.Bucket?
   {
     Bucket(map key | key in bucket.b && MS.UpperBound(key, end) :: bucket.b[key])
   }

@@ -926,7 +926,8 @@ module BucketWeights {
 
   // Undoes WeightSplitBucketInList
   lemma WeightMergeBucketsInList(blist: BucketList, i: int, pivots: PivotTable)
-  requires BucketListWellMarshalled(blist)
+  requires blist[i].Bucket?
+  requires blist[i+1].Bucket?
   requires 0 <= i < |blist| - 1
   requires WFBucketList(blist, pivots)
   ensures WeightBucketList(MergeBucketsInList(blist, i)) == WeightBucketList(blist)
