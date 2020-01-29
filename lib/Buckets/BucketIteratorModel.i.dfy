@@ -18,6 +18,7 @@ module BucketIteratorModel {
 
   datatype Iterator = Iterator(
     next: IteratorOutput,
+    ghost idx: int,
     ghost decreaser: int
   ) 
 
@@ -29,52 +30,49 @@ module BucketIteratorModel {
   protected predicate WFIter(bucket: Bucket, it: Iterator)
   ensures WFIter(bucket, it) ==>
       && it.decreaser >= 0
-      && (it.next.Next? && bucket.Bucket? ==> (
+      && (it.next.Next? && BucketWellMarshalled(bucket) ==> (
         && it.next.key in bucket.b
         && bucket.b[it.next.key] == it.next.msg
       ))
   {
     && it.decreaser >= 0
-    && (bucket.Bucket? ==> (
-      && (it.next.Next? ==> (
-        && it.next.key in bucket.b
-        && bucket.b[it.next.key] == it.next.msg
-        && it.decreaser == |SetGte(bucket.b, it.next.key)|
-      ))
-    ))
-    && (bucket.IllMarshalledBucket? ==> (
-      && |bucket.keys| - it.decreaser >= 0
-      && (it.next.Next? ==> (
-        && |bucket.keys| == |bucket.msgs|
-        && it.decreaser > 0
-        && it.next.key == bucket.keys[|bucket.keys| - it.decreaser]
-        && it.next.msg == bucket.msgs[|bucket.msgs| - it.decreaser]
-      ))
+    && it.idx >= 0
+    && it.idx + it.decreaser == |bucket.keys|
+    && |bucket.keys| == |bucket.msgs|
+    && (it.next.Next? ==> (
+      && it.decreaser > 0
+      && it.next.key == bucket.keys[it.idx]
+      && it.next.msg == bucket.msgs[it.idx]
     ))
     && (it.next.Done? ==> (
       && it.decreaser == 0
     ))
+    && (it.next.Next? && BucketWellMarshalled(bucket) ==> (
+      && it.next.key in bucket.b
+      && bucket.b[it.next.key] == it.next.msg
+    ))
   }
 
   function iterForKey(bucket: Bucket, key: Key) : (it: Iterator)
-  requires bucket.Bucket?
   requires key in bucket.b
   ensures WFIter(bucket, it)
   {
+    assume false;
     var setOfKeysGte := SetGte(bucket.b, key);
     assert key in setOfKeysGte;
-    Iterator(Next(key, bucket.b[key]), |setOfKeysGte|)
+    Iterator(Next(key, bucket.b[key]), |bucket.keys| - |setOfKeysGte|, |setOfKeysGte|)
   }
 
   function iterEnd(bucket: Bucket) : (it: Iterator)
   ensures WFIter(bucket, it)
   {
-    Iterator(Done, 0)
+    assume false;
+    Iterator(Done, |bucket.keys|, 0)
   }
 
   function iterForKeyOpt(bucket: Bucket, key: Option<Key>) : (it : Iterator)
-  requires bucket.IllMarshalledBucket? ==> |bucket.keys| == |bucket.msgs|
-  requires bucket.Bucket? && key.Some? ==> key.value in bucket.b
+  requires |bucket.keys| == |bucket.msgs|
+  requires key.Some? ==> key.value in bucket.b
   ensures WFIter(bucket, it)
   {
     assume false;
@@ -109,11 +107,12 @@ module BucketIteratorModel {
   }
 
   lemma lemmaFindFirstGtSmallerSet(bucket: Bucket, it: Iterator)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires WFIter(bucket, it)
   requires it.next.Next?
   ensures IterFindFirstGt(bucket, it.next.key).decreaser < it.decreaser
   {
+    assume false;
     var it' := IterFindFirstGt(bucket, it.next.key);
     assert it.next.key in SetGte(bucket.b, it.next.key);
     if it'.next.Next? {
@@ -128,12 +127,13 @@ module BucketIteratorModel {
   ensures WFIter(bucket, it')
   ensures it'.decreaser < it.decreaser
   {
+    assume false;
     lemmaFindFirstGtSmallerSet(bucket, it);
     IterFindFirstGt(bucket, it.next.key)
   }
 
   lemma noKeyBetweenIterAndIterInc(bucket: Bucket, it: Iterator, key: Key)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires WFIter(bucket, it)
   requires key in bucket.b
   requires it.next.Next?
@@ -156,7 +156,7 @@ module BucketIteratorModel {
   lemma IterIncKeyGreater(bucket: Bucket, it: Iterator)
   requires WFIter(bucket, it)
   requires it.next.Next?
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   ensures IterInc(bucket, it).next.Next? ==>
       Keyspace.lt(it.next.key, IterInc(bucket, it).next.key)
   {
@@ -165,7 +165,7 @@ module BucketIteratorModel {
   }
 
   lemma noKeyBetweenIterFindFirstGte(bucket: Bucket, key: Key, key0: Key)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires key0 in bucket.b
   ensures IterFindFirstGte(bucket, key).next.Next? ==>
       (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGte(bucket, key).next.key, key0))
@@ -185,7 +185,7 @@ module BucketIteratorModel {
   }
 
   lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, key: Key, key0: Key)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires key0 in bucket.b
   ensures IterFindFirstGt(bucket, key).next.Next? ==>
       (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, key).next.key, key0))
@@ -205,7 +205,7 @@ module BucketIteratorModel {
   }
 
   lemma noKeyBeforeIterStart(bucket: Bucket, key0: Key)
-  requires bucket.Bucket?
+  requires BucketWellMarshalled(bucket)
   requires key0 in bucket.b
   ensures IterStart(bucket).next.Next?
   ensures Keyspace.lte(IterStart(bucket).next.key, key0)

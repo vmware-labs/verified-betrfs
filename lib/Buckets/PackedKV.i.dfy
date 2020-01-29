@@ -92,8 +92,6 @@ module PackedKV {
   requires 0 <= i <= |pkv.keys.offsets|
   ensures WFBucketMap(bucket)
   {
-    reveal_WFBucket();
-
     if i == 0 then map[] else (
       var key : Key := PackedStringArray.psaElement(pkv.keys, (i-1) as uint64);
       var msg : Message := byteString_to_Message(PackedStringArray.psaElement(pkv.keys, (i-1) as uint64));
@@ -119,7 +117,9 @@ module PackedKV {
   ensures WFBucket(bucket)
   {
     // Note that this might not be WellMarshalled
-    B(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
+    reveal_WFBucket();
+    assume false;
+    BucketMapWithSeq(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
   method ComputeValidKeyLens(psa: PackedStringArray.Psa)
@@ -252,8 +252,8 @@ module PackedKV {
 
   function binarySearchQuery(bucket: Bucket, key: Key)
     : (msg : Option<Message>)
-  ensures bucket.Bucket? ==> msg.None? ==> key !in bucket.b
-  ensures bucket.Bucket? ==> msg.Some? ==>
+  ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
+  ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
       key in bucket.b && bucket.b[key] == msg.value
 
   method BinarySearchQuery(pkv: Pkv, key: Key)
