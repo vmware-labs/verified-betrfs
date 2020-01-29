@@ -1,7 +1,7 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-include "KVListPartialFlush.i.dfy"
+include "../lib/Buckets/KVListPartialFlush.i.dfy"
 
 module FlushModel { 
   import opened StateModel

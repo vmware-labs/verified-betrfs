@@ -4,7 +4,7 @@ include "../lib/Base/Message.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
-include "KVList.i.dfy"
+include "../lib/Buckets/KVList.i.dfy"
 
 //
 // Defines the interpretation of a sector of bytes as

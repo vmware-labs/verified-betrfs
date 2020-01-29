@@ -7,7 +7,7 @@ include "Util.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/PackedInts.s.dfy"
-include "../DataStructures/PackedKV.i.dfy"
+include "../Buckets/PackedKV.i.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -2319,6 +2319,7 @@ method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) retu
     assert (val.c as int) < |grammar.cases|;
 
     ghost var bytes := data_seq[index..(index as int) + SizeOfV(val)];
+    PackedStringArray.lemma_seq_slice_slice(data_seq, index as int, index as int + SizeOfV(val), 0, 8);
     assert bytes[..8] == new_int_bytes;
     calc {
         parse_Val(bytes, grammar);

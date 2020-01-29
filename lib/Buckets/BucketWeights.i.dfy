@@ -76,6 +76,8 @@ module BucketWeights {
     key
   }
 
+  // TODO we need to rewrite this in terms of the bucket sequences
+  // not the map.
   function {:opaque} WeightBucket(bucket: Bucket) : (w:int)
   ensures w >= 0
   ensures |bucket.b| == 0 ==> WeightBucket(bucket) == 0

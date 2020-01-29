@@ -1,7 +1,7 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "StateImpl.i.dfy"
 include "StateModel.i.dfy"
-include "BucketImpl.i.dfy"
+include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
 

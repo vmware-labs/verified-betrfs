@@ -1,6 +1,5 @@
 include "BookkeepingImpl.i.dfy"
 include "FlushModel.i.dfy"
-include "KVListPartialFlush.i.dfy"
 
 module FlushImpl { 
   import opened BookkeepingImpl
