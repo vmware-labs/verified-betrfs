@@ -39,7 +39,7 @@ module BucketImpl {
   requires KMB.WF(tree)
   requires KMBBOps.NumElements(tree) < Uint64UpperBound()
   ensures KVList.WF(kvl)
-  ensures KVList.I(kvl) == KMB.Interpretation(tree)
+  ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
     var s := KMBBOps.ToSeq(tree);
     kvl := KVList.Kvl(s.0[..], s.1[..]);
@@ -51,7 +51,7 @@ module BucketImpl {
   requires KVList.WF(kvl)
   requires |kvl.keys| < Uint64UpperBound() - 1
   ensures KMB.WF(tree)
-  ensures KVList.I(kvl) == KMB.Interpretation(tree)
+  ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
     var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
@@ -81,7 +81,7 @@ module BucketImpl {
   returns (tree: TreeMap)
   requires PackedKV.WF(pkv)
   ensures KMB.WF(tree)
-  ensures PackedKV.I(pkv) == KMB.Interpretation(tree)
+  ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
   {
     var kv := pkv_to_kvl(pkv);
     assume |kv.keys| < Uint64UpperBound() - 1;
@@ -106,7 +106,7 @@ module BucketImpl {
     var Weight: uint64;
 
     ghost var Repr: set<object>;
-    ghost var Bucket: map<Key, Message>;
+    ghost var Bucket: Bucket;
 
     protected predicate Inv()
     reads this, Repr
@@ -119,7 +119,6 @@ module BucketImpl {
         && tree == null
         && KVList.WF(kvl)
         && WeightBucket(KVList.I(kvl)) < Uint64UpperBound()
-        && Weight as int == WeightBucket(KVList.I(kvl))
         && Bucket == KVList.I(kvl)
       ))
       && (format.BFTree? ==> (
@@ -127,17 +126,16 @@ module BucketImpl {
         && tree in Repr
         && tree.repr <= Repr
         && KMB.WF(tree)
-        && Weight as int == WeightBucket(KMB.Interpretation(tree))
         && Weight as int < Uint64UpperBound()
-        && Bucket == KMB.Interpretation(tree)
+        && Bucket == B(KMB.Interpretation(tree))
       ))
       && (format.BFPkv? ==> (
         && tree == null
         && PackedKV.WF(pkv)
-        && Weight as int == WeightBucket(Bucket)
         && Bucket == PackedKV.I(pkv)
       ))
       && WFBucket(Bucket)
+      && (Weight as int == WeightBucket(Bucket))
     }
 
     constructor(kv: KVList.Kvl)
@@ -192,7 +190,7 @@ module BucketImpl {
     }
 
     lemma NumElementsLteWeight(bucket: Bucket)
-      ensures |bucket| < WeightBucket(bucket)
+      ensures |bucket.b| < WeightBucket(bucket)
     {
       assume false;
     }
@@ -203,7 +201,7 @@ module BucketImpl {
     ensures KVList.I(kv) == Bucket
     {
       if (format.BFTree?) {
-        NumElementsLteWeight(KMB.Interpretation(tree));
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
         assume false;
         kv := tree_to_kvl(tree);
       } else if (format.BFKvl?) {
@@ -431,14 +429,13 @@ module BucketImpl {
         }
       }
 
-      Bucket := KMB.Interpretation(tree);
+      Bucket := B(KMB.Interpretation(tree));
     }
 
     method Query(key: Key)
     returns (m: Option<Message>)
     requires Inv()
-    ensures m.None? ==> key !in Bucket
-    ensures m.Some? ==> key in Bucket && Bucket[key] == m.value
+    ensures m == bucketBinarySearchLookup(I(), key)
     {
       if format.BFTree? {
         m := KMB.Query(tree, key);
@@ -446,7 +443,7 @@ module BucketImpl {
         KVList.lenKeysLeWeightOver4(kvl);
         m := KVList.Query(kvl, key);
       } else if format.BFPkv? {
-        m := PackedKV.Query(pkv, key);
+        m := PackedKV.BinarySearchQuery(pkv, key);
       }
     }
 

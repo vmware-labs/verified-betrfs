@@ -250,16 +250,10 @@ module PackedKV {
     byteString_to_Message(PackedStringArray.psaElement(pkv.messages, i))
   }
 
-  function binarySearchQuery(bucket: Bucket, key: Key)
-    : (msg : Option<Message>)
-  ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
-  ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
-      key in bucket.b && bucket.b[key] == msg.value
-
   method BinarySearchQuery(pkv: Pkv, key: Key)
   returns (msg: Option<Message>)
   requires WF(pkv)
-  ensures msg == binarySearchQuery(I(pkv), key)
+  ensures msg == bucketBinarySearchLookup(I(pkv), key)
   {
     assume false;
 

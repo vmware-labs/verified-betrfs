@@ -77,7 +77,6 @@ module BucketWeights {
   }
 
   function {:opaque} WeightBucket(bucket: Bucket) : (w:int)
-  requires BucketWellMarshalled(bucket)
   ensures w >= 0
   ensures |bucket.b| == 0 ==> WeightBucket(bucket) == 0
   decreases bucket.b
@@ -89,17 +88,12 @@ module BucketWeights {
     )
   }
 
-  function WeightBucketOpt(bucket: Bucket) : int
-  {
-    if BucketWellMarshalled(bucket) then WeightBucket(bucket) else 0
-  }
-
   function {:opaque} WeightBucketList(buckets: BucketList) : (w:int)
   ensures w >= 0
   {
     if |buckets| == 0 then 0 else (
       WeightBucketList(DropLast(buckets)) +
-          WeightBucketOpt(Last(buckets))
+          WeightBucket(Last(buckets))
     )
   }
 
@@ -448,9 +442,9 @@ module BucketWeights {
           { assert left + right == left + lessRight + [Last(right)]; }  // trigger
         WeightBucketList(left + lessRight + [Last(right)]);
           { reveal_WeightBucketList(); }
-        WeightBucketList(left + lessRight) + WeightBucketOpt(Last(right));
+        WeightBucketList(left + lessRight) + WeightBucket(Last(right));
           { WeightBucketListConcat(left, lessRight); }
-        WeightBucketList(left) + WeightBucketList(lessRight) + WeightBucketOpt(Last(right));
+        WeightBucketList(left) + WeightBucketList(lessRight) + WeightBucket(Last(right));
           { reveal_WeightBucketList(); }
         WeightBucketList(left) + WeightBucketList(right);
       }
@@ -814,7 +808,7 @@ module BucketWeights {
 
   lemma WeightBucketListReplace(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|
-  ensures WeightBucketList(blist[i := bucket]) == WeightBucketList(blist) - WeightBucketOpt(blist[i]) + WeightBucketOpt(bucket)
+  ensures WeightBucketList(blist[i := bucket]) == WeightBucketList(blist) - WeightBucket(blist[i]) + WeightBucket(bucket)
   {
     assert blist[i := bucket] == (blist[..i] + [bucket]) + blist[i+1..];
     calc {
@@ -824,7 +818,7 @@ module BucketWeights {
         { WeightBucketListConcat(blist[..i], [bucket]); }
       WeightBucketList(blist[..i]) + WeightBucketList([bucket]) + WeightBucketList(blist[i+1..]);
         { reveal_WeightBucketList(); }
-      WeightBucketList(blist[..i]) + WeightBucketOpt(bucket) + WeightBucketList(blist[i+1..]);
+      WeightBucketList(blist[..i]) + WeightBucket(bucket) + WeightBucketList(blist[i+1..]);
     }
     assert blist == (blist[..i] + [blist[i]]) + blist[i+1..];
     calc {
@@ -834,13 +828,13 @@ module BucketWeights {
         { WeightBucketListConcat(blist[..i], [blist[i]]); }
       WeightBucketList(blist[..i]) + WeightBucketList([blist[i]]) + WeightBucketList(blist[i+1..]);
         { reveal_WeightBucketList(); }
-      WeightBucketList(blist[..i]) + WeightBucketOpt(blist[i]) + WeightBucketList(blist[i+1..]);
+      WeightBucketList(blist[..i]) + WeightBucket(blist[i]) + WeightBucketList(blist[i+1..]);
     }
   }
 
   lemma WeightBucketListShrinkEntry(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|
-  requires WeightBucketOpt(bucket) <= WeightBucketOpt(blist[i])
+  requires WeightBucket(bucket) <= WeightBucket(blist[i])
   ensures WeightBucketList(blist[i := bucket]) <= WeightBucketList(blist)
   {
     WeightBucketListReplace(blist, i, bucket);
@@ -1160,10 +1154,10 @@ module BucketWeights {
 
   lemma WeightBucketLeBucketList(blist: BucketList, i: int)
   requires 0 <= i < |blist|
-  ensures WeightBucketOpt(blist[i]) <= WeightBucketList(blist)
+  ensures WeightBucket(blist[i]) <= WeightBucketList(blist)
   {
     calc {
-      WeightBucketOpt(blist[i]);
+      WeightBucket(blist[i]);
         { reveal_WeightBucketList(); }
       WeightBucketList([blist[i]]);
         { assert [blist[i]] == blist[i..i+1]; } // trigger

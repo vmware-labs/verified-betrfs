@@ -18,6 +18,7 @@ module BucketsLib {
   import opened Maps
   import opened Sequences
   import opened KeyType
+  import opened Options
   import UI
   import MS = MapSpec
 
@@ -978,4 +979,13 @@ module BucketsLib {
       WellMarshalledBucketsEq(a[i], b[i]);
     }
   }
+
+  // This binary searches on the keys list in bucket.
+  // If it happens to be in sorted order, it will return the correct
+  // answer.
+  function bucketBinarySearchLookup(bucket: Bucket, key: Key)
+    : (msg : Option<Message>)
+  ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
+  ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
+      key in bucket.b && bucket.b[key] == msg.value
 }
