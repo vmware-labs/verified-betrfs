@@ -958,6 +958,14 @@ module BucketWeights {
     WeightSplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]);
   }
 
+  lemma WeightMergeBucketsInListLe(blist: BucketList, i: int, pivots: PivotTable)
+  requires 0 <= i < |blist| - 1
+  requires WFBucketListProper(blist, pivots)
+  ensures WeightBucketList(MergeBucketsInList(blist, i)) <= WeightBucketList(blist)
+  {
+    assume false;
+  }
+
   lemma WeightBucketSubset(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires BucketWellMarshalled(bucket)
   requires a<=b
@@ -1007,7 +1015,6 @@ module BucketWeights {
   // draw tight conclusions (WeightBucketList == WeightBucketList). Can we
   // redefine JoinBucketList in terms of MergBuckets and lose some cruft?
   lemma WeightJoinBucketList(blist: BucketList)
-  requires BucketListWellMarshalled(blist)
   ensures WeightBucket(JoinBucketList(blist)) <= WeightBucketList(blist)
   {
     if |blist| == 0 {

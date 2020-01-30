@@ -92,6 +92,7 @@ module PivotBetreeSpec {
   {
     && WFNode(node)
     && WFBucketListProper(node.buckets, node.pivotTable)
+    && BucketListWellMarshalled(node.buckets)
   }
 
   function AddMessageToNode(node: Node, key: Key, msg: Message) : Node
