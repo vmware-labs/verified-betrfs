@@ -146,7 +146,7 @@ module Marshalling {
     Some(v.ma)
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, i: int) : (s : Bucket)
+  function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Bucket)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   {
@@ -165,7 +165,7 @@ module Marshalling {
       []
     else (
       var pref := valToBuckets(DropLast(a));
-      var bucket := valToBucket(Last(a), |pref|);
+      var bucket := valToBucket(Last(a));
       pref + [bucket]
     )
   }

@@ -160,7 +160,7 @@ module PivotBetreeSpecRefinement {
   function ISplit(split: P.NodeFusion) : B.Redirect
   requires P.ValidSplit(split)
   {
-    PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(split);
+    PivotBetreeSpecWFNodes.ValidSplitWritesInvNodes(split);
     B.Redirect(
       split.parentref,
       INode(split.fused_parent),
@@ -181,7 +181,7 @@ module PivotBetreeSpecRefinement {
   function IMerge(split: P.NodeFusion) : B.Redirect
   requires P.ValidMerge(split)
   {
-    PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(split);
+    PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(split);
     B.Redirect(
       split.parentref,
       INode(split.split_parent),
@@ -891,7 +891,7 @@ module PivotBetreeSpecRefinement {
     assert P.WFNode(f.left_child);
     assert P.WFNode(f.right_child);
     var redirect := IMerge(f);
-    PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(f);
+    PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
 
     assert P.WFNode(P.MergeOps(f)[0].node);
     assert P.WFNode(P.MergeOps(f)[1].node);
@@ -1006,7 +1006,7 @@ module PivotBetreeSpecRefinement {
   ensures B.ValidRedirect(ISplit(f))
   {
     var r := ISplit(f);
-    PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(f);
+    PivotBetreeSpecWFNodes.ValidSplitWritesInvNodes(f);
 
     assert P.SplitReads(f)[0].node == f.fused_parent;
     assert BucketListWellMarshalled(f.fused_parent.buckets);
@@ -1175,7 +1175,7 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.InsertionOps(ins)[i].node)
   ensures IOps(P.InsertionOps(ins)) == B.InsertionOps(IInsertion(ins))
   {
-    PivotBetreeSpecWFNodes.ValidInsertWritesWFNodes(ins);
+    PivotBetreeSpecWFNodes.ValidInsertWritesInvNodes(ins);
 
     var newroot := P.AddMessageToNode(ins.oldroot, ins.key, ins.msg);
     var newroot' := B.AddMessageToNode(INode(ins.oldroot), ins.key, ins.msg);
@@ -1228,7 +1228,7 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.FlushOps(flush)[i].node)
   ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
   {
-    PivotBetreeSpecWFNodes.ValidFlushWritesWFNodes(flush);
+    PivotBetreeSpecWFNodes.ValidFlushWritesInvNodes(flush);
 
     var comp := BucketComplement(flush.parent.buckets[flush.slotIndex], flush.keys);
     var isec := BucketIntersect(flush.parent.buckets[flush.slotIndex], flush.keys);
@@ -1342,7 +1342,7 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.GrowOps(growth)[i].node)
   ensures IOps(P.GrowOps(growth)) == B.GrowOps(IGrow(growth))
   {
-    PivotBetreeSpecWFNodes.ValidGrowWritesWFNodes(growth);
+    PivotBetreeSpecWFNodes.ValidGrowWritesInvNodes(growth);
 
     var newroot := P.G.Node([], Some([growth.newchildref]), [BucketsLib.B(map[])]);
     var newroot' := B.G.Node(
@@ -1374,7 +1374,7 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.SplitOps(f)[i].node)
   ensures IOps(P.SplitOps(f)) == B.RedirectOps(ISplit(f))
   {
-    PivotBetreeSpecWFNodes.ValidSplitWritesWFNodes(f);
+    PivotBetreeSpecWFNodes.ValidSplitWritesInvNodes(f);
     //assert IOp(P.G.AllocOp(f.left_childref, f.left_child)) == B.RedirectOps(ISplit(f))[0];
     //assert IOp(P.G.AllocOp(f.right_childref, f.right_child)) == B.RedirectOps(ISplit(f))[1];
     //assert IOp(P.G.WriteOp(f.parentref, f.split_parent)) == B.RedirectOps(ISplit(f))[2];
@@ -1408,7 +1408,7 @@ module PivotBetreeSpecRefinement {
       P.WFNode(P.MergeOps(f)[i].node)
   ensures IOps(P.MergeOps(f)) == B.RedirectOps(IMerge(f))
   {
-    PivotBetreeSpecWFNodes.ValidMergeWritesWFNodes(f);
+    PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
   }
 
   // The meaty lemma: If we mutate the nodes of a pivot-y cache according to a

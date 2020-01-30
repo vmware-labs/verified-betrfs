@@ -68,7 +68,6 @@ module BucketWeights {
   }
 
   function {:opaque} ChooseKey(bucket: Bucket) : (key : Key)
-  requires BucketWellMarshalled(bucket)
   requires |bucket.b| > 0
   ensures key in bucket.b
   {
@@ -728,7 +727,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, items: int)
-  requires WFBucketList(children, pivots)
+  requires WFBucketListProper(children, pivots)
   requires 0 <= items <= |children|
   requires BucketWellMarshalled(parent)
   requires BucketListWellMarshalled(children)
@@ -792,7 +791,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
-  requires WFBucketList(children, pivots)
+  requires WFBucketListProper(children, pivots)
   requires |children| == NumBuckets(pivots)
   requires BucketWellMarshalled(parent)
   requires BucketListWellMarshalled(children)
@@ -902,7 +901,7 @@ module BucketWeights {
   // TODO move this to BucketsLib?
   lemma MergeUndoesSplit(blist:BucketList, pivots:PivotTable, i:int)
   requires 0 <= i < |blist| - 1
-  requires WFBucketList(blist, pivots)
+  requires WFBucketListProper(blist, pivots)
   requires BucketListWellMarshalled(blist)
   ensures SplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]) == blist;
   {
@@ -934,7 +933,7 @@ module BucketWeights {
   // Undoes WeightSplitBucketInList
   lemma WeightMergeBucketsInList(blist: BucketList, i: int, pivots: PivotTable)
   requires 0 <= i < |blist| - 1
-  requires WFBucketList(blist, pivots)
+  requires WFBucketListProper(blist, pivots)
   requires BucketWellMarshalled(blist[i])
   requires BucketWellMarshalled(blist[i+1])
   ensures WeightBucketList(MergeBucketsInList(blist, i)) == WeightBucketList(blist)
@@ -1171,7 +1170,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
-  requires WFBucketList(blist, pivots)
+  requires WFBucketListProper(blist, pivots)
   requires BucketWellMarshalled(blist[Route(pivots, key)])
   ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
       WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)

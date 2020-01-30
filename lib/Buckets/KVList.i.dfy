@@ -213,7 +213,7 @@ module KVList {
   {
     && WF(parent)
     && (forall i | 0 <= i < |children| :: WF(children[i]))
-    && WFBucketList(ISeq(children), pivots)
+    && WFBucketListProper(ISeq(children), pivots)
     && |pivots| + 1 == |children|
     && 0 <= parentIdx <= |parent.keys|
     && 0 <= childrenIdx <= |children|
@@ -524,12 +524,13 @@ module KVList {
   lemma flushRes(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
-  requires WFBucketList(ISeq(children), pivots)
+  requires WFBucketListProper(ISeq(children), pivots)
   ensures var f := flush(parent, children, pivots);
       && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
     reveal_IMap();
+    assert BucketListItemFlush(B(map[]), B(map[]), pivots, 0).b == map[];
     flushIterateRes(parent, children, pivots, 0, 0, 0, [], Kvl([], []));
   }
 
@@ -537,7 +538,7 @@ module KVList {
   returns (f : seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
-  requires WFBucketList(ISeq(children), pivots)
+  requires WFBucketListProper(ISeq(children), pivots)
   requires |children| < 0x1_0000_0000_0000_0000
   requires forall i | 0 <= i < |children| :: |children[i].keys| + |parent.keys| < 0x8000_0000_0000_0000
   ensures forall i | 0 <= i < |f| :: WF(f[i])
@@ -905,7 +906,7 @@ module KVList {
 
   lemma joinEqJoinBucketList(kvls: seq<Kvl>, pivots: seq<Key>)
   requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
-  requires WFBucketList(ISeq(kvls), pivots)
+  requires WFBucketListProper(ISeq(kvls), pivots)
   ensures WF(join(kvls))
   ensures I(join(kvls)) == JoinBucketList(ISeq(kvls))
   {
@@ -916,7 +917,7 @@ module KVList {
   Join(kvls: seq<Kvl>, ghost pivots: seq<Key>)
   returns (kvl: Kvl)
   requires forall i | 0 <= i < |kvls| :: WF(kvls[i])
-  requires WFBucketList(ISeq(kvls), pivots)
+  requires WFBucketListProper(ISeq(kvls), pivots)
   requires |kvls| < 0x8000_0000
   requires forall i | 0 <= i < |kvls| :: |kvls[i].keys| < 0x1_0000_0000
   ensures WF(kvl)

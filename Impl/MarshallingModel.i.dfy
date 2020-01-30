@@ -58,9 +58,9 @@ module MarshallingModel {
   /////// Some lemmas that are useful in Impl
 
   lemma WeightBucketLteSize(v: V, pivotTable: seq<Key>, i: int, kvl: KVList.Kvl)
-  requires Marshalling.valToBucket.requires(v, pivotTable, i)
+  requires Marshalling.valToBucket.requires(v)
   requires KVList.WF(kvl)
-  requires Marshalling.valToBucket(v, pivotTable, i) == Some(KVList.I(kvl))
+  requires Marshalling.valToBucket(v) == KVList.I(kvl)
   ensures WeightBucket(KVList.I(kvl)) <= SizeOfV(v)
   {
     /*KVList.kvlWeightEq(kvl);
@@ -76,8 +76,8 @@ module MarshallingModel {
 
   lemma WeightBucketListLteSize(v: V, pivotTable: seq<Key>, buckets: seq<Bucket>)
   requires v.VArray?
-  requires Marshalling.valToBuckets.requires(v.a, pivotTable)
-  requires Marshalling.valToBuckets(v.a, pivotTable) == Some(buckets)
+  requires Marshalling.valToBuckets.requires(v.a)
+  requires Marshalling.valToBuckets(v.a) == buckets
   ensures WeightBucketList(buckets) <= SizeOfV(v)
 
   decreases |v.a|
