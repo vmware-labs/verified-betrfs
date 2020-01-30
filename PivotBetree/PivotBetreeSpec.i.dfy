@@ -293,7 +293,6 @@ module PivotBetreeSpec {
     && WFNode(ins.oldroot)
     && WeightBucketList(ins.oldroot.buckets) + WeightKey(ins.key) + WeightMessage(ins.msg)
         <= MaxTotalBucketWeight()
-    && BucketWellMarshalled(ins.oldroot.buckets[Route(ins.oldroot.pivotTable, ins.key)])
   }
 
   function InsertionReads(ins: MessageInsertion): seq<ReadOp>

@@ -1185,8 +1185,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
-  requires WFBucketListProper(blist, pivots)
-  requires BucketWellMarshalled(blist[Route(pivots, key)])
+  requires WFBucketList(blist, pivots)
   ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
       WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
   {
