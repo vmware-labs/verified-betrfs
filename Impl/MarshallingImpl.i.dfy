@@ -116,26 +116,6 @@ module MarshallingImpl {
   ensures s != null ==> Some(s.I()) == Marshalling.valToBucket(v, pivotTable, i as int)
   { 
     var pkv := v.pkv;
- 
-    // Check that the keys fit in the desired bucket
-    if |pkv.keys.offsets| as uint64 > 0 {
-      if i > 0 {
-        var c := Keyspace.cmp(pivotTable[i-1], PackedKV.FirstKey(pkv));
-        if (c > 0) {
-          return null;
-        }
-      }
-
-      if i < |pivotTable| as uint64 {
-        var c := Keyspace.cmp(pivotTable[i], PackedKV.LastKey(pkv));
-        if (c <= 0) {
-          return null;
-        }
-      }
-    }
-
-    assert WFBucketAt(PackedKV.I(pkv), pivotTable, i as int);
-
     s := new BucketImpl.MutBucket.InitFromPkv(pkv);
   }
 
@@ -332,10 +312,8 @@ module MarshallingImpl {
   ensures 8 + WeightKeySeq(keys) == SizeOfV(VKeyArray(keys))
   {
     if |keys| == 0 {
-      reveal_SeqSumLens();
     } else {
       lemmaSizeOfKeyArray(DropLast(keys));
-      lemma_SeqSumLens_prefix(DropLast(keys), Last(keys));
       assert DropLast(keys) + [Last(keys)] == keys;
     }
   }
@@ -344,12 +322,9 @@ module MarshallingImpl {
   ensures 8 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
   {
     if |messages| == 0 {
-      reveal_SeqSumMessageLens();
     } else {
       lemmaSizeOfMessageArray(DropLast(messages));
-      lemma_SeqSumMessageLens_prefix(DropLast(messages), Last(messages));
       assert DropLast(messages) + [Last(messages)] == messages;
-      reveal_MessageSizeUint64();
     }
   }
 
