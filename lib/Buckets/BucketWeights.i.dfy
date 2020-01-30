@@ -413,6 +413,13 @@ module BucketWeights {
     WeightBucketLinearInKeySet(bucket, ILeftKeys(pivot), IRightKeys(pivot));
   }
 
+  lemma WeightSplitBucketAdditiveLe(bucket: Bucket, pivot: Key)
+  ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
+          WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
+  {
+    assume false;
+  }
+
   lemma WeightBucketList2(a: Bucket, b: Bucket)
   requires BucketWellMarshalled(a)
   requires BucketWellMarshalled(b)
@@ -791,7 +798,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
-  requires WFBucketListProper(children, pivots)
+  requires WFBucketList(children, pivots)
   requires |children| == NumBuckets(pivots)
   requires BucketWellMarshalled(parent)
   requires BucketListWellMarshalled(children)

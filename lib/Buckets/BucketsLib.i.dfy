@@ -646,6 +646,13 @@ module BucketsLib {
   }
 
   lemma WFBucketListFlush(parent: Bucket, blist: BucketList, pivots: PivotTable)
+  requires WFBucketList(blist, pivots)
+  ensures WFBucketList(BucketListFlush(parent, blist, pivots), pivots)
+  {
+    assume false;
+  }
+
+  lemma WFProperBucketListFlush(parent: Bucket, blist: BucketList, pivots: PivotTable)
   requires WFBucketListProper(blist, pivots)
   ensures WFBucketListProper(BucketListFlush(parent, blist, pivots), pivots)
   {
@@ -955,17 +962,6 @@ module BucketsLib {
     }
   }
 
-  lemma WFBucketsOfWFBucketList(blist: BucketList, pivots: PivotTable)
-  requires WFBucketListProper(blist, pivots)
-  ensures forall i | 0 <= i < |blist| :: WFBucket(blist[i])
-  {
-    reveal_WFBucket();
-    forall i | 0 <= i < |blist| ensures WFBucket(blist[i])
-    {
-      assert WFBucketAt(blist[i], pivots, i);
-    }
-  }
-
   lemma WFBucketListSplitLeft(blist: BucketList, pivots: PivotTable, i: int)
   requires WFBucketListProper(blist, pivots)
   requires 1 <= i <= |blist|
@@ -1014,4 +1010,18 @@ module BucketsLib {
   ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
   ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
       key in bucket.b && bucket.b[key] == msg.value
+
+  function getMiddleKey(bucket: Bucket) : Key
+  requires WFBucket(bucket)
+  {
+    if |bucket.keys| == 0 then
+      [0] // Just pick an arbitary key
+    else (
+      var key := bucket.keys[|bucket.keys| / 2];
+      if |key| == 0 then 
+        [0]
+      else
+        key
+    )
+  }
 }

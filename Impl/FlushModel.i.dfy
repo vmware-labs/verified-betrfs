@@ -48,8 +48,6 @@ module FlushModel {
       var parent := s.cache[parentref];
 
       WeightBucketLeBucketList(parent.buckets, slot);
-      WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
-      WFBucketsOfWFBucketList(child.buckets, child.pivotTable);
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
@@ -92,15 +90,12 @@ module FlushModel {
       var parent := s.cache[parentref];
 
       WeightBucketLeBucketList(parent.buckets, slot);
-      WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
-      WFBucketsOfWFBucketList(child.buckets, child.pivotTable);
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
       var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var flushedKeys := KVListPartialFlush.bucketPartialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
 
-      WFBucketsOfWFBucketList(parent.buckets, parent.pivotTable);
       WFBucketIntersect(parent.buckets[slot], flushedKeys);
       WFBucketComplement(parent.buckets[slot], flushedKeys);
       WeightBucketComplement(parent.buckets[slot], flushedKeys);

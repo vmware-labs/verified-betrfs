@@ -171,7 +171,6 @@ module PivotBetreeSpec {
 
   function InterpretLookup(lookup: Lookup, key: Key) : Message
   requires LookupVisitsWFNodes(lookup)
-  requires LookupVisitsWellMarshalledBuckets(lookup, key)
   {
     if |lookup| == 0 then
       Update(NopDelta())
@@ -182,7 +181,6 @@ module PivotBetreeSpec {
   function InterpretLookupAccountingForLeaf(lookup: Lookup, key: Key) : Message
   requires |lookup| > 0
   requires LookupVisitsWFNodes(lookup)
-  requires LookupVisitsWellMarshalledBuckets(lookup, key)
   {
     if Last(lookup).node.children.Some? then
       InterpretLookup(lookup, key)
@@ -679,7 +677,6 @@ module PivotBetreeSpec {
     && r.leaf.children.None?
     && WFPivots(r.pivots)
     && |r.pivots| <= MaxNumChildren() - 1
-    && BucketListWellMarshalled(r.leaf.buckets)
   }
 
   function RepivotReads(r: Repivot) : seq<ReadOp>
@@ -694,7 +691,6 @@ module PivotBetreeSpec {
   requires WFNode(leaf)
   requires leaf.children.None?
   requires WFPivots(pivots)
-  requires BucketListWellMarshalled(leaf.buckets)
   {
     Node(pivots, None, SplitBucketOnPivots(JoinBucketList(leaf.buckets), pivots))
   }
@@ -805,7 +801,6 @@ module PivotBetreeSpecWFNodes {
       );
     var newchild := AddMessagesToNode(f.child, BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
 
-    WFBucketsOfWFBucketList(f.parent.buckets, f.parent.pivotTable);
     WFBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
     WFBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
     WeightBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
@@ -919,7 +914,6 @@ module PivotBetreeSpecWFNodes {
   {
     var j := JoinBucketList(leaf.buckets);
     var s := SplitBucketOnPivots(j, pivots);
-    WFBucketsOfWFBucketList(leaf.buckets, leaf.pivotTable);
     WFJoinBucketList(leaf.buckets);
     JoinBucketsSplitBucketOnPivotsCancel(j, pivots);
     WeightJoinBucketList(leaf.buckets);

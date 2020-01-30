@@ -546,6 +546,38 @@ module BucketImpl {
       }
     }
 
+    method GetMiddleKey() returns (res: Key)
+    requires Inv()
+    ensures getMiddleKey(I()) == res
+    {
+      if format.BFPkv? {
+        if |pkv.keys.offsets| as uint64 == 0 {
+          return [0];
+        } else {
+          var key := PackedKV.GetKey(pkv, |pkv.keys.offsets| as uint64 / 2);
+          if |key| as uint64 == 0 {
+            return [0];
+          } else {
+            return key;
+          }
+        }
+      } else {
+        var kvl := GetKvl();
+        KVList.lenKeysLeWeightOver4(kvl);
+        assume false;
+        if |kvl.keys| as uint64 == 0 {
+          return [0];
+        } else {
+          var key := kvl.keys[|kvl.keys| as uint64 / 2];
+          if |key| as uint64 == 0 {
+            return [0];
+          } else {
+            return key;
+          }
+        }
+      }
+    }
+
     static method computeWeightOfSeq(buckets: seq<MutBucket>)
     returns (weight: uint64)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()

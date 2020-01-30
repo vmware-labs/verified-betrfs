@@ -36,9 +36,7 @@ module LeafModel {
     ) then (
       s
     ) else (
-      WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
-
-      var pivot := KVList.getMiddleKey(node.buckets[0]);
+      var pivot := getMiddleKey(node.buckets[0]);
       var pivots := [pivot];
 
       var buckets' := [
@@ -81,9 +79,7 @@ module LeafModel {
       return;
     }
 
-    WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
-
-    var pivot := KVList.getMiddleKey(node.buckets[0]);
+    var pivot := getMiddleKey(node.buckets[0]);
     var pivots := [pivot];
 
     KVList.WFPivotsOfGetMiddleKey(node.buckets[0]);
@@ -92,6 +88,9 @@ module LeafModel {
         SplitBucketLeft(node.buckets[0], pivot),
         SplitBucketRight(node.buckets[0], pivot)
     ];
+
+    reveal_WFBucket();
+
     var newnode := Node(pivots, None, buckets');
     var s1 := writeWithNode(k, s, ref, newnode);
     reveal_writeBookkeeping();
@@ -99,7 +98,7 @@ module LeafModel {
     assert s1 == s';
 
     WeightBucketLeBucketList(node.buckets, 0);
-    WeightSplitBucketAdditive(node.buckets[0], pivot);
+    WeightSplitBucketAdditiveLe(node.buckets[0], pivot);
     WeightBucketList2(
         SplitBucketLeft(node.buckets[0], pivot),
         SplitBucketRight(node.buckets[0], pivot));
@@ -110,10 +109,10 @@ module LeafModel {
 
     //assert IVars(s1).cache == IVars(s).cache[ref := INode(newnode)];
 
-    assert JoinBucketList(node.buckets)
-        == MapUnion(JoinBucketList([]), node.buckets[0])
-        == MapUnion(map[], node.buckets[0])
-        == node.buckets[0];
+    assert JoinBucketList(node.buckets).b
+        == MapUnion(JoinBucketList([]).b, node.buckets[0].b)
+        == MapUnion(map[], node.buckets[0].b)
+        == node.buckets[0].b;
     assert SplitBucketOnPivots(JoinBucketList(node.buckets), pivots)
         == SplitBucketOnPivots(node.buckets[0], pivots)
         == buckets';

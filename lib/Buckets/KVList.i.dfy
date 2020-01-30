@@ -1393,46 +1393,8 @@ module KVList {
     I_injective(toKvl(I(kvl)), kvl);
   }
 
-  function getMiddleKey(bucket: Bucket) : Key
-  requires BucketWellMarshalled(bucket)
-  requires WFBucket(bucket)
-  {
-    var kvl := toKvl(bucket);
-    if |kvl.keys| == 0 then
-      [0] // Just pick an arbitary key
-    else (
-      var key := kvl.keys[|kvl.keys| / 2];
-      if |key| == 0 then 
-        [0]
-      else
-        key
-    )
-  }
-
-  method GetMiddleKey(kvl: Kvl) returns (res: Key)
-  requires WF(kvl)
-  requires WeightBucket(I(kvl)) < 0x1_0000_0000_0000_0000
-  ensures WFBucket(I(kvl))
-  ensures getMiddleKey(I(kvl)) == res
-  {
-    WFImpliesWFBucket(kvl); 
-    lenKeysLeWeight(kvl);
-    toKvlI_eq(kvl);
-    if |kvl.keys| as uint64 == 0 {
-      return [0];
-    } else {
-      var key := kvl.keys[|kvl.keys| as uint64 / 2];
-      if |key| as uint64 == 0 {
-        return [0];
-      } else {
-        return key;
-      }
-    }
-  }
-
   lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
   requires WFBucket(bucket)
-  requires BucketWellMarshalled(bucket)
   ensures P.WFPivots([getMiddleKey(bucket)])
   {
     reveal_IsStrictlySorted();
