@@ -528,6 +528,16 @@ module BucketsLib {
   }
 
   lemma WFSplitBucketInList(blist: BucketList, slot: int, pivot: Key, pivots: PivotTable)
+  requires WFBucketList(blist, pivots)
+  requires 0 <= slot < |blist|
+  requires PivotInsertable(pivots, slot, pivot)
+  ensures WFPivots(insert(pivots, pivot, slot))
+  ensures WFBucketList(SplitBucketInList(blist, slot, pivot), insert(pivots, pivot, slot))
+  {
+    assume false;
+  }
+
+  lemma WFProperSplitBucketInList(blist: BucketList, slot: int, pivot: Key, pivots: PivotTable)
   requires WFBucketListProper(blist, pivots)
   requires 0 <= slot < |blist|
   requires PivotInsertable(pivots, slot, pivot)
@@ -963,6 +973,22 @@ module BucketsLib {
   }
 
   lemma WFBucketListSplitLeft(blist: BucketList, pivots: PivotTable, i: int)
+  requires WFBucketList(blist, pivots)
+  requires 1 <= i <= |blist|
+  ensures WFBucketList(blist[.. i], pivots[.. i-1])
+  {
+    assume false;
+  }
+
+  lemma WFBucketListSplitRight(blist: BucketList, pivots: PivotTable, i: int)
+  requires WFBucketList(blist, pivots)
+  requires 0 <= i < |blist|
+  ensures WFBucketList(blist[i ..], pivots[i ..])
+  {
+    assume false;
+  }
+
+  lemma WFProperBucketListSplitLeft(blist: BucketList, pivots: PivotTable, i: int)
   requires WFBucketListProper(blist, pivots)
   requires 1 <= i <= |blist|
   ensures WFBucketListProper(blist[.. i], pivots[.. i-1])
@@ -971,7 +997,7 @@ module BucketsLib {
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist[.. i], pivots[.. i-1], 0, i-1, 0);
   }
 
-  lemma WFBucketListSplitRight(blist: BucketList, pivots: PivotTable, i: int)
+  lemma WFProperBucketListSplitRight(blist: BucketList, pivots: PivotTable, i: int)
   requires WFBucketListProper(blist, pivots)
   requires 0 <= i < |blist|
   ensures WFBucketListProper(blist[i ..], pivots[i ..])

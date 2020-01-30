@@ -105,7 +105,6 @@ module PivotBetreeSpec {
 
   function AddMessagesToNode(node: Node, msgs: Bucket) : Node
   requires WFNode(node)
-  requires BucketListWellMarshalled(node.buckets)
   {
     Node(
       node.pivotTable,
@@ -399,7 +398,6 @@ module PivotBetreeSpec {
 
   function {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
-  requires BucketListWellMarshalled(node.buckets)
   ensures BucketListWellMarshalled(node'.buckets)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
@@ -423,7 +421,6 @@ module PivotBetreeSpec {
 
   function {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
   requires WFNode(node)
-  requires BucketListWellMarshalled(node.buckets)
   ensures BucketListWellMarshalled(node'.buckets)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
@@ -447,7 +444,6 @@ module PivotBetreeSpec {
 
   lemma CutoffNodeCorrect(node: Node, node1: Node, node2: Node, lpivot: Key, rpivot: Key)
   requires WFNode(node)
-  requires BucketListWellMarshalled(node.buckets)
   requires node1 == CutoffNodeAndKeepLeft(node, rpivot);
   requires node2 == CutoffNodeAndKeepRight(node1, lpivot);
   ensures |node2.pivotTable| > 0 ==> Keyspace.lt(lpivot, node2.pivotTable[0])
@@ -470,7 +466,6 @@ module PivotBetreeSpec {
 
   function {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
   requires WFNode(node)
-  requires BucketListWellMarshalled(node.buckets)
   ensures BucketListWellMarshalled(node'.buckets)
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
@@ -514,7 +509,6 @@ module PivotBetreeSpec {
   //// Split
 
   function SplitChildLeft(child: Node, num_children_left: int) : Node
-  requires BucketListWellMarshalled(child.buckets)
   requires 0 <= num_children_left - 1 <= |child.pivotTable|
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|
@@ -527,7 +521,6 @@ module PivotBetreeSpec {
   }
 
   function SplitChildRight(child: Node, num_children_left: int) : Node
-  requires BucketListWellMarshalled(child.buckets)
   requires 0 <= num_children_left <= |child.pivotTable|
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|
@@ -544,7 +537,6 @@ module PivotBetreeSpec {
   requires fused_parent.children.Some?
   requires fused_parent.children.Some? ==> 0 <= slot_idx < |fused_parent.children.value|
   requires 0 <= slot_idx < |fused_parent.buckets|
-  requires BucketWellMarshalled(fused_parent.buckets[slot_idx])
   {
     Node(
       insert(fused_parent.pivotTable, pivot, slot_idx),
@@ -561,9 +553,6 @@ module PivotBetreeSpec {
     && f.fused_parent.children.Some?
     && 0 <= f.slot_idx < |f.fused_parent.buckets|
     && |f.fused_parent.buckets| <= MaxNumChildren() - 1
-
-    && BucketListWellMarshalled(f.fused_child.buckets)
-    && BucketWellMarshalled(f.fused_parent.buckets[f.slot_idx])
 
     && var lbound := (if f.slot_idx > 0 then Some(f.fused_parent.pivotTable[f.slot_idx - 1]) else None);
     && var ubound := (if f.slot_idx < |f.fused_parent.pivotTable| then Some(f.fused_parent.pivotTable[f.slot_idx]) else None);
@@ -616,11 +605,6 @@ module PivotBetreeSpec {
     && f.split_parent.children.value[f.slot_idx + 1] == f.right_childref
     && WeightBucketList(f.left_child.buckets) + WeightBucketList(f.right_child.buckets) <= MaxTotalBucketWeight()
     && |f.left_child.buckets| + |f.right_child.buckets| <= MaxNumChildren()
-
-    && BucketListWellMarshalled(f.left_child.buckets)
-    && BucketListWellMarshalled(f.right_child.buckets)
-    && BucketWellMarshalled(f.split_parent.buckets[f.slot_idx])
-    && BucketWellMarshalled(f.split_parent.buckets[f.slot_idx + 1])
 
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
 

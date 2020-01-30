@@ -897,6 +897,14 @@ module BucketWeights {
     WeightSplitBucketAdditive(blist[i], pivot);
   }
 
+  lemma WeightSplitBucketInListLe(blist: BucketList, i: int, pivot: Key)
+  requires 0 <= i < |blist|
+  ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
+      <= WeightBucketList(blist)
+  {
+    assume false;
+  }
+
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
   requires 0 <= a <= |blist|
   ensures WeightBucketList(blist[a..]) <= WeightBucketList(blist)
