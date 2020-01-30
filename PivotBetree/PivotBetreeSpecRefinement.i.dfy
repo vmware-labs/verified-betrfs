@@ -8,7 +8,8 @@ include "../lib/Base/Message.i.dfy"
 include "../Betree/BetreeSpec.i.dfy"
 include "../Betree/Betree.i.dfy"
 include "../Betree/BetreeInv.i.dfy"
-include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "PivotBetreeSpec.i.dfy"
+include "PivotBetreeSpecWFNodes.i.dfy"
 //
 // Lays out the abstraction function between the datatypes, setting
 // up for PivotBetree_Refines_Betree.
