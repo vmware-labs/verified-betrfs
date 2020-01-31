@@ -22,7 +22,7 @@ include "../PivotBetree/PivotBetree.i.dfy"
 
 // TODO(jonh): name doesn't match filename.
 module PivotBetreeInvAndRefinement {
-  import opened PivotBetreeSpec`Spec
+  import opened PivotBetreeSpec`Internal
   import opened Sequences
   import opened BucketWeights
   import opened BucketsLib
@@ -47,50 +47,42 @@ module PivotBetreeInvAndRefinement {
     B.Constants(BI.Constants())
   }
 
-  predicate ViewHasWFNodes(view: imap<Reference, PNode>)
+  predicate ViewHasInvNodes(view: imap<Reference, PNode>)
   {
-    forall ref | ref in view :: WFNode(view[ref])
+    forall ref | ref in view :: InvNode(view[ref])
   }
 
   function IView(view: imap<Reference, PNode>) : imap<Reference, Node>
-  requires ViewHasWFNodes(view)
+  requires ViewHasInvNodes(view)
   {
     imap ref | ref in view :: SpecRef.INode(view[ref])
   }
   
   function I(k: Constants, s: Variables) : B.Variables
-  requires ViewHasWFNodes(s.bcv.view)
+  requires ViewHasInvNodes(s.bcv.view)
   {
     B.Variables(BI.Variables(IView(s.bcv.view)))
   }
 
-  predicate AllBucketsWellMarshalled(k: Constants, s: Variables) 
-  {
-    forall ref | ref in s.bcv.view ::
-      forall i | 0 <= i < |s.bcv.view[ref].buckets| ::
-        BucketWellMarshalled(s.bcv.view[ref].buckets[i])
-  }
-
   predicate Inv(k: Constants, s: Variables)
   {
-    && ViewHasWFNodes(s.bcv.view)
+    && ViewHasInvNodes(s.bcv.view)
     && BInv.Inv(Ik(k), I(k, s))
-    && AllBucketsWellMarshalled(k, s)
   }
 
   lemma OpRefines(k: Constants, s: Variables, s': Variables, op: PG.Op)
-  requires WFNode(op.node)
-  requires ViewHasWFNodes(s.bcv.view)
+  requires InvNode(op.node)
+  requires ViewHasInvNodes(s.bcv.view)
   requires PBI.OpStep(k.bck, s.bcv, s'.bcv, op)
-  ensures ViewHasWFNodes(s'.bcv.view)
+  ensures ViewHasInvNodes(s'.bcv.view)
   ensures BI.OpStep(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOp(op))
   {
     //BI.OpStepPreservesInv(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOp(op));
   }
 
   lemma IOpsAdditive(ops1: seq<PG.Op>, ops2: seq<PG.Op>)
-  requires forall i | 0 <= i < |ops1| :: WFNode(ops1[i].node)
-  requires forall i | 0 <= i < |ops2| :: WFNode(ops2[i].node)
+  requires forall i | 0 <= i < |ops1| :: InvNode(ops1[i].node)
+  requires forall i | 0 <= i < |ops2| :: InvNode(ops2[i].node)
   ensures SpecRef.IOps(ops1 + ops2) == SpecRef.IOps(ops1) + SpecRef.IOps(ops2)
   {
     if (|ops2| == 0) {
@@ -111,10 +103,10 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma TransactionRefines(k: Constants, s: Variables, s': Variables, ops: seq<PG.Op>)
-  requires forall i | 0 <= i < |ops| :: WFNode(ops[i].node)
-  requires ViewHasWFNodes(s.bcv.view)
+  requires forall i | 0 <= i < |ops| :: InvNode(ops[i].node)
+  requires ViewHasInvNodes(s.bcv.view)
   requires PBI.Transaction(k.bck, s.bcv, s'.bcv, ops)
-  ensures ViewHasWFNodes(s'.bcv.view)
+  ensures ViewHasInvNodes(s'.bcv.view)
   ensures BI.Transaction(Ik(k).bck, I(k, s).bcv, I(k, s').bcv, SpecRef.IOps(ops))
   decreases |ops|
   {
@@ -125,11 +117,11 @@ module PivotBetreeInvAndRefinement {
       var ops1, mid, ops2 := PBI.SplitTransaction(k.bck, s.bcv, s'.bcv, ops);
       var smid := PB.Variables(mid);
 
-      forall i | 0 <= i < |ops1| ensures WFNode(ops1[i].node)
+      forall i | 0 <= i < |ops1| ensures InvNode(ops1[i].node)
       {
         assert ops1[i].node == ops[i].node;
       }
-      forall i | 0 <= i < |ops2| ensures WFNode(ops2[i].node)
+      forall i | 0 <= i < |ops2| ensures InvNode(ops2[i].node)
       {
         assert ops2[i].node == ops[i + |ops1|].node;
       }
@@ -143,8 +135,9 @@ module PivotBetreeInvAndRefinement {
   }
 
   lemma ReadsRefines(k: Constants, s: Variables, ops: seq<PG.ReadOp>)
+  requires forall i | 0 <= i < |ops| :: InvNode(ops[i].node)
   requires forall i | 0 <= i < |ops| :: WFNode(ops[i].node)
-  requires ViewHasWFNodes(s.bcv.view)
+  requires ViewHasInvNodes(s.bcv.view)
   requires PBI.Reads(k.bck, s.bcv, ops)
   ensures BI.Reads(Ik(k).bck, I(k, s).bcv, SpecRef.IReadOps(ops))
   decreases |ops|
@@ -177,10 +170,9 @@ module PivotBetreeInvAndRefinement {
     }
   }
 
-  lemma ReadOpsBucketsWellMarshalledOfValidStep(k: Constants, s: Variables, betreeStep: BetreeStep)
+  /*lemma ReadOpsBucketsWellMarshalledOfValidStep(k: Constants, s: Variables, betreeStep: BetreeStep)
   requires ValidBetreeStep(betreeStep)
   requires PBI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
-  requires AllBucketsWellMarshalled(k, s)
   ensures SpecRef.ReadOpsBucketsWellMarshalled(BetreeStepReads(betreeStep))
   {
     var readOps := BetreeStepReads(betreeStep);
@@ -192,7 +184,7 @@ module PivotBetreeInvAndRefinement {
       assert PBI.ReadStep(k.bck, s.bcv, readOps[i]);
       assert readOps[i].node == s.bcv.view[readOps[i].ref];
     }
-  }
+  }*/
 
   lemma BetreeStepRefines(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   requires Inv(k, s)
@@ -207,7 +199,14 @@ module PivotBetreeInvAndRefinement {
       assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.StutterStep);
       BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
     } else {
-      ReadOpsBucketsWellMarshalledOfValidStep(k, s, betreeStep);
+      forall i | 0 <= i < |BetreeStepReads(betreeStep)|
+      ensures InvNode(BetreeStepReads(betreeStep)[i].node)
+      {
+        assert PBI.ReadStep(k.bck, s.bcv, BetreeStepReads(betreeStep)[i]);
+        assert s.bcv.view[BetreeStepReads(betreeStep)[i].ref]
+            == BetreeStepReads(betreeStep)[i].node;
+      }
+
       SpecRef.RefinesValidBetreeStep(betreeStep);
       SpecRef.RefinesReadOps(betreeStep);
       SpecRef.RefinesOps(betreeStep);
@@ -234,8 +233,6 @@ module PivotBetreeInvAndRefinement {
       */
       assert B.NextStep(Ik(k), I(k,s), I(k,s'), uiop, B.BetreeStep(SpecRef.IStep(betreeStep)));
       BInv.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
-
-      assume AllBucketsWellMarshalled(k, s');
     }
   }
 

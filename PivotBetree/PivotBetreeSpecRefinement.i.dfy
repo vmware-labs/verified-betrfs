@@ -1183,7 +1183,7 @@ module PivotBetreeSpecRefinement {
 
   // interpret the pivot-y Ops (from our little cache DSL) to their Betree (non-pivot) versions.
   function IOp(op: P.G.Op) : B.G.Op
-  requires P.WFNode(op.node)
+  requires P.InvNode(op.node)
   {
     match op {
       case AllocOp(ref, block) => B.G.AllocOp(ref, INode(block))
@@ -1192,7 +1192,7 @@ module PivotBetreeSpecRefinement {
   }
 
   function IOps(ops: seq<P.G.Op>) : seq<B.G.Op>
-  requires forall i | 0 <= i < |ops| :: P.WFNode(ops[i].node)
+  requires forall i | 0 <= i < |ops| :: P.InvNode(ops[i].node)
   {
     if |ops| == 0 then [] else
       IOps(ops[..|ops|-1]) + [IOp(ops[|ops|-1])]
