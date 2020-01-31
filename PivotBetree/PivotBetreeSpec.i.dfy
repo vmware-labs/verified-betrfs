@@ -262,17 +262,16 @@ module PivotBetreeSpec {
     && WFLookupForKey(sq.lookup, startKey)
 
     && var lookupUpperBound := LookupUpperBound(sq.lookup, startKey);
-    && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
 
     && Last(sq.lookup).node.children.None?
 
     && |sq.lookup| == |sq.buckets|
     && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Route(sq.lookup[i].node.pivotTable, startKey)])
 
-    && MS.NonEmptyRange(sq.start, sq.end)
-
     && (BucketListWellMarshalled(sq.buckets) ==> (
-      sq.results ==
+      && MS.NonEmptyRange(sq.start, sq.end)
+      && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
+      && sq.results ==
         SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
             ClampRange(ComposeSeq(sq.buckets), sq.start, sq.end)))
