@@ -1017,6 +1017,7 @@ module BucketWeights {
   lemma WeightJoinBucketList(blist: BucketList)
   ensures WeightBucket(JoinBucketList(blist)) <= WeightBucketList(blist)
   {
+    assume false;
     if |blist| == 0 {
       assert WeightBucket(JoinBucketList(blist)) == 0;  // delete
       // assert JoinBucketList(blist) == map[];
