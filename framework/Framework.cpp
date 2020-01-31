@@ -359,7 +359,7 @@ void Application::Insert(ByteString key, ByteString val)
     fail("Insert: value is too long");
   }
 
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 500; i++) {
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();

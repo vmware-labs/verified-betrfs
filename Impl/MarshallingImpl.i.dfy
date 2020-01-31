@@ -370,7 +370,7 @@ module MarshallingImpl {
   ensures ValInGrammar(v, Marshalling.BucketGrammar())
   ensures ValidVal(v)
   ensures Marshalling.valToBucket(v) == bucket.Bucket
-  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 16
+  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 8
   {
     var kvl := bucket.GetKvl();
     KVList.kvlWeightEq(kvl);
@@ -401,7 +401,7 @@ module MarshallingImpl {
   ensures ValInGrammar(v, GArray(Marshalling.BucketGrammar()))
   ensures |v.a| == |buckets|
   ensures Marshalling.valToBuckets(v.a) == BucketImpl.MutBucket.ISeq(buckets)
-  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 16
+  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 8
   {
     if |buckets| as uint64 == 0 {
       v := VArray([]);
@@ -464,11 +464,13 @@ module MarshallingImpl {
 
     v := VTuple([pivots, children, buckets]);
 
-    assert SizeOfV(pivots) <= 320000;
-    assert SizeOfV(children) <= 264;
-    assert SizeOfV(buckets) <= 8068312;
+    assert SizeOfV(pivots) <= (4 + (MaxNumChildren()-1)*(4 + KeyType.MaxLen() as int));
+    assert SizeOfV(children) <= (8 + MaxNumChildren() * 8);
+    assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (4 + 4) + MaxTotalBucketWeight();
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
+
+    lemma_node_fits_in_block();
   }
 
   method sectorToVal(sector: StateImpl.Sector) returns (v : V)

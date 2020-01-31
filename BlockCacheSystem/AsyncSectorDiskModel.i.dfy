@@ -1,5 +1,6 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.s.dfy"
+include "../PivotBetree/Bounds.i.dfy"
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
 // is some higher-level Node datatype. A later refinement step shows how to marshall and align
@@ -14,11 +15,12 @@ module AsyncSectorDiskModelTypes {
 
 module LBAType {
   import opened NativeTypes
+  import Bounds
 
   type LBA(==,!new) = uint64
   datatype Location = Location(addr: LBA, len: uint64)
 
-  function method BlockSize() : uint64 { 8*1024*1024 }
+  function method BlockSize() : uint64 { Bounds.BlockSizeUint64() }
   function method IndirectionTableLBA() : LBA { 0 }
   function method IndirectionTableLocation() : Location {
     Location(IndirectionTableLBA(), BlockSize())
