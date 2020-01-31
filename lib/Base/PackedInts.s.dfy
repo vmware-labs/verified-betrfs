@@ -65,6 +65,7 @@ module {:extern} NativePackedInts {
   returns (i: uint32)
   requires 0 <= idx
   requires idx as int + 4 <= |packed|
+  requires |packed| < 0x1_0000_0000_0000_0000
   ensures i == unpack_LittleEndian_Uint32(packed[idx .. idx + 4])
 
   method {:extern "NativePackedInts_Compile", 
@@ -73,6 +74,7 @@ module {:extern} NativePackedInts {
   returns (i: uint64)
   requires 0 <= idx
   requires idx as int + 8 <= |packed|
+  requires |packed| < 0x1_0000_0000_0000_0000
   ensures i == unpack_LittleEndian_Uint64(packed[idx .. idx + 8])
 
   method {:extern "NativePackedInts_Compile", 
@@ -80,6 +82,7 @@ module {:extern} NativePackedInts {
   Pack_LittleEndian_Uint32_into_Array(i: uint32, ar: array<byte>, idx: uint64)
   requires 0 <= idx
   requires idx as int + 4 <= ar.Length
+  requires ar.Length < 0x1_0000_0000_0000_0000
   modifies ar
   ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
   ensures unpack_LittleEndian_Uint32(ar[idx .. idx + 4]) == i
@@ -90,6 +93,7 @@ module {:extern} NativePackedInts {
   Pack_LittleEndian_Uint64_into_Array(i: uint64, ar: array<byte>, idx: uint64)
   requires 0 <= idx
   requires idx as int + 8 <= ar.Length
+  requires ar.Length < 0x1_0000_0000_0000_0000
   modifies ar
   ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
   ensures unpack_LittleEndian_Uint64(ar[idx .. idx + 8]) == i
@@ -101,6 +105,7 @@ module {:extern} NativePackedInts {
   returns (unpacked: seq<uint32>)
   requires 0 <= idx
   requires idx as int + 4 * len as int <= |packed|
+  requires |packed| < 0x1_0000_0000_0000_0000
   ensures unpacked == unpack_LittleEndian_Uint32_Seq(packed[idx .. idx + 4*len], len as int)
 
   method {:extern "NativePackedInts_Compile", 
@@ -109,6 +114,7 @@ module {:extern} NativePackedInts {
   returns (unpacked: seq<uint64>)
   requires 0 <= idx
   requires idx as int + 8 * len as int <= |packed|
+  requires |packed| < 0x1_0000_0000_0000_0000
   ensures unpacked == unpack_LittleEndian_Uint64_Seq(packed[idx .. idx + 8*len], len as int)
 
   method {:extern "NativePackedInts_Compile", 
@@ -116,6 +122,7 @@ module {:extern} NativePackedInts {
   Pack_LittleEndian_Uint32_Seq_into_Array(unpacked: seq<uint32>, ar: array<byte>, idx: uint64)
   requires 0 <= idx
   requires idx as int + 4 * |unpacked| <= ar.Length
+  requires ar.Length < 0x1_0000_0000_0000_0000
   modifies ar
   ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
   ensures unpack_LittleEndian_Uint32_Seq(ar[idx .. idx as int + 4*|unpacked|], |unpacked|) == unpacked
@@ -126,6 +133,7 @@ module {:extern} NativePackedInts {
   Pack_LittleEndian_Uint64_Seq_into_Array(unpacked: seq<uint64>, ar: array<byte>, idx: uint64)
   requires 0 <= idx
   requires idx as int + 8 * |unpacked| <= ar.Length
+  requires ar.Length < 0x1_0000_0000_0000_0000
   modifies ar
   ensures forall j | 0 <= j < idx :: ar[j] == old(ar[j])
   ensures unpack_LittleEndian_Uint64_Seq(ar[idx .. idx as int + 8*|unpacked|], |unpacked|) == unpacked
