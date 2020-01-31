@@ -65,7 +65,7 @@ module PivotBetreeSpec {
   import opened KeyType
   import opened ValueMessage
 
-  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode
+  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode, InvNode
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
