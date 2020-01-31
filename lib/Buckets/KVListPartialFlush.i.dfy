@@ -118,6 +118,7 @@ module KVListPartialFlush {
   requires WeightBucketList(children) <= MaxTotalBucketWeight()
   requires forall i | 0 <= i < |children| :: WFBucket(children[i])
   {
+    assume false;
     partialFlushWF(toKvl(parent), toKvlSeq(children), pivots);
 
     var (newParent, newChildren) := partialFlush(toKvl(parent), toKvlSeq(children), pivots);
