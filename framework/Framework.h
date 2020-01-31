@@ -85,7 +85,7 @@ namespace NativeArrays_Compile {
 }
 
 namespace NativePackedInts_Compile {
-  static_assert(__LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
+  static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
   static_assert(sizeof(uint64) == 8, "uint64 is aliased wrong");
 
