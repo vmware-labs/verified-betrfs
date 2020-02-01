@@ -12,9 +12,9 @@ module Bounds {
   function method BlockSizeUint64() : uint64 { 8*1024*1024 }
 
   function method MaxNumChildrenUint64() : uint64 { 32 }
-  function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
+  function method MaxTotalBucketWeightUint64() : uint64 { 64220 }
 
-  function method MaxCacheSizeUint64() : uint64 { 200 }
+  function method MaxCacheSizeUint64() : uint64 { 25600 }
 
   // Minimum weight a bucket needs to have before we consider flushing it.
   function method FlushTriggerWeightUint64() : uint64 { MaxTotalBucketWeightUint64() / 8 }
