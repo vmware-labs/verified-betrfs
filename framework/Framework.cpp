@@ -330,7 +330,7 @@ void Application::Sync() {
   }
   LOG("doing push sync...");
 
-  for (int i = 0; i < 5000; i++) {
+  for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
     auto tup2 = handle_PopSync(k, hs, io, id);
     bool wait = tup2.first;
