@@ -3,8 +3,8 @@ include "NativeTypes.s.dfy"
 module {:extern} KeyType {
   import NativeTypes
 
-  function method MaxLen() : NativeTypes.uint64 { 1024 }
-  type Key = s : seq<NativeTypes.byte> | |s| <= 1024
+  function method MaxLen() : NativeTypes.uint64 { 20 }
+  type Key = s : seq<NativeTypes.byte> | |s| <= 20
 }
 
 module {:extern} ValueType {
