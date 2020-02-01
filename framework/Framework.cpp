@@ -127,7 +127,7 @@ namespace MainDiskIOHandler_Compile {
       num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
     }
     num[16] = '\0';
-    return ".veribetrfs-storage/" + string(num);
+    return "/tmp/.veribetrfs-storage/" + string(num);
   }
 
   int readFile(string const& filename, byte* res, int len)
@@ -509,15 +509,15 @@ void Mkfs() {
     fail("InitDiskBytes failed.");
   }
 
-  /*if (std::filesystem::exists(".veribetrfs-storage")) {
-    fail("error: .veribetrfs-storage/ already exists");
+  /*if (std::filesystem::exists("/tmp/.veribetrfs-storage")) {
+    fail("error: /tmp/.veribetrfs-storage/ already exists");
   }
-  std::filesystem::create_directory(".veribetrfs-storage");*/
+  std::filesystem::create_directory("/tmp/.veribetrfs-storage");*/
   struct stat info;
-  if (stat(".veribetrfs-storage", &info) != -1) {
-    fail("error: .veribetrfs-storage/ already exists");
+  if (stat("/tmp/.veribetrfs-storage", &info) != -1) {
+    fail("error: /tmp/.veribetrfs-storage/ already exists");
   }
-  mkdir(".veribetrfs-storage", 0700);
+  mkdir("/tmp/.veribetrfs-storage", 0700);
 
   for (auto p : m) {
     MainDiskIOHandler_Compile::writeSync(
@@ -527,11 +527,11 @@ void Mkfs() {
 
 void ClearIfExists() {
   struct stat info;
-  if (stat(".veribetrfs-storage", &info) != -1) {
+  if (stat("/tmp/.veribetrfs-storage", &info) != -1) {
 		// TODO use std::filesystem::remove_all
-		int ret = system("rm -rf .veribetrfs-storage"); 
+		int ret = system("rm -rf /tmp/.veribetrfs-storage"); 
 		if (ret != 0) {
-		  fail("failed to delete .veribetrfs-storage");
+		  fail("failed to delete /tmp/.veribetrfs-storage");
 		}
   }
 }
