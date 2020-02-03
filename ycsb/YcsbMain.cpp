@@ -58,11 +58,24 @@ inline void performYcsbUpdate(Application& app, ycsbc::CoreWorkload& workload, b
 void ycsbLoad(Application& app, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << "[step] loading (num ops: " << num_ops << ")" << endl;
 
+
+    auto clock_start = chrono::high_resolution_clock::now();
     for (int i = 0; i < num_ops; ++i) {
         performYcsbInsert(app, workload, verbose);
     }
 
+    cerr << "[step] sync" << endl;
+    app.Sync();
+
+    auto clock_end = chrono::high_resolution_clock::now();
+    long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
+
+    double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
+
+
     cerr << "[step] loading complete" << endl;
+    cout << "[load]\tduration(ns)\toperations\tops/s" << endl;
+    cout << "\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
 }
 
 
@@ -160,9 +173,6 @@ int main(int argc, char* argv[]) {
     int sync_interval_ms = stoi(props["syncintervalms"]);
 
     ycsbLoad(app, *workload, record_count, verbose);
-
-    cerr << "[step] sync" << endl;
-    app.Sync();
 
     int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
 
