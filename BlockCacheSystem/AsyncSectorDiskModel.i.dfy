@@ -42,6 +42,13 @@ module LBAType {
     loc.addr == loc'.addr
   }
 
+  lemma ValidAddrMul(i: uint64)
+  requires i as int * BlockSize() as int < 0x1_0000_0000_0000_0000
+  ensures ValidAddr(i * BlockSize())
+  {
+    reveal_ValidAddr();
+  }
+
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
   //    reveals BlockSize
   //export extends S

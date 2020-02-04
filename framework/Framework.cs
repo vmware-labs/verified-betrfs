@@ -442,7 +442,7 @@ public class FSUtil {
   }
 
   public static void Mkfs() {
-    Dafny.Map<ulong, byte[]> m = MkfsImpl_Compile.__default.InitDiskBytes();
+    Dafny.Map<ulong, Dafny.Sequence<byte>> m = __default.Mkfs();
 
     if (m.Count == 0) {
       throw new Exception("InitDiskBytes failed.");
@@ -456,7 +456,9 @@ public class FSUtil {
     DiskIOHandler io = new DiskIOHandler();
 
     foreach (ulong lba in m.Keys.Elements) {
-      byte[] bytes = m.Select(lba);
+      IList<byte> ilist = m.Select(lba).Elements;
+      byte[] bytes = new byte[ilist.Count];
+      ilist.CopyTo(bytes, 0);
       io.writeSync(lba, bytes);
     }
   }
@@ -558,6 +560,10 @@ namespace NativeArrays_Compile {
       return res;
     }
 
+    public static void @CopyArrayIntoArray<A>(A[] src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+        System.Array.Copy(src, (long)srcIndex, dst, (long)dstIndex, (long)len);
+    }
+
     public static T[] @newArrayClone<T>(T[] ar)
     {
       T[] res = new T[ar.Length];
@@ -566,12 +572,12 @@ namespace NativeArrays_Compile {
     }
 
     public static void @CopySeqIntoArray<A>(Dafny.Sequence<A> src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
-        //Native_Compile.BenchmarkingUtil.start();
-
         ArraySegment<A> seg = (ArraySegment<A>) src.Elements;
         System.Array.Copy(seg.Array, seg.Offset + (long)srcIndex, dst, (long)dstIndex, (long)len);
+    }
 
-        //Native_Compile.BenchmarkingUtil.end();
+    public static void @CopyArrayIntoDifferentArray<A>(A[] src, ulong srcIndex, A[] dst, ulong dstIndex, ulong len) {
+        System.Array.Copy(src, (long)srcIndex, dst, (long)dstIndex, (long)len);
     }
 
     //[DllImport("c", CallingConvention = CallingConvention.Cdecl)]

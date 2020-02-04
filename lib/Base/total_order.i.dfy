@@ -1,4 +1,5 @@
 include "sequences.i.dfy"
+include "Maps.s.dfy"
 include "NativeTypes.s.dfy"
 include "KeyType.s.dfy"
 include "NativeArrays.s.dfy"
@@ -6,10 +7,11 @@ include "Option.s.dfy"
   
 abstract module Total_Order {
   import Seq = Sequences
+  import Maps
   import opened NativeTypes
   import opened Options
   import NativeArrays
-    
+  
 	type Element(!new,==)
 
 	function SomeElement() : Element
@@ -25,12 +27,12 @@ abstract module Total_Order {
 		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
 		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
-  method cmp(a: Element, b: Element) returns (c: int32)
-    ensures c < 0 ==> lt(a, b)
-    ensures c > 0 ==> lt(b, a)
-    ensures c == 0 ==> a == b
-
 	predicate ltedef(a: Element, b: Element)
+
+  //method cmp(a: Element, b: Element) returns (c: int32)
+  //  ensures c < 0 ==> lt(a, b)
+  //  ensures c > 0 ==> lt(b, a)
+  //  ensures c == 0 ==> a == b
 
   function Min(a: Element, b: Element) : Element
   {
@@ -139,8 +141,12 @@ abstract module Total_Order {
   ensures |run| == 0 ==> IsStrictlySorted(run)
   ensures |run| == 1 ==> IsStrictlySorted(run)
   {
-    reveal_IsSorted();
-    forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
+    var b := forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j]);
+    assert b ==> IsSorted(run) by {
+       reveal_IsSorted();
+    }
+    b
+    //forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
   }
 
   lemma IsStrictlySortedImpliesLt(run: seq<Element>, i: int, j: int)
@@ -149,6 +155,14 @@ abstract module Total_Order {
   ensures lt(run[i], run[j])
   {
     reveal_IsStrictlySorted();
+  }
+
+  lemma IsSortedImpliesLte(run: seq<Element>, i: int, j: int)
+  requires IsSorted(run)
+  requires 0 <= i <= j < |run|
+  ensures lte(run[i], run[j])
+  {
+    reveal_IsSorted();
   }
 
   lemma IsStrictlySortedImpliesLtIndices(run: seq<Element>, i: int, j: int)
@@ -177,6 +191,22 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma SortedSubsequence(run: seq<Element>, i: int, j: int)
+    requires IsSorted(run)
+    requires 0 <= i <= j <= |run|
+    ensures IsSorted(run[i..j])
+  {
+    reveal_IsSorted();
+  }
+
+  lemma StrictlySortedSubsequence(run: seq<Element>, i: int, j: int)
+    requires IsStrictlySorted(run)
+    requires 0 <= i <= j <= |run|
+    ensures IsStrictlySorted(run[i..j])
+  {
+    reveal_IsStrictlySorted();
+  }
+  
   lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
   requires -1 <= pos < |l|;
   requires IsStrictlySorted(l);
@@ -206,6 +236,76 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma strictlySortedReplace(l: seq<Element>, k: Element, pos: int)
+    requires IsStrictlySorted(l)
+    requires 0 <= pos < |l|
+    requires 0 < pos ==> lt(l[pos-1], k)
+    requires pos < |l|-1 ==> lt(k, l[pos+1])
+    ensures IsStrictlySorted(l[pos := k])
+  {
+    var l' := l[pos := k];
+    reveal_IsStrictlySorted();
+    forall i, j | 0 <= i < j < |l'|
+      ensures lt(l'[i], l'[j])
+    {
+      if i == pos {
+        if pos < |l|-1 {
+          assert lte(l[pos+1], l[j]);
+        }
+      } else if j == pos {
+        if 0 < pos {
+          assert lte(l[i], l[pos-1]);
+        }
+      }
+    }
+  }
+  
+  lemma FlattenSorted(seqs: seq<seq<Element>>)
+    requires forall i :: 0 <= i < |seqs| ==> IsSorted(seqs[i])
+    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lte(k1, k2)
+    ensures IsSorted(Seq.Flatten(seqs))
+  {
+    var shape := Seq.FlattenShape(seqs);
+    var fseqs := Seq.Flatten(seqs);
+    forall i, j | 0 <= i < j < |fseqs|
+      ensures lte(fseqs[i], fseqs[j])
+    {
+      var (il, io) := Seq.UnflattenIndex(shape, i);
+      var (jl, jo) := Seq.UnflattenIndex(shape, j);
+      Seq.UnflattenIndexIsCorrect(seqs, i);
+      Seq.UnflattenIndexIsCorrect(seqs, j);
+      Seq.UnflattenIndexOrdering(shape, i, j);
+      if il < jl {
+      } else {
+        IsSortedImpliesLte(seqs[il], io, jo);
+      }
+    }
+    reveal_IsSorted();
+  }
+
+  lemma FlattenStrictlySorted(seqs: seq<seq<Element>>)
+    requires forall i :: 0 <= i < |seqs| ==> IsStrictlySorted(seqs[i])
+    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lt(k1, k2)
+    ensures IsStrictlySorted(Seq.Flatten(seqs))
+  {
+    var shape := Seq.FlattenShape(seqs);
+    var fseqs := Seq.Flatten(seqs);
+    forall i, j | 0 <= i < j < |fseqs|
+      ensures lt(fseqs[i], fseqs[j])
+    {
+      var (il, io) := Seq.UnflattenIndex(shape, i);
+      var (jl, jo) := Seq.UnflattenIndex(shape, j);
+      Seq.UnflattenIndexIsCorrect(seqs, i);
+      Seq.UnflattenIndexIsCorrect(seqs, j);
+      Seq.UnflattenIndexOrdering(shape, i, j);
+      if il < jl {
+      } else {
+        IsStrictlySortedImpliesLt(seqs[il], io, jo);
+      }
+    }
+    reveal_IsStrictlySorted();
+  }
+  
   function LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLte(run, needle) < |run|;
@@ -218,6 +318,81 @@ abstract module Total_Order {
     else 1 + LargestLte(run[1..], needle)
   }
 
+  lemma LargestLteIsOrderPreserving(run: seq<Element>, smaller: Element, larger: Element)
+    requires IsSorted(run)
+    requires lte(smaller, larger)
+    ensures LargestLte(run, smaller) <= LargestLte(run, larger)
+  {
+  }
+
+  lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
+    requires IsSorted(run)
+    requires -1 <= pos < |run|
+    requires forall i ::   0 <= i <= pos   ==> lte(run[i], needle)
+    requires forall i :: pos < i < |run| ==> lt(needle, run[i])
+    ensures pos == LargestLte(run, needle)
+  {
+    reveal_IsSorted();
+    var llte := LargestLte(run, needle);
+    if pos < llte {
+      assert lt(run[llte], needle);
+      assert lte(needle, run[llte]);
+      assert false;
+    } else if llte < pos {
+      assert lt(run[pos], needle);
+      assert lte(needle, run[pos]);
+      assert false;
+    }
+  }
+
+  lemma LargestLteIsUnique2(run: seq<Element>, needle: Element, pos: int)
+    requires IsSorted(run)
+    requires -1 <= pos < |run|
+    requires 0 <= pos ==> lte(run[pos], needle)
+    requires pos < |run|-1 ==> lt(needle, run[pos+1])
+    ensures pos == LargestLte(run, needle)
+  {
+    forall i | 0 <= i <= pos
+      ensures lte(run[i], needle)
+    {
+      IsSortedImpliesLte(run, i, pos);
+    }
+    forall i | pos < i < |run|
+      ensures lt(needle, run[i])
+    {
+      IsSortedImpliesLte(run, pos+1, i);
+    }
+    LargestLteIsUnique(run, needle, pos);
+  }
+  
+  lemma LargestLteSubsequence(run: seq<Element>, needle: Element, from: int, to: int)
+    requires IsSorted(run)
+    requires 0 <= from <= to <= |run|
+    ensures from-1 <= LargestLte(run, needle) < to ==> LargestLte(run, needle) == from + LargestLte(run[from..to], needle)
+    ensures 0 <= LargestLte(run[from..to], needle) < to - from - 1 ==> LargestLte(run, needle) == from + LargestLte(run[from..to], needle)
+  {
+    var sub := run[from..to];
+    var runllte := LargestLte(run, needle);
+    var subllte := LargestLte(sub, needle);
+    
+    if from-1 <= runllte < to {
+      if from <= runllte {
+        assert lte(sub[runllte-from], needle);
+      }
+      if runllte < to-1 {
+        assert lt(needle, sub[runllte+1-from]);
+      }
+      LargestLteIsUnique2(sub, needle, runllte-from);
+    }
+
+    if 0 <= subllte < |sub|-1 {
+      assert lte(run[from + subllte], needle);
+      assert lt(needle, sub[subllte+1]);
+      assert lt(needle, run[from + subllte + 1]);
+      LargestLteIsUnique2(run, needle, from + subllte);
+    }
+  }
+  
   function LargestLt(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLt(run, needle) < |run|;
@@ -230,6 +405,26 @@ abstract module Total_Order {
     else 1 + LargestLt(run[1..], needle)
   }
 
+  lemma LargestLtIsUnique(run: seq<Element>, needle: Element, pos: int)
+    requires IsSorted(run)
+    requires -1 <= pos < |run|
+    requires forall i ::   0 <= i <= pos   ==> lt(run[i], needle)
+    requires forall i :: pos < i < |run| ==> lte(needle, run[i])
+    ensures pos == LargestLt(run, needle)
+  {
+    reveal_IsSorted();
+    var llt := LargestLt(run, needle);
+    if pos < llt {
+      assert lt(run[llt], needle);
+      assert lte(needle, run[llt]);
+      assert false;
+    } else if llt < pos {
+      assert lt(run[pos], needle);
+      assert lte(needle, run[pos]);
+      assert false;
+    }
+  }
+  
   lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
   requires IsStrictlySorted(run);
   requires 0 <= pos < |run|
@@ -239,6 +434,13 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma PosEqLargestLteForAllElts(run: seq<Element>)
+    requires IsStrictlySorted(run)
+    ensures forall elt :: elt in run ==> Seq.IndexOf(run, elt) == LargestLte(run, elt)
+  {
+    reveal_IsStrictlySorted();
+  }
+  
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
   requires IsStrictlySorted(run)
   requires |run| > 0 ==> lt(Seq.Last(run), key)
@@ -375,62 +577,54 @@ abstract module Total_Order {
     b :| lt(b, a);
   }
 
-  method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int64)
-    requires |run| < 0x4000_0000_0000_0000
-    requires IsSorted(run)
-    ensures res as int == LargestLte(run, needle)
-  {
-    var lo: int64 := 0;
-    var hi: int64 := |run| as int64;
-    while lo < hi
-    invariant 0 <= lo as int <= hi as int <= |run|
-    invariant 1 <= lo as int ==> lte(run[lo-1], needle)
-    invariant hi as int < |run| ==> lt(needle, run[hi])
-    invariant lo <= hi
-    decreases hi - lo
-    {
-      var mid := (lo + hi) / 2;
-      var c := cmp(run[mid], needle);
-      if (c > 0) {
-        hi := mid;
-      } else {
-        lo := mid+1;
-      }
-    }
-
-    return lo - 1;
+  function MapPivotedUnion<Value>(left: map<Element, Value>, pivot: Element, right: map<Element, Value>) : map<Element, Value> {
+    var restricted_left := Maps.MapIRestrict(left, iset k | lt(k, pivot));
+    var restricted_right := Maps.MapIRestrict(right, iset k | lte(pivot, k));
+    Maps.MapDisjointUnion(restricted_left, restricted_right)
   }
 
-  method ComputeLargestLt(run: seq<Element>, needle: Element) returns (res : int64)
-    requires |run| < 0x4000_0000_0000_0000
-    requires IsSorted(run)
-    ensures res as int == LargestLt(run, needle)
+  function SetSuccessor(m: set<Element>, key: Element) : Option<Element>
   {
-    var lo: int64 := 0;
-    var hi: int64 := |run| as int64;
-    while lo < hi
-    invariant 0 <= lo as int <= hi as int <= |run|
-    invariant 1 <= lo as int ==> lt(run[lo-1], needle)
-    invariant hi as int < |run| ==> lte(needle, run[hi])
-    decreases hi - lo
-    {
-      var mid := (lo + hi) / 2;
-      var c := cmp(run[mid], needle);
-      if (c < 0) {
-        lo := mid+1;
-      } else {
-        hi := mid;
-      }
-    }
-
-    return lo - 1;
+    if next :|
+      && next in m
+      && lt(key, next)
+      && (forall other :: other in m && other != next && lt(key, other) ==> lt(next, other)) then
+      Some(next)
+    else
+      None
+  }
+  
+  function MapSuccessor<V>(m: map<Element, V>, key: Element) : Option<Element>
+  {
+    SetSuccessor(m.Keys, key)
   }
 
+  function SeqSuccessor(m: seq<Element>, key: Element) : Option<Element>
+  {
+    SetSuccessor(set x | x in m, key)
+  }
+
+  lemma StrictlySortedSeqSuccessor(s: seq<Element>, key: Element, pos: int)
+    requires IsStrictlySorted(s)
+    requires 0 < pos < |s|
+    requires lte(s[pos-1], key)
+    requires lt(key, s[pos])
+    ensures SeqSuccessor(s, key) == Some(s[pos])
+  {
+    forall other | other in s && other != s[pos] && lt(key, other)
+      ensures lt(s[pos], other)
+    {
+      var otherpos := Seq.IndexOf(s, other);
+      IsStrictlySortedImpliesLtIndices(s, pos-1, otherpos);
+      IsStrictlySortedImpliesLt(s, pos, otherpos);
+    }
+  }
+  
   predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
   {
-    && (forall i, j | 0 <= i < j < |s| :: lt(s[i].0, s[j].0))
-    && (forall i | 0 <= i < |s| :: s[i].0 in m && m[s[i].0] == s[i].1)
-    && (forall key | key in m :: exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key])
+    && IsStrictlySorted(Seq.Unzip(s).0)
+    && (forall i :: 0 <= i < |s| ==> s[i].0 in m && m[s[i].0] == s[i].1)
+    && (forall key :: key in m ==> (exists i :: 0 <= i < |s| && s[i].0 == key && s[i].1 == m[key]))
   }
 
   function {:opaque} minimum(s: set<Element>) : (x : Element)
@@ -513,25 +707,20 @@ abstract module Total_Order {
   }
 }*/
 
-/*module Integer_Order refines Total_Order {
+module Integer_Order refines Total_Order {
   type Element = int
 
   function SomeElement() : Element { 0 }
 
-  predicate method lte(a: Element, b: Element) {
+  predicate lte(a: Element, b: Element) {
     reveal_ltedef();
     ltedef(a, b)
   }
 
-  predicate method {:opaque} ltedef(a: Element, b: Element) {
+  predicate {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
-
-  method cmp(a: Element, b: Element) returns (c: int32)
-  {
-    return if a < b then -1 else if a > b then 1 else 0;
-  }
-}*/
+}
 
 module Uint64_Order refines Total_Order {
   type Element = uint64
@@ -672,6 +861,9 @@ module Lexicographic_Byte_Order refines Total_Order {
   }
 
   method cmp(a: Element, b: Element) returns (c: int32)
+    ensures c < 0 ==> lt(a, b)
+    ensures c > 0 ==> lt(b, a)
+    ensures c == 0 ==> a == b
   {
     c := NativeArrays.ByteSeqCmpByteSeq(a, b);
   }
@@ -681,4 +873,185 @@ module Lexicographic_Byte_Order refines Total_Order {
   {
     SeqComparison.reveal_lte();
   }
+
+  // TODO Ideally we would put these methods in the abstract class
+  // (since they could apply to any kind of Element)
+  // But then our c++ backend would not be able to compile
+  // Integer_Total_Order which uses the `int` type.
+
+  method ArrayLargestLtePlus1Linear(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
+    requires IsSorted(run[start..end]);
+    ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
+  {
+    var i: uint64 := start;
+    var t;
+    if i < end {
+      t := cmp(run[i], needle);
+    }
+    while i < end && t <= 0
+      invariant start <= i <= end
+      invariant forall j :: start <= j < i ==> lte(run[j], needle)
+      invariant i < end ==> (t <= 0 <==> lte(run[i], needle))
+    {
+      i := i + 1;
+      if i < end {
+        t := cmp(run[i], needle);
+      }
+    }
+    forall j | i <= j < end
+      ensures lt(needle, run[j])
+    {
+      reveal_IsSorted();
+      assert lt(needle, run[i]);
+      assert lte(run[i], run[j]);
+    }
+    LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
+    posplus1 := i;
+  }
+
+  method ArrayLargestLtePlus1(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
+    requires IsSorted(run[start..end]);
+    ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
+  {
+    reveal_IsSorted();
+    var lo := start;
+    var hi := end + 1;
+    while 1 < hi - lo 
+      invariant start <= lo < hi <= end + 1
+      invariant forall i :: start <= i < lo ==> lte(run[i], needle)
+      invariant forall i :: hi - 1 <= i < end ==> lt(needle, run[i])
+      decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var t := cmp(run[mid-1], needle);
+      if t <= 0 {
+        lo := mid;
+      } else {
+        hi := mid;
+      }
+    }
+    var i: uint64 := lo;
+    /*
+    var t;
+    if i < hi {
+      t := cmp(run[i], needle);
+    }
+    while i < hi && t <= 0
+      invariant start <= i <= end
+      invariant forall j :: start <= j < i ==> lte(run[j], needle)
+      invariant i < hi ==> (t <= 0 <==> lte(run[i], needle))
+    {
+      i := i + 1;
+      if i < hi {
+        t := cmp(run[i], needle);
+      }
+    }
+    forall j | i <= j < end
+      ensures lt(needle, run[j])
+    {
+      reveal_IsSorted();
+      assert lt(needle, run[i]);
+      assert lte(run[i], run[j]);
+    }
+    */
+    LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
+    posplus1 := i;
+  }
+  
+  method ArrayLargestLtPlus1(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
+    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
+    requires IsSorted(run[start..end]);
+    ensures posplus1 as int == start as int + LargestLt(run[start..end], needle) + 1
+  {
+    reveal_IsSorted();
+    var lo := start;
+    var hi := end + 1;
+    while 1 < hi - lo 
+      invariant start <= lo < hi <= end + 1
+      invariant forall i :: start <= i < lo ==> lt(run[i], needle)
+      invariant forall i :: hi - 1 <= i < end ==> lte(needle, run[i])
+      decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var t := cmp(run[mid-1], needle);
+      if t < 0 {
+        lo := mid;
+      } else {
+        hi := mid;
+      }
+    }
+    var i: uint64 := lo;
+    /*
+    var t;
+    if i < hi {
+      t := cmp(run[i], needle);
+    }
+    while i < hi && t < 0
+      invariant start <= i <= end
+      invariant forall j :: start <= j < i ==> lt(run[j], needle)
+      invariant i < hi ==> (t < 0 <==> lt(run[i], needle))
+    {
+      i := i + 1;
+      if i < hi {
+        t := cmp(run[i], needle);
+      }
+    }
+    */
+    LargestLtIsUnique(run[start..end], needle, i as int - start as int - 1);
+    posplus1 := i;
+  }
+
+  method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int64)
+    requires |run| < 0x4000_0000_0000_0000
+    requires IsSorted(run)
+    ensures res as int == LargestLte(run, needle)
+  {
+    var lo: int64 := 0;
+    var hi: int64 := |run| as int64;
+    while lo < hi
+    invariant 0 <= lo as int <= hi as int <= |run|
+    invariant 1 <= lo as int ==> lte(run[lo-1], needle)
+    invariant hi as int < |run| ==> lt(needle, run[hi])
+    invariant lo <= hi
+    decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var c := cmp(run[mid], needle);
+      if (c > 0) {
+        hi := mid;
+      } else {
+        lo := mid+1;
+      }
+    }
+
+    return lo - 1;
+  }
+    
+  method ComputeLargestLt(run: seq<Element>, needle: Element) returns (res : int64)
+    requires |run| < 0x4000_0000_0000_0000
+    requires IsSorted(run)
+    ensures res as int == LargestLt(run, needle)
+  {
+    var lo: int64 := 0;
+    var hi: int64 := |run| as int64;
+    while lo < hi
+    invariant 0 <= lo as int <= hi as int <= |run|
+    invariant 1 <= lo as int ==> lt(run[lo-1], needle)
+    invariant hi as int < |run| ==> lte(needle, run[hi])
+    decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var c := cmp(run[mid], needle);
+      if (c < 0) {
+        lo := mid+1;
+      } else {
+        hi := mid;
+      }
+    }
+
+    return lo - 1;
+  }
+
 }

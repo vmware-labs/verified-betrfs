@@ -1,6 +1,10 @@
 include "../Base/total_order.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/mathematics.i.dfy"
+//
+// VESTIGIAL -- do not bother trying to prove stuff here because this
+// file is marked for deletion or major renovation.
+//
 
 module TwoThreeTree {
     import Keyspace = Lexicographic_Byte_Order

@@ -581,6 +581,16 @@ module PivotBetreeSpecRefinement {
     reveal_SplitBucketLeft();
     P.reveal_CutoffNodeAndKeepLeft();
     var i := Route(node'.pivotTable, key);
+
+    var cLeft := CutoffForLeft(node.pivotTable, pivot);
+    if i < |node.pivotTable| {
+      if i < cLeft - 1 {
+        //assert Keyspace.lt(key, node'.pivotTable[i]);
+        //assert Keyspace.lt(key, node.pivotTable[i]);
+      } else {
+        //assert Keyspace.lt(key, node.pivotTable[i]);
+      }
+    }
     RouteIs(node.pivotTable, key, i);
   }
 

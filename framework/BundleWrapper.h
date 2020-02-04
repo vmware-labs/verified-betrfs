@@ -17,12 +17,18 @@ struct Variables {
   std::shared_ptr<MainHandlers_Compile::HeapState> hs;
 };
 
+namespace UI_Compile {
+  struct SuccResultList;
+  struct RangeStart;
+};
+
 std::pair<Constants, Variables> handle_InitState();
-DafnyMap<uint64, shared_ptr<vector<uint8>>> handle_InitDiskBytes();
+DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs();
 uint64 handle_PushSync(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 std::pair<bool, bool> handle_PopSync(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, uint64);
 bool handle_Insert(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>, DafnySequence<uint8>);
 std::pair<bool, DafnySequence<uint8>> handle_Query(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>);
+std::pair<bool, UI_Compile::SuccResultList> handle_Succ(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, UI_Compile::RangeStart start, uint64 maxToFind);
 void handle_ReadResponse(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 void handle_WriteResponse(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 

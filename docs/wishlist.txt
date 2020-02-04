@@ -45,6 +45,10 @@
 - auto-cast uint64 to ints
 - methods on datatypes (because we don't necessarily want to use a class)
 
+In tag slow-SplitChild,
+   time dafny MutableBtree.dfy /proc:*SplitChild*
+takes 3 minutes to fail.
+
 - d6d75b81577205ab31aafa4761a97a9b6ef72d1e timeout/instability with no smoking guns in the profiler
 - 1a88431e5c4ec22082a390f894878e10b2009a5f see Probe in MutableMap:449 for fix, surprising assert required
 
@@ -115,3 +119,27 @@ build rustny
   and put them back later? Can't borrow because once you borrow the
   first Node, you don't own the Cache and hence can't borrow a second
   Node.
+
+2019/12/31 Timeout with almost no quantifier instantiations:
+           commit bdf3df8e82c50f0f1afeea1621c31d623032a779
+           cd lib/DataStructures
+           dafny BtreeSpec.i.dfy /proc:*BuildTreeForSequence
+
+2020/01/02 See lib/Base/total_order.i.dfy:IsStrictlySorted()
+           It originally was just
+           {
+             reveal_IsSorted();
+             forall i, j ...
+           }
+           but the body of IsSorted would leak to callers of
+           reveal_IsStrictlySorted().
+
+2020/01/02 See lib/Base/insert()
+           It ensures something that appears to have a trigger trap
+           in the ensure itself.  Consider rewriting
+              ensures forall i :: pos <= i < |s| ==> insert(s, a, pos)[i+1] == s[i];
+           as
+              ensures insert(s, a, pos) == s[..pos] + [a] + s[pos..]
+           (but this willd likely cause massive breakage throughout code)
+
+

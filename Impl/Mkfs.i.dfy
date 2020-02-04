@@ -1,6 +1,7 @@
-include "Marshalling.i.dfy"
+include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "StateImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
+include "MkfsModel.i.dfy"
 
 //
 // TODO implement this so that it matches the spec of Mkfs
@@ -9,7 +10,7 @@ include "MarshallingImpl.i.dfy"
 
 module {:extern} MkfsImpl {
   import MarshallingImpl
-  import IMM = ImplMarshallingModel
+  import IMM = MarshallingModel
   import opened Options
   import opened NativeTypes
   import opened BucketWeights
@@ -19,6 +20,8 @@ module {:extern} MkfsImpl {
   import KVList
   import IndirectionTableModel
   import IndirectionTableImpl
+  import Marshalling
+  import MkfsModel
 
   import BT = PivotBetreeSpec
   import BC = BetreeGraphBlockCache
@@ -30,7 +33,11 @@ module {:extern} MkfsImpl {
 
   type LBA = LBAType.LBA
 
-  method InitDiskBytes() returns (m :  map<LBA, array<byte>>)
+  import ADM = ByteBetreeBlockCacheSystem
+
+  method Mkfs() returns (diskContents :  map<LBA, seq<byte>>)
+  ensures MkfsModel.InitDiskContents(diskContents)
+  ensures ADM.BlocksDontIntersect(diskContents)
   {
     WeightBucketEmpty();
     var empty := new MutBucket(KVList.Kvl([], []));
@@ -41,37 +48,33 @@ module {:extern} MkfsImpl {
     assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
     ghost var sector:SI.Sector := SI.SectorBlock(node);
     ghost var is:SM.Sector := SI.ISector(sector);
-    var b1 := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
 
-    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
-    sectorIndirectionTable.InvForMkfs();
-    sectorIndirectionTable.t.Insert(0, IndirectionTableModel.Entry(Some(LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)), [], 1));
+    var b1_array := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
+    var b1 := b1_array[..];
 
-    // TODO(jonh): We're reaching right into sectorIndirectionTable.t above to
-    // wangle it. No reason that should preserve sectorIndirectionTable.Inv!
-    // Need to improve the contract between sectorIndirectionTable and here.
-    assume sectorIndirectionTable.Inv();
+    var loc := LBAType.Location(LBAType.BlockSize(), |b1| as uint64);
+    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(loc);
 
-    assume SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
-      map[0 := LBAType.Location(LBAType.BlockSize(), b1.Length as uint64)],
+    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
+      map[0 := LBAType.Location(LBAType.BlockSize(), |b1| as uint64)],
       map[0 := []]
     );
 
-    //assert SI.WFSector(SI.SectorIndirectionTable(sectorIndirectionTable));
-    assume SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
-    var b0 := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
+    LBAType.ValidAddrMul(1);
+    assert LBAType.ValidLocation(LBAType.Location(LBAType.BlockSize(), |b1| as uint64));
+    assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
+    assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
+    var b0_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
-    // TODO(jonh): MarshallCheckedSector owes us a promise that it can marshall
-    // SectorIndirectionTables successfully. It can't make that promise right
-    // now, since it only bounds the marshalled size of an indirection table to a gazillion.
-    assume b0 != null;
+    assert b0_array != null;
 
-    m := map[
+    var b0 := b0_array[..];
+
+    diskContents := map[
       // Map ref 0 to lba 1
       0 := b0,
       // Put the root at lba 1
       LBAType.BlockSize() := b1
     ];
-
   }
 }

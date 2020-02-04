@@ -17,6 +17,8 @@ else
   TIMELIMIT=/timeLimit:$(TL)
 endif
 
+CC=g++
+
 ##############################################################################
 # Automatic targets
 
@@ -24,6 +26,7 @@ all: status exe
 
 clean:
 	rm -rf build
+	@$(MAKE) -C ycsb clean
 
 ##############################################################################
 # Build dir and dependency setup
@@ -190,6 +193,18 @@ build/%.syntax-status.pdf: %.dfy build/%.syntax $(STATUS_TOOL) $(STATUS_DEPS) bu
 	@tred < $(DOTNAME) | dot -Tpdf -o$@
 
 ##############################################################################
+# .lcreport: Tabular data on line counts of {spec, impl, proof}
+#.PRECIOUS: build/%.lc --Why isn't this necessary?
+LC_TOOL=tools/line_counter.py
+LC_DEPS=tools/line_count_lib.py tools/lib_aggregate.py tools/lib_deps.py
+build/%.lc: %.dfy build/%.syntax $(LC_TOOL) $(LC_DEPS)
+		$(LC_TOOL) --mode count --input $< --output $@
+
+LC_REPORT_DEPS=tools/line_counter_report_lib.py
+build/%.lcreport: %.dfy build/%.lc $(LC_TOOL) $(LC_DEPS) $(LC_REPORT_DEPS)
+		$(LC_TOOL) --mode report --input $< --output $@
+
+##############################################################################
 # .cs: C-Sharp output from compiling a Dafny file (which includes all deps)
 # In principle, building code should depend on .verified! But we want
 # to play with perf with not-entirely-verifying trees.
@@ -218,31 +233,59 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
+# XXX(travis) this is a dumb hack to extract from the cpp file
+# part of it that we want to use as a .h
+# Ideally the dafny compiler would build this for us.
+build/Bundle.h: build/Bundle.cpp
+	python tools/hack_make_Bundle_h.py > $@
+
 ##############################################################################
 # C++ object files
 
 CPP_DEP_DIR=build/cppdeps
+GEN_H_FILES=build/Bundle.h
 
-build/%.o: build/%.cpp | $$(@D)/.
-	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall
+WARNINGS=-Wall -Wsign-compare
 
-build/framework/%.o: framework/%.cpp | $$(@D)/.
+build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall -Werror
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(WARNINGS)
+
+# _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
+# (but also makes stuff not thread-safe)
+OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
+
+build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
+	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
-build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp | $$(@D)/.
+build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	g++ -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" -Wall
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o
+VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o build/framework/Benchmarks.o
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	g++ -o $@ $(VERIBETRFS_O_FILES) -msse4.2
+	$(CC) -o $@ $(VERIBETRFS_O_FILES) -msse4.2
+
+##############################################################################
+# YCSB
+
+VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
+
+libycsbc:
+	@$(MAKE) -C ycsb build/libycsbc.a
+
+.PHONY: libycsbc
+
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc ycsb/YcsbMain.cpp
+	# NOTE: this uses c++17, which is required by hdrhist
+	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -std=c++17 -msse4.2 -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
+

@@ -1,4 +1,4 @@
-include "../BlockCacheSystem/AsyncDiskModel.s.dfy"
+include "AsyncDiskModel.s.dfy"
 include "ByteBetreeBlockCache.i.dfy"
 include "../BlockCacheSystem/BetreeBlockCacheSystem.i.dfy"
 //

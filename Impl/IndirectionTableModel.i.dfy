@@ -9,6 +9,8 @@ include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/BitmapModel.i.dfy"
+include "../ByteBlockCacheSystem/Marshalling.i.dfy"
+
 //
 // An IndirectionTable maps references to locations and tracks
 // dependencies (accounts for locations containing references).
@@ -39,6 +41,7 @@ module IndirectionTableModel {
   import BitmapModel
   import opened Bounds
   import SetBijectivity
+  import Marshalling
 
   datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
@@ -115,12 +118,12 @@ module IndirectionTableModel {
 
   function MaxSize() : int
   {
-    0x1_0000_0000
+    IndirectionTableMaxSize()
   }
 
   function method MaxSizeUint64() : uint64
   {
-    0x1_0000_0000
+    IndirectionTableMaxSizeUint64()
   }
 
   protected predicate Inv(self: IndirectionTable)
@@ -389,7 +392,12 @@ module IndirectionTableModel {
   ensures idx < |oldSuccs| ==>
     var (t', q') := PredDec(t, q, oldSuccs[idx]);
     RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
+  ensures |LruModel.I(q)| <= 0x1_0000_0000
   {
+    assert LruModel.I(q) <= t.contents.Keys;
+    SetInclusionImpliesSmallerCardinality(LruModel.I(q), t.contents.Keys);
+    assert |t.contents.Keys| == |t.contents|;
+
     if idx < |oldSuccs| {
       var graph := Graph(t);
 
@@ -634,6 +642,17 @@ module IndirectionTableModel {
     forall ref | ref in succs :: ref in graph
   }
 
+  lemma QueueSizeBound(self: IndirectionTable)
+  requires Inv(self)
+  ensures self.garbageQueue.Some? ==>
+      |LruModel.I(self.garbageQueue.value)| <= 0x1_0000_0000;
+  {
+    if self.garbageQueue.Some? {
+      SetInclusionImpliesSmallerCardinality(LruModel.I(self.garbageQueue.value), self.t.contents.Keys);
+      assert |self.t.contents.Keys| == |self.t.contents|;
+    }
+  }
+
   lemma LemmaUpdateAndRemoveLocStuff(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>)
   requires Inv(self)
   requires TrackingGarbage(self)
@@ -647,7 +666,10 @@ module IndirectionTableModel {
     var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
     RefcountUpdateInv(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0, 0)
+  ensures |LruModel.I(self.garbageQueue.value)| <= 0x1_0000_0000;
   {
+    QueueSizeBound(self);
+
     var oldEntry := MutableMapModel.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
     var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
@@ -1106,16 +1128,22 @@ module IndirectionTableModel {
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
-  requires |a| < 0x1_0000_0000_0000_0000 / 8
+  requires |a| <= MaxSize()
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> s.value.count as int == |a|
   ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
   ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
   ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
+  ensures s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value))
+  ensures s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?
   {
     if |a| == 0 then
-      Some(MutableMapModel.Constructor(1024))
+      var s := Some(MutableMapModel.Constructor(1024));
+      assert Locs(s.value) == map[];
+      assert Graph(s.value) == map[];
+      //assert s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value));
+      s
     else (
       var res := valToHashMap(DropLast(a));
       match res {
@@ -1124,18 +1152,17 @@ module IndirectionTableModel {
           var ref := tuple.t[0].u;
           var lba := tuple.t[1].u;
           var len := tuple.t[2].u;
-          var succs := Some(tuple.t[3].ua);
-          match succs {
-            case None => None
-            case Some(succs) => (
-              var loc := LBAType.Location(lba, len);
-              if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
-                None
-              ) else (
-                Some(MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0)))
-              )
-            )
-          }
+          var succs := tuple.t[3].ua;
+          var loc := LBAType.Location(lba, len);
+          if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
+            None
+          ) else (
+            var res := MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0));
+            assert Locs(res) == Locs(table)[ref := loc];
+            assert Graph(res) == Graph(table)[ref := succs];
+            //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
+            Some(res)
+          )
         )
         case None => None
       }
@@ -1215,6 +1242,8 @@ module IndirectionTableModel {
   ensures s.Some? ==> Inv(s.value)
   ensures s.Some? ==> TrackingGarbage(s.value)
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
+  ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(I(s.value))
+  ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
   {
     if |v.a| <= MaxSize() then (
       var t := valToHashMap(v.a);
@@ -1640,5 +1669,49 @@ module IndirectionTableModel {
   ensures self'.locs == self.locs
   {
     FromHashMap(self.t, None)
+  }
+
+  function FindRefWithNoLocIterate(self: IndirectionTable, it: MutableMapModel.Iterator<Entry>) : (ref: Option<BT.G.Reference>)
+  requires Inv(self)
+  requires MutableMapModel.WFIter(self.t, it)
+  decreases it.decreaser
+  ensures
+    && (ref.Some? ==> ref.value in self.graph)
+    && (ref.Some? ==> ref.value !in self.locs)
+    && (ref.None? ==> forall r | r in self.graph && r !in it.s :: r in self.locs)
+  {
+    if it.next.Next? then (
+      if it.next.value.loc.None? then (
+        Some(it.next.key)
+      ) else (
+        FindRefWithNoLocIterate(self,
+            MutableMapModel.IterInc(self.t, it))
+      )
+    ) else (
+      None
+    )
+  }
+
+  function {:opaque} FindRefWithNoLoc(self: IndirectionTable) : (ref: Option<BT.G.Reference>)
+  requires Inv(self)
+  ensures
+    && (ref.Some? ==> ref.value in self.graph)
+    && (ref.Some? ==> ref.value !in self.locs)
+    && (ref.None? ==> forall r | r in self.graph :: r in self.locs)
+  {
+    FindRefWithNoLocIterate(self, MutableMapModel.IterStart(self.t))
+  }
+
+  function {:opaque} ConstructorRootOnly(loc: BC.Location) : (self' : IndirectionTable)
+  ensures Inv(self')
+  ensures self'.graph == map[BT.G.Root() := []]
+  ensures self'.locs == map[BT.G.Root() := loc]
+  {
+    var t0 := MutableMapModel.Constructor(128);
+    var t1 := MutableMapModel.Insert(t0, BT.G.Root(),
+        Entry(Some(loc), [], 1));
+    var self' := FromHashMap(t1, None);
+
+    self'
   }
 }

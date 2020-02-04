@@ -14,9 +14,9 @@ std::pair<Constants, Variables> handle_InitState()
   return make_pair(k, hs);
 }
 
-DafnyMap<uint64, shared_ptr<vector<uint8>>> handle_InitDiskBytes()
+DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 {
-  return MkfsImpl_Compile::__default::InitDiskBytes();
+  return MkfsImpl_Compile::__default::Mkfs();
 }
 
 uint64 handle_PushSync(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
@@ -38,6 +38,12 @@ bool handle_Insert(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compi
 std::pair<bool, DafnySequence<uint8>> handle_Query(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key)
 {
   auto p = __default::handleQuery(*k.k, hs.hs, io, key);
+  return make_pair(p.is_Some(), p.v_Some.value);
+}
+
+std::pair<bool, UI_Compile::SuccResultList> handle_Succ(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, UI_Compile::RangeStart start, uint64 maxToFind)
+{
+  auto p = __default::handleSucc(*k.k, hs.hs, io, start, maxToFind);
   return make_pair(p.is_Some(), p.v_Some.value);
 }
 

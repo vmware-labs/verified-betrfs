@@ -3,6 +3,7 @@
 #include "DafnyRuntime.h"
 
 #include <map>
+#include <cstring>
 
 namespace Maps_Compile {
   class __default {
@@ -22,11 +23,11 @@ namespace NativeArrays_Compile {
     public:
     static int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2)
     {
-      int result = memcmp(&b1.seq[0], &b2.seq[0], b1.seq.size() < b2.seq.size() ? b1.seq.size() : b2.seq.size());
+      int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
       if (result == 0) {
-        if (b1.seq.size() == b2.seq.size()) {
+        if (b1.size() == b2.size()) {
           return 0;
-        } else if (b1.seq.size() > b2.seq.size()) {
+        } else if (b1.size() > b2.size()) {
           return 1;
         } else {
           return -1;
@@ -37,32 +38,48 @@ namespace NativeArrays_Compile {
     }
 
     template <typename T>
-    static shared_ptr<vector<T>> newArrayFill(uint64 len, T val)
+    static DafnyArray<T> newArrayFill(uint64 len, T val)
     {
-      shared_ptr<vector<T>> ar { new vector<T>(len) };
-      for (int i = 0; i < len; i++) {
-        (*ar)[i] = val;
+      DafnyArray<T> ar(len);
+      for (size_t i = 0; i < len; i++) {
+        ar.at(i) = val;
       }
       return ar;
     }
 
     template <typename T>
-    static shared_ptr<vector<T>> newArrayClone(shared_ptr<vector<T>> ar)
+    static DafnyArray<T> newArrayClone(DafnyArray<T> ar)
     {
-      shared_ptr<vector<T>> clone { new vector<T>(*ar) };
-      return clone;
+      DafnyArray<T> clone_ar(ar.size());
+      std::copy(ar.begin(), ar.end(), clone_ar.begin());
+      return clone_ar;
     }
 
     template <typename T>
     static void CopySeqIntoArray(
       DafnySequence<T> src,
       uint64 srcIndex,
-      shared_ptr<vector<T>> dst,
+      DafnyArray<T> dst,
       uint64 dstIndex,
       uint64 len)
     {
-      std::copy(src.seq.begin() + srcIndex, src.seq.begin() + (srcIndex + len),
-          (*dst).begin() + dstIndex);
+      std::copy(src.ptr() + srcIndex, src.ptr() + (srcIndex + len),
+          dst.begin() + dstIndex);
+    }
+
+    template <typename T>
+    static void CopyArrayIntoDifferentArray(
+      DafnyArray<T> src,
+      uint64 srcIndex,
+      DafnyArray<T> dst,
+      uint64 dstIndex,
+      uint64 len)
+    {
+      // We're allowed to do this without checking the ranges overlap
+      // because CopyArrayIntoDifferentArray has the condition
+      // src != dst.
+      std::copy(src.begin() + srcIndex, src.begin() + (srcIndex + len),
+          dst.begin() + dstIndex);
     }
   };
 }
@@ -72,7 +89,7 @@ namespace Crypto_Compile {
     public:
     static DafnySequence<uint8> Sha256(DafnySequence<uint8>);
     static DafnySequence<uint8> Crc32C(DafnySequence<uint8>);
-    static DafnySequence<uint8> Crc32CArray(shared_ptr<vector<uint8>>, uint64 start, uint64 len);
+    static DafnySequence<uint8> Crc32CArray(DafnyArray<uint8>, uint64 start, uint64 len);
   };
 }
 
@@ -82,7 +99,7 @@ namespace MainDiskIOHandler_Compile {
 
   class DiskIOHandler {
     public:
-    uint64 write(uint64 addr, shared_ptr<vector<uint8>> bytes);
+    uint64 write(uint64 addr, DafnyArray<uint8> bytes);
     uint64 read(uint64 addr, uint64 len);
     uint64 getWriteResult();
     Tuple2<uint64, DafnySequence<uint8>> getReadResult();
@@ -90,6 +107,8 @@ namespace MainDiskIOHandler_Compile {
     DiskIOHandler();
     bool prepareWriteResponse();
     bool prepareReadResponse();
+    void completeWriteTasks();
+    void waitForOne();
 
     private:
     uint64 readResponseId;
@@ -99,8 +118,16 @@ namespace MainDiskIOHandler_Compile {
 
     uint64 curId;
 
-    std::map<uint64, WriteTask> writeReqs;
+    std::map<uint64, std::shared_ptr<WriteTask>> writeReqs;
     std::map<uint64, ReadTask> readReqs;
+  };
+}
+
+namespace NativeBenchmarking_Compile {
+  class __default {
+  public:
+    static void start(DafnySequence<char> dafnyName);
+    static void end(DafnySequence<char> dafnyName);
   };
 }
 

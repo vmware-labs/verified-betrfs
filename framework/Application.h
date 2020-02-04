@@ -6,48 +6,47 @@
 using namespace std;
 
 struct ByteString {
-  shared_ptr<vector<uint8>> bytes;
+  DafnySequence<uint8> seq;
 
-  ByteString(std::string const& s)
-  {
-    bytes = shared_ptr<vector<uint8>>(new vector<uint8>(s.size()));
-    for (int i = 0; i < s.size(); i++) {
-      (*bytes)[i] = (uint8) s[i];
-    }
-  }
+  ByteString() { }
 
-  ByteString(DafnySequence<uint8> seq)
-  {
-    bytes = shared_ptr<vector<uint8>>(new vector<uint8>(seq.seq.size()));
-    for (int i = 0; i < seq.seq.size(); i++) {
-      (*bytes)[i] = seq.seq[i];
-    }
+  explicit ByteString(int n) : seq(n) { }
+  explicit ByteString(DafnySequence<uint8> seq) : seq(seq) { }
+
+  explicit ByteString(std::string const& s) : seq(s.size()) {
+    uint8* ptr = (uint8*) &s[0];
+    std::copy(ptr, ptr + size(), seq.ptr());
   }
 
   std::string as_string() {
-    return std::string((char*)&(*bytes)[0], bytes->size());
+    return std::string((char *)seq.ptr(), seq.size());
   }
 
   DafnySequence<uint8> as_dafny_seq()
   {
-    DafnySequence<uint8> s;
-    s.seq = *bytes;
-    return s;
+    return seq;
   }
 
-  size_t size() {
-    return bytes->size();  
+  size_t size() const {
+    return seq.size();  
   }
 
-  bool operator==(ByteString const& other) const& {
-    return *bytes == *(other.bytes);
+  bool operator==(ByteString const& other) const {
+    return seq.equals(other.seq);
+  }
+
+  bool operator<(ByteString const& other) const {
+    int m = std::min(seq.size(), other.seq.size());
+    int c = memcmp(seq.ptr(), other.seq.ptr(), m);
+    if (c < 0) return true;
+    if (c > 0) return false;
+    return seq.size() < other.seq.size();
   }
 };
 
 class Application {
 public:
   Application();
-  void log(std::string const&);
   void initialize();
   void crash();
 
@@ -58,10 +57,16 @@ public:
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);
   void QueryAndExpect(ByteString key, ByteString expected_val);
-  bool maybeDoResponse();
+  vector<pair<ByteString, ByteString>> Succ(
+      ByteString lowerBound, bool inclusive, uint64 targetCount);
 
 private:
   Constants k;
   Variables hs;
   shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;
+
+  bool maybeDoResponse();
+  void log(std::string const&);
+
+  UI_Compile::SuccResultList SuccOnce(UI_Compile::RangeStart start, uint64 maxToFind);
 };

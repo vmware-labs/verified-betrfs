@@ -1,4 +1,4 @@
-include "ByteBetreeBlockCacheSystem.i.dfy"
+include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"
@@ -12,7 +12,6 @@ module {:extern} StateImpl {
   import opened Options
   import opened Sequences
   import opened NativeTypes
-  import TTT = TwoThreeTree
   import SM = StateModel
   import opened NodeImpl
   import opened CacheImpl
@@ -48,7 +47,6 @@ module {:extern} StateImpl {
   type Reference = BT.G.Reference
   type Key = MS.Key
   type Message = Messages.Message
-  type TreeMap = TTT.Tree<Message>
 
   type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
   type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?

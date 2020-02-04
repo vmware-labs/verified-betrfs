@@ -92,6 +92,10 @@ module {:extern} Maps {
     map k | k in ks && k in m :: m[k]
   }
   
+  function MapIRestrict<K,V>(m:map<K,V>, ks: iset<K>) : (m':map<K,V>) {
+    map k | k in m && k in ks :: m[k]
+  }
+  
   function IMapRestrict<K,V>(m:imap<K,V>, ks: iset<K>) : (m':imap<K,V>) {
     imap k | k in ks && k in m :: m[k]
   }

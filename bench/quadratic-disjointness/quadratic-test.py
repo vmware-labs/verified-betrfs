@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import time
+import os
 import subprocess
 
 def chain(n, fmtStr):
@@ -64,6 +65,7 @@ def run_test(n, datafp):
     subprocess.call(["dafny", "/compile:0", name_file(n)])
     end = time.time()
     datafp.write("%d, %s\n" % (n, end-start))
+    os.remove(name_file(n))
 
 def main():
     datafp = open("result-data.csv", "w")

@@ -9,7 +9,7 @@ module BucketWeights {
   import Sets
   import opened PivotsLib
   import opened Lexicographic_Byte_Order
-  import opened ValueMessage
+  import opened ValueMessage`Internal
   import ValueWithDefault`Internal
   import opened Maps
   import opened Sequences
@@ -37,15 +37,12 @@ module BucketWeights {
     }
   }
 
-  // TODO(thance): There's an assume in here that we need to sort out.
   lemma MergeGainsNoWeight(parent: Message, child: Message)
   ensures WeightMessage(Merge(parent, child)) <= WeightMessage(parent) + WeightMessage(child)
   {
-    var merged := Merge(parent, child);
-    if (parent.Update? && child.Define?) {
-      assume ValueWithDefault.Len(ApplyDelta(parent.delta, child.value))
-        <= WeightMessage(parent) + ValueWithDefault.Len(child.value);
-    }
+    //var merged := Merge(parent, child);
+    //if (parent.Update? && child.Define?) {
+    //}
   }
 
   function method WeightKeyUint64(key: Key) : (w:uint64)
