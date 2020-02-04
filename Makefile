@@ -231,17 +231,11 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
-# XXX(travis) this is a dumb hack to extract from the cpp file
-# part of it that we want to use as a .h
-# Ideally the dafny compiler would build this for us.
-build/Bundle.h: build/Bundle.cpp
-	python tools/hack_make_Bundle_h.py > $@
-
 ##############################################################################
 # C++ object files
 
 CPP_DEP_DIR=build/cppdeps
-GEN_H_FILES=build/Bundle.h
+GEN_H_FILES=build/Bundle.i.h
 
 WARNINGS=-Wall -Wsign-compare
 

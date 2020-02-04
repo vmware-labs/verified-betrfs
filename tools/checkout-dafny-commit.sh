@@ -20,4 +20,4 @@ set -x
 
 # https://github.com/secure-foundations/dafny.git
 # cpp branch
-git checkout f5920671de51fdea9f52f0409444fe51e8c20d3c
+git checkout a8f361b9054e62e7590385ac213ef38462ec5f85

@@ -1,7 +1,7 @@
 #include "BundleWrapper.h"
 #include "Application.h"
 
-#include "Bundle.h"
+#include "Bundle.i.h"
 
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
