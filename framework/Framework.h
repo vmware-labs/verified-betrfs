@@ -163,6 +163,7 @@ namespace MainDiskIOHandler_Compile {
     Tuple2<uint64, DafnySequence<uint8>> getReadResult();
 
     DiskIOHandler(string filename = ".veribetrfs.img");
+    ~DiskIOHandler();
     bool prepareWriteResponse();
     bool prepareReadResponse();
     void completeWriteTasks();

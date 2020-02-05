@@ -211,7 +211,8 @@ public:
 
 int main(int argc, char* argv[]) {
     bool verbose = false;
-
+    std::string veribetrfs_filename = ".veribetrfs.img";
+      
     if (argc != 2) {
         cerr << "error: expects one argument: the workload spec" << endl;
         exit(-1);
@@ -231,9 +232,8 @@ int main(int argc, char* argv[]) {
     int sync_interval_ms = stoi(props["syncintervalms"]);
 
     {
-        /* veribetrkv */ ClearIfExists();
-        /* veribetrkv */ Mkfs();
-        /* veribetrkv */ Application app;
+        /* veribetrkv */ Mkfs(veribetrfs_filename);
+      /* veribetrkv */ Application app(veribetrfs_filename);
         /* veribetrkv */ VeribetrkvFacade db(app);
 
         ycsbLoad(db, *workload, record_count, verbose);
