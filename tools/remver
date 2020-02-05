@@ -52,9 +52,10 @@ class RemVer:
     def compute(self):
         cmd = self.buckets["cmd"]
         cmd[0] = os.path.join(os.getcwd(), cmd[0])  # TODO HACK
-        hostver = "/home/jonh/veribetrfs2/tools/hostver" # TODO HACK
+        hostver = "veribetrfs/tools/hostver"
         pipe = subprocess.Popen(
-            [hostver, "--cmd"] + cmd + ["--dafnyhash", lib_remote.get_dafny_hash()],
+            ["ssh", "dafnyserver@172.17.0.2"]
+            + [hostver, "--cmd"] + cmd + ["--dafnyhash", lib_remote.get_dafny_hash()],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print("invoke")
         (stdout, stderr) = pipe.communicate(open(self.pkgfile, "rb").read())

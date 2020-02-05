@@ -3,7 +3,7 @@ import sys
 import subprocess
 
 def get_dafny_hash():
-    (value,_) = subprocess.Popen(["git", "rev-parse", "HEAD", ".dafny"], stdout=subprocess.PIPE).communicate()
+    (value,_) = subprocess.Popen(["git", "rev-parse", "HEAD", "."], cwd=".dafny/dafny", stdout=subprocess.PIPE).communicate()
     return value.decode("utf-8").split("\n")[0]
 
 def parse_args(KNOWN_KEYS, usage):
