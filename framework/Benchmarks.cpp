@@ -219,12 +219,35 @@ public:
     rngState = 198432;
   }
 
+  vector<ByteString> queryKeys;
+  vector<ByteString> queryValues;
+
   uint32_t NextPseudoRandom() {
     rngState = (uint32_t) (((uint64_t) rngState * 279470273) % 0xfffffffb);
     return rngState;
   }
 
   BenchmarkBigTreeQueries() {
+    resetRng();
+
+    for (int i = 0; i < queryCount; i++) {
+      ByteString key(KEY_SIZE);
+      ByteString value(VALUE_SIZE);
+
+      for (int k = 0; k < insertCount / queryCount; k++) {
+        for (int j = 0; j < KEY_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+        for (int j = 0; j < VALUE_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+      }
+
+      queryKeys.push_back(key);
+      queryValues.push_back(value);
+    }
   }
 
   virtual void prepare(Application& app) override {
@@ -252,24 +275,8 @@ public:
   }
 
   virtual void go(Application& app) override {
-    resetRng();
-
     for (int i = 0; i < queryCount; i++) {
-      ByteString key(KEY_SIZE);
-      ByteString value(VALUE_SIZE);
-
-      for (int k = 0; k < insertCount / queryCount; k++) {
-        for (int j = 0; j < KEY_SIZE; j += 4) {
-          uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
-          *ptr = NextPseudoRandom();
-        }
-        for (int j = 0; j < VALUE_SIZE; j += 4) {
-          uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
-          *ptr = NextPseudoRandom();
-        }
-      }
-
-      app.QueryAndExpect(key, value);
+      app.QueryAndExpect(queryKeys[i], queryValues[i]);
     }
   }
 };

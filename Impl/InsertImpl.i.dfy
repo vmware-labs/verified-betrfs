@@ -22,6 +22,9 @@ module InsertImpl {
   import opened Sets
   import opened Sequences
   import opened NativeTypes
+  import opened KeyType
+  import opened ValueType
+  import ValueMessage
 
   import opened BucketsLib
   import opened BucketWeights
@@ -29,7 +32,7 @@ module InsertImpl {
 
   import opened PBS = PivotBetreeSpec`Spec
 
-  method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: MS.Key, value: MS.Value)
+  method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
   requires Inv(k, s)
   requires s.ready
@@ -52,7 +55,7 @@ module InsertImpl {
       }
     }
 
-    var msg := Messages.Define(value);
+    var msg := ValueMessage.Define(value);
     s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
     writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
@@ -60,7 +63,7 @@ module InsertImpl {
     success := true;
   }
 
-  method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
   requires Inv(k, s)
@@ -98,7 +101,7 @@ module InsertImpl {
 
     var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.buckets);
 
-    if WeightKeyUint64(key) + WeightMessageUint64(Messages.Define(value)) + weightSeq
+    if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
       success := InsertKeyValue(k, s, key, value);
     } else {

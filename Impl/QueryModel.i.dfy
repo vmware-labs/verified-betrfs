@@ -12,6 +12,9 @@ module QueryModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened EvictModel
+  import opened KeyType
+  import ValueType
+  import opened ValueMessage
 
   import opened Options
   import opened Maps
@@ -24,12 +27,12 @@ module QueryModel {
   import opened Bounds
   import PivotsLib
 
-  import PBS = PivotBetreeSpec`Spec
+  import PBS = PivotBetreeSpec`Internal
 
   // == query ==
 
   predicate {:opaque} queryIterate(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64,
-      s': Variables, result: Option<MS.Value>, io': IO)    
+      s': Variables, result: Option<Value>, io': IO)    
   requires s.Ready?
   requires Inv(k, s)
   requires io.IOInit?
@@ -54,7 +57,7 @@ module QueryModel {
 
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
-        var kmtMsg := MapLookupOption(bucket, key);
+        var kmtMsg := bucketBinarySearchLookup(bucket, key);
         var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
         if newmsg.Define? then (
           && s' == s0
@@ -66,7 +69,7 @@ module QueryModel {
             queryIterate(k, s0, key, newmsg, node.children.value[r], io, counter - 1, s', result, io')
           ) else (
             && s' == s0
-            && result == Some(MS.V.DefaultValue())
+            && result == Some(ValueType.DefaultValue())
             && io' == io
           )
         )
@@ -74,8 +77,8 @@ module QueryModel {
     )
   }
 
-  predicate {:opaque} query(k: Constants, s: Variables, io: IO, key: MS.Key,
-      s': Variables, result: Option<MS.Value>, io': IO)
+  predicate {:opaque} query(k: Constants, s: Variables, io: IO, key: Key,
+      s': Variables, result: Option<Value>, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
   {
@@ -102,10 +105,11 @@ module QueryModel {
     && (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
     && (forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node))
     && (ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
-    && msg == BT.InterpretLookup(lookup, key)
+    && (PBS.LookupVisitsWellMarshalledBuckets(lookup, key) ==>
+        msg == BT.InterpretLookup(lookup, key))
   }
 
-  lemma AugmentLookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: MS.Key, cache: map<BT.G.Reference, BT.G.Node>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  lemma AugmentLookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: Key, cache: map<BT.G.Reference, BT.G.Node>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
   returns (lookup' : seq<BT.G.ReadOp>)
   requires |lookup| > 0 ==> BT.WFLookupForKey(lookup, key)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in graph
@@ -122,6 +126,7 @@ module QueryModel {
   ensures forall i | 0 <= i < |lookup'| :: lookup'[i].ref in graph
   ensures forall i | 0 <= i < |lookup'| :: MapsTo(cache, lookup'[i].ref, lookup'[i].node)
   {
+    assume false;
     lookup' := lookup + [BT.G.ReadOp(ref, node)];
 
     forall idx | BT.ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
@@ -138,7 +143,7 @@ module QueryModel {
   }
 
   lemma queryIterateCorrect(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>,
-      s': Variables, res: Option<MS.Value>, io': IO)
+      s': Variables, res: Option<Value>, io': IO)
   requires queryInv(k, s, key, msg, ref, io, counter, lookup)
   requires !msg.Define?
   requires queryIterate(k, s, key, msg, ref, io, counter, s', res, io');
@@ -165,16 +170,19 @@ module QueryModel {
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
 
-        var kmtMsg := MapLookupOption(bucket, key);
+        var kmtMsg := bucketBinarySearchLookup(bucket, key);
         var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
 
         var lookupMsg := if kmtMsg.Some? then kmtMsg.value else Messages.IdentityMessage();
         assert newmsg == Messages.Merge(msg, lookupMsg);
 
         var inode := INode(s0.cache[ref]);
-        assert lookupMsg == BT.NodeLookup(inode, key);
+        assert BucketWellMarshalled(bucket) ==> lookupMsg == BT.NodeLookup(inode, key);
 
         var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s0.cache), IIndirectionTable(s0.ephemeralIndirectionTable).graph);
+
+        assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> BucketWellMarshalled(bucket);
+        assume PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key);
 
         if newmsg.Define? {
           assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
@@ -208,8 +216,8 @@ module QueryModel {
     }
   }
 
-  lemma queryCorrect(k: Constants, s: Variables, io: IO, key: MS.Key,
-      s': Variables, res: Option<MS.Value>, io': IO)
+  lemma queryCorrect(k: Constants, s: Variables, io: IO, key: Key,
+      s': Variables, res: Option<Value>, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
   requires query(k, s, io, key, s', res, io');

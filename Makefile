@@ -231,17 +231,11 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
-# XXX(travis) this is a dumb hack to extract from the cpp file
-# part of it that we want to use as a .h
-# Ideally the dafny compiler would build this for us.
-build/Bundle.h: build/Bundle.cpp
-	python tools/hack_make_Bundle_h.py > $@
-
 ##############################################################################
 # C++ object files
 
 CPP_DEP_DIR=build/cppdeps
-GEN_H_FILES=build/Bundle.h
+GEN_H_FILES=build/Bundle.i.h
 
 WARNINGS=-Wall -Wsign-compare
 
@@ -291,9 +285,12 @@ VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framewor
 libycsbc:
 	@$(MAKE) -C ycsb build/libycsbc.a
 
+librocksdb:
+	@env ROCKSDB_DISABLE_BZIP=1 ROCKSDB_DISABLE_ZLIB=1 $(MAKE) -C vendor/rocksdb static_lib
+
 .PHONY: libycsbc
 
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc ycsb/YcsbMain.cpp
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
-	g++ -o $@ -Lycsb/build -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -std=c++17 $(LDFLAGS) -O3 -lycsbc $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
+	g++ -o $@ -Lycsb/build -Lvendor/rocksdb -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ -std=c++17 $(LDFLAGS) -O3 -lycsbc -lrocksdb $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
 

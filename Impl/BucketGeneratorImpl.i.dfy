@@ -1,5 +1,5 @@
 include "BucketGeneratorModel.i.dfy"
-include "BucketImpl.i.dfy"
+include "../lib/Buckets/BucketImpl.i.dfy"
 
 module BucketGeneratorImpl {
   import opened BucketImpl

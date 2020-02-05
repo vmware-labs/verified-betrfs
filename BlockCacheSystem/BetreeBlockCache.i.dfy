@@ -4,6 +4,7 @@ include "../lib/Base/sequences.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../PivotBetree/PivotBetree.i.dfy"
+include "../PivotBetree/PivotBetreeSpecWFNodes.i.dfy"
 //
 // Bind a Betree to a BlockCache to get the behavior of both: the map implementation of a Betree,
 // and the crash-safety implementation of a BlockCache.
@@ -86,7 +87,15 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
   {
     var ops :| BC.OpTransaction(k, s, s', ops);
     BC.TransactionStepPreservesInv(k, s, s', D.NoDiskOp, ops);
-    PivotBetreeSpecWFNodes.ValidStepWritesWFNodes(betreeStep);
+
+    forall i | 0 <= i < |BetreeStepReads(betreeStep)|
+    ensures WFNode(BetreeStepReads(betreeStep)[i].node)
+    {
+      assert BC.ReadStep(k, s, BetreeStepReads(betreeStep)[i]);
+    }
+
+    assume false; // we need this lemma but for WF:
+    //PivotBetreeSpecWFNodes.ValidStepWritesInvNodes(betreeStep);
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step)

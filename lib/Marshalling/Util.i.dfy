@@ -219,21 +219,6 @@ function method BEByteSeqToUint32(bs:seq<byte>) : uint32
 }
 */
 
-// renamed from BEByteSeqToUint64 to SeqByteToUint64
-// "BEByteSeq" is a seq<int> with a byte precondition constraint, to
-// access the generic pv library.
-// So let's have SeqByte be a Dafny seq<byte>.
-function method SeqByteToUint64(bs:seq<byte>) : uint64
-    requires |bs| == (Uint64Size()) as int;
-    ensures 0 <= BEByteSeqToInt(bs) < 0x10000000000000000;    // Need for the cast on the next line
-    ensures SeqByteToUint64(bs) == (BEByteSeqToInt(bs)) as uint64;
-{
-    lemma_2toX();
-    lemma_BEByteSeqToUint64_properties(bs);
-    (bs[(0) as uint64]) as uint64 * 256*256*256*0x100000000 + (bs[(1) as uint64]) as uint64 * 256*256*0x100000000 + (bs[(2) as uint64]) as uint64 * 256*0x100000000 + (bs[(3) as uint64]) as uint64 * 0x100000000 +
-    (bs[(4) as uint64]) as uint64 * 256*256*256 + (bs[(5) as uint64]) as uint64 * 256*256 + (bs[(6) as uint64]) as uint64 * 256 + (bs[(7) as uint64]) as uint64
-}
-
 function BEUintToSeqByte(v:int, width:int) : seq<byte>
     ensures width >= 0 && v >= 0 ==> |BEUintToSeqByte(v, width)| == width;
 {

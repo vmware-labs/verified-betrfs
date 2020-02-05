@@ -19,9 +19,11 @@ module Betree {
   import MS = MapSpec
   import opened Maps
   import opened Sequences
+  import opened KeyType
+  import opened ValueType
+  import UI
 
   import opened G = BetreeGraph
-  type UIOp = MS.UI.Op
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
@@ -54,12 +56,12 @@ module Betree {
     && s.bcv.view[Root()] == EmptyNode()
   }
 
-  predicate GC(k: Constants, s: Variables, s': Variables, uiop: UIOp, refs: iset<Reference>) {
+  predicate GC(k: Constants, s: Variables, s': Variables, uiop: UI.Op, refs: iset<Reference>) {
     && uiop.NoOp?
     && BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
 
-  predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
+  predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   {
     && ValidBetreeStep(betreeStep)
     && BetreeStepUI(betreeStep, uiop)
@@ -72,7 +74,7 @@ module Betree {
     | GCStep(refs: iset<Reference>)
     | StutterStep
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step) {
+  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: Step) {
     match step {
       case BetreeStep(betreeStep) => Betree(k, s, s', uiop, betreeStep)
       case GCStep(refs) => GC(k, s, s', uiop, refs)
@@ -80,7 +82,7 @@ module Betree {
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op) {
     exists step: Step :: NextStep(k, s, s', uiop, step)
   }
 }

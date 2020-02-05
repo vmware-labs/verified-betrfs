@@ -73,13 +73,13 @@ abstract module Message {
 }
 
 module ValueMessage refines Message {
-  import V = ValueType
+  import ValueType
 
-  type Value = V.Value
+  type Value = ValueType.Value
   datatype Delta = NoDelta
 
   function method NopDelta() : Delta { NoDelta }
-  function method DefaultValue() : Value { V.DefaultValue() }
+  function method DefaultValue() : Value { ValueType.DefaultValue() }
 
   function method CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta { NoDelta }
   function method ApplyDelta(delta: Delta, value: Value) : Value { value }

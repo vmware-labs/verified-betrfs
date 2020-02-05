@@ -4,11 +4,8 @@ module {:extern} UI {
   //import Keyspace = Total_Order
   //import Keyspace = Lexicographic_Byte_Order
 
-  import V = ValueType
-  import K = KeyType
-
-  type Value = V.Value
-  type Key = K.Key
+  import opened ValueType
+  import opened KeyType
 
   datatype RangeStart = SInclusive(key: Key) | SExclusive(key: Key) | NegativeInf
   datatype RangeEnd = EInclusive(key: Key) | EExclusive(key: Key) | PositiveInf

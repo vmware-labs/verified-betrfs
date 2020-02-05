@@ -1,7 +1,7 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "BucketImpl.i.dfy"
+include "../lib/Buckets/BucketImpl.i.dfy"
 include "SplitModel.i.dfy"
 include "InsertModel.i.dfy"
 //
@@ -13,6 +13,8 @@ module NodeImpl {
   import opened Options
   import opened Sequences
   import opened NativeTypes
+  import opened KeyType
+  import opened ValueMessage
 
   import IM = StateModel
   import BT = PivotBetreeSpec`Internal
@@ -372,14 +374,14 @@ module NodeImpl {
       MutBucket.reveal_ReprSeq();
     }
 
-    method InsertKeyValue(key: Key, value: IM.Message)
+    method InsertKeyValue(key: Key, msg: Message)
     requires Inv();
     requires IM.WFNode(I())
-    requires WeightBucketList(MutBucket.ISeq(buckets)) + WeightKey(key) + WeightMessage(value) < 0x1_0000_0000_0000_0000
+    requires WeightBucketList(MutBucket.ISeq(buckets)) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv();
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
-    ensures I() == InsertModel.NodeInsertKeyValue(old(I()), key, value)
+    ensures I() == InsertModel.NodeInsertKeyValue(old(I()), key, msg)
     {
       InsertModel.reveal_NodeInsertKeyValue();
 
@@ -388,7 +390,7 @@ module NodeImpl {
       MutBucket.LemmaReprBucketLeReprSeq(buckets, r as int);
       WeightBucketLeBucketList(MutBucket.ISeq(buckets), r as int);
 
-      buckets[r].Insert(key, value);
+      buckets[r].Insert(key, msg);
 
       forall i | 0 <= i < |buckets|
       ensures buckets[i].Inv()
@@ -404,7 +406,7 @@ module NodeImpl {
       Repr := {this} + MutBucket.ReprSeq(buckets);
       LemmaReprFacts();
       assert Inv();
-      assert I().buckets == InsertModel.NodeInsertKeyValue(old(I()), key, value).buckets;
+      assert I().buckets == InsertModel.NodeInsertKeyValue(old(I()), key, msg).buckets;
     }
 
     lemma LemmaReprSeqBucketsLeRepr()

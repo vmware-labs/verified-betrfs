@@ -10,6 +10,7 @@ module BucketSuccessorLoopImpl {
   import BucketGeneratorModel
   import opened Lexicographic_Byte_Order
   import opened ValueMessage
+  import opened KeyType
 
   method GetSuccessorInBucketStack(
       buckets: seq<MutBucket>,

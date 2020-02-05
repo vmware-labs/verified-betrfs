@@ -1,0 +1,2 @@
+#!/bin/bash
+/home/dafnyserver/.dafny/dafny/Binaries/dafny /compile:0 $*

@@ -22,6 +22,9 @@ module QueryImpl {
   import opened Maps
   import opened Sets
   import opened Sequences
+  import opened KeyType
+  import opened ValueType
+  import ValueMessage
 
   import opened Bounds
   import opened BucketsLib
@@ -31,8 +34,8 @@ module QueryImpl {
 
   // == query ==
 
-  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
-  returns (res: Option<MS.Value>)
+  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: Key)
+  returns (res: Option<Value>)
   requires io.initialized()
   requires Inv(k, s)
   requires io !in s.Repr()
@@ -49,7 +52,7 @@ module QueryImpl {
       res := None;
     } else {
       var ref := BT.G.Root();
-      var msg := Messages.IdentityMessage();
+      var msg := ValueMessage.IdentityMessage();
       var counter: uint64 := 40;
 
       // TODO write this in recursive style, it would be a lot simpler?
@@ -92,7 +95,7 @@ module QueryImpl {
           var bucket := node.buckets[r];
 
           var kmtMsg := bucket.Query(key);
-          var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
+          var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
 
           if (newmsg.Define?) {
             res := Some(newmsg.value);
@@ -103,7 +106,7 @@ module QueryImpl {
               counter := counter - 1;
               ref := node.children.value[r];
             } else {
-              res := Some(MS.V.DefaultValue());
+              res := Some(ValueType.DefaultValue());
               return;
             }
           }
