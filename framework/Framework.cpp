@@ -23,26 +23,44 @@ typedef uint8 byte;
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
+  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
+    byte *aligned_bytes;
+    *aligned_len = (len + 4095) & ~0xfffUL;
+    int result = posix_memalign((void **)&aligned_bytes, 4096, *aligned_len);
+    if (result) {
+      return NULL;
+    }
+    memcpy(aligned_bytes, buf, len);
+    return aligned_bytes;
+  }
+  
   struct WriteTask {
-    vector<byte> bytes;
+    size_t aligned_len;
+    byte *aligned_bytes;
     aiocb aio_req_write;
 
     bool done;
+
+    ~WriteTask() {
+      free(aligned_bytes);
+    }
     
     WriteTask(int fd, uint64 addr, byte* buf, size_t len) {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
 
-      bytes.resize(len);
-      std::copy(buf, buf + len, bytes.begin());
-
+      aligned_bytes = aligned_copy(buf, len, &aligned_len);
+      if (aligned_bytes == NULL) {
+        fail("Couldn't create aligned copy of buffer");
+      }
+      
       this->done = false;
 
       aio_req_write.aio_fildes = fd;
       aio_req_write.aio_offset = addr;
-      aio_req_write.aio_buf = &bytes[0];
-      aio_req_write.aio_nbytes = len;
+      aio_req_write.aio_buf = &aligned_bytes[0];
+      aio_req_write.aio_nbytes = aligned_len;
       aio_req_write.aio_reqprio = 0;
       aio_req_write.aio_sigevent.sigev_notify = SIGEV_NONE;
 
@@ -70,7 +88,7 @@ namespace MainDiskIOHandler_Compile {
         int status = aio_error(&aio_req_write);
         if (status == 0) {
           ssize_t ret = aio_return(&aio_req_write);
-          if (ret != (int)bytes.size()) {
+          if (ret < 0 || (size_t)ret != aligned_len) {
             fail("write did not write all bytes");
           }
           done = true;
@@ -89,10 +107,20 @@ namespace MainDiskIOHandler_Compile {
 
   uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
   {
-    ssize_t count = pread(fd, res, len, addr);
+    size_t aligned_len = (len + 4095) & ~0xfffULL;
+    byte *aligned_res;
+    int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
+    if (result != 0) {
+      fail("Couldn't allocate aligned memory");
+    }
+    
+    ssize_t count = pread(fd, aligned_res, aligned_len, addr);
     if (count < 0) {
+      free(aligned_res);
       fail("pread failed");
     }
+    memcpy(res, aligned_res, len);
+    free(aligned_res);
     
     return (uint64)count;
   }
@@ -102,8 +130,18 @@ namespace MainDiskIOHandler_Compile {
       fail("writeSync not implemented for these arguments");
     }
 
-    ssize_t res = pwrite(fd, sector, len, addr);
-    if (res < 0 || (uint64)res != len) {
+    size_t aligned_len;
+    byte *aligned_sector;
+    aligned_sector = aligned_copy(sector, len, &aligned_len);
+    if (aligned_sector == NULL) {
+      fail("Couldn't create aligned copy of buffer");
+    }    
+    
+    ssize_t res = pwrite(fd, aligned_sector, aligned_len, addr);
+
+    free(aligned_sector);
+    
+    if (res < 0 || (uint64)res != aligned_len) {
       perror("write failed");
       printf("fd=%d sector=%p len=%016lx addr=%016lx\n",
              fd, sector, len, addr);
@@ -124,7 +162,7 @@ namespace MainDiskIOHandler_Compile {
 
   DiskIOHandler::DiskIOHandler(string filename) : curId(0) {
     // Should probably throw an error if this fails
-    fd = open(filename.c_str(), O_RDWR | O_DSYNC | O_NOATIME);
+    fd = open(filename.c_str(), O_RDWR | O_DIRECT | O_DSYNC | O_NOATIME);
   }
 
   uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
@@ -432,7 +470,7 @@ void Mkfs(string filename) {
     fail("InitDiskBytes failed.");
   }
 
-  int fd = open(filename.c_str(), O_RDWR | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  int fd = open(filename.c_str(), O_RDWR | O_DIRECT | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
   if (fd < 0) {
     fail("Could not open output file: " + filename);
   }
