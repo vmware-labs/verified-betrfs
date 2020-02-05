@@ -26,13 +26,12 @@ public:
   virtual void prepare(Application& app) = 0;
   virtual void go(Application& app) = 0;
 
-  void run(bool skipPrepare = false) {
+  void run(string filename, bool skipPrepare = false) {
     if (!skipPrepare) {
-      ClearIfExists();
-      Mkfs();
+      Mkfs(filename);
     }
 
-    Application app;
+    Application app(filename);
 
     if (!skipPrepare) {
       prepare(app);
@@ -401,10 +400,10 @@ public:
 };
 
 
-void RunAllBenchmarks() {
-  { BenchmarkRandomInserts q; q.run(); }
-  { BenchmarkRandomQueries q; q.run(); }
-  { BenchmarkRandomSuccQueries q; q.run(); }
+void RunAllBenchmarks(string filename) {
+  { BenchmarkRandomInserts q; q.run(filename); }
+  { BenchmarkRandomQueries q; q.run(filename); }
+  { BenchmarkRandomSuccQueries q; q.run(filename); }
 }
 
 shared_ptr<Benchmark> benchmark_by_name(string const& name) {
@@ -482,7 +481,7 @@ namespace NativeBenchmarking_Compile {
   }
 }
 
-void RunBenchmark(string const& name, bool skipPrepare) {
-  benchmark_by_name(name)->run(skipPrepare);
+void RunBenchmark(string filename, string const& name, bool skipPrepare) {
+  benchmark_by_name(name)->run(filename, skipPrepare);
   dump();
 }

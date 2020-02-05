@@ -162,13 +162,15 @@ namespace MainDiskIOHandler_Compile {
     uint64 getWriteResult();
     Tuple2<uint64, DafnySequence<uint8>> getReadResult();
 
-    DiskIOHandler();
+    DiskIOHandler(string filename = ".veribetrfs.img");
     bool prepareWriteResponse();
     bool prepareReadResponse();
     void completeWriteTasks();
     void waitForOne();
 
     private:
+    int fd;
+    
     uint64 readResponseId;
     DafnySequence<uint8> readResponseBytes;
 
@@ -189,5 +191,4 @@ namespace NativeBenchmarking_Compile {
   };
 }
 
-void ClearIfExists();
-void Mkfs();
+void Mkfs(string filename = ".veribetrfs.img");

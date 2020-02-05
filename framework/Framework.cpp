@@ -24,30 +24,23 @@ namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
   struct WriteTask {
-    FILE* f;
-
     vector<byte> bytes;
     aiocb aio_req_write;
-    aiocb aio_req_fsync;
 
     bool done;
     
-    WriteTask(FILE* f, byte* buf, size_t len) {
+    WriteTask(int fd, uint64 addr, byte* buf, size_t len) {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
 
-      // TODO we actually need to fsync the directory too,
-      // but it would be even better to just write straight to a device.
-
       bytes.resize(len);
       std::copy(buf, buf + len, bytes.begin());
 
-      this->f = f;
       this->done = false;
 
-      aio_req_write.aio_fildes = fileno(f);
-      aio_req_write.aio_offset = 0;
+      aio_req_write.aio_fildes = fd;
+      aio_req_write.aio_offset = addr;
       aio_req_write.aio_buf = &bytes[0];
       aio_req_write.aio_nbytes = len;
       aio_req_write.aio_reqprio = 0;
@@ -57,21 +50,12 @@ namespace MainDiskIOHandler_Compile {
       if (ret != 0) {
         fail("aio_write failed");
       }
-
-      aio_req_fsync.aio_fildes = fileno(f);
-      aio_req_fsync.aio_reqprio = 0;
-      aio_req_fsync.aio_sigevent.sigev_notify = SIGEV_NONE;
-
-      ret = aio_fsync(O_SYNC, &aio_req_fsync);
-      if (ret != 0) {
-        fail("aio_fsync failed");
-      }
     }
 
     void wait() {
       if (!done) {
         aiocb* aiolist[1];
-        aiolist[0] = &aio_req_fsync;
+        aiolist[0] = &aio_req_write; //&aio_req_fsync;
         aio_suspend(aiolist, 1, NULL);
 
         check_if_complete();
@@ -83,31 +67,15 @@ namespace MainDiskIOHandler_Compile {
 
     void check_if_complete() {
       if (!done) {
-        int status = aio_error(&aio_req_fsync);
+        int status = aio_error(&aio_req_write);
         if (status == 0) {
-          status = aio_error(&aio_req_write);
-          if (status != 0) {
-            fail("fsync finished but write somehow did not");
-          }
-
-          int ret = aio_return(&aio_req_fsync);
-          if (ret != 0) {
-            fail("fsync returned nonzero");
-          }
-
-          ret = aio_return(&aio_req_write);
+          ssize_t ret = aio_return(&aio_req_write);
           if (ret != (int)bytes.size()) {
-            fail("fwrite did not write all bytes");
+            fail("write did not write all bytes");
           }
-
-          int close_res = fclose(f);
-          if (close_res != 0) {
-            fail("read fclose failed");
-          }
-
           done = true;
         } else if (status != EINPROGRESS) {
-          fail("aio_error returned that fsync has failed");
+          fail("aio_error returned that write has failed");
         }
       }
     }
@@ -119,86 +87,45 @@ namespace MainDiskIOHandler_Compile {
     ReadTask(DafnySequence<byte> s) : bytes(s) { }
   };
 
-  string getFilename(uint64 addr) {
-    // Convert to hex
-    char num[17];
-    for (int i = 0; i < 16; i++) {
-      int digit = (addr >> (4 * i)) & 0xf;
-      num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
-    }
-    num[16] = '\0';
-    return "/tmp/.veribetrfs-storage/" + string(num);
-  }
-
-  int readFile(string const& filename, byte* res, int len)
+  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
   {
-    FILE* f = fopen(filename.c_str(), "r");
-    if (f == NULL) {
-      fail("read fopen failed");
-    }
-
-    int count = fread(res, 1, len, f);
-    if (ferror(f) != 0) {
-      fail("fread failed");
+    ssize_t count = pread(fd, res, len, addr);
+    if (count < 0) {
+      fail("pread failed");
     }
     
-    int close_res = fclose(f);
-    if (close_res != 0) {
-      fail("read fclose failed");
-    }
-
-    return count;
+    return (uint64)count;
   }
 
-  void writeSync(uint64 addr, byte* sector, size_t len) {
+  void writeSync(int fd, uint64 addr, byte* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
       fail("writeSync not implemented for these arguments");
     }
 
-    FILE* f = fopen(getFilename(addr).c_str(), "w");
-    if (f == NULL) {
-      fail("write fopen failed");
-    }
-
-    size_t res = fwrite(sector, 1, len, f);
-    if (res != len) {
-      fail("fwrite failed");
-    }
-
-    int flush_res = fflush(f);
-    if (flush_res != 0) {
-      fail("fflush failed");
-    }
-
-    // TODO according to the fsync documentation, we also need to fsync
-    // the directory that the file is in.
-    // But really, we should probably be writing straight to a device
-    // instead.
-
-    int fsync_res = fsync(fileno(f));
-    if (fsync_res != 0) {
-      fail("fsync failed");
-    }
-
-    int close_res = fclose(f);
-    if (close_res != 0) {
-      fail("write fclose failed");
+    ssize_t res = pwrite(fd, sector, len, addr);
+    if (res < 0 || (uint64)res != len) {
+      perror("write failed");
+      printf("fd=%d sector=%p len=%016lx addr=%016lx\n",
+             fd, sector, len, addr);
+      fail("pwrite failed");
     }
   }
 
-  void readSync(uint64 addr, uint64 len, byte* sector) {
+  void readSync(int fd, uint64 addr, uint64 len, byte* sector) {
     if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
       fail("readSync not implemented for these arguments");
     }
 
-    string filename = getFilename(addr);
-    int actualRead = readFile(filename, sector, len);
-    if ((uint64)actualRead < len) {
+    uint64 actualRead = readFromFile(fd, addr, sector, len);
+    if (actualRead < len) {
       fail("readSync did not find enough bytes");
     }
   }
 
-  DiskIOHandler::DiskIOHandler() : curId(0) { }
+  DiskIOHandler::DiskIOHandler(string filename) : curId(0) {
+    // Should probably throw an error if this fails
+    fd = open(filename.c_str(), O_RDWR | O_DSYNC | O_NOATIME);
+  }
 
   uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
   {
@@ -207,13 +134,8 @@ namespace MainDiskIOHandler_Compile {
       fail("write not implemented for these arguments");
     }
 
-    FILE* f = fopen(getFilename(addr).c_str(), "w");
-    if (f == NULL) {
-      fail("write fopen failed");
-    }
-
     shared_ptr<WriteTask> writeTask {
-      new WriteTask(f, &bytes.at(0), len) };
+      new WriteTask(fd, addr, &bytes.at(0), len) };
 
     uint64 id = this->curId;
     this->curId++;
@@ -226,7 +148,7 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
     DafnySequence<byte> bytes(len);
-    readSync(addr, len, bytes.ptr());
+    readSync(fd, addr, len, bytes.ptr());
 
     uint64 id = this->curId;
     this->curId++;
@@ -285,7 +207,7 @@ namespace MainDiskIOHandler_Compile {
       if (p.second->done) {
         return;
       } else {
-        tasks[i] = &p.second->aio_req_fsync;
+        tasks[i] = &p.second->aio_req_write;
         i++;
       }
     }
@@ -304,7 +226,8 @@ using MainDiskIOHandler_Compile::DiskIOHandler;
   #define LOG(x)
 #endif
 
-Application::Application() {
+Application::Application(string filename) {
+  this->filename = filename;
   initialize();
 }
 
@@ -312,7 +235,7 @@ void Application::initialize() {
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
-  this->io = make_shared<DiskIOHandler>();
+  this->io = make_shared<DiskIOHandler>(this->filename);
 }
 
 void Application::crash() {
@@ -500,7 +423,7 @@ void Application::log(std::string const& s) {
   std::cout << s << endl;
 }
 
-void Mkfs() {
+void Mkfs(string filename) {
   DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
 
   unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
@@ -509,29 +432,14 @@ void Mkfs() {
     fail("InitDiskBytes failed.");
   }
 
-  /*if (std::filesystem::exists("/tmp/.veribetrfs-storage")) {
-    fail("error: /tmp/.veribetrfs-storage/ already exists");
+  int fd = open(filename.c_str(), O_RDWR | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    fail("Could not open output file: " + filename);
   }
-  std::filesystem::create_directory("/tmp/.veribetrfs-storage");*/
-  struct stat info;
-  if (stat("/tmp/.veribetrfs-storage", &info) != -1) {
-    fail("error: /tmp/.veribetrfs-storage/ already exists");
-  }
-  mkdir("/tmp/.veribetrfs-storage", 0700);
-
+  
   for (auto p : m) {
     MainDiskIOHandler_Compile::writeSync(
-        p.first, p.second.ptr(), p.second.size());
+        fd, p.first, p.second.ptr(), p.second.size());
   }
 }
 
-void ClearIfExists() {
-  struct stat info;
-  if (stat("/tmp/.veribetrfs-storage", &info) != -1) {
-		// TODO use std::filesystem::remove_all
-		int ret = system("rm -rf /tmp/.veribetrfs-storage"); 
-		if (ret != 0) {
-		  fail("failed to delete /tmp/.veribetrfs-storage");
-		}
-  }
-}
