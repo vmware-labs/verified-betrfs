@@ -71,9 +71,9 @@ module BucketSuccessorLoopModel {
   {
     && results == SortedSeqOfKeyValueMap(KeyValueMapOfBucket(left))
     && YieldsSortedBucket(g, right)
-    && (forall l, r | l in left && r in right :: Keyspace.lt(l, r))
-    && (upTo.Some? ==> forall l | l in left :: Keyspace.lt(l, upTo.value))
-    && MapUnionPreferA(left, right) == bucket
+    && (forall l, r | l in left.b && r in right.b :: Keyspace.lt(l, r))
+    && (upTo.Some? ==> forall l | l in left.b :: Keyspace.lt(l, upTo.value))
+    && MapUnionPreferA(left.b, right.b) == bucket.b
     && |results| < maxToFind
   }
 
@@ -86,6 +86,9 @@ module BucketSuccessorLoopModel {
       upTo: Option<Key>,
       results: seq<UI.SuccResult>)
   requires ProcessInv(bucket, left, right, g, maxToFind, upTo, results)
+  requires BucketWellMarshalled(bucket)
+  requires BucketWellMarshalled(left)
+  requires BucketWellMarshalled(right)
   ensures var r := ProcessGenerator(g, maxToFind, upTo, results);
       && r.results == SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
@@ -110,8 +113,8 @@ module BucketSuccessorLoopModel {
 
       GenPopIsRemove(g);
 
-      var left' := left[next.key := next.msg];
-      var right' := MapRemove1(right, next.key);
+      var left' := B(left.b[next.key := next.msg]);
+      var right' := B(MapRemove1(right.b, next.key));
 
       if v != DefaultValue() {
         var results' := results + [UI.SuccResult(next.key, v)];
@@ -137,8 +140,10 @@ module BucketSuccessorLoopModel {
         ProcessGeneratorResult(bucket, left', right', g', maxToFind, upTo, results);
       }
     } else {
-      assert left == ClampEnd(bucket, 
+      var ce := ClampEnd(bucket, 
           if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
+      assert left.b == ce.b;
+      WellMarshalledBucketsEq(left, ce);
       //var r := UI.SuccResultList(results,
       //    if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
     }
@@ -161,6 +166,7 @@ module BucketSuccessorLoopModel {
       upTo: Option<Key>)
   requires |buckets| >= 1
   requires maxToFind >= 1
+  requires BucketListWellMarshalled(buckets)
   requires upTo.Some? && (start.SInclusive? || start.SExclusive?) ==>
       Keyspace.lt(start.key, upTo.value)
   ensures var r := GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
@@ -177,7 +183,7 @@ module BucketSuccessorLoopModel {
     var bucket := BucketOf(g);
     reveal_KeyValueMapOfBucket();
     reveal_SortedSeqOfKeyValueMap();
-    ProcessGeneratorResult(bucket, map[], bucket, g, maxToFind, upTo, []);
+    ProcessGeneratorResult(bucket, B(map[]), bucket, g, maxToFind, upTo, []);
     var r := ProcessGenerator(g, maxToFind, upTo, []);
     assert r == GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
 
@@ -204,7 +210,7 @@ module BucketSuccessorLoopModel {
       // There's at least 1 result, so the range has to be non-empty
       SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(
                ClampRange(ComposeSeq(buckets), start, r.end)), 0);
-      assert r.results[0].key in ClampRange(ComposeSeq(buckets), start, r.end);
+      assert r.results[0].key in ClampRange(ComposeSeq(buckets), start, r.end).b;
       assert MS.InRange(start, r.results[0].key, r.end);
       InRangeImpliesNonEmpty(start, r.results[0].key, r.end);
     }

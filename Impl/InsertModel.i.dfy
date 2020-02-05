@@ -93,13 +93,17 @@ module InsertModel {
     var root := s.cache[BT.G.Root()];
     var r := Pivots.Route(root.pivotTable, key);
     var bucket := root.buckets[r];
-    var newBucket := bucket[key := msg];
+    var newBucket := B(bucket.b[key := msg]);
     var newRoot := root.(buckets := root.buckets[r := newBucket]);
     var newCache := s.cache[BT.G.Root() := newRoot];
 
     WeightBucketListInsert(root.buckets, root.pivotTable, key, msg);
 
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+
+    reveal_WFBucket();
+    assert WFBucket(newBucket);
+    assert WFNode(newRoot);
 
     var s0 := s.(cache := newCache);
     var s' := writeBookkeepingNoSuccsUpdate(k, s0, BT.G.Root());

@@ -1,7 +1,7 @@
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "BucketImpl.i.dfy"
+include "../lib/Buckets/BucketImpl.i.dfy"
 include "SplitModel.i.dfy"
 include "InsertModel.i.dfy"
 //

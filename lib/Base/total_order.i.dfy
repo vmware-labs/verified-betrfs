@@ -722,6 +722,26 @@ module Integer_Order refines Total_Order {
   }
 }
 
+module Uint32_Order refines Total_Order {
+  type Element = uint32
+
+  function SomeElement() : Element { 0 }
+
+  predicate method lte(a: Element, b: Element) {
+    reveal_ltedef();
+    ltedef(a, b)
+  }
+
+  predicate method {:opaque} ltedef(a: Element, b: Element) {
+    a <= b
+  }
+
+  method cmp(a: Element, b: Element) returns (c: int32)
+  {
+    return if a < b then -1 else if a > b then 1 else 0;
+  }
+}
+
 module Uint64_Order refines Total_Order {
   type Element = uint64
 

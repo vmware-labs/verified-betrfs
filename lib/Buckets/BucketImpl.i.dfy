@@ -1,6 +1,7 @@
-include "../lib/DataStructures/KMBtree.i.dfy"
-include "../ByteBlockCacheSystem/KVList.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
+include "../DataStructures/KMBtree.i.dfy"
+include "PackedKV.i.dfy"
+include "KVList.i.dfy"
+include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated
@@ -17,6 +18,7 @@ module BucketImpl {
   import KMB = KMBtree`API
   import KMBBOps = KMBtreeBulkOperations
   import KVList
+  import PackedKV
   import opened ValueMessage`Internal
   import opened Lexicographic_Byte_Order
   import opened Sequences
@@ -37,7 +39,7 @@ module BucketImpl {
   requires KMB.WF(tree)
   requires KMBBOps.NumElements(tree) < Uint64UpperBound()
   ensures KVList.WF(kvl)
-  ensures KVList.I(kvl) == KMB.Interpretation(tree)
+  ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
     var s := KMBBOps.ToSeq(tree);
     kvl := KVList.Kvl(s.0[..], s.1[..]);
@@ -49,26 +51,62 @@ module BucketImpl {
   requires KVList.WF(kvl)
   requires |kvl.keys| < Uint64UpperBound() - 1
   ensures KMB.WF(tree)
-  ensures KVList.I(kvl) == KMB.Interpretation(tree)
+  ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
     var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
     assume false;
   }
 
+  method pkv_to_kvl(pkv: PackedKV.Pkv)
+  returns (kvl: KVList.Kvl)
+  requires PackedKV.WF(pkv)
+  ensures KVList.WF(kvl)
+  ensures KVList.I(kvl) == PackedKV.I(pkv)
+  {
+    assume false;
+    var n := |pkv.keys.offsets| as uint64;
+    var keys := new Key[n];
+    var messages := new Message[n];
+    var i: uint64 := 0;
+    while i < n {
+      keys[i] := PackedKV.GetKey(pkv, i);
+      messages[i] := PackedKV.GetMessage(pkv, i);
+      i := i + 1;
+    }
+    return KVList.Kvl(keys[..], messages[..]);
+  }
+
+  method pkv_to_tree(pkv: PackedKV.Pkv)
+  returns (tree: TreeMap)
+  requires PackedKV.WF(pkv)
+  ensures KMB.WF(tree)
+  ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
+  {
+    var kv := pkv_to_kvl(pkv);
+    assume |kv.keys| < Uint64UpperBound() - 1;
+    tree := kvl_to_tree(kv);
+  }
+
   datatype Iterator = Iterator(i: uint64)
   function IIterator(it: Iterator) : BucketIteratorModel.Iterator
 
+  datatype BucketFormat =
+      | BFTree
+      | BFKvl
+      | BFPkv
+
   class MutBucket {
-    var is_tree: bool;
+    var format: BucketFormat;
 
     var tree: KMB.Node?;
     var kvl: KVList.Kvl;
+    var pkv: PackedKV.Pkv;
 
     var Weight: uint64;
 
     ghost var Repr: set<object>;
-    ghost var Bucket: map<Key, Message>;
+    ghost var Bucket: Bucket;
 
     protected predicate Inv()
     reads this, Repr
@@ -77,23 +115,27 @@ module BucketImpl {
     ensures Inv() ==> WFBucket(Bucket)
     {
       && this in Repr
-      && (!is_tree ==> (
+      && (format.BFKvl? ==> (
         && tree == null
         && KVList.WF(kvl)
         && WeightBucket(KVList.I(kvl)) < Uint64UpperBound()
-        && Weight as int == WeightBucket(KVList.I(kvl))
         && Bucket == KVList.I(kvl)
       ))
-      && (is_tree ==> (
+      && (format.BFTree? ==> (
         && tree != null
         && tree in Repr
         && tree.repr <= Repr
         && KMB.WF(tree)
-        && Weight as int == WeightBucket(KMB.Interpretation(tree))
         && Weight as int < Uint64UpperBound()
-        && Bucket == KMB.Interpretation(tree)
+        && Bucket == B(KMB.Interpretation(tree))
+      ))
+      && (format.BFPkv? ==> (
+        && tree == null
+        && PackedKV.WF(pkv)
+        && Bucket == PackedKV.I(pkv)
       ))
       && WFBucket(Bucket)
+      && (Weight as int == WeightBucket(Bucket))
     }
 
     constructor(kv: KVList.Kvl)
@@ -103,7 +145,7 @@ module BucketImpl {
     ensures Inv()
     ensures fresh(Repr)
     {
-      this.is_tree := false;
+      this.format := BFKvl;
       this.kvl := kv;
       this.tree := null;
       this.Repr := {this};
@@ -121,7 +163,7 @@ module BucketImpl {
     ensures Inv()
     ensures fresh(Repr)
     {
-      this.is_tree := false;
+      this.format := BFKvl;
       this.kvl := kv;
       this.tree := null;
       this.Repr := {this};
@@ -130,8 +172,25 @@ module BucketImpl {
       KVList.WFImpliesWFBucket(kv);
     }
 
+    constructor InitFromPkv(pkv: PackedKV.Pkv)
+    requires PackedKV.WF(pkv)
+    ensures I() == PackedKV.I(pkv)
+    ensures Inv()
+    ensures fresh(Repr)
+    {
+      this.format := BFPkv;
+      this.pkv := pkv;
+      this.Weight := PackedKV.WeightPkv(pkv);
+      this.Repr := {this};
+      this.Bucket := PackedKV.I(pkv);
+      this.tree := null;
+      new;
+      assume Weight as int == WeightBucket(Bucket);
+      assume WFBucket(Bucket);
+    }
+
     lemma NumElementsLteWeight(bucket: Bucket)
-      ensures |bucket| < WeightBucket(bucket)
+      ensures |bucket.b| < WeightBucket(bucket)
     {
       assume false;
     }
@@ -141,12 +200,19 @@ module BucketImpl {
     ensures KVList.WF(kv)
     ensures KVList.I(kv) == Bucket
     {
-      if (is_tree) {
-        NumElementsLteWeight(KMB.Interpretation(tree));
+      if (format.BFTree?) {
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
         assume false;
         kv := tree_to_kvl(tree);
-      } else {
+      } else if (format.BFKvl?) {
         kv := kvl;
+      } else {
+        var isSorted := PackedKV.ComputeIsSorted(pkv);
+        if (!isSorted) {
+          // TODO need to sort
+          print "pkv is not sorted\n";
+        }
+        kv := pkv_to_kvl(pkv);
       }
     }
 
@@ -345,14 +411,18 @@ module BucketImpl {
     ensures Bucket == BucketInsert(old(Bucket), key, value)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      if !is_tree {
-        is_tree := true;
-        assume false; // NumElements issue
+      assume false;
+
+      if format.BFKvl? {
+        format := BFTree;
         tree := kvl_to_tree(kvl);
         kvl := KVList.Kvl([], []); // not strictly necessary, but frees memory
+      } else if format.BFPkv? {
+        format := BFTree;
+        tree := pkv_to_tree(pkv);
+        var psa := PackedKV.PackedStringArray.Psa([], []);
+        pkv := PackedKV.Pkv(psa, psa);
       }
-
-      assume false;
 
       if value.Define? {
         var cur;
@@ -364,20 +434,21 @@ module BucketImpl {
         }
       }
 
-      Bucket := KMB.Interpretation(tree);
+      Bucket := B(KMB.Interpretation(tree));
     }
 
     method Query(key: Key)
     returns (m: Option<Message>)
     requires Inv()
-    ensures m.None? ==> key !in Bucket
-    ensures m.Some? ==> key in Bucket && Bucket[key] == m.value
+    ensures m == bucketBinarySearchLookup(I(), key)
     {
-      if is_tree {
+      if format.BFTree? {
         m := KMB.Query(tree, key);
-      } else {
-        KVList.lenKeysLeWeightOver8(kvl);
+      } else if format.BFKvl? {
+        KVList.lenKeysLeWeightOver4(kvl);
         m := KVList.Query(kvl, key);
+      } else if format.BFPkv? {
+        m := PackedKV.BinarySearchQuery(pkv, key);
       }
     }
 
@@ -388,16 +459,10 @@ module BucketImpl {
     ensures left.Bucket == SplitBucketLeft(Bucket, pivot)
     ensures fresh(left.Repr)
     {
-      var kv;
-      if is_tree {
-        assume false; // NumElements issue
-        kv := tree_to_kvl(tree);
-      } else {
-        kv := kvl;
-      }
+      var kv := GetKvl();
 
       WeightSplitBucketLeft(Bucket, pivot);
-      KVList.lenKeysLeWeightOver8(kv);
+      KVList.lenKeysLeWeightOver4(kv);
       var kvlLeft := KVList.SplitLeft(kv, pivot);
       left := new MutBucket(kvlLeft);
     }
@@ -409,16 +474,10 @@ module BucketImpl {
     ensures right.Bucket == SplitBucketRight(Bucket, pivot)
     ensures fresh(right.Repr)
     {
-      var kv;
-      if is_tree {
-        assume false; // NumElements issue
-        kv := tree_to_kvl(tree);
-      } else {
-        kv := kvl;
-      }
+      var kv := GetKvl();
 
       WeightSplitBucketRight(Bucket, pivot);
-      KVList.lenKeysLeWeightOver8(kv);
+      KVList.lenKeysLeWeightOver4(kv);
       var kvlRight := KVList.SplitRight(kv, pivot);
       right := new MutBucket(kvlRight);
     }
@@ -492,6 +551,38 @@ module BucketImpl {
       }
     }
 
+    method GetMiddleKey() returns (res: Key)
+    requires Inv()
+    ensures getMiddleKey(I()) == res
+    {
+      if format.BFPkv? {
+        if |pkv.keys.offsets| as uint64 == 0 {
+          return [0];
+        } else {
+          var key := PackedKV.GetKey(pkv, |pkv.keys.offsets| as uint64 / 2);
+          if |key| as uint64 == 0 {
+            return [0];
+          } else {
+            return key;
+          }
+        }
+      } else {
+        var kvl := GetKvl();
+        KVList.lenKeysLeWeightOver4(kvl);
+        assume false;
+        if |kvl.keys| as uint64 == 0 {
+          return [0];
+        } else {
+          var key := kvl.keys[|kvl.keys| as uint64 / 2];
+          if |key| as uint64 == 0 {
+            return [0];
+          } else {
+            return key;
+          }
+        }
+      }
+    }
+
     static method computeWeightOfSeq(buckets: seq<MutBucket>)
     returns (weight: uint64)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
@@ -551,8 +642,13 @@ module BucketImpl {
     ensures fresh(bucket'.Repr)
     ensures this.Bucket == bucket'.Bucket
     {
+      if format.BFPkv? {
+        bucket' := new MutBucket.InitFromPkv(pkv);
+        return;
+      }
+
       var kv;
-      if is_tree {
+      if format.BFTree? {
         assume false; // NumElements issue
         kv := tree_to_kvl(tree);
       } else {
@@ -613,6 +709,7 @@ module BucketImpl {
     ensures IIterator(it') == BucketIteratorModel.IterFindFirstGte(I(), key)
     {
       assume false;
+      var kvl := GetKvl();
       var i: uint64 := KVList.IndexOfFirstKeyGte(kvl, key);
       return Iterator(i);
     }
@@ -623,6 +720,7 @@ module BucketImpl {
     ensures IIterator(it') == BucketIteratorModel.IterFindFirstGt(I(), key)
     {
       assume false;
+      var kvl := GetKvl();
       var i: uint64 := KVList.IndexOfFirstKeyGt(kvl, key);
       return Iterator(i);
     }
@@ -644,11 +742,19 @@ module BucketImpl {
     ensures next == IIterator(it).next
     {
       assume false;
-      var kvl := GetKvl();
-      if it.i == |kvl.keys| as uint64 {
-        next := BucketIteratorModel.Done;
+      if format.BFPkv? {
+        if it.i == |pkv.keys.offsets| as uint64 {
+          next := BucketIteratorModel.Done;
+        } else {
+          next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
+        }
       } else {
-        next := BucketIteratorModel.Next(kvl.keys[it.i], kvl.messages[it.i]);
+        var kvl := GetKvl();
+        if it.i == |kvl.keys| as uint64 {
+          next := BucketIteratorModel.Done;
+        } else {
+          next := BucketIteratorModel.Next(kvl.keys[it.i], kvl.messages[it.i]);
+        }
       }
     }
   }

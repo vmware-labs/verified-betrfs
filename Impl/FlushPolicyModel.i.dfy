@@ -159,7 +159,6 @@ module FlushPolicyModel {
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
         (s, getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1))
       ) else (
-        WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
         var (slot, slotWeight) := biggestSlot(node.buckets);
         // TODO:
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
@@ -250,7 +249,6 @@ module FlushPolicyModel {
       if node.children.None? || |node.buckets| == MaxNumChildren() {
         getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
-        WFBucketsOfWFBucketList(node.buckets, node.pivotTable);
         var (slot, slotWeight) := biggestSlot(node.buckets);
         //if slotWeight >= FlushTriggerWeight() as uint64 {
         if |node.buckets| < 8 {

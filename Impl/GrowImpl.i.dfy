@@ -16,6 +16,7 @@ module GrowImpl {
   import opened Sequences
   import opened Sets
   import opened BucketWeights
+  import opened BucketsLib
 
   import opened NativeTypes
 
@@ -64,7 +65,7 @@ module GrowImpl {
         MutBucket.ReprSeqDisjointOfLen1([mutbucket]);
         var newroot := new Node([], Some([newref]), [mutbucket]);
         
-        assert newroot.I() == IM.Node([], Some([newref]), [map[]]);
+        assert newroot.I() == IM.Node([], Some([newref]), [B(map[])]);
         assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
         assert fresh(newroot.Repr);
 

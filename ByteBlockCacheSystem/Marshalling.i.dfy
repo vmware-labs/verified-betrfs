@@ -4,7 +4,7 @@ include "../lib/Base/Message.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
-include "KVList.i.dfy"
+include "../lib/Buckets/KVList.i.dfy"
 
 //
 // Defines the interpretation of a sector of bytes as
@@ -29,6 +29,7 @@ module Marshalling {
   import LBAType
   import ReferenceType`Internal
   import Crypto
+  import PackedKV
 
   type Reference = BC.Reference
   type LBA = BC.LBA
@@ -41,10 +42,7 @@ module Marshalling {
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
-    GTuple([
-      GKeyArray,
-      GMessageArray
-    ])
+    GPackedKV
   }
 
   function method PivotNodeGrammar() : G
@@ -107,12 +105,12 @@ module Marshalling {
   requires ValidVal(v)
   requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
-  ensures s.Some? ==> |s.value| == |v.baa|
-  decreases |v.baa|
+  ensures s.Some? ==> |s.value| == |v.ka|
+  decreases |v.ka|
   {
-    if isStrictlySortedKeySeq(v.baa) then
-      var blah : seq<Key> := v.baa;
-      Some(v.baa)
+    if isStrictlySortedKeySeq(v.ka) then
+      var blah : seq<Key> := v.ka;
+      Some(v.ka)
     else
       None
   }
@@ -121,7 +119,7 @@ module Marshalling {
   requires ValidVal(v)
   requires ValInGrammar(v, GKeyArray)
   ensures s.Some? ==> Pivots.WFPivots(s.value)
-  ensures s.Some? ==> |s.value| == |v.baa|
+  ensures s.Some? ==> |s.value| == |v.ka|
   {
     var s := valToStrictlySortedKeySeq(v);
     if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
@@ -148,47 +146,27 @@ module Marshalling {
     Some(v.ma)
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V, pivotTable: seq<Key>, i: int) : (s : Option<KVList.Kvl>)
+  function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Bucket)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
-  requires Pivots.WFPivots(pivotTable)
-  requires 0 <= i <= |pivotTable|
   {
-    var keys := valToStrictlySortedKeySeq(v.t[0]);
-    var values := valToMessageSeq(v.t[1]);
-
-    if keys.Some? && values.Some? then (
-      var kvl := KVList.Kvl(keys.value, values.value);
-
-      if KVList.WF(kvl) && WFBucketAt(KVList.I(kvl), pivotTable, i) then
-        Some(kvl)
-      else
-        None
-    ) else (
-      None
-    )
+    var pkv := v.pkv;
+    var bucket := PackedKV.I(pkv);
+    bucket
   }
 
-  function valToBuckets(a: seq<V>, pivotTable: seq<Key>) : (s : Option<seq<Bucket>>)
-  requires Pivots.WFPivots(pivotTable)
+  function valToBuckets(a: seq<V>) : (s : seq<Bucket>)
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
-  requires |a| <= |pivotTable| + 1
-  ensures s.Some? ==> |s.value| == |a|
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucketAt(s.value[i], pivotTable, i)
+  ensures |s| == |a|
+  ensures forall i | 0 <= i < |s| :: WFBucket(s[i])
   {
     if |a| == 0 then
-      Some([])
+      []
     else (
-      match valToBuckets(DropLast(a), pivotTable) {
-        case None => None
-        case Some(pref) => (
-          match valToBucket(Last(a), pivotTable, |pref|) {
-            case Some(bucket) => Some(pref + [KVList.I(bucket)])
-            case None => None
-          }
-        )
-      }
+      var pref := valToBuckets(DropLast(a));
+      var bucket := valToBucket(Last(a));
+      pref + [bucket]
     )
   }
 
@@ -207,7 +185,7 @@ module Marshalling {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
-    var pivots_len := |v.t[0].baa| as uint64;
+    var pivots_len := |v.t[0].ka| as uint64;
     var children_len := |v.t[1].ua| as uint64;
     var buckets_len := |v.t[2].a| as uint64;
 
@@ -224,20 +202,16 @@ module Marshalling {
             case None => None
             case Some(children) => (
               assert ValidVal(v.t[2]);
-              match valToBuckets(v.t[2].a, pivots) {
-                case None => None
-                case Some(buckets) => (
-                  if WeightBucketList(buckets) <= MaxTotalBucketWeight() then (
-                    var node := BT.G.Node(
-                      pivots,
-                      if |children| == 0 then None else Some(children),
-                      buckets);
-                    Some(node)
-                  ) else (
-                    None
-                  )
-                )
-              }
+              var buckets := valToBuckets(v.t[2].a);
+              if WeightBucketList(buckets) <= MaxTotalBucketWeight() then (
+                var node := BT.G.Node(
+                  pivots,
+                  if |children| == 0 then None else Some(children),
+                  buckets);
+                Some(node)
+              ) else (
+                None
+              )
             )
           }
         )
