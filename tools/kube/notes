@@ -1,0 +1,43 @@
+KUBECONFIG=kubeconfig kubectl get nodes
+KUBECONFIG=kubeconfig kubectl create namespace veribetrfs
+
+
+Building docker images
+https://www.linode.com/docs/kubernetes/deploy-container-image-to-kubernetes/
+https://training.play-with-docker.com/beginner-linux/#Task_2
+
+docker image build --tag jonhdotnet/dafny_server:1.0 dafny_server/
+docker container rm dfy
+docker container run --publish 522:22 --name dfy jonhdotnet/dafny_server:1.0
+docker container run --detach --publish 522:22 jonhdotnet/dafny_server:1.0 
+docker ps -a
+docker container run -t -i --publish 522:22 jonhdotnet/dafny_server:1.0 /bin/bash
+docker container run -t -i --publish 522:22 --user root jonhdotnet/dafny_server:1.0 /bin/bash
+docker exec -it --user root 9fe66e9fd09f bash
+
+su - dockertester
+
+docker image build --tag jonhdotnet/veribetrfs:1.0 dafny_server/
+docker login
+docker push jonhdotnet/veribetrfs:1.0
+
+# trying to replicate on sumas
+sudo apt install docker.io
+sudo service docker restart
+sudo addgroup $USER docker
+newgrp docker
+
+# pull the image
+docker pull jonhdotnet/veribetrfs:1.0
+# run it with access to the current dir.
+docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial,type=bind --workdir /home/dafnyserver/tutorial jonhdotnet/veribetrfs:1.0 /bin/bash
+$ dafny test.dfy
+
+
+docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial,type=bind --workdir /home/dafnyserver/tutorial jonhdotnet/veribetrfs:1.0 /bin/bash
+
+# First set up veribetrfs_ci/assets/veribetrfs as desired
+# (git checkout relevant branch, for example)
+docker image build veribetrfs_ci
+docker container run -t -i `docker image ls -q | head -1` /bin/bash
+sudo docker inspect -f "{{ .NetworkSettings.IPAddress }}" `docker container ls --latest -q`
