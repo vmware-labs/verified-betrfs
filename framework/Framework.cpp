@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <fcntl.h>
 
+#define USE_O_DIRECT (O_DIRECT)
+//#define USE_O_DIRECT (0)
+
 [[ noreturn ]]
 void fail(string err)
 {
@@ -23,15 +26,19 @@ typedef uint8 byte;
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
+#if USE_O_DIRECT
   byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
-    // byte *aligned_bytes;
-    // *aligned_len = (len + 4095) & ~0xfffUL;
-    // int result = posix_memalign((void **)&aligned_bytes, 4096, *aligned_len);
-    // if (result) {
-    //   return NULL;
-    // }
-    // memcpy(aligned_bytes, buf, len);
-    // return aligned_bytes;
+    byte *aligned_bytes;
+    *aligned_len = (len + 4095) & ~0xfffUL;
+    int result = posix_memalign((void **)&aligned_bytes, 4096, *aligned_len);
+    if (result) {
+      return NULL;
+      }
+    memcpy(aligned_bytes, buf, len);
+    return aligned_bytes;
+  }
+#else
+  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
     byte *aligned_bytes = (byte *)malloc(len);
     if (aligned_bytes) {
       memcpy(aligned_bytes, buf, len);
@@ -39,6 +46,7 @@ namespace MainDiskIOHandler_Compile {
     }
     return aligned_bytes;
   }
+#endif // USE_O_DIRECT
   
   struct WriteTask {
     size_t aligned_len;
@@ -111,26 +119,36 @@ namespace MainDiskIOHandler_Compile {
     ReadTask(DafnySequence<byte> s) : bytes(s) { }
   };
 
+#if USE_O_DIRECT
   uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
   {
-    // size_t aligned_len = (len + 4095) & ~0xfffULL;
-    // byte *aligned_res;
-    // int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
-    // if (result != 0) {
-    //   fail("Couldn't allocate aligned memory");
-    // }
+    size_t aligned_len = (len + 4095) & ~0xfffULL;
+    byte *aligned_res;
+    int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
+    if (result != 0) {
+      fail("Couldn't allocate aligned memory");
+    }
     
-    //ssize_t count = pread(fd, aligned_res, aligned_len, addr);
-    ssize_t count = pread(fd, res, len, addr);
+    ssize_t count = pread(fd, aligned_res, aligned_len, addr);
     if (count < 0) {
-      //free(aligned_res);
+      free(aligned_res);
       fail("pread failed");
     }
-    //memcpy(res, aligned_res, len);
-    //free(aligned_res);
+    memcpy(res, aligned_res, len);
+    free(aligned_res);
     
     return (uint64)count;
   }
+#else
+  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
+  {
+    ssize_t count = pread(fd, res, len, addr);
+    if (count < 0) {
+      fail("pread failed");
+    }
+    return (uint64)count;
+  }
+#endif // USE_O_DIRECT
 
   void writeSync(int fd, uint64 addr, byte* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
@@ -169,7 +187,7 @@ namespace MainDiskIOHandler_Compile {
 
   DiskIOHandler::DiskIOHandler(string filename) : curId(0) {
     // Should probably throw an error if this fails
-    fd = open(filename.c_str(), O_RDWR | O_DSYNC | O_NOATIME);
+    fd = open(filename.c_str(), O_RDWR | USE_O_DIRECT | O_DSYNC | O_NOATIME);
   }
 
   DiskIOHandler::~DiskIOHandler() {
@@ -482,7 +500,7 @@ void Mkfs(string filename) {
     fail("InitDiskBytes failed.");
   }
 
-  int fd = open(filename.c_str(), O_RDWR | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  int fd = open(filename.c_str(), O_RDWR | USE_O_DIRECT | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
   if (fd < 0) {
     fail("Could not open output file: " + filename);
   }

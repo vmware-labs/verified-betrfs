@@ -233,7 +233,7 @@ int main(int argc, char* argv[]) {
 
     {
         /* veribetrkv */ Mkfs(veribetrfs_filename);
-      /* veribetrkv */ Application app(veribetrfs_filename);
+        /* veribetrkv */ Application app(veribetrfs_filename);
         /* veribetrkv */ VeribetrkvFacade db(app);
 
         ycsbLoad(db, *workload, record_count, verbose);
