@@ -46,7 +46,7 @@ class DafnySyntaxOK(DafnyCondition):
         super().__init__(6, "syntax ok", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
-    return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
+    return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy").replace(".dummydep", ".dfy")
 
 def hasDisallowedAssumptions(verchk):
     dfy = dafnyFromVerchk(verchk)

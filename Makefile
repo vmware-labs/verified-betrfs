@@ -150,7 +150,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 build/%.verchk: %.dfy | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
 #	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
-	tools/remver --cmd $(DAFNY_CMD) /compile:0 $< --stdout $(TMPNAME) --transfer $^
+	tools/remver --cmd $(DAFNY_CMD) /compile:0 $< --stdout $(TMPNAME) --transfer $<
 	mv $(TMPNAME) $@
 
 ##############################################################################

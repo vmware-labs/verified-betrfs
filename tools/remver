@@ -1,8 +1,17 @@
 #!/usr/bin/python3
+"""
+The client side of remote verification: bundles up the dafny files reachable
+from some root and carts them off in a call to a remote verification host.
+"""
 import sys
 import tempfile
 import os
 import shutil
+import subprocess
+
+#import lib_aggregate
+import lib_deps
+import lib_remote
 
 def usage(msg):
     sys.stderr.write(msg + "\n")
@@ -11,46 +20,60 @@ def usage(msg):
 
 class RemVer:
     def __init__(self):
-        self.parseArgs()
-
-    def parseArgs(self):
-        key = None
-        KNOWN_KEYS = ["cmd", "stdout", "transfer"]
-        buckets = {}
-        for arg in sys.argv[1:]:
-            if arg.startswith("--"):
-                key = arg[2:]
-                if key not in KNOWN_KEYS:
-                    usage("Unknown arg '%s'" % arg)
-            elif key==None:
-                usage("Unknown arg '%s'" % arg)
-            else:
-                if key not in buckets:
-                    buckets[key] = []
-                buckets[key].append(arg)
-        if len(buckets["stdout"]) != 1:
+        self.buckets = lib_remote.parse_args(["cmd", "stdout", "transfer"], usage)
+        if len(self.buckets["stdout"]) != 1:
             usage("Expected exactly one value for --stdout")
-        self.buckets = buckets
 
-    def transfer(self):
-        tmpdir = tempfile.mkdtemp(".remver")
-        print("look in %s" % tmpdir)
-        for srcfile in self.buckets['transfer']:
-            if os.path.isdir(srcfile):
-                # We'll make the dir if we need it.
-                continue
-            dstfile = os.path.join(tmpdir, srcfile)
-            assert os.path.abspath(dstfile).startswith(tmpdir)  # no ..s
-            try:
-                print("makedirs %s for dest %s" % (os.path.dirname(dstfile), dstfile))
-                os.makedirs(os.path.dirname(dstfile))
-            except FileExistsError:
-                pass
-            shutil.copyfile(srcfile, dstfile)
+    def cleanup(self):
+        shutil.rmtree(self.tardir)
+        os.unlink(self.pkgfile)
+
+    def package(self):
+        self.tardir = tempfile.mkdtemp(".remver")
+        #print("look in %s" % self.tardir)
+        for transfer in self.buckets['transfer']:
+            rootIref = lib_deps.IncludeReference(None, 0, transfer)
+            for srcRef in [rootIref] + lib_deps.depsFromDfySource(rootIref):
+                srcfile = srcRef.normPath
+                if os.path.isdir(srcfile):
+                    # We'll make the dir if we need it.
+                    continue
+                dstfile = os.path.join(self.tardir, srcfile)
+                assert os.path.abspath(dstfile).startswith(self.tardir)  # no ..s
+                try:
+                    #print("makedirs %s for dest %s" % (os.path.dirname(dstfile), dstfile))
+                    os.makedirs(os.path.dirname(dstfile))
+                except FileExistsError:
+                    pass
+                shutil.copyfile(srcfile, dstfile)
+        (_, self.pkgfile) = tempfile.mkstemp(".pkg.tbz")
+        subprocess.call(["tar", "-C", self.tardir, "-cjf", self.pkgfile, "."])
+
+    def compute(self):
+        cmd = self.buckets["cmd"]
+        cmd[0] = os.path.join(os.getcwd(), cmd[0])  # TODO HACK
+        hostver = "/home/jonh/veribetrfs2/tools/hostver" # TODO HACK
+        pipe = subprocess.Popen(
+            [hostver, "--cmd"] + cmd + ["--dafnyhash", lib_remote.get_dafny_hash()],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("invoke")
+        (stdout, stderr) = pipe.communicate(open(self.pkgfile, "rb").read())
+        print("invoke done")
+        #print(stdout)
+        #print(stderr)
+        (stdoutFile,) = tuple(self.buckets["stdout"])
+        fp = open(stdoutFile, "wb")
+        fp.write(stdout)
+        fp.write(stderr)
+        fp.close()
 
     def main(self):
-        for key in self.buckets:
-            print("Got %d args in bucket %s" % (len(self.buckets[key]), key))
-        self.transfer()
+        #for key in self.buckets:
+            #print("Got %d args in bucket %s" % (len(self.buckets[key]), key))
+        # Gather the relevant files and tar them up.
+        self.package()
+        # Ship the tarball up, get the tarballed results back.
+        self.compute()
+        self.cleanup()
 
 RemVer().main()

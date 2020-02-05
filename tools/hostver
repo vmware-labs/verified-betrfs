@@ -1,0 +1,40 @@
+#!/usr/bin/python3
+"""
+The client side of remote verification: bundles up the dafny files reachable
+from some root and carts them off in a call to a remote verification host.
+"""
+import sys
+import tempfile
+import os
+import shutil
+import subprocess
+import lib_remote
+
+def usage(msg):
+    sys.stderr.write(msg + "\n")
+    sys.stderr.write("Ordinarily this command is only invoked from remver\n");
+    sys.stderr.write("Usage: %s --cmd <blar>* --dafnyhash <path>\n" % sys.argv[0])
+    sys.exit(-1)
+
+def main():
+    argBuckets = lib_remote.parse_args(["cmd", "dafnyhash"], usage)
+    #print(argBuckets)
+
+    (requested_dafny_hash,) = tuple(argBuckets["dafnyhash"])
+    local_dafny_hash = lib_remote.get_dafny_hash()
+    if requested_dafny_hash != local_dafny_hash:
+        sys.stderr.write("Server dafny %s Caller wanted %s" % (local_dafny_hash, argBuckets["dafnyhash"]))
+        return
+
+    # security: tarfile could have root or ../ pathnames. Guess we trust
+    # the user (gulp).
+    tmpdir = tempfile.mkdtemp(".hostver")
+    tarpipe = subprocess.Popen(["tar", "-C", tmpdir, "-xjf", "-"], stdin=subprocess.PIPE)
+    tarpipe.communicate(sys.stdin.buffer.read())
+    print("### hostver using %s" % tmpdir);
+
+    print("### cmd: %s" % argBuckets["cmd"])
+    subprocess.call(argBuckets["cmd"], cwd=tmpdir)
+    shutil.rmtree(tmpdir)
+
+main()
