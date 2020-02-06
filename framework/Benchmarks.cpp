@@ -160,7 +160,6 @@ public:
   virtual void go(Application& app) override {
     benchmark_start("go-Insert");
     for (size_t i = 0; i < keys.size(); i++) {
-      if (i % 1000 == 0) cout << i << endl;
       app.Insert(keys[i], values[i]);
     }
     benchmark_end("go-Insert");

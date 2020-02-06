@@ -167,6 +167,7 @@ namespace MainDiskIOHandler_Compile {
     bool prepareReadResponse();
     void completeWriteTasks();
     void waitForOne();
+    void maybeStartWriteReq();
 
     private:
     uint64 readResponseId;
