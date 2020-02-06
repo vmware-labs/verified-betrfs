@@ -55,7 +55,12 @@ namespace MainDiskIOHandler_Compile {
 
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
-        fail("aio_write failed");
+        if (ret == EAGAIN) { fail("aio_write failed EAGAIN"); }
+        else if (ret == EBADF) { fail("aio_write failed EBADF"); }
+        else if (ret == EFBIG) { fail("aio_write failed EFBIG"); }
+        else if (ret == EINVAL) { fail("aio_write failed EINVAL"); }
+        else if (ret == ENOSYS) { fail("aio_write failed ENOSYS"); }
+        else { fail("aio_write failed (error unknown)"); }
       }
 
       aio_req_fsync.aio_fildes = fileno(f);
