@@ -109,7 +109,7 @@ void golden_lut_print_demo_intel() {
   delete tbl;
 }*/
 
-#define CRC_ITER(i) case i:                \
+#define CRC_ITER(i) \
 crcA = _mm_crc32_u64(crcA, *(uint64_t*)(pA - 8*(i)));   \
 crcB = _mm_crc32_u64(crcB, *(uint64_t*)(pB - 8*(i)));   \
 crcC = _mm_crc32_u64(crcC, *(uint64_t*)(pC - 8*(i)));
@@ -143,8 +143,15 @@ uint32_t option_13_golden_intel(const void* M, uint32_t bytes, uint32_t prev = 0
     uint64_t pB = pA + 8 * n;
     uint64_t pC = pB + 8 * n;
     uint64_t crcB = 0, crcC = 0;
-    switch (n)
+    if (n == 256) {
       CRC_ITERS_256_TO_2();
+    } else {
+      for (int z = n; z >= 2; z--) {
+        crcA = _mm_crc32_u64(crcA, *(uint64_t*)(pA - 8*(z)));
+        crcB = _mm_crc32_u64(crcB, *(uint64_t*)(pB - 8*(z)));
+        crcC = _mm_crc32_u64(crcC, *(uint64_t*)(pC - 8*(z)));
+      }
+    }
 
     crcA = _mm_crc32_u64(crcA, *(uint64_t*)(pA - 8));
     crcB = _mm_crc32_u64(crcB, *(uint64_t*)(pB - 8));
