@@ -38,7 +38,7 @@ def main():
 
     cmd = argBuckets["cmd"]
     assert cmd[0]=="DAFNY"
-    cmd[0] = DAFNY
+    cmd[0] = os.path.abspath(DAFNY)
     print("### cmd: %s" % cmd)
     subprocess.call(argBuckets["cmd"], cwd=tmpdir)
     shutil.rmtree(tmpdir)
