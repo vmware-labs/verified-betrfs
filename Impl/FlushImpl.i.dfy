@@ -46,6 +46,8 @@ module FlushImpl {
   ensures s.ready
   ensures FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
   {
+    NativeBenchmarking.start("flush.0");
+
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
       if b {
@@ -53,6 +55,9 @@ module FlushImpl {
         return;
       }
     }
+
+    NativeBenchmarking.end("flush.0");
+    NativeBenchmarking.start("flush.2");
 
     //Native.BenchmarkingUtil.start();
 
@@ -76,14 +81,24 @@ module FlushImpl {
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
+    NativeBenchmarking.end("flush.2");
+    NativeBenchmarking.start("flush.3");
+
     var newparentBucket, newbuckets := KVListPartialFlush.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+
+    NativeBenchmarking.end("flush.3");
+
+    NativeBenchmarking.start("flush.4");
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
+    NativeBenchmarking.end("flush.4");
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
         Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
 
     BookkeepingModel.allocRefDoesntEqual(Ic(k), s.I(), newchild.children, parentref);
+    NativeBenchmarking.start("flush.5");
     var newchildref := allocBookkeeping(k, s, newchild.children);
+    NativeBenchmarking.end("flush.5");
     if newchildref.None? {
       print "giving up; could not get parentref\n";
       return;
@@ -91,24 +106,32 @@ module FlushImpl {
 
     assert parent.I().children == s.I().cache[parentref].children;
 
+    NativeBenchmarking.start("flush.6");
     var newparent_children := SeqIndexUpdate(
       parent.children.value, slot, newchildref.value);
+    NativeBenchmarking.end("flush.6");
 
+    NativeBenchmarking.start("flush.7");
     writeBookkeeping(k, s, parentref, Some(newparent_children));
+    NativeBenchmarking.end("flush.7");
 
     assert parentref != newchildref.value;
 
     ghost var c1 := s.cache.I();
     assert c1 == old(s.cache.I());
 
+    NativeBenchmarking.start("flush.8");
     s.cache.Insert(newchildref.value, newchild);
+    NativeBenchmarking.end("flush.8");
 
     ghost var c2 := s.cache.I();
     assert c2 == c1[newchildref.value := newchild.I()];
     //assert newchild.I() == old(child.I()).(buckets := MutBucket.ISeq(newbuckets));
     ghost var newParentBucketI := newparentBucket.Bucket;
 
+    NativeBenchmarking.start("flush.9");
     s.cache.UpdateNodeSlot(parentref, slot, newparentBucket, newchildref.value);
+    NativeBenchmarking.end("flush.9");
 
     ghost var c3 := s.cache.I();
 

@@ -73,6 +73,7 @@ module BucketImpl {
   ensures KVList.I(kvl) == PackedKV.I(pkv)
   {
     assume false;
+    NativeBenchmarking.start("pkv_to_kvl");
     var n := |pkv.keys.offsets| as uint64;
     var keys := new Key[n];
     var messages := new Message[n];
@@ -82,6 +83,7 @@ module BucketImpl {
       messages[i] := PackedKV.GetMessage(pkv, i);
       i := i + 1;
     }
+    NativeBenchmarking.end("pkv_to_kvl");
     return KVList.Kvl(keys[..], messages[..]);
   }
 
