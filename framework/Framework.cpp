@@ -21,6 +21,7 @@
 #define O_DIRECT_FLAG (0)
 #if USE_DIRECT
 #ifdef O_DIRECT
+#undef O_DIRECT_FLAG
 #define O_DIRECT_FLAG O_DIRECT
 #endif
 #endif
