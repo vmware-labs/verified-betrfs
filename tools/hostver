@@ -16,12 +16,15 @@ def usage(msg):
     sys.stderr.write("Usage: %s --cmd <blar>* --dafnyhash <path>\n" % sys.argv[0])
     sys.exit(-1)
 
+DAFNYDIR = "veribetrfs/.dafny/dafny/Binaries"
+DAFNY = os.path.join(DAFNYDIR, "dafny")
+
 def main():
     argBuckets = lib_remote.parse_args(["cmd", "dafnyhash"], usage)
     #print(argBuckets)
 
     (requested_dafny_hash,) = tuple(argBuckets["dafnyhash"])
-    local_dafny_hash = lib_remote.get_dafny_hash()
+    local_dafny_hash = lib_remote.get_dafny_hash(DAFNYDIR)
     if requested_dafny_hash != local_dafny_hash:
         sys.stderr.write("Server dafny %s Caller wanted %s" % (local_dafny_hash, argBuckets["dafnyhash"]))
         return
@@ -33,7 +36,10 @@ def main():
     tarpipe.communicate(sys.stdin.buffer.read())
     print("### hostver using %s" % tmpdir);
 
-    print("### cmd: %s" % argBuckets["cmd"])
+    cmd = argBuckets["cmd"]
+    print("### cmd: %s" % cmd)
+    assert cmd[0]=="DAFNY"
+    cmd[0] = DAFNY
     subprocess.call(argBuckets["cmd"], cwd=tmpdir)
     shutil.rmtree(tmpdir)
 
