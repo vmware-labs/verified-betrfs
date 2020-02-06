@@ -13,8 +13,7 @@ import subprocess
 import lib_deps
 import lib_remote
 
-TOOLS = os.path.dirpart(os.path.realpath(__file__))
-print("TOOLs %s" %  TOOLS)
+TOOLS = os.path.split(os.path.realpath(__file__))[0]
 
 def usage(msg):
     sys.stderr.write(msg + "\n")
@@ -58,7 +57,7 @@ class RemVer:
         hostver = "veribetrfs/tools/hostver"
         pipe = subprocess.Popen(
             ["ssh", "dafnyserver@172.17.0.2"]
-            + [hostver, "--cmd"] + cmd + ["--dafnyhash", lib_remote.get_dafny_hash()],
+            + [hostver, "--cmd"] + cmd + ["--dafnyhash", lib_remote.get_dafny_hash(os.path.join(TOOLS, "../.dafny/dafny"))],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print("invoke")
         (stdout, stderr) = pipe.communicate(open(self.pkgfile, "rb").read())
