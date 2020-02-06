@@ -26,7 +26,7 @@ def main():
     (requested_dafny_hash,) = tuple(argBuckets["dafnyhash"])
     local_dafny_hash = lib_remote.get_dafny_hash(DAFNYDIR)
     if requested_dafny_hash != local_dafny_hash:
-        sys.stderr.write("Server dafny %s Caller wanted %s" % (local_dafny_hash, argBuckets["dafnyhash"]))
+        sys.stderr.write("Server dafny %s Caller wanted %s" % (local_dafny_hash, requested_dafny_hash))
         return
 
     # security: tarfile could have root or ../ pathnames. Guess we trust
@@ -37,9 +37,9 @@ def main():
     print("### hostver using %s" % tmpdir);
 
     cmd = argBuckets["cmd"]
-    print("### cmd: %s" % cmd)
     assert cmd[0]=="DAFNY"
     cmd[0] = DAFNY
+    print("### cmd: %s" % cmd)
     subprocess.call(argBuckets["cmd"], cwd=tmpdir)
     shutil.rmtree(tmpdir)
 
