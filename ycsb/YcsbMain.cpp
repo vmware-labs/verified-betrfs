@@ -17,11 +17,11 @@ template< class DB >
 inline void performYcsbRead(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
     ycsbcwrappers::TxRead txread = ycsbcwrappers::TransactionRead(workload);
     if (!workload.read_all_fields()) {
-        cerr << "error: not reading all fields unsupported" << endl;
+        cerr << db.name << " error: not reading all fields unsupported" << endl;
         exit(-1);
     }
     if (verbose) {
-        cerr << "[op] READ " << txread.table << " " << txread.key << " { all fields }" << endl;
+        cerr << db.name << " [op] READ " << txread.table << " " << txread.key << " { all fields }" << endl;
     }
     // TODO use the table name?
     db.query(txread.key);
@@ -31,12 +31,12 @@ template< class DB >
 inline void performYcsbInsert(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
     ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
     if (txinsert.values->size() != 1) {
-        cerr << "error: only fieldcount=1 is supported" << endl;
+        cerr << db.name << " error: only fieldcount=1 is supported" << endl;
         exit(-1);
     }
     const std::string& value = (*txinsert.values)[0].second;
     if (verbose) {
-        cerr << "[op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
+        cerr << db.name << " [op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
     }
     // TODO use the table name?
     db.insert(txinsert.key, value);
@@ -46,16 +46,16 @@ template< class DB >
 inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
     ycsbcwrappers::TxUpdate txupdate = ycsbcwrappers::TransactionUpdate(workload);
     if (!workload.write_all_fields()) {
-        cerr << "error: not writing all fields unsupported" << endl;
+        cerr << db.name << " error: not writing all fields unsupported" << endl;
         exit(-1);
     }
     if (txupdate.values->size() != 1) {
-        cerr << "error: only fieldcount=1 is supported" << endl;
+        cerr << db.name << " error: only fieldcount=1 is supported" << endl;
         exit(-1);
     }
     const std::string& value = (*txupdate.values)[0].second;
     if (verbose) {
-        cerr << "[op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
+        cerr << db.name << " [op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
     }
     // TODO use the table name?
     db.update(txupdate.key, value);
@@ -63,14 +63,14 @@ inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose
 
 template< class DB >
 void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
-    cerr << "[step] loading (num ops: " << num_ops << ")" << endl;
+    cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
 
     auto clock_start = chrono::high_resolution_clock::now();
     for (int i = 0; i < num_ops; ++i) {
         performYcsbInsert(db, workload, verbose);
     }
 
-    cerr << "[step] sync" << endl;
+    cerr << db.name << " [step] sync" << endl;
     db.sync();
 
     auto clock_end = chrono::high_resolution_clock::now();
@@ -78,10 +78,9 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
 
     double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
 
-
-    cerr << "[step] loading complete" << endl;
-    cout << "[load]\tduration(ns)\toperations\tops/s" << endl;
-    cout << "\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+    cerr << db.name << " [step] loading complete" << endl;
+    cout << "db(load)\tduration(ns)\toperations\tops/s" << endl;
+    cout << db.name << "\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
 }
 
 template< class DB >
@@ -92,7 +91,7 @@ void ycsbRun(
     int sync_interval_ms,
     bool verbose) {
 
-    cerr << "[step] running experiment (num ops: " << num_ops << ", sync interval " <<
+    cerr << db.name << " [step] running experiment (num ops: " << num_ops << ", sync interval " <<
         sync_interval_ms << "ms)" << endl;
 
     // TODO: sync every k seconds
@@ -131,7 +130,7 @@ void ycsbRun(
         if (std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_last_sync).count() > sync_interval_ms) {
 
-            cerr << "[op] sync (completed " << i << " ops)" << endl;
+            cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
             db.sync();
 
             auto sync_completed = chrono::high_resolution_clock::now();
@@ -147,15 +146,18 @@ void ycsbRun(
 
     double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
 
-    cerr << "[step] experiment complete" << endl;
-    cout << "duration(ns)\toperations\tops/s" << endl;
-    cout << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+    cerr << db.name << " [step] experiment complete" << endl;
+    cout << "db\tduration(ns)\toperations\tops/s" << endl;
+    cout << db.name << "\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
 }
 
 class VeribetrkvFacade {
 protected:
     Application& app;
+
 public:
+    static const string name;
+
     VeribetrkvFacade(Application& app) : app(app) { }
 
     inline void query(const string& key) {
@@ -175,10 +177,15 @@ public:
     }
 };
 
+const string VeribetrkvFacade::name = string("veribetrkv");
+
 class RocksdbFacade {
 protected:
     rocksdb::DB& db;
+    
 public:
+    static const string name;
+
     RocksdbFacade(rocksdb::DB& db) : db(db) { }
 
     inline void query(const string& key) {
@@ -209,16 +216,19 @@ public:
     }
 };
 
+const string RocksdbFacade::name = string("rocksdb");
+
 int main(int argc, char* argv[]) {
     bool verbose = false;
-    std::string veribetrfs_filename = ".veribetrfs.img";
-      
-    if (argc != 2) {
+ 
+    if (argc != 3) {
         cerr << "error: expects one argument: the workload spec" << endl;
         exit(-1);
     }
 
     std::string workload_filename(argv[1]);
+    std::string base_directory(argv[2]);
+    // (unsupported on macOS 10.14) std::filesystem::create_directory(base_directory);
 
     utils::Properties props = ycsbcwrappers::props_from(workload_filename);
     unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
@@ -232,6 +242,8 @@ int main(int argc, char* argv[]) {
     int sync_interval_ms = stoi(props["syncintervalms"]);
 
     {
+        /* veribetrkv */ std::string veribetrfs_filename = base_directory + "veribetrfs.img";
+        // /* veribetrkv */ (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
         /* veribetrkv */ Mkfs(veribetrfs_filename);
         /* veribetrkv */ Application app(veribetrfs_filename);
         /* veribetrkv */ VeribetrkvFacade db(app);
@@ -242,8 +254,8 @@ int main(int argc, char* argv[]) {
     }
 
     {
-        /* rocksdb */ static string rocksdb_path = "/tmp/rocksdb_experiment_testdb";
-        // /* rocksdb */ std::filesystem::remove_all(rocksdb_path);
+        /* rocksdb */ static string rocksdb_path = base_directory + "rocksdb.db";
+        // /* rocksdb */ (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
 
         /* rocksdb */ rocksdb::DB* rocks_db;
         /* rocksdb */ rocksdb::Options options;
