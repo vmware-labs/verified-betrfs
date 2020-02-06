@@ -11,8 +11,19 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-#define USE_O_DIRECT (O_DIRECT)
-//#define USE_O_DIRECT (0)
+#define USE_DIRECT (1)
+//#define USE_DIRECT (0)
+
+#ifndef O_NOATIME
+#define O_NOATIME (0)
+#endif
+
+#define O_DIRECT_FLAG (0)
+#if USE_DIRECT
+#ifdef O_DIRECT
+#define O_DIRECT_FLAG O_DIRECT
+#endif
+#endif
 
 [[ noreturn ]]
 void fail(string err)
@@ -26,7 +37,7 @@ typedef uint8 byte;
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
-#if USE_O_DIRECT
+#if USE_DIRECT
   byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
     byte *aligned_bytes;
     *aligned_len = (len + 4095) & ~0xfffUL;
@@ -46,7 +57,7 @@ namespace MainDiskIOHandler_Compile {
     }
     return aligned_bytes;
   }
-#endif // USE_O_DIRECT
+#endif // USE_DIRECT
   
   struct WriteTask {
     size_t aligned_len;
@@ -119,7 +130,7 @@ namespace MainDiskIOHandler_Compile {
     ReadTask(DafnySequence<byte> s) : bytes(s) { }
   };
 
-#if USE_O_DIRECT
+#if USE_DIRECT
   uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
   {
     size_t aligned_len = (len + 4095) & ~0xfffULL;
@@ -148,7 +159,7 @@ namespace MainDiskIOHandler_Compile {
     }
     return (uint64)count;
   }
-#endif // USE_O_DIRECT
+#endif // USE_DIRECT
 
   void writeSync(int fd, uint64 addr, byte* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
@@ -169,7 +180,7 @@ namespace MainDiskIOHandler_Compile {
     if (res < 0 || (uint64)res != aligned_len) {
       perror("write failed");
       printf("fd=%d sector=%p len=%016lx addr=%016lx\n",
-             fd, sector, len, addr);
+             fd, sector, len, (unsigned long)addr);
       fail("pwrite failed");
     }
   }
@@ -186,8 +197,19 @@ namespace MainDiskIOHandler_Compile {
   }
 
   DiskIOHandler::DiskIOHandler(string filename) : curId(0) {
-    // Should probably throw an error if this fails
-    fd = open(filename.c_str(), O_RDWR | USE_O_DIRECT | O_DSYNC | O_NOATIME);
+
+    fd = open(filename.c_str(), O_RDWR | O_DIRECT_FLAG | O_DSYNC | O_NOATIME);
+
+    if (fd == -1) {
+      fail("open failed");
+    }
+
+    #ifdef F_NOCACHE
+    int res = fcntl(fd, F_NOCACHE, 1);
+    if (res == -1) {
+      fail("fcntl F_NOCACHE failed");
+    }
+    #endif
   }
 
   DiskIOHandler::~DiskIOHandler() {
@@ -500,7 +522,7 @@ void Mkfs(string filename) {
     fail("InitDiskBytes failed.");
   }
 
-  int fd = open(filename.c_str(), O_RDWR | USE_O_DIRECT | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  int fd = open(filename.c_str(), O_RDWR | O_DIRECT_FLAG | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
   if (fd < 0) {
     fail("Could not open output file: " + filename);
   }
