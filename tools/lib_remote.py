@@ -2,8 +2,10 @@
 import sys
 import subprocess
 
-def get_dafny_hash():
-    (value,_) = subprocess.Popen(["git", "rev-parse", "HEAD", "."], cwd=".dafny/dafny", stdout=subprocess.PIPE).communicate()
+def get_dafny_hash(dafnydir):
+    """dafnydir is the directory containing the dafny binary, for which
+    we can examine the git hash."""
+    (value,_) = subprocess.Popen(["git", "rev-parse", "HEAD", "."], cwd=dafnydir, stdout=subprocess.PIPE).communicate()
     return value.decode("utf-8").split("\n")[0]
 
 def parse_args(KNOWN_KEYS, usage):

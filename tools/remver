@@ -13,6 +13,9 @@ import subprocess
 import lib_deps
 import lib_remote
 
+TOOLS = os.path.dirpart(os.path.realpath(__file__))
+print("TOOLs %s" %  TOOLS)
+
 def usage(msg):
     sys.stderr.write(msg + "\n")
     sys.stderr.write("Usage: %s --cmd <blar>* --stdout <path> --transfer <blah>*\n" % sys.argv[0])
@@ -51,7 +54,7 @@ class RemVer:
 
     def compute(self):
         cmd = self.buckets["cmd"]
-        cmd[0] = os.path.join(os.getcwd(), cmd[0])  # TODO HACK
+        cmd[0] = "DAFNY"
         hostver = "veribetrfs/tools/hostver"
         pipe = subprocess.Popen(
             ["ssh", "dafnyserver@172.17.0.2"]
