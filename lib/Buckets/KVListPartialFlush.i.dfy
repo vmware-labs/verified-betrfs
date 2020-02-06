@@ -19,6 +19,7 @@ module KVListPartialFlush {
   import opened Bounds
   import opened BucketImpl
   import opened KeyType
+  import NativeBenchmarking
 
   function partialFlushIterate(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl, newParent: Kvl, weightSlack: int) : (Kvl, seq<Kvl>)
@@ -167,6 +168,7 @@ module KVListPartialFlush {
   ensures bucketPartialFlush(old(parentMutBucket.Bucket), old(MutBucket.ISeq(childrenMutBuckets)), pivots)
       == (newParent.Bucket, MutBucket.ISeq(newChildren))
   {
+    NativeBenchmarking.start("partialFlush.init");
     assume false;
     reveal_partialFlush();
 
@@ -211,6 +213,9 @@ module KVListPartialFlush {
     kvlSeqWeightEq(children);
     var weightSlack: uint64 := MaxTotalBucketWeightUint64() - initChildrenWeight;
     var bucketStartWeightSlack: uint64 := weightSlack;
+
+    NativeBenchmarking.end("partialFlush.init");
+    NativeBenchmarking.start("partialFlush.main");
 
     while childrenIdx < |children| as uint64
     invariant 0 <= parentIdx as int <= |parent.keys|
@@ -380,10 +385,15 @@ module KVListPartialFlush {
       }
     }
 
+    NativeBenchmarking.end("partialFlush.main");
+    NativeBenchmarking.start("partialFlush.end");
+
     newChildren := acc;
     newParent := new MutBucket(
       Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx])
     );
+
+    NativeBenchmarking.end("partialFlush.end");
   }
 
   /*method MutBucketPartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)
