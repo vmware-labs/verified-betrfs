@@ -1,3 +1,5 @@
+#include <cstdlib>
+
 #include "Application.h"
 
 #include "core_workload.h"
@@ -222,13 +224,19 @@ int main(int argc, char* argv[]) {
     bool verbose = false;
  
     if (argc != 3) {
-        cerr << "error: expects one argument: the workload spec" << endl;
+        cerr << "error: expects two arguments: the workload spec, and the persistent data directory" << endl;
         exit(-1);
     }
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);
     // (unsupported on macOS 10.14) std::filesystem::create_directory(base_directory);
+    // check that base_directory is empty
+    int status = std::system(("[ \"$(ls -A " + base_directory + ")\" ]").c_str());
+    if (status == 0) {
+        cerr << "error: " << base_directory << " appears to be non-empty";
+        exit(-1);
+    }
 
     utils::Properties props = ycsbcwrappers::props_from(workload_filename);
     unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
