@@ -617,6 +617,15 @@ module MutableMapModel {
     }
   }
 
+  function FixedSizeUpdateBySlot<V>(self: FixedSizeLinearHashMap<V>, slotIdx: uint64, value: V) : FixedSizeLinearHashMap<V>
+  requires 0 <= slotIdx as int < |self.storage|
+  requires self.storage[slotIdx].Entry?
+  {
+    var storage' := self.storage[slotIdx as int := self.storage[slotIdx].(value := value)];
+    var contents' := self.contents[self.storage[slotIdx].key := Some(value)];
+    FixedSizeLinearHashMap(storage', self.count, contents')
+  }
+
   function {:opaque} FixedSizeGet<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
     : (found : Option<V>)
   requires FixedSizeInv(self)
@@ -1282,12 +1291,32 @@ module MutableMapModel {
   }
 
   //////// Iterator
+
+  // We have two types of iterators.
+  //
+  // Iterator is usually more convenient as it has the IteratorOutput
+  // built-in.
+  //
+  // SimpleIterator doesn't (you have to call SimpleIteratorOutput)
+  // but has the advantage that the WFSimpleIter condition doesn't
+  // depend on the key/value being correct. Thus the well-formedness
+  // of a SimpleIterator can be preserved across (some) modifications
+  // of the hash map.
+  //
+  // TODO fix the duplicated code that results.
+
   datatype IteratorOutput<V> = Next(key: uint64, value: V) | Done
+
   datatype Iterator<V> = Iterator(
     i: uint64, // index in hash table item list
     ghost s: set<uint64>,   // set of values returned so far
     ghost decreaser: ORDINAL,
     next: IteratorOutput)
+
+  datatype SimpleIterator = SimpleIterator(
+    i: uint64, // index in hash table item list
+    ghost s: set<uint64>,   // set of values returned so far
+    ghost decreaser: ORDINAL)
 
   predicate NextExplainedByI<V>(self: LinearHashMap<V>, i : uint64, output:IteratorOutput)
   {
@@ -1304,11 +1333,11 @@ module MutableMapModel {
     && 0 <= it.i as int <= |self.underlying.storage|
   }
 
-  predicate EachReturnedKeyExplainedByPassedIndex<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  requires ValidI(self, it)
+  predicate EachReturnedKeyExplainedByPassedIndex<V>(self: LinearHashMap<V>, s: set<uint64>, i: uint64)
+  requires 0 <= i as int <= |self.underlying.storage|
   {
-    forall key | key in it.s ::
-        exists j | 0 <= j < it.i as int ::
+    forall key | key in s ::
+        exists j | 0 <= j < i as int ::
         && self.underlying.storage[j].Entry?
         && key == self.underlying.storage[j].key
   }
@@ -1327,11 +1356,52 @@ module MutableMapModel {
     // Each passed index appears in s
     && (forall j | 0 <= j < it.i as int ::
         self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
-    && EachReturnedKeyExplainedByPassedIndex(self, it)
+    && EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
     && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
     && (it.next.Next? ==> MapsTo(self.contents, it.next.key, it.next.value))
     && (it.next.Next? ==> it.next.key !in it.s)
     && it.s <= self.contents.Keys
+  }
+
+  protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
+  {
+    && 0 <= it.i as int <= |self.underlying.storage|
+    && (it.i as int == |self.underlying.storage| ==> (it.s == self.contents.Keys))
+    && (it.i as int < |self.underlying.storage| ==> self.underlying.storage[it.i].Entry?)
+    // Each passed index appears in s
+    && (forall j | 0 <= j < it.i as int ::
+        self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
+    && EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
+    && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
+    && (it.i as int < |self.underlying.storage| ==> (
+      && MapsTo(self.contents, self.underlying.storage[it.i].key, self.underlying.storage[it.i].value)
+      && self.underlying.storage[it.i].key !in it.s
+    ))
+    && it.s <= self.contents.Keys
+  }
+
+  function indexOutput<V>(self: LinearHashMap<V>, i: uint64) : (next: IteratorOutput<V>)
+  requires 0 <= i as int <= |self.underlying.storage|
+  requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
+  {
+    if i as int == |self.underlying.storage| then (
+      Done
+    ) else (
+      Next(
+        self.underlying.storage[i].key,
+        self.underlying.storage[i].value)
+    )
+  }
+
+  protected function SimpleIterOutput<V>(self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
+  requires WFSimpleIter(self, it)
+  ensures (next.Done? ==> it.s == self.contents.Keys)
+  ensures (next.Next? ==>
+      MapsTo(self.contents, next.key, next.value));
+  ensures (next.Next? ==> next.key !in it.s)
+  {
+    indexOutput(self, it.i)
   }
 
   lemma LemmaWFIterImpliesILt<V>(self: LinearHashMap<V>, it: Iterator<V>)
@@ -1340,12 +1410,23 @@ module MutableMapModel {
   {
   }
 
+  lemma LemmaWFSimpleIterImpliesEntry<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  requires WFSimpleIter(self, it)
+  ensures
+    && 0 <= it.i as int <= |self.underlying.storage|
+    && (SimpleIterOutput(self, it).Next? ==> it.i as int < |self.underlying.storage|)
+    && (it.i as int < |self.underlying.storage| ==>
+      && self.underlying.storage[it.i].Entry?
+    )
+  {
+  }
+
   lemma LemmaIterNextNotInS<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires 0 <= it.i as int <= |self.underlying.storage|
   requires ValidElements(self.underlying.storage)
   requires CantEquivocateStorageKey(self.underlying.storage)
   requires NextExplainedByI(self, it.i, it.next)
-  requires EachReturnedKeyExplainedByPassedIndex(self, it)
+  requires EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
   ensures (it.next.Next? ==> it.next.key !in it.s)
   {
     if it.next.Next? {
@@ -1373,6 +1454,25 @@ module MutableMapModel {
       (i, Next(self.underlying.storage[i].key, self.underlying.storage[i].value))
     ) else (
       iterToNext(self, i+1)
+    )
+  }
+
+  function simpleIterToNext<V>(self: LinearHashMap<V>, i: uint64) : (i': uint64)
+  requires Inv(self)
+  requires 0 <= i as int <= |self.underlying.storage|
+  ensures 0 <= i' as int <= |self.underlying.storage|
+  ensures forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
+  ensures i' as int < |self.underlying.storage| ==>
+      self.underlying.storage[i'].Entry?
+  ensures i <= i'
+  decreases |self.underlying.storage| - i as int
+  {
+    if i as int == |self.underlying.storage| then (
+      i
+    ) else if self.underlying.storage[i].Entry? then (
+      i
+    ) else (
+      simpleIterToNext(self, i+1)
     )
   }
 
@@ -1409,6 +1509,22 @@ module MutableMapModel {
     it'
   }
 
+  function {:opaque} SimpleIterStart<V>(self: LinearHashMap<V>) : (it' : SimpleIterator)
+  requires Inv(self)
+  ensures WFSimpleIter(self, it')
+  ensures it'.s == {}
+  {
+    lemmaIterToNextValidKeyValuePair(self, 0);
+
+    var i := simpleIterToNext(self, 0);
+    var it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
+
+    LemmaIterNextNotInS(self,
+      Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
+
+    it'
+  }
+
   function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
   requires Inv(self)
   requires WFIter(self, it)
@@ -1430,6 +1546,30 @@ module MutableMapModel {
     assert (it'.next.Done? ==> it'.s == self.contents.Keys);
 
     LemmaIterNextNotInS(self, it');
+
+    it'
+  }
+
+  function {:opaque} SimpleIterInc<V>(self: LinearHashMap<V>, it: SimpleIterator) : (it' : SimpleIterator)
+  requires Inv(self)
+  requires WFSimpleIter(self, it)
+  requires SimpleIterOutput(self, it).Next?
+  ensures WFSimpleIter(self, it')
+  ensures it'.s == it.s + {SimpleIterOutput(self, it).key}
+  ensures it'.decreaser < it.decreaser
+  {
+    lemmaIterToNextValidKeyValuePair(self, it.i + 1);
+
+    var i := simpleIterToNext(self, it.i + 1);
+    var it' := SimpleIterator(i, it.s + {SimpleIterOutput(self, it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
+
+    assert (forall key | key in it'.s ::
+        exists j | 0 <= j < it'.i as int ::
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key);
+
+    LemmaIterNextNotInS(self,
+      Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
 
     it'
   }
@@ -1464,5 +1604,47 @@ module MutableMapModel {
   ensures forall key | key in self.contents :: key <= res
   {
     MaxKeyIterate(self, IterStart(self), 0)    
+  }
+
+  function {:opaque} UpdateByIter<V>(self: LinearHashMap<V>, it: SimpleIterator, value: V)
+    : (self': LinearHashMap)
+  requires Inv(self)
+  requires WFSimpleIter(self, it)
+  requires SimpleIterOutput(self, it).Next?
+  ensures Inv(self')
+  ensures self'.contents == self.contents[SimpleIterOutput(self, it).key := value]
+  ensures self'.count == self.count
+  {
+    assume false;
+    var underlying := FixedSizeUpdateBySlot(self.underlying, it.i, value);
+    LinearHashMap(underlying, self.count,
+        self.contents[SimpleIterOutput(self, it).key := value])
+  }
+
+  lemma UpdatePreservesSimpleIter<V>(
+    self: LinearHashMap<V>, it: SimpleIterator, value: V,
+    preserved: SimpleIterator)
+  requires UpdateByIter.requires(self, it, value)
+  requires WFSimpleIter(self, preserved)
+  ensures WFSimpleIter(UpdateByIter(self, it, value), preserved)
+  {
+    assume false;
+  }
+
+  function {:opaque} FindSimpleIter<V>(self: LinearHashMap<V>, key: uint64)
+    : (it : SimpleIterator)
+  requires Inv(self)
+  ensures WFSimpleIter(self, it)
+  ensures key in self.contents ==> SimpleIterOutput(self, it) == Next(key, self.contents[key])
+  ensures key !in self.contents ==> SimpleIterOutput(self, it) == Done
+  {
+    assume false;
+    var i := Probe(self.underlying, key);
+    if self.underlying.storage[i].Entry? then (
+      // TODO the ghosty {} is wrong
+      SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL)
+    ) else (
+      SimpleIterator(|self.underlying.storage| as uint64, self.contents.Keys, 0)
+    )
   }
 }
