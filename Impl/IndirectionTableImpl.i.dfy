@@ -42,6 +42,7 @@ module IndirectionTableImpl {
   class IndirectionTable {
     var t: HashMap;
     var garbageQueue: LruImpl.LruImplQueue?;
+    var refUpperBound: uint64;
     ghost var Repr: set<object>;
 
     protected predicate Inv()
@@ -69,6 +70,7 @@ module IndirectionTableImpl {
       ))
       && BT.G.Root() in t.I().contents
       && this.t.Count as int <= IndirectionTableModel.MaxSize()
+      && (forall ref | ref in graph :: ref <= this.refUpperBound)
     }
 
     protected function I() : IndirectionTableModel.IndirectionTable
@@ -76,7 +78,7 @@ module IndirectionTableImpl {
     requires Inv()
     ensures IndirectionTableModel.Inv(I())
     {
-      var res := IndirectionTableModel.FromHashMap(t.I(), if garbageQueue != null then Some(garbageQueue.Queue) else None);
+      var res := IndirectionTableModel.FromHashMap(t.I(), if garbageQueue != null then Some(garbageQueue.Queue) else None, refUpperBound);
       IndirectionTableModel.reveal_Inv(res);
       res
     }
@@ -105,6 +107,7 @@ module IndirectionTableImpl {
       new;
       this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
       this.garbageQueue := null;
+      this.refUpperBound := BT.G.Root();
       Repr := {this} + this.t.Repr;
       IndirectionTableModel.reveal_ConstructorRootOnly();
     }
@@ -126,6 +129,7 @@ module IndirectionTableImpl {
     {
       var t0 := this.t.Clone();
       table := new IndirectionTable(t0);
+      table.refUpperBound := this.refUpperBound;
 
       table.Repr := {table} + table.t.Repr + (if table.garbageQueue != null then table.garbageQueue.Repr else {});
       IndirectionTableModel.reveal_clone();
@@ -358,6 +362,10 @@ module IndirectionTableImpl {
 
       //IndirectionTableModel.LemmaValidPredCountsOfValidPredCountsIntermediate(IndirectionTableModel.PredCounts(this.t.I()), IndirectionTableModel.Graph(this.t.I()), succs, if oldEntry.Some? then oldEntry.value.succs else []);
 
+      if ref > this.refUpperBound {
+        this.refUpperBound := ref;
+      }
+
       oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
 
       Repr := {this} + this.t.Repr + (if this.garbageQueue != null then this.garbageQueue.Repr else {});
@@ -520,6 +528,29 @@ module IndirectionTableImpl {
       }
     }
 
+    static method ComputeRefUpperBound(t: HashMap)
+    returns (r: uint64)
+    requires t.Inv()
+    ensures r == IndirectionTableModel.computeRefUpperBound(t.I())
+    {
+      var it := t.IterStart();
+      var refUpperBound := 0;
+      while it.next.Next?
+      invariant MutableMapModel.Inv(t.I())
+      invariant MutableMapModel.WFIter(t.I(), it)
+      invariant forall ref | ref in it.s :: ref <= refUpperBound
+      invariant IndirectionTableModel.computeRefUpperBoundIterate(t.I(), it, refUpperBound)
+             == IndirectionTableModel.computeRefUpperBound(t.I())
+      decreases it.decreaser
+      {
+        if it.next.key > refUpperBound {
+          refUpperBound := it.next.key;
+        }
+        it := t.IterInc(it);
+      }
+      r := refUpperBound;
+    }
+
     static method ValToIndirectionTable(v: V)
     returns (s : IndirectionTable?)
     requires IndirectionTableModel.valToIndirectionTable.requires(v)
@@ -543,6 +574,7 @@ module IndirectionTableImpl {
                 var q := MakeGarbageQueue(t1);
                 s := new IndirectionTable(t1);
                 s.garbageQueue := q;
+                s.refUpperBound := ComputeRefUpperBound(t1);
                 s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
               } else {
                 s := null;
@@ -781,6 +813,14 @@ module IndirectionTableImpl {
         }
       }
       return None;
+    }
+
+    method GetRefUpperBound() returns (r: uint64)
+    requires Inv()
+    ensures r == IndirectionTableModel.getRefUpperBound(this.I())
+    {
+      IndirectionTableModel.reveal_getRefUpperBound();
+      return this.refUpperBound;
     }
   }
 }
