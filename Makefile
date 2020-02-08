@@ -249,13 +249,13 @@ OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
 build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
+	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o
@@ -293,8 +293,15 @@ librocksdb:
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
 	g++ -o $@ \
-			-Lycsb/build -Lvendor/rocksdb \
-			-Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ \
-			-std=c++17 $(LDFLAGS) -O3 $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
-			-lycsbc -lrocksdb -lpthread -ldl -Winline
+			-L ycsb/build \
+			-L vendor/rocksdb \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			-I vendor/rocksdb/include/ \
+			-Winline -std=c++17 $(LDFLAGS) -O3 \
+			$(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
+			-lycsbc -lrocksdb -lpthread -ldl 
 

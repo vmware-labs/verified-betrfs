@@ -42,6 +42,8 @@ module IndirectionTableImpl {
   class IndirectionTable {
     var t: HashMap;
     var garbageQueue: LruImpl.LruImplQueue?;
+    var refUpperBound: uint64;
+    var findLoclessIterator: Option<MutableMapModel.SimpleIterator>;
     ghost var Repr: set<object>;
 
     protected predicate Inv()
@@ -60,6 +62,7 @@ module IndirectionTableImpl {
 
       && var predCounts := IndirectionTableModel.PredCounts(this.t.I());
       && var graph := IndirectionTableModel.Graph(this.t.I());
+      && var locs := IndirectionTableModel.Locs(this.t.I());
       && IndirectionTableModel.ValidPredCounts(predCounts, graph)
       && BC.GraphClosed(graph)
       && (forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren())
@@ -69,6 +72,13 @@ module IndirectionTableImpl {
       ))
       && BT.G.Root() in t.I().contents
       && this.t.Count as int <= IndirectionTableModel.MaxSize()
+      && (forall ref | ref in graph :: ref <= this.refUpperBound)
+      && (findLoclessIterator.Some? ==>
+        && MutableMapModel.WFSimpleIter(t.I(),
+            findLoclessIterator.value)
+        && (forall r | r in findLoclessIterator.value.s ::
+            r in locs)
+      )
     }
 
     protected function I() : IndirectionTableModel.IndirectionTable
@@ -76,7 +86,7 @@ module IndirectionTableImpl {
     requires Inv()
     ensures IndirectionTableModel.Inv(I())
     {
-      var res := IndirectionTableModel.FromHashMap(t.I(), if garbageQueue != null then Some(garbageQueue.Queue) else None);
+      var res := IndirectionTableModel.FromHashMap(t.I(), if garbageQueue != null then Some(garbageQueue.Queue) else None, refUpperBound, findLoclessIterator);
       IndirectionTableModel.reveal_Inv(res);
       res
     }
@@ -89,6 +99,7 @@ module IndirectionTableImpl {
     ensures fresh(Repr)
     {
       this.t := new MutableMap.ResizingHashMap(128);
+      this.findLoclessIterator := None;
       new;
       // This is not important, but needed to satisfy the Inv:
       this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
@@ -102,9 +113,11 @@ module IndirectionTableImpl {
     ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
     {
       this.t := new MutableMap.ResizingHashMap(128);
+      this.findLoclessIterator := None;
       new;
       this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
       this.garbageQueue := null;
+      this.refUpperBound := BT.G.Root();
       Repr := {this} + this.t.Repr;
       IndirectionTableModel.reveal_ConstructorRootOnly();
     }
@@ -126,6 +139,8 @@ module IndirectionTableImpl {
     {
       var t0 := this.t.Clone();
       table := new IndirectionTable(t0);
+      table.refUpperBound := this.refUpperBound;
+      table.findLoclessIterator := None;
 
       table.Repr := {table} + table.t.Repr + (if table.garbageQueue != null then table.garbageQueue.Repr else {});
       IndirectionTableModel.reveal_clone();
@@ -163,6 +178,7 @@ module IndirectionTableImpl {
       var predCount := oldEntry.value.predCount;
       var succs := oldEntry.value.succs;
       t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
+      this.findLoclessIterator := None;
 
       oldLoc := oldEntry.value.loc;
 
@@ -180,10 +196,19 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_AddLocIfPresent();
 
-      var oldEntry := this.t.Get(ref);
-      added := oldEntry.Some? && oldEntry.value.loc.None?;
+      var it := this.t.FindSimpleIter(ref);
+      var oldEntry := this.t.SimpleIterOutput(it);
+      added := oldEntry.Next? && oldEntry.value.loc.None?;
+
       if added {
-        this.t.Insert(ref, IndirectionTableModel.Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
+        ghost var ghosty := true;
+        if ghosty {
+          if I().findLoclessIterator.Some? {
+            MutableMapModel.UpdatePreservesSimpleIter(I().t, it, IndirectionTableModel.Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount), I().findLoclessIterator.value);
+          }
+        }
+
+        this.t.UpdateByIter(it, IndirectionTableModel.Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
       }
 
       Repr := {this} + this.t.Repr + (if this.garbageQueue != null then this.garbageQueue.Repr else {});
@@ -215,6 +240,7 @@ module IndirectionTableImpl {
       IndirectionTableModel.lemma_count_eq_graph_size(this.t.I());
 
       oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
+      this.findLoclessIterator := None;
 
       Repr := {this} + this.t.Repr + (if this.garbageQueue != null then this.garbageQueue.Repr else {});
       ghost var _ := IndirectionTableModel.RemoveRef(old(I()), ref);
@@ -358,7 +384,12 @@ module IndirectionTableImpl {
 
       //IndirectionTableModel.LemmaValidPredCountsOfValidPredCountsIntermediate(IndirectionTableModel.PredCounts(this.t.I()), IndirectionTableModel.Graph(this.t.I()), succs, if oldEntry.Some? then oldEntry.value.succs else []);
 
+      if ref > this.refUpperBound {
+        this.refUpperBound := ref;
+      }
+
       oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
+      this.findLoclessIterator := None;
 
       Repr := {this} + this.t.Repr + (if this.garbageQueue != null then this.garbageQueue.Repr else {});
       ghost var _ := IndirectionTableModel.UpdateAndRemoveLoc(old(I()), ref, succs);
@@ -520,6 +551,29 @@ module IndirectionTableImpl {
       }
     }
 
+    static method ComputeRefUpperBound(t: HashMap)
+    returns (r: uint64)
+    requires t.Inv()
+    ensures r == IndirectionTableModel.computeRefUpperBound(t.I())
+    {
+      var it := t.IterStart();
+      var refUpperBound := 0;
+      while it.next.Next?
+      invariant MutableMapModel.Inv(t.I())
+      invariant MutableMapModel.WFIter(t.I(), it)
+      invariant forall ref | ref in it.s :: ref <= refUpperBound
+      invariant IndirectionTableModel.computeRefUpperBoundIterate(t.I(), it, refUpperBound)
+             == IndirectionTableModel.computeRefUpperBound(t.I())
+      decreases it.decreaser
+      {
+        if it.next.key > refUpperBound {
+          refUpperBound := it.next.key;
+        }
+        it := t.IterInc(it);
+      }
+      r := refUpperBound;
+    }
+
     static method ValToIndirectionTable(v: V)
     returns (s : IndirectionTable?)
     requires IndirectionTableModel.valToIndirectionTable.requires(v)
@@ -543,6 +597,8 @@ module IndirectionTableImpl {
                 var q := MakeGarbageQueue(t1);
                 s := new IndirectionTable(t1);
                 s.garbageQueue := q;
+                s.refUpperBound := ComputeRefUpperBound(t1);
+                s.findLoclessIterator := None;
                 s.Repr := {s} + s.t.Repr + s.garbageQueue.Repr;
               } else {
                 s := null;
@@ -763,24 +819,50 @@ module IndirectionTableImpl {
 
     method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
     requires Inv()
-    ensures ref == IndirectionTableModel.FindRefWithNoLoc(old(I()))
+    modifies Repr
+    ensures Inv()
+    ensures Repr == old(Repr)
+    ensures (I(), ref) == IndirectionTableModel.FindRefWithNoLoc(old(I()))
     {
       IndirectionTableModel.reveal_FindRefWithNoLoc();
 
-      var it := this.t.IterStart();
-      while it.next.Next?
-      invariant MutableMapModel.WFIter(this.t.I(), it)
+      var it;
+      if this.findLoclessIterator.Some? {
+        it := this.findLoclessIterator.value;
+      } else {
+        it := this.t.SimpleIterStart();
+      }
+
+      while true
+      invariant Inv()
+      invariant MutableMapModel.WFSimpleIter(this.t.I(), it)
+      invariant forall r | r in it.s :: r in I().locs
       invariant IndirectionTableModel.FindRefWithNoLoc(old(I()))
-          == IndirectionTableModel.FindRefWithNoLocIterate(old(I()), it)
+          == IndirectionTableModel.FindRefWithNoLocIterate(I(), it)
+      invariant Repr == old(Repr)
       decreases it.decreaser
       {
-        if it.next.value.loc.None? {
-          return Some(it.next.key);
+        var next := this.t.SimpleIterOutput(it);
+        if next.Next? {
+          if next.value.loc.None? {
+            this.findLoclessIterator := Some(it);
+            return Some(next.key);
+          } else {
+            it := this.t.SimpleIterInc(it);
+          }
         } else {
-          it := this.t.IterInc(it);
+          this.findLoclessIterator := Some(it);
+          return None;
         }
       }
-      return None;
+    }
+
+    method GetRefUpperBound() returns (r: uint64)
+    requires Inv()
+    ensures r == IndirectionTableModel.getRefUpperBound(this.I())
+    {
+      IndirectionTableModel.reveal_getRefUpperBound();
+      return this.refUpperBound;
     }
   }
 }

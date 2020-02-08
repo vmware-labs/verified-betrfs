@@ -28,11 +28,17 @@ module BookkeepingModel {
   function getFreeRefIterate(s: Variables, i: uint64) 
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires i >= 1
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   decreases 0x1_0000_0000_0000_0000 - i as int
   {
-    if i !in s.ephemeralIndirectionTable.graph && i !in s.cache then (
+    // NOTE: we shouldn't even need to do this check with the current
+    // setup (because we start i at a value > than anything that has
+    // *ever* been in the ephemeralIndirectionTable, which would include
+    // anything in the cache. That requires some proof though.
+    if i !in s.cache then (
       Some(i)
     ) else if i == 0xffff_ffff_ffff_ffff then (
       None
@@ -44,20 +50,29 @@ module BookkeepingModel {
   function {:opaque} getFreeRef(s: Variables)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   {
-    getFreeRefIterate(s, 1)
+    var i := IndirectionTableModel.getRefUpperBound(
+      s.ephemeralIndirectionTable);
+    if i == 0xffff_ffff_ffff_ffff then (
+      None
+    ) else (
+      getFreeRefIterate(s, i+1)
+    )
   }
 
   function getFreeRef2Iterate(s: Variables, avoid: BT.G.Reference, i: uint64) 
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires i >= 1
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures ref.Some? ==> ref.value != avoid
   decreases 0x1_0000_0000_0000_0000 - i as int
   {
-    if i != avoid && i !in s.ephemeralIndirectionTable.graph && i !in s.cache then (
+    if i != avoid && i !in s.cache then (
       Some(i)
     ) else if i == 0xffff_ffff_ffff_ffff then (
       None
@@ -69,10 +84,17 @@ module BookkeepingModel {
   function {:opaque} getFreeRef2(s: Variables, avoid: BT.G.Reference)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures ref.Some? ==> ref.value != avoid
   {
-    getFreeRef2Iterate(s, avoid, 1)
+    var i := IndirectionTableModel.getRefUpperBound(
+      s.ephemeralIndirectionTable);
+    if i == 0xffff_ffff_ffff_ffff then (
+      None
+    ) else (
+      getFreeRef2Iterate(s, avoid, i+1)
+    )
   }
 
   // Conditions that will hold intermediately between writes and allocs
@@ -518,10 +540,12 @@ module BookkeepingModel {
   requires s.Ready?
   requires ref in s.cache
   requires i >= 1
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
   decreases 0x1_0000_0000_0000_0000 - i as int
   ensures getFreeRefIterate(s, i) != Some(ref)
   {
-    if i !in s.ephemeralIndirectionTable.graph && i !in s.cache {
+    if i !in s.cache {
     } else if i == 0xffff_ffff_ffff_ffff {
     } else {
       getFreeRefIterateDoesntEqual(s, i+1, ref);
@@ -531,20 +555,28 @@ module BookkeepingModel {
   lemma getFreeRefDoesntEqual(s: Variables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   ensures getFreeRef(s) != Some(ref)
   {
     reveal_getFreeRef();
-    getFreeRefIterateDoesntEqual(s, 1, ref);
+    var i := IndirectionTableModel.getRefUpperBound(
+      s.ephemeralIndirectionTable);
+    if i == 0xffff_ffff_ffff_ffff {
+    } else {
+      getFreeRefIterateDoesntEqual(s, i+1, ref);
+    }
   }
 
   lemma getFreeRef2IterateDoesntEqual(s: Variables, avoid: BT.G.Reference, i: uint64, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires i >= 1
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
   ensures getFreeRef2Iterate(s, avoid, i) != Some(ref)
   decreases 0x1_0000_0000_0000_0000 - i as int
   {
-    if i != avoid && i !in s.ephemeralIndirectionTable.graph && i !in s.cache {
+    if i != avoid && i !in s.cache {
     } else if i == 0xffff_ffff_ffff_ffff {
     } else {
       getFreeRef2IterateDoesntEqual(s, avoid, i+1, ref);
@@ -554,10 +586,16 @@ module BookkeepingModel {
   lemma getFreeRef2DoesntEqual(s: Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
+  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   ensures getFreeRef2(s, avoid) != Some(ref)
   {
     reveal_getFreeRef2();
-    getFreeRef2IterateDoesntEqual(s, avoid, 1, ref);
+    var i := IndirectionTableModel.getRefUpperBound(
+      s.ephemeralIndirectionTable);
+    if i == 0xffff_ffff_ffff_ffff {
+    } else {
+      getFreeRef2IterateDoesntEqual(s, avoid, i+1, ref);
+    }
   }
 
   lemma allocRefDoesntEqual(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
