@@ -255,11 +255,10 @@ int main(int argc, char* argv[]) {
         /* veribetrkv */ Mkfs(veribetrfs_filename);
         /* veribetrkv */ Application app(veribetrfs_filename);
         /* veribetrkv */ VeribetrkvFacade db(app);
+        ycsbLoad(db, *workload, record_count, verbose);
+        int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
+        ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
     }
-    //     ycsbLoad(db, *workload, record_count, verbose);
-    //     int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
-    //     ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
-    // }
 
     {
         /* rocksdb */ static string rocksdb_path = base_directory + "rocksdb.db";
