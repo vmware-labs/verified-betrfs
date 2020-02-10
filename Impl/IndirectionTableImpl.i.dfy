@@ -397,6 +397,24 @@ module IndirectionTableImpl {
 
     // Parsing and marshalling
 
+    static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
+    requires IndirectionTableModel.valToHashMap.requires(a)
+    requires 0 <= i <= |a|
+    requires IndirectionTableModel.valToHashMap(a[..i]).None?
+    ensures IndirectionTableModel.valToHashMap(a).None?
+    decreases |a| - i
+    {
+      if (i == |a|) {
+        assert a[..i] == a;
+      } else {
+        assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
+          assert DropLast(a[..i+1]) == a[..i];
+          assert Last(a[..i+1]) == a[i];
+        }
+        lemma_valToHashMapNonePrefix(a, i+1);
+      }
+    }
+
     static method {:fuel ValInGrammar,3} ValToHashMap(a: seq<V>) returns (s : Option<HashMap>)
     requires IndirectionTableModel.valToHashMap.requires(a)
     ensures s.None? ==> IndirectionTableModel.valToHashMap(a).None?
@@ -406,38 +424,42 @@ module IndirectionTableImpl {
     ensures s.Some? ==> s.value.Count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures s.Some? ==> fresh(s.value) && fresh(s.value.Repr)
     {
-      if |a| as uint64 == 0 {
-        var newHashMap := new MutableMap.ResizingHashMap<IndirectionTableModel.Entry>(1024); // TODO(alattuada) magic numbers
-        s := Some(newHashMap);
-      } else {
-        var res := ValToHashMap(a[..|a| as uint64 - 1]);
-        match res {
-          case Some(mutMap) => {
-            var tuple := a[|a| as uint64 - 1];
-            var ref := tuple.t[0 as uint64].u;
-            var lba := tuple.t[1 as uint64].u;
-            var len := tuple.t[2 as uint64].u;
-            var succs := tuple.t[3 as uint64].ua;
-            var graphRef := mutMap.Get(ref);
-            var loc := LBAType.Location(lba, len);
+      var i: uint64 := 0;
+      var mutMap := new MutableMap.ResizingHashMap<IndirectionTableModel.Entry>(1024); // TODO(alattuada) magic numbers
 
-            assert ValidVal(tuple);
-            assert ValidVal(tuple.t[3]);
-            assert |succs| < 0x1_0000_0000_0000_0000;
+      while i < |a| as uint64
+      invariant 0 <= i as int <= |a|
+      invariant mutMap.Inv()
+      invariant fresh(mutMap.Repr)
+      invariant IndirectionTableModel.valToHashMap(a[..i]) == Some(mutMap.I())
+      {
+        var tuple := a[i];
+        var ref := tuple.t[0 as uint64].u;
+        var addr := tuple.t[1 as uint64].u;
+        var len := tuple.t[2 as uint64].u;
+        var succs := tuple.t[3 as uint64].ua;
+        var graphRef := mutMap.Get(ref);
+        var loc := LBAType.Location(addr, len);
 
-            if graphRef.Some? || lba == 0 || !LBAType.ValidLocation(loc)
-                || |succs| as uint64 > MaxNumChildrenUint64() {
-              s := None;
-            } else {
-              mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
-              s := Some(mutMap);
-            }
-          }
-          case None => {
-            s := None;
-          }
+        assert ValidVal(tuple);
+        assert ValidVal(tuple.t[3]);
+        assert |succs| < 0x1_0000_0000_0000_0000;
+
+        assert DropLast(a[..i+1]) == a[..i];
+        assert Last(a[..i+1]) == a[i];
+
+        if graphRef.Some? || addr == 0 || !LBAType.ValidLocation(loc)
+            || |succs| as uint64 > MaxNumChildrenUint64() {
+          lemma_valToHashMapNonePrefix(a, (i+1) as int);
+          return None;
+        } else {
+          mutMap.Insert(ref, IndirectionTableModel.Entry(Some(loc), succs, 0));
+          i := i + 1;
         }
       }
+
+      assert a[..i] == a;
+      return Some(mutMap);
     }
 
     static method ComputeRefCounts(t: HashMap)
