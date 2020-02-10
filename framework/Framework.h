@@ -18,6 +18,15 @@ namespace Maps_Compile {
   };
 }
 
+namespace NativeArithmetic_Compile {
+  class __default {
+    public:
+    static uint64_t u64add(uint64_t a, uint64_t b) {
+      return a + b;
+    }
+  };
+}
+
 namespace NativeArrays_Compile {
   class __default {
     public:
