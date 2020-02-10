@@ -1487,14 +1487,31 @@ method ComputeSeqSum(s:seq<V>) returns (size:uint64)
     requires forall v :: v in s ==> ValidVal(v);
     ensures (size as int) == SeqSum(s);
 {
-    reveal_SeqSum();
-    if (|s| as uint64) == 0 {
-        size := 0;
-    } else {
-        var v_size := ComputeSizeOf(s[(0 as uint64)]);
-        var rest_size := ComputeSeqSum(s[(1 as uint64)..]);
-        size := v_size + rest_size;
+  assert SeqSum([]) == 0 by { reveal_SeqSum(); }
+
+  var i: uint64 := 0;
+  var res: uint64 := 0;
+  while i < |s| as uint64
+  invariant 0 <= i as int <= |s|
+  invariant res as int == SeqSum(s[..i])
+  {
+    calc {
+      SeqSum(s[..i+1]);
+      { assert s[..i+1] == s[..i] + [s[i]]; }
+      SeqSum(s[..i] + [s[i]]);
+      { lemma_SeqSum_prefix(s[..i], s[i]); }
+      SeqSum(s[..i]) + SizeOfV(s[i]);
     }
+
+    lemma_SeqSum_bound(s, 0x1_0000_0000_0000_0000);
+    lemma_SeqSum_bound_prefix(s, s[..i+1], (i+1) as int);
+
+    var v_size := ComputeSizeOf(s[i]);
+    res := res + v_size;
+    i := i + 1;
+  }
+  assert s[..|s|] == s;
+  return res;
 }
 
 method ComputeWeightKeySeq(s: seq<Key>) returns (size:uint64)
