@@ -248,8 +248,6 @@ namespace MainDiskIOHandler_Compile {
       fail("write fopen failed");
     }
 
-    //cout << "number of writeReqs: " << writeReqs.size() << endl;
-
     shared_ptr<WriteTask> writeTask {
       new WriteTask(f, &bytes.at(0), len) };
 
@@ -328,14 +326,32 @@ namespace MainDiskIOHandler_Compile {
 
   void DiskIOHandler::completeWriteTasks() {
     benchmark_start("completeWriteTasks");
-    /*for (auto p : this->writeReqs) {
-      if (!p.second->done) {
-        p.second->wait();
-        maybeStartWriteReq();
+    while (true) {
+      vector<aiocb*> tasks;
+      tasks.resize(this->writeReqs.size());
+      int i = 0;
+      bool any_not_started = false;
+      for (auto p : this->writeReqs) {
+        p.second->check_if_complete();
+        if (p.second->done) {
+          continue;
+        } else if (p.second->made_req) {
+          tasks[i] = &p.second->aio_req_fsync;
+          i++;
+        } else {
+          any_not_started = true;
+        }
       }
-    }*/
-    while (!this->writeReqs.empty()) {
-      waitForOne();
+      if (i == 0) {
+        if (any_not_started) {
+          fail("completeWriteTasks: any_not_started");
+        }
+        break;
+      }
+
+      aio_suspend(&tasks[0], i, NULL);
+
+      maybeStartWriteReq();
     }
     benchmark_end("completeWriteTasks");
   }
@@ -346,7 +362,7 @@ namespace MainDiskIOHandler_Compile {
     for (auto p : this->writeReqs) {
       if (p.second->done) {
         return;
-      } else {
+      } else if (p.second->made_req) {
         tasks[i] = &p.second->aio_req_fsync;
         i++;
       }

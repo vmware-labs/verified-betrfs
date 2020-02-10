@@ -171,7 +171,7 @@ public:
 
 class BenchmarkLongRandomInserts : public Benchmark {
 public:
-  int count = 5000000;
+  int count = 2000000;
 
   virtual string name() override { return "LongRandomInserts"; }
   virtual int opCount() override { return count; }
