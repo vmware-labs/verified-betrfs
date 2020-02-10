@@ -18,6 +18,39 @@ module MutableMap {
   import NativeArrays
   import opened MutableMapModel
 
+  function method lshift(a: uint64, b: int32) : uint64
+  {
+    ((a as bv64) << b) as uint64
+  }
+
+  function method rshift(a: uint64, b: int32) : uint64
+  {
+    ((a as bv64) >> b) as uint64
+  }
+
+  function method bitnot(a: uint64) : uint64
+  {
+    ((a as bv64) ^ 0xffff_ffff_ffff_ffff) as uint64
+  }
+
+  function method bitxor(a: uint64, b: uint64) : uint64
+  {
+    ((a as bv64) ^ (b as bv64)) as uint64
+  }
+
+  function method hash64(k: uint64): uint64
+  {
+    var k0 := (bitnot(k) + lshift(k, 21));
+    var k1 := bitxor(k0, rshift(k0, 24));
+    var k2 := ((k1 + lshift(k1, 3)) + lshift(k1, 8));
+    var k3 := bitxor(k2, rshift(k2, 14));
+    var k4 := ((k3 + lshift(k3, 2)) + lshift(k3, 4));
+    var k5 := bitxor(k4, rshift(k4, 28));
+    var k6 := k5 + lshift(k5, 31);
+
+    k6
+  }
+
   // TODO having a separate FixedSizeHashMap isn't really necessary;
   // things might be clearer if we just combine them.
 
@@ -88,7 +121,8 @@ module MutableMap {
     requires 0 < this.Storage.Length < 0x1_0000_0000_0000_0000
     ensures result == MutableMapModel.Uint64SlotForKey(ModelI(this), key)
     {
-      result := key % (Storage.Length as uint64);
+      var h := key; //hash64(key);
+      result := h % (Storage.Length as uint64);
     }
 
     method Uint64SlotSuccessor(slot: uint64) returns (nextSlot: uint64)

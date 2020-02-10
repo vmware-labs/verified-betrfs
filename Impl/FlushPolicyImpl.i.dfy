@@ -171,7 +171,9 @@ module FlushPolicyImpl {
     assert SM.IVars(s.I()) == SM.IVars(old(s.I()));
 
     FlushPolicyModel.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
+    NativeBenchmarking.start("getActionToFlush");
     var action := getActionToFlush(k, s, [BT.G.Root()], []);
+    NativeBenchmarking.end("getActionToFlush");
 
     match action {
       case ActionPageIn(ref) => {

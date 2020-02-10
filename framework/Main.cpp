@@ -1,6 +1,9 @@
 #include "Application.h"
 #include "Benchmarks.h"
 
+//extern long long probeCount;
+//extern long long probeRunCount;
+
 using namespace std;
 
 int main(int argc, char* argv[]) {
@@ -30,6 +33,10 @@ int main(int argc, char* argv[]) {
   } else {
     cout << "Use --all-benchmarks or --benchmark" << endl;
   }
+
+  //cout << "probeCount " << probeCount << endl;
+  //cout << "probeRunCount " << probeRunCount << endl;
+  //cout << "avg " << (probeRunCount / probeCount) << endl;
 }
 
 /*void test_succ(Application& app, string s, bool inclusive, int num) {

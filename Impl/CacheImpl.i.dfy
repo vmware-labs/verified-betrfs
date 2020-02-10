@@ -128,7 +128,11 @@ module CacheImpl {
     ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
     {
       LemmaSizeEqCount();
+
+      NativeBenchmarking.start("cache.Insert");
       cache.Insert(ref, node);
+      NativeBenchmarking.end("cache.Insert");
+
       assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
