@@ -141,7 +141,7 @@ module SuccModel {
       var (s', io') := PageInIndirectionTableReq(k, s, io);
       (s', io', None)
     ) else (
-      var startKey := if start.NegativeInf? then [] else start.key;
+      var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
       getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40)
     )
   }
@@ -171,7 +171,7 @@ module SuccModel {
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node)
   requires (upTo.Some? ==> lt(startKey, upTo.value))
-  requires startKey == (if start.NegativeInf? then [] else start.key)
+  requires startKey == (if start.NegativeInf? then seq_to_key([]) else start.key)
   requires res == 
      BucketSuccessorLoopModel.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
 
@@ -216,7 +216,7 @@ module SuccModel {
   requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
   requires upTo.Some? ==> lt(startKey, upTo.value)
-  requires startKey == (if start.NegativeInf? then [] else start.key)
+  requires startKey == (if start.NegativeInf? then seq_to_key([]) else start.key)
   decreases counter
   ensures var (s', io', res) := getPath(k, s, io, startKey, acc, start, upTo, maxToFind, ref, counter);
       && WFVars(s')

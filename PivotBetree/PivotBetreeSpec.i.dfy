@@ -257,26 +257,6 @@ module PivotBetreeSpec {
   }
 
   predicate ValidSuccQuery(sq: SuccQuery)
-  {
-    && var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
-    && WFLookupForKey(sq.lookup, startKey)
-
-    && var lookupUpperBound := LookupUpperBound(sq.lookup, startKey);
-
-    && Last(sq.lookup).node.children.None?
-
-    && |sq.lookup| == |sq.buckets|
-    && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Route(sq.lookup[i].node.pivotTable, startKey)])
-
-    && (BucketListWellMarshalled(sq.buckets) ==> (
-      && MS.NonEmptyRange(sq.start, sq.end)
-      && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
-      && sq.results ==
-        SortedSeqOfKeyValueMap(
-          KeyValueMapOfBucket(
-            ClampRange(ComposeSeq(sq.buckets), sq.start, sq.end)))
-    ))
-  }
 
   function SuccQueryReads(q: SuccQuery): seq<ReadOp> {
     q.lookup

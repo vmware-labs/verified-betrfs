@@ -417,20 +417,22 @@ void Application::Sync() {
   fail("Sync operation didn't finish");
 }
 
-void Application::Insert(ByteString key, ByteString val)
+void Application::Insert(ByteString key0, ByteString val)
 {
   benchmark_start("Application::Insert");
 
-  if (key.size() > MaxKeyLen()) {
+  if (key0.size() > MaxKeyLen()) {
     fail("Insert: key is too long");
   }
   if (val.size() > MaxValueLen()) {
     fail("Insert: value is too long");
   }
 
+  Key key = KeyType_Compile::seq__to__key(key0.as_dafny_seq());
+
   for (int i = 0; i < 500; i++) {
     benchmark_start("handle_Insert");
-    bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    bool success = handle_Insert(k, hs, io, key, val.as_dafny_seq());
     benchmark_end("handle_Insert");
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();
@@ -453,16 +455,18 @@ void Application::Insert(ByteString key, ByteString val)
   benchmark_end("Application::Insert");
 }
 
-ByteString Application::Query(ByteString key)
+ByteString Application::Query(ByteString key0)
 {
-  LOG("Query \"" + key.as_string() + "\"");
+  LOG("Query \"" + key0.as_string() + "\"");
 
-  if (key.size() > MaxKeyLen()) {
+  if (key0.size() > MaxKeyLen()) {
     fail("Query: key is too long");
   }
 
+  Key key = KeyType_Compile::seq__to__key(key0.as_dafny_seq());
+
   for (int i = 0; i < 5000; i++) {
-    auto result = handle_Query(k, hs, io, key.as_dafny_seq());
+    auto result = handle_Query(k, hs, io, key);
     this->maybeDoResponse();
     if (result.first) {
       DafnySequence<byte> val_bytes = result.second;
@@ -544,15 +548,15 @@ vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bo
   }
 
   UI_Compile::RangeStart start = inclusive ?
-      UI_Compile::RangeStart::create_SInclusive(lowerBound.as_dafny_seq()) :
-      UI_Compile::RangeStart::create_SExclusive(lowerBound.as_dafny_seq());
+      UI_Compile::RangeStart::create_SInclusive(KeyType_Compile::seq__to__key(lowerBound.as_dafny_seq())) :
+      UI_Compile::RangeStart::create_SExclusive(KeyType_Compile::seq__to__key(lowerBound.as_dafny_seq()));
   vector<pair<ByteString, ByteString>> all_results(targetCount);
   uint64 found = 0;
   while (found < targetCount) {
     UI_Compile::SuccResultList srl = SuccOnce(start, targetCount - found);
     for (size_t i = 0; i < srl.results.size(); i++) {
       UI_Compile::SuccResult sr = srl.results.select(i);
-      all_results[found] = make_pair(ByteString(sr.key), ByteString(sr.value));
+      all_results[found] = make_pair(ByteString(KeyType_Compile::key__to__seq(sr.key)), ByteString(sr.value));
       found++;
     }
     if (found == targetCount) {

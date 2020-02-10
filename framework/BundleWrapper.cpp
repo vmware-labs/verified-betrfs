@@ -30,12 +30,12 @@ std::pair<bool, bool> handle_PopSync(Constants k, Variables hs, shared_ptr<MainD
   return make_pair(p.t0, p.t1);
 }
 
-bool handle_Insert(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key, DafnySequence<uint8> value)
+bool handle_Insert(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, Key const& key, DafnySequence<uint8> value)
 {
   return __default::handleInsert(*k.k, hs.hs, io, key, value);
 }
 
-std::pair<bool, DafnySequence<uint8>> handle_Query(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key)
+std::pair<bool, DafnySequence<uint8>> handle_Query(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, Key const& key)
 {
   auto p = __default::handleQuery(*k.k, hs.hs, io, key);
   return make_pair(p.is_Some(), p.v_Some.value);
@@ -59,7 +59,7 @@ void handle_WriteResponse(Constants k, Variables hs, shared_ptr<MainDiskIOHandle
 
 uint64 MaxKeyLen()
 {
-  return KeyType_Compile::__default::MaxLen();
+  return KeyType_Compile::MaxLen();
 }
 
 uint64 MaxValueLen()

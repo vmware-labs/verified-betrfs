@@ -17,8 +17,10 @@ abstract module MutableBtree {
   import Math = Mathematics
   import Arrays
   import Model : BtreeModel
+  import KeyType
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps, KeyType
+      reveals Node, NodeContents, Key, Value
   export All reveals *
     
   type Key = Model.Keys.Element

@@ -212,7 +212,7 @@ module SuccImpl {
       PageInIndirectionTableReq(k, s, io);
       res := None;
     } else {
-      var startKey := if start.NegativeInf? then [] else start.key;
+      var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
       res := getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40);
     }
   }

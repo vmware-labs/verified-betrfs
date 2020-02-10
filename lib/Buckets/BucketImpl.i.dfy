@@ -571,11 +571,11 @@ module BucketImpl {
     {
       if format.BFPkv? {
         if |pkv.keys.offsets| as uint64 == 0 {
-          return [0];
+          return seq_to_key([0]);
         } else {
           var key := PackedKV.GetKey(pkv, |pkv.keys.offsets| as uint64 / 2);
-          if |key| as uint64 == 0 {
-            return [0];
+          if KeyLenUint64(key) == 0 {
+            return seq_to_key([0]);
           } else {
             return key;
           }
@@ -585,11 +585,11 @@ module BucketImpl {
         KVList.lenKeysLeWeightOver4(kvl);
         assume false;
         if |kvl.keys| as uint64 == 0 {
-          return [0];
+          return seq_to_key([0]);
         } else {
           var key := kvl.keys[|kvl.keys| as uint64 / 2];
-          if |key| as uint64 == 0 {
-            return [0];
+          if KeyLenUint64(key) == 0 {
+            return seq_to_key([0]);
           } else {
             return key;
           }

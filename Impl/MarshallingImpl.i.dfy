@@ -33,7 +33,7 @@ module MarshallingImpl {
   import MutableMapModel
   import IndirectionTableImpl
   import IndirectionTableModel
-  import KeyType
+  import opened KeyType
   import SeqComparison
 
   import BT = PivotBetreeSpec`Internal
@@ -101,7 +101,7 @@ module MarshallingImpl {
   ensures s == Marshalling.valToPivots(v)
   {
     s := ValToStrictlySortedKeySeq(v);
-    if (s.Some? && |s.value| as uint64 > 0 && |s.value[0 as uint64]| as uint64 == 0) {
+    if (s.Some? && |s.value| as uint64 > 0 && KeyLenUint64(s.value[0 as uint64]) as uint64 == 0) {
       s := None;
     }
   }
@@ -325,7 +325,7 @@ module MarshallingImpl {
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
   requires Pivots.WFPivots(pivots)
   requires |pivots| > 0
-  ensures |pivots[0]| != 0;
+  ensures KeyLenUint64(pivots[0]) != 0;
   {
     var e := Keyspace.SmallerElement(pivots[0]);
     SeqComparison.reveal_lte();

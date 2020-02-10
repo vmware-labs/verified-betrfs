@@ -5,6 +5,70 @@
 #include <map>
 #include <cstring>
 
+namespace KeyType_Compile {
+  struct Key {
+    uint32_t len;
+    uint8_t keydata[20];
+
+    Key() : len(0) { }
+
+    bool operator==(Key const& other) const {
+      return len == other.len && memcmp(keydata, other.keydata, len) == 0;
+    }
+
+    bool operator!=(Key const& other) const {
+      return !(*this == other);
+    }
+  };
+
+  inline int32_t key__cmp(Key a, Key b) {
+    int m = a.len < b.len ? a.len : b.len;
+    int c = memcmp(a.keydata, b.keydata, m);
+    if (c == 0) {
+      return a.len - b.len;
+    } else {
+      return c;
+    }
+  }
+
+  inline uint64_t KeyLenUint64(Key a) {
+    return a.len;
+  }
+
+  inline uint64_t MaxLen() {
+    return 20;
+  }
+
+  inline Key seq__to__key(DafnySequence<uint8_t> s) {
+    Key k;
+    k.len = s.size();
+    std::copy(s.ptr(), s.ptr() + s.size(), k.keydata);
+    return k;
+  }
+
+  inline DafnySequence<uint8_t> key__to__seq(Key const& key) {
+    DafnySequence<uint8_t> s(key.len);
+    std::copy(key.keydata, key.keydata + key.len, s.ptr());
+    return s;
+  }
+
+  class __default {
+    public:
+    static void CopyKeyIntoArray(
+      Key src,
+      DafnyArray<uint8_t> dst,
+      uint64 dstIndex)
+    {
+      std::copy(src.keydata, src.keydata + src.len,
+          dst.begin() + dstIndex);
+    }
+  };
+
+  static_assert(sizeof(Key) == 24, "eh");
+}
+
+using KeyType_Compile::Key;
+
 namespace Maps_Compile {
   class __default {
     public:
@@ -189,6 +253,23 @@ namespace NativeBenchmarking_Compile {
     static void end(DafnySequence<char> dafnyName);
   };
 }
+
+template <>
+struct std::hash<Key> {
+    size_t operator()(const Key& s) const {
+        size_t seed = 0;
+        for (size_t i = 0; i < s.len; i++) {      
+            hash_combine<uint8_t>(seed, s.keydata[i]);
+        }
+        return seed; 
+    }
+};
+
+template<>
+struct get_default<Key> {
+  static Key call() { return Key(); }
+};
+
 
 void ClearIfExists();
 void Mkfs();

@@ -401,16 +401,16 @@ module PivotBetreeSpecRefinement {
   requires MS.InRange(start, key, end)
   requires P.LookupVisitsWFNodes(lookup)
   requires
-    var startKey := if start.NegativeInf? then [] else start.key;
+    var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
     var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
     && P.WFLookupForKey(lookup, startKey)
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   requires 0 <= idx < |lookup|
-  ensures var startKey := if start.NegativeInf? then [] else start.key;
+  ensures var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
         Route(lookup[idx].node.pivotTable, startKey)
      == Route(lookup[idx].node.pivotTable, key)
   {
-    var startKey := if start.NegativeInf? then [] else start.key;
+    var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
 
     var r := Route(lookup[idx].node.pivotTable, startKey);
     //assert r > 0 ==> Keyspace.lte(lookup[idx].node.pivotTable[r-1], startKey);
@@ -437,13 +437,13 @@ module PivotBetreeSpecRefinement {
   requires MS.InRange(start, key, end)
   requires P.LookupVisitsWFNodes(lookup)
   requires
-    var startKey := if start.NegativeInf? then [] else start.key;
+    var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
     var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
     && P.WFLookupForKey(lookup, startKey)
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   ensures P.WFLookupForKey(lookup, key)
   {
-    var startKey := if start.NegativeInf? then [] else start.key;
+    var startKey := if start.NegativeInf? then seq_to_key([]) else start.key;
 
     forall idx | P.ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 
     ensures P.LookupFollowsChildRefAtLayer(key, lookup, idx)
@@ -457,7 +457,7 @@ module PivotBetreeSpecRefinement {
       start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
       buckets: seq<Bucket>, lookup: P.Lookup, key: Key,
       j: int)
-  requires startKey == if start.NegativeInf? then [] else start.key;
+  requires startKey == if start.NegativeInf? then seq_to_key([]) else start.key;
   requires P.LookupVisitsWFNodes(lookup)
   requires |lookup| == |buckets|
   requires (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
@@ -488,7 +488,7 @@ module PivotBetreeSpecRefinement {
   lemma InterpretBucketStackEqInterpretLookup(
       start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
       buckets: seq<Bucket>, lookup: P.Lookup, key: Key)
-  requires startKey == if start.NegativeInf? then [] else start.key;
+  requires startKey == if start.NegativeInf? then seq_to_key([]) else start.key;
   requires P.LookupVisitsWFNodes(lookup)
   requires |lookup| == |buckets|
   requires (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
@@ -565,7 +565,7 @@ module PivotBetreeSpecRefinement {
   ensures B.ValidSuccQuery(ISuccQuery(sq))
   {
     var q := ISuccQuery(sq);
-    var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
+    var startKey := if sq.start.NegativeInf? then seq_to_key([]) else sq.start.key;
 
     SuccQueryProperties(sq.results, sq.buckets, sq.start, sq.end);
 

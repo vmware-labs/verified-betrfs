@@ -30,6 +30,7 @@ module MarshallingModel {
   import IndirectionTableModel
   import SeqComparison
   import Marshalling
+  import opened KeyType
 
   import BT = PivotBetreeSpec`Internal
 

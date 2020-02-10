@@ -20,7 +20,7 @@ import opened Options
 //import opened Math__power2_i
 import NativeArrays
 import opened Math
-import KeyType
+import opened KeyType
 import ValueMessage`Internal
 import ValueType`Internal
 import opened NativePackedInts
@@ -33,11 +33,10 @@ export S
       KeyType, ValueMessage, ValueType,
       lemma_SizeOfV_parse_Val,
       PackedKV, BucketWeights
-  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, Key, Message, ValidMessage
+  reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, Message, ValidMessage
 
 export extends S
 
-type Key = KeyType.Key
 type Message = ValueMessage.Message
 
 datatype G = GUint64
@@ -409,7 +408,7 @@ method ParseKeyArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, r
     var i: uint64 := 0;
     while i < n
     {
-      keys[i] := PackedStringArray.psaElement(psa.value, i);
+      keys[i] := seq_to_key(PackedStringArray.psaElement(psa.value, i));
       i := i + 1;
     }
 
@@ -1506,7 +1505,7 @@ method ComputeWeightKeySeq(s: seq<Key>) returns (size:uint64)
   if (|s| as uint64) == 0 {
     size := 0;
   } else {
-    var v_size := 4 + |s[0 as uint64]| as uint64;
+    var v_size := 4 + KeyLenUint64(s[0 as uint64]);
     var rest_size := ComputeWeightKeySeq(s[(1 as uint64)..]);
     size := v_size + rest_size;
   }
@@ -1883,8 +1882,8 @@ method MarshallKeyArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) 
   var offset: uint64 := 0;
   while i < |val.ka| as uint64
   {
-    NativeArrays.CopySeqIntoArray(val.ka[i], 0, data, index + 4 + 4*|val.ka| as uint64 + offset, |val.ka[i]| as uint64);
-    offset := offset + |val.ka[i]| as uint64;
+    CopyKeyIntoArray(val.ka[i], data, index + 4 + 4*|val.ka| as uint64 + offset);
+    offset := offset + KeyLenUint64(val.ka[i]) as uint64;
     Pack_LittleEndian_Uint32_into_Array(offset as uint32, data, index + 4 + 4*i);
     i := i + 1;
   }

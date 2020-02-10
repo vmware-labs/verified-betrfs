@@ -19,9 +19,6 @@ module BucketWeights {
 
   function WeightKey(key: Key) : (w:int)
   ensures w >= 0
-  {
-    4 + |key|
-  }
  
   function WeightKeySeq(keys: seq<Key>) : (w:int)
   ensures w >= 0
@@ -49,7 +46,7 @@ module BucketWeights {
   function method WeightKeyUint64(key: Key) : (w:uint64)
   ensures w as int == WeightKey(key)
   {
-    4 + |key| as uint64
+    4 + KeyLenUint64(key)
   }
 
   function method WeightMessageUint64(msg: Message) : (w:uint64)

@@ -1039,15 +1039,4 @@ module BucketsLib {
 
   function getMiddleKey(bucket: Bucket) : Key
   requires WFBucket(bucket)
-  {
-    if |bucket.keys| == 0 then
-      [0] // Just pick an arbitary key
-    else (
-      var key := bucket.keys[|bucket.keys| / 2];
-      if |key| == 0 then 
-        [0]
-      else
-        key
-    )
-  }
 }

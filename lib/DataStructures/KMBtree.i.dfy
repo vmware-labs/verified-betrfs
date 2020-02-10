@@ -14,7 +14,7 @@ module KMBtree refines MutableBtree {
   function method MaxChildren() : uint64 { 64 }
 
   function method DefaultValue() : Value { Model.Messages.DefineDefault() }
-  function method DefaultKey() : Key { [] }
+  function method DefaultKey() : Key { KeyType.seq_to_key([]) }
 }
 
 module KMBtreeBulkOperations refines MutableBtreeBulkOperations {

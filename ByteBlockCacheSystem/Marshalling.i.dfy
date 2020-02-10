@@ -30,6 +30,7 @@ module Marshalling {
   import ReferenceType`Internal
   import Crypto
   import PackedKV
+  import opened KeyType
 
   type Reference = BC.Reference
   type LBA = BC.LBA
@@ -122,10 +123,10 @@ module Marshalling {
   ensures s.Some? ==> |s.value| == |v.ka|
   {
     var s := valToStrictlySortedKeySeq(v);
-    if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
+    if s.Some? && (|s.value| > 0 ==> KeyLenUint64(s.value[0]) != 0) then (
       if |s.value| > 0 then (
         SeqComparison.reveal_lte();
-        Keyspace.IsNotMinimum([], s.value[0]);
+        //Keyspace.IsNotMinimum([], s.value[0]);
         s
       ) else (
         s

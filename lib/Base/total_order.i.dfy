@@ -826,73 +826,29 @@ module Lexicographic_Byte_Order refines Total_Order {
 
   import Base_Order = Byte_Order
 
-  function SomeElement() : Element { [] }
+  function SomeElement() : Element
 
   predicate lte(a: Element, b: Element)
-  {
-    totality(a, b);
-    antisymm(a, b);
-    transitivity_forall();
-
-    SeqComparison.lte(a, b)
-  }
 
   predicate ltedef(a: Element, b: Element)
-  {
-    SeqComparison.lte(a, b)
-  }
-    
+
   lemma totality(a: Element, b: Element)
-  ensures SeqComparison.lte(a, b) || SeqComparison.lte(b, a);
-  {
-    SeqComparison.reveal_lte();
-  }
 
   lemma antisymm(a: Element, b: Element)
-  ensures SeqComparison.lte(a, b) && SeqComparison.lte(b, a) ==> a == b;
-  {
-    SeqComparison.reveal_lte();
-    if |a| > 0 && |b| > 0 {
-      antisymm(a[1..], b[1..]);
-    }
-  }
 
   lemma transitivity_forall()
-  ensures forall a, b, c | (SeqComparison.lte(a, b) && SeqComparison.lte(b, c)) :: SeqComparison.lte(a, c);
-  {
-    // We need this due to dafny bug
-    // https://github.com/dafny-lang/dafny/issues/287
-    SeqComparison.reveal_lte();
-
-    forall a: Element, b: Element, c: Element | SeqComparison.lte(a, b) && SeqComparison.lte(b, c)
-    ensures SeqComparison.lte(a, c)
-    {
-      transitivity(a, b, c);
-    }
-  }
 
   lemma transitivity(a: Element, b: Element, c: Element)
-  ensures SeqComparison.lte(a, b) && SeqComparison.lte(b, c) ==> SeqComparison.lte(a, c);
-  {
-    SeqComparison.reveal_lte();
-    if (|a| > 0 && |b| > 0 && |c| > 0) {
-      transitivity(a[1..], b[1..], c[1..]);
-    }
-  }
 
   method cmp(a: Element, b: Element) returns (c: int32)
     ensures c < 0 ==> lt(a, b)
     ensures c > 0 ==> lt(b, a)
     ensures c == 0 ==> a == b
   {
-    c := NativeArrays.ByteSeqCmpByteSeq(a, b);
+    c := KeyType.key_cmp(a, b);
   }
 
   lemma EmptyLte(x: Element)
-  ensures lte([], x)
-  {
-    SeqComparison.reveal_lte();
-  }
 
   // TODO Ideally we would put these methods in the abstract class
   // (since they could apply to any kind of Element)

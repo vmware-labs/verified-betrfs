@@ -46,9 +46,9 @@ module PackedKV {
   requires ValidKeyLens(psa)
   requires 0 <= i <= |psa.offsets|
   ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == PackedStringArray.psaElement(psa, j as uint64)
+  ensures forall j | 0 <= j < i :: res[j] == seq_to_key(PackedStringArray.psaElement(psa, j as uint64))
   {
-    if i == 0 then [] else psaSeq_Keys(psa, i-1) + [PackedStringArray.psaElement(psa, (i-1) as uint64)]
+    if i == 0 then [] else psaSeq_Keys(psa, i-1) + [seq_to_key(PackedStringArray.psaElement(psa, (i-1) as uint64))]
   }
 
   function IKeys(psa: PackedStringArray.Psa) : (res : seq<Key>)
@@ -93,7 +93,7 @@ module PackedKV {
   ensures WFBucketMap(bucket)
   {
     if i == 0 then map[] else (
-      var key : Key := PackedStringArray.psaElement(pkv.keys, (i-1) as uint64);
+      var key : Key := seq_to_key(PackedStringArray.psaElement(pkv.keys, (i-1) as uint64));
       var msg : Message := byteString_to_Message(PackedStringArray.psaElement(pkv.keys, (i-1) as uint64));
       IMapi(pkv, i-1)[key := msg]
     )
@@ -226,21 +226,21 @@ module PackedKV {
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
   {
-    PackedStringArray.FirstElement(pkv.keys)
+    seq_to_key(PackedStringArray.FirstElement(pkv.keys))
   }
 
   function method LastKey(pkv: Pkv) : Key
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
   {
-    PackedStringArray.LastElement(pkv.keys)
+    seq_to_key(PackedStringArray.LastElement(pkv.keys))
   }
 
   function method GetKey(pkv: Pkv, i: uint64) : Key
   requires WF(pkv)
   requires 0 <= i as int < |pkv.keys.offsets|
   {
-    PackedStringArray.psaElement(pkv.keys, i)
+    seq_to_key(PackedStringArray.psaElement(pkv.keys, i))
   }
 
   function method GetMessage(pkv: Pkv, i: uint64) : Message

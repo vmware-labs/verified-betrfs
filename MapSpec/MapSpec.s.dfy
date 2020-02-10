@@ -59,45 +59,15 @@ module MapSpec refines UIStateMachine {
   }
 
   predicate LowerBound(start: UI.RangeStart, key: Key)
-  {
-    && (start.SInclusive? ==> SeqComparison.lte(start.key, key))
-    && (start.SExclusive? ==> SeqComparison.lt(start.key, key))
-  }
 
   predicate UpperBound(key: Key, end: UI.RangeEnd)
-  {
-    && (end.EInclusive? ==> SeqComparison.lte(key, end.key))
-    && (end.EExclusive? ==> SeqComparison.lt(key, end.key))
-  }
 
   predicate InRange(start: UI.RangeStart, key: Key, end: UI.RangeEnd)
-  {
-    && LowerBound(start, key)
-    && UpperBound(key, end)
-  }
 
   predicate NonEmptyRange(start: UI.RangeStart, end: UI.RangeEnd)
-  {
-    || start.NegativeInf?
-    || end.PositiveInf?
-    || (start.SInclusive? && end.EInclusive? && SeqComparison.lte(start.key, end.key))
-    || SeqComparison.lt(start.key, end.key)
-  }
 
   predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp,
       start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
-  {
-    && uiop == UI.SuccOp(start, results, end)
-    && WF(s)
-    && s' == s
-    && NonEmptyRange(start, end)
-    && (forall i | 0 <= i < |results| :: s.view[results[i].key] == results[i].value)
-    && (forall i | 0 <= i < |results| :: results[i].value != EmptyValue())
-    && (forall i | 0 <= i < |results| :: InRange(start, results[i].key, end))
-    && (forall i, j | 0 <= i < j < |results| :: SeqComparison.lt(results[i].key, results[j].key))
-    && (forall key | InRange(start, key, end) && s.view[key] != EmptyValue() ::
-        exists i :: 0 <= i < |results| && results[i].key == key)
-  }
 
   predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
       ensures Write(k, s, s', uiop, key, new_value) ==> WF(s')
