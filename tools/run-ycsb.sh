@@ -10,17 +10,20 @@ echo "NOTE: ${blu}if this fails, you may need to ./tools/update-submodules.sh${e
 
 set -x
 
-make build/VeribetrfsYcsb
+make -j 4 build/VeribetrfsYcsb
 
 set +x
 
+rm -R /tmp/veriexperiments || true
+mkdir /tmp/veriexperiments
+
 echo "${yel}== workload A ==${end}"
-./build/VeribetrfsYcsb ycsb/workloada-onefield.spec
+./build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/veriexperiments
 
 echo "${yel}== workload B ==${end}"
-./build/VeribetrfsYcsb ycsb/workloadb-onefield.spec
+./build/VeribetrfsYcsb ycsb/workloadb-onefield.spec /tmp/veriexperiments
 
 echo "${yel}== workload C ==${end}"
-./build/VeribetrfsYcsb ycsb/workloadc-onefield.spec
+./build/VeribetrfsYcsb ycsb/workloadc-onefield.spec /tmp/veriexperiments
 
 echo "`tput op`"
