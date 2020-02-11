@@ -301,6 +301,9 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMa
 	# NOTE: this uses c++17, which is required by hdrhist
 	g++ -o $@ -Lycsb/build -Lvendor/rocksdb -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ -std=c++17 $(LDFLAGS) -O3 -lycsbc -lrocksdb -Winline $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
 
+##############################################################################
+# other benchmarks
+
 build/HashMapBench: bench/hashmap.cpp build/MutableMapImpl.cpp
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
