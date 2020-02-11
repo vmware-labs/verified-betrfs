@@ -231,6 +231,13 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
+build/MutableMapImpl.cpp: lib/DataStructures/MutableMapImpl.i.dfy build/lib/DataStructures/MutableMapImpl.i.dummydep $(DAFNY_BINS) | $$(@D)/.
+#eval trick to assign make var inside rule
+	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
+	mv $(TMPNAME) $@
+
+
 ##############################################################################
 # C++ object files
 
@@ -294,7 +301,7 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMa
 	# NOTE: this uses c++17, which is required by hdrhist
 	g++ -o $@ -Lycsb/build -Lvendor/rocksdb -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ -std=c++17 $(LDFLAGS) -O3 -lycsbc -lrocksdb -Winline $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
 
-build/HashMapBench: bench/hashmap.cpp $(VERIBETRFS_YCSB_O_FILES)
+build/HashMapBench: bench/hashmap.cpp build/MutableMapImpl.cpp
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	$(CC)  -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -march=native -msse4.2 -MMD -MP $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) $(VERIBETRFS_YCSB_O_FILES) bench/hashmap.cpp
+	$(CC)  -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -march=native -msse4.2 -MMD -MP $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) bench/hashmap.cpp

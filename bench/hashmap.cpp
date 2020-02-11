@@ -1,8 +1,9 @@
-#include <DafnyRuntime.h>
-#include <Framework.h>
-#include <Bundle.i.h>
+//#include <DafnyRuntime.h>
+//#include <Framework.h>
+//#include <Bundle.i.h>
+#include "MutableMapImpl.cpp"
 
-using namespace _463_MutableMap_Compile;
+using namespace _29_MutableMap_Compile;
 
 int main(int argc, char* argv[]) {
     ResizingHashMap<uint64> m;
