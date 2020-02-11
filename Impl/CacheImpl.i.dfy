@@ -125,6 +125,7 @@ module CacheImpl {
     modifies Repr
     ensures Inv()
     ensures I() == old(I()[ref := node.I()])
+    ensures forall r | r != ref :: ptr(r) == old(ptr(r))
     ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
     {
       LemmaSizeEqCount();
@@ -191,7 +192,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
+    method UpdateNodeSlot(ghost ref: BT.G.Reference, node: Node, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()
     requires ref in I()
@@ -201,6 +202,7 @@ module CacheImpl {
     requires slot as int + 1 < 0x1_0000_0000_0000_0000
     requires bucket.Repr !! Repr
     requires |I()| <= 0x10000
+    requires ptr(ref) == Some(node)
     modifies Repr
     ensures Inv()
     ensures I() == old(I()[ref := IM.Node(
@@ -210,8 +212,8 @@ module CacheImpl {
       )])
     ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o)
     {
-      var nodeOpt := cache.Get(ref);
-      var node := nodeOpt.value;
+      //var nodeOpt := cache.Get(ref);
+      //var node := nodeOpt.value;
       node.UpdateSlot(slot, bucket, childref);
 
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
