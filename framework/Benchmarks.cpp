@@ -323,6 +323,9 @@ public:
   int start = 1000000;
   int count = 5000000;
 
+  int KEY_SIZE = 24;
+  int VALUE_SIZE = 512;
+
   virtual string name() override { return "MixedInsertQuery"; }
   virtual int opCount() override { return count; }
 
@@ -361,8 +364,8 @@ public:
   }
 
   virtual void go(Application& app) override {
-    static_assert (KEY_SIZE % 4 == 0, "");
-    static_assert (VALUE_SIZE % 4 == 0, "");
+    assert (KEY_SIZE % 4 == 0);
+    assert (VALUE_SIZE % 4 == 0);
 
     rngState = 43211;
 
