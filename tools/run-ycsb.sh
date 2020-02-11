@@ -17,13 +17,14 @@ set +x
 rm -R /tmp/veriexperiments || true
 mkdir /tmp/veriexperiments
 
+ALL_EXPERIMENTS="--veribetrkv --rocks"
+
 echo "${yel}== workload A ==${end}"
-./build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/veriexperiments
+./build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/veriexperiments $ALL_EXPERIMENTS
 
 echo "${yel}== workload B ==${end}"
-./build/VeribetrfsYcsb ycsb/workloadb-onefield.spec /tmp/veriexperiments
-
+./build/VeribetrfsYcsb ycsb/workloadb-onefield.spec /tmp/veriexperiments $ALL_EXPERIMENTS
 echo "${yel}== workload C ==${end}"
-./build/VeribetrfsYcsb ycsb/workloadc-onefield.spec /tmp/veriexperiments
+./build/VeribetrfsYcsb ycsb/workloadc-onefield.spec /tmp/veriexperiments $ALL_EXPERIMENTS
 
 echo "`tput op`"

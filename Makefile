@@ -286,7 +286,14 @@ libycsbc:
 	@$(MAKE) -C ycsb build/libycsbc.a
 
 librocksdb:
-	@env ROCKSDB_DISABLE_BZIP=1 ROCKSDB_DISABLE_ZLIB=1 $(MAKE) -C vendor/rocksdb static_lib
+	@env \
+		ROCKSDB_DISABLE_BZIP=1 \
+		ROCKSDB_DISABLE_ZLIB=1 \
+		ROCKSDB_DISABLE_LZ4=1 \
+		ROCKSDB_DISABLE_ZSTD=1 \
+		ROCKSDB_DISABLE_JEMALLOC=1 \
+		ROCKSDB_DISABLE_SNAPPY=1 \
+		$(MAKE) -C vendor/rocksdb static_lib
 
 .PHONY: libycsbc
 
@@ -303,5 +310,4 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMa
 			-I vendor/rocksdb/include/ \
 			-Winline -std=c++17 $(LDFLAGS) -O3 \
 			$(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
-			-lycsbc -lrocksdb -lpthread -ldl 
-
+			-lycsbc -lrocksdb -lpthread -ldl

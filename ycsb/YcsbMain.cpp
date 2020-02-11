@@ -223,7 +223,7 @@ const string RocksdbFacade::name = string("rocksdb");
 int main(int argc, char* argv[]) {
     bool verbose = false;
  
-    if (argc != 3) {
+    if (argc < 3) {
         cerr << "error: expects two arguments: the workload spec, and the persistent data directory" << endl;
         exit(-1);
     }
@@ -238,6 +238,21 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
+    bool do_veribetrkv = false;
+    bool do_rocks = false;
+    for (int i = 3; i < argc; i++) {
+      if (string(argv[i]) == "--veribetrkv") {
+        do_veribetrkv = true;
+      }
+      else if (string(argv[i]) == "--rocks") {
+        do_rocks = true;
+      }
+      else {
+        cerr << "unrecognized: " << argv[i] << endl;
+        exit(-1);
+      }
+    }
+
     utils::Properties props = ycsbcwrappers::props_from(workload_filename);
     unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
     int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
@@ -249,9 +264,10 @@ int main(int argc, char* argv[]) {
     }
     int sync_interval_ms = stoi(props["syncintervalms"]);
 
-    {
+    if (do_veribetrkv) {
         /* veribetrkv */ std::string veribetrfs_filename = base_directory + "veribetrfs.img";
         // /* veribetrkv */ (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
+        system(("rm -rf " + veribetrfs_filename).c_str());
         /* veribetrkv */ Mkfs(veribetrfs_filename);
         /* veribetrkv */ Application app(veribetrfs_filename);
         /* veribetrkv */ VeribetrkvFacade db(app);
@@ -261,9 +277,10 @@ int main(int argc, char* argv[]) {
         ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
     }
 
-    {
+    if (do_rocks) {
         /* rocksdb */ static string rocksdb_path = base_directory + "rocksdb.db";
         // /* rocksdb */ (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
+        system(("rm -rf " + rocksdb_path).c_str());
 
         /* rocksdb */ rocksdb::DB* rocks_db;
         /* rocksdb */ rocksdb::Options options;
