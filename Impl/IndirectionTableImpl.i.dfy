@@ -174,10 +174,11 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_RemoveLoc();
 
-      var oldEntry := t.Get(ref);
+      var it := t.FindSimpleIter(ref);
+      var oldEntry := t.SimpleIterOutput(it);
       var predCount := oldEntry.value.predCount;
       var succs := oldEntry.value.succs;
-      t.Insert(ref, IndirectionTableModel.Entry(None, succs, predCount));
+      t.UpdateByIter(it, IndirectionTableModel.Entry(None, succs, predCount));
       this.findLoclessIterator := None;
 
       oldLoc := oldEntry.value.loc;

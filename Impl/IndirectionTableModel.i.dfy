@@ -811,10 +811,13 @@ module IndirectionTableModel {
     && (oldLoc.None? ==> ref !in self.locs)
     && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
   {
-    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var it := MutableMapModel.FindSimpleIter(self.t, ref);
+    var oldEntry := MutableMapModel.SimpleIterOutput(self.t, it);
+
     var predCount := oldEntry.value.predCount;
     var succs := oldEntry.value.succs;
-    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
+
+    var t := MutableMapModel.UpdateByIter(self.t, it, Entry(None, succs, predCount));
 
     var self' := FromHashMap(t, self.garbageQueue, self.refUpperBound, None);
     var oldLoc := oldEntry.value.loc;
