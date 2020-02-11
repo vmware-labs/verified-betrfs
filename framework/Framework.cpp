@@ -35,6 +35,8 @@ void fail(string err)
 
 typedef uint8 byte;
 
+constexpr int MAX_WRITE_REQS_OUT = 8;
+
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
@@ -60,11 +62,15 @@ namespace MainDiskIOHandler_Compile {
   }
 #endif // USE_DIRECT
   
+  int nWriteReqsOut = 0;
+  int nWriteReqsWaiting = 0;
+
   struct WriteTask {
     size_t aligned_len;
     byte *aligned_bytes;
     aiocb aio_req_write;
 
+    bool made_req;
     bool done;
 
     ~WriteTask() {
@@ -80,8 +86,6 @@ namespace MainDiskIOHandler_Compile {
       if (aligned_bytes == NULL) {
         fail("Couldn't create aligned copy of buffer");
       }
-      
-      this->done = false;
 
       aio_req_write.aio_fildes = fd;
       aio_req_write.aio_offset = addr;
@@ -90,13 +94,33 @@ namespace MainDiskIOHandler_Compile {
       aio_req_write.aio_reqprio = 0;
       aio_req_write.aio_sigevent.sigev_notify = SIGEV_NONE;
 
+      this->done = false;
+      this->made_req = false;
+
+      nWriteReqsWaiting++;
+    }
+
+    void start() {
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
-        fail("aio_write failed");
+        cout << "number of writeReqs " << endl;
+        if (errno == EAGAIN) { fail("aio_write failed EAGAIN"); }
+        else if (errno == EBADF) { fail("aio_write failed EBADF"); }
+        else if (errno == EFBIG) { fail("aio_write failed EFBIG"); }
+        else if (errno == EINVAL) { fail("aio_write failed EINVAL"); }
+        else if (errno == ENOSYS) { fail("aio_write failed ENOSYS"); }
+        else { fail("aio_write failed, error unknown, " + to_string(errno)); }
       }
+
+      this->made_req = true;
+      nWriteReqsOut++;
+      nWriteReqsWaiting--;
     }
 
     void wait() {
+      if (!this->made_req) {
+        fail("wait() failed - request not made yet");
+      }
       if (!done) {
         aiocb* aiolist[1];
         aiolist[0] = &aio_req_write; //&aio_req_fsync;
@@ -110,7 +134,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void check_if_complete() {
-      if (!done) {
+      if (!done && made_req) {
         int status = aio_error(&aio_req_write);
         if (status == 0) {
           ssize_t ret = aio_return(&aio_req_write);
@@ -118,6 +142,7 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
+          nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
         }
@@ -228,6 +253,10 @@ namespace MainDiskIOHandler_Compile {
     shared_ptr<WriteTask> writeTask {
       new WriteTask(fd, addr, &bytes.at(0), len) };
 
+    if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
+      writeTask->start();
+    }
+
     uint64 id = this->curId;
     this->curId++;
 
@@ -271,6 +300,17 @@ namespace MainDiskIOHandler_Compile {
     }
   }
 
+  void DiskIOHandler::maybeStartWriteReq() {
+    for (auto it = this->writeReqs.begin();
+        it != this->writeReqs.end() && nWriteReqsWaiting > 0
+          && nWriteReqsOut < MAX_WRITE_REQS_OUT; ++it)
+    {
+      if (!it->second->made_req) {
+        it->second->start();
+      }
+    }
+  }
+
   bool DiskIOHandler::prepareWriteResponse() {
     for (auto it = this->writeReqs.begin();
         it != this->writeReqs.end(); ++it) {
@@ -279,6 +319,7 @@ namespace MainDiskIOHandler_Compile {
       if (writeTask->done) {
         this->writeResponseId = it->first;
         this->writeReqs.erase(it);
+        maybeStartWriteReq();
         return true;
       }
     }
@@ -286,8 +327,32 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void DiskIOHandler::completeWriteTasks() {
-    for (auto p : this->writeReqs) {
-      p.second->wait();
+    while (true) {
+      vector<aiocb*> tasks;
+      tasks.resize(this->writeReqs.size());
+      int i = 0;
+      bool any_not_started = false;
+      for (auto p : this->writeReqs) {
+        p.second->check_if_complete();
+        if (p.second->done) {
+          continue;
+        } else if (p.second->made_req) {
+          tasks[i] = &p.second->aio_req_write;
+          i++;
+        } else {
+          any_not_started = true;
+        }
+      }
+      if (i == 0) {
+        if (any_not_started) {
+          fail("completeWriteTasks: any_not_started");
+        }
+        break;
+      }
+
+      aio_suspend(&tasks[0], i, NULL);
+
+      maybeStartWriteReq();
     }
   }
   void DiskIOHandler::waitForOne() {
@@ -297,7 +362,7 @@ namespace MainDiskIOHandler_Compile {
     for (auto p : this->writeReqs) {
       if (p.second->done) {
         return;
-      } else {
+      } else if (p.second->made_req) {
         tasks[i] = &p.second->aio_req_write;
         i++;
       }
@@ -305,7 +370,10 @@ namespace MainDiskIOHandler_Compile {
     if (i == 0) {
       fail("waitForOne called with no tasks\n");
     }
+
     aio_suspend(&tasks[0], i, NULL);
+
+    maybeStartWriteReq();
   }
 }
 
@@ -344,7 +412,7 @@ void Application::Sync() {
   }
   LOG("doing push sync...");
 
-  for (int i = 0; i < 5000; i++) {
+  for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
     auto tup2 = handle_PopSync(k, hs, io, id);
     bool wait = tup2.first;
@@ -377,7 +445,9 @@ void Application::Insert(ByteString key, ByteString val)
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();
+
     this->maybeDoResponse();
+
     if (success) {
       LOG("doing insert... success!");
       LOG("");
