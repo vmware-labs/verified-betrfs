@@ -310,4 +310,4 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMa
 			-I vendor/rocksdb/include/ \
 			-Winline -std=c++17 $(LDFLAGS) -O3 \
 			$(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
-			-lycsbc -lrocksdb -lpthread -ldl
+			-lycsbc -lrocksdb -lpthread -ldl $(LDFLAGS)
