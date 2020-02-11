@@ -441,7 +441,7 @@ void Application::Insert(ByteString key, ByteString val)
     fail("Insert: value is too long");
   }
 
-  for (int i = 0; i < 500; i++) {
+  for (int i = 0; i < 500000; i++) {
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();
@@ -468,7 +468,7 @@ ByteString Application::Query(ByteString key)
     fail("Query: key is too long");
   }
 
-  for (int i = 0; i < 5000; i++) {
+  for (int i = 0; i < 500000; i++) {
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
     this->maybeDoResponse();
     if (result.first) {
@@ -529,7 +529,7 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
     fail("SuccOnce should have maxToFind >= 1");
   }
 
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 500000; i++) {
     auto result = handle_Succ(k, hs, io, start, maxToFind);
     this->maybeDoResponse();
     if (result.first) {
