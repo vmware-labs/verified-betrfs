@@ -286,6 +286,8 @@ int main(int argc, char* argv[]) {
         /* rocksdb */ rocksdb::Options options;
         /* rocksdb */ options.create_if_missing = true;
         /* rocksdb */ options.error_if_exists = true;
+        /* rocksdb */ options.use_direct_reads = true;
+        /* rocksdb */ options.use_direct_io_for_flush_and_compaction = true;
         /* rocksdb */ rocksdb::Status status = rocksdb::DB::Open(options, rocksdb_path, &rocks_db);
         /* rocksdb */ assert(status.ok());
         /* rocksdb */ RocksdbFacade db(*rocks_db);
