@@ -230,11 +230,13 @@ namespace MainDiskIOHandler_Compile {
       fail("open failed");
     }
 
+    #if USE_DIRECT
     #ifdef F_NOCACHE
     int res = fcntl(fd, F_NOCACHE, 1);
     if (res == -1) {
       fail("fcntl F_NOCACHE failed");
     }
+    #endif
     #endif
   }
 
