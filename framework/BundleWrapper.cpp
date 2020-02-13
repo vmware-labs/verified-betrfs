@@ -38,13 +38,13 @@ bool handle_Insert(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compi
 std::pair<bool, DafnySequence<uint8>> handle_Query(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key)
 {
   auto p = __default::handleQuery(*k.k, hs.hs, io, key);
-  return make_pair(p.is_Option_Some(), p.dtor_value());
+  return make_pair(p.is_Some(), p.dtor_value());
 }
 
 std::pair<bool, UI_Compile::SuccResultList> handle_Succ(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, UI_Compile::RangeStart start, uint64 maxToFind)
 {
   auto p = __default::handleSucc(*k.k, hs.hs, io, start, maxToFind);
-  return make_pair(p.is_Option_Some(), p.dtor_value());
+  return make_pair(p.is_Some(), p.dtor_value());
 }
 
 void handle_ReadResponse(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
