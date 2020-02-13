@@ -1,17 +1,22 @@
 #include <cstdlib>
 
+#ifdef _YCSB_VERIBETRFS
 #include "Application.h"
+#endif
 
 #include "core_workload.h"
 #include "ycsbwrappers.h"
 
 #include "hdrhist.hpp"
 
+#ifdef _YCSB_ROCKS
 #include "rocksdb/db.h"
+#endif
 
 #include <strstream>
 //#include <filesystem>
 #include <chrono>
+#include <iostream>
 
 using namespace std;
 
@@ -198,6 +203,7 @@ void ycsbRun(
     }
 }
 
+#ifdef _YCSB_VERIBETRFS
 class VeribetrkvFacade {
 protected:
     Application& app;
@@ -225,7 +231,9 @@ public:
 };
 
 const string VeribetrkvFacade::name = string("veribetrkv");
+#endif
 
+#ifdef _YCSB_ROCKS
 class RocksdbFacade {
 protected:
     rocksdb::DB& db;
@@ -264,6 +272,7 @@ public:
 };
 
 const string RocksdbFacade::name = string("rocksdb");
+#endif
 
 class NopFacade {
 public:
@@ -355,6 +364,7 @@ int main(int argc, char* argv[]) {
 
     // == veribetrkv ==
     if (do_veribetrkv) {
+    #ifdef _YCSB_VERIBETRFS
         std::string veribetrfs_filename = base_directory + "veribetrfs.img";
         // (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
         system(("rm -rf " + veribetrfs_filename).c_str());
@@ -363,11 +373,13 @@ int main(int argc, char* argv[]) {
         VeribetrkvFacade db(app);
     
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+    #endif 
     }
 
 
     // == rocksdb ==
     if (do_rocks) {
+    #ifdef _YCSB_ROCKS
         static string rocksdb_path = base_directory + "rocksdb.db";
         // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
         system(("rm -rf " + rocksdb_path).c_str());
@@ -386,6 +398,7 @@ int main(int argc, char* argv[]) {
         RocksdbFacade db(*rocks_db);
 
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+    #endif 
     }
 
 
