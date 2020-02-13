@@ -211,6 +211,8 @@ module SyncImpl {
     }
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
 
+    assert Inv(k, s) by { StateModel.reveal_ConsistentBitmap(); }
+
     if foundInFrozen.Some? {
       syncFoundInFrozen(k, s, io, foundInFrozen.value);
       return;

@@ -7,7 +7,8 @@ int main(int argc, char* argv[]) {
   bool allBenchmarks = false;
   string benchmark;
   bool skipPrepare = false;
-
+  string image = ".veribetrfs.img";
+  
   for (int i = 1; i < argc; i++) {
     string arg = string(argv[i]);
 
@@ -17,6 +18,8 @@ int main(int argc, char* argv[]) {
       benchmark = arg.substr(12);
     } else if (arg == "--skip-prepare") {
       skipPrepare = true;
+    } else if (arg[0] != '-') {
+      image = arg;
     } else {
       cout << "Unrecognized argument: " << arg << endl;
       return 1;
@@ -24,11 +27,13 @@ int main(int argc, char* argv[]) {
   }
 
   if (allBenchmarks) {
-    RunAllBenchmarks();
+    RunAllBenchmarks(image);
   } else if (benchmark != "") {
-    RunBenchmark(benchmark, skipPrepare);
+    RunBenchmark(image, benchmark, skipPrepare);
   } else {
-    cout << "Use --all-benchmarks or --benchmark" << endl;
+    cout << "Usage: Veribetrfs --all-benchmarks [disk.img]" << endl;
+    cout << "Usage: Veribetrfs [--skip-prepare] --benchmark=<benchmark> [disk.img]" << endl;
+    cout << "Default disk image is .veribetrfs.img" << endl;
   }
 }
 

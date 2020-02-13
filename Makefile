@@ -286,11 +286,28 @@ libycsbc:
 	@$(MAKE) -C ycsb build/libycsbc.a
 
 librocksdb:
-	@env ROCKSDB_DISABLE_BZIP=1 ROCKSDB_DISABLE_ZLIB=1 $(MAKE) -C vendor/rocksdb static_lib
+	@env \
+		ROCKSDB_DISABLE_BZIP=1 \
+		ROCKSDB_DISABLE_ZLIB=1 \
+		ROCKSDB_DISABLE_LZ4=1 \
+		ROCKSDB_DISABLE_ZSTD=1 \
+		ROCKSDB_DISABLE_JEMALLOC=1 \
+		ROCKSDB_DISABLE_SNAPPY=1 \
+		$(MAKE) -C vendor/rocksdb static_lib
 
 .PHONY: libycsbc
 
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
-	g++ -o $@ -Lycsb/build -Lvendor/rocksdb -Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ -std=c++17 $(LDFLAGS) -O3 -lycsbc -lrocksdb -Winline $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp
-
+	g++ -o $@ \
+			-L ycsb/build \
+			-L vendor/rocksdb \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			-I vendor/rocksdb/include/ \
+			-Winline -std=c++17 $(LDFLAGS) -O3 \
+			$(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
+			-lycsbc -lrocksdb -lpthread -ldl $(LDFLAGS)

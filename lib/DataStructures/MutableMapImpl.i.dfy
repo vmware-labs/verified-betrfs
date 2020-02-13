@@ -18,6 +18,9 @@ module MutableMap {
   import NativeArrays
   import opened MutableMapModel
 
+  // TODO having a separate FixedSizeHashMap isn't really necessary;
+  // things might be clearer if we just combine them.
+
   class FixedSizeHashMap<V> {
     var Storage: array<Item<V>>;
     var Count: uint64;
@@ -85,7 +88,8 @@ module MutableMap {
     requires 0 < this.Storage.Length < 0x1_0000_0000_0000_0000
     ensures result == MutableMapModel.Uint64SlotForKey(ModelI(this), key)
     {
-      result := key % (Storage.Length as uint64);
+      var h := MutableMapModel.hash64(key);
+      result := h % (Storage.Length as uint64);
     }
 
     method Uint64SlotSuccessor(slot: uint64) returns (nextSlot: uint64)
@@ -218,6 +222,22 @@ module MutableMap {
       cloned.Contents := Contents;
       /* (doc) assert cloned.Repr !! Repr; */
       assert Storage[..] == cloned.Storage[..]; // observe
+    }
+
+    method UpdateBySlot(slotIdx: uint64, v: V)
+      requires WF()
+      requires Inv()
+      requires 0 <= slotIdx as int < this.Storage.Length
+      requires this.Storage[slotIdx].Entry?
+      modifies Repr
+      ensures WF()
+      ensures Inv()
+      ensures Repr == old(Repr)
+      ensures ModelI(this) == FixedSizeUpdateBySlot(old(ModelI(this)), slotIdx, v)
+    {
+      Contents := Contents[Storage[slotIdx].key := Some(v)];
+      Storage[slotIdx] := Entry(Storage[slotIdx].key, v);
+      assume false;
     }
   }
 
@@ -523,5 +543,101 @@ module MutableMap {
       return m;
     }
 
+    method SimpleIterOutput(it: SimpleIterator)
+    returns (next: IteratorOutput<V>)
+    requires Inv()
+    requires WFSimpleIter(I(), it)
+    ensures next == MutableMapModel.SimpleIterOutput(I(), it)
+    {
+      LemmaWFSimpleIterImpliesEntry(I(), it);
+      assume MutableMapModel.SimpleIterOutput(I(), it)
+          == MutableMapModel.indexOutput(I(), it.i);
+      if it.i == this.Underlying.Storage.Length as uint64 {
+        return Done;
+      } else {
+        return Next(
+            this.Underlying.Storage[it.i].key,
+            this.Underlying.Storage[it.i].value);
+      }
+    }
+
+    method SimpleIterStart() returns (it' : SimpleIterator)
+    requires Inv()
+    ensures it' == MutableMapModel.SimpleIterStart(I())
+    {
+      ghost var self := I();
+      reveal_SimpleIterStart();
+
+      var i: uint64 := 0;
+      while i < Underlying.Storage.Length as uint64
+      invariant 0 <= i as int <= |self.underlying.storage|
+      invariant simpleIterToNext(self, 0) == simpleIterToNext(self, i)
+      {
+        if Underlying.Storage[i].Entry? {
+          it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
+          return;
+        }
+        i := i + 1;
+      }
+
+      it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
+    }
+
+    method SimpleIterInc(it: SimpleIterator) returns (it' : SimpleIterator)
+    requires Inv()
+    requires WFSimpleIter(I(), it)
+    requires MutableMapModel.SimpleIterOutput(I(), it).Next?
+    ensures it' == MutableMapModel.SimpleIterInc(I(), it)
+    {
+      ghost var self := I();
+      reveal_SimpleIterInc();
+
+      LemmaWFSimpleIterImpliesEntry(self, it);
+
+      var i: uint64 := it.i + 1;
+      while i < Underlying.Storage.Length as uint64
+      invariant 0 <= i as int <= |self.underlying.storage|
+      invariant simpleIterToNext(self, it.i + 1) == simpleIterToNext(self, i)
+      {
+        if Underlying.Storage[i].Entry? {
+          it' := SimpleIterator(i, it.s + {MutableMapModel.SimpleIterOutput(old(I()), it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
+          return;
+        }
+        i := i + 1;
+      }
+
+      it' := SimpleIterator(i, it.s + {MutableMapModel.SimpleIterOutput(old(I()), it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
+    }
+
+    method UpdateByIter(it: SimpleIterator, value: V)
+    requires Inv()
+    requires WFSimpleIter(I(), it)
+    requires MutableMapModel.SimpleIterOutput(I(), it).Next?
+    modifies Repr
+    ensures Inv()
+    ensures Repr == old(Repr)
+    ensures I() == MutableMapModel.UpdateByIter(old(I()), it, value);
+    {
+      LemmaWFSimpleIterImpliesEntry(I(), it);
+      MutableMapModel.reveal_UpdateByIter();
+
+      this.Underlying.UpdateBySlot(it.i, value);
+
+      this.Contents := this.Contents[MutableMapModel.SimpleIterOutput(old(I()), it).key := value];
+      assume false;
+    }
+
+    method FindSimpleIter(key: uint64) returns (it : SimpleIterator)
+    requires Inv()
+    ensures it == MutableMapModel.FindSimpleIter(I(), key)
+    {
+      MutableMapModel.reveal_FindSimpleIter();
+      var i := this.Underlying.Probe(key);
+      if this.Underlying.Storage[i].Entry? {
+        return SimpleIterator(i, {}, (|I().underlying.storage| - i as int) as ORDINAL);
+      } else {
+        return SimpleIterator(Underlying.Storage.Length as uint64, I().contents.Keys, 0);
+      }
+    }
   }
 }
