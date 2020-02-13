@@ -1,0 +1,177 @@
+domain Key { }
+domain Message { }
+
+domain Option[T] {
+    function Some(value: T) : Option[T]
+    function None() : Option[T]
+    function is_Some(o: Option[T]) : Bool
+    function dtor_value(o: Option[T]) : T
+
+    axiom a1 { forall t:T :: is_Some(Some(t)) }
+    axiom a2 { !is_Some(None()) }
+    axiom a3 { forall value:T :: dtor_value(Some(value)) == value }
+    axiom a4 { forall o:Option[T] :: is_Some(o) ==> Some(dtor_value(o)) == o }
+    axiom a5 { forall o:Option[T] :: !is_Some(o) ==> None() == o }
+}
+
+domain Bucket {
+    function SplitLeft(bucket: Bucket, pivot: Key) : Bucket
+}
+
+field _BucketField:Int
+predicate BucketInv(r: Ref)
+{
+  acc(r._BucketField)
+}
+
+function BucketI(r: Ref) : Bucket
+requires BucketInv(r)
+
+predicate InvSeq(r: Seq[Ref])
+{
+	forall i:Int :: 0 <= i && i < |r| ==> BucketInv(r[i])
+}
+
+function ISeq(r: Seq[Ref]) : Seq[Bucket]
+requires InvSeq(r)
+ensures |r| == |ISeq(r)|
+ensures forall j:Int :: 0 <= j && j < |r| ==>
+  ISeq(r)[j] == (unfolding InvSeq(r) in BucketI(r[j]))
+
+method ImplSplitLeft(bucket: Ref, pivot: Key)
+returns (left: Ref)
+requires BucketInv(bucket)
+ensures BucketInv(left)
+ensures BucketI(left) == SplitLeft(old(BucketI(bucket)), pivot)
+
+method CloneSeq(buckets: Seq[Ref])
+returns (buckets0: Seq[Ref])
+requires InvSeq(buckets)
+ensures InvSeq(buckets)
+ensures InvSeq(buckets0)
+
+domain Node {
+  function ctorNode(pivotTable: Seq[Key], children: Option[Seq[Int]], buckets: Seq[Bucket]) : Node
+
+  function dtor_pivotTable(node: Node) : Seq[Key]
+  function dtor_children(node: Node) : Option[Seq[Int]]
+  function dtor_buckets(node: Node) : Seq[Bucket]
+
+  axiom b1 { forall pivotTable:Seq[Key] :: forall children:Option[Seq[Int]] :: forall buckets:Seq[Bucket] :: dtor_pivotTable(ctorNode(pivotTable, children, buckets)) == pivotTable }
+  axiom b2 { forall pivotTable:Seq[Key] :: forall children:Option[Seq[Int]] :: forall buckets:Seq[Bucket] :: dtor_children(ctorNode(pivotTable, children, buckets)) == children }
+  axiom b3 { forall pivotTable:Seq[Key] :: forall children:Option[Seq[Int]] :: forall buckets:Seq[Bucket] :: dtor_buckets(ctorNode(pivotTable, children, buckets)) == buckets }
+  axiom b4 { forall node: Node :: node == ctorNode(dtor_pivotTable(node), dtor_children(node), dtor_buckets(node)) }
+}
+
+function WFPivots(pivots: Seq[Key]) : Bool
+
+function WFNode(node: Node) : Bool 
+{
+  (is_Some(dtor_children(node)) ==> |dtor_value(dtor_children(node))| == |dtor_pivotTable(node)| + 1)
+  && (|dtor_buckets(node)| == |dtor_pivotTable(node)| + 1)
+  && WFPivots(dtor_pivotTable(node))
+}
+
+
+function PivotsCutoffForLeft(pivots: Seq[Key], pivot: Key) : Int
+requires WFPivots(pivots)
+ensures 0 <= PivotsCutoffForLeft(pivots, pivot)
+ensures PivotsCutoffForLeft(pivots, pivot) <= |pivots|
+
+function CutoffNodeAndKeepLeft(node: Node, pivot: Key) : Node
+  requires WFNode(node)
+  ensures |dtor_buckets(CutoffNodeAndKeepLeft(node, pivot))| == |dtor_pivotTable(CutoffNodeAndKeepLeft(node, pivot))| + 1
+  ensures is_Some(dtor_children(CutoffNodeAndKeepLeft(node, pivot))) ==> |dtor_buckets(CutoffNodeAndKeepLeft(node, pivot))| == |dtor_value(dtor_children(CutoffNodeAndKeepLeft(node, pivot)))|
+  {
+    let cLeft == (PivotsCutoffForLeft(dtor_pivotTable(node), pivot)) in
+    let leftPivots == (dtor_pivotTable(node)[.. cLeft]) in
+    let leftChildren == (is_Some(dtor_children(node)) ? (Some(dtor_value(dtor_children(node))[.. cLeft + 1])) : (None())) in
+    let splitBucket == (SplitLeft(dtor_buckets(node)[cLeft], pivot)) in
+    let leftBuckets == (dtor_buckets(node)[.. cLeft] ++ Seq(splitBucket)) in
+    ctorNode(leftPivots, leftChildren, leftBuckets)
+  }
+
+method ImplPivotsCutoffForLeft(pivots: Seq[Key], pivot: Key) returns (i: Int)
+requires |pivots| < 4000000000000000
+requires WFPivots(pivots)
+ensures i == PivotsCutoffForLeft(pivots, pivot)
+
+field _pivotTable: Seq[Key]
+field _children: Option[Seq[Int]]
+field _buckets: Seq[Ref]
+
+predicate nodeInv(node: Ref) {
+     acc(node._pivotTable)
+  && acc(node._children)
+  && acc(node._buckets)
+  && InvSeq(node._buckets)
+}
+
+function nodeI(node: Ref) : Node
+requires nodeInv(node)
+{
+  unfolding nodeInv(node) in
+  ctorNode(node._pivotTable, node._children, ISeq(node._buckets))
+}
+
+method newNode(pivotTable: Seq[Key], children: Option[Seq[Int]], buckets: Seq[Ref]) returns (node: Ref)
+requires InvSeq(buckets)
+ensures nodeInv(node)
+ensures nodeI(node) == ctorNode(pivotTable, children, old(ISeq(buckets)))
+{
+  node := new(_pivotTable, _children, _buckets)
+  node._pivotTable := pivotTable
+  node._children := children
+  node._buckets := buckets
+  fold nodeInv(node)
+}
+
+method ImplCutoffNodeAndKeepLeft(node: Ref, pivot: Key) returns (node1: Ref)
+    requires nodeInv(node)
+    requires WFNode(nodeI(node))
+    requires |dtor_pivotTable(nodeI(node))| < 4000000000000000
+    ensures nodeInv(node1)
+    ensures nodeI(node1) == CutoffNodeAndKeepLeft(old(nodeI(node)), pivot);
+    {
+      unfold nodeInv(node)
+
+      // First method call
+      var cLeft: Int
+      cLeft := ImplPivotsCutoffForLeft(node._pivotTable, pivot)
+
+      // Some functional computation
+      var leftPivots: Seq[Key] := node._pivotTable[.. cLeft]
+      var leftChildren: Option[Seq[Int]] := (is_Some(node._children) ? Some(dtor_value(node._children)[.. cLeft + 1]) : None())
+
+
+      // Grab a BucketImpl from the sequence
+      // And split it.
+      unfold InvSeq(node._buckets)
+      var splitBucket: Ref
+      splitBucket := ImplSplitLeft(node._buckets[cLeft], pivot);
+
+      // Grab every bucket from the list *before* that buck.
+      fold InvSeq(node._buckets[.. cLeft])
+      var slice: Seq[Ref]
+      slice := CloneSeq(node._buckets[.. cLeft]);
+
+      // Put them together.
+      unfold InvSeq(slice)
+      var leftBuckets: Seq[Ref] := slice ++ Seq(splitBucket);
+
+      assert forall i:Int :: 0 <= i && i < |leftBuckets| - 1 ==> BucketInv(leftBuckets[i]);
+      assert BucketInv(leftBuckets[|leftBuckets| - 1]);
+      assert (forall i:Int :: 0 <= i && i < |leftBuckets| - 1 ==> BucketInv(leftBuckets[i]))
+          && BucketInv(leftBuckets[|leftBuckets| - 1]);
+      assert forall i:Int :: forall j:Int :: 0 <= i && i < |leftBuckets| && 0 <= j && j < |leftBuckets| && i != j ==> (
+        unfolding BucketInv(leftBuckets[i]) in
+        unfolding BucketInv(leftBuckets[j]) in
+        leftBuckets[i] != leftBuckets[j]
+      );
+      assert forall i:Int :: 0 <= i && i < |leftBuckets| ==> BucketInv(leftBuckets[i]);
+      fold InvSeq(leftBuckets)
+
+      // Create a new node.
+      node1 := newNode(leftPivots, leftChildren, leftBuckets);
+    }
+
