@@ -68,8 +68,19 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
 
     auto clock_start = chrono::steady_clock::now();
+    auto clock_last_report = clock_start;
+    auto report_interval_ms = 1000;
     for (int i = 0; i < num_ops; ++i) {
         performYcsbInsert(db, workload, verbose);
+
+        auto clock_op_completed = chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            clock_op_completed - clock_last_report).count() > report_interval_ms) {
+
+            cerr << db.name << " (completed " << i << " ops)" << endl;
+            auto report_completed = chrono::steady_clock::now();
+            clock_last_report = report_completed;
+        }
     }
 
     cerr << db.name << " [step] sync" << endl;
