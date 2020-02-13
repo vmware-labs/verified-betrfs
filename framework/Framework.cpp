@@ -11,8 +11,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-#define USE_DIRECT (1)
-//#define USE_DIRECT (0)
+//#define USE_DIRECT (1)
+#define USE_DIRECT (0)
 
 #ifndef O_NOATIME
 #define O_NOATIME (0)

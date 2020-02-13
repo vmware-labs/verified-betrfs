@@ -376,8 +376,11 @@ int main(int argc, char* argv[]) {
         rocksdb::Options options;
         options.create_if_missing = true;
         options.error_if_exists = true;
-        // FIXME options.use_direct_reads = true;
-        // FIXME options.use_direct_io_for_flush_and_compaction = true;
+
+        // disabled - we let rocks use the page cache
+        // options.use_direct_reads = true;
+        // options.use_direct_io_for_flush_and_compaction = true;
+
         rocksdb::Status status = rocksdb::DB::Open(options, rocksdb_path, &rocks_db);
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
