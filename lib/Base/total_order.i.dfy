@@ -441,6 +441,14 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
   
+  lemma SortedAugment(run: seq<Element>, key: Element)
+  requires IsSorted(run)
+  requires |run| > 0 ==> lte(Seq.Last(run), key)
+  ensures IsSorted(run + [key])
+  {
+    reveal_IsSorted();
+  }
+
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
   requires IsStrictlySorted(run)
   requires |run| > 0 ==> lt(Seq.Last(run), key)

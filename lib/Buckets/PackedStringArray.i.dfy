@@ -9,6 +9,7 @@ module PackedStringArray {
   import opened NativePackedInts
   import opened NativeArrays
   import Uint32_Order
+  import Sequences
   
   datatype Psa = Psa(offsets: seq<uint32>, data: seq<byte>)
 
@@ -20,6 +21,12 @@ module PackedStringArray {
     && Uint32_Order.IsSorted(psa.offsets)
   }
 
+  function method psaNumStrings(psa: Psa) : uint64
+    requires |psa.offsets| < Uint64UpperBound()
+  {
+    |psa.offsets| as uint64
+  }
+  
   function method psaStart(psa: Psa, i: uint64) : (start : uint32)
   requires WF(psa)
   requires 0 <= i as int < |psa.offsets|
@@ -30,6 +37,18 @@ module PackedStringArray {
       psa.offsets[i-1]
   }
 
+  lemma psaStartsLte(psa: Psa, i: uint64, j: uint64)
+  requires WF(psa)
+  requires 0 <= i as int <= j as int < |psa.offsets|
+  ensures psaStart(psa, i) <= psaStart(psa, j)
+  {
+    if i == 0 {
+    } else {
+      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, j as int - 1);
+    }
+  }
+    
+  
   function method psaEnd(psa: Psa, i: uint64) : (end : uint32)
   requires WF(psa)
   requires 0 <= i as int < |psa.offsets|
@@ -65,6 +84,14 @@ module PackedStringArray {
     psaSeq(psa, |psa.offsets|)
   }
 
+  function method EmptyPsa() : (result: Psa)
+    ensures WF(result)
+    ensures I(result) == []
+  {
+    assert Uint32_Order.IsSorted([]) by { Uint32_Order.reveal_IsSorted(); }
+    Psa([], [])
+  }
+  
   function SizeOfPsa(psa: Psa) : int {
     4 + 4 * |psa.offsets| + |psa.data|
   }
@@ -102,15 +129,27 @@ module PackedStringArray {
   requires |s| < 0x1_0000_0000_0000_0000
   ensures b == Uint32_Order.IsSorted(s)
   {
-    assume false;
     var i: uint64 := 1;
+    if |s| < 2 {
+      assert Uint32_Order.IsSorted(s) by { Uint32_Order.reveal_IsSorted(); }
+      return true;
+    }
+    if 0 < |s| {
+      assert Uint32_Order.IsSorted(s[..1]) by { Uint32_Order.reveal_IsSorted(); }
+    }
     while i < |s| as uint64
+      invariant i as int <= |s|
+      invariant Uint32_Order.IsSorted(s[..i])
     {
       if s[i-1] > s[i] {
+        assert !Uint32_Order.IsSorted(s) by { Uint32_Order.reveal_IsSorted(); }
         return false;
       }
+      Uint32_Order.SortedAugment(s[..i], s[i]);
+      assert s[..i+1] == s[..i] + [s[i]];
       i := i + 1;
     }
+    assert s == s[..i];
     return true;
   }
 
@@ -261,4 +300,74 @@ module PackedStringArray {
   {
     psaElement(psa, |psa.offsets| as uint64 - 1)
   }
+
+
+  function psaPrefix(psa: Psa, len: uint64) : (result: Psa)
+    requires WF(psa)
+    requires len <= psaNumStrings(psa)
+    ensures WF(result)
+    ensures psaNumStrings(result) == len
+  {
+    if len == 0 then
+      assert Uint32_Order.IsSorted([]) by { Uint32_Order.reveal_IsSorted(); }
+      EmptyPsa()
+    else
+      Uint32_Order.IsSortedImpliesLte(psa.offsets, len as int - 1, |psa.offsets|-1);
+      Uint32_Order.SortedSubsequence(psa.offsets, 0, len as int);
+      Psa(psa.offsets[0..len], psa.data[..psa.offsets[len-1]])
+  }
+    
+  lemma psaPrefixpsaSeq(psa: Psa, len: uint64)
+    requires WF(psa)
+    requires len <= psaNumStrings(psa)
+    ensures I(psaPrefix(psa, len)) == psaSeq(psa, len as int)
+  {
+    if len == 0 {
+    } else {
+      var ipsap := I(psaPrefix(psa, len));
+      var psas := psaSeq(psa, len as int);
+      assert |ipsap| == |psas| == len as int;
+      forall i | 0 <= i < len
+        ensures ipsap[i] == psas[i]
+      {
+      }
+    }
+  }
+
+  function psaDropLast(psa: Psa) : (result: Psa)
+    requires WF(psa)
+    requires 0 < psaNumStrings(psa)
+    ensures WF(result)
+    ensures I(result) == Sequences.DropLast(I(psa))
+  {
+    psaPrefixpsaSeq(psa, psaNumStrings(psa)-1);
+    psaPrefix(psa, psaNumStrings(psa)-1)
+  }
+
+  function psaAppend(psa: Psa, key: seq<byte>) : (result: Psa)
+    requires WF(psa)
+    requires |psa.offsets| < 0x1_000_0000 - 1
+    requires |psa.data| + |key| < 0x1_0000_0000
+    ensures WF(result)
+  {
+    var newdata := psa.data + key;
+    Uint32_Order.SortedAugment(psa.offsets, |newdata| as uint32);
+    Psa(psa.offsets + [|newdata| as uint32], newdata)
+  }
+
+  lemma psaAppendIAppend(psa: Psa, key: seq<byte>)
+    requires WF(psa)
+    requires |psa.offsets| < 0x1_000_0000 - 1
+    requires |psa.data| + |key| < 0x1_0000_0000
+    ensures I(psaAppend(psa, key)) == I(psa) + [key]
+  {
+    var ipsaa := I(psaAppend(psa, key));
+    var aipsa := I(psa) + [key];
+    assert |ipsaa| == |aipsa|;
+    forall i | 0 <= i < |ipsaa|
+      ensures ipsaa[i] == aipsa[i]
+    {
+    }
+  }
+  
 }

@@ -2,6 +2,7 @@ include "../Base/Message.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/NativeArrays.s.dfy"
+include "PackedStringArray.i.dfy"
 include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"
 //
@@ -27,33 +28,34 @@ module KVList {
   import P = PivotsLib
   import SeqComparison
   import opened KeyType
-
-  datatype Kvl = Kvl(keys: seq<Key>, messages: seq<Message>)
+  import PSA = PackedStringArray
+  
+  datatype Kvl = Kvl(keys: PSA.Psa, messages: seq<Message>)
 
   predicate WF(kvl: Kvl) {
-    && |kvl.keys| == |kvl.messages|
-    && IsStrictlySorted(kvl.keys)
+    && PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
+    && IsStrictlySorted(PSA.I(kvl.keys))
     && (forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage())
   }
 
   function {:opaque} IMap(kvl: Kvl) : BucketMap
-  requires |kvl.keys| == |kvl.messages|
-  ensures |kvl.keys| == 0 ==> |IMap(kvl).Keys| == 0    // empty input -> empty output.
-  decreases |kvl.keys|
+  requires PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
+  ensures PSA.psaNumStrings(kvl.keys) as int == 0 ==> |IMap(kvl).Keys| == 0    // empty input -> empty output.
+  decreases PSA.psaNumStrings(kvl.keys)
   {
-    if |kvl.keys| == 0 then map[] else (
-      IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))[Last(kvl.keys) := Last(kvl.messages)]
+    if PSA.psaNumStrings(kvl.keys) == 0 then map[] else (
+      IMap(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)))[PSA.LastElement(kvl.keys) := Last(kvl.messages)]
     )
   }
 
   function I(kvl: Kvl) : Bucket
-  requires |kvl.keys| == |kvl.messages|
+  requires PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
   {
     B(IMap(kvl))
   }
 
   function {:opaque} ISeq(kvls: seq<Kvl>) : (s : seq<Bucket>)
-  requires forall i | 0 <= i < |kvls| :: |kvls[i].keys| == |kvls[i].messages|
+  requires forall i | 0 <= i < |kvls| :: PSA.psaNumStrings(kvls[i].keys) as int == |kvls[i].messages|
   ensures |s| == |kvls|
   ensures forall i | 0 <= i < |kvls| :: s[i] == I(kvls[i])
   {
@@ -61,61 +63,61 @@ module KVList {
   }
 
   function prefix(kvl: Kvl, i: int) : Kvl
-  requires 0 <= i <= |kvl.keys|
+  requires 0 <= i <= PSA.psaNumStrings(kvl.keys) as int
   requires 0 <= i <= |kvl.messages|
   {
-    Kvl(kvl.keys[..i], kvl.messages[..i]) 
+    Kvl(PSA.psaPrefix(kvl.keys, i as uint64), kvl.messages[..i]) 
   }
 
   lemma WFPrefix(kvl: Kvl, i: int)
   requires WF(kvl)
-  requires 0 <= i <= |kvl.keys|
+  requires 0 <= i <= PSA.psaNumStrings(kvl.keys) as int
   ensures WF(prefix(kvl, i))
   {
     reveal_IsStrictlySorted();
   }
 
   lemma IndexOfKey(kvl: Kvl, key: Key) returns (i : int)
-  requires |kvl.keys| == |kvl.messages|
+  requires PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
   requires key in IMap(kvl)
-  ensures 0 <= i < |kvl.keys|
-  ensures kvl.keys[i] == key
-  decreases |kvl.keys|
+  ensures 0 <= i < PSA.psaNumStrings(kvl.keys) as int
+  ensures PSA.psaElement(kvl.keys, i as uint64) == key
+  decreases PSA.psaNumStrings(kvl.keys) as int
   {
     reveal_IMap();
-    if key == Last(kvl.keys) {
-      i := |kvl.keys| - 1;
+    if key == PSA.LastElement(kvl.keys) {
+      i := PSA.psaNumStrings(kvl.keys) as int - 1;
     } else {
-      i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), key);
+      i := IndexOfKey(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), key);
     }
   }
 
   lemma Imaps(kvl: Kvl, i: int)
   requires WF(kvl)
-  requires 0 <= i < |kvl.keys|
-  ensures MapsTo(IMap(kvl), kvl.keys[i], kvl.messages[i])
-  decreases |kvl.keys|
+  requires 0 <= i < PSA.psaNumStrings(kvl.keys) as int
+  ensures MapsTo(IMap(kvl), PSA.psaElement(kvl.keys, i as uint64), kvl.messages[i])
+  decreases PSA.psaNumStrings(kvl.keys) as int
   {
     reveal_IMap();
-    if (i == |kvl.keys| - 1) {
+    if (i == PSA.psaNumStrings(kvl.keys) as int - 1) {
     } else {
       reveal_IsStrictlySorted();
-      Imaps(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), i);
-      assert kvl.keys[|kvl.keys| - 1] != kvl.keys[i];
+      Imaps(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), i);
+      assert PSA.LastElement(kvl.keys) != PSA.psaElement(kvl.keys, i as uint64);
     }
   }
 
   lemma WFImpliesWFBucket(kvl: Kvl)
   requires WF(kvl)
   ensures WFBucket(I(kvl))
-  decreases |kvl.keys|
+  decreases PSA.psaNumStrings(kvl.keys) as int
   {
     reveal_IMap();
     reveal_WFBucket();
-    if |kvl.keys| == 0 {
+    if PSA.psaNumStrings(kvl.keys) as int == 0 {
     } else {
-      ghost var km' := Kvl(DropLast(kvl.keys), DropLast(kvl.messages));
-      WFPrefix(kvl, |kvl.keys| - 1);
+      ghost var km' := Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages));
+      WFPrefix(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
       assert WF(km');
       WFImpliesWFBucket(km');
     }
@@ -127,23 +129,23 @@ module KVList {
 
   function append(kvl: Kvl, key: Key, value: Message) : Kvl
   {
-    Kvl(kvl.keys + [key], kvl.messages + [value])
+    Kvl(PSA.psaAppend(kvl.keys, key), kvl.messages + [value])
   }
 
   lemma Iappend(kvl: Kvl, key: Key, value: Message)
-  requires |kvl.keys| == |kvl.messages|
+  requires PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
   ensures IMap(append(kvl, key, value)) == IMap(kvl)[key := value]
   {
     reveal_IMap();
   }
 
   lemma Iprefix_append(kvl: Kvl, i: int)
-  requires |kvl.keys| == |kvl.messages|
-  requires 0 <= i < |kvl.keys|
-  ensures IMap(prefix(kvl, i + 1)) == IMap(prefix(kvl, i))[kvl.keys[i] := kvl.messages[i]]
+  requires PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
+  requires 0 <= i < PSA.psaNumStrings(kvl.keys) as int
+  ensures IMap(prefix(kvl, i + 1)) == IMap(prefix(kvl, i))[PSA.psaElement(kvl.keys, i as uint64) := kvl.messages[i]]
   {
-    assert prefix(kvl, i + 1) == append(prefix(kvl, i), kvl.keys[i], kvl.messages[i]);
-    Iappend(prefix(kvl, i), kvl.keys[i], kvl.messages[i]);
+    assert prefix(kvl, i + 1) == append(prefix(kvl, i), PSA.psaElement(kvl.keys, i as uint64), kvl.messages[i]);
+    Iappend(prefix(kvl, i), PSA.psaElement(kvl.keys, i as uint64), kvl.messages[i]);
   }
 
   function flushIterate(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
@@ -151,49 +153,49 @@ module KVList {
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires |pivots| + 1 == |children|
-  requires 0 <= parentIdx <= |parent.keys|
+  requires 0 <= parentIdx <= PSA.psaNumStrings(parent.keys) as int
   requires 0 <= childrenIdx <= |children|
-  requires childrenIdx < |children| ==> 0 <= childIdx <= |children[childrenIdx].keys|
+  requires childrenIdx < |children| ==> 0 <= childIdx <= PSA.psaNumStrings(children[childrenIdx].keys) as int
   decreases |children| - childrenIdx
-  decreases |parent.keys| - parentIdx +
-      (if childrenIdx < |children| then |children[childrenIdx].keys| - childIdx else 0)
+  decreases PSA.psaNumStrings(parent.keys) as int - parentIdx +
+      (if childrenIdx < |children| then PSA.psaNumStrings(children[childrenIdx].keys) as int - childIdx else 0)
   {
     if childrenIdx == |children| then (
       acc
     ) else (
       var child := children[childrenIdx];
 
-      if parentIdx == |parent.keys| then (
-        if childIdx == |child.keys| then (
-          flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl([], []))
+      if parentIdx == PSA.psaNumStrings(parent.keys) as int then (
+        if childIdx == PSA.psaNumStrings(child.keys) as int then (
+          flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl(PSA.EmptyPsa(), []))
         //) else if |cur.keys| == 0 then (
-        //  flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], Kvl([], []))
+        //  flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], Kvl(PSA.EmptyPsa(), []))
         ) else (
-          flushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]))
+          flushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]))
         )
       ) else (
-        if childIdx == |child.keys| then (
+        if childIdx == PSA.psaNumStrings(child.keys) as int then (
           if childrenIdx == |children| - 1 then (
-            flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
+            flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
           ) else (
-            if lt(parent.keys[parentIdx], pivots[childrenIdx]) then (
-              flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
+            if lt(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx]) then (
+              flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
             ) else (
-              flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl([], []))
+              flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl(PSA.EmptyPsa(), []))
             )
           )
         ) else (
-          if child.keys[childIdx] == parent.keys[parentIdx] then (
+          if PSA.psaElement(child.keys, childIdx as uint64) == PSA.psaElement(parent.keys, parentIdx as uint64) then (
             var m := Merge(parent.messages[parentIdx], child.messages[childIdx]);
             if m == IdentityMessage() then (
               flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, cur)
             ) else (
-              flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m))
+              flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), m))
             )
-          ) else if lt(child.keys[childIdx], parent.keys[parentIdx]) then (
-            flushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]))
+          ) else if lt(PSA.psaElement(child.keys, childIdx as uint64), PSA.psaElement(parent.keys, parentIdx as uint64)) then (
+            flushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]))
           ) else (
-            flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
+            flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
           )
         )
       )
@@ -205,7 +207,7 @@ module KVList {
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires |pivots| + 1 == |children|
   {
-    flushIterate(parent, children, pivots, 0, 0, 0, [], Kvl([], []))
+    flushIterate(parent, children, pivots, 0, 0, 0, [], Kvl(PSA.EmptyPsa(), []))
   }
 
   predicate flushIterateInv(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
@@ -215,49 +217,49 @@ module KVList {
     && (forall i | 0 <= i < |children| :: WF(children[i]))
     && WFBucketListProper(ISeq(children), pivots)
     && |pivots| + 1 == |children|
-    && 0 <= parentIdx <= |parent.keys|
+    && 0 <= parentIdx <= PSA.psaNumStrings(parent.keys) as int
     && 0 <= childrenIdx <= |children|
-    && (childrenIdx < |children| ==> 0 <= childIdx <= |children[childrenIdx].keys|)
+    && (childrenIdx < |children| ==> 0 <= childIdx <= PSA.psaNumStrings(children[childrenIdx].keys) as int)
     && |acc| == childrenIdx
     && (forall i | 0 <= i < childrenIdx :: WF(acc[i]))
     && ISeq(acc) == BucketListFlushPartial(I(parent), ISeq(children), pivots, childrenIdx)
     && WF(cur)
     && (childrenIdx < |children| ==> I(cur) == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx))
-    && (childrenIdx < |children| && childIdx > 0 && parentIdx < |parent.keys| ==> lt(children[childrenIdx].keys[childIdx - 1], parent.keys[parentIdx]))
-    && (childrenIdx > 0 && childrenIdx - 1 < |pivots| && parentIdx < |parent.keys| ==> lte(pivots[childrenIdx - 1], parent.keys[parentIdx]))
-    && (parentIdx > 0 && childrenIdx < |children| && childIdx < |children[childrenIdx].keys| ==> lt(parent.keys[parentIdx - 1], children[childrenIdx].keys[childIdx]))
-    && (parentIdx > 0 && childrenIdx < |pivots| ==> lt(parent.keys[parentIdx - 1], pivots[childrenIdx]))
+    && (childrenIdx < |children| && childIdx > 0 && parentIdx < PSA.psaNumStrings(parent.keys) as int ==> lt(PSA.psaElement(children[childrenIdx].keys, childIdx as uint64 - 1), PSA.psaElement(parent.keys, parentIdx as uint64)))
+    && (childrenIdx > 0 && childrenIdx - 1 < |pivots| && parentIdx < PSA.psaNumStrings(parent.keys) as int ==> lte(pivots[childrenIdx - 1], PSA.psaElement(parent.keys, parentIdx as uint64)))
+    && (parentIdx > 0 && childrenIdx < |children| && childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64 - 1), PSA.psaElement(children[childrenIdx].keys, childIdx as uint64)))
+    && (parentIdx > 0 && childrenIdx < |pivots| ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64 - 1), pivots[childrenIdx]))
   }
 
   lemma flushIterateCurLastLt(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx < |children|
-  ensures |cur.keys| > 0 && parentIdx < |parent.keys| ==> lt(cur.keys[|cur.keys| - 1], parent.keys[parentIdx])
-  ensures |cur.keys| > 0 && childIdx < |children[childrenIdx].keys| ==> lt(cur.keys[|cur.keys| - 1], children[childrenIdx].keys[childIdx])
+  ensures PSA.psaNumStrings(cur.keys) as int > 0 && parentIdx < PSA.psaNumStrings(parent.keys) as int ==> lt(PSA.LastElement(cur.keys), PSA.psaElement(parent.keys, parentIdx as uint64))
+  ensures PSA.psaNumStrings(cur.keys) as int > 0 && childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int ==> lt(PSA.LastElement(cur.keys), PSA.psaElement(children[childrenIdx].keys, childIdx as uint64))
   {
     reveal_IMap();
-    if (|cur.keys| > 0) {
-      var lastCurKey := cur.keys[|cur.keys| - 1];
+    if (PSA.psaNumStrings(cur.keys) as int > 0) {
+      var lastCurKey := PSA.LastElement(cur.keys);
       assert lastCurKey in IMap(cur);
       assert lastCurKey in (IMap(prefix(parent, parentIdx)).Keys + IMap(prefix(children[childrenIdx], childIdx)).Keys);
       if lastCurKey in IMap(prefix(parent, parentIdx)).Keys {
         var i := IndexOfKey(prefix(parent, parentIdx), lastCurKey);
-        assert parent.keys[i] == lastCurKey;
-        if parentIdx < |parent.keys| {
-          IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
+        assert PSA.psaElement(parent.keys, i as uint64) == lastCurKey;
+        if parentIdx < PSA.psaNumStrings(parent.keys) as int {
+          IsStrictlySortedImpliesLt(PSA.I(parent.keys), i, parentIdx);
         }
-        if childIdx < |children[childrenIdx].keys| {
-          IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+        if childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int {
+          IsStrictlySortedImpliesLte(PSA.I(parent.keys), i, parentIdx - 1);
         }
       } else {
         var i := IndexOfKey(prefix(children[childrenIdx], childIdx), lastCurKey);
-        assert children[childrenIdx].keys[i] == lastCurKey;
-        if parentIdx < |parent.keys| {
-          IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
+        assert PSA.psaElement(children[childrenIdx].keys, i as uint64) == lastCurKey;
+        if parentIdx < PSA.psaNumStrings(parent.keys) as int {
+          IsStrictlySortedImpliesLte(PSA.I(children[childrenIdx].keys), i, childIdx - 1);
         }
-        if childIdx < |children[childrenIdx].keys| {
-          IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
+        if childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int {
+          IsStrictlySortedImpliesLt(PSA.I(children[childrenIdx].keys), i, childIdx);
         }
       }
     }
@@ -267,26 +269,26 @@ module KVList {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx < |children|
-  ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in IMap(prefix(parent, parentIdx))
-  ensures parentIdx < |parent.keys| ==> parent.keys[parentIdx] !in IMap(prefix(children[childrenIdx], childIdx))
-  ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in IMap(prefix(parent, parentIdx))
-  ensures childIdx < |children[childrenIdx].keys| ==> children[childrenIdx].keys[childIdx] !in IMap(prefix(children[childrenIdx], childIdx))
+  ensures parentIdx < PSA.psaNumStrings(parent.keys) as int ==> PSA.psaElement(parent.keys, parentIdx as uint64) !in IMap(prefix(parent, parentIdx))
+  ensures parentIdx < PSA.psaNumStrings(parent.keys) as int ==> PSA.psaElement(parent.keys, parentIdx as uint64) !in IMap(prefix(children[childrenIdx], childIdx))
+  ensures childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int ==> PSA.psaElement(children[childrenIdx].keys, childIdx as uint64) !in IMap(prefix(parent, parentIdx))
+  ensures childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int ==> PSA.psaElement(children[childrenIdx].keys, childIdx as uint64) !in IMap(prefix(children[childrenIdx], childIdx))
   {
-    if parentIdx < |parent.keys| && parent.keys[parentIdx] in IMap(prefix(parent, parentIdx)) {
-      var i := IndexOfKey(prefix(parent, parentIdx), parent.keys[parentIdx]);
-      IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
+    if parentIdx < PSA.psaNumStrings(parent.keys) as int && PSA.psaElement(parent.keys, parentIdx as uint64) in IMap(prefix(parent, parentIdx)) {
+      var i := IndexOfKey(prefix(parent, parentIdx), PSA.psaElement(parent.keys, parentIdx as uint64));
+      IsStrictlySortedImpliesLt(PSA.I(parent.keys), i, parentIdx);
     }
-    if parentIdx < |parent.keys| && parent.keys[parentIdx] in IMap(prefix(children[childrenIdx], childIdx)) {
-      var i := IndexOfKey(prefix(children[childrenIdx], childIdx), parent.keys[parentIdx]);
-      IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
+    if parentIdx < PSA.psaNumStrings(parent.keys) as int && PSA.psaElement(parent.keys, parentIdx as uint64) in IMap(prefix(children[childrenIdx], childIdx)) {
+      var i := IndexOfKey(prefix(children[childrenIdx], childIdx), PSA.psaElement(parent.keys, parentIdx as uint64));
+      IsStrictlySortedImpliesLte(PSA.I(children[childrenIdx].keys), i, childIdx - 1);
     }
-    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in IMap(prefix(parent, parentIdx)) {
-      var i := IndexOfKey(prefix(parent, parentIdx), children[childrenIdx].keys[childIdx]);
-      IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+    if childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int && PSA.psaElement(children[childrenIdx].keys, childIdx as uint64) in IMap(prefix(parent, parentIdx)) {
+      var i := IndexOfKey(prefix(parent, parentIdx), PSA.psaElement(children[childrenIdx].keys, childIdx as uint64));
+      IsStrictlySortedImpliesLte(PSA.I(parent.keys), i, parentIdx - 1);
     }
-    if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in IMap(prefix(children[childrenIdx], childIdx)) {
-      var i := IndexOfKey(prefix(children[childrenIdx], childIdx), children[childrenIdx].keys[childIdx]);
-      IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
+    if childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int && PSA.psaElement(children[childrenIdx].keys, childIdx as uint64) in IMap(prefix(children[childrenIdx], childIdx)) {
+      var i := IndexOfKey(prefix(children[childrenIdx], childIdx), PSA.psaElement(children[childrenIdx].keys, childIdx as uint64));
+      IsStrictlySortedImpliesLt(PSA.I(children[childrenIdx].keys), i, childIdx);
     }
   }
 
@@ -294,26 +296,26 @@ module KVList {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires 0 <= childrenIdx < |children|
-  requires 0 <= parentIdx < |parent.keys|
-  requires childrenIdx < |pivots| ==> lt(parent.keys[parentIdx], pivots[childrenIdx])
-  ensures WF(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
-  ensures I(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
+  requires 0 <= parentIdx < PSA.psaNumStrings(parent.keys) as int
+  requires childrenIdx < |pivots| ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx])
+  ensures WF(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
+  ensures I(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
   {
     flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
     flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, parent.keys[parentIdx]);
-    BucketListItemFlushAddParentKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, parent.keys[parentIdx], parent.messages[parentIdx]);
+    StrictlySortedAugment(PSA.I(cur.keys), PSA.psaElement(parent.keys, parentIdx as uint64));
+    BucketListItemFlushAddParentKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]);
 
-    P.RouteIs(pivots, parent.keys[parentIdx], childrenIdx);
+    P.RouteIs(pivots, PSA.psaElement(parent.keys, parentIdx as uint64), childrenIdx);
 
-    Iappend(cur, parent.keys[parentIdx], parent.messages[parentIdx]);
+    Iappend(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]);
     Iprefix_append(parent, parentIdx);
 
-    /*assert I(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
-        == I(cur)[parent.keys[parentIdx] := parent.messages[parentIdx]]
-        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[parent.keys[parentIdx] := parent.messages[parentIdx]]
-        == BucketListItemFlush(I(prefix(parent, parentIdx))[parent.keys[parentIdx] := parent.messages[parentIdx]], I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
+    /*assert I(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
+        == I(cur)[PSA.psaElement(parent.keys, parentIdx as uint64) := parent.messages[parentIdx]]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[PSA.psaElement(parent.keys, parentIdx as uint64) := parent.messages[parentIdx]]
+        == BucketListItemFlush(I(prefix(parent, parentIdx))[PSA.psaElement(parent.keys, parentIdx as uint64) := parent.messages[parentIdx]], I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
         == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx);*/
   }
 
@@ -321,29 +323,29 @@ module KVList {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires 0 <= childrenIdx < |children|
-  requires 0 <= childIdx < |children[childrenIdx].keys|
-  ensures WF(append(cur, children[childrenIdx].keys[childIdx], children[childrenIdx].messages[childIdx]))
-  ensures I(append(cur, children[childrenIdx].keys[childIdx], children[childrenIdx].messages[childIdx]))
+  requires 0 <= childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int
+  ensures WF(append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]))
+  ensures I(append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
   {
     var child := children[childrenIdx];
     flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
     flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
-    BucketListItemFlushAddChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], child.messages[childIdx]);
+    StrictlySortedAugment(PSA.I(cur.keys), PSA.psaElement(child.keys, childIdx as uint64));
+    BucketListItemFlushAddChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]);
 
     assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
     Imaps(child, childIdx);
-    assert child.keys[childIdx] in IMap(children[childrenIdx]);
-    assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+    assert PSA.psaElement(child.keys, childIdx as uint64) in IMap(children[childrenIdx]);
+    assert P.Route(pivots, PSA.psaElement(child.keys, childIdx as uint64)) == childrenIdx;
 
-    Iappend(cur, child.keys[childIdx], child.messages[childIdx]);
+    Iappend(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]);
     Iprefix_append(child, childIdx);
 
-    /*assert I(append(cur, child.keys[childIdx], child.messages[childIdx]))
-        == I(cur)[child.keys[childIdx] := child.messages[childIdx]]
-        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[child.keys[childIdx] := child.messages[childIdx]]
-        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx))[child.keys[childIdx] := child.messages[childIdx]], pivots, childrenIdx)
+    /*assert I(append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]))
+        == I(cur)[PSA.psaElement(child.keys, childIdx as uint64) := child.messages[childIdx]]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[PSA.psaElement(child.keys, childIdx as uint64) := child.messages[childIdx]]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx))[PSA.psaElement(child.keys, childIdx as uint64) := child.messages[childIdx]], pivots, childrenIdx)
         == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);*/
   }
 
@@ -352,34 +354,34 @@ module KVList {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires 0 <= childrenIdx < |children|
-  requires 0 <= parentIdx < |parent.keys|
-  requires 0 <= childIdx < |children[childrenIdx].keys|
-  requires children[childrenIdx].keys[childIdx] == parent.keys[parentIdx]
+  requires 0 <= parentIdx < PSA.psaNumStrings(parent.keys) as int
+  requires 0 <= childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int
+  requires PSA.psaElement(children[childrenIdx].keys, childIdx as uint64) == PSA.psaElement(parent.keys, parentIdx as uint64)
   requires Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]) != IdentityMessage()
 
-  ensures WF(append(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
-  ensures I(append(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
+  ensures WF(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
+  ensures I(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
   {
     var child := children[childrenIdx];
     flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
     flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
-    BucketListItemFlushAddParentAndChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], parent.messages[parentIdx], child.messages[childIdx]);
+    StrictlySortedAugment(PSA.I(cur.keys), PSA.psaElement(child.keys, childIdx as uint64));
+    BucketListItemFlushAddParentAndChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, PSA.psaElement(child.keys, childIdx as uint64), parent.messages[parentIdx], child.messages[childIdx]);
 
     assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
     Imaps(child, childIdx);
-    assert child.keys[childIdx] in IMap(children[childrenIdx]);
-    assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+    assert PSA.psaElement(child.keys, childIdx as uint64) in IMap(children[childrenIdx]);
+    assert P.Route(pivots, PSA.psaElement(child.keys, childIdx as uint64)) == childrenIdx;
 
-    Iappend(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]));
+    Iappend(cur, PSA.psaElement(parent.keys, parentIdx as uint64), Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]));
     Iprefix_append(parent, parentIdx);
     Iprefix_append(child, childIdx);
 
-    /*assert I(append(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
-        == I(cur)[parent.keys[parentIdx] := Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])]
-        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[parent.keys[parentIdx] := Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])]
-        == BucketListItemFlush(I(prefix(parent, parentIdx))[parent.keys[parentIdx] := parent.messages[parentIdx]], I(prefix(children[childrenIdx], childIdx))[child.keys[childIdx] := child.messages[childIdx]], pivots, childrenIdx)
+    /*assert I(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
+        == I(cur)[PSA.psaElement(parent.keys, parentIdx as uint64) := Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])]
+        == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)[PSA.psaElement(parent.keys, parentIdx as uint64) := Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])]
+        == BucketListItemFlush(I(prefix(parent, parentIdx))[PSA.psaElement(parent.keys, parentIdx as uint64) := parent.messages[parentIdx]], I(prefix(children[childrenIdx], childIdx))[PSA.psaElement(child.keys, childIdx as uint64) := child.messages[childIdx]], pivots, childrenIdx)
         == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx);*/
   }
 
@@ -387,8 +389,8 @@ module KVList {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx < |children|
-  requires childIdx == |children[childrenIdx].keys|
-  requires parentIdx < |parent.keys| ==> childrenIdx < |pivots| && lte(pivots[childrenIdx], parent.keys[parentIdx])
+  requires childIdx == PSA.psaNumStrings(children[childrenIdx].keys) as int
+  requires parentIdx < PSA.psaNumStrings(parent.keys) as int ==> childrenIdx < |pivots| && lte(pivots[childrenIdx], PSA.psaElement(parent.keys, parentIdx as uint64))
   ensures I(cur) == BucketListItemFlush(I(parent), I(children[childrenIdx]), pivots, childrenIdx)
   {
     forall key | P.Route(pivots, key) == childrenIdx
@@ -405,9 +407,9 @@ module KVList {
           Imaps(parent, i);
           Imaps(prefix(parent, parentIdx), i);
         } else {
-          assert lt(parent.keys[i], pivots[childrenIdx]);
-          assert lte(pivots[childrenIdx], parent.keys[parentIdx]);
-          IsStrictlySortedImpliesLte(parent.keys, parentIdx, i);
+          assert lt(PSA.psaElement(parent.keys, i as uint64), pivots[childrenIdx]);
+          assert lte(pivots[childrenIdx], PSA.psaElement(parent.keys, parentIdx as uint64));
+          IsStrictlySortedImpliesLte(PSA.I(parent.keys), parentIdx, i);
           assert false;
         }
       }
@@ -419,20 +421,20 @@ module KVList {
   lemma flushIteratepivotLteChildKey0(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
-  ensures childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 ==> lte(pivots[childrenIdx], children[childrenIdx + 1].keys[0])
+  ensures childrenIdx < |pivots| && PSA.psaNumStrings(children[childrenIdx + 1].keys) as int > 0 ==> lte(pivots[childrenIdx], PSA.FirstElement(children[childrenIdx + 1].keys))
   {
-    if childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 {
+    if childrenIdx < |pivots| && PSA.psaNumStrings(children[childrenIdx + 1].keys) as int > 0 {
       Imaps(children[childrenIdx + 1], 0);
-      assert P.Route(pivots, children[childrenIdx + 1].keys[0]) == childrenIdx + 1;
+      assert P.Route(pivots, PSA.FirstElement(children[childrenIdx + 1].keys)) == childrenIdx + 1;
     }
   }
 
   lemma flushIterateIEmptyEqBucketListItemFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
-  requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(parent.keys[parentIdx - 1], pivots[childrenIdx])
+  requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64 - 1), pivots[childrenIdx])
   ensures childrenIdx + 1 < |children| ==>
-         I(Kvl([],[])).b
+         I(Kvl(PSA.EmptyPsa(),[])).b
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1).b
   {
     reveal_IMap();
@@ -440,7 +442,7 @@ module KVList {
     ensures P.Route(pivots, key) != childrenIdx + 1
     {
       var i := IndexOfKey(prefix(parent, parentIdx), key);
-      IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+      IsStrictlySortedImpliesLte(PSA.I(parent.keys), i, parentIdx - 1);
     }
   }
 
@@ -451,70 +453,70 @@ module KVList {
       && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   decreases |children| - childrenIdx
-  decreases |parent.keys| - parentIdx +
-      (if childrenIdx < |children| then |children[childrenIdx].keys| - childIdx else 0)
+  decreases PSA.psaNumStrings(parent.keys) as int - parentIdx +
+      (if childrenIdx < |children| then PSA.psaNumStrings(children[childrenIdx].keys) as int - childIdx else 0)
   {
     if childrenIdx == |children| {
     } else {
       var child := children[childrenIdx];
 
-      if parentIdx + 1 < |parent.keys| {
-        IsStrictlySortedImpliesLt(parent.keys, parentIdx, parentIdx + 1);
+      if parentIdx + 1 < PSA.psaNumStrings(parent.keys) as int {
+        IsStrictlySortedImpliesLt(PSA.I(parent.keys), parentIdx, parentIdx + 1);
       }
       if childrenIdx + 1 < |pivots| {
         IsStrictlySortedImpliesLt(pivots, childrenIdx, childrenIdx + 1);
       }
-      if childIdx + 1 < |child.keys| {
-        IsStrictlySortedImpliesLt(child.keys, childIdx, childIdx + 1);
+      if childIdx + 1 < PSA.psaNumStrings(child.keys) as int {
+        IsStrictlySortedImpliesLt(PSA.I(child.keys), childIdx, childIdx + 1);
       }
-      if childIdx < |child.keys| {
+      if childIdx < PSA.psaNumStrings(child.keys) as int {
         Imaps(child, childIdx);
-        assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+        assert P.Route(pivots, PSA.psaElement(child.keys, childIdx as uint64)) == childrenIdx;
       }
 
-      if parentIdx == |parent.keys| {
-        if childIdx == |child.keys| {
+      if parentIdx == PSA.psaNumStrings(parent.keys) as int {
+        if childIdx == PSA.psaNumStrings(child.keys) as int {
           flushIterateCurEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
           flushIterateIEmptyEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
           flushIteratepivotLteChildKey0(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-          flushIterateRes(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl([], []));
+          flushIterateRes(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl(PSA.EmptyPsa(), []));
         //} else if |cur| == 0 {
-        //  flushIterateRes(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], Kvl([], []));
+        //  flushIterateRes(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [child], Kvl(PSA.EmptyPsa(), []));
         } else {
           flushIterateAppendChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-          flushIterateRes(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]));
+          flushIterateRes(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]));
         }
       } else {
-        if childIdx == |child.keys| {
+        if childIdx == PSA.psaNumStrings(child.keys) as int {
           if childrenIdx == |children| - 1 {
             flushIterateAppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-            flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]));
+            flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]));
           } else {
-            if lt(parent.keys[parentIdx], pivots[childrenIdx]) {
+            if lt(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx]) {
               flushIterateAppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-              flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]));
+              flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]));
             } else {
               flushIterateCurEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flushIterateIEmptyEqBucketListItemFlush(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flushIteratepivotLteChildKey0(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-              flushIterateRes(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl([], []));
+              flushIterateRes(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl(PSA.EmptyPsa(), []));
             }
           }
         } else {
-          if child.keys[childIdx] == parent.keys[parentIdx] {
+          if PSA.psaElement(child.keys, childIdx as uint64) == PSA.psaElement(parent.keys, parentIdx as uint64) {
             var m := Merge(parent.messages[parentIdx], child.messages[childIdx]);
             if m == IdentityMessage() {
               flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, cur);
             } else {
               flushIterateAppendParentAndChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-              flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m));
+              flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), m));
             }
-          } else if lt(child.keys[childIdx], parent.keys[parentIdx]) {
+          } else if lt(PSA.psaElement(child.keys, childIdx as uint64), PSA.psaElement(parent.keys, parentIdx as uint64)) {
             flushIterateAppendChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-            flushIterateRes(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]));
+            flushIterateRes(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]));
           } else {
             flushIterateAppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-            flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]));
+            flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]));
           }
         }
       }
@@ -531,7 +533,7 @@ module KVList {
   {
     reveal_IMap();
     assert BucketListItemFlush(B(map[]), B(map[]), pivots, 0).b == map[];
-    flushIterateRes(parent, children, pivots, 0, 0, 0, [], Kvl([], []));
+    flushIterateRes(parent, children, pivots, 0, 0, 0, [], Kvl(PSA.EmptyPsa(), []));
   }
 
   method Flush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
@@ -540,22 +542,22 @@ module KVList {
   requires forall i | 0 <= i < |children| :: WF(children[i])
   requires WFBucketListProper(ISeq(children), pivots)
   requires |children| < 0x1_0000_0000_0000_0000
-  requires forall i | 0 <= i < |children| :: |children[i].keys| + |parent.keys| < 0x8000_0000_0000_0000
+  requires forall i | 0 <= i < |children| :: PSA.psaNumStrings(children[i].keys) as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000
   ensures forall i | 0 <= i < |f| :: WF(f[i])
   ensures ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   ensures f == flush(parent, children, pivots)
   {
-    assert |children[0].keys| + |parent.keys| < 0x8000_0000_0000_0000;
+    assert PSA.psaNumStrings(children[0].keys) as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000;
 
     var maxChildLen: uint64 := 0;
     var idx: uint64 := 0;
     while idx < |children| as uint64
     invariant 0 <= idx as int <= |children|
-    invariant forall i | 0 <= i < idx as int :: |children[i].keys| <= maxChildLen as int
-    invariant maxChildLen as int + |parent.keys| < 0x8000_0000_0000_0000
+    invariant forall i | 0 <= i < idx as int :: PSA.psaNumStrings(children[i].keys) as int <= maxChildLen as int
+    invariant maxChildLen as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000
     {
-      if |children[idx].keys| as uint64 > maxChildLen {
-        maxChildLen := |children[idx].keys| as uint64;
+      if PSA.psaNumStrings(children[idx].keys) > maxChildLen {
+        maxChildLen := PSA.psaNumStrings(children[idx].keys);
       }
       idx := idx + 1;
     }
@@ -564,53 +566,53 @@ module KVList {
     var childrenIdx: uint64 := 0;
     var childIdx: uint64 := 0;
     var acc := [];
-    var cur_keys := new Key[maxChildLen + |parent.keys| as uint64];
+    var cur_keys := new Key[maxChildLen + PSA.psaNumStrings(parent.keys) ];
 
-    var cur_values := new Message[maxChildLen + |parent.keys| as uint64];
+    var cur_values := new Message[maxChildLen + PSA.psaNumStrings(parent.keys) ];
 
     var cur_idx: uint64 := 0;
 
     while childrenIdx < |children| as uint64
-    invariant 0 <= parentIdx as int <= |parent.keys|
+    invariant 0 <= parentIdx as int <= PSA.psaNumStrings(parent.keys) as int
     invariant 0 <= childrenIdx as int <= |children|
-    invariant (childrenIdx as int < |children| ==> 0 <= childIdx as int <= |children[childrenIdx].keys|)
+    invariant (childrenIdx as int < |children| ==> 0 <= childIdx as int <= PSA.psaNumStrings(children[childrenIdx].keys) as int)
     invariant 0 <= cur_idx
     invariant childrenIdx as int < |children| ==> cur_idx as int <= parentIdx as int + childIdx as int
     invariant childrenIdx as int == |children| ==> cur_idx == 0
     invariant flushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]))
         == flush(parent, children, pivots)
     decreases |children| - childrenIdx as int
-    decreases |parent.keys| - parentIdx as int +
-        (if childrenIdx as int < |children| then |children[childrenIdx].keys| - childIdx as int else 0)
+    decreases PSA.psaNumStrings(parent.keys) as int - parentIdx as int +
+        (if childrenIdx as int < |children| then PSA.psaNumStrings(children[childrenIdx].keys) as int - childIdx as int else 0)
     {
       var child := children[childrenIdx];
-      if parentIdx == |parent.keys| as uint64 {
-        if childIdx == |child.keys| as uint64 {
+      if parentIdx == PSA.psaNumStrings(parent.keys)  {
+        if childIdx == PSA.psaNumStrings(child.keys)  {
           childrenIdx := childrenIdx + 1;
           childIdx := 0;
           acc := acc + [Kvl(cur_keys[..cur_idx], cur_values[..cur_idx])];
           cur_idx := 0;
         } else {
-          cur_keys[cur_idx] := child.keys[childIdx];
+          cur_keys[cur_idx] := PSA.psaElement(child.keys, childIdx as uint64);
           cur_values[cur_idx] := child.messages[childIdx];
-          assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), child.keys[childIdx], child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+          assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
           childIdx := childIdx + 1;
           cur_idx := cur_idx + 1;
         }
       } else {
-        if childIdx == |child.keys| as uint64 {
+        if childIdx == PSA.psaNumStrings(child.keys)  {
           if childrenIdx == |children| as uint64 - 1 {
-            cur_keys[cur_idx] := parent.keys[parentIdx];
+            cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
             cur_values[cur_idx] := parent.messages[parentIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
             parentIdx := parentIdx + 1;
             cur_idx := cur_idx + 1;
           } else {
-            var c := cmp(parent.keys[parentIdx], pivots[childrenIdx]);
+            var c := cmp(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx]);
             if c < 0 {
-              cur_keys[cur_idx] := parent.keys[parentIdx];
+              cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
               cur_values[cur_idx] := parent.messages[parentIdx];
-              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
               parentIdx := parentIdx + 1;
               cur_idx := cur_idx + 1;
             } else {
@@ -621,30 +623,30 @@ module KVList {
             }
           }
         } else {
-          var c := cmp(child.keys[childIdx], parent.keys[parentIdx]);
+          var c := cmp(PSA.psaElement(child.keys, childIdx as uint64), PSA.psaElement(parent.keys, parentIdx as uint64));
           if c == 0 {
             var m := Merge(parent.messages[parentIdx], child.messages[childIdx]);
             if m == IdentityMessage() {
               parentIdx := parentIdx + 1;
               childIdx := childIdx + 1;
             } else {
-              cur_keys[cur_idx] := parent.keys[parentIdx];
+              cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
               cur_values[cur_idx] := m;
-              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], m) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), m) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
               cur_idx := cur_idx + 1;
               parentIdx := parentIdx + 1;
               childIdx := childIdx + 1;
             }
           } else if c < 0 {
-            cur_keys[cur_idx] := child.keys[childIdx];
+            cur_keys[cur_idx] := PSA.psaElement(child.keys, childIdx as uint64);
             cur_values[cur_idx] := child.messages[childIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), child.keys[childIdx], child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
             childIdx := childIdx + 1;
             cur_idx := cur_idx + 1;
           } else {
-            cur_keys[cur_idx] := parent.keys[parentIdx];
+            cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
             cur_values[cur_idx] := parent.messages[parentIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), parent.keys[parentIdx], parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
             parentIdx := parentIdx + 1;
             cur_idx := cur_idx + 1;
           }
@@ -662,22 +664,22 @@ module KVList {
 
   method Query(kvl: Kvl, key: Key) returns (m: Option<Message>)
   requires WF(kvl)
-  requires |kvl.keys| < 0x8000_0000_0000_0000
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x8000_0000_0000_0000
   ensures m.None? ==> key !in I(kvl).b
   ensures m.Some? ==> key in I(kvl).b && I(kvl).b[key] == m.value
   {
     var lo: uint64 := 0;
-    var hi: uint64 := |kvl.keys| as uint64;
+    var hi: uint64 := PSA.psaNumStrings(kvl.keys) ;
 
     while lo < hi
-    invariant 0 <= lo as int <= |kvl.keys|
-    invariant 0 <= hi as int <= |kvl.keys|
-    invariant lo > 0 ==> lt(kvl.keys[lo-1], key)
-    invariant hi as int < |kvl.keys| ==> lt(key, kvl.keys[hi])
+    invariant 0 <= lo as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant 0 <= hi as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant lo > 0 ==> lt(PSA.psaElement(kvl.keys, lo-1), key)
+    invariant hi as int < PSA.psaNumStrings(kvl.keys) as int ==> lt(key, PSA.psaElement(kvl.keys, hi))
     decreases hi as int - lo as int
     {
       var mid: uint64 := (lo + hi) / 2;
-      var c := cmp(key, kvl.keys[mid]);
+      var c := cmp(key, PSA.psaElement(kvl.keys, mid));
       if c == 0 {
         m := Some(kvl.messages[mid]);
         Imaps(kvl, mid as int);
@@ -691,8 +693,8 @@ module KVList {
 
     if (key in IMap(kvl)) {
       ghost var j := IndexOfKey(kvl, key);
-      if (lo > 0) { IsStrictlySortedImpliesLtIndices(kvl.keys, lo as int - 1, j as int); }
-      if (hi as int < |kvl.keys|) { IsStrictlySortedImpliesLtIndices(kvl.keys, j as int, hi as int); }
+      if (lo > 0) { IsStrictlySortedImpliesLtIndices(PSA.I(kvl.keys), lo as int - 1, j as int); }
+      if (hi as int < PSA.psaNumStrings(kvl.keys) as int) { IsStrictlySortedImpliesLtIndices(PSA.I(kvl.keys), j as int, hi as int); }
     }
 
     m := None;
@@ -705,25 +707,25 @@ module KVList {
   method IndexOfFirstKeyGte(kvl: Kvl, key: Key)
   returns (idx: uint64)
   requires WF(kvl)
-  requires |kvl.keys| < 0x8000_0000_0000_0000
-  ensures 0 <= idx as int <= |kvl.keys|
-  ensures forall i | 0 <= i < idx as int :: lt(kvl.keys[i], key)
-  ensures forall i | idx as int <= i as int < |kvl.keys| :: lte(key, kvl.keys[i])
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x8000_0000_0000_0000
+  ensures 0 <= idx as int <= PSA.psaNumStrings(kvl.keys) as int
+  ensures forall i | 0 <= i < idx as int :: lt(PSA.psaElement(kvl.keys, i as uint64), key)
+  ensures forall i | idx as int <= i as int < PSA.psaNumStrings(kvl.keys) as int :: lte(key, PSA.psaElement(kvl.keys, i))
   {
     var lo: uint64 := 0;
-    var hi: uint64 := |kvl.keys| as uint64;
+    var hi: uint64 := PSA.psaNumStrings(kvl.keys) ;
 
     while lo < hi
-    invariant 0 <= lo as int <= |kvl.keys|
-    invariant 0 <= hi as int <= |kvl.keys|
-    invariant forall i | 0 <= i < lo as int :: lt(kvl.keys[i], key)
-    invariant forall i | hi as int <= i < |kvl.keys| :: lte(key, kvl.keys[i])
+    invariant 0 <= lo as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant 0 <= hi as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant forall i | 0 <= i < lo as int :: lt(PSA.psaElement(kvl.keys, i as uint64), key)
+    invariant forall i | hi as int <= i < PSA.psaNumStrings(kvl.keys) as int :: lte(key, PSA.psaElement(kvl.keys, i as uint64))
     decreases hi as int - lo as int
     {
       reveal_IsStrictlySorted();
 
       var mid: uint64 := (lo + hi) / 2;
-      var c := cmp(key, kvl.keys[mid]);
+      var c := cmp(key, PSA.psaElement(kvl.keys, mid));
       if (c > 0) {
         lo := mid + 1;
       } else {
@@ -737,25 +739,25 @@ module KVList {
   method IndexOfFirstKeyGt(kvl: Kvl, key: Key)
   returns (idx: uint64)
   requires WF(kvl)
-  requires |kvl.keys| < 0x8000_0000_0000_0000
-  ensures 0 <= idx as int <= |kvl.keys|
-  ensures forall i | 0 <= i < idx as int :: lte(kvl.keys[i], key)
-  ensures forall i | idx as int <= i as int < |kvl.keys| :: lt(key, kvl.keys[i])
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x8000_0000_0000_0000
+  ensures 0 <= idx as int <= PSA.psaNumStrings(kvl.keys) as int
+  ensures forall i | 0 <= i < idx as int :: lte(PSA.psaElement(kvl.keys, i as uint64), key)
+  ensures forall i | idx as int <= i as int < PSA.psaNumStrings(kvl.keys) as int :: lt(key, PSA.psaElement(kvl.keys, i))
   {
     var lo: uint64 := 0;
-    var hi: uint64 := |kvl.keys| as uint64;
+    var hi: uint64 := PSA.psaNumStrings(kvl.keys) ;
 
     while lo < hi
-    invariant 0 <= lo as int <= |kvl.keys|
-    invariant 0 <= hi as int <= |kvl.keys|
-    invariant forall i | 0 <= i < lo as int :: lte(kvl.keys[i], key)
-    invariant forall i | hi as int <= i < |kvl.keys| :: lt(key, kvl.keys[i])
+    invariant 0 <= lo as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant 0 <= hi as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant forall i | 0 <= i < lo as int :: lte(PSA.psaElement(kvl.keys, i as uint64), key)
+    invariant forall i | hi as int <= i < PSA.psaNumStrings(kvl.keys) as int :: lt(key, PSA.psaElement(kvl.keys, i as uint64))
     decreases hi as int - lo as int
     {
       reveal_IsStrictlySorted();
 
       var mid: uint64 := (lo + hi) / 2;
-      var c := cmp(key, kvl.keys[mid]);
+      var c := cmp(key, PSA.psaElement(kvl.keys, mid));
       if (c >= 0) {
         lo := mid + 1;
       } else {
@@ -773,13 +775,13 @@ module KVList {
   method SplitLeft(kvl: Kvl, pivot: Key)
   returns (left: Kvl)
   requires WF(kvl)
-  requires |kvl.keys| < 0x8000_0000_0000_0000
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x8000_0000_0000_0000
   ensures WF(left)
   ensures I(left) == SplitBucketLeft(I(kvl), pivot)
   {
     reveal_SplitBucketLeft();
     var idx := IndexOfFirstKeyGte(kvl, pivot);
-    left := Kvl(kvl.keys[..idx], kvl.messages[..idx]);
+    left := Kvl(PSA.psaPrefix(kvl.keys, idx), kvl.messages[..idx]);
 
     reveal_IsStrictlySorted();
 
@@ -809,7 +811,7 @@ module KVList {
   method SplitRight(kvl: Kvl, pivot: Key)
   returns (right: Kvl)
   requires WF(kvl)
-  requires |kvl.keys| < 0x8000_0000_0000_0000
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x8000_0000_0000_0000
   ensures WF(right)
   ensures I(right) == SplitBucketRight(I(kvl), pivot)
   {
@@ -880,7 +882,7 @@ module KVList {
 
   /*function join(kvls: seq<Kvl>) : Kvl
   {
-    if |kvls| == 0 then Kvl([], []) else (
+    if |kvls| == 0 then Kvl(PSA.EmptyPsa(), []) else (
       var j := join(DropLast(kvls));
       var l := Last(kvls);
       Kvl(j.keys + l.keys, j.messages + l.messages)
@@ -1011,7 +1013,7 @@ module KVList {
   requires WF(kvl)
   requires P.WFPivots(pivots)
   requires |pivots| < 0x7fff_ffff_ffff_ffff
-  requires |kvl.keys| < 0x8000_0000_0000_0000
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x8000_0000_0000_0000
   ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
   ensures ISeq(kvls) == SplitBucketOnPivots(I(kvl), pivots)
   ensures kvls == splitOnPivots(kvl, pivots)
@@ -1030,13 +1032,13 @@ module KVList {
   }*/
 
   method IsWF(kvl: Kvl) returns (b: bool)
-  requires |kvl.keys| < 0x1_0000_0000_0000_0000
+  requires PSA.psaNumStrings(kvl.keys) as int < 0x1_0000_0000_0000_0000
   requires |kvl.messages| < 0x1_0000_0000_0000_0000
-  requires IsStrictlySorted(kvl.keys)
+  requires IsStrictlySorted(PSA.I(kvl.keys))
   requires forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage()
   ensures b == WF(kvl)
   {
-    if |kvl.keys| as uint64 != |kvl.messages| as uint64
+    if PSA.psaNumStrings(kvl.keys)  != |kvl.messages| as uint64
     {
       return false;
     }
@@ -1045,9 +1047,9 @@ module KVList {
     reveal_IsStrictlySorted();
 
     var k: uint64 := 1;
-    while k < |kvl.keys| as uint64
-    invariant |kvl.keys| > 0 ==> 0 <= k as int <= |kvl.keys|
-    invariant |kvl.keys| > 0 ==> forall i, j :: 0 <= i < j < k as int ==> lt(kvl.keys[i], kvl.keys[j])
+    while k < PSA.psaNumStrings(kvl.keys) 
+    invariant PSA.psaNumStrings(kvl.keys) as int > 0 ==> 0 <= k as int <= PSA.psaNumStrings(kvl.keys) as int
+    invariant PSA.psaNumStrings(kvl.keys) as int > 0 ==> forall i, j :: 0 <= i < j < k as int ==> lt(PSA.psaElement(kvl.keys, i), kvl.keys[j])
     {
       var c := cmp(kvl.keys[k-1], kvl.keys[k]);
       if (c >= 0) {
@@ -1069,7 +1071,7 @@ module KVList {
   ensures I(kvl) == B(map[])
   {
     reveal_IMap();
-    Kvl([],[])
+    Kvl(PSA.EmptyPsa(),[])
   }
 
   lemma Islice(kvls: seq<Kvl>, a: int, b: int)
@@ -1156,7 +1158,7 @@ module KVList {
 
   function WeightKvl(kvl: Kvl) : int
   {
-    WeightKeySeq(kvl.keys) + WeightMessageSeq(kvl.messages)
+    WeightKeySeq(PSA.I(kvl.keys)) + WeightMessageSeq(kvl.messages)
   }
 
   function WeightKvlSeq(kvls: seq<Kvl>) : int
@@ -1167,24 +1169,24 @@ module KVList {
   lemma kvlWeightEq(kvl: Kvl)
   requires WF(kvl)
   ensures WeightKvl(kvl) == WeightBucket(I(kvl))
-  decreases |kvl.keys|
+  decreases PSA.psaNumStrings(kvl.keys) as int
   {
     reveal_IMap();
-    if |kvl.keys| == 0 {
+    if PSA.psaNumStrings(kvl.keys) as int == 0 {
       WeightBucketEmpty();
     } else {
-      WFPrefix(kvl, |kvl.keys| - 1);
-      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-      if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
-        var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
+      WFPrefix(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
+      kvlWeightEq(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)));
+      if PSA.LastElement(kvl.keys) in IMap(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages))) {
+        var i := IndexOfKey(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), PSA.LastElement(kvl.keys));
         reveal_IsStrictlySorted();
       }
-      WeightBucketInduct(I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))), Last(kvl.keys), Last(kvl.messages));
+      WeightBucketInduct(I(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages))), PSA.LastElement(kvl.keys), Last(kvl.messages));
       assert WeightKvl(kvl)
-          == WeightKvl(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))
-              + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages))
-          == WeightBucket(I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))))
-              + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages));
+          == WeightKvl(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)))
+              + WeightKey(PSA.LastElement(kvl.keys)) + WeightMessage(Last(kvl.messages))
+          == WeightBucket(I(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages))))
+              + WeightKey(PSA.LastElement(kvl.keys)) + WeightMessage(Last(kvl.messages));
     }
   }
 
@@ -1203,34 +1205,34 @@ module KVList {
 
   lemma kvlWeightPrefixLe(kvl: Kvl, j: int)
   requires WF(kvl)
-  requires 0 <= j <= |kvl.keys|
+  requires 0 <= j <= PSA.psaNumStrings(kvl.keys) as int
   ensures WeightKvl(prefix(kvl, j)) <= WeightKvl(kvl);
-  decreases |kvl.keys|
+  decreases PSA.psaNumStrings(kvl.keys) as int
   {
-    if j == |kvl.keys| {
+    if j == PSA.psaNumStrings(kvl.keys) as int {
       assert prefix(kvl, j) == kvl;
     } else {
-      WFPrefix(kvl, |kvl.keys| - 1);
-      kvlWeightPrefixLe(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), j);
-      assert prefix(kvl, j) == prefix(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), j);
+      WFPrefix(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
+      kvlWeightPrefixLe(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), j);
+      assert prefix(kvl, j) == prefix(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), j);
       assert WeightKvl(prefix(kvl, j))
-          == WeightKvl(prefix(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), j))
-          <= WeightKvl(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))
+          == WeightKvl(prefix(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), j))
+          <= WeightKvl(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)))
           <= WeightKvl(kvl);
     }
   }
 
   lemma lenKeysLeWeightOver4(kvl: Kvl)
   requires WF(kvl)
-  ensures 4*|kvl.keys| <= WeightBucket(I(kvl))
-  decreases |kvl.keys|
+  ensures 4*PSA.psaNumStrings(kvl.keys) as int <= WeightBucket(I(kvl))
+  decreases PSA.psaNumStrings(kvl.keys) as int
   {
-    if |kvl.keys| == 0 {
+    if PSA.psaNumStrings(kvl.keys) as int == 0 {
     } else {
-      WFPrefix(kvl, |kvl.keys| - 1);
-      lenKeysLeWeightOver4(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
+      WFPrefix(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
+      lenKeysLeWeightOver4(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)));
       kvlWeightEq(kvl);
-      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
+      kvlWeightEq(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)));
     }
   }
 
@@ -1239,21 +1241,21 @@ module KVList {
   // to show that numbers fit within 64 bits.
   lemma lenKeysLeWeight(kvl: Kvl)
   requires WF(kvl)
-  ensures |kvl.keys| <= WeightBucket(I(kvl))
+  ensures PSA.psaNumStrings(kvl.keys) as int <= WeightBucket(I(kvl))
   {
     lenKeysLeWeightOver4(kvl);
   }
 
   lemma WeightKvlInduct(kvl: Kvl, j: int)
   requires WF(kvl)
-  requires 0 <= j < |kvl.keys|
+  requires 0 <= j < PSA.psaNumStrings(kvl.keys) as int
   ensures WeightKvl(prefix(kvl, j as int)) +
-      WeightKey(kvl.keys[j]) + WeightMessage(kvl.messages[j])
+      WeightKey(PSA.psaElement(kvl.keys, j as uint64)) + WeightMessage(kvl.messages[j])
           == WeightKvl(prefix(kvl, j as int + 1));
   {
     assert DropLast(prefix(kvl, j as int + 1).messages)
         == prefix(kvl, j as int).messages;
-    assert DropLast(prefix(kvl, j as int + 1).keys)
+    assert PSA.psaDropLast(prefix(kvl, j as int + 1).keys)
         == prefix(kvl, j as int).keys;
   }
 
@@ -1268,19 +1270,19 @@ module KVList {
 
     var j: uint64 := 0;
     var w: uint64 := 0;
-    while j < |kvl.keys| as uint64
-    invariant 0 <= j as int <= |kvl.keys|
+    while j < PSA.psaNumStrings(kvl.keys) 
+    invariant 0 <= j as int <= PSA.psaNumStrings(kvl.keys) as int
     invariant w as int == WeightKvl(prefix(kvl, j as int))
     {
       WeightKvlInduct(kvl, j as int);
       kvlWeightPrefixLe(kvl, j as int + 1);
 
-      w := w + WeightKeyUint64(kvl.keys[j]) + WeightMessageUint64(kvl.messages[j]);
+      w := w + WeightKeyUint64(PSA.psaElement(kvl.keys, j)) + WeightMessageUint64(kvl.messages[j]);
       j := j + 1;
     }
     weight := w;
 
-    assert prefix(kvl, |kvl.keys|) == kvl;
+    assert prefix(kvl, PSA.psaNumStrings(kvl.keys) as int) == kvl;
   }
 
   function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
@@ -1296,12 +1298,12 @@ module KVList {
     assume false;
 
     if bucket.b.Keys == {} then (
-      Kvl([], [])
+      Kvl(PSA.EmptyPsa(), [])
     ) else (
       var key := maximum(bucket.b.Keys);
       var kvl1 := toKvl(B(MapRemove1(bucket.b, key)));
-      StrictlySortedAugment(kvl1.keys, key);
-      Kvl(kvl1.keys + [key], kvl1.messages + [bucket.b[key]])
+      StrictlySortedAugment(PSA.I(kvl1.keys), key);
+      Kvl(PSA.psaAppend(kvl1.keys, key), kvl1.messages + [bucket.b[key]])
     )
   }
 
@@ -1321,13 +1323,13 @@ module KVList {
 
   lemma lastIsMax(kvl: Kvl)
   requires WF(kvl)
-  requires |kvl.keys| > 0
-  ensures maximumOpt(I(kvl).b.Keys) == Some(Last(kvl.keys))
+  requires PSA.psaNumStrings(kvl.keys) as int > 0
+  ensures maximumOpt(I(kvl).b.Keys) == Some(PSA.LastElement(kvl.keys))
   {
-    Imaps(kvl, |kvl.keys| - 1);
-    assert Last(kvl.keys) in IMap(kvl).Keys;
+    Imaps(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
+    assert PSA.LastElement(kvl.keys) in IMap(kvl).Keys;
     forall key | key in IMap(kvl).Keys
-    ensures lte(key, Last(kvl.keys))
+    ensures lte(key, PSA.LastElement(kvl.keys))
     {
       var i := IndexOfKey(kvl, key);
       reveal_IsStrictlySorted();
@@ -1336,14 +1338,14 @@ module KVList {
 
   lemma lastIsNotInDropLast(kvl: Kvl)
   requires WF(kvl)
-  requires |kvl.keys| > 0
-  ensures WF(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))
-  ensures Last(kvl.keys) !in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
+  requires PSA.psaNumStrings(kvl.keys) as int > 0
+  ensures WF(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)))
+  ensures PSA.LastElement(kvl.keys) !in IMap(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)));
   {
-    WFPrefix(kvl, |kvl.keys| - 1);
-    if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
-      var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
-      assert kvl.keys[i] == Last(kvl.keys);
+    WFPrefix(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
+    if PSA.LastElement(kvl.keys) in IMap(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages))) {
+      var i := IndexOfKey(Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages)), PSA.LastElement(kvl.keys));
+      assert PSA.psaElement(kvl.keys, i as uint64) == PSA.LastElement(kvl.keys);
       reveal_IsStrictlySorted();
     }
   }
@@ -1353,32 +1355,32 @@ module KVList {
   requires WF(kvl2)
   requires IMap(kvl1) == IMap(kvl2)
   ensures kvl1 == kvl2
-  decreases |kvl1.keys|
+  decreases PSA.psaNumStrings(kvl1.keys) as int
   {
     reveal_IMap();
     reveal_IsStrictlySorted();
-    if |kvl1.keys| == 0 {
+    if PSA.psaNumStrings(kvl1.keys) as int == 0 {
     } else {
       lastIsMax(kvl1);
       lastIsMax(kvl2);
-      assert Some(Last(kvl1.keys))
+      assert Some(PSA.LastElement(kvl1.keys))
           == maximumOpt(IMap(kvl1).Keys)
           == maximumOpt(IMap(kvl2).Keys)
-          == Some(Last(kvl2.keys));
+          == Some(PSA.LastElement(kvl2.keys));
 
-      var key := Last(kvl1.keys);
-      assert key == Last(kvl2.keys);
+      var key := PSA.LastElement(kvl1.keys);
+      assert key == PSA.LastElement(kvl2.keys);
       lastIsNotInDropLast(kvl1);
       lastIsNotInDropLast(kvl2);
       //assert key !in IMap(Kvl(DropLast(kvl1.keys), DropLast(kvl1.messages)));
       //assert key !in IMap(Kvl(DropLast(kvl2.keys), DropLast(kvl2.messages)));
-      assert IMap(Kvl(DropLast(kvl1.keys), DropLast(kvl1.messages)))
+      assert IMap(Kvl(PSA.psaDropLast(kvl1.keys), DropLast(kvl1.messages)))
           == MapRemove1(IMap(kvl1), key)
           == MapRemove1(IMap(kvl2), key)
-          == IMap(Kvl(DropLast(kvl2.keys), DropLast(kvl2.messages)));
+          == IMap(Kvl(PSA.psaDropLast(kvl2.keys), DropLast(kvl2.messages)));
       I_injective(
-        prefix(kvl1, |kvl1.keys| - 1),
-        prefix(kvl2, |kvl2.keys| - 1));
+        prefix(kvl1, PSA.psaNumStrings(kvl1.keys) as int - 1),
+        prefix(kvl2, PSA.psaNumStrings(kvl2.keys) as int - 1));
       assert Last(kvl1.messages) == Last(kvl2.messages);
     }
   }
