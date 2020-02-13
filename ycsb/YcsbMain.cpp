@@ -67,7 +67,7 @@ template< class DB >
 void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
 
-    auto clock_start = chrono::high_resolution_clock::now();
+    auto clock_start = chrono::steady_clock::now();
     for (int i = 0; i < num_ops; ++i) {
         performYcsbInsert(db, workload, verbose);
     }
@@ -75,14 +75,27 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << db.name << " [step] sync" << endl;
     db.sync();
 
-    auto clock_end = chrono::high_resolution_clock::now();
+    auto clock_end = chrono::steady_clock::now();
     long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
 
     double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
 
     cerr << db.name << " [step] loading complete" << endl;
-    cout << "db(load)\tduration(ns)\toperations\tops/s" << endl;
-    cout << db.name << "\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+    cout << "--\tthroughput(load)\tduration(ns)\toperations\tops/s" << endl;
+    cout << db.name << "\tthroughput(load)\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+}
+
+void print_summary(HDRHistQuantiles& summary, const string db_name, const string op) {
+    if (summary.samples() != 0) {
+        std::cout << "--" << "\tlatency_ccdf\top\t" << "quantile" << "\t" << "upper_bound(ns)" << std::endl;
+        for (
+            auto summary_el = summary.next();
+            summary_el.has_value();
+            summary_el = summary.next()) {
+
+            std::cout << db_name << "\tlatency_ccdf\t" << op << "\t" << summary_el->quantile << "\t" << summary_el->upper_bound << std::endl;
+        }
+    }
 }
 
 template< class DB >
@@ -93,12 +106,20 @@ void ycsbRun(
     int sync_interval_ms,
     bool verbose) {
 
+    map<ycsbc::Operation, unique_ptr<HDRHist>> latency_hist;
+
+    latency_hist[ycsbc::READ] =            move(make_unique<HDRHist>());
+    latency_hist[ycsbc::UPDATE] =          move(make_unique<HDRHist>());
+    latency_hist[ycsbc::INSERT] =          move(make_unique<HDRHist>());
+    latency_hist[ycsbc::SCAN] =            move(make_unique<HDRHist>());
+    latency_hist[ycsbc::READMODIFYWRITE] = move(make_unique<HDRHist>());
+
+    HDRHist sync_latency_hist;
+
     cerr << db.name << " [step] running experiment (num ops: " << num_ops << ", sync interval " <<
         sync_interval_ms << "ms)" << endl;
 
-    // TODO: sync every k seconds
- 
-    auto clock_start = chrono::high_resolution_clock::now();
+    auto clock_start = chrono::steady_clock::now();
     auto clock_prev = clock_start;
     auto clock_last_sync = clock_start;
 
@@ -127,15 +148,23 @@ void ycsbRun(
                 exit(-1);
         }
 
-        auto clock_op_completed = chrono::high_resolution_clock::now();
+        auto clock_op_completed = chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+            clock_op_completed - clock_prev).count();
+        latency_hist[next_operation]->add_value(duration);
 
         if (std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_last_sync).count() > sync_interval_ms) {
 
-            cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
             db.sync();
+            auto sync_completed = chrono::steady_clock::now();
 
-            auto sync_completed = chrono::high_resolution_clock::now();
+            cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
+
+            auto sync_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                sync_completed - clock_op_completed).count();
+            sync_latency_hist.add_value(sync_duration);
+
             clock_last_sync = sync_completed;
             clock_prev = sync_completed;
         } else {
@@ -143,14 +172,32 @@ void ycsbRun(
         }
     }
 
-    auto clock_end = chrono::high_resolution_clock::now();
+    auto clock_end = chrono::steady_clock::now();
     long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
 
     double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
 
     cerr << db.name << " [step] experiment complete" << endl;
-    cout << "db\tduration(ns)\toperations\tops/s" << endl;
-    cout << db.name << "\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+    cout << "--\tthroughput\tduration(ns)\toperations\tops/s" << endl;
+    cout << db.name << "\tthroughput\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+
+    {
+        auto sync_summary = sync_latency_hist.summary();
+        print_summary(sync_summary, db.name, "sync");
+
+        vector<pair<ycsbc::Operation, string>> operations = {
+            make_pair(ycsbc::READ, "read"),
+            make_pair(ycsbc::UPDATE, "update"),
+            make_pair(ycsbc::INSERT, "insert"),
+            make_pair(ycsbc::SCAN, "scan"),
+            make_pair(ycsbc::READMODIFYWRITE, "readmodifywrite"),
+        };
+
+        for (auto op : operations) {
+            auto op_summary = latency_hist[op.first]->summary();
+            print_summary(op_summary, db.name, op.second);
+        }
+    }
 }
 
 class VeribetrkvFacade {
@@ -220,6 +267,31 @@ public:
 
 const string RocksdbFacade::name = string("rocksdb");
 
+class NopFacade {
+public:
+    static const string name;
+
+    NopFacade() { }
+
+    inline void query(const string& key) {
+        asm volatile ("nop");
+    }
+
+    inline void insert(const string& key, const string& value) {
+        asm volatile ("nop");
+    }
+
+    inline void update(const string& key, const string& value) {
+        asm volatile ("nop");
+    }
+
+    inline void sync() {
+        asm volatile ("nop");
+    }
+};
+
+const string NopFacade::name = string("nop");
+
 int main(int argc, char* argv[]) {
     bool verbose = false;
  
@@ -240,12 +312,16 @@ int main(int argc, char* argv[]) {
 
     bool do_veribetrkv = false;
     bool do_rocks = false;
+    bool do_nop = false;
     for (int i = 3; i < argc; i++) {
       if (string(argv[i]) == "--veribetrkv") {
         do_veribetrkv = true;
       }
       else if (string(argv[i]) == "--rocks") {
         do_rocks = true;
+      }
+      else if (string(argv[i]) == "--nop") {
+        do_nop = true;
       }
       else {
         cerr << "unrecognized: " << argv[i] << endl;
@@ -291,6 +367,14 @@ int main(int argc, char* argv[]) {
         /* rocksdb */ rocksdb::Status status = rocksdb::DB::Open(options, rocksdb_path, &rocks_db);
         /* rocksdb */ assert(status.ok());
         /* rocksdb */ RocksdbFacade db(*rocks_db);
+
+        ycsbLoad(db, *workload, record_count, verbose);
+        int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
+        ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
+    }
+
+    if (do_nop) {
+        /* nop */ NopFacade db;
 
         ycsbLoad(db, *workload, record_count, verbose);
         int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
