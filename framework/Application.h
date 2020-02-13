@@ -46,7 +46,7 @@ struct ByteString {
 
 class Application {
 public:
-  Application();
+  Application(string filename);
   void initialize();
   void crash();
 
@@ -63,6 +63,7 @@ public:
 private:
   Constants k;
   Variables hs;
+  string filename;
   shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;
 
   bool maybeDoResponse();

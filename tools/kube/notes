@@ -17,6 +17,7 @@ docker exec -it --user root 9fe66e9fd09f bash
 
 su - dockertester
 
+tar -C /home/jonh/book-examples -czf dafny_server/tutorial.tgz tutorial
 docker image build --tag jonhdotnet/veribetrfs:1.0 dafny_server/
 docker login
 docker push jonhdotnet/veribetrfs:1.0
@@ -34,4 +35,8 @@ docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial
 $ dafny test.dfy
 
 
-docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial,type=bind --workdir /home/dafnyserver/tutorial jonhdotnet/veribetrfs:1.0 /bin/bash
+mkdir work
+cd work
+docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/work,type=bind --workdir /home/dafnyserver/work jonhdotnet/veribetrfs:1.0 /bin/bash
+cp -r ../tutorial .
+cd tutorial/chapter01
