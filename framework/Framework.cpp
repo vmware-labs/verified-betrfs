@@ -27,9 +27,9 @@
 #endif
 
 [[ noreturn ]]
-void fail(string err)
+void fail(std::string err)
 {
-  cout << "fatal error: " << err << endl;
+  std::cout << "fatal error: " << err << std::endl;
   exit(1);
 }
 
@@ -157,6 +157,17 @@ namespace MainDiskIOHandler_Compile {
   };
 
 #if USE_DIRECT
+  std::string getFilename(uint64 addr) {
+    // Convert to hex
+    char num[17];
+    for (int i = 0; i < 16; i++) {
+      int digit = (addr >> (4 * i)) & 0xf;
+      num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
+    }
+    num[16] = '\0';
+    return "/tmp/.veribetrfs-storage/" + std::string(num);
+  }
+
   uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
   {
     size_t aligned_len = (len + 4095) & ~0xfffULL;
@@ -262,7 +273,7 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
-    writeReqs.insert(make_pair(id, writeTask));
+    writeReqs.insert(std::make_pair(id, writeTask));
 
     return id;
   }
@@ -275,7 +286,7 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
-    readReqs.insert(make_pair(id, ReadTask(bytes)));
+    readReqs.insert(std::make_pair(id, ReadTask(bytes)));
 
     return id;
   }
@@ -316,7 +327,7 @@ namespace MainDiskIOHandler_Compile {
   bool DiskIOHandler::prepareWriteResponse() {
     for (auto it = this->writeReqs.begin();
         it != this->writeReqs.end(); ++it) {
-      shared_ptr<WriteTask> writeTask = it->second;
+      std::shared_ptr<WriteTask> writeTask = it->second;
       writeTask->check_if_complete();
       if (writeTask->done) {
         this->writeResponseId = it->first;
@@ -358,7 +369,7 @@ namespace MainDiskIOHandler_Compile {
     }
   }
   void DiskIOHandler::waitForOne() {
-    vector<aiocb*> tasks;
+    std::vector<aiocb*> tasks;
     tasks.resize(this->writeReqs.size());
     int i = 0;
     for (auto p : this->writeReqs) {
@@ -546,7 +557,7 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
   fail("Succ operation didn't finish");
 }
 
-vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bool inclusive, uint64 targetCount)
+std::vector<std::pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bool inclusive, uint64 targetCount)
 {
   if (lowerBound.size() > MaxKeyLen()) {
     fail("Query: key is too long");
@@ -555,23 +566,23 @@ vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bo
   UI_Compile::RangeStart start = inclusive ?
       UI_Compile::RangeStart::create_SInclusive(lowerBound.as_dafny_seq()) :
       UI_Compile::RangeStart::create_SExclusive(lowerBound.as_dafny_seq());
-  vector<pair<ByteString, ByteString>> all_results(targetCount);
+  std::vector<std::pair<ByteString, ByteString>> all_results(targetCount);
   uint64 found = 0;
   while (found < targetCount) {
     UI_Compile::SuccResultList srl = SuccOnce(start, targetCount - found);
     for (size_t i = 0; i < srl.results.size(); i++) {
       UI_Compile::SuccResult sr = srl.results.select(i);
-      all_results[found] = make_pair(ByteString(sr.key), ByteString(sr.value));
+      all_results[found] = std::make_pair(ByteString(sr.key), ByteString(sr.value));
       found++;
     }
     if (found == targetCount) {
       break;
     }
-    if (srl.end.is_PositiveInf()) {
+    if (srl.end.is_RangeEnd_PositiveInf()) {
       all_results.resize(found);
       return all_results;
     }
-    if (srl.end.is_EExclusive()) {
+    if (srl.end.is_RangeEnd_EExclusive()) {
       start = UI_Compile::RangeStart::create_SInclusive(srl.end.dtor_key());
     } else {
       start = UI_Compile::RangeStart::create_SExclusive(srl.end.dtor_key());
@@ -583,13 +594,13 @@ vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bo
 
 
 void Application::log(std::string const& s) {
-  std::cout << s << endl;
+  std::cout << s << std::endl;
 }
 
 void Mkfs(string filename) {
   DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
 
-  unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
+  std::unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
 
   if (m.size() == 0) {
     fail("InitDiskBytes failed.");
