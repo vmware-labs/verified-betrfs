@@ -106,13 +106,19 @@ void ycsbRun(
     int sync_interval_ms,
     bool verbose) {
 
+    vector<pair<ycsbc::Operation, string>> operations = {
+        make_pair(ycsbc::READ, "read"),
+        make_pair(ycsbc::UPDATE, "update"),
+        make_pair(ycsbc::INSERT, "insert"),
+        make_pair(ycsbc::SCAN, "scan"),
+        make_pair(ycsbc::READMODIFYWRITE, "readmodifywrite"),
+    };
+
     map<ycsbc::Operation, unique_ptr<HDRHist>> latency_hist;
 
-    latency_hist[ycsbc::READ] =            move(make_unique<HDRHist>());
-    latency_hist[ycsbc::UPDATE] =          move(make_unique<HDRHist>());
-    latency_hist[ycsbc::INSERT] =          move(make_unique<HDRHist>());
-    latency_hist[ycsbc::SCAN] =            move(make_unique<HDRHist>());
-    latency_hist[ycsbc::READMODIFYWRITE] = move(make_unique<HDRHist>());
+    for (auto op : operations) {
+        latency_hist[op.first] = move(make_unique<HDRHist>());
+    }
 
     HDRHist sync_latency_hist;
 
@@ -149,7 +155,7 @@ void ycsbRun(
         }
 
         auto clock_op_completed = chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
             clock_op_completed - clock_prev).count();
         latency_hist[next_operation]->add_value(duration);
 
@@ -184,14 +190,6 @@ void ycsbRun(
     {
         auto sync_summary = sync_latency_hist.summary();
         print_summary(sync_summary, db.name, "sync");
-
-        vector<pair<ycsbc::Operation, string>> operations = {
-            make_pair(ycsbc::READ, "read"),
-            make_pair(ycsbc::UPDATE, "update"),
-            make_pair(ycsbc::INSERT, "insert"),
-            make_pair(ycsbc::SCAN, "scan"),
-            make_pair(ycsbc::READMODIFYWRITE, "readmodifywrite"),
-        };
 
         for (auto op : operations) {
             auto op_summary = latency_hist[op.first]->summary();
@@ -292,6 +290,19 @@ public:
 
 const string NopFacade::name = string("nop");
 
+template< class DB >
+void ycsbLoadAndRun(
+    DB db,
+    ycsbc::CoreWorkload& workload,
+    int record_count,
+    int num_ops,
+    int sync_interval_ms,
+    bool verbose) {
+
+    ycsbLoad(db, workload, record_count, verbose);
+    ycsbRun(db, workload, num_ops, sync_interval_ms, verbose);
+}
+
 int main(int argc, char* argv[]) {
     bool verbose = false;
  
@@ -339,46 +350,47 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
     int sync_interval_ms = stoi(props["syncintervalms"]);
+    int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
 
+
+    // == veribetrkv ==
     if (do_veribetrkv) {
-        /* veribetrkv */ std::string veribetrfs_filename = base_directory + "veribetrfs.img";
-        // /* veribetrkv */ (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
+        std::string veribetrfs_filename = base_directory + "veribetrfs.img";
+        // (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
         system(("rm -rf " + veribetrfs_filename).c_str());
-        /* veribetrkv */ Mkfs(veribetrfs_filename);
-        /* veribetrkv */ Application app(veribetrfs_filename);
-        /* veribetrkv */ VeribetrkvFacade db(app);
+        Mkfs(veribetrfs_filename);
+        Application app(veribetrfs_filename);
+        VeribetrkvFacade db(app);
     
-        ycsbLoad(db, *workload, record_count, verbose);
-        int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
-        ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     }
 
+
+    // == rocksdb ==
     if (do_rocks) {
-        /* rocksdb */ static string rocksdb_path = base_directory + "rocksdb.db";
-        // /* rocksdb */ (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
+        static string rocksdb_path = base_directory + "rocksdb.db";
+        // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
         system(("rm -rf " + rocksdb_path).c_str());
 
-        /* rocksdb */ rocksdb::DB* rocks_db;
-        /* rocksdb */ rocksdb::Options options;
-        /* rocksdb */ options.create_if_missing = true;
-        /* rocksdb */ options.error_if_exists = true;
-        /* rocksdb */ options.use_direct_reads = true;
-        /* rocksdb */ options.use_direct_io_for_flush_and_compaction = true;
-        /* rocksdb */ rocksdb::Status status = rocksdb::DB::Open(options, rocksdb_path, &rocks_db);
-        /* rocksdb */ assert(status.ok());
-        /* rocksdb */ RocksdbFacade db(*rocks_db);
+        rocksdb::DB* rocks_db;
+        rocksdb::Options options;
+        options.create_if_missing = true;
+        options.error_if_exists = true;
+        // FIXME options.use_direct_reads = true;
+        // FIXME options.use_direct_io_for_flush_and_compaction = true;
+        rocksdb::Status status = rocksdb::DB::Open(options, rocksdb_path, &rocks_db);
+        assert(status.ok());
+        RocksdbFacade db(*rocks_db);
 
-        ycsbLoad(db, *workload, record_count, verbose);
-        int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
-        ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     }
 
-    if (do_nop) {
-        /* nop */ NopFacade db;
 
-        ycsbLoad(db, *workload, record_count, verbose);
-        int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
-        ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
+    // == nop ==
+    if (do_nop) {
+        NopFacade db;
+
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     }
 }
 
