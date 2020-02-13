@@ -3,6 +3,7 @@
 #include "DafnyRuntime.h"
 #include "Framework.h"
 
+using namespace std;
 
 struct ByteString {
   DafnySequence<uint8> seq;

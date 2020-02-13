@@ -171,7 +171,7 @@ namespace MainDiskIOHandler_Compile {
     uint64 getWriteResult();
     Tuple2<uint64, DafnySequence<uint8>> getReadResult();
 
-    DiskIOHandler(string filename = ".veribetrfs.img");
+    DiskIOHandler(std::string filename = ".veribetrfs.img");
     ~DiskIOHandler();
     bool prepareWriteResponse();
     bool prepareReadResponse();
@@ -202,4 +202,4 @@ namespace NativeBenchmarking_Compile {
   };
 }
 
-void Mkfs(string filename = ".veribetrfs.img");
+void Mkfs(std::string filename = ".veribetrfs.img");
