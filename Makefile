@@ -17,7 +17,7 @@ else
   TIMELIMIT=/timeLimit:$(TL)
 endif
 
-CC=g++
+CC=clang++ -stdlib=libc++
 
 ##############################################################################
 # Automatic targets
@@ -299,7 +299,7 @@ librocksdb:
 
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
-	g++ -o $@ \
+	$(CC) -o $@ \
 			-L ycsb/build \
 			-L vendor/rocksdb \
 			-I ycsb/build/include \
