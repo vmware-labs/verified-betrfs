@@ -6,8 +6,6 @@
 #include "DafnyRuntime.h"
 #include "Framework.h"
 
-using namespace std;
-
 uint32_t crc32c(const uint8_t *bytes, size_t len)
 {
   uint32_t acc = 0xffffffff;

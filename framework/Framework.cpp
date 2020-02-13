@@ -12,9 +12,9 @@
 #include <fcntl.h>
 
 [[ noreturn ]]
-void fail(string err)
+void fail(std::string err)
 {
-  cout << "fatal error: " << err << endl;
+  std::cout << "fatal error: " << err << std::endl;
   exit(1);
 }
 
@@ -26,7 +26,7 @@ namespace MainDiskIOHandler_Compile {
   struct WriteTask {
     FILE* f;
 
-    vector<byte> bytes;
+    std::vector<byte> bytes;
     aiocb aio_req_write;
     aiocb aio_req_fsync;
 
@@ -119,7 +119,7 @@ namespace MainDiskIOHandler_Compile {
     ReadTask(DafnySequence<byte> s) : bytes(s) { }
   };
 
-  string getFilename(uint64 addr) {
+  std::string getFilename(uint64 addr) {
     // Convert to hex
     char num[17];
     for (int i = 0; i < 16; i++) {
@@ -127,10 +127,10 @@ namespace MainDiskIOHandler_Compile {
       num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
     }
     num[16] = '\0';
-    return "/tmp/.veribetrfs-storage/" + string(num);
+    return "/tmp/.veribetrfs-storage/" + std::string(num);
   }
 
-  int readFile(string const& filename, byte* res, int len)
+  int readFile(std::string const& filename, byte* res, int len)
   {
     FILE* f = fopen(filename.c_str(), "r");
     if (f == NULL) {
@@ -191,7 +191,7 @@ namespace MainDiskIOHandler_Compile {
       fail("readSync not implemented for these arguments");
     }
 
-    string filename = getFilename(addr);
+    std::string filename = getFilename(addr);
     int actualRead = readFile(filename, sector, len);
     if ((uint64)actualRead < len) {
       fail("readSync did not find enough bytes");
@@ -212,13 +212,13 @@ namespace MainDiskIOHandler_Compile {
       fail("write fopen failed");
     }
 
-    shared_ptr<WriteTask> writeTask {
+    std::shared_ptr<WriteTask> writeTask {
       new WriteTask(f, &bytes.at(0), len) };
 
     uint64 id = this->curId;
     this->curId++;
 
-    writeReqs.insert(make_pair(id, writeTask));
+    writeReqs.insert(std::make_pair(id, writeTask));
 
     return id;
   }
@@ -231,7 +231,7 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
-    readReqs.insert(make_pair(id, ReadTask(bytes)));
+    readReqs.insert(std::make_pair(id, ReadTask(bytes)));
 
     return id;
   }
@@ -261,7 +261,7 @@ namespace MainDiskIOHandler_Compile {
   bool DiskIOHandler::prepareWriteResponse() {
     for (auto it = this->writeReqs.begin();
         it != this->writeReqs.end(); ++it) {
-      shared_ptr<WriteTask> writeTask = it->second;
+      std::shared_ptr<WriteTask> writeTask = it->second;
       writeTask->check_if_complete();
       if (writeTask->done) {
         this->writeResponseId = it->first;
@@ -278,7 +278,7 @@ namespace MainDiskIOHandler_Compile {
     }
   }
   void DiskIOHandler::waitForOne() {
-    vector<aiocb*> tasks;
+    std::vector<aiocb*> tasks;
     tasks.resize(this->writeReqs.size());
     int i = 0;
     for (auto p : this->writeReqs) {
@@ -312,7 +312,7 @@ void Application::initialize() {
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
-  this->io = make_shared<DiskIOHandler>();
+  this->io = std::make_shared<DiskIOHandler>();
 }
 
 void Application::crash() {
@@ -460,7 +460,7 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
   fail("Succ operation didn't finish");
 }
 
-vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bool inclusive, uint64 targetCount)
+std::vector<std::pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bool inclusive, uint64 targetCount)
 {
   if (lowerBound.size() > MaxKeyLen()) {
     fail("Query: key is too long");
@@ -469,23 +469,23 @@ vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bo
   UI_Compile::RangeStart start = inclusive ?
       UI_Compile::RangeStart::create_SInclusive(lowerBound.as_dafny_seq()) :
       UI_Compile::RangeStart::create_SExclusive(lowerBound.as_dafny_seq());
-  vector<pair<ByteString, ByteString>> all_results(targetCount);
+  std::vector<std::pair<ByteString, ByteString>> all_results(targetCount);
   uint64 found = 0;
   while (found < targetCount) {
     UI_Compile::SuccResultList srl = SuccOnce(start, targetCount - found);
     for (size_t i = 0; i < srl.results.size(); i++) {
       UI_Compile::SuccResult sr = srl.results.select(i);
-      all_results[found] = make_pair(ByteString(sr.key), ByteString(sr.value));
+      all_results[found] = std::make_pair(ByteString(sr.key), ByteString(sr.value));
       found++;
     }
     if (found == targetCount) {
       break;
     }
-    if (srl.end.is_PositiveInf()) {
+    if (srl.end.is_RangeEnd_PositiveInf()) {
       all_results.resize(found);
       return all_results;
     }
-    if (srl.end.is_EExclusive()) {
+    if (srl.end.is_RangeEnd_EExclusive()) {
       start = UI_Compile::RangeStart::create_SInclusive(srl.end.dtor_key());
     } else {
       start = UI_Compile::RangeStart::create_SExclusive(srl.end.dtor_key());
@@ -497,13 +497,13 @@ vector<pair<ByteString, ByteString>> Application::Succ(ByteString lowerBound, bo
 
 
 void Application::log(std::string const& s) {
-  std::cout << s << endl;
+  std::cout << s << std::endl;
 }
 
 void Mkfs() {
   DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
 
-  unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
+  std::unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
 
   if (m.size() == 0) {
     fail("InitDiskBytes failed.");
