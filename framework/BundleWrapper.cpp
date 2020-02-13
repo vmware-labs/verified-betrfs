@@ -19,6 +19,11 @@ DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
   return MkfsImpl_Compile::__default::Mkfs();
 }
 
+void handle_EvictEverything(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
+{
+  __default::handleEvictEverything(*k.k, hs.hs, io);
+}
+
 uint64 handle_PushSync(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
   return __default::handlePushSync(*k.k, hs.hs, io);

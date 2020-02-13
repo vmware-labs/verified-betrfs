@@ -2,13 +2,14 @@
 
 #include "core_workload.h"
 #include "ycsbwrappers.h"
+#include "leakfinder.h"
 
 #include "hdrhist.hpp"
 
 #include "rocksdb/db.h"
 
 #include <strstream>
-#include <filesystem>
+//#include <filesystem>
 #include <chrono>
 
 using namespace std;
@@ -66,8 +67,19 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
 
     auto clock_start = chrono::high_resolution_clock::now();
+    auto clock_last_report = clock_start;
+    auto report_interval_ms = 1000;
     for (int i = 0; i < num_ops; ++i) {
         performYcsbInsert(db, workload, verbose);
+
+        auto clock_op_completed = chrono::high_resolution_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            clock_op_completed - clock_last_report).count() > report_interval_ms) {
+
+            cerr << db.name << " (completed " << i << " ops)" << endl;
+            auto report_completed = chrono::high_resolution_clock::now();
+            clock_last_report = report_completed;
+        }
     }
 
     cerr << db.name << " [step] sync" << endl;
@@ -132,6 +144,12 @@ void ycsbRun(
 
             cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
             db.sync();
+            if (i > 100000) {
+              leakfinder_report(1);
+              db.evictEverything();
+              leakfinder_report(2);
+              exit(0);
+            }
 
             auto sync_completed = chrono::high_resolution_clock::now();
             clock_last_sync = sync_completed;
@@ -175,6 +193,10 @@ public:
     inline void sync() {
         app.Sync();
     }
+
+    inline void evictEverything() {
+        app.EvictEverything();
+    }
 };
 
 const string VeribetrkvFacade::name = string("veribetrkv");
@@ -214,6 +236,9 @@ public:
         rocksdb::Status status = db.Flush(foptions);
         assert(status.ok());
     }
+
+    inline void evictEverything() {
+    }
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -225,6 +250,12 @@ int main(int argc, char* argv[]) {
         cerr << "error: expects one argument: the workload spec" << endl;
         exit(-1);
     }
+
+//    leakfinder_mark(1);
+//    for (int i=0; i<15; i++) {
+//      leakfinder_mark(1);
+//    }
+    leakfinder_report(0);
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);
@@ -249,9 +280,11 @@ int main(int argc, char* argv[]) {
         /* veribetrkv */ VeribetrkvFacade db(app);
 
         ycsbLoad(db, *workload, record_count, verbose);
+        db.evictEverything();
         int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
         ycsbRun(db, *workload, num_ops, sync_interval_ms, verbose);
     }
+    exit(0);
 
     {
         /* rocksdb */ static string rocksdb_path = base_directory + "rocksdb.db";

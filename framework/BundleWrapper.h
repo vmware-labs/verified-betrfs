@@ -24,6 +24,7 @@ namespace UI_Compile {
 
 std::pair<Constants, Variables> handle_InitState();
 DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs();
+void handle_EvictEverything(Constants k, Variables hs, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
 uint64 handle_PushSync(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 std::pair<bool, bool> handle_PopSync(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, uint64);
 bool handle_Insert(Constants, Variables, shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>, DafnySequence<uint8>);

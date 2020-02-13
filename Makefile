@@ -245,7 +245,8 @@ build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
-OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
+#OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
+OPT_FLAG=-O0 -g
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
@@ -271,7 +272,7 @@ LDFLAGS=-msse4.2
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
 else
-	LDFLAGS += -lrt
+LDFLAGS += -lrt
 endif
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
@@ -280,7 +281,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 ##############################################################################
 # YCSB
 
-VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
+VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/leakfinder.o
 
 libycsbc:
 	@$(MAKE) -C ycsb build/libycsbc.a
@@ -290,11 +291,13 @@ librocksdb:
 
 .PHONY: libycsbc
 
+#SUPEROPT_FLAG=-O3
+SUPEROPT_FLAG=-O0 -g
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
 	g++ -o $@ \
 			-Lycsb/build -Lvendor/rocksdb \
 			-Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ \
-			-std=c++17 $(LDFLAGS) -O3 $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
-			-lycsbc -lrocksdb -lpthread -ldl -Winline
+			-std=c++17 $(SUPEROPT_FLAG) $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
+			-lycsbc -lrocksdb -lpthread -ldl -Winline $(LDFLAGS)
 

@@ -54,6 +54,7 @@ public:
   ByteString Query(string const& key);
 
   void Sync();
+  void EvictEverything();
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);
   void QueryAndExpect(ByteString key, ByteString expected_val);

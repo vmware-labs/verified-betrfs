@@ -335,6 +335,10 @@ void Application::crash() {
   initialize();
 }
 
+void Application::EvictEverything() {
+  handle_EvictEverything(k, hs, io);
+}
+
 void Application::Sync() {
   LOG("Sync");
 

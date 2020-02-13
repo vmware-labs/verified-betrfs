@@ -1,3 +1,4 @@
+include "../lib/Base/DebugAccumulator.i.dfy"
 include "NodeImpl.i.dfy"
 //
 // Implements map<Reference, Node>
@@ -7,6 +8,7 @@ include "NodeImpl.i.dfy"
 //
 
 module CacheImpl {
+  import DebugAccumulator
   import opened NodeImpl
   import opened Options
   import opened Maps
@@ -24,6 +26,12 @@ module CacheImpl {
   {
     var cache: MM.ResizingHashMap<Node>;
     ghost var Repr: set<object>;
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+      acc := DebugAccumulator.EmptyAccumulator();
+      var a := new DebugAccumulator.AccRec(cache.Count, "Node");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+    }
 
     constructor()
     ensures Inv();
