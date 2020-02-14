@@ -350,6 +350,10 @@ int main(int argc, char* argv[]) {
         exit(-1);
       }
     }
+    if (!do_veribetrkv && !do_rocks && !do_nop) {
+        cerr << "No benchmark flags specified; doing nothing." << endl;
+        exit(-1);
+    }
 
     utils::Properties props = ycsbcwrappers::props_from(workload_filename);
     unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
