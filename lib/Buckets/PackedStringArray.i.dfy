@@ -402,9 +402,23 @@ module PackedStringArray {
     var isubpsa := I(subpsa);
     var ipsasub := I(psa)[from..to];
     assert |isubpsa| == |ipsasub|;
-    forall i | 0 <= i < |isubpsa|
+    forall i: uint64 | 0 <= i < |isubpsa| as uint64
       ensures isubpsa[i] == ipsasub[i]
     {
+      var dataStart := psaStart(psa, from);
+      var dataEnd := psaEnd(psa, to-1);
+      var subStart := psaStart(subpsa, i);
+      var subEnd := psaEnd(subpsa, i);
+      // WTF.  Why isn't this a simple calc of sequence?  This proof seem very brittle.
+      forall j  | 0 <= j < subEnd - subStart
+        ensures 
+        psa.data[dataStart..dataEnd][subStart..subEnd][j] ==
+        psa.data[dataStart + subStart..dataStart + subEnd][j]
+      {
+        // For example of the brittleness of this proof, converting these asserts to a single calc causes the proof to fail.
+        assert psa.data[dataStart..dataEnd][subStart..subEnd][j] == psa.data[dataStart + subStart + j];
+        assert psa.data[dataStart + subStart..dataStart + subEnd][j] == psa.data[dataStart + subStart + j];
+      }
     }
   }
 
