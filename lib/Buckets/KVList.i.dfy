@@ -1321,10 +1321,20 @@ module KVList {
     )
   }
 
+  // Dafny type inference can't figure out the type of the naked
+  // maximumOpt call, so we wrap it
+  function KeySetMax(keys: set<seq<byte>>) : seq<byte>
+    requires keys != {}
+  {
+    var v: Option<seq<byte>> := maximumOpt(keys);
+    v.value
+  }
+    
+  
   lemma lastIsMax(kvl: Kvl)
   requires WF(kvl)
   requires PSA.psaNumStrings(kvl.keys) as int > 0
-  ensures maximumOpt(I(kvl).b.Keys) == Some(PSA.LastElement(kvl.keys))
+  ensures KeySetMax(I(kvl).b.Keys) == PSA.LastElement(kvl.keys)
   {
     Imaps(kvl, PSA.psaNumStrings(kvl.keys) as int - 1);
     assert PSA.LastElement(kvl.keys) in IMap(kvl).Keys;
@@ -1363,9 +1373,11 @@ module KVList {
     } else {
       lastIsMax(kvl1);
       lastIsMax(kvl2);
+      ghost var max1: Option<seq<byte>> := maximumOpt(IMap(kvl1).Keys);
+      ghost var max2: Option<seq<byte>> := maximumOpt(IMap(kvl2).Keys);
       assert Some(PSA.LastElement(kvl1.keys))
-          == maximumOpt(IMap(kvl1).Keys)
-          == maximumOpt(IMap(kvl2).Keys)
+          == max1
+          == max2
           == Some(PSA.LastElement(kvl2.keys));
 
       var key := PSA.LastElement(kvl1.keys);

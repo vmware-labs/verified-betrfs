@@ -9,9 +9,9 @@ module PackedStringArray {
   import opened NativePackedInts
   import opened NativeArrays
   import Uint32_Order
-  import Sequences
+  import opened Sequences
   
-  datatype Psa = Psa(offsets: seq<uint32>, data: seq<byte>)
+  datatype Psa = Psa(offsets: seq<uint32>, data: seq<NativeTypes.byte>)
 
   predicate WF(psa: Psa)
   {
@@ -48,7 +48,6 @@ module PackedStringArray {
     }
   }
     
-  
   function method psaEnd(psa: Psa, i: uint64) : (end : uint32)
   requires WF(psa)
   requires 0 <= i as int < |psa.offsets|
@@ -62,6 +61,17 @@ module PackedStringArray {
     psa.offsets[i]
   }
 
+  lemma psaStartLtePsaEnd(psa: Psa, i: uint64, j: uint64)
+    requires WF(psa)
+    requires 0 <= i as int <= j as int < |psa.offsets|
+    ensures psaStart(psa, i) <= psaEnd(psa, j)
+  {
+    if i == 0 {
+    } else {
+      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, j as int);
+    }
+  }
+  
   function method psaElement(psa: Psa, i: uint64) : seq<byte>
   requires WF(psa)
   requires 0 <= i as int < |psa.offsets|
@@ -342,6 +352,60 @@ module PackedStringArray {
   {
     psaPrefixpsaSeq(psa, psaNumStrings(psa)-1);
     psaPrefix(psa, psaNumStrings(psa)-1)
+  }
+
+
+  function subtractConstant(nums: seq<uint32>, subtrahend: uint32) : (result: seq<uint32>)
+    requires forall i :: 0 <= i < |nums| ==> subtrahend <= nums[i]
+    ensures |result| == |nums|
+    ensures forall i :: 0 <= i < |result| ==> result[i] == nums[i] - subtrahend
+  {
+    if |nums| == 0 then
+      []
+    else
+      subtractConstant(DropLast(nums), subtrahend) + [Last(nums) - subtrahend]
+  }
+  
+  function subOffsets(offsets: seq<uint32>, from: uint64, to: uint64) : (result: seq<uint32>)
+    requires Uint32_Order.IsSorted(offsets)
+    requires 0 <= from as int <= to as int <= |offsets|
+  {
+    var suboffsets := offsets[from..to];
+    if from == 0 then
+      suboffsets
+    else
+      assert forall i :: 0 <= i < |suboffsets| ==> offsets[from-1] <= suboffsets[i] by { Uint32_Order.reveal_IsSorted(); }
+      subtractConstant(suboffsets, offsets[from-1])
+  }
+  
+  function psaSubSeq(psa: Psa, from: uint64, to: uint64) : (result: Psa)
+    requires WF(psa)
+    requires 0 <= from <= to <= psaNumStrings(psa)
+  {
+    if from == to then
+      EmptyPsa()
+    else 
+      var dataStart := psaStart(psa, from);
+      var dataEnd := psaEnd(psa, to-1);
+      psaStartLtePsaEnd(psa, from, to-1);
+      Psa(subOffsets(psa.offsets, from, to), psa.data[dataStart..dataEnd])
+  }
+
+  lemma WFpsaSubSeq(psa: Psa, from: uint64, to: uint64)
+    requires WF(psa)
+    requires 0 <= from <= to <= psaNumStrings(psa)
+    ensures WF(psaSubSeq(psa, from, to))
+    ensures I(psaSubSeq(psa, from, to)) == I(psa)[from..to]
+  {
+    var subpsa := psaSubSeq(psa, from, to);
+    assert WF(subpsa) by { Uint32_Order.reveal_IsSorted(); }
+    var isubpsa := I(subpsa);
+    var ipsasub := I(psa)[from..to];
+    assert |isubpsa| == |ipsasub|;
+    forall i | 0 <= i < |isubpsa|
+      ensures isubpsa[i] == ipsasub[i]
+    {
+    }
   }
 
   function psaAppend(psa: Psa, key: seq<byte>) : (result: Psa)
