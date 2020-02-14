@@ -237,6 +237,10 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
+build/Bundle.i.h: build/Bundle.cpp
+# this is build automatically when we build Bundle.cpp
+	touch build/Bundle.i.h
+
 ##############################################################################
 # C++ object files
 
