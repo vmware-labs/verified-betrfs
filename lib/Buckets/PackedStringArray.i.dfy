@@ -311,50 +311,6 @@ module PackedStringArray {
     psaElement(psa, |psa.offsets| as uint64 - 1)
   }
 
-
-  function psaPrefix(psa: Psa, len: uint64) : (result: Psa)
-    requires WF(psa)
-    requires len <= psaNumStrings(psa)
-    ensures WF(result)
-    ensures psaNumStrings(result) == len
-  {
-    if len == 0 then
-      assert Uint32_Order.IsSorted([]) by { Uint32_Order.reveal_IsSorted(); }
-      EmptyPsa()
-    else
-      Uint32_Order.IsSortedImpliesLte(psa.offsets, len as int - 1, |psa.offsets|-1);
-      Uint32_Order.SortedSubsequence(psa.offsets, 0, len as int);
-      Psa(psa.offsets[0..len], psa.data[..psa.offsets[len-1]])
-  }
-    
-  lemma psaPrefixpsaSeq(psa: Psa, len: uint64)
-    requires WF(psa)
-    requires len <= psaNumStrings(psa)
-    ensures I(psaPrefix(psa, len)) == psaSeq(psa, len as int)
-  {
-    if len == 0 {
-    } else {
-      var ipsap := I(psaPrefix(psa, len));
-      var psas := psaSeq(psa, len as int);
-      assert |ipsap| == |psas| == len as int;
-      forall i | 0 <= i < len
-        ensures ipsap[i] == psas[i]
-      {
-      }
-    }
-  }
-
-  function psaDropLast(psa: Psa) : (result: Psa)
-    requires WF(psa)
-    requires 0 < psaNumStrings(psa)
-    ensures WF(result)
-    ensures I(result) == Sequences.DropLast(I(psa))
-  {
-    psaPrefixpsaSeq(psa, psaNumStrings(psa)-1);
-    psaPrefix(psa, psaNumStrings(psa)-1)
-  }
-
-
   function subtractConstant(nums: seq<uint32>, subtrahend: uint32) : (result: seq<uint32>)
     requires forall i :: 0 <= i < |nums| ==> subtrahend <= nums[i]
     ensures |result| == |nums|
@@ -364,6 +320,23 @@ module PackedStringArray {
       []
     else
       subtractConstant(DropLast(nums), subtrahend) + [Last(nums) - subtrahend]
+  }
+
+  method SubtractConstant(nums: seq<uint32>, subtrahend: uint32) returns (result: seq<uint32>)
+    requires forall i :: 0 <= i < |nums| ==> subtrahend <= nums[i]
+    requires |nums| < Uint64UpperBound()
+    ensures result == subtractConstant(nums, subtrahend)
+  {
+    var arr := newArrayFill(|nums| as uint64, 0);
+    var i: uint64 := 0;
+    while i < |nums| as uint64
+      invariant i <= |nums| as uint64
+      invariant forall j :: j < i ==> arr[j] == nums[j] - subtrahend
+    {
+      arr[i] := nums[i] - subtrahend;
+      i := i + 1;
+    }
+    result := arr[..];
   }
   
   function subOffsets(offsets: seq<uint32>, from: uint64, to: uint64) : (result: seq<uint32>)
@@ -377,8 +350,22 @@ module PackedStringArray {
       assert forall i :: 0 <= i < |suboffsets| ==> offsets[from-1] <= suboffsets[i] by { Uint32_Order.reveal_IsSorted(); }
       subtractConstant(suboffsets, offsets[from-1])
   }
+
+  method SubOffsets(offsets: seq<uint32>, from: uint64, to: uint64) returns (result: seq<uint32>)
+    requires Uint32_Order.IsSorted(offsets)
+    requires 0 <= from as int <= to as int <= |offsets|
+    ensures result == subOffsets(offsets, from, to)
+  {
+    var suboffsets := offsets[from..to];
+    if from == 0 {
+      result := suboffsets;
+    } else {
+      assert forall i :: 0 <= i < |suboffsets| ==> offsets[from-1] <= suboffsets[i] by { Uint32_Order.reveal_IsSorted(); }
+      result := SubtractConstant(suboffsets, offsets[from-1]);
+    }
+  }
   
-  function psaSubSeq(psa: Psa, from: uint64, to: uint64) : (result: Psa)
+  function psaSubSeqInternal(psa: Psa, from: uint64, to: uint64) : (result: Psa)
     requires WF(psa)
     requires 0 <= from <= to <= psaNumStrings(psa)
   {
@@ -394,10 +381,10 @@ module PackedStringArray {
   lemma WFpsaSubSeq(psa: Psa, from: uint64, to: uint64)
     requires WF(psa)
     requires 0 <= from <= to <= psaNumStrings(psa)
-    ensures WF(psaSubSeq(psa, from, to))
-    ensures I(psaSubSeq(psa, from, to)) == I(psa)[from..to]
+    ensures WF(psaSubSeqInternal(psa, from, to))
+    ensures I(psaSubSeqInternal(psa, from, to)) == I(psa)[from..to]
   {
-    var subpsa := psaSubSeq(psa, from, to);
+    var subpsa := psaSubSeqInternal(psa, from, to);
     assert WF(subpsa) by { Uint32_Order.reveal_IsSorted(); }
     var isubpsa := I(subpsa);
     var ipsasub := I(psa)[from..to];
@@ -420,6 +407,63 @@ module PackedStringArray {
         assert psa.data[dataStart + subStart..dataStart + subEnd][j] == psa.data[dataStart + subStart + j];
       }
     }
+  }
+
+  function psaSubSeq(psa: Psa, from: uint64, to: uint64) : (result: Psa)
+    requires WF(psa)
+    requires 0 <= from <= to <= psaNumStrings(psa)
+    ensures WF(result)
+    ensures I(result) == I(psa)[from..to]
+  {
+    WFpsaSubSeq(psa, from, to);
+    psaSubSeqInternal(psa, from, to)
+  }
+  
+  method PsaSubSeq(psa: Psa, from: uint64, to: uint64) returns (result: Psa)
+    requires WF(psa)
+    requires 0 <= from <= to <= psaNumStrings(psa)
+    ensures result == psaSubSeq(psa, from, to)
+    ensures WF(psaSubSeq(psa, from, to))
+    ensures I(psaSubSeq(psa, from, to)) == I(psa)[from..to]
+  {
+    if from == to {
+      result := EmptyPsa();
+    } else {
+      var dataStart := psaStart(psa, from);
+      var dataEnd := psaEnd(psa, to-1);
+      psaStartLtePsaEnd(psa, from, to-1);
+      var newoffsets := SubOffsets(psa.offsets, from, to);
+      result := Psa(newoffsets, psa.data[dataStart..dataEnd]);
+      WFpsaSubSeq(psa, from, to);
+    }
+  }
+  
+  method PsaPrefix(psa: Psa, to: uint64) returns (result: Psa)
+    requires WF(psa)
+    requires 0 <= to <= psaNumStrings(psa)
+    ensures WF(result)
+    ensures I(result) == I(psa)[..to]
+  {
+    result := PsaSubSeq(psa, 0, to);
+  }
+  
+  method PsaSuffix(psa: Psa, from: uint64) returns (result: Psa)
+    requires WF(psa)
+    requires 0 <= from <= psaNumStrings(psa)
+    ensures WF(result)
+    ensures I(result) == I(psa)[from..]
+  {
+    result := PsaSubSeq(psa, from, psaNumStrings(psa));
+  }
+  
+  function psaDropLast(psa: Psa) : (result: Psa)
+    requires WF(psa)
+    requires 0 < psaNumStrings(psa)
+    ensures WF(result)
+    ensures I(result) == Sequences.DropLast(I(psa))
+  {
+    WFpsaSubSeq(psa, 0, psaNumStrings(psa)-1);
+    psaSubSeq(psa, 0, psaNumStrings(psa)-1)
   }
 
   function psaAppend(psa: Psa, key: seq<byte>) : (result: Psa)
