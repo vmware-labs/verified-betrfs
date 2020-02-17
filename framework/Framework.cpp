@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 
+using namespace std;
+
 #define USE_DIRECT (1)
 //#define USE_DIRECT (0)
 
@@ -33,16 +35,14 @@ void fail(std::string err)
   exit(1);
 }
 
-typedef uint8 byte;
-
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
 #if USE_DIRECT
-  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
-    byte *aligned_bytes;
+  uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
+    uint8_t *aligned_bytes;
     *aligned_len = (len + 4095) & ~0xfffUL;
     int result = posix_memalign((void **)&aligned_bytes, 4096, *aligned_len);
     if (result) {
@@ -52,8 +52,8 @@ namespace MainDiskIOHandler_Compile {
     return aligned_bytes;
   }
 #else
-  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
-    byte *aligned_bytes = (byte *)malloc(len);
+  uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
+    uint8_t *aligned_bytes = (uint8_t *)malloc(len);
     if (aligned_bytes) {
       memcpy(aligned_bytes, buf, len);
       *aligned_len = len;
@@ -67,7 +67,7 @@ namespace MainDiskIOHandler_Compile {
 
   struct WriteTask {
     size_t aligned_len;
-    byte *aligned_bytes;
+    uint8_t *aligned_bytes;
     aiocb aio_req_write;
 
     bool made_req;
@@ -77,7 +77,7 @@ namespace MainDiskIOHandler_Compile {
       free(aligned_bytes);
     }
     
-    WriteTask(int fd, uint64 addr, byte* buf, size_t len) {
+    WriteTask(int fd, uint64 addr, uint8_t* buf, size_t len) {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
@@ -151,9 +151,9 @@ namespace MainDiskIOHandler_Compile {
   };
 
   struct ReadTask {
-    DafnySequence<byte> bytes;
+    DafnySequence<uint8_t> bytes;
 
-    ReadTask(DafnySequence<byte> s) : bytes(s) { }
+    ReadTask(DafnySequence<uint8_t> s) : bytes(s) { }
   };
 
 #if USE_DIRECT
@@ -168,10 +168,10 @@ namespace MainDiskIOHandler_Compile {
     return "/tmp/.veribetrfs-storage/" + std::string(num);
   }
 
-  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
+  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
   {
     size_t aligned_len = (len + 4095) & ~0xfffULL;
-    byte *aligned_res;
+    uint8_t *aligned_res;
     int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
     if (result != 0) {
       fail("Couldn't allocate aligned memory");
@@ -188,7 +188,7 @@ namespace MainDiskIOHandler_Compile {
     return (uint64)count;
   }
 #else
-  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
+  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
   {
     ssize_t count = pread(fd, res, len, addr);
     if (count < 0) {
@@ -198,13 +198,13 @@ namespace MainDiskIOHandler_Compile {
   }
 #endif // USE_DIRECT
 
-  void writeSync(int fd, uint64 addr, byte* sector, size_t len) {
+  void writeSync(int fd, uint64 addr, uint8_t* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
       fail("writeSync not implemented for these arguments");
     }
 
     size_t aligned_len;
-    byte *aligned_sector;
+    uint8_t *aligned_sector;
     aligned_sector = aligned_copy(sector, len, &aligned_len);
     if (aligned_sector == NULL) {
       fail("Couldn't create aligned copy of buffer");
@@ -222,7 +222,7 @@ namespace MainDiskIOHandler_Compile {
     }
   }
 
-  void readSync(int fd, uint64 addr, uint64 len, byte* sector) {
+  void readSync(int fd, uint64 addr, uint64 len, uint8_t* sector) {
     if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
       fail("readSync not implemented for these arguments");
     }
@@ -280,7 +280,7 @@ namespace MainDiskIOHandler_Compile {
 
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
-    DafnySequence<byte> bytes(len);
+    DafnySequence<uint8_t> bytes(len);
     readSync(fd, addr, len, bytes.ptr());
 
     uint64 id = this->curId;
@@ -485,7 +485,7 @@ ByteString Application::Query(ByteString key)
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
     this->maybeDoResponse();
     if (result.first) {
-      DafnySequence<byte> val_bytes = result.second;
+      DafnySequence<uint8_t> val_bytes = result.second;
       LOG("doing query... success!");
       ByteString val(val_bytes);
       LOG("query result is \"" + key.as_string() + "\" -> \"" + val.as_string() + "\"");
@@ -598,9 +598,9 @@ void Application::log(std::string const& s) {
 }
 
 void Mkfs(string filename) {
-  DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
+  DafnyMap<uint64, DafnySequence<uint8_t>> daf_map = handle_Mkfs();
 
-  std::unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
+  std::unordered_map<uint64, DafnySequence<uint8_t>> m = daf_map.map;
 
   if (m.size() == 0) {
     fail("InitDiskBytes failed.");

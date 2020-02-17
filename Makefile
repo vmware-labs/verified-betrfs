@@ -245,7 +245,7 @@ build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
-OPT_FLAG=-g -O0 -D_LIBCPP_HAS_NO_THREADS
+OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
@@ -308,6 +308,6 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMa
 			-I build/ \
 			-I vendor/hdrhist/ \
 			-I vendor/rocksdb/include/ \
-			-Winline -std=c++17 $(LDFLAGS) $(OPT_FLAG) \
+			-Winline -std=c++17 $(LDFLAGS) -O3 \
 			$(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
 			-lycsbc -lrocksdb -lpthread -ldl $(LDFLAGS)
