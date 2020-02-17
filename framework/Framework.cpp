@@ -484,8 +484,8 @@ ByteString Application::Query(ByteString key)
   for (int i = 0; i < 500000; i++) {
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
     this->maybeDoResponse();
-    if (result.first) {
-      DafnySequence<uint8_t> val_bytes = result.second;
+    if (result.has_value()) {
+      DafnySequence<uint8_t> val_bytes = *result;
       LOG("doing query... success!");
       ByteString val(val_bytes);
       LOG("query result is \"" + key.as_string() + "\" -> \"" + val.as_string() + "\"");
@@ -545,10 +545,10 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
   for (int i = 0; i < 500000; i++) {
     auto result = handle_Succ(k, hs, io, start, maxToFind);
     this->maybeDoResponse();
-    if (result.first) {
+    if (result.has_value()) {
       LOG("doing succ ... success!");
       LOG("");
-      return result.second;
+      return *result;
     } else {
       LOG("doing succ...");
     }

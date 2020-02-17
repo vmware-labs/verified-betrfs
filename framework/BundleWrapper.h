@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <optional>
 #include "Framework.h"
 
 namespace BetreeGraphBlockCache_Compile {
@@ -27,8 +28,8 @@ DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs();
 uint64 handle_PushSync(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 std::pair<bool, bool> handle_PopSync(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, uint64);
 bool handle_Insert(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>, DafnySequence<uint8>);
-std::pair<bool, DafnySequence<uint8>> handle_Query(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>);
-std::pair<bool, UI_Compile::SuccResultList> handle_Succ(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, UI_Compile::RangeStart start, uint64 maxToFind);
+std::optional<DafnySequence<uint8>> handle_Query(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>);
+std::optional<UI_Compile::SuccResultList> handle_Succ(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, UI_Compile::RangeStart start, uint64 maxToFind);
 void handle_ReadResponse(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 void handle_WriteResponse(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
 
