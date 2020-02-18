@@ -51,7 +51,7 @@ module DeallocImpl {
     s.cache.Remove(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
     ghost var s1 := s.I();
