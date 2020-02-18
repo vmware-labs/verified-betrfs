@@ -448,6 +448,10 @@ void Application::Sync() {
 
 void Application::Insert(ByteString key, ByteString val)
 {
+  #ifdef LOG_QUERY_STATS
+  auto t1 = chrono::high_resolution_clock::now();
+  #endif
+
   if (key.size() > MaxKeyLen()) {
     fail("Insert: key is too long");
   }
@@ -465,6 +469,14 @@ void Application::Insert(ByteString key, ByteString val)
     if (success) {
       LOG("doing insert... success!");
       LOG("");
+
+      #ifdef LOG_QUERY_STATS
+      auto t2 = chrono::high_resolution_clock::now();
+
+      long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+      benchmark_append("Appliation::Insert", ns);
+      #endif
+
       return;
     } else {
       LOG("doing insert...");
@@ -525,6 +537,7 @@ ByteString Application::Query(ByteString key)
         long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
         benchmark_append("query-writes-" + to_string(num_writes) +
             "-reads-" + to_string(num_reads), ns);
+        benchmark_append("Application::Query", ns);
       }
       queryCount++;
       #endif
