@@ -10,8 +10,8 @@ module Bounds {
   import opened KeyType
 
   function method IndirectionTableBlockSizeUint64() : uint64 { 8*1024*1024 }
-  function method NodeBlockSizeUint64() : uint64 { 8*1024*1024 }
-  function method MinNodeBlockIndexUint64() : uint64 { 1 }
+  function method NodeBlockSizeUint64() : uint64 { 98304 }
+  function method MinNodeBlockIndexUint64() : uint64 { 86 }
 
   //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
   //function method MaxCacheSizeUint64() : uint64 { 200 }
