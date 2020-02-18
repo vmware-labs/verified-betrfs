@@ -41,8 +41,6 @@ void fail(std::string err)
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
-  constexpr int BLOCK_SIZE = 8*1024*1024;
-
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
     uint8_t *aligned_bytes;
@@ -181,10 +179,6 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void writeSync(int fd, uint64 addr, uint8_t* sector, size_t len) {
-    if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
-      fail("writeSync not implemented for these arguments");
-    }
-
     size_t aligned_len;
     uint8_t *aligned_sector;
     aligned_sector = aligned_copy(sector, len, &aligned_len);
@@ -205,10 +199,6 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void readSync(int fd, uint64 addr, uint64 expected_len, uint64 len_to_read, uint8_t* sector) {
-    if (addr % BLOCK_SIZE != 0 || len_to_read > BLOCK_SIZE) {
-      fail("readSync not implemented for these arguments");
-    }
-
     uint64 actualRead = readFromFile(fd, addr, sector, len_to_read);
     if (actualRead < expected_len) {
       fail("readSync did not find enough bytes");
@@ -241,9 +231,6 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
   {
     size_t len = bytes.size();
-    if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
-      fail("write not implemented for these arguments");
-    }
 
     shared_ptr<WriteTask> writeTask {
       new WriteTask(fd, addr, &bytes.at(0), len) };
