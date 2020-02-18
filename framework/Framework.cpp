@@ -204,13 +204,13 @@ namespace MainDiskIOHandler_Compile {
     }
   }
 
-  void readSync(int fd, uint64 addr, uint64 len, uint8_t* sector) {
-    if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
+  void readSync(int fd, uint64 addr, uint64 expected_len, uint64 len_to_read, uint8_t* sector) {
+    if (addr % BLOCK_SIZE != 0 || len_to_read > BLOCK_SIZE) {
       fail("readSync not implemented for these arguments");
     }
 
-    uint64 actualRead = readFromFile(fd, addr, sector, len);
-    if (actualRead < len) {
+    uint64 actualRead = readFromFile(fd, addr, sector, len_to_read);
+    if (actualRead < expected_len) {
       fail("readSync did not find enough bytes");
     }
   }
@@ -280,13 +280,14 @@ namespace MainDiskIOHandler_Compile {
     bytes.len = len;
     #else
     DafnySequence<uint8_t> bytes(len);
+    uint64 aligned_len = len;
     #endif
 
     #ifdef LOG_QUERY_STATS
     benchmark_end("DiskIOHandler::read alloc");
     #endif
 
-    readSync(fd, addr, len, bytes.ptr());
+    readSync(fd, addr, len, aligned_len, bytes.ptr());
 
     #ifdef LOG_QUERY_STATS
     benchmark_start("DiskIOHandler::read finish");
