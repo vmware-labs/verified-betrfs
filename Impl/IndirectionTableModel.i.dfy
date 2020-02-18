@@ -1329,11 +1329,11 @@ module IndirectionTableModel {
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
     // Can't use the lower values, so they're always marked "allocated"
-    || i < MinNodeBlockIndex()
-    || !(
+    || 0 <= i < MinNodeBlockIndex()
+    || (!(
       forall ref | ref in indirectionTable.locs ::
         indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
-    )
+    ))
   }
 
   predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
