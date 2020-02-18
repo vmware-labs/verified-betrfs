@@ -20,8 +20,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import BCS = BetreeGraphBlockCacheSystem
   import BBCS = BetreeBlockCacheSystem
   import SD = AsyncSectorDisk
-  import LBAType
-  type Location = BBC.Location
+  import opened LBAType
 
   function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp<BBC.Sector>
   requires M.ValidDiskOp(diskOp)
@@ -58,10 +57,10 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     && (forall id | id in disk.respWrites :: M.ValidRespWrite(disk.respWrites[id]))
   }
 
-  function IContents(contents: seq<byte>) : imap<BBC.Location, BBC.Sector>
+  function IContents(contents: seq<byte>) : imap<Location, BBC.Sector>
   {
     imap loc: Location |
-      && M.ValidAddr(loc.addr)
+      && ValidAddr(loc.addr)
       && 0 <= loc.addr
       && 0 <= loc.len
       && loc.addr as int + loc.len as int <= |contents|

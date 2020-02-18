@@ -13,9 +13,8 @@ abstract module BlockCacheSystem {
   import opened Options
   import opened AsyncSectorDiskModelTypes
   import opened NativeTypes
+  import opened LBAType
 
-  type LBA = M.LBA
-  type Location = M.Location
   type Sector = M.Sector
   type DiskOp = M.DiskOp
 
@@ -29,7 +28,7 @@ abstract module BlockCacheSystem {
 
   predicate WFDisk(blocks: imap<Location, Sector>)
   {
-    && var indirectionTableLoc := M.IndirectionTableLocation();
+    && var indirectionTableLoc := IndirectionTableLocation();
     && indirectionTableLoc in blocks
     && blocks[indirectionTableLoc].SectorIndirectionTable?
     && M.WFCompleteIndirectionTable(blocks[indirectionTableLoc].indirectionTable)
@@ -51,7 +50,7 @@ abstract module BlockCacheSystem {
   function DiskIndirectionTable(blocks: imap<Location, Sector>) : IndirectionTable
   requires WFDisk(blocks)
   {
-    blocks[M.IndirectionTableLocation()].indirectionTable
+    blocks[IndirectionTableLocation()].indirectionTable
   }
 
   function RefMapOfDisk(
@@ -302,7 +301,7 @@ abstract module BlockCacheSystem {
       && var reqId := s.machine.outstandingIndirectionTableRead.value;
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
-        s.disk.reqReads[reqId] == D.ReqRead(M.IndirectionTableLocation())
+        s.disk.reqReads[reqId] == D.ReqRead(IndirectionTableLocation())
       )
       && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.Some? ==>
         s.disk.respReads[reqId] == D.RespRead(Some(M.SectorIndirectionTable(DiskIndirectionTable(s.disk.blocks))))
@@ -355,7 +354,7 @@ abstract module BlockCacheSystem {
       && (reqId in s.disk.reqWrites ==>
           s.disk.reqWrites[reqId] ==
           D.ReqWrite(
-            M.IndirectionTableLocation(),
+            IndirectionTableLocation(),
             M.SectorIndirectionTable(
               s.machine.frozenIndirectionTable.value
             )
@@ -1132,7 +1131,7 @@ abstract module BlockCacheSystem {
        == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache)
   {
     var req := s.disk.reqWrites[id];
-    if (req.loc.addr == M.IndirectionTableLBA()) {
+    if (req.loc.addr == IndirectionTableAddr()) {
       assert WFDisk(s'.disk.blocks);
 
       forall ref | ref in indirectionTable.locs
@@ -1195,7 +1194,7 @@ abstract module BlockCacheSystem {
     ProcessWritePreservesDiskCacheGraph(k, s, s', id, s.machine.ephemeralIndirectionTable);
 
     var req := s.disk.reqWrites[id];
-    if (req.loc == M.IndirectionTableLocation()) {
+    if (req.loc == IndirectionTableLocation()) {
       var indirectionTable := s.machine.frozenIndirectionTable.value;
       DiskCacheGraphEqDiskGraph(k, s, indirectionTable);
 

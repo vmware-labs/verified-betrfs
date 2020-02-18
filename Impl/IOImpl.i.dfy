@@ -9,6 +9,7 @@ module IOImpl {
   import opened Maps
   import opened NodeImpl
   import opened CacheImpl
+  import opened LBAType
   import StateModel
   import MarshallingImpl
   import IOModel
@@ -23,16 +24,16 @@ module IOImpl {
 
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(s: ImplVariables, len: uint64)
-  returns (loc : Option<BC.Location>)
+  returns (loc : Option<Location>)
   requires s.ready
   requires s.WF()
-  requires len <= LBAType.BlockSize()
+  requires len <= NodeBlockSizeUint64()
   ensures loc == IOModel.getFreeLoc(s.I(), len)
   {
     IOModel.reveal_getFreeLoc();
     var i := s.blockAllocator.Alloc();
     if i.Some? {
-      loc := Some(LBAType.Location((i.value * BlockSizeUint64()), len));
+      loc := Some(LBAType.Location((i.value * NodeBlockSizeUint64()), len));
     } else {
       loc := None;
     }
@@ -114,7 +115,7 @@ module IOImpl {
     IOModel.reveal_PageInIndirectionTableReq();
 
     if (s.outstandingIndirectionTableRead.None?) {
-      var id := RequestRead(io, BC.IndirectionTableLocation());
+      var id := RequestRead(io, IndirectionTableLocation());
       s.outstandingIndirectionTableRead := Some(id);
     } else {
       print "PageInIndirectionTableReq: request already out\n";
@@ -166,7 +167,7 @@ module IOImpl {
   {
     var id1, bytes := io.getReadResult();
     id := id1;
-    if |bytes| as uint64 <= BlockSizeUint64() {
+    if |bytes| as uint64 <= IndirectionTableBlockSizeUint64() {
       var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
       sector := sectorOpt;
     } else {
@@ -382,7 +383,7 @@ module IOImpl {
     } else if (s.ready && id in s.outstandingBlockWrites) {
       IOModel.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
 
-      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64());
+      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
       s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
     } else {
     }

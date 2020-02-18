@@ -15,38 +15,50 @@ module AsyncSectorDiskModelTypes {
 
 module LBAType {
   import opened NativeTypes
-  import Bounds
+  import opened Bounds
 
-  type LBA(==,!new) = uint64
-  datatype Location = Location(addr: LBA, len: uint64)
+  type Addr(==,!new) = uint64
+  datatype Location = Location(addr: Addr, len: uint64)
 
-  function method BlockSize() : uint64 { Bounds.BlockSizeUint64() }
-  function method IndirectionTableLBA() : LBA { 0 }
+  function method IndirectionTableAddr() : Addr { 0 }
   function method IndirectionTableLocation() : Location {
-    Location(IndirectionTableLBA(), BlockSize())
+    Location(
+      IndirectionTableAddr(),
+      IndirectionTableBlockSizeUint64())
   }
-  predicate method {:opaque} ValidAddr(addr: LBA) {
+  predicate method {:opaque} ValidAddr(addr: Addr) {
     //exists j: int :: j * BlockSize() as int == addr as int
-    addr % BlockSize() == 0
+    //addr % BlockSize() == 0
+    addr != 0 ==> (
+      && addr % NodeBlockSizeUint64() == 0
+      && addr >= NodeBlockSizeUint64() * MinNodeBlockIndexUint64()
+    )
   }
   predicate method ValidLocation(loc: Location) {
     && ValidAddr(loc.addr)
-    && loc.len <= BlockSize()
+    && (loc.addr == 0 ==>
+      loc.len == IndirectionTableBlockSizeUint64()
+    )
+    && (loc.addr != 0 ==>
+      loc.len <= NodeBlockSizeUint64()
+    )
   }
-  lemma ValidAddrDivisor(addr: LBA) returns (i: int)
+  lemma ValidAddrDivisor(addr: Addr) returns (i: int)
   requires ValidAddr(addr);
-  ensures i * BlockSize() as int == addr as int
+  ensures i * NodeBlockSize() as int == addr as int
+  ensures addr != IndirectionTableAddr() ==> i >= MinNodeBlockIndex()
   {
     reveal_ValidAddr();
-    i := addr as int / BlockSize() as int;
+    i := addr as int / NodeBlockSize() as int;
   }
   predicate overlap(loc: Location, loc': Location) {
     loc.addr == loc'.addr
   }
 
   lemma ValidAddrMul(i: uint64)
-  requires i as int * BlockSize() as int < 0x1_0000_0000_0000_0000
-  ensures ValidAddr(i * BlockSize())
+  requires i as int * NodeBlockSize() as int < 0x1_0000_0000_0000_0000
+  requires i as int >= MinNodeBlockIndex()
+  ensures ValidAddr(i * NodeBlockSizeUint64())
   {
     reveal_ValidAddr();
   }

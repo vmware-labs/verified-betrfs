@@ -36,14 +36,14 @@ module IndirectionTableModel {
   import BC = BetreeGraphBlockCache
   import LruModel
   import MutableMapModel
-  import LBAType
+  import opened LBAType
   import opened GenericMarshalling
   import BitmapModel
   import opened Bounds
   import SetBijectivity
   import Marshalling
 
-  datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
+  datatype Entry = Entry(loc: Option<Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
 
   // TODO move bitmap in here?
@@ -55,12 +55,12 @@ module IndirectionTableModel {
 
     // These are for easy access in proof code, but all the relevant data
     // is contained in the `t: HashMap` field.
-    ghost locs: map<BT.G.Reference, BC.Location>,
+    ghost locs: map<BT.G.Reference, Location>,
     ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>,
     ghost predCounts: map<BT.G.Reference, int>
   )
 
-  function Locs(t: HashMap) : map<BT.G.Reference, BC.Location>
+  function Locs(t: HashMap) : map<BT.G.Reference, Location>
   {
     map ref | ref in t.contents && t.contents[ref].loc.Some? :: t.contents[ref].loc.value
   }
@@ -209,7 +209,7 @@ module IndirectionTableModel {
     entry.Some? && entry.value.loc.None?
   }
 
-  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (IndirectionTable, bool)
+  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: Location) : (IndirectionTable, bool)
   requires Inv(self)
   ensures var (self', added) := AddLocIfPresent(self, ref, loc);
     && Inv(self')
@@ -760,7 +760,7 @@ module IndirectionTableModel {
         == t.count as int;
   }
 
-  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
+  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires |self.graph| < MaxSize()
@@ -799,7 +799,7 @@ module IndirectionTableModel {
     (self', oldLoc)
   }
 
-  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BT.G.Reference) : (res : (IndirectionTable, Option<BC.Location>))
+  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BT.G.Reference) : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires ref in self.graph
@@ -1183,7 +1183,7 @@ module IndirectionTableModel {
           var lba := tuple.t[1].u;
           var len := tuple.t[2].u;
           var succs := tuple.t[3].ua;
-          var loc := LBAType.Location(lba, len);
+          var loc := Location(lba, len);
           if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
@@ -1331,7 +1331,7 @@ module IndirectionTableModel {
     || i == 0 // block 0 is always implicitly allocated
     || !(
       forall ref | ref in indirectionTable.locs ::
-        indirectionTable.locs[ref].addr as int != i * BlockSize() as int
+        indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
     )
   }
 
@@ -1358,7 +1358,7 @@ module IndirectionTableModel {
       assert it.next.key in I(indirectionTable).locs;
 
       var loc: uint64 := it.next.value.loc.value.addr;
-      var locIndex: uint64 := loc / BlockSize() as uint64;
+      var locIndex: uint64 := loc / NodeBlockSize() as uint64;
       if locIndex < NumBlocks() as uint64 && !BitmapModel.IsSet(bm, locIndex as int) then (
         InitLocBitmapIterate(indirectionTable,
             MutableMapModel.IterInc(indirectionTable.t, it),
@@ -1383,10 +1383,10 @@ module IndirectionTableModel {
 
   predicate IsLocAllocIndirectionTablePartial(indirectionTable: IndirectionTable, i: int, s: set<uint64>)
   {
-    || i == 0 // block 0 is always implicitly allocated
+    || i < MinNodeBlockIndex() // these blocks can't be used
     || !(
       forall ref | ref in indirectionTable.locs && ref in s ::
-        indirectionTable.locs[ref].addr as int != i * BlockSize() as int
+        indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
     )
   }
 
@@ -1431,12 +1431,12 @@ module IndirectionTableModel {
       if (succ) {
         assert it.next.key in indirectionTable.locs;
         var loc: uint64 := it.next.value.loc.value.addr;
-        var locIndex: uint64 := loc / BlockSize() as uint64;
+        var locIndex: uint64 := loc / NodeBlockSize() as uint64;
 
         //assert I(indirectionTable).locs[kv.0] == kv.1.0.value;
         LBAType.reveal_ValidAddr();
         assert BC.ValidLocationForNode(it.next.value.loc.value);
-        assert locIndex as int * BlockSize() == loc as int;
+        assert locIndex as int * NodeBlockSize() == loc as int;
 
         //assert locIndex < NumBlocks() as uint64;
         //assert !BitmapModel.IsSet(bm, locIndex as int);
@@ -1452,7 +1452,7 @@ module IndirectionTableModel {
           if IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s) { }
           /*
           if i != 0 {
-            var ref :| ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in it0.s && indirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
+            var ref :| ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in it0.s && indirectionTable.contents[ref].0.value.addr as int == i * NodeBlockSize() as int;
             if (ref == kv.0) {
               assert IsLocAllocBitmap(bm0, i);
             } else {
@@ -1477,7 +1477,7 @@ module IndirectionTableModel {
             assert indirectionTable.t.contents[ref].loc.Some?;
             assert ref in it0.s;
             assert indirectionTable.t.contents[ref] == it.next.value;
-            assert indirectionTable.t.contents[ref].loc.value.addr as int == i * BlockSize() as int;
+            assert indirectionTable.t.contents[ref].loc.value.addr as int == i * NodeBlockSize() as int;
 
             assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s);
           } else {
@@ -1683,7 +1683,7 @@ module IndirectionTableModel {
   }
 
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
-    : (res : (IndirectionTable, Option<BC.Location>))
+    : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires deallocable(self, ref)
@@ -1774,7 +1774,7 @@ module IndirectionTableModel {
     FindRefWithNoLocIterate(self, it)
   }
 
-  function {:opaque} ConstructorRootOnly(loc: BC.Location) : (self' : IndirectionTable)
+  function {:opaque} ConstructorRootOnly(loc: Location) : (self' : IndirectionTable)
   ensures Inv(self')
   ensures self'.graph == map[BT.G.Root() := []]
   ensures self'.locs == map[BT.G.Root() := loc]

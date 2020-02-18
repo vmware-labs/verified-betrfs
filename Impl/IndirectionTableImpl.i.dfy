@@ -28,7 +28,7 @@ module IndirectionTableImpl {
   import LruModel
   import MutableMapModel
   import MutableMap
-  import LBAType
+  import opened LBAType
   import opened GenericMarshalling
   import BitmapModel
   import BitmapImpl
@@ -107,7 +107,7 @@ module IndirectionTableImpl {
       Repr := {this} + this.t.Repr;
     }
 
-    constructor RootOnly(loc: BC.Location)
+    constructor RootOnly(loc: Location)
     ensures Inv()
     ensures fresh(Repr)
     ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
@@ -163,7 +163,7 @@ module IndirectionTableImpl {
     }
 
     method RemoveLoc(ref: BT.G.Reference)
-    returns (oldLoc: Option<BC.Location>)
+    returns (oldLoc: Option<Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     requires ref in I().graph
@@ -187,7 +187,7 @@ module IndirectionTableImpl {
       ghost var _ := IndirectionTableModel.RemoveLoc(old(I()), ref);
     }
 
-    method AddLocIfPresent(ref: BT.G.Reference, loc: BC.Location)
+    method AddLocIfPresent(ref: BT.G.Reference, loc: Location)
     returns (added : bool)
     requires Inv()
     modifies Repr
@@ -217,7 +217,7 @@ module IndirectionTableImpl {
     }
 
     method RemoveRef(ref: BT.G.Reference)
-    returns (oldLoc : Option<BC.Location>)
+    returns (oldLoc : Option<Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     requires IndirectionTableModel.deallocable(I(), ref)
@@ -353,7 +353,7 @@ module IndirectionTableImpl {
     }
 
     method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
-    returns (oldLoc : Option<BC.Location>)
+    returns (oldLoc : Option<Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     requires |succs| <= MaxNumChildren()
@@ -801,7 +801,7 @@ module IndirectionTableImpl {
         assert it.next.key in IndirectionTableModel.I(I()).locs;
 
         var loc: uint64 := it.next.value.loc.value.addr;
-        var locIndex: uint64 := loc / BlockSizeUint64();
+        var locIndex: uint64 := loc / NodeBlockSizeUint64();
         if locIndex < NumBlocksUint64() {
           var isSet := bm.GetIsSet(locIndex);
           if !isSet {

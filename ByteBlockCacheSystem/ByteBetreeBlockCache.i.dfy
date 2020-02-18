@@ -24,18 +24,12 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   import Marshalling
 
   import SD = AsyncSectorDisk
-  import LBAType
+  import opened LBAType
 
   type Constants = BBC.Constants
   type Variables = BBC.Variables
-  type Location = LBAType.Location
 
   function BlockSize() : int { 8 * 1024 * 1024 }
-
-  predicate ValidAddr(addr: uint64)
-  {
-    LBAType.ValidAddr(addr)
-  }
 
   function {:opaque} Parse(sector: seq<byte>) : Option<BBC.Sector>
   requires |sector| <= BlockSize() - 32
@@ -94,12 +88,12 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   function IReqRead(reqRead: D.ReqRead) : SD.ReqRead
   requires ValidReqRead(reqRead)
   {
-    SD.ReqRead(LBAType.Location(reqRead.addr, reqRead.len))
+    SD.ReqRead(Location(reqRead.addr, reqRead.len))
   }
   function IReqWrite(reqWrite: D.ReqWrite) : SD.ReqWrite<BBC.Sector>
   requires ValidReqWrite(reqWrite)
   {
-    SD.ReqWrite(LBAType.Location(reqWrite.addr, |reqWrite.bytes| as uint64), IBytes(reqWrite.bytes))
+    SD.ReqWrite(Location(reqWrite.addr, |reqWrite.bytes| as uint64), IBytes(reqWrite.bytes))
   }
   function IRespRead(respRead: D.RespRead) : SD.RespRead<BBC.Sector>
   {

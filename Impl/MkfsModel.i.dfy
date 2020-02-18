@@ -7,6 +7,7 @@ module MkfsModel {
   import opened Sequences
   import opened NativeTypes
   import opened BucketsLib
+  import opened Bounds
   import BT = PivotBetree
   import ADM = ByteBetreeBlockCacheSystem
   import LBAType
@@ -19,14 +20,14 @@ module MkfsModel {
 
   predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
   {
-    && diskContents.Keys == {0, LBAType.BlockSize()}
+    && diskContents.Keys == {0, NodeBlockSizeUint64()}
     && var b0 := diskContents[0];
-    && var b1 := diskContents[LBAType.BlockSize()];
-    && |b0| == LBAType.BlockSize() as int
-    && |b1| <= LBAType.BlockSize() as int
+    && var b1 := diskContents[NodeBlockSizeUint64()];
+    && |b0| == NodeBlockSize() as int
+    && |b1| <= NodeBlockSize() as int
     && Marshalling.parseCheckedSector(b0)
       == Some(BC.SectorIndirectionTable(BC.IndirectionTable(
-        map[BT.G.Root() := LBAType.Location(LBAType.BlockSize(), |b1| as uint64)],
+        map[BT.G.Root() := LBAType.Location(NodeBlockSizeUint64(), |b1| as uint64)],
         map[BT.G.Root() := []]
       )))
     && Marshalling.parseCheckedSector(b1)
@@ -54,13 +55,13 @@ module MkfsModel {
     ADM.D.reveal_ChecksumChecksOut();
 
     var b0 := diskContents[0];
-    var b1 := diskContents[LBAType.BlockSize()];
+    var b1 := diskContents[NodeBlockSize()];
 
     assert ADM.M.ValidBytes(b0);
     assert ADM.M.ValidBytes(b1);
 
     var loc0 := LBAType.IndirectionTableLocation();
-    var loc1 := LBAType.Location(LBAType.BlockSize(), |b1| as uint64);
+    var loc1 := LBAType.Location(NodeBlockSize(), |b1| as uint64);
 
     //assert loc0.addr as int + loc0.len as int <= |s.disk.contents|;
     //assert s.disk.contents[0 .. |b0|] == b0;
