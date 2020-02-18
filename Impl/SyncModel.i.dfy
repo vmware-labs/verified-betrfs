@@ -230,7 +230,7 @@ module SyncModel {
         assert indirectionTable'.locs[ref].addr as int == i * NodeBlockSize() as int;
         assert IsLocAllocIndirectionTable(indirectionTable', i);
       } else {
-        if i == 0 {
+        if 0 <= i < MinNodeBlockIndex() {
           assert IsLocAllocIndirectionTable(indirectionTable', i);
         } else {
           assert IsLocAllocIndirectionTable(indirectionTable, i);
