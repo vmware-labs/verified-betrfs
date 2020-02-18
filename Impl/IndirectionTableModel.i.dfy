@@ -1328,7 +1328,8 @@ module IndirectionTableModel {
 
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
-    || i == 0 // block 0 is always implicitly allocated
+    // Can't use the lower values, so they're always marked "allocated"
+    || i < MinNodeBlockIndex()
     || !(
       forall ref | ref in indirectionTable.locs ::
         indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
@@ -1339,6 +1340,24 @@ module IndirectionTableModel {
   {
     && 0 <= i < BitmapModel.Len(bm)
     && BitmapModel.IsSet(bm, i)
+  }
+
+  function BitmapInitUpToIterate(bm: BitmapModel.BitmapModelT, i: uint64, upTo: uint64) : (res:BitmapModel.BitmapModelT)
+  requires 0 <= i as int <= upTo as int <= BitmapModel.Len(bm)
+  ensures BitmapModel.Len(res) == BitmapModel.Len(bm)
+  decreases upTo - i
+  {
+    if i == upTo then
+      bm
+    else
+      BitmapInitUpToIterate(BitmapModel.BitSet(bm, i as int), i+1, upTo)
+  }
+
+  function {:opaque} BitmapInitUpTo(bm: BitmapModel.BitmapModelT, upTo: uint64) : (res:BitmapModel.BitmapModelT)
+  requires upTo as int <= BitmapModel.Len(bm)
+  ensures BitmapModel.Len(res) == BitmapModel.Len(bm)
+  {
+    BitmapInitUpToIterate(bm, 0, upTo)
   }
 
   function InitLocBitmapIterate(indirectionTable: IndirectionTable,
@@ -1375,7 +1394,7 @@ module IndirectionTableModel {
   ensures BitmapModel.Len(res.1) == NumBlocks()
   {
     var bm := BitmapModel.EmptyBitmap(NumBlocks());
-    var bm' := BitmapModel.BitSet(bm, 0);
+    var bm' := BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
     InitLocBitmapIterate(indirectionTable,
         MutableMapModel.IterStart(indirectionTable.t),
         bm')
@@ -1383,7 +1402,7 @@ module IndirectionTableModel {
 
   predicate IsLocAllocIndirectionTablePartial(indirectionTable: IndirectionTable, i: int, s: set<uint64>)
   {
-    || i < MinNodeBlockIndex() // these blocks can't be used
+    || 0 <= i < MinNodeBlockIndex() // these blocks can't be used
     || !(
       forall ref | ref in indirectionTable.locs && ref in s ::
         indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
@@ -1539,23 +1558,19 @@ module IndirectionTableModel {
     var it := MutableMapModel.IterStart(indirectionTable.t);
 
     var bm := BitmapModel.EmptyBitmap(NumBlocks());
-    var bm' := BitmapModel.BitSet(bm, 0);
+    var bm' := BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
 
-    /*forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
+    forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     ensures IsLocAllocBitmap(bm', i)
     {
-      assert i == 0;
-    }*/
+      assert i < MinNodeBlockIndex();
+      assume BitmapModel.IsSet(bm', i);
+    }
 
     forall i: int | IsLocAllocBitmap(bm', i)
     ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     {
-      if i != 0 {
-        assert BitmapModel.IsSet(bm', i)
-            == BitmapModel.IsSet(bm, i)
-            == false;
-      }
-      assert i == 0;
+      assume i < MinNodeBlockIndex();
     }
 
     InitLocBitmapIterateCorrect(indirectionTable, it, bm');

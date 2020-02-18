@@ -774,6 +774,34 @@ module IndirectionTableImpl {
 
     // To bitmap
 
+    static method BitmapInitUpToIterate(bm: BitmapImpl.Bitmap, i: uint64, upTo: uint64)
+    requires bm.Inv()
+    requires 0 <= i as int <= upTo as int <= BitmapModel.Len(bm.I())
+    modifies bm.Repr
+    ensures bm.Inv()
+    ensures bm.I() == IndirectionTableModel.BitmapInitUpToIterate(old(bm.I()), i, upTo)
+    ensures bm.Repr == old(bm.Repr)
+    decreases upTo - i
+    {
+      if i == upTo {
+      } else {
+        bm.Set(i);
+        BitmapInitUpToIterate(bm, i+1, upTo);
+      }
+    }
+
+    static method BitmapInitUpTo(bm: BitmapImpl.Bitmap, upTo: uint64)
+    requires bm.Inv()
+    requires upTo as int <= BitmapModel.Len(bm.I())
+    modifies bm.Repr
+    ensures bm.Inv()
+    ensures bm.I() == IndirectionTableModel.BitmapInitUpTo(old(bm.I()), upTo)
+    ensures bm.Repr == old(bm.Repr)
+    {
+      IndirectionTableModel.reveal_BitmapInitUpTo();
+      BitmapInitUpToIterate(bm, 0, upTo);
+    }
+
     method InitLocBitmap()
     returns (success: bool, bm: BitmapImpl.Bitmap)
     requires Inv()
@@ -785,7 +813,7 @@ module IndirectionTableImpl {
       IndirectionTableModel.reveal_InitLocBitmap();
 
       bm := new BitmapImpl.Bitmap(NumBlocksUint64());
-      bm.Set(0);
+      BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
       var it := t.IterStart();
       while it.next.Next?
       invariant t.Inv()
