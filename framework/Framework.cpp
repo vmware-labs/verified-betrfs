@@ -159,47 +159,26 @@ namespace MainDiskIOHandler_Compile {
     ReadTask(DafnySequence<uint8_t> s) : bytes(s) { }
   };
 
-#if USE_DIRECT
-  std::string getFilename(uint64 addr) {
-    // Convert to hex
-    char num[17];
-    for (int i = 0; i < 16; i++) {
-      int digit = (addr >> (4 * i)) & 0xf;
-      num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
-    }
-    num[16] = '\0';
-    return "/tmp/.veribetrfs-storage/" + std::string(num);
-  }
+  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
+  {
+    #ifdef LOG_QUERY_STATS
+    auto t1 = chrono::high_resolution_clock::now();
+    #endif
 
-  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
-  {
-    size_t aligned_len = (len + 4095) & ~0xfffULL;
-    uint8_t *aligned_res;
-    int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
-    if (result != 0) {
-      fail("Couldn't allocate aligned memory");
-    }
-    
-    ssize_t count = pread(fd, aligned_res, aligned_len, addr);
-    if (count < 0) {
-      free(aligned_res);
-      fail("pread failed");
-    }
-    memcpy(res, aligned_res, len);
-    free(aligned_res);
-    
-    return (uint64)count;
-  }
-#else
-  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
-  {
     ssize_t count = pread(fd, res, len, addr);
+
+    #ifdef LOG_QUERY_STATS
+    auto t2 = chrono::high_resolution_clock::now();
+    long long ns = std::chrono::duration_cast<
+        std::chrono::nanoseconds>(t2 - t1).count();
+    benchmark_append("pread", ns);
+    #endif
+
     if (count < 0) {
       fail("pread failed");
     }
     return (uint64)count;
   }
-#endif // USE_DIRECT
 
   void writeSync(int fd, uint64 addr, uint8_t* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
@@ -284,11 +263,34 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
     #ifdef LOG_QUERY_STATS
-    benchmark_start("read");
+    benchmark_start("DiskIOHandler::read alloc");
     #endif
 
+    #if USE_DIRECT
+    size_t aligned_len = (len + 4095) & ~0xfffULL;
+    uint8_t* aligned_res;
+    int result = posix_memalign((void **)&aligned_res,
+        4096, aligned_len);
+    if (result != 0) {
+      fail("DiskIOHandler::read couldn't allocate aligned memory");
+    }
+    DafnySequence<uint8_t> bytes;
+    bytes.sptr = std::shared_ptr<uint8_t>(aligned_res, free);
+    bytes.start = aligned_res;
+    bytes.len = len;
+    #else
     DafnySequence<uint8_t> bytes(len);
+    #endif
+
+    #ifdef LOG_QUERY_STATS
+    benchmark_end("DiskIOHandler::read alloc");
+    #endif
+
     readSync(fd, addr, len, bytes.ptr());
+
+    #ifdef LOG_QUERY_STATS
+    benchmark_start("DiskIOHandler::read finish");
+    #endif
 
     uint64 id = this->curId;
     this->curId++;
@@ -296,7 +298,7 @@ namespace MainDiskIOHandler_Compile {
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
 
     #ifdef LOG_QUERY_STATS
-    benchmark_end("read");
+    benchmark_end("DiskIOHandler::read finish");
     #endif
 
     return id;
