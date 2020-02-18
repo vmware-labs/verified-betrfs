@@ -63,6 +63,12 @@ module LBAType {
     reveal_ValidAddr();
   }
 
+  lemma ValidAddr0()
+  ensures ValidAddr(0)
+  {
+    reveal_ValidAddr();
+  }
+
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
   //    reveals BlockSize
   //export extends S
