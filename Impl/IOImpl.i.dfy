@@ -27,7 +27,7 @@ module IOImpl {
   returns (loc : Option<Location>)
   requires s.ready
   requires s.WF()
-  requires len <= IndirectionTableBlockSizeUint64()
+  requires len <= NodeBlockSizeUint64()
   ensures loc == IOModel.getFreeLoc(s.I(), len)
   {
     IOModel.reveal_getFreeLoc();
@@ -68,6 +68,7 @@ module IOImpl {
   requires IM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
+  requires sector.SectorBlock?
   modifies io
   ensures s.W()
   ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))

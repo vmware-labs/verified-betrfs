@@ -70,6 +70,7 @@ module IOModel {
 
   lemma getFreeLocCorrect(s: Variables, len: uint64)
   requires getFreeLoc.requires(s, len);
+  requires len <= NodeBlockSizeUint64()
   ensures var loc := getFreeLoc(s, len);
     && (loc.Some? ==> LocAvailable(s, loc.value, len))
   {
@@ -158,7 +159,7 @@ module IOModel {
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= IndirectionTableBlockSize() as int
+      && |bytes| <= NodeBlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && WFSector(sector)
