@@ -104,7 +104,7 @@ module IOModel {
     )
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= NodeBlockSize() as int
+      && |bytes| <= IndirectionTableBlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && WFSector(sector)
@@ -158,7 +158,7 @@ module IOModel {
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= NodeBlockSize() as int
+      && |bytes| <= IndirectionTableBlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && WFSector(sector)

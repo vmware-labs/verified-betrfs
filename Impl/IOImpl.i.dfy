@@ -27,7 +27,7 @@ module IOImpl {
   returns (loc : Option<Location>)
   requires s.ready
   requires s.WF()
-  requires len <= NodeBlockSizeUint64()
+  requires len <= IndirectionTableBlockSizeUint64()
   ensures loc == IOModel.getFreeLoc(s.I(), len)
   {
     IOModel.reveal_getFreeLoc();
