@@ -10,8 +10,11 @@
 #include <aio.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <chrono>
 
 using namespace std;
+
+//#define LOG_QUERY_STATS
 
 //#define USE_DIRECT (1)
 #define USE_DIRECT (0)
@@ -280,6 +283,10 @@ namespace MainDiskIOHandler_Compile {
 
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
+    #ifdef LOG_QUERY_STATS
+    benchmark_start("read");
+    #endif
+
     DafnySequence<uint8_t> bytes(len);
     readSync(fd, addr, len, bytes.ptr());
 
@@ -287,6 +294,10 @@ namespace MainDiskIOHandler_Compile {
     this->curId++;
 
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+
+    #ifdef LOG_QUERY_STATS
+    benchmark_end("read");
+    #endif
 
     return id;
   }
@@ -473,8 +484,18 @@ void Application::Insert(ByteString key, ByteString val)
   fail("Insert operation didn't finish");
 }
 
+#ifdef LOG_QUERY_STATS
+int queryCount = 0;
+#endif
+
 ByteString Application::Query(ByteString key)
 {
+  #ifdef LOG_QUERY_STATS
+  auto t1 = chrono::high_resolution_clock::now();
+  int num_reads = 0;
+  int num_writes = 0;
+  #endif
+
   LOG("Query \"" + key.as_string() + "\"");
 
   if (key.size() > MaxKeyLen()) {
@@ -483,13 +504,41 @@ ByteString Application::Query(ByteString key)
 
   for (int i = 0; i < 500000; i++) {
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
+
+    #ifdef LOG_QUERY_STATS
+    if (io->has_write_task()) {
+      num_writes++;
+    }
+    if (io->has_read_task()) {
+      num_reads++;
+    }
+    #endif
+
+    if (io->has_write_task()) {
+      io->completeWriteTasks();
+    }
     this->maybeDoResponse();
+
     if (result.has_value()) {
       DafnySequence<uint8_t> val_bytes = *result;
       LOG("doing query... success!");
       ByteString val(val_bytes);
       LOG("query result is \"" + key.as_string() + "\" -> \"" + val.as_string() + "\"");
       LOG("");
+
+      #ifdef LOG_QUERY_STATS
+      if (queryCount > 500) {
+        // first few queries would skew results because the cache
+        // wouldn't be full yet.
+        auto t2 = chrono::high_resolution_clock::now();
+
+        long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+        benchmark_append("query-writes-" + to_string(num_writes) +
+            "-reads-" + to_string(num_reads), ns);
+      }
+      queryCount++;
+      #endif
+
       return val;
     } else {
       LOG("doing query...");
