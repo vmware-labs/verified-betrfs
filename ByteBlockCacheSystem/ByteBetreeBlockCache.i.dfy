@@ -67,10 +67,15 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
       None
   }
 
-  predicate ValidReqRead(reqRead: D.ReqRead) { ValidAddr(reqRead.addr) && reqRead.len as int <= BlockSize() }
+  predicate ValidReqRead(reqRead: D.ReqRead) {
+    && ValidAddr(reqRead.addr)
+    && ValidLocation(Location(reqRead.addr, reqRead.len))
+    && reqRead.len as int <= BlockSize()
+  }
   predicate ValidReqWrite(reqWrite: D.ReqWrite) {
     && ValidAddr(reqWrite.addr)
     && ValidBytes(reqWrite.bytes)
+    && ValidLocation(Location(reqWrite.addr, |reqWrite.bytes| as uint64))
   }
   predicate ValidRespRead(respRead: D.RespRead) { true }
   predicate ValidRespWrite(respWrite: D.RespWrite) { true }

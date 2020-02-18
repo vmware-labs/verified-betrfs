@@ -60,7 +60,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   function IContents(contents: seq<byte>) : imap<Location, BBC.Sector>
   {
     imap loc: Location |
-      && ValidAddr(loc.addr)
+      && ValidLocation(loc)
       && 0 <= loc.addr
       && 0 <= loc.len
       && loc.addr as int + loc.len as int <= |contents|
