@@ -8,6 +8,10 @@ cd .dafny
 
 git clone https://github.com/boogie-org/boogie
 cd boogie
+# TODO next line locks us into a version of Boogie from Feb 2020, before
+# boogie broke the dafny build with:
+# "'DafnyOptions' does not contain a definition for 'AddZ3Option'"
+git checkout 124d1cee315b79585f7738deb6d72579578d24e2
 wget https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
 mono ./nuget.exe restore Source/Boogie.sln
 msbuild /p:Configuration=Release Source/Boogie.sln
