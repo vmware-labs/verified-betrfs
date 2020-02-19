@@ -337,7 +337,7 @@ int main(int argc, char* argv[]) {
     // check that base_directory is empty
     int status = std::system(("[ \"$(ls -A " + base_directory + ")\" ]").c_str());
     if (status == 0) {
-        cerr << "error: " << base_directory << " appears to be non-empty";
+        cerr << "error: " << base_directory << " appears to be non-empty" << endl;
         exit(-1);
     }
 

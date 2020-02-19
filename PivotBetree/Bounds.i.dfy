@@ -9,9 +9,9 @@ module Bounds {
   import opened NativeTypes
   import opened KeyType
 
-  function method IndirectionTableBlockSizeUint64() : uint64 { 8*1024*1024 }
+  function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 }
   function method NodeBlockSizeUint64() : uint64 { 98304 }
-  function method MinNodeBlockIndexUint64() : uint64 { 86 }
+  function method MinNodeBlockIndexUint64() : uint64 { 257 }
 
   //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
   //function method MaxCacheSizeUint64() : uint64 { 200 }
@@ -23,7 +23,7 @@ module Bounds {
   // Minimum weight a bucket needs to have before we consider flushing it.
   function method FlushTriggerWeightUint64() : uint64 { MaxTotalBucketWeightUint64() / 8 }
 
-  function method NumBlocksUint64() : uint64 { 0x1_0000 }
+  function method NumBlocksUint64() : uint64 { 0x10_0000 }
 
   function method IndirectionTableMaxSizeUint64() : uint64 { 0x1_0000_0000 }
 
