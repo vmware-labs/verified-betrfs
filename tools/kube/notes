@@ -46,3 +46,8 @@ docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial
 docker image build veribetrfs_ci
 docker container run -t -i `docker image ls -q | head -1` /bin/bash
 sudo docker inspect -f "{{ .NetworkSettings.IPAddress }}" `docker container ls --latest -q`
+
+docker image build veribetrfs_ci
+docker container run -t -i `docker image ls -q | head -1`
+dest=$(sudo docker inspect -f "{{ .NetworkSettings.IPAddress }}" `docker container ls --latest -q`)
+ssh dafnyserver@${dest}
