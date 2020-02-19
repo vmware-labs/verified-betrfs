@@ -400,6 +400,9 @@ int main(int argc, char* argv[]) {
         options.create_if_missing = true;
         options.error_if_exists = true;
 
+        // FIXME this is probably not fair, especially when we implement off-thread compaction
+        options.max_background_jobs = 0;
+
         // disabled - we let rocks use the page cache
         // options.use_direct_reads = true;
         // options.use_direct_io_for_flush_and_compaction = true;
