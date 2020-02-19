@@ -16,12 +16,14 @@ module InsertModel {
   import opened BucketWeights
   import opened BucketsLib
   import opened Bounds
+  import opened KeyType
+  import opened ValueMessage
 
   import PBS = PivotBetreeSpec`Spec
 
   // == insert ==
 
-  function {:opaque} NodeInsertKeyValue(node: Node, key: MS.Key, msg: Message) : Node
+  function {:opaque} NodeInsertKeyValue(node: Node, key: Key, msg: Message) : Node
   requires WFNode(node)
   {
     var r := Pivots.Route(node.pivotTable, key);
@@ -30,14 +32,14 @@ module InsertModel {
     node.(buckets := node.buckets[r := newBucket])
   }
 
-  function {:opaque} CacheInsertKeyValue(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, key: MS.Key, msg: Message) : map<BT.G.Reference, Node>
+  function {:opaque} CacheInsertKeyValue(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, key: Key, msg: Message) : map<BT.G.Reference, Node>
   requires ref in cache
   requires WFNode(cache[ref])
   {
     cache[ref := NodeInsertKeyValue(cache[ref], key, msg)]
   }
 
-  function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
+  function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: Key, value: Value)
   : (Variables, bool)
   requires Inv(k, s)
   requires s.Ready?
@@ -61,7 +63,7 @@ module InsertModel {
     )
   }
 
-  lemma InsertKeyValueCorrect(k: Constants, s: Variables, key: MS.Key, value: MS.Value)
+  lemma InsertKeyValueCorrect(k: Constants, s: Variables, key: Key, value: Value)
   requires Inv(k, s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
@@ -91,13 +93,17 @@ module InsertModel {
     var root := s.cache[BT.G.Root()];
     var r := Pivots.Route(root.pivotTable, key);
     var bucket := root.buckets[r];
-    var newBucket := bucket[key := msg];
+    var newBucket := B(bucket.b[key := msg]);
     var newRoot := root.(buckets := root.buckets[r := newBucket]);
     var newCache := s.cache[BT.G.Root() := newRoot];
 
     WeightBucketListInsert(root.buckets, root.pivotTable, key, msg);
 
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+
+    reveal_WFBucket();
+    assert WFBucket(newBucket);
+    assert WFNode(newRoot);
 
     var s0 := s.(cache := newCache);
     var s' := writeBookkeepingNoSuccsUpdate(k, s0, BT.G.Root());
@@ -130,7 +136,7 @@ module InsertModel {
         M.Step(BBC.BetreeMoveStep(btStep)));
   }
 
-  predicate {:opaque} insert(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value,
+  predicate {:opaque} insert(k: Constants, s: Variables, io: IO, key: Key, value: Value,
       s': Variables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
@@ -163,7 +169,7 @@ module InsertModel {
     )
   }
 
-  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: MS.Key, value: MS.Value,
+  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: Key, value: Value,
       s': Variables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)

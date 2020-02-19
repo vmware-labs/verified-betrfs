@@ -3,7 +3,7 @@ include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
-include "BucketImpl.i.dfy"
+include "../lib/Buckets/BucketImpl.i.dfy"
 include "CacheImpl.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
@@ -24,15 +24,11 @@ module {:extern} StateImpl {
   import ByteBetreeBlockCacheSystem
 
   import BT = PivotBetreeSpec`Internal
-  import Messages = ValueMessage
-  import MS = MapSpec
-  import Pivots = PivotsLib
   import BC = BetreeGraphBlockCache
   import M = BetreeBlockCache
   import D = AsyncSectorDisk
   import LBAType = LBAType
   import MainDiskIOHandler
-  import LruModel
   import LruImpl
   import BucketImpl
   import opened Bounds
@@ -45,8 +41,6 @@ module {:extern} StateImpl {
   type ImplVariables = Variables
 
   type Reference = BT.G.Reference
-  type Key = MS.Key
-  type Message = Messages.Message
 
   type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
   type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
@@ -261,5 +255,13 @@ module {:extern} StateImpl {
   {
     && s.W()
     && (forall o | o in s.Repr() :: o in old(s.Repr()) || fresh(o))
+  }
+
+  function method TotalCacheSize(s: ImplVariables) : (res : uint64)
+  reads s, s.cache, s.cache.Repr
+  requires s.cache.Inv()
+  requires |s.cache.I()| + |s.outstandingBlockReads| < 0x1_0000_0000_0000_0000
+  {
+    s.cache.Count() + (|s.outstandingBlockReads| as uint64)
   }
 }

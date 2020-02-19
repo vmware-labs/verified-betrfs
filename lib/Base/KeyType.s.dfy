@@ -7,7 +7,7 @@ module {:extern} KeyType {
   type Key = s : seq<NativeTypes.byte> | |s| <= 1024
 }
 
-module {:extern} ValueWithDefault {
+module {:extern} ValueType {
   import NativeTypes
 
   function method MaxLen() : NativeTypes.uint64 { 1024 }

@@ -11,6 +11,7 @@ module GrowModel {
   import opened Sets
   import opened BucketWeights
   import opened Bounds
+  import opened BucketsLib
 
   import opened NativeTypes
 
@@ -40,7 +41,7 @@ module GrowModel {
           s1
         )
         case Some(newref) => (
-          var newroot := Node([], Some([newref]), [map[]]);
+          var newroot := Node([], Some([newref]), [B(map[])]);
           var s2 := writeBookkeeping(k, s1, BT.G.Root(), newroot.children);
           var s' := s2.(cache := s2.cache[newref := oldroot][BT.G.Root() := newroot]);
           s'
@@ -83,7 +84,7 @@ module GrowModel {
         assert noop(k, IVars(s), IVars(s1));
       }
       case Some(newref) => {
-        var newroot := Node([], Some([newref]), [map[]]);
+        var newroot := Node([], Some([newref]), [B(map[])]);
         WeightBucketListOneEmpty();
 
         assert BT.G.Root() in s.cache;
@@ -98,7 +99,7 @@ module GrowModel {
         writeCorrect(k, s1, BT.G.Root(), newroot);
 
         var growth := BT.RootGrowth(INode(oldroot), newref);
-        assert INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [map[]]);
+        assert INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [B(map[])]);
         var step := BT.BetreeGrow(growth);
         BC.MakeTransaction2(Ik(k), IVars(s), IVars(s1), IVars(s'), BT.BetreeStepOps(step));
         assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, M.IDiskOp(D.NoDiskOp), step);

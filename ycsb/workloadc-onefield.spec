@@ -3,11 +3,9 @@
 #   Application example: user profile cache, where profiles are constructed elsewhere (e.g., Hadoop)
 #                        
 #   Read/update ratio: 100/0
-#   Default data size: 1 KB records (10 fields, 100 bytes each, plus key)
-#   Request distribution: zipfian
 
-recordcount=100000
-operationcount=1000000
+recordcount=20000000
+operationcount=10000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
 readallfields=true

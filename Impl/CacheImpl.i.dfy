@@ -13,6 +13,8 @@ module CacheImpl {
   import opened NativeTypes
   import opened BucketImpl
   import opened BucketWeights
+  import opened KeyType
+  import opened ValueMessage
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -123,10 +125,13 @@ module CacheImpl {
     modifies Repr
     ensures Inv()
     ensures I() == old(I()[ref := node.I()])
+    ensures forall r | r != ref :: ptr(r) == old(ptr(r))
     ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
     {
       LemmaSizeEqCount();
+
       cache.Insert(ref, node);
+
       assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
@@ -189,7 +194,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
+    method UpdateNodeSlot(ghost ref: BT.G.Reference, node: Node, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()
     requires ref in I()
@@ -199,6 +204,7 @@ module CacheImpl {
     requires slot as int + 1 < 0x1_0000_0000_0000_0000
     requires bucket.Repr !! Repr
     requires |I()| <= 0x10000
+    requires ptr(ref) == Some(node)
     modifies Repr
     ensures Inv()
     ensures I() == old(I()[ref := IM.Node(
@@ -208,8 +214,8 @@ module CacheImpl {
       )])
     ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o)
     {
-      var nodeOpt := cache.Get(ref);
-      var node := nodeOpt.value;
+      //var nodeOpt := cache.Get(ref);
+      //var node := nodeOpt.value;
       node.UpdateSlot(slot, bucket, childref);
 
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
@@ -237,7 +243,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: IM.Message)
+    method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: Message)
     requires Inv()
     requires ref in I()
     requires IM.WFNode(I()[ref])

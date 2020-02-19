@@ -15,6 +15,9 @@ module BetreeInv {
   import opened BetreeSpec`Internal
   import opened G = BetreeSpec.G
   import opened Options
+  import opened KeyType
+  import opened ValueType
+  import UI
 
   predicate KeyHasSatisfyingLookup(k: Constants, view: BI.View, key: Key)
   {
@@ -853,7 +856,7 @@ module BetreeInv {
 
   // Putting it all together
 
-  lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UIOp, betreeStep: BetreeStep)
+  lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
     requires Inv(k, s)
     requires Betree(k, s, s', uiop, betreeStep)
     ensures Inv(k, s')
@@ -868,7 +871,7 @@ module BetreeInv {
     }
   }
 
-  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
+  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', uiop, step)
     ensures Inv(k, s')
@@ -880,7 +883,7 @@ module BetreeInv {
     }
   }
   
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
     requires Inv(k, s)
     requires Next(k, s, s', uiop)
     ensures Inv(k, s')

@@ -33,6 +33,11 @@ docker pull jonhdotnet/veribetrfs:1.0
 docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial,type=bind --workdir /home/dafnyserver/tutorial jonhdotnet/veribetrfs:1.0 /bin/bash
 $ dafny test.dfy
 
+mkdir work
+cd work
+docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/work,type=bind --workdir /home/dafnyserver/work jonhdotnet/veribetrfs:1.0 /bin/bash
+cp -r ../tutorial .
+cd tutorial/chapter01
 
 docker container run -t -i --mount src="`pwd`",target=/home/dafnyserver/tutorial,type=bind --workdir /home/dafnyserver/tutorial jonhdotnet/veribetrfs:1.0 /bin/bash
 

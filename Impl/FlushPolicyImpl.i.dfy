@@ -52,14 +52,6 @@ module FlushPolicyImpl {
     return (bestIdx, bestWeight);
   }
 
-  function method TotalCacheSize(s: ImplVariables) : (res : uint64)
-  reads s, s.cache, s.cache.Repr
-  requires s.cache.Inv()
-  requires |s.cache.I()| + |s.outstandingBlockReads| < 0x1_0000_0000_0000_0000
-  {
-    s.cache.Count() + (|s.outstandingBlockReads| as uint64)
-  }
-
   method getActionToSplit(k: ImplConstants, s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) returns (action : FlushPolicyModel.Action)
   requires 0 <= i as int < |stack|
   requires Inv(k, s)

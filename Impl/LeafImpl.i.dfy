@@ -42,8 +42,7 @@ module LeafImpl {
       }
     }
 
-    var kvl := node.buckets[0 as uint64].GetKvl();
-    var pivot := KVList.GetMiddleKey(kvl);
+    var pivot := node.buckets[0 as uint64].GetMiddleKey();
 
     var pivots := [pivot];
 

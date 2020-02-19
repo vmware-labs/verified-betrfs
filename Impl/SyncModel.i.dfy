@@ -572,19 +572,21 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) then (
           (s', io') == syncNotFrozen(k, s, io)
         ) else (
-          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
-          if foundInFrozen.Some? then (
-            syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
-          ) else if (s.outstandingBlockWrites != map[]) then (
-            && s' == s
+          var (frozen0, ref) := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
+          var s0 := s.(frozenIndirectionTable := Some(frozen0));
+          assert Inv(k, s0) by { reveal_ConsistentBitmap(); }
+          if ref.Some? then (
+            syncFoundInFrozen(k, s0, io, ref.value, s', io')
+          ) else if (s0.outstandingBlockWrites != map[]) then (
+            && s' == s0
             && io' == io
           ) else (
             if (diskOp(io').ReqWriteOp?) then (
               var id := Some(diskOp(io').id);
-              && RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io')
-              && s' == s.(outstandingIndirectionTableWrite := id)
+              && RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s0.frozenIndirectionTable.value), id, io')
+              && s' == s0.(outstandingIndirectionTableWrite := id)
             ) else (
-              && s' == s
+              && s' == s0
               && io' == io
             )
           )
@@ -613,16 +615,18 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) {
           syncNotFrozenCorrect(k, s, io);
         } else {
-          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
-          if foundInFrozen.Some? {
-            syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
-          } else if (s.outstandingBlockWrites != map[]) {
-            assert noop(k, IVars(s), IVars(s));
+          var (frozen0, ref) := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
+          var s0 := s.(frozenIndirectionTable := Some(frozen0));
+          assert Inv(k, s0) by { reveal_ConsistentBitmap(); }
+          if ref.Some? {
+            syncFoundInFrozenCorrect(k, s0, io, ref.value, s', io');
+          } else if (s0.outstandingBlockWrites != map[]) {
+            assert noop(k, IVars(s), IVars(s0));
           } else {
             if (diskOp(io').ReqWriteOp?) {
               var id := Some(diskOp(io').id);
               LBAType.reveal_ValidAddr();
-              RequestWriteCorrect(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io');
+              RequestWriteCorrect(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s0.frozenIndirectionTable.value), id, io');
               assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
               assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
             } else {

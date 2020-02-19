@@ -9,6 +9,7 @@ module EvictImpl {
   import opened SyncImpl
   import EvictModel
   import opened StateImpl
+  import opened Bounds
 
   import opened Options
   import opened Maps
@@ -104,6 +105,31 @@ module EvictImpl {
           } else {
           }
         }
+      }
+    }
+  }
+
+  method PageInReqOrMakeRoom(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  requires Inv(k, s)
+  requires s.ready
+  requires io.initialized()
+  requires io !in s.Repr()
+  requires ref in s.ephemeralIndirectionTable.I().graph
+  requires ref !in s.cache.I()
+  modifies io
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.ready
+  ensures EvictModel.PageInReqOrMakeRoom(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  {
+    EvictModel.reveal_PageInReqOrMakeRoom();
+
+    if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+      PageInReq(k, s, io, ref);
+    } else {
+      var c := s.cache.Count(); 
+      if c > 0 {
+        EvictOrDealloc(k, s, io);
       }
     }
   }

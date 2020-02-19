@@ -1,5 +1,6 @@
 include "SyncImpl.i.dfy"
 include "QueryModel.i.dfy"
+include "EvictImpl.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -14,12 +15,16 @@ module QueryImpl {
   import BookkeepingModel
   import opened StateImpl
   import opened BucketImpl
+  import opened EvictImpl
 
   import opened Options
   import opened NativeTypes
   import opened Maps
   import opened Sets
   import opened Sequences
+  import opened KeyType
+  import opened ValueType
+  import ValueMessage
 
   import opened Bounds
   import opened BucketsLib
@@ -29,15 +34,15 @@ module QueryImpl {
 
   // == query ==
 
-  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: MS.Key)
-  returns (res: Option<MS.Value>)
+  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: Key)
+  returns (res: Option<Value>)
   requires io.initialized()
   requires Inv(k, s)
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), res, IIO(io)) == QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key)
+  ensures QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key, s.I(), res, IIO(io))
   {
     QueryModel.reveal_query();
     QueryModel.reveal_queryIterate();
@@ -47,16 +52,18 @@ module QueryImpl {
       res := None;
     } else {
       var ref := BT.G.Root();
-      var msg := Messages.IdentityMessage();
+      var msg := ValueMessage.IdentityMessage();
       var counter: uint64 := 40;
 
+      // TODO write this in recursive style, it would be a lot simpler?
       while true
       invariant Inv(k, s)
       invariant s.ready
       invariant ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
       invariant io.initialized()
-      invariant QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key)
-             == QueryModel.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter)
+      invariant forall s', r, io' ::
+          QueryModel.queryIterate(Ic(k), s.I(), key, msg, ref, IIO(io), counter, s', r, io') ==>
+          QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key, s', r, io')
       invariant counter as int >= 0
       invariant io !in s.Repr()
       invariant WellUpdated(s)
@@ -69,14 +76,9 @@ module QueryImpl {
 
         var nodeOpt := s.cache.GetOpt(ref);
         if (nodeOpt.None?) {
-          if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
-            PageInReq(k, s, io, ref);
-            res := None;
-            return;
-          } else {
-            res := None;
-            return;
-          }
+          PageInReqOrMakeRoom(k, s, io, ref);
+          res := None;
+          return;
         } else {
           var node := nodeOpt.value;
 
@@ -93,7 +95,7 @@ module QueryImpl {
           var bucket := node.buckets[r];
 
           var kmtMsg := bucket.Query(key);
-          var newmsg := if kmtMsg.Some? then Messages.Merge(msg, kmtMsg.value) else msg;
+          var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
 
           if (newmsg.Define?) {
             res := Some(newmsg.value);
@@ -104,7 +106,7 @@ module QueryImpl {
               counter := counter - 1;
               ref := node.children.value[r];
             } else {
-              res := Some(MS.V.DefaultValue());
+              res := Some(ValueType.DefaultValue());
               return;
             }
           }

@@ -4,3 +4,6 @@
 [submodule "vendor/hdrhist"]
 	path = vendor/hdrhist
 	url = git@github.com:utaal/hdrhist-cpp.git
+[submodule "vendor/rocksdb"]
+	path = vendor/rocksdb
+	url = git@github.com:facebook/rocksdb.git

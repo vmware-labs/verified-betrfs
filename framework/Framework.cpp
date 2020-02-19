@@ -1,7 +1,7 @@
 #include "BundleWrapper.h"
 #include "Application.h"
 
-#include "Bundle.h"
+#include "Bundle.i.h"
 
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
@@ -9,6 +9,22 @@
 #include <unistd.h>
 #include <aio.h>
 #include <stdio.h>
+#include <fcntl.h>
+
+//#define USE_DIRECT (1)
+#define USE_DIRECT (0)
+
+#ifndef O_NOATIME
+#define O_NOATIME (0)
+#endif
+
+#define O_DIRECT_FLAG (0)
+#if USE_DIRECT
+#ifdef O_DIRECT
+#undef O_DIRECT_FLAG
+#define O_DIRECT_FLAG O_DIRECT
+#endif
+#endif
 
 [[ noreturn ]]
 void fail(string err)
@@ -19,58 +35,95 @@ void fail(string err)
 
 typedef uint8 byte;
 
+constexpr int MAX_WRITE_REQS_OUT = 8;
+
 namespace MainDiskIOHandler_Compile {
   constexpr int BLOCK_SIZE = 8*1024*1024;
 
+#if USE_DIRECT
+  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
+    byte *aligned_bytes;
+    *aligned_len = (len + 4095) & ~0xfffUL;
+    int result = posix_memalign((void **)&aligned_bytes, 4096, *aligned_len);
+    if (result) {
+      return NULL;
+      }
+    memcpy(aligned_bytes, buf, len);
+    return aligned_bytes;
+  }
+#else
+  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
+    byte *aligned_bytes = (byte *)malloc(len);
+    if (aligned_bytes) {
+      memcpy(aligned_bytes, buf, len);
+      *aligned_len = len;
+    }
+    return aligned_bytes;
+  }
+#endif // USE_DIRECT
+  
+  int nWriteReqsOut = 0;
+  int nWriteReqsWaiting = 0;
+
   struct WriteTask {
-    FILE* f;
-
-    vector<byte> bytes;
+    size_t aligned_len;
+    byte *aligned_bytes;
     aiocb aio_req_write;
-    aiocb aio_req_fsync;
 
+    bool made_req;
     bool done;
+
+    ~WriteTask() {
+      free(aligned_bytes);
+    }
     
-    WriteTask(FILE* f, byte* buf, size_t len) {
+    WriteTask(int fd, uint64 addr, byte* buf, size_t len) {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
 
-      // TODO we actually need to fsync the directory too,
-      // but it would be even better to just write straight to a device.
+      aligned_bytes = aligned_copy(buf, len, &aligned_len);
+      if (aligned_bytes == NULL) {
+        fail("Couldn't create aligned copy of buffer");
+      }
 
-      bytes.resize(len);
-      std::copy(buf, buf + len, bytes.begin());
-
-      this->f = f;
-      this->done = false;
-
-      aio_req_write.aio_fildes = fileno(f);
-      aio_req_write.aio_offset = 0;
-      aio_req_write.aio_buf = &bytes[0];
-      aio_req_write.aio_nbytes = len;
+      aio_req_write.aio_fildes = fd;
+      aio_req_write.aio_offset = addr;
+      aio_req_write.aio_buf = &aligned_bytes[0];
+      aio_req_write.aio_nbytes = aligned_len;
       aio_req_write.aio_reqprio = 0;
       aio_req_write.aio_sigevent.sigev_notify = SIGEV_NONE;
 
+      this->done = false;
+      this->made_req = false;
+
+      nWriteReqsWaiting++;
+    }
+
+    void start() {
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
-        fail("aio_write failed");
+        cout << "number of writeReqs " << endl;
+        if (errno == EAGAIN) { fail("aio_write failed EAGAIN"); }
+        else if (errno == EBADF) { fail("aio_write failed EBADF"); }
+        else if (errno == EFBIG) { fail("aio_write failed EFBIG"); }
+        else if (errno == EINVAL) { fail("aio_write failed EINVAL"); }
+        else if (errno == ENOSYS) { fail("aio_write failed ENOSYS"); }
+        else { fail("aio_write failed, error unknown, " + to_string(errno)); }
       }
 
-      aio_req_fsync.aio_fildes = fileno(f);
-      aio_req_fsync.aio_reqprio = 0;
-      aio_req_fsync.aio_sigevent.sigev_notify = SIGEV_NONE;
-
-      ret = aio_fsync(O_SYNC, &aio_req_fsync);
-      if (ret != 0) {
-        fail("aio_fsync failed");
-      }
+      this->made_req = true;
+      nWriteReqsOut++;
+      nWriteReqsWaiting--;
     }
 
     void wait() {
+      if (!this->made_req) {
+        fail("wait() failed - request not made yet");
+      }
       if (!done) {
         aiocb* aiolist[1];
-        aiolist[0] = &aio_req_fsync;
+        aiolist[0] = &aio_req_write; //&aio_req_fsync;
         aio_suspend(aiolist, 1, NULL);
 
         check_if_complete();
@@ -81,32 +134,17 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void check_if_complete() {
-      if (!done) {
-        int status = aio_error(&aio_req_fsync);
+      if (!done && made_req) {
+        int status = aio_error(&aio_req_write);
         if (status == 0) {
-          status = aio_error(&aio_req_write);
-          if (status != 0) {
-            fail("fsync finished but write somehow did not");
+          ssize_t ret = aio_return(&aio_req_write);
+          if (ret < 0 || (size_t)ret != aligned_len) {
+            fail("write did not write all bytes");
           }
-
-          int ret = aio_return(&aio_req_fsync);
-          if (ret != 0) {
-            fail("fsync returned nonzero");
-          }
-
-          ret = aio_return(&aio_req_write);
-          if (ret != (int)bytes.size()) {
-            fail("fwrite did not write all bytes");
-          }
-
-          int close_res = fclose(f);
-          if (close_res != 0) {
-            fail("read fclose failed");
-          }
-
           done = true;
+          nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
-          fail("aio_error returned that fsync has failed");
+          fail("aio_error returned that write has failed");
         }
       }
     }
@@ -118,86 +156,94 @@ namespace MainDiskIOHandler_Compile {
     ReadTask(DafnySequence<byte> s) : bytes(s) { }
   };
 
-  string getFilename(uint64 addr) {
-    // Convert to hex
-    char num[17];
-    for (int i = 0; i < 16; i++) {
-      int digit = (addr >> (4 * i)) & 0xf;
-      num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
-    }
-    num[16] = '\0';
-    return ".veribetrfs-storage/" + string(num);
-  }
-
-  int readFile(string const& filename, byte* res, int len)
+#if USE_DIRECT
+  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
   {
-    FILE* f = fopen(filename.c_str(), "r");
-    if (f == NULL) {
-      fail("read fopen failed");
-    }
-
-    int count = fread(res, 1, len, f);
-    if (ferror(f) != 0) {
-      fail("fread failed");
+    size_t aligned_len = (len + 4095) & ~0xfffULL;
+    byte *aligned_res;
+    int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
+    if (result != 0) {
+      fail("Couldn't allocate aligned memory");
     }
     
-    int close_res = fclose(f);
-    if (close_res != 0) {
-      fail("read fclose failed");
+    ssize_t count = pread(fd, aligned_res, aligned_len, addr);
+    if (count < 0) {
+      free(aligned_res);
+      fail("pread failed");
     }
-
-    return count;
+    memcpy(res, aligned_res, len);
+    free(aligned_res);
+    
+    return (uint64)count;
   }
+#else
+  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
+  {
+    ssize_t count = pread(fd, res, len, addr);
+    if (count < 0) {
+      fail("pread failed");
+    }
+    return (uint64)count;
+  }
+#endif // USE_DIRECT
 
-  void writeSync(uint64 addr, byte* sector, size_t len) {
+  void writeSync(int fd, uint64 addr, byte* sector, size_t len) {
     if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
       fail("writeSync not implemented for these arguments");
     }
 
-    FILE* f = fopen(getFilename(addr).c_str(), "w");
-    if (f == NULL) {
-      fail("write fopen failed");
-    }
+    size_t aligned_len;
+    byte *aligned_sector;
+    aligned_sector = aligned_copy(sector, len, &aligned_len);
+    if (aligned_sector == NULL) {
+      fail("Couldn't create aligned copy of buffer");
+    }    
+    
+    ssize_t res = pwrite(fd, aligned_sector, aligned_len, addr);
 
-    size_t res = fwrite(sector, 1, len, f);
-    if (res != len) {
-      fail("fwrite failed");
-    }
-
-    int flush_res = fflush(f);
-    if (flush_res != 0) {
-      fail("fflush failed");
-    }
-
-    // TODO according to the fsync documentation, we also need to fsync
-    // the directory that the file is in.
-    // But really, we should probably be writing straight to a device
-    // instead.
-
-    int fsync_res = fsync(fileno(f));
-    if (fsync_res != 0) {
-      fail("fsync failed");
-    }
-
-    int close_res = fclose(f);
-    if (close_res != 0) {
-      fail("write fclose failed");
+    free(aligned_sector);
+    
+    if (res < 0 || (uint64)res != aligned_len) {
+      perror("write failed");
+      printf("fd=%d sector=%p len=%016lx addr=%016lx\n",
+             fd, sector, len, (unsigned long)addr);
+      fail("pwrite failed");
     }
   }
 
-  void readSync(uint64 addr, uint64 len, byte* sector) {
+  void readSync(int fd, uint64 addr, uint64 len, byte* sector) {
     if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
       fail("readSync not implemented for these arguments");
     }
 
-    string filename = getFilename(addr);
-    int actualRead = readFile(filename, sector, len);
-    if ((uint64)actualRead < len) {
+    uint64 actualRead = readFromFile(fd, addr, sector, len);
+    if (actualRead < len) {
       fail("readSync did not find enough bytes");
     }
   }
 
-  DiskIOHandler::DiskIOHandler() : curId(0) { }
+  DiskIOHandler::DiskIOHandler(string filename) : curId(0) {
+
+    fd = open(filename.c_str(), O_RDWR | O_DIRECT_FLAG | O_DSYNC | O_NOATIME);
+
+    if (fd == -1) {
+      fail("open failed");
+    }
+
+    #if USE_DIRECT
+    #ifdef F_NOCACHE
+    int res = fcntl(fd, F_NOCACHE, 1);
+    if (res == -1) {
+      fail("fcntl F_NOCACHE failed");
+    }
+    #endif
+    #endif
+  }
+
+  DiskIOHandler::~DiskIOHandler() {
+    if (0 <= fd)
+      close(fd);
+  }
 
   uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
   {
@@ -206,13 +252,12 @@ namespace MainDiskIOHandler_Compile {
       fail("write not implemented for these arguments");
     }
 
-    FILE* f = fopen(getFilename(addr).c_str(), "w");
-    if (f == NULL) {
-      fail("write fopen failed");
-    }
-
     shared_ptr<WriteTask> writeTask {
-      new WriteTask(f, &bytes.at(0), len) };
+      new WriteTask(fd, addr, &bytes.at(0), len) };
+
+    if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
+      writeTask->start();
+    }
 
     uint64 id = this->curId;
     this->curId++;
@@ -225,7 +270,7 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
     DafnySequence<byte> bytes(len);
-    readSync(addr, len, bytes.ptr());
+    readSync(fd, addr, len, bytes.ptr());
 
     uint64 id = this->curId;
     this->curId++;
@@ -257,6 +302,17 @@ namespace MainDiskIOHandler_Compile {
     }
   }
 
+  void DiskIOHandler::maybeStartWriteReq() {
+    for (auto it = this->writeReqs.begin();
+        it != this->writeReqs.end() && nWriteReqsWaiting > 0
+          && nWriteReqsOut < MAX_WRITE_REQS_OUT; ++it)
+    {
+      if (!it->second->made_req) {
+        it->second->start();
+      }
+    }
+  }
+
   bool DiskIOHandler::prepareWriteResponse() {
     for (auto it = this->writeReqs.begin();
         it != this->writeReqs.end(); ++it) {
@@ -265,6 +321,7 @@ namespace MainDiskIOHandler_Compile {
       if (writeTask->done) {
         this->writeResponseId = it->first;
         this->writeReqs.erase(it);
+        maybeStartWriteReq();
         return true;
       }
     }
@@ -272,8 +329,32 @@ namespace MainDiskIOHandler_Compile {
   }
 
   void DiskIOHandler::completeWriteTasks() {
-    for (auto p : this->writeReqs) {
-      p.second->wait();
+    while (true) {
+      vector<aiocb*> tasks;
+      tasks.resize(this->writeReqs.size());
+      int i = 0;
+      bool any_not_started = false;
+      for (auto p : this->writeReqs) {
+        p.second->check_if_complete();
+        if (p.second->done) {
+          continue;
+        } else if (p.second->made_req) {
+          tasks[i] = &p.second->aio_req_write;
+          i++;
+        } else {
+          any_not_started = true;
+        }
+      }
+      if (i == 0) {
+        if (any_not_started) {
+          fail("completeWriteTasks: any_not_started");
+        }
+        break;
+      }
+
+      aio_suspend(&tasks[0], i, NULL);
+
+      maybeStartWriteReq();
     }
   }
   void DiskIOHandler::waitForOne() {
@@ -283,15 +364,18 @@ namespace MainDiskIOHandler_Compile {
     for (auto p : this->writeReqs) {
       if (p.second->done) {
         return;
-      } else {
-        tasks[i] = &p.second->aio_req_fsync;
+      } else if (p.second->made_req) {
+        tasks[i] = &p.second->aio_req_write;
         i++;
       }
     }
     if (i == 0) {
       fail("waitForOne called with no tasks\n");
     }
+
     aio_suspend(&tasks[0], i, NULL);
+
+    maybeStartWriteReq();
   }
 }
 
@@ -303,7 +387,8 @@ using MainDiskIOHandler_Compile::DiskIOHandler;
   #define LOG(x)
 #endif
 
-Application::Application() {
+Application::Application(string filename) {
+  this->filename = filename;
   initialize();
 }
 
@@ -311,7 +396,7 @@ void Application::initialize() {
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
-  this->io = make_shared<DiskIOHandler>();
+  this->io = make_shared<DiskIOHandler>(this->filename);
 }
 
 void Application::crash() {
@@ -329,7 +414,7 @@ void Application::Sync() {
   }
   LOG("doing push sync...");
 
-  for (int i = 0; i < 5000; i++) {
+  for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
     auto tup2 = handle_PopSync(k, hs, io, id);
     bool wait = tup2.first;
@@ -358,11 +443,13 @@ void Application::Insert(ByteString key, ByteString val)
     fail("Insert: value is too long");
   }
 
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 500000; i++) {
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
     io->completeWriteTasks();
+
     this->maybeDoResponse();
+
     if (success) {
       LOG("doing insert... success!");
       LOG("");
@@ -383,7 +470,7 @@ ByteString Application::Query(ByteString key)
     fail("Query: key is too long");
   }
 
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 500000; i++) {
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
     this->maybeDoResponse();
     if (result.first) {
@@ -444,7 +531,7 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
     fail("SuccOnce should have maxToFind >= 1");
   }
 
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 500000; i++) {
     auto result = handle_Succ(k, hs, io, start, maxToFind);
     this->maybeDoResponse();
     if (result.first) {
@@ -499,7 +586,7 @@ void Application::log(std::string const& s) {
   std::cout << s << endl;
 }
 
-void Mkfs() {
+void Mkfs(string filename) {
   DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
 
   unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
@@ -508,29 +595,16 @@ void Mkfs() {
     fail("InitDiskBytes failed.");
   }
 
-  /*if (std::filesystem::exists(".veribetrfs-storage")) {
-    fail("error: .veribetrfs-storage/ already exists");
+  int fd = open(filename.c_str(), O_RDWR | O_DIRECT_FLAG | O_DSYNC | O_NOATIME | O_CREAT, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    fail("Could not open output file: " + filename);
   }
-  std::filesystem::create_directory(".veribetrfs-storage");*/
-  struct stat info;
-  if (stat(".veribetrfs-storage", &info) != -1) {
-    fail("error: .veribetrfs-storage/ already exists");
-  }
-  mkdir(".veribetrfs-storage", 0700);
-
+  
   for (auto p : m) {
     MainDiskIOHandler_Compile::writeSync(
-        p.first, p.second.ptr(), p.second.size());
+        fd, p.first, p.second.ptr(), p.second.size());
   }
+
+  close(fd);
 }
 
-void ClearIfExists() {
-  struct stat info;
-  if (stat(".veribetrfs-storage", &info) != -1) {
-		// TODO use std::filesystem::remove_all
-		int ret = system("rm -rf .veribetrfs-storage"); 
-		if (ret != 0) {
-		  fail("failed to delete .veribetrfs-storage");
-		}
-  }
-}

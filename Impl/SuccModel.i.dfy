@@ -11,6 +11,7 @@ module SuccModel {
   import opened StateModel
   import opened IOModel
   import opened BookkeepingModel
+  import opened KeyType
 
   import opened Options
   import opened Maps
@@ -178,7 +179,9 @@ module SuccModel {
       UI.SuccOp(start, res.results, res.end),
       diskOp(io))
   {
-    BucketSuccessorLoopModel.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
+    if (BucketListWellMarshalled(buckets)) {
+      BucketSuccessorLoopModel.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
+    }
 
     var succStep := BT.SuccQuery(start, res.results, res.end, buckets, lookup);
     assert BT.ValidSuccQuery(succStep);

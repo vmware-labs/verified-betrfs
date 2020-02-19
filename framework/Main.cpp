@@ -6,7 +6,9 @@ using namespace std;
 int main(int argc, char* argv[]) {
   bool allBenchmarks = false;
   string benchmark;
-
+  bool skipPrepare = false;
+  string image = ".veribetrfs.img";
+  
   for (int i = 1; i < argc; i++) {
     string arg = string(argv[i]);
 
@@ -14,15 +16,24 @@ int main(int argc, char* argv[]) {
       allBenchmarks = true;
     } else if (arg.substr(0, 12) == "--benchmark=") {
       benchmark = arg.substr(12);
+    } else if (arg == "--skip-prepare") {
+      skipPrepare = true;
+    } else if (arg[0] != '-') {
+      image = arg;
+    } else {
+      cout << "Unrecognized argument: " << arg << endl;
+      return 1;
     }
   }
 
   if (allBenchmarks) {
-    RunAllBenchmarks();
+    RunAllBenchmarks(image);
   } else if (benchmark != "") {
-    RunBenchmark(benchmark);
+    RunBenchmark(image, benchmark, skipPrepare);
   } else {
-    cout << "Use --all-benchmarks or --benchmark" << endl;
+    cout << "Usage: Veribetrfs --all-benchmarks [disk.img]" << endl;
+    cout << "Usage: Veribetrfs [--skip-prepare] --benchmark=<benchmark> [disk.img]" << endl;
+    cout << "Default disk image is .veribetrfs.img" << endl;
   }
 }
 
@@ -32,22 +43,25 @@ int main(int argc, char* argv[]) {
   for (auto p : res) {
     cout << "    " << p.first.as_string() << " : " << p.second.as_string() << endl;
   }
-}
+}*/
 
-int main()
+/*int main()
 {
   ClearIfExists();
   Mkfs();
   cout << "Mkfs done" << endl;
 
   Application app;
+  cout << "Inserting..." << endl;
   app.Insert("abc", "def");
+  cout << "done first insert..." << endl;
   app.Insert("xyq", "rawr");
   app.Query("abc");
 
   app.Query("xyq");
   app.Query("blahblah");
   app.crash();
+  cout << "crashed" << endl;
   app.Query("abc");
   app.Query("xyq");
 

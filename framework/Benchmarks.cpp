@@ -5,6 +5,7 @@
 #include <random>
 #include <algorithm>
 #include <cstdio>
+#include <cassert>
 
 #include "Application.h"
 
@@ -25,13 +26,16 @@ public:
   virtual void prepare(Application& app) = 0;
   virtual void go(Application& app) = 0;
 
-  void run() {
-    ClearIfExists();
-    Mkfs();
+  void run(string filename, bool skipPrepare = false) {
+    if (!skipPrepare) {
+      Mkfs(filename);
+    }
 
-    Application app;
+    Application app(filename);
 
-    prepare(app);
+    if (!skipPrepare) {
+      prepare(app);
+    }
 
     auto t1 = chrono::high_resolution_clock::now();
     go(app);
@@ -200,6 +204,81 @@ public:
   }
 };
 
+class BenchmarkBigTreeQueries : public Benchmark {
+public:
+  int insertCount = 5000000;
+  int queryCount  =    2000;
+
+  virtual string name() override { return "BigTreeQueries"; }
+  virtual int opCount() override { return queryCount; }
+
+  uint32_t rngState;
+
+  void resetRng() {
+    rngState = 198432;
+  }
+
+  vector<ByteString> queryKeys;
+  vector<ByteString> queryValues;
+
+  uint32_t NextPseudoRandom() {
+    rngState = (uint32_t) (((uint64_t) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  BenchmarkBigTreeQueries() {
+    resetRng();
+
+    for (int i = 0; i < queryCount; i++) {
+      ByteString key(KEY_SIZE);
+      ByteString value(VALUE_SIZE);
+
+      for (int k = 0; k < insertCount / queryCount; k++) {
+        for (int j = 0; j < KEY_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+        for (int j = 0; j < VALUE_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+      }
+
+      queryKeys.push_back(key);
+      queryValues.push_back(value);
+    }
+  }
+
+  virtual void prepare(Application& app) override {
+    static_assert (KEY_SIZE % 4 == 0, "");
+    static_assert (VALUE_SIZE % 4 == 0, "");
+
+    resetRng();
+
+    for (int i = 0; i < insertCount; i++) {
+      ByteString key(KEY_SIZE);
+      for (int j = 0; j < KEY_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+      ByteString value(VALUE_SIZE);
+      for (int j = 0; j < VALUE_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+
+      app.Insert(key, value);
+    }
+    app.Sync();
+    app.crash();
+  }
+
+  virtual void go(Application& app) override {
+    for (int i = 0; i < queryCount; i++) {
+      app.QueryAndExpect(queryKeys[i], queryValues[i]);
+    }
+  }
+};
 
 class BenchmarkRandomQueries : public Benchmark {
 public:
@@ -235,6 +314,147 @@ public:
   virtual void go(Application& app) override {
     for (size_t i = 0; i < query_keys.size(); i++) {
       app.QueryAndExpect(query_keys[i], query_values[i]);
+    }
+  }
+};
+
+class BenchmarkMixedInsertQuery : public Benchmark {
+public:
+  int start = 1000000;
+  int count = 5000000;
+
+  int KEY_SIZE = 24;
+  int VALUE_SIZE = 512;
+
+  virtual string name() override { return "MixedInsertQuery"; }
+  virtual int opCount() override { return count; }
+
+  uint32_t rngState = 198432;
+
+  uint32_t NextPseudoRandom() {
+    rngState = (uint32_t) (((uint64_t) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  vector<ByteString> keys;
+
+  BenchmarkMixedInsertQuery() {
+    for (int i = 0; i < start + count/2; i++) {
+      ByteString key(KEY_SIZE);
+      for (int j = 0; j < KEY_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+      keys.push_back(key);
+    }
+  }
+
+  virtual void prepare(Application& app) override {
+    for (int i = 0; i < start; i++) {
+      ByteString value(VALUE_SIZE);
+      for (int j = 0; j < VALUE_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+
+      app.Insert(keys[i], value);
+    }
+
+    app.Sync();
+  }
+
+  virtual void go(Application& app) override {
+    assert (KEY_SIZE % 4 == 0);
+    assert (VALUE_SIZE % 4 == 0);
+
+    rngState = 43211;
+
+    for (int i = 0; i < count; i++) {
+      if (i % 10000 == 0)  cout << i << endl;
+
+      if (i % 2) {
+        int v = NextPseudoRandom() % keys.size();
+        app.Query(keys[v]);
+      } else {
+        int key_idx = start + i / 2;
+        ByteString value(VALUE_SIZE);
+        for (int j = 0; j < VALUE_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+        app.Insert(keys[key_idx], value);
+      }
+    }
+  }
+};
+
+class BenchmarkMixedUpdateQuery : public Benchmark {
+public:
+  int start = 1000000;
+  int count = 5000000;
+
+  // match ycsb-a
+  int KEY_SIZE = 24;
+  int VALUE_SIZE = 512;
+
+  virtual string name() override { return "MixedUpdateQuery"; }
+  virtual int opCount() override { return count; }
+
+  uint32_t rngState = 198432;
+
+  uint32_t NextPseudoRandom() {
+    rngState = (uint32_t) (((uint64_t) rngState * 279470273) % 0xfffffffb);
+    return rngState;
+  }
+
+  vector<ByteString> keys;
+
+  BenchmarkMixedUpdateQuery() {
+    for (int i = 0; i < start; i++) {
+      ByteString key(KEY_SIZE);
+      for (int j = 0; j < KEY_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (key.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+      keys.push_back(key);
+    }
+  }
+
+  virtual void prepare(Application& app) override {
+    for (int i = 0; i < start; i++) {
+      ByteString value(VALUE_SIZE);
+      for (int j = 0; j < VALUE_SIZE; j += 4) {
+        uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+        *ptr = NextPseudoRandom();
+      }
+
+      app.Insert(keys[i], value);
+    }
+
+    app.Sync();
+  }
+
+  virtual void go(Application& app) override {
+    assert (KEY_SIZE % 4 == 0);
+    assert (VALUE_SIZE % 4 == 0);
+
+    rngState = 43211;
+
+    for (int i = 0; i < count; i++) {
+      if (i % 10000 == 0)  cout << i << endl;
+
+      if (i % 2) {
+        int v = NextPseudoRandom() % keys.size();
+        app.Query(keys[v]);
+      } else {
+        int key_idx = NextPseudoRandom() % keys.size();
+        ByteString value(VALUE_SIZE);
+        for (int j = 0; j < VALUE_SIZE; j += 4) {
+          uint32_t* ptr = (uint32_t*) (value.seq.ptr() + j);
+          *ptr = NextPseudoRandom();
+        }
+        app.Insert(keys[key_idx], value);
+      }
     }
   }
 };
@@ -321,17 +541,20 @@ public:
 };
 
 
-void RunAllBenchmarks() {
-  { BenchmarkRandomInserts q; q.run(); }
-  { BenchmarkRandomQueries q; q.run(); }
-  { BenchmarkRandomSuccQueries q; q.run(); }
+void RunAllBenchmarks(string filename) {
+  { BenchmarkRandomInserts q; q.run(filename); }
+  { BenchmarkRandomQueries q; q.run(filename); }
+  { BenchmarkRandomSuccQueries q; q.run(filename); }
 }
 
 shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   if (name == "random-queries") { return shared_ptr<Benchmark>(new BenchmarkRandomQueries()); }
   if (name == "random-inserts") { return shared_ptr<Benchmark>(new BenchmarkRandomInserts()); }
   if (name == "long-random-inserts") { return shared_ptr<Benchmark>(new BenchmarkLongRandomInserts()); }
+  if (name == "big-tree-queries") { return shared_ptr<Benchmark>(new BenchmarkBigTreeQueries()); }
   if (name == "random-succs") { return shared_ptr<Benchmark>(new BenchmarkRandomSuccQueries()); }
+  if (name == "mixed-insert-query") { return shared_ptr<Benchmark>(new BenchmarkMixedInsertQuery()); }
+  if (name == "mixed-update-query") { return shared_ptr<Benchmark>(new BenchmarkMixedUpdateQuery()); }
 
   cerr << "No benchmark found by name " << name << endl;
   exit(1);
@@ -401,7 +624,7 @@ namespace NativeBenchmarking_Compile {
   }
 }
 
-void RunBenchmark(string const& name) {
-  benchmark_by_name(name)->run();
+void RunBenchmark(string filename, string const& name, bool skipPrepare) {
+  benchmark_by_name(name)->run(filename, skipPrepare);
   dump();
 }

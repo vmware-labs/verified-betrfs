@@ -27,7 +27,7 @@ module {:extern} MkfsImpl {
   import BC = BetreeGraphBlockCache
   import ReferenceType`Internal
   import LBAType
-  import ValueWithDefault`Internal
+  import ValueType`Internal
   import SI = StateImpl
   import D = AsyncDisk
 

@@ -14,6 +14,7 @@ module SplitModel {
   import opened BucketWeights
   import opened Bounds
   import PivotsLib
+  import opened KeyType
 
   import opened NativeTypes
 
@@ -260,12 +261,12 @@ module SplitModel {
     && var inode := INode(fused_parent);
     && var inode' := INode(res);
     && inode' == BT.SplitParent(inode, pivot, slot, left_childref, right_childref)
-    && WeightBucketList(res.buckets) == WeightBucketList(fused_parent.buckets)
+    && WeightBucketList(res.buckets) <= WeightBucketList(fused_parent.buckets)
   {
     reveal_SplitParent();
     var res := SplitParent(fused_parent, pivot, slot, left_childref, right_childref);
     WFSplitBucketInList(fused_parent.buckets, slot, pivot, fused_parent.pivotTable);
-    WeightSplitBucketInList(fused_parent.buckets, slot, pivot);
+    WeightSplitBucketInListLe(fused_parent.buckets, slot, pivot);
     assert WFNode(res);
     assert INode(res) == BT.SplitParent(INode(fused_parent), pivot, slot, left_childref, right_childref);
   }

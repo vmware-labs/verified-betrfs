@@ -13,6 +13,8 @@ module EvictModel {
   import opened Sequences
   import opened Sets
 
+  import opened Bounds
+
   import opened NativeTypes
 
   import LruModel
@@ -113,6 +115,43 @@ module EvictModel {
       } else {
         assert noop(k, IVars(s), IVars(s));
       }
+    }
+  }
+
+  predicate {:opaque} PageInReqOrMakeRoom(
+      k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
+      s': Variables, io': IO)
+  requires Inv(k, s)
+  requires s.Ready?
+  requires io.IOInit?
+  requires ref in s.ephemeralIndirectionTable.graph
+  requires ref !in s.cache
+  {
+    if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+      (s', io') == PageInReq(k, s, io, ref)
+    ) else if |s.cache| > 0 then (
+      EvictOrDealloc(k, s, io, s', io')
+    ) else (
+      s' == s && io' == io
+    )
+  }
+
+  lemma PageInReqOrMakeRoomCorrect(
+      k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
+      s': Variables, io': IO)
+  requires PageInReqOrMakeRoom.requires(k, s, io, ref, s', io')
+  requires PageInReqOrMakeRoom(k, s, io, ref, s', io')
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  {
+    reveal_PageInReqOrMakeRoom();
+
+    if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+      PageInReqCorrect(k, s, io, ref);
+    } else if |s.cache| > 0 {
+      EvictOrDeallocCorrect(k, s, io, s', io');
+    } else {
+      assert noop(k, IVars(s), IVars(s));
     }
   }
 }

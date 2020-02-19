@@ -108,13 +108,13 @@ module {:extern} MainHandlers refines Main {
         io.diskOp());
   }
 
-  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key)
-  returns (v: Option<MS.Value>)
+  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: Key)
+  returns (v: Option<Value>)
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
     var value := query(k, s, io, key);
-    QueryModel.queryCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key);
+    QueryModel.queryCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key, s.I(), value, SI.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -125,7 +125,7 @@ module {:extern} MainHandlers refines Main {
         io.diskOp());
   }
 
-  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: MS.Key, value: MS.Value)
+  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   {
     var s := hs.s;
