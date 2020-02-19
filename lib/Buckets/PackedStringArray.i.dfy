@@ -16,6 +16,7 @@ module PackedStringArray {
   predicate WF(psa: Psa)
   {
     && |psa.offsets| < 0x1_0000_0000
+    && |psa.data| < 0x1_0000_0000
     && (|psa.offsets| == 0 ==> |psa.data| == 0)
     && (|psa.offsets| > 0 ==> |psa.data| == psa.offsets[|psa.offsets|-1] as int)
     && Uint32_Order.IsSorted(psa.offsets)
@@ -468,7 +469,7 @@ module PackedStringArray {
 
   function psaAppend(psa: Psa, key: seq<byte>) : (result: Psa)
     requires WF(psa)
-    requires |psa.offsets| < 0x1_000_0000 - 1
+    requires |psa.offsets| < 0x1_0000_0000 - 1
     requires |psa.data| + |key| < 0x1_0000_0000
     ensures WF(result)
   {
@@ -479,7 +480,7 @@ module PackedStringArray {
 
   lemma psaAppendIAppend(psa: Psa, key: seq<byte>)
     requires WF(psa)
-    requires |psa.offsets| < 0x1_000_0000 - 1
+    requires |psa.offsets| < 0x1_0000_0000 - 1
     requires |psa.data| + |key| < 0x1_0000_0000
     ensures I(psaAppend(psa, key)) == I(psa) + [key]
   {
