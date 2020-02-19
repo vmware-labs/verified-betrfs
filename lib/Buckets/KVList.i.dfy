@@ -713,17 +713,20 @@ module KVList {
   requires parentIdx < PSA.psaNumStrings(parent.keys) as int ==> childrenIdx < |pivots| && lte(pivots[childrenIdx], PSA.psaElement(parent.keys, parentIdx as uint64))
   ensures I(cur) == BucketListItemFlush(I(parent), I(children[childrenIdx]), pivots, childrenIdx)
   {
+    var pre := prefix(parent, parentIdx);
     forall key | P.Route(pivots, key) == childrenIdx
     ensures MapsAgreeOnKey(IMap(prefix(parent, parentIdx)), IMap(parent), key)
     {
       WFPrefix(parent, parentIdx);
       if (key in IMap(prefix(parent, parentIdx))) {
         var i := IndexOfKey(prefix(parent, parentIdx), key);
+        assert PSA.psaElement(parent.keys, i as uint64) == PSA.psaElement(pre.keys, i as uint64);
         Imaps(parent, i);
         Imaps(prefix(parent, parentIdx), i);
       } else if (key in IMap(parent)) {
         var i := IndexOfKey(parent, key);
         if (i < parentIdx) {
+          assert PSA.psaElement(parent.keys, i as uint64) == PSA.psaElement(pre.keys, i as uint64);
           Imaps(parent, i);
           Imaps(prefix(parent, parentIdx), i);
         } else {
@@ -738,33 +741,33 @@ module KVList {
     assert prefix(children[childrenIdx], childIdx) == children[childrenIdx];
   }
 
-  // lemma flushIteratepivotLteChildKey0(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
-  //     parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
-  // requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
-  // ensures childrenIdx < |pivots| && PSA.psaNumStrings(children[childrenIdx + 1].keys) as int > 0 ==> lte(pivots[childrenIdx], PSA.FirstElement(children[childrenIdx + 1].keys))
-  // {
-  //   if childrenIdx < |pivots| && PSA.psaNumStrings(children[childrenIdx + 1].keys) as int > 0 {
-  //     Imaps(children[childrenIdx + 1], 0);
-  //     assert P.Route(pivots, PSA.FirstElement(children[childrenIdx + 1].keys)) == childrenIdx + 1;
-  //   }
-  // }
+  lemma flushIteratepivotLteChildKey0(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
+      parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
+  requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
+  ensures childrenIdx < |pivots| && PSA.psaNumStrings(children[childrenIdx + 1].keys) as int > 0 ==> lte(pivots[childrenIdx], PSA.FirstElement(children[childrenIdx + 1].keys))
+  {
+    if childrenIdx < |pivots| && PSA.psaNumStrings(children[childrenIdx + 1].keys) as int > 0 {
+      Imaps(children[childrenIdx + 1], 0);
+      assert P.Route(pivots, PSA.FirstElement(children[childrenIdx + 1].keys)) == childrenIdx + 1;
+    }
+  }
 
-  // lemma flushIterateIEmptyEqBucketListItemFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
-  //     parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
-  // requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
-  // requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64 - 1), pivots[childrenIdx])
-  // ensures childrenIdx + 1 < |children| ==>
-  //        I(Kvl(PSA.EmptyPsa(),[])).b
-  //     == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1).b
-  // {
-  //   reveal_IMap();
-  //   forall key | key in IMap(prefix(parent, parentIdx))
-  //   ensures P.Route(pivots, key) != childrenIdx + 1
-  //   {
-  //     var i := IndexOfKey(prefix(parent, parentIdx), key);
-  //     IsStrictlySortedImpliesLte(PSA.I(parent.keys), i, parentIdx - 1);
-  //   }
-  // }
+  lemma flushIterateIEmptyEqBucketListItemFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
+      parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
+  requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
+  requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64 - 1), pivots[childrenIdx])
+  ensures childrenIdx + 1 < |children| ==>
+         I(Kvl(PSA.EmptyPsa(),[])).b
+      == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1).b
+  {
+    reveal_IMap();
+    forall key | key in IMap(prefix(parent, parentIdx))
+    ensures P.Route(pivots, key) != childrenIdx + 1
+    {
+      var i := IndexOfKey(prefix(parent, parentIdx), key);
+      IsStrictlySortedImpliesLte(PSA.I(parent.keys), i, parentIdx - 1);
+    }
+  }
 
   // lemma flushIterateRes(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
   //     parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
