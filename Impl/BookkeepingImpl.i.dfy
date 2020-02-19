@@ -114,7 +114,7 @@ module BookkeepingImpl {
     s.lru.Use(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
     LruModel.LruUse(old(s.lru.Queue), ref);
@@ -148,7 +148,7 @@ module BookkeepingImpl {
     s.lru.Use(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
     LruModel.LruUse(old(s.lru.Queue), ref);

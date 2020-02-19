@@ -211,15 +211,13 @@ uint32_t option_13_golden_intel(const void* M, uint32_t bytes, uint32_t prev = 0
   return ~acc;
 }*/
 
-typedef uint8 byte;
-
 namespace Crypto_Compile {
-  DafnySequence<byte> padded_crc32(byte* bytes, int len)
+  DafnySequence<uint8_t> padded_crc32(uint8_t* bytes, int len)
   {
     //uint32_t crc = crc32c(bytes, len);
     uint32_t crc = ~option_13_golden_intel(bytes, len, 0xffffffff);
 
-    DafnySequence<byte> padded(32);
+    DafnySequence<uint8_t> padded(32);
     padded.ptr()[0] = (uint8_t)(crc & 0xff);
     padded.ptr()[1] = (uint8_t)((crc >> 8) & 0xff);
     padded.ptr()[2] = (uint8_t)((crc >> 16) & 0xff);

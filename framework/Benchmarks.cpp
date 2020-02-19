@@ -586,6 +586,11 @@ public:
     ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - last).count();
     count++;
   }
+
+  void append(long long ns) {
+    this->ns += ns;
+    count++;
+  }
 };
 map<string, StopwatchEntry> sw;
 
@@ -603,6 +608,14 @@ void benchmark_start(string const& name) {
 
 void benchmark_end(string const& name) {
   sw[name].end();
+}
+
+void benchmark_append(string const& name, long long ns) {
+  auto it = sw.find(name);
+  if (it == sw.end()) {
+    sw.insert(make_pair(name, StopwatchEntry()));
+  }
+  sw[name].append(ns);
 }
 
 void dump() {

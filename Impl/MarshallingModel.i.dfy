@@ -50,8 +50,6 @@ module MarshallingModel {
   import MM = MutableMap
 
   type Reference = BC.Reference
-  type LBA = BC.LBA
-  type Location = BC.Location
   type Sector = SM.Sector
   type Node = SM.Node
 
@@ -147,13 +145,6 @@ module MarshallingModel {
   ensures SizeOfV(v) == 8
   {
     VUint64(ref)
-  }
-
-  function method lbaToVal(lba: LBA) : (v : V)
-  ensures ValidVal(v)
-  ensures SizeOfV(v) == 8
-  {
-    VUint64(lba)
   }
 
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)

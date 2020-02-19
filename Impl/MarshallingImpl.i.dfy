@@ -47,8 +47,6 @@ module MarshallingImpl {
   import Keyspace = Lexicographic_Byte_Order
 
   type Reference = IMM.Reference
-  type LBA = IMM.LBA
-  type Location = IMM.Location
   type Sector = SI.Sector
 
   /////// Conversion to PivotNode
@@ -448,7 +446,7 @@ module MarshallingImpl {
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
-  ensures SizeOfV(v) <= BlockSize() - 32 - 8
+  ensures SizeOfV(v) <= NodeBlockSize() - 32 - 8
   {
     BucketImpl.MutBucket.AllocatedReprSeq(node.buckets);
     var buckets := bucketsToVal(node.buckets);
@@ -483,7 +481,7 @@ module MarshallingImpl {
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
   ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
-  ensures sector.SectorBlock? ==> SizeOfV(v) <= BlockSize() as int - 32
+  ensures sector.SectorBlock? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   {
     match sector {
@@ -573,9 +571,9 @@ module MarshallingImpl {
   ensures data != null ==>
       && IM.ISector(IMM.parseCheckedSector(data[..]).value)
       == IM.ISector(StateImpl.ISector(sector))
-  ensures data != null ==> data.Length <= BlockSize() as int
   ensures data != null ==> 32 <= data.Length
-  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == BlockSize() as int
+  ensures data != null && sector.SectorBlock? ==> data.Length <= NodeBlockSize() as int
+  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == IndirectionTableBlockSize() as int
   ensures sector.SectorBlock? ==> data != null;
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
   {
@@ -589,8 +587,8 @@ module MarshallingImpl {
       }
     }
 
-    if (computedSize + 32 <= BlockSizeUint64()) {
-      var size := if sector.SectorIndirectionTable? then BlockSizeUint64() else computedSize + 32;
+    if (computedSize + 32 <= IndirectionTableBlockSizeUint64()) {
+      var size := if sector.SectorIndirectionTable? then IndirectionTableBlockSizeUint64() else computedSize + 32;
 
       //Native.BenchmarkingUtil.start();
       var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
