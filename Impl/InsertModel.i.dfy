@@ -6,6 +6,7 @@ module InsertModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushPolicyModel
+  import opened NodeModel
 
   import opened Options
   import opened Maps
@@ -22,22 +23,6 @@ module InsertModel {
   import PBS = PivotBetreeSpec`Spec
 
   // == insert ==
-
-  function {:opaque} NodeInsertKeyValue(node: Node, key: Key, msg: Message) : Node
-  requires WFNode(node)
-  {
-    var r := Pivots.Route(node.pivotTable, key);
-    var bucket := node.buckets[r];
-    var newBucket := BucketInsert(bucket, key, msg);
-    node.(buckets := node.buckets[r := newBucket])
-  }
-
-  function {:opaque} CacheInsertKeyValue(cache: map<BT.G.Reference, Node>, ref: BT.G.Reference, key: Key, msg: Message) : map<BT.G.Reference, Node>
-  requires ref in cache
-  requires WFNode(cache[ref])
-  {
-    cache[ref := NodeInsertKeyValue(cache[ref], key, msg)]
-  }
 
   function {:opaque} InsertKeyValue(k: Constants, s: Variables, key: Key, value: Value)
   : (Variables, bool)

@@ -15,6 +15,7 @@ module CacheImpl {
   import opened BucketWeights
   import opened KeyType
   import opened ValueMessage
+  import NodeModel
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -232,7 +233,7 @@ module CacheImpl {
     requires |I()| <= 0x10000
     modifies Repr
     ensures Inv()
-    ensures I() == old(I()[ref := SplitModel.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
+    ensures I() == old(I()[ref := NodeModel.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       var nodeOpt := GetOpt(ref);
@@ -250,10 +251,10 @@ module CacheImpl {
     requires WeightBucketList(I()[ref].buckets) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv()
-    ensures I() == old(InsertModel.CacheInsertKeyValue(I(), ref, key, msg))
+    ensures I() == old(NodeModel.CacheInsertKeyValue(I(), ref, key, msg))
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      InsertModel.reveal_CacheInsertKeyValue();
+      NodeModel.reveal_CacheInsertKeyValue();
 
       var nodeOpt := GetOpt(ref);
       var node := nodeOpt.value;
