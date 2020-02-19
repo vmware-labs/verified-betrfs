@@ -401,6 +401,8 @@ int main(int argc, char* argv[]) {
         options.error_if_exists = true;
 
         // FIXME this is probably not fair, especially when we implement off-thread compaction
+        // disables background compaction _and_ flushing
+        // https://github.com/facebook/rocksdb/blob/master/include/rocksdb/options.h#L531-L536
         options.max_background_jobs = 0;
 
         // disabled - we let rocks use the page cache
