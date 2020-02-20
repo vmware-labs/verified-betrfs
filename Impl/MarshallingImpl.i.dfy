@@ -586,13 +586,13 @@ module MarshallingImpl {
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
   {
     if sector.SectorIndirectionTable? {
-      NativeBenchmarking.start("MarshallCheckedSector");
+      //NativeBenchmarking.start("MarshallCheckedSector");
 
       var data := new byte[IndirectionTableBlockSizeUint64()];
 
-      NativeBenchmarking.start("marshallIndirectionTable");
+      //NativeBenchmarking.start("marshallIndirectionTable");
       var end := sector.indirectionTable.marshallIndirectionTable(data, 40);
-      NativeBenchmarking.end("marshallIndirectionTable");
+      //NativeBenchmarking.end("marshallIndirectionTable");
 
       assume false;
       if end == 0 {
@@ -602,12 +602,12 @@ module MarshallingImpl {
       // case 0 indicates indirection table
       Pack_LittleEndian_Uint64_into_Array(0, data, 32);
 
-      NativeBenchmarking.start("crc32");
+      //NativeBenchmarking.start("crc32");
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
-      NativeBenchmarking.end("crc32");
+      //NativeBenchmarking.end("crc32");
 
-      NativeBenchmarking.end("MarshallCheckedSector");
+      //NativeBenchmarking.end("MarshallCheckedSector");
 
       return data;
     } else {
