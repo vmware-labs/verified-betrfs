@@ -155,7 +155,9 @@ def main():
 
   clear_page_cache()
 
-  os.system("cgexec -g memory:VeribetrfsExp ./build/VeribetrfsYcsb " + wl + " " + loc + " --veribetrkv")
+  command = "cgexec -g memory:VeribetrfsExp ./build/VeribetrfsYcsb " + wl + " " + loc + " --veribetrkv"
+  print(command)
+  os.system(command)
   assert ret == 0
 
 if __name__ == "__main__":
