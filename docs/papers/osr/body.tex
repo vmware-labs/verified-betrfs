@@ -1,0 +1,245 @@
+
+\newcommand{ironstar}{Iron{\star}}
+\newcommand{bepsilon}{B^{\epsilon}}
+
+Systems verification is picking up momentum.
+The promise is that we might someday replace a methodology of
+write-test-debug with a comprehensive compile-time confirmation
+of correctness. In particular, critical software could remove
+``ship'' from the bug-fix development cycle.
+
+The chief obstacle to the practical application of verification for
+systems-scale software development is the sheer tedium of involved
+in reducing a proof to the level of mechanically verifiability.
+Automated verifiers based on SAT solvers have made tremendous progress
+grinding through this logical tedium, brinigng systems-scale
+verification into the realm of feasibility.
+
+
+\section{{\ironstar}: an automation-based approach}
+
+The authors have been involved in a few projects~\cite{}
+over which we have developed strategies that exploit
+SAT-solver automation to improve the scalability of verification.
+
+\section{What makes systems verification challenging?}
+
+\subsection{Stating a system specification}
+
+\subsection{Structuring a proof for maintainability}
+
+\subsection{Proof tedium}
+
+\subsection{Heap reasoning}
+
+\subsection{Concurrency}
+
+\subsection{Liveness and performance properties}
+
+\section{How {\ironstar} addresses these challenges}
+
+\subsection{Stating a system specification}\label{sec:specification}
+
+{ironstar} adopts Lamport's TLA+ model for specifying the
+allowed behaviors of an evolving system~\cite{specifying-systems}.
+TLA+ emphasizes
+\begin{itemize}
+\item Mathematical abstraction to elide every detail that isn't
+  essential to a specification
+\item Nondeterminism to capture environmental concurrency,
+  nondeterminism, adversarial behavior, and abstract 
+\end{itemize}
+
+TLA+ is built on untyped set theory, but we find using a
+decidable type system dramatically more convenient,
+as it dispatches many tedious proof obligations in the type checker before
+reaching the theorem prover.
+Dafny's type system offers numeric and logical primitive types,
+sequences, sets and maps, user-defined
+algebraic (struct/tagged-union) recursive types, and generics.
+
+We define behaviors as TLA+-style state machines:
+a struct provides the \textemph{state} type, and
+then \textsc{Init} and \textsc{Next} predicates define
+the allowed nondeterministic state machine relations.
+
+A state machine is a natural way to define the goalposts for a system.
+How should a replicated state machine behave?
+Just like a instance of single state machine.
+How should a physically decentralized filesystem behave?
+Just like a logically-centralized filesystem~\cite{Farsite}.
+How should a {\bepsilon}tree store behave?
+Just like a simple map.
+
+A state-machine goal avoids a common verification trap of specifying
+an implementation's correctness by its invariants. The invariants are
+means to an end; a reference state machine is often the most straightforward
+way to describe that end.
+
+\subsection{Modeling the environment}
+
+A distributed system consists of several processes running
+the program we wish to verify,
+a network,
+and our assumption that those the processes may only interact through
+the network.
+
+A storage system consists of a process running the program
+we wish to verify,
+a storage device,
+our assumption about the asynchronous bus that connects the
+device to the process,
+and our assumption that the system may sponatenously \texttt{crash},
+zeroing the process memory but preserving the device memory.
+\footnote{
+It may be easier to see how general the model is if you imagine
+the storage system as a strangely-shaped distributed system:
+one process that runs the program,
+another that runs a trusted storage state machine,
+a network (the SATA bus) that connects them,
+and a failure model for the processes.
+The same sorts of nondeterminism that reorders network messages and fails
+hosts in a distributed system
+can reorder I/O requests and fail the filesystem process.
+}
+
+In both cases, the ultimate theorem claims that the
+\textit{system} behavior---process(es) and environment---refines
+to that of the logically-centralized specification.
+What does mechanical verification of the program mean?
+It means that, if the program is instantiated as processes in an
+environment matching the \textit{environment model},
+its behavior will match the \textit{application model}.
+That is, one must read the text defining not only the application
+but also the environment to know what the verification promises;
+in exchange, one needn't read the program implementation, as the
+mechanical verifier has done that for you.
+
+\subsection{Structuring a proof for maintainability}
+
+A systems verification problem, ultimately, is simply a really complex
+proof goal: an inductive statement of refinement between an implementation
+state machine and a specification state machine, each of which is a
+big tree of definitions ultimately rooted in some first-order logic or
+basic datatypes.
+
+In early interactive theorem provers, the operator stated a goal theorem.
+The proof engine offered a bag of tools that transform the proof rules.
+The operator repeatedly applied tools until the proof goal has been
+transformed into \texttt{true}.
+These systems would record the operator's effort as a ``proof script'';
+one could replay the script to verify the veracity of the top-level goal.
+
+Proof scripts are brittle; a small change in the system definitions perturb
+the proof, and necessary repairs are often non-local~\cite{}.
+Chlipala has made remarkable progress in organizing proof scripts into
+tactic modules that mimic the structure of the system under
+verification. His approach improves the modularity and locality
+of maintenance of the proof artifact.
+It requires the operator to simultaneously maintain the system
+and the tactic library that supports it.
+
+
+\comment{Diagram here.}
+
+An {\ironstar} proof is a refinement hierarchy of state machines.
+
+In {\ironstar}, the operator works as follows:
+First, she defines the state machine (and its data structures) that
+specify the application~(\S\ref{sec:specification}).
+She uses abstraction to omit as many details as possible while capturing the
+desired application behavior.
+She also models the finished \texttt{system} as a compound state machine that
+models the environment and takes a program as a parameter.
+Her goal is to write a program that, when instatiated in the \texttt{system},
+causes the system to satisify the application spec.
+
+The program will ultimately be expressed as
+imperative code over an immutable heap,
+so that the programmer has sufficient control to achieve the
+desired performance.
+The imperative code is event-driven, so that we can view each
+trip through the main loop or invocation of a handler as an
+atomic step in a state machine,
+and thus can be plugged in as a component into the \texttt{system} definition.
+
+In any system of reasonable size, the semantic gap between the abstract
+application definition and the pointer-diddling implementation will be
+substantial.
+Why is any given line of C++ code correct? There are surely many reasons.
+Perhaps the \texttt{->} operator isn't a null pointer dereference because
+the pointer was freshly allocated six lines ago; an automatic tool may
+be able to confirm such local or simple properties.
+But the arguments to the referenced method might be the right ones because
+they were the results of another method call earlier in the function.
+And the side-effect of the method call might be correct
+because it establishes a property that will be used when another I/O
+event completes in the future.
+Most of these higher-level arguments appear at best in comments,
+or perhaps in a distant and outdated English design document,
+or they can be inferred from the penumbras and emanations of the
+call graph or object hierarchy.
+Most likely, they appear nowhere other than an author's mental model.
+
+In a verified system, every such correctness argument must be explicitly
+stated and the collection chained together to connect the implementation
+code all the way up to the abstract application specification.
+In an {\ironstar} verified system, these arguments are organized into
+a refinement hierarchy.
+In the refinement hierarchy, state machine models act as waypoints
+along the route from abstract to concrete. Each refinement proof that
+connects a state machine to the abstract one above it captures some
+aspect of the system's correctness reasoning. 
+The refinement hierarchy is a mechanism to \textit{organize the
+proof arguments} into a maintainable structure.
+
+
+The idea of refinement as a proof strategy is far from new with {\ironstar}.
+Note that we do \textit{not} aim to use refinement
+as a way to break a proof down into small-enough pieces that a
+mechanical verifier can leap the layers completely automatically
+(as is done in~\cite{cspec,ironarmada}).
+Instead, the refinement layers are meant to be ``human-sized'' concepts:
+just as a skilled engineer decomposes a function or organizes a
+class hierchy at a scale that's designed to communicate to the next
+human reader,
+refinement layers in {\ironstar} are designed to organize the proof
+artifact into human-brain-sized conceptual chunks.
+
+\comment{Discuss the tree hierarchy in veribetrfs}
+Figure~{diagram} shows the richest refinement hierarchy in the
+{\veribetrfs} system.
+The top refinement explains how queries searching a {\bepsilon}tree
+structure give it behavior equivalent to a map,
+while abstracting the internal structure of tree nodes as infinite
+maps.
+The next layer explains how nodes can be implemented in finite space
+with pivots; note that this layer disregards the {\bepsilon}tree structure,
+since those correctness arguments are already dispatched in the
+layer above.
+The pivot layer assumes that nodes are abstract datatypes that can
+be passed through disk storage, which of course is an abstraction of
+the real disk. The next layer shows how marshalling can provide the
+same abstract data types while passing byte strings through disk storage.
+
+Each of the layers above are written in with immutable data types
+(that is, in a functional, side-effect-free style), abstracting away
+the complexity of in-place updates. They also make widespread use of
+mathematical integers, wherein $i+1$ is always bigger than $i$.
+The bottom layer -- the concrete implementation -- uses machine integers
+and exploits in-place updates to achieve excellent performance.
+Its refinement proof shows that both transformations are correct,
+but again, it disregards any of the reasoning at higher levels of
+abstraction.
+
+The developer uses 
+
+\subsection{Proof tedium}
+
+\subsection{Heap reasoning}
+
+\subsection{Concurrency}
+
+\subsection{Liveness and performance properties}
+
+\section{Managing automation}
