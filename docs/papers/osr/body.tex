@@ -1,6 +1,7 @@
 
 \newcommand{ironstar}{Iron{\star}}
 \newcommand{bepsilon}{B^{\epsilon}}
+\newcommand{veribetrfs}{\texttt{\textit{veri}betrfs}}
 
 Systems verification is picking up momentum.
 The promise is that we might someday replace a methodology of
@@ -207,7 +208,7 @@ refinement layers in {\ironstar} are designed to organize the proof
 artifact into human-brain-sized conceptual chunks.
 
 \comment{Discuss the tree hierarchy in veribetrfs}
-Figure~{diagram} shows the richest refinement hierarchy in the
+Figure~\ref{betreerefinement} shows the richest refinement hierarchy in the
 {\veribetrfs} system.
 The top refinement explains how queries searching a {\bepsilon}tree
 structure give it behavior equivalent to a map,
@@ -232,9 +233,41 @@ Its refinement proof shows that both transformations are correct,
 but again, it disregards any of the reasoning at higher levels of
 abstraction.
 
-The developer uses 
+The developer creates the intermediate state machines as
+``interface boundaries'' that separate concerns.
+She organizes the bulk of the proof artifact
+by slicing it across the axis of abstraction.
+
+Of course, the proof artifact can also be orthogonally organized
+by module.
+In {\veribetrfs},
+the {\bepsilon}tree refinement stack of Figure~\ref{betreerefinement}
+has a (simpler) sibling that reasons about a disk block caching module.
 
 \subsection{Proof tedium}
+
+\subsubsection{A day in the life of a verification engineer.}
+What is it like to develop software in this style?
+
+Define a state machine.
+- it's immutable datatypes; get comfortable with abstraction.
+State a refinement.
+- it's a boilerplate induction pattern.
+Assert its proof.
+- Start with {} -- see how far automation takes you.
+- Probably a simple case breakdown. Write an if or case statement!
+Diagnose
+- bisection debugging! This is an exciting part of the story;
+  forward-reference it. Contrast it with proof-goal manipulation
+  (Coq/Isabelle/TLAPS) or counterexample deconstruction.
+Develop an invariant
+- I bet you're missing an invariant
+Patch up a proof
+- bugs in definitions (off by one errors)
+- witnesses
+- automation syntactic triggering
+
+recursion vs. quantification story
 
 \subsection{Heap reasoning}
 
