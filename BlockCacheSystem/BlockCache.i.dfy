@@ -18,16 +18,12 @@ abstract module BlockCache refines Transactable {
   import opened Maps
   import opened Options
   import opened NativeTypes
-  import LBAType
+  import opened LBAType
 
   import Disk = AsyncSectorDisk
 
   type ReqId = Disk.ReqId
-  type LBA = LBAType.LBA
-  type Location = LBAType.Location
   datatype Constants = Constants()
-  function method IndirectionTableLBA() : LBA { LBAType.IndirectionTableLBA() }
-  function method IndirectionTableLocation() : Location { LBAType.IndirectionTableLocation() }
 
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
@@ -70,14 +66,14 @@ abstract module BlockCache refines Transactable {
     ref in s.ephemeralIndirectionTable.graph
   }
 
-  predicate method ValidLBAForNode(lba: LBA)
+  predicate method ValidAddrForNode(addr: Addr)
   {
-    && LBAType.ValidAddr(lba)
-    && lba != IndirectionTableLBA()
+    && LBAType.ValidAddr(addr)
+    && addr != IndirectionTableAddr()
   }
   predicate method ValidLocationForNode(loc: Location)
   {
-    && ValidLBAForNode(loc.addr)
+    && ValidAddrForNode(loc.addr)
     && LBAType.ValidLocation(loc)
   }
 

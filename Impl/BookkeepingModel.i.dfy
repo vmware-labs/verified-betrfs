@@ -126,19 +126,19 @@ module BookkeepingModel {
   requires WriteAllocConditions(k, s)
   ensures ref in s.ephemeralIndirectionTable.locs ==>
     (
-      && 0 <= s.ephemeralIndirectionTable.locs[ref].addr as int / BlockSize() < NumBlocks()
-      && (s.ephemeralIndirectionTable.locs[ref].addr as int / BlockSize()) * BlockSize() == s.ephemeralIndirectionTable.locs[ref].addr as int
+      && 0 <= s.ephemeralIndirectionTable.locs[ref].addr as int / NodeBlockSize() < NumBlocks()
+      && (s.ephemeralIndirectionTable.locs[ref].addr as int / NodeBlockSize()) * NodeBlockSize() == s.ephemeralIndirectionTable.locs[ref].addr as int
     )
   {
     if ref in s.ephemeralIndirectionTable.locs {
       reveal_ConsistentBitmap();
       var loc := s.ephemeralIndirectionTable.locs[ref];
-      var i := loc.addr as int / BlockSize();
+      var i := loc.addr as int / NodeBlockSize();
       assert IIndirectionTable(s.ephemeralIndirectionTable).locs[ref] == loc;
       assert loc in IIndirectionTable(s.ephemeralIndirectionTable).locs.Values;
       assert BC.ValidLocationForNode(loc);
       LBAType.reveal_ValidAddr();
-      assert i * BlockSize() == loc.addr as int;
+      assert i * NodeBlockSize() == loc.addr as int;
       assert IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
     }
   }
@@ -160,7 +160,7 @@ module BookkeepingModel {
     var (eph, oldLoc) := IndirectionTableModel.UpdateAndRemoveLoc(s.ephemeralIndirectionTable, ref,
         (if children.Some? then children.value else []));
     var blockAllocator' := if oldLoc.Some?
-      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
       else s.blockAllocator;
     var s' := s.(ephemeralIndirectionTable := eph)
      .(lru := LruModel.Use(s.lru, ref))
@@ -168,7 +168,7 @@ module BookkeepingModel {
 
     freeIndirectionTableLocCorrect(k, s, s', ref,
       if oldLoc.Some?
-      then Some(oldLoc.value.addr as int / BlockSize())
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
       else None);
     reveal_ConsistentBitmap();
 
@@ -187,7 +187,7 @@ module BookkeepingModel {
     lemmaIndirectionTableLocIndexValid(k, s, ref);
     var (eph, oldLoc) := IndirectionTableModel.RemoveLoc(s.ephemeralIndirectionTable, ref);
     var blockAllocator' := if oldLoc.Some?
-      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
       else s.blockAllocator;
     var s' := s.(ephemeralIndirectionTable := eph)
      .(lru := LruModel.Use(s.lru, ref))
@@ -195,7 +195,7 @@ module BookkeepingModel {
 
     freeIndirectionTableLocCorrect(k, s, s', ref,
       if oldLoc.Some?
-      then Some(oldLoc.value.addr as int / BlockSize())
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
       else None);
     reveal_ConsistentBitmap();
 
@@ -239,7 +239,7 @@ module BookkeepingModel {
     var (eph, oldLoc) := IndirectionTableModel.UpdateAndRemoveLoc(s.ephemeralIndirectionTable, ref,
         (if node.children.Some? then node.children.value else []));
     var blockAllocator' := if oldLoc.Some?
-      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
       else s.blockAllocator;
     var s' := s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
         .(lru := LruModel.Use(s.lru, ref))
@@ -247,7 +247,7 @@ module BookkeepingModel {
 
     freeIndirectionTableLocCorrect(k, s, s', ref,
       if oldLoc.Some?
-      then Some(oldLoc.value.addr as int / BlockSize())
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
       else None);
     reveal_ConsistentBitmap();
 
@@ -283,7 +283,7 @@ module BookkeepingModel {
   requires ref !in IIndirectionTable(s'.ephemeralIndirectionTable).locs
   requires j.Some? ==> 0 <= j.value < NumBlocks()
   requires j.Some? ==> ref in IIndirectionTable(s.ephemeralIndirectionTable).locs
-  requires j.Some? ==> IIndirectionTable(s.ephemeralIndirectionTable).locs[ref].addr as int == j.value * BlockSize()
+  requires j.Some? ==> IIndirectionTable(s.ephemeralIndirectionTable).locs[ref].addr as int == j.value * NodeBlockSize()
   requires j.Some? ==> s'.blockAllocator == BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, j.value)
   requires j.None? ==> s'.blockAllocator == s.blockAllocator
   requires j.None? ==> ref !in IIndirectionTable(s.ephemeralIndirectionTable).locs
@@ -317,6 +317,9 @@ module BookkeepingModel {
 
     if j.Some? {
       assert BC.ValidLocationForNode(IIndirectionTable(s.ephemeralIndirectionTable).locs[ref]);
+      assert j.value >= MinNodeBlockIndex() by {
+        LBAType.reveal_ValidAddr();
+      }
     }
 
     forall i: int
@@ -324,11 +327,11 @@ module BookkeepingModel {
     ensures IsLocAllocBitmap(s'.blockAllocator.ephemeral, i)
     {
       if j.Some? && i == j.value {
-        if i == 0 {
+        if 0 <= i < MinNodeBlockIndex() {
           assert false;
         } else {
           var r :| r in s'.ephemeralIndirectionTable.locs &&
-              s'.ephemeralIndirectionTable.locs[r].addr as int == i * BlockSize() as int;
+              s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
           assert MapsAgreeOnKey(
             IIndirectionTable(s.ephemeralIndirectionTable).locs,
             IIndirectionTable(s'.ephemeralIndirectionTable).locs, r);
@@ -344,13 +347,13 @@ module BookkeepingModel {
           assert false;
         }
       } else {
-        if i == 0 {
+        if 0 <= i < MinNodeBlockIndex() {
           assert IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i);
           assert IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
           assert IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);
         } else {
           var r :| r in s'.ephemeralIndirectionTable.locs &&
-              s'.ephemeralIndirectionTable.locs[r].addr as int == i * BlockSize() as int;
+              s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
           //assert r != ref;
           assert MapsAgreeOnKey(
             IIndirectionTable(s.ephemeralIndirectionTable).locs,
@@ -359,7 +362,7 @@ module BookkeepingModel {
           //assert r in IIndirectionTable(s.ephemeralIndirectionTable).locs;
           //assert r in s.ephemeralIndirectionTable.contents;
           //assert s.ephemeralIndirectionTable.contents[r].0.Some?;
-          //assert s.ephemeralIndirectionTable.contents[r].0.value.addr as int == i * BlockSize() as int;
+          //assert s.ephemeralIndirectionTable.contents[r].0.value.addr as int == i * NodeBlockSize() as int;
           assert IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i);
           assert IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
           assert IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);
@@ -376,16 +379,16 @@ module BookkeepingModel {
       } else {
         assert IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
         assert IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i);
-        if i == 0 {
+        if 0 <= i < MinNodeBlockIndex() {
           assert IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i);
         } else {
           var r :| r in s.ephemeralIndirectionTable.locs &&
-            s.ephemeralIndirectionTable.locs[r].addr as int == i * BlockSize() as int;
+            s.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
           assert MapsAgreeOnKey(
             IIndirectionTable(s.ephemeralIndirectionTable).locs,
             IIndirectionTable(s'.ephemeralIndirectionTable).locs, r);
           assert r in s'.ephemeralIndirectionTable.locs &&
-            s'.ephemeralIndirectionTable.locs[r].addr as int == i * BlockSize() as int;
+            s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
           assert IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i);
         }
       }
@@ -429,7 +432,7 @@ module BookkeepingModel {
         (None, if children.Some? then children.value else []));
 
     var j := if oldEntry.Some? && oldEntry.value.0.Some? then
-      Some(oldEntry.value.0.value.addr as int / BlockSize())
+      Some(oldEntry.value.0.value.addr as int / NodeBlockSize())
     else
       None;
     freeIndirectionTableLocCorrect(k, s, s', ref, j);

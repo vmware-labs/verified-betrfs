@@ -7,6 +7,7 @@ module MkfsModel {
   import opened Sequences
   import opened NativeTypes
   import opened BucketsLib
+  import opened Bounds
   import BT = PivotBetree
   import ADM = ByteBetreeBlockCacheSystem
   import LBAType
@@ -19,14 +20,15 @@ module MkfsModel {
 
   predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
   {
-    && diskContents.Keys == {0, LBAType.BlockSize()}
+    && var addr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
+    && diskContents.Keys == {0, addr}
     && var b0 := diskContents[0];
-    && var b1 := diskContents[LBAType.BlockSize()];
-    && |b0| == LBAType.BlockSize() as int
-    && |b1| <= LBAType.BlockSize() as int
+    && var b1 := diskContents[addr];
+    && |b0| == IndirectionTableBlockSize() as int
+    && |b1| <= NodeBlockSize() as int
     && Marshalling.parseCheckedSector(b0)
       == Some(BC.SectorIndirectionTable(BC.IndirectionTable(
-        map[BT.G.Root() := LBAType.Location(LBAType.BlockSize(), |b1| as uint64)],
+        map[BT.G.Root() := LBAType.Location(addr, |b1| as uint64)],
         map[BT.G.Root() := []]
       )))
     && Marshalling.parseCheckedSector(b1)
@@ -53,29 +55,32 @@ module MkfsModel {
     ADM.M.reveal_IBytes();
     ADM.D.reveal_ChecksumChecksOut();
 
+    var addr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
     var b0 := diskContents[0];
-    var b1 := diskContents[LBAType.BlockSize()];
+    var b1 := diskContents[addr];
 
     assert ADM.M.ValidBytes(b0);
     assert ADM.M.ValidBytes(b1);
 
     var loc0 := LBAType.IndirectionTableLocation();
-    var loc1 := LBAType.Location(LBAType.BlockSize(), |b1| as uint64);
+    var loc1 := LBAType.Location(addr, |b1| as uint64);
 
-    //assert loc0.addr as int + loc0.len as int <= |s.disk.contents|;
-    //assert s.disk.contents[0 .. |b0|] == b0;
-    //assert loc0.addr == 0;
-    //assert loc0.len as int == |b0|;
-    //assert s.disk.contents[loc0.addr .. loc0.addr as int + loc0.len as int] == b0;
-    //assert ADM.M.ValidBytes(s.disk.contents[loc0.addr .. loc0.addr as int + loc0.len as int]);
-    LBAType.ValidAddrMul(0);
-    assert LBAType.IndirectionTableLocation() in ADM.IContents(s.disk.contents);
-    assert ADM.IContents(s.disk.contents)[LBAType.IndirectionTableLocation()] == BC.SectorIndirectionTable(BC.IndirectionTable(
+    assert loc0.addr as int + loc0.len as int <= |s.disk.contents|;
+    assert s.disk.contents[0 .. |b0|] == b0;
+    assert loc0.addr == 0;
+    assert loc0.len as int == |b0|;
+    assert s.disk.contents[loc0.addr .. loc0.addr as int + loc0.len as int] == b0;
+    assert ADM.M.ValidBytes(s.disk.contents[loc0.addr .. loc0.addr as int + loc0.len as int]);
+    LBAType.ValidAddr0();
+    assert LBAType.ValidLocation(loc0);
+    assert LBAType.ValidAddr(loc0.addr);
+    assert loc0 in ADM.IContents(s.disk.contents);
+    assert ADM.IContents(s.disk.contents)[loc0] == BC.SectorIndirectionTable(BC.IndirectionTable(
         map[BT.G.Root() := loc1],
         map[BT.G.Root() := []]
       ));
 
-    LBAType.ValidAddrMul(1);
+    LBAType.ValidAddrMul(MinNodeBlockIndexUint64());
     assert loc1 in ADM.IContents(s.disk.contents);
     assert ADM.IContents(s.disk.contents)[loc1] == 
       BC.SectorBlock(BT.G.Node([], None, [B(map[])]));

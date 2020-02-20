@@ -10,9 +10,14 @@
 #include <aio.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <chrono>
 
-#define USE_DIRECT (1)
-//#define USE_DIRECT (0)
+using namespace std;
+
+//#define LOG_QUERY_STATS
+
+//#define USE_DIRECT (1)
+#define USE_DIRECT (0)
 
 #ifndef O_NOATIME
 #define O_NOATIME (0)
@@ -33,16 +38,12 @@ void fail(std::string err)
   exit(1);
 }
 
-typedef uint8 byte;
-
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
-  constexpr int BLOCK_SIZE = 8*1024*1024;
-
 #if USE_DIRECT
-  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
-    byte *aligned_bytes;
+  uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
+    uint8_t *aligned_bytes;
     *aligned_len = (len + 4095) & ~0xfffUL;
     int result = posix_memalign((void **)&aligned_bytes, 4096, *aligned_len);
     if (result) {
@@ -52,8 +53,8 @@ namespace MainDiskIOHandler_Compile {
     return aligned_bytes;
   }
 #else
-  byte *aligned_copy(byte* buf, size_t len, size_t *aligned_len) {
-    byte *aligned_bytes = (byte *)malloc(len);
+  uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
+    uint8_t *aligned_bytes = (uint8_t *)malloc(len);
     if (aligned_bytes) {
       memcpy(aligned_bytes, buf, len);
       *aligned_len = len;
@@ -67,7 +68,7 @@ namespace MainDiskIOHandler_Compile {
 
   struct WriteTask {
     size_t aligned_len;
-    byte *aligned_bytes;
+    uint8_t *aligned_bytes;
     aiocb aio_req_write;
 
     bool made_req;
@@ -77,7 +78,7 @@ namespace MainDiskIOHandler_Compile {
       free(aligned_bytes);
     }
     
-    WriteTask(int fd, uint64 addr, byte* buf, size_t len) {
+    WriteTask(int fd, uint64 addr, uint8_t* buf, size_t len) {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
@@ -151,60 +152,35 @@ namespace MainDiskIOHandler_Compile {
   };
 
   struct ReadTask {
-    DafnySequence<byte> bytes;
+    DafnySequence<uint8_t> bytes;
 
-    ReadTask(DafnySequence<byte> s) : bytes(s) { }
+    ReadTask(DafnySequence<uint8_t> s) : bytes(s) { }
   };
 
-#if USE_DIRECT
-  std::string getFilename(uint64 addr) {
-    // Convert to hex
-    char num[17];
-    for (int i = 0; i < 16; i++) {
-      int digit = (addr >> (4 * i)) & 0xf;
-      num[15 - i] = (digit < 10 ? '0' + digit : 'a' + digit - 10);
-    }
-    num[16] = '\0';
-    return "/tmp/.veribetrfs-storage/" + std::string(num);
-  }
+  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
+  {
+    #ifdef LOG_QUERY_STATS
+    auto t1 = chrono::high_resolution_clock::now();
+    #endif
 
-  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
-  {
-    size_t aligned_len = (len + 4095) & ~0xfffULL;
-    byte *aligned_res;
-    int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
-    if (result != 0) {
-      fail("Couldn't allocate aligned memory");
-    }
-    
-    ssize_t count = pread(fd, aligned_res, aligned_len, addr);
-    if (count < 0) {
-      free(aligned_res);
-      fail("pread failed");
-    }
-    memcpy(res, aligned_res, len);
-    free(aligned_res);
-    
-    return (uint64)count;
-  }
-#else
-  uint64 readFromFile(int fd, uint64 addr, byte* res, int len)
-  {
     ssize_t count = pread(fd, res, len, addr);
+
+    #ifdef LOG_QUERY_STATS
+    auto t2 = chrono::high_resolution_clock::now();
+    long long ns = std::chrono::duration_cast<
+        std::chrono::nanoseconds>(t2 - t1).count();
+    benchmark_append("pread", ns);
+    #endif
+
     if (count < 0) {
       fail("pread failed");
     }
     return (uint64)count;
   }
-#endif // USE_DIRECT
 
-  void writeSync(int fd, uint64 addr, byte* sector, size_t len) {
-    if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
-      fail("writeSync not implemented for these arguments");
-    }
-
+  void writeSync(int fd, uint64 addr, uint8_t* sector, size_t len) {
     size_t aligned_len;
-    byte *aligned_sector;
+    uint8_t *aligned_sector;
     aligned_sector = aligned_copy(sector, len, &aligned_len);
     if (aligned_sector == NULL) {
       fail("Couldn't create aligned copy of buffer");
@@ -222,13 +198,9 @@ namespace MainDiskIOHandler_Compile {
     }
   }
 
-  void readSync(int fd, uint64 addr, uint64 len, byte* sector) {
-    if (addr % BLOCK_SIZE != 0 || len > BLOCK_SIZE) {
-      fail("readSync not implemented for these arguments");
-    }
-
-    uint64 actualRead = readFromFile(fd, addr, sector, len);
-    if (actualRead < len) {
+  void readSync(int fd, uint64 addr, uint64 expected_len, uint64 len_to_read, uint8_t* sector) {
+    uint64 actualRead = readFromFile(fd, addr, sector, len_to_read);
+    if (actualRead < expected_len) {
       fail("readSync did not find enough bytes");
     }
   }
@@ -259,9 +231,6 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
   {
     size_t len = bytes.size();
-    if (len > BLOCK_SIZE || addr % BLOCK_SIZE != 0) {
-      fail("write not implemented for these arguments");
-    }
 
     shared_ptr<WriteTask> writeTask {
       new WriteTask(fd, addr, &bytes.at(0), len) };
@@ -280,13 +249,45 @@ namespace MainDiskIOHandler_Compile {
 
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
-    DafnySequence<byte> bytes(len);
-    readSync(fd, addr, len, bytes.ptr());
+    #ifdef LOG_QUERY_STATS
+    benchmark_start("DiskIOHandler::read alloc");
+    #endif
+
+    #if USE_DIRECT
+    size_t aligned_len = (len + 4095) & ~0xfffULL;
+    uint8_t* aligned_res;
+    int result = posix_memalign((void **)&aligned_res,
+        4096, aligned_len);
+    if (result != 0) {
+      fail("DiskIOHandler::read couldn't allocate aligned memory");
+    }
+    DafnySequence<uint8_t> bytes;
+    bytes.sptr = std::shared_ptr<uint8_t>(aligned_res, free);
+    bytes.start = aligned_res;
+    bytes.len = len;
+    #else
+    DafnySequence<uint8_t> bytes(len);
+    uint64 aligned_len = len;
+    #endif
+
+    #ifdef LOG_QUERY_STATS
+    benchmark_end("DiskIOHandler::read alloc");
+    #endif
+
+    readSync(fd, addr, len, aligned_len, bytes.ptr());
+
+    #ifdef LOG_QUERY_STATS
+    benchmark_start("DiskIOHandler::read finish");
+    #endif
 
     uint64 id = this->curId;
     this->curId++;
 
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+
+    #ifdef LOG_QUERY_STATS
+    benchmark_end("DiskIOHandler::read finish");
+    #endif
 
     return id;
   }
@@ -447,6 +448,10 @@ void Application::Sync() {
 
 void Application::Insert(ByteString key, ByteString val)
 {
+  #ifdef LOG_QUERY_STATS
+  auto t1 = chrono::high_resolution_clock::now();
+  #endif
+
   if (key.size() > MaxKeyLen()) {
     fail("Insert: key is too long");
   }
@@ -464,6 +469,14 @@ void Application::Insert(ByteString key, ByteString val)
     if (success) {
       LOG("doing insert... success!");
       LOG("");
+
+      #ifdef LOG_QUERY_STATS
+      auto t2 = chrono::high_resolution_clock::now();
+
+      long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+      benchmark_append("Appliation::Insert", ns);
+      #endif
+
       return;
     } else {
       LOG("doing insert...");
@@ -473,8 +486,18 @@ void Application::Insert(ByteString key, ByteString val)
   fail("Insert operation didn't finish");
 }
 
+#ifdef LOG_QUERY_STATS
+int queryCount = 0;
+#endif
+
 ByteString Application::Query(ByteString key)
 {
+  #ifdef LOG_QUERY_STATS
+  auto t1 = chrono::high_resolution_clock::now();
+  int num_reads = 0;
+  int num_writes = 0;
+  #endif
+
   LOG("Query \"" + key.as_string() + "\"");
 
   if (key.size() > MaxKeyLen()) {
@@ -483,13 +506,42 @@ ByteString Application::Query(ByteString key)
 
   for (int i = 0; i < 500000; i++) {
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
+
+    #ifdef LOG_QUERY_STATS
+    if (io->has_write_task()) {
+      num_writes++;
+    }
+    if (io->has_read_task()) {
+      num_reads++;
+    }
+    #endif
+
+    if (io->has_write_task()) {
+      io->completeWriteTasks();
+    }
     this->maybeDoResponse();
-    if (result.first) {
-      DafnySequence<byte> val_bytes = result.second;
+
+    if (result.has_value()) {
+      DafnySequence<uint8_t> val_bytes = *result;
       LOG("doing query... success!");
       ByteString val(val_bytes);
       LOG("query result is \"" + key.as_string() + "\" -> \"" + val.as_string() + "\"");
       LOG("");
+
+      #ifdef LOG_QUERY_STATS
+      if (queryCount > 500) {
+        // first few queries would skew results because the cache
+        // wouldn't be full yet.
+        auto t2 = chrono::high_resolution_clock::now();
+
+        long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+        benchmark_append("query-writes-" + to_string(num_writes) +
+            "-reads-" + to_string(num_reads), ns);
+        benchmark_append("Application::Query", ns);
+      }
+      queryCount++;
+      #endif
+
       return val;
     } else {
       LOG("doing query...");
@@ -545,10 +597,10 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
   for (int i = 0; i < 500000; i++) {
     auto result = handle_Succ(k, hs, io, start, maxToFind);
     this->maybeDoResponse();
-    if (result.first) {
+    if (result.has_value()) {
       LOG("doing succ ... success!");
       LOG("");
-      return result.second;
+      return *result;
     } else {
       LOG("doing succ...");
     }
@@ -598,9 +650,9 @@ void Application::log(std::string const& s) {
 }
 
 void Mkfs(string filename) {
-  DafnyMap<uint64, DafnySequence<byte>> daf_map = handle_Mkfs();
+  DafnyMap<uint64, DafnySequence<uint8_t>> daf_map = handle_Mkfs();
 
-  std::unordered_map<uint64, DafnySequence<byte>> m = daf_map.map;
+  std::unordered_map<uint64, DafnySequence<uint8_t>> m = daf_map.map;
 
   if (m.size() == 0) {
     fail("InitDiskBytes failed.");

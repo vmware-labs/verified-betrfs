@@ -35,16 +35,24 @@ bool handle_Insert(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_
   return __default::handleInsert(*k.k, hs.hs, io, key, value);
 }
 
-std::pair<bool, DafnySequence<uint8>> handle_Query(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key)
+std::optional<DafnySequence<uint8>> handle_Query(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key)
 {
   auto p = __default::handleQuery(*k.k, hs.hs, io, key);
-  return std::make_pair(p.is_Option_Some(), p.dtor_value());
+  if (p.is_Option_Some()) {
+    return std::optional<DafnySequence<uint8>>(p.dtor_value());
+  } else {
+    return std::nullopt;
+  }
 }
 
-std::pair<bool, UI_Compile::SuccResultList> handle_Succ(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, UI_Compile::RangeStart start, uint64 maxToFind)
+std::optional<UI_Compile::SuccResultList> handle_Succ(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, UI_Compile::RangeStart start, uint64 maxToFind)
 {
   auto p = __default::handleSucc(*k.k, hs.hs, io, start, maxToFind);
-  return std::make_pair(p.is_Option_Some(), p.dtor_value());
+  if (p.is_Option_Some()) {
+    return std::optional<UI_Compile::SuccResultList>(p.dtor_value());
+  } else {
+    return std::nullopt;
+  }
 }
 
 void handle_ReadResponse(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
