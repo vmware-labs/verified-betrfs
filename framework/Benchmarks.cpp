@@ -198,6 +198,8 @@ public:
       }
 
       app.Insert(key, value);
+
+      //if (i % 50000 == 0) app.Sync();
     }
 
     app.Sync();

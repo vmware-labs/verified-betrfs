@@ -4,6 +4,7 @@ include "StateModel.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/Base/NativeBenchmarking.s.dfy"
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
@@ -35,6 +36,7 @@ module MarshallingImpl {
   import IndirectionTableModel
   import KeyType
   import SeqComparison
+  import NativeBenchmarking
 
   import BT = PivotBetreeSpec`Internal
 
@@ -471,7 +473,8 @@ module MarshallingImpl {
     lemma_node_fits_in_block();
   }
 
-  method sectorToVal(sector: StateImpl.Sector) returns (v : V)
+  method sectorToVal(sector: StateImpl.Sector)
+  returns (v : V, size: uint64)
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
@@ -483,15 +486,18 @@ module MarshallingImpl {
   ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
   ensures sector.SectorBlock? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
+  ensures SizeOfV(v) == size as int
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {
-        var v := indirectionTable.indirectionTableToVal();
-        return VCase(0, v);
+        var w, s := indirectionTable.indirectionTableToVal();
+        v := VCase(0, w);
+        size := s + 8;
       }
       case SectorBlock(node) => {
-        var v := nodeToVal(node);
-        return VCase(1, v);
+        var w := nodeToVal(node);
+        v := VCase(1, w);
+        size := ComputeSizeOf(v);
       }
     }
   }
@@ -577,8 +583,11 @@ module MarshallingImpl {
   ensures sector.SectorBlock? ==> data != null;
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
   {
-    var v := sectorToVal(sector);
-    var computedSize := GenericMarshalling.ComputeSizeOf(v);
+    //if sector.SectorIndirectionTable? { NativeBenchmarking.start("Marshall"); }
+
+    //if sector.SectorIndirectionTable? { NativeBenchmarking.start("sectorToVal"); }
+    var v, computedSize := sectorToVal(sector);
+    //if sector.SectorIndirectionTable? { NativeBenchmarking.end("sectorToVal"); }
 
     ghost var ghosty := true;
     if ghosty {
@@ -591,17 +600,24 @@ module MarshallingImpl {
       var size := if sector.SectorIndirectionTable? then IndirectionTableBlockSizeUint64() else computedSize + 32;
 
       //Native.BenchmarkingUtil.start();
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.start("MarshallIntoFixedSize"); }
       var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.end("MarshallIntoFixedSize"); }
       //Native.BenchmarkingUtil.end();
 
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.start("crc32"); }
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.end("crc32"); }
+
       assert data[32..] == data[32..data.Length];
       assert hash == Crypto.Crc32C(data[32..]);
       ghost var data_suffix := data[32..];
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.start("copy"); }
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.end("copy"); }
       assert data_suffix == data[32..];
 
       /*ghost var data_seq := data[..];
@@ -611,6 +627,8 @@ module MarshallingImpl {
           == hash
           == data[..32]
           == data_seq[..32];*/
+
+      //if sector.SectorIndirectionTable? { NativeBenchmarking.end("Marshall"); }
 
       return data;
     } else {

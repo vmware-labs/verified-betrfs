@@ -654,7 +654,7 @@ module IndirectionTableImpl {
     lemma {:fuel SizeOfV,5} lemma_tuple_size(a: uint64, b: uint64, c: uint64, succs: seq<BT.G.Reference>)
     requires|succs| <= MaxNumChildren()
     ensures SizeOfV(VTuple([VUint64(a), VUint64(b), VUint64(c), VUint64Array(succs)]))
-         <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
+         == (8 + 8 + 8 + (8 + |succs| * 8))
     {
     }
 
@@ -665,7 +665,7 @@ module IndirectionTableImpl {
     }
 
     method indirectionTableToVal()
-    returns (v : V)
+    returns (v : V, size: uint64)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
     ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
@@ -675,12 +675,15 @@ module IndirectionTableImpl {
           IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
        == IndirectionTableModel.I(I())
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
+    ensures SizeOfV(v) == size as int
     {
       assert t.Count <= IndirectionTableModel.MaxSizeUint64();
       lemma_SeqSum_empty();
       var a: array<V> := new V[t.Count as uint64];
       var it := t.IterStart();
       var i: uint64 := 0;
+      size := 0;
+
       ghost var partial := map[];
       while it.next.Next?
       invariant Inv()
@@ -700,7 +703,9 @@ module IndirectionTableImpl {
           && partial[r].succs == t.I().contents[r].succs
       // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
       invariant t.I().contents == old(t.I().contents)
-      invariant SeqSum(a[..i]) <= |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
+      invariant size as int <=
+          |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
+      invariant SeqSum(a[..i]) == size as int;
       decreases it.decreaser
       {
         var (ref, locOptGraph: IndirectionTableModel.Entry) := (it.next.key, it.next.value);
@@ -735,7 +740,6 @@ module IndirectionTableImpl {
 
         var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
 
-        lemma_tuple_size(ref, loc.addr, loc.len, succs);
         //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
 
         // == mutation ==
@@ -747,13 +751,20 @@ module IndirectionTableImpl {
 
         assert a[..i-1] == DropLast(a[..i]); // observe
 
-        lemma_SeqSum_prefix_array(a, i as int);
+        calc {
+          SeqSum(a[..i]);
+          {
+            lemma_SeqSum_prefix_array(a, i as int);
+          }
+          SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
+          SeqSum(a[..i-1]) + SizeOfV(vi);
+          {
+            lemma_tuple_size(ref, loc.addr, loc.len, succs);
+          }
+          size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
+        }
 
-        assert SeqSum(a[..i])
-            == SeqSum(a[..i-1]) + SizeOfV(a[i-1])
-            == SeqSum(a[..i-1]) + SizeOfV(vi)
-            <= (|it.s| - 1) * (8 + 8 + 8 + (8 + MaxNumChildren() * 8)) + SizeOfV(vi)
-            <= |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
+        size := size + 32 + 8 * |succs| as uint64;
       }
 
       /* (doc) assert |partial.Keys| == |t.I().contents.Keys|; */
@@ -770,6 +781,8 @@ module IndirectionTableImpl {
       assert t1.Some?;*/
 
       assert |it.s| <= IndirectionTableModel.MaxSize();
+
+      size := size + 8;
     }
 
     // To bitmap
