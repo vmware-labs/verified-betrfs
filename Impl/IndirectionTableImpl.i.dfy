@@ -35,6 +35,7 @@ module IndirectionTableImpl {
   import opened Bounds
   import IndirectionTableModel
   import LruImpl
+  import opened NativePackedInts
 
   type HashMap = MutableMap.ResizingHashMap<IndirectionTableModel.Entry>
 
@@ -664,126 +665,170 @@ module IndirectionTableImpl {
       reveal_SeqSum();
     }
 
-    method indirectionTableToVal()
-    returns (v : V, size: uint64)
+    method marshallIndirectionTable(data: array<byte>, start_idx: uint64)
+    returns (end: uint64)
     requires Inv()
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-    ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
-    ensures ValidVal(v)
-    ensures IndirectionTableModel.valToIndirectionTable(v).Some?
-    ensures
-          IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
-       == IndirectionTableModel.I(I())
-    ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
-    ensures SizeOfV(v) == size as int
+    modifies data
     {
-      assert t.Count <= IndirectionTableModel.MaxSizeUint64();
-      lemma_SeqSum_empty();
-      var a: array<V> := new V[t.Count as uint64];
+      assume false;
+
+      var idx := start_idx;
+
+      Pack_LittleEndian_Uint64_into_Array(t.Count, data, idx);
+      idx := idx + 8;
+
       var it := t.IterStart();
-      var i: uint64 := 0;
-      size := 0;
-
-      ghost var partial := map[];
       while it.next.Next?
-      invariant Inv()
-      invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-      invariant 0 <= i as int <= a.Length
-      invariant MutableMapModel.WFIter(t.I(), it);
-      invariant forall j | 0 <= j < i :: ValidVal(a[j])
-      invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-      // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-      invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
-      invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
-      invariant |partial.Keys| == i as nat
-      invariant partial.Keys == it.s
-      invariant partial.Keys <= t.I().contents.Keys
-      invariant forall r | r in partial :: r in t.I().contents
-          && partial[r].loc == t.I().contents[r].loc
-          && partial[r].succs == t.I().contents[r].succs
-      // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
-      invariant t.I().contents == old(t.I().contents)
-      invariant size as int <=
-          |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
-      invariant SeqSum(a[..i]) == size as int;
-      decreases it.decreaser
       {
-        var (ref, locOptGraph: IndirectionTableModel.Entry) := (it.next.key, it.next.value);
-        assert ref in I().locs;
-        // NOTE: deconstructing in two steps to work around c# translation bug
-        var locOpt := locOptGraph.loc;
-        var succs := locOptGraph.succs;
-        var loc := locOpt.value;
-        //ghost var predCount := locOptGraph.predCount;
-        var childrenVal := VUint64Array(succs);
-
-        assert |succs| <= MaxNumChildren();
-
-        //assert I().locs[ref] == loc;
-        //assert I().graph[ref] == succs;
-
-        //assert IndirectionTableModel.I(I()).locs[ref] == loc;
-        //assert IndirectionTableModel.I(I()).graph[ref] == succs;
-
-        assert BC.ValidLocationForNode(loc);
-        /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
-        assert ref !in t0.value.contents;
-        assert loc.addr != 0;
-        assert LBAType.ValidLocation(loc);*/
-
-        MutableMapModel.LemmaIterIndexLtCount(t.I(), it);
-
-        assert |succs| < 0x1_0000_0000_0000_0000;
-        assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
-
-        assert |MutableMapModel.IterInc(t.I(), it).s| == |it.s| + 1;
-
-        var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
-
-        //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
-
-        // == mutation ==
-        partial := partial[ref := IndirectionTableModel.Entry(locOpt, succs, 0)];
-        a[i] := vi;
-        i := i + 1;
-        it := t.IterInc(it);
-        // ==============
-
-        assert a[..i-1] == DropLast(a[..i]); // observe
-
-        calc {
-          SeqSum(a[..i]);
-          {
-            lemma_SeqSum_prefix_array(a, i as int);
-          }
-          SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
-          SeqSum(a[..i-1]) + SizeOfV(vi);
-          {
-            lemma_tuple_size(ref, loc.addr, loc.len, succs);
-          }
-          size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
+        if idx + 8 + 8 + 8 + 8 + 8*|it.next.value.succs| as uint64
+            > data.Length as uint64
+        {
+          return 0;
         }
 
-        size := size + 32 + 8 * |succs| as uint64;
+        Pack_LittleEndian_Uint64_into_Array(it.next.key, data, idx);
+        idx := idx + 8;
+
+        Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.addr, data, idx);
+        idx := idx + 8;
+
+        Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.len, data, idx);
+        idx := idx + 8;
+
+        Pack_LittleEndian_Uint64_into_Array(
+            |it.next.value.succs| as uint64, data, idx);
+        idx := idx + 8;
+
+        Pack_LittleEndian_Uint64_Seq_into_Array(
+            it.next.value.succs, data, idx);
+        idx := idx + 8 * |it.next.value.succs| as uint64;
+        
+        it := t.IterInc(it);
       }
-
-      /* (doc) assert |partial.Keys| == |t.I().contents.Keys|; */
-      SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.I().contents.Keys);
-
-      assert a[..i] == a[..]; // observe
-      v := VArray(a[..]);
-
-      /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
-      assert t0.Some?;
-      assert BT.G.Root() in t0.value.contents;
-      assert t0.value.count <= MaxSizeUint64();
-      ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
-      assert t1.Some?;*/
-
-      assert |it.s| <= IndirectionTableModel.MaxSize();
-
-      size := size + 8;
+      return idx;
     }
+
+    //method indirectionTableToVal()
+    //returns (v : V, size: uint64)
+    //requires Inv()
+    //requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+    //ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
+    //ensures ValidVal(v)
+    //ensures IndirectionTableModel.valToIndirectionTable(v).Some?
+    //ensures
+    //      IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
+    //   == IndirectionTableModel.I(I())
+    //ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
+    //ensures SizeOfV(v) == size as int
+    //{
+    //  assert t.Count <= IndirectionTableModel.MaxSizeUint64();
+    //  lemma_SeqSum_empty();
+    //  var a: array<V> := new V[t.Count as uint64];
+    //  var it := t.IterStart();
+    //  var i: uint64 := 0;
+    //  size := 0;
+
+    //  ghost var partial := map[];
+    //  while it.next.Next?
+    //  invariant Inv()
+    //  invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+    //  invariant 0 <= i as int <= a.Length
+    //  invariant MutableMapModel.WFIter(t.I(), it);
+    //  invariant forall j | 0 <= j < i :: ValidVal(a[j])
+    //  invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    //  // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
+    //  invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
+    //  invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
+    //  invariant |partial.Keys| == i as nat
+    //  invariant partial.Keys == it.s
+    //  invariant partial.Keys <= t.I().contents.Keys
+    //  invariant forall r | r in partial :: r in t.I().contents
+    //      && partial[r].loc == t.I().contents[r].loc
+    //      && partial[r].succs == t.I().contents[r].succs
+    //  // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
+    //  invariant t.I().contents == old(t.I().contents)
+    //  invariant size as int <=
+    //      |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
+    //  invariant SeqSum(a[..i]) == size as int;
+    //  decreases it.decreaser
+    //  {
+    //    var (ref, locOptGraph: IndirectionTableModel.Entry) := (it.next.key, it.next.value);
+    //    assert ref in I().locs;
+    //    // NOTE: deconstructing in two steps to work around c# translation bug
+    //    var locOpt := locOptGraph.loc;
+    //    var succs := locOptGraph.succs;
+    //    var loc := locOpt.value;
+    //    //ghost var predCount := locOptGraph.predCount;
+    //    var childrenVal := VUint64Array(succs);
+
+    //    assert |succs| <= MaxNumChildren();
+
+    //    //assert I().locs[ref] == loc;
+    //    //assert I().graph[ref] == succs;
+
+    //    //assert IndirectionTableModel.I(I()).locs[ref] == loc;
+    //    //assert IndirectionTableModel.I(I()).graph[ref] == succs;
+
+    //    assert BC.ValidLocationForNode(loc);
+    //    /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
+    //    assert ref !in t0.value.contents;
+    //    assert loc.addr != 0;
+    //    assert LBAType.ValidLocation(loc);*/
+
+    //    MutableMapModel.LemmaIterIndexLtCount(t.I(), it);
+
+    //    assert |succs| < 0x1_0000_0000_0000_0000;
+    //    assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
+
+    //    assert |MutableMapModel.IterInc(t.I(), it).s| == |it.s| + 1;
+
+    //    var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
+
+    //    //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
+
+    //    // == mutation ==
+    //    partial := partial[ref := IndirectionTableModel.Entry(locOpt, succs, 0)];
+    //    a[i] := vi;
+    //    i := i + 1;
+    //    it := t.IterInc(it);
+    //    // ==============
+
+    //    assert a[..i-1] == DropLast(a[..i]); // observe
+
+    //    calc {
+    //      SeqSum(a[..i]);
+    //      {
+    //        lemma_SeqSum_prefix_array(a, i as int);
+    //      }
+    //      SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
+    //      SeqSum(a[..i-1]) + SizeOfV(vi);
+    //      {
+    //        lemma_tuple_size(ref, loc.addr, loc.len, succs);
+    //      }
+    //      size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
+    //    }
+
+    //    size := size + 32 + 8 * |succs| as uint64;
+    //  }
+
+    //  /* (doc) assert |partial.Keys| == |t.I().contents.Keys|; */
+    //  SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.I().contents.Keys);
+
+    //  assert a[..i] == a[..]; // observe
+    //  v := VArray(a[..]);
+
+    //  /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
+    //  assert t0.Some?;
+    //  assert BT.G.Root() in t0.value.contents;
+    //  assert t0.value.count <= MaxSizeUint64();
+    //  ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
+    //  assert t1.Some?;*/
+
+    //  assert |it.s| <= IndirectionTableModel.MaxSize();
+
+    //  size := size + 8;
+    //}
 
     // To bitmap
 
