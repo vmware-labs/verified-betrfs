@@ -194,6 +194,13 @@ void ycsbRun(
         }
     }
 
+    auto sync_started = chrono::steady_clock::now();
+    db.sync();
+    auto sync_completed = chrono::steady_clock::now();
+    auto sync_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        sync_completed - sync_started).count();
+    sync_latency_hist.add_value(sync_duration);
+
     auto clock_end = chrono::steady_clock::now();
     long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
 
