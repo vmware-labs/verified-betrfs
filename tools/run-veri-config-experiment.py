@@ -108,7 +108,7 @@ def main():
       config = "64kb"
     elif arg == "config-8mb":
       config = "8mb"
-    elif arg == "rocks"
+    elif arg == "rocks":
       rocks = True
     else:
       assert False, "unrecognized argument: " + arg
@@ -128,9 +128,10 @@ def main():
   ret = os.system("rm -rf build/")
   assert ret == 0
 
-  print("Building Bundle.cpp...")
-  ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
-  assert ret == 0
+  if not rocks:
+    print("Building Bundle.cpp...")
+    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
+    assert ret == 0
 
   for (name, value) in value_updates:
     assert not rocks
