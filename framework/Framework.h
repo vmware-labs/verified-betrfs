@@ -208,5 +208,7 @@ namespace NativeBenchmarking_Compile {
 void benchmark_start(std::string const&);
 void benchmark_end(std::string const&);
 void benchmark_append(std::string const&, long long ns);
+void benchmark_clear();
+void benchmark_dump();
 
 void Mkfs(std::string filename = ".veribetrfs.img");

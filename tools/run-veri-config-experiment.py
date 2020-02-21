@@ -88,6 +88,7 @@ def main():
   mem = None
   value_updates = []
   config = None
+  log_stats = False
 
   rocks = None
 
@@ -110,6 +111,8 @@ def main():
       config = "8mb"
     elif arg == "rocks":
       rocks = True
+    elif arg == "log_stats":
+      log_stats = True
     else:
       assert False, "unrecognized argument: " + arg
 
@@ -145,8 +148,13 @@ def main():
     exe = "build/VeribetrfsYcsb"
     cmdoption = "--veribetrkv"
 
+  make_options = ""
+  if log_stats:
+    make_options = "LOG_QUERY_STATS=1 "
+
   print("Building executable...")
-  ret = os.system("make " + exe + " -s -j4 > /dev/null 2> /dev/null")
+  ret = os.system(make_options + "make " +
+      exe + " -s -j4 > /dev/null 2> /dev/null")
   assert ret == 0
 
   wl = "ycsb/workload" + workload + "-onefield.spec"

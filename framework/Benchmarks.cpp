@@ -620,13 +620,17 @@ void benchmark_append(string const& name, long long ns) {
   sw[name].append(ns);
 }
 
-void dump() {
+void benchmark_dump() {
   for (auto& p : sw) {
     string name = p.first;
     int count = p.second.count;
     long long ms = p.second.ns / 1000000;
     cout << name << " " << ms << " ms, " << count << " ticks" << endl;
   }
+}
+
+void benchmark_clear() {
+  sw.clear();
 }
 
 namespace NativeBenchmarking_Compile {
@@ -641,5 +645,5 @@ namespace NativeBenchmarking_Compile {
 
 void RunBenchmark(string filename, string const& name, bool skipPrepare) {
   benchmark_by_name(name)->run(filename, skipPrepare);
-  dump();
+  benchmark_dump();
 }

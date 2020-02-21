@@ -183,6 +183,15 @@ void ycsbRun(
 
             cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
 
+            #ifdef _YCSB_VERIBETRFS
+            #ifdef LOG_QUERY_STATS
+            cout << "=========================================" << endl;
+            benchmark_dump();
+            benchmark_clear();
+            cout << "=========================================" << endl;
+            #endif
+            #endif
+
             auto sync_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 sync_completed - clock_op_completed).count();
             sync_latency_hist.add_value(sync_duration);
