@@ -287,7 +287,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 ##############################################################################
 # YCSB
 
-VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
+VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Benchmarks.o
 
 libycsbc: build/libycsbc-libcpp.a \
 				  build/libycsbc-default.a

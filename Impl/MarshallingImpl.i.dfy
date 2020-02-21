@@ -617,13 +617,13 @@ module MarshallingImpl {
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
   {
     if sector.SectorIndirectionTable? {
-      //NativeBenchmarking.start("MarshallCheckedSector");
+      NativeBenchmarking.start("MarshallCheckedSector.indirectionTable");
 
       var data := new byte[IndirectionTableBlockSizeUint64()];
 
-      //NativeBenchmarking.start("marshallIndirectionTable");
+      NativeBenchmarking.start("MarshallCheckedSector.indirectionTable.marshallIndirectionTable");
       var end := sector.indirectionTable.marshallIndirectionTable(data, 40);
-      //NativeBenchmarking.end("marshallIndirectionTable");
+      NativeBenchmarking.end("MarshallCheckedSector.indirectionTable.marshallIndirectionTable");
 
       assume false;
       if end == 0 {
@@ -633,30 +633,41 @@ module MarshallingImpl {
       // case 0 indicates indirection table
       Pack_LittleEndian_Uint64_into_Array(0, data, 32);
 
-      //NativeBenchmarking.start("crc32");
+      NativeBenchmarking.start("MarshallCheckedSector.indirectionTable.crc32");
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
-      //NativeBenchmarking.end("crc32");
+      NativeBenchmarking.end("MarshallCheckedSector.indirectionTable.crc32");
 
-      //NativeBenchmarking.end("MarshallCheckedSector");
+      NativeBenchmarking.end("MarshallCheckedSector.indirectionTable");
 
       return data;
     } else {
+      NativeBenchmarking.start("MarshallCheckedSector.node");
+
+      NativeBenchmarking.start("MarshallCheckedSector.node.sectorToVal");
       var v, computedSize := sectorToVal(sector);
+      NativeBenchmarking.end("MarshallCheckedSector.node.sectorToVal");
       var size := computedSize + 32;
 
+      NativeBenchmarking.start("MarshallCheckedSector.node.MarshallIntoFixedSize");
       var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
+      NativeBenchmarking.end("MarshallCheckedSector.node.MarshallIntoFixedSize");
 
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
+      NativeBenchmarking.start("MarshallCheckedSector.node.crc32");
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+
+      NativeBenchmarking.end("MarshallCheckedSector.node.crc32");
 
       assert data[32..] == data[32..data.Length];
       assert hash == Crypto.Crc32C(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];
+
+      NativeBenchmarking.end("MarshallCheckedSector.node");
 
       return data;
     }

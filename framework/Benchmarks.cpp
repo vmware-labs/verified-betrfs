@@ -620,6 +620,10 @@ void benchmark_append(string const& name, long long ns) {
   sw[name].append(ns);
 }
 
+void benchmark_clear() {
+  sw.clear();
+}
+
 void dump() {
   for (auto& p : sw) {
     string name = p.first;

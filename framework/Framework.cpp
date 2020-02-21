@@ -418,6 +418,8 @@ void Application::crash() {
 }
 
 void Application::Sync() {
+  benchmark_start("Application::Sync");
+
   LOG("Sync");
 
   uint64 id = handle_PushSync(k, hs, io);
@@ -428,16 +430,21 @@ void Application::Sync() {
 
   for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
+
     auto tup2 = handle_PopSync(k, hs, io, id);
     bool wait = tup2.first;
     bool success = tup2.second;
     if (success) {
       LOG("doing sync... success!");
       LOG("");
+
+      benchmark_end("Application::Sync");
       return;
     } else if (wait) {
       LOG("doing wait...");
+      benchmark_start("waitForOne");
       io->waitForOne();
+      benchmark_end("waitForOne");
     } else {
       LOG("doing sync...");
     }
@@ -562,12 +569,16 @@ void Application::QueryAndExpect(ByteString key, ByteString expected_val)
 bool Application::maybeDoResponse()
 {
   if (io->prepareReadResponse()) {
+    benchmark_start("handle_ReadResponse");
     handle_ReadResponse(k, hs, io);
+    benchmark_end("handle_ReadResponse");
     LOG("doing read response...");
     return true;
   }
   else if (io->prepareWriteResponse()) {
+    benchmark_start("handle_WriteResponse");
     handle_WriteResponse(k, hs, io);
+    benchmark_end("handle_WriteResponse");
     LOG("doing write response...");
     return true;
   }

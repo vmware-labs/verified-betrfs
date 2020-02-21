@@ -214,6 +214,9 @@ void ycsbRun(
     }
 }
 
+void benchmark_clear();
+void dump();
+
 #ifdef _YCSB_VERIBETRFS
 class VeribetrkvFacade {
 protected:
@@ -237,7 +240,11 @@ public:
     }
 
     inline void sync() {
+        benchmark_clear();
         app.Sync();
+        cout << "========================================" << endl;
+        dump();
+        cout << "========================================" << endl;
     }
 };
 
