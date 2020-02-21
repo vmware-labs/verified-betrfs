@@ -11,6 +11,12 @@ module {:extern} NativeArrays {
       ensures c > 0 ==> SeqComparison.lt(s2, s1)
       ensures c == 0 ==> s1 == s2
 
+  method {:extern "NativeArrays_Compile", "ByteSeqSliceCmpByteSeqSlice"} ByteSeqSliceCmpByteSeqSlice(s1: seq<byte>, lo1: uint64, hi1: uint64, s2: seq<byte>, lo2: uint64, hi2: uint64)
+      returns (c : int32)
+      ensures c < 0 ==> SeqComparison.lt(s1[lo1..hi1], s2[lo2..hi2])
+      ensures c > 0 ==> SeqComparison.lt(s2[lo1..hi1], s1[lo2..hi2])
+      ensures c == 0 ==> s1[lo1..hi1] == s2[lo2..hi2]
+
   method {:extern "NativeArrays_Compile", "newArrayFill"} newArrayFill<T>(n: uint64, t: T) returns (ar: array<T>)
   ensures ar.Length == n as int
   ensures forall i | 0 <= i < n :: ar[i] == t

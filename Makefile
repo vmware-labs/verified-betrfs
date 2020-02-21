@@ -282,7 +282,7 @@ else
 endif
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS)
+	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(OPT_FLAG)
 
 ##############################################################################
 # YCSB

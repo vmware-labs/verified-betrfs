@@ -46,6 +46,31 @@ namespace NativeArrays_Compile {
       }
     }
 
+    static int32_t ByteSeqSliceCmpByteSeqSlice(
+        DafnySequence<uint8> b1,
+        uint64 lo1, uint64 hi1,
+        DafnySequence<uint8> b2,
+        uint64 lo2, uint64 hi2)
+    {
+      size_t size1 = hi1 - lo1;
+      size_t size2 = hi2 - lo2;
+      int result = memcmp(
+          b1.ptr() + lo1,
+          b2.ptr() + lo2,
+          size1 < size2 ? size1 : size2);
+      if (result == 0) {
+        if (size1 == size2) {
+          return 0;
+        } else if (size1 > size2) {
+          return 1;
+        } else {
+          return -1;
+        }
+      } else {
+        return result;
+      }
+    }
+
     template <typename T>
     static DafnyArray<T> newArrayFill(uint64 len, T val)
     {

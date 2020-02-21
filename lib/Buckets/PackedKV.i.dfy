@@ -12,6 +12,7 @@ module PackedKV {
   import opened ValueMessage
   import opened BucketsLib
   import opened Options
+  import NativeArrays
 
   datatype Pkv = Pkv(
       keys: PackedStringArray.Psa,
@@ -263,7 +264,12 @@ module PackedKV {
     while lo < hi
     {
       var mid: uint64 := (lo + hi) / 2;
-      var c := Keyspace.cmp(key, GetKey(pkv, mid));
+      //var c := Keyspace.cmp(key, GetKey(pkv, mid));
+      var c := NativeArrays.ByteSeqSliceCmpByteSeqSlice(
+          key, 0, |key| as uint64,
+          pkv.keys.data,
+          PackedStringArray.psaStart(pkv.keys, mid) as uint64,
+          PackedStringArray.psaEnd(pkv.keys, mid) as uint64);
       if c == 0 {
         msg := Some(GetMessage(pkv, mid));
         return;
@@ -284,7 +290,14 @@ module PackedKV {
     var i: uint64 := 1;
     while i < |pkv.keys.offsets| as uint64
     {
-      var c := Keyspace.cmp(GetKey(pkv, i-1), GetKey(pkv, i));
+      //var c := Keyspace.cmp(GetKey(pkv, i-1), GetKey(pkv, i));
+      var c := NativeArrays.ByteSeqSliceCmpByteSeqSlice(
+          pkv.keys.data,
+          PackedStringArray.psaStart(pkv.keys, i-1) as uint64,
+          PackedStringArray.psaEnd(pkv.keys, i-1) as uint64,
+          pkv.keys.data,
+          PackedStringArray.psaStart(pkv.keys, i) as uint64,
+          PackedStringArray.psaEnd(pkv.keys, i) as uint64);
       if c >= 0 {
         return false;
       }
