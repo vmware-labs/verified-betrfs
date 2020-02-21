@@ -192,7 +192,7 @@ module {:extern} Maps {
 	}
 
 	lemma IsMapUnion<K,V>(m1: map<K,V>, m2: map<K,V>, m: map<K,V>)
-	requires m1 !! m2
+	requires m1.Keys !! m2.Keys
 	requires forall key | key in m1 :: key in m && m[key] == m1[key]
 	requires forall key | key in m2 :: key in m && m[key] == m2[key]
 	requires forall key | key in m :: (key in m1 || key in m2)
