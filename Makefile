@@ -20,10 +20,14 @@ endif
 CC=clang++
 STDLIB=-stdlib=libc++
 
+# Uncomment to enable gprof
+#GPROF_FLAGS=-pg
+
+DBG_SYMBOLS_FLAG=-g
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
-OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
+OPT_FLAG=$(DBG_SYMBOLS_FLAG) -O2 -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -251,7 +255,7 @@ WARNINGS=-Wall -Wsign-compare
 
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(WARNINGS)
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
@@ -282,7 +286,7 @@ else
 endif
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS)
+	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(GPROF_FLAGS)
 
 ##############################################################################
 # YCSB
@@ -310,11 +314,8 @@ librocksdb:
 
 .PHONY: libycsbc
 
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a ycsb/YcsbMain.cpp
-	# NOTE: this uses c++17, which is required by hdrhist
-	$(CC) $(STDLIB) -o $@ \
-			-L ycsb/build \
-			-L vendor/rocksdb \
+build/YcsbMain.o: ycsb/YcsbMain.cpp
+	$(CC) $(STDLIB) -c -o $@ \
 			-I ycsb/build/include \
 			-I $(DAFNY_ROOT)/Binaries/ \
 			-I framework/ \
@@ -323,7 +324,19 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a ycsb/Yc
 			-I vendor/rocksdb/include/ \
 			-Winline -std=c++17 -O3 \
 			-D_YCSB_VERIBETRFS \
-			$(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
+			$(DBG_SYMBOLS_FLAG) \
+			$(GPROF_FLAGS) \
+			$^
+
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) $(STDLIB) -o $@ \
+			-Winline -std=c++17 -O3 \
+			-L ycsb/build \
+			-L vendor/rocksdb \
+			$(DBG_SYMBOLS_FLAG) \
+			$(VERIBETRFS_YCSB_O_FILES) \
+			build/YcsbMain.o \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
 build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
