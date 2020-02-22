@@ -17,7 +17,17 @@ else
   TIMELIMIT=/timeLimit:$(TL)
 endif
 
-CC=g++
+CC=clang++
+STDLIB=-stdlib=libc++
+
+# Uncomment to enable gprof
+#GPROF_FLAGS=-pg
+
+DBG_SYMBOLS_FLAG=-g
+# _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
+# (but also makes stuff not thread-safe)
+# Note: this optimization only works with stdlib=libc++
+OPT_FLAG=$(DBG_SYMBOLS_FLAG) -O2 -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -231,6 +241,10 @@ build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) |
 	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
 	mv $(TMPNAME) $@
 
+build/Bundle.i.h: build/Bundle.cpp
+# this is build automatically when we build Bundle.cpp
+	touch build/Bundle.i.h
+
 ##############################################################################
 # C++ object files
 
@@ -241,22 +255,17 @@ WARNINGS=-Wall -Wsign-compare
 
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(WARNINGS)
-
-# _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
-# (but also makes stuff not thread-safe)
-#OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
-OPT_FLAG=-O0 -g
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
 build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	$(CC) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++14 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o
@@ -276,28 +285,74 @@ LDFLAGS += -lrt
 endif
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS)
+	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(GPROF_FLAGS)
 
 ##############################################################################
 # YCSB
 
 VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/leakfinder.o
 
-libycsbc:
-	@$(MAKE) -C ycsb build/libycsbc.a
+libycsbc: build/libycsbc-libcpp.a \
+				  build/libycsbc-default.a
+
+build/libycsbc-libcpp.a:
+	STDLIB=libcpp $(MAKE) -C ycsb build/libycsbc-libcpp.a
+
+build/libycsbc-default.a:
+	STDLIB=default $(MAKE) -C ycsb build/libycsbc-default.a
 
 librocksdb:
-	@env ROCKSDB_DISABLE_BZIP=1 ROCKSDB_DISABLE_ZLIB=1 $(MAKE) -C vendor/rocksdb static_lib
+	@env \
+		ROCKSDB_DISABLE_BZIP=1 \
+		ROCKSDB_DISABLE_ZLIB=1 \
+		ROCKSDB_DISABLE_LZ4=1 \
+		ROCKSDB_DISABLE_ZSTD=1 \
+		ROCKSDB_DISABLE_JEMALLOC=1 \
+		ROCKSDB_DISABLE_SNAPPY=1 \
+		$(MAKE) -C vendor/rocksdb static_lib
 
 .PHONY: libycsbc
 
-#SUPEROPT_FLAG=-O3
-SUPEROPT_FLAG=-O0 -g
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) libycsbc librocksdb ycsb/YcsbMain.cpp
-	# NOTE: this uses c++17, which is required by hdrhist
-	g++ -o $@ \
-			-Lycsb/build -Lvendor/rocksdb \
-			-Iycsb/build/include -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -I vendor/hdrhist/ -I vendor/rocksdb/include/ \
-			-std=c++17 $(SUPEROPT_FLAG) $(VERIBETRFS_YCSB_O_FILES) ycsb/YcsbMain.cpp \
-			-lycsbc -lrocksdb -lpthread -ldl -Winline $(LDFLAGS)
+build/YcsbMain.o: ycsb/YcsbMain.cpp
+	$(CC) $(STDLIB) -c -o $@ \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			-I vendor/rocksdb/include/ \
+			-Winline -std=c++17 -O3 \
+			-D_YCSB_VERIBETRFS \
+			$(DBG_SYMBOLS_FLAG) \
+			$(GPROF_FLAGS) \
+			$^
 
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) $(STDLIB) -o $@ \
+			-Winline -std=c++17 -O3 \
+			-L ycsb/build \
+			-L vendor/rocksdb \
+			$(DBG_SYMBOLS_FLAG) \
+			$(VERIBETRFS_YCSB_O_FILES) \
+			build/YcsbMain.o \
+			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
+
+build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) -o $@ \
+			-L ycsb/build \
+			-L vendor/rocksdb \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			-I vendor/rocksdb/include/ \
+			-Winline -std=c++17 -O3 \
+			-D_YCSB_ROCKS \
+			ycsb/YcsbMain.cpp \
+			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
+
+
+ycsb: build/VeribetrfsYcsb build/RocksYcsb

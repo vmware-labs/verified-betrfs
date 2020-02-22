@@ -13,6 +13,7 @@ module SyncImpl {
   import opened BookkeepingImpl
   import opened DeallocImpl
   import opened Bounds
+  import opened LBAType
   import SyncModel
   import BookkeepingModel
   import DeallocModel
@@ -28,11 +29,11 @@ module SyncImpl {
 
   import opened NativeTypes
 
-  method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  method AssignRefToLocEphemeral(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires s.W()
   requires s.ready
   requires BlockAllocatorModel.Inv(s.blockAllocator.I())
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   modifies s.Repr()
   ensures s.W()
   ensures WellUpdated(s)
@@ -44,16 +45,16 @@ module SyncImpl {
     var table := s.ephemeralIndirectionTable;
     var added := table.AddLocIfPresent(ref, loc);
     if added {
-      s.blockAllocator.MarkUsedEphemeral(loc.addr / BlockSizeUint64());
+      s.blockAllocator.MarkUsedEphemeral(loc.addr / NodeBlockSizeUint64());
     }
   }
 
-  method AssignRefToLocFrozen(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: BC.Location)
+  method AssignRefToLocFrozen(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires s.W()
   requires s.ready
   requires s.I().frozenIndirectionTable.Some? ==> s.I().blockAllocator.frozen.Some?
   requires BlockAllocatorModel.Inv(s.blockAllocator.I())
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   modifies s.Repr()
   ensures s.W()
   ensures WellUpdated(s)
@@ -66,16 +67,16 @@ module SyncImpl {
       var table := s.frozenIndirectionTable;
       var added := table.AddLocIfPresent(ref, loc);
       if added {
-        s.blockAllocator.MarkUsedFrozen(loc.addr / BlockSizeUint64());
+        s.blockAllocator.MarkUsedFrozen(loc.addr / NodeBlockSizeUint64());
       }
     }
   }
 
-  method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
+  method AssignIdRefLocOutstanding(k: ImplConstants, s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
   requires s.W()
   requires s.ready
   requires BlockAllocatorModel.Inv(s.I().blockAllocator)
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   modifies s.Repr()
   ensures s.W()
   ensures WellUpdated(s)
@@ -84,11 +85,11 @@ module SyncImpl {
   {
     SyncModel.reveal_AssignIdRefLocOutstanding();
 
-    if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64() < NumBlocksUint64() {
-      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / BlockSizeUint64());
+    if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64() < NumBlocksUint64() {
+      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
     }
     s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
-    s.blockAllocator.MarkUsedOutstanding(loc.addr / BlockSizeUint64());
+    s.blockAllocator.MarkUsedOutstanding(loc.addr / NodeBlockSizeUint64());
   }
 
   method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
@@ -211,6 +212,8 @@ module SyncImpl {
     }
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
 
+    assert Inv(k, s) by { StateModel.reveal_ConsistentBitmap(); }
+
     if foundInFrozen.Some? {
       syncFoundInFrozen(k, s, io, foundInFrozen.value);
       return;
@@ -219,7 +222,7 @@ module SyncImpl {
       wait := true;
       return;
     } else {
-      var id := RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable));
+      var id := RequestWrite(io, IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable));
       if (id.Some?) {
         s.outstandingIndirectionTableWrite := id;
         return;

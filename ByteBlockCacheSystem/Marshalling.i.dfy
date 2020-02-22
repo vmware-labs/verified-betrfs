@@ -32,8 +32,6 @@ module Marshalling {
   import PackedKV
 
   type Reference = BC.Reference
-  type LBA = BC.LBA
-  type Location = BC.Location
   type Sector = BC.Sector
   type Node = BT.G.Node
 

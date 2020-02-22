@@ -3,8 +3,6 @@
 #include "DafnyRuntime.h"
 #include "Framework.h"
 
-using namespace std;
-
 struct ByteString {
   DafnySequence<uint8> seq;
 
@@ -46,26 +44,26 @@ struct ByteString {
 
 class Application {
 public:
-  Application(string filename);
+  Application(std::string filename);
   void initialize();
   void crash();
 
-  void Insert(string const& key, string const& val);
-  ByteString Query(string const& key);
+  void Insert(std::string const& key, std::string const& val);
+  ByteString Query(std::string const& key);
 
   void Sync();
   void EvictEverything();
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);
   void QueryAndExpect(ByteString key, ByteString expected_val);
-  vector<pair<ByteString, ByteString>> Succ(
+  std::vector<std::pair<ByteString, ByteString>> Succ(
       ByteString lowerBound, bool inclusive, uint64 targetCount);
 
 private:
   Constants k;
   Variables hs;
-  string filename;
-  shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;
+  std::string filename;
+  std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;
 
   bool maybeDoResponse();
   void log(std::string const&);

@@ -81,7 +81,7 @@ module StateModel {
 
   predicate IsLocAllocOutstanding(outstanding: map<SD.ReqId, BC.OutstandingWrite>, i: int)
   {
-    !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * BlockSize() as int)
+    !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * NodeBlockSize() as int)
   }
 
   predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)

@@ -36,29 +36,31 @@ module IndirectionTableModel {
   import BC = BetreeGraphBlockCache
   import LruModel
   import MutableMapModel
-  import LBAType
+  import opened LBAType
   import opened GenericMarshalling
   import BitmapModel
   import opened Bounds
   import SetBijectivity
   import Marshalling
 
-  datatype Entry = Entry(loc: Option<BC.Location>, succs: seq<BT.G.Reference>, predCount: uint64)
+  datatype Entry = Entry(loc: Option<Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = MutableMapModel.LinearHashMap<Entry>
 
   // TODO move bitmap in here?
   datatype IndirectionTable = IndirectionTable(
     t: HashMap,
     garbageQueue: Option<LruModel.LruQueue>,
+    refUpperBound: uint64,
+    findLoclessIterator: Option<MutableMapModel.SimpleIterator>,
 
     // These are for easy access in proof code, but all the relevant data
     // is contained in the `t: HashMap` field.
-    ghost locs: map<BT.G.Reference, BC.Location>,
+    ghost locs: map<BT.G.Reference, Location>,
     ghost graph: map<BT.G.Reference, seq<BT.G.Reference>>,
     ghost predCounts: map<BT.G.Reference, int>
   )
 
-  function Locs(t: HashMap) : map<BT.G.Reference, BC.Location>
+  function Locs(t: HashMap) : map<BT.G.Reference, Location>
   {
     map ref | ref in t.contents && t.contents[ref].loc.Some? :: t.contents[ref].loc.value
   }
@@ -153,6 +155,13 @@ module IndirectionTableModel {
     )
     && BT.G.Root() in self.t.contents
     && self.t.count as int <= MaxSize()
+    && (forall ref | ref in self.graph :: ref <= self.refUpperBound)
+    && (self.findLoclessIterator.Some? ==>
+        && MutableMapModel.WFSimpleIter(self.t,
+            self.findLoclessIterator.value)
+        && (forall r | r in self.findLoclessIterator.value.s ::
+            r in self.locs)
+      )
   }
 
   lemma reveal_Inv(self: IndirectionTable)
@@ -170,9 +179,14 @@ module IndirectionTableModel {
     BC.IndirectionTable(self.locs, self.graph)
   }
 
-  function FromHashMap(m: HashMap, q: Option<LruModel.LruQueue>) : IndirectionTable
+  function FromHashMap(
+    m: HashMap,
+    q: Option<LruModel.LruQueue>,
+    refUpperBound: uint64,
+    findLoclessIterator: Option<MutableMapModel.SimpleIterator>
+  ) : IndirectionTable
   {
-    IndirectionTable(m, q, Locs(m), Graph(m), PredCounts(m))
+    IndirectionTable(m, q, refUpperBound, findLoclessIterator, Locs(m), Graph(m), PredCounts(m))
   }
 
   function {:opaque} GetEntry(self: IndirectionTable, ref: BT.G.Reference) : (e : Option<Entry>)
@@ -195,7 +209,7 @@ module IndirectionTableModel {
     entry.Some? && entry.value.loc.None?
   }
 
-  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: BC.Location) : (IndirectionTable, bool)
+  function {:opaque} AddLocIfPresent(self: IndirectionTable, ref: BT.G.Reference, loc: Location) : (IndirectionTable, bool)
   requires Inv(self)
   ensures var (self', added) := AddLocIfPresent(self, ref, loc);
     && Inv(self')
@@ -205,17 +219,27 @@ module IndirectionTableModel {
     && (!added ==> self'.locs == self.locs)
     && (TrackingGarbage(self) ==> TrackingGarbage(self'))
   {
-    var oldEntry := MutableMapModel.Get(self.t, ref);
-    var added := oldEntry.Some? && oldEntry.value.loc.None?;
-    var t := (if added then
-      MutableMapModel.Insert(self.t, ref, Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount))
-    else
-      self.t);
+    var it := MutableMapModel.FindSimpleIter(self.t, ref);
+    var oldEntry := MutableMapModel.SimpleIterOutput(self.t, it);
+    var added := oldEntry.Next? && oldEntry.value.loc.None?;
+    //assert oldEntry.Next? == (ref in self.graph);
+    //assert oldEntry.Next? ==> oldEntry.value.loc.None? == (ref !in self.locs);
+    if added then (
+      var t := MutableMapModel.UpdateByIter(self.t, it, 
+          Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
 
-    assert Graph(t) == Graph(self.t);
-    assert PredCounts(t) == PredCounts(self.t);
+      assert Graph(t) == Graph(self.t);
+      assert PredCounts(t) == PredCounts(self.t);
 
-    (FromHashMap(t, self.garbageQueue), added)
+      var _ := if self.findLoclessIterator.Some? then (
+        MutableMapModel.UpdatePreservesSimpleIter(self.t, it, 
+          Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount), self.findLoclessIterator.value); 0
+      ) else 0;
+
+      (FromHashMap(t, self.garbageQueue, self.refUpperBound, self.findLoclessIterator), true)
+    ) else (
+      (self, false)
+    )
   }
 
   /////// Reference count updating
@@ -736,7 +760,7 @@ module IndirectionTableModel {
         == t.count as int;
   }
 
-  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<BC.Location>))
+  function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires |self.graph| < MaxSize()
@@ -767,12 +791,15 @@ module IndirectionTableModel {
     LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), succs,
         if oldEntry.Some? then oldEntry.value.succs else []);
 
-    var self' := FromHashMap(t1, Some(garbageQueue1));
+    var refUpperBound' := if self.refUpperBound > ref then self.refUpperBound else ref;
+    assert forall r | r in Graph(t1) :: r in self.graph || r == ref;
+
+    var self' := FromHashMap(t1, Some(garbageQueue1), refUpperBound', None);
     var oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
     (self', oldLoc)
   }
 
-  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BT.G.Reference) : (res : (IndirectionTable, Option<BC.Location>))
+  function {:opaque} RemoveLoc(self: IndirectionTable, ref: BT.G.Reference) : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires ref in self.graph
@@ -784,12 +811,15 @@ module IndirectionTableModel {
     && (oldLoc.None? ==> ref !in self.locs)
     && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
   {
-    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var it := MutableMapModel.FindSimpleIter(self.t, ref);
+    var oldEntry := MutableMapModel.SimpleIterOutput(self.t, it);
+
     var predCount := oldEntry.value.predCount;
     var succs := oldEntry.value.succs;
-    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
 
-    var self' := FromHashMap(t, self.garbageQueue);
+    var t := MutableMapModel.UpdateByIter(self.t, it, Entry(None, succs, predCount));
+
+    var self' := FromHashMap(t, self.garbageQueue, self.refUpperBound, None);
     var oldLoc := oldEntry.value.loc;
 
     assert PredCounts(t) == PredCounts(self.t);
@@ -1153,7 +1183,7 @@ module IndirectionTableModel {
           var lba := tuple.t[1].u;
           var len := tuple.t[2].u;
           var succs := tuple.t[3].ua;
-          var loc := LBAType.Location(lba, len);
+          var loc := Location(lba, len);
           if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
@@ -1236,6 +1266,28 @@ module IndirectionTableModel {
     makeGarbageQueueIterateCorrect(t, LruModel.Empty(), MutableMapModel.IterStart(t));
   }
 
+  function computeRefUpperBoundIterate(t: HashMap, it: MutableMapModel.Iterator<Entry>, refUpperBound: uint64) : (r: uint64)
+  requires MutableMapModel.Inv(t)
+  requires MutableMapModel.WFIter(t, it)
+  requires forall ref | ref in it.s :: ref <= refUpperBound
+  ensures forall ref | ref in t.contents :: ref <= r
+  decreases it.decreaser
+  {
+    if it.next.Next? then (
+      computeRefUpperBoundIterate(t, MutableMapModel.IterInc(t, it),
+          if it.next.key > refUpperBound then it.next.key else refUpperBound)
+    ) else (
+      refUpperBound
+    )
+  }
+
+  function computeRefUpperBound(t: HashMap) : (r: uint64)
+  requires MutableMapModel.Inv(t)
+  ensures forall ref | ref in t.contents :: ref <= r
+  {
+    computeRefUpperBoundIterate(t, MutableMapModel.IterStart(t), 0)
+  }
+
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
   requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableGrammar())
@@ -1255,7 +1307,8 @@ module IndirectionTableModel {
               lemmaMakeGarbageQueueCorrect(t1.value);
               lemma_count_eq_graph_size(t);
               lemma_count_eq_graph_size(t1.value);
-              var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)));
+              var refUpperBound := computeRefUpperBound(t1.value);
+              var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)), refUpperBound, None);
               Some(res)
             ) else (
               None
@@ -1275,17 +1328,36 @@ module IndirectionTableModel {
 
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
-    || i == 0 // block 0 is always implicitly allocated
-    || !(
+    // Can't use the lower values, so they're always marked "allocated"
+    || 0 <= i < MinNodeBlockIndex()
+    || (!(
       forall ref | ref in indirectionTable.locs ::
-        indirectionTable.locs[ref].addr as int != i * BlockSize() as int
-    )
+        indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
+    ))
   }
 
   predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
   {
     && 0 <= i < BitmapModel.Len(bm)
     && BitmapModel.IsSet(bm, i)
+  }
+
+  function BitmapInitUpToIterate(bm: BitmapModel.BitmapModelT, i: uint64, upTo: uint64) : (res:BitmapModel.BitmapModelT)
+  requires 0 <= i as int <= upTo as int <= BitmapModel.Len(bm)
+  ensures BitmapModel.Len(res) == BitmapModel.Len(bm)
+  decreases upTo - i
+  {
+    if i == upTo then
+      bm
+    else
+      BitmapInitUpToIterate(BitmapModel.BitSet(bm, i as int), i+1, upTo)
+  }
+
+  function {:opaque} BitmapInitUpTo(bm: BitmapModel.BitmapModelT, upTo: uint64) : (res:BitmapModel.BitmapModelT)
+  requires upTo as int <= BitmapModel.Len(bm)
+  ensures BitmapModel.Len(res) == BitmapModel.Len(bm)
+  {
+    BitmapInitUpToIterate(bm, 0, upTo)
   }
 
   function InitLocBitmapIterate(indirectionTable: IndirectionTable,
@@ -1305,7 +1377,7 @@ module IndirectionTableModel {
       assert it.next.key in I(indirectionTable).locs;
 
       var loc: uint64 := it.next.value.loc.value.addr;
-      var locIndex: uint64 := loc / BlockSize() as uint64;
+      var locIndex: uint64 := loc / NodeBlockSize() as uint64;
       if locIndex < NumBlocks() as uint64 && !BitmapModel.IsSet(bm, locIndex as int) then (
         InitLocBitmapIterate(indirectionTable,
             MutableMapModel.IterInc(indirectionTable.t, it),
@@ -1322,7 +1394,7 @@ module IndirectionTableModel {
   ensures BitmapModel.Len(res.1) == NumBlocks()
   {
     var bm := BitmapModel.EmptyBitmap(NumBlocks());
-    var bm' := BitmapModel.BitSet(bm, 0);
+    var bm' := BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
     InitLocBitmapIterate(indirectionTable,
         MutableMapModel.IterStart(indirectionTable.t),
         bm')
@@ -1330,10 +1402,10 @@ module IndirectionTableModel {
 
   predicate IsLocAllocIndirectionTablePartial(indirectionTable: IndirectionTable, i: int, s: set<uint64>)
   {
-    || i == 0 // block 0 is always implicitly allocated
+    || 0 <= i < MinNodeBlockIndex() // these blocks can't be used
     || !(
       forall ref | ref in indirectionTable.locs && ref in s ::
-        indirectionTable.locs[ref].addr as int != i * BlockSize() as int
+        indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
     )
   }
 
@@ -1378,12 +1450,12 @@ module IndirectionTableModel {
       if (succ) {
         assert it.next.key in indirectionTable.locs;
         var loc: uint64 := it.next.value.loc.value.addr;
-        var locIndex: uint64 := loc / BlockSize() as uint64;
+        var locIndex: uint64 := loc / NodeBlockSize() as uint64;
 
         //assert I(indirectionTable).locs[kv.0] == kv.1.0.value;
         LBAType.reveal_ValidAddr();
         assert BC.ValidLocationForNode(it.next.value.loc.value);
-        assert locIndex as int * BlockSize() == loc as int;
+        assert locIndex as int * NodeBlockSize() == loc as int;
 
         //assert locIndex < NumBlocks() as uint64;
         //assert !BitmapModel.IsSet(bm, locIndex as int);
@@ -1399,7 +1471,7 @@ module IndirectionTableModel {
           if IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s) { }
           /*
           if i != 0 {
-            var ref :| ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in it0.s && indirectionTable.contents[ref].0.value.addr as int == i * BlockSize() as int;
+            var ref :| ref in indirectionTable.contents && indirectionTable.contents[ref].0.Some? && ref in it0.s && indirectionTable.contents[ref].0.value.addr as int == i * NodeBlockSize() as int;
             if (ref == kv.0) {
               assert IsLocAllocBitmap(bm0, i);
             } else {
@@ -1424,7 +1496,7 @@ module IndirectionTableModel {
             assert indirectionTable.t.contents[ref].loc.Some?;
             assert ref in it0.s;
             assert indirectionTable.t.contents[ref] == it.next.value;
-            assert indirectionTable.t.contents[ref].loc.value.addr as int == i * BlockSize() as int;
+            assert indirectionTable.t.contents[ref].loc.value.addr as int == i * NodeBlockSize() as int;
 
             assert IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s);
           } else {
@@ -1486,23 +1558,19 @@ module IndirectionTableModel {
     var it := MutableMapModel.IterStart(indirectionTable.t);
 
     var bm := BitmapModel.EmptyBitmap(NumBlocks());
-    var bm' := BitmapModel.BitSet(bm, 0);
+    var bm' := BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
 
-    /*forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
+    forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     ensures IsLocAllocBitmap(bm', i)
     {
-      assert i == 0;
-    }*/
+      assert i < MinNodeBlockIndex();
+      assume BitmapModel.IsSet(bm', i);
+    }
 
     forall i: int | IsLocAllocBitmap(bm', i)
     ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     {
-      if i != 0 {
-        assert BitmapModel.IsSet(bm', i)
-            == BitmapModel.IsSet(bm, i)
-            == false;
-      }
-      assert i == 0;
+      assume i < MinNodeBlockIndex();
     }
 
     InitLocBitmapIterateCorrect(indirectionTable, it, bm');
@@ -1630,7 +1698,7 @@ module IndirectionTableModel {
   }
 
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
-    : (res : (IndirectionTable, Option<BC.Location>))
+    : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
   requires deallocable(self, ref)
@@ -1655,8 +1723,9 @@ module IndirectionTableModel {
 
     LemmaValidPredCountsOfValidPredCountsIntermediate(PredCounts(t1), Graph(t1), [], oldEntry.value.succs);
 
-    var self' := FromHashMap(t1, Some(q1));
+    var self' := FromHashMap(t1, Some(q1), self.refUpperBound, None);
     var oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
+    assert self'.graph == MapRemove1(self.graph, ref);
     (self', oldLoc)
   }
 
@@ -1668,41 +1737,59 @@ module IndirectionTableModel {
   ensures self'.graph == self.graph
   ensures self'.locs == self.locs
   {
-    FromHashMap(self.t, None)
+    FromHashMap(self.t, None, self.refUpperBound, None)
   }
 
-  function FindRefWithNoLocIterate(self: IndirectionTable, it: MutableMapModel.Iterator<Entry>) : (ref: Option<BT.G.Reference>)
+  function FindRefWithNoLocIterate(
+      self: IndirectionTable,
+      it: MutableMapModel.SimpleIterator)
+     : (res: (IndirectionTable, Option<BT.G.Reference>))
   requires Inv(self)
-  requires MutableMapModel.WFIter(self.t, it)
+  requires MutableMapModel.WFSimpleIter(self.t, it)
+  requires forall r | r in it.s :: r in self.locs
   decreases it.decreaser
-  ensures
+  ensures var (self', ref) := res;
+    && Inv(self')
+    && self'.locs == self.locs
+    && self'.graph == self.graph
     && (ref.Some? ==> ref.value in self.graph)
     && (ref.Some? ==> ref.value !in self.locs)
     && (ref.None? ==> forall r | r in self.graph && r !in it.s :: r in self.locs)
   {
-    if it.next.Next? then (
-      if it.next.value.loc.None? then (
-        Some(it.next.key)
+    var next := MutableMapModel.SimpleIterOutput(self.t, it);
+    if next.Next? then (
+      if next.value.loc.None? then (
+        var self' := self.(findLoclessIterator := Some(it));
+        (self', Some(next.key))
       ) else (
         FindRefWithNoLocIterate(self,
-            MutableMapModel.IterInc(self.t, it))
+            MutableMapModel.SimpleIterInc(self.t, it))
       )
     ) else (
-      None
+      var self' := self.(findLoclessIterator := Some(it));
+      (self', None)
     )
   }
 
-  function {:opaque} FindRefWithNoLoc(self: IndirectionTable) : (ref: Option<BT.G.Reference>)
+  function {:opaque} FindRefWithNoLoc(self: IndirectionTable) : (res: (IndirectionTable, Option<BT.G.Reference>))
   requires Inv(self)
-  ensures
+  ensures var (self', ref) := res;
+    && Inv(self')
+    && self'.locs == self.locs
+    && self'.graph == self.graph
     && (ref.Some? ==> ref.value in self.graph)
     && (ref.Some? ==> ref.value !in self.locs)
     && (ref.None? ==> forall r | r in self.graph :: r in self.locs)
   {
-    FindRefWithNoLocIterate(self, MutableMapModel.IterStart(self.t))
+    var it := if self.findLoclessIterator.Some? then (
+      self.findLoclessIterator.value
+    ) else (
+      MutableMapModel.SimpleIterStart(self.t)
+    );
+    FindRefWithNoLocIterate(self, it)
   }
 
-  function {:opaque} ConstructorRootOnly(loc: BC.Location) : (self' : IndirectionTable)
+  function {:opaque} ConstructorRootOnly(loc: Location) : (self' : IndirectionTable)
   ensures Inv(self')
   ensures self'.graph == map[BT.G.Root() := []]
   ensures self'.locs == map[BT.G.Root() := loc]
@@ -1710,8 +1797,15 @@ module IndirectionTableModel {
     var t0 := MutableMapModel.Constructor(128);
     var t1 := MutableMapModel.Insert(t0, BT.G.Root(),
         Entry(Some(loc), [], 1));
-    var self' := FromHashMap(t1, None);
+    var self' := FromHashMap(t1, None, BT.G.Root(), None);
 
     self'
+  }
+
+  function {:opaque} getRefUpperBound(self: IndirectionTable) : (r: uint64)
+  requires Inv(self)
+  ensures forall ref | ref in self.graph :: ref <= r
+  {
+    self.refUpperBound
   }
 }

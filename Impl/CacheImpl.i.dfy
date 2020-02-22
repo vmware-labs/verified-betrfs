@@ -17,6 +17,7 @@ module CacheImpl {
   import opened BucketWeights
   import opened KeyType
   import opened ValueMessage
+  import NodeModel
 
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -133,10 +134,13 @@ module CacheImpl {
     modifies Repr
     ensures Inv()
     ensures I() == old(I()[ref := node.I()])
+    ensures forall r | r != ref :: ptr(r) == old(ptr(r))
     ensures forall o | o in Repr :: o in old(Repr) || o in old(node.Repr) || fresh(o)
     {
       LemmaSizeEqCount();
+
       cache.Insert(ref, node);
+
       assert cache.Contents[ref] == node;
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
@@ -199,7 +203,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method UpdateNodeSlot(ref: BT.G.Reference, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
+    method UpdateNodeSlot(ghost ref: BT.G.Reference, node: Node, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()
     requires ref in I()
@@ -209,6 +213,7 @@ module CacheImpl {
     requires slot as int + 1 < 0x1_0000_0000_0000_0000
     requires bucket.Repr !! Repr
     requires |I()| <= 0x10000
+    requires ptr(ref) == Some(node)
     modifies Repr
     ensures Inv()
     ensures I() == old(I()[ref := IM.Node(
@@ -218,8 +223,8 @@ module CacheImpl {
       )])
     ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o)
     {
-      var nodeOpt := cache.Get(ref);
-      var node := nodeOpt.value;
+      //var nodeOpt := cache.Get(ref);
+      //var node := nodeOpt.value;
       node.UpdateSlot(slot, bucket, childref);
 
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
@@ -236,7 +241,7 @@ module CacheImpl {
     requires |I()| <= 0x10000
     modifies Repr
     ensures Inv()
-    ensures I() == old(I()[ref := SplitModel.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
+    ensures I() == old(I()[ref := NodeModel.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       var nodeOpt := GetOpt(ref);
@@ -254,10 +259,10 @@ module CacheImpl {
     requires WeightBucketList(I()[ref].buckets) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv()
-    ensures I() == old(InsertModel.CacheInsertKeyValue(I(), ref, key, msg))
+    ensures I() == old(NodeModel.CacheInsertKeyValue(I(), ref, key, msg))
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      InsertModel.reveal_CacheInsertKeyValue();
+      NodeModel.reveal_CacheInsertKeyValue();
 
       var nodeOpt := GetOpt(ref);
       var node := nodeOpt.value;

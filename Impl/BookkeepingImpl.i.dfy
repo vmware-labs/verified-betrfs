@@ -23,19 +23,24 @@ module BookkeepingImpl {
   ensures ref == BookkeepingModel.getFreeRef(s.I())
   {
     BookkeepingModel.reveal_getFreeRef();
-    var i := 1;
+
+    var i := s.ephemeralIndirectionTable.GetRefUpperBound();
+    if i == 0xffff_ffff_ffff_ffff {
+      return None;
+    }
+
+    i := i + 1;
+
     while true
     invariant i >= 1
+    invariant forall r | r in s.ephemeralIndirectionTable.I().graph :: r < i
     invariant BookkeepingModel.getFreeRefIterate(s.I(), i)
            == BookkeepingModel.getFreeRef(s.I())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
-      var lookup := s.ephemeralIndirectionTable.GetEntry(i);
-      if lookup.None? {
-        var cacheLookup := s.cache.GetOpt(i);
-        if cacheLookup.None? {
-          return Some(i);
-        }
+      var cacheLookup := s.cache.GetOpt(i);
+      if cacheLookup.None? {
+        return Some(i);
       }
       
       if i == 0xffff_ffff_ffff_ffff {
@@ -54,20 +59,25 @@ module BookkeepingImpl {
   ensures ref.Some? ==> ref.value != avoid;
   {
     BookkeepingModel.reveal_getFreeRef2();
-    var i := 1;
+
+    var i := s.ephemeralIndirectionTable.GetRefUpperBound();
+    if i == 0xffff_ffff_ffff_ffff {
+      return None;
+    }
+
+    i := i + 1;
+
     while true
     invariant i >= 1
+    invariant forall r | r in s.ephemeralIndirectionTable.I().graph :: r < i
     invariant BookkeepingModel.getFreeRef2Iterate(s.I(), avoid, i)
            == BookkeepingModel.getFreeRef2(s.I(), avoid)
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
-        var lookup := s.ephemeralIndirectionTable.GetEntry(i);
-        if lookup.None? {
-          var cacheLookup := s.cache.GetOpt(i);
-          if cacheLookup.None? {
-            return Some(i);
-          }
+        var cacheLookup := s.cache.GetOpt(i);
+        if cacheLookup.None? {
+          return Some(i);
         }
       }
       
@@ -104,7 +114,7 @@ module BookkeepingImpl {
     s.lru.Use(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
     LruModel.LruUse(old(s.lru.Queue), ref);
@@ -138,7 +148,7 @@ module BookkeepingImpl {
     s.lru.Use(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / BlockSizeUint64());
+      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
     LruModel.LruUse(old(s.lru.Queue), ref);

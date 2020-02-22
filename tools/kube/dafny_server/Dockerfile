@@ -15,6 +15,7 @@ COPY mono-official-stable.list /etc/apt/sources.list.d/
 RUN apt-get update
 RUN useradd -ms /bin/bash dafnyserver
 RUN apt-get install -y mono-runtime mono-mcs mono-devel git make wget unzip
+RUN apt-get install -y vim emacs
 USER dafnyserver
 WORKDIR /home/dafnyserver
 #RUN git clone https://github.com/secure-foundations/dafny.git
@@ -27,3 +28,5 @@ COPY bin_dafny_sh bin/dafny
 COPY bin_dafny_exe_sh bin/dafny_exe
 COPY bashrc-appendage /tmp
 RUN cat /tmp/bashrc-appendage >> /home/dafnyserver/.bashrc
+COPY tutorial.tgz /home/dafnyserver/tutorial.tgz
+RUN tar -C /home/dafnyserver -xzf /home/dafnyserver/tutorial.tgz

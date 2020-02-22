@@ -17,6 +17,7 @@ module SyncModel {
   import opened Maps
   import opened Sequences
   import opened Sets
+  import opened LBAType
 
   import opened BucketsLib
 
@@ -35,11 +36,11 @@ module SyncModel {
     assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;*/
   }
 
-  function {:opaque} AssignRefToLocEphemeral(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  function {:opaque} AssignRefToLocEphemeral(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location) : (s' : Variables)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures s'.Ready?
   ensures s'.frozenIndirectionTable == s.frozenIndirectionTable
   ensures s'.blockAllocator.frozen == s.blockAllocator.frozen
@@ -49,7 +50,7 @@ module SyncModel {
     var table := s.ephemeralIndirectionTable;
     var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
     if added then (
-      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
+      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / NodeBlockSize());
       s.(ephemeralIndirectionTable := table')
        .(blockAllocator := blockAllocator')
     ) else (
@@ -57,12 +58,12 @@ module SyncModel {
     )
   }
 
-  function {:opaque} AssignRefToLocFrozen(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  function {:opaque} AssignRefToLocFrozen(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location) : (s' : Variables)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
   requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures s'.Ready?
   ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
   ensures BlockAllocatorModel.Inv(s'.blockAllocator)
@@ -71,7 +72,7 @@ module SyncModel {
       var table := s.frozenIndirectionTable.value;
       var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
       if added then (
-        var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+        var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / NodeBlockSize());
         s.(frozenIndirectionTable := Some(table'))
          .(blockAllocator := blockAllocator')
       ) else (
@@ -82,35 +83,35 @@ module SyncModel {
     )
   }
 
-  function {:opaque} AssignIdRefLocOutstanding(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location) : (s' : Variables)
+  function {:opaque} AssignIdRefLocOutstanding(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: Location) : (s' : Variables)
   requires s.Ready?
   requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   {
-    var blockAllocator0 := if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / BlockSize() < NumBlocks() then
+    var blockAllocator0 := if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks() then
       // This case shouldn't actually occur but it's annoying to prove from this point.
       // So I just chose to handle it instead.
       // Yeah, it's kind of annoying.
-      BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / BlockSize())
+      BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize())
     else
       s.blockAllocator;
 
     var outstandingBlockWrites' := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
 
-    var blockAllocator' := BlockAllocatorModel.MarkUsedOutstanding(blockAllocator0, loc.addr as int / BlockSize());
+    var blockAllocator' := BlockAllocatorModel.MarkUsedOutstanding(blockAllocator0, loc.addr as int / NodeBlockSize());
 
     s
       .(outstandingBlockWrites := outstandingBlockWrites')
       .(blockAllocator := blockAllocator')
   }
 
-  lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: BC.Location)
+  lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires (forall i: int :: IsLocAllocOutstanding(s.outstandingBlockWrites, i)
           <==> IsLocAllocBitmap(s.blockAllocator.outstanding, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires BC.AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
   requires BC.OutstandingWriteValidLocation(s.outstandingBlockWrites)
   ensures var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
@@ -126,24 +127,24 @@ module SyncModel {
 
     var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
 
-    var j := loc.addr as int / BlockSize();
+    var j := loc.addr as int / NodeBlockSize();
     LBAType.reveal_ValidAddr();
     assert j != 0;
-    assert j * BlockSize() == loc.addr as int;
+    assert j * NodeBlockSize() == loc.addr as int;
 
     forall i: int
     | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
     ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     {
-      if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / BlockSize() < NumBlocks() && i == s.outstandingBlockWrites[id].loc.addr as int / BlockSize() {
+      if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks() && i == s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() {
         if i == j {
           assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
         } else {
-          var id0 :| id0 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id0].loc.addr as int == i * BlockSize() as int;
+          var id0 :| id0 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id0].loc.addr as int == i * NodeBlockSize() as int;
           assert LBAType.ValidAddr(s.outstandingBlockWrites[id0].loc.addr);
           assert LBAType.ValidAddr(s.outstandingBlockWrites[id].loc.addr);
           assert s.outstandingBlockWrites[id0].loc.addr as int
-              == i * BlockSize() as int
+              == i * NodeBlockSize() as int
               == s.outstandingBlockWrites[id].loc.addr as int;
           assert id == id0;
           assert false;
@@ -165,14 +166,14 @@ module SyncModel {
         assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
         assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
         var id0 :| id0 in s.outstandingBlockWrites
-          && s.outstandingBlockWrites[id0].loc.addr as int == i * BlockSize() as int;
+          && s.outstandingBlockWrites[id0].loc.addr as int == i * NodeBlockSize() as int;
         assert id0 != id;
         assert id0 in s'.outstandingBlockWrites;
-        assert s'.outstandingBlockWrites[id0].loc.addr as int == i * BlockSize() as int;
+        assert s'.outstandingBlockWrites[id0].loc.addr as int == i * NodeBlockSize() as int;
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
       } else {
         assert id in s'.outstandingBlockWrites;
-        assert s'.outstandingBlockWrites[id].loc.addr as int == i * BlockSize() as int;
+        assert s'.outstandingBlockWrites[id].loc.addr as int == i * NodeBlockSize() as int;
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
       }
     }
@@ -184,18 +185,18 @@ module SyncModel {
       indirectionTable': IndirectionTable,
       bm': BitmapModel.BitmapModelT,
       ref: BT.G.Reference,
-      loc: BC.Location)
+      loc: Location)
   requires IndirectionTableModel.Inv(indirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
           <==> IsLocAllocBitmap(bm, i))
   requires BC.ValidLocationForNode(loc);
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires ref in indirectionTable.graph
   requires ref !in indirectionTable.locs
   requires (indirectionTable', true) == IndirectionTableModel.AddLocIfPresent(indirectionTable, ref, loc)
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires BitmapModel.Len(bm) == NumBlocks()
-  requires bm' == BitmapModel.BitSet(bm, loc.addr as int / BlockSize())
+  requires bm' == BitmapModel.BitSet(bm, loc.addr as int / NodeBlockSize())
   ensures 
       && (forall i: int :: IsLocAllocIndirectionTable(indirectionTable', i)
           <==> IsLocAllocBitmap(bm', i))
@@ -205,10 +206,10 @@ module SyncModel {
 
     //assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
 
-    var j := loc.addr as int / BlockSize();
+    var j := loc.addr as int / NodeBlockSize();
     LBAType.reveal_ValidAddr();
     assert j != 0;
-    assert j * BlockSize() == loc.addr as int;
+    assert j * NodeBlockSize() == loc.addr as int;
 
     forall i: int | IsLocAllocIndirectionTable(indirectionTable', i)
     ensures IsLocAllocBitmap(bm', i)
@@ -226,34 +227,34 @@ module SyncModel {
       if i == j {
         assert ref in indirectionTable'.graph;
         assert ref in indirectionTable'.locs;
-        assert indirectionTable'.locs[ref].addr as int == i * BlockSize() as int;
+        assert indirectionTable'.locs[ref].addr as int == i * NodeBlockSize() as int;
         assert IsLocAllocIndirectionTable(indirectionTable', i);
       } else {
-        if i == 0 {
+        if 0 <= i < MinNodeBlockIndex() {
           assert IsLocAllocIndirectionTable(indirectionTable', i);
         } else {
           assert IsLocAllocIndirectionTable(indirectionTable, i);
           var r :| r in indirectionTable.locs &&
-            indirectionTable.locs[r].addr as int == i * BlockSize() as int;
+            indirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
           assert MapsAgreeOnKey(
             IIndirectionTable(indirectionTable).locs,
             IIndirectionTable(indirectionTable').locs, r);
           assert r in indirectionTable'.locs &&
-            indirectionTable'.locs[r].addr as int == i * BlockSize() as int;
+            indirectionTable'.locs[r].addr as int == i * NodeBlockSize() as int;
           assert IsLocAllocIndirectionTable(indirectionTable', i);
         }
       }
     }
   }
 
-  lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
+  lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocEphemeral(k, s, ref, loc);
       && s'.Ready?
       && (forall i: int :: IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable, i)
@@ -265,13 +266,13 @@ module SyncModel {
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
 
-    var j := loc.addr as int / BlockSize();
+    var j := loc.addr as int / NodeBlockSize();
 
     var table := s.ephemeralIndirectionTable;
     if (ref in table.graph && ref !in table.locs) {
       var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
       assert added;
-      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / BlockSize());
+      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / NodeBlockSize());
       var s' := s
       .(ephemeralIndirectionTable := table')
       .(blockAllocator := blockAllocator');
@@ -304,7 +305,7 @@ module SyncModel {
     }
   }
 
-  lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: BC.Location)
+  lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
@@ -313,7 +314,7 @@ module SyncModel {
           <==> IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires BC.ValidLocationForNode(loc);
-  requires 0 <= loc.addr as int / BlockSize() < NumBlocks()
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocFrozen(k, s, ref, loc);
       && s'.Ready?
       && (s'.frozenIndirectionTable.Some? ==> s'.blockAllocator.frozen.Some?)
@@ -332,12 +333,12 @@ module SyncModel {
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
 
-    var j := loc.addr as int / BlockSize();
+    var j := loc.addr as int / NodeBlockSize();
 
     var table := s.frozenIndirectionTable.value;
     var (table', added) := IndirectionTableModel.AddLocIfPresent(table, ref, loc);
     if added {
-      var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / BlockSize());
+      var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / NodeBlockSize());
       var s' := s
         .(frozenIndirectionTable := Some(table'))
         .(blockAllocator := blockAllocator');
@@ -432,7 +433,7 @@ module SyncModel {
       id: Option<D.ReqId>, loc: Option<LBAType.Location>, s': Variables)
   requires s.Ready?
   requires Inv(k, s)
-  requires loc.Some? ==> 0 <= loc.value.addr as int / BlockSize() < NumBlocks()
+  requires loc.Some? ==> 0 <= loc.value.addr as int / NodeBlockSize() < NumBlocks()
   requires ref in s.cache
   {
     reveal_ConsistentBitmap();
@@ -572,19 +573,21 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) then (
           (s', io') == syncNotFrozen(k, s, io)
         ) else (
-          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
-          if foundInFrozen.Some? then (
-            syncFoundInFrozen(k, s, io, foundInFrozen.value, s', io')
-          ) else if (s.outstandingBlockWrites != map[]) then (
-            && s' == s
+          var (frozen0, ref) := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
+          var s0 := s.(frozenIndirectionTable := Some(frozen0));
+          assert Inv(k, s0) by { reveal_ConsistentBitmap(); }
+          if ref.Some? then (
+            syncFoundInFrozen(k, s0, io, ref.value, s', io')
+          ) else if (s0.outstandingBlockWrites != map[]) then (
+            && s' == s0
             && io' == io
           ) else (
             if (diskOp(io').ReqWriteOp?) then (
               var id := Some(diskOp(io').id);
-              && RequestWrite(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io')
-              && s' == s.(outstandingIndirectionTableWrite := id)
+              && RequestWrite(io, IndirectionTableLocation(), SectorIndirectionTable(s0.frozenIndirectionTable.value), id, io')
+              && s' == s0.(outstandingIndirectionTableWrite := id)
             ) else (
-              && s' == s
+              && s' == s0
               && io' == io
             )
           )
@@ -613,16 +616,18 @@ module SyncModel {
         if (s.frozenIndirectionTable.None?) {
           syncNotFrozenCorrect(k, s, io);
         } else {
-          var foundInFrozen := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
-          if foundInFrozen.Some? {
-            syncFoundInFrozenCorrect(k, s, io, foundInFrozen.value, s', io');
-          } else if (s.outstandingBlockWrites != map[]) {
-            assert noop(k, IVars(s), IVars(s));
+          var (frozen0, ref) := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
+          var s0 := s.(frozenIndirectionTable := Some(frozen0));
+          assert Inv(k, s0) by { reveal_ConsistentBitmap(); }
+          if ref.Some? {
+            syncFoundInFrozenCorrect(k, s0, io, ref.value, s', io');
+          } else if (s0.outstandingBlockWrites != map[]) {
+            assert noop(k, IVars(s), IVars(s0));
           } else {
             if (diskOp(io').ReqWriteOp?) {
               var id := Some(diskOp(io').id);
               LBAType.reveal_ValidAddr();
-              RequestWriteCorrect(io, BC.IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable.value), id, io');
+              RequestWriteCorrect(io, IndirectionTableLocation(), SectorIndirectionTable(s0.frozenIndirectionTable.value), id, io');
               assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
               assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
             } else {

@@ -548,6 +548,16 @@ namespace Maps_Compile {
   }
 }
 
+namespace NativeArithmetic_Compile {
+  public partial class __default
+  {
+    public static ulong u64add(ulong a, ulong b)
+    {
+      return a + b;
+    }
+  }
+}
+
 namespace NativePackedInts_Compile {
   public partial class __default
   {
