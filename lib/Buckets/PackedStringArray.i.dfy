@@ -28,6 +28,12 @@ module PackedStringArray {
     |psa.offsets| as uint64
   }
   
+  function method psaTotalLength(psa: Psa) : uint64
+    requires |psa.data| < Uint64UpperBound()
+  {
+    |psa.data| as uint64
+  }
+  
   function method psaStart(psa: Psa, i: uint64) : (start : uint32)
   requires WF(psa)
   requires 0 <= i as int < |psa.offsets|

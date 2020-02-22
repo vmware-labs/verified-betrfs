@@ -255,6 +255,17 @@ module KVList {
   {
     inputLengthSoFar(parent, children, PSA.psaNumStrings(parent.keys) as int, |children|, 0)
   }
+
+  lemma inputLengthGteChild(parent: Kvl, children: seq<Kvl>, childrenIdx: int)
+    requires WF(parent)
+    requires 0 < |children|
+    requires forall i | 0 <= i < |children| :: WF(children[i])
+    requires 0 <= childrenIdx < |children|
+    ensures PSA.psaTotalLength(parent.keys) as int + PSA.psaTotalLength(children[childrenIdx].keys) as int <= inputLengthTotal(parent, children)
+  {
+    inputLengthSoFarMonotonic(parent, children, PSA.psaNumStrings(parent.keys) as int, 0, 0, PSA.psaNumStrings(parent.keys) as int, childrenIdx, 0);
+    inputLengthSoFarMonotonic(parent, children, PSA.psaNumStrings(parent.keys) as int, childrenIdx, PSA.psaNumStrings(children[childrenIdx].keys) as int, PSA.psaNumStrings(parent.keys) as int, |children|, 0);
+  }
   
   function psaStringsSoFar(psa: PSA.Psa, index: int) : int
     requires PSA.WF(psa)
@@ -321,6 +332,17 @@ module KVList {
     requires forall i | 0 <= i < |children| :: WF(children[i])
   {
     inputStringsSoFar(parent, children, PSA.psaNumStrings(parent.keys) as int, |children|, 0)
+  }
+
+  lemma inputStringsGteChild(parent: Kvl, children: seq<Kvl>, childrenIdx: int)
+    requires WF(parent)
+    requires 0 < |children|
+    requires forall i | 0 <= i < |children| :: WF(children[i])
+    requires 0 <= childrenIdx < |children|
+    ensures PSA.psaNumStrings(parent.keys) as int + PSA.psaNumStrings(children[childrenIdx].keys) as int <= inputStringsTotal(parent, children)
+  {
+    inputStringsSoFarMonotonic(parent, children, PSA.psaNumStrings(parent.keys) as int, 0, 0, PSA.psaNumStrings(parent.keys) as int, childrenIdx, 0);
+    inputStringsSoFarMonotonic(parent, children, PSA.psaNumStrings(parent.keys) as int, childrenIdx, PSA.psaNumStrings(children[childrenIdx].keys) as int, PSA.psaNumStrings(parent.keys) as int, |children|, 0);
   }
 
   lemma appendFromParent(parent: Kvl, children: seq<Kvl>, parentIdx: int, childrenIdx: int, childIdx: int, cur: Kvl)
@@ -874,11 +896,29 @@ module KVList {
     flushIterateRes(parent, children, pivots, 0, 0, 0, [], Kvl(PSA.EmptyPsa(), []));
   }
 
-  /*
+  method appendString(num_strings: uint64, offsets: array<uint32>, total_length: uint32, data: array<byte>, str: Key)
+    returns (new_total_length: uint32)
+    requires num_strings as int < offsets.Length < 0x1_0000_0000
+    requires total_length as int + |str| <= data.Length < 0x1_0000_0000
+    ensures offsets[..num_strings] == old(offsets[..num_strings])
+    ensures offsets[num_strings] == total_length + |str| as uint32
+    ensures data[..total_length] == old(data[..total_length])
+    ensures data[total_length..total_length + |str| as uint32] == str
+    ensures new_total_length == total_length + |str| as uint32
+    modifies offsets, data
+  {
+    NativeArrays.CopySeqIntoArray(str, 0, data, total_length as uint64, |str| as uint64);
+    offsets[num_strings] := total_length + |str| as uint32;
+    new_total_length := total_length + |str| as uint32;
+  }
+  
   method Flush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>)
   returns (f : seq<Kvl>)
   requires WF(parent)
+  requires 0 < |children|
   requires forall i | 0 <= i < |children| :: WF(children[i])
+  requires inputStringsTotal(parent, children) < 0x1_0000_0000 - 1
+  requires inputLengthTotal(parent, children) < 0x1_0000_0000
   requires WFBucketListProper(ISeq(children), pivots)
   requires |children| < 0x1_0000_0000_0000_0000
   requires forall i | 0 <= i < |children| :: PSA.psaNumStrings(children[i].keys) as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000
@@ -888,37 +928,69 @@ module KVList {
   {
     assert PSA.psaNumStrings(children[0].keys) as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000;
 
-    var maxChildLen: uint64 := 0;
+    var maxChildNumStrings: uint64 := PSA.psaNumStrings(children[0].keys);
+    var maxChildLen: uint64 := PSA.psaTotalLength(children[0].keys);
     var idx: uint64 := 0;
+    ghost var len_rep: nat := 0;
+    ghost var str_rep: nat := 0;
     while idx < |children| as uint64
     invariant 0 <= idx as int <= |children|
-    invariant forall i | 0 <= i < idx as int :: PSA.psaNumStrings(children[i].keys) as int <= maxChildLen as int
-    invariant maxChildLen as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000
+    invariant forall i | 0 <= i < idx as int :: PSA.psaNumStrings(children[i].keys) as int <= maxChildNumStrings as int
+    invariant forall i | 0 <= i < idx as int :: PSA.psaTotalLength(children[i].keys) as int <= maxChildLen as int
+    invariant maxChildNumStrings as int + PSA.psaNumStrings(parent.keys) as int < 0x8000_0000_0000_0000
+    invariant len_rep < |children| 
+    invariant maxChildLen == PSA.psaTotalLength(children[len_rep].keys)
+    invariant str_rep < |children| 
+    invariant maxChildNumStrings == PSA.psaNumStrings(children[str_rep].keys)
     {
-      if PSA.psaNumStrings(children[idx].keys) > maxChildLen {
-        maxChildLen := PSA.psaNumStrings(children[idx].keys);
+      if PSA.psaNumStrings(children[idx].keys) > maxChildNumStrings {
+        str_rep := idx as nat;
+        maxChildNumStrings := PSA.psaNumStrings(children[idx].keys);
+      }
+      if maxChildLen < PSA.psaTotalLength(children[idx].keys) {
+        len_rep := idx as nat;
+        maxChildLen := PSA.psaTotalLength(children[idx].keys);
       }
       idx := idx + 1;
     }
 
+    inputLengthGteChild(parent, children, len_rep);
+    assert maxChildLen as int + PSA.psaTotalLength(parent.keys) as int <= inputLengthTotal(parent, children);
+
+    inputStringsGteChild(parent, children, str_rep);
+    assert maxChildNumStrings as int + PSA.psaNumStrings(parent.keys) as int <= inputStringsTotal(parent, children);
+
+    
     var parentIdx: uint64 := 0;
     var childrenIdx: uint64 := 0;
     var childIdx: uint64 := 0;
     var acc := [];
-    var cur_keys := new Key[maxChildLen + PSA.psaNumStrings(parent.keys) ];
+    
+    var cur_keys_data := new byte[maxChildLen + PSA.psaTotalLength(parent.keys) ];
+    var cur_keys_offsets := new uint32[maxChildNumStrings + PSA.psaNumStrings(parent.keys) ];
+    var cur_keys_numstrings: uint64 := 0;
+    var cur_keys_totallen: uint32 := 0;
 
-    var cur_values := new Message[maxChildLen + PSA.psaNumStrings(parent.keys) ];
-
-    var cur_idx: uint64 := 0;
+    var cur_values := new Message[maxChildNumStrings + PSA.psaNumStrings(parent.keys) ];
 
     while childrenIdx < |children| as uint64
+    invariant cur_keys_numstrings <= cur_keys_offsets.Length as uint64
+    invariant cur_keys_totallen <= cur_keys_data.Length as uint32
+    invariant PSA.WF(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..cur_keys_totallen]))
     invariant 0 <= parentIdx as int <= PSA.psaNumStrings(parent.keys) as int
     invariant 0 <= childrenIdx as int <= |children|
     invariant (childrenIdx as int < |children| ==> 0 <= childIdx as int <= PSA.psaNumStrings(children[childrenIdx].keys) as int)
-    invariant 0 <= cur_idx
-    invariant childrenIdx as int < |children| ==> cur_idx as int <= parentIdx as int + childIdx as int
-    invariant childrenIdx as int == |children| ==> cur_idx == 0
-    invariant flushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]))
+    invariant 0 <= cur_keys_numstrings
+    invariant childrenIdx as int < |children| ==> cur_keys_numstrings as int <= parentIdx as int + childIdx as int
+    invariant childrenIdx as int == |children| ==> cur_keys_numstrings == 0
+
+    invariant cur_keys_numstrings as int <= parentIdx as int + childIdx as int
+    invariant cur_keys_numstrings as int <= inputStringsSoFar(parent, children, parentIdx as int, childrenIdx as int, childIdx as int)
+    invariant childrenIdx as int < |children|
+    ==> cur_keys_totallen as uint64 <= PSA.psaTotalLength(PSA.psaSubSeq(parent.keys, 0, parentIdx)) + PSA.psaTotalLength(PSA.psaSubSeq(children[childrenIdx].keys, 0, childIdx));
+    invariant cur_keys_totallen as int <= inputLengthSoFar(parent, children, parentIdx as int, childrenIdx as int, childIdx as int)
+
+    invariant flushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings]))
         == flush(parent, children, pivots)
     decreases |children| - childrenIdx as int
     decreases PSA.psaNumStrings(parent.keys) as int - parentIdx as int +
@@ -929,65 +1001,94 @@ module KVList {
         if childIdx == PSA.psaNumStrings(child.keys)  {
           childrenIdx := childrenIdx + 1;
           childIdx := 0;
-          acc := acc + [Kvl(cur_keys[..cur_idx], cur_values[..cur_idx])];
-          cur_idx := 0;
+          acc := acc + [Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings])];
+          cur_keys_numstrings := 0;
+          cur_keys_totallen := 0;
         } else {
-          cur_keys[cur_idx] := PSA.psaElement(child.keys, childIdx as uint64);
-          cur_values[cur_idx] := child.messages[childIdx];
-          assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+          ghost var old_cur_keys_totallen := cur_keys_totallen;
+          cur_keys_totallen := appendString(cur_keys_numstrings, cur_keys_offsets, cur_keys_totallen, cur_keys_data, PSA.psaElement(child.keys, childIdx as uint64));
+          cur_values[cur_keys_numstrings] := child.messages[childIdx];
+          assert append(Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..old_cur_keys_totallen]), cur_values[..cur_keys_numstrings]), PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx])
+            == Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings+1], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings+1]);
+          inputStringsSoFarChildIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+          inputLengthSoFarChildIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
           childIdx := childIdx + 1;
-          cur_idx := cur_idx + 1;
+          cur_keys_numstrings := cur_keys_numstrings + 1;
         }
       } else {
         if childIdx == PSA.psaNumStrings(child.keys)  {
           if childrenIdx == |children| as uint64 - 1 {
-            cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
-            cur_values[cur_idx] := parent.messages[parentIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            ghost var old_cur_keys_totallen := cur_keys_totallen;
+            cur_keys_totallen := appendString(cur_keys_numstrings, cur_keys_offsets, cur_keys_totallen, cur_keys_data, PSA.psaElement(parent.keys, parentIdx as uint64));
+            cur_values[cur_keys_numstrings] := parent.messages[parentIdx];
+            assert append(Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..old_cur_keys_totallen]), cur_values[..cur_keys_numstrings]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx])
+              == Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings+1], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings+1]);
+            inputStringsSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+            inputLengthSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
             parentIdx := parentIdx + 1;
-            cur_idx := cur_idx + 1;
+            cur_keys_numstrings := cur_keys_numstrings + 1;
           } else {
             var c := cmp(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx]);
             if c < 0 {
-              cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
-              cur_values[cur_idx] := parent.messages[parentIdx];
-              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+              ghost var old_cur_keys_totallen := cur_keys_totallen;
+              assert cur_keys_totallen as int + |PSA.psaElement(parent.keys, parentIdx as uint64)| <= cur_keys_data.Length;
+              cur_keys_totallen := appendString(cur_keys_numstrings, cur_keys_offsets, cur_keys_totallen, cur_keys_data, PSA.psaElement(parent.keys, parentIdx as uint64));
+              cur_values[cur_keys_numstrings] := parent.messages[parentIdx];
+              assert append(Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..old_cur_keys_totallen]), cur_values[..cur_keys_numstrings]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx])
+                == Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings+1], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings+1]);
+              inputStringsSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+              inputLengthSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
               parentIdx := parentIdx + 1;
-              cur_idx := cur_idx + 1;
+              cur_keys_numstrings := cur_keys_numstrings + 1;
             } else {
-              acc := acc + [Kvl(cur_keys[..cur_idx], cur_values[..cur_idx])];
+              acc := acc + [Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings])];
               childrenIdx := childrenIdx + 1;
               childIdx := 0;
-              cur_idx := 0;
+              cur_keys_numstrings := 0;
+              cur_keys_totallen := 0;
             }
           }
         } else {
           var c := cmp(PSA.psaElement(child.keys, childIdx as uint64), PSA.psaElement(parent.keys, parentIdx as uint64));
           if c == 0 {
             var m := Merge(parent.messages[parentIdx], child.messages[childIdx]);
+            inputStringsSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+            inputStringsSoFarChildIncrease(parent, children, parentIdx as int + 1, childrenIdx as int, childIdx as int);
+            inputLengthSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+            inputLengthSoFarChildIncrease(parent, children, parentIdx as int + 1, childrenIdx as int, childIdx as int);
             if m == IdentityMessage() {
               parentIdx := parentIdx + 1;
               childIdx := childIdx + 1;
             } else {
-              cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
-              cur_values[cur_idx] := m;
-              assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), m) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
-              cur_idx := cur_idx + 1;
+              ghost var old_cur_keys_totallen := cur_keys_totallen;
+              cur_keys_totallen := appendString(cur_keys_numstrings, cur_keys_offsets, cur_keys_totallen, cur_keys_data, PSA.psaElement(parent.keys, parentIdx as uint64));
+              cur_values[cur_keys_numstrings] := m;
+              assert append(Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..old_cur_keys_totallen]), cur_values[..cur_keys_numstrings]), PSA.psaElement(parent.keys, parentIdx as uint64), m)
+                == Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings+1], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings+1]);
+              cur_keys_numstrings := cur_keys_numstrings + 1;
               parentIdx := parentIdx + 1;
               childIdx := childIdx + 1;
             }
           } else if c < 0 {
-            cur_keys[cur_idx] := PSA.psaElement(child.keys, childIdx as uint64);
-            cur_values[cur_idx] := child.messages[childIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            ghost var old_cur_keys_totallen := cur_keys_totallen;
+            cur_keys_totallen := appendString(cur_keys_numstrings, cur_keys_offsets, cur_keys_totallen, cur_keys_data, PSA.psaElement(child.keys, childIdx as uint64));
+            cur_values[cur_keys_numstrings] := child.messages[childIdx];
+            assert append(Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..old_cur_keys_totallen]), cur_values[..cur_keys_numstrings]), PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx])
+              == Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings+1], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings+1]);
+            inputStringsSoFarChildIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+            inputLengthSoFarChildIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
             childIdx := childIdx + 1;
-            cur_idx := cur_idx + 1;
+            cur_keys_numstrings := cur_keys_numstrings + 1;
           } else {
-            cur_keys[cur_idx] := PSA.psaElement(parent.keys, parentIdx as uint64);
-            cur_values[cur_idx] := parent.messages[parentIdx];
-            assert append(Kvl(cur_keys[..cur_idx], cur_values[..cur_idx]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]) == Kvl(cur_keys[..cur_idx+1], cur_values[..cur_idx+1]);
+            ghost var old_cur_keys_totallen := cur_keys_totallen;
+            cur_keys_totallen := appendString(cur_keys_numstrings, cur_keys_offsets, cur_keys_totallen, cur_keys_data, PSA.psaElement(parent.keys, parentIdx as uint64));
+            cur_values[cur_keys_numstrings] := parent.messages[parentIdx];
+            assert append(Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings], cur_keys_data[..old_cur_keys_totallen]), cur_values[..cur_keys_numstrings]), PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx])
+              == Kvl(PSA.Psa(cur_keys_offsets[..cur_keys_numstrings+1], cur_keys_data[..cur_keys_totallen]), cur_values[..cur_keys_numstrings+1]);
+            inputStringsSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
+            inputLengthSoFarParentIncrease(parent, children, parentIdx as int, childrenIdx as int, childIdx as int);
             parentIdx := parentIdx + 1;
-            cur_idx := cur_idx + 1;
+            cur_keys_numstrings := cur_keys_numstrings + 1;
           }
         }
       }
@@ -996,7 +1097,6 @@ module KVList {
     flushRes(parent, children, pivots);
     return acc;
   }
-   */
   
   /////////////////////////
   //// Query
