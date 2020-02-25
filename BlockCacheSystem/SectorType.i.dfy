@@ -15,6 +15,11 @@ module SectorType {
       journalLen: uint64,
       indirectionTableLoc: Location)
 
+  // TODO make indirectionTable take up more than one block
+  datatype IndirectionTable = IndirectionTable(
+      locs: map<Reference, Location>,
+      graph: map<Reference, seq<Reference>>)
+
   datatype Sector =
     | SectorSuperblock(superblock: Superblock)
     | SectorJournal(journal: JournalRange)

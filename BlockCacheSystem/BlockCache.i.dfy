@@ -16,25 +16,22 @@ include "JournalRange.i.dfy"
 // application data, facilitating the crash-safety and crash recovery behavior.
 //
 
-abstract module BlockCache refines Transactable {
+module BlockCache refines Transactable {
+  import G = PivotBetreeGraph
   import opened Maps
   import opened Options
   import opened NativeTypes
   import opened DiskLayout
   import opened Journal
   import opened JournalRanges
+  import opened SectorType
 
   import Disk = AsyncSectorDisk
 
   type ReqId = Disk.ReqId
   datatype Constants = Constants()
 
-  // TODO make indirectionTable take up more than one block
-  datatype IndirectionTable = IndirectionTable(
-      locs: map<Reference, Location>,
-      graph: map<Reference, seq<Reference>>)
-
-  type DiskOp = Disk.DiskOp<Sector>
+  type DiskOp = Disk.DiskOp
 
   // BlockCache stuff
 
@@ -1379,7 +1376,3 @@ abstract module BlockCache refines Transactable {
     NextStepPreservesInv(k, s, s', dop, step);
   }
 }
-
-/*module {:extern} BetreeGraphBlockCache refines BlockCache {
-  import G = PivotBetreeGraph
-}*/

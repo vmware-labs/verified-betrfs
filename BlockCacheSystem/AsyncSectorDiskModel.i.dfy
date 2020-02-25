@@ -2,6 +2,7 @@ include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "DiskLayout.i.dfy"
+include "SectorType.i.dfy"
 
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
@@ -21,30 +22,32 @@ module AsyncSectorDisk {
   import opened Maps
   import opened Options
   import opened DiskLayout
+  import opened SectorType
+  import opened JournalRanges
 
   type ReqId = uint64
 
   datatype ReqRead = ReqRead(loc: Location)
-  datatype ReqWrite<Sector> = ReqWrite(loc: Location, sector: Sector)
-  datatype RespRead<Sector> = RespRead(sector: Option<Sector>)
+  datatype ReqWrite = ReqWrite(loc: Location, sector: Sector)
+  datatype RespRead = RespRead(sector: Option<Sector>)
   datatype RespWrite = RespWrite
 
-  datatype DiskOp<Sector> =
+  datatype DiskOp =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
-    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite<Sector>)
+    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite)
     | ReqWrite2Op(id1: ReqId, id2: ReqId,
-        reqWrite1: ReqWrite<Sector>,
-        reqWrite2: ReqWrite<Sector>)
-    | RespReadOp(id: ReqId, respRead: RespRead<Sector>)
+        reqWrite1: ReqWrite,
+        reqWrite2: ReqWrite)
+    | RespReadOp(id: ReqId, respRead: RespRead)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
 
   datatype Constants = Constants()
-  datatype Variables<Sector> = Variables(
+  datatype Variables = Variables(
     // Queue of requests and responses:
     reqReads: map<ReqId, ReqRead>,
-    reqWrites: map<ReqId, ReqWrite<Sector>>,
-    respReads: map<ReqId, RespRead<Sector>>,
+    reqWrites: map<ReqId, ReqWrite>,
+    respReads: map<ReqId, RespRead>,
     respWrites: map<ReqId, RespWrite>,
 
     // The disk:
@@ -151,7 +154,31 @@ module AsyncSectorDisk {
               .(respReads := s.respReads[id := RespRead(None)])
   }
 
-  predicate ClosedUnderLogConcatenation(blocks: map
+  predicate ClosedUnderLogConcatenationLocs(
+      blocks: imap<Location, Sector>,
+      loc1: Location,
+      loc2: Location,
+      loc3: Location)
+  {
+    && loc1 in blocks
+    && loc2 in blocks
+    && blocks[loc1].SectorJournal?
+    && blocks[loc2].SectorJournal?
+    && loc2.addr as int == loc1.addr as int + loc1.len as int
+    && loc3.addr == loc1.addr
+    && loc3.len as int == loc1.len as int + loc2.len as int
+        ==> (
+          && loc3 in blocks
+          && blocks[loc3] == SectorJournal(JournalRangeConcat(
+              blocks[loc1].journal, blocks[loc2].journal))
+        )
+  }
+
+  predicate ClosedUnderLogConcatenation(blocks: imap<Location, Sector>)
+  {
+    forall loc1, loc2, loc3 ::
+        ClosedUnderLogConcatenationLocs(blocks, loc1, loc2, loc3)
+  }
 
   predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
@@ -201,10 +228,10 @@ abstract module AsyncSectorDiskMachine {
   type Sector
   type UIOp = UI.Op
 
-  type DiskOp = D.DiskOp<Sector>
+  type DiskOp = D.DiskOp
   type ReqRead = D.ReqRead
-  type ReqWrite = D.ReqWrite<Sector>
-  type RespRead = D.RespRead<Sector>
+  type ReqWrite = D.ReqWrite
+  type RespRead = D.RespRead
   type RespWrite = D.RespWrite
 
   predicate Init(k: Constants, s: Variables)
@@ -218,10 +245,11 @@ abstract module AsyncSectorDiskModel {
   import D = AsyncSectorDisk
   import M : AsyncSectorDiskMachine
   import AsyncSectorDiskModelTypes
+  import opened SectorType
 
   type DiskOp = M.DiskOp
   type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
-  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables<M.Sector>>
+  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
   type UIOp = M.UIOp
 
   datatype Step =
