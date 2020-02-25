@@ -69,7 +69,7 @@ abstract module Main {
       if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
       io.diskOp())
 
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64)
+  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   requires io.initialized()
   requires Inv(k, hs)

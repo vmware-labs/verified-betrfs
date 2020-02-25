@@ -22,12 +22,14 @@ module AsyncDisk {
 
   datatype ReqRead = ReqRead(addr: uint64, len: uint64)
   datatype ReqWrite = ReqWrite(addr: uint64, bytes: seq<byte>)
-  datatype RespRead = RespRead(bytes: seq<byte>)
-  datatype RespWrite = RespWrite
+  datatype RespRead = RespRead(addr: uint64, bytes: seq<byte>)
+  datatype RespWrite = RespWrite(addr: uint64, len: uint64)
 
   datatype DiskOp =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
     | ReqWriteOp(id: ReqId, reqWrite: ReqWrite)
+    | ReqWrite2Op(id1: ReqId, id2: ReqId,
+        reqWrite1: ReqWrite, reqWrite2: ReqWrite)
     | RespReadOp(id: ReqId, respRead: RespRead)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
@@ -55,6 +57,7 @@ module AsyncDisk {
   datatype Step =
     | RecvReadStep
     | RecvWriteStep
+    | RecvWrite2Step
     | AckReadStep
     | AckWriteStep
     | StutterStep
@@ -73,6 +76,20 @@ module AsyncDisk {
     && dop.id !in s.reqWrites
     && dop.id !in s.respWrites
     && s' == s.(reqWrites := s.reqWrites[dop.id := dop.reqWrite])
+  }
+
+  predicate RecvWrite2(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWrite2Op?
+    && dop.id1 !in s.reqWrites
+    && dop.id1 !in s.respWrites
+    && dop.id2 !in s.reqWrites
+    && dop.id2 !in s.respWrites
+    && dop.id1 != dop.id2
+    && s' == s.(reqWrites :=
+        s.reqWrites[dop.id1 := dop.reqWrite1]
+                   [dop.id2 := dop.reqWrite2]
+       )
   }
 
   predicate AckRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -101,6 +118,7 @@ module AsyncDisk {
     match step {
       case RecvReadStep => RecvRead(k, s, s', dop)
       case RecvWriteStep => RecvWrite(k, s, s', dop)
+      case RecvWrite2Step => RecvWrite2(k, s, s', dop)
       case AckReadStep => AckRead(k, s, s', dop)
       case AckWriteStep => AckWrite(k, s, s', dop)
       case StutterStep => Stutter(k, s, s', dop)
@@ -112,24 +130,48 @@ module AsyncDisk {
   }
 
   datatype InternalStep =
-    | ProcessReadStep(id: ReqId)
+    //| ProcessReadStep(id: ReqId)
     | ProcessReadFailureStep(id: ReqId, fakeContents: seq<byte>)
     | ProcessWriteStep(id: ReqId)
     | HavocConflictingWritesStep(id: ReqId, id': ReqId)
     | HavocConflictingWriteReadStep(id: ReqId, id': ReqId)
 
-  predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
+  /*predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
     && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(s.contents[req.addr .. req.addr as int + req.len as int])])
-  }
+              .(respReads := s.respReads[id := RespRead(req.addr, s.contents[req.addr .. req.addr as int + req.len as int])])
+  }*/
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
     && |s| >= 32
     && s[0..32] == Crypto.Crc32C(s[32..])
+  }
+
+  predicate ChecksumsCheckOutForSlice(realContents: seq<byte>, fakeContents: seq<byte>, i: int, j: int)
+  requires |realContents| == |fakeContents|
+  requires 0 <= i <= j <= |realContents|
+  {
+    // We make the assumption that the disk cannot fail from a checksum-correct state
+    // to a different checksum-correct state. This is a reasonable assumption for many
+    // probabilistic failure models of the disk.
+
+    // We don't make a blanket assumption that !ChecksumChecksOut(fakeContents)
+    // because it would be reasonable for a disk to fail into a checksum-correct state
+    // from a checksum-incorrect one.
+
+    ChecksumChecksOut(realContents[i..j]) && 
+    ChecksumChecksOut(fakeContents[i..j]) ==>
+        realContents[i..j] == fakeContents[i..j]
+  }
+
+  predicate AllChecksumsCheckOut(realContents: seq<byte>, fakeContents: seq<byte>)
+  requires |realContents| == |fakeContents|
+  {
+    forall i, j | 0 <= i <= j <= |realContents| ::
+      ChecksumsCheckOutForSlice(realContents, fakeContents, i, j)
   }
 
   predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
@@ -139,19 +181,12 @@ module AsyncDisk {
     && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && var realContents := s.contents[req.addr .. req.addr as int + req.len as int];
     && |fakeContents| == |realContents|
+    && fakeContents != realContents
 
-    // We make the assumption that the disk cannot fail from a checksum-correct state
-    // to a different checksum-correct state. This is a reasonable assumption for many
-    // probabilistic failure models of the disk.
-
-    // We don't make a blanket assumption that !ChecksumChecksOut(fakeContents)
-    // because it would be reasonable for a disk to fail into a checksum-correct state
-    // from a checksum-incorrect one.
-
-    && (ChecksumChecksOut(realContents) ==> !ChecksumChecksOut(fakeContents))
+    && AllChecksumsCheckOut(realContents, fakeContents)
 
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(fakeContents)])
+              .(respReads := s.respReads[id := RespRead(req.addr, fakeContents)])
   }
 
   function {:opaque} splice(bytes: seq<byte>, start: int, ins: seq<byte>) : seq<byte>
@@ -166,9 +201,10 @@ module AsyncDisk {
     && id in s.reqWrites
     && var req := s.reqWrites[id];
     && 0 <= req.addr
+    && |req.bytes| < 0x1_0000_0000_0000_0000
     && req.addr as int + |req.bytes| <= |s.contents|
     && s' == s.(reqWrites := MapRemove1(s.reqWrites, id))
-              .(respWrites := s.respWrites[id := RespWrite])
+              .(respWrites := s.respWrites[id := RespWrite(req.addr, |req.bytes| as uint64)])
               .(contents := splice(s.contents, req.addr as int, req.bytes))
   }
 
@@ -203,7 +239,7 @@ module AsyncDisk {
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
   {
     match step {
-      case ProcessReadStep(id) => ProcessRead(k, s, s', id)
+      //case ProcessReadStep(id) => ProcessRead(k, s, s', id)
       case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailure(k, s, s', id, fakeContents)
       case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
       case HavocConflictingWritesStep(id, id') => HavocConflictingWrites(k, s, s', id, id')

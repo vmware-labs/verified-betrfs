@@ -3,7 +3,7 @@
 #include <optional>
 #include "Framework.h"
 
-namespace BetreeGraphBlockCache_Compile {
+namespace BlockJournalCache_Compile {
   struct Constants;
 }
 namespace MainHandlers_Compile {
@@ -11,7 +11,7 @@ namespace MainHandlers_Compile {
 }
 
 struct Constants {
-  std::shared_ptr<BetreeGraphBlockCache_Compile::Constants> k;
+  std::shared_ptr<BlockJournalCache_Compile::Constants> k;
 };
 
 struct Variables {

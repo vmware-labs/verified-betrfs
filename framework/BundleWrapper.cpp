@@ -7,8 +7,8 @@ std::pair<Constants, Variables> handle_InitState()
 {
   auto tup2 = __default::InitState();
   Constants k;
-  k.k = std::shared_ptr<BetreeGraphBlockCache_Compile::Constants>(
-      new BetreeGraphBlockCache_Compile::Constants(tup2.t0));
+  k.k = std::shared_ptr<BlockJournalCache_Compile::Constants>(
+      new BlockJournalCache_Compile::Constants(tup2.t0));
   Variables hs;
   hs.hs = tup2.t1;
   return std::make_pair(k, hs);
@@ -16,7 +16,7 @@ std::pair<Constants, Variables> handle_InitState()
 
 DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 {
-  return MkfsImpl_Compile::__default::Mkfs();
+  return __default::Mkfs();
 }
 
 uint64 handle_PushSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
@@ -26,7 +26,7 @@ uint64 handle_PushSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHand
 
 std::pair<bool, bool> handle_PopSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, uint64 id)
 {
-  auto p = __default::handlePopSync(*k.k, hs.hs, io, id);
+  auto p = __default::handlePopSync(*k.k, hs.hs, io, id, true /* graphSync */);
   return std::make_pair(p.t0, p.t1);
 }
 

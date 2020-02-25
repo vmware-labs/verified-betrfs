@@ -8,8 +8,10 @@ module EvictImpl {
   import opened DeallocImpl
   import opened SyncImpl
   import EvictModel
+  import opened DiskOpImpl
   import opened StateImpl
   import opened Bounds
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps
@@ -109,7 +111,7 @@ module EvictImpl {
     }
   }
 
-  method PageInReqOrMakeRoom(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  method PageInNodeReqOrMakeRoom(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires Inv(k, s)
   requires s.ready
   requires io.initialized()
@@ -120,12 +122,12 @@ module EvictImpl {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures EvictModel.PageInReqOrMakeRoom(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures EvictModel.PageInNodeReqOrMakeRoom(Ic(k), old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    EvictModel.reveal_PageInReqOrMakeRoom();
+    EvictModel.reveal_PageInNodeReqOrMakeRoom();
 
     if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-      PageInReq(k, s, io, ref);
+      PageInNodeReq(k, s, io, ref);
     } else {
       var c := s.cache.Count(); 
       if c > 0 {

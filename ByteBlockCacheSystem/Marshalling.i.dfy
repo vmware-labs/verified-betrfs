@@ -4,6 +4,7 @@ include "../lib/Base/Message.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
+include "../BlockCacheSystem/JournalCache.i.dfy"
 include "../lib/Buckets/KVList.i.dfy"
 
 //
@@ -18,7 +19,8 @@ module Marshalling {
   import opened Sequences
   import opened BucketsLib
   import opened BucketWeights
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
+  import JC = JournalCache
   import BT = PivotBetreeSpec`Internal
   import M = ValueMessage`Internal
   import Pivots = PivotsLib
@@ -26,13 +28,13 @@ module Marshalling {
   import Keyspace = Lexicographic_Byte_Order
   import SeqComparison
   import opened Bounds
-  import LBAType
+  import DiskLayout
   import ReferenceType`Internal
   import Crypto
   import PackedKV
+  import opened SectorType
 
   type Reference = BC.Reference
-  type Sector = BC.Sector
   type Node = BT.G.Node
 
   /////// Grammar
@@ -60,10 +62,24 @@ module Marshalling {
     GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   }
 
+  function method SuperblockGrammar() : G
+  ensures ValidGrammar(SuperblockGrammar())
+  {
+    // counter
+    // journalStart
+    // journalLen,
+    // indirectionTableLoc.addr
+    // indirectionTableLoc.len
+    GTuple([GUint64, GUint64, GUint64, GUint64, GUint64])
+  }
+
   function method SectorGrammar() : G
   ensures ValidGrammar(SectorGrammar())
   {
-    GTaggedUnion([IndirectionTableGrammar(), PivotNodeGrammar()])    
+    GTaggedUnion([
+      SuperblockGrammar(),
+      IndirectionTableGrammar(),
+      PivotNodeGrammar()])    
   }
 
   /////// Conversion to PivotNode
@@ -219,31 +235,31 @@ module Marshalling {
     )
   }
 
-  function {:fuel ValInGrammar,3} valToIndirectionTableMaps(a: seq<V>) : (s : Option<BC.IndirectionTable>)
+  function {:fuel ValInGrammar,3} valToIndirectionTableMaps(a: seq<V>) : (s : Option<IndirectionTable>)
   requires |a| <= IndirectionTableMaxSize()
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> |s.value.graph| as int == |a|
   ensures s.Some? ==> s.value.graph.Keys == s.value.locs.Keys
-  ensures s.Some? ==> forall v | v in s.value.locs.Values :: BC.ValidLocationForNode(v)
+  ensures s.Some? ==> forall v | v in s.value.locs.Values :: DiskLayout.ValidNodeLocation(v)
   ensures s.Some? ==> forall ref | ref in s.value.graph :: |s.value.graph[ref]| <= MaxNumChildren()
   {
     if |a| == 0 then
-      Some(BC.IndirectionTable(map[], map[]))
+      Some(IndirectionTable(map[], map[]))
     else (
       var res := valToIndirectionTableMaps(DropLast(a));
       match res {
         case Some(table) => (
           var tuple := Last(a);
           var ref := tuple.t[0].u;
-          var lba := tuple.t[1].u;
+          var addr := tuple.t[1].u;
           var len := tuple.t[2].u;
           var succs := tuple.t[3].ua;
-          var loc := LBAType.Location(lba, len);
-          if ref in table.graph || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
+          var loc := DiskLayout.Location(addr, len);
+          if ref in table.graph || !DiskLayout.ValidNodeLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
-            Some(BC.IndirectionTable(table.locs[ref := loc], table.graph[ref := succs]))
+            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs]))
           )
         )
         case None => None
@@ -251,7 +267,7 @@ module Marshalling {
     )
   }
 
-  function valToIndirectionTable(v: V) : (s : Option<BC.IndirectionTable>)
+  function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
   requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableGrammar())
   ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value)
@@ -273,18 +289,46 @@ module Marshalling {
     )
   }
 
+  function method valToSuperblock(v: V) : (s: Option<Superblock>)
+  requires ValidVal(v)
+  requires ValInGrammar(v, SuperblockGrammar())
+  {
+    assert ValInGrammar(v.t[0], GUint64);
+    assert ValInGrammar(v.t[1], GUint64);
+    assert ValInGrammar(v.t[2], GUint64);
+    assert ValInGrammar(v.t[3], GUint64);
+    assert ValInGrammar(v.t[4], GUint64);
+
+    var counter := v.t[0].u;
+    var journalStart := v.t[1].u;
+    var journalLen := v.t[2].u;
+    var itlocAddr := v.t[3].u;
+    var itlocLen := v.t[4].u;
+    var sup := Superblock(counter, journalStart, journalLen,
+        DiskLayout.Location(itlocAddr, itlocLen));
+    if JC.WFSuperblock(sup) then
+      Some(sup)
+    else
+      None
+  }
+
   function valToSector(v: V) : (s : Option<Sector>)
   requires ValidVal(v)
   requires ValInGrammar(v, SectorGrammar())
   {
     if v.c == 0 then (
+      match valToSuperblock(v.val) {
+        case Some(s) => Some(SectorSuperblock(s))
+        case None => None
+      }
+    ) else if v.c == 1 then (
       match valToIndirectionTable(v.val) {
-        case Some(s) => Some(BC.SectorIndirectionTable(s))
+        case Some(s) => Some(SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(BC.SectorBlock(s))
+        case Some(s) => Some(SectorNode(s))
         case None => None
       }
     )
@@ -323,7 +367,7 @@ module Marshalling {
     assert m0.Keys <= m.Keys;
   }
 
-  predicate IsInitIndirectionTable(table: BC.IndirectionTable)
+  predicate IsInitIndirectionTable(table: IndirectionTable)
   {
     && BC.WFCompleteIndirectionTable(table)
     && table.graph.Keys == {BT.G.Root()}
@@ -336,11 +380,11 @@ module Marshalling {
     {:fuel ValInGrammar,10}
     {:fuel SizeOfV,10}
     {:fuel SeqSum,10}
-  InitIndirectionTableSizeOfV(table: BC.IndirectionTable, v: V)
+  InitIndirectionTableSizeOfV(table: IndirectionTable, v: V)
   requires IsInitIndirectionTable(table)
   requires ValidVal(v)
   requires ValInGrammar(v, SectorGrammar())
-  requires valToSector(v) == Some(BC.SectorIndirectionTable(table))
+  requires valToSector(v) == Some(SectorIndirectionTable(table))
   ensures SizeOfV(v) == 48
   {
     var ref := BT.G.Root();
@@ -367,7 +411,7 @@ module Marshalling {
     assert valToIndirectionTableMaps(DropLast(v.val.a)).value.graph == map[];
 
     //assert valToIndirectionTableMaps(DropLast(v.val.a))
-    //    == Some(BC.IndirectionTable(map[], map[]));
+    //    == Some(IndirectionTable(map[], map[]));
 
     assert DropLast(v.val.a) == [];
 
@@ -377,7 +421,7 @@ module Marshalling {
         VUint64(loc.len),
         VUint64Array([])]);
 
-    assert v == VCase(0, VArray([
+    assert v == VCase(1, VArray([
       VTuple([
         VUint64(BT.G.Root()),
         VUint64(loc.addr),

@@ -3,12 +3,7 @@ include "StateImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
 include "MkfsModel.i.dfy"
 
-//
-// TODO implement this so that it matches the spec of Mkfs
-// provided in Main.s.dfy.
-//
-
-module {:extern} MkfsImpl {
+module MkfsImpl {
   import MarshallingImpl
   import IMM = MarshallingModel
   import opened Options
@@ -24,20 +19,26 @@ module {:extern} MkfsImpl {
   import MkfsModel
 
   import BT = PivotBetreeSpec
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
+  import opened SectorType
   import ReferenceType`Internal
-  import opened LBAType
+  import opened DiskLayout
   import opened Bounds
   import ValueType`Internal
   import SI = StateImpl
   import D = AsyncDisk
 
-  import ADM = ByteBetreeBlockCacheSystem
+  import ADM = ByteSystem
 
   method Mkfs() returns (diskContents :  map<Addr, seq<byte>>)
   ensures MkfsModel.InitDiskContents(diskContents)
   ensures ADM.BlocksDontIntersect(diskContents)
   {
+    var s1addr := Superblock1Location().addr;
+    var s2addr := Superblock2Location().addr;
+    var indirectionTableAddr := IndirectionTable1Addr();
+    var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
+
     WeightBucketEmpty();
     var empty := new MutBucket(KVList.Kvl([], []));
     MutBucket.ReprSeqDisjointOfLen1([empty]);
@@ -45,36 +46,59 @@ module {:extern} MkfsImpl {
 
     WeightBucketListOneEmpty();
     assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
-    ghost var sector:SI.Sector := SI.SectorBlock(node);
+    ghost var sector:SI.Sector := SI.SectorNode(node);
     ghost var is:SM.Sector := SI.ISector(sector);
 
-    var b1_array := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
-    var b1 := b1_array[..];
+    var bNode_array := MarshallingImpl.MarshallCheckedSector(SI.SectorNode(node));
+    var bNode := bNode_array[..];
 
-    var addr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
-    var loc := Location(addr, |b1| as uint64);
-    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(loc);
+    var nodeLoc := Location(nodeAddr, |bNode| as uint64);
+    assert ValidNodeLocation(nodeLoc)
+      by {
+        ValidNodeAddrMul(MinNodeBlockIndexUint64());
+      }
 
-    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
-      map[0 := LBAType.Location(addr, |b1| as uint64)],
+    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(nodeLoc);
+
+    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == IndirectionTable(
+      map[0 := nodeLoc],
       map[0 := []]
     );
 
-    LBAType.ValidAddrMul(MinNodeBlockIndexUint64());
-    assert ValidLocation(Location(addr, |b1| as uint64));
     assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
     assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
-    var b0_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
+    var bIndirectionTable_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
-    assert b0_array != null;
+    assert bIndirectionTable_array != null;
 
-    var b0 := b0_array[..];
+    var bIndirectionTable := bIndirectionTable_array[..];
+
+    var indirectionTableLoc := Location(indirectionTableAddr, |bIndirectionTable| as uint64);
+    assert ValidIndirectionTableLocation(indirectionTableLoc);
+
+    var sectorSuperblock := SI.SectorSuperblock(Superblock(0, 0, 0, indirectionTableLoc));
+    var bSuperblock_array := MarshallingImpl.MarshallCheckedSector(sectorSuperblock);
+    var bSuperblock := bSuperblock_array[..];
+
+    ghost var ghosty := true;
+    if ghosty {
+      if overlap(Superblock1Location(), nodeLoc) {
+        overlappingLocsSameType(Superblock1Location(), nodeLoc);
+      }
+      if overlap(Superblock2Location(), nodeLoc) {
+        overlappingLocsSameType(Superblock2Location(), nodeLoc);
+      }
+      if overlap(indirectionTableLoc, nodeLoc) {
+        overlappingLocsSameType(indirectionTableLoc, nodeLoc);
+      }
+    }
 
     diskContents := map[
       // Map ref 0 to lba 1
-      0 := b0,
-      // Put the root at lba 1
-      addr := b1
+      s1addr := bSuperblock,
+      s2addr := bSuperblock,
+      indirectionTableAddr := bIndirectionTable,
+      nodeAddr := bNode
     ];
   }
 }
