@@ -1,6 +1,8 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"
+include "DiskLayout.i.dfy"
+
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
 // is some higher-level Node datatype. A later refinement step shows how to marshall and align
@@ -13,74 +15,12 @@ module AsyncSectorDiskModelTypes {
   datatype AsyncSectorDiskModelVariables<M,D> = AsyncSectorDiskModelVariables(machine: M, disk: D)
 }
 
-module LBAType {
-  import opened NativeTypes
-  import opened Bounds
-
-  type Addr(==,!new) = uint64
-  datatype Location = Location(addr: Addr, len: uint64)
-
-  function method IndirectionTableAddr() : Addr { 0 }
-  function method IndirectionTableLocation() : Location {
-    Location(
-      IndirectionTableAddr(),
-      IndirectionTableBlockSizeUint64())
-  }
-  predicate method {:opaque} ValidAddr(addr: Addr) {
-    //exists j: int :: j * BlockSize() as int == addr as int
-    //addr % BlockSize() == 0
-    addr != 0 ==> (
-      && addr % NodeBlockSizeUint64() == 0
-      && addr >= NodeBlockSizeUint64() * MinNodeBlockIndexUint64()
-    )
-  }
-  predicate method ValidLocation(loc: Location) {
-    && ValidAddr(loc.addr)
-    && (loc.addr == 0 ==>
-      loc.len == IndirectionTableBlockSizeUint64()
-    )
-    && (loc.addr != 0 ==>
-      loc.len <= NodeBlockSizeUint64()
-    )
-  }
-  lemma ValidAddrDivisor(addr: Addr) returns (i: int)
-  requires ValidAddr(addr);
-  ensures i * NodeBlockSize() as int == addr as int
-  ensures addr != IndirectionTableAddr() ==> i >= MinNodeBlockIndex()
-  {
-    reveal_ValidAddr();
-    i := addr as int / NodeBlockSize() as int;
-  }
-  predicate overlap(loc: Location, loc': Location) {
-    loc.addr == loc'.addr
-  }
-
-  lemma ValidAddrMul(i: uint64)
-  requires i as int * NodeBlockSize() as int < 0x1_0000_0000_0000_0000
-  requires i as int >= MinNodeBlockIndex()
-  ensures ValidAddr(i * NodeBlockSizeUint64())
-  {
-    reveal_ValidAddr();
-  }
-
-  lemma ValidAddr0()
-  ensures ValidAddr(0)
-  {
-    reveal_ValidAddr();
-  }
-
-  //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidAddr
-  //    reveals BlockSize
-  //export extends S
-  //export Internal reveals *
-}
-
 // A disk, processing stuff in its queue, doing its thing.
 module AsyncSectorDisk {
   import opened NativeTypes
   import opened Maps
   import opened Options
-  import opened LBAType
+  import opened DiskLayout
 
   type ReqId = uint64
 
@@ -92,6 +32,9 @@ module AsyncSectorDisk {
   datatype DiskOp<Sector> =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
     | ReqWriteOp(id: ReqId, reqWrite: ReqWrite<Sector>)
+    | ReqWrite2Op(id1: ReqId, id2: ReqId,
+        reqWrite1: ReqWrite<Sector>,
+        reqWrite2: ReqWrite<Sector>)
     | RespReadOp(id: ReqId, respRead: RespRead<Sector>)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
@@ -137,6 +80,18 @@ module AsyncSectorDisk {
     && dop.id !in s.reqWrites
     && dop.id !in s.respWrites
     && s' == s.(reqWrites := s.reqWrites[dop.id := dop.reqWrite])
+  }
+
+  predicate RecvWrite2(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWrite2Op?
+    && dop.id1 !in s.reqWrites
+    && dop.id1 !in s.respWrites
+    && dop.id2 !in s.reqWrites
+    && dop.id2 !in s.respWrites
+    && dop.id1 != dop.id2
+    && s' == s.(reqWrites := s.reqWrites[dop.id1 := dop.reqWrite1]
+                                        [dop.id2 := dop.reqWrite2])
   }
 
   predicate AckRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
