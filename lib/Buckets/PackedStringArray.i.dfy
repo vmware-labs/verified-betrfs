@@ -875,4 +875,22 @@ module PackedStringArray {
     var dpsa := new DynamicPsa.FromSeq(strs);
     psa := dpsa.toPsa();
   }
+
+  method ToSeq(psa: Psa) returns (strs: seq<seq<byte>>)
+    requires WF(psa)
+    ensures strs == I(psa)
+  {
+    var nstrings: uint64 := psaNumStrings(psa);
+    var astrs := new seq<byte>[nstrings];
+
+    var i: uint64 := 0;
+    while i < nstrings
+      invariant i <= nstrings
+      invariant astrs[..i] == psaSeq(psa, i as int)
+    {
+      astrs[i] := psaElement(psa, i);
+      i := i + 1;
+    }
+    strs := astrs[..];
+  }
 }

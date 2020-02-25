@@ -31,7 +31,8 @@ module BucketImpl {
   import opened KeyType
   import BucketIteratorModel
   import Pivots = PivotsLib
-
+  import PSA = PackedStringArray
+  
   type TreeMap = KMB.Node
 
   method tree_to_kvl(tree: TreeMap)
@@ -42,18 +43,20 @@ module BucketImpl {
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
     var s := KMBBOps.ToSeq(tree);
-    kvl := KVList.Kvl(s.0[..], s.1[..]);
     assume false;
+    var psa := PSA.FromSeq(s.0[..]);
+    kvl := KVList.Kvl(psa, s.1[..]);
   }
 
   method kvl_to_tree(kvl : KVList.Kvl)
   returns (tree: TreeMap)
   requires KVList.WF(kvl)
-  requires |kvl.keys| < Uint64UpperBound() - 1
+  requires PSA.psaNumStrings(kvl.keys) as int < Uint64UpperBound() - 1
   ensures KMB.WF(tree)
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
-    var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
+    var strs := PSA.ToSeq(kvl.keys);
+    var modelkvl := KMB.Model.KVList(strs, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
     assume false;
   }
@@ -74,7 +77,8 @@ module BucketImpl {
       messages[i] := PackedKV.GetMessage(pkv, i);
       i := i + 1;
     }
-    return KVList.Kvl(keys[..], messages[..]);
+    var psa := PSA.FromSeq(keys[..]);
+    return KVList.Kvl(psa, messages[..]);
   }
 
   method pkv_to_tree(pkv: PackedKV.Pkv)
@@ -84,7 +88,7 @@ module BucketImpl {
   ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
   {
     var kv := pkv_to_kvl(pkv);
-    assume |kv.keys| < Uint64UpperBound() - 1;
+    //assume |kv.keys| < Uint64UpperBound() - 1;
     tree := kvl_to_tree(kv);
   }
 
@@ -416,7 +420,7 @@ module BucketImpl {
       if format.BFKvl? {
         format := BFTree;
         tree := kvl_to_tree(kvl);
-        kvl := KVList.Kvl([], []); // not strictly necessary, but frees memory
+        kvl := KVList.Kvl(PSA.EmptyPsa(), []); // not strictly necessary, but frees memory
       } else if format.BFPkv? {
         format := BFTree;
         tree := pkv_to_tree(pkv);
@@ -570,10 +574,10 @@ module BucketImpl {
         var kvl := GetKvl();
         KVList.lenKeysLeWeightOver4(kvl);
         assume false;
-        if |kvl.keys| as uint64 == 0 {
+        if PSA.psaNumStrings(kvl.keys) == 0 {
           return [0];
         } else {
-          var key := kvl.keys[|kvl.keys| as uint64 / 2];
+          var key := PSA.psaElement(kvl.keys, PSA.psaNumStrings(kvl.keys) / 2);
           if |key| as uint64 == 0 {
             return [0];
           } else {
@@ -750,10 +754,10 @@ module BucketImpl {
         }
       } else {
         var kvl := GetKvl();
-        if it.i == |kvl.keys| as uint64 {
+        if it.i == PSA.psaNumStrings(kvl.keys) {
           next := BucketIteratorModel.Done;
         } else {
-          next := BucketIteratorModel.Next(kvl.keys[it.i], kvl.messages[it.i]);
+          next := BucketIteratorModel.Next(PSA.psaElement(kvl.keys, it.i), kvl.messages[it.i]);
         }
       }
     }
