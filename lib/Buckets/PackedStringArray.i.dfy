@@ -473,10 +473,15 @@ module PackedStringArray {
     psaSubSeq(psa, 0, psaNumStrings(psa)-1)
   }
 
+  predicate method psaCanAppend(psa: Psa, key: seq<byte>)
+  {
+    && |psa.offsets| < 0x1_0000_0000 - 1
+    && |psa.data| + |key| < 0x1_0000_0000
+  }
+  
   function psaAppend(psa: Psa, key: seq<byte>) : (result: Psa)
     requires WF(psa)
-    requires |psa.offsets| < 0x1_0000_0000 - 1
-    requires |psa.data| + |key| < 0x1_0000_0000
+    requires psaCanAppend(psa, key)
     ensures WF(result)
   {
     var newdata := psa.data + key;
@@ -486,8 +491,7 @@ module PackedStringArray {
 
   lemma psaAppendIAppend(psa: Psa, key: seq<byte>)
     requires WF(psa)
-    requires |psa.offsets| < 0x1_0000_0000 - 1
-    requires |psa.data| + |key| < 0x1_0000_0000
+    requires psaCanAppend(psa, key)
     ensures I(psaAppend(psa, key)) == I(psa) + [key]
   {
     var ipsaa := I(psaAppend(psa, key));
@@ -498,5 +502,377 @@ module PackedStringArray {
     {
     }
   }
+
+  lemma psaAppendTotalLength(psa: Psa, key: seq<byte>)
+    requires WF(psa)
+    requires psaCanAppend(psa, key)
+    ensures psaTotalLength(psaAppend(psa, key)) as int == psaTotalLength(psa) as int + |key|
+  {
+  }
   
+  predicate psaCanAppendSeq(psa: Psa, strs: seq<seq<byte>>)
+    requires WF(psa)
+    decreases |strs|, 0
+  {
+    if |strs| == 0 then
+      true
+    else
+      psaCanAppendSeq(psa, DropLast(strs)) && psaCanAppend(psaAppendSeq(psa, DropLast(strs)), Last(strs))
+  }
+
+  function psaAppendSeq(psa: Psa, strs: seq<seq<byte>>) : (result: Psa)
+    requires WF(psa)
+    requires psaCanAppendSeq(psa, strs)
+    ensures WF(result)
+    ensures I(result) == I(psa) + strs
+    decreases |strs|, 1
+  {
+    if |strs| == 0 then
+      psa
+    else
+      assert strs == DropLast(strs) + [Last(strs)];
+      psaAppendIAppend(psaAppendSeq(psa, DropLast(strs)), Last(strs));
+      psaAppend(psaAppendSeq(psa, DropLast(strs)), Last(strs))
+  }
+    
+  lemma psaCanAppendSeqPrefix(psa: Psa, strs: seq<seq<byte>>, i: nat)
+    requires WF(psa)
+    requires psaCanAppendSeq(psa, strs)
+    requires i <= |strs|
+    ensures psaCanAppendSeq(psa, strs[..i])
+  {
+    if i == |strs| {
+      assert strs[..i] == strs;
+    } else {
+      psaCanAppendSeqPrefix(psa, DropLast(strs), i);
+      assert strs[..i] == DropLast(strs)[..i];
+    }
+  }
+
+  lemma psaAppendSeqPrefixTotalLength(psa: Psa, strs: seq<seq<byte>>, i: nat)
+    requires WF(psa)
+    requires psaCanAppendSeq(psa, strs)
+    requires i <= |strs|
+    ensures psaCanAppendSeq(psa, strs[..i])
+    ensures psaTotalLength(psaAppendSeq(psa, strs[..i])) <= psaTotalLength(psaAppendSeq(psa, strs))
+  {
+    psaCanAppendSeqPrefix(psa, strs, i);
+    if i == |strs| {
+      assert strs[..i] == strs;
+    } else {
+      psaAppendSeqPrefixTotalLength(psa, DropLast(strs), i);
+      assert strs[..i] == DropLast(strs)[..i];      
+    }
+  }
+
+  function psaFromSeq(strs: seq<seq<byte>>) : (result: Psa)
+    requires psaCanAppendSeq(EmptyPsa(), strs)
+    ensures WF(result)
+    ensures I(result) == strs
+  {
+    psaAppendSeq(EmptyPsa(), strs)
+  }
+
+  method psaSeqTotalLength(strs: seq<seq<byte>>) returns (len: uint64)
+    requires psaCanAppendSeq(EmptyPsa(), strs)
+    ensures len == psaTotalLength(psaAppendSeq(EmptyPsa(), strs))
+  {
+    forall i | 0 <= i <= |strs|
+      ensures psaCanAppendSeq(EmptyPsa(), strs[..i])
+      ensures psaTotalLength(psaAppendSeq(EmptyPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(EmptyPsa(), strs))
+    {
+      psaCanAppendSeqPrefix(EmptyPsa(), strs, i);
+      psaAppendSeqPrefixTotalLength(EmptyPsa(), strs, i);
+    }
+
+    var curlen: uint64 := 0;
+    var i: uint64 := 0;
+    while i < |strs| as uint64
+      invariant i as int <= |strs|
+      invariant curlen == psaTotalLength(psaAppendSeq(EmptyPsa(), strs[..i]))
+    {
+      assert strs[..i] == DropLast(strs[..i+1]);
+      psaAppendTotalLength(psaAppendSeq(EmptyPsa(), strs[..i]), strs[i]);
+      curlen := curlen + |strs[i]| as uint64;
+      i := i + 1;
+    }
+    assert strs == strs[..|strs|];
+    len := curlen;
+  }
+  
+  class DynamicPsa {
+    var nstrings: uint64
+    var offsets: array<uint32>
+    var data: array<byte>
+    ghost var Repr: set<object>
+    
+    predicate WF()
+      reads this, this.Repr
+    {
+      && Repr == {this, offsets, data}
+      && offsets.Length < Uint64UpperBound()
+      && data.Length < 0x1_0000_0000 
+      && nstrings as int <= offsets.Length
+      && nstrings < 0x1_0000_0000
+      && (0 < nstrings ==> offsets[nstrings-1] as int < 0x1_0000_0000)
+      && (0 < nstrings ==> offsets[nstrings-1] as int <= data.Length)
+      && Uint32_Order.IsSorted(offsets[..nstrings])
+    }
+
+    function method toPsa() : Psa
+      requires WF()
+      reads this, this.Repr
+    {
+      if 0 == nstrings then
+        EmptyPsa()
+      else 
+        Psa(offsets[..nstrings], data[..offsets[nstrings-1]])
+    }
+
+    predicate method canAppend(str: seq<byte>)
+      requires WF()
+      reads this, this.Repr
+    {
+      && psaCanAppend(toPsa(), str)
+      && nstrings as int < offsets.Length
+      && psaTotalLength(toPsa()) as int + |str| <= data.Length
+    }
+    
+    method append(str: seq<byte>)
+      requires WF()
+      requires canAppend(str)
+      ensures WF()
+      ensures toPsa() == psaAppend(old(toPsa()), str)
+      ensures Repr == old(Repr)
+      modifies this.Repr
+    {
+      var start: uint32 := if nstrings == 0 then 0 else offsets[nstrings-1];
+      offsets[nstrings] := start + |str| as uint32;
+      CopySeqIntoArray(str, 0, data, start as uint64, |str| as uint64);
+      nstrings := nstrings + 1;
+      Uint32_Order.reveal_IsSorted();
+    }
+
+    method realloc_offsets(new_offsets_len: uint64)
+      requires WF()
+      requires nstrings <= new_offsets_len
+      ensures WF()
+      ensures toPsa() == old(toPsa())
+      ensures fresh(offsets)
+      ensures offsets.Length == new_offsets_len as int
+      ensures data == old(data)
+      modifies this.Repr
+    {
+      var new_offsets := new uint32[new_offsets_len];
+      CopyArrayIntoDifferentArray(offsets, 0, new_offsets, 0, nstrings);
+      offsets := new_offsets;
+      assert offsets[..nstrings] == old(offsets[..nstrings]);
+      Repr := {this, offsets, data};
+    }
+    
+    method realloc_data(new_data_len: uint64)
+      requires WF()
+      requires new_data_len < 0x1_0000_0000 
+      requires 0 < nstrings ==> offsets[nstrings-1] as uint64 <= new_data_len
+      ensures WF()
+      ensures toPsa() == old(toPsa())
+      ensures offsets == old(offsets)
+      ensures fresh(data)
+      ensures data.Length == new_data_len as int
+      modifies this.Repr
+    {
+      var data_len := if 0 == nstrings then 0 else offsets[nstrings-1];
+      var new_data := new byte[new_data_len];
+      CopyArrayIntoDifferentArray(data, 0, new_data, 0, data_len as uint64);
+      data := new_data;
+      Repr := {this, offsets, data};
+    }
+
+    method realloc_to_accomodate(str: seq<byte>)
+      requires WF()
+      requires psaCanAppend(toPsa(), str)
+      ensures WF()
+      ensures toPsa() == old(toPsa())
+      ensures canAppend(str)
+      ensures fresh(Repr - old(Repr))
+      modifies this.Repr
+    {
+      if nstrings == offsets.Length as uint64 {
+        if 0x8000_0000 <= nstrings {
+          realloc_offsets(0xffff_ffff);
+        } else {
+          realloc_offsets(2*nstrings + 1);
+        }
+      }
+      var data_len: uint32 := if nstrings == 0 then 0 else offsets[nstrings-1];
+      assert data_len as uint64 == psaTotalLength(toPsa());
+      var new_len: uint64 := data_len as uint64 + |str| as uint64;
+      if data.Length as uint64 < new_len {
+        if 0x1_0000_0000 <= 2 * new_len {
+          realloc_data(0xffff_ffff);
+        } else {
+          realloc_data(2*new_len);
+        }
+      }
+    }
+    
+    method Append(str: seq<byte>)
+      requires WF()
+      requires psaCanAppend(toPsa(), str)
+      ensures WF()
+      ensures toPsa() == psaAppend(old(toPsa()), str)
+      ensures fresh(Repr - old(Repr))
+      modifies this.Repr
+    {
+      realloc_to_accomodate(str);
+      append(str);
+    }
+
+    method appendSeq(strs: seq<seq<byte>>)
+      requires WF()
+      requires psaCanAppendSeq(toPsa(), strs)
+      requires nstrings as int + |strs| <= offsets.Length
+      requires psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length
+      ensures WF()
+      ensures toPsa() == psaAppendSeq(old(toPsa()), strs)
+      ensures Repr == old(Repr)
+      modifies this, this.Repr
+    {
+      forall i | 0 <= i <= |strs|
+        ensures psaCanAppendSeq(toPsa(), strs[..i])
+        ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(toPsa(), strs))
+      {
+        psaCanAppendSeqPrefix(toPsa(), strs, i);
+        psaAppendSeqPrefixTotalLength(toPsa(), strs, i);
+      }
+      
+      var i: uint64 := 0;
+      while i < |strs| as uint64
+        invariant i as int <= |strs|
+        invariant WF()
+        invariant toPsa() == psaAppendSeq(old(toPsa()), strs[..i])
+        invariant Repr == old(Repr)
+      {
+        assert strs[..i+1] == strs[..i] + [strs[i]];
+        append(strs[i]);
+        i := i + 1;
+      }
+      assert strs[..|strs|] == strs;
+    }
+    
+    method realloc_to_accomodate_seq(strs: seq<seq<byte>>)
+      requires WF()
+      requires psaCanAppendSeq(toPsa(), strs)
+      ensures WF()
+      ensures toPsa() == old(toPsa())
+      ensures nstrings as int + |strs| <= offsets.Length
+      ensures psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length
+      ensures fresh(Repr - old(Repr))
+      modifies this.Repr
+    {
+      forall i | 0 <= i <= |strs|
+        ensures psaCanAppendSeq(toPsa(), strs[..i])
+        ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(toPsa(), strs))
+      {
+        psaCanAppendSeqPrefix(toPsa(), strs, i);
+        psaAppendSeqPrefixTotalLength(toPsa(), strs, i);
+      }
+      
+      if offsets.Length as uint64 < nstrings as uint64 + |strs| as uint64 {
+        realloc_offsets(nstrings as uint64 + |strs| as uint64);
+      }
+
+      var total_len: uint64 := if nstrings == 0 then 0 else offsets[nstrings-1] as uint64;
+      var i: uint64 := 0;
+      while i < |strs| as uint64
+        invariant i as int <= |strs|
+        invariant  total_len as int == psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) as int
+        modifies {}
+      {
+        assert strs[..i] == DropLast(strs[..i+1]);
+        psaAppendTotalLength(psaAppendSeq(toPsa(), strs[..i]), strs[i]);
+        total_len := total_len + |strs[i]| as uint64;
+        i := i + 1;
+      }
+      assert strs == strs[..|strs|];
+      if data.Length as uint64 < total_len {
+        realloc_data(total_len);
+      }
+    }
+    
+    method AppendSeq(strs: seq<seq<byte>>)
+      requires WF()
+      requires psaCanAppendSeq(toPsa(), strs)
+      ensures WF()
+      ensures toPsa() == psaAppendSeq(old(toPsa()), strs)
+      ensures fresh(Repr - old(Repr))
+      modifies this, this.Repr
+    {
+      forall i | 0 <= i <= |strs|
+        ensures psaCanAppendSeq(toPsa(), strs[..i])
+      {
+        psaCanAppendSeqPrefix(toPsa(), strs, i);
+      }
+
+      realloc_to_accomodate_seq(strs);
+      ghost var new_Repr := Repr;
+      ghost var new_offsets := offsets;
+      ghost var new_data := data;
+      
+      var i: uint64 := 0;
+      while i < |strs| as uint64
+        invariant i as int <= |strs|
+        invariant WF()
+        invariant toPsa() == psaAppendSeq(old(toPsa()), strs[..i])
+        invariant Repr == new_Repr
+        invariant offsets == new_offsets
+        invariant data == new_data
+      {
+        assert strs[..i+1] == strs[..i] + [strs[i]];
+        psaAppendSeqPrefixTotalLength(old(toPsa()), strs, i as nat + 1);
+        append(strs[i]);
+        i := i + 1;
+      }
+      assert strs[..|strs|] == strs;
+    }
+    
+    constructor PreSized(num_strings: uint32, total_len: uint32)
+      ensures WF()
+      ensures offsets.Length == num_strings as int
+      ensures data.Length == total_len as int
+      ensures toPsa() == EmptyPsa()
+      ensures fresh(Repr)
+    {
+      nstrings := 0;
+      offsets := new uint32[num_strings];
+      data := new byte[total_len];
+      Repr := {this, offsets, data};
+    }
+
+    constructor FromSeq(strs: seq<seq<byte>>)
+      requires psaCanAppendSeq(EmptyPsa(), strs)
+      ensures WF()
+      ensures offsets.Length == |strs|
+      ensures data.Length == psaTotalLength(psaFromSeq(strs)) as int
+      ensures toPsa() == psaFromSeq(strs)
+      ensures fresh(Repr)
+    {
+      nstrings := 0;
+      offsets := new uint32[|strs| as uint64];
+      var total_len := psaSeqTotalLength(strs);
+      data := new byte[total_len];
+      Repr := {this, offsets, data};
+      new;
+      appendSeq(strs);
+    }
+  }
+
+  method FromSeq(strs: seq<seq<byte>>) returns (psa: Psa)
+    requires psaCanAppendSeq(EmptyPsa(), strs)
+    ensures WF(psa)
+    ensures I(psa) == strs
+  {
+    var dpsa := new DynamicPsa.FromSeq(strs);
+    psa := dpsa.toPsa();
+  }
 }
