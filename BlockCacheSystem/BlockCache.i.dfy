@@ -29,22 +29,10 @@ abstract module BlockCache refines Transactable {
   type ReqId = Disk.ReqId
   datatype Constants = Constants()
 
-  datatype Superblock = Superblock(
-      counter: uint64,
-      journalStart: uint64,
-      journalLen: uint64,
-      indirectionTableLoc: Location)
-
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
       locs: map<Reference, Location>,
       graph: map<Reference, seq<Reference>>)
-
-  datatype Sector =
-    | SectorSuperblock(superblock: Superblock)
-    | SectorJournal(journal: JournalRange)
-    | SectorNode(block: Node)
-    | SectorIndirectionTable(indirectionTable: IndirectionTable)
 
   type DiskOp = Disk.DiskOp<Sector>
 

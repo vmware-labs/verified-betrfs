@@ -151,6 +151,8 @@ module AsyncSectorDisk {
               .(respReads := s.respReads[id := RespRead(None)])
   }
 
+  predicate ClosedUnderLogConcatenation(blocks: map
+
   predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqWrites
@@ -166,6 +168,7 @@ module AsyncSectorDisk {
     && req.loc in s'.blocks
     && s'.blocks[req.loc] == req.sector
     && (forall loc | loc in s.blocks && !overlap(loc, req.loc) :: loc in s'.blocks && s'.blocks[loc] == s.blocks[loc])
+    && ClosedUnderLogConcatenation(s'.blocks)
   }
 
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
