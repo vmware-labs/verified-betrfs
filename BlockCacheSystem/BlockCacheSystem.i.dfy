@@ -362,7 +362,7 @@ module BlockCacheSystem {
   requires s.machine.LoadingSuperblock?
   requires WFDisk(s.disk.blocks)
   {
-    && s.machine.outstandingSuperblock1Read.Some? ==> (
+    && (s.machine.outstandingSuperblock1Read.Some? ==> (
       && var reqId := s.machine.outstandingSuperblock1Read.value;
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
@@ -372,8 +372,8 @@ module BlockCacheSystem {
         && Superblock1Location() in s.disk.blocks
         && s.disk.respReads[reqId] == D.RespRead(Some(s.disk.blocks[Superblock1Location()]))
       )
-    )
-    && s.machine.outstandingSuperblock2Read.Some? ==> (
+    ))
+    && (s.machine.outstandingSuperblock2Read.Some? ==> (
       && var reqId := s.machine.outstandingSuperblock2Read.value;
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
@@ -383,7 +383,7 @@ module BlockCacheSystem {
         && Superblock2Location() in s.disk.blocks
         && s.disk.respReads[reqId] == D.RespRead(Some(s.disk.blocks[Superblock2Location()]))
       )
-    )
+    ))
   }
 
   // Any outstanding write we have recorded should be consistent with
@@ -586,11 +586,15 @@ module BlockCacheSystem {
       //  && WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.blocks)
       //  && s.machine.outstandingBlockWrites == map[]
       //)
+      //&& (
+      //  || s.machine.persistentIndirectionTable == IndirectionTableOfDisk(s.disk.blocks)
+      //  || s.machine.frozenIndirectionTable == Some(IndirectionTableOfDisk(s.disk.blocks))
+      //)
       && (
-        || s.machine.persistentIndirectionTable == IndirectionTableOfDisk(s.disk.blocks)
-        || s.machine.frozenIndirectionTable == Some(IndirectionTableOfDisk(s.disk.blocks))
+        || s.machine.superblock == SuperblockOfDisk(s.disk.blocks)
+        || s.machine.newSuperblock == Some(SuperblockOfDisk(s.disk.blocks))
       )
-      && (s.machine.outstandingIndirectionTableWrite.None? ==>
+      && (s.machine.superblockWrite.None? ==>
         || s.machine.persistentIndirectionTable == IndirectionTableOfDisk(s.disk.blocks)
       )
       && WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
@@ -986,10 +990,14 @@ module BlockCacheSystem {
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures M.Inv(k.machine, s'.machine)
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     M.WriteBackIndirectionTableRespStepPreservesInv(k.machine, s.machine, s'.machine, dop);
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma WriteBackIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1136,18 +1144,19 @@ module BlockCacheSystem {
     ensures s'.disk.reqReads[id1].loc.addr != s'.disk.reqWrites[id2].loc.addr
     {
       if (id1 == dop.id && s'.disk.reqReads[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr) {
-        var loc := dop.reqRead.loc;
+        //var loc := dop.reqRead.loc;
         //assert s.machine.ephemeralIndirectionTable.locs[ref] == loc;
         //assert id2 in s.disk.reqWrites;
         //assert RecordedWriteRequest(k, s, id2, s'.disk.reqWrites[id2].loc, s'.disk.reqWrites[id2].sector);
-        assert ValidNodeLocation(dop.reqRead.loc);
-        //assert dop.reqRead.loc.addr != 0;
-        //assert s'.disk.reqWrites[id2].loc.addr != 0;
+        //assert overlap(dop.reqRead.loc, s'.disk.reqWrites[id2].loc);
+        //assert ValidNodeLocation(dop.reqRead.loc);
+        overlappingLocsSameType(dop.reqRead.loc, s'.disk.reqWrites[id2].loc);
+        //assert ValidNodeLocation(s'.disk.reqWrites[id2].loc);
         //assert s'.disk.reqWrites[id2].sector.SectorNode?;
         //assert id2 in s.machine.outstandingBlockWrites;
         //assert s.machine.outstandingBlockWrites[id2].ref != ref ||
         //    s.machine.outstandingBlockWrites[id2].loc.addr != s.machine.ephemeralIndirectionTable.locs[ref].addr;
-        assert false;
+        //assert false;
       }
     }
   }
@@ -1203,13 +1212,11 @@ module BlockCacheSystem {
     requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
 
-    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
-
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraph(k, s') == PersistentGraph(k, s);
+    ensures EphemeralGraphOpt(k, s') == None
   {
-    assert IndirectionTableOfDisk(s.disk.blocks) == s'.machine.persistentIndirectionTable;
+    //assert IndirectionTableOfDisk(s.disk.blocks) == s'.machine.persistentIndirectionTable;
     /*
     forall ref | ref in s'.machine.ephemeralIndirectionTable.locs
     ensures WFIndirectionTableRefWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk, ref)
@@ -1411,17 +1418,92 @@ module BlockCacheSystem {
 
       forall ref | ref in indirectionTable.locs
       ensures WFIndirectionTableRefWrtDiskQueue(indirectionTable, s'.disk, ref)
-      ensures indirectionTable.locs[ref].addr != 0;
+      ensures ValidNodeLocation(indirectionTable.locs[ref])
       {
         assert ValidNodeLocation(indirectionTable.locs[ref]);
-        assert indirectionTable.locs[ref].addr != 0;
         assert WFIndirectionTableRefWrtDiskQueue(indirectionTable, s.disk, ref);
       }
 
       assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
       assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
           == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
-    } else {
+    } else if (ValidNodeLocation(req.loc)) {
+      if overlap(req.loc, Superblock1Location()) {
+        overlappingLocsSameType(req.loc, Superblock1Location());
+        assert false;
+      }
+      if overlap(req.loc, Superblock2Location()) {
+        overlappingLocsSameType(req.loc, Superblock2Location());
+        assert false;
+      }
+
+      if DiskHasSuperblock1(s.disk.blocks) {
+        assert DiskHasSuperblock1(s'.disk.blocks);
+        assert Superblock1OfDisk(s'.disk.blocks) == Superblock1OfDisk(s.disk.blocks);
+      }
+      if DiskHasSuperblock2(s.disk.blocks) {
+        assert DiskHasSuperblock2(s'.disk.blocks);
+        assert Superblock2OfDisk(s'.disk.blocks) == Superblock2OfDisk(s.disk.blocks);
+      }
+      assert SuperblockOfDisk(s'.disk.blocks) == SuperblockOfDisk(s.disk.blocks);
+      assert s'.disk.blocks[SuperblockOfDisk(s'.disk.blocks).indirectionTableLoc]
+          == s.disk.blocks[SuperblockOfDisk(s.disk.blocks).indirectionTableLoc];
+      assert IndirectionTableOfDisk(s'.disk.blocks)
+          == IndirectionTableOfDisk(s.disk.blocks);
+
+      assert WFDisk(s'.disk.blocks);
+      assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
+      assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
+    } else if (ValidJournalLocation(req.loc)) {
+      if overlap(req.loc, Superblock1Location()) {
+        overlappingLocsSameType(req.loc, Superblock1Location());
+        assert false;
+      }
+      if overlap(req.loc, Superblock2Location()) {
+        overlappingLocsSameType(req.loc, Superblock2Location());
+        assert false;
+      }
+      if overlap(req.loc, SuperblockOfDisk(s.disk.blocks).indirectionTableLoc) {
+        overlappingLocsSameType(req.loc, SuperblockOfDisk(s.disk.blocks).indirectionTableLoc);
+        assert false;
+      }
+
+      forall loc | ValidNodeLocation(loc)
+      ensures loc in s.disk.blocks ==> loc in s'.disk.blocks && s'.disk.blocks[loc] == s.disk.blocks[loc];
+      {
+        if overlap(req.loc, loc) {
+          overlappingLocsSameType(req.loc, loc);
+          assert false;
+        }
+      }
+
+      if DiskHasSuperblock1(s.disk.blocks) {
+        assert DiskHasSuperblock1(s'.disk.blocks);
+        assert Superblock1OfDisk(s'.disk.blocks) == Superblock1OfDisk(s.disk.blocks);
+      }
+      if DiskHasSuperblock2(s.disk.blocks) {
+        assert DiskHasSuperblock2(s'.disk.blocks);
+        assert Superblock2OfDisk(s'.disk.blocks) == Superblock2OfDisk(s.disk.blocks);
+      }
+      assert SuperblockOfDisk(s'.disk.blocks) == SuperblockOfDisk(s.disk.blocks);
+      assert s'.disk.blocks[SuperblockOfDisk(s'.disk.blocks).indirectionTableLoc]
+          == s.disk.blocks[SuperblockOfDisk(s.disk.blocks).indirectionTableLoc];
+      assert IndirectionTableOfDisk(s'.disk.blocks)
+          == IndirectionTableOfDisk(s.disk.blocks);
+
+      assert WFDisk(s'.disk.blocks);
+      assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
+      assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
+    } else if (ValidSuperblock1Location(req.loc)) {
+      assume false;
+      assert WFDisk(s'.disk.blocks);
+      assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
+      assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
+    } else if (ValidSuperblock2Location(req.loc)) {
+      assume false;
       assert WFDisk(s'.disk.blocks);
       assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
       assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)

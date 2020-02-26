@@ -195,6 +195,7 @@ module AsyncSectorDisk {
     && req.loc in s'.blocks
     && s'.blocks[req.loc] == req.sector
     && (forall loc | loc in s.blocks && !overlap(loc, req.loc) :: loc in s'.blocks && s'.blocks[loc] == s.blocks[loc])
+    && (forall loc | loc in s'.blocks && !overlap(loc, req.loc) :: loc in s.blocks)
     && ClosedUnderLogConcatenation(s'.blocks)
   }
 
