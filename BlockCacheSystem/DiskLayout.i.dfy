@@ -68,25 +68,40 @@ module DiskLayout {
     && loc.addr + loc.len <= (2 + NumJournalBlocks()) * 4096
   }
 
-  predicate method ValidIndirectionTableLocation(loc: Location) {
+  predicate method ValidIndirectionTableLocation(loc: Location)
+  ensures ValidIndirectionTableLocation(loc) ==>
+      !ValidJournalLocation(loc)
+  {
     && ValidIndirectionTableAddr(loc.addr) 
     && loc.len <= IndirectionTableMaxLength()
   }
 
-  predicate method ValidNodeLocation(loc: Location) {
+  predicate method ValidNodeLocation(loc: Location)
+  ensures ValidNodeLocation(loc) ==> !ValidJournalLocation(loc)
+  ensures ValidNodeLocation(loc) ==> !ValidIndirectionTableLocation(loc)
+  {
     && ValidNodeAddr(loc.addr)
     && loc.len <= NodeBlockSizeUint64()
   }
 
-  predicate method ValidSuperblock1Location(loc: Location) {
+  predicate method ValidSuperblock1Location(loc: Location)
+  ensures ValidSuperblock1Location(loc) ==> !ValidJournalLocation(loc)
+  ensures ValidSuperblock1Location(loc) ==> !ValidIndirectionTableLocation(loc)
+  ensures ValidSuperblock1Location(loc) ==> !ValidNodeLocation(loc)
+  {
     loc == Superblock1Location()
   }
 
-  predicate method ValidSuperblock2Location(loc: Location) {
+  predicate method ValidSuperblock2Location(loc: Location)
+  ensures ValidSuperblock2Location(loc) ==> !ValidJournalLocation(loc)
+  ensures ValidSuperblock2Location(loc) ==> !ValidIndirectionTableLocation(loc)
+  ensures ValidSuperblock2Location(loc) ==> !ValidNodeLocation(loc)
+  {
     loc == Superblock2Location()
   }
 
-  predicate method ValidLocation(loc: Location) {
+  predicate method ValidLocation(loc: Location)
+  {
     || ValidSuperblock1Location(loc)
     || ValidSuperblock2Location(loc)
     || ValidJournalLocation(loc)

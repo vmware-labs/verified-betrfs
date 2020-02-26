@@ -340,7 +340,9 @@ module BlockCache refines Transactable {
     && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.locs.Keys
     && s.outstandingIndirectionTableWrite.None?
     //&& s.outstandingBlockWrites == map[]
-    && s' == s.(outstandingIndirectionTableWrite := Some(dop.id))
+    && s' == s
+      .(outstandingIndirectionTableWrite := Some(dop.id))
+      .(frozenIndirectionTableLoc := dop.reqWrite.loc)
   }
 
   predicate WriteBackIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
