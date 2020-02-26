@@ -1397,6 +1397,46 @@ module BlockCacheSystem {
   {
   }
 
+  lemma ProcessWrite_PreservesOtherTypes(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+  requires Inv(k, s)
+  requires s.machine == s'.machine
+  requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
+  ensures !ValidSuperblock1Location(s.disk.reqWrites[id].loc) ==> Superblock1Location() in s.disk.blocks ==> Superblock1Location() in s'.disk.blocks && s'.disk.blocks[Superblock1Location()] == s.disk.blocks[Superblock1Location()]
+  ensures !ValidSuperblock1Location(s.disk.reqWrites[id].loc) ==> Superblock1Location() in s'.disk.blocks ==> Superblock1Location() in s.disk.blocks
+  ensures !ValidSuperblock2Location(s.disk.reqWrites[id].loc) ==> Superblock2Location() in s.disk.blocks ==> Superblock2Location() in s'.disk.blocks && s'.disk.blocks[Superblock2Location()] == s.disk.blocks[Superblock2Location()]
+  ensures !ValidSuperblock2Location(s.disk.reqWrites[id].loc) ==> Superblock2Location() in s'.disk.blocks ==> Superblock2Location() in s.disk.blocks
+  ensures !ValidJournalLocation(s.disk.reqWrites[id].loc) ==> forall loc | ValidJournalLocation(loc) :: loc in s.disk.blocks ==> loc in s'.disk.blocks && s'.disk.blocks[loc] == s.disk.blocks[loc]
+  ensures !ValidJournalLocation(s.disk.reqWrites[id].loc) ==> forall loc | ValidJournalLocation(loc) :: loc in s'.disk.blocks ==> loc in s.disk.blocks
+  ensures !ValidIndirectionTableLocation(s.disk.reqWrites[id].loc) ==> forall loc | ValidIndirectionTableLocation(loc) :: loc in s.disk.blocks ==> loc in s'.disk.blocks && s'.disk.blocks[loc] == s.disk.blocks[loc]
+  ensures !ValidIndirectionTableLocation(s.disk.reqWrites[id].loc) ==> forall loc | ValidIndirectionTableLocation(loc) :: loc in s'.disk.blocks ==> loc in s.disk.blocks
+  ensures !ValidNodeLocation(s.disk.reqWrites[id].loc) ==> forall loc | ValidNodeLocation(loc) :: loc in s.disk.blocks ==> loc in s'.disk.blocks && s'.disk.blocks[loc] == s.disk.blocks[loc]
+  ensures !ValidNodeLocation(s.disk.reqWrites[id].loc) ==> forall loc | ValidNodeLocation(loc) :: loc in s'.disk.blocks ==> loc in s.disk.blocks
+  {
+    forall loc | ValidLocation(loc) && overlap(s.disk.reqWrites[id].loc, loc)
+    ensures ValidSuperblock1Location(s.disk.reqWrites[id].loc) <==> ValidSuperblock1Location(loc)
+    ensures ValidSuperblock2Location(s.disk.reqWrites[id].loc) <==> ValidSuperblock2Location(loc)
+    ensures ValidJournalLocation(s.disk.reqWrites[id].loc) <==> ValidJournalLocation(loc)
+    ensures ValidIndirectionTableLocation(s.disk.reqWrites[id].loc) <==> ValidIndirectionTableLocation(loc)
+    ensures ValidNodeLocation(s.disk.reqWrites[id].loc) <==> ValidNodeLocation(loc)
+    {
+      overlappingLocsSameType(s.disk.reqWrites[id].loc, loc);
+    }
+    assert ValidSuperblock1Location(Superblock1Location());
+    assert ValidSuperblock2Location(Superblock2Location());
+
+    if !ValidJournalLocation(s.disk.reqWrites[id].loc) {
+      forall loc | ValidJournalLocation(loc)
+      ensures loc in s.disk.blocks ==> loc in s'.disk.blocks && s'.disk.blocks[loc] == s.disk.blocks[loc]
+      ensures loc in s'.disk.blocks ==> loc in s.disk.blocks
+      {
+        if overlap(s.disk.reqWrites[id].loc, loc) {
+          assert ValidJournalLocation(s.disk.reqWrites[id].loc);
+          assert false;
+        }
+      }
+    }
+  }
+
   lemma ProcessWritePreservesDiskCacheGraph(k: Constants, s: Variables, s': Variables, id: D.ReqId, indirectionTable: IndirectionTable)
   requires Inv(k, s)
   requires s.machine == s'.machine
@@ -1412,6 +1452,8 @@ module BlockCacheSystem {
   ensures DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
        == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache)
   {
+    ProcessWrite_PreservesOtherTypes(k, s, s', id);
+
     var req := s.disk.reqWrites[id];
     if (ValidIndirectionTableLocation(req.loc)) {
       assert WFDisk(s'.disk.blocks);
@@ -1428,7 +1470,7 @@ module BlockCacheSystem {
       assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
           == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
     } else if (ValidNodeLocation(req.loc)) {
-      if overlap(req.loc, Superblock1Location()) {
+      /*if overlap(req.loc, Superblock1Location()) {
         overlappingLocsSameType(req.loc, Superblock1Location());
         assert false;
       }
@@ -1449,14 +1491,14 @@ module BlockCacheSystem {
       assert s'.disk.blocks[SuperblockOfDisk(s'.disk.blocks).indirectionTableLoc]
           == s.disk.blocks[SuperblockOfDisk(s.disk.blocks).indirectionTableLoc];
       assert IndirectionTableOfDisk(s'.disk.blocks)
-          == IndirectionTableOfDisk(s.disk.blocks);
+          == IndirectionTableOfDisk(s.disk.blocks);*/
 
       assert WFDisk(s'.disk.blocks);
       assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
       assert DiskCacheGraph(indirectionTable, s.disk, s.machine.cache)
           == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache);
     } else if (ValidJournalLocation(req.loc)) {
-      if overlap(req.loc, Superblock1Location()) {
+      /*if overlap(req.loc, Superblock1Location()) {
         overlappingLocsSameType(req.loc, Superblock1Location());
         assert false;
       }
@@ -1490,7 +1532,7 @@ module BlockCacheSystem {
       assert s'.disk.blocks[SuperblockOfDisk(s'.disk.blocks).indirectionTableLoc]
           == s.disk.blocks[SuperblockOfDisk(s.disk.blocks).indirectionTableLoc];
       assert IndirectionTableOfDisk(s'.disk.blocks)
-          == IndirectionTableOfDisk(s.disk.blocks);
+          == IndirectionTableOfDisk(s.disk.blocks);*/
 
       assert WFDisk(s'.disk.blocks);
       assert WFIndirectionTableWrtDiskQueue(indirectionTable, s'.disk);
