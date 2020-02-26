@@ -4,8 +4,8 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 // Attach a BlockCache to a Disk
 //
 
-abstract module BlockCacheSystem {
-  import M : BlockCache
+module BlockCacheSystem {
+  import M = BlockCache
   import D = AsyncSectorDisk
 
   import opened Maps
@@ -13,25 +13,80 @@ abstract module BlockCacheSystem {
   import opened Options
   import opened AsyncSectorDiskModelTypes
   import opened NativeTypes
-  import opened LBAType
+  import opened DiskLayout
+  import opened SectorType
 
-  type Sector = M.Sector
   type DiskOp = M.DiskOp
 
   type Constants = AsyncSectorDiskModelConstants<M.Constants, D.Constants>
-  type Variables = AsyncSectorDiskModelVariables<M.Variables, D.Variables<Sector>>
+  type Variables = AsyncSectorDiskModelVariables<M.Variables, D.Variables>
 
-  type IndirectionTable = M.IndirectionTable
   type Reference = M.G.Reference
   type Node = M.G.Node
   type Op = M.Op
 
+  predicate DiskHasSuperblock1(blocks: imap<Location, Sector>)
+  {
+    && Superblock1Location() in blocks
+    && blocks[Superblock1Location()].SectorSuperblock?
+    && M.WFSuperblock(blocks[Superblock1Location()].superblock)
+  }
+
+  function Superblock1OfDisk(blocks: imap<Location, Sector>) : (su: Superblock)
+  requires DiskHasSuperblock1(blocks)
+  {
+    blocks[Superblock1Location()].superblock
+  }
+
+  predicate DiskHasSuperblock2(blocks: imap<Location, Sector>)
+  {
+    && Superblock2Location() in blocks
+    && blocks[Superblock2Location()].SectorSuperblock?
+    && M.WFSuperblock(blocks[Superblock2Location()].superblock)
+  }
+
+  function Superblock2OfDisk(blocks: imap<Location, Sector>) : (su: Superblock)
+  requires DiskHasSuperblock2(blocks)
+  {
+    blocks[Superblock2Location()].superblock
+  }
+
+  predicate DiskHasSuperblock(blocks: imap<Location, Sector>)
+  {
+    DiskHasSuperblock1(blocks) || DiskHasSuperblock2(blocks)
+  }
+
+  function SuperblockOfDisk(blocks: imap<Location, Sector>) : (su : Superblock)
+  requires DiskHasSuperblock(blocks)
+  ensures M.WFSuperblock(su)
+  {
+    if DiskHasSuperblock1(blocks) && DiskHasSuperblock2(blocks) then
+      M.SelectSuperblock(Superblock1OfDisk(blocks), Superblock2OfDisk(blocks))
+    else if DiskHasSuperblock1(blocks) then
+      Superblock1OfDisk(blocks)
+    else
+      Superblock2OfDisk(blocks)
+  }
+
+  predicate DiskHasIndirectionTable(blocks: imap<Location, Sector>)
+  {
+    && DiskHasSuperblock(blocks)
+    && ValidIndirectionTableLocation(SuperblockOfDisk(blocks).indirectionTableLoc)
+    && SuperblockOfDisk(blocks).indirectionTableLoc in blocks
+    && blocks[SuperblockOfDisk(blocks).indirectionTableLoc].SectorIndirectionTable?
+  }
+
+  function IndirectionTableOfDisk(blocks: imap<Location, Sector>) : IndirectionTable
+  requires DiskHasIndirectionTable(blocks)
+  {
+    blocks[SuperblockOfDisk(blocks).indirectionTableLoc].indirectionTable
+  }
+
   predicate WFDisk(blocks: imap<Location, Sector>)
   {
-    && var indirectionTableLoc := IndirectionTableLocation();
-    && indirectionTableLoc in blocks
-    && blocks[indirectionTableLoc].SectorIndirectionTable?
-    && M.WFCompleteIndirectionTable(blocks[indirectionTableLoc].indirectionTable)
+    && DiskHasSuperblock(blocks)
+    && DiskHasIndirectionTable(blocks)
+    && M.WFCompleteIndirectionTable(IndirectionTableOfDisk(blocks))
   }
 
   predicate WFIndirectionTableRefWrtDisk(indirectionTable: IndirectionTable, blocks: imap<Location,Sector>,
@@ -39,18 +94,12 @@ abstract module BlockCacheSystem {
   requires ref in indirectionTable.locs
   {
     && indirectionTable.locs[ref] in blocks
-    && blocks[indirectionTable.locs[ref]].SectorBlock?
+    && blocks[indirectionTable.locs[ref]].SectorNode?
   }
 
   predicate WFIndirectionTableWrtDisk(indirectionTable: IndirectionTable, blocks: imap<Location, Sector>)
   {
     && (forall ref | ref in indirectionTable.locs :: WFIndirectionTableRefWrtDisk(indirectionTable, blocks, ref))
-  }
-
-  function DiskIndirectionTable(blocks: imap<Location, Sector>) : IndirectionTable
-  requires WFDisk(blocks)
-  {
-    blocks[IndirectionTableLocation()].indirectionTable
   }
 
   function RefMapOfDisk(
@@ -78,44 +127,44 @@ abstract module BlockCacheSystem {
 
   function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires WFDisk(s.disk.blocks)
-  requires WFIndirectionTableWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
+  requires WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
   {
-    DiskGraph(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
+    DiskGraph(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
   }
 
-  function {:opaque} QueueLookupIdByLocation(reqWrites: map<D.ReqId, D.ReqWrite<Sector>>, loc: Location) : (res : Option<D.ReqId>)
+  function {:opaque} QueueLookupIdByLocation(reqWrites: map<D.ReqId, D.ReqWrite>, loc: Location) : (res : Option<D.ReqId>)
   ensures res.None? ==> forall id | id in reqWrites :: reqWrites[id].loc != loc
   ensures res.Some? ==> res.value in reqWrites && reqWrites[res.value].loc == loc
   {
     if id :| id in reqWrites && reqWrites[id].loc == loc then Some(id) else None
   }
 
-  predicate WFIndirectionTableRefWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables<Sector>, ref: Reference)
+  predicate WFIndirectionTableRefWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables, ref: Reference)
   requires ref in indirectionTable.locs
   {
     && (QueueLookupIdByLocation(disk.reqWrites, indirectionTable.locs[ref]).None? ==>
       && indirectionTable.locs[ref] in disk.blocks
-      && disk.blocks[indirectionTable.locs[ref]].SectorBlock?
+      && disk.blocks[indirectionTable.locs[ref]].SectorNode?
     )
   }
 
-  predicate WFIndirectionTableWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables<Sector>)
+  predicate WFIndirectionTableWrtDiskQueue(indirectionTable: IndirectionTable, disk: D.Variables)
   {
     && (forall ref | ref in indirectionTable.locs :: WFIndirectionTableRefWrtDiskQueue(indirectionTable, disk, ref))
   }
 
-  predicate WFReqWriteBlocks(reqWrites: map<D.ReqId, D.ReqWrite<Sector>>)
+  predicate WFReqWriteBlocks(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
-    forall id | id in reqWrites && M.ValidLocationForNode(reqWrites[id].loc) ::
-        reqWrites[id].sector.SectorBlock?
+    forall id | id in reqWrites && ValidNodeLocation(reqWrites[id].loc) ::
+        reqWrites[id].sector.SectorNode?
   }
 
-  function DiskQueueLookup(disk: D.Variables<Sector>, loc: Location) : Node
+  function DiskQueueLookup(disk: D.Variables, loc: Location) : Node
   requires WFDisk(disk.blocks)
   requires WFReqWriteBlocks(disk.reqWrites)
-  requires M.ValidLocationForNode(loc)
+  requires ValidNodeLocation(loc)
   requires !QueueLookupIdByLocation(disk.reqWrites, loc).Some? ==> loc in disk.blocks
-  requires !QueueLookupIdByLocation(disk.reqWrites, loc).Some? ==> disk.blocks[loc].SectorBlock?
+  requires !QueueLookupIdByLocation(disk.reqWrites, loc).Some? ==> disk.blocks[loc].SectorNode?
   {
     if QueueLookupIdByLocation(disk.reqWrites, loc).Some? then
       disk.reqWrites[QueueLookupIdByLocation(disk.reqWrites, loc).value].sector.block
@@ -123,7 +172,7 @@ abstract module BlockCacheSystem {
       disk.blocks[loc].block
   }
 
-  function DiskQueueCacheLookup(indirectionTable: IndirectionTable, disk: D.Variables<Sector>, cache: map<Reference, Node>, ref: Reference) : Node
+  function DiskQueueCacheLookup(indirectionTable: IndirectionTable, disk: D.Variables, cache: map<Reference, Node>, ref: Reference) : Node
   requires WFDisk(disk.blocks)
   requires M.WFIndirectionTable(indirectionTable)
   requires WFIndirectionTableWrtDiskQueue(indirectionTable, disk)
@@ -138,7 +187,7 @@ abstract module BlockCacheSystem {
     )
   }
 
-  function DiskCacheGraph(indirectionTable: IndirectionTable, disk: D.Variables<Sector>, cache: map<Reference, Node>) : map<Reference, Node>
+  function DiskCacheGraph(indirectionTable: IndirectionTable, disk: D.Variables, cache: map<Reference, Node>) : map<Reference, Node>
   requires WFDisk(disk.blocks)
   requires M.WFIndirectionTable(indirectionTable)
   requires WFIndirectionTableWrtDiskQueue(indirectionTable, disk)
@@ -211,8 +260,8 @@ abstract module BlockCacheSystem {
     && M.Init(k.machine, s.machine)
     && D.Init(k.disk, s.disk)
     && WFDisk(s.disk.blocks)
-    && WFIndirectionTableWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
-    && SuccessorsAgree(DiskIndirectionTable(s.disk.blocks).graph, PersistentGraph(k, s))
+    && WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(IndirectionTableOfDisk(s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && PersistentGraph(k, s).Keys == {M.G.Root()}
     && M.G.Successors(PersistentGraph(k, s)[M.G.Root()]) == iset{}
@@ -294,17 +343,45 @@ abstract module BlockCacheSystem {
   }
 
   predicate CorrectInflightIndirectionTableReads(k: Constants, s: Variables)
-  requires s.machine.Unready?
+  requires s.machine.LoadingOther?
   requires WFDisk(s.disk.blocks)
   {
-    s.machine.outstandingIndirectionTableRead.Some? ==> (
-      && var reqId := s.machine.outstandingIndirectionTableRead.value;
+    s.machine.indirectionTableRead.Some? ==> (
+      && var reqId := s.machine.indirectionTableRead.value;
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
-        s.disk.reqReads[reqId] == D.ReqRead(IndirectionTableLocation())
+        s.disk.reqReads[reqId] == D.ReqRead(s.machine.superblock.indirectionTableLoc)
       )
       && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.Some? ==>
-        s.disk.respReads[reqId] == D.RespRead(Some(M.SectorIndirectionTable(DiskIndirectionTable(s.disk.blocks))))
+        s.disk.respReads[reqId] == D.RespRead(Some(SectorIndirectionTable(IndirectionTableOfDisk(s.disk.blocks))))
+      )
+    )
+  }
+
+  predicate CorrectInflightSuperblockReads(k: Constants, s: Variables)
+  requires s.machine.LoadingSuperblock?
+  requires WFDisk(s.disk.blocks)
+  {
+    && s.machine.outstandingSuperblock1Read.Some? ==> (
+      && var reqId := s.machine.outstandingSuperblock1Read.value;
+      && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
+      && (reqId in s.disk.reqReads ==>
+        s.disk.reqReads[reqId] == D.ReqRead(Superblock1Location())
+      )
+      && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.Some? ==>
+        && Superblock1Location() in s.disk.blocks
+        && s.disk.respReads[reqId] == D.RespRead(Some(s.disk.blocks[Superblock1Location()]))
+      )
+    )
+    && s.machine.outstandingSuperblock2Read.Some? ==> (
+      && var reqId := s.machine.outstandingSuperblock2Read.value;
+      && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
+      && (reqId in s.disk.reqReads ==>
+        s.disk.reqReads[reqId] == D.ReqRead(Superblock2Location())
+      )
+      && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.Some? ==>
+        && Superblock2Location() in s.disk.blocks
+        && s.disk.respReads[reqId] == D.RespRead(Some(s.disk.blocks[Superblock2Location()]))
       )
     )
   }
@@ -316,7 +393,7 @@ abstract module BlockCacheSystem {
   requires s.machine.Ready?
   requires WFDisk(s.disk.blocks)
   {
-    && M.ValidLocationForNode(loc)
+    && ValidNodeLocation(loc)
     && (forall r | r in s.machine.ephemeralIndirectionTable.locs ::
         s.machine.ephemeralIndirectionTable.locs[r].addr == loc.addr ==> r == ref)
 
@@ -324,12 +401,12 @@ abstract module BlockCacheSystem {
         forall r | r in s.machine.frozenIndirectionTable.value.locs ::
         s.machine.frozenIndirectionTable.value.locs[r].addr == loc.addr ==> r == ref)
 
-    && (forall r | r in DiskIndirectionTable(s.disk.blocks).locs ::
-        DiskIndirectionTable(s.disk.blocks).locs[r].addr != loc.addr)
+    && (forall r | r in IndirectionTableOfDisk(s.disk.blocks).locs ::
+        IndirectionTableOfDisk(s.disk.blocks).locs[r].addr != loc.addr)
 
     && (id in s.disk.reqWrites ==>
       && s.disk.reqWrites[id].loc == loc
-      && s.disk.reqWrites[id].sector.SectorBlock?
+      && s.disk.reqWrites[id].sector.SectorNode?
     )
 
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
@@ -343,25 +420,69 @@ abstract module BlockCacheSystem {
       CorrectInflightBlockWrite(k, s, id, s.machine.outstandingBlockWrites[id].ref, s.machine.outstandingBlockWrites[id].loc)
   }
 
-  predicate CorrectInflightIndirectionTableWrites(k: Constants, s: Variables)
+  predicate CorrectInflightJournalWrite(k: Constants, s: Variables, id: D.ReqId)
   requires s.machine.Ready?
   requires WFDisk(s.disk.blocks)
+  {
+    && (id in s.disk.reqWrites ==>
+      && ValidJournalLocation(s.disk.reqWrites[id].loc)
+      && s.disk.reqWrites[id].sector.SectorJournal?
+    )
+
+    && !(id in s.disk.reqWrites && id in s.disk.respWrites)
+  }
+
+  predicate CorrectInflightJournalWrites(k: Constants, s: Variables)
+  requires s.machine.Ready?
+  requires WFDisk(s.disk.blocks)
+  {
+    forall id | id in s.machine.outstandingJournalWrites ::
+      CorrectInflightJournalWrite(k, s, id)
+  }
+
+  predicate CorrectInflightIndirectionTableWrites(k: Constants, s: Variables)
+  requires s.machine.Ready?
   {
     s.machine.outstandingIndirectionTableWrite.Some? ==> (
       && s.machine.frozenIndirectionTable.Some?
       && var reqId := s.machine.outstandingIndirectionTableWrite.value;
       && !(reqId in s.disk.reqWrites && reqId in s.disk.respWrites)
+      && s.machine.frozenIndirectionTableLoc.Some?
       && (reqId in s.disk.reqWrites ==>
           s.disk.reqWrites[reqId] ==
           D.ReqWrite(
-            IndirectionTableLocation(),
-            M.SectorIndirectionTable(
+            s.machine.frozenIndirectionTableLoc.value,
+            SectorIndirectionTable(
               s.machine.frozenIndirectionTable.value
             )
           )
       )
       && (reqId in s.disk.respWrites ==>
-        s.machine.frozenIndirectionTable == Some(DiskIndirectionTable(s.disk.blocks))
+        && s.machine.frozenIndirectionTableLoc.value in s.disk.blocks
+        && s.disk.blocks[s.machine.frozenIndirectionTableLoc.value].SectorIndirectionTable?
+        && s.machine.frozenIndirectionTable == Some(s.disk.blocks[s.machine.frozenIndirectionTableLoc.value].indirectionTable)
+      )
+    )
+  }
+
+  predicate CorrectInflightSuperblockWrites(k: Constants, s: Variables)
+  requires s.machine.Ready?
+  requires WFDisk(s.disk.blocks)
+  {
+    s.machine.superblockWrite.Some? ==> (
+      && s.machine.newSuperblock.Some?
+      && var reqId := s.machine.superblockWrite.value;
+      && !(reqId in s.disk.reqWrites && reqId in s.disk.respWrites)
+      && (s.machine.whichSuperblock == 0 || s.machine.whichSuperblock == 1)
+      && var loc := if s.machine.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
+      && (reqId in s.disk.reqWrites ==>
+        s.disk.reqWrites[reqId] ==
+          D.ReqWrite(loc, SectorSuperblock(s.machine.newSuperblock.value))
+      )
+      && (reqId in s.disk.respWrites ==>
+        && loc in s.disk.blocks
+        && s.disk.blocks[loc].SectorSuperblock?
+        && s.machine.newSuperblock == Some(s.disk.blocks[loc].superblock)
       )
     )
   }
@@ -371,21 +492,33 @@ abstract module BlockCacheSystem {
   predicate RecordedWriteRequest(k: Constants, s: Variables, id: D.ReqId, loc: Location, sector: Sector)
   {
     && s.machine.Ready?
-    && (match sector {
-      case SectorIndirectionTable(indirectionTable) => (
-        && s.machine.outstandingIndirectionTableWrite == Some(id)
-        && s.machine.frozenIndirectionTable == Some(indirectionTable)
-      )
-      case SectorBlock(block) => (
-        && id in s.machine.outstandingBlockWrites
-      )
-    })
+    && (sector.SectorIndirectionTable? ==>
+      && s.machine.outstandingIndirectionTableWrite == Some(id)
+      && s.machine.frozenIndirectionTable == Some(sector.indirectionTable)
+    )
+    && (sector.SectorNode? ==>
+      && id in s.machine.outstandingBlockWrites
+    )
+    && (sector.SectorSuperblock? ==>
+      s.machine.superblockWrite == Some(id)
+    )
+    && (sector.SectorJournal? ==>
+      id in s.machine.outstandingJournalWrites
+    )
   }
 
   predicate RecordedReadRequest(k: Constants, s: Variables, id: D.ReqId)
   {
     && (s.machine.Ready? ==> id in s.machine.outstandingBlockReads)
-    && (s.machine.Unready? ==> Some(id) == s.machine.outstandingIndirectionTableRead)
+    && (s.machine.LoadingOther? ==>
+      || Some(id) == s.machine.indirectionTableRead
+      || Some(id) == s.machine.journalFrontRead
+      || Some(id) == s.machine.journalBackRead
+    )
+    && (s.machine.LoadingSuperblock? ==>
+      || Some(id) == s.machine.outstandingSuperblock1Read
+      || Some(id) == s.machine.outstandingSuperblock2Read
+    )
   }
 
   predicate RecordedWriteRequests(k: Constants, s: Variables)
@@ -398,14 +531,14 @@ abstract module BlockCacheSystem {
     forall id | id in s.disk.reqReads :: RecordedReadRequest(k, s, id)
   }
 
-  predicate WriteRequestsUniqueLBAs(reqWrites: map<D.ReqId, D.ReqWrite<Sector>>)
+  predicate WriteRequestsUniqueLBAs(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
     forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].loc.addr == reqWrites[id2].loc.addr :: id1 == id2
   }
 
   predicate NoReadWriteConflicts(
       reqReads: map<D.ReqId, D.ReqRead>,
-      reqWrites: map<D.ReqId, D.ReqWrite<Sector>>)
+      reqWrites: map<D.ReqId, D.ReqWrite>)
   {
     forall id1, id2 | id1 in reqReads && id2 in reqWrites :: reqReads[id1].loc.addr != reqWrites[id2].loc.addr
   }
@@ -414,8 +547,8 @@ abstract module BlockCacheSystem {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk.blocks)
     && WFReqWriteBlocks(s.disk.reqWrites)
-    && WFIndirectionTableWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
-    && SuccessorsAgree(DiskIndirectionTable(s.disk.blocks).graph, PersistentGraph(k, s))
+    && WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
+    && SuccessorsAgree(IndirectionTableOfDisk(s.disk.blocks).graph, PersistentGraph(k, s))
     && NoDanglingPointers(PersistentGraph(k, s))
     && (s.machine.Ready? ==>
       && (s.machine.frozenIndirectionTable.Some? ==>
@@ -427,11 +560,11 @@ abstract module BlockCacheSystem {
         && s.machine.outstandingBlockWrites == map[]
       )
       && (
-        || s.machine.persistentIndirectionTable == DiskIndirectionTable(s.disk.blocks)
-        || s.machine.frozenIndirectionTable == Some(DiskIndirectionTable(s.disk.blocks))
+        || s.machine.persistentIndirectionTable == IndirectionTableOfDisk(s.disk.blocks)
+        || s.machine.frozenIndirectionTable == Some(IndirectionTableOfDisk(s.disk.blocks))
       )
       && (s.machine.outstandingIndirectionTableWrite.None? ==>
-        || s.machine.persistentIndirectionTable == DiskIndirectionTable(s.disk.blocks)
+        || s.machine.persistentIndirectionTable == IndirectionTableOfDisk(s.disk.blocks)
       )
       && WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
       && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(k, s))
@@ -440,8 +573,29 @@ abstract module BlockCacheSystem {
       && CorrectInflightBlockReads(k, s)
       && CorrectInflightBlockWrites(k, s)
       && CorrectInflightIndirectionTableWrites(k, s)
+      && CorrectInflightJournalWrites(k, s)
+      && CorrectInflightSuperblockWrites(k, s)
+      && s.machine.superblock == SuperblockOfDisk(s.disk.blocks)
     )
-    && (s.machine.Unready? ==>
+    && (s.machine.LoadingSuperblock? ==>
+      && CorrectInflightSuperblockReads(k, s)
+      && (s.machine.superblock1.SuperblockSuccess? ==>
+        && DiskHasSuperblock1(s.disk.blocks)
+        && s.machine.superblock1.value == Superblock1OfDisk(s.disk.blocks)
+      )
+      && (s.machine.superblock2.SuperblockSuccess? ==>
+        && DiskHasSuperblock2(s.disk.blocks)
+        && s.machine.superblock2.value == Superblock2OfDisk(s.disk.blocks)
+      )
+      && (s.machine.superblock1.SuperblockCorruption? ==>
+        !DiskHasSuperblock1(s.disk.blocks)
+      )
+      && (s.machine.superblock2.SuperblockCorruption? ==>
+        !DiskHasSuperblock2(s.disk.blocks)
+      )
+    )
+    && (s.machine.LoadingOther? ==>
+      && s.machine.superblock == SuperblockOfDisk(s.disk.blocks)
       && CorrectInflightIndirectionTableReads(k, s)
     )
     && WriteRequestsUniqueLBAs(s.disk.reqWrites)
@@ -459,10 +613,10 @@ abstract module BlockCacheSystem {
   }
 
   lemma QueueLookupIdByLocationInsert(
-      reqWrites: map<D.ReqId, D.ReqWrite<Sector>>,
-      reqWrites': map<D.ReqId, D.ReqWrite<Sector>>,
+      reqWrites: map<D.ReqId, D.ReqWrite>,
+      reqWrites': map<D.ReqId, D.ReqWrite>,
       id: D.ReqId,
-      req: D.ReqWrite<Sector>,
+      req: D.ReqWrite,
       loc: Location)
   requires id !in reqWrites
   requires reqWrites' == reqWrites[id := req]
@@ -499,17 +653,32 @@ abstract module BlockCacheSystem {
     }
   }
 
-  lemma WriteBackReqStepUniqueLBAs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
+  lemma WriteBackReqStepUniqueLBAs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
     ensures WriteRequestsUniqueLBAs(s'.disk.reqWrites)
   {
-    /*forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
+    forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
     ensures id1 == id2
     {
-      var loc := s'.disk.reqWrites[id1].loc;
-      if (loc == dop.reqWrite.loc) {
+      overlappingLocsSameType(
+          s'.disk.reqWrites[id1].loc,
+          s'.disk.reqWrites[id2].loc);
+
+      /*if (s'.disk.reqWrites[id1].loc == dop.reqWrite.loc) {
+        assert overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[id2].loc);
+        assert ValidNodeLocation(s'.disk.reqWrites[id1].loc);
+
+        if (ValidNodeLocation(s'.disk.reqWrites[id2].loc)) {
+          assert s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[id2].loc;
+        } else {
+          assert ValidLocation(s'.disk.reqWrites[id2].loc);
+          assert false;
+        }
+
+        assert s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[id2].loc;
+
         if (id1 in s.disk.reqWrites) {
           assert RecordedWriteRequest(k, s, id1, s.disk.reqWrites[id1].loc, s.disk.reqWrites[id1].sector);
           assert id1 in s.machine.outstandingBlockWrites;
@@ -517,13 +686,25 @@ abstract module BlockCacheSystem {
           assert s.machine.outstandingBlockWrites[id1].loc == dop.reqWrite.loc;
           assert false;
         }
+        if (id2 in s.disk.reqWrites) {
+          assert RecordedWriteRequest(k, s, id2, s.disk.reqWrites[id2].loc, s.disk.reqWrites[id2].sector);
+          assert id2 in s.machine.outstandingBlockWrites;
+          assert CorrectInflightBlockWrite(k, s, id2, s.machine.outstandingBlockWrites[id2].ref, s.machine.outstandingBlockWrites[id2].loc);
+          assert s.machine.outstandingBlockWrites[id2].loc == dop.reqWrite.loc;
+          assert false;
+        }
         assert id1 == dop.id;
         assert id2 == dop.id;
         assert id1 == id2;
-      } else {
+      } else if (s'.disk.reqWrites[id2].loc == dop.reqWrite.loc) {
         assert id1 == id2;
-      }
-    }*/
+      } else {
+        assert id1 in s.disk.reqWrites;
+        assert id2 in s.disk.reqWrites;
+        assert s.disk.reqWrites[id1].loc.addr == s.disk.reqWrites[id2].loc.addr;
+        assert id1 == id2;
+      }*/
+    }
   }
 
   lemma WriteBackReqStepPreservesDiskCacheGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
@@ -543,6 +724,8 @@ abstract module BlockCacheSystem {
          == DiskCacheGraph(indirectionTable', s'.disk, s'.machine.cache)
   {
     assert dop.id !in s.disk.reqWrites;
+
+    WriteBackReqStepUniqueLBAs(k, s, s', dop, ref);
 
     forall r | r in indirectionTable'.locs
     ensures WFIndirectionTableRefWrtDiskQueue(indirectionTable', s'.disk, r)
@@ -580,7 +763,7 @@ abstract module BlockCacheSystem {
         assert indirectionTable'.locs[ref] == dop.reqWrite.loc;
         assert QueueLookupIdByLocation(s'.disk.reqWrites, indirectionTable'.locs[ref]).Some?;
         assert QueueLookupIdByLocation(s'.disk.reqWrites, indirectionTable'.locs[ref]) == Some(dop.id);
-        assert s'.disk.reqWrites[dop.id].sector.SectorBlock?;
+        assert s'.disk.reqWrites[dop.id].sector.SectorNode?;
         assert r !in indirectionTable.locs;
 
         assert DiskQueueCacheLookup(indirectionTable, s.disk, s.machine.cache, r)
@@ -650,7 +833,26 @@ abstract module BlockCacheSystem {
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    WriteBackReqStepUniqueLBAs(k, s, s', dop, ref);
     WriteBackReqStepPreservesGraphs(k, s, s', dop, ref);
+
+    assert forall loc1, loc2 ::
+        ValidNodeLocation(loc1) ==>
+          ValidJournalLocation(loc2) ==>
+            !overlap(loc1, loc2);
+    assert ValidNodeLocation(dop.reqWrite.loc);
+    forall id | id in s'.machine.outstandingJournalWrites
+    ensures CorrectInflightJournalWrite(k, s', id)
+    {
+      assert CorrectInflightJournalWrite(k, s, id);
+      if (id in s'.disk.reqWrites) {
+        assert id != dop.id;
+        assert id in s.disk.reqWrites;
+        assert id in s.machine.outstandingJournalWrites;
+      }
+      assert CorrectInflightJournalWrite(k, s', id);
+    }
+    assert CorrectInflightJournalWrites(k, s');
   }
 
   lemma WriteBackRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -701,7 +903,7 @@ abstract module BlockCacheSystem {
     forall id1, id2 | id1 in s'.disk.reqReads && id2 in s'.disk.reqWrites
     ensures s'.disk.reqReads[id1].loc.addr != s'.disk.reqWrites[id2].loc.addr
     {
-      assert M.ValidLocationForNode(s'.disk.reqReads[id1].loc);
+      assert ValidNodeLocation(s'.disk.reqReads[id1].loc);
     }
   }
 
@@ -865,10 +1067,10 @@ abstract module BlockCacheSystem {
         //assert s.machine.ephemeralIndirectionTable.locs[ref] == loc;
         //assert id2 in s.disk.reqWrites;
         //assert RecordedWriteRequest(k, s, id2, s'.disk.reqWrites[id2].loc, s'.disk.reqWrites[id2].sector);
-        assert M.ValidLocationForNode(dop.reqRead.loc);
+        assert ValidNodeLocation(dop.reqRead.loc);
         //assert dop.reqRead.loc.addr != 0;
         //assert s'.disk.reqWrites[id2].loc.addr != 0;
-        //assert s'.disk.reqWrites[id2].sector.SectorBlock?;
+        //assert s'.disk.reqWrites[id2].sector.SectorNode?;
         //assert id2 in s.machine.outstandingBlockWrites;
         //assert s.machine.outstandingBlockWrites[id2].ref != ref ||
         //    s.machine.outstandingBlockWrites[id2].loc.addr != s.machine.ephemeralIndirectionTable.locs[ref].addr;
@@ -934,13 +1136,13 @@ abstract module BlockCacheSystem {
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraph(k, s') == PersistentGraph(k, s);
   {
-    assert DiskIndirectionTable(s.disk.blocks) == s'.machine.persistentIndirectionTable;
+    assert IndirectionTableOfDisk(s.disk.blocks) == s'.machine.persistentIndirectionTable;
     /*
     forall ref | ref in s'.machine.ephemeralIndirectionTable.locs
     ensures WFIndirectionTableRefWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk, ref)
     {
-      assert ref in DiskIndirectionTable(s.disk.blocks).locs;
-      assert WFIndirectionTableRefWrtDisk(DiskIndirectionTable(s.disk.blocks), s.disk.blocks, ref);
+      assert ref in IndirectionTableOfDisk(s.disk.blocks).locs;
+      assert WFIndirectionTableRefWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks, ref);
     }
     */
   }
@@ -1131,14 +1333,14 @@ abstract module BlockCacheSystem {
        == DiskCacheGraph(indirectionTable, s'.disk, s'.machine.cache)
   {
     var req := s.disk.reqWrites[id];
-    if (req.loc.addr == IndirectionTableAddr()) {
+    if (ValidIndirectionTableLocation(req.loc)) {
       assert WFDisk(s'.disk.blocks);
 
       forall ref | ref in indirectionTable.locs
       ensures WFIndirectionTableRefWrtDiskQueue(indirectionTable, s'.disk, ref)
       ensures indirectionTable.locs[ref].addr != 0;
       {
-        assert M.ValidLocationForNode(indirectionTable.locs[ref]);
+        assert ValidNodeLocation(indirectionTable.locs[ref]);
         assert indirectionTable.locs[ref].addr != 0;
         assert WFIndirectionTableRefWrtDiskQueue(indirectionTable, s.disk, ref);
       }
@@ -1178,7 +1380,7 @@ abstract module BlockCacheSystem {
     requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
 
     ensures WFDisk(s'.disk.blocks)
-    ensures WFIndirectionTableWrtDisk(DiskIndirectionTable(s'.disk.blocks), s'.disk.blocks)
+    ensures WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s'.disk.blocks), s'.disk.blocks)
     ensures s.machine.Ready? ==> WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
 
     ensures (
@@ -1194,7 +1396,7 @@ abstract module BlockCacheSystem {
     ProcessWritePreservesDiskCacheGraph(k, s, s', id, s.machine.ephemeralIndirectionTable);
 
     var req := s.disk.reqWrites[id];
-    if (req.loc == IndirectionTableLocation()) {
+    if (ValidIndirectionTableLocation(req.loc)) {
       var indirectionTable := s.machine.frozenIndirectionTable.value;
       DiskCacheGraphEqDiskGraph(k, s, indirectionTable);
 
@@ -1203,7 +1405,7 @@ abstract module BlockCacheSystem {
           == DiskGraph(s.machine.frozenIndirectionTable.value, s.disk.blocks)
           == PersistentGraph(k, s');
     } else {
-      var indirectionTable := DiskIndirectionTable(s.disk.blocks);
+      var indirectionTable := IndirectionTableOfDisk(s.disk.blocks);
 
       /*forall ref | ref in indirectionTable.graph
       ensures RefMapOfDisk(indirectionTable, s.disk.blocks)[ref]
@@ -1215,9 +1417,9 @@ abstract module BlockCacheSystem {
       }*/
 
       assert PersistentGraph(k, s)
-          == DiskGraph(DiskIndirectionTable(s.disk.blocks), s.disk.blocks)
-          == DiskGraph(DiskIndirectionTable(s.disk.blocks), s'.disk.blocks)
-          == DiskGraph(DiskIndirectionTable(s'.disk.blocks), s'.disk.blocks)
+          == DiskGraph(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
+          == DiskGraph(IndirectionTableOfDisk(s.disk.blocks), s'.disk.blocks)
+          == DiskGraph(IndirectionTableOfDisk(s'.disk.blocks), s'.disk.blocks)
           == PersistentGraph(k, s');
     }
   }
@@ -1277,8 +1479,4 @@ abstract module BlockCacheSystem {
   ensures s.disk.reqReads[id].loc in s.disk.blocks
   {
   }
-}
-
-module BetreeGraphBlockCacheSystem refines BlockCacheSystem {
-  import M = BetreeGraphBlockCache
 }

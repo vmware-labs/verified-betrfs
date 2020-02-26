@@ -58,6 +58,16 @@ module DiskLayout {
     && addr >= NodeBlockSizeUint64() * MinNodeBlockIndexUint64()
   }
 
+  predicate method {:opaque} ValidJournalLocation(loc: Location) {
+    //exists j: int :: addr == 0 <= j < NumJournalBlocks()
+    //    && 2 * 4096 + j * 4096
+    && loc.addr % 4096 == 0
+    && loc.addr >= 2*4096
+    && 0 <= (loc.addr - 2*4096) / 4096 < NumJournalBlocks()
+    && loc.addr <= 0xffff_ffff_ffff_ffff - loc.len
+    && loc.addr + loc.len <= (2 + NumJournalBlocks()) * 4096
+  }
+
   predicate method ValidIndirectionTableLocation(loc: Location) {
     && ValidIndirectionTableAddr(loc.addr) 
     && loc.len <= IndirectionTableMaxLength()
@@ -76,6 +86,14 @@ module DiskLayout {
     loc == Superblock2Location()
   }
 
+  predicate method ValidLocation(loc: Location) {
+    || ValidSuperblock1Location(loc)
+    || ValidSuperblock2Location(loc)
+    || ValidJournalLocation(loc)
+    || ValidIndirectionTableLocation(loc)
+    || ValidNodeLocation(loc)
+  }
+
   // Lemmas
 
   lemma ValidNodeAddrDivisor(addr: Addr) returns (i: int)
@@ -86,6 +104,7 @@ module DiskLayout {
     reveal_ValidNodeAddr();
     i := addr as int / NodeBlockSize() as int;
   }
+
   predicate overlap(loc: Location, loc': Location) {
     loc.addr == loc'.addr
   }
@@ -98,10 +117,16 @@ module DiskLayout {
     reveal_ValidNodeAddr();
   }
 
-  lemma ValidNodeAddr0()
-  ensures ValidNodeAddr(0)
+  lemma overlappingLocsSameType(loc1: Location, loc2: Location)
+  requires ValidLocation(loc1)
+  requires ValidLocation(loc2)
+  requires overlap(loc1, loc2)
+  ensures ValidSuperblock1Location(loc1) <==> ValidSuperblock1Location(loc2)
+  ensures ValidSuperblock2Location(loc1) <==> ValidSuperblock2Location(loc2)
+  ensures ValidJournalLocation(loc1) <==> ValidJournalLocation(loc2)
+  ensures ValidIndirectionTableLocation(loc1) <==> ValidIndirectionTableLocation(loc2)
+  ensures ValidNodeLocation(loc1) <==> ValidNodeLocation(loc2)
   {
-    reveal_ValidNodeAddr();
   }
 
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr
