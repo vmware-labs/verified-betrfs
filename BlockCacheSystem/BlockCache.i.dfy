@@ -333,6 +333,7 @@ module BlockCache refines Transactable {
     && s.Ready?
     && s.frozenIndirectionTable.Some?
     && ValidIndirectionTableLocation(dop.reqWrite.loc)
+    && s.newSuperblock.None?
     && !overlap(
           dop.reqWrite.loc,
           s.superblock.indirectionTableLoc)
@@ -342,7 +343,7 @@ module BlockCache refines Transactable {
     //&& s.outstandingBlockWrites == map[]
     && s' == s
       .(outstandingIndirectionTableWrite := Some(dop.id))
-      .(frozenIndirectionTableLoc := dop.reqWrite.loc)
+      .(frozenIndirectionTableLoc := Some(dop.reqWrite.loc))
   }
 
   predicate WriteBackIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -731,8 +732,10 @@ module BlockCache refines Transactable {
     && s.Ready?
     && dop.NoDiskOp?
     && s.outstandingIndirectionTableWrite.None?
+    && s.superblockWrite.None?
     && s' ==
         s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
+         .(frozenIndirectionTableLoc := None)
   }
 
   predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
@@ -1004,6 +1007,8 @@ module BlockCache refines Transactable {
     && OverlappingWritesEqForIndirectionTable(k, s, s.persistentIndirectionTable)
     && OutstandingWriteValidNodeLocation(s.outstandingBlockWrites)
     && AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
+    && (s.superblockWrite.Some? <==> s.newSuperblock.Some?)
+    && (s.frozenIndirectionTableLoc.Some? ==> s.frozenIndirectionTable.Some?)
 
     // This isn't necessary for the other invariants in this file,
     // but it is useful for the implementation.
