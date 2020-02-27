@@ -1,8 +1,306 @@
-
 \newcommand{ironstar}{Iron{\star}}
 \newcommand{bepsilon}{B^{\epsilon}}
 \newcommand{veribetrfs}{\texttt{\textit{veri}betrfs}}
 
+For half a century, we have known that a program is constructed by
+writing code, testing, and debugging. Program verification promises
+an alternative process in which no bug escapes the compiler.
+
+Convincing a mechanical checker that a program is correct requires
+resolving a fantastic degree of detail.
+The SMART system offered an extension to Paxos~\cite{smart}.
+Its authors provided a hand-written proof at a level of detail intended
+to satisfy a mechanical checker, although it was never checked.
+Just the proof of the SMART algorithm, without an imperative implementation,
+is 70 pages of text~\cite{smart-proof}.
+If we are to apply verification as a practical engineering tool,
+we must rely heavily on automation to retire tedious logic obligations,
+focusing humans on just the subtle invariants that reflect the insights
+of the system design.
+
+The authors have verified several systems using highly-automated
+verification tools. This paper conveys the experience of learning and using
+such tools. We argue that strong automation is the path forward for
+large-scale systems verification, and we highlight open challenges.
+
+\section{A verified codebase}
+
+The code base of a verified system has three parts:
+the specification, the implementation, and the proof.
+
+The \textit{specification} defines the application spec
+(what does the program do?) and the environment spec
+(what can the program assume about its environment?).
+
+
+The \textit{implementation} is the source code that will compile
+into the final program. It is imperative (has in-place updates) and
+uses machine-supported datatypes (uint64) to give the programmer
+enough control to achieve great performance.
+
+The \textit{proof} files illuminate the invariants and structure
+the arguments that show that the implementation does what the specification
+says.
+
+A typical specification is smaller than 1/10^{th} the size of
+the implementation it constrains.
+In {\ironstar}, the spec files carry a distinguished file extension,
+and spec files may only include other spec files.
+If the developer reads all of the spec files, she need read no other
+files to understand what the verified program does.
+
+An {\ironstar} proof text is around five times
+as big as the implementation code.
+The effort spent constructing and maintaining it is in lieu of
+maintaining a conventional test suite.
+
+\section{A day in the life of a verification engineer}
+
+At the large scale, the team's task is to write a fast implementation,
+and show that its behavior matches the spec. This task breaks down into
+making smaller arguments; a typical argument might say ``splitting a node
+in a tree creates a new tree that represents all the same key-value pairs.''
+
+When using an automation-centric tools, the engineer begins each such
+argument the same way: She states the argument, and then offers an empty
+proof:
+\begin{verbatim} % TODO get an environment that numbers lines.
+lemma TODOPlausibleLemmaName(before:Tree, after:Tree, pivot:Key)
+  requires TreeInv(a)
+  requires SplitNodeRelation(before, after, pivot)
+  ensures TreeInv(b)
+{
+}
+\end{verbatim}
+Then she asks the verifier to try to verify the lemma.
+This is analogous to testing every possible argument assignment,
+but of course the mechanism is not actually model checking, since
+there are infinite such assignments.
+
+Sometimes, automation
+successfully opens the tall tree of definitions under
+\texttt{SplitNodeRelation} and \texttt{TreeInv}, and confirms the validity
+of the lemma.
+More commonly, the verifier cannot convince itself, and it reports
+\texttt{TODO real text at line 4}.
+Maybe the lemma is invalid: The definitions don't actually
+do what the engineer hoped, either because of a deep misunderstanding
+or due to a minor off-by-one error.
+This is why we're using automation in the first place; it's a failed test
+pointing to a flaw in the designer's understanding.
+Or perhaps the lemma is valid, but the automation can't see why.
+This is by far the more common case; it's the tax we pay to enjoy
+exhaustive testing.
+
+However, the engineer's action in either case is the same: she must
+elaborate the proof until either the verifier admits its validity
+or she discovers an underlying error.
+
+The currency of definitions is are quantified logical statments.
+\verb{TreeInv(t)} is a list of conjuncts; one says that the tree
+is acyclic:
+\begin{verbatim}
+predicate Acyclic(t) {
+  forall p, i, j :: Path(p, t) && i!=j ==> p[i] != p[i]
+}
+\end{verbatim}
+This says that no path through the tree visits the same node twice.
+
+Suppose the engineer wonders if acyclicity is the thing tripping up the
+verifier. So she replaces the lemma proof with:
+\begin{verbatim}
+{
+  assert Acyclic(b);
+}
+\end{verbatim}
+The verifier will respond in one of the following ways:
+\begin{itemize}
+  \item line 6 assertion failed: Yep, acyclicity is the difficult part,
+  \textit{and if we assume it's true, the postcondition verifies}.
+  \item line 4 postcondition failed: acyclicity was valid; some other
+  conjunct in TreeInv(b) is the problem.
+  \item \textit{both} errors: The verified needs help seeing more than one
+  conjunct in \texttt{TreeInv}.
+  \item neither error: the assertion itself has given the verifier a
+  sufficient hint to verify the lemma (see \S\ref{observes}).
+  \item \textit{Timeout}. See \S\ref{timeouts}.
+\end{itemize}
+The first two cases are by far the most common: the engineer has successfully
+"bisected" the problem, either implicating or vindicating the \verb{Acyclic}
+conjunct.
+
+She applies this bisection technique recursively, just as she would use
+printf bisection debugging to back a deterministic runtime test failure into a
+corner.
+If \verb{Acyclic(b)} is unproven, she drills down:
+\begin{verbatim}
+{
+  forall p, i, j | Path(p, t) && i!=j
+    ensures p[i] != p[i]
+  {
+  }
+  assert Acyclic(b);
+}
+\end{verbatim}
+The forall brings new variables \verb{p, i, j} into scope for use in its
+proof body which, again, begins as \verb{\{\}}.
+The verifier complains about the postcondition on line 7.
+It accepts the assert on line 10, predicated on the assumption that the
+engineer will ultimately correct the failing forall statement.
+
+Now that \verb{p, i, j} have been introduced, the engineer may drill
+further down into definitions to argue why \verb{p[i] != p[i]}.
+In this exmaple, she would begin a proof by contradiction:
+If there exists a cyclic path \verb{pb} in \verb{b},
+then construct a witness path \verb{pa} in tree \verb{a} that is
+cyclic, which contradicts the given \verb{Acyclic(a)}.
+
+
+This iterative, user-guided debugging approach stands in contrast to other
+common verification development methodologies.
+The engineer isn't confronted with a half-transformed proof goal
+with a hundred subterms, forcing her to
+think in the verifier's internal representation.
+Nor does she dig through a counterexample with a value assigned for each
+of hundreds of in-scope variables, only two of which are actually relevant.
+Both of those approaches present information to the user that scales up with
+the system size, and both ask the user to interpret the system's model.
+By contrast, bisection proof debugging lets the engineer develop her own
+mental model by probing the verification Oracle in a game of twenty-questions.
+The benefit of letting the engineer steer the story and maintain her own
+mental model outweighs the fact that she must make a logarithmic number of
+inquiries to reach the root cause, especially because each inquiry is answered
+rapidly.
+
+
+Returning to the possible verifier responses: in case 3, the verifier
+complains about both the assertion and the postcondition; the engineer
+has failed to bisect the problem. It could be as simple as the assertion
+being incorrect, or it could be that there is more than one problem
+(error in definition, or missing proof) to identify. The engineer proceeds
+the same as above, but has more ground to cover before she's done.
+
+Case 4 is a victory: by introducing the assertion, the engineer has
+triggered the automation to exploit a quantifier it hadn't considered
+automatically, and it has completed the proof.
+
+Case 5, a timeout, is a meta-problem: not only can the verifier not
+see the proof, but the automation strategy has broken down, and requires
+human intervention to fix. These issues are rare: we bisect-debug all day,
+but have to resolve a timeout perhaps once a week.
+We discuss automation control and timeout mitigation in Section~\ref{timeout}.
+
+Other than timeout management, note that the nitty-gritty work of verification
+engineering feels a lot like printf-debugging a deterministic test failure.
+The process is familiar, easy to learn, and it generally requires deep insight
+only about the system being debugged, not about the verification tool itself.
+
+
+TODO the glory of quantified vs recursive definitions.
+
+\subsection{Structuring the proof}
+
+While the low-level mechanics are simple, the verification engineer does
+need to adopt new disciplines to organize her proof text for scale and
+maintainability. The goal is the same as organizing a big software system
+into modules for maintainability, but the techniques for arranging a
+proof argument are different.
+
+A single line of an imperative program may be correct for many reasons,
+at multiple levels of abstraction, all of which must hold to support the
+program's correctness. For example, in this line:
+\begin{verbatim}
+  node->writeToBlock(lba)
+\end{verbatim}
+Dereferencing \verb{node} is safe because \verb{node} was allocated earlier
+in the method and not freed. The write to address \verb{lba} is safe
+because \verb{lba} was returned from a library function managing free space
+on the device. The content written, a marshalled representation of \verb{node},
+is appropriate because later in the program we'll store a pointer to \verb{lba}
+that expects a representation of \verb{node} to appear there.
+
+Common static analysis tools can confirm non-null properties like the first
+one. The other arguments are at higher levels of abstraction, interact with
+distant lines of code in the program, and may even interect with other
+instances of the process, such as before or after a crash event that resets
+RAM. In a conventional program, each informal argument might appear in a
+comment on the code line, or might be inferrable from the name of
+the methods or the methods it calls, or may appear in an Engilsh design
+document from two years ago, or may appear nowhere but in an engineer's
+memory.
+
+Mechanical verification requires that each such argument be written down.
+Trying to cram all of these arguments into the ground-level source code
+is overwhelming; the more abstract arguments are weighed down with the
+tedium of implementation. In {\ironstar}, we employ state machine refinement
+to organize proof text%
+\footnote{We contrast this use with other verification efforts that also
+use refinement, but in service to the verification system, to divide the
+proof up into layers so fine that automation can leap from one to the next
+without assistance. In {\ironstar}, refinement layers are introduced at
+a granularity that humans find natural, just as developers choose appropriate
+granularity boundaries for functional abstraction or object encapsulation.
+}
+by separating it along the axis of abstraction.
+
+% TODO discuss app specification in more detail somewhere?
+The app spec is a TLA+-style state machine.
+In {\veribetrfs}, the spec is a key-value dictionary extended with
+a \verb{flush} operation and a \verb{crash} event that interleaves
+at the whim of the environment. These specs are all written with immutable
+data structures and mathematical conveniences (unbounded integers, infinite
+sets and sequences) that let us focus on the behavior while ignoring
+implementation details.
+
+The first layer of refinement introduces the structure of a {\bepsilon}
+tree, while abstracting the nodes as infinite sets mapping every key to
+a child node.
+Proof text at this layer argues that the tree state machine maintains the
+necessary invariants such that the tree acts exactly like a dictionary.
+
+The second layer refines the infinite nodes to ``pivot'' nodes, which
+map keys from A---G to one child, H---N to the next, and so on. Proof
+text at this layer argues that pivot nodes are a (finite!) shorthand
+for infinite maps, and hence that {\bepsilon}{\langle}pivot{\rangle} is
+still a dictionary.
+
+The previous layer supposed a disk that accepts the Node abstract data
+type as arguments to \verb{write}; the third layer refines the Pivot Node to
+have a marshalled representation. Proof text at this layer argues
+that \verb{unmarshall(marshall(n) == n}, and thus that, when
+a {\bepsilon} tree made of marshallable nodes is connected to a disk
+that does I/O on byte strings, the system behaves the same as the prior layer.
+
+Finally, the bottom-most layer replaces immutable datatypes with mutable
+ones (to exploit the performance of in-place updates), and replaces
+mathematical integers with machine \verb{uint64}s. Proof text at this
+layer shows that aliasing is controlled enough that mutable data structures
+mimic their immutable models above. It also shows that bounds are respected
+so that \verb{uint64}s don't overflow.
+
+Each of the arguments is necessary to stitch the proof together from the bottom
+layer implementation to the top level application spec.
+The important observation from this tour is that the refinement layers
+act as narrow interfaces along the axis of abstraction: arguments about
+high-level concepts like {\bepsilon} tree structure may omit details
+about marshalling and register bounds; conversely, low-level arguments
+may attend only to detailed reasoning, as the abstract properties were
+dispensed with elsewhere.
+
+Module design in an imperative program creates conceptual boundaries,
+so that an engineer can study and modify part of the program while being
+insulated from interactions with most of the other lines of code in the
+system.
+Likewise, we have found this organization enables us to study and modify
+parts of our verified system while insulating our changes from other
+parts. Most importantly, it means that we can introduce a new feature
+(like sub-node reads) while leaving most of the proof text undisturbed.
+Because proof is 80\% of the text of our verified system,
+incremental and modular maintenance is as important for the proof as
+for the imperaive code.
+
+
+------------------------------------------------------------------------------
 Systems verification is picking up momentum.
 The promise is that we might someday replace a methodology of
 write-test-debug with a comprehensive compile-time confirmation
