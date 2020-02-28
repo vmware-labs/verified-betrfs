@@ -127,7 +127,8 @@ module DiskLayout {
   }
 
   predicate overlap(loc: Location, loc': Location) {
-    loc.addr == loc'.addr
+    && loc.addr as int + loc.len as int >= loc'.addr as int
+    && loc'.addr as int + loc'.len as int >= loc.addr as int
   }
 
   lemma ValidNodeAddrMul(i: uint64)

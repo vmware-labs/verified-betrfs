@@ -65,6 +65,7 @@ module AsyncSectorDisk {
   datatype Step =
     | RecvReadStep
     | RecvWriteStep
+    | RecvWrite2Step
     | AckReadStep
     | AckWriteStep
     | StutterStep
@@ -123,6 +124,7 @@ module AsyncSectorDisk {
     match step {
       case RecvReadStep => RecvRead(k, s, s', dop)
       case RecvWriteStep => RecvWrite(k, s, s', dop)
+      case RecvWrite2Step => RecvWrite2(k, s, s', dop)
       case AckReadStep => AckRead(k, s, s', dop)
       case AckWriteStep => AckWrite(k, s, s', dop)
       case StutterStep => Stutter(k, s, s', dop)

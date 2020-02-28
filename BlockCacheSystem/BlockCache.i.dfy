@@ -392,7 +392,9 @@ module BlockCache refines Transactable {
         && dop.ReqWriteOp?
         && dop.reqWrite.sector == SectorJournal(jr)
         && dop.reqWrite.loc == JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64)
-        && s' == s.(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
+        && s' == s
+            .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
+            .(writtenJournalLen := s.writtenJournalLen + JournalRangeLen(jr))
       )
     && (JournalRangeLen(jr) + startPos > NumJournalBlocks() as int ==>
         && dop.ReqWrite2Op?
@@ -400,7 +402,9 @@ module BlockCache refines Transactable {
         && dop.reqWrite1.loc == JournalRangeLocation(startPos as uint64, NumJournalBlocks() - startPos as uint64)
         && dop.reqWrite2.sector == SectorJournal(JournalRangeSuffix(jr, NumJournalBlocks() as int - startPos))
         && dop.reqWrite2.loc == JournalRangeLocation(0, JournalRangeLen(jr) as uint64 - (NumJournalBlocks() - startPos as uint64))
-        && s' == s.(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id1, dop.id2})
+        && s' == s
+            .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id1, dop.id2})
+            .(writtenJournalLen := s.writtenJournalLen + JournalRangeLen(jr))
       )
   }
 
@@ -459,7 +463,6 @@ module BlockCache refines Transactable {
     && s' == s
         .(newSuperblock := Some(newSuperblock))
         .(superblockWrite := Some(dop.id))
-        .(frozenIndirectionTableLoc := None)
         .(syncReqs := syncReqs3to2(s.syncReqs))
   }
 
@@ -469,15 +472,27 @@ module BlockCache refines Transactable {
     && dop.RespWriteOp?
     && Some(dop.id) == s.superblockWrite
     && s.newSuperblock.Some?
+    && s'.Ready?
+    && var isUpdatingTable :=
+        (s.newSuperblock.value.indirectionTableLoc != s.superblock.indirectionTableLoc);
+    && (isUpdatingTable ==> s.frozenIndirectionTable.Some?)
     && s' == s.(superblockWrite := None)
         .(superblock := s.newSuperblock.value)
         .(newSuperblock := None)
         .(whichSuperblock := if s.whichSuperblock == 0 then 1 else 0)
         .(syncReqs := syncReqs2to1(s.syncReqs))
+        .(writtenJournalLen :=
+            if !isUpdatingTable then s.writtenJournalLen else
+                s.writtenJournalLen - s.frozenJournalPosition)
+        .(frozenJournalPosition :=
+            if !isUpdatingTable then s.frozenJournalPosition else 0)
         .(frozenIndirectionTableLoc :=
-            if s.frozenIndirectionTableLoc.Some? &&
-               s.frozenIndirectionTableLoc.value.addr == s.newSuperblock.value.indirectionTableLoc.addr then None else s.frozenIndirectionTableLoc
-         )
+            if !isUpdatingTable then s.frozenIndirectionTableLoc else None)
+        .(frozenIndirectionTable :=
+            if !isUpdatingTable then s.frozenIndirectionTable else None)
+        .(persistentIndirectionTable :=
+            if !isUpdatingTable
+              then s.persistentIndirectionTable else s.frozenIndirectionTable.value)
   }
 
   predicate NoPredecessors(graph: map<Reference, seq<Reference>>, ref: Reference)
@@ -727,7 +742,7 @@ module BlockCache refines Transactable {
     && s'.outstandingBlockReads == map[]
     && s'.inMemoryJournal == []
     && s'.outstandingJournalWrites == {}
-    && s'.writtenJournalLen == JournalRangeLen(fullRange)
+    && s'.writtenJournalLen == s.superblock.journalLen as int
     && JournalRangeParses(fullRange, s'.replayJournal)
     && s'.superblock == s.superblock
     && s'.whichSuperblock == s.whichSuperblock
@@ -1035,6 +1050,15 @@ module BlockCache refines Transactable {
     && (s.superblockWrite.Some? <==> s.newSuperblock.Some?)
     && (s.frozenIndirectionTableLoc.Some? ==> s.frozenIndirectionTable.Some?)
 
+    && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
+    && 0 <= s.superblock.journalLen as int <= s.writtenJournalLen
+
+    && (s.frozenIndirectionTable.Some? ==> (
+      && 0 <= s.frozenJournalPosition <= NumJournalBlocks() as int
+      && s.superblock.journalLen as int <= s.writtenJournalLen
+      && s.frozenJournalPosition <= s.writtenJournalLen
+    ))
+
     // This isn't necessary for the other invariants in this file,
     // but it is useful for the implementation.
     && AllLocationsForDifferentRefsDontOverlap(s.ephemeralIndirectionTable)
@@ -1046,15 +1070,36 @@ module BlockCache refines Transactable {
     ))
 
     && (s.outstandingIndirectionTableWrite.Some? ==> (
+      && s.frozenIndirectionTableLoc.Some?
+    ))
+    && (s.frozenIndirectionTableLoc.Some? ==> (
       && s.frozenIndirectionTable.Some?
       && WFCompleteIndirectionTable(s.frozenIndirectionTable.value)
     ))
 
     && WFSuperblock(s.superblock)
     && (s.newSuperblock.Some? ==>
+        && (
+          || s.newSuperblock.value.indirectionTableLoc == s.superblock.indirectionTableLoc
+          || (
+            && s.frozenIndirectionTableLoc.Some?
+            && s.newSuperblock.value.indirectionTableLoc == s.frozenIndirectionTableLoc.value
+          )
+        )
+
         && WFSuperblock(s.newSuperblock.value)
         && s.newSuperblock.value.counter ==
             IncrementSuperblockCounter(s.superblock.counter)
+        && (s.newSuperblock.value.indirectionTableLoc == s.superblock.indirectionTableLoc ==>
+            && s.newSuperblock.value.journalStart == s.superblock.journalStart
+            && s.newSuperblock.value.journalLen as int <= s.writtenJournalLen
+        )
+        && (s.newSuperblock.value.indirectionTableLoc != s.superblock.indirectionTableLoc ==>
+            && s.outstandingIndirectionTableWrite.None?
+            && s.newSuperblock.value.journalStart as int == JournalPosAdd(s.superblock.journalStart as int, s.frozenJournalPosition)
+            && s.frozenJournalPosition as int + s.newSuperblock.value.journalLen as int
+                <= s.writtenJournalLen
+        )
     )
     && (s.frozenIndirectionTableLoc.Some? ==> (
       && ValidIndirectionTableLocation(s.frozenIndirectionTableLoc.value)
@@ -1163,6 +1208,14 @@ module BlockCache refines Transactable {
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
+      /*if s'.frozenIndirectionTable.Some? {
+        if s.newSuperblock.value.indirectionTableLoc == s.superblock.indirectionTableLoc {
+          assert s'.superblock.journalLen as int <= s'.frozenJournalPosition;
+        } else {
+          assert s'.superblock.journalLen as int <= s'.frozenJournalPosition;
+        }
+      }*/
+
       assert InvReady(k, s');
     }
   }

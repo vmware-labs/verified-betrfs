@@ -446,11 +446,18 @@ module BlockCacheSystem {
     && (id in s.disk.reqWrites ==>
       && ValidJournalLocation(s.disk.reqWrites[id].loc)
       && s.disk.reqWrites[id].sector.SectorJournal?
+
+      && s.machine.superblock.journalStart < NumJournalBlocks()
+      && s.machine.superblock.journalLen <= NumJournalBlocks()
+      && 0 <= s.machine.writtenJournalLen <= NumJournalBlocks() as int
+      && 0 <= s.machine.superblock.journalLen <= s.machine.writtenJournalLen as uint64
+
       && locContainedInCircularJournalRange(
           s.disk.reqWrites[id].loc,
             M.JournalPosAdd(s.machine.superblock.journalStart as int,
                 s.machine.superblock.journalLen as int) as uint64,
-            s.machine.writtenJournalLen as uint64)
+            s.machine.writtenJournalLen as uint64
+                - s.machine.superblock.journalLen)
     )
 
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
@@ -1147,7 +1154,7 @@ module BlockCacheSystem {
   lemma WriteBackJournalReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
     requires Inv(k, s)
     requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, jr)
-    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop)
     ensures FrozenGraphOpt.requires(k, s')
     ensures EphemeralGraph.requires(k, s')
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
@@ -1194,7 +1201,7 @@ module BlockCacheSystem {
   lemma WriteBackJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
     requires Inv(k, s)
     requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, jr)
-    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop)
     ensures Inv(k, s')
   {
     WriteBackJournalReqStepPreservesGraphs(k, s, s', dop, jr);
@@ -1222,6 +1229,61 @@ module BlockCacheSystem {
     forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
     ensures id1 == id2
     {
+    }
+
+    assert s.machine.superblock.journalStart < NumJournalBlocks();
+    assert s.machine.superblock.journalLen <= NumJournalBlocks();
+    assert 0 <= s.machine.writtenJournalLen <= NumJournalBlocks() as int;
+    assert 0 <= s.machine.superblock.journalLen <= s.machine.writtenJournalLen as uint64;
+
+    forall id | id in s'.machine.outstandingJournalWrites
+    ensures CorrectInflightJournalWrite(k, s', id)
+    {
+      if id == dop.id {
+        var startPos := M.JournalPosAdd(
+          s.machine.superblock.journalStart as int,
+          s.machine.writtenJournalLen);
+
+
+        if M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                s.machine.superblock.journalLen as int) + 
+              s.machine.writtenJournalLen + JournalRangeLen(jr)
+                  - s.machine.superblock.journalLen as int
+              <= NumJournalBlocks() as int {
+
+          assert M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                    s.machine.writtenJournalLen) as uint64
+              >= M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                    s.machine.superblock.journalLen as int) as uint64;
+
+          assert JournalPoint(startPos as uint64) as uint64
+              >= JournalPoint(M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                    s.machine.superblock.journalLen as int) as uint64);
+
+          assert JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64).addr
+              >= JournalPoint(M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                    s.machine.superblock.journalLen as int) as uint64);
+        }
+
+        assert locContainedInCircularJournalRange(
+            JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64),
+            M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                s.machine.superblock.journalLen as int) as uint64,
+            s.machine.writtenJournalLen as uint64 + JournalRangeLen(jr) as uint64
+                - s.machine.superblock.journalLen);
+
+        assert locContainedInCircularJournalRange(
+            JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64),
+            M.JournalPosAdd(s'.machine.superblock.journalStart as int,
+                s'.machine.superblock.journalLen as int) as uint64,
+            s'.machine.writtenJournalLen as uint64
+                - s.machine.superblock.journalLen);
+
+
+        assert CorrectInflightJournalWrite(k, s', id);
+      } else {
+        assert CorrectInflightJournalWrite(k, s', id);
+      }
     }
   }
 
