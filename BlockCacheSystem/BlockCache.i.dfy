@@ -57,7 +57,29 @@ module BlockCache refines Transactable {
   //                  | 
   //                  | writtenLen  <- frozen state
   //                  v \
-  //                  v   inMemoryLog
+  //                  v   inMemoryJournal
+  //  ephemeral graph v /
+  //                  o \
+  //                  o   replayLog
+  //                  o /
+  //                  o             <- ephemeral state
+  //
+  // OR
+  //
+  //  persistent graph
+  //                  |
+  //                  | journalLen  <- persistent state
+  //                  |
+  //                  |
+  //                  |
+  //                  |
+  //                  | 
+  //                  | writtenLen  = frozenJournalPosition
+  //                  X \
+  //                  X   inMemoryJournalFrozen
+  //  frozen graph    X /           <- frozen state
+  //                  v \
+  //                  v   inMemoryJournal
   //  ephemeral graph v /
   //                  o \
   //                  o   replayLog
@@ -84,6 +106,7 @@ module BlockCache refines Transactable {
         outstandingBlockWrites: map<ReqId, OutstandingWrite>,
         outstandingBlockReads: map<ReqId, OutstandingRead>,
 
+        inMemoryJournalFrozen: seq<JournalEntry>,
         inMemoryJournal: seq<JournalEntry>,
         outstandingJournalWrites: set<ReqId>,
         writtenJournalLen: int,
@@ -334,6 +357,7 @@ module BlockCache refines Transactable {
     && s'.frozenJournalPosition == s.frozenJournalPosition
     && s'.superblockWrite == s.superblockWrite
     && s'.inMemoryJournal == s.inMemoryJournal
+    && s'.inMemoryJournalFrozen == s.inMemoryJournalFrozen
     && s'.outstandingJournalWrites == s.outstandingJournalWrites
     && s'.writtenJournalLen == s.writtenJournalLen
     && s'.replayJournal == s.replayJournal
@@ -380,7 +404,14 @@ module BlockCache refines Transactable {
   predicate WriteBackJournalReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
   {
     && s.Ready?
-    && JournalRangeParses(jr, s.inMemoryJournal)
+
+    && var j :=
+        if s.inMemoryJournalFrozen == [] then
+          s.inMemoryJournal
+        else
+          s.inMemoryJournalFrozen;
+
+    && JournalRangeParses(jr, j)
     && JournalRangeLen(jr) + s.writtenJournalLen <= NumJournalBlocks() as int
     && JournalRangeLen(jr) > 0
     && s.superblock.journalStart < NumJournalBlocks()
@@ -388,13 +419,34 @@ module BlockCache refines Transactable {
     && var startPos := JournalPosAdd(
         s.superblock.journalStart as int,
         s.writtenJournalLen);
+
+    && var writtenJournalLen' :=
+        s.writtenJournalLen + JournalRangeLen(jr);
+
+    && var frozenJournalPosition' := 
+        if s.inMemoryJournalFrozen == [] then
+          s.frozenJournalPosition
+        else
+          writtenJournalLen';
+
+    && var inMemoryJournal' :=
+        if s.inMemoryJournalFrozen == [] then
+          []
+        else
+          s.inMemoryJournal;
+
+    && var inMemoryJournalFrozen' := [];
+
     && (JournalRangeLen(jr) + startPos <= NumJournalBlocks() as int ==>
         && dop.ReqWriteOp?
         && dop.reqWrite.sector == SectorJournal(jr)
         && dop.reqWrite.loc == JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64)
         && s' == s
             .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
-            .(writtenJournalLen := s.writtenJournalLen + JournalRangeLen(jr))
+            .(writtenJournalLen := writtenJournalLen')
+            .(frozenJournalPosition := frozenJournalPosition')
+            .(inMemoryJournal := inMemoryJournal')
+            .(inMemoryJournalFrozen := inMemoryJournalFrozen')
       )
     && (JournalRangeLen(jr) + startPos > NumJournalBlocks() as int ==>
         && dop.ReqWrite2Op?
@@ -404,7 +456,10 @@ module BlockCache refines Transactable {
         && dop.reqWrite2.loc == JournalRangeLocation(0, JournalRangeLen(jr) as uint64 - (NumJournalBlocks() - startPos as uint64))
         && s' == s
             .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id1, dop.id2})
-            .(writtenJournalLen := s.writtenJournalLen + JournalRangeLen(jr))
+            .(writtenJournalLen := writtenJournalLen')
+            .(frozenJournalPosition := frozenJournalPosition')
+            .(inMemoryJournal := inMemoryJournal')
+            .(inMemoryJournalFrozen := inMemoryJournalFrozen')
       )
   }
 
@@ -451,6 +506,7 @@ module BlockCache refines Transactable {
     && 0 <= s.frozenJournalPosition
          <= s.writtenJournalLen
          <= NumJournalBlocks() as int
+    && s.inMemoryJournalFrozen == []
     && var newSuperblock := Superblock(
       IncrementSuperblockCounter(s.superblock.counter),
       JournalPosAdd(
@@ -529,7 +585,7 @@ module BlockCache refines Transactable {
     && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
     && s'.frozenJournalPosition == s.frozenJournalPosition
     && s'.superblockWrite == s.superblockWrite
-    && s'.inMemoryJournal == s.inMemoryJournal
+    && s'.inMemoryJournalFrozen == s.inMemoryJournalFrozen
     && s'.outstandingJournalWrites == s.outstandingJournalWrites
     && s'.writtenJournalLen == s.writtenJournalLen
     && s'.replayJournal == s.replayJournal
@@ -740,6 +796,7 @@ module BlockCache refines Transactable {
     && s'.superblockWrite == None
     && s'.outstandingBlockWrites == map[]
     && s'.outstandingBlockReads == map[]
+    && s'.inMemoryJournalFrozen == []
     && s'.inMemoryJournal == []
     && s'.outstandingJournalWrites == {}
     && s'.writtenJournalLen == s.superblock.journalLen as int
@@ -774,6 +831,9 @@ module BlockCache refines Transactable {
     && s' ==
         s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
          .(frozenIndirectionTableLoc := None)
+         .(inMemoryJournalFrozen := s.inMemoryJournalFrozen + s.inMemoryJournal)
+         .(inMemoryJournal := [])
+         .(frozenJournalPosition := s.writtenJournalLen)
   }
 
   predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
@@ -841,6 +901,7 @@ module BlockCache refines Transactable {
     && s'.frozenJournalPosition == s.frozenJournalPosition
     && s'.superblockWrite == s.superblockWrite
     && s'.inMemoryJournal == s.inMemoryJournal
+    && s'.inMemoryJournalFrozen == s.inMemoryJournalFrozen
     && s'.outstandingJournalWrites == s.outstandingJournalWrites
     && s'.writtenJournalLen == s.writtenJournalLen
     && s'.replayJournal == s.replayJournal
@@ -877,6 +938,7 @@ module BlockCache refines Transactable {
     && s'.frozenJournalPosition == s.frozenJournalPosition
     && s'.superblockWrite == s.superblockWrite
     && s'.inMemoryJournal == s.inMemoryJournal
+    && s'.inMemoryJournalFrozen == s.inMemoryJournalFrozen
     && s'.outstandingJournalWrites == s.outstandingJournalWrites
     && s'.writtenJournalLen == s.writtenJournalLen
     && s'.replayJournal == s.replayJournal
@@ -1095,6 +1157,7 @@ module BlockCache refines Transactable {
             && s.newSuperblock.value.journalLen as int <= s.writtenJournalLen
         )
         && (s.newSuperblock.value.indirectionTableLoc != s.superblock.indirectionTableLoc ==>
+            && s.inMemoryJournalFrozen == []
             && s.outstandingIndirectionTableWrite.None?
             && s.newSuperblock.value.journalStart as int == JournalPosAdd(s.superblock.journalStart as int, s.frozenJournalPosition)
             && s.frozenJournalPosition as int + s.newSuperblock.value.journalLen as int
