@@ -34,12 +34,18 @@ module DiskLayout {
     IndirectionTable1Addr() + IndirectionTableMaxLength()
   }
 
-  function method JournalRangeLocation(start: uint64, len: uint64) : Location
+  function method JournalPoint(point: uint64) : uint64
+  requires point <= NumJournalBlocks()
+  {
+    2 * 4096 + point * 4096
+  }
+
+  function method JournalRangeLocation(start: uint64, len: uint64) : (loc : Location)
   requires start < NumJournalBlocks()
   requires start as int + len as int <= NumJournalBlocks() as int
+  ensures ValidJournalLocation(loc)
   {
-    Location(2 * 4096 + start * 4096,
-             2 * 4096 + (start + len) * 4096)
+    Location(JournalPoint(start), len * 4096)
   }
 
   // Valididty
@@ -142,6 +148,40 @@ module DiskLayout {
   ensures ValidIndirectionTableLocation(loc1) <==> ValidIndirectionTableLocation(loc2)
   ensures ValidNodeLocation(loc1) <==> ValidNodeLocation(loc2)
   {
+  }
+
+  predicate locContainedInCircularJournalRange(loc: Location, start: uint64, len: uint64)
+  requires 0 <= start < NumJournalBlocks()
+  requires 0 <= len <= NumJournalBlocks()
+  {
+    if start + len <= NumJournalBlocks() then (
+      && loc.addr >= JournalPoint(start)
+      && loc.addr as int + loc.len as int <=
+          JournalPoint(start + len) as int
+    ) else (
+      (
+        && loc.addr >= JournalPoint(start)
+        && loc.addr as int + loc.len as int <= 
+            JournalPoint(NumJournalBlocks()) as int
+      ) || (
+        && loc.addr >= JournalPoint(0)
+        && loc.addr as int + loc.len as int <= 
+              JournalPoint(start + len - NumJournalBlocks()) as int
+      )
+    )
+  }
+
+  predicate locDisjointFromCircularJournalRange(loc: Location, start: uint64, len: uint64)
+  requires 0 <= start < NumJournalBlocks()
+  requires 0 <= len <= NumJournalBlocks()
+  {
+    if start + len <= NumJournalBlocks() then (
+      || loc.addr as int + loc.len as int <= JournalPoint(start) as int
+      || loc.addr >= JournalPoint(start + len)
+    ) else (
+      && loc.addr >= JournalPoint(start + len - NumJournalBlocks())
+      && loc.addr as int + loc.len as int <= JournalPoint(start) as int
+    )
   }
 
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr

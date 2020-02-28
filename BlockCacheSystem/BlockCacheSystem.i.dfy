@@ -15,6 +15,7 @@ module BlockCacheSystem {
   import opened NativeTypes
   import opened DiskLayout
   import opened SectorType
+  import opened JournalRanges
 
   type DiskOp = M.DiskOp
 
@@ -445,6 +446,11 @@ module BlockCacheSystem {
     && (id in s.disk.reqWrites ==>
       && ValidJournalLocation(s.disk.reqWrites[id].loc)
       && s.disk.reqWrites[id].sector.SectorJournal?
+      && locContainedInCircularJournalRange(
+          s.disk.reqWrites[id].loc,
+            M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                s.machine.superblock.journalLen as int) as uint64,
+            s.machine.writtenJournalLen as uint64)
     )
 
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
@@ -1138,6 +1144,163 @@ module BlockCacheSystem {
     WriteBackIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
+  lemma WriteBackJournalReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
+    requires Inv(k, s)
+    requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, jr)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures FrozenGraphOpt.requires(k, s')
+    ensures EphemeralGraph.requires(k, s')
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
+  {
+    assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
+
+    /*forall ref | ref in s'.machine.ephemeralIndirectionTable.locs
+    ensures WFIndirectionTableRefWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk, ref)
+    {
+      if QueueLookupIdByLocation(s'.disk.reqWrites, s'.machine.ephemeralIndirectionTable.locs[ref]).None? {
+        forall id | id in s.disk.reqWrites
+        ensures s.disk.reqWrites[id].loc != s.machine.ephemeralIndirectionTable.locs[ref]
+        {
+        }
+        assert QueueLookupIdByLocation(s.disk.reqWrites, s.machine.ephemeralIndirectionTable.locs[ref]).None?;
+        assert s'.machine.ephemeralIndirectionTable.locs[ref] in s'.disk.blocks;
+        assert s'.disk.blocks[s'.machine.ephemeralIndirectionTable.locs[ref]].SectorNode?;
+      }
+    }*/
+
+    //assert ValidJournalLocation(dop.reqWrite.loc);
+
+    /*forall loc | ValidNodeLocation(loc)
+    ensures loc != dop.reqWrite.loc
+    {
+      if (overlap(loc, dop.reqWrite.loc)) {
+        overlappingLocsSameType(loc, dop.reqWrite.loc);
+      }
+    }*/
+
+    //assert WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
+    //assert WFReqWriteBlocks(s'.disk.reqWrites);
+
+    //assert EphemeralGraph.requires(k, s');
+    //assert FrozenGraphOpt.requires(k, s');
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
+  }
+
+  lemma WriteBackJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
+    requires Inv(k, s)
+    requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, jr)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    WriteBackJournalReqStepPreservesGraphs(k, s, s', dop, jr);
+
+    forall id1, id2 | id1 in s'.disk.reqReads && id2 in s'.disk.reqWrites
+    ensures s'.disk.reqReads[id1].loc.addr != s'.disk.reqWrites[id2].loc.addr
+    {
+      assert ValidNodeLocation(s'.disk.reqReads[id1].loc);
+      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[id2].loc) {
+        overlappingLocsSameType(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[id2].loc);
+      }
+    }
+
+    forall id | id in s'.disk.reqWrites && s'.disk.reqWrites[id].loc.addr == dop.reqWrite.loc.addr
+    ensures id == dop.id
+    {
+      var loc := s'.disk.reqWrites[id].loc;
+      if ValidJournalLocation(loc) {
+        assert id == dop.id;
+      } else {
+        assert false;
+      }
+    }
+
+    forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
+    ensures id1 == id2
+    {
+    }
+  }
+
+  lemma WriteBackJournalRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma WriteBackJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    WriteBackJournalRespStepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma WriteBackSuperblockReq_Basic_StepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblockReq_Basic(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
+  {
+  }
+
+  lemma WriteBackSuperblockReq_Basic_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblockReq_Basic(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    WriteBackSuperblockReq_Basic_StepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblockReq_UpdateIndirectionTable(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
+  {
+  }
+
+  lemma WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblockReq_UpdateIndirectionTable(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesGraphs(k, s, s', dop);
+  }
+
+  lemma WriteBackSuperblockRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblockResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
+  {
+  }
+
+  lemma WriteBackSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackSuperblockResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    WriteBackSuperblockRespStepPreservesGraphs(k, s, s', dop);
+  }
+
   lemma DirtyStepUpdatesGraph(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
     requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
@@ -1364,6 +1527,82 @@ module BlockCacheSystem {
     PageInIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
+  lemma PageInJournalReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, which)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, which)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PageInJournalReqStepPreservesGraphs(k, s, s', dop, which);
+  }
+
+  lemma PageInJournalRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, which)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, which)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PageInJournalRespStepPreservesGraphs(k, s, s', dop, which);
+  }
+
+  lemma PageInSuperblockReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, which)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInSuperblockReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, which)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PageInSuperblockReqStepPreservesGraphs(k, s, s', dop, which);
+  }
+
+  lemma PageInSuperblockRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, which)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, which)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    PageInSuperblockRespStepPreservesGraphs(k, s, s', dop, which);
+  }
+
   lemma FinishLoadingSuperblockPhaseStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.FinishLoadingSuperblockPhase(k.machine, s.machine, s'.machine, dop)
@@ -1509,11 +1748,20 @@ module BlockCacheSystem {
       case WriteBackRespStep => WriteBackRespStepPreservesInv(k, s, s', dop);
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(k, s, s', dop);
+      case WriteBackJournalReqStep(jr) => WriteBackJournalReqStepPreservesInv(k, s, s', dop, jr);
+      case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(k, s, s', dop);
+      case WriteBackSuperblockReq_Basic_Step => WriteBackSuperblockReq_Basic_StepPreservesInv(k, s, s', dop);
+      case WriteBackSuperblockReq_UpdateIndirectionTable_Step => WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesInv(k, s, s', dop);
+      case WriteBackSuperblockRespStep => WriteBackSuperblockRespStepPreservesInv(k, s, s', dop);
       case UnallocStep(ref) => UnallocStepPreservesInv(k, s, s', dop, ref);
       case PageInReqStep(ref) => PageInReqStepPreservesInv(k, s, s', dop, ref);
       case PageInRespStep => PageInRespStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
+      case PageInJournalReqStep(which) => PageInJournalReqStepPreservesInv(k, s, s', dop, which);
+      case PageInJournalRespStep(which) => PageInJournalRespStepPreservesInv(k, s, s', dop, which);
+      case PageInSuperblockReqStep(which) => PageInSuperblockReqStepPreservesInv(k, s, s', dop, which);
+      case PageInSuperblockRespStep(which) => PageInSuperblockRespStepPreservesInv(k, s, s', dop, which);
       case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(k, s, s', dop);
       case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);

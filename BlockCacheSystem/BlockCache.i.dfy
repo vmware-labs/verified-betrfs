@@ -46,6 +46,29 @@ module BlockCache refines Transactable {
       | SuperblockUnfinished
       | SuperblockCorruption
 
+  //
+  //  persistent graph
+  //                  |
+  //                  | journalLen  <- persistent state
+  //                  |
+  //                  |
+  //  frozen graph    | frozenJournalPosition
+  //                  |
+  //                  | 
+  //                  | writtenLen  <- frozen state
+  //                  v \
+  //                  v   inMemoryLog
+  //  ephemeral graph v /
+  //                  o \
+  //                  o   replayLog
+  //                  o /
+  //                  o             <- ephemeral state
+  //
+  // Note that a "state" is obtained by playing journal
+  // entries on top of some map interpretation of some
+  // "graph" (given by indirection table)
+
+
   datatype Variables =
     | Ready(
         persistentIndirectionTable: IndirectionTable,
@@ -760,6 +783,8 @@ module BlockCache refines Transactable {
       && !(
         || (s.Ready? && s.outstandingIndirectionTableWrite == Some(dop.id))
         || (s.Ready? && dop.id in s.outstandingBlockWrites)
+        || (s.Ready? && dop.id in s.outstandingJournalWrites)
+        || (s.Ready? && s.superblockWrite == Some(dop.id))
       )
     ))
     && s' == s
