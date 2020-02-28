@@ -414,6 +414,7 @@ module BlockCache refines Transactable {
     && JournalRangeParses(jr, j)
     && JournalRangeLen(jr) + s.writtenJournalLen <= NumJournalBlocks() as int
     && JournalRangeLen(jr) > 0
+    && s.newSuperblock.None?
     && s.superblock.journalStart < NumJournalBlocks()
     && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
     && var startPos := JournalPosAdd(
@@ -501,6 +502,8 @@ module BlockCache refines Transactable {
     && s.frozenIndirectionTableLoc.Some?
     && s.outstandingIndirectionTableWrite.None?
     && s.superblockWrite.None?
+    && s.outstandingBlockWrites == map[]
+    && s.outstandingJournalWrites == {}
     && dop.reqWrite.loc == (if s.whichSuperblock == 0 then
         Superblock2Location() else Superblock1Location())
     && 0 <= s.superblock.journalStart < NumJournalBlocks()

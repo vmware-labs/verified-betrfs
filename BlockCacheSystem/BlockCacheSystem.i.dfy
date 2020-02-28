@@ -458,6 +458,8 @@ module BlockCacheSystem {
                 s.machine.superblock.journalLen as int) as uint64,
             s.machine.writtenJournalLen as uint64
                 - s.machine.superblock.journalLen)
+
+      && s.machine.newSuperblock.None?
     )
 
     && !(id in s.disk.reqWrites && id in s.disk.respWrites)
@@ -1435,10 +1437,24 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackSuperblockReq_UpdateIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+
+    ensures s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
+    ensures WFReqWriteBlocks(s'.disk.reqWrites)
+    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
+    assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
+
+    assert ValidSuperblock1Location(dop.reqWrite.loc)
+        || ValidSuperblock2Location(dop.reqWrite.loc);
+
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1448,6 +1464,47 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
     WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesGraphs(k, s, s', dop);
+
+    forall id1 | id1 in s'.disk.reqReads
+    ensures s'.disk.reqReads[id1].loc != s'.disk.reqWrites[dop.id].loc
+    ensures !overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc)
+    {
+      assert ValidNodeLocation(s'.disk.reqReads[id1].loc);
+      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+        overlappingIndirectionTablesSameAddr(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
+    }
+
+    forall id1 | id1 in s'.disk.reqWrites
+    ensures s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc
+        ==> id1 == dop.id
+    ensures overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc)
+        ==> id1 == dop.id
+    {
+      if s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc {
+        assert s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[dop.id].loc.addr;
+      }
+      if overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqWrites[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
+    }
+
+    /*assert s.disk.blocks[s.machine.frozenIndirectionTableLoc.value].SectorIndirectionTable?;
+    assert s.machine.frozenIndirectionTable == Some(s.disk.blocks[s.machine.frozenIndirectionTableLoc.value].indirectionTable);
+
+    forall ref | ref in s'.machine.frozenIndirectionTable.value.locs 
+    ensures WFIndirectionTableRefWrtDisk(
+        s'.machine.frozenIndirectionTable.value,
+        s'.disk.blocks, ref)
+    {
+    }*/
   }
 
   lemma WriteBackSuperblockRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1455,9 +1512,16 @@ module BlockCacheSystem {
     requires M.WriteBackSuperblockResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures (
+          || FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+          || FrozenGraphOpt(k, s') == None
+         )
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
+    if (FrozenGraphOpt(k, s').Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma WriteBackSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1467,6 +1531,11 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
     WriteBackSuperblockRespStepPreservesGraphs(k, s, s', dop);
+    forall id | id in s'.machine.outstandingJournalWrites
+    ensures CorrectInflightJournalWrite(k, s', id)
+    {
+      assert CorrectInflightJournalWrite(k, s, id);
+    }
   }
 
   lemma DirtyStepUpdatesGraph(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
