@@ -593,16 +593,30 @@ module BlockCacheSystem {
     forall id | id in s.disk.reqReads :: RecordedReadRequest(k, s, id)
   }
 
-  predicate WriteRequestsUniqueLBAs(reqWrites: map<D.ReqId, D.ReqWrite>)
+  predicate WriteRequestsDontOverlap(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
-    forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].loc.addr == reqWrites[id2].loc.addr :: id1 == id2
+    forall id1, id2 | id1 in reqWrites && id2 in reqWrites && overlap(reqWrites[id1].loc, reqWrites[id2].loc) :: id1 == id2
   }
 
-  predicate NoReadWriteConflicts(
+  predicate WriteRequestsAreDistinct(reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].loc == reqWrites[id2].loc :: id1 == id2
+  }
+
+  predicate ReadWritesDontOverlap(
       reqReads: map<D.ReqId, D.ReqRead>,
       reqWrites: map<D.ReqId, D.ReqWrite>)
   {
-    forall id1, id2 | id1 in reqReads && id2 in reqWrites :: reqReads[id1].loc.addr != reqWrites[id2].loc.addr
+    forall id1, id2 | id1 in reqReads && id2 in reqWrites ::
+        !overlap(reqReads[id1].loc, reqWrites[id2].loc)
+  }
+
+  predicate ReadWritesAreDistinct(
+      reqReads: map<D.ReqId, D.ReqRead>,
+      reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    forall id1, id2 | id1 in reqReads && id2 in reqWrites ::
+        reqReads[id1].loc != reqWrites[id2].loc
   }
 
   predicate Inv(k: Constants, s: Variables) {
@@ -672,6 +686,16 @@ module BlockCacheSystem {
       && CorrectInflightJournalWrites(k, s)
       && CorrectInflightSuperblockWrites(k, s)
       && WriteReqIdsDistinct(s.machine)
+      && (s.machine.newSuperblock.None? ==> (
+        && (s.machine.whichSuperblock == 0 ==> (
+          && Superblock1Location() in s.disk.blocks
+          && s.disk.blocks[Superblock1Location()] == SectorSuperblock(s.machine.superblock)
+        ))
+        && (s.machine.whichSuperblock == 1 ==> (
+          && Superblock2Location() in s.disk.blocks
+          && s.disk.blocks[Superblock2Location()] == SectorSuperblock(s.machine.superblock)
+        ))
+      ))
     )
     && (s.machine.LoadingSuperblock? ==>
       && CorrectInflightSuperblockReads(k, s)
@@ -717,8 +741,10 @@ module BlockCacheSystem {
         && s.machine.journalBack.None?
       ))
     )
-    && WriteRequestsUniqueLBAs(s.disk.reqWrites)
-    && NoReadWriteConflicts(s.disk.reqReads, s.disk.reqWrites)
+    && WriteRequestsDontOverlap(s.disk.reqWrites)
+    && WriteRequestsAreDistinct(s.disk.reqWrites)
+    && ReadWritesDontOverlap(s.disk.reqReads, s.disk.reqWrites)
+    && ReadWritesAreDistinct(s.disk.reqReads, s.disk.reqWrites)
     && RecordedWriteRequests(k, s)
     && RecordedReadRequests(k, s)
   }
@@ -739,7 +765,7 @@ module BlockCacheSystem {
       loc: Location)
   requires id !in reqWrites
   requires reqWrites' == reqWrites[id := req]
-  requires WriteRequestsUniqueLBAs(reqWrites')
+  requires WriteRequestsAreDistinct(reqWrites')
   ensures QueueLookupIdByLocation(reqWrites', req.loc) == Some(id)
   ensures loc != req.loc ==>
       QueueLookupIdByLocation(reqWrites', loc) == QueueLookupIdByLocation(reqWrites, loc)
@@ -752,22 +778,32 @@ module BlockCacheSystem {
     //assert QueueLookupIdByLocation(reqWrites', req.loc).Some?;
     //assert QueueLookupIdByLocation(reqWrites', req.loc).value == id;
 
-    forall id1, id2 | id1 in reqWrites && id2 in reqWrites && reqWrites[id1].loc.addr == reqWrites[id2].loc.addr
+    forall id1, id2 | id1 in reqWrites && id2 in reqWrites
+        && reqWrites[id1].loc == reqWrites[id2].loc
     ensures id1 == id2
     {
       assert reqWrites'[id1] == reqWrites[id1];
       assert reqWrites'[id2] == reqWrites[id2];
     }
-    assert WriteRequestsUniqueLBAs(reqWrites);
+    assert WriteRequestsAreDistinct(reqWrites);
+
+    assert id in reqWrites';
+    assert reqWrites'[id].loc == req.loc;
+    assert QueueLookupIdByLocation(reqWrites', req.loc).Some?;
+    forall id' | id' in reqWrites' && reqWrites'[id'].loc == req.loc
+    ensures id' == id
+    {
+    }
+    assert QueueLookupIdByLocation(reqWrites', req.loc) == Some(id);
 
     if (loc != req.loc) {
       if id' :| id' in reqWrites && reqWrites[id'].loc == loc {
         assert reqWrites'[id'].loc == loc;
-        //assert QueueLookupIdByLocation(reqWrites', loc)
-        //    == Some(id')
-        //    == QueueLookupIdByLocation(reqWrites, loc);
+        assert QueueLookupIdByLocation(reqWrites', loc)
+            == Some(id')
+            == QueueLookupIdByLocation(reqWrites, loc);
       } else {
-        //assert QueueLookupIdByLocation(reqWrites', loc) == QueueLookupIdByLocation(reqWrites, loc);
+        assert QueueLookupIdByLocation(reqWrites', loc) == QueueLookupIdByLocation(reqWrites, loc);
       }
     }
   }
@@ -776,53 +812,26 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
-    ensures WriteRequestsUniqueLBAs(s'.disk.reqWrites)
+    ensures WriteRequestsDontOverlap(s'.disk.reqWrites)
+    ensures WriteRequestsAreDistinct(s'.disk.reqWrites)
   {
-    forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
-    ensures id1 == id2
+    forall id1 | id1 in s'.disk.reqWrites
+    ensures s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc
+        ==> id1 == dop.id
+    ensures overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc)
+        ==> id1 == dop.id
     {
-      overlappingLocsSameType(
-          s'.disk.reqWrites[id1].loc,
-          s'.disk.reqWrites[id2].loc);
-
-      /*if (s'.disk.reqWrites[id1].loc == dop.reqWrite.loc) {
-        assert overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[id2].loc);
-        assert ValidNodeLocation(s'.disk.reqWrites[id1].loc);
-
-        if (ValidNodeLocation(s'.disk.reqWrites[id2].loc)) {
-          assert s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[id2].loc;
-        } else {
-          assert ValidLocation(s'.disk.reqWrites[id2].loc);
-          assert false;
-        }
-
-        assert s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[id2].loc;
-
-        if (id1 in s.disk.reqWrites) {
-          assert RecordedWriteRequest(k, s, id1, s.disk.reqWrites[id1].loc, s.disk.reqWrites[id1].sector);
-          assert id1 in s.machine.outstandingBlockWrites;
-          assert CorrectInflightBlockWrite(k, s, id1, s.machine.outstandingBlockWrites[id1].ref, s.machine.outstandingBlockWrites[id1].loc);
-          assert s.machine.outstandingBlockWrites[id1].loc == dop.reqWrite.loc;
-          assert false;
-        }
-        if (id2 in s.disk.reqWrites) {
-          assert RecordedWriteRequest(k, s, id2, s.disk.reqWrites[id2].loc, s.disk.reqWrites[id2].sector);
-          assert id2 in s.machine.outstandingBlockWrites;
-          assert CorrectInflightBlockWrite(k, s, id2, s.machine.outstandingBlockWrites[id2].ref, s.machine.outstandingBlockWrites[id2].loc);
-          assert s.machine.outstandingBlockWrites[id2].loc == dop.reqWrite.loc;
-          assert false;
-        }
-        assert id1 == dop.id;
-        assert id2 == dop.id;
-        assert id1 == id2;
-      } else if (s'.disk.reqWrites[id2].loc == dop.reqWrite.loc) {
-        assert id1 == id2;
-      } else {
-        assert id1 in s.disk.reqWrites;
-        assert id2 in s.disk.reqWrites;
-        assert s.disk.reqWrites[id1].loc.addr == s.disk.reqWrites[id2].loc.addr;
-        assert id1 == id2;
-      }*/
+      if s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc {
+        assert s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[dop.id].loc.addr;
+      }
+      if overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqWrites[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+        overlappingNodesSameAddr(
+            s'.disk.reqWrites[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
     }
   }
 
@@ -954,6 +963,20 @@ module BlockCacheSystem {
   {
     WriteBackReqStepUniqueLBAs(k, s, s', dop, ref);
     WriteBackReqStepPreservesGraphs(k, s, s', dop, ref);
+
+    forall id1 | id1 in s'.disk.reqReads
+    ensures s'.disk.reqReads[id1].loc != s'.disk.reqWrites[dop.id].loc
+    ensures !overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc)
+    {
+      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+        overlappingNodesSameAddr(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
+    }
 
     /*assert ValidNodeLocation(dop.reqWrite.loc);
     forall id | id in s'.machine.outstandingJournalWrites
@@ -1110,18 +1133,38 @@ module BlockCacheSystem {
   {
     WriteBackIndirectionTableReqStepPreservesGraphs(k, s, s', dop);
 
-    forall id1, id2 | id1 in s'.disk.reqReads && id2 in s'.disk.reqWrites
-    ensures s'.disk.reqReads[id1].loc.addr != s'.disk.reqWrites[id2].loc.addr
+    forall id1 | id1 in s'.disk.reqReads
+    ensures s'.disk.reqReads[id1].loc != s'.disk.reqWrites[dop.id].loc
+    ensures !overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc)
     {
       assert ValidNodeLocation(s'.disk.reqReads[id1].loc);
+      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+        overlappingIndirectionTablesSameAddr(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
     }
 
-    forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
-    ensures id1 == id2
+    forall id1 | id1 in s'.disk.reqWrites
+    ensures s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc
+        ==> id1 == dop.id
+    ensures overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc)
+        ==> id1 == dop.id
     {
-      overlappingLocsSameType(
-          s'.disk.reqWrites[id1].loc,
-          s'.disk.reqWrites[id2].loc);
+      if s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc {
+        assert s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[dop.id].loc.addr;
+      }
+      if overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqWrites[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+        overlappingIndirectionTablesSameAddr(
+            s'.disk.reqWrites[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
     }
   }
 
@@ -1187,11 +1230,11 @@ module BlockCacheSystem {
       }
     }*/
 
-    //assert WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
-    //assert WFReqWriteBlocks(s'.disk.reqWrites);
+    assert WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
+    assert WFReqWriteBlocks(s'.disk.reqWrites);
 
-    //assert EphemeralGraph.requires(k, s');
-    //assert FrozenGraphOpt.requires(k, s');
+    assert EphemeralGraph.requires(k, s');
+    assert FrozenGraphOpt.requires(k, s');
     if (FrozenGraphOpt(k, s).Some?) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
@@ -1206,32 +1249,42 @@ module BlockCacheSystem {
   {
     WriteBackJournalReqStepPreservesGraphs(k, s, s', dop, jr);
 
-    forall id1, id2 | id1 in s'.disk.reqReads && id2 in s'.disk.reqWrites
-    ensures s'.disk.reqReads[id1].loc.addr != s'.disk.reqWrites[id2].loc.addr
+    forall id1 | id1 in s'.disk.reqReads
+    ensures s'.disk.reqReads[id1].loc != s'.disk.reqWrites[dop.id].loc
+    ensures !overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc)
     {
-      assert ValidNodeLocation(s'.disk.reqReads[id1].loc);
-      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[id2].loc) {
-        overlappingLocsSameType(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[id2].loc);
+      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc);
       }
     }
 
-    forall id | id in s'.disk.reqWrites && s'.disk.reqWrites[id].loc.addr == dop.reqWrite.loc.addr
-    ensures id == dop.id
+    forall id1 | id1 in s'.disk.reqWrites
+    ensures s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc
+        ==> id1 == dop.id
+    ensures overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc)
+        ==> id1 == dop.id
     {
-      var loc := s'.disk.reqWrites[id].loc;
-      if ValidJournalLocation(loc) {
-        assert id == dop.id;
-      } else {
-        assert false;
+      if overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        var loc := s'.disk.reqWrites[id1].loc;
+        if ValidJournalLocation(loc) {
+          /*assert dop.reqWrite.loc.len > 0;
+          assert !locContainedInCircularJournalRange(
+              dop.reqWrite.loc,
+              M.JournalPosAdd(s.machine.superblock.journalStart as int,
+                  s.machine.superblock.journalLen as int) as uint64,
+              s.machine.writtenJournalLen as uint64
+                  - s.machine.superblock.journalLen);
+
+          assert id1 == dop.id;*/
+        } else {
+          //assert overlap(s'.disk.reqWrites[id1].loc, dop.reqWrite.loc);
+          overlappingLocsSameType(s'.disk.reqWrites[id1].loc, dop.reqWrite.loc);
+          assert false;
+        }
       }
     }
 
-    forall id1, id2 | id1 in s'.disk.reqWrites && id2 in s'.disk.reqWrites && s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr
-    ensures id1 == id2
-    {
-    }
-
-    assert s.machine.superblock.journalStart < NumJournalBlocks();
+    /*assert s.machine.superblock.journalStart < NumJournalBlocks();
     assert s.machine.superblock.journalLen <= NumJournalBlocks();
     assert 0 <= s.machine.writtenJournalLen <= NumJournalBlocks() as int;
     assert 0 <= s.machine.superblock.journalLen <= s.machine.writtenJournalLen as uint64;
@@ -1284,7 +1337,7 @@ module BlockCacheSystem {
       } else {
         assert CorrectInflightJournalWrite(k, s', id);
       }
-    }
+    }*/
   }
 
   lemma WriteBackJournalRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1292,9 +1345,13 @@ module BlockCacheSystem {
     requires M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma WriteBackJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1310,10 +1367,28 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackSuperblockReq_Basic(k.machine, s.machine, s'.machine, dop)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+
+    ensures s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
+    ensures WFReqWriteBlocks(s'.disk.reqWrites)
+    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
+    assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
+
+    assert ValidSuperblock1Location(dop.reqWrite.loc)
+        || ValidSuperblock2Location(dop.reqWrite.loc);
+
+    //assert s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk);
+    //assert WFReqWriteBlocks(s'.disk.reqWrites);
+    //assert WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
+
+    if (FrozenGraphOpt(k, s).Some?) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma WriteBackSuperblockReq_Basic_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1323,6 +1398,37 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
     WriteBackSuperblockReq_Basic_StepPreservesGraphs(k, s, s', dop);
+
+    forall id1 | id1 in s'.disk.reqReads
+    ensures s'.disk.reqReads[id1].loc != s'.disk.reqWrites[dop.id].loc
+    ensures !overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc)
+    {
+      assert ValidNodeLocation(s'.disk.reqReads[id1].loc);
+      if overlap(s'.disk.reqReads[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+        overlappingIndirectionTablesSameAddr(
+            s'.disk.reqReads[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
+    }
+
+    forall id1 | id1 in s'.disk.reqWrites
+    ensures s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc
+        ==> id1 == dop.id
+    ensures overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc)
+        ==> id1 == dop.id
+    {
+      if s'.disk.reqWrites[id1].loc == s'.disk.reqWrites[dop.id].loc {
+        assert s'.disk.reqWrites[id1].loc.addr == s'.disk.reqWrites[dop.id].loc.addr;
+      }
+      if overlap(s'.disk.reqWrites[id1].loc, s'.disk.reqWrites[dop.id].loc) {
+        overlappingLocsSameType(
+            s'.disk.reqWrites[id1].loc,
+            s'.disk.reqWrites[dop.id].loc);
+      }
+    }
   }
 
   lemma WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)

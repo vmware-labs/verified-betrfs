@@ -467,6 +467,7 @@ module BlockCache refines Transactable {
   {
     && s.Ready?
     && dop.RespWriteOp?
+    && dop.id in s.outstandingJournalWrites
     && s' == s
        .(outstandingJournalWrites := s.outstandingJournalWrites - {dop.id})
   }
@@ -1093,6 +1094,7 @@ module BlockCache refines Transactable {
       && WFCompleteIndirectionTable(s.indirectionTable.value)
       && AllLocationsForDifferentRefsDontOverlap(s.indirectionTable.value)
     )
+    && (s.whichSuperblock == 0 || s.whichSuperblock == 1)
   }
 
   predicate InvReady(k: Constants, s: Variables)
@@ -1111,6 +1113,8 @@ module BlockCache refines Transactable {
     && AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
     && (s.superblockWrite.Some? <==> s.newSuperblock.Some?)
     && (s.frozenIndirectionTableLoc.Some? ==> s.frozenIndirectionTable.Some?)
+
+    && (s.whichSuperblock == 0 || s.whichSuperblock == 1)
 
     && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
     && 0 <= s.superblock.journalLen as int <= s.writtenJournalLen

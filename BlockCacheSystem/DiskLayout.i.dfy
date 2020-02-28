@@ -79,7 +79,7 @@ module DiskLayout {
       !ValidJournalLocation(loc)
   {
     && ValidIndirectionTableAddr(loc.addr) 
-    && loc.len <= IndirectionTableMaxLength()
+    && 0 < loc.len <= IndirectionTableMaxLength()
   }
 
   predicate method ValidNodeLocation(loc: Location)
@@ -127,8 +127,8 @@ module DiskLayout {
   }
 
   predicate overlap(loc: Location, loc': Location) {
-    && loc.addr as int + loc.len as int >= loc'.addr as int
-    && loc'.addr as int + loc'.len as int >= loc.addr as int
+    && loc.addr as int + loc.len as int > loc'.addr as int
+    && loc'.addr as int + loc'.len as int > loc.addr as int
   }
 
   lemma ValidNodeAddrMul(i: uint64)
@@ -148,6 +148,22 @@ module DiskLayout {
   ensures ValidJournalLocation(loc1) <==> ValidJournalLocation(loc2)
   ensures ValidIndirectionTableLocation(loc1) <==> ValidIndirectionTableLocation(loc2)
   ensures ValidNodeLocation(loc1) <==> ValidNodeLocation(loc2)
+  {
+  }
+
+  lemma overlappingNodesSameAddr(loc1: Location, loc2: Location)
+  requires ValidNodeLocation(loc1)
+  requires ValidNodeLocation(loc2)
+  requires overlap(loc1, loc2)
+  ensures loc1.addr == loc2.addr
+  {
+  }
+
+  lemma overlappingIndirectionTablesSameAddr(loc1: Location, loc2: Location)
+  requires ValidIndirectionTableLocation(loc1)
+  requires ValidIndirectionTableLocation(loc2)
+  requires overlap(loc1, loc2)
+  ensures loc1.addr == loc2.addr
   {
   }
 
