@@ -1148,6 +1148,8 @@ module BlockCache refines Transactable {
 
     && WFSuperblock(s.superblock)
     && (s.newSuperblock.Some? ==>
+        && s.outstandingJournalWrites == {}
+
         && (
           || s.newSuperblock.value.indirectionTableLoc == s.superblock.indirectionTableLoc
           || (
