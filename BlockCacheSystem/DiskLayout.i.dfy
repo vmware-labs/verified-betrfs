@@ -240,6 +240,28 @@ module DiskLayout {
           len - (NumJournalBlocks() - start)))
   }
 
+  predicate LocationSub(loc1: Location, loc2: Location)
+  {
+    && loc1.addr >= loc2.addr
+    && loc1.addr as int + loc1.len as int
+        <= loc2.addr as int + loc2.len as int
+  }
+
+  function {:opaque} JournalBlockIdx(loc: Location) : (i : int)
+  requires ValidJournalLocation(loc)
+  ensures 0 <= i < NumJournalBlocks() as int
+  ensures loc.addr == JournalPoint(i as uint64)
+  {
+    (loc.addr as int - (2 * 4096)) / 4096
+  }
+
+  lemma journalLength1OverlapImpliesContained(start: uint64, loc: Location)
+  requires overlap(JournalRangeLocation(start, 1), loc)
+  requires ValidLocation(loc)
+  ensures LocationSub(JournalRangeLocation(start, 1), loc)
+  {
+  }
+
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr
   //    reveals BlockSize
   //export extends S

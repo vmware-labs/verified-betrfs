@@ -30,4 +30,32 @@ module JournalRanges {
 
   function JournalRangeSuffix(jr: JournalRange, i: int) : JournalRange
   requires 0 <= i <= JournalRangeLen(jr)
+
+  function JournalBlockGet(jr: JournalRange, i: int) : (res : JournalRange)
+  requires 0 <= i < JournalRangeLen(jr)
+  ensures JournalRangeLen(res) == 1
+
+  function JournalBlocks(jr: JournalRange) : (res : seq<JournalRange>)
+  ensures |res| == JournalRangeLen(jr)
+  ensures forall i | 0 < i < |res| :: res[i] == JournalBlockGet(jr, i)
+
+  lemma parseJournalRangeEmpty()
+  ensures parseJournalRange(JournalRangeEmpty()) == Some([])
+
+  lemma parseJournalRangeAdditive(a: JournalRange, b: JournalRange)
+  requires parseJournalRange(a).Some?
+  requires parseJournalRange(b).Some?
+  ensures parseJournalRange(JournalRangeConcat(a, b)).Some?
+  ensures parseJournalRange(JournalRangeConcat(a, b)).value
+      == parseJournalRange(a).value + parseJournalRange(b).value
+
+  lemma JournalRangeConcatAssoc(a: JournalRange, b: JournalRange, c: JournalRange)
+  ensures JournalRangeConcat(JournalRangeConcat(a, b), c)
+       == JournalRangeConcat(a, JournalRangeConcat(b, c))
+
+  lemma JournalRangeConcatEmpty(a: JournalRange)
+  ensures JournalRangeConcat(a, JournalRangeEmpty()) == a
+
+  lemma JournalRangeConcatEmpty'(a: JournalRange)
+  ensures JournalRangeConcat(JournalRangeEmpty(), a) == a
 }
