@@ -182,6 +182,27 @@ module AsyncSectorDisk {
         ClosedUnderLogConcatenationLocs(blocks, loc1, loc2, loc3)
   }
 
+  predicate LogLookupSingleBlockConsistentLoc(
+      blocks: imap<Location, Sector>,
+      loc: Location, loc2: Location, i: int)
+  {
+    && loc in blocks
+    && blocks[loc].SectorJournal?
+    && loc2.addr as int == loc.addr as int + 4096*i
+    && loc2.len == 4096
+    && 0 <= i < JournalRangeLen(blocks[loc].journal)
+      ==>
+    && loc2 in blocks
+    && blocks[loc2] == SectorJournal(
+        JournalBlockGet(blocks[loc].journal, i))
+  }
+
+  predicate LogLookupSingleBlockConsistent(blocks: imap<Location, Sector>)
+  {
+    forall loc, loc2, i ::
+        LogLookupSingleBlockConsistentLoc(blocks, loc, loc2, i)
+  }
+
   predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqWrites
@@ -199,6 +220,7 @@ module AsyncSectorDisk {
     && (forall loc | loc in s.blocks && !overlap(loc, req.loc) :: loc in s'.blocks && s'.blocks[loc] == s.blocks[loc])
     && (forall loc | loc in s'.blocks && !overlap(loc, req.loc) :: loc in s.blocks)
     && ClosedUnderLogConcatenation(s'.blocks)
+    && LogLookupSingleBlockConsistent(s'.blocks)
   }
 
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)

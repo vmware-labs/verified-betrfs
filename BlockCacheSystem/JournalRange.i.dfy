@@ -24,20 +24,24 @@ module JournalRanges {
 
   function JournalRangePrefix(jr: JournalRange, i: int) : JournalRange
   requires 0 <= i <= JournalRangeLen(jr)
+  ensures JournalRangeLen(JournalRangePrefix(jr, i)) == i
+
+  function JournalRangeSuffix(jr: JournalRange, i: int) : JournalRange
+  requires 0 <= i <= JournalRangeLen(jr)
+  ensures JournalRangeLen(JournalRangeSuffix(jr, i))
+      == JournalRangeLen(jr) - i
 
   function JournalRangeConcat(jr1: JournalRange, jr2: JournalRange) : JournalRange
   function JournalRangeEmpty() : JournalRange
 
-  function JournalRangeSuffix(jr: JournalRange, i: int) : JournalRange
-  requires 0 <= i <= JournalRangeLen(jr)
+  function JournalBlocks(jr: JournalRange) : (res : seq<JournalRange>)
+  ensures |res| == JournalRangeLen(jr)
 
   function JournalBlockGet(jr: JournalRange, i: int) : (res : JournalRange)
   requires 0 <= i < JournalRangeLen(jr)
-  ensures JournalRangeLen(res) == 1
-
-  function JournalBlocks(jr: JournalRange) : (res : seq<JournalRange>)
-  ensures |res| == JournalRangeLen(jr)
-  ensures forall i | 0 < i < |res| :: res[i] == JournalBlockGet(jr, i)
+  {
+    JournalBlocks(jr)[i]
+  }
 
   lemma parseJournalRangeEmpty()
   ensures parseJournalRange(JournalRangeEmpty()) == Some([])
@@ -58,4 +62,16 @@ module JournalRanges {
 
   lemma JournalRangeConcatEmpty'(a: JournalRange)
   ensures JournalRangeConcat(JournalRangeEmpty(), a) == a
+
+  lemma JournalRangePrefixGet(jr: JournalRange, i: int, j: int)
+  requires 0 <= j < i <= JournalRangeLen(jr)
+  ensures JournalBlockGet(jr, j)
+      == JournalBlockGet(JournalRangePrefix(jr, i), j)
+
+  lemma JournalRangeSuffixGet(jr: JournalRange, i: int, j: int)
+  requires 0 <= i <= JournalRangeLen(jr)
+  ensures 0 <= j < JournalRangeLen(jr) - i
+  ensures JournalBlockGet(jr, i + j)
+      == JournalBlockGet(JournalRangeSuffix(jr, i), j)
+
 }

@@ -1,5 +1,6 @@
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "JournalDiskUtils.i.dfy"
 //
 // Attach a BlockCache to a Disk
 //
@@ -16,6 +17,8 @@ module BlockCacheSystem {
   import opened DiskLayout
   import opened SectorType
   import opened JournalRanges
+  import opened JournalDiskUtils
+  import opened Journal
 
   type DiskOp = M.DiskOp
 
@@ -271,6 +274,101 @@ module BlockCacheSystem {
     && forall ref | ref in succGraph :: (iset r | r in succGraph[ref]) == M.G.Successors(graph[ref])
   }
 
+  predicate WFPersistentJournal(s: Variables)
+  {
+    && DiskHasSuperblock(s.disk.blocks)
+    && WFRange(
+        SuperblockOfDisk(s.disk.blocks).journalStart as int,
+        SuperblockOfDisk(s.disk.blocks).journalLen as int)
+    && Disk_HasJournal(s.disk.blocks,
+        SuperblockOfDisk(s.disk.blocks).journalStart as int,
+        SuperblockOfDisk(s.disk.blocks).journalLen as int)
+  }
+
+  function PersistentJournal(s: Variables) : seq<JournalEntry>
+  requires WFPersistentJournal(s)
+  {
+    Disk_Journal(s.disk.blocks,
+        SuperblockOfDisk(s.disk.blocks).journalStart as int,
+        SuperblockOfDisk(s.disk.blocks).journalLen as int)
+  }
+
+  predicate WFFrozenJournal(s: Variables)
+  {
+    && DiskHasSuperblock(s.disk.blocks)
+    && (s.machine.Ready? ==>
+      && (s.machine.frozenIndirectionTable.Some? ==>
+        && WFRange(
+            s.machine.frozenJournalPosition,
+            s.machine.writtenJournalLen)
+        && DiskQueue_HasJournal(s.disk,
+            s.machine.frozenJournalPosition,
+            s.machine.writtenJournalLen)
+      )
+      && (s.machine.frozenIndirectionTable.None? ==>
+        && WFRange(
+            s.machine.frozenJournalPosition,
+            s.machine.writtenJournalLen)
+        && DiskQueue_HasJournal(s.disk,
+            SuperblockOfDisk(s.disk.blocks).journalStart as int,
+            s.machine.writtenJournalLen)
+      )
+    )
+    && (!s.machine.Ready? ==>
+      && WFRange(
+          SuperblockOfDisk(s.disk.blocks).journalStart as int,
+          SuperblockOfDisk(s.disk.blocks).journalLen as int)
+      && DiskQueue_HasJournal(s.disk,
+          SuperblockOfDisk(s.disk.blocks).journalStart as int,
+          SuperblockOfDisk(s.disk.blocks).journalLen as int)
+    )
+  }
+
+  function FrozenJournal(s: Variables) : seq<JournalEntry>
+  requires WFFrozenJournal(s)
+  {
+    if s.machine.Ready? then (
+      if s.machine.frozenIndirectionTable.Some? then (
+        DiskQueue_Journal(s.disk,
+            s.machine.frozenJournalPosition,
+            s.machine.writtenJournalLen)
+        + s.machine.inMemoryJournalFrozen
+      ) else (
+        DiskQueue_Journal(s.disk,
+            SuperblockOfDisk(s.disk.blocks).journalStart as int,
+            s.machine.writtenJournalLen)
+        + s.machine.inMemoryJournalFrozen
+      )
+    ) else (
+      DiskQueue_Journal(s.disk,
+          SuperblockOfDisk(s.disk.blocks).journalStart as int,
+          SuperblockOfDisk(s.disk.blocks).journalLen as int)
+    )
+  }
+
+  predicate WFEphemeralJournal(s: Variables)
+  {
+    && WFPersistentJournal(s)
+  }
+
+  function EphemeralJournal(s: Variables) : seq<JournalEntry>
+  {
+    if s.machine.Ready? then (
+      s.machine.replayJournal
+    ) else (
+      PersistentJournal(s)
+    )
+  }
+
+  function DeltaJournal(s: Variables) : seq<JournalEntry>
+  {
+    if s.machine.Ready? then (
+      s.machine.inMemoryJournal
+    ) else (
+      []
+    )
+  }
+
   ///// Init
 
   predicate Init(k: Constants, s: Variables)
@@ -469,7 +567,7 @@ module BlockCacheSystem {
 
       && locContainedInCircularJournalRange(
           s.disk.reqWrites[id].loc,
-            M.JournalPosAdd(s.machine.superblock.journalStart as int,
+            JournalPosAdd(s.machine.superblock.journalStart as int,
                 s.machine.superblock.journalLen as int) as uint64,
             s.machine.writtenJournalLen as uint64
                 - s.machine.superblock.journalLen)
@@ -757,11 +855,11 @@ module BlockCacheSystem {
       && (s.machine.journalBack.Some? ==> (
         && s.machine.journalBackRead.None?
       ))
-      && (M.JournalFrontLocation(s.machine.superblock).None? ==> (
+      && (M.JournalFrontLocationOfSuperblock(s.machine.superblock).None? ==> (
         && s.machine.journalFrontRead.None?
         && s.machine.journalFront.None?
       ))
-      && (M.JournalBackLocation(s.machine.superblock).None? ==> (
+      && (M.JournalBackLocationOfSuperblock(s.machine.superblock).None? ==> (
         && s.machine.journalBackRead.None?
         && s.machine.journalBack.None?
       ))
@@ -781,6 +879,9 @@ module BlockCacheSystem {
     && ReadIdsDistinct(s.disk.reqReads, s.disk.respReads)
     && RecordedWriteRequests(k, s)
     && RecordedReadRequests(k, s)
+    && WFPersistentJournal(s)
+    && WFFrozenJournal(s)
+    && WFEphemeralJournal(s)
   }
 
   ////// Proofs
@@ -841,6 +942,10 @@ module BlockCacheSystem {
       }
     }
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// WriteBackReq
+  //////////////////////
 
   lemma WriteBackReqStepUniqueLBAs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
@@ -989,6 +1094,27 @@ module BlockCacheSystem {
     }
   }
 
+  lemma WriteBackReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+    WriteBackReqStepUniqueLBAs(k, s, s', dop, ref);
+    var start := if s.machine.frozenIndirectionTable.Some?
+        then s.machine.frozenJournalPosition
+        else SuperblockOfDisk(s.disk.blocks).journalStart as int;
+    var len := s.machine.writtenJournalLen;
+    DiskQueue_Journal_write_other(
+        k.disk, s.disk, s'.disk, start, len, dop);
+  }
+
   lemma WriteBackReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
@@ -997,6 +1123,7 @@ module BlockCacheSystem {
   {
     WriteBackReqStepUniqueLBAs(k, s, s', dop, ref);
     WriteBackReqStepPreservesGraphs(k, s, s', dop, ref);
+    WriteBackReqStepPreservesJournals(k, s, s', dop, ref);
 
     forall id1 | id1 in s'.disk.reqReads
     ensures s'.disk.reqReads[id1].loc != s'.disk.reqWrites[dop.id].loc
@@ -1304,7 +1431,7 @@ module BlockCacheSystem {
           /*assert dop.reqWrite.loc.len > 0;
           assert !locContainedInCircularJournalRange(
               dop.reqWrite.loc,
-              M.JournalPosAdd(s.machine.superblock.journalStart as int,
+              JournalPosAdd(s.machine.superblock.journalStart as int,
                   s.machine.superblock.journalLen as int) as uint64,
               s.machine.writtenJournalLen as uint64
                   - s.machine.superblock.journalLen);
@@ -1327,41 +1454,41 @@ module BlockCacheSystem {
     ensures CorrectInflightJournalWrite(k, s', id)
     {
       if id == dop.id {
-        var startPos := M.JournalPosAdd(
+        var startPos := JournalPosAdd(
           s.machine.superblock.journalStart as int,
           s.machine.writtenJournalLen);
 
 
-        if M.JournalPosAdd(s.machine.superblock.journalStart as int,
+        if JournalPosAdd(s.machine.superblock.journalStart as int,
                 s.machine.superblock.journalLen as int) + 
               s.machine.writtenJournalLen + JournalRangeLen(jr)
                   - s.machine.superblock.journalLen as int
               <= NumJournalBlocks() as int {
 
-          assert M.JournalPosAdd(s.machine.superblock.journalStart as int,
+          assert JournalPosAdd(s.machine.superblock.journalStart as int,
                     s.machine.writtenJournalLen) as uint64
-              >= M.JournalPosAdd(s.machine.superblock.journalStart as int,
+              >= JournalPosAdd(s.machine.superblock.journalStart as int,
                     s.machine.superblock.journalLen as int) as uint64;
 
           assert JournalPoint(startPos as uint64) as uint64
-              >= JournalPoint(M.JournalPosAdd(s.machine.superblock.journalStart as int,
+              >= JournalPoint(JournalPosAdd(s.machine.superblock.journalStart as int,
                     s.machine.superblock.journalLen as int) as uint64);
 
           assert JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64).addr
-              >= JournalPoint(M.JournalPosAdd(s.machine.superblock.journalStart as int,
+              >= JournalPoint(JournalPosAdd(s.machine.superblock.journalStart as int,
                     s.machine.superblock.journalLen as int) as uint64);
         }
 
         assert locContainedInCircularJournalRange(
             JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64),
-            M.JournalPosAdd(s.machine.superblock.journalStart as int,
+            JournalPosAdd(s.machine.superblock.journalStart as int,
                 s.machine.superblock.journalLen as int) as uint64,
             s.machine.writtenJournalLen as uint64 + JournalRangeLen(jr) as uint64
                 - s.machine.superblock.journalLen);
 
         assert locContainedInCircularJournalRange(
             JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64),
-            M.JournalPosAdd(s'.machine.superblock.journalStart as int,
+            JournalPosAdd(s'.machine.superblock.journalStart as int,
                 s'.machine.superblock.journalLen as int) as uint64,
             s'.machine.writtenJournalLen as uint64
                 - s.machine.superblock.journalLen);

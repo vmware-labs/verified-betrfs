@@ -720,8 +720,8 @@ module BlockCache refines Transactable {
     && dop.NoDiskOp?
     && s.LoadingSuperblock?
     // TODO account for case where one superblock or the other is corrupt
-    && !s.superblock1.SuperblockUnfinished?
-    && !s.superblock2.SuperblockUnfinished?
+    && s.superblock1.SuperblockSuccess?
+    && s.superblock2.SuperblockSuccess?
     && (s.superblock1.SuperblockSuccess?
         || s.superblock2.SuperblockSuccess?)
     && (s.superblock1.SuperblockSuccess? && s.superblock2.SuperblockSuccess? ==>

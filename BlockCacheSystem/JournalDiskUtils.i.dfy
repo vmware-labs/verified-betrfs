@@ -2,6 +2,11 @@ include "DiskLayout.i.dfy"
 include "AsyncSectorDiskModel.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 
+//
+// Interpretation of the journal stored on the disk
+// and lemmas thereof. Useful for BlockCacheSystem proofs.
+//
+
 module JournalDiskUtils {
   import opened DiskLayout
   import opened NativeTypes
@@ -24,7 +29,7 @@ module JournalDiskUtils {
   predicate NoOverlaps(reqWrites: map<ReqId, ReqWrite>)
   {
     forall id1, id2 | id1 in reqWrites && id2 in reqWrites ::
-        !overlap(reqWrites[id1].loc, reqWrites[id2].loc)
+        overlap(reqWrites[id1].loc, reqWrites[id2].loc) ==> id1 == id2
   }
 
   function Disk_JournalBlockAtLoc(blocks: imap<Location, Sector>, loc: Location)
@@ -303,12 +308,41 @@ module JournalDiskUtils {
     }
   }
 
-  lemma DiskQueue_Journal_append_other(
+  lemma Queue_JournalBlockAt_preserved_by_nonoverlapping_write(
+      k: DiskConstants, disk: DiskState, disk': DiskState, dop: DiskOp, i: int)
+  requires AsyncSectorDisk.RecvWrite(k, disk, disk', dop)
+      || AsyncSectorDisk.RecvWrite2(k, disk, disk', dop)
+  requires 0 <= i < NumJournalBlocks() as int
+  requires AsyncSectorDisk.RecvWrite(k, disk, disk', dop) ==>
+      !overlap(dop.reqWrite.loc, JournalRangeLocation(i as uint64, 1))
+  requires AsyncSectorDisk.RecvWrite2(k, disk, disk', dop) ==>
+      !overlap(dop.reqWrite1.loc, JournalRangeLocation(i as uint64, 1))
+  requires AsyncSectorDisk.RecvWrite2(k, disk, disk', dop) ==>
+      !overlap(dop.reqWrite2.loc, JournalRangeLocation(i as uint64, 1))
+  requires NoOverlaps(disk.reqWrites)
+  requires NoOverlaps(disk'.reqWrites)
+  ensures Queue_JournalBlockAt(disk.reqWrites, i)
+      == Queue_JournalBlockAt(disk'.reqWrites, i)
+  {
+    var loc := JournalRangeLocation(i as uint64, 1);
+    if Queue_JournalBlockAt(disk.reqWrites, i).Some? {
+      var id :| id in disk.reqWrites
+        && ValidJournalLocation(disk.reqWrites[id].loc)
+        && LocationSub(loc, disk.reqWrites[id].loc);
+      assert ValidJournalLocation(disk'.reqWrites[id].loc);
+      assert LocationSub(loc, disk'.reqWrites[id].loc);
+    } else {
+      assert Queue_JournalBlockAt(disk'.reqWrites, i).None?;
+    }
+  }
+
+  lemma DiskQueue_Journal_write_other(
       k: DiskConstants, disk: DiskState, disk': DiskState,
       start: int, len: int, dop: DiskOp)
   requires WFRange(start, len)
   requires AsyncSectorDisk.RecvWrite(k, disk, disk', dop)
-  requires !dop.reqWrite.sector.SectorJournal?
+  requires ValidLocation(dop.reqWrite.loc);
+  requires !ValidJournalLocation(dop.reqWrite.loc);
   requires DiskQueue_HasJournal(disk, start, len)
   requires NoOverlaps(disk'.reqWrites)
   ensures DiskQueue_HasJournal(disk', start, len)
@@ -325,9 +359,19 @@ module JournalDiskUtils {
     forall i | 0 <= i < |slice'| ensures slice'[i] == slice[i]
     {
       var j := JournalPosAdd(start, i);
+      var loc := JournalRangeLocation(j as uint64, 1);
+      if overlap(loc, dop.reqWrite.loc) {
+        overlappingLocsSameType(loc, dop.reqWrite.loc);
+      }
       calc {
         slice'[i];
         dq'[j];
+        DiskQueue_JournalBlockAt(disk', j);
+        {
+          Queue_JournalBlockAt_preserved_by_nonoverlapping_write(
+              k, disk, disk', dop, j);
+        }
+        DiskQueue_JournalBlockAt(disk, j);
         dq[j];
         slice[i];
       }
@@ -366,10 +410,16 @@ module JournalDiskUtils {
     forall i | 0 <= i < |slice'| ensures slice'[i] == slice_jr[i]
     {
       var j := JournalPosAdd(start, i);
+      var loc := JournalRangeLocation(j as uint64, 1);
       if i < len {
         calc {
           slice'[i];
           dq'[j];
+          DiskQueue_JournalBlockAt(disk', j);
+          {
+            Queue_JournalBlockAt_preserved_by_nonoverlapping_write(
+                k, disk, disk', dop, j);
+          }
           dq[j];
           slice_jr[i];
         }
@@ -392,6 +442,8 @@ module JournalDiskUtils {
           DiskQueue_JournalBlockAt(disk', j);
           Queue_JournalBlockAt(disk'.reqWrites, j);
           Some(JournalBlockGet(jr, i - len));
+          Some(JournalBlocks(jr)[i - len]);
+          mapSome(JournalBlocks(jr))[i - len];
           slice_jr[i];
         }
       }
@@ -458,6 +510,10 @@ module JournalDiskUtils {
         calc {
           slice'[i];
           dq'[j];
+          {
+            Queue_JournalBlockAt_preserved_by_nonoverlapping_write(
+                k, disk, disk', dop, j);
+          }
           dq[j];
           slice_jr[i];
         }
@@ -470,8 +526,10 @@ module JournalDiskUtils {
         assert ValidJournalLocation(disk'.reqWrites[dop.id1].loc);
         assert LocationSub(loc, disk'.reqWrites[dop.id1].loc);
         assert disk'.reqWrites[dop.id1].sector.SectorJournal?;
-        assert 0 <= j - JournalBlockIdx(disk'.reqWrites[dop.id1].loc) < 
-            JournalRangeLen(disk'.reqWrites[dop.id1].sector.journal);
+        assert JournalRangeLen(disk'.reqWrites[dop.id1].sector.journal) == len1;
+        assert 0
+            <= j - JournalBlockIdx(disk'.reqWrites[dop.id1].loc)
+            < JournalRangeLen(disk'.reqWrites[dop.id1].sector.journal);
 
         assert Queue_JournalBlockAt(disk'.reqWrites, j).Some?;
         calc {
@@ -480,6 +538,13 @@ module JournalDiskUtils {
           DiskQueue_JournalBlockAt(disk', j);
           Queue_JournalBlockAt(disk'.reqWrites, j);
           Some(JournalBlockGet(jr1, i - len));
+          Some(JournalBlocks(jr1)[i-len]);
+          {
+            JournalRangePrefixGet(
+                jr, NumJournalBlocks() as int - start - len, i - len);
+          }
+          Some(JournalBlocks(jr)[i-len]);
+          mapSome(JournalBlocks(jr))[i - len];
           slice_jr[i];
         }
       } else {
@@ -500,7 +565,13 @@ module JournalDiskUtils {
           dq'[j];
           DiskQueue_JournalBlockAt(disk', j);
           Queue_JournalBlockAt(disk'.reqWrites, j);
-          Some(JournalBlockGet(jr2, i - len));
+          Some(JournalBlockGet(jr2, i - len - len1));
+          {
+            JournalRangeSuffixGet(
+                jr, len1, i - len - len1);
+          }
+          Some(JournalBlockGet(jr, i - len));
+          mapSome(JournalBlocks(jr))[i - len];
           slice_jr[i];
         }
       }
@@ -557,9 +628,22 @@ module JournalDiskUtils {
                 j as uint64, disk.reqWrites[id].loc);
           }
 
-          /*
           if (Queue_JournalBlockAt(disk.reqWrites, j).Some?) {
             if (Queue_JournalBlockAt(disk'.reqWrites, j).None?) {
+              var idx := j - JournalBlockIdx(disk.reqWrites[id].loc);
+
+              assert LogLookupSingleBlockConsistentLoc(disk'.blocks,
+                  disk.reqWrites[id].loc, loc, idx as int);
+
+              //assert disk.reqWrites[id].loc in disk'.blocks;
+              //assert disk'.blocks[disk.reqWrites[id].loc].SectorJournal?;
+              //assert loc.addr as int == disk.reqWrites[id].loc.addr as int + 4096*idx;
+              //assert loc.len == 4096;
+
+              assert loc in disk'.blocks;
+              assert Disk_JournalBlockAt(disk'.blocks, j).Some?;
+              assert Disk_JournalBlockAt(disk'.blocks, j).value
+                  == Queue_JournalBlockAt(disk.reqWrites, j).value;
               assert DiskQueue_JournalBlockAt(disk, j)
                   == DiskQueue_JournalBlockAt(disk', j);
             } else {
@@ -567,13 +651,23 @@ module JournalDiskUtils {
                   == DiskQueue_JournalBlockAt(disk', j);
             }
           } else {
+            if overlap(loc, disk.reqWrites[id].loc) {
+              overlappingLocsSameType(loc, disk.reqWrites[id].loc);
+              journalLength1OverlapImpliesContained(
+                  j as uint64, disk.reqWrites[id].loc);
+
+              assert id in disk.reqWrites;
+              assert ValidJournalLocation(disk.reqWrites[id].loc);
+              assert LocationSub(loc, disk.reqWrites[id].loc);
+
+              assert disk.reqWrites[id].sector.SectorJournal?;
+              assert 0 <= j - JournalBlockIdx(disk.reqWrites[id].loc) < 
+                JournalRangeLen(disk.reqWrites[id].sector.journal);
+
+              assert false;
+            }
+
             if (Queue_JournalBlockAt(disk'.reqWrites, j).None?) {
-              assert loc != disk.reqWrites[id].loc;
-              if overlap(loc, disk.reqWrites[id].loc) {
-                journalLength1OverlapImpliesContained(
-                    j as uint64, disk.reqWrites[id].loc);
-                assert false;
-              }
               assert DiskQueue_JournalBlockAt(disk, j)
                   == Disk_JournalBlockAt(disk.blocks, j)
                   == Disk_JournalBlockAt(disk'.blocks, j)
@@ -583,7 +677,6 @@ module JournalDiskUtils {
                   == DiskQueue_JournalBlockAt(disk', j);
             }
           }
-          */
         }
         DiskQueue_JournalBlockAt(disk', j);
         dq'[j];
