@@ -235,47 +235,20 @@ module BlockCache refines Transactable {
     map id | id in syncReqs :: (if syncReqs[id] == State2 then State1 else syncReqs[id])
   }
 
-  function JournalPosAdd(start: int, span: int) : int
-  {
-    if start + span >= NumJournalBlocks() as int then
-      start + span - NumJournalBlocks() as int
-    else
-      start + span
-  }
-
   // Journal is written in a circular array, so to load the log
   // we may have to read back two chunks.
 
-  function JournalFrontLocation(superblock: Superblock) : Option<Location>
+  function JournalFrontLocationOfSuperblock(superblock: Superblock) : Option<Location>
   requires superblock.journalStart < NumJournalBlocks()
   {
-    if superblock.journalLen == 0 then
-      None
-    else
-      Some(JournalRangeLocation(
-          superblock.journalStart,
-          if superblock.journalLen <=
-              NumJournalBlocks() - superblock.journalStart
-          then
-            superblock.journalLen
-          else
-            NumJournalBlocks() - superblock.journalStart
-      ))
+    JournalFrontLocation(superblock.journalStart, superblock.journalLen)
   }
 
-  function JournalBackLocation(superblock: Superblock) : Option<Location>
+  function JournalBackLocationOfSuperblock(superblock: Superblock) : Option<Location>
   requires superblock.journalStart < NumJournalBlocks()
   requires superblock.journalLen <= NumJournalBlocks()
   {
-    if superblock.journalLen == 0 then
-      None
-    else if superblock.journalLen <=
-        NumJournalBlocks() - superblock.journalStart then
-      None
-    else
-      Some(JournalRangeLocation(0, 
-          superblock.journalLen -
-        (NumJournalBlocks() - superblock.journalStart)))
+    JournalBackLocation(superblock.journalStart, superblock.journalLen)
   }
 
   predicate WFSuperblock(superblock: Superblock)
@@ -632,6 +605,7 @@ module BlockCache refines Transactable {
     && s.LoadingOther?
 
     && s.indirectionTableRead.None?
+    && s.indirectionTable.None?
     && dop.reqRead.loc == s.superblock.indirectionTableLoc
     && s' == s.(indirectionTableRead := Some(dop.id))
   }
@@ -659,15 +633,17 @@ module BlockCache refines Transactable {
     && s.superblock.journalStart < NumJournalBlocks()
     && s.superblock.journalLen <= NumJournalBlocks()
     && (which == 0 ==>
-      && JournalFrontLocation(s.superblock).Some?
-      && dop.reqRead.loc == JournalFrontLocation(s.superblock).value
+      && JournalFrontLocationOfSuperblock(s.superblock).Some?
+      && dop.reqRead.loc == JournalFrontLocationOfSuperblock(s.superblock).value
       && s.journalFrontRead.None?
+      && s.journalFront.None?
       && s' == s.(journalFrontRead := Some(dop.id))
     )
     && (which == 1 ==>
-      && JournalBackLocation(s.superblock).Some?
-      && dop.reqRead.loc == JournalBackLocation(s.superblock).value
+      && JournalBackLocationOfSuperblock(s.superblock).Some?
+      && dop.reqRead.loc == JournalBackLocationOfSuperblock(s.superblock).value
       && s.journalBackRead.None?
+      && s.journalBack.None?
       && s' == s.(journalBackRead := Some(dop.id))
     )
   }
@@ -701,11 +677,13 @@ module BlockCache refines Transactable {
     && (which == 0 ==> 
       && dop.reqRead.loc == Superblock1Location()
       && s.outstandingSuperblock1Read.None?
+      && s.superblock1.SuperblockUnfinished?
       && s' == s.(outstandingSuperblock1Read := Some(dop.id))
     )
     && (which == 1 ==> 
       && dop.reqRead.loc == Superblock2Location()
       && s.outstandingSuperblock2Read.None?
+      && s.superblock2.SuperblockUnfinished?
       && s' == s.(outstandingSuperblock2Read := Some(dop.id))
     )
   }
@@ -779,13 +757,13 @@ module BlockCache refines Transactable {
     && s.indirectionTable.Some?
     && s.superblock.journalStart < NumJournalBlocks()
     && s.superblock.journalLen <= NumJournalBlocks()
-    && (JournalFrontLocation(s.superblock).Some? ==> s.journalFront.Some?)
-    && (JournalBackLocation(s.superblock).Some? ==> s.journalBack.Some?)
+    && (JournalFrontLocationOfSuperblock(s.superblock).Some? ==> s.journalFront.Some?)
+    && (JournalBackLocationOfSuperblock(s.superblock).Some? ==> s.journalBack.Some?)
 
     && var fullRange := (
-        if JournalBackLocation(s.superblock).Some? then
+        if JournalBackLocationOfSuperblock(s.superblock).Some? then
           JournalRangeConcat(s.journalFront.value, s.journalBack.value)
-        else if JournalFrontLocation(s.superblock).Some? then
+        else if JournalFrontLocationOfSuperblock(s.superblock).Some? then
           s.journalFront.value
         else
           JournalRangeEmpty()
@@ -1084,9 +1062,19 @@ module BlockCache refines Transactable {
   requires s.LoadingSuperblock?
   {
     && (s.superblock1.SuperblockSuccess? ==>
-        WFSuperblock(s.superblock1.value))
+        && s.outstandingSuperblock1Read.None?
+        && WFSuperblock(s.superblock1.value)
+       )
     && (s.superblock2.SuperblockSuccess? ==>
-        WFSuperblock(s.superblock2.value))
+        && s.outstandingSuperblock2Read.None?
+        && WFSuperblock(s.superblock2.value)
+       )
+    && (s.superblock1.SuperblockCorruption? ==>
+        && s.outstandingSuperblock1Read.None?
+        )
+    && (s.superblock2.SuperblockCorruption? ==>
+        && s.outstandingSuperblock2Read.None?
+        )
   }
 
   predicate InvLoadingOther(k: Constants, s: Variables)
@@ -1094,6 +1082,7 @@ module BlockCache refines Transactable {
   {
     && WFSuperblock(s.superblock)
     && (s.indirectionTable.Some? ==>
+      && s.indirectionTableRead.None?
       && WFCompleteIndirectionTable(s.indirectionTable.value)
       && AllLocationsForDifferentRefsDontOverlap(s.indirectionTable.value)
     )

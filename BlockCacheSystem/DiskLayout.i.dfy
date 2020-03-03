@@ -1,9 +1,11 @@
 include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Base/Option.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module DiskLayout {
   import opened NativeTypes
   import opened Bounds
+  import opened Options
 
   type Addr(==,!new) = uint64
   datatype Location = Location(addr: Addr, len: uint64)
@@ -199,6 +201,43 @@ module DiskLayout {
       && loc.addr >= JournalPoint(start + len - NumJournalBlocks())
       && loc.addr as int + loc.len as int <= JournalPoint(start) as int
     )
+  }
+
+  function JournalPosAdd(start: int, span: int) : int
+  {
+    if start + span >= NumJournalBlocks() as int then
+      start + span - NumJournalBlocks() as int
+    else
+      start + span
+  }
+
+  function JournalFrontLocation(start: uint64, len: uint64) : Option<Location>
+  requires start < NumJournalBlocks()
+  {
+    if len == 0 then
+      None
+    else
+      Some(JournalRangeLocation(
+          start,
+          if len <= NumJournalBlocks() - start
+          then
+            len
+          else
+            NumJournalBlocks() - start
+      ))
+  }
+
+  function JournalBackLocation(start: uint64, len: uint64) : Option<Location>
+  requires start < NumJournalBlocks()
+  requires len <= NumJournalBlocks()
+  {
+    if len == 0 then
+      None
+    else if len <= NumJournalBlocks() - start then
+      None
+    else
+      Some(JournalRangeLocation(0, 
+          len - (NumJournalBlocks() - start)))
   }
 
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr

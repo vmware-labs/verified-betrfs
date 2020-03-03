@@ -366,6 +366,7 @@ module BlockCacheSystem {
   {
     s.machine.indirectionTableRead.Some? ==> (
       && var reqId := s.machine.indirectionTableRead.value;
+      && (reqId in s.disk.reqReads || reqId in s.disk.respReads)
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
         s.disk.reqReads[reqId] == D.ReqRead(s.machine.superblock.indirectionTableLoc)
@@ -380,9 +381,15 @@ module BlockCacheSystem {
   requires s.machine.LoadingSuperblock?
   requires WFDisk(s.disk.blocks)
   {
+    && (s.machine.outstandingSuperblock1Read.Some?
+      && s.machine.outstandingSuperblock2Read.Some? ==>
+        s.machine.outstandingSuperblock1Read.value !=
+        s.machine.outstandingSuperblock2Read.value
+    ) 
     && (s.machine.outstandingSuperblock1Read.Some? ==> (
       && var reqId := s.machine.outstandingSuperblock1Read.value;
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
+      && (reqId in s.disk.reqReads || reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
         s.disk.reqReads[reqId] == D.ReqRead(Superblock1Location())
       )
@@ -390,10 +397,15 @@ module BlockCacheSystem {
         && Superblock1Location() in s.disk.blocks
         && s.disk.respReads[reqId] == D.RespRead(Some(s.disk.blocks[Superblock1Location()]))
       )
+      && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.None? ==> !(
+        && Superblock1Location() in s.disk.blocks
+        && s.disk.blocks[Superblock1Location()].SectorSuperblock?
+      ))
     ))
     && (s.machine.outstandingSuperblock2Read.Some? ==> (
       && var reqId := s.machine.outstandingSuperblock2Read.value;
       && !(reqId in s.disk.reqReads && reqId in s.disk.respReads)
+      && (reqId in s.disk.reqReads || reqId in s.disk.respReads)
       && (reqId in s.disk.reqReads ==>
         s.disk.reqReads[reqId] == D.ReqRead(Superblock2Location())
       )
@@ -401,6 +413,9 @@ module BlockCacheSystem {
         && Superblock2Location() in s.disk.blocks
         && s.disk.respReads[reqId] == D.RespRead(Some(s.disk.blocks[Superblock2Location()]))
       )
+      && (reqId in s.disk.respReads && s.disk.respReads[reqId].sector.None? ==> !(
+        && Superblock2Location() in s.disk.blocks
+      ))
     ))
   }
 
@@ -621,6 +636,14 @@ module BlockCacheSystem {
         reqReads[id1].loc != reqWrites[id2].loc
   }
 
+  predicate ReadIdsDistinct(
+    reqReads: map<D.ReqId, D.ReqRead>,
+    respReads: map<D.ReqId, D.RespRead>)
+  {
+    forall id1, id2 | id1 in reqReads && id2 in respReads ::
+        id1 != id2
+  }
+
   predicate Inv(k: Constants, s: Variables) {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk.blocks)
@@ -742,11 +765,20 @@ module BlockCacheSystem {
         && s.machine.journalBackRead.None?
         && s.machine.journalBack.None?
       ))
+      && (s.machine.whichSuperblock == 0 ==> (
+        && Superblock1Location() in s.disk.blocks
+        && s.disk.blocks[Superblock1Location()] == SectorSuperblock(s.machine.superblock)
+      ))
+      && (s.machine.whichSuperblock == 1 ==> (
+        && Superblock2Location() in s.disk.blocks
+        && s.disk.blocks[Superblock2Location()] == SectorSuperblock(s.machine.superblock)
+      ))
     )
     && WriteRequestsDontOverlap(s.disk.reqWrites)
     && WriteRequestsAreDistinct(s.disk.reqWrites)
     && ReadWritesDontOverlap(s.disk.reqReads, s.disk.reqWrites)
     && ReadWritesAreDistinct(s.disk.reqReads, s.disk.reqWrites)
+    && ReadIdsDistinct(s.disk.reqReads, s.disk.respReads)
     && RecordedWriteRequests(k, s)
     && RecordedReadRequests(k, s)
   }
@@ -1668,23 +1700,13 @@ module BlockCacheSystem {
     {
     }
 
-    forall id1, id2 | id1 in s'.disk.reqReads && id2 in s'.disk.reqWrites
-    ensures s'.disk.reqReads[id1].loc.addr != s'.disk.reqWrites[id2].loc.addr
+    forall id2 | id2 in s'.disk.reqWrites
+    ensures dop.reqRead.loc != s'.disk.reqWrites[id2].loc
+    ensures !overlap(dop.reqRead.loc, s'.disk.reqWrites[id2].loc)
     {
-      if (id1 == dop.id && s'.disk.reqReads[id1].loc.addr == s'.disk.reqWrites[id2].loc.addr) {
-        //var loc := dop.reqRead.loc;
-        //assert s.machine.ephemeralIndirectionTable.locs[ref] == loc;
-        //assert id2 in s.disk.reqWrites;
-        //assert RecordedWriteRequest(k, s, id2, s'.disk.reqWrites[id2].loc, s'.disk.reqWrites[id2].sector);
-        //assert overlap(dop.reqRead.loc, s'.disk.reqWrites[id2].loc);
-        //assert ValidNodeLocation(dop.reqRead.loc);
+      if overlap(dop.reqRead.loc, s'.disk.reqWrites[id2].loc) {
         overlappingLocsSameType(dop.reqRead.loc, s'.disk.reqWrites[id2].loc);
-        //assert ValidNodeLocation(s'.disk.reqWrites[id2].loc);
-        //assert s'.disk.reqWrites[id2].sector.SectorNode?;
-        //assert id2 in s.machine.outstandingBlockWrites;
-        //assert s.machine.outstandingBlockWrites[id2].ref != ref ||
-        //    s.machine.outstandingBlockWrites[id2].loc.addr != s.machine.ephemeralIndirectionTable.locs[ref].addr;
-        //assert false;
+        overlappingNodesSameAddr(dop.reqRead.loc, s'.disk.reqWrites[id2].loc);
       }
     }
   }
@@ -1800,6 +1822,33 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
     PageInJournalRespStepPreservesGraphs(k, s, s', dop, which);
+
+    /*forall id | id in s'.disk.reqReads
+    ensures RecordedReadRequest(k, s', id)
+    {
+      assert RecordedReadRequest(k, s, id);
+      if which == 0 {
+        if Some(id) == s.machine.indirectionTableRead {
+          assert Some(id) == s'.machine.indirectionTableRead;
+        } else if Some(id) == s.machine.journalFrontRead {
+          assert id !in s'.disk.reqReads;
+        } else if Some(id) == s.machine.journalBackRead {
+          assert Some(id) == s'.machine.journalBackRead;
+        } else {
+          assert false;
+        }
+      } else {
+        if Some(id) == s.machine.indirectionTableRead {
+          assert Some(id) == s'.machine.indirectionTableRead;
+        } else if Some(id) == s.machine.journalFrontRead {
+          assert Some(id) == s'.machine.journalFrontRead;
+        } else if Some(id) == s.machine.journalBackRead {
+          assert id !in s'.disk.reqReads;
+        } else {
+          assert false;
+        }
+      }
+    }*/
   }
 
   lemma PageInSuperblockReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)

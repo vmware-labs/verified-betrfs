@@ -1,16 +1,23 @@
 include "../MapSpec/Journal.i.dfy"
+include "../lib/Base/Option.s.dfy"
 
 module JournalRanges {
   import opened KeyType 
   import opened ValueMessage
   import opened Journal
+  import opened Options
 
   // Range of JournalEntries in a form that can be written
   // as a series of blocks on disk, or an incomplete chunk of
   // such a list.
   type JournalRange
 
+  function parseJournalRange(jr: JournalRange) : Option<seq<JournalEntry>>
+
   predicate JournalRangeParses(jr: JournalRange, jes: seq<JournalEntry>)
+  {
+    parseJournalRange(jr) == Some(jes)
+  }
 
   function JournalRangeLen(jr: JournalRange) : (len : int)
   ensures len >= 0
