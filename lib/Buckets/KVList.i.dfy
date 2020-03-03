@@ -1861,26 +1861,46 @@ module KVList {
     assert prefix(kvl, PSA.psaNumStrings(kvl.keys) as int) == kvl;
   }
 
+  function toKvlInternal(bucket: Bucket) : (kvl: Kvl)
+  requires WFBucket(bucket)
+  requires BucketWellMarshalled(bucket)
+  requires |bucket.keys| < 0x1_0000_0000 - 1
+  requires MaxLen() as int * |bucket.keys| < 0x1_0000_0000 
+  {
+    PSA.psaCanAppendSeqHelper2(PSA.EmptyPsa(), bucket.keys, MaxLen() as int);
+    Kvl(PSA.psaFromSeq(bucket.keys), bucket.msgs)
+  }
+
+  lemma toKvlCorrect(bucket: Bucket)
+  requires WFBucket(bucket)
+  requires BucketWellMarshalled(bucket)
+  requires |bucket.keys| < 0x1_0000_0000 - 1
+  requires MaxLen() as int * |bucket.keys| < 0x1_0000_0000 
+  ensures WF(toKvlInternal(bucket))
+  ensures I(toKvlInternal(bucket)) == bucket
+  {
+    PSA.psaCanAppendSeqHelper2(PSA.EmptyPsa(), bucket.keys, MaxLen() as int);
+    var keys := PSA.psaFromSeq(bucket.keys);
+    var kvl := toKvlInternal(bucket);
+    forall i | 0 <= i < PSA.psaNumStrings(keys)
+      ensures |PSA.psaElement(keys, i)| <= MaxLen() as int
+    {
+      assert PSA.psaElement(keys, i) == PSA.I(keys)[i];
+    }
+    reveal_WFBucket();
+    assert forall i | 0 <= i < |bucket.msgs| :: bucket.msgs[i] != IdentityMessage();
+  }
+  
   function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
+  requires |bucket.keys| < 0x1_0000_0000 - 1
+  requires MaxLen() as int * |bucket.keys| < 0x1_0000_0000 
   ensures WF(kvl)
   ensures I(kvl) == bucket
-  decreases bucket.b
   {
-    reveal_IMap();
-    reveal_IsStrictlySorted();
-    reveal_WFBucket();
-    assume false;
-
-    if bucket.b.Keys == {} then (
-      Kvl(PSA.EmptyPsa(), [])
-    ) else (
-      var key := maximum(bucket.b.Keys);
-      var kvl1 := toKvl(B(MapRemove1(bucket.b, key)));
-      StrictlySortedAugment(PSA.I(kvl1.keys), key);
-      Kvl(PSA.psaAppend(kvl1.keys, key), kvl1.messages + [bucket.b[key]])
-    )
+    toKvlCorrect(bucket);
+    toKvlInternal(bucket)
   }
 
   function {:opaque} toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)

@@ -26,9 +26,15 @@ module BucketsLib {
   datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
 
-  function BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : BucketMap
+  function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : BucketMap
   requires |keys| == |msgs|
-
+  {
+    if |keys| == 0 then
+      map[]
+    else
+      BucketMapOfSeq(DropLast(keys), DropLast(msgs))[Last(keys) := Last(msgs)]
+  }
+  
   predicate WFBucketMap(bucket: BucketMap)
   {
     forall key | key in bucket :: bucket[key] != IdentityMessage()
@@ -51,11 +57,56 @@ module BucketsLib {
     forall i | 0 <= i < |blist| :: BucketWellMarshalled(blist[i])
   }
 
-  function B(m: BucketMap) : (bucket: Bucket)
-  ensures bucket.b == m
-  ensures WFBucketMap(m) ==> WFBucket(bucket)
-  ensures BucketWellMarshalled(bucket)
+  function BInternal(m: BucketMap) : (bucket: Bucket)
+    ensures bucket.b == m
+    ensures |bucket.keys| == |bucket.msgs|
+  {
+    if |m.Keys| == 0 then
+      BucketMapWithSeq(m, [], [])
+    else 
+      var maxkey := maximum(m.Keys);
+      var maxmsg := m[maxkey];
+      var subm := MapRemove1(m, maxkey);
+      var subbucket := BInternal(subm);
+      BucketMapWithSeq(m, subbucket.keys + [maxkey], subbucket.msgs + [maxmsg])
+  }
 
+  lemma BInternalWellMarshalled(m: BucketMap)
+  ensures BucketWellMarshalled(BInternal(m))
+  //ensures WFBucketMap(m) ==> WFBucket(BInternal(m))
+  {
+    if |m| == 0 {
+    } else if |m| == 1 {
+    } else {
+      var maxkey := maximum(m.Keys);
+      var subm := MapRemove1(m, maxkey);
+      var subbucket := BInternal(subm);      
+      BInternalWellMarshalled(subm);
+      StrictlySortedAugment(subbucket.keys, maxkey);
+    }
+  }
+  
+  lemma BInternalWFBucket(m: BucketMap)
+    requires WFBucketMap(m)
+    ensures WFBucket(BInternal(m))
+  {
+    reveal_WFBucket();
+    reveal_BucketMapOfSeq();
+  }
+  
+  function {:opaque} B(m: BucketMap) : (bucket: Bucket)
+  ensures bucket.b == m
+  ensures BucketWellMarshalled(bucket)
+  ensures WFBucketMap(m) ==> WFBucket(bucket)
+  {
+    BInternalWellMarshalled(m);
+    if WFBucketMap(m) then
+      BInternalWFBucket(m);
+      BInternal(m)
+    else 
+      BInternal(m)
+  }
+  
   predicate WFBucketAt(bucket: Bucket, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   {

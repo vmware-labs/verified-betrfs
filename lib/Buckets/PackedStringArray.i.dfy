@@ -573,6 +573,20 @@ module PackedStringArray {
     psaAppendSeq(EmptyPsa(), strs)
   }
 
+  lemma psaCanAppendSeqHelper(psa: Psa, strs: seq<seq<byte>>)
+    requires WF(psa)
+    requires |strs| < |psa.offsets| + 0x1_0000_0000 - 1
+    requires |psa.data| + FlattenLength(FlattenShape(strs)) < 0x1_0000_0000 
+    ensures psaCanAppendSeq(psa, strs)
+
+  lemma psaCanAppendSeqHelper2(psa: Psa, strs: seq<seq<byte>>, elementLengthBound: nat)
+    requires WF(psa)
+    requires |strs| < |psa.offsets| + 0x1_0000_0000 - 1
+    requires forall i | 0 <= i < |strs| :: |strs[i]| <= elementLengthBound
+    requires |psa.data| + elementLengthBound * |strs| < 0x1_0000_0000 
+    ensures psaCanAppendSeq(psa, strs)
+
+    
   method psaSeqTotalLength(strs: seq<seq<byte>>) returns (len: uint64)
     requires psaCanAppendSeq(EmptyPsa(), strs)
     ensures len == psaTotalLength(psaAppendSeq(EmptyPsa(), strs))
