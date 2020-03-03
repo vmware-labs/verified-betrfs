@@ -48,14 +48,32 @@ module JournalDiskUtils {
     Disk_JournalBlockAtLoc(blocks, JournalRangeLocation(i as uint64, 1))
   }
 
+  predicate BlockHasOverwritingReqInQueue(reqWrites: map<ReqId, ReqWrite>, i: int)
+  requires 0 <= i < NumJournalBlocks() as int
+  {
+    var loc := JournalRangeLocation(i as uint64, 1);
+    exists id :: id in reqWrites
+        && ValidJournalLocation(reqWrites[id].loc)
+        && LocationSub(loc, reqWrites[id].loc)
+  }
+
+  function OverwritingReqInQueue(reqWrites: map<ReqId, ReqWrite>, i: int) : ReqId
+  requires 0 <= i < NumJournalBlocks() as int
+  requires BlockHasOverwritingReqInQueue(reqWrites, i)
+  {
+    var loc := JournalRangeLocation(i as uint64, 1);
+    var id :| id in reqWrites
+        && ValidJournalLocation(reqWrites[id].loc)
+        && LocationSub(loc, reqWrites[id].loc);
+    id
+  }
+
   function Queue_JournalBlockAt(reqWrites: map<ReqId, ReqWrite>, i: int)
     : Option<JournalRange>
   requires 0 <= i < NumJournalBlocks() as int
   {
-    var loc := JournalRangeLocation(i as uint64, 1);
-    if id :| id in reqWrites
-        && ValidJournalLocation(reqWrites[id].loc)
-        && LocationSub(loc, reqWrites[id].loc) then (
+    if BlockHasOverwritingReqInQueue(reqWrites, i) then (
+      var id := OverwritingReqInQueue(reqWrites, i);
       if reqWrites[id].sector.SectorJournal?
          && 0 <= i - JournalBlockIdx(reqWrites[id].loc) < 
             JournalRangeLen(reqWrites[id].sector.journal) then (
@@ -603,6 +621,8 @@ module JournalDiskUtils {
   requires AsyncSectorDisk.ProcessWrite(k, disk, disk', id)
   requires ValidLocation(disk.reqWrites[id].loc);
   requires DiskQueue_HasJournal(disk, start, len)
+  requires ValidJournalLocation(disk.reqWrites[id].loc) ==>
+      disk.reqWrites[id].sector.SectorJournal?
   ensures DiskQueue_HasJournal(disk', start, len)
   ensures DiskQueue_Journal(disk', start, len)
        == DiskQueue_Journal(disk, start, len)
@@ -623,29 +643,27 @@ module JournalDiskUtils {
         DiskQueue_JournalBlockAt(disk, j);
         {
           var loc := JournalRangeLocation(j as uint64, 1);
-          if overlap(loc, disk.reqWrites[id].loc) {
-            journalLength1OverlapImpliesContained(
-                j as uint64, disk.reqWrites[id].loc);
-          }
-
-          if (Queue_JournalBlockAt(disk.reqWrites, j).Some?) {
-            if (Queue_JournalBlockAt(disk'.reqWrites, j).None?) {
-              var idx := j - JournalBlockIdx(disk.reqWrites[id].loc);
-
-              assert LogLookupSingleBlockConsistentLoc(disk'.blocks,
-                  disk.reqWrites[id].loc, loc, idx as int);
-
-              //assert disk.reqWrites[id].loc in disk'.blocks;
-              //assert disk'.blocks[disk.reqWrites[id].loc].SectorJournal?;
-              //assert loc.addr as int == disk.reqWrites[id].loc.addr as int + 4096*idx;
-              //assert loc.len == 4096;
-
-              assert loc in disk'.blocks;
-              assert Disk_JournalBlockAt(disk'.blocks, j).Some?;
-              assert Disk_JournalBlockAt(disk'.blocks, j).value
-                  == Queue_JournalBlockAt(disk.reqWrites, j).value;
-              assert DiskQueue_JournalBlockAt(disk, j)
-                  == DiskQueue_JournalBlockAt(disk', j);
+          if BlockHasOverwritingReqInQueue(disk.reqWrites, j) {
+            var id' := OverwritingReqInQueue(disk.reqWrites, j);
+            if id' == id {
+              if disk.reqWrites[id].sector.SectorJournal? {
+                var idx := j - JournalBlockIdx(disk.reqWrites[id].loc);
+                assert LogLookupSingleBlockConsistentLoc(disk'.blocks,
+                    disk.reqWrites[id].loc, loc, idx as int);
+                assert disk.reqWrites[id].loc in disk'.blocks;
+                assert disk'.blocks[disk.reqWrites[id].loc].SectorJournal?;
+                assert loc.addr as int == disk.reqWrites[id].loc.addr as int + 4096*idx;
+                assert loc.len == 4096;
+                assert loc in disk'.blocks;
+                assert Disk_JournalBlockAt(disk'.blocks, j).Some?;
+                assert Disk_JournalBlockAt(disk'.blocks, j).value
+                    == Queue_JournalBlockAt(disk.reqWrites, j).value;
+                assert DiskQueue_JournalBlockAt(disk, j)
+                    == DiskQueue_JournalBlockAt(disk', j);
+              } else {
+                assert DiskQueue_JournalBlockAt(disk, j)
+                    == DiskQueue_JournalBlockAt(disk', j);
+              }
             } else {
               assert DiskQueue_JournalBlockAt(disk, j)
                   == DiskQueue_JournalBlockAt(disk', j);
@@ -655,27 +673,13 @@ module JournalDiskUtils {
               overlappingLocsSameType(loc, disk.reqWrites[id].loc);
               journalLength1OverlapImpliesContained(
                   j as uint64, disk.reqWrites[id].loc);
-
-              assert id in disk.reqWrites;
-              assert ValidJournalLocation(disk.reqWrites[id].loc);
-              assert LocationSub(loc, disk.reqWrites[id].loc);
-
-              assert disk.reqWrites[id].sector.SectorJournal?;
-              assert 0 <= j - JournalBlockIdx(disk.reqWrites[id].loc) < 
-                JournalRangeLen(disk.reqWrites[id].sector.journal);
-
               assert false;
             }
 
-            if (Queue_JournalBlockAt(disk'.reqWrites, j).None?) {
-              assert DiskQueue_JournalBlockAt(disk, j)
-                  == Disk_JournalBlockAt(disk.blocks, j)
-                  == Disk_JournalBlockAt(disk'.blocks, j)
-                  == DiskQueue_JournalBlockAt(disk', j);
-            } else {
-              assert DiskQueue_JournalBlockAt(disk, j)
-                  == DiskQueue_JournalBlockAt(disk', j);
-            }
+            assert DiskQueue_JournalBlockAt(disk, j)
+                == Disk_JournalBlockAt(disk.blocks, j)
+                == Disk_JournalBlockAt(disk'.blocks, j)
+                == DiskQueue_JournalBlockAt(disk', j);
           }
         }
         DiskQueue_JournalBlockAt(disk', j);
@@ -815,6 +819,7 @@ module JournalDiskUtils {
   requires 1 <= len
   requires start + len <= NumJournalBlocks() as int
   requires Disk_HasJournal(disk.blocks, start, len)
+  requires ClosedUnderLogConcatenation(disk.blocks)
   ensures JournalRangeLocation(start as uint64, len as uint64) in disk.blocks
   ensures disk.blocks[JournalRangeLocation(start as uint64, len as uint64)].SectorJournal?
   ensures Some(Disk_Journal(disk.blocks, start, len))

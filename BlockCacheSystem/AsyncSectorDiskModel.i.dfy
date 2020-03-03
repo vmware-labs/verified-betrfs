@@ -190,9 +190,12 @@ module AsyncSectorDisk {
     && blocks[loc].SectorJournal?
     && loc2.addr as int == loc.addr as int + 4096*i
     && loc2.len == 4096
-    && 0 <= i < JournalRangeLen(blocks[loc].journal)
+    && loc2.addr >= loc.addr
+    && loc2.addr as int + loc2.len as int
+        <= loc.addr as int + loc.len as int
       ==>
     && loc2 in blocks
+    && 0 <= i < JournalRangeLen(blocks[loc].journal)
     && blocks[loc2] == SectorJournal(
         JournalBlockGet(blocks[loc].journal, i))
   }
