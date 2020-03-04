@@ -277,7 +277,7 @@ impl<V> ResizingHashMap<V> {
             }
             slot_idx += 1;
         }
-        return VeribetrfsHashMapIter {
+        VeribetrfsHashMapIter {
             slot_idx,
             next: None,
         }
@@ -296,7 +296,7 @@ impl<V> ResizingHashMap<V> {
             }
             slot_idx += 1;
         }
-        return VeribetrfsHashMapIter {
+        VeribetrfsHashMapIter {
             slot_idx,
             next: None,
         }
