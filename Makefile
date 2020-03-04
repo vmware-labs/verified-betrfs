@@ -33,7 +33,7 @@ OPT_FLAG=-O2 -D_LIBCPP_HAS_NO_THREADS
 ##############################################################################
 # Automatic targets
 
-all: status exe
+all: status elf
 
 clean:
 	rm -rf build
