@@ -678,7 +678,23 @@ module BucketsLib {
   ensures WFPivots(insert(pivots, pivot, slot))
   ensures WFBucketList(SplitBucketInList(blist, slot, pivot), insert(pivots, pivot, slot))
   {
-    assume false;
+    WFPivotsInsert(pivots, slot, pivot);
+    reveal_SplitBucketInList();
+    var newbuckets := SplitBucketInList(blist, slot, pivot);
+    forall i | 0 <= i < |newbuckets|
+      ensures WFBucket(newbuckets[i])
+    {
+      if i < slot {
+        assert newbuckets[i] == blist[i];
+      } else if i == slot {
+        reveal_SplitBucketLeft();
+      } else if i == slot + 1 {
+        reveal_SplitBucketRight();
+      } else {
+        assert newbuckets[i] == blist[i-1];
+      }
+    }
+    //WFSplitBucketRight(blist[slot], pivot, pivots, slot);
   }
 
   lemma WFProperSplitBucketInList(blist: BucketList, slot: int, pivot: Key, pivots: PivotTable)
