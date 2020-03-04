@@ -248,8 +248,22 @@ impl<V> ResizingHashMap<V> {
     }
 
     // idiomatic rust iterator with mutable references
+    //
+    // this requires unsafe, because it allows multiple mutable reference to distinct elements in the Vec
+    // if instead we’re willing to give up the standard Iterator trait,
+    // the type system is sufficient, and this is necessary for ergonomics,
+    // see safe_iter_mut
     pub fn iter_mut<'a>(&'a mut self) -> HashMapIterMut<'a, V> {
         HashMapIterMut {
+            map: self,
+            slot_idx: 0,
+        }
+    }
+
+    // an unsafe-free, somewhat idiomatic rust iterator with mutable references
+    // it can only return a single mutable reference at a time
+    pub fn safe_iter_mut<'a>(&'a mut self) -> HashMapIterOneMut<'a, V> {
+        HashMapIterOneMut {
             map: self,
             slot_idx: 0,
         }
@@ -356,6 +370,39 @@ impl<'a, V: 'a> Iterator for HashMapIterMut<'a, V> {
     }
 }
 
+pub struct HashMapIterOneMut<'a, V: 'a> {
+    map: &'a mut ResizingHashMap<V>,
+    slot_idx: usize,
+}
+
+impl<'a, V: 'a> HashMapIterOneMut<'a, V> {
+    // this is now 100% safe, but doesn’t conform to the Iterator interface anymore
+    // (which isn’t typically a big deal for mutable iterators)
+    // I _think_ that proving the safe-ness of the idiomatic version (with unsafe)
+    // is one of the current goals of Prusti; with separation logic, they should be able
+    // to unfold the permission to the whole Vec into distinct permissions to all the elements
+    pub fn next<'b>(&'b mut self) -> Option<(u64, &'b mut V)> where 'a: 'b {
+        let mut found = None;
+        while self.slot_idx < self.map.underlying.storage.len() {
+            let cur_slot = self.slot_idx;
+            self.slot_idx += 1;
+            if let HashMapItem::Entry { .. } = &self.map.underlying.storage[cur_slot] {
+                found = Some(cur_slot);
+                break;
+            }
+        };
+        if let Some(slot_idx) = found {
+            if let HashMapItem::Entry { key, ref mut value } = &mut self.map.underlying.storage[slot_idx] {
+                Some((*key, value))
+            } else {
+                unreachable!()
+            }
+        } else {
+            None
+        }
+    }
+}
+
 pub struct VeribetrfsHashMapIter<'a, V> {
     slot_idx: usize,
     next: Option<(u64, &'a V)>,
@@ -446,5 +493,23 @@ mod resizing_hash_map_test {
         }
 
         assert_eq!(count, (0..128).filter(|x| x % 3 == 0).count());
+
+        let mut safe_mut_iterator = rhm.safe_iter_mut();
+        while let Some((_k, ref mut v)) = safe_mut_iterator.next() {
+            (*v).value /= 2;
+        }
+
+        let mut iterator = rhm.iter();
+        while let Some((k, v)) = iterator.next() {
+            assert_eq!(k, v.value);
+            assert!(k % 3 == 0);
+        }
+
+        let mut mut_iterator_2 = rhm.iter_mut();
+        let mut first = mut_iterator_2.next();
+        let mut second = mut_iterator_2.next();
+        let third = mut_iterator_2.next();
+        first.as_mut().unwrap().1.value = second.as_ref().unwrap().1.value;
+        second.as_mut().unwrap().1.value = third.as_ref().unwrap().1.value;
     }
 }
