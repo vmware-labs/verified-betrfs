@@ -264,6 +264,7 @@ module BlockCache refines Transactable {
     | WriteBackIndirectionTableReqStep
     | WriteBackIndirectionTableRespStep
     | WriteBackJournalReqStep(jr: JournalRange)
+    | WriteBackJournalReqWraparoundStep(jr: JournalRange)
     | WriteBackJournalRespStep
     | WriteBackSuperblockReq_Basic_Step
     | WriteBackSuperblockReq_UpdateIndirectionTable_Step
@@ -411,30 +412,67 @@ module BlockCache refines Transactable {
 
     && var inMemoryJournalFrozen' := [];
 
-    && (JournalRangeLen(jr) + startPos <= NumJournalBlocks() as int ==>
-        && dop.ReqWriteOp?
-        && dop.reqWrite.sector == SectorJournal(jr)
-        && dop.reqWrite.loc == JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64)
-        && s' == s
-            .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
-            .(writtenJournalLen := writtenJournalLen')
-            .(frozenJournalPosition := frozenJournalPosition')
-            .(inMemoryJournal := inMemoryJournal')
-            .(inMemoryJournalFrozen := inMemoryJournalFrozen')
-      )
-    && (JournalRangeLen(jr) + startPos > NumJournalBlocks() as int ==>
-        && dop.ReqWrite2Op?
-        && dop.reqWrite1.sector == SectorJournal(JournalRangePrefix(jr, NumJournalBlocks() as int - startPos))
-        && dop.reqWrite1.loc == JournalRangeLocation(startPos as uint64, NumJournalBlocks() - startPos as uint64)
-        && dop.reqWrite2.sector == SectorJournal(JournalRangeSuffix(jr, NumJournalBlocks() as int - startPos))
-        && dop.reqWrite2.loc == JournalRangeLocation(0, JournalRangeLen(jr) as uint64 - (NumJournalBlocks() - startPos as uint64))
-        && s' == s
-            .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id1, dop.id2})
-            .(writtenJournalLen := writtenJournalLen')
-            .(frozenJournalPosition := frozenJournalPosition')
-            .(inMemoryJournal := inMemoryJournal')
-            .(inMemoryJournalFrozen := inMemoryJournalFrozen')
-      )
+    && JournalRangeLen(jr) + startPos <= NumJournalBlocks() as int
+    && dop.ReqWriteOp?
+    && dop.reqWrite.sector == SectorJournal(jr)
+    && dop.reqWrite.loc == JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64)
+    && s' == s
+        .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
+        .(writtenJournalLen := writtenJournalLen')
+        .(frozenJournalPosition := frozenJournalPosition')
+        .(inMemoryJournal := inMemoryJournal')
+        .(inMemoryJournalFrozen := inMemoryJournalFrozen')
+  }
+
+  predicate WriteBackJournalReqWraparound(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
+  {
+    && s.Ready?
+
+    && var j :=
+        if s.inMemoryJournalFrozen == [] then
+          s.inMemoryJournal
+        else
+          s.inMemoryJournalFrozen;
+
+    && JournalRangeParses(jr, j)
+    && JournalRangeLen(jr) + s.writtenJournalLen <= NumJournalBlocks() as int
+    && JournalRangeLen(jr) > 0
+    && s.newSuperblock.None?
+    && s.superblock.journalStart < NumJournalBlocks()
+    && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
+    && var startPos := JournalPosAdd(
+        s.superblock.journalStart as int,
+        s.writtenJournalLen);
+
+    && var writtenJournalLen' :=
+        s.writtenJournalLen + JournalRangeLen(jr);
+
+    && var frozenJournalPosition' := 
+        if s.inMemoryJournalFrozen == [] then
+          s.frozenJournalPosition
+        else
+          writtenJournalLen';
+
+    && var inMemoryJournal' :=
+        if s.inMemoryJournalFrozen == [] then
+          []
+        else
+          s.inMemoryJournal;
+
+    && var inMemoryJournalFrozen' := [];
+
+    && JournalRangeLen(jr) + startPos > NumJournalBlocks() as int
+    && dop.ReqWrite2Op?
+    && dop.reqWrite1.sector == SectorJournal(JournalRangePrefix(jr, NumJournalBlocks() as int - startPos))
+    && dop.reqWrite1.loc == JournalRangeLocation(startPos as uint64, NumJournalBlocks() - startPos as uint64)
+    && dop.reqWrite2.sector == SectorJournal(JournalRangeSuffix(jr, NumJournalBlocks() as int - startPos))
+    && dop.reqWrite2.loc == JournalRangeLocation(0, JournalRangeLen(jr) as uint64 - (NumJournalBlocks() - startPos as uint64))
+    && s' == s
+        .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id1, dop.id2})
+        .(writtenJournalLen := writtenJournalLen')
+        .(frozenJournalPosition := frozenJournalPosition')
+        .(inMemoryJournal := inMemoryJournal')
+        .(inMemoryJournalFrozen := inMemoryJournalFrozen')
   }
 
   predicate WriteBackJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -960,6 +998,7 @@ module BlockCache refines Transactable {
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReq(k, s, s', dop)
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableResp(k, s, s', dop)
       case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReq(k, s, s', dop, jr)
+      case WriteBackJournalReqWraparoundStep(jr: JournalRange) => WriteBackJournalReqWraparound(k, s, s', dop, jr)
       case WriteBackJournalRespStep => WriteBackJournalResp(k, s, s', dop)
       case WriteBackSuperblockReq_Basic_Step => WriteBackSuperblockReq_Basic(k, s, s', dop)
       case WriteBackSuperblockReq_UpdateIndirectionTable_Step => WriteBackSuperblockReq_UpdateIndirectionTable(k, s, s', dop)
@@ -1233,6 +1272,17 @@ module BlockCache refines Transactable {
     }
   }
 
+  lemma WriteBackJournalReqWraparoundStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
+    requires Inv(k, s)
+    requires WriteBackJournalReqWraparound(k, s, s', dop, jr)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
+
   lemma WriteBackJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires WriteBackJournalResp(k, s, s', dop)
@@ -1489,6 +1539,7 @@ module BlockCache refines Transactable {
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReqStepPreservesInv(k, s, s', dop, jr);
+      case WriteBackJournalReqWraparoundStep(jr: JournalRange) => WriteBackJournalReqWraparoundStepPreservesInv(k, s, s', dop, jr);
       case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(k, s, s', dop);
       case WriteBackSuperblockReq_Basic_Step => WriteBackSuperblockReq_Basic_StepPreservesInv(k, s, s', dop);
       case WriteBackSuperblockReq_UpdateIndirectionTable_Step => WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesInv(k, s, s', dop);

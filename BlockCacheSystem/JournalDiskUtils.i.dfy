@@ -87,14 +87,14 @@ module JournalDiskUtils {
     )
   }
 
-  function DiskQueue_JournalBlockAt(disk: DiskState, i: int)
+  function DiskQueue_JournalBlockAt(blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>, i: int)
     : Option<JournalRange>
   requires 0 <= i < NumJournalBlocks() as int
   {
-    if Queue_JournalBlockAt(disk.reqWrites, i).Some? then
-      Queue_JournalBlockAt(disk.reqWrites, i)
+    if Queue_JournalBlockAt(reqWrites, i).Some? then
+      Queue_JournalBlockAt(reqWrites, i)
     else
-      Disk_JournalBlockAt(disk.blocks, i)
+      Disk_JournalBlockAt(blocks, i)
   }
 
   function Disk_JournalBlockSeq_i(blocks: imap<Location, Sector>, i: int)
@@ -115,22 +115,22 @@ module JournalDiskUtils {
     Disk_JournalBlockSeq_i(blocks, NumJournalBlocks() as int)
   }
 
-  function DiskQueue_JournalBlockSeq_i(disk: DiskState, i: int)
+  function DiskQueue_JournalBlockSeq_i(blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>, i: int)
     : (res : seq<Option<JournalRange>>)
   requires 0 <= i <= NumJournalBlocks() as int
   ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == DiskQueue_JournalBlockAt(disk, j)
+  ensures forall j | 0 <= j < i :: res[j] == DiskQueue_JournalBlockAt(blocks, reqWrites, j)
   {
     if i == 0 then [] else
-      DiskQueue_JournalBlockSeq_i(disk, i-1) + [DiskQueue_JournalBlockAt(disk, i-1)]
+      DiskQueue_JournalBlockSeq_i(blocks, reqWrites, i-1) + [DiskQueue_JournalBlockAt(blocks, reqWrites, i-1)]
   }
 
-  function DiskQueue_JournalBlockSeq(disk: DiskState)
+  function DiskQueue_JournalBlockSeq(blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>)
     : (res : seq<Option<JournalRange>>)
   ensures |res| == NumJournalBlocks() as int
-  ensures forall j | 0 <= j < NumJournalBlocks() as int :: res[j] == DiskQueue_JournalBlockAt(disk, j)
+  ensures forall j | 0 <= j < NumJournalBlocks() as int :: res[j] == DiskQueue_JournalBlockAt(blocks, reqWrites, j)
   {
-    DiskQueue_JournalBlockSeq_i(disk, NumJournalBlocks() as int)
+    DiskQueue_JournalBlockSeq_i(blocks, reqWrites, NumJournalBlocks() as int)
   }
 
   function CyclicSlice<T>(s: seq<T>, start: int, len: int) : seq<T>
@@ -189,50 +189,54 @@ module JournalDiskUtils {
   }
 
   predicate DiskQueue_HasJournalRange(
-      disk: DiskState, start: int, len: int)
+      blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>, 
+      start: int, len: int)
   requires WFRange(start, len)
   {
-    && NoOverlaps(disk.reqWrites)
-    && var slice := CyclicSlice(DiskQueue_JournalBlockSeq(disk), start, len);
+    && NoOverlaps(reqWrites)
+    && var slice := CyclicSlice(DiskQueue_JournalBlockSeq(blocks, reqWrites), start, len);
     && fullRange(slice)
   }
 
   function DiskQueue_JournalRange(
-      disk: DiskState, start: int, len: int) : JournalRange
+      blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>, 
+      start: int, len: int) : JournalRange
   requires WFRange(start, len)
-  requires DiskQueue_HasJournalRange(disk, start, len)
+  requires DiskQueue_HasJournalRange(blocks, reqWrites, start, len)
   {
-    var slice := CyclicSlice(DiskQueue_JournalBlockSeq(disk), start, len);
+    var slice := CyclicSlice(DiskQueue_JournalBlockSeq(blocks, reqWrites), start, len);
     concatFold(slice)
   }
 
   protected predicate DiskQueue_HasJournal(
-      disk: DiskState, start: int, len: int)
+      blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>, 
+      start: int, len: int)
   requires WFRange(start, len)
   {
-    && DiskQueue_HasJournalRange(disk, start, len)
-    && parseJournalRange(DiskQueue_JournalRange(disk, start, len)).Some?
+    && DiskQueue_HasJournalRange(blocks, reqWrites, start, len)
+    && parseJournalRange(DiskQueue_JournalRange(blocks, reqWrites, start, len)).Some?
   }
 
   protected function DiskQueue_Journal(
-      disk: DiskState, start: int, len: int) : seq<JournalEntry>
+      blocks: imap<Location, Sector>, reqWrites: map<ReqId, ReqWrite>, 
+      start: int, len: int) : seq<JournalEntry>
   requires WFRange(start, len)
-  requires DiskQueue_HasJournal(disk, start, len)
+  requires DiskQueue_HasJournal(blocks, reqWrites, start, len)
   {
-    parseJournalRange(DiskQueue_JournalRange(disk, start, len)).value
+    parseJournalRange(DiskQueue_JournalRange(blocks, reqWrites, start, len)).value
   }
 
   lemma Disk_eq_DiskQueue(disk: DiskState, start: int, len: int)
   requires WFRange(start, len)
-  requires DiskQueue_HasJournal(disk, start, len)
+  requires DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)
   requires forall id | id in disk.reqWrites ::
       locDisjointFromCircularJournalRange(
           disk.reqWrites[id].loc, start as uint64, len as uint64)
   ensures Disk_HasJournal(disk.blocks, start, len)
   ensures Disk_Journal(disk.blocks, start, len)
-      == DiskQueue_Journal(disk, start, len)
+      == DiskQueue_Journal(disk.blocks, disk.reqWrites, start, len)
   {
-    var dq := DiskQueue_JournalBlockSeq(disk);
+    var dq := DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites);
     var d := Disk_JournalBlockSeq(disk.blocks);
     var dq_slice := CyclicSlice(dq, start, len);
     var d_slice := CyclicSlice(d, start, len);
@@ -266,13 +270,13 @@ module JournalDiskUtils {
   lemma DiskQueue_Journal_empty(disk: DiskState, start: int)
   requires WFRange(start, 0)
   requires NoOverlaps(disk.reqWrites)
-  ensures DiskQueue_HasJournal(disk, start, 0)
-  ensures DiskQueue_Journal(disk, start, 0) == []
+  ensures DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, 0)
+  ensures DiskQueue_Journal(disk.blocks, disk.reqWrites, start, 0) == []
   {
-    assert CyclicSlice(DiskQueue_JournalBlockSeq(disk), start, 0)
+    assert CyclicSlice(DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites), start, 0)
         == [];
     parseJournalRangeEmpty();
-    assert DiskQueue_JournalRange(disk, start, 0)
+    assert DiskQueue_JournalRange(disk.blocks, disk.reqWrites, start, 0)
         == JournalRangeEmpty();
   }
 
@@ -361,14 +365,14 @@ module JournalDiskUtils {
   requires AsyncSectorDisk.RecvWrite(k, disk, disk', dop)
   requires ValidLocation(dop.reqWrite.loc);
   requires !ValidJournalLocation(dop.reqWrite.loc);
-  requires DiskQueue_HasJournal(disk, start, len)
+  requires DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)
   requires NoOverlaps(disk'.reqWrites)
-  ensures DiskQueue_HasJournal(disk', start, len)
-  ensures DiskQueue_Journal(disk', start, len)
-      == DiskQueue_Journal(disk, start, len)
+  ensures DiskQueue_HasJournal(disk'.blocks, disk'.reqWrites, start, len)
+  ensures DiskQueue_Journal(disk'.blocks, disk'.reqWrites, start, len)
+      == DiskQueue_Journal(disk.blocks, disk.reqWrites, start, len)
   {
-    var dq := DiskQueue_JournalBlockSeq(disk);
-    var dq' := DiskQueue_JournalBlockSeq(disk');
+    var dq := DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites);
+    var dq' := DiskQueue_JournalBlockSeq(disk'.blocks, disk'.reqWrites);
 
     var slice := CyclicSlice(dq, start, len);
     var slice' := CyclicSlice(dq', start, len);
@@ -384,12 +388,12 @@ module JournalDiskUtils {
       calc {
         slice'[i];
         dq'[j];
-        DiskQueue_JournalBlockAt(disk', j);
+        DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
         {
           Queue_JournalBlockAt_preserved_by_nonoverlapping_write(
               k, disk, disk', dop, j);
         }
-        DiskQueue_JournalBlockAt(disk, j);
+        DiskQueue_JournalBlockAt(disk.blocks, disk.reqWrites, j);
         dq[j];
         slice[i];
       }
@@ -404,7 +408,7 @@ module JournalDiskUtils {
   requires WFRange(start, len)
   requires AsyncSectorDisk.RecvWrite(k, disk, disk', dop)
   requires dop.reqWrite.sector == SectorJournal(jr)
-  requires DiskQueue_HasJournal(disk, start, len)
+  requires DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)
   requires parseJournalRange(jr).Some?
   requires len + JournalRangeLen(jr) <= NumJournalBlocks() as int
   requires JournalPosAdd(start, len) + JournalRangeLen(jr) <= NumJournalBlocks() as int
@@ -412,12 +416,12 @@ module JournalDiskUtils {
   requires dop.reqWrite.loc == JournalRangeLocation(
       JournalPosAdd(start, len) as uint64,
       JournalRangeLen(jr) as uint64)
-  ensures DiskQueue_HasJournal(disk', start, len + JournalRangeLen(jr))
-  ensures DiskQueue_Journal(disk', start, len + JournalRangeLen(jr))
-      == DiskQueue_Journal(disk, start, len) + parseJournalRange(jr).value
+  ensures DiskQueue_HasJournal(disk'.blocks, disk'.reqWrites, start, len + JournalRangeLen(jr))
+  ensures DiskQueue_Journal(disk'.blocks, disk'.reqWrites, start, len + JournalRangeLen(jr))
+      == DiskQueue_Journal(disk.blocks, disk.reqWrites, start, len) + parseJournalRange(jr).value
   {
-    var dq := DiskQueue_JournalBlockSeq(disk);
-    var dq' := DiskQueue_JournalBlockSeq(disk');
+    var dq := DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites);
+    var dq' := DiskQueue_JournalBlockSeq(disk'.blocks, disk'.reqWrites);
 
     var slice := CyclicSlice(dq, start, len);
     var slice_jr := slice + mapSome(JournalBlocks(jr));
@@ -433,7 +437,7 @@ module JournalDiskUtils {
         calc {
           slice'[i];
           dq'[j];
-          DiskQueue_JournalBlockAt(disk', j);
+          DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
           {
             Queue_JournalBlockAt_preserved_by_nonoverlapping_write(
                 k, disk, disk', dop, j);
@@ -457,7 +461,7 @@ module JournalDiskUtils {
         calc {
           slice'[i];
           dq'[j];
-          DiskQueue_JournalBlockAt(disk', j);
+          DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
           Queue_JournalBlockAt(disk'.reqWrites, j);
           Some(JournalBlockGet(jr, i - len));
           Some(JournalBlocks(jr)[i - len]);
@@ -495,7 +499,7 @@ module JournalDiskUtils {
   requires JournalPosAdd(start, len) + JournalRangeLen(jr) >= NumJournalBlocks() as int
   requires dop.reqWrite1.sector == SectorJournal(JournalRangePrefix(jr, NumJournalBlocks() as int - start - len))
   requires dop.reqWrite2.sector == SectorJournal(JournalRangeSuffix(jr, NumJournalBlocks() as int - start - len))
-  requires DiskQueue_HasJournal(disk, start, len)
+  requires DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)
   requires parseJournalRange(jr).Some?
   requires NoOverlaps(disk'.reqWrites)
   requires dop.reqWrite1.loc == JournalRangeLocation(
@@ -504,12 +508,12 @@ module JournalDiskUtils {
   requires dop.reqWrite2.loc == JournalRangeLocation(
       0,
       JournalRangeLen(jr) as uint64 - (NumJournalBlocks() - start as uint64 - len as uint64))
-  ensures DiskQueue_HasJournal(disk', start, len + JournalRangeLen(jr))
-  ensures DiskQueue_Journal(disk', start, len + JournalRangeLen(jr))
-      == DiskQueue_Journal(disk, start, len) + parseJournalRange(jr).value
+  ensures DiskQueue_HasJournal(disk'.blocks, disk'.reqWrites, start, len + JournalRangeLen(jr))
+  ensures DiskQueue_Journal(disk'.blocks, disk'.reqWrites, start, len + JournalRangeLen(jr))
+      == DiskQueue_Journal(disk.blocks, disk.reqWrites, start, len) + parseJournalRange(jr).value
   {
-    var dq := DiskQueue_JournalBlockSeq(disk);
-    var dq' := DiskQueue_JournalBlockSeq(disk');
+    var dq := DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites);
+    var dq' := DiskQueue_JournalBlockSeq(disk'.blocks, disk'.reqWrites);
 
     var jr1 := JournalRangePrefix(jr, NumJournalBlocks() as int - start - len);
     var jr2 := JournalRangeSuffix(jr, NumJournalBlocks() as int - start - len);
@@ -553,7 +557,7 @@ module JournalDiskUtils {
         calc {
           slice'[i];
           dq'[j];
-          DiskQueue_JournalBlockAt(disk', j);
+          DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
           Queue_JournalBlockAt(disk'.reqWrites, j);
           Some(JournalBlockGet(jr1, i - len));
           Some(JournalBlocks(jr1)[i-len]);
@@ -581,7 +585,7 @@ module JournalDiskUtils {
         calc {
           slice'[i];
           dq'[j];
-          DiskQueue_JournalBlockAt(disk', j);
+          DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
           Queue_JournalBlockAt(disk'.reqWrites, j);
           Some(JournalBlockGet(jr2, i - len - len1));
           {
@@ -620,15 +624,15 @@ module JournalDiskUtils {
   requires WFRange(start, len)
   requires AsyncSectorDisk.ProcessWrite(k, disk, disk', id)
   requires ValidLocation(disk.reqWrites[id].loc);
-  requires DiskQueue_HasJournal(disk, start, len)
+  requires DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)
   requires ValidJournalLocation(disk.reqWrites[id].loc) ==>
       disk.reqWrites[id].sector.SectorJournal?
-  ensures DiskQueue_HasJournal(disk', start, len)
-  ensures DiskQueue_Journal(disk', start, len)
-       == DiskQueue_Journal(disk, start, len)
+  ensures DiskQueue_HasJournal(disk'.blocks, disk'.reqWrites, start, len)
+  ensures DiskQueue_Journal(disk'.blocks, disk'.reqWrites, start, len)
+       == DiskQueue_Journal(disk.blocks, disk.reqWrites, start, len)
   {
-    var dq := DiskQueue_JournalBlockSeq(disk);
-    var dq' := DiskQueue_JournalBlockSeq(disk');
+    var dq := DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites);
+    var dq' := DiskQueue_JournalBlockSeq(disk'.blocks, disk'.reqWrites);
 
     var slice := CyclicSlice(dq, start, len);
     var slice' := CyclicSlice(dq', start, len);
@@ -640,7 +644,7 @@ module JournalDiskUtils {
       calc {
         slice[i];
         dq[j];
-        DiskQueue_JournalBlockAt(disk, j);
+        DiskQueue_JournalBlockAt(disk.blocks, disk.reqWrites, j);
         {
           var loc := JournalRangeLocation(j as uint64, 1);
           if BlockHasOverwritingReqInQueue(disk.reqWrites, j) {
@@ -658,15 +662,15 @@ module JournalDiskUtils {
                 assert Disk_JournalBlockAt(disk'.blocks, j).Some?;
                 assert Disk_JournalBlockAt(disk'.blocks, j).value
                     == Queue_JournalBlockAt(disk.reqWrites, j).value;
-                assert DiskQueue_JournalBlockAt(disk, j)
-                    == DiskQueue_JournalBlockAt(disk', j);
+                assert DiskQueue_JournalBlockAt(disk.blocks, disk.reqWrites, j)
+                    == DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
               } else {
-                assert DiskQueue_JournalBlockAt(disk, j)
-                    == DiskQueue_JournalBlockAt(disk', j);
+                assert DiskQueue_JournalBlockAt(disk.blocks, disk.reqWrites, j)
+                    == DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
               }
             } else {
-              assert DiskQueue_JournalBlockAt(disk, j)
-                  == DiskQueue_JournalBlockAt(disk', j);
+              assert DiskQueue_JournalBlockAt(disk.blocks, disk.reqWrites, j)
+                  == DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
             }
           } else {
             if overlap(loc, disk.reqWrites[id].loc) {
@@ -676,13 +680,13 @@ module JournalDiskUtils {
               assert false;
             }
 
-            assert DiskQueue_JournalBlockAt(disk, j)
+            assert DiskQueue_JournalBlockAt(disk.blocks, disk.reqWrites, j)
                 == Disk_JournalBlockAt(disk.blocks, j)
                 == Disk_JournalBlockAt(disk'.blocks, j)
-                == DiskQueue_JournalBlockAt(disk', j);
+                == DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
           }
         }
-        DiskQueue_JournalBlockAt(disk', j);
+        DiskQueue_JournalBlockAt(disk'.blocks, disk'.reqWrites, j);
         dq'[j];
         slice'[i];
       }
