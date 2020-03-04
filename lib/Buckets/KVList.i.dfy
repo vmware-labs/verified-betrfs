@@ -1888,6 +1888,7 @@ module KVList {
       assert PSA.psaElement(keys, i) == PSA.I(keys)[i];
     }
     reveal_WFBucket();
+    reveal_BucketMapOfSeq();
     assert forall i | 0 <= i < |bucket.msgs| :: bucket.msgs[i] != IdentityMessage();
   }
   

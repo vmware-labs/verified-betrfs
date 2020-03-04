@@ -26,13 +26,18 @@ module BucketsLib {
   datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
 
-  function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : BucketMap
-  requires |keys| == |msgs|
+  function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: BucketMap)
+    requires |keys| == |msgs|
+    ensures result.Keys == Set(keys)
+    ensures result.Values <= Set(msgs)
   {
     if |keys| == 0 then
       map[]
     else
-      BucketMapOfSeq(DropLast(keys), DropLast(msgs))[Last(keys) := Last(msgs)]
+      var r' := BucketMapOfSeq(DropLast(keys), DropLast(msgs));
+      var r := r'[Last(keys) := Last(msgs)];
+      assert r.Values <= r'.Values + {Last(msgs)};
+      r
   }
   
   predicate WFBucketMap(bucket: BucketMap)
@@ -40,7 +45,7 @@ module BucketsLib {
     forall key | key in bucket :: bucket[key] != IdentityMessage()
   }
 
-  predicate {:opaque} WFBucket(bucket: Bucket)
+  predicate WFBucket(bucket: Bucket)
   {
     && WFBucketMap(bucket.b)
     && |bucket.keys| == |bucket.msgs|
@@ -90,13 +95,14 @@ module BucketsLib {
     requires WFBucketMap(m)
     ensures WFBucket(BInternal(m))
   {
-    reveal_WFBucket();
+    // reveal_WFBucket();
     reveal_BucketMapOfSeq();
   }
-  
+
   function {:opaque} B(m: BucketMap) : (bucket: Bucket)
   ensures bucket.b == m
   ensures BucketWellMarshalled(bucket)
+  ensures |bucket.keys| == |bucket.msgs|
   ensures WFBucketMap(m) ==> WFBucket(bucket)
   {
     BInternalWellMarshalled(m);
@@ -105,6 +111,55 @@ module BucketsLib {
       BInternal(m)
     else 
       BInternal(m)
+  }
+
+  function BucketDropLast(bucket: Bucket) : Bucket
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires 0 < |bucket.keys|
+  {
+    var submap := MapRemove1(bucket.b, Last(bucket.keys));
+    BucketMapWithSeq(submap, DropLast(bucket.keys), DropLast(bucket.msgs))
+  }
+
+  lemma BucketDropLastWF(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires 0 < |bucket.keys|
+    ensures WFBucket(BucketDropLast(bucket))
+  {
+    reveal_IsStrictlySorted();
+    reveal_BucketMapOfSeq();
+  }
+
+  lemma BucketDropLastWellMarshalled(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires 0 < |bucket.keys|
+    ensures BucketWellMarshalled(BucketDropLast(bucket))
+  {
+    reveal_IsStrictlySorted();
+  }
+
+  
+  lemma WFWellMarshalledBucketMap(bucket: Bucket, key: Key)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires key in bucket.b
+    ensures bucket.b[key] == bucket.msgs[LargestLte(bucket.keys, key)]
+    decreases |bucket.keys|
+  {
+    reveal_BucketMapOfSeq();
+    var i :| 0 <= i < |bucket.keys| && bucket.keys[i] == key;
+    PosEqLargestLte(bucket.keys, key, i);
+    if i == |bucket.keys| - 1 {
+      assert bucket.b[key] == Last(bucket.msgs);
+    } else {
+      var bdl := BucketDropLast(bucket);
+      BucketDropLastWF(bucket);
+      BucketDropLastWellMarshalled(bucket);
+      WFWellMarshalledBucketMap(bdl, key);
+    }
   }
   
   predicate WFBucketAt(bucket: Bucket, pivots: PivotTable, i: int)
@@ -116,11 +171,39 @@ module BucketsLib {
   }
 
   lemma WellMarshalledBucketsEq(a: Bucket, b: Bucket)
-  requires BucketWellMarshalled(a)
-  requires BucketWellMarshalled(b)
-  requires a.b == b.b
-  ensures a == b
-
+    requires WFBucket(a)
+    requires WFBucket(b)
+    requires BucketWellMarshalled(a)
+    requires BucketWellMarshalled(b)
+    requires a.b == b.b
+    ensures a == b
+    decreases |a.keys|
+  {
+    if |a.b| == 0 {
+      if 0 < |a.keys| {
+        assert a.keys[0] in Set(a.keys);
+        assert false;
+      }
+      if 0 < |b.keys| {
+        assert b.keys[0] in Set(b.keys);
+        assert false;
+      }
+    } else {
+      var maxkey := Last(a.keys);
+      var maxval := Last(a.msgs);
+      WFWellMarshalledBucketMap(a, maxkey);
+      WFWellMarshalledBucketMap(b, maxkey);
+      
+      var adl := BucketDropLast(a);
+      BucketDropLastWF(a);
+      BucketDropLastWellMarshalled(a);
+      var bdl := BucketDropLast(b);
+      BucketDropLastWF(b);
+      BucketDropLastWellMarshalled(b);
+      WellMarshalledBucketsEq(adl, bdl);
+    }
+  }
+  
   predicate WFBucketList(blist: BucketList, pivots: PivotTable)
   {
     && WFPivots(pivots)
@@ -203,6 +286,10 @@ module BucketsLib {
   function SplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>) : (buckets: BucketList)
   ensures |buckets| == |pivots| + 1
   ensures BucketListWellMarshalled(buckets)
+  ensures forall i | 0 <= i < |buckets| :: buckets[i].b.Keys <= bucket.b.Keys
+  ensures forall i | 0 <= i < |buckets| :: buckets[i].b.Values <= bucket.b.Values
+  ensures forall i | 0 <= i < |buckets| :: |buckets[i].keys| == |buckets[i].msgs|
+  ensures WFBucketMap(bucket.b) ==> forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   decreases |pivots|
   {
     if |pivots| == 0 then (
@@ -237,7 +324,7 @@ module BucketsLib {
   requires WFBucket(bucket)
   ensures WFBucket(BucketIntersect(bucket, keys))
   {
-    reveal_WFBucket();
+    // reveal_WFBucket();
     reveal_BucketIntersect();
   }
 
@@ -245,7 +332,7 @@ module BucketsLib {
   requires WFBucket(bucket)
   ensures WFBucket(BucketComplement(bucket, keys))
   {
-    reveal_WFBucket();
+    // reveal_WFBucket();
     reveal_BucketComplement();
   }
 
@@ -525,7 +612,7 @@ module BucketsLib {
   {
     reveal_SplitBucketLeft();
     WFSlice(pivots, 0, cLeft);
-    reveal_WFBucket();
+    // reveal_WFBucket();
   }
 
   lemma WFProperSplitBucketListLeft(blist: BucketList, pivots: PivotTable, cLeft: int, key: Key)
@@ -555,7 +642,7 @@ module BucketsLib {
   {
     reveal_SplitBucketRight();
     WFSuffix(pivots, cRight);
-    reveal_WFBucket();
+    // reveal_WFBucket();
   }
 
   lemma WFProperSplitBucketListRight(blist: BucketList, pivots: PivotTable, cRight: int, key: Key)
@@ -680,7 +767,7 @@ module BucketsLib {
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   ensures WFBucket(JoinBucketList(buckets))
   {
-    reveal_WFBucket();
+    // reveal_WFBucket();
     if |buckets| == 0 {
     } else {
       WFJoinBucketList(DropLast(buckets));
@@ -923,6 +1010,7 @@ module BucketsLib {
   }
 
   lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: Bucket, pivots: seq<Key>, emp: seq<Bucket>)
+  requires WFBucket(bucket)
   requires WFPivots(pivots)
   requires |emp| == |pivots| + 1
   requires forall i | 0 <= i < |emp| :: emp[i] == B(map[])
@@ -971,7 +1059,7 @@ module BucketsLib {
   requires WFPivots(pivots)
   ensures WFBucketListProper(SplitBucketOnPivots(bucket, pivots), pivots)
   {
-    reveal_WFBucket();
+    // reveal_WFBucket();
     var e := emptyList(|pivots| + 1);
     LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket, pivots, e);
     WFBucketListFlush(bucket, e, pivots);
@@ -985,7 +1073,7 @@ module BucketsLib {
   decreases |pivots|
   {
     WFSplitBucketOnPivots(bucket, pivots);
-    reveal_WFBucket();
+    // reveal_WFBucket();
 
     if |pivots| == 0 {
     } else {
@@ -1079,15 +1167,49 @@ module BucketsLib {
     }
   }
 
+  function binarySearch(keys: seq<Key>, key: Key) : (i : Option<nat>)
+    ensures IsStrictlySorted(keys) ==> i.None? ==> key !in keys
+    ensures i.Some? ==> 0 <= i.value < |keys| && key == keys[i.value]
+  {
+    if |keys| == 0 then
+      None
+    else
+      reveal_IsStrictlySorted();
+      var mid := |keys| / 2;
+      if lt(key, keys[mid]) then
+        binarySearch(keys[..mid], key)
+      else if keys[mid] == key then
+        Some(mid)
+      else
+        var sub := binarySearch(keys[mid+1..], key);
+        if sub.Some? then
+          Some(mid + 1 + sub.value)
+        else
+          None
+  }
+  
   // This binary searches on the keys list in bucket.
   // If it happens to be in sorted order, it will return the correct
   // answer.
   function bucketBinarySearchLookup(bucket: Bucket, key: Key)
     : (msg : Option<Message>)
-  ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
-  ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
+    requires WFBucket(bucket)
+    ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
+    ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
       key in bucket.b && bucket.b[key] == msg.value
-
+  {
+    var i := binarySearch(bucket.keys, key);
+    if i.Some? then 
+      (if BucketWellMarshalled(bucket) then
+        WFWellMarshalledBucketMap(bucket, key);
+        PosEqLargestLte(bucket.keys, key, i.value);
+        Some(bucket.msgs[i.value])
+      else
+        Some(bucket.msgs[i.value]))
+    else
+      None
+  }
+  
   function getMiddleKey(bucket: Bucket) : Key
   requires WFBucket(bucket)
   {
