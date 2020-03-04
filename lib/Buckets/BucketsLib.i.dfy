@@ -374,11 +374,17 @@ module BucketsLib {
   lemma ComposeAssoc(a: Bucket, b: Bucket, c: Bucket)
   ensures Compose(Compose(a, b), c).b == Compose(a, Compose(b, c)).b
   {
-    assume false;
     reveal_Compose();
-    forall a, b, c ensures Merge(a, Merge(b, c)) == Merge(Merge(a, b), c)
+    var ab_c := Compose(Compose(a, b), c).b;
+    var a_bc := Compose(a, Compose(b, c)).b;
+
+    forall key | key in ab_c.Keys
+      ensures ab_c[key] == a_bc[key]
     {
-      MergeIsAssociative(a, b, c);
+      var av := BucketGet(a, key);
+      var bv := BucketGet(b, key);
+      var cv := BucketGet(c, key);
+      MergeIsAssociative(av, bv, cv);
     }
   }
 
