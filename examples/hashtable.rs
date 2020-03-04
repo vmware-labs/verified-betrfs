@@ -269,6 +269,16 @@ impl<V> ResizingHashMap<V> {
         }
     }
 
+    pub fn fancy_iter_mut<'a>(&'a mut self) -> impl Iterator<Item=(u64, &'a mut V)> {
+        self.underlying.storage.iter_mut().filter_map(|e| {
+            if let HashMapItem::Entry { key, ref mut value } = e {
+                Some((*key, value))
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn max_key(&self) -> u64 {
         let mut m = 0;
         for (k, _) in self.iter() {
@@ -505,11 +515,21 @@ mod resizing_hash_map_test {
             assert!(k % 3 == 0);
         }
 
-        let mut mut_iterator_2 = rhm.iter_mut();
-        let mut first = mut_iterator_2.next();
-        let mut second = mut_iterator_2.next();
-        let third = mut_iterator_2.next();
-        first.as_mut().unwrap().1.value = second.as_ref().unwrap().1.value;
-        second.as_mut().unwrap().1.value = third.as_ref().unwrap().1.value;
+        {
+            let mut fancy_mut_iterator = rhm.fancy_iter_mut();
+            while let Some((k, ref mut v)) = fancy_mut_iterator.next() {
+                (*v).value *= 2;
+                assert_eq!(k * 2, v.value);
+            }
+        }
+
+        {
+            let mut mut_iterator_2 = rhm.iter_mut();
+            let mut first = mut_iterator_2.next();
+            let mut second = mut_iterator_2.next();
+            let third = mut_iterator_2.next();
+            first.as_mut().unwrap().1.value = second.as_ref().unwrap().1.value;
+            second.as_mut().unwrap().1.value = third.as_ref().unwrap().1.value;
+        }
     }
 }
