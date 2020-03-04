@@ -31,6 +31,13 @@ using namespace std;
 #endif
 #endif
 
+#ifdef LOG_QUERY_STATS
+constexpr int ACTION_QUERY = 0;
+constexpr int ACTION_INSERT = 1;
+constexpr int ACTION_SYNC = 2;
+int currently_doing_action = 0;
+#endif
+
 [[ noreturn ]]
 void fail(std::string err)
 {
@@ -169,7 +176,15 @@ namespace MainDiskIOHandler_Compile {
     auto t2 = chrono::high_resolution_clock::now();
     long long ns = std::chrono::duration_cast<
         std::chrono::nanoseconds>(t2 - t1).count();
-    benchmark_append("pread", ns);
+    if (currently_doing_action == ACTION_QUERY) {
+      benchmark_append("pread (query)", ns);
+    }
+    else if (currently_doing_action == ACTION_INSERT) {
+      benchmark_append("pread (insert)", ns);
+    }
+    else if (currently_doing_action == ACTION_SYNC) {
+      benchmark_append("pread (sync)", ns);
+    }
     #endif
 
     if (count < 0) {
@@ -250,7 +265,7 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
     #ifdef LOG_QUERY_STATS
-    benchmark_start("DiskIOHandler::read alloc");
+    //benchmark_start("DiskIOHandler::read alloc");
     #endif
 
     #if USE_DIRECT
@@ -271,13 +286,13 @@ namespace MainDiskIOHandler_Compile {
     #endif
 
     #ifdef LOG_QUERY_STATS
-    benchmark_end("DiskIOHandler::read alloc");
+    //benchmark_end("DiskIOHandler::read alloc");
     #endif
 
     readSync(fd, addr, len, aligned_len, bytes.ptr());
 
     #ifdef LOG_QUERY_STATS
-    benchmark_start("DiskIOHandler::read finish");
+    //benchmark_start("DiskIOHandler::read finish");
     #endif
 
     uint64 id = this->curId;
@@ -286,7 +301,7 @@ namespace MainDiskIOHandler_Compile {
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
 
     #ifdef LOG_QUERY_STATS
-    benchmark_end("DiskIOHandler::read finish");
+    //benchmark_end("DiskIOHandler::read finish");
     #endif
 
     return id;
@@ -418,6 +433,11 @@ void Application::crash() {
 }
 
 void Application::Sync() {
+  #ifdef LOG_QUERY_STATS
+  currently_doing_action = ACTION_SYNC;
+  auto t1 = chrono::high_resolution_clock::now();
+  #endif
+
   LOG("Sync");
 
   uint64 id = handle_PushSync(k, hs, io);
@@ -434,10 +454,27 @@ void Application::Sync() {
     if (success) {
       LOG("doing sync... success!");
       LOG("");
+
+      #ifdef LOG_QUERY_STATS
+      auto t2 = chrono::high_resolution_clock::now();
+
+      long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+      benchmark_append("Application::Sync", ns);
+      #endif
+
       return;
     } else if (wait) {
       LOG("doing wait...");
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (sync)");
+      #endif
+
       io->waitForOne();
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_end("write (sync)");
+      #endif
     } else {
       LOG("doing sync...");
     }
@@ -449,6 +486,7 @@ void Application::Sync() {
 void Application::Insert(ByteString key, ByteString val)
 {
   #ifdef LOG_QUERY_STATS
+  currently_doing_action = ACTION_INSERT;
   auto t1 = chrono::high_resolution_clock::now();
   #endif
 
@@ -462,7 +500,18 @@ void Application::Insert(ByteString key, ByteString val)
   for (int i = 0; i < 500000; i++) {
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
-    io->completeWriteTasks();
+
+    if (io->has_write_task()) {
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (insert)");
+      #endif
+
+      io->completeWriteTasks();
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_end("write (insert)");
+      #endif
+    }
 
     this->maybeDoResponse();
 
@@ -474,7 +523,7 @@ void Application::Insert(ByteString key, ByteString val)
       auto t2 = chrono::high_resolution_clock::now();
 
       long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
-      benchmark_append("Appliation::Insert", ns);
+      benchmark_append("Application::Insert", ns);
       #endif
 
       return;
@@ -493,6 +542,7 @@ int queryCount = 0;
 ByteString Application::Query(ByteString key)
 {
   #ifdef LOG_QUERY_STATS
+  currently_doing_action = ACTION_QUERY;
   auto t1 = chrono::high_resolution_clock::now();
   int num_reads = 0;
   int num_writes = 0;
@@ -517,7 +567,15 @@ ByteString Application::Query(ByteString key)
     #endif
 
     if (io->has_write_task()) {
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (query)");
+      #endif
+
       io->completeWriteTasks();
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (query)");
+      #endif
     }
     this->maybeDoResponse();
 
