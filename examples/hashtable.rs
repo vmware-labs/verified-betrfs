@@ -269,6 +269,9 @@ impl<V> ResizingHashMap<V> {
         }
     }
 
+    // one can write an iterator without having to define a separate type,
+    // just by relying on combinators over the existing iterators (in this case for Vec)
+    // no unsafe here, because the unsafe is hidden away in the underlying iterator for Vec
     pub fn fancy_iter_mut<'a>(&'a mut self) -> impl Iterator<Item=(u64, &'a mut V)> {
         self.underlying.storage.iter_mut().filter_map(|e| {
             if let HashMapItem::Entry { key, ref mut value } = e {
