@@ -1200,6 +1200,10 @@ module BlockCacheSystem {
     //    s'.machine.outstandingBlockWrites[dop.id].loc);
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// WriteBackResp
+  //////////////////////
+
   lemma WriteBackRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
@@ -1214,6 +1218,20 @@ module BlockCacheSystem {
     }
   }
 
+  lemma WriteBackRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
   lemma WriteBackRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
@@ -1221,6 +1239,7 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
     WriteBackRespStepPreservesGraphs(k, s, s', dop);
+    WriteBackRespStepPreservesJournals(k, s, s', dop);
     /*forall id | id in s'.machine.outstandingJournalWrites
     ensures CorrectInflightJournalWrite(k, s', id)
     {
@@ -1230,6 +1249,10 @@ module BlockCacheSystem {
       assert CorrectInflightJournalWrite(k, s, id);
     }*/
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// WriteBackIndirectionTableReq
+  //////////////////////
 
   lemma WriteBackIndirectionTableReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
