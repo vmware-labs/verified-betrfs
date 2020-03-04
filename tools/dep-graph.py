@@ -4,6 +4,7 @@
 # from root.dfy. Construct a GraphViz dot file as output.
 
 import os
+import sys
 from lib_deps import *
 from lib_aggregate import *
 
@@ -102,10 +103,14 @@ class Traverser:
         fp.close()
 
 def main():
-    reportType = sys.argv[1]
-    assert reportType in ("verchk", "synchk")
-    rootDfy = sys.argv[2]
-    outputFilename = sys.argv[3]
+    try:
+        reportType = sys.argv[1]
+        assert reportType in ("verchk", "synchk")
+        rootDfy = sys.argv[2]
+        outputFilename = sys.argv[3]
+    except:
+        sys.stderr.write("usage: %s <verchk|synchk> root.dfy output.dot\n" % sys.argv[0])
+        sys.exit(-1)
     Traverser(reportType, rootDfy, outputFilename)
 
 main()
