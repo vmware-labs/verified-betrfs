@@ -329,14 +329,8 @@ module BlockCacheSystem {
   function FrozenJournal(s: Variables) : seq<JournalEntry>
   requires WFFrozenJournal(s)
   {
-    if s.machine.Ready? then (
-      DiskQueue_Journal(s.disk.blocks, s.disk.reqWrites,
-          FrozenStartPos(s), FrozenLen(s))
-      + s.machine.inMemoryJournalFrozen
-    ) else (
-      DiskQueue_Journal(s.disk.blocks, s.disk.reqWrites,
-          FrozenStartPos(s), FrozenLen(s))
-    )
+    DiskQueue_Journal(s.disk.blocks, s.disk.reqWrites,
+        FrozenStartPos(s), FrozenLen(s))
   }
 
   predicate WFEphemeralJournal(s: Variables)
@@ -351,6 +345,42 @@ module BlockCacheSystem {
       s.machine.replayJournal
     ) else (
       PersistentJournal(s)
+    )
+  }
+
+  function GammaStartPos(s: Variables) : int
+  requires DiskHasSuperblock(s.disk.blocks)
+  {
+    SuperblockOfDisk(s.disk.blocks).journalStart as int
+  }
+
+  function GammaLen(s: Variables) : int
+  requires DiskHasSuperblock(s.disk.blocks)
+  {
+    if s.machine.Ready? then
+      s.machine.writtenJournalLen
+    else
+      SuperblockOfDisk(s.disk.blocks).journalLen as int
+  }
+
+  predicate WFGammaJournal(s: Variables)
+  {
+    && DiskHasSuperblock(s.disk.blocks)
+    && WFRange(GammaStartPos(s), GammaLen(s))
+    && DiskQueue_HasJournal(s.disk.blocks, s.disk.reqWrites,
+        GammaStartPos(s), GammaLen(s))
+  }
+
+  function GammaJournal(s: Variables) : seq<JournalEntry>
+  requires WFGammaJournal(s)
+  {
+    if s.machine.Ready? then (
+      DiskQueue_Journal(s.disk.blocks, s.disk.reqWrites,
+          GammaStartPos(s), GammaLen(s))
+        + s.machine.inMemoryJournalFrozen
+    ) else (
+      DiskQueue_Journal(s.disk.blocks, s.disk.reqWrites,
+          GammaStartPos(s), GammaLen(s))
     )
   }
 
@@ -876,6 +906,7 @@ module BlockCacheSystem {
     && WFPersistentJournal(s)
     && WFFrozenJournal(s)
     && WFEphemeralJournal(s)
+    && WFGammaJournal(s)
   }
 
   ////// Proofs
@@ -1095,9 +1126,11 @@ module BlockCacheSystem {
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
     ensures FrozenJournal(s') == FrozenJournal(s)
     ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
     ensures DeltaJournal(s') == DeltaJournal(s)
   {
     WriteBackReqStepUniqueLBAs(k, s, s', dop, ref);
@@ -1105,6 +1138,9 @@ module BlockCacheSystem {
     var len := FrozenLen(s);
     DiskQueue_Journal_write_other(
         k.disk, s.disk, s'.disk, start, len, dop);
+    DiskQueue_Journal_write_other(
+        k.disk, s.disk, s'.disk,
+        GammaStartPos(s), GammaLen(s), dop);
   }
 
   lemma WriteBackReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -1217,9 +1253,11 @@ module BlockCacheSystem {
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
     ensures FrozenJournal(s') == FrozenJournal(s)
     ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
     ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
@@ -1336,9 +1374,11 @@ module BlockCacheSystem {
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
     ensures FrozenJournal(s') == FrozenJournal(s)
     ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
     ensures DeltaJournal(s') == DeltaJournal(s)
   {
     WriteBackIndirectionTableReqStep_WriteRequestsDontOverlap(k, s, s', dop);
@@ -1346,6 +1386,9 @@ module BlockCacheSystem {
     var len := FrozenLen(s);
     DiskQueue_Journal_write_other(
         k.disk, s.disk, s'.disk, start, len, dop);
+    DiskQueue_Journal_write_other(
+        k.disk, s.disk, s'.disk,
+        GammaStartPos(s), GammaLen(s), dop);
   }
 
   lemma WriteBackIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1402,9 +1445,11 @@ module BlockCacheSystem {
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
     ensures FrozenJournal(s') == FrozenJournal(s)
     ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
     ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
@@ -1513,14 +1558,17 @@ module BlockCacheSystem {
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
     ensures (
       || (
         && FrozenJournal(s') == FrozenJournal(s)
+        && GammaJournal(s') == GammaJournal(s)
         && DeltaJournal(s') == DeltaJournal(s)
       )
       || (
         && FrozenJournal(s') == FrozenJournal(s) + DeltaJournal(s)
+        && GammaJournal(s') == GammaJournal(s) + DeltaJournal(s)
         && DeltaJournal(s') == []
       )
     )
@@ -1528,12 +1576,34 @@ module BlockCacheSystem {
   {
     WriteBackJournalReqStep_WriteRequestsDontOverlap(k, s, s', dop, jr);
 
-    var start := FrozenStartPos(s);
-    var len := FrozenLen(s);
+    DiskQueue_Journal_append(k.disk, s.disk, s'.disk, FrozenStartPos(s), FrozenLen(s), jr, dop);
+    assert SuperblockOfDisk(s.disk.blocks).journalStart
+        == SuperblockOfDisk(s'.disk.blocks).journalStart;
 
-    DiskQueue_Journal_append(k.disk, s.disk, s'.disk, start, len, jr, dop);
-    assert FrozenStartPos(s') == start;
-    assert FrozenLen(s') == len + JournalRangeLen(jr);
+    //assert FrozenStartPos(s') == FrozenStartPos(s);
+    //assert FrozenLen(s') == FrozenLen(s) + JournalRangeLen(jr);
+
+    DiskQueue_Journal_append(k.disk, s.disk, s'.disk, GammaStartPos(s), GammaLen(s), jr, dop);
+
+    if s.machine.inMemoryJournalFrozen != [] {
+      assert s.machine.frozenIndirectionTable.Some?;
+      assert s.machine.frozenJournalPosition
+          == s.machine.writtenJournalLen;
+
+      DiskQueue_Journal_empty(s.disk, FrozenStartPos(s));
+      DiskQueue_Journal_empty(s'.disk, FrozenStartPos(s'));
+
+      assert FrozenLen(s) == 0;
+      assert FrozenLen(s') == 0;
+
+      assert FrozenJournal(s') == FrozenJournal(s);
+      assert GammaJournal(s') == GammaJournal(s);
+      assert DeltaJournal(s') == DeltaJournal(s);
+    } else {
+      assert FrozenJournal(s') == FrozenJournal(s) + DeltaJournal(s);
+      assert GammaJournal(s') == GammaJournal(s) + DeltaJournal(s);
+      assert DeltaJournal(s') == [];
+    }
   }
 
   lemma WriteBackJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)

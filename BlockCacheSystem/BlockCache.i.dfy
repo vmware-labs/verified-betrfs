@@ -1207,6 +1207,10 @@ module BlockCache refines Transactable {
           s.frozenIndirectionTableLoc.value,
           s.superblock.indirectionTableLoc)
     ))
+    && (s.inMemoryJournalFrozen != [] ==>
+      && s.frozenIndirectionTable.Some?
+      && s.frozenJournalPosition == s.writtenJournalLen
+    )
   }
 
   predicate Inv(k: Constants, s: Variables)
