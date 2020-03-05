@@ -819,7 +819,6 @@ module BucketsLib {
   requires WFBucketList(blist, pivots)
   ensures WFBucketList(BucketListFlush(parent, blist, pivots), pivots)
   {
-    assume false;
   }
 
   lemma WFProperBucketListFlush(parent: Bucket, blist: BucketList, pivots: PivotTable)
@@ -1138,7 +1137,7 @@ module BucketsLib {
   requires 1 <= i <= |blist|
   ensures WFBucketList(blist[.. i], pivots[.. i-1])
   {
-    assume false;
+    StrictlySortedSubsequence(pivots, 0, i-1);
   }
 
   lemma WFBucketListSplitRight(blist: BucketList, pivots: PivotTable, i: int)
@@ -1146,7 +1145,12 @@ module BucketsLib {
   requires 0 <= i < |blist|
   ensures WFBucketList(blist[i ..], pivots[i ..])
   {
-    assume false;
+    assert pivots[i..] == pivots[i..|pivots|];
+    StrictlySortedSubsequence(pivots, i, |pivots|);
+    if 0 < i < |pivots| {
+      IsStrictlySortedImpliesLt(pivots, 0, i);
+      IsNotMinimum(pivots[0], pivots[i]);
+    }
   }
 
   lemma WFProperBucketListSplitLeft(blist: BucketList, pivots: PivotTable, i: int)
