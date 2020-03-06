@@ -601,6 +601,7 @@ module BlockCache refines Transactable {
     && s'.frozenJournalPosition == s.frozenJournalPosition
     && s'.superblockWrite == s.superblockWrite
     && s'.inMemoryJournalFrozen == s.inMemoryJournalFrozen
+    && s'.inMemoryJournal == s.inMemoryJournal
     && s'.outstandingJournalWrites == s.outstandingJournalWrites
     && s'.writtenJournalLen == s.writtenJournalLen
     && s'.replayJournal == s.replayJournal

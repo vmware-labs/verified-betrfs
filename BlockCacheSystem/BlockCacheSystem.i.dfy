@@ -296,12 +296,16 @@ module BlockCacheSystem {
   function FrozenStartPos(s: Variables) : int
   requires DiskHasSuperblock(s.disk.blocks)
   {
-    if s.machine.Ready? && s.machine.frozenIndirectionTable.Some? then
-      JournalPosAdd(
-        SuperblockOfDisk(s.disk.blocks).journalStart as int,
-        s.machine.frozenJournalPosition)
-    else
+    if s.machine.Ready? then (
+      if s.machine.frozenIndirectionTable.Some? then
+        JournalPosAdd(
+          s.machine.superblock.journalStart as int,
+          s.machine.frozenJournalPosition)
+      else
+        s.machine.superblock.journalStart as int
+    ) else (
       SuperblockOfDisk(s.disk.blocks).journalStart as int
+    )
   }
 
   function FrozenLen(s: Variables) : int
@@ -358,7 +362,14 @@ module BlockCacheSystem {
   requires DiskHasSuperblock(s.disk.blocks)
   {
     if s.machine.Ready? then
-      s.machine.writtenJournalLen
+      if s.machine.newSuperblock.Some? 
+        && s.machine.newSuperblock.value.indirectionTableLoc != s.machine.superblock.indirectionTableLoc
+        && s.machine.superblockWrite.Some?
+        && s.machine.superblockWrite.value in s.disk.respWrites
+      then
+        s.machine.writtenJournalLen - s.machine.frozenJournalPosition
+      else
+        s.machine.writtenJournalLen
     else
       SuperblockOfDisk(s.disk.blocks).journalLen as int
   }
@@ -2180,6 +2191,22 @@ module BlockCacheSystem {
     }
   }
 
+  lemma DirtyStepPreservesJournals(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+    requires Inv(k, s)
+    requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
+    requires s.disk == s'.disk
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
   lemma DirtyStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(k, s)
     requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
@@ -2205,6 +2232,22 @@ module BlockCacheSystem {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
+  }
+
+  lemma AllocStepPreservesJournals(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+    requires Inv(k, s)
+    requires M.Alloc(k.machine, s.machine, s'.machine, ref, block)
+    requires s.disk == s'.disk
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
   }
 
   lemma AllocStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
@@ -2248,6 +2291,10 @@ module BlockCacheSystem {
     }
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// Unalloc
+  //////////////////////
+
   lemma UnallocStepUpdatesGraph(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
@@ -2260,6 +2307,22 @@ module BlockCacheSystem {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
+  }
+
+  lemma UnallocStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
   }
 
   lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -2276,6 +2339,10 @@ module BlockCacheSystem {
     */
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInReq
+  //////////////////////
+
   lemma PageInReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
     requires M.PageInReq(k.machine, s.machine, s'.machine, dop, ref)
@@ -2288,6 +2355,22 @@ module BlockCacheSystem {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
+  }
+
+  lemma PageInReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+    requires Inv(k, s)
+    requires M.PageInReq(k.machine, s.machine, s'.machine, dop, ref)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
   }
 
   lemma PageInReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -2314,6 +2397,10 @@ module BlockCacheSystem {
     }
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInResp
+  //////////////////////
+
   lemma PageInRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
@@ -2328,6 +2415,22 @@ module BlockCacheSystem {
     }
   }
 
+  lemma PageInRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
   lemma PageInRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
@@ -2336,6 +2439,10 @@ module BlockCacheSystem {
   {
     PageInRespStepPreservesGraphs(k, s, s', dop);
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInIndirectionTableReq
+  //////////////////////
 
   lemma PageInIndirectionTableReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
@@ -2351,6 +2458,22 @@ module BlockCacheSystem {
     }
   }
 
+  lemma PageInIndirectionTableReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
   lemma PageInIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
@@ -2359,6 +2482,10 @@ module BlockCacheSystem {
   {
     PageInIndirectionTableReqStepPreservesGraphs(k, s, s', dop);
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInIndirectionTableResp
+  //////////////////////
 
   lemma PageInIndirectionTableRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
@@ -2380,6 +2507,22 @@ module BlockCacheSystem {
     */
   }
 
+  lemma PageInIndirectionTableRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
   lemma PageInIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
@@ -2389,6 +2532,10 @@ module BlockCacheSystem {
     PageInIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInJournalReq
+  //////////////////////
+
   lemma PageInJournalReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
     requires Inv(k, s)
     requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, which)
@@ -2396,6 +2543,22 @@ module BlockCacheSystem {
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInJournalReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, which)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
 
@@ -2408,6 +2571,10 @@ module BlockCacheSystem {
     PageInJournalReqStepPreservesGraphs(k, s, s', dop, which);
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInJournalResp
+  //////////////////////
+
   lemma PageInJournalRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
     requires Inv(k, s)
     requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, which)
@@ -2415,6 +2582,22 @@ module BlockCacheSystem {
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInJournalRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, which)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
 
@@ -2454,6 +2637,10 @@ module BlockCacheSystem {
     }*/
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInSuperblockReq
+  //////////////////////
+
   lemma PageInSuperblockReqStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
     requires Inv(k, s)
     requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, which)
@@ -2461,6 +2648,22 @@ module BlockCacheSystem {
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInSuperblockReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, which)
+    requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
 
@@ -2473,6 +2676,10 @@ module BlockCacheSystem {
     PageInSuperblockReqStepPreservesGraphs(k, s, s', dop, which);
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// PageInSuperblockResp
+  //////////////////////
+
   lemma PageInSuperblockRespStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
     requires Inv(k, s)
     requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, which)
@@ -2480,6 +2687,22 @@ module BlockCacheSystem {
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma PageInSuperblockRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
+    requires Inv(k, s)
+    requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, which)
+    requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
 
@@ -2492,6 +2715,10 @@ module BlockCacheSystem {
     PageInSuperblockRespStepPreservesGraphs(k, s, s', dop, which);
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// FinishLoadingSuperblockPhase
+  //////////////////////
+
   lemma FinishLoadingSuperblockPhaseStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.FinishLoadingSuperblockPhase(k.machine, s.machine, s'.machine, dop)
@@ -2499,6 +2726,22 @@ module BlockCacheSystem {
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
+  {
+  }
+
+  lemma FinishLoadingSuperblockPhaseStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.FinishLoadingSuperblockPhase(k.machine, s.machine, s'.machine, dop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
   {
   }
 
@@ -2510,6 +2753,10 @@ module BlockCacheSystem {
   {
     FinishLoadingSuperblockPhaseStepPreservesGraphs(k, s, s', dop);
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// FinishLoadingOtherPhase
+  //////////////////////
 
   lemma FinishLoadingOtherPhaseStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
@@ -2533,6 +2780,35 @@ module BlockCacheSystem {
     assert WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
   }
 
+  lemma FinishLoadingOtherPhaseStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.FinishLoadingOtherPhase(k.machine, s.machine, s'.machine, dop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+    if M.JournalBackLocationOfSuperblock(s.machine.superblock).Some? {
+      Disk_Journal_Read2(s.disk,
+          s.machine.superblock.journalStart as int,
+          s.machine.superblock.journalLen as int);
+      assert EphemeralJournal(s') == EphemeralJournal(s);
+    } else if M.JournalFrontLocationOfSuperblock(s.machine.superblock).Some? {
+      Disk_Journal_Read1(s.disk,
+          s.machine.superblock.journalStart as int,
+          s.machine.superblock.journalLen as int);
+      assert EphemeralJournal(s') == EphemeralJournal(s);
+    } else {
+      assert EphemeralJournal(s') == EphemeralJournal(s);
+    }
+  }
+
   lemma FinishLoadingOtherPhaseStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires M.FinishLoadingOtherPhase(k.machine, s.machine, s'.machine, dop)
@@ -2541,6 +2817,10 @@ module BlockCacheSystem {
   {
     FinishLoadingOtherPhaseStepPreservesGraphs(k, s, s', dop);
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// Evict
+  //////////////////////
 
   lemma EvictStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
