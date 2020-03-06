@@ -874,7 +874,20 @@ module BlockCache refines Transactable {
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && (dop.RespReadOp? || dop.NoDiskOp? || (
+    && (
+    || dop.NoDiskOp?
+    || (
+      && dop.RespReadOp?
+      && !(
+        || (s.Ready? && dop.id in s.outstandingBlockReads)
+        || (s.LoadingSuperblock? && s.outstandingSuperblock1Read == Some(dop.id))
+        || (s.LoadingSuperblock? && s.outstandingSuperblock2Read == Some(dop.id))
+        || (s.LoadingOther? && s.indirectionTableRead == Some(dop.id))
+        || (s.LoadingOther? && s.journalFrontRead == Some(dop.id))
+        || (s.LoadingOther? && s.journalBackRead == Some(dop.id))
+      )
+    )
+    || (
       && dop.RespWriteOp?
       && !(
         || (s.Ready? && s.outstandingIndirectionTableWrite == Some(dop.id))
