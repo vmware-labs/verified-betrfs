@@ -262,6 +262,15 @@ module DiskLayout {
   {
   }
 
+  lemma locDisjointFromCircularJournalRangeOfNonJournalLoc(loc: Location, start: uint64, len: uint64)
+  requires ValidLocation(loc)
+  requires !ValidJournalLocation(loc)
+  requires 0 <= start < NumJournalBlocks()
+  requires 0 <= len <= NumJournalBlocks()
+  ensures locDisjointFromCircularJournalRange(loc, start, len)
+  {
+  }
+
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr
   //    reveals BlockSize
   //export extends S

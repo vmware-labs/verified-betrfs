@@ -146,13 +146,6 @@ module BlockCacheSystem {
     Graph(indirectionTable.graph.Keys, RefMapOfDisk(indirectionTable, blocks))
   }
 
-  function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
-  requires WFDisk(s.disk.blocks)
-  requires WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
-  {
-    DiskGraph(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
-  }
-
   function {:opaque} QueueLookupIdByLocation(reqWrites: map<D.ReqId, D.ReqWrite>, loc: Location) : (res : Option<D.ReqId>)
   ensures res.None? ==> forall id | id in reqWrites :: reqWrites[id].loc != loc
   ensures res.Some? ==> res.value in reqWrites && reqWrites[res.value].loc == loc
@@ -218,47 +211,63 @@ module BlockCacheSystem {
     map ref | ref in indirectionTable.graph :: DiskQueueCacheLookup(indirectionTable, disk, cache, ref)
   }
 
-  function FrozenGraph(k: Constants, s: Variables) : map<Reference, Node>
-  requires WFDisk(s.disk.blocks)
-  requires s.machine.Ready?
-  requires s.machine.frozenIndirectionTable.Some?
-  requires M.WFIndirectionTable(s.machine.frozenIndirectionTable.value)
-  requires WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
-  requires M.IndirectionTableCacheConsistent(s.machine.frozenIndirectionTable.value, s.machine.cache)
-  requires WFReqWriteBlocks(s.disk.reqWrites)
+  predicate WFPersistentGraph(k: Constants, s: Variables)
   {
-    DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+    && WFDisk(s.disk.blocks)
+    && WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
   }
 
-  function FrozenGraphOpt(k: Constants, s: Variables) : Option<map<Reference, Node>>
-  requires WFDisk(s.disk.blocks)
-  requires s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==> M.WFIndirectionTable(s.machine.frozenIndirectionTable.value)
-  requires s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
-  requires s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==> M.IndirectionTableCacheConsistent(s.machine.frozenIndirectionTable.value, s.machine.cache)
-  requires WFReqWriteBlocks(s.disk.reqWrites)
+  function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
+  requires WFPersistentGraph(k, s)
   {
-    if s.machine.Ready? && s.machine.frozenIndirectionTable.Some? then Some(FrozenGraph(k, s)) else None
+    DiskGraph(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
+  }
+
+  predicate WFFrozenGraph(k: Constants, s: Variables)
+  {
+    && WFDisk(s.disk.blocks)
+    && (s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==>
+      && M.WFIndirectionTable(s.machine.frozenIndirectionTable.value)
+      && WFIndirectionTableWrtDiskQueue(s.machine.frozenIndirectionTable.value, s.disk)
+      && M.IndirectionTableCacheConsistent(s.machine.frozenIndirectionTable.value, s.machine.cache)
+    )
+    && WFReqWriteBlocks(s.disk.reqWrites)
+    && WFPersistentGraph(k, s)
+  }
+
+  predicate UseFrozenGraph(k: Constants, s: Variables)
+  {
+    s.machine.Ready? && s.machine.frozenIndirectionTable.Some?
+  }
+
+  function FrozenGraph(k: Constants, s: Variables) : map<Reference, Node>
+  requires WFFrozenGraph(k, s)
+  {
+    if UseFrozenGraph(k, s) then
+      DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+    else
+      PersistentGraph(k, s)
+  }
+
+  predicate WFEphemeralGraph(k: Constants, s: Variables)
+  {
+    && M.Inv(k.machine, s.machine)
+    && WFDisk(s.disk.blocks)
+    && (s.machine.Ready? ==>
+      && WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
+      && M.IndirectionTableCacheConsistent(s.machine.ephemeralIndirectionTable, s.machine.cache)
+    )
+    && WFReqWriteBlocks(s.disk.reqWrites)
+    && WFPersistentGraph(k, s)
   }
 
   function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
-  requires M.Inv(k.machine, s.machine)
-  requires s.machine.Ready?
-  requires WFDisk(s.disk.blocks)
-  requires WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
-  requires M.IndirectionTableCacheConsistent(s.machine.ephemeralIndirectionTable, s.machine.cache)
-  requires WFReqWriteBlocks(s.disk.reqWrites)
+  requires WFEphemeralGraph(k, s)
   {
-    DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
-  }
-
-  function EphemeralGraphOpt(k: Constants, s: Variables) : Option<map<Reference, Node>>
-  requires M.Inv(k.machine, s.machine)
-  requires WFDisk(s.disk.blocks)
-  requires s.machine.Ready? ==> WFIndirectionTableWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk)
-  requires s.machine.Ready? ==> M.IndirectionTableCacheConsistent(s.machine.ephemeralIndirectionTable, s.machine.cache)
-  requires WFReqWriteBlocks(s.disk.reqWrites)
-  {
-    if s.machine.Ready? then Some(EphemeralGraph(k, s)) else None
+    if s.machine.Ready? then
+      DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+    else
+      PersistentGraph(k, s)
   }
 
   predicate NoDanglingPointers(graph: map<Reference, Node>)
@@ -900,14 +909,14 @@ module BlockCacheSystem {
         && s.machine.superblock2.value == Superblock2OfDisk(s.disk.blocks)
         && s.machine.outstandingSuperblock2Read.None?
       )
-      && (s.machine.superblock1.SuperblockCorruption? ==>
-        && !DiskHasSuperblock1(s.disk.blocks)
-        && s.machine.outstandingSuperblock1Read.None?
-      )
-      && (s.machine.superblock2.SuperblockCorruption? ==>
-        && !DiskHasSuperblock2(s.disk.blocks)
-        && s.machine.outstandingSuperblock2Read.None?
-      )
+      //&& (s.machine.superblock1.SuperblockCorruption? ==>
+      //  && !DiskHasSuperblock1(s.disk.blocks)
+      //  && s.machine.outstandingSuperblock1Read.None?
+      //)
+      //&& (s.machine.superblock2.SuperblockCorruption? ==>
+      //  && !DiskHasSuperblock2(s.disk.blocks)
+      //  && s.machine.outstandingSuperblock2Read.None?
+      //)
     )
     && (s.machine.LoadingOther? ==>
       && s.machine.superblock == SuperblockOfDisk(s.disk.blocks)
@@ -1162,15 +1171,11 @@ module BlockCacheSystem {
     requires M.WriteBackReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
 
-    ensures s.machine.frozenIndirectionTable.Some? ==> (
-      && s'.machine.frozenIndirectionTable.Some?
-      && WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
-    )
-
-    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
-
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
     WriteBackReqStepPreservesDiskCacheGraph(k, s, s', dop, ref, s.machine.ephemeralIndirectionTable, s'.machine.ephemeralIndirectionTable);
@@ -1296,11 +1301,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -1349,12 +1357,11 @@ module BlockCacheSystem {
     requires M.WriteBackIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
 
-    ensures s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
-    ensures WFReqWriteBlocks(s'.disk.reqWrites)
-    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
-
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
@@ -1393,7 +1400,7 @@ module BlockCacheSystem {
     assert s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk);
     assert WFReqWriteBlocks(s'.disk.reqWrites);
 
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -1485,13 +1492,15 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
-    ensures M.Inv(k.machine, s'.machine)
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     M.WriteBackIndirectionTableRespStepPreservesInv(k.machine, s.machine, s'.machine, dop);
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -1533,10 +1542,11 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, jr)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop)
-    ensures FrozenGraphOpt.requires(k, s')
-    ensures EphemeralGraph.requires(k, s')
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
@@ -1569,8 +1579,8 @@ module BlockCacheSystem {
     assert WFReqWriteBlocks(s'.disk.reqWrites);
 
     assert EphemeralGraph.requires(k, s');
-    assert FrozenGraphOpt.requires(k, s');
-    if (FrozenGraphOpt(k, s).Some?) {
+    assert FrozenGraph.requires(k, s');
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -1749,10 +1759,11 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackJournalReqWraparound(k.machine, s.machine, s'.machine, dop, jr)
     requires D.RecvWrite2(k.disk, s.disk, s'.disk, dop)
-    ensures FrozenGraphOpt.requires(k, s')
-    ensures EphemeralGraph.requires(k, s')
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
@@ -1785,8 +1796,8 @@ module BlockCacheSystem {
     assert WFReqWriteBlocks(s'.disk.reqWrites);
 
     assert EphemeralGraph.requires(k, s');
-    assert FrozenGraphOpt.requires(k, s');
-    if (FrozenGraphOpt(k, s).Some?) {
+    assert FrozenGraph.requires(k, s');
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -1913,11 +1924,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -1958,12 +1972,12 @@ module BlockCacheSystem {
     requires M.WriteBackSuperblockReq_Basic(k.machine, s.machine, s'.machine, dop)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
 
-    ensures s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
-    ensures WFReqWriteBlocks(s'.disk.reqWrites)
-    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
@@ -1975,7 +1989,7 @@ module BlockCacheSystem {
     //assert WFReqWriteBlocks(s'.disk.reqWrites);
     //assert WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk);
 
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2065,12 +2079,12 @@ module BlockCacheSystem {
     requires M.WriteBackSuperblockReq_UpdateIndirectionTable(k.machine, s.machine, s'.machine, dop)
     requires D.RecvWrite(k.disk, s.disk, s'.disk, dop);
 
-    ensures s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
-    ensures WFReqWriteBlocks(s'.disk.reqWrites)
-    ensures WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     assert forall id | id in s.disk.reqWrites :: id in s'.disk.reqWrites;
@@ -2078,7 +2092,7 @@ module BlockCacheSystem {
     assert ValidSuperblock1Location(dop.reqWrite.loc)
         || ValidSuperblock2Location(dop.reqWrite.loc);
 
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2177,14 +2191,16 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.WriteBackSuperblockResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures (
-          || FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
-          || FrozenGraphOpt(k, s') == None
-         )
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
-    if (FrozenGraphOpt(k, s').Some?) {
+    if (UseFrozenGraph(k, s')) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2230,11 +2246,11 @@ module BlockCacheSystem {
     requires M.Dirty(k.machine, s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
     ensures ref in EphemeralGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s')) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2273,11 +2289,11 @@ module BlockCacheSystem {
     requires M.Alloc(k.machine, s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s)
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
     ensures ref !in EphemeralGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2349,10 +2365,10 @@ module BlockCacheSystem {
     requires M.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == MapRemove1(EphemeralGraph(k, s), ref)
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2396,11 +2412,16 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInReq(k.machine, s.machine, s'.machine, dop, ref)
     requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2454,11 +2475,16 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
     ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2497,11 +2523,16 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInIndirectionTableReq(k.machine, s.machine, s'.machine, dop)
     requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
-    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == None
-    ensures EphemeralGraphOpt(k, s) == None
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2541,9 +2572,13 @@ module BlockCacheSystem {
     requires M.PageInIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
 
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
     //assert IndirectionTableOfDisk(s.disk.blocks) == s'.machine.persistentIndirectionTable;
     /*
@@ -2589,9 +2624,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, which)
     requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
   }
 
@@ -2628,9 +2668,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, which)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
   {
   }
 
@@ -2694,9 +2739,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, which)
     requires D.RecvRead(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
   {
   }
 
@@ -2733,9 +2783,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, which)
     requires D.AckRead(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
   {
   }
 
@@ -2772,9 +2827,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.FinishLoadingSuperblockPhase(k.machine, s.machine, s'.machine, dop)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
   {
   }
 
@@ -2812,11 +2872,13 @@ module BlockCacheSystem {
     requires M.FinishLoadingOtherPhase(k.machine, s.machine, s'.machine, dop)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
 
-    ensures EphemeralGraph.requires(k, s')
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
 
-    ensures PersistentGraph(k, s') == PersistentGraph(k, s)
-    ensures FrozenGraphOpt(k, s') == None
-    ensures EphemeralGraph(k, s') == PersistentGraph(k, s)
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
   {
     assert WFIndirectionTableWrtDiskQueue(s.machine.indirectionTable.value, s.disk);
 
@@ -2879,11 +2941,16 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.Evict(k.machine, s.machine, s'.machine, dop, ref)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
-    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s)
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
@@ -2923,8 +2990,13 @@ module BlockCacheSystem {
     requires M.Freeze(k.machine, s.machine, s'.machine, dop)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures M.Inv(k.machine, s'.machine);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == Some(EphemeralGraph(k, s));
+    ensures FrozenGraph(k, s') == EphemeralGraph(k, s);
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop);
@@ -2989,10 +3061,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, id)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures M.Inv(k.machine, s'.machine);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
-    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
   }
 
@@ -3029,10 +3105,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, id)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures M.Inv(k.machine, s'.machine);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
-    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
   }
 
@@ -3069,10 +3149,14 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires M.NoOp(k.machine, s.machine, s'.machine, dop)
     requires D.Next(k.disk, s.disk, s'.disk, dop);
-    ensures M.Inv(k.machine, s'.machine);
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
-    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
   }
 
@@ -3159,15 +3243,18 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires s.machine == s'.machine
     requires D.ProcessRead(k.disk, s.disk, s'.disk, id)
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
-    ensures EphemeralGraphOpt(k, s) == EphemeralGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
-    if (EphemeralGraphOpt(k, s).Some?) {
+    if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
     }
@@ -3196,7 +3283,7 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
   }
-
+  
   ////////////////////////////////////////////////////
   ////////////////////// ProcessReadFailure
   //////////////////////
@@ -3205,15 +3292,18 @@ module BlockCacheSystem {
     requires Inv(k, s)
     requires s.machine == s'.machine
     requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id)
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
     ensures PersistentGraph(k, s) == PersistentGraph(k, s');
-    ensures FrozenGraphOpt(k, s) == FrozenGraphOpt(k, s');
-    ensures EphemeralGraphOpt(k, s) == EphemeralGraphOpt(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
   {
-    if (FrozenGraphOpt(k, s).Some?) {
+    if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
     }
-    if (EphemeralGraphOpt(k, s).Some?) {
+    if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
     }
@@ -3430,11 +3520,16 @@ module BlockCacheSystem {
     }*/
   }
 
-  predicate ProcessWriteIsStateUpdate(k: Constants, s: Variables, id: D.ReqId)
+  predicate ProcessWriteIsSuperblockUpdate(k: Constants, s: Variables, id: D.ReqId)
   {
     && s.machine.Ready?
     && s.machine.superblockWrite == Some(id)
     && s.machine.newSuperblock.Some?
+  }
+
+  predicate ProcessWriteIsGraphUpdate(k: Constants, s: Variables, id: D.ReqId)
+  {
+    && ProcessWriteIsSuperblockUpdate(k, s, id)
     && s.machine.newSuperblock.value.indirectionTableLoc != s.machine.superblock.indirectionTableLoc
   }
 
@@ -3443,18 +3538,17 @@ module BlockCacheSystem {
     requires s.machine == s'.machine
     requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
 
-    ensures WFDisk(s'.disk.blocks)
-    ensures WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s'.disk.blocks), s'.disk.blocks)
-    ensures s.machine.Ready? ==> WFIndirectionTableWrtDiskQueue(s'.machine.ephemeralIndirectionTable, s'.disk)
-    ensures s'.machine.Ready? && s'.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDiskQueue(s'.machine.frozenIndirectionTable.value, s'.disk)
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
 
-    ensures ProcessWriteIsStateUpdate(k, s, id) ==>
-      Some(PersistentGraph(k, s')) == FrozenGraphOpt(k, s)
-    ensures !ProcessWriteIsStateUpdate(k, s, id) ==>
+    ensures ProcessWriteIsGraphUpdate(k, s, id) ==>
+      PersistentGraph(k, s') == FrozenGraph(k, s)
+    ensures !ProcessWriteIsGraphUpdate(k, s, id) ==>
       PersistentGraph(k, s') == PersistentGraph(k, s)
 
-    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
-    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenGraph(k, s') == FrozenGraph(k, s);
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s);
   {
     if (s.machine.frozenIndirectionTable.Some?) { 
       ProcessWritePreservesDiskCacheGraph(k, s, s', id, s.machine.frozenIndirectionTable.value);
@@ -3489,6 +3583,17 @@ module BlockCacheSystem {
     } else {
       var indirectionTable := IndirectionTableOfDisk(s.disk.blocks);
 
+      forall ref | ref in indirectionTable.locs
+      ensures overlap(indirectionTable.locs[ref], s.disk.reqWrites[id].loc) ==>
+            ValidNodeLocation(s.disk.reqWrites[id].loc) &&
+            indirectionTable.locs[ref].addr == s.disk.reqWrites[id].loc.addr;
+      {
+        if overlap(indirectionTable.locs[ref], s.disk.reqWrites[id].loc) {
+          overlappingLocsSameType(indirectionTable.locs[ref], s.disk.reqWrites[id].loc);
+          overlappingNodesSameAddr(indirectionTable.locs[ref], s.disk.reqWrites[id].loc);
+        }
+      }
+
       /*forall ref | ref in indirectionTable.graph
       ensures RefMapOfDisk(indirectionTable, s.disk.blocks)[ref]
            == RefMapOfDisk(indirectionTable, s'.disk.blocks)[ref]
@@ -3513,6 +3618,123 @@ module BlockCacheSystem {
     }
   }
 
+  lemma ProcessWritePreservesJournals(k: Constants, s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(k, s)
+    requires s.machine == s'.machine
+    requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+
+    ensures 
+      if ProcessWriteIsSuperblockUpdate(k, s, id) then (
+        if ProcessWriteIsGraphUpdate(k, s, id) then (
+          && GammaJournal(s') == FrozenJournal(s)
+          && PersistentJournal(s') == FrozenJournal(s)
+        ) else (
+          && GammaJournal(s') == GammaJournal(s)
+          && PersistentJournal(s') == GammaJournal(s)
+        )
+      ) else (
+        && GammaJournal(s') == GammaJournal(s)
+        && PersistentJournal(s') == PersistentJournal(s)
+      )
+
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+    ProcessWrite_PreservesOtherTypes(k, s, s', id);
+    DiskQueue_Journal_ProcessWrite(k.disk, s.disk, s'.disk,
+        FrozenStartPos(s), FrozenLen(s), id);
+
+    DiskQueue_Journal_ProcessWrite(k.disk, s.disk, s'.disk,
+        GammaStartPos(s), GammaLen(s), id);
+
+    if ValidJournalLocation(s.disk.reqWrites[id].loc) {
+      assert locDisjointFromCircularJournalRange(
+          s.disk.reqWrites[id].loc,
+          s.machine.superblock.journalStart,
+          s.machine.superblock.journalLen);
+      assert locDisjointFromCircularJournalRange(
+          s.disk.reqWrites[id].loc,
+          SuperblockOfDisk(s.disk.blocks).journalStart,
+          SuperblockOfDisk(s.disk.blocks).journalLen);
+    } else {
+      locDisjointFromCircularJournalRangeOfNonJournalLoc(
+          s.disk.reqWrites[id].loc,
+          SuperblockOfDisk(s.disk.blocks).journalStart,
+          SuperblockOfDisk(s.disk.blocks).journalLen);
+    }
+    Disk_Journal_ProcessWrite(k.disk, s.disk, s'.disk,
+        SuperblockOfDisk(s.disk.blocks).journalStart as int,
+        SuperblockOfDisk(s.disk.blocks).journalLen as int,
+        id);
+
+    if ProcessWriteIsSuperblockUpdate(k, s, id) {
+      assert s.machine.newSuperblock.Some?;
+      assert SuperblockOfDisk(s'.disk.blocks)
+          == s.machine.newSuperblock.value;
+      if ProcessWriteIsGraphUpdate(k, s, id) {
+        //locDisjointFromCircularJournalRangeOfNonJournalLoc(
+        //    s.disk.reqWrites[id].loc,
+        //    FrozenStartPos(s) as uint64,
+        //    FrozenLen(s) as uint64);
+        forall id | id in s'.disk.reqWrites
+        ensures locDisjointFromCircularJournalRange(
+          s'.disk.reqWrites[id].loc,
+          FrozenStartPos(s) as uint64,
+          FrozenLen(s) as uint64)
+        {
+          locDisjointFromCircularJournalRangeOfNonJournalLoc(
+              s'.disk.reqWrites[id].loc,
+              FrozenStartPos(s) as uint64,
+              FrozenLen(s) as uint64);
+        }
+
+        assert s.machine.newSuperblock.value.journalLen as int
+            == s.machine.writtenJournalLen - s.machine.frozenJournalPosition
+            == FrozenLen(s);
+
+        Disk_eq_DiskQueue(s'.disk, FrozenStartPos(s), FrozenLen(s));
+        assert SuperblockOfDisk(s'.disk.blocks).journalStart as int
+            == FrozenStartPos(s);
+        assert SuperblockOfDisk(s'.disk.blocks).journalLen as int
+            == FrozenLen(s);
+        assert WFPersistentJournal(s');
+        assert PersistentJournal(s') == FrozenJournal(s);
+      } else {
+        assert s.machine.inMemoryJournalFrozen == [];
+
+        forall id | id in s'.disk.reqWrites
+        ensures locDisjointFromCircularJournalRange(
+          s'.disk.reqWrites[id].loc,
+          GammaStartPos(s) as uint64,
+          GammaLen(s) as uint64)
+        {
+          locDisjointFromCircularJournalRangeOfNonJournalLoc(
+              s'.disk.reqWrites[id].loc,
+              GammaStartPos(s) as uint64,
+              GammaLen(s) as uint64);
+        }
+
+        Disk_eq_DiskQueue(s'.disk, GammaStartPos(s), GammaLen(s));
+        assert s'.machine.newSuperblock.Some?;
+        assert SuperblockOfDisk(s'.disk.blocks).journalStart as int
+            == s'.machine.newSuperblock.value.journalStart as int
+            == GammaStartPos(s);
+        assert SuperblockOfDisk(s'.disk.blocks).journalLen as int
+            == s'.machine.newSuperblock.value.journalLen as int
+            == s.machine.writtenJournalLen
+            == GammaLen(s);
+        assert WFPersistentJournal(s');
+        assert PersistentJournal(s') == GammaJournal(s);
+      }
+    } else {
+    }
+  }
+
   lemma ProcessWritePreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
     requires Inv(k, s)
     requires s.machine == s'.machine
@@ -3520,6 +3742,7 @@ module BlockCacheSystem {
     ensures Inv(k, s')
   {
     ProcessWritePreservesGraphs(k, s, s', id);
+    ProcessWritePreservesJournals(k, s, s', id);
     ProcessWrite_PreservesOtherTypes(k, s, s', id);
   }
 
