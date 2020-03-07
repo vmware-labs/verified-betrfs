@@ -338,6 +338,18 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			build/YcsbMain.o \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
+build/VeribetrfsYcsbMalloc: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o build/framework/MallocAccounting.o
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) $(STDLIB) -o $@ \
+			-Winline -std=c++17 -O3 \
+			-L ycsb/build \
+			-L vendor/rocksdb \
+			$(DBG_SYMBOLS_FLAG) \
+			$(VERIBETRFS_YCSB_O_FILES) \
+			build/framework/MallocAccounting.o \
+			build/YcsbMain.o \
+			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
+
 build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) -o $@ \

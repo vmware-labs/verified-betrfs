@@ -3,6 +3,8 @@
 
 #include "Bundle.i.h"
 
+#include "MallocAccounting.h"
+
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -405,6 +407,7 @@ Application::Application(string filename) {
 }
 
 void Application::initialize() {
+  init_malloc_accounting();
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
