@@ -3,6 +3,8 @@
 
 #include "Bundle.i.h"
 
+#include "MallocAccounting.h"
+
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -247,8 +249,9 @@ namespace MainDiskIOHandler_Compile {
   {
     size_t len = bytes.size();
 
-    shared_ptr<WriteTask> writeTask {
-      new WriteTask(fd, addr, &bytes.at(0), len) };
+    malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
+    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
+    malloc_accounting_default_scope();
 
     if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
       writeTask->start();
@@ -257,7 +260,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
+    malloc_accounting_set_scope("DiskIOHandler::write.insert");
     writeReqs.insert(std::make_pair(id, writeTask));
+    malloc_accounting_default_scope();
 
     return id;
   }
@@ -298,7 +303,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
+    malloc_accounting_set_scope("DiskIOHandler::ReadTask");
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+    malloc_accounting_default_scope();
 
     #ifdef LOG_QUERY_STATS
     //benchmark_end("DiskIOHandler::read finish");
@@ -386,7 +393,9 @@ namespace MainDiskIOHandler_Compile {
   }
   void DiskIOHandler::waitForOne() {
     std::vector<aiocb*> tasks;
+    malloc_accounting_set_scope("waitForOne.resize");
     tasks.resize(this->writeReqs.size());
+    malloc_accounting_default_scope();
     int i = 0;
     for (auto p : this->writeReqs) {
       if (p.second->done) {
@@ -420,16 +429,30 @@ Application::Application(string filename) {
 }
 
 void Application::initialize() {
+  init_malloc_accounting();
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
+  malloc_accounting_set_scope("Application::initialize DiskIOHandler");
   this->io = make_shared<DiskIOHandler>(this->filename);
+  malloc_accounting_default_scope();
+}
+
+Application::~Application()
+{
+  Sync();
+  EvictEverything();
+  fini_malloc_accounting();
 }
 
 void Application::crash() {
   LOG("'crashing' and reinitializing");
   LOG("");
   initialize();
+}
+
+void Application::EvictEverything() {
+  handle_EvictEverything(k, hs, io);
 }
 
 void Application::Sync() {

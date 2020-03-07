@@ -6,6 +6,7 @@
 
 #include "core_workload.h"
 #include "ycsbwrappers.h"
+#include "leakfinder.h"
 
 #include "hdrhist.hpp"
 
@@ -22,6 +23,7 @@ using namespace std;
 
 template< class DB >
 inline void performYcsbRead(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
+    malloc_accounting_set_scope("performYcsbRead setup");
     ycsbcwrappers::TxRead txread = ycsbcwrappers::TransactionRead(workload);
     if (!workload.read_all_fields()) {
         cerr << db.name << " error: not reading all fields unsupported" << endl;
@@ -30,12 +32,14 @@ inline void performYcsbRead(DB db, ycsbc::CoreWorkload& workload, bool verbose) 
     if (verbose) {
         cerr << db.name << " [op] READ " << txread.table << " " << txread.key << " { all fields }" << endl;
     }
+    malloc_accounting_default_scope();
     // TODO use the table name?
     db.query(txread.key);
 }
 
 template< class DB >
 inline void performYcsbInsert(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
+    malloc_accounting_set_scope("performYcsbInsert setup");
     ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
     if (txinsert.values->size() != 1) {
         cerr << db.name << " error: only fieldcount=1 is supported" << endl;
@@ -45,12 +49,14 @@ inline void performYcsbInsert(DB db, ycsbc::CoreWorkload& workload, bool verbose
     if (verbose) {
         cerr << db.name << " [op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
     }
+    malloc_accounting_default_scope();
     // TODO use the table name?
     db.insert(txinsert.key, value);
 }
 
 template< class DB >
 inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
+    malloc_accounting_set_scope("performYcsbUpdate setup");
     ycsbcwrappers::TxUpdate txupdate = ycsbcwrappers::TransactionUpdate(workload);
     if (!workload.write_all_fields()) {
         cerr << db.name << " error: not writing all fields unsupported" << endl;
@@ -64,6 +70,7 @@ inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose
     if (verbose) {
         cerr << db.name << " [op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
     }
+    malloc_accounting_default_scope();
     // TODO use the table name?
     db.update(txupdate.key, value);
 }
@@ -122,6 +129,7 @@ void ycsbRun(
     int sync_interval_ms,
     bool verbose) {
 
+    malloc_accounting_set_scope("ycsbRun.setup");
     vector<pair<ycsbc::Operation, string>> operations = {
         make_pair(ycsbc::READ, "read"),
         make_pair(ycsbc::UPDATE, "update"),
@@ -137,6 +145,7 @@ void ycsbRun(
     }
 
     HDRHist sync_latency_hist;
+    malloc_accounting_default_scope();
 
     cerr << db.name << " [step] running experiment (num ops: " << num_ops << ", sync interval " <<
         sync_interval_ms << "ms)" << endl;
@@ -179,6 +188,15 @@ void ycsbRun(
             clock_op_completed - clock_last_sync).count() > sync_interval_ms) {
 
             db.sync();
+
+            /*
+            if (i > 3000000) {
+              leakfinder_report(1);
+              db.evictEverything();
+              leakfinder_report(2);
+              exit(0);
+            }
+            */
             auto sync_completed = chrono::steady_clock::now();
 
             cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
@@ -219,6 +237,7 @@ void ycsbRun(
     cout << "--\tthroughput\tduration(ns)\toperations\tops/s" << endl;
     cout << db.name << "\tthroughput\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
 
+    malloc_accounting_set_scope("ycsbRun.summary");
     {
         auto sync_summary = sync_latency_hist.summary();
         print_summary(sync_summary, db.name, "sync");
@@ -228,6 +247,7 @@ void ycsbRun(
             print_summary(op_summary, db.name, op.second);
         }
     }
+    malloc_accounting_default_scope();
 }
 
 #ifdef _YCSB_VERIBETRFS
@@ -254,6 +274,10 @@ public:
 
     inline void sync() {
         app.Sync();
+    }
+
+    inline void evictEverything() {
+        app.EvictEverything();
     }
 };
 
@@ -296,6 +320,9 @@ public:
         rocksdb::Status status = db.Flush(foptions);
         assert(status.ok());
     }
+
+    inline void evictEverything() {
+    }
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -322,6 +349,10 @@ public:
     inline void sync() {
         asm volatile ("nop");
     }
+
+    inline void evictEverything() {
+        asm volatile ("nop");
+    }
 };
 
 const string NopFacade::name = string("nop");
@@ -346,6 +377,12 @@ int main(int argc, char* argv[]) {
         cerr << "error: expects two arguments: the workload spec, and the persistent data directory" << endl;
         exit(-1);
     }
+
+//    leakfinder_mark(1);
+//    for (int i=0; i<15; i++) {
+//      leakfinder_mark(1);
+//    }
+    leakfinder_report(0);
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);
@@ -402,7 +439,6 @@ int main(int argc, char* argv[]) {
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
     }
-
 
     // == rocksdb ==
     if (do_rocks) {

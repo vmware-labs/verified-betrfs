@@ -7,8 +7,10 @@ std::pair<Constants, Variables> handle_InitState()
 {
   auto tup2 = __default::InitState();
   Constants k;
+  malloc_accounting_set_scope("BundleWrapper::handle_InitState");
   k.k = std::shared_ptr<BetreeGraphBlockCache::Constants>(
       new BetreeGraphBlockCache::Constants(tup2.t0));
+  malloc_accounting_default_scope();
   Variables hs;
   hs.hs = tup2.t1;
   return std::make_pair(k, hs);
@@ -17,6 +19,11 @@ std::pair<Constants, Variables> handle_InitState()
 DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 {
   return MkfsImpl::__default::Mkfs();
+}
+
+void handle_EvictEverything(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
+{
+  __default::handleEvictEverything(*k.k, hs.hs, io);
 }
 
 uint64 handle_PushSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)

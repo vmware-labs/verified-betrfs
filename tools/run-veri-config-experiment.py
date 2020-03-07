@@ -163,7 +163,8 @@ def main():
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
   elif device == "disk":
-    loc = "/home/tjhance/ycsb/"
+    #loc = "/home/tjhance/ycsb/"
+    loc = "/tmp/veribetrfs/"
   else:
     assert False
 

@@ -1,3 +1,4 @@
+include "../lib/Base/DebugAccumulator.i.dfy"
 include "Main.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
@@ -15,9 +16,11 @@ include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVe
 //
 
 module {:compileName "MainHandlers"} MainHandlers refines Main { 
+  import DebugAccumulator
   import SM = StateModel
   import SI = StateImpl
   import IOImpl
+  import opened EvictImpl // jonh hack
   import opened InsertImpl
   import opened QueryImpl
   import opened SyncImpl
@@ -88,6 +91,26 @@ module {:compileName "MainHandlers"} MainHandlers refines Main {
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
     hs.Repr := s.Repr() + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), uiop, io.diskOp()); // observe
+  }
+
+  // jonh hack UNVERIFIED DEBUG ONLY
+  method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    var s := hs.s;
+    print "\nBefore\n";
+    var acc := s.DebugAccumulate();
+    DebugAccumulator.Display(acc, 0);
+    var count:uint64 := s.cache.cache.Count;
+//    var last_count:uint64 := count;
+//    var last_at_this_count:uint64 = 0;
+    while (count > 0) { // somehow it gets to where we can't get rid of the last few...?
+      EvictOrDealloc(k, s, io);
+      count := s.cache.cache.Count;
+    }
+    print "\nAfter\n";
+    acc := s.DebugAccumulate();
+    DebugAccumulator.Display(acc, 0);
+    assume false;
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64)
