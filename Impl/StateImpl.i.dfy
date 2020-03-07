@@ -8,7 +8,7 @@ include "CacheImpl.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 
-module {:extern} StateImpl {
+module {:compileName "StateImpl"} StateImpl {
   import opened Options
   import opened Sequences
   import opened NativeTypes

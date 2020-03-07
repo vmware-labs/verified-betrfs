@@ -17,6 +17,11 @@ else
   TIMELIMIT=/timeLimit:$(TL)
 endif
 
+POUND_DEFINES=
+ifdef LOG_QUERY_STATS
+	POUND_DEFINES += -DLOG_QUERY_STATS
+endif
+
 CC=clang++
 STDLIB=-stdlib=libc++
 
@@ -32,7 +37,7 @@ OPT_FLAG=$(DBG_SYMBOLS_FLAG) -O2 -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
 ##############################################################################
 # Automatic targets
 
-all: status exe
+all: status elf
 
 clean:
 	rm -rf build
@@ -255,12 +260,11 @@ WARNINGS=-Wall -Wsign-compare
 
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
-
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
 build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
@@ -291,7 +295,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 ##############################################################################
 # YCSB
 
-VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o
+VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Benchmarks.o
 
 libycsbc: build/libycsbc-libcpp.a \
 				  build/libycsbc-default.a
@@ -324,6 +328,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			-I vendor/rocksdb/include/ \
 			-Winline -std=c++17 -O3 \
 			-D_YCSB_VERIBETRFS \
+			$(POUND_DEFINES) \
 			$(DBG_SYMBOLS_FLAG) \
 			$(GPROF_FLAGS) \
 			$^
@@ -352,6 +357,7 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 			-I vendor/rocksdb/include/ \
 			-Winline -std=c++17 -O3 \
 			-D_YCSB_ROCKS \
+			$(POUND_DEFINES) \
 			ycsb/YcsbMain.cpp \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
 

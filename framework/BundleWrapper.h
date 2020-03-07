@@ -3,19 +3,19 @@
 #include <optional>
 #include "Framework.h"
 
-namespace BetreeGraphBlockCache_Compile {
+namespace BetreeGraphBlockCache {
   struct Constants;
 }
-namespace MainHandlers_Compile {
+namespace MainHandlers {
   class HeapState;
 }
 
 struct Constants {
-  std::shared_ptr<BetreeGraphBlockCache_Compile::Constants> k;
+  std::shared_ptr<BetreeGraphBlockCache::Constants> k;
 };
 
 struct Variables {
-  std::shared_ptr<MainHandlers_Compile::HeapState> hs;
+  std::shared_ptr<MainHandlers::HeapState> hs;
 };
 
 namespace UI_Compile {

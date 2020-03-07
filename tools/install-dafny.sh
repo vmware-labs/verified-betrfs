@@ -21,7 +21,8 @@ git clone https://github.com/secure-foundations/dafny.git
 cd dafny
 
 ../../tools/checkout-dafny-commit.sh
-
+wget https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+mono ./nuget.exe restore Source/Dafny.sln
 msbuild /p:Configuration=Release Source/Dafny.sln
 cd ..
 

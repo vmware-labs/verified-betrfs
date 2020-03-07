@@ -88,6 +88,9 @@ def main():
   mem = None
   value_updates = []
   config = None
+  log_stats = False
+
+  rocks = None
 
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
@@ -106,6 +109,10 @@ def main():
       config = "64kb"
     elif arg == "config-8mb":
       config = "8mb"
+    elif arg == "rocks":
+      rocks = True
+    elif arg == "log_stats":
+      log_stats = True
     else:
       assert False, "unrecognized argument: " + arg
 
@@ -113,6 +120,7 @@ def main():
   assert device != None
 
   if config != None:
+    assert not rocks
     assert ram != None
     value_updates = autoconfig(config, ram) + value_updates
 
@@ -123,16 +131,30 @@ def main():
   ret = os.system("rm -rf build/")
   assert ret == 0
 
-  print("Building Bundle.cpp...")
-  ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
-  assert ret == 0
+  if not rocks:
+    print("Building Bundle.cpp...")
+    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
+    assert ret == 0
 
   for (name, value) in value_updates:
+    assert not rocks
     print("setting " + name + " to " + value)
     splice_value_into_bundle(name, value)
 
+  if rocks:
+    exe = "build/RocksYcsb"
+    cmdoption = "--rocks"
+  else:
+    exe = "build/VeribetrfsYcsb"
+    cmdoption = "--veribetrkv"
+
+  make_options = ""
+  if log_stats:
+    make_options = "LOG_QUERY_STATS=1 "
+
   print("Building executable...")
-  ret = os.system("make build/VeribetrfsYcsb -s -j4 > /dev/null 2> /dev/null")
+  ret = os.system(make_options + "make " +
+      exe + " -s -j4 > /dev/null 2> /dev/null")
   assert ret == 0
 
   wl = "ycsb/workload" + workload + "-onefield.spec"
@@ -155,7 +177,14 @@ def main():
 
   clear_page_cache()
 
-  os.system("cgexec -g memory:VeribetrfsExp ./build/VeribetrfsYcsb " + wl + " " + loc + " --veribetrkv")
+  # bitmask indicating which CPUs we can use
+  # See https://linux.die.net/man/1/taskset
+  taskset_cmd = "taskset 4 "
+
+  command = taskset_cmd + "cgexec -g memory:VeribetrfsExp ./" + exe + " " + wl + " " + loc + " " + cmdoption
+  print(command)
+
+  os.system(command)
   assert ret == 0
 
 if __name__ == "__main__":

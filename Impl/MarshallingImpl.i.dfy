@@ -307,7 +307,8 @@ module MarshallingImpl {
     }
   }
 
-  method strictlySortedKeySeqToVal(keys: seq<Key>) returns (v : V)
+  method strictlySortedKeySeqToVal(keys: seq<Key>)
+  returns (v : V)
   requires Keyspace.IsStrictlySorted(keys)
   requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
@@ -320,7 +321,7 @@ module MarshallingImpl {
     lemmaSizeOfKeyArray(keys);
     WeightKeySeqLe(keys);
 
-    return VKeyArray(keys);
+    v := VKeyArray(keys);
   }
 
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
@@ -332,7 +333,8 @@ module MarshallingImpl {
     SeqComparison.reveal_lte();
   }
 
-  method pivotsToVal(pivots: seq<Key>) returns (v : V)
+  method pivotsToVal(pivots: seq<Key>)
+  returns (v : V, size: uint64)
   requires Pivots.WFPivots(pivots)
   requires |pivots| <= MaxNumChildren() as int - 1
   ensures ValidVal(v)
@@ -340,8 +342,12 @@ module MarshallingImpl {
   ensures |v.ka| == |pivots|
   ensures Marshalling.valToPivots(v) == Some(pivots)
   ensures SizeOfV(v) <= 4 + |pivots| * (4 + KeyType.MaxLen() as int)
+  ensures SizeOfV(v) == size as int
   {
     v := strictlySortedKeySeqToVal(pivots);
+
+    var keys_size := ComputeWeightKeySeq(pivots);
+    size := keys_size + 4;
 
     ghost var ghosty := true;
     if ghosty && |pivots| > 0 {
@@ -365,13 +371,15 @@ module MarshallingImpl {
 
   // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel SizeOfV,3}
-  bucketToVal(bucket: BucketImpl.MutBucket) returns (v: V)
+  bucketToVal(bucket: BucketImpl.MutBucket)
+  returns (v: V, size: uint64)
   requires bucket.Inv()
   requires WeightBucket(bucket.Bucket) <= MaxTotalBucketWeight()
   ensures ValInGrammar(v, Marshalling.BucketGrammar())
   ensures ValidVal(v)
   ensures Marshalling.valToBucket(v) == bucket.Bucket
   ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 8
+  ensures SizeOfV(v) == size as int
   {
     var kvl := bucket.GetKvl();
     KVList.kvlWeightEq(kvl);
@@ -391,9 +399,12 @@ module MarshallingImpl {
     // TODO we need to show that v is equivalent to a V
     // which demarshalls to the same bucket.
     assume ValInGrammar(v, Marshalling.BucketGrammar()); // this is not remotely true
+
+    size := bucket.Weight + 8;
   }
 
-  method bucketsToVal(buckets: seq<BucketImpl.MutBucket>) returns (v: V)
+  method bucketsToVal(buckets: seq<BucketImpl.MutBucket>)
+  returns (v: V, size: uint64)
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i].Bucket)
   requires |buckets| <= MaxNumChildren() as int
@@ -403,18 +414,22 @@ module MarshallingImpl {
   ensures |v.a| == |buckets|
   ensures Marshalling.valToBuckets(v.a) == BucketImpl.MutBucket.ISeq(buckets)
   ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 8
+  ensures SizeOfV(v) == size as int
   {
+    BucketImpl.MutBucket.AllocatedReprSeq(buckets);
+
     if |buckets| as uint64 == 0 {
       v := VArray([]);
+      size := 8;
     } else {
       WeightBucketListSlice(BucketImpl.MutBucket.ISeq(buckets), 0, |buckets| - 1);
       WeightBucketLeBucketList(BucketImpl.MutBucket.ISeq(buckets), |buckets| - 1);
       BucketImpl.MutBucket.Islice(buckets, 0, |buckets| - 1);
 
-      var pref := bucketsToVal(buckets[..|buckets| as uint64 - 1]);
+      var pref, pref_size := bucketsToVal(buckets[..|buckets| as uint64 - 1]);
       var bucket := buckets[|buckets| as uint64 - 1];
 
-      var bucketVal := bucketToVal(bucket);
+      var bucketVal, bucket_size := bucketToVal(bucket);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
       assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == BucketImpl.MutBucket.ISeq(buckets); // observe
@@ -428,6 +443,15 @@ module MarshallingImpl {
           == WeightBucketList(BucketImpl.MutBucket.ISeq(DropLast(buckets))) + WeightBucket(Last(buckets).I());
 
       v := VArray(pref.a + [bucketVal]);
+
+      /*calc {
+        pref_size as int + bucket_size as int;
+        == SizeOfV(v);
+        <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 8;
+        <= 8 + MaxTotalBucketWeight() + MaxNumChildren() * 8;
+        < 0x1_0000_0000_0000_0000;
+      }*/
+      size := pref_size + bucket_size;
     }
   }
 
@@ -442,7 +466,8 @@ module MarshallingImpl {
       None
   }
 
-  method {:fuel SizeOfV,4} nodeToVal(node: Node) returns (v : V)
+  method {:fuel SizeOfV,4} nodeToVal(node: Node)
+  returns (v : V, size: uint64)
   requires node.Inv()
   requires IM.WFNode(node.I())
   requires BT.WFNode(IM.INode(node.I()))
@@ -450,18 +475,22 @@ module MarshallingImpl {
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
   ensures SizeOfV(v) <= NodeBlockSize() - 32 - 8
+  ensures SizeOfV(v) == size as int
   {
     BucketImpl.MutBucket.AllocatedReprSeq(node.buckets);
-    var buckets := bucketsToVal(node.buckets);
+    var buckets, size_buckets := bucketsToVal(node.buckets);
 
-    var pivots := pivotsToVal(node.pivotTable);
+    var pivots, size_pivots := pivotsToVal(node.pivotTable);
 
-    var children;
+    var children, size_children;
     if node.children.Some? {
       children := childrenToVal(node.children.value);
+      size_children := 8 + 8 * |node.children.value| as uint64;
     } else {
       children := VUint64Array([]);
+      size_children := 8;
     }
+    assert SizeOfV(children) == size_children as int;
 
     v := VTuple([pivots, children, buckets]);
 
@@ -472,6 +501,8 @@ module MarshallingImpl {
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
 
     lemma_node_fits_in_block();
+
+    size := size_buckets + size_pivots + size_children;
   }
 
   method sectorToVal(sector: StateImpl.Sector)
@@ -497,9 +528,9 @@ module MarshallingImpl {
       //  size := s + 8;
       //}
       case SectorBlock(node) => {
-        var w := nodeToVal(node);
+        var w, s := nodeToVal(node);
         v := VCase(1, w);
-        size := ComputeSizeOf(v);
+        size := s + 8;
       }
     }
   }
@@ -530,7 +561,7 @@ module MarshallingImpl {
     }
   }
 
-  method MarshallIntoFixedSize(val:V, grammar:G, start: uint64, n: uint64) returns (data:array<byte>)
+  method MarshallIntoFixedSize(val:V, ghost grammar:G, start: uint64, n: uint64) returns (data:array<byte>)
     requires ValidGrammar(grammar);
     requires ValInGrammar(val, grammar);
     requires ValidVal(val);
