@@ -23,11 +23,20 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
-DBG_SYMBOLS_FLAG=-g
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
-OPT_FLAG=$(DBG_SYMBOLS_FLAG) -O2 -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
+
+WANT_DEBUG=true
+ifeq "$(WANT_DEBUG)" "true"
+	DBG_SYMBOLS_FLAG=-g
+	OPT_FLAG=-O0
+else
+	DBG_SYMBOLS_FLAG=
+	OPT_FLAG=-O3
+endif
+
+OPT_FLAGS=$(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -255,17 +264,17 @@ WARNINGS=-Wall -Wsign-compare
 
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS) -Werror
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
 build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAG) $(WARNINGS)
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o
@@ -321,7 +330,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			-I build/ \
 			-I vendor/hdrhist/ \
 			-I vendor/rocksdb/include/ \
-			-Winline -std=c++17 -O3 \
+			-Winline -std=c++17 $(O3FLAG) \
 			-D_YCSB_VERIBETRFS \
 			$(DBG_SYMBOLS_FLAG) \
 			$(GPROF_FLAGS) \
@@ -330,7 +339,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
-			-Winline -std=c++17 -O3 \
+			-Winline -std=c++17 $(O3FLAG) \
 			-L ycsb/build \
 			-L vendor/rocksdb \
 			$(DBG_SYMBOLS_FLAG) \
@@ -341,9 +350,10 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 build/VeribetrfsYcsbMalloc: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o build/framework/MallocAccounting.o
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
-			-Winline -std=c++17 -O3 \
+			-Winline -std=c++17 $(O3FLAG) \
 			-L ycsb/build \
 			-L vendor/rocksdb \
+			-O0 \
 			$(DBG_SYMBOLS_FLAG) \
 			$(VERIBETRFS_YCSB_O_FILES) \
 			build/framework/MallocAccounting.o \
@@ -361,7 +371,7 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 			-I build/ \
 			-I vendor/hdrhist/ \
 			-I vendor/rocksdb/include/ \
-			-Winline -std=c++17 -O3 \
+			-Winline -std=c++17 $(O3FLAG) \
 			-D_YCSB_ROCKS \
 			ycsb/YcsbMain.cpp \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
