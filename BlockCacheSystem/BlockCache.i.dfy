@@ -490,6 +490,7 @@ module BlockCache refines Transactable {
     && dop.ReqWriteOp?
     && s.superblockWrite.None?
     && s.outstandingJournalWrites == {}
+    && s.inMemoryJournalFrozen == []
     && dop.reqWrite.loc == (if s.whichSuperblock == 0 then
         Superblock2Location() else Superblock1Location())
     && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
@@ -1203,14 +1204,15 @@ module BlockCache refines Transactable {
         && WFSuperblock(s.newSuperblock.value)
         && s.newSuperblock.value.counter ==
             IncrementSuperblockCounter(s.superblock.counter)
+        && s.inMemoryJournalFrozen == []
         && (s.newSuperblock.value.indirectionTableLoc == s.superblock.indirectionTableLoc ==>
             && s.newSuperblock.value.journalStart == s.superblock.journalStart
-            && s.newSuperblock.value.journalLen as int <= s.writtenJournalLen
+            && s.newSuperblock.value.journalLen as int == s.writtenJournalLen
         )
         && (s.newSuperblock.value.indirectionTableLoc != s.superblock.indirectionTableLoc ==>
-            && s.inMemoryJournalFrozen == []
             && s.outstandingIndirectionTableWrite.None?
             && s.newSuperblock.value.journalStart as int == JournalPosAdd(s.superblock.journalStart as int, s.frozenJournalPosition)
+            && s.newSuperblock.value.journalLen as int == s.writtenJournalLen - s.frozenJournalPosition
             && s.frozenJournalPosition as int + s.newSuperblock.value.journalLen as int
                 <= s.writtenJournalLen
         )

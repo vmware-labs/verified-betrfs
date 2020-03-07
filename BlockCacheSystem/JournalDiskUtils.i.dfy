@@ -226,6 +226,36 @@ module JournalDiskUtils {
     parseJournalRange(DiskQueue_JournalRange(blocks, reqWrites, start, len)).value
   }
 
+  lemma DiskQueue_eq_Disk(disk: DiskState, start: int, len: int)
+  requires WFRange(start, len)
+  requires Disk_HasJournal(disk.blocks, start, len)
+  requires forall id | id in disk.reqWrites ::
+      locDisjointFromCircularJournalRange(
+          disk.reqWrites[id].loc, start as uint64, len as uint64)
+  requires NoOverlaps(disk.reqWrites)
+  ensures DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)
+  ensures Disk_Journal(disk.blocks, start, len)
+      == DiskQueue_Journal(disk.blocks, disk.reqWrites, start, len)
+  {
+    var dq := DiskQueue_JournalBlockSeq(disk.blocks, disk.reqWrites);
+    var d := Disk_JournalBlockSeq(disk.blocks);
+    var dq_slice := CyclicSlice(dq, start, len);
+    var d_slice := CyclicSlice(d, start, len);
+    assert |d_slice| == |dq_slice|;
+    forall i | 0 <= i < |d_slice|
+    ensures d_slice[i] == dq_slice[i]
+    {
+      var j := JournalPosAdd(start, i);
+      calc {
+        d_slice[i];
+        d[j];
+        dq[j];
+        dq_slice[i];
+      }
+    }
+    assert d_slice == dq_slice;
+  }
+
   lemma Disk_eq_DiskQueue(disk: DiskState, start: int, len: int)
   requires WFRange(start, len)
   requires DiskQueue_HasJournal(disk.blocks, disk.reqWrites, start, len)

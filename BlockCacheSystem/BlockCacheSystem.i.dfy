@@ -3746,6 +3746,10 @@ module BlockCacheSystem {
     ProcessWrite_PreservesOtherTypes(k, s, s', id);
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// DiskInternal
+  //////////////////////
+
   lemma DiskInternalStepPreservesInv(k: Constants, s: Variables, s': Variables, step: D.InternalStep)
     requires Inv(k, s)
     requires DiskInternal(k, s, s', step)
@@ -3758,12 +3762,37 @@ module BlockCacheSystem {
     }
   }
 
+  ////////////////////////////////////////////////////
+  ////////////////////// Crash
+  //////////////////////
+
+  lemma CrashPreservesJournals(k: Constants, s: Variables, s': Variables)
+    requires Inv(k, s)
+    requires Crash(k, s, s')
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == PersistentJournal(s)
+    ensures EphemeralJournal(s') == PersistentJournal(s)
+    ensures GammaJournal(s') == PersistentJournal(s)
+    ensures DeltaJournal(s') == []
+  {
+    DiskQueue_eq_Disk(s'.disk, FrozenStartPos(s'), FrozenLen(s'));
+  }
+
   lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
     requires Crash(k, s, s')
     ensures Inv(k, s')
   {
+    CrashPreservesJournals(k, s, s');
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// NextStep
+  //////////////////////
 
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, step: Step)
     requires Inv(k, s)
