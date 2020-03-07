@@ -23,9 +23,12 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
-# _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
-# (but also makes stuff not thread-safe)
-# Note: this optimization only works with stdlib=libc++
+WANT_MALLOC_ACCOUNTING=true
+ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
+	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
+else
+	MALLOC_ACCOUNTING_DEFINE=
+endif
 
 WANT_DEBUG=true
 ifeq "$(WANT_DEBUG)" "true"
@@ -36,7 +39,10 @@ else
 	OPT_FLAG=-O3
 endif
 
-OPT_FLAGS=$(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
+# _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
+# (but also makes stuff not thread-safe)
+# Note: this optimization only works with stdlib=libc++
+OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -299,7 +305,12 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 ##############################################################################
 # YCSB
 
-VERIBETRFS_YCSB_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/leakfinder.o
+VERIBETRFS_YCSB_O_FILES=\
+	build/framework/BundleWrapper.o \
+	build/framework/Framework.o \
+	build/framework/Crc32.o \
+	build/framework/leakfinder.o \
+	build/framework/MallocAccounting.o \
 
 libycsbc: build/libycsbc-libcpp.a \
 				  build/libycsbc-default.a
@@ -344,19 +355,6 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			-L vendor/rocksdb \
 			$(DBG_SYMBOLS_FLAG) \
 			$(VERIBETRFS_YCSB_O_FILES) \
-			build/YcsbMain.o \
-			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
-
-build/VeribetrfsYcsbMalloc: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o build/framework/MallocAccounting.o
-	# NOTE: this uses c++17, which is required by hdrhist
-	$(CC) $(STDLIB) -o $@ \
-			-Winline -std=c++17 $(O3FLAG) \
-			-L ycsb/build \
-			-L vendor/rocksdb \
-			-O0 \
-			$(DBG_SYMBOLS_FLAG) \
-			$(VERIBETRFS_YCSB_O_FILES) \
-			build/framework/MallocAccounting.o \
 			build/YcsbMain.o \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 

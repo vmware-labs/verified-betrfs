@@ -7,6 +7,8 @@
 
 #include "MallocAccounting.h"
 
+#if MALLOC_ACCOUNTING
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
@@ -236,10 +238,6 @@ void malloc_accounting_set_scope(const char* scope) {
 void malloc_accounting_default_scope() {
   atable.clear_active_label();
 }
-
-std::string malloc_accounting_std_string(const char* c_str) {
-  malloc_accounting_set_scope("std_string");
-  std::string std_string(c_str);
-  malloc_accounting_default_scope();
-  return std_string;
-}
+#else // MALLOC_ACCOUNTING
+// implementations are empty inlines in .h
+#endif // MALLOC_ACCOUNTING

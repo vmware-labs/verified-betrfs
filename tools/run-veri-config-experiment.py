@@ -141,7 +141,8 @@ def main():
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
   elif device == "disk":
-    loc = "/home/tjhance/ycsb/"
+    #loc = "/home/tjhance/ycsb/"
+    loc = "/tmp/veribetrfs/"
   else:
     assert False
 
@@ -155,7 +156,9 @@ def main():
 
   clear_page_cache()
 
-  os.system("cgexec -g memory:VeribetrfsExp ./build/VeribetrfsYcsb " + wl + " " + loc + " --veribetrkv")
+  cmd = "cgexec -g memory:VeribetrfsExp ./build/VeribetrfsYcsb " + wl + " " + loc + " --veribetrkv"
+  print(cmd)
+  os.system(cmd)
   assert ret == 0
 
 if __name__ == "__main__":
