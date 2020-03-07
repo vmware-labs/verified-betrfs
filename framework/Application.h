@@ -45,6 +45,7 @@ struct ByteString {
 class Application {
 public:
   Application(std::string filename);
+  ~Application();
   void initialize();
   void crash();
 

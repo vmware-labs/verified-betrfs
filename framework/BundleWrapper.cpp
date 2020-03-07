@@ -7,8 +7,10 @@ std::pair<Constants, Variables> handle_InitState()
 {
   auto tup2 = __default::InitState();
   Constants k;
+  malloc_accounting_set_scope("BundleWrapper::handle_InitState");
   k.k = std::shared_ptr<BetreeGraphBlockCache_Compile::Constants>(
       new BetreeGraphBlockCache_Compile::Constants(tup2.t0));
+  malloc_accounting_default_scope();
   Variables hs;
   hs.hs = tup2.t1;
   return std::make_pair(k, hs);
