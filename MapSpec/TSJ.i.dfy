@@ -14,13 +14,13 @@ abstract module TSJ {
 
   datatype Constants = Constants(k: SM.Constants)
 
-  // s1 -------> S1 
+  // s1 -------> t1
   //       j1
   //
-  //                   s2 -------> S2
+  //                   s2 -------> t2
   //                         j2
   //
-  //                                      s3 -------> S3
+  //                                      s3 -------> t3
   //                                            j3
   //
   //   -------------------------->  ---------------->
@@ -113,8 +113,8 @@ abstract module TSJ {
       s.s1,
       s.s2,
       s.s3,
-      s.j1,
       s.j_gamma,
+      s.j2,
       s.j3,
       s.j_gamma,
       s.j_delta,
@@ -125,13 +125,14 @@ abstract module TSJ {
   {
     && SM.Next(k.k, s.s3, s'.s3, uiop)
     && var new_je := JournalEntriesForUIOp(uiop);
+    && s.j3 == []
     && s' == Variables(
       s.s1,
       s.s2,
       s'.s3,
       s.j1,
       s.j2,
-      s.j3 + new_je,
+      s.j3,
       s.j_gamma,
       s.j_delta + new_je,
       s.outstandingSyncReqs)
@@ -185,5 +186,167 @@ abstract module TSJ {
 
   predicate Next(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp) {
     exists step :: NextStep(k, s, s', uiop, step)
+  }
+
+  /// Invariant definition
+
+  predicate IsPath(
+      k: SM.Constants,
+      s: SM.Variables,
+      uiops: seq<SM.UIOp>,
+      s': SM.Variables,
+      states: seq<SM.Variables>)
+  {
+    && |states| == |uiops| + 1
+    && states[0] == s
+    && states[|states|-1] == s'
+    && forall i | 0 <= i < |uiops| ::
+        SM.Next(k, states[i], states[i+1], uiops[i])
+  }
+
+  predicate path(
+      k: SM.Constants,
+      s: SM.Variables,
+      jes: seq<JournalEntry>,
+      s': SM.Variables)
+  {
+    exists states, uiops ::
+        && jes == JournalEntriesForUIOps(uiops)
+        && IsPath(k, s, uiops, s', states)
+  }
+
+  predicate Inv1(k: Constants, s: Variables,
+      t1: SM.Variables, t2: SM.Variables, t3: SM.Variables)
+  {
+    && path(k.k, s.s1, s.j1, t1)
+    && path(k.k, s.s2, s.j2, t2)
+    && path(k.k, s.s3, s.j3, t3)
+    && path(k.k, s.s1, s.j_gamma, t2)
+    && path(k.k, t2, s.j_delta, t3)
+  }
+
+  predicate Inv(k: Constants, s: Variables)
+  {
+    exists t1, t2, t3 :: Inv1(k, s, t1, t2, t3)
+  }
+
+  lemma path_empty(k: SM.Constants, s: SM.Variables)
+  ensures path(k, s, [], s)
+  {
+    var states := [s];
+    var uiops := [];
+    assert [] == JournalEntriesForUIOps(uiops);
+    assert IsPath(k, s, uiops, s, states);
+  }
+
+  lemma paths_compose(k: SM.Constants, s1: SM.Variables, jes1: seq<JournalEntry>, s2: SM.Variables, jes2: seq<JournalEntry>, s3: SM.Variables)
+  requires path(k, s1, jes1, s2)
+  requires path(k, s2, jes2, s3)
+  ensures path(k, s1, jes1 + jes2, s3)
+
+  lemma InitImpliesInv(k: Constants, s: Variables)
+  requires Init(k, s)
+  ensures Inv(k, s)
+  {
+    path_empty(k.k, s.s1);
+    assert Inv1(k, s, s.s1, s.s1, s.s1);
+  }
+
+  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires Crash(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
+    path_empty(k.k, t1);
+    assert Inv1(k, s', t1, t1, t1);
+  }
+
+  lemma Move1to2StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires Move1to2(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
+    assert Inv1(k, s', t2, t2, t3);
+  }
+
+  lemma Move2to3StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires Move2to3(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
+    paths_compose(k.k, s.s1, s.j_gamma, t2, s.j_delta, t3);
+    path_empty(k.k, t3);
+    assert Inv1(k, s', t1, t3, t3);
+  }
+
+  lemma ExtendLog1StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires ExtendLog1(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
+    assert Inv1(k, s', t2, t2, t3);
+  }
+
+  lemma Move3StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires Move3(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+    var new_je := JournalEntriesForUIOp(uiop);
+    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
+    assert path(k.k, s.s1, s.j1, t1);
+    path_empty(k.k, s'.s3);
+    assert path(k.k, s'.s3, s.j3, s'.s3);
+    assert path(k.k, t2, s.j_delta + new_je, s'.s3);
+    assert Inv1(k, s', t1, t2, s'.s3);
+  }
+
+  lemma ReplayStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, replayedUIOp: SM.UIOp)
+  requires Inv(k, s)
+  requires Replay(k, s, s', uiop, replayedUIOp)
+  ensures Inv(k, s')
+  {
+  }
+
+  lemma PushSyncStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, id: int)
+  requires Inv(k, s)
+  requires PushSync(k, s, s', uiop, id)
+  ensures Inv(k, s')
+  {
+  }
+
+  lemma PopSyncStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, id: int)
+  requires Inv(k, s)
+  requires PopSync(k, s, s', uiop, id)
+  ensures Inv(k, s')
+  {
+  }
+
+  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: Step)
+  requires Inv(k, s)
+  requires NextStep(k, s, s', uiop, step)
+  ensures Inv(k, s')
+  {
+    match step {
+      case CrashStep => CrashStepPreservesInv(k, s, s', uiop);
+      case Move1to2Step => Move1to2StepPreservesInv(k, s, s', uiop);
+      case Move2to3Step => Move2to3StepPreservesInv(k, s, s', uiop);
+      case ExtendLog1Step => ExtendLog1StepPreservesInv(k, s, s', uiop);
+      case Move3Step => Move3StepPreservesInv(k, s, s', uiop);
+      case ReplayStep(replayedUIOp) => ReplayStepPreservesInv(k, s, s', uiop, replayedUIOp);
+      case PushSyncStep(id) => PushSyncStepPreservesInv(k, s, s', uiop, id);
+      case PopSyncStep(id) => PopSyncStepPreservesInv(k, s, s', uiop, id);
+    }
+  }
+
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires Next(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
   }
 }
