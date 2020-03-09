@@ -221,6 +221,10 @@ abstract module TSJ {
     && s[|s| - |t| ..] == t
   }
 
+  // Sequence subtraction s-t
+  // Only makes sense when t is a suffix of s.
+  // Result is that s-t+t == s for the usual notion
+  // of sequence addition.
   function SeqSub<T>(s: seq<T>, t: seq<T>) : seq<T>
   requires IsSuffix(s, t)
   {
@@ -256,11 +260,50 @@ abstract module TSJ {
   requires path(k, s1, jes1, s2)
   requires path(k, s2, jes2, s3)
   ensures path(k, s1, jes1 + jes2, s3)
+  {
+    var states1, uiops1 :|
+        && jes1 == JournalEntriesForUIOps(uiops1)
+        && IsPath(k, s1, uiops1, s2, states1);
+    var states2, uiops2 :|
+        && jes2 == JournalEntriesForUIOps(uiops2)
+        && IsPath(k, s2, uiops2, s3, states2);
+
+    var states := states1 + states2[1..];
+    var uiops := uiops1 + uiops2;
+
+    JournalEntriesForUIOpsAdditive(uiops1, uiops2);
+    assert jes1 + jes2 == JournalEntriesForUIOps(uiops);
+
+    forall i | 0 <= i < |uiops|
+    ensures SM.Next(k, states[i], states[i+1], uiops[i]);
+    {
+      if i < |uiops1| {
+        assert states[i] == states1[i];
+        assert states[i+1] == states1[i+1];
+        assert uiops[i] == uiops1[i];
+        assert SM.Next(k, states1[i], states1[i+1], uiops1[i]);
+      } else {
+        assert states[i] == states2[i - |uiops1|];
+        assert states[i+1] == states2[i - |uiops1| + 1];
+        assert uiops[i] == uiops2[i - |uiops1|];
+        assert SM.Next(k, states2[i - |uiops1|],
+            states2[i - |uiops1| + 1], uiops2[i - |uiops1|]);
+      }
+    }
+    assert IsPath(k, s1, uiops, s3, states);
+  }
 
   lemma path_append(k: SM.Constants, s1: SM.Variables, jes: seq<JournalEntry>, s2: SM.Variables, uiop: SM.UIOp, s3: SM.Variables)
   requires path(k, s1, jes, s2)
   requires SM.Next(k, s2, s3, uiop)
   ensures path(k, s1, jes + JournalEntriesForUIOp(uiop), s3)
+  {
+    var jes2 := JournalEntriesForUIOp(uiop);
+    assert jes2 == JournalEntriesForUIOps([uiop]);
+    assert IsPath(k, s2, [uiop], s3, [s2, s3]);
+    assert path(k, s2, jes2, s3);
+    paths_compose(k, s1, jes, s2, jes2, s3);
+  }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
   requires Init(k, s)

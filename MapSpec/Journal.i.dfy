@@ -27,8 +27,9 @@ module Journal {
           + JournalEntriesForUIOp(Last(uiops))
   }
 
-  function UIOpForJournalEntry(je: JournalEntry) : UI.Op
+  lemma JournalEntriesForUIOpsAdditive(a: seq<UI.Op>, b: seq<UI.Op>)
+  ensures JournalEntriesForUIOps(a + b)
+      == JournalEntriesForUIOps(a) + JournalEntriesForUIOps(b)
   {
-    UI.PutOp(je.key, je.value)
   }
 }
