@@ -215,19 +215,32 @@ abstract module TSJ {
         && IsPath(k, s, uiops, s', states)
   }
 
-  predicate Inv1(k: Constants, s: Variables,
-      t1: SM.Variables, t2: SM.Variables, t3: SM.Variables)
+  predicate IsSuffix<T>(s: seq<T>, t: seq<T>)
   {
-    && path(k.k, s.s1, s.j1, t1)
-    && path(k.k, s.s2, s.j2, t2)
-    && path(k.k, s.s3, s.j3, t3)
-    && path(k.k, s.s1, s.j_gamma, t2)
-    && path(k.k, t2, s.j_delta, t3)
+    && |t| <= |s|
+    && s[|s| - |t| ..] == t
+  }
+
+  function SeqSub<T>(s: seq<T>, t: seq<T>) : seq<T>
+  requires IsSuffix(s, t)
+  {
+    s[.. |s| - |t|]
+  }
+
+  predicate advances(k: SM.Constants,
+      s: SM.Variables,
+      jes: seq<JournalEntry>, 
+      s': SM.Variables,
+      jes2: seq<JournalEntry>)
+  {
+    && IsSuffix(jes, jes2)
+    && path(k, s, SeqSub(jes, jes2), s')
   }
 
   predicate Inv(k: Constants, s: Variables)
   {
-    exists t1, t2, t3 :: Inv1(k, s, t1, t2, t3)
+    && advances(k.k, s.s1, s.j_gamma, s.s2, s.j2)
+    && advances(k.k, s.s2, s.j2 + s.j_delta, s.s3, s.j3)
   }
 
   lemma path_empty(k: SM.Constants, s: SM.Variables)
@@ -244,12 +257,16 @@ abstract module TSJ {
   requires path(k, s2, jes2, s3)
   ensures path(k, s1, jes1 + jes2, s3)
 
+  lemma path_append(k: SM.Constants, s1: SM.Variables, jes: seq<JournalEntry>, s2: SM.Variables, uiop: SM.UIOp, s3: SM.Variables)
+  requires path(k, s1, jes, s2)
+  requires SM.Next(k, s2, s3, uiop)
+  ensures path(k, s1, jes + JournalEntriesForUIOp(uiop), s3)
+
   lemma InitImpliesInv(k: Constants, s: Variables)
   requires Init(k, s)
   ensures Inv(k, s)
   {
     path_empty(k.k, s.s1);
-    assert Inv1(k, s, s.s1, s.s1, s.s1);
   }
 
   lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
@@ -257,9 +274,7 @@ abstract module TSJ {
   requires Crash(k, s, s', uiop)
   ensures Inv(k, s')
   {
-    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
-    path_empty(k.k, t1);
-    assert Inv1(k, s', t1, t1, t1);
+    path_empty(k.k, s.s1);
   }
 
   lemma Move1to2StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
@@ -267,8 +282,7 @@ abstract module TSJ {
   requires Move1to2(k, s, s', uiop)
   ensures Inv(k, s')
   {
-    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
-    assert Inv1(k, s', t2, t2, t3);
+    path_empty(k.k, s.s2);
   }
 
   lemma Move2to3StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
@@ -276,10 +290,18 @@ abstract module TSJ {
   requires Move2to3(k, s, s', uiop)
   ensures Inv(k, s')
   {
-    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
-    paths_compose(k.k, s.s1, s.j_gamma, t2, s.j_delta, t3);
-    path_empty(k.k, t3);
-    assert Inv1(k, s', t1, t3, t3);
+    path_empty(k.k, s.s2);
+    path_empty(k.k, s.s3);
+    assert advances(k.k, s.s1, s.j_gamma, s.s2, s.j2);
+    assert advances(k.k, s.s2, s.j2 + s.j_delta, s.s3, s.j3);
+    paths_compose(k.k, s.s1,
+        SeqSub(s.j_gamma, s.j2),
+        s.s2,
+        SeqSub(s.j2 + s.j_delta, s.j3),
+        s.s3);
+    assert SeqSub(s.j_gamma, s.j2) + SeqSub(s.j2 + s.j_delta, s.j3)
+        == SeqSub(s.j_gamma + s.j_delta, s.j3);
+    assert advances(k.k, s.s1, s.j_gamma + s.j_delta, s.s3, s.j3);
   }
 
   lemma ExtendLog1StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
@@ -287,8 +309,6 @@ abstract module TSJ {
   requires ExtendLog1(k, s, s', uiop)
   ensures Inv(k, s')
   {
-    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
-    assert Inv1(k, s', t2, t2, t3);
   }
 
   lemma Move3StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
@@ -297,12 +317,12 @@ abstract module TSJ {
   ensures Inv(k, s')
   {
     var new_je := JournalEntriesForUIOp(uiop);
-    var t1, t2, t3 :| Inv1(k, s, t1, t2, t3);
-    assert path(k.k, s.s1, s.j1, t1);
-    path_empty(k.k, s'.s3);
-    assert path(k.k, s'.s3, s.j3, s'.s3);
-    assert path(k.k, t2, s.j_delta + new_je, s'.s3);
-    assert Inv1(k, s', t1, t2, s'.s3);
+    path_append(k.k, s.s2, s.j2 + s.j_delta, s.s3, uiop, s'.s3);
+    //assert s.j3 == [];
+    //assert SeqSub(s.j2 + s.j_delta, s.j3)
+    //    == s.j2 + s.j_delta;
+    //assert SeqSub(s.j2 + s.j_delta + JournalEntriesForUIOp(uiop), s.j3)
+    //    == s.j2 + s.j_delta + JournalEntriesForUIOp(uiop);
   }
 
   lemma ReplayStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, replayedUIOp: SM.UIOp)
@@ -310,6 +330,9 @@ abstract module TSJ {
   requires Replay(k, s, s', uiop, replayedUIOp)
   ensures Inv(k, s')
   {
+    path_append(k.k, s.s2, SeqSub(s.j2 + s.j_delta, s.j3), s.s3, replayedUIOp, s'.s3);
+    assert SeqSub(s.j2 + s.j_delta, s.j3) + JournalEntriesForUIOp(replayedUIOp)
+        == SeqSub(s.j2 + s.j_delta, s'.j3);
   }
 
   lemma PushSyncStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, id: int)
@@ -348,5 +371,7 @@ abstract module TSJ {
   requires Next(k, s, s', uiop)
   ensures Inv(k, s')
   {
+    var step :| NextStep(k, s, s', uiop, step);
+    NextStepPreservesInv(k, s, s', uiop, step);
   }
 }
