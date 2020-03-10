@@ -4,6 +4,12 @@ include "../lib/Base/Maps.s.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
 include "Journal.i.dfy"
 
+// TSJ = Three-State-Journaled.
+// There are three states, and each one has a journal.
+// We also track two extra journals ("gamma" and "delta")
+// which describe the relationships between the three
+// states.
+
 abstract module TSJ {
   import SM : UIStateMachine
 
@@ -118,7 +124,7 @@ abstract module TSJ {
       s.j3,
       s.j_gamma,
       s.j_delta,
-      SyncReqs3to2(s.outstandingSyncReqs))
+      SyncReqs2to1(s.outstandingSyncReqs))
   }
 
   predicate Move3(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
