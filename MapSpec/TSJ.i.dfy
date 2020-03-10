@@ -231,10 +231,20 @@ abstract module TSJ {
   // Only makes sense when t is a suffix of s.
   // Result is that s-t+t == s for the usual notion
   // of sequence addition.
-  function SeqSub<T>(s: seq<T>, t: seq<T>) : seq<T>
+  function {:opaque} SeqSub<T>(s: seq<T>, t: seq<T>) : seq<T>
   requires IsSuffix(s, t)
+  ensures SeqSub(s, t) + t == s
   {
     s[.. |s| - |t|]
+  }
+
+  lemma SeqSubAdd<T>(a: seq<T>, b: seq<T>, c: seq<T>, d: seq<T>)
+  requires IsSuffix(a, b)
+  requires IsSuffix(b + c, d)
+  ensures SeqSub(a, b) + SeqSub(b + c, d)
+      == SeqSub(a + c, d)
+  {
+    reveal_SeqSub();
   }
 
   predicate advances(k: SM.Constants,
@@ -249,6 +259,9 @@ abstract module TSJ {
 
   predicate Inv(k: Constants, s: Variables)
   {
+    && SM.Inv(k.k, s.s1)
+    && SM.Inv(k.k, s.s2)
+    && SM.Inv(k.k, s.s3)
     && advances(k.k, s.s1, s.j_gamma, s.s2, s.j2)
     && advances(k.k, s.s2, s.j2 + s.j_delta, s.s3, s.j3)
   }
@@ -315,6 +328,7 @@ abstract module TSJ {
   requires Init(k, s)
   ensures Inv(k, s)
   {
+    SM.InitImpliesInv(k.k, s.s1);
     path_empty(k.k, s.s1);
   }
 
@@ -348,6 +362,7 @@ abstract module TSJ {
         s.s2,
         SeqSub(s.j2 + s.j_delta, s.j3),
         s.s3);
+    SeqSubAdd(s.j_gamma, s.j2, s.j_delta, s.j3);
     assert SeqSub(s.j_gamma, s.j2) + SeqSub(s.j2 + s.j_delta, s.j3)
         == SeqSub(s.j_gamma + s.j_delta, s.j3);
     assert advances(k.k, s.s1, s.j_gamma + s.j_delta, s.s3, s.j3);
@@ -365,6 +380,7 @@ abstract module TSJ {
   requires Move3(k, s, s', uiop)
   ensures Inv(k, s')
   {
+    SM.NextPreservesInv(k.k, s.s3, s'.s3, uiop);
     var new_je := JournalEntriesForUIOp(uiop);
     path_append(k.k, s.s2, s.j2 + s.j_delta, s.s3, uiop, s'.s3);
     //assert s.j3 == [];
@@ -379,6 +395,7 @@ abstract module TSJ {
   requires Replay(k, s, s', uiop, replayedUIOp)
   ensures Inv(k, s')
   {
+    SM.NextPreservesInv(k.k, s.s3, s'.s3, replayedUIOp);
     path_append(k.k, s.s2, SeqSub(s.j2 + s.j_delta, s.j3), s.s3, replayedUIOp, s'.s3);
     assert SeqSub(s.j2 + s.j_delta, s.j3) + JournalEntriesForUIOp(replayedUIOp)
         == SeqSub(s.j2 + s.j_delta, s'.j3);
