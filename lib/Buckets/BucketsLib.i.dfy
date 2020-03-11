@@ -161,7 +161,20 @@ module BucketsLib {
       WFWellMarshalledBucketMap(bdl, key);
     }
   }
-  
+
+  lemma WFWellMarshalledBucketNoIdentityMsgs(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures IdentityMessage() !in bucket.msgs
+  {
+    forall i | 0 <= i < |bucket.msgs|
+      ensures bucket.msgs[i] != IdentityMessage()
+    {
+      PosEqLargestLte(bucket.keys, bucket.keys[i], i);
+      WFWellMarshalledBucketMap(bucket, bucket.keys[i]);
+    }
+  }
+
   predicate WFBucketAt(bucket: Bucket, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   {

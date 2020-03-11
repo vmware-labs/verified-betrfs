@@ -130,7 +130,6 @@ module KVList {
   decreases PSA.psaNumStrings(kvl.keys) as int
   {
     reveal_IMap();
-    reveal_WFBucket();
     if PSA.psaNumStrings(kvl.keys) as int == 0 {
     } else {
       ghost var km' := Kvl(PSA.psaDropLast(kvl.keys), DropLast(kvl.messages));
@@ -1861,25 +1860,43 @@ module KVList {
     assert prefix(kvl, PSA.psaNumStrings(kvl.keys) as int) == kvl;
   }
 
+  predicate BucketFitsInKvl(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+  {
+    PSA.psaCanAppendSeq(PSA.EmptyPsa(), bucket.keys)
+  }
+
   function toKvlInternal(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires |bucket.keys| < 0x1_0000_0000 - 1
-  requires MaxLen() as int * |bucket.keys| < 0x1_0000_0000 
+  requires BucketFitsInKvl(bucket)
   {
-    PSA.psaCanAppendSeqHelper2(PSA.EmptyPsa(), bucket.keys, MaxLen() as int);
     Kvl(PSA.psaFromSeq(bucket.keys), bucket.msgs)
   }
 
+  lemma IMapIsBucketMapOfSeq(kvl: Kvl)
+    requires WF(kvl)
+    ensures IMap(kvl) == BucketMapOfSeq(PSA.I(kvl.keys), kvl.messages)
+    decreases PSA.psaNumStrings(kvl.keys)
+  {
+    var ikeys := PSA.I(kvl.keys);
+    if |ikeys| == 0 {
+    } else {
+      WFPrefix(kvl, |ikeys|-1);
+      IMapIsBucketMapOfSeq(prefix(kvl, |ikeys|-1));
+      reveal_BucketMapOfSeq();
+      reveal_IMap();
+    }
+  }
+  
   lemma toKvlCorrect(bucket: Bucket)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires |bucket.keys| < 0x1_0000_0000 - 1
-  requires MaxLen() as int * |bucket.keys| < 0x1_0000_0000 
+  requires BucketFitsInKvl(bucket)
   ensures WF(toKvlInternal(bucket))
   ensures I(toKvlInternal(bucket)) == bucket
   {
-    PSA.psaCanAppendSeqHelper2(PSA.EmptyPsa(), bucket.keys, MaxLen() as int);
     var keys := PSA.psaFromSeq(bucket.keys);
     var kvl := toKvlInternal(bucket);
     forall i | 0 <= i < PSA.psaNumStrings(keys)
@@ -1887,16 +1904,16 @@ module KVList {
     {
       assert PSA.psaElement(keys, i) == PSA.I(keys)[i];
     }
-    reveal_WFBucket();
+    WFWellMarshalledBucketNoIdentityMsgs(bucket);
     reveal_BucketMapOfSeq();
-    assert forall i | 0 <= i < |bucket.msgs| :: bucket.msgs[i] != IdentityMessage();
+    IMapIsBucketMapOfSeq(kvl);
+    WellMarshalledBucketsEq(I(kvl), bucket);
   }
-  
+
   function {:opaque} toKvl(bucket: Bucket) : (kvl: Kvl)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires |bucket.keys| < 0x1_0000_0000 - 1
-  requires MaxLen() as int * |bucket.keys| < 0x1_0000_0000 
+  requires BucketFitsInKvl(bucket)
   ensures WF(kvl)
   ensures I(kvl) == bucket
   {
@@ -1904,9 +1921,84 @@ module KVList {
     toKvlInternal(bucket)
   }
 
+  lemma Ikeys(kvl: Kvl)
+  requires WF(kvl)
+  //ensures WFBucket(I(kvl))
+  //ensures BucketFitsInKvl(I(kvl))
+  ensures I(kvl).keys == PSA.I(kvl.keys)
+  //ensures toKvl(I(kvl)) == kvl
+  decreases |PSA.I(kvl.keys)|
+  {
+    var bucket := I(kvl);
+    WFImpliesWFBucket(kvl);
+    
+    if |PSA.I(kvl.keys)| == 0 {
+      reveal_toKvl();
+      reveal_BucketMapOfSeq();
+    } else {
+      var prekvl := prefix(kvl, |PSA.I(kvl.keys)|-1);
+      var last := PSA.LastElement(kvl.keys);
+      WFPrefix(kvl, |PSA.I(kvl.keys)|-1);
+      Ikeys(prekvl);
+      var prebucket := I(prekvl);
+      WFImpliesWFBucket(prekvl);
+      Iprefix_append(kvl, |PSA.I(kvl.keys)|-1);
+      assert kvl == prefix(kvl, |PSA.I(kvl.keys)|);
+      assert bucket.b == prebucket.b[last := Last(kvl.messages)];
+      WellMarshalledBucketsEq(bucket, B(prebucket.b[last := Last(kvl.messages)]));
+      assert bucket.b.Keys == prebucket.b.Keys + {last};
+      forall k | k in bucket.b.Keys && k != last
+        ensures lt(k, last)
+      {
+        var i :| 0 <= i < |prebucket.keys| && prebucket.keys[i] == k;
+        IsStrictlySortedImpliesLt(PSA.I(kvl.keys), i, |PSA.I(kvl.keys)|-1);
+      }
+      assert Last(bucket.keys) == last by {
+        reveal_B();
+      }
+      forall i | 0 <= i < |PSA.I(prekvl.keys)|
+        ensures PSA.I(prekvl.keys)[i] != last
+      {
+        IsStrictlySortedImpliesLt(PSA.I(kvl.keys), i, |PSA.I(kvl.keys)|-1);
+      }
+      StrictlySortedAugment(prebucket.keys, last);
+      StrictlySortedEq(bucket.keys, prebucket.keys + [last]);
+    }
+  }
+
+  lemma toKvlI_eq(kvl: Kvl)
+    requires WF(kvl)
+    ensures WFBucket(I(kvl))
+    ensures BucketFitsInKvl(I(kvl))
+    ensures toKvl(I(kvl)) == kvl
+  {
+    WFImpliesWFBucket(kvl);
+    Ikeys(kvl);
+    PSA.psaCanAppendI(kvl.keys);
+    var bucket := I(kvl);
+    var kvl' := toKvl(bucket);
+
+    assert PSA.I(kvl'.keys) == PSA.I(kvl.keys) by {
+      reveal_toKvl();
+    }
+    PSA.UniqueRepr(kvl'.keys, kvl.keys);
+
+    forall i | 0 <= i < |kvl.messages|
+      ensures kvl'.messages[i] == kvl.messages[i]
+    {
+      assert kvl'.messages[i] == bucket.msgs[i] by {
+        reveal_toKvl();
+      }
+      Imaps(kvl, i);
+      PosEqLargestLte(bucket.keys, bucket.keys[i], i);
+      WFWellMarshalledBucketMap(bucket, bucket.keys[i]);
+    }
+  }
+  
   function {:opaque} toKvlSeq(buckets: BucketList) : (kvls: seq<Kvl>)
   requires BucketListWellMarshalled(buckets)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  requires forall i | 0 <= i < |buckets| :: BucketFitsInKvl(buckets[i])
   ensures |kvls| == |buckets|
   ensures forall i | 0 <= i < |kvls| :: WF(kvls[i])
   ensures ISeq(kvls) == buckets
@@ -1995,16 +2087,6 @@ module KVList {
         prefix(kvl2, PSA.psaNumStrings(kvl2.keys) as int - 1));
       assert Last(kvl1.messages) == Last(kvl2.messages);
     }
-  }
-
-  lemma toKvlI_eq(kvl: Kvl)
-  requires WF(kvl)
-  ensures WFBucket(I(kvl))
-  ensures toKvl(I(kvl)) == kvl
-  {
-    WFImpliesWFBucket(kvl);
-    assert I(toKvl(I(kvl))) == I(kvl);
-    I_injective(toKvl(I(kvl)), kvl);
   }
 
   lemma WFPivotsOfGetMiddleKey(bucket: Bucket)

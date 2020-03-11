@@ -573,20 +573,19 @@ module PackedStringArray {
     psaAppendSeq(EmptyPsa(), strs)
   }
 
-  lemma psaCanAppendSeqHelper(psa: Psa, strs: seq<seq<byte>>)
+  lemma psaCanAppendI(psa: Psa)
     requires WF(psa)
-    requires |strs| < |psa.offsets| + 0x1_0000_0000 - 1
-    requires |psa.data| + FlattenLength(FlattenShape(strs)) < 0x1_0000_0000 
-    ensures psaCanAppendSeq(psa, strs)
-
-  lemma psaCanAppendSeqHelper2(psa: Psa, strs: seq<seq<byte>>, elementLengthBound: nat)
-    requires WF(psa)
-    requires |strs| < |psa.offsets| + 0x1_0000_0000 - 1
-    requires forall i | 0 <= i < |strs| :: |strs[i]| <= elementLengthBound
-    requires |psa.data| + elementLengthBound * |strs| < 0x1_0000_0000 
-    ensures psaCanAppendSeq(psa, strs)
-
-    
+    ensures psaCanAppendSeq(EmptyPsa(), I(psa))
+    ensures psaAppendSeq(EmptyPsa(), I(psa)) == psa
+    decreases psaNumStrings(psa)
+  {
+    if psaNumStrings(psa) == 0 {
+    } else {
+      var prepsa := psaDropLast(psa);
+      psaCanAppendI(prepsa);
+    }
+  }
+  
   method psaSeqTotalLength(strs: seq<seq<byte>>) returns (len: uint64)
     requires psaCanAppendSeq(EmptyPsa(), strs)
     ensures len == psaTotalLength(psaAppendSeq(EmptyPsa(), strs))
@@ -906,5 +905,22 @@ module PackedStringArray {
       i := i + 1;
     }
     strs := astrs[..];
+  }
+  
+  lemma UniqueRepr(psa1: Psa, psa2: Psa)
+    requires WF(psa1)
+    requires WF(psa2)
+    requires I(psa1) == I(psa2)
+    ensures psa1 == psa2
+    decreases |psa1.offsets|
+  {
+    if |psa1.offsets| == 0 {
+    } else {
+      var pre1 := psaDropLast(psa1);
+      var pre2 := psaDropLast(psa2);
+      UniqueRepr(pre1, pre2);
+      var last := Last(I(psa1));
+      assert psa1.data == pre1.data + last;
+    }
   }
 }

@@ -191,6 +191,42 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
 
+  lemma StrictlySortedEq(run1: seq<Element>, run2: seq<Element>)
+    requires IsStrictlySorted(run1)
+    requires IsStrictlySorted(run2)
+    requires Seq.Set(run1) == Seq.Set(run2)
+    ensures run1 == run2
+  {
+    if |run1| == 0 {
+      if 0 < |run2| {
+        assert run2[0] in Seq.Set(run2);
+        assert false;
+      }
+    } else {
+      assert run1[0] in Seq.Set(run2);
+      var last1 := Seq.Last(run1);
+      var last2 := Seq.Last(run2);
+      assert last1 in Seq.Set(run1);
+      assert last1 == maximum(Seq.Set(run1)) by {
+        reveal_IsStrictlySorted();
+      }
+      assert last2 in Seq.Set(run2);
+      assert last2 == maximum(Seq.Set(run2)) by {
+        reveal_IsStrictlySorted();
+      }
+      assert last1 == last2;
+      StrictlySortedSubsequence(run1, 0, |run1|-1);
+      StrictlySortedSubsequence(run2, 0, |run2|-1);
+      assert Seq.Set(Seq.DropLast(run1)) == Seq.Set(run1) - {last1} by {
+        reveal_IsStrictlySorted();
+      }
+      assert Seq.Set(Seq.DropLast(run2)) == Seq.Set(run2) - {last2} by {
+        reveal_IsStrictlySorted();
+      }
+      StrictlySortedEq(Seq.DropLast(run1), Seq.DropLast(run2));
+    }
+  }
+  
   lemma SortedSubsequence(run: seq<Element>, i: int, j: int)
     requires IsSorted(run)
     requires 0 <= i <= j <= |run|
