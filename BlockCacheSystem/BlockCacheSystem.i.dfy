@@ -211,19 +211,19 @@ module BlockCacheSystem {
     map ref | ref in indirectionTable.graph :: DiskQueueCacheLookup(indirectionTable, disk, cache, ref)
   }
 
-  predicate WFPersistentGraph(k: Constants, s: Variables)
+  protected predicate WFPersistentGraph(k: Constants, s: Variables)
   {
     && WFDisk(s.disk.blocks)
     && WFIndirectionTableWrtDisk(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
   }
 
-  function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
+  protected function PersistentGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires WFPersistentGraph(k, s)
   {
     DiskGraph(IndirectionTableOfDisk(s.disk.blocks), s.disk.blocks)
   }
 
-  predicate WFFrozenGraph(k: Constants, s: Variables)
+  protected predicate WFFrozenGraph(k: Constants, s: Variables)
   {
     && WFDisk(s.disk.blocks)
     && (s.machine.Ready? && s.machine.frozenIndirectionTable.Some? ==>
@@ -240,7 +240,7 @@ module BlockCacheSystem {
     s.machine.Ready? && s.machine.frozenIndirectionTable.Some?
   }
 
-  function FrozenGraph(k: Constants, s: Variables) : map<Reference, Node>
+  protected function FrozenGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires WFFrozenGraph(k, s)
   {
     if UseFrozenGraph(k, s) then
@@ -249,7 +249,7 @@ module BlockCacheSystem {
       PersistentGraph(k, s)
   }
 
-  predicate WFEphemeralGraph(k: Constants, s: Variables)
+  protected predicate WFEphemeralGraph(k: Constants, s: Variables)
   {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk.blocks)
@@ -261,7 +261,7 @@ module BlockCacheSystem {
     && WFPersistentGraph(k, s)
   }
 
-  function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
+  protected function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
   requires WFEphemeralGraph(k, s)
   {
     if s.machine.Ready? then
@@ -283,7 +283,7 @@ module BlockCacheSystem {
     && forall ref | ref in succGraph :: (iset r | r in succGraph[ref]) == M.G.Successors(graph[ref])
   }
 
-  predicate WFPersistentJournal(s: Variables)
+  protected predicate WFPersistentJournal(s: Variables)
   {
     && DiskHasSuperblock(s.disk.blocks)
     && WFRange(
@@ -294,7 +294,7 @@ module BlockCacheSystem {
         SuperblockOfDisk(s.disk.blocks).journalLen as int)
   }
 
-  function PersistentJournal(s: Variables) : seq<JournalEntry>
+  protected function PersistentJournal(s: Variables) : seq<JournalEntry>
   requires WFPersistentJournal(s)
   {
     Disk_Journal(s.disk.blocks,
@@ -331,7 +331,7 @@ module BlockCacheSystem {
     )
   }
 
-  predicate WFFrozenJournal(s: Variables)
+  protected predicate WFFrozenJournal(s: Variables)
   {
     && DiskHasSuperblock(s.disk.blocks)
     && WFRange(FrozenStartPos(s), FrozenLen(s))
@@ -339,19 +339,19 @@ module BlockCacheSystem {
         FrozenStartPos(s), FrozenLen(s))
   }
 
-  function FrozenJournal(s: Variables) : seq<JournalEntry>
+  protected function FrozenJournal(s: Variables) : seq<JournalEntry>
   requires WFFrozenJournal(s)
   {
     DiskQueue_Journal(s.disk.blocks, s.disk.reqWrites,
         FrozenStartPos(s), FrozenLen(s))
   }
 
-  predicate WFEphemeralJournal(s: Variables)
+  protected predicate WFEphemeralJournal(s: Variables)
   {
     && WFPersistentJournal(s)
   }
 
-  function EphemeralJournal(s: Variables) : seq<JournalEntry>
+  protected function EphemeralJournal(s: Variables) : seq<JournalEntry>
   requires WFEphemeralJournal(s)
   {
     if s.machine.Ready? then (
@@ -383,7 +383,7 @@ module BlockCacheSystem {
       SuperblockOfDisk(s.disk.blocks).journalLen as int
   }
 
-  predicate WFGammaJournal(s: Variables)
+  protected predicate WFGammaJournal(s: Variables)
   {
     && DiskHasSuperblock(s.disk.blocks)
     && WFRange(GammaStartPos(s), GammaLen(s))
@@ -391,7 +391,7 @@ module BlockCacheSystem {
         GammaStartPos(s), GammaLen(s))
   }
 
-  function GammaJournal(s: Variables) : seq<JournalEntry>
+  protected function GammaJournal(s: Variables) : seq<JournalEntry>
   requires WFGammaJournal(s)
   {
     if s.machine.Ready? then (
@@ -404,7 +404,7 @@ module BlockCacheSystem {
     )
   }
 
-  function DeltaJournal(s: Variables) : seq<JournalEntry>
+  protected function DeltaJournal(s: Variables) : seq<JournalEntry>
   {
     if s.machine.Ready? then (
       s.machine.inMemoryJournal
@@ -819,7 +819,16 @@ module BlockCacheSystem {
         id1 != id2
   }
 
-  predicate Inv(k: Constants, s: Variables) {
+  protected predicate Inv(k: Constants, s: Variables)
+  ensures Inv(k, s) ==>
+    && WFPersistentGraph(k, s)
+    && WFFrozenGraph(k, s)
+    && WFEphemeralGraph(k, s)
+    && WFPersistentJournal(s)
+    && WFFrozenJournal(s)
+    && WFEphemeralJournal(s)
+    && WFGammaJournal(s)
+  {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk.blocks)
     && WFReqWriteBlocks(s.disk.reqWrites)
@@ -2327,6 +2336,43 @@ module BlockCacheSystem {
   ////////////////////// Transaction
   //////////////////////
 
+  lemma JournalStepPreservesGraphs(k: Constants, s: Variables, s': Variables, js: M.JournalStep)
+    requires Inv(k, s)
+    requires M.ValidJournalStep(s.machine, js)
+    requires s'.machine == M.DoJournalStep(s.machine, js)
+    requires s'.disk == s.disk
+    ensures Inv(k, s')
+    ensures PersistentGraph(k, s) == PersistentGraph(k, s');
+    ensures FrozenGraph(k, s) == FrozenGraph(k, s');
+    ensures EphemeralGraph(k, s) == EphemeralGraph(k, s');
+  {
+  }
+
+  lemma JournalStepPreservesJournals(k: Constants, s: Variables, s': Variables, js: M.JournalStep)
+    requires Inv(k, s)
+    requires M.ValidJournalStep(s.machine, js)
+    requires s'.machine == M.DoJournalStep(s.machine, js)
+    requires s'.disk == s.disk
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures js.JSNew? ==>
+      && EphemeralJournal(s) == []
+      && EphemeralJournal(s') == []
+      && DeltaJournal(s') == DeltaJournal(s) + js.entries
+    ensures js.JSReplay? ==>
+      && js.entries + EphemeralJournal(s') == EphemeralJournal(s)
+      && DeltaJournal(s') == DeltaJournal(s)
+  {
+    if js.JSReplay? {
+      calc {
+        js.entries + EphemeralJournal(s');
+          { reveal_IsPrefix(); }
+        EphemeralJournal(s);
+      }
+    }
+  }
+
   lemma OpPreservesInv(k: Constants, s: Variables, s': Variables, op: Op)
     requires Inv(k, s)
     requires M.OpStep(k.machine, s.machine, s'.machine, op)
@@ -2339,10 +2385,10 @@ module BlockCacheSystem {
     }
   }
 
-  lemma TransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+  lemma OpTransactionPreservesInv(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
     requires Inv(k, s)
-    requires M.Transaction(k.machine, s.machine, s'.machine, dop, ops)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    requires M.OpTransaction(k.machine, s.machine, s'.machine, ops)
+    requires s.disk == s'.disk
     ensures Inv(k, s')
     decreases |ops|
   {
@@ -2351,9 +2397,20 @@ module BlockCacheSystem {
       OpPreservesInv(k, s, s', ops[0]);
     } else {
       var ops1, smid, ops2 := M.SplitTransaction(k.machine, s.machine, s'.machine, ops);
-      TransactionStepPreservesInv(k, s, AsyncSectorDiskModelVariables(smid, s.disk), dop, ops1);
-      TransactionStepPreservesInv(k, AsyncSectorDiskModelVariables(smid, s.disk), s', dop, ops2);
+      OpTransactionPreservesInv(k, s, AsyncSectorDiskModelVariables(smid, s.disk), ops1);
+      OpTransactionPreservesInv(k, AsyncSectorDiskModelVariables(smid, s.disk), s', ops2);
     }
+  }
+
+  lemma TransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>, js: M.JournalStep)
+    requires Inv(k, s)
+    requires M.Transaction(k.machine, s.machine, s'.machine, dop, ops, js)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+    decreases |ops|
+  {
+    var s1 := s.(machine := M.DoJournalStep(s.machine, js));
+    OpTransactionPreservesInv(k, s1, s', ops);
   }
 
   ////////////////////////////////////////////////////
@@ -3231,7 +3288,7 @@ module BlockCacheSystem {
       case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, id);
       case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, id);
       case NoOpStep => { NoOpStepPreservesInv(k, s, s', dop); }
-      case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, ops);
+      case TransactionStep(ops, js) => TransactionStepPreservesInv(k, s, s', dop, ops, js);
     }
   }
 

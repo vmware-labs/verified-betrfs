@@ -14,7 +14,16 @@ include "../lib/Base/sequences.i.dfy"
 // now, we just prove the refinement specifically for BetreeGraph.
 //
 
-module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
+module BlockCacheSystem_Refines_TSJBlockInterface {
+  // Okay, this isn't *technically* a refinement: there's no
+  // such thing as a TSJBlockInterface.
+  // (You can only create a TSJX for an X which is defined
+  // with respect to UIOps. BlockInterface is not such an X.)
+  // Still, this module contains most of the meat that would
+  // be used to define such a refinement if it existed.
+  // Really, these lemmas are here to facilitate the proof
+  // that BetreeBlockCacheSystem refines TSJPivotBetree.
+
   import opened G = PivotBetreeGraph
   import BCS = BetreeGraphBlockCacheSystem
   import opened AsyncSectorDiskModelTypes
@@ -35,30 +44,28 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
     BI.Constants()
   }
 
-  function {:opaque} PersistentGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
+  function PersistentGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
   requires BCS.Inv(k, s)
   {
     MapToImap(BCS.PersistentGraph(k, s))
   }
 
-  function {:opaque} EphemeralGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
+  function EphemeralGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
   requires BCS.Inv(k, s)
   {
-    MapToImap(if BCS.EphemeralGraphOpt(k, s).Some? then
-      BCS.EphemeralGraphOpt(k, s).value
-    else
-      BCS.PersistentGraph(k, s))
+    MapToImap(EphemeralGraph(k, s))
   }
 
-  function {:opaque} FrozenGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
+  function FrozenGraph(k: BCS.Constants, s: BCS.Variables) : imap<Reference, Node>
   requires BCS.Inv(k, s)
   {
-    MapToImap(
-      if BCS.FrozenGraphOpt(k, s).Some? then
-        BCS.FrozenGraphOpt(k, s).value
-      else
-        BCS.PersistentGraph(k, s)
-    )
+    MapToImap(EphemeralGraph(k, s))
+  }
+
+  predicate CommitOccurredNotAcked(s: BCS.Variables)
+  {
+    s.machine.Ready? && s.machine.superblockWrite.Some?
+            && s.machine.superblockWrite.value in s.disk.respWrites
   }
   
   function SyncReqState(k: BCS.Constants, s: BCS.Variables, status: BC.SyncReqStatus) : ThreeState.SyncReqStatus
@@ -68,8 +75,7 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
       case State2 => (
         // It's possible that the disk has written the superblock but the BlockCache
         // hasn't heard about it yet. In that case, we need to upgrade State2 to State1.
-        if s.machine.Ready? && s.machine.outstandingIndirectionTableWrite.Some?
-            && s.machine.outstandingIndirectionTableWrite.value in s.disk.respWrites then
+        if CommitOccurredNotAcked(s) then
           ThreeState.State1
         else
           ThreeState.State2
@@ -84,18 +90,106 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
     map id | 0 <= id < 0x1_0000_0000_0000_0000 && id as uint64 in s.machine.syncReqs :: SyncReqState(k, s, s.machine.syncReqs[id as uint64])
   }
 
-  predicate IsPersistStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
-  {
-    && s.machine.Ready?
-    && step.DiskInternalStep?
-    && step.step.ProcessWriteStep?
-    && Some(step.step.id) == s.machine.outstandingIndirectionTableWrite
-  }
-
-  predicate IsFreezeStep(step: BCS.Step)
+  predicate IsTransactionStep(step: BCS.Step)
   {
     && step.MachineStep?
-    && step.machineStep.FreezeStep?
+    && step.machineStep.TransactionStep?
+  }
+
+  predicate UpdateAllEq(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables)
+  {
+    && PersistentGraph(k, s') == PersistentGraph(k, s)
+    && FrozenGraph(k, s') == FrozenGraph(k, s)
+    && EphemeralGraph(k, s') == EphemeralGraph(k, s)
+    && BCS.PersistentJournal(s') == BCS.PersistentJournal(s)
+    && BCS.FrozenJournal(s') == BCS.FrozenJournal(s)
+    && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.GammaJournal(s') == BCS.GammaJournal(s)
+    && BCS.DeltaJournal(s') == BCS.DeltaJournal(s)
+  }
+
+  predicate UpdateMove1to2(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables)
+  {
+    && PersistentGraph(k, s') == FrozenGraph(k, s)
+    && FrozenGraph(k, s') == FrozenGraph(k, s)
+    && EphemeralGraph(k, s') == EphemeralGraph(k, s)
+    && BCS.PersistentJournal(s') == BCS.FrozenJournal(s)
+    && BCS.FrozenJournal(s') == BCS.FrozenJournal(s)
+    && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.GammaJournal(s') == BCS.FrozenJournal(s)
+    && BCS.DeltaJournal(s') == BCS.DeltaJournal(s)
+  }
+
+  predicate UpdateMove2to3(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables)
+  {
+    && PersistentGraph(k, s') == FrozenGraph(k, s)
+    && FrozenGraph(k, s') == EphemeralGraph(k, s)
+    && EphemeralGraph(k, s') == EphemeralGraph(k, s)
+    && BCS.PersistentJournal(s') == BCS.FrozenJournal(s)
+    && BCS.FrozenJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.GammaJournal(s') == BCS.GammaJournal(s) + BCS.DeltaJournal(s)
+    && BCS.DeltaJournal(s') == []
+  }
+
+  predicate UpdateExtendLog(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables)
+  {
+    && PersistentGraph(k, s') == PersistentGraph(k, s)
+    && FrozenGraph(k, s') == FrozenGraph(k, s)
+    && EphemeralGraph(k, s') == EphemeralGraph(k, s)
+    && BCS.PersistentJournal(s') == BCS.GammaJournal(s)
+    && BCS.FrozenJournal(s') == BCS.FrozenJournal(s)
+    && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.GammaJournal(s') == BCS.GammaJournal(s)
+    && BCS.DeltaJournal(s') == BCS.DeltaJournal(s)
+  }
+
+  predicate UpdateUnalloc(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables)
+  {
+    && PersistentGraph(k, s') == PersistentGraph(k, s)
+    && FrozenGraph(k, s') == FrozenGraph(k, s)
+    && EphemeralGraph(k, s') == IMapRemove1(EphemeralGraph(k, s), step.machineStep.ref)
+    && BCS.PersistentJournal(s') == BCS.GammaJournal(s)
+    && BCS.FrozenJournal(s') == BCS.FrozenJournal(s)
+    && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.GammaJournal(s') == BCS.GammaJournal(s)
+    && BCS.DeltaJournal(s') == BCS.DeltaJournal(s)
+  }
+
+  predicate UpdateTransaction(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables,
+    step: BCS.Step)
+  requires IsTransactionStep(step)
+  {
+    && PersistentGraph(k, s') == PersistentGraph(k, s)
+    && FrozenGraph(k, s') == FrozenGraph(k, s)
+    && BI.OpTransaction(BI.Constants(),
+            BI.Variables(EphemeralGraph(k, s)),
+            BI.Variables(EphemeralGraph(k, s')),
+            step.machineStep.ops)
+    && BCS.PersistentJournal(s') == BCS.GammaJournal(s)
+    && BCS.FrozenJournal(s') == BCS.FrozenJournal(s)
+    && BCS.EphemeralJournal(s) == []
+    && BCS.EphemeralJournal(s') == []
+    && BCS.GammaJournal(s') == BCS.GammaJournal(s)
+    && BCS.DeltaJournal(s') == step.machineStep.newJournal
   }
 
   lemma InitImpliesGraphsEq(k: BCS.Constants, s: BCS.Variables)
@@ -192,23 +286,12 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
   requires BCS.NextStep(k, s, s', step)
   ensures BCS.Inv(k, s')
 
-  ensures (step.CrashStep? ==>
-      && PersistentGraph(k, s') == PersistentGraph(k, s)
-      && FrozenGraph(k, s') == PersistentGraph(k, s)
-      && EphemeralGraph(k, s') == PersistentGraph(k, s)
-    )
-
-  ensures (step.DiskInternalStep? ==>
-      && (!IsPersistStep(k, s, step) ==> PersistentGraph(k, s') == PersistentGraph(k, s))
-      && (IsPersistStep(k, s, step) ==> PersistentGraph(k, s') == FrozenGraph(k, s))
-      && FrozenGraph(k, s') == FrozenGraph(k, s)
-      && EphemeralGraph(k, s') == EphemeralGraph(k, s)
-    )
-
-  ensures (step.MachineStep? && step.machineStep.FreezeStep? ==>
-      && PersistentGraph(k, s') == PersistentGraph(k, s)
-      && FrozenGraph(k, s') == EphemeralGraph(k, s)
-      && EphemeralGraph(k, s') == EphemeralGraph(k, s)
+  ensures !IsTransactionStep(step) ==> (
+      || UpdateAllEq(k, s, s')
+      || UpdateMove1to2(k, s, s')
+      || UpdateMove2to3(k, s, s')
+      || UpdateExtendLog(k, s, s')
+      || UpdateUnalloc(k, s, s')
     )
 
   ensures (step.MachineStep? && step.machineStep.TransactionStep? ==>
@@ -224,16 +307,6 @@ module BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface {
       && PersistentGraph(k, s') == PersistentGraph(k, s)
       && FrozenGraph(k, s') == FrozenGraph(k, s)
       && EphemeralGraph(k, s') == IMapRemove1(EphemeralGraph(k, s), step.machineStep.ref)
-    )
-
-  ensures (step.MachineStep? && !(
-      || step.machineStep.FreezeStep?
-      || step.machineStep.TransactionStep?
-      || step.machineStep.UnallocStep?)
-    ) ==> (
-      && PersistentGraph(k, s') == PersistentGraph(k, s)
-      && FrozenGraph(k, s') == FrozenGraph(k, s)
-      && EphemeralGraph(k, s') == EphemeralGraph(k, s)
     )
   {
     BCS.NextStepPreservesInv(k, s, s', step);

@@ -258,6 +258,10 @@ module BlockCache refines Transactable {
     && ValidIndirectionTableLocation(superblock.indirectionTableLoc)
   }
 
+  datatype JournalStep =
+      | JSNew(entries: seq<JournalEntry>)
+      | JSReplay(entries: seq<JournalEntry>)
+
   datatype Step =
     | WriteBackReqStep(ref: Reference)
     | WriteBackRespStep
@@ -285,7 +289,7 @@ module BlockCache refines Transactable {
     | PushSyncReqStep(id: uint64)
     | PopSyncReqStep(id: uint64)
     | NoOpStep
-    | TransactionStep(ops: seq<Op>)
+    | TransactionStep(ops: seq<Op>, journalStep: JournalStep)
 
   function assignRefToLocation(indirectionTable: IndirectionTable, ref: Reference, loc: Location) : IndirectionTable
   {
@@ -995,10 +999,38 @@ module BlockCache refines Transactable {
     }
   }
 
-  predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+  predicate ValidJournalStep(s: Variables, js: JournalStep)
+  {
+    && s.Ready?
+    && (js.JSReplay? ==>
+      && IsPrefix(js.entries, s.replayJournal)
+    )
+    && (js.JSNew? ==>
+      && s.replayJournal == []
+    )
+  }
+
+  function DoJournalStep(s: Variables, js: JournalStep) : Variables
+  requires ValidJournalStep(s, js)
+  requires s.Ready?
+  {
+    match js {
+      case JSReplay(entries) =>
+        reveal_IsPrefix(); 
+        s.(replayJournal := s.replayJournal[|entries|..])
+      case JSNew(entries) =>
+        s.(inMemoryJournal := s.inMemoryJournal + entries)
+    }
+  }
+
+  predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>, js: JournalStep)
   {
     && dop.NoDiskOp?
-    && OpTransaction(k, s, s', ops)
+
+    && ValidJournalStep(s, js)
+    && var s1 := DoJournalStep(s, js);
+
+    && OpTransaction(k, s1, s', ops)
   }
 
   predicate Init(k: Constants, s: Variables)
@@ -1034,7 +1066,7 @@ module BlockCache refines Transactable {
       case PushSyncReqStep(id: uint64) => PushSyncReq(k, s, s', dop, id)
       case PopSyncReqStep(id: uint64) => PopSyncReq(k, s, s', dop, id)
       case NoOpStep => NoOp(k, s, s', dop)
-      case TransactionStep(ops) => Transaction(k, s, s', dop, ops)
+      case TransactionStep(ops, js) => Transaction(k, s, s', dop, ops, js)
     }
   }
 
@@ -1382,9 +1414,9 @@ module BlockCache refines Transactable {
     }
   }
 
-  lemma TransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>)
+  lemma OpTransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
     requires Inv(k, s)
-    requires Transaction(k, s, s', dop, ops)
+    requires OpTransaction(k, s, s', ops)
     ensures Inv(k, s')
     decreases |ops|
   {
@@ -1393,9 +1425,20 @@ module BlockCache refines Transactable {
       OpPreservesInv(k, s, s', ops[0]);
     } else {
       var ops1, smid, ops2 := SplitTransaction(k, s, s', ops);
-      TransactionStepPreservesInv(k, s, smid, dop, ops1);
-      TransactionStepPreservesInv(k, smid, s', dop, ops2);
+      OpTransactionStepPreservesInv(k, s, smid, ops1);
+      OpTransactionStepPreservesInv(k, smid, s', ops2);
     }
+  }
+
+
+  lemma TransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ops: seq<Op>, js: JournalStep)
+    requires Inv(k, s)
+    requires Transaction(k, s, s', dop, ops, js)
+    ensures Inv(k, s')
+    decreases |ops|
+  {
+    var s1 := DoJournalStep(s, js);
+    OpTransactionStepPreservesInv(k, s1, s', ops);
   }
 
   lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
@@ -1580,7 +1623,7 @@ module BlockCache refines Transactable {
       case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, id);
       case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, id);
       case NoOpStep => { }
-      case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, ops);
+      case TransactionStep(ops, js) => TransactionStepPreservesInv(k, s, s', dop, ops, js);
     }
   }
 
