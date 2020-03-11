@@ -120,7 +120,6 @@ module PackedKV {
   ensures WFBucket(bucket)
   {
     // Note that this might not be WellMarshalled
-    reveal_WFBucket();
     assume false;
     BucketMapWithSeq(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
   }

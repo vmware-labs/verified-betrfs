@@ -848,6 +848,24 @@ module PackedStringArray {
       }
       assert strs[..|strs|] == strs;
     }
+
+    method Prefix(newlen: uint64)
+      requires WF()
+      requires newlen <= nstrings
+      ensures WF()
+      ensures toPsa() == psaSubSeq(old(toPsa()), 0, newlen)
+      ensures offsets == old(offsets)
+      ensures data == old(data)
+      ensures Repr == old(Repr)
+      modifies this
+    {
+      Uint32_Order.SortedSubsequence(offsets[..nstrings], 0, newlen as int);
+      assert offsets[..newlen] == offsets[..nstrings][..newlen];
+      if 0 < newlen {
+        Uint32_Order.IsSortedImpliesLte(offsets[..nstrings], newlen as int - 1, nstrings as int - 1);
+      }
+      nstrings := newlen;
+    }
     
     constructor PreSized(num_strings: uint32, total_len: uint32)
       ensures WF()
