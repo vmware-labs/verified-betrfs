@@ -13,16 +13,17 @@ include "../PivotBetree/PivotBetreeSpecWFNodes.i.dfy"
 module BetreeBlockCache refines AsyncSectorDiskMachine {
   import opened Maps
   import opened Sequences
+  import opened SectorType
+  import opened Journal
 
   import opened PivotBetreeSpec`Spec
   import G = PivotBetreeGraph
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
   import BI = BetreeBlockInterface
   import PivotBetreeSpecWFNodes
 
   type Variables = BC.Variables
   type Constants = BC.Constants
-  type Sector = BC.Sector
 
   type Op = BC.Op
 
@@ -36,17 +37,19 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
   }
 
   datatype Step =
-    | BetreeMoveStep(betreeStep: BetreeStep)
+    | BetreeMoveStep(betreeStep: BetreeStep, js: BC.JournalStep)
     | BlockCacheMoveStep(blockCacheStep: BC.Step)
 
-  predicate BetreeMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep)
+  predicate BetreeMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep, js: BC.JournalStep)
   {
     && dop.NoDiskOp?
     && s.Ready?
     && ValidBetreeStep(betreeStep)
     && BC.Reads(k, s, BetreeStepReads(betreeStep))
-    && BC.OpTransaction(k, s, s', BetreeStepOps(betreeStep))
+    && BC.Transaction(k, s, s', dop, BetreeStepOps(betreeStep), js)
     && BetreeStepUI(betreeStep, uiop)
+    && (js.JSNew? ==> js.entries == JournalEntriesForUIOp(uiop))
+    && (js.JSReplay? ==> uiop.NoOp?)
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step) {
@@ -56,14 +59,14 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
     && (!step.PushSyncReqStep? && !step.PopSyncReqStep? ==> uiop.NoOp?)
 
     && BC.NextStep(k, s, s', dop, step)
-    && (dop.RespReadOp? && dop.respRead.sector.Some? && dop.respRead.sector.value.SectorBlock? ==>
+    && (dop.RespReadOp? && dop.respRead.sector.Some? && dop.respRead.sector.value.SectorNode? ==>
       WFNode(dop.respRead.sector.value.block)
     )
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: Step) {
     match step {
-      case BetreeMoveStep(step) => BetreeMove(k, s, s', uiop, dop, step)
+      case BetreeMoveStep(step, js) => BetreeMove(k, s, s', uiop, dop, step, js)
       case BlockCacheMoveStep(step) => BlockCacheMove(k, s, s', uiop, dop, step)
     }
   }
@@ -79,13 +82,13 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
     BC.InitImpliesInv(k, s);
   }
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep, js: BC.JournalStep)
   requires Inv(k, s)
-  requires BetreeMove(k, s, s', uiop, dop, betreeStep)
+  requires BetreeMove(k, s, s', uiop, dop, betreeStep, js)
   ensures Inv(k, s')
   {
-    var ops :| BC.OpTransaction(k, s, s', ops);
-    BC.TransactionStepPreservesInv(k, s, s', D.NoDiskOp, ops);
+    var ops := BetreeStepOps(betreeStep);
+    BC.TransactionStepPreservesInv(k, s, s', D.NoDiskOp, ops, js);
 
     forall i | 0 <= i < |BetreeStepReads(betreeStep)|
     ensures WFNode(BetreeStepReads(betreeStep)[i].node)
@@ -111,7 +114,7 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
   ensures Inv(k, s')
   {
     match step {
-      case BetreeMoveStep(step) => BetreeMoveStepPreservesInv(k, s, s', uiop, dop, step);
+      case BetreeMoveStep(step, js) => BetreeMoveStepPreservesInv(k, s, s', uiop, dop, step, js);
       case BlockCacheMoveStep(step) => BlockCacheMoveStepPreservesInv(k, s, s', uiop, dop, step);
     }
   }

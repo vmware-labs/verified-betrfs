@@ -416,7 +416,11 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
   requires s'.disk == s.disk
   requires BC.Unalloc(k.machine, s.machine, s'.machine, dop, ref)
   ensures BI.CanGCRefs(BI.Constants(), BI.Variables(EphemeralGraph(k, s)), iset{ref})
+  ensures BCS.Inv(k, s')
+  ensures ref in EphemeralGraph(k, s)
+  ensures EphemeralGraph(k, s') == IMapRemove1(EphemeralGraph(k, s), ref)
   {
+    BCS.UnallocStepPreservesInv(k, s, s', dop, ref);
     BCS.UnallocStepUpdatesGraph(k, s, s', dop, ref);
     //reveal_EphemeralGraph();
     if (ref in BI.LiveReferences(BI.Constants(), BI.Variables(EphemeralGraph(k, s)))) {

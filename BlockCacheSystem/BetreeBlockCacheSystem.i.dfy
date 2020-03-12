@@ -5,7 +5,7 @@ include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
-include "../BlockCacheSystem/BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy"
+include "../BlockCacheSystem/BlockCacheSystem_Refines_TSJBlockInterface.i.dfy"
 //
 // Instantiate the {PivotBetree, BlockCache} code in a System (model of the environment).
 // ("Bottom lettuce")
@@ -18,12 +18,11 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
   import opened Sequences
 
   import opened PivotBetreeSpec`Spec
-  import BC = BetreeGraphBlockCache
-  import BCS = BetreeGraphBlockCacheSystem
+  import BC = BlockCache
+  import BCS = BlockCacheSystem
   import BT = PivotBetree
-  import BTI = PivotBetreeInvAndRefinement
   import BI = PivotBetreeBlockInterface
-  import Ref = BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface
+  import Ref = BlockCacheSystem_Refines_TSJBlockInterface
 
   import M = BetreeBlockCache
 
@@ -55,14 +54,17 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
     && M.Init(k.machine, s.machine)
     && D.Init(k.disk, s.disk)
     && BCS.Init(k, s)
-    && BT.Init(Ik(k), PersistentBetree(k, s))
+    && (
+      BCS.InitImpliesInv(k, s);
+      BT.Init(Ik(k), PersistentBetree(k, s))
+    )
   }
 
   predicate Inv(k: Constants, s: Variables) {
     && BCS.Inv(k, s)
-    && BTI.Inv(Ik(k), PersistentBetree(k, s))
-    && BTI.Inv(Ik(k), FrozenBetree(k, s))
-    && BTI.Inv(Ik(k), EphemeralBetree(k, s))
+    && BT.Inv(Ik(k), PersistentBetree(k, s))
+    && BT.Inv(Ik(k), FrozenBetree(k, s))
+    && BT.Inv(Ik(k), EphemeralBetree(k, s))
   }
 
   // Proofs
@@ -73,21 +75,21 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
     //ensures Inv(k, s)
   {
     BCS.InitImpliesInv(k, s);
-    BTI.InitImpliesInv(Ik(k), PersistentBetree(k, s));
-    Ref.InitImpliesGraphsEq(k, s);
+    BT.InitImpliesInv(Ik(k), PersistentBetree(k, s));
+    BCS.InitGraphs(k, s);
   }
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, betreeStep: BetreeStep)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, betreeStep: BetreeStep, js: BC.JournalStep)
     requires Inv(k, s)
-    requires M.BetreeMove(k.machine, s.machine, s'.machine, uiop, dop, betreeStep)
+    requires M.BetreeMove(k.machine, s.machine, s'.machine, uiop, dop, betreeStep, js)
     requires D.Next(k.disk, s.disk, s'.disk, dop)
     ensures Inv(k, s')
   {
-    Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep))));
+    Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep), js)));
     Ref.RefinesReads(k, s, BetreeStepReads(betreeStep));
     //assert BT.Betree(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
     assert BT.NextStep(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, BT.BetreeStep(betreeStep));
-    BTI.NextPreservesInv(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop);
+    BT.NextPreservesInv(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop);
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, step: BC.Step)
@@ -106,8 +108,9 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
       assert BI.ClosedUnderPredecessor(EphemeralBetree(k, s).bcv.view, iset{step.ref});
       assert IMapRemove1(EphemeralBetree(k, s).bcv.view, step.ref)
           == IMapRemove(EphemeralBetree(k, s).bcv.view, iset{step.ref});
+      assert BI.GC(Ik(k).bck, EphemeralBetree(k, s).bcv, EphemeralBetree(k, s').bcv, iset{step.ref});
       assert BT.GC(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, iset{step.ref});
-      BTI.GCStepRefines(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, iset{step.ref});
+      BT.GCStepRefines(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, iset{step.ref});
     }
   }
 
@@ -136,7 +139,7 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
       case MachineStep(dop) => {
         var machineStep :| M.NextStep(k.machine, s.machine, s'.machine, uiop, dop, machineStep);
         match machineStep {
-          case BetreeMoveStep(betreeStep) => BetreeMoveStepPreservesInv(k, s, s', uiop, dop, betreeStep);
+          case BetreeMoveStep(betreeStep, js) => BetreeMoveStepPreservesInv(k, s, s', uiop, dop, betreeStep, js);
           case BlockCacheMoveStep(blockCacheStep) => BlockCacheMoveStepPreservesInv(k, s, s', uiop, dop, blockCacheStep);
         }
       }
