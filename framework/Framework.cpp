@@ -3,6 +3,8 @@
 
 #include "Bundle.i.h"
 
+#include "MallocAccounting.h"
+
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -29,6 +31,13 @@ using namespace std;
 #undef O_DIRECT_FLAG
 #define O_DIRECT_FLAG O_DIRECT
 #endif
+#endif
+
+#ifdef LOG_QUERY_STATS
+constexpr int ACTION_QUERY = 0;
+constexpr int ACTION_INSERT = 1;
+constexpr int ACTION_SYNC = 2;
+int currently_doing_action = 0;
 #endif
 
 [[ noreturn ]]
@@ -169,7 +178,15 @@ namespace MainDiskIOHandler_Compile {
     auto t2 = chrono::high_resolution_clock::now();
     long long ns = std::chrono::duration_cast<
         std::chrono::nanoseconds>(t2 - t1).count();
-    benchmark_append("pread", ns);
+    if (currently_doing_action == ACTION_QUERY) {
+      benchmark_append("pread (query)", ns);
+    }
+    else if (currently_doing_action == ACTION_INSERT) {
+      benchmark_append("pread (insert)", ns);
+    }
+    else if (currently_doing_action == ACTION_SYNC) {
+      benchmark_append("pread (sync)", ns);
+    }
     #endif
 
     if (count < 0) {
@@ -232,8 +249,9 @@ namespace MainDiskIOHandler_Compile {
   {
     size_t len = bytes.size();
 
-    shared_ptr<WriteTask> writeTask {
-      new WriteTask(fd, addr, &bytes.at(0), len) };
+    malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
+    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
+    malloc_accounting_default_scope();
 
     if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
       writeTask->start();
@@ -242,7 +260,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
+    malloc_accounting_set_scope("DiskIOHandler::write.insert");
     writeReqs.insert(std::make_pair(id, writeTask));
+    malloc_accounting_default_scope();
 
     return id;
   }
@@ -250,7 +270,7 @@ namespace MainDiskIOHandler_Compile {
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
     #ifdef LOG_QUERY_STATS
-    benchmark_start("DiskIOHandler::read alloc");
+    //benchmark_start("DiskIOHandler::read alloc");
     #endif
 
     #if USE_DIRECT
@@ -271,22 +291,24 @@ namespace MainDiskIOHandler_Compile {
     #endif
 
     #ifdef LOG_QUERY_STATS
-    benchmark_end("DiskIOHandler::read alloc");
+    //benchmark_end("DiskIOHandler::read alloc");
     #endif
 
     readSync(fd, addr, len, aligned_len, bytes.ptr());
 
     #ifdef LOG_QUERY_STATS
-    benchmark_start("DiskIOHandler::read finish");
+    //benchmark_start("DiskIOHandler::read finish");
     #endif
 
     uint64 id = this->curId;
     this->curId++;
 
+    malloc_accounting_set_scope("DiskIOHandler::ReadTask");
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+    malloc_accounting_default_scope();
 
     #ifdef LOG_QUERY_STATS
-    benchmark_end("DiskIOHandler::read finish");
+    //benchmark_end("DiskIOHandler::read finish");
     #endif
 
     return id;
@@ -371,7 +393,9 @@ namespace MainDiskIOHandler_Compile {
   }
   void DiskIOHandler::waitForOne() {
     std::vector<aiocb*> tasks;
+    malloc_accounting_set_scope("waitForOne.resize");
     tasks.resize(this->writeReqs.size());
+    malloc_accounting_default_scope();
     int i = 0;
     for (auto p : this->writeReqs) {
       if (p.second->done) {
@@ -405,10 +429,20 @@ Application::Application(string filename) {
 }
 
 void Application::initialize() {
+  init_malloc_accounting();
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
+  malloc_accounting_set_scope("Application::initialize DiskIOHandler");
   this->io = make_shared<DiskIOHandler>(this->filename);
+  malloc_accounting_default_scope();
+}
+
+Application::~Application()
+{
+  Sync();
+  EvictEverything();
+  fini_malloc_accounting();
 }
 
 void Application::crash() {
@@ -417,7 +451,16 @@ void Application::crash() {
   initialize();
 }
 
+void Application::EvictEverything() {
+  handle_EvictEverything(k, hs, io);
+}
+
 void Application::Sync() {
+  #ifdef LOG_QUERY_STATS
+  currently_doing_action = ACTION_SYNC;
+  auto t1 = chrono::high_resolution_clock::now();
+  #endif
+
   LOG("Sync");
 
   uint64 id = handle_PushSync(k, hs, io);
@@ -434,10 +477,27 @@ void Application::Sync() {
     if (success) {
       LOG("doing sync... success!");
       LOG("");
+
+      #ifdef LOG_QUERY_STATS
+      auto t2 = chrono::high_resolution_clock::now();
+
+      long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+      benchmark_append("Application::Sync", ns);
+      #endif
+
       return;
     } else if (wait) {
       LOG("doing wait...");
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (sync)");
+      #endif
+
       io->waitForOne();
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_end("write (sync)");
+      #endif
     } else {
       LOG("doing sync...");
     }
@@ -449,6 +509,7 @@ void Application::Sync() {
 void Application::Insert(ByteString key, ByteString val)
 {
   #ifdef LOG_QUERY_STATS
+  currently_doing_action = ACTION_INSERT;
   auto t1 = chrono::high_resolution_clock::now();
   #endif
 
@@ -462,7 +523,18 @@ void Application::Insert(ByteString key, ByteString val)
   for (int i = 0; i < 500000; i++) {
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
-    io->completeWriteTasks();
+
+    if (io->has_write_task()) {
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (insert)");
+      #endif
+
+      io->completeWriteTasks();
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_end("write (insert)");
+      #endif
+    }
 
     this->maybeDoResponse();
 
@@ -474,7 +546,7 @@ void Application::Insert(ByteString key, ByteString val)
       auto t2 = chrono::high_resolution_clock::now();
 
       long long ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
-      benchmark_append("Appliation::Insert", ns);
+      benchmark_append("Application::Insert", ns);
       #endif
 
       return;
@@ -493,6 +565,7 @@ int queryCount = 0;
 ByteString Application::Query(ByteString key)
 {
   #ifdef LOG_QUERY_STATS
+  currently_doing_action = ACTION_QUERY;
   auto t1 = chrono::high_resolution_clock::now();
   int num_reads = 0;
   int num_writes = 0;
@@ -517,7 +590,15 @@ ByteString Application::Query(ByteString key)
     #endif
 
     if (io->has_write_task()) {
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (query)");
+      #endif
+
       io->completeWriteTasks();
+
+      #ifdef LOG_QUERY_STATS
+      benchmark_start("write (query)");
+      #endif
     }
     this->maybeDoResponse();
 

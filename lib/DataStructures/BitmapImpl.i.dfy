@@ -1,3 +1,4 @@
+include "../Base/DebugAccumulator.i.dfy"
 include "BitmapModel.i.dfy"
 //
 // Maintains a compact set of integers using a packed-uint64 bitmap
@@ -5,6 +6,7 @@ include "BitmapModel.i.dfy"
 //
 
 module BitmapImpl {
+  import DebugAccumulator
   import opened NativeTypes
   import opened Options
   import opened BitmapModel
@@ -13,6 +15,12 @@ module BitmapImpl {
 
   class Bitmap {
     var bits: array<uint64>;
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+      acc := DebugAccumulator.EmptyAccumulator();
+      var a := new DebugAccumulator.AccRec(bits.Length as uint64, "uint64");
+      acc := DebugAccumulator.AccPut(acc, "bits", a);
+    }
 
     ghost var Repr: set<object>;
 

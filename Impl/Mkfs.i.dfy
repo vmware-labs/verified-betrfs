@@ -8,7 +8,7 @@ include "MkfsModel.i.dfy"
 // provided in Main.s.dfy.
 //
 
-module {:extern} MkfsImpl {
+module {:compileName "MkfsImpl"} MkfsImpl {
   import MarshallingImpl
   import IMM = MarshallingModel
   import opened Options

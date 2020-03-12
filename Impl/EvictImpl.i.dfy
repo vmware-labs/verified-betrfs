@@ -89,9 +89,11 @@ module EvictImpl {
     if ref.Some? {
       Dealloc(k, s, io, ref.value);
     } else {
-      var ref := s.lru.Next();
-      if ref == BT.G.Root() {
+      var refOpt := s.lru.NextOpt();
+      //if ref == BT.G.Root() {
+      if refOpt.None? {
       } else {
+        var ref := refOpt.value;
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {

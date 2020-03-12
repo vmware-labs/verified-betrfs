@@ -32,7 +32,7 @@ export S
       ComputeSizeOf, Options, MarshallVal, lemma_parse_Val_view_specific, lemma_SeqSum_prefix,
       KeyType, ValueMessage, ValueType,
       lemma_SizeOfV_parse_Val,
-      PackedKV, BucketWeights
+      PackedKV, BucketWeights, ComputeWeightKeySeq
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum, Key, Message, ValidMessage
 
 export extends S
@@ -1519,14 +1519,32 @@ method ComputeWeightKeySeq(s: seq<Key>) returns (size:uint64)
     requires 0 <= WeightKeySeq(s) < 0x1_0000_0000_0000_0000;
     ensures (size as int) == WeightKeySeq(s);
 {
-  assume false;
-  if (|s| as uint64) == 0 {
-    size := 0;
-  } else {
-    var v_size := 4 + |s[0 as uint64]| as uint64;
-    var rest_size := ComputeWeightKeySeq(s[(1 as uint64)..]);
-    size := v_size + rest_size;
+  assert WeightKeySeq([]) == 0;
+
+  var i: uint64 := 0;
+  var res: uint64 := 0;
+  while i < |s| as uint64
+  invariant 0 <= i as int <= |s|
+  invariant res as int == WeightKeySeq(s[..i])
+  {
+    calc {
+      WeightKeySeq(s[..i+1]);
+      { assert s[..i+1] == s[..i] + [s[i]]; }
+      WeightKeySeq(s[..i] + [s[i]]);
+      WeightKeySeq(s[..i]) + WeightKey(s[i]);
+    }
+
+    //lemma_SeqSum_bound(s, 0x1_0000_0000_0000_0000);
+    //lemma_SeqSum_bound_prefix(s, s[..i+1], (i+1) as int);
+
+    var v_size := WeightKeyUint64(s[i]);
+    assume res as int + v_size as int < 0x1_0000_0000_0000_0000;
+    res := res + v_size;
+    i := i + 1;
   }
+  assert s[..|s|] == s;
+  return res;
+
 }
 
 method ComputeWeightMessageSeq(s:seq<Message>) returns (size:uint64)

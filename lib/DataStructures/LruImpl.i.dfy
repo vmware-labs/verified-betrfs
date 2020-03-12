@@ -1,9 +1,11 @@
+include "../Base/DebugAccumulator.i.dfy"
 include "LruModel.i.dfy"
 //
 // An LRU-queue.
 //
 
 module LruImpl {
+  import DebugAccumulator
   import opened NativeTypes
   import opened Sequences
   import opened LruModel`Internal
@@ -384,5 +386,25 @@ module LruImpl {
       }
     }
 
+    // Unverified junk for debugging
+    method Count() returns (count:uint64)
+    {
+      if this == null {
+        count := 0;
+        return;
+      }
+      var ptr: Node? := head_node;
+      count := 0;
+      while (ptr != null) {
+        count := count + 1;
+        ptr := ptr.next;
+      }
+    }
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+      var nodeCount := Count();
+      var r := new DebugAccumulator.AccRec(nodeCount, "Node");
+      acc := DebugAccumulator.AccPut(acc, "t", r);
+    }
   }
 }
