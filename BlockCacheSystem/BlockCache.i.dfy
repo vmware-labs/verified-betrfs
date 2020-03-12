@@ -414,6 +414,12 @@ module BlockCache refines Transactable {
         else
           s.inMemoryJournal;
 
+    && var syncReqs' :=
+        if s.inMemoryJournalFrozen == [] then
+          syncReqs3to2(s.syncReqs)
+        else
+          s.syncReqs;
+
     && var inMemoryJournalFrozen' := [];
 
     && JournalRangeLen(jr) + startPos <= NumJournalBlocks() as int
@@ -426,6 +432,7 @@ module BlockCache refines Transactable {
         .(frozenJournalPosition := frozenJournalPosition')
         .(inMemoryJournal := inMemoryJournal')
         .(inMemoryJournalFrozen := inMemoryJournalFrozen')
+        .(syncReqs := syncReqs')
   }
 
   predicate WriteBackJournalReqWraparound(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
@@ -463,6 +470,12 @@ module BlockCache refines Transactable {
         else
           s.inMemoryJournal;
 
+    && var syncReqs' :=
+        if s.inMemoryJournalFrozen == [] then
+          syncReqs3to2(s.syncReqs)
+        else
+          s.syncReqs;
+
     && var inMemoryJournalFrozen' := [];
 
     && JournalRangeLen(jr) + startPos > NumJournalBlocks() as int
@@ -477,6 +490,7 @@ module BlockCache refines Transactable {
         .(frozenJournalPosition := frozenJournalPosition')
         .(inMemoryJournal := inMemoryJournal')
         .(inMemoryJournalFrozen := inMemoryJournalFrozen')
+        .(syncReqs := syncReqs')
   }
 
   predicate WriteBackJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)

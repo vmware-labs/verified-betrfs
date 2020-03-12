@@ -60,6 +60,7 @@ module AsyncSectorDisk {
     && s.reqWrites == map[]
     && s.respReads == map[]
     && s.respWrites == map[]
+    && ClosedUnderLogConcatenation(s.blocks)
   }
 
   datatype Step =

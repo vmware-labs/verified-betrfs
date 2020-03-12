@@ -62,6 +62,7 @@ abstract module TSJ {
     | Move1to2Step
     | Move2to3Step
     | ExtendLog1Step
+    | ExtendLog2Step
     | Move3Step
     | ReplayStep(replayedUIOp: SM.UIOp)
     | PushSyncStep(ghost id: int)
@@ -127,6 +128,21 @@ abstract module TSJ {
       SyncReqs2to1(s.outstandingSyncReqs))
   }
 
+  predicate ExtendLog2(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
+  {
+    && uiop.NoOp?
+    && s' == Variables(
+      s.s1,
+      s.s2,
+      s.s3,
+      s.j1,
+      s.j2 + s.j_delta,
+      s.j3,
+      s.j_gamma + s.j_delta,
+      [],
+      SyncReqs3to2(s.outstandingSyncReqs))
+  }
+
   predicate Move3(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
     && SM.Next(k.k, s.s3, s'.s3, uiop)
@@ -183,6 +199,7 @@ abstract module TSJ {
       case Move1to2Step => Move1to2(k, s, s', uiop)
       case Move2to3Step => Move2to3(k, s, s', uiop)
       case ExtendLog1Step => ExtendLog1(k, s, s', uiop)
+      case ExtendLog2Step => ExtendLog2(k, s, s', uiop)
       case Move3Step => Move3(k, s, s', uiop)
       case ReplayStep(replayedUIOp) => Replay(k, s, s', uiop, replayedUIOp)
       case PushSyncStep(id) => PushSync(k, s, s', uiop, id)
@@ -375,6 +392,13 @@ abstract module TSJ {
   {
   }
 
+  lemma ExtendLog2StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(k, s)
+  requires ExtendLog2(k, s, s', uiop)
+  ensures Inv(k, s')
+  {
+  }
+
   lemma Move3StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
   requires Inv(k, s)
   requires Move3(k, s, s', uiop)
@@ -425,6 +449,7 @@ abstract module TSJ {
       case Move1to2Step => Move1to2StepPreservesInv(k, s, s', uiop);
       case Move2to3Step => Move2to3StepPreservesInv(k, s, s', uiop);
       case ExtendLog1Step => ExtendLog1StepPreservesInv(k, s, s', uiop);
+      case ExtendLog2Step => ExtendLog2StepPreservesInv(k, s, s', uiop);
       case Move3Step => Move3StepPreservesInv(k, s, s', uiop);
       case ReplayStep(replayedUIOp) => ReplayStepPreservesInv(k, s, s', uiop, replayedUIOp);
       case PushSyncStep(id) => PushSyncStepPreservesInv(k, s, s', uiop, id);

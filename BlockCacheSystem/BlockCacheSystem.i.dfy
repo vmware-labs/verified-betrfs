@@ -425,6 +425,8 @@ module BlockCacheSystem {
     && NoDanglingPointers(PersistentGraph(k, s))
     && PersistentGraph(k, s).Keys == {M.G.Root()}
     && M.G.Successors(PersistentGraph(k, s)[M.G.Root()]) == iset{}
+    && SuperblockOfDisk(s.disk.blocks).journalStart == 0
+    && SuperblockOfDisk(s.disk.blocks).journalLen == 0
   }
 
   ////// Next
@@ -989,11 +991,48 @@ module BlockCacheSystem {
 
   ////// Proofs
 
+  ////////////////////////////////////////////////////
+  ////////////////////// Init
+  //////////////////////
+
+  lemma InitGraphs(k: Constants, s: Variables)
+    requires Init(k, s)
+    ensures WFPersistentGraph(k, s)
+    ensures WFFrozenGraph(k, s)
+    ensures WFEphemeralGraph(k, s)
+    ensures PersistentGraph(k, s)
+         == FrozenGraph(k, s)
+         == EphemeralGraph(k, s)
+  {
+  }
+
+  lemma InitJournals(k: Constants, s: Variables)
+    requires Init(k, s)
+    ensures WFPersistentJournal(s)
+    ensures WFFrozenJournal(s)
+    ensures WFEphemeralJournal(s)
+    ensures WFGammaJournal(s)
+    ensures PersistentJournal(s) == []
+    ensures FrozenJournal(s) == []
+    ensures EphemeralJournal(s) == []
+    ensures DeltaJournal(s) == []
+    ensures GammaJournal(s) == []
+  {
+    Disk_Journal_empty(s.disk, 0);
+    DiskQueue_Journal_empty(s.disk, 0);
+  }
+
   lemma InitImpliesInv(k: Constants, s: Variables)
     requires Init(k, s)
     ensures Inv(k, s)
   {
+    InitGraphs(k, s);
+    InitJournals(k, s);
   }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// WriteBackReq
+  //////////////////////
 
   lemma QueueLookupIdByLocationInsert(
       reqWrites: map<D.ReqId, D.ReqWrite>,
@@ -1045,10 +1084,6 @@ module BlockCacheSystem {
       }
     }
   }
-
-  ////////////////////////////////////////////////////
-  ////////////////////// WriteBackReq
-  //////////////////////
 
   lemma WriteBackReqStepUniqueLBAs(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
@@ -1639,18 +1674,16 @@ module BlockCacheSystem {
     ensures WFEphemeralJournal(s')
     ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
-    ensures (
-      || (
+    ensures !(s.machine.Ready? && s.machine.inMemoryJournalFrozen == []) ==> (
         && FrozenJournal(s') == FrozenJournal(s)
         && GammaJournal(s') == GammaJournal(s)
         && DeltaJournal(s') == DeltaJournal(s)
       )
-      || (
+    ensures (s.machine.Ready? && s.machine.inMemoryJournalFrozen == []) ==> (
         && FrozenJournal(s') == FrozenJournal(s) + DeltaJournal(s)
         && GammaJournal(s') == GammaJournal(s) + DeltaJournal(s)
         && DeltaJournal(s') == []
       )
-    )
     ensures EphemeralJournal(s') == EphemeralJournal(s)
   {
     WriteBackJournalReqStep_WriteRequestsDontOverlap(k, s, s', dop, jr);
@@ -1854,19 +1887,18 @@ module BlockCacheSystem {
     ensures WFEphemeralJournal(s')
     ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
-    ensures (
-      || (
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+
+    ensures !(s.machine.Ready? && s.machine.inMemoryJournalFrozen == []) ==> (
         && FrozenJournal(s') == FrozenJournal(s)
         && GammaJournal(s') == GammaJournal(s)
         && DeltaJournal(s') == DeltaJournal(s)
       )
-      || (
+    ensures (s.machine.Ready? && s.machine.inMemoryJournalFrozen == []) ==> (
         && FrozenJournal(s') == FrozenJournal(s) + DeltaJournal(s)
         && GammaJournal(s') == GammaJournal(s) + DeltaJournal(s)
         && DeltaJournal(s') == []
       )
-    )
-    ensures EphemeralJournal(s') == EphemeralJournal(s)
   {
     WriteBackJournalReqWraparoundStep_WriteRequestsDontOverlap(k, s, s', dop, jr);
 
@@ -2258,6 +2290,8 @@ module BlockCacheSystem {
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
     ensures ref in EphemeralGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
+    ensures forall key | key in M.G.Successors(block) ::
+        key in EphemeralGraph(k, s).Keys
   {
     if (UseFrozenGraph(k, s')) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -2301,6 +2335,8 @@ module BlockCacheSystem {
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
     ensures ref !in EphemeralGraph(k, s)
     ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)[ref := block]
+    ensures forall key | key in M.G.Successors(block) ::
+        key in EphemeralGraph(k, s).Keys
   {
     if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -2424,6 +2460,9 @@ module BlockCacheSystem {
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s);
     ensures EphemeralGraph(k, s') == MapRemove1(EphemeralGraph(k, s), ref)
+    ensures ref in EphemeralGraph(k, s)
+    ensures forall r | r in EphemeralGraph(k, s) ::
+        ref !in M.G.Successors(EphemeralGraph(k, s)[r])
   {
     if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -3823,6 +3862,19 @@ module BlockCacheSystem {
   ////////////////////// Crash
   //////////////////////
 
+  lemma CrashPreservesGraphs(k: Constants, s: Variables, s': Variables)
+    requires Inv(k, s)
+    requires Crash(k, s, s')
+
+    ensures WFPersistentGraph(k, s')
+    ensures WFFrozenGraph(k, s')
+    ensures WFEphemeralGraph(k, s')
+    ensures PersistentGraph(k, s') == PersistentGraph(k, s);
+    ensures FrozenGraph(k, s') == PersistentGraph(k, s);
+    ensures EphemeralGraph(k, s') == PersistentGraph(k, s);
+  {
+  }
+
   lemma CrashPreservesJournals(k: Constants, s: Variables, s': Variables)
     requires Inv(k, s)
     requires Crash(k, s, s')
@@ -3878,4 +3930,16 @@ module BlockCacheSystem {
   ensures s.disk.reqReads[id].loc in s.disk.blocks
   {
   }*/
+
+  ////////////////////////////////////////////////////
+  ////////////////////// Reads
+  //////////////////////
+
+  lemma EphemeralGraphRead(k: Constants, s: Variables, op: M.ReadOp)
+  requires Inv(k, s)
+  requires M.ReadStep(k.machine, s.machine, op)
+  ensures op.ref in EphemeralGraph(k, s)
+  ensures EphemeralGraph(k, s)[op.ref] == op.node
+  {
+  }
 }

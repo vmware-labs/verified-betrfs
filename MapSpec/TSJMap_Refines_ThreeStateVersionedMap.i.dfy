@@ -214,6 +214,35 @@ module TSJMap_Refines_ThreeStateVersionedMap {
     assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move1to2Step);
   }
 
+  lemma RefinesExtendLog2(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(k, s)
+    requires TSJ.ExtendLog2(k, s, s', uiop)
+    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  {
+    calc {
+      ApplySeq(s.s3, s.j3);
+      {
+        apply_path(k.k, s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3), s.s3);
+      }
+      ApplySeq(ApplySeq(s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3)), s.j3);
+      {
+        ApplySeqAdditive(s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3), s.j3);
+      }
+      ApplySeq(s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3) + s.j3);
+      ApplySeq(s.s2, s.j2 + s.j_delta);
+      ApplySeq(s'.s2, s'.j2);
+    }
+
+    assert I(k, s').s1 == I(k, s).s1;
+    assert I(k, s').s2 == I(k, s).s3;
+    assert I(k, s').s3 == I(k, s).s3;
+    assert I(k, s').outstandingSyncReqs
+        == SyncReqs3to2(I(k, s).outstandingSyncReqs);
+
+    assert TSV.Move2to3(Ik(k), I(k, s), I(k, s'), uiop);
+    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move2to3Step);
+  }
+
   lemma RefinesMove3(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
     requires TSJ.Inv(k, s)
     requires TSJ.Move3(k, s, s', uiop)
@@ -272,6 +301,7 @@ module TSJMap_Refines_ThreeStateVersionedMap {
       case Move1to2Step => RefinesMove1to2(k, s, s', uiop);
       case Move2to3Step => RefinesMove2to3(k, s, s', uiop);
       case ExtendLog1Step => RefinesExtendLog1(k, s, s', uiop);
+      case ExtendLog2Step => RefinesExtendLog2(k, s, s', uiop);
       case Move3Step => RefinesMove3(k, s, s', uiop);
       case ReplayStep(replayedUIOp) => RefinesReplay(k, s, s', uiop, replayedUIOp);
       case PushSyncStep(id) => RefinesPushSync(k, s, s', uiop, id);
