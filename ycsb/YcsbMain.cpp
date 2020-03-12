@@ -159,6 +159,12 @@ void ycsbRun(
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
 
+// An experiment that demonstrated that the heap was filling with small
+// junk ("heap Kessler syndrome"?): by evicting periodically, we freed
+// most of the small junk and kept the heap waste down. TODO okay to clean up.
+//    int evict_interval_ms = 100000;
+//    int next_evict_ms = evict_interval_ms;
+
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
         switch (next_operation) {
@@ -191,6 +197,13 @@ void ycsbRun(
 
         int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_start).count();
+
+//        if (elapsed_ms >= next_evict_ms) {
+//            printf("evict.");
+//            db.sync();
+//            db.evictEverything();
+//            next_evict_ms += evict_interval_ms;
+//        }
 
         if (elapsed_ms >= next_display_ms) {
             malloc_accounting_display("periodic");
@@ -400,7 +413,7 @@ int main(int argc, char* argv[]) {
 //    for (int i=0; i<15; i++) {
 //      leakfinder_mark(1);
 //    }
-    leakfinder_report(0);
+//    leakfinder_report(0);
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);
