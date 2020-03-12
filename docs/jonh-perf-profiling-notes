@@ -203,3 +203,94 @@ So the proposed actions:
 modal, maybe we can tune the allocator.
 * It may be worth understanding whether rocks is paying a similar price.
 Perhaps Jon's malloc investigator can be made to work there.
+
+
+Okay, we've learned something!
+I used the mmap pool to separate big (>1MB) allocations from little.
+The problem was that the heap that grew during the warmup phase never
+got cleaned up, and stayed sprayed out, so it hurt RSSz as well as VMSz.
+
+So the next experiment was to try evicting everything every so often (100s),
+thinking that maybe we can zero out that heap before it gets too big.
+[malloc-exp/evictions-truncated-heapmallocplot.png]
+And viola! the heap basically stops growing at the first evict-everything!
+The overall memory usage is about 1.9GB, which is about 1.6GB
+(expected, 200 blocks * 8MB) times the 20% malloc overhead. Liveable!
+
+Because mmap-pool is enabled, the paged-in blocks show up on the graph (in
+orange) -- so you can see that as we recover from the first eviction, the
+malloc line jumps right back up to its trendline, but now it's backed by a
+vertical blast of orange block page-ins (of the top of the tree) replacing the
+original red stuff.
+
+I'm trying the same experiment now with mmap pool disabled to see if it's
+actually necessary.
+
+I should also try varying the period between the evictions.
+
+Now this definitely slowed things down overall, because the inflection
+point doesn't happen until about 570s, which is about 100s later.
+
+Hmm, maybe there's a less-destructive way to accomplish this.
+We could mark blocks by how they were built, and if they're built out of
+little allocations, replace them with a new block (marshall/unmarshall?)
+with equivalent semantics but with a clean allocation representation.
+The idea would be that eventually all the startup-phase cruft would get
+cleaned out, reopening lots of contiguous memory.
+
+So here's a cute little experiment: First evcition at 25s, then 50s intervals
+thereafter.
+[malloc-exp/evictions-nommap-25s50s-heapmallocplot.png]
+We made room for 25s worth of inserts with the eviction, reused that memory
+during [25-50s], then had to grow the heap more during [50-75s].
+
+This suggests that one strategy would be to hold the first eviction until
+the inflection point -- that is, do a full eviction at the first point we
+have to evict a single block. That'll reset the heap from the small-objects
+phase. After that, if the workload isn't phasic, we may not even need to
+do anything else!
+
+Okay, so I tried to simulate that strategy with another experiment.  Here, I
+did the first eviction at 450s, then 200s intervals.  Look at 450s on the
+graph: we empty most of memory (blue line drops near zero), but when we page
+the blocks back in (blue line climbs), the orange line (os-map-total) climbs,
+too, about the same amount -- apparently even though we emptied most of memory,
+the allocator still had to go buy fresh pages to host big 8MB blocks.
+
+That indicates that what was left in memory was enough and well-enough
+fragmented that it managed to keep all the holes small.  So the
+periodic-eviction works in part because it's recycling those small holes, using
+them for more small allocation demands.
+
+Note that the 1.5GB gap between blue and orange is essentially permanently
+lost, just as it was when we didn't do the eviction at all. And so the overall
+memory demands converge to >3.4GB: the 1.9GB we need in the previous successful
+run, plus the 1.5GB we "broke".
+
+So here's a run with MaxCacheSize=400, evicting everything every 100s.
+That's 3.2GB of live data; 3.2*1.25=4GB. ulimit -v 4000000.
+[malloc-exp/evictions-nommap-100s100s-cache400blocks-heapmallocplot.png]
+It successfully completes 20m operations, which I guess is a first for us?
+--      throughput      duration(ns)    operations      ops/s
+veribetrkv      throughput      2799068554254   20000000        7145.23
+Even after 20m ops the memory profile hasn't yet converged, but it indeed
+is below the forecast 4GB.
+
+
+tools/run-veri-config-experiment.py workload=b device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri
+tools/run-veri-config-experiment.py workloab device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
+
+
+Okay, some actual legit cgroups-enforced results, on workloadb (95% read):
+  --	throughput	duration(ns)	operations	ops/s
+  rocksdb	throughput	100483121524	5000000	49759.6
+  veribetrkv	throughput	493813475855	5000000	10125.3
+So in this example we're 5X behind.  That's a lot better than 100X behind,
+though! And we have all of the following limitations:
+
+- my abusive evict-everything-every-100s policy
+- my malloc thingy interposing on every allocation (because that's the same
+  branch where my eviction policy is)
+- we're still not exploiting the full cache; after 5M ops, veri only got to
+  1.7GB. So we're not getting as much benefit from the cache as rocks is.
+  Maybe I should run for longer.

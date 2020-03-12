@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <unordered_map>
 #include <vector>
 
@@ -53,23 +54,26 @@ bool cstr_ends_with(const char* haystack, const char* needle) {
 }
 
 // OS view of heap size
-size_t external_heap_size() {
+void external_heap_size(size_t* heap, size_t* all_maps) {
   size_t result = -1;
   FILE* fp = fopen("/proc/self/maps", "r");
+  size_t total = 0;
   while (true) {
     char space[1000];
     char* line = fgets(space, sizeof(space), fp);
     if (line==NULL) { break; }
+    char* remainder;
+    size_t base = strtol(line, &remainder, 16);
+    size_t end = strtol(&remainder[1], NULL, 16);
+    result = end - base;
+    total += result;
+
     if (cstr_ends_with(line, "[heap]\n")) {
-      char* remainder;
-      long base = strtol(line, &remainder, 16);
-      long end = strtol(&remainder[1], NULL, 16);
-      result = end - base;
-      break;
+      *heap = result;
     }
   }
   fclose(fp);
-  return result;
+  *all_maps = total;
 }
   
 #define ACCOUNTING_MAGIC 0x1badf00f
@@ -134,6 +138,7 @@ Label g_default_label("default", "");
 class ATable {
 private:
   std::unordered_map<Label, ARow> umap;
+  std::unordered_map<size_t, size_t> histogram;
   Label g_active_label;
 
 public:
@@ -150,8 +155,11 @@ public:
 
  ARow* get_active_row() { return get_or_add_row(g_active_label); }
   
-  void display();
+  void display_cause_map();
   size_t total_open();  // total open allocation bytes
+
+  void histogram_increment(size_t size, int delta);
+  void display_histogram();
 };
 
 ATable::ATable() {
@@ -174,7 +182,7 @@ size_t ATable::total_open() {
   return total;
 }
 
-void ATable::display() {
+void ATable::display_cause_map() {
   Label totalLabel("total", "");
   ARow total(totalLabel);
   printf("%10s %10s %10s %10s  %s\n",
@@ -216,15 +224,53 @@ void ATable::display() {
     "");
 }
 
+void ATable::histogram_increment(size_t size, int delta) {
+  auto insertPair = histogram.emplace(size, 0);
+  auto eltIt = insertPair.first;
+  auto kvPointer = &(*eltIt);
+  kvPointer->second += delta;
+}
+
+void ATable::display_histogram() {
+  std::vector<std::pair<size_t, size_t>> buckets;
+  for (auto it = histogram.begin(); it != histogram.end(); it++)  {
+    buckets.push_back(std::pair<size_t, size_t>(it->first, it->second));
+  }
+  sort(buckets.begin(), buckets.end(), [](const std::pair<size_t,size_t>& lhs, const std::pair<size_t,size_t>& rhs) {
+      return lhs.first < rhs.first;
+  });
+
+  size_t total = 0;
+  printf("{");
+  for (auto it = buckets.begin(); it != buckets.end(); it++)  {
+    auto pair = *it;
+    total += pair.first * pair.second;
+    printf("%ld:%ld,", pair.first, pair.second);
+  }
+  printf("}\n");
+  printf("histogram total %ld\n", total);
+}
+
 ATable atable;
+
+#define SIZE_THRESH (1<<20) /* 1MB */
+#define ENABLE_MMAP_POOL 0
 
 void *malloc_hook(size_t size, const void *caller) {
   void *result;
 
   remove_hooks();
+  // do our work (outside of hookland)
+
+  size_t underlying_size = size + sizeof(AccountingHeader);
 
   // Call real malloc
-  result = malloc(size + sizeof(AccountingHeader));
+  bool use_mmap = ENABLE_MMAP_POOL && (size >= SIZE_THRESH);
+  if (use_mmap) {
+    result = mmap(NULL, underlying_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  } else {
+    result = malloc(underlying_size);
+  }
 
   ARow* arow = atable.get_active_row();
   AccountingHeader* ar = (AccountingHeader*) result;
@@ -234,12 +280,12 @@ void *malloc_hook(size_t size, const void *caller) {
   ar->arow = arow;
   //record_underlying_hooks(); // not sure why example re-saves hooks here
 
-  // do our work (outside of hookland)
   //printf("malloc_hook sees size %lx from %p; returns %p\n", size, caller, result);
   arow->total_allocation_count += 1;
   arow->open_allocation_count += 1;
   arow->total_allocation_bytes += size;
   arow->open_allocation_bytes += size;
+  atable.histogram_increment(size, 1);
 
   install_hooks();
 
@@ -257,6 +303,9 @@ void free_hook(void* ptr, const void *caller) {
   // do our work (outside of hookland)
   AccountingHeader* ar = (AccountingHeader*)((char*) ptr - sizeof(AccountingHeader));
   void* orig_ptr;
+  size_t size = 0;
+  bool use_munmap;
+
   if (ar->magic != ACCOUNTING_MAGIC) {
     // Uh, that's not mine.
     // https://getyarn.io/yarn-clip/00a2eaf9-a18d-4aea-b600-6e4b19bbe4d1
@@ -265,16 +314,26 @@ void free_hook(void* ptr, const void *caller) {
     // This occurs due to allocations that happened before our hook
     // mechanism got installed. Not very interesting. 
     //printf("free_hook frees someone else's ptr %p\n", ptr);
+    use_munmap = false;
   } else {
     orig_ptr = ar;
 //    printf("free_hook sees free %p size %lx from %p\n", ptr, ar->allocation_size, caller);
 
+    size = ar->allocation_size;
     ARow* arow = ar->arow;
     arow->open_allocation_count -= 1;
-    arow->open_allocation_bytes -= ar->allocation_size;
+    arow->open_allocation_bytes -= size;
+    atable.histogram_increment(size, -1);
+    use_munmap = ENABLE_MMAP_POOL && (size >= SIZE_THRESH);
   }
 
-  free(orig_ptr);
+  if (use_munmap) {
+    size_t underlying_size = size + sizeof(AccountingHeader);
+//    printf("--munmap big block %.1fMB\n", underlying_size/(1024*1024.0));
+    munmap(orig_ptr, underlying_size);
+  } else {
+    free(orig_ptr);
+  }
 
   install_hooks();
 }
@@ -300,8 +359,9 @@ void dump_proc_self_maps() {
 
 void malloc_accounting_display(const char* label) {
   printf("*** Malloc accounting at %s\n", label);
-  atable.display();
+  atable.display_cause_map();
   // dump_proc_self_maps();
+  // atable.display_histogram();
 }
 
 void fini_malloc_accounting() {
@@ -320,8 +380,11 @@ void fini_malloc_accounting() {
 // Finally, we could also be gobbling up other cgroup-y memory -- maybe
 // space in the buffer cache? Not worrying about that here.
 void malloc_accounting_status() {
-  printf("proc-heap %8ld malloc-accounting-total %8ld\n",
-    external_heap_size(),
+  size_t heap, all_maps;
+  external_heap_size(&heap, &all_maps);
+  printf("os-map-total %8ld os-map-heap %8ld malloc-accounting-total %8ld\n",
+    all_maps,
+    heap,
     atable.total_open());
 }
 

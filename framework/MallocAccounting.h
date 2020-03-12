@@ -20,6 +20,7 @@ template<typename T> char const* malloc_accounting_get_type_name() {
 #else // MALLOC_ACCOUNTING
 inline void init_malloc_accounting() {}
 inline void malloc_accounting_status() {}
+inline void malloc_accounting_display(const char* label) {}
 inline void fini_malloc_accounting() {}
 inline void malloc_accounting_set_scope(const char* scope) {}
 inline void malloc_accounting_set_scope(const char* scope, const char* subscope) {}
