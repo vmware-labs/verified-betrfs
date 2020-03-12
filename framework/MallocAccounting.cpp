@@ -4,6 +4,10 @@
 #include <malloc.h>
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unordered_map>
+#include <vector>
 
 #include "MallocAccounting.h"
 
@@ -40,6 +44,33 @@ static inline void remove_hooks() {
   __malloc_hook = old_malloc_hook;
   __free_hook = old_free_hook;
 }
+
+bool cstr_ends_with(const char* haystack, const char* needle) {
+  int haystack_len = strlen(haystack);
+  int needle_len = strlen(needle);
+  if (haystack_len < needle_len) { return false; }
+  return strcmp(&haystack[haystack_len - needle_len], needle) == 0;
+}
+
+// OS view of heap size
+size_t external_heap_size() {
+  size_t result = -1;
+  FILE* fp = fopen("/proc/self/maps", "r");
+  while (true) {
+    char space[1000];
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) { break; }
+    if (cstr_ends_with(line, "[heap]\n")) {
+      char* remainder;
+      long base = strtol(line, &remainder, 16);
+      long end = strtol(&remainder[1], NULL, 16);
+      result = end - base;
+      break;
+    }
+  }
+  fclose(fp);
+  return result;
+}
   
 #define ACCOUNTING_MAGIC 0x1badf00f
 
@@ -59,21 +90,38 @@ struct Label {
   Label(const char* scope, const char* subscope)
     : scope(scope),
       subscope(subscope) {}
-  Label() { scope = NULL; }
+  Label() {
+    scope = NULL;
+    subscope = NULL;
+  }
   bool equals(const Label& other) const {
     return strcmp(scope, other.scope) == 0
       && strcmp(subscope, other.subscope) == 0;
   }
+  bool operator==(const Label& other) const {
+    return scope==other.scope && subscope==other.subscope;
+  }
 };
+
+namespace std {
+  template<> struct hash<Label> {
+    std::size_t operator()(const Label& label) const {
+      //return hashCstr(label.scope) & hashCstr(label.subscope);
+      // Actually, I think I'm willing to assume that the Label fields
+      // are interned, so we only have to look at the pointers.
+      return ((size_t) label.scope)*193 ^ ((size_t)label.subscope);
+    }
+  };
+}
 
 struct ARow {
   Label label;
-  int total_allocation_count;
-  int open_allocation_count;
-  int total_allocation_bytes;
-  int open_allocation_bytes;
-  ARow()
-    : label(),
+  uint64_t total_allocation_count;
+  uint64_t open_allocation_count;
+  uint64_t total_allocation_bytes;
+  uint64_t open_allocation_bytes;
+  ARow(const Label &label)
+    : label(label),
       total_allocation_count(0),
       open_allocation_count(0),
       total_allocation_bytes(0),
@@ -82,15 +130,11 @@ struct ARow {
 };
 
 // Somebody wishes he had a hashtable, doesn't somebody?
-#define NUM_ROWS 1000
 Label g_default_label("default", "");
 class ATable {
 private:
-  ARow rows[NUM_ROWS];
+  std::unordered_map<Label, ARow> umap;
   Label g_active_label;
-
-  // returns index of row with label, or index of next free row.
-  int get_or_add_row_index(const Label& label);
 
 public:
   ATable();
@@ -104,57 +148,72 @@ public:
   // Add a row to the table if it's absent.
   ARow* get_or_add_row(const Label& label);
 
-  ARow* get_active_row() { return get_or_add_row(g_active_label); }
-
+ ARow* get_active_row() { return get_or_add_row(g_active_label); }
+  
   void display();
+  size_t total_open();  // total open allocation bytes
 };
 
 ATable::ATable() {
   g_active_label = g_default_label;
-  for (int i=0; i<NUM_ROWS; i++) {
-    rows[i].label = Label();
-  }
 }
 
-int ATable::get_or_add_row_index(const Label& label) {
+ARow* ATable::get_or_add_row(const Label& label) {
   assert(label.scope != NULL);
-  int i;
-  for (i=0; i<NUM_ROWS && rows[i].label.scope!=NULL; i++) {
-    if (label.equals(rows[i].label)) {
-       return i;
-    }
-  }
-  assert(i<NUM_ROWS); // table full!
-  return i;
+  auto insertPair = umap.emplace(label, ARow(label));
+  // Don't care if insert succeeded or was just a lookup; just want
+  // the row.
+  return &insertPair.first->second;
 }
 
-ARow* ATable::get_or_add_row(const Label& label)
-{
-  int index = get_or_add_row_index(label);
-  assert(index < NUM_ROWS);
-  ARow* arow = &rows[index];
-  if (arow->label.scope != NULL) {
-    return arow;  // already present
+size_t ATable::total_open() {
+  size_t total = 0;
+  for (auto it = umap.begin(); it != umap.end(); it++)  {
+    total += it->second.open_allocation_bytes;
   }
-  arow->label = label;
-  return arow;
+  return total;
 }
 
 void ATable::display() {
+  Label totalLabel("total", "");
+  ARow total(totalLabel);
   printf("%10s %10s %10s %10s  %s\n",
     "tot cnt", "open cnt", "tot byt", "open byt", "label");
   printf("%10s %10s %10s %10s  %s\n",
     "-------", "--------", "-------", "--------", "----------");
-  for (int i=0; i<NUM_ROWS && rows[i].label.scope!=NULL; i++) {
-    ARow* row = &rows[i];
-    printf("%10d %10d %10d %10d  %s.%s\n",
+  std::vector<ARow> rows;
+  for (auto it = umap.begin(); it != umap.end(); it++)  {
+    rows.push_back(it->second);
+  }
+
+  sort(rows.begin(), rows.end(), [](const ARow& lhs, const ARow& rhs) {
+      return lhs.open_allocation_bytes < rhs.open_allocation_bytes;
+  });
+
+  for (auto it = rows.begin(); it != rows.end(); it++)  {
+    ARow* row = &(*it);
+    Label* label = &row->label;
+    printf("%10ld %10ld %10ld %10ld  %s.%s\n",
       row->total_allocation_count,
       row->open_allocation_count,
       row->total_allocation_bytes,
       row->open_allocation_bytes,
-      row->label.subscope,
-      row->label.scope);
+      label->subscope,
+      label->scope);
+    total.total_allocation_count += row->total_allocation_count;
+    total.open_allocation_count += row->open_allocation_count;
+    total.total_allocation_bytes += row->total_allocation_bytes;
+    total.open_allocation_bytes += row->open_allocation_bytes;
   }
+  printf("%10s %10s %10s %10s  %s\n",
+    "-------", "--------", "-------", "--------", "----------");
+  printf("%10ld %10ld %10ld %10ld  %s.%s\n",
+    total.total_allocation_count,
+    total.open_allocation_count,
+    total.total_allocation_bytes,
+    total.open_allocation_bytes,
+    "total",
+    "");
 }
 
 ATable atable;
@@ -202,7 +261,10 @@ void free_hook(void* ptr, const void *caller) {
     // Uh, that's not mine.
     // https://getyarn.io/yarn-clip/00a2eaf9-a18d-4aea-b600-6e4b19bbe4d1
     orig_ptr = ptr;
-    printf("free_hook frees someone else's ptr %p\n", ptr);
+
+    // This occurs due to allocations that happened before our hook
+    // mechanism got installed. Not very interesting. 
+    //printf("free_hook frees someone else's ptr %p\n", ptr);
   } else {
     orig_ptr = ar;
 //    printf("free_hook sees free %p size %lx from %p\n", ptr, ar->allocation_size, caller);
@@ -223,8 +285,44 @@ void init_malloc_accounting() {
   install_hooks();
 }
 
+void dump_proc_self_maps() {
+  // copy /proc/self/maps to stdout
+  // to confirm that the heap is all that matters.
+  FILE* fp = fopen("/proc/self/maps", "r");
+  while (true) {
+    char space[1000];
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) { break; }
+    fputs(line, stdout);
+  }
+  fclose(fp);
+}
+
+void malloc_accounting_display(const char* label) {
+  printf("*** Malloc accounting at %s\n", label);
+  atable.display();
+  // dump_proc_self_maps();
+}
+
 void fini_malloc_accounting() {
-    atable.display();
+  malloc_accounting_display("fini");
+}
+
+// This is here to confirm that malloc accounting indeed finds
+// all of the memory that the OS is giving us. When I studied this,
+// I found that the OS heap accounting was about 20% more than what
+// we used in malloc -- probably fragmentation. It stayed fairly
+// proportional, giving me confidence that malloc is gettingt a
+// complete view.
+// (Note that there could also be other ways to gobble process memory,
+// like mmap, but we're not doing that; /proc/maps only shows
+// text segments and other ordinary features.)
+// Finally, we could also be gobbling up other cgroup-y memory -- maybe
+// space in the buffer cache? Not worrying about that here.
+void malloc_accounting_status() {
+  printf("proc-heap %8ld malloc-accounting-total %8ld\n",
+    external_heap_size(),
+    atable.total_open());
 }
 
 void malloc_accounting_set_scope(const char* scope, const char* subscope) {

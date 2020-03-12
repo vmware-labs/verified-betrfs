@@ -1,0 +1,205 @@
+http://euccas.github.io/blog/20170827/cpu-profiling-tools-on-linux.html
+
+prof
+------------------------------------------------------------------------------
+AAargh.
+So I captured a trace with Linux Perf. I rebuilt with -g so I could have symbols in the trace.
+'perf report' seems to be able to see the symbols, but its UI is ... poor.
+So I tried hotspot https://github.com/KDAB/hotspot#on-debianubuntu, which has a nice UI,
+but can't seem to find my Elf file. I tried it via AppImage, so I'm wondering if the problem
+is that AppImage can't see out to find my perf.data file.
+So I tried strace on hotspot, but it can't see past some boundary used by AppImage; probably a
+chroot-y thing.
+Fine, I'll build hotspot from source and use that.
+Hmm, it needs Qt>=5.10, and my ubuntu has 5.9.5.
+No problem, I'll download the Qt installer. But wait, it requires you to LOG INTO A Qt ACCOUNT.
+What the heck? Open $ource? Ugh. I give up. Gonna go try to find another profiler.
+
+Okay. Turns out hotspot is getting symbols just fine; we're getting lost because we're not seeing
+the libc stuff. How about getting at them?
+
+apt install libc6-dbg
+https://github.com/KDAB/hotspot/issues/128
+... and we also didn't have symbols in YcsbMain.cpp, I think, due to Makefile.
+
+rm -rf /tmp/data ; mkdir /tmp/data; perf record -g build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+~/appimage/hotspot-v1.2.0-x86_64.AppImage --debugPaths /usr/lib/debug
+
+http://www.brendangregg.com/perf.html
+rm -rf /tmp/data ; mkdir /tmp/data; perf record -g --call-graph dwarf build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+
+YYYAAAY! --call-graph dwarf was the answer!
+
+rm -rf /tmp/data ; mkdir /tmp/data; build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+After load phase,
+perf record -g --call-graph dwarf -p 14148 sleep 10
+
+Bottom-up flame:
+====================
+1.86% Bucket refcounts
+2.8% refcount
+4.8 + 1 +1+2 = 8.8% release_shared, ~shared_ptr, ::shared_ptr
+1.55% shared pointer deletion?
+
+3.3+13.8+2.5+1.4 = 21% in malloc, free
+2% PartialFlush
+6.5% malloc_consolidate
+
+Top-down flame:
+====================
+16% ?? -- aargh symbols
+7% Bucket assignment
+5% deleting SuccResult calls Realloc!?
+5% deleting KVLists
+2.7% flush
+4% top-level free !?
+12.6% top-level malloc !?
+4% rehashing something
+
+Sure wish I understood why ??
+Yeah. YcsbMain had no symbols. Change makefile to build .os and then link into executables!
+
+gprof
+------------------------------------------------------------------------------
+Need -pg on link line as well as all compile lines, I guess.
+gmon.out isn't emitted until exit() is called gracefully.
+Ugh, 'gprof' barfs a pile of ugly text output and that's it. The only gui is
+gprof2dot. Shudder.
+
+callgrind/kcachegrind
+------------------------------------------------------------------------------
+sudo apt install valgrind kcachegrind
+valgrind --tool=callgrind build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+Oh yuck, it's not a sampling profiler, so it dramatically distorts runtime. :v(
+
+
+==============================================================================
+Travis' leak study
+==============================================================================
+./tools/run-veri-config-experiment.py workload=a device=disk ram=50gb config-8mb MaxCacheSizeUint64=512
+
+> note that script only works on rob's machine on my user account
+> because it hardcodes the mapping from device=disk to paths that only make sense there
+> you should also probably note that the script builds Bundle.cpp, modifies it, and then builds the exe
+
+> i also tried removing the subsequence-sharing optimizingin DafnyRuntime.h
+> this helped, but mem usage was still at 6gb or so
+> you can check out the branch ' dont-copy-for-subseq'
+> if you want to see that
+> also the branch is named wrong
+> it should be copy-for-subseq
+> because it does more copies
+
+sudo apt install cgroup-tools
+tools/create-cgroups.sh
+tools/setup-clear-os-page-cache-binary.sh
+
+./tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb MaxCacheSizeUint64=512
+./tools/run-veri-config-experiment.py workload=a device=disk ram=6gb config-8mb MaxCacheSizeUint64=512
+  -- eventually killed by ulimit (cgroups?) After swapping laptop to pieces. 14m real 5m user 3m sys
+
+./tools/run-veri-config-experiment.py workload=a device=disk ram=3gb config-8mb MaxCacheSizeUint64=256
+Added heaptrack.
+
+Proposed experiment: at op #3,000,000:
+- count up how much stuff Dafny thinks vbfs has allocated.
+- count up how much /proc/stat thinks vbfs has allocated
+- count up how much malloc thinks vbfs has allocated
+Then sync/evictEverything, and produce the same report.
+
+rm -rf /tmp/data; mkdir /tmp/data
+bash
+ulimit -m 4000000
+build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv > exp/x-20m
+
+make build/VeribetrfsYcsb
+
+After 17m, we blew through ulimit m=4000000
+OS says we have used 3.27e9 bytes,
+malloc counts 2.71e9 bytes -- maintaining the 20% probably-fragmentation
+overhead. Willing to believe that.
+
+At the point of the crash, 88% of the memory is allocated as 150-byte
+seq<unsigned char> (15,989,114 allocations).
+The Node count has grown to 350, maintaining a ratio of ~45k records per node.
+(That's right for a 150-byte value plus about 25 more bytes -- the key?)
+
+The next 6% (176MB) are 1198 seq<Message> arrays, these must be the containers
+holding all the inserts. That's 11 bytes per allocated value; plausible.
+
+The next 5% (141MB) are 1198 seq<unsigned char>, 9 bytes per allocated value. I
+guess these are the packed byte arrays that the messages point into.
+
+And now we've accounted for 99% of the allocated memory. Doesn't smell leaky.
+So the gaps are in two places:
+
+1. There's a 20% gap between what we've received from malloc and what we get
+billed by the OS in the /proc heap. I'm guessing malloc fragmentation. It's
+conceivable that we could choose a tuned allocator. We could also just discount
+our cache constants by 20% (use 425 blocks instead of 512) for now.
+
+2. There's a 20% (727MB) gap between what we see in the /proc/maps [heap]
+and the point where the ulimit of 4e9 fired. I don't have a hypothesis about
+this.
+
+Next ideas:
+- drop ulimit to 1GB, to make the experiment 4m long
+- cat /proc/maps for easier postmortem.
+
+
+rm -rf /tmp/data; mkdir /tmp/data
+bash
+ulimit -m 1000000
+time build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv > exp/x-20m-u1gb
+Well that's pretty freakin' weird. it happily blew past 1.2g rss in top.
+I'll just run the original experiment again.
+
+next -m4000000 try died at 2963599360, which is a 34% overhead.
+
+heap was 2938056704, every page in /proc/maps was 2962866176,
+a 23MB (a 1% offset). So THAT ain't it.
+
+Let's try ulimit -v?
+2962866176
+
+Okay, -v hit pretty hard at 970825728.
+And with 2gb, at 1975689216. (1999806464 with 23MB overhead!)
+
+
+Next experiment: run MaxCacheSize down to 400 (by manually editing Bundle.cpp).
+Run again with -v 4000000, and expect the proc size to stay below 3.75gb
+(400/512*4*1.2).
+
+9.5 minutes got through 4.8M ops, so this is at least a 40-minute experiment.
+(Maybe longer since the tree is growing a bit.)
+
+And so it crashed in 15 minutes. 
+
+Travis saw stabilization on an intended-4GB config at around 7GB,
+and we want to see some cache stabilization. So we decided to set
+MaxCacheSizeUint64 = 200 and run to stable memory consumption.
+exp/x-20m-uv4gb-200count
+
+Okay, it was consistently dying at 15m30s *real* time. Because that's about
+1000s; I was running out of the 1024-file-handle ulimit. Because my profiler
+was opening /proc/self/maps and not closing it.
+
+Summary of what we learned.
+The problem we set out to solve is that our actual memory consumption would
+greatly exceed our predicted size (e.g. 8MB * MaxCacheSize), causing the
+program to swap, creating orders of magnitude penalty on query performance.
+
+[malloc-exp/heap-to-malloc.png]
+We discovered that, during the growth phase (0-400s in the figure), we see
+a pretty consistent 1.2x overhead on malloc. The interesting observation
+is that, once the we hit cache pressure and start evicting blocks, the
+malloc behavior changes dramatically, converging on a 2.34x overhead.
+Apparently our memory freeing patterns change once we start evicting.
+
+The good news is that there does seem to be a kinda-stable constant there.
+So the proposed actions:
+* We can solve the swapping problem by discounting the memory by around 2.4x.
+* It may be worth looking at the allocation-size distribution. If it's super
+modal, maybe we can tune the allocator.
+* It may be worth understanding whether rocks is paying a similar price.
+Perhaps Jon's malloc investigator can be made to work there.
