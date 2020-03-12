@@ -2771,7 +2771,7 @@ module BlockCacheSystem {
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
-    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
   }
 
@@ -2842,7 +2842,7 @@ module BlockCacheSystem {
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
-    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
   }
 
@@ -2886,7 +2886,7 @@ module BlockCacheSystem {
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
-    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
   }
 
@@ -2930,7 +2930,7 @@ module BlockCacheSystem {
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
-    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
   }
 
@@ -2974,7 +2974,7 @@ module BlockCacheSystem {
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
-    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
     assert WFIndirectionTableWrtDiskQueue(s.machine.indirectionTable.value, s.disk);
 
@@ -3044,7 +3044,7 @@ module BlockCacheSystem {
 
     ensures PersistentGraph(k, s') == PersistentGraph(k, s);
     ensures FrozenGraph(k, s') == FrozenGraph(k, s)
-    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s')
+    ensures EphemeralGraph(k, s') == EphemeralGraph(k, s)
   {
     if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -3620,12 +3620,13 @@ module BlockCacheSystem {
   {
     && s.machine.Ready?
     && s.machine.superblockWrite == Some(id)
-    && s.machine.newSuperblock.Some?
+    //&& s.machine.newSuperblock.Some?
   }
 
   predicate ProcessWriteIsGraphUpdate(k: Constants, s: Variables, id: D.ReqId)
   {
     && ProcessWriteIsSuperblockUpdate(k, s, id)
+    && s.machine.newSuperblock.Some?
     && s.machine.newSuperblock.value.indirectionTableLoc != s.machine.superblock.indirectionTableLoc
   }
 
@@ -3940,6 +3941,29 @@ module BlockCacheSystem {
   requires M.ReadStep(k.machine, s.machine, op)
   ensures op.ref in EphemeralGraph(k, s)
   ensures EphemeralGraph(k, s)[op.ref] == op.node
+  {
+  }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// Misc lemma
+  //////////////////////
+
+  // Used by BlockCacheSystem_Refines_TSJBlockInterface
+  lemma WriteRespIdNotSuperblockId(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  requires Inv(k, s)
+  requires D.AckWrite(k.disk, s.disk, s'.disk, dop);
+
+  ensures M.WriteBackResp(k.machine, s.machine, s'.machine, dop)
+      ==> s.machine.Ready?
+      ==> s.machine.superblockWrite != Some(dop.id)
+
+  ensures M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop)
+      ==> s.machine.Ready?
+      ==> s.machine.superblockWrite != Some(dop.id)
+
+  ensures M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop)
+      ==> s.machine.Ready?
+      ==> s.machine.superblockWrite != Some(dop.id)
   {
   }
 }

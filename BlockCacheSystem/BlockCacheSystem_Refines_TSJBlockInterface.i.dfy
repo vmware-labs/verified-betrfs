@@ -90,6 +90,13 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
     map id | 0 <= id < 0x1_0000_0000_0000_0000 && id as uint64 in s.machine.syncReqs :: SyncReqState(k, s, s.machine.syncReqs[id as uint64])
   }
 
+  predicate IsPersistStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
+  {
+    && step.DiskInternalStep?
+    && step.step.ProcessWriteStep?
+    && BCS.ProcessWriteIsSuperblockUpdate(k, s, step.step.id)
+  }
+
   predicate IsFreezeStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
   {
     && step.MachineStep?
@@ -111,21 +118,6 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
   predicate IsCrashStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
   {
     && step.CrashStep?
-  }
-
-  predicate IsPersistStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
-  {
-    && step.DiskInternalStep?
-    && step.step.ProcessWriteStep?
-    && BCS.ProcessWriteIsGraphUpdate(k, s, step.step.id)
-  }
-
-  predicate IsAdvanceLogStep(k: BCS.Constants, s: BCS.Variables, step: BCS.Step)
-  {
-    && step.DiskInternalStep?
-    && step.step.ProcessWriteStep?
-    && BCS.ProcessWriteIsSuperblockUpdate(k, s, step.step.id)
-    && !BCS.ProcessWriteIsGraphUpdate(k, s, step.step.id)
   }
 
   predicate IsTransactionStep(step: BCS.Step)
@@ -202,7 +194,7 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
     && BCS.DeltaJournal(s') == []
   }
 
-  predicate UpdateExtendLog(
+  predicate UpdateExtendLog1(
     k: BCS.Constants,
     s: BCS.Variables,
     s': BCS.Variables)
@@ -217,6 +209,23 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
     && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
     && BCS.GammaJournal(s') == BCS.GammaJournal(s)
     && BCS.DeltaJournal(s') == BCS.DeltaJournal(s)
+  }
+
+  predicate UpdateExtendLog2(
+    k: BCS.Constants,
+    s: BCS.Variables,
+    s': BCS.Variables)
+  {
+    && BCS.Inv(k, s)
+    && BCS.Inv(k, s')
+    && PersistentGraph(k, s') == PersistentGraph(k, s)
+    && FrozenGraph(k, s') == FrozenGraph(k, s)
+    && EphemeralGraph(k, s') == EphemeralGraph(k, s)
+    && BCS.PersistentJournal(s') == BCS.PersistentJournal(s)
+    && BCS.FrozenJournal(s') == BCS.FrozenJournal(s) + BCS.DeltaJournal(s)
+    && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
+    && BCS.GammaJournal(s') == BCS.GammaJournal(s) + BCS.DeltaJournal(s)
+    && BCS.DeltaJournal(s') == []
   }
 
   predicate UpdateUnalloc(
@@ -234,7 +243,7 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
     && PersistentGraph(k, s') == PersistentGraph(k, s)
     && FrozenGraph(k, s') == FrozenGraph(k, s)
     && EphemeralGraph(k, s') == IMapRemove1(EphemeralGraph(k, s), step.machineStep.ref)
-    && BCS.PersistentJournal(s') == BCS.GammaJournal(s)
+    && BCS.PersistentJournal(s') == BCS.PersistentJournal(s)
     && BCS.FrozenJournal(s') == BCS.FrozenJournal(s)
     && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
     && BCS.GammaJournal(s') == BCS.GammaJournal(s)
@@ -428,18 +437,16 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
   requires BCS.NextStep(k, s, s', step)
   ensures BCS.Inv(k, s')
 
+  ensures IsPersistStep(k, s, step) ==>
+      || UpdateMove1to2(k, s, s')
+      || UpdateExtendLog1(k, s, s')
+
   ensures IsFreezeStep(k, s, step) ==>
       || UpdateMove2to3(k, s, s')
-      || UpdateExtendLog(k, s, s')
+      || UpdateExtendLog2(k, s, s')
 
   ensures IsCrashStep(k, s, step) ==>
       UpdateCrash(k, s, s')
-
-  ensures IsPersistStep(k, s, step) ==>
-      UpdateMove1to2(k, s, s')
-
-  ensures IsAdvanceLogStep(k, s, step) ==>
-      UpdateExtendLog(k, s, s')
 
   ensures IsTransactionStep(step) ==> (
     && (step.machineStep.journalStep.JSNew? ==>
@@ -449,11 +456,10 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
   )
 
   ensures (
-      && !IsTransactionStep(step)
-      && !IsFreezeStep(k, s, step)
       && !IsPersistStep(k, s, step)
-      && !IsAdvanceLogStep(k, s, step)
+      && !IsFreezeStep(k, s, step)
       && !IsCrashStep(k, s, step)
+      && !IsTransactionStep(step)
     ) ==> (
       || UpdateAllEq(k, s, s')
       || UpdateUnalloc(k, s, s', step)
@@ -488,7 +494,7 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
             BCS.WriteBackJournalReqStepPreservesGraphs(k, s, s', dop, jr);
             BCS.WriteBackJournalReqStepPreservesJournals(k, s, s', dop, jr);
             if IsFreezeStep(k, s, step) {
-              assert UpdateExtendLog(k, s, s');
+              assert UpdateExtendLog2(k, s, s');
             } else {
               assert UpdateAllEq(k, s, s');
             }
@@ -619,11 +625,11 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
       && step.machineStep.id as int in SyncReqs(k, s)
       && SyncReqs(k, s)[step.machineStep.id as int] == ThreeState.State1
       && SyncReqs(k, s') == MapRemove1(SyncReqs(k, s), step.machineStep.id as int)
-  ensures step.CrashStep? ==> SyncReqs(k, s') == map[]
+  ensures IsCrashStep(k, s, step) ==> SyncReqs(k, s') == map[]
   ensures
     && !IsPersistStep(k, s, step)
     && !IsFreezeStep(k, s, step)
-    && !step.CrashStep?
+    && !IsCrashStep(k, s, step)
     && !(step.MachineStep? && step.machineStep.PushSyncReqStep?)
     && !(step.MachineStep? && step.machineStep.PopSyncReqStep?)
     ==> SyncReqs(k, s') == SyncReqs(k, s)
@@ -631,20 +637,51 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
     reveal_SyncReqs();
     BCS.NextStepPreservesInv(k, s, s', step);
 
-    if (
-      && !IsPersistStep(k, s, step)
-      && !IsFreezeStep(k, s, step)
-      && !step.CrashStep?
-      && !(step.MachineStep? && step.machineStep.PushSyncReqStep?)
-      && !(step.MachineStep? && step.machineStep.PopSyncReqStep?)
-    ) {
+    if IsPersistStep(k, s, step) {
+    }
+    else if IsFreezeStep(k, s, step) {
+      //assert CommitOccurredNotAcked(s) == CommitOccurredNotAcked(s');
+      assert !CommitOccurredNotAcked(s);
+      /*if step.machineStep.FreezeStep? {
+      } else if (
+        && step.machineStep.WriteBackJournalReqStep?
+        && s.machine.Ready?
+        && s.machine.inMemoryJournalFrozen == []
+      ) {
+        assert s'.machine.syncReqs == BC.syncReqs3to2(s.machine.syncReqs);
+        assert SyncReqs(k, s') == ThreeState.SyncReqs3to2(SyncReqs(k, s));
+      } else if (
+        && step.machineStep.WriteBackJournalReqWraparoundStep?
+        && s.machine.Ready?
+        && s.machine.inMemoryJournalFrozen == []
+      ) {
+        assert s'.machine.syncReqs == BC.syncReqs3to2(s.machine.syncReqs);
+        assert SyncReqs(k, s') == ThreeState.SyncReqs3to2(SyncReqs(k, s));
+      }*/
+    }
+    else if IsCrashStep(k, s, step) {
+    }
+    else if step.MachineStep? && step.machineStep.PushSyncReqStep? {
+    }
+    else if step.MachineStep? && step.machineStep.PopSyncReqStep? {
+    }
+    else {
       match step {
         case MachineStep(dop, machineStep) => {
           match machineStep {
             case WriteBackReqStep(ref) => assert SyncReqs(k,s) == SyncReqs(k,s');
-            case WriteBackRespStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case WriteBackRespStep => {
+              BCS.WriteRespIdNotSuperblockId(k, s, s', dop);
+              assert s.machine.Ready? ==> Some(dop.id) != s.machine.superblockWrite;
+
+              assert CommitOccurredNotAcked(s) == CommitOccurredNotAcked(s');
+              assert SyncReqs(k,s) == SyncReqs(k,s');
+            }
             case WriteBackIndirectionTableReqStep => assert SyncReqs(k,s) == SyncReqs(k,s');
             case WriteBackIndirectionTableRespStep => {
+              BCS.WriteRespIdNotSuperblockId(k, s, s', dop);
+              assert s.machine.Ready? ==> Some(dop.id) != s.machine.superblockWrite;
+
               /*assert SyncReqState(k, s, BC.State1) == SyncReqState(k, s', BC.State1);
               assert SyncReqState(k, s, BC.State2) == SyncReqState(k, s', BC.State1);
               assert SyncReqState(k, s, BC.State3) == SyncReqState(k, s', BC.State3);
@@ -659,11 +696,30 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
               }*/
               assert SyncReqs(k,s) == SyncReqs(k, s');
             }
+            case WriteBackJournalReqStep(jr) => assert SyncReqs(k, s) == SyncReqs(k, s');
+            case WriteBackJournalReqWraparoundStep(jr) => assert SyncReqs(k, s) == SyncReqs(k, s');
+            case WriteBackJournalRespStep => {
+              BCS.WriteRespIdNotSuperblockId(k, s, s', dop);
+              assert s.machine.Ready? ==> Some(dop.id) != s.machine.superblockWrite;
+              assert SyncReqs(k, s) == SyncReqs(k, s');
+            }
+            case WriteBackSuperblockReq_Basic_Step => {
+              assert CommitOccurredNotAcked(s) == CommitOccurredNotAcked(s');
+              assert SyncReqs(k, s) == SyncReqs(k, s');
+            }
+            case WriteBackSuperblockReq_UpdateIndirectionTable_Step => assert SyncReqs(k, s) == SyncReqs(k, s');
+            case WriteBackSuperblockRespStep => assert SyncReqs(k, s) == SyncReqs(k, s');
             case UnallocStep(ref: Reference) => assert SyncReqs(k,s) == SyncReqs(k,s');
             case PageInReqStep(ref: Reference) => assert SyncReqs(k,s) == SyncReqs(k,s');
             case PageInRespStep => assert SyncReqs(k,s) == SyncReqs(k,s');
             case PageInIndirectionTableReqStep => assert SyncReqs(k,s) == SyncReqs(k,s');
             case PageInIndirectionTableRespStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInJournalReqStep(which) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInJournalRespStep(which) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInSuperblockReqStep(which) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case PageInSuperblockRespStep(which) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case FinishLoadingSuperblockPhaseStep => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case FinishLoadingOtherPhaseStep =>assert SyncReqs(k,s) == SyncReqs(k,s');
             case EvictStep(ref: Reference) => assert SyncReqs(k,s) == SyncReqs(k,s');
             case FreezeStep => assert false;
             case PushSyncReqStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
@@ -679,7 +735,13 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
           match step {
             case ProcessReadStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
             case ProcessReadFailureStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
-            case ProcessWriteStep(id) => assert SyncReqs(k,s) == SyncReqs(k,s');
+            case ProcessWriteStep(id) => {
+              assert s.machine.Ready? ==>
+                  Some(id) != s.machine.superblockWrite;
+              assert CommitOccurredNotAcked(s)
+                  == CommitOccurredNotAcked(s');
+              assert SyncReqs(k,s) == SyncReqs(k,s');
+            }
           }
         }
         case CrashStep => assert false;

@@ -392,7 +392,7 @@ module BlockCache refines Transactable {
     && JournalRangeParses(jr, j)
     && JournalRangeLen(jr) + s.writtenJournalLen <= NumJournalBlocks() as int
     && JournalRangeLen(jr) > 0
-    && s.newSuperblock.None?
+    && s.superblockWrite.None?
     && s.superblock.journalStart < NumJournalBlocks()
     && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
     && var startPos := JournalPosAdd(
@@ -448,7 +448,7 @@ module BlockCache refines Transactable {
     && JournalRangeParses(jr, j)
     && JournalRangeLen(jr) + s.writtenJournalLen <= NumJournalBlocks() as int
     && JournalRangeLen(jr) > 0
-    && s.newSuperblock.None?
+    && s.superblockWrite.None?
     && s.superblock.journalStart < NumJournalBlocks()
     && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
     && var startPos := JournalPosAdd(
@@ -522,7 +522,6 @@ module BlockCache refines Transactable {
     && s' == s
         .(newSuperblock := Some(newSuperblock))
         .(superblockWrite := Some(dop.id))
-        .(syncReqs := syncReqs3to2(s.syncReqs))
   }
 
   predicate WriteBackSuperblockReq_UpdateIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -553,7 +552,6 @@ module BlockCache refines Transactable {
     && s' == s
         .(newSuperblock := Some(newSuperblock))
         .(superblockWrite := Some(dop.id))
-        .(syncReqs := syncReqs3to2(s.syncReqs))
   }
 
   predicate WriteBackSuperblockResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -874,6 +872,7 @@ module BlockCache refines Transactable {
          .(inMemoryJournalFrozen := s.inMemoryJournalFrozen + s.inMemoryJournal)
          .(inMemoryJournal := [])
          .(frozenJournalPosition := s.writtenJournalLen)
+         .(syncReqs := syncReqs3to2(s.syncReqs))
   }
 
   predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, id: uint64)
