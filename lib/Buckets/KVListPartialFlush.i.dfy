@@ -24,10 +24,17 @@ module KVListPartialFlush {
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl, newParent: Kvl, weightSlack: int) : (Kvl, seq<Kvl>)
   requires WF(parent)
   requires forall i | 0 <= i < |children| :: WF(children[i])
+  requires PSA.WF(cur.keys)
+  requires PSA.WF(newParent.keys)
   requires |pivots| + 1 == |children|
+  requires inputStringsTotal(parent, children) < 0x1_0000_0000 - 1
+  requires inputLengthTotal(parent, children) < 0x1_0000_0000  
   requires 0 <= parentIdx <= PSA.psaNumStrings(parent.keys) as int
   requires 0 <= childrenIdx <= |children|
   requires childrenIdx < |children| ==> 0 <= childIdx <= PSA.psaNumStrings(children[childrenIdx].keys) as int
+  requires PSA.psaNumStrings(cur.keys) as int <= inputStringsSoFar(parent, children, parentIdx, childrenIdx, childIdx)
+  requires |cur.keys.data| <= inputLengthSoFar(parent, children, parentIdx, childrenIdx, childIdx)
+  requires PSA.psaCanAppendSeq(newParent.keys, PSA.I(parent.keys)[parentIdx..])
   decreases |children| - childrenIdx
   decreases PSA.psaNumStrings(parent.keys) as int - parentIdx +
       (if childrenIdx < |children| then PSA.psaNumStrings(children[childrenIdx].keys) as int - childIdx else 0)
@@ -50,16 +57,20 @@ module KVListPartialFlush {
           if childrenIdx == |children| - 1 then (
             var w := WeightKey(PSA.psaElement(parent.keys, parentIdx as uint64)) + WeightMessage(parent.messages[parentIdx]);
             if w <= weightSlack then (
+              appendFromParent(parent, children, parentIdx, childrenIdx, childIdx, cur);
               partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), newParent, weightSlack - w)
             ) else (
+              assume false;
               partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), weightSlack)
             )
           ) else (
             if lt(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx]) then (
               var w := WeightKey(PSA.psaElement(parent.keys, parentIdx as uint64)) + WeightMessage(parent.messages[parentIdx]);
               if w <= weightSlack then (
+                appendFromParent(parent, children, parentIdx, childrenIdx, childIdx, cur);
                 partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), newParent, weightSlack - w)
               ) else (
+                assume false;
                 partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), weightSlack)
               )
             ) else (
@@ -73,18 +84,23 @@ module KVListPartialFlush {
               partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, cur, newParent, weightSlack + WeightKey(PSA.psaElement(child.keys, childIdx as uint64)) + WeightMessage(child.messages[childIdx]))
             ) else (
               if weightSlack + WeightMessage(child.messages[childIdx]) >= WeightMessage(m) then (
+                appendFromParentChildMerge(parent, children, parentIdx, childrenIdx, childIdx, cur);                
                 partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), m), newParent, weightSlack + WeightMessage(child.messages[childIdx]) - WeightMessage(m))
               ) else (
+                assume false;
                 partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]), append(newParent, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), weightSlack)
               )
             )
           ) else if lt(PSA.psaElement(child.keys, childIdx as uint64), PSA.psaElement(parent.keys, parentIdx as uint64)) then (
+            appendFromChild(parent, children, parentIdx, childrenIdx, childIdx, cur);
             partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, PSA.psaElement(child.keys, childIdx as uint64), child.messages[childIdx]), newParent, weightSlack)
           ) else (
             var w := WeightKey(PSA.psaElement(parent.keys, parentIdx as uint64)) + WeightMessage(parent.messages[parentIdx]);
             if w <= weightSlack then (
+              appendFromParent(parent, children, parentIdx, childrenIdx, childIdx, cur);
               partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), newParent, weightSlack - w)
             ) else (
+              assume false;
               partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]), weightSlack)
             )
           )

@@ -144,9 +144,8 @@ module KVList {
   /////////////////////////
 
   function append(kvl: Kvl, key: Key, value: Message) : Kvl
-  requires PSA.WF(kvl.keys)
-  requires |kvl.keys.offsets| < 0x1_0000_0000 - 1
-  requires |kvl.keys.data| + |key| < 0x1_0000_0000
+    requires PSA.WF(kvl.keys)
+    requires PSA.psaCanAppend(kvl.keys, key)
   {
     Kvl(PSA.psaAppend(kvl.keys, key), kvl.messages + [value])
   }
@@ -154,8 +153,7 @@ module KVList {
   lemma Iappend(kvl: Kvl, key: Key, value: Message)
   requires PSA.WF(kvl.keys)
   requires PSA.psaNumStrings(kvl.keys) as int == |kvl.messages|
-  requires |kvl.keys.offsets| < 0x1_0000_0000 - 1
-  requires |kvl.keys.data| + |key| < 0x1_0000_0000
+  requires PSA.psaCanAppend(kvl.keys, key)
   ensures IMap(append(kvl, key, value)) == IMap(kvl)[key := value]
   {
     reveal_IMap();
@@ -357,8 +355,7 @@ module KVList {
   requires PSA.WF(cur.keys)
   requires PSA.psaNumStrings(cur.keys) as int <= inputStringsSoFar(parent, children, parentIdx, childrenIdx, childIdx)
   requires |cur.keys.data| <= inputLengthSoFar(parent, children, parentIdx, childrenIdx, childIdx)
-  ensures |cur.keys.offsets| < 0x1_0000_0000 - 1
-  ensures |cur.keys.data| + |PSA.psaElement(parent.keys, parentIdx as uint64)| < 0x1_0000_0000
+  ensures PSA.psaCanAppend(cur.keys, PSA.psaElement(parent.keys, parentIdx as uint64))
   ensures PSA.WF(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]).keys)
   ensures PSA.psaNumStrings(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]).keys) as int <= inputStringsSoFar(parent, children, parentIdx+1, childrenIdx, childIdx)
   ensures |append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]).keys.data| <= inputLengthSoFar(parent, children, parentIdx+1, childrenIdx, childIdx)
@@ -381,8 +378,7 @@ module KVList {
   requires PSA.WF(cur.keys)
   requires PSA.psaNumStrings(cur.keys) as int <= inputStringsSoFar(parent, children, parentIdx, childrenIdx, childIdx)
   requires |cur.keys.data| <= inputLengthSoFar(parent, children, parentIdx, childrenIdx, childIdx)
-  ensures |cur.keys.offsets| < 0x1_0000_0000 - 1
-  ensures |cur.keys.data| + |PSA.psaElement(children[childrenIdx].keys, childIdx as uint64)| < 0x1_0000_0000
+  ensures PSA.psaCanAppend(cur.keys, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64))
   ensures PSA.WF(append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]).keys)
   ensures PSA.psaNumStrings(append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]).keys) as int <= inputStringsSoFar(parent, children, parentIdx, childrenIdx, childIdx+1)
   ensures |append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]).keys.data| <= inputLengthSoFar(parent, children, parentIdx, childrenIdx, childIdx+1)
@@ -405,8 +401,7 @@ module KVList {
   requires PSA.WF(cur.keys)
   requires PSA.psaNumStrings(cur.keys) as int <= inputStringsSoFar(parent, children, parentIdx, childrenIdx, childIdx)
   requires |cur.keys.data| <= inputLengthSoFar(parent, children, parentIdx, childrenIdx, childIdx)
-  ensures |cur.keys.offsets| < 0x1_0000_0000 - 1
-  ensures |cur.keys.data| + |PSA.psaElement(parent.keys, parentIdx as uint64)| < 0x1_0000_0000
+  ensures PSA.psaCanAppend(cur.keys, PSA.psaElement(parent.keys, parentIdx as uint64))
   ensures PSA.WF(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]).keys)
   ensures PSA.psaNumStrings(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]).keys) as int <= inputStringsSoFar(parent, children, parentIdx+1, childrenIdx, childIdx + 1)
   ensures |append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]).keys.data| <= inputLengthSoFar(parent, children, parentIdx+1, childrenIdx, childIdx + 1)
@@ -594,8 +589,7 @@ module KVList {
   requires 0 <= childrenIdx < |children|
   requires 0 <= parentIdx < PSA.psaNumStrings(parent.keys) as int
   requires childrenIdx < |pivots| ==> lt(PSA.psaElement(parent.keys, parentIdx as uint64), pivots[childrenIdx])
-  requires |cur.keys.offsets| < 0x1_0000_0000 - 1
-  requires |cur.keys.data| + |PSA.psaElement(parent.keys, parentIdx as uint64)| < 0x1_0000_0000
+  requires PSA.psaCanAppend(cur.keys, PSA.psaElement(parent.keys, parentIdx as uint64))
   ensures WF(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
   ensures I(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), parent.messages[parentIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
@@ -637,8 +631,7 @@ module KVList {
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires 0 <= childrenIdx < |children|
   requires 0 <= childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int
-  requires |cur.keys.offsets| < 0x1_0000_0000 - 1
-  requires |cur.keys.data| + |PSA.psaElement(children[childrenIdx].keys, childIdx as uint64)| < 0x1_0000_0000
+  requires PSA.psaCanAppend(cur.keys, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64))
   ensures WF(append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]))
   ensures I(append(cur, PSA.psaElement(children[childrenIdx].keys, childIdx as uint64), children[childrenIdx].messages[childIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
@@ -688,8 +681,7 @@ module KVList {
   requires 0 <= childIdx < PSA.psaNumStrings(children[childrenIdx].keys) as int
   requires PSA.psaElement(children[childrenIdx].keys, childIdx as uint64) == PSA.psaElement(parent.keys, parentIdx as uint64)
   requires Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]) != IdentityMessage()
-  requires |cur.keys.offsets| < 0x1_0000_0000 - 1
-  requires |cur.keys.data| + |PSA.psaElement(parent.keys, parentIdx as uint64)| < 0x1_0000_0000
+  requires PSA.psaCanAppend(cur.keys, PSA.psaElement(parent.keys, parentIdx as uint64))
   ensures WF(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
   ensures I(append(cur, PSA.psaElement(parent.keys, parentIdx as uint64), Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
