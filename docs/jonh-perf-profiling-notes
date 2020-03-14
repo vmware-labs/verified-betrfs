@@ -294,3 +294,38 @@ though! And we have all of the following limitations:
 - we're still not exploiting the full cache; after 5M ops, veri only got to
   1.7GB. So we're not getting as much benefit from the cache as rocks is.
   Maybe I should run for longer.
+
+So we blew through memory. But looking at the malloc scopes, we have about
+10M bytes allocated per Node, and that number stays pretty stable for the
+short life of that experiment. 343*10M = 3.4GB, so we're not way off. In
+fact, we predicted about a 25% cost at the fringe (although I forget the
+reasoning), and 10M = 8M * 1.25. So maybe we just need to discount the Node
+count a bit more.
+
+[malloc-exp/wprofile-amass-discount]
+Nodes=300, with tree->kvlist repacking
+200 should have worked (using about 2GB), but it just blew right on past.
+Bytes/node climbed enthusiastically once the cache filled. Trying again with 50.
+
+[malloc-exp/wprofile-amass-discount-50]
+Okay, well, that did stabilize, with 600MB in [byte], 0.9GB in large
+allocations, and 1.2GB of OS. (Quite a lot of malloc still; now in the large
+region?)
+This suggests we can probably push up to at least 150 nodes.
+Will that stabilize nicely?
+
+[malloc-exp/wprofile-amass-discount-150]
+Okay, so 150 blows out.
+[malloc-exp/wprofile-amass-discount-100]
+Okay, so 100 fits.
+Things we know, from the runs that complete:
+- before the cache fills, the byte[]:Node ratio is a plausible 8-8MB
+- after the cache fills, the ratio climbs up to (14, 24) before settling in.
+  Ouch!
+- The byte[]s explain about 0.7-1.0 of the malloced space.
+- At the end of discount-100, that ratio is 76%. The next 23% is
+  explicit-seq<byte>. Where does that come from?
+I think that's really the burning question.
+- a bunch are 512-byte allocations from ycsb
+- and then, after 2.4Mops, we see page-in events.
+-- and then two 7k allocations from the parser

@@ -36,6 +36,57 @@ module KVList {
     && (forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage())
   }
 
+  // Reallocate the bytes of a kvl into contiguous memory.
+  method AmassKvl(kvl: Kvl) returns (amassed: Kvl)
+    requires WF(kvl)
+    ensures WF(amassed)
+    ensures I(kvl) == I(amassed)
+  {
+    // Count how much space we'll need
+    var i : uint64 := 0;
+    var cumKeyLen:uint64 := 0;
+    var cumMessageLen:uint64 := 0;
+    while (i < |kvl.keys| as uint64)
+    {
+      cumKeyLen := cumKeyLen + |kvl.keys[i]| as uint64;
+      cumMessageLen := cumMessageLen + |kvl.messages[i].value| as uint64;
+      i := i + 1;
+    }
+
+    // String together the bytes
+    var ary := new byte[cumKeyLen + cumMessageLen];
+    var ptr:uint64 := 0;
+    i := 0;
+    while (i < |kvl.keys| as uint64)
+    {
+      NativeArrays.CopySeqIntoArray(kvl.keys[i], 0, ary, ptr, |kvl.keys[i]| as uint64);
+      ptr := ptr + |kvl.keys[i]| as uint64;
+      NativeArrays.CopySeqIntoArray<byte>(kvl.messages[i].value, 0, ary, ptr, |kvl.messages[i].value| as uint64);
+      ptr := ptr + |kvl.messages[i].value| as uint64;
+      i := i + 1;
+    }
+
+    // Glue into a seq
+    var amassedSeq := ary[..];
+
+    // String together the refs to the bytes, pointing into the amassed seq
+    var keyAry := new Key[|kvl.keys| as uint64];
+    var messageAry := new Message[|kvl.messages| as uint64];
+    ptr := 0;
+    i := 0;
+    while (i < |kvl.keys| as uint64)
+    {
+      keyAry[i] := amassedSeq[ptr .. ptr+|kvl.keys[i]| as uint64];
+      ptr := ptr + |kvl.keys[i]| as uint64;
+      messageAry[i] := Message.Define(amassedSeq[ptr .. ptr+|kvl.messages[i].value| as uint64]);
+      ptr := ptr + |kvl.messages[i].value| as uint64;
+      i := i + 1;
+    }
+
+    // And finally glue the array of seq slice refs into seqs
+    amassed := Kvl(keyAry[..], messageAry[..]);
+  }
+
   function {:opaque} IMap(kvl: Kvl) : BucketMap
   requires |kvl.keys| == |kvl.messages|
   ensures |kvl.keys| == 0 ==> |IMap(kvl).Keys| == 0    // empty input -> empty output.

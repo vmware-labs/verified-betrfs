@@ -159,11 +159,14 @@ void ycsbRun(
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
 
+#define HACK_EVICT_PERIODIC 0
+#if HACK_EVICT_PERIODIC
 // An experiment that demonstrated that the heap was filling with small
 // junk ("heap Kessler syndrome"?): by evicting periodically, we freed
 // most of the small junk and kept the heap waste down. TODO okay to clean up.
-//    int evict_interval_ms = 100000;
-//    int next_evict_ms = evict_interval_ms;
+    int evict_interval_ms = 100000;
+    int next_evict_ms = evict_interval_ms;
+#endif // HACK_EVICT_PERIODIC
 
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
@@ -198,12 +201,14 @@ void ycsbRun(
         int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_start).count();
 
-//        if (elapsed_ms >= next_evict_ms) {
-//            printf("evict.");
-//            db.sync();
-//            db.evictEverything();
-//            next_evict_ms += evict_interval_ms;
-//        }
+#if HACK_EVICT_PERIODIC
+        if (elapsed_ms >= next_evict_ms) {
+            printf("evict.");
+            db.sync();
+            db.evictEverything();
+            next_evict_ms += evict_interval_ms;
+        }
+#endif // HACK_EVICT_PERIODIC
 
         if (elapsed_ms >= next_display_ms) {
             malloc_accounting_display("periodic");
