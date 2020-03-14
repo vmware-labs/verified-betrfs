@@ -326,6 +326,29 @@ Things we know, from the runs that complete:
 - At the end of discount-100, that ratio is 76%. The next 23% is
   explicit-seq<byte>. Where does that come from?
 I think that's really the burning question.
-- a bunch are 512-byte allocations from ycsb
-- and then, after 2.4Mops, we see page-in events.
+-- a bunch are 512-byte allocations from ycsb
+-- and then, after 2.4Mops, we see page-in events.
 -- and then two 7k allocations from the parser
+
+[malloc-exp/wprofile-amass-discount-100-timeseries.png]
+Discovery: Amassing doesn't work, because the amassed objects seem to get
+hung-onto by a thread. In the middle graph, note we have 100 Nodes in
+this experiment. In steady state, once we start page-in at 250s, there are
+also 100 faulted-in large (8M-ish) blocks. But then we have some 600
+"amass"ed blocks: 6-ish per Node.
+So, hypothesis: the data getting inserted gets amassed. The amassed blocks
+get pushed down the tree, data spread out across the leaves. Leaves get
+evicted. Some of the amassed data lands in a frontier Node, and the rest
+gets evicted. But the frontier nodes are enough to keep that amassed allocation
+around for a long time. The amassed data was a single bucket when it started,
+destined for a single Node at the second level of the tree. But it's
+spread across ~8 nodes at the third level, which is where the frontier of
+a 50-node tree lands. If our tree got deeper, the amassed nodes would hang
+on by even smaller threads, and we'd see a 64:1 ratio, I bet!
+
+I'm not entirely sure why the pagein blocks don't have the same behavior.
+Wouldn't they get pushed down the tree? I guess pageins for tree-top Nodes
+are never stranded (because treetop nodes are evicted), and pageins for
+evicted nodes are GCd, because they can only be referenced by Nodes below,
+which in general are also evicted.
+

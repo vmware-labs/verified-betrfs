@@ -112,7 +112,7 @@ namespace std {
 typedef struct {
   uint64_t magic; // identify my own mallocs
   size_t allocation_size;
-  const Label* label;
+  Label label;
 } AccountingHeader;
 
 struct ARow {
@@ -121,7 +121,7 @@ struct ARow {
   uint64_t open_count;
   uint64_t total_bytes;
   uint64_t open_bytes;
-  ARow(const Label &label)
+  ARow(const Label& label)
     : label(label),
       total_count(0),
       open_count(0),
@@ -226,8 +226,8 @@ void ScopeMap::display() {
   return;
 #endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
   char buf[AROW_BUFSIZE];
-  printf("ma-scope %s\n", ARow::display_header(buf, sizeof(buf)));
-  printf("ma-scope --------------------------------------------  ----------\n");
+  printf("ma-hdr   %s\n", ARow::display_header(buf, sizeof(buf)));
+  printf("ma-hdr   ----------------------------------------------------  ----------\n");
   std::vector<ARow> rows;
   for (auto it = umap.begin(); it != umap.end(); it++)  {
     rows.push_back(it->second);
@@ -257,12 +257,18 @@ struct Microscope {
 static const char* match_any = "any";
 
 Microscope microscopes[] = {
-  {0, (1<<20)-1, ARow(Label(match_any, "")), "<1MB"},
-  {1<<20, ULLONG_MAX, ARow(Label(match_any, "")), ">=1MB"},
+  // row 0 is reserved for total
+  {0, ULLONG_MAX, ARow(Label(match_any, "")), "total"},
+  {0, (1<<20)-1, ARow(Label(match_any, "")), "coarse-small"},
+  {1<<20, ULLONG_MAX, ARow(Label(match_any, "")), "coarse-large"},
   {0, 511, ARow(Label("[T = unsigned char]", "explicit-seq")), "es511"},
   {512, 512, ARow(Label("[T = unsigned char]", "explicit-seq")), "es512"},
   {513, (1<<20)-1, ARow(Label("[T = unsigned char]", "explicit-seq")), "esMid"},
   {1<<20, ULLONG_MAX, ARow(Label("[T = unsigned char]", "explicit-seq")), "esLarge"},
+  {0, 511, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfa511"},
+  {512, 512, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfa512"},
+  {513, (1<<20)-1, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfaMid"},
+  {1<<20, ULLONG_MAX, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfaLarge"},
 };
 
 class MicroscopeBench {
@@ -361,58 +367,18 @@ void FineHistogram::display() {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Coarse-grained (cheap!) histogram
-
-class CoarseHistogram {
-private:
-  size_t threshold = 1<<20;
-  ARow small = ARow(Label("small", ""));
-  ARow large = ARow(Label("large", ""));
-
-public:
-  inline void record_allocate(size_t size) {
-    if (size<threshold) {
-      small.record_allocate(size);
-    } else {
-      large.record_allocate(size);
-    }
-  }
-
-  inline void record_free(size_t size) {
-    if (size<threshold) {
-      small.record_free(size);
-    } else {
-      large.record_free(size);
-    }
-  }
-
-  void display();
-};
-
-void CoarseHistogram::display() {
-  char buf[AROW_BUFSIZE];
-  printf("ma-coarse-histogram threshold %ld\n", threshold);
-  printf("ma-coarse-histogram small %s\n", small.display(buf, sizeof(buf)));
-  printf("ma-coarse-histogram large %s\n", large.display(buf, sizeof(buf)));
-}
-
-//////////////////////////////////////////////////////////////////////////////
 // table of interesting metrics.
 
 class ATable {
 public:
   // These different modules are activated/deactivated with #defines in .h
-  ARow total = ARow(Label("total", ""));
   ScopeMap scope_map;
   FineHistogram fine_histogram;
-  CoarseHistogram coarse_histogram;
   MicroscopeBench microscope_bench;
 
   inline const Label* record_allocate(size_t size) {
     const Label* label = scope_map.get_active_label();
-    total.record_allocate(size);
     fine_histogram.record_allocate(size);
-    coarse_histogram.record_allocate(size);
     scope_map.record_allocate(size);
     microscope_bench.record_allocate(*label, size);
     return label; // tuck into allocation header so we know it at free time
@@ -420,20 +386,16 @@ public:
 
   // scope_row is tucked into allocation to avoid a hash lookup at free time
   inline void record_free(size_t size, const Label& label) {
-    total.record_free(size);
     fine_histogram.record_free(size);
-    coarse_histogram.record_free(size);
     scope_map.record_free(label, size);
     microscope_bench.record_free(label, size);
   }
 
-  void display_total();
+  size_t total_open_bytes() {
+    // row 0 is reserved for total
+    return microscopes[0].arow.open_bytes;
+  }
 };
-
-void ATable::display_total() {
-  char buf[AROW_BUFSIZE];
-  printf("ma-total %s\n", total.display(buf, sizeof(buf)));
-}
 
 ATable atable;
 
@@ -464,7 +426,7 @@ void *malloc_hook(size_t size, const void *caller) {
   result = (char*) underlying + sizeof(AccountingHeader);
   ar->magic = ACCOUNTING_MAGIC;
   ar->allocation_size = size;
-  ar->label = atable.record_allocate(size);
+  ar->label = *atable.record_allocate(size);
 
   install_hooks();
 
@@ -499,7 +461,7 @@ void free_hook(void* ptr, const void *caller) {
 //    printf("free_hook sees free %p size %lx from %p\n", ptr, ar->allocation_size, caller);
 
     size = ar->allocation_size;
-    atable.record_free(size, *ar->label);
+    atable.record_free(size, ar->label);
     use_munmap = MMAP_POOL_ENABLE && (size >= MMAP_POOL_SIZE_THRESH);
   }
 
@@ -537,9 +499,7 @@ void malloc_accounting_display(const char* label) {
   printf("ma-display-header %s\n", label);
   atable.scope_map.display();
   atable.fine_histogram.display();
-  atable.coarse_histogram.display();
   atable.microscope_bench.display();
-  atable.display_total();
   // dump_proc_self_maps();
   // atable.display_histogram();
 }
@@ -565,7 +525,7 @@ void malloc_accounting_status() {
   printf("os-map-total %8ld os-map-heap %8ld malloc-accounting-total %8ld\n",
     all_maps,
     heap,
-    atable.total.open_bytes);
+    atable.total_open_bytes());
 }
 
 #if MALLOC_ACCOUNTING_ENABLE_SCOPES
