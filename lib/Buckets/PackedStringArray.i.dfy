@@ -410,6 +410,7 @@ module PackedStringArray {
         psa.data[dataStart + subStart..dataStart + subEnd][j]
       {
         // For example of the brittleness of this proof, converting these asserts to a single calc causes the proof to fail.
+        assert psa.data[dataStart..dataEnd][subStart..subEnd][j] == psa.data[dataStart..dataEnd][subStart + j];
         assert psa.data[dataStart..dataEnd][subStart..subEnd][j] == psa.data[dataStart + subStart + j];
         assert psa.data[dataStart + subStart..dataStart + subEnd][j] == psa.data[dataStart + subStart + j];
       }
@@ -502,7 +503,7 @@ module PackedStringArray {
     {
     }
   }
-
+  
   lemma psaAppendTotalLength(psa: Psa, key: seq<byte>)
     requires WF(psa)
     requires psaCanAppend(psa, key)
@@ -514,57 +515,69 @@ module PackedStringArray {
     requires WF(psa)
     decreases |strs|, 0
   {
-    if |strs| == 0 then
-      true
-    else
-      psaCanAppendSeq(psa, DropLast(strs)) && psaCanAppend(psaAppendSeq(psa, DropLast(strs)), Last(strs))
+    && |psa.offsets| + |strs| < 0x1_0000_0000
+    && |psa.data| + FlattenLength(FlattenShape(strs)) < 0x1_0000_0000
   }
 
+  lemma psaCanAppendOne(psa: Psa, str: seq<byte>)
+    requires WF(psa)
+    requires psaCanAppendSeq(psa, [str])
+    ensures psaCanAppend(psa, str)
+  {
+    reveal_FlattenShape();
+    reveal_FlattenLength();
+  }
+  
   function psaAppendSeq(psa: Psa, strs: seq<seq<byte>>) : (result: Psa)
     requires WF(psa)
     requires psaCanAppendSeq(psa, strs)
     ensures WF(result)
     ensures I(result) == I(psa) + strs
+    ensures psaTotalLength(result) == psaTotalLength(psa) + FlattenLength(FlattenShape(strs)) as uint64
     decreases |strs|, 1
   {
     if |strs| == 0 then
       psa
     else
       assert strs == DropLast(strs) + [Last(strs)];
+      FlattenShapeAdditive(DropLast(strs), [Last(strs)]);
+      FlattenLengthAdditive(FlattenShape(DropLast(strs)), FlattenShape([Last(strs)]));
+      assert FlattenLength(FlattenShape(DropLast(strs))) <= FlattenLength(FlattenShape(strs));
+      assert |Last(strs)| == FlattenLength(FlattenShape([Last(strs)])) by {
+        reveal_FlattenShape();
+        reveal_FlattenLength();
+      }
       psaAppendIAppend(psaAppendSeq(psa, DropLast(strs)), Last(strs));
       psaAppend(psaAppendSeq(psa, DropLast(strs)), Last(strs))
   }
-    
-  lemma psaCanAppendSeqPrefix(psa: Psa, strs: seq<seq<byte>>, i: nat)
+
+  lemma psaCanAppendSeqAdditive(psa: Psa, strs1: seq<seq<byte>>, strs2: seq<seq<byte>>)
     requires WF(psa)
-    requires psaCanAppendSeq(psa, strs)
-    requires i <= |strs|
-    ensures psaCanAppendSeq(psa, strs[..i])
+    ensures psaCanAppendSeq(psa, strs1 + strs2) <==>
+    psaCanAppendSeq(psa, strs1) && psaCanAppendSeq(psaAppendSeq(psa, strs1), strs2)
   {
-    if i == |strs| {
-      assert strs[..i] == strs;
-    } else {
-      psaCanAppendSeqPrefix(psa, DropLast(strs), i);
-      assert strs[..i] == DropLast(strs)[..i];
-    }
+    FlattenShapeAdditive(strs1, strs2);
+    FlattenLengthAdditive(FlattenShape(strs1), FlattenShape(strs2));
   }
 
-  lemma psaAppendSeqPrefixTotalLength(psa: Psa, strs: seq<seq<byte>>, i: nat)
+  lemma psaAppendSeqAdditive(psa: Psa, strs1: seq<seq<byte>>, strs2: seq<seq<byte>>)
     requires WF(psa)
-    requires psaCanAppendSeq(psa, strs)
-    requires i <= |strs|
-    ensures psaCanAppendSeq(psa, strs[..i])
-    ensures psaTotalLength(psaAppendSeq(psa, strs[..i])) <= psaTotalLength(psaAppendSeq(psa, strs))
+    requires psaCanAppendSeq(psa, strs1 + strs2) ||
+    (psaCanAppendSeq(psa, strs1) && psaCanAppendSeq(psaAppendSeq(psa, strs1), strs2))
+    ensures psaCanAppendSeq(psa, strs1 + strs2) &&
+    (psaCanAppendSeq(psa, strs1) && psaCanAppendSeq(psaAppendSeq(psa, strs1), strs2))
+    ensures psaAppendSeq(psa, strs1 + strs2) == psaAppendSeq(psaAppendSeq(psa, strs1), strs2)
   {
-    psaCanAppendSeqPrefix(psa, strs, i);
-    if i == |strs| {
-      assert strs[..i] == strs;
+    psaCanAppendSeqAdditive(psa, strs1, strs2);
+    if |strs2| == 0 {
+      assert strs1 + strs2 == strs1;
+    } else if |strs2| == 1 {
     } else {
-      psaAppendSeqPrefixTotalLength(psa, DropLast(strs), i);
-      assert strs[..i] == DropLast(strs)[..i];      
+      assert strs1 + DropLast(strs2) + [Last(strs2)] == strs1 + strs2;
+      psaCanAppendSeqAdditive(psa, strs1 + DropLast(strs2), [Last(strs2)]);
     }
   }
-
+  
   function psaFromSeq(strs: seq<seq<byte>>) : (result: Psa)
     requires psaCanAppendSeq(EmptyPsa(), strs)
     ensures WF(result)
@@ -579,10 +592,23 @@ module PackedStringArray {
     ensures psaAppendSeq(EmptyPsa(), I(psa)) == psa
     decreases psaNumStrings(psa)
   {
+    var strs := I(psa);
     if psaNumStrings(psa) == 0 {
+    } else if psaNumStrings(psa) == 1 {
+      assert psaCanAppendSeq(EmptyPsa(), I(psa)) by {
+        reveal_FlattenShape();
+        reveal_FlattenLength();
+      }
     } else {
       var prepsa := psaDropLast(psa);
+      var prestrs := I(prepsa);
+      var last := Last(strs);
+      assert strs == prestrs + [last];
       psaCanAppendI(prepsa);
+      assert psaCanAppendSeq(EmptyPsa(), strs) by {
+        reveal_FlattenShape();
+        reveal_FlattenLength();
+      }
     }
   }
   
@@ -594,8 +620,8 @@ module PackedStringArray {
       ensures psaCanAppendSeq(EmptyPsa(), strs[..i])
       ensures psaTotalLength(psaAppendSeq(EmptyPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(EmptyPsa(), strs))
     {
-      psaCanAppendSeqPrefix(EmptyPsa(), strs, i);
-      psaAppendSeqPrefixTotalLength(EmptyPsa(), strs, i);
+        assert strs == strs[..i] + strs[i..];
+        psaAppendSeqAdditive(EmptyPsa(), strs[..i], strs[i..]);
     }
 
     var curlen: uint64 := 0;
@@ -755,8 +781,8 @@ module PackedStringArray {
         ensures psaCanAppendSeq(toPsa(), strs[..i])
         ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(toPsa(), strs))
       {
-        psaCanAppendSeqPrefix(toPsa(), strs, i);
-        psaAppendSeqPrefixTotalLength(toPsa(), strs, i);
+        assert strs == strs[..i] + strs[i..];
+        psaAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
       }
       
       var i: uint64 := 0;
@@ -787,8 +813,8 @@ module PackedStringArray {
         ensures psaCanAppendSeq(toPsa(), strs[..i])
         ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(toPsa(), strs))
       {
-        psaCanAppendSeqPrefix(toPsa(), strs, i);
-        psaAppendSeqPrefixTotalLength(toPsa(), strs, i);
+        assert strs == strs[..i] + strs[i..];
+        psaAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
       }
       
       if offsets.Length as uint64 < nstrings as uint64 + |strs| as uint64 {
@@ -821,16 +847,30 @@ module PackedStringArray {
       ensures fresh(Repr - old(Repr))
       modifies this, this.Repr
     {
-      forall i | 0 <= i <= |strs|
-        ensures psaCanAppendSeq(toPsa(), strs[..i])
-      {
-        psaCanAppendSeqPrefix(toPsa(), strs, i);
-      }
-
       realloc_to_accomodate_seq(strs);
       ghost var new_Repr := Repr;
       ghost var new_offsets := offsets;
       ghost var new_data := data;
+
+      assert psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length;
+      
+      forall i | 0 <= i <= |strs|
+        ensures psaCanAppendSeq(toPsa(), strs[..i])
+      {
+        assert strs == strs[..i] + strs[i..];
+        psaCanAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
+      }
+
+      forall i | 0 <= i < |strs|
+        ensures psaCanAppend(psaAppendSeq(toPsa(), strs[..i]), strs[i])
+        ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) as int + |strs[i]| <= data.Length
+      {
+        assert strs[..i+1] == strs[..i] + [strs[i]];
+        psaCanAppendSeqAdditive(toPsa(), strs[..i], [strs[i]]);
+        psaCanAppendOne(psaAppendSeq(toPsa(), strs[..i]), strs[i]);
+        assert strs == strs[..i+1] + strs[i+1..];
+        psaAppendSeqAdditive(toPsa(), strs[..i+1], strs[i+1..]);
+      }
       
       var i: uint64 := 0;
       while i < |strs| as uint64
@@ -842,7 +882,6 @@ module PackedStringArray {
         invariant data == new_data
       {
         assert strs[..i+1] == strs[..i] + [strs[i]];
-        psaAppendSeqPrefixTotalLength(old(toPsa()), strs, i as nat + 1);
         append(strs[i]);
         i := i + 1;
       }
