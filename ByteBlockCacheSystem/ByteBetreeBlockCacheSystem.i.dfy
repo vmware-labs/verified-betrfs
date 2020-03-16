@@ -15,14 +15,16 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
 
   import opened AsyncSectorDiskModelTypes
   import opened Maps
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
   import BBC = BetreeBlockCache
-  import BCS = BetreeGraphBlockCacheSystem
+  import BCS = BlockCacheSystem
   import BBCS = BetreeBlockCacheSystem
   import SD = AsyncSectorDisk
-  import opened LBAType
+  import opened DiskLayout
+  import opened SectorType
+  import opened Options
 
-  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp<BBC.Sector>
+  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp
   requires M.ValidDiskOp(diskOp)
   {
     M.IDiskOp(diskOp)
@@ -33,12 +35,12 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   {
     map id | id in reqReads :: M.IReqRead(reqReads[id])
   }
-  function IReqWrites(reqWrites: map<D.ReqId, D.ReqWrite>) : map<SD.ReqId, SD.ReqWrite<BBC.Sector>>
+  function IReqWrites(reqWrites: map<D.ReqId, D.ReqWrite>) : map<SD.ReqId, SD.ReqWrite>
   requires forall id | id in reqWrites :: M.ValidReqWrite(reqWrites[id])
   {
     map id | id in reqWrites :: M.IReqWrite(reqWrites[id])
   }
-  function IRespReads(respReads: map<D.ReqId, D.RespRead>) : map<SD.ReqId, SD.RespRead<BBC.Sector>>
+  function IRespReads(respReads: map<D.ReqId, D.RespRead>) : map<SD.ReqId, SD.RespRead>
   requires forall id | id in respReads :: M.ValidRespRead(respReads[id])
   {
     map id | id in respReads :: M.IRespRead(respReads[id])
@@ -57,18 +59,18 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     && (forall id | id in disk.respWrites :: M.ValidRespWrite(disk.respWrites[id]))
   }
 
-  function IContents(contents: seq<byte>) : imap<Location, BBC.Sector>
+  function IContents(contents: seq<byte>) : imap<Location, Sector>
   {
     imap loc: Location |
       && ValidLocation(loc)
       && 0 <= loc.addr
       && 0 <= loc.len
       && loc.addr as int + loc.len as int <= |contents|
-      && M.ValidBytes(contents[loc.addr .. loc.addr as int + loc.len as int])
-    :: M.IBytes(contents[loc.addr .. loc.addr as int + loc.len as int])
+      && M.ValidLocationAndBytes(loc, contents[loc.addr .. loc.addr as int + loc.len as int])
+    :: M.IBytes(loc, contents[loc.addr .. loc.addr as int + loc.len as int])
   }
 
-  function IDisk(disk: D.Variables) : SD.Variables<BBC.Sector>
+  function IDisk(disk: D.Variables) : SD.Variables
   requires ValidDisk(disk)
   {
     SD.Variables(
@@ -224,7 +226,31 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   ensures ValidDisk(s'.disk)
   ensures SD.ProcessReadFailure(Ik(k).disk, I(k, s).disk, I(k, s').disk, id)
   {
-    M.reveal_ValidCheckedBytes();
+    var req := s.disk.reqReads[id];
+    var loc := DiskLayout.Location(req.addr, req.len);
+    var realContents := s.disk.contents[req.addr .. req.addr as int + req.len as int];
+
+    //assert ValidLocation(loc);
+
+    BCS.ReadReqIdWillReadValidData(Ik(k), I(k, s), id);
+
+    //assert loc in I(k, s).disk.blocks;
+    //assert loc in IContents(s.disk.contents);
+    //assert M.ValidLocationAndBytes(loc, realContents);
+
+    if ValidJournalLocation(loc) {
+      assert I(k, s').disk.respReads == I(k, s).disk.respReads[id := SD.RespRead(None)];
+    } else {
+      assert D.ChecksumsCheckOutForSlice(realContents, fakeContents, 0, |realContents|);
+      M.reveal_ValidCheckedBytes();
+      assert D.ChecksumChecksOut(realContents);
+      assert realContents[0..|realContents|] == realContents;
+      assert fakeContents[0..|fakeContents|] == fakeContents;
+      //assert !D.ChecksumChecksOut(fakeContents);
+      //assert !M.ValidBytes(fakeContents);
+      //assert !M.ValidLocationAndBytes(loc, fakeContents);
+      //assert I(k, s').disk.respReads == I(k, s).disk.respReads[id := SD.RespRead(None)];
+    }
 
     /*var req := s.disk.reqReads[id];
     var realContents := s.disk.contents[req.addr .. req.addr as int + req.len as int];
@@ -236,17 +262,16 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
 
   lemma SplicePreserves(bytes: seq<byte>, loc: Location, ins: seq<byte>, loc': Location)
   requires loc.len as int == |ins|
-  requires !LBAType.overlap(loc, loc')
+  requires !DiskLayout.overlap(loc, loc')
   requires loc.addr as int + loc.len as int <= |bytes|
   requires loc'.addr as int + loc'.len as int <= |bytes|
-  requires LBAType.ValidLocation(loc)
-  requires LBAType.ValidLocation(loc')
+  requires DiskLayout.ValidLocation(loc)
+  requires DiskLayout.ValidLocation(loc')
   ensures |D.splice(bytes, loc.addr as int, ins)| == |bytes|
   ensures bytes[loc'.addr .. loc'.addr as int + loc'.len as int]
       == D.splice(bytes, loc.addr as int, ins)[loc'.addr .. loc'.addr as int + loc'.len as int]
   {
     D.reveal_splice();
-    LBAType.reveal_ValidAddr();
     if (loc.addr as int + loc.len as int <= loc'.addr as int) {
       assert bytes[loc'.addr .. loc'.addr as int + loc'.len as int]
           == D.splice(bytes, loc.addr as int, ins)[loc'.addr .. loc'.addr as int + loc'.len as int];
@@ -285,23 +310,12 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
 
     D.reveal_splice();
 
-    forall loc:Location | loc in b1 && !LBAType.overlap(loc, req.loc)
+    forall loc:Location | loc in b1 && !DiskLayout.overlap(loc, req.loc)
     ensures loc in b2
     ensures b1[loc] == b2[loc]
     {
-      SplicePreserves(s.disk.contents, LBAType.Location(req1.addr, |req1.bytes| as uint64), req1.bytes, loc);
+      SplicePreserves(s.disk.contents, DiskLayout.Location(req1.addr, |req1.bytes| as uint64), req1.bytes, loc);
     }
-  }
-
-  lemma overlapImpliesEq(loc: Location, loc': Location)
-  requires D.overlap(loc.addr as int, loc.len as int, loc'.addr as int, loc'.len as int)
-  requires LBAType.ValidLocation(loc)
-  requires LBAType.ValidLocation(loc')
-  ensures loc.addr == loc'.addr
-  {
-    var i := LBAType.ValidAddrDivisor(loc.addr);
-    var j := LBAType.ValidAddrDivisor(loc'.addr);
-    assert i == j;
   }
 
   lemma HavocConflictingWriteReadStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
@@ -309,11 +323,6 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   requires D.HavocConflictingWriteRead(k.disk, s.disk, s'.disk, id, id')
   ensures false
   {
-    overlapImpliesEq(
-        LBAType.Location(s.disk.reqWrites[id].addr, |s.disk.reqWrites[id].bytes| as uint64),
-        LBAType.Location(s.disk.reqReads[id'].addr, s.disk.reqReads[id'].len));
-    assert IReqWrites(s.disk.reqWrites)[id].loc.addr
-        == IReqReads(s.disk.reqReads)[id'].loc.addr;
   }
 
   lemma HavocConflictingWritesStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
@@ -321,11 +330,6 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   requires D.HavocConflictingWrites(k.disk, s.disk, s'.disk, id, id')
   ensures false
   {
-    overlapImpliesEq(
-        LBAType.Location(s.disk.reqWrites[id].addr, |s.disk.reqWrites[id].bytes| as uint64),
-        LBAType.Location(s.disk.reqWrites[id'].addr, |s.disk.reqWrites[id'].bytes| as uint64));
-    assert IReqWrites(s.disk.reqWrites)[id].loc.addr
-        == IReqWrites(s.disk.reqWrites)[id'].loc.addr;
   }
 
   lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}

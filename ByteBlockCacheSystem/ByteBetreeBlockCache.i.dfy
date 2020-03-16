@@ -25,14 +25,15 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
 
   import SD = AsyncSectorDisk
   import opened DiskLayout
+  import opened JournalRanges`Internal
+  import opened SectorType
 
   type Constants = BBC.Constants
   type Variables = BBC.Variables
 
   function BlockSize() : int { 8 * 1024 * 1024 }
 
-  function {:opaque} Parse(sector: seq<byte>) : Option<BBC.Sector>
-  requires |sector| <= BlockSize() - 32
+  function {:opaque} Parse(sector: seq<byte>) : Option<Sector>
   {
     Marshalling.parseSector(sector)
   }
@@ -55,10 +56,10 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   // There's some complexity here because we have to deal with
   // journal blocks.
 
-  function {:opaque} JournalRangeOfByteSeq(s: seq<byte>): JournalRange
+  function {:opaque} JournalRangeOfByteSeq(s: seq<byte>): Option<JournalRange>
   {
     if s == [] then
-      []
+      Some([])
     else if |s| >= 4096 && D.ChecksumChecksOut(s[0..4096]) then (
       var rest := JournalRangeOfByteSeq(s[4096..]);
       if rest.Some? then (
@@ -84,23 +85,23 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     && (ValidJournalLocation(loc) ==> (
       ValidJournalBytes(bytes)
     ))
-    && (ValidJournalLocation(loc) ==> (
+    && (!ValidJournalLocation(loc) ==> (
       ValidBytes(bytes)
     ))
   }
 
-  function {:opaque} IBytes(loc: Location, bytes: seq<byte>) : BBC.Sector
+  function {:opaque} IBytes(loc: Location, bytes: seq<byte>) : Sector
   requires ValidLocationAndBytes(loc, bytes)
   {
     if ValidJournalLocation(loc) then (
-      JournalRangeOfByteSeq(bytes).value
+      SectorJournal(JournalRangeOfByteSeq(bytes).value)
     ) else (
       reveal_ValidCheckedBytes();
-      Parse(sector[32..]).value
+      Parse(bytes[32..]).value
     )
   }
 
-  function IBytesOpt(loc: Location, bytes: seq<byte>) : Option<BBC.Sector>
+  function IBytesOpt(loc: Location, bytes: seq<byte>) : Option<Sector>
   {
     if ValidLocationAndBytes(loc, bytes) then
       Some(IBytes(loc, bytes))
@@ -115,6 +116,7 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
 
   predicate ValidReqWrite(reqWrite: D.ReqWrite)
   {
+    && |reqWrite.bytes| < 0x1_0000_0000_0000_0000
     && ValidLocationAndBytes(
         Location(reqWrite.addr, |reqWrite.bytes| as uint64),
         reqWrite.bytes
@@ -139,22 +141,26 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   {
     SD.ReqRead(Location(reqRead.addr, reqRead.len))
   }
-  function IReqWrite(reqWrite: D.ReqWrite) : SD.ReqWrite<BBC.Sector>
+
+  function IReqWrite(reqWrite: D.ReqWrite) : SD.ReqWrite
   requires ValidReqWrite(reqWrite)
   {
-    SD.ReqWrite(Location(reqWrite.addr, |reqWrite.bytes| as uint64), IBytes(reqWrite.bytes))
+    var loc := Location(reqWrite.addr, |reqWrite.bytes| as uint64);
+    SD.ReqWrite(loc, IBytes(loc, reqWrite.bytes))
   }
-  function IRespRead(respRead: D.RespRead) : SD.RespRead<BBC.Sector>
+
+  function IRespRead(respRead: D.RespRead) : SD.RespRead
   {
-    SD.RespRead(IBytesOpt(respRead.bytes))
+    SD.RespRead(IBytesOpt(DiskLayout.Location(respRead.addr, respRead.len), respRead.bytes))
   }
+
   function IRespWrite(respWrite: D.RespWrite) : SD.RespWrite
   requires ValidRespWrite(respWrite)
   {
     SD.RespWrite
   }
 
-  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp<BBC.Sector>
+  function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp
   requires ValidDiskOp(diskOp)
   {
     match diskOp {

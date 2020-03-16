@@ -57,7 +57,8 @@ module BlockCacheSystem {
 
   predicate DiskHasSuperblock(blocks: imap<Location, Sector>)
   {
-    DiskHasSuperblock1(blocks) || DiskHasSuperblock2(blocks)
+    && DiskHasSuperblock1(blocks)
+    && DiskHasSuperblock2(blocks)
   }
 
   function SuperblockOfDisk(blocks: imap<Location, Sector>) : (su : Superblock)
@@ -3965,5 +3966,69 @@ module BlockCacheSystem {
       ==> s.machine.Ready?
       ==> s.machine.superblockWrite != Some(dop.id)
   {
+  }
+
+  // Used by ByteBetreeBlockCacheSystem.i.dfy
+  lemma ReadReqIdWillReadValidData(k: Constants, s: Variables, id: D.ReqId)
+  requires Inv(k, s)
+  requires id in s.disk.reqReads
+  ensures s.disk.reqReads[id].loc in s.disk.blocks
+  ensures ValidSuperblock1Location(s.disk.reqReads[id].loc) ==>
+      s.disk.blocks[s.disk.reqReads[id].loc].SectorSuperblock?
+  ensures ValidSuperblock2Location(s.disk.reqReads[id].loc) ==>
+      s.disk.blocks[s.disk.reqReads[id].loc].SectorSuperblock?
+  ensures ValidJournalLocation(s.disk.reqReads[id].loc) ==>
+      s.disk.blocks[s.disk.reqReads[id].loc].SectorJournal?
+  ensures ValidIndirectionTableLocation(s.disk.reqReads[id].loc) ==>
+      s.disk.blocks[s.disk.reqReads[id].loc].SectorIndirectionTable?
+  ensures ValidNodeLocation(s.disk.reqReads[id].loc) ==>
+      s.disk.blocks[s.disk.reqReads[id].loc].SectorNode?
+  {
+    var loc := s.disk.reqReads[id].loc;
+
+    assert RecordedReadRequest(k, s, id);
+    if ValidSuperblock1Location(loc) {
+      assert s.disk.reqReads[id].loc in s.disk.blocks;
+      assert s.disk.blocks[s.disk.reqReads[id].loc].SectorSuperblock?;
+    }
+    if ValidSuperblock2Location(loc) {
+      assert s.disk.reqReads[id].loc in s.disk.blocks;
+      assert s.disk.blocks[s.disk.reqReads[id].loc].SectorSuperblock?;
+    }
+    if ValidIndirectionTableLocation(loc) {
+      assert s.disk.reqReads[id].loc in s.disk.blocks;
+    }
+    if ValidJournalLocation(loc) {
+      if s.machine.Ready? {
+        assert ValidNodeLocation(loc);
+        assert false;
+      }
+      if s.machine.LoadingSuperblock? {
+        assert false;
+      }
+      assert s.machine.LoadingOther?;
+      assert s.machine.superblock == SuperblockOfDisk(s.disk.blocks);
+      if M.JournalBackLocationOfSuperblock(s.machine.superblock).Some? {
+        Disk_Journal_Read2(s.disk,
+            s.machine.superblock.journalStart as int,
+            s.machine.superblock.journalLen as int);
+      } else if M.JournalFrontLocationOfSuperblock(s.machine.superblock).Some? {
+        Disk_Journal_Read1(s.disk,
+            s.machine.superblock.journalStart as int,
+            s.machine.superblock.journalLen as int);
+      }
+
+      assert s.disk.reqReads[id].loc in s.disk.blocks;
+    }
+    if ValidNodeLocation(loc) {
+      /*assert id in s.machine.outstandingBlockReads;
+      var ref := s.machine.outstandingBlockReads[id].ref;
+      assert CorrectInflightBlockRead(k, s, id, ref);
+      assert s.disk.reqReads[id].loc
+          == s.machine.ephemeralIndirectionTable.locs[ref];
+      assert s.disk.reqReads[id].loc in s.disk.blocks;
+      assert WFIndirectionTableRefWrtDiskQueue(s.machine.ephemeralIndirectionTable, s.disk, ref);
+      assert QueueLookupIdByLocation(s.disk.reqWrites, s.machine.ephemeralIndirectionTable.locs[ref]).None?;*/
+    }
   }
 }
