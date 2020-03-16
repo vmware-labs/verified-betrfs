@@ -560,6 +560,38 @@ module PackedStringArray {
     FlattenLengthAdditive(FlattenShape(strs1), FlattenShape(strs2));
   }
 
+  lemma psaCanAppendSubSeq(psa: Psa, strs: seq<seq<byte>>, from: nat, to: nat)
+    requires WF(psa)
+    requires psaCanAppendSeq(psa, strs)
+    requires from <= to <= |strs|
+    ensures psaCanAppendSeq(psa, strs[from..to])
+  {
+    var strssh := FlattenShape(strs);
+    var strsl := FlattenLength(strssh);
+    
+    var a := strs[..from];
+    var ash := FlattenShape(a);
+    var al := FlattenLength(ash);
+
+    var b := strs[from..to];
+    var bsh := FlattenShape(b);
+    var bl := FlattenLength(bsh);
+    
+    var c := strs[to..];
+    var csh := FlattenShape(c);
+    var cl := FlattenLength(csh);
+
+    assert strs == a + b + c;
+    
+    FlattenShapeAdditive(a + b, c);
+    FlattenShapeAdditive(a, b);
+    //assert strssh == ash + bsh + csh;
+
+    FlattenLengthAdditive(ash + bsh, csh);
+    FlattenLengthAdditive(ash, bsh);
+    //assert strsl == al + bl + cl;
+  }
+  
   lemma psaAppendSeqAdditive(psa: Psa, strs1: seq<seq<byte>>, strs2: seq<seq<byte>>)
     requires WF(psa)
     requires psaCanAppendSeq(psa, strs1 + strs2) ||
