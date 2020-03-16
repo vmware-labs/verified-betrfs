@@ -38,7 +38,8 @@ module MarshallingImpl {
   import SeqComparison
   import NativeBenchmarking
   import opened NativePackedInts
-
+  import PSA = PackedStringArray
+  
   import BT = PivotBetreeSpec`Internal
 
   import ValueType`Internal
@@ -324,6 +325,13 @@ module MarshallingImpl {
     v := VKeyArray(keys);
   }
 
+  method packeStringArrayToVal(psa: PSA.Psa)
+    returns (v: V)
+    requires PSA.WF(psa)
+  {
+    v := VTuple([VUint32Array(psa.offsets), VByteArray(psa.data)]);
+  }
+  
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
   requires Pivots.WFPivots(pivots)
   requires |pivots| > 0
