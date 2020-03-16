@@ -88,7 +88,8 @@ module MutableMap {
     requires 0 < this.Storage.Length < 0x1_0000_0000_0000_0000
     ensures result == MutableMapModel.Uint64SlotForKey(ModelI(this), key)
     {
-      result := key % (Storage.Length as uint64);
+      var h := MutableMapModel.hash64(key);
+      result := h % (Storage.Length as uint64);
     }
 
     method Uint64SlotSuccessor(slot: uint64) returns (nextSlot: uint64)

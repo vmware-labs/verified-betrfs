@@ -40,7 +40,7 @@ module DeallocModel {
       lemmaIndirectionTableLocIndexValid(k, s, ref);
 
       var blockAllocator' := if oldLoc.Some?
-        then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+        then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
         else s.blockAllocator;
 
       var s' := s
@@ -85,12 +85,12 @@ module DeallocModel {
     var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
 
     var blockAllocator' := if oldLoc.Some?
-      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / BlockSize())
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
       else s.blockAllocator;
 
     freeIndirectionTableLocCorrect(k, s, s', ref,
       if oldLoc.Some?
-      then Some(oldLoc.value.addr as int / BlockSize())
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
       else None);
     reveal_ConsistentBitmap();
 

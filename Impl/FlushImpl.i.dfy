@@ -63,6 +63,8 @@ module FlushImpl {
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
+    assert Some(parent) == s.cache.ptr(parentref);
+
     BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
     BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
 
@@ -79,6 +81,8 @@ module FlushImpl {
     var newparentBucket, newbuckets := KVListPartialFlush.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
+    assert Some(parent) == s.cache.ptr(parentref);
+
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
         Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
 
@@ -89,12 +93,16 @@ module FlushImpl {
       return;
     }
 
+    assert Some(parent) == s.cache.ptr(parentref);
+
     assert parent.I().children == s.I().cache[parentref].children;
 
     var newparent_children := SeqIndexUpdate(
       parent.children.value, slot, newchildref.value);
 
     writeBookkeeping(k, s, parentref, Some(newparent_children));
+
+    assert Some(parent) == s.cache.ptr(parentref);
 
     assert parentref != newchildref.value;
 
@@ -103,12 +111,14 @@ module FlushImpl {
 
     s.cache.Insert(newchildref.value, newchild);
 
+    assert Some(parent) == s.cache.ptr(parentref);
+
     ghost var c2 := s.cache.I();
     assert c2 == c1[newchildref.value := newchild.I()];
     //assert newchild.I() == old(child.I()).(buckets := MutBucket.ISeq(newbuckets));
     ghost var newParentBucketI := newparentBucket.Bucket;
 
-    s.cache.UpdateNodeSlot(parentref, slot, newparentBucket, newchildref.value);
+    s.cache.UpdateNodeSlot(parentref, parent, slot, newparentBucket, newchildref.value);
 
     ghost var c3 := s.cache.I();
 

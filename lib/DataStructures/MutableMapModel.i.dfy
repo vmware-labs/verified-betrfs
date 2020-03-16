@@ -4,6 +4,7 @@ include "../Base/sequences.i.dfy"
 include "../Base/Sets.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/SetBijectivity.i.dfy"
+include "../Base/Arithmetic.s.dfy"
 //
 // Immutable (functional) model to support MutableMapImpl.  API provides an
 // iterator interface with a deterministic order for parsing/marshaling.
@@ -23,6 +24,42 @@ module MutableMapModel {
   import opened Sets
   import opened Maps
   import opened SetBijectivity
+  import opened NativeArithmetic
+
+  function method {:opaque} lshift(a: uint64, b: uint32) : uint64
+  requires 0 <= b < 64
+  {
+    ((a as bv64) << b) as uint64
+  }
+
+  function method {:opaque} rshift(a: uint64, b: uint32) : uint64
+  requires 0 <= b < 64
+  {
+    ((a as bv64) >> b) as uint64
+  }
+
+  function method {:opaque} bitnot(a: uint64) : uint64
+  {
+    ((a as bv64) ^ 0xffff_ffff_ffff_ffff) as uint64
+  }
+
+  function method {:opaque} bitxor(a: uint64, b: uint64) : uint64
+  {
+    ((a as bv64) ^ (b as bv64)) as uint64
+  }
+
+  function method {:opaque} hash64(k: uint64): uint64
+  {
+    var k0 := u64add(bitnot(k), lshift(k, 21));
+    var k1 := bitxor(k0, rshift(k0, 24));
+    var k2 := u64add(u64add(k1, lshift(k1, 3)), lshift(k1, 8));
+    var k3 := bitxor(k2, rshift(k2, 14));
+    var k4 := u64add(u64add(k3, lshift(k3, 2)), lshift(k3, 4));
+    var k5 := bitxor(k4, rshift(k4, 28));
+    var k6 := u64add(k5, lshift(k5, 31));
+
+    k6
+  }
 
   datatype Slot = Slot(ghost slot: nat)
 
@@ -47,7 +84,8 @@ module MutableMapModel {
   requires 0 < elementsLength
   ensures ValidSlot(elementsLength, result)
   {
-    Slot((key as nat) % elementsLength)
+    var h := hash64(key);
+    Slot((h as nat) % elementsLength)
   }
 
   function Uint64SlotForKey<V>(self: FixedSizeLinearHashMap<V>, key: uint64): (result: uint64)
@@ -55,7 +93,8 @@ module MutableMapModel {
   ensures ValidSlot(|self.storage|, Slot(result as nat))
   ensures Slot(result as nat) == SlotForKey(|self.storage|, key)
   {
-    key % (|self.storage| as uint64)
+    var h := hash64(key);
+    h % (|self.storage| as uint64)
   }
 
   function SlotSuccessor(elementsLength: nat, slot: Slot): (nextSlot: Slot)

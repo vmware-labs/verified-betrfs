@@ -8,7 +8,7 @@ include "MkfsModel.i.dfy"
 // provided in Main.s.dfy.
 //
 
-module {:extern} MkfsImpl {
+module MkfsImpl {
   import MarshallingImpl
   import IMM = MarshallingModel
   import opened Options
@@ -26,16 +26,15 @@ module {:extern} MkfsImpl {
   import BT = PivotBetreeSpec
   import BC = BetreeGraphBlockCache
   import ReferenceType`Internal
-  import LBAType
+  import opened LBAType
+  import opened Bounds
   import ValueType`Internal
   import SI = StateImpl
   import D = AsyncDisk
 
-  type LBA = LBAType.LBA
-
   import ADM = ByteBetreeBlockCacheSystem
 
-  method Mkfs() returns (diskContents :  map<LBA, seq<byte>>)
+  method Mkfs() returns (diskContents :  map<Addr, seq<byte>>)
   ensures MkfsModel.InitDiskContents(diskContents)
   ensures ADM.BlocksDontIntersect(diskContents)
   {
@@ -52,16 +51,17 @@ module {:extern} MkfsImpl {
     var b1_array := MarshallingImpl.MarshallCheckedSector(SI.SectorBlock(node));
     var b1 := b1_array[..];
 
-    var loc := LBAType.Location(LBAType.BlockSize(), |b1| as uint64);
+    var addr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
+    var loc := Location(addr, |b1| as uint64);
     var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(loc);
 
     assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == BC.IndirectionTable(
-      map[0 := LBAType.Location(LBAType.BlockSize(), |b1| as uint64)],
+      map[0 := LBAType.Location(addr, |b1| as uint64)],
       map[0 := []]
     );
 
-    LBAType.ValidAddrMul(1);
-    assert LBAType.ValidLocation(LBAType.Location(LBAType.BlockSize(), |b1| as uint64));
+    LBAType.ValidAddrMul(MinNodeBlockIndexUint64());
+    assert ValidLocation(Location(addr, |b1| as uint64));
     assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
     assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
     var b0_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
@@ -74,7 +74,7 @@ module {:extern} MkfsImpl {
       // Map ref 0 to lba 1
       0 := b0,
       // Put the root at lba 1
-      LBAType.BlockSize() := b1
+      addr := b1
     ];
   }
 }

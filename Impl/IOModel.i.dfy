@@ -20,7 +20,7 @@ module IOModel {
   import opened BucketWeights
   import IMM = MarshallingModel
   import Marshalling = Marshalling
-  import LBAType
+  import opened LBAType
   import BucketsLib
   import LruModel
   import M = ByteBetreeBlockCache
@@ -45,7 +45,7 @@ module IOModel {
 
   // models of IO-related methods
 
-  predicate LocAvailable(s: Variables, loc: BC.Location, len: uint64)
+  predicate LocAvailable(s: Variables, loc: Location, len: uint64)
   requires WFVars(s)
   {
     && s.Ready?
@@ -55,21 +55,22 @@ module IOModel {
   }
 
   function {:opaque} getFreeLoc(s: Variables, len: uint64)
-  : (res : Option<BC.Location>)
+  : (res : Option<Location>)
   requires s.Ready?
   requires WFVars(s)
-  requires len <= LBAType.BlockSize()
-  ensures res.Some? ==> 0 <= res.value.addr as int / BlockSize() < NumBlocks()
+  requires len <= NodeBlockSizeUint64()
+  ensures res.Some? ==> 0 <= res.value.addr as int / NodeBlockSize() < NumBlocks()
   {
     var i := BlockAllocatorModel.Alloc(s.blockAllocator);
     if i.Some? then
-      Some(LBAType.Location((i.value * BlockSize()) as uint64, len))
+      Some(LBAType.Location((i.value * NodeBlockSize()) as uint64, len))
     else
       None
   }
 
   lemma getFreeLocCorrect(s: Variables, len: uint64)
   requires getFreeLoc.requires(s, len);
+  requires len <= NodeBlockSizeUint64()
   ensures var loc := getFreeLoc(s, len);
     && (loc.Some? ==> LocAvailable(s, loc.value, len))
   {
@@ -104,7 +105,7 @@ module IOModel {
     )
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= BlockSize() as int
+      && |bytes| <= IndirectionTableBlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && WFSector(sector)
@@ -147,7 +148,7 @@ module IOModel {
   requires s.Ready?
   requires WFVars(s)
   ensures FindLocationAndRequestWrite(io, s, sector, id, loc, io') ==>
-      loc.Some? ==> 0 <= loc.value.addr as int / BlockSize() < NumBlocks()
+      loc.Some? ==> 0 <= loc.value.addr as int / NodeBlockSize() < NumBlocks()
   {
     && var dop := diskOp(io');
     && (dop.NoDiskOp? || dop.ReqWriteOp?)
@@ -158,7 +159,7 @@ module IOModel {
     ))
     && (dop.ReqWriteOp? ==> (
       var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= BlockSize() as int
+      && |bytes| <= NodeBlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && WFSector(sector)
@@ -184,7 +185,7 @@ module IOModel {
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> LBAType.ValidLocation(loc.value)
   ensures id.Some? ==> BC.ValidAllocation(IVars(s), loc.value)
-  ensures id.Some? ==> loc.value.addr != BC.IndirectionTableLBA()
+  ensures id.Some? ==> loc.value.addr != IndirectionTableAddr()
   ensures id.Some? ==> M.IDiskOp(diskOp(io')) == SD.ReqWriteOp(id.value, SD.ReqWrite(loc.value, ISector(sector)))
   ensures id.None? ==> io' == io
   {
@@ -224,10 +225,10 @@ module IOModel {
   }
 
   lemma LemmaIndirectionTableLBAValid()
-  ensures M.ValidAddr(BC.IndirectionTableLBA())
+  ensures ValidAddr(IndirectionTableAddr())
   {
     LBAType.reveal_ValidAddr();
-    assert BC.IndirectionTableLBA() as int == 0 * M.BlockSize();
+    assert IndirectionTableAddr() as int == 0 * NodeBlockSize();
   }
 
   function {:opaque} PageInIndirectionTableReq(k: Constants, s: Variables, io: IO)
@@ -237,7 +238,7 @@ module IOModel {
   {
     if (s.outstandingIndirectionTableRead.None?) then (
       LemmaIndirectionTableLBAValid();
-      var (id, io') := RequestRead(io, BC.IndirectionTableLocation());
+      var (id, io') := RequestRead(io, IndirectionTableLocation());
       var s' := Unready(Some(id), s.syncReqs);
       (s', io')
     ) else (
@@ -329,7 +330,7 @@ module IOModel {
   {
     var id := io.id;
     var bytes := io.respRead.bytes;
-    if |bytes| <= M.BlockSize() then (
+    if |bytes| <= IndirectionTableBlockSize() then (
       var sector := IMM.parseCheckedSector(bytes);
       (id, sector)
     ) else (
@@ -541,12 +542,12 @@ module IOModel {
   requires Inv(k, s)
   requires s.Ready?
   requires id in s.outstandingBlockWrites
-  ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / BlockSize() < NumBlocks()
+  ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
   {
     reveal_ConsistentBitmap();
-    var i := s.outstandingBlockWrites[id].loc.addr as int / BlockSize();
+    var i := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
     LBAType.reveal_ValidAddr();
-    assert i * BlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
+    assert i * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
     assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
   }
 
@@ -699,7 +700,7 @@ module IOModel {
     ) else if (s.Ready? && id in s.outstandingBlockWrites) then (
       lemmaOutstandingLocIndexValid(k, s, id);
       s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
-       .(blockAllocator := BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / BlockSize()))
+       .(blockAllocator := BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize()))
     ) else (
       s
     )
@@ -721,11 +722,11 @@ module IOModel {
       assert WFVars(s');
       assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
     } else if (s.Ready? && id in s.outstandingBlockWrites) {
-      var locIdx := s.outstandingBlockWrites[id].loc.addr as int / BlockSize();
+      var locIdx := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
       lemmaOutstandingLocIndexValid(k, s, id);
 
       LBAType.reveal_ValidAddr();
-      assert locIdx * BlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
+      assert locIdx * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
 
       BitmapModel.reveal_BitUnset();
       BitmapModel.reveal_IsSet();
@@ -763,11 +764,11 @@ module IOModel {
           assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
           assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
         } else {
-          var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * BlockSize() as int;
+          var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * NodeBlockSize() as int;
           assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
           /*assert s.outstandingBlockWrites[id1].loc.addr as int
               == s'.outstandingBlockWrites[id1].loc.addr as int
-              == i * BlockSize() as int;
+              == i * NodeBlockSize() as int;
           assert id == id1;
           assert id !in s'.outstandingBlockWrites;
           assert false;*/

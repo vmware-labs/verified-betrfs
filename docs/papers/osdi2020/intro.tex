@@ -1,0 +1,65 @@
+\begin{abstract}
+For verification to make the leap from the laboratory to
+practical use,
+it must become performant, maintainable, and accessible.
+
+
+\end{abstract}
+
+\section)Introduction}
+Systems researchers have begun to demonstrate that substantial
+systems software components can be constructed using verification
+as the primary means of establishing functional correctness.
+Compared to ordinary test-driven software development,
+verfication promises effectily exhaustive testing.
+
+What stands in the way of verification replacing testing?
+Verification must produce software that offers competitive \textit{performance}.
+The languages and techniques must be \textit{accessible}
+to mainstream developers.
+The burden of creating verified software and its associated
+proof-guiding annotations must be \textit{affordable}.
+The proof artifact must be incrementally \textit{maintainable} to evolve
+as the specification and implementation code evolve.
+
+We present {\veribetrkv}, a high-performance key-value store
+with the explicit goal of developing a maintainable code artifact
+with a verification methodology.
+{\veribetrkv} implements the persistent key-value storage substrate of
+BetrFS\cite{}.
+We build {\veribetrkv} as the first step in building a verified BetrFS,
+with the explicit goal of making an adoptoble filesystem:
+one \texit{faster} than ext4, free of corruption and crash-fault bugs,
+and maintainable.
+On realistic workloads it outperforms RocksDB over disk-like devices
+and is competitive within 30\% even over emerging nonvolatile storage.
+
+The methodology, called {\ironstar},
+builds on and improves the accessibility and automation of
+the tools and techniques used in prior projects.
+
+The executable code in {\ironstar} is specified as imperative, heap-mutating
+code, giving the developer a high degree of control over memory behavior
+and hence system perforamnce.
+{\ironstar} prescribes a refinement-based plan for organizing proof code
+into localized modules that enhance maintainability.
+
+To be affordable, a verification methodology must heavily exploit automation.
+{\ironstar} improves on its methodological predecessor by offering a path
+exploiting maximal automation while avoiding the timeouts that have plagued
+prior highly-automated approaches.
+
+The evaluation demonstrates that {\veribetrkv} performs comparably to
+state-of-the-art unverified key-value storage, and dramatically outperforms
+prior verified systems when considering realistic workloads that stress
+the filesystems' CPU activity.
+
+We show that changes to {\veribetrkv} implementation create isolated
+changes to its proof obligations, showing that {\ironstar} code is
+refactorable and maintainable.
+
+{\veribetrkv} demonstrates these attributes while maintaining an affordable
+burden as compared with prior approaches, as measured by the proof:code
+ratio.
+
+\endsection{Introduction}
