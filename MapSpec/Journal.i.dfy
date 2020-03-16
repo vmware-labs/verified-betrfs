@@ -1,6 +1,7 @@
 include "../lib/Base/KeyType.s.dfy"
 include "../lib/Base/Message.i.dfy"
 include "../lib/Base/sequences.i.dfy"
+include "UI.s.dfy"
 
 module Journal {
   import opened KeyType 

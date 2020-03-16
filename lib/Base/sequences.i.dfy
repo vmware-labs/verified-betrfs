@@ -179,6 +179,15 @@ module Sequences {
     a + [b] + c
   }
 
+  function {:opaque} concatSeq<A>(a: seq<seq<A>>) : seq<A>
+  {
+    if |a| == 0 then [] else concatSeq(DropLast(a)) + Last(a)
+  }
+
+  lemma lemma_concatSeqLen_ge_elemLen<A>(a: seq<seq<A>>, i: int)
+  requires 0 <= i < |a|
+  ensures |concatSeq(a)| >= |a[i]|
+
   predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
     && |a| <= |b|
     && a == b[..|a|]

@@ -3107,7 +3107,7 @@ module BlockCacheSystem {
     ensures WFEphemeralJournal(s')
     ensures WFGammaJournal(s')
     ensures PersistentJournal(s') == PersistentJournal(s)
-    ensures FrozenJournal(s') == []
+    ensures FrozenJournal(s') == EphemeralJournal(s)
     ensures EphemeralJournal(s') == EphemeralJournal(s)
     ensures GammaJournal(s')
         == GammaJournal(s) + DeltaJournal(s)

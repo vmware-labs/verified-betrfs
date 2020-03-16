@@ -18,6 +18,7 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
   import opened Sequences
 
   import opened PivotBetreeSpec`Spec
+  import opened Journal
   import BC = BlockCache
   import BCS = BlockCacheSystem
   import BT = PivotBetree
@@ -79,17 +80,24 @@ module BetreeBlockCacheSystem refines AsyncSectorDiskModel {
     BCS.InitGraphs(k, s);
   }
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, betreeStep: BetreeStep, js: BC.JournalStep)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, betreeStep: BetreeStep, js: M.JournalUIOpStep)
     requires Inv(k, s)
     requires M.BetreeMove(k.machine, s.machine, s'.machine, uiop, dop, betreeStep, js)
     requires D.Next(k.disk, s.disk, s'.disk, dop)
     ensures Inv(k, s')
   {
-    Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep), js)));
+    var j := if js.JSNew? then (
+        BC.JSNew(JournalEntriesForUIOp(uiop))
+      ) else (
+        BC.JSReplay(JournalEntriesForUIOp(js.replayedUIOp))
+      );
+
+    Ref.StepGraphs(k, s, s', BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep), j)));
     Ref.RefinesReads(k, s, BetreeStepReads(betreeStep));
     //assert BT.Betree(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
-    assert BT.NextStep(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, BT.BetreeStep(betreeStep));
-    BT.NextPreservesInv(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop);
+    var ruiop := if js.JSNew? then uiop else js.replayedUIOp;
+    assert BT.NextStep(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), ruiop, BT.BetreeStep(betreeStep));
+    BT.NextPreservesInv(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), ruiop);
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: M.DiskOp, step: BC.Step)

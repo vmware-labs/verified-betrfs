@@ -36,20 +36,31 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
     && (s.Ready? ==> (forall ref | ref in s.cache :: PivotBetreeSpec.WFNode(s.cache[ref])))
   }
 
+  datatype JournalUIOpStep =
+    | JSNew
+    | JSReplay(replayedUIOp: UIOp)
+
   datatype Step =
-    | BetreeMoveStep(betreeStep: BetreeStep, js: BC.JournalStep)
+    | BetreeMoveStep(betreeStep: BetreeStep, js: JournalUIOpStep)
     | BlockCacheMoveStep(blockCacheStep: BC.Step)
 
-  predicate BetreeMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep, js: BC.JournalStep)
+  predicate BetreeMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep, js: JournalUIOpStep)
   {
     && dop.NoDiskOp?
     && s.Ready?
     && ValidBetreeStep(betreeStep)
     && BC.Reads(k, s, BetreeStepReads(betreeStep))
-    && BC.Transaction(k, s, s', dop, BetreeStepOps(betreeStep), js)
-    && BetreeStepUI(betreeStep, uiop)
-    && (js.JSNew? ==> js.entries == JournalEntriesForUIOp(uiop))
-    && (js.JSReplay? ==> uiop.NoOp?)
+    && (js.JSNew? ==>
+      && BC.Transaction(k, s, s', dop, BetreeStepOps(betreeStep),
+          BC.JSNew(JournalEntriesForUIOp(uiop)))
+      && BetreeStepUI(betreeStep, uiop)
+    )
+    && (js.JSReplay? ==>
+      && BC.Transaction(k, s, s', dop, BetreeStepOps(betreeStep),
+          BC.JSReplay(JournalEntriesForUIOp(js.replayedUIOp)))
+      && BetreeStepUI(betreeStep, js.replayedUIOp)
+      && uiop.NoOp?
+    )
   }
 
   predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, step: BC.Step) {
@@ -82,13 +93,18 @@ module BetreeBlockCache refines AsyncSectorDiskMachine {
     BC.InitImpliesInv(k, s);
   }
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep, js: BC.JournalStep)
+  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp, betreeStep: BetreeStep, js: JournalUIOpStep)
   requires Inv(k, s)
   requires BetreeMove(k, s, s', uiop, dop, betreeStep, js)
   ensures Inv(k, s')
   {
     var ops := BetreeStepOps(betreeStep);
-    BC.TransactionStepPreservesInv(k, s, s', D.NoDiskOp, ops, js);
+    var j := if js.JSNew? then (
+        BC.JSNew(JournalEntriesForUIOp(uiop))
+      ) else (
+        BC.JSReplay(JournalEntriesForUIOp(js.replayedUIOp))
+      );
+    BC.TransactionStepPreservesInv(k, s, s', D.NoDiskOp, ops, j);
 
     forall i | 0 <= i < |BetreeStepReads(betreeStep)|
     ensures WFNode(BetreeStepReads(betreeStep)[i].node)

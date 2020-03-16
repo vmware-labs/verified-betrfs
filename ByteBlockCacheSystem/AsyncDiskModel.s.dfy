@@ -132,14 +132,10 @@ module AsyncDisk {
     && s[0..32] == Crypto.Crc32C(s[32..])
   }
 
-  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
+  predicate ChecksumsCheckOutForSlice(realContents: seq<byte>, fakeContents: seq<byte>, i: int, j: int)
+  requires |realContents| == |fakeContents|
+  requires 0 <= i <= j <= |realContents|
   {
-    && id in s.reqReads
-    && var req := s.reqReads[id];
-    && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
-    && var realContents := s.contents[req.addr .. req.addr as int + req.len as int];
-    && |fakeContents| == |realContents|
-
     // We make the assumption that the disk cannot fail from a checksum-correct state
     // to a different checksum-correct state. This is a reasonable assumption for many
     // probabilistic failure models of the disk.
@@ -148,7 +144,25 @@ module AsyncDisk {
     // because it would be reasonable for a disk to fail into a checksum-correct state
     // from a checksum-incorrect one.
 
-    && (ChecksumChecksOut(realContents) ==> !ChecksumChecksOut(fakeContents))
+    ChecksumChecksOut(realContents[i..j]) ==> !ChecksumChecksOut(fakeContents[i..j])
+  }
+
+  predicate AllChecksumsCheckOut(realContents: seq<byte>, fakeContents: seq<byte>)
+  requires |realContents| == |fakeContents|
+  {
+    forall i, j | 0 <= i <= j <= |realContents| ::
+      ChecksumsCheckOutForSlice(realContents, fakeContents, i, j)
+  }
+
+  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
+  {
+    && id in s.reqReads
+    && var req := s.reqReads[id];
+    && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
+    && var realContents := s.contents[req.addr .. req.addr as int + req.len as int];
+    && |fakeContents| == |realContents|
+
+    && AllChecksumsCheckOut(realContents, fakeContents)
 
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
               .(respReads := s.respReads[id := RespRead(fakeContents)])

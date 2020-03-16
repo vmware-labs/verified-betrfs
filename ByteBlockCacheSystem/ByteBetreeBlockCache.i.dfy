@@ -24,7 +24,7 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
   import Marshalling
 
   import SD = AsyncSectorDisk
-  import opened LBAType
+  import opened DiskLayout
 
   type Constants = BBC.Constants
   type Variables = BBC.Variables
@@ -52,31 +52,75 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     && ValidCheckedBytes(sector)
   }
 
-  function {:opaque} IBytes(sector: seq<byte>) : BBC.Sector
-  requires ValidBytes(sector)
+  // There's some complexity here because we have to deal with
+  // journal blocks.
+
+  function {:opaque} JournalRangeOfByteSeq(s: seq<byte>): JournalRange
   {
-    reveal_ValidCheckedBytes();
-    Parse(sector[32..]).value
+    if s == [] then
+      []
+    else if |s| >= 4096 && D.ChecksumChecksOut(s[0..4096]) then (
+      var rest := JournalRangeOfByteSeq(s[4096..]);
+      if rest.Some? then (
+        Some([s[32..4096]] + rest.value)
+      ) else (
+        None
+      )
+    )
+    else (
+      None
+    )
   }
 
-  function IBytesOpt(sector: seq<byte>) : Option<BBC.Sector>
+  predicate ValidJournalBytes(bytes: seq<byte>)
   {
-    if ValidBytes(sector) then
-      Some(IBytes(sector))
+    && JournalRangeOfByteSeq(bytes).Some?
+  }
+
+  predicate ValidLocationAndBytes(loc: Location, bytes: seq<byte>)
+  {
+    && loc.len as int == |bytes|
+    && ValidLocation(loc)
+    && (ValidJournalLocation(loc) ==> (
+      ValidJournalBytes(bytes)
+    ))
+    && (ValidJournalLocation(loc) ==> (
+      ValidBytes(bytes)
+    ))
+  }
+
+  function {:opaque} IBytes(loc: Location, bytes: seq<byte>) : BBC.Sector
+  requires ValidLocationAndBytes(loc, bytes)
+  {
+    if ValidJournalLocation(loc) then (
+      JournalRangeOfByteSeq(bytes).value
+    ) else (
+      reveal_ValidCheckedBytes();
+      Parse(sector[32..]).value
+    )
+  }
+
+  function IBytesOpt(loc: Location, bytes: seq<byte>) : Option<BBC.Sector>
+  {
+    if ValidLocationAndBytes(loc, bytes) then
+      Some(IBytes(loc, bytes))
     else
       None
   }
 
-  predicate ValidReqRead(reqRead: D.ReqRead) {
-    && ValidAddr(reqRead.addr)
+  predicate ValidReqRead(reqRead: D.ReqRead)
+  {
     && ValidLocation(Location(reqRead.addr, reqRead.len))
-    && reqRead.len as int <= BlockSize()
   }
-  predicate ValidReqWrite(reqWrite: D.ReqWrite) {
-    && ValidAddr(reqWrite.addr)
-    && ValidBytes(reqWrite.bytes)
-    && ValidLocation(Location(reqWrite.addr, |reqWrite.bytes| as uint64))
+
+  predicate ValidReqWrite(reqWrite: D.ReqWrite)
+  {
+    && ValidLocationAndBytes(
+        Location(reqWrite.addr, |reqWrite.bytes| as uint64),
+        reqWrite.bytes
+       )
   }
+
   predicate ValidRespRead(respRead: D.RespRead) { true }
   predicate ValidRespWrite(respWrite: D.RespWrite) { true }
   predicate ValidDiskOp(dop: D.DiskOp)

@@ -188,7 +188,7 @@ module BlockCacheSystem_Refines_TSJBlockInterface {
     && FrozenGraph(k, s') == EphemeralGraph(k, s)
     && EphemeralGraph(k, s') == EphemeralGraph(k, s)
     && BCS.PersistentJournal(s') == BCS.PersistentJournal(s)
-    && BCS.FrozenJournal(s') == []
+    && BCS.FrozenJournal(s') == BCS.EphemeralJournal(s)
     && BCS.EphemeralJournal(s') == BCS.EphemeralJournal(s)
     && BCS.GammaJournal(s') == BCS.GammaJournal(s) + BCS.DeltaJournal(s)
     && BCS.DeltaJournal(s') == []

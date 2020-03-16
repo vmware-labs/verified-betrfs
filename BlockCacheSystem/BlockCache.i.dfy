@@ -866,6 +866,7 @@ module BlockCache refines Transactable {
     && dop.NoDiskOp?
     && s.outstandingIndirectionTableWrite.None?
     && s.superblockWrite.None?
+    && s.replayJournal == []
     && s' ==
         s.(frozenIndirectionTable := Some(s.ephemeralIndirectionTable))
          .(frozenIndirectionTableLoc := None)
