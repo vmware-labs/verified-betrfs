@@ -39,7 +39,7 @@ module MkfsImpl {
   ensures ADM.BlocksDontIntersect(diskContents)
   {
     WeightBucketEmpty();
-    var empty := new MutBucket(KVList.Kvl([], []));
+    var empty := new MutBucket(KVList.Kvl(PSA.EmptyPsa(), []));
     MutBucket.ReprSeqDisjointOfLen1([empty]);
     var node := new Node([], None, [empty]);
 

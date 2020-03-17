@@ -300,7 +300,7 @@ module MarshallingImpl {
   }
 
   lemma WeightKeySeqLe(keys: seq<Key>)
-  ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
+  ensures WeightKeySeq(keys) <= |keys| * (4 + KeyType.MaxLen() as int)
   {
     if |keys| == 0 {
     } else {
@@ -392,7 +392,7 @@ module MarshallingImpl {
     var kvl := bucket.GetKvl();
     KVList.kvlWeightEq(kvl);
     KVList.lenKeysLeWeight(kvl);
-    var keys := strictlySortedKeySeqToVal(kvl.keys);
+    var keys := packeStringArrayToVal(kvl.keys);
     var messages := messageSeqToVal(kvl.messages);
     v := VTuple([keys, messages]);
 

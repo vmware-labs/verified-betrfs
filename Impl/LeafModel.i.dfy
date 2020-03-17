@@ -89,7 +89,7 @@ module LeafModel {
         SplitBucketRight(node.buckets[0], pivot)
     ];
 
-    reveal_WFBucket();
+    //reveal_WFBucket();
 
     var newnode := Node(pivots, None, buckets');
     var s1 := writeWithNode(k, s, ref, newnode);

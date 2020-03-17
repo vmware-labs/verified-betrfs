@@ -86,7 +86,7 @@ module InsertModel {
 
     assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
 
-    reveal_WFBucket();
+    //reveal_WFBucket();
     assert WFBucket(newBucket);
     assert WFNode(newRoot);
 
