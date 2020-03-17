@@ -26,6 +26,7 @@ import ValueType`Internal
 import opened NativePackedInts
 import opened PackedKV
 import opened BucketWeights
+import opened Sequences
 
 export S
   provides NativeTypes, parse_Val, ParseVal, Marshall, Demarshallable,
@@ -2303,7 +2304,7 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
 
   ghost var data_seq2 := data[index..(index as int) + SizeOfV(val)];
   assert unpack_LittleEndian_Uint64(data_seq2[..8]) as int == |val.ua|;
-  PackedStringArray.lemma_array_slice_slice(data, index as int, (index as int) + SizeOfV(val), 8, 8 + 8*|val.ua|);
+  lemma_array_slice_slice(data, index as int, (index as int) + SizeOfV(val), 8, 8 + 8*|val.ua|);
   assert unpack_LittleEndian_Uint64_Seq(
       data_seq2[8..8 + 8*|val.ua|], |val.ua|) == val.ua;
 
@@ -2354,7 +2355,7 @@ method MarshallCase(val:V, ghost grammar:G, data:array<byte>, index:uint64) retu
     assert (val.c as int) < |grammar.cases|;
 
     ghost var bytes := data_seq[index..(index as int) + SizeOfV(val)];
-    PackedStringArray.lemma_seq_slice_slice(data_seq, index as int, index as int + SizeOfV(val), 0, 8);
+    lemma_seq_slice_slice(data_seq, index as int, index as int + SizeOfV(val), 0, 8);
     assert bytes[..8] == new_int_bytes;
     calc {
         parse_Val(bytes, grammar);

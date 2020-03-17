@@ -144,7 +144,9 @@ module AsyncDisk {
     // because it would be reasonable for a disk to fail into a checksum-correct state
     // from a checksum-incorrect one.
 
-    ChecksumChecksOut(realContents[i..j]) ==> !ChecksumChecksOut(fakeContents[i..j])
+    ChecksumChecksOut(realContents[i..j]) && 
+    ChecksumChecksOut(fakeContents[i..j]) ==>
+        realContents[i..j] == fakeContents[i..j]
   }
 
   predicate AllChecksumsCheckOut(realContents: seq<byte>, fakeContents: seq<byte>)
@@ -161,6 +163,7 @@ module AsyncDisk {
     && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && var realContents := s.contents[req.addr .. req.addr as int + req.len as int];
     && |fakeContents| == |realContents|
+    && fakeContents != realContents
 
     && AllChecksumsCheckOut(realContents, fakeContents)
 

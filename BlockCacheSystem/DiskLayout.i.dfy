@@ -271,6 +271,15 @@ module DiskLayout {
   {
   }
 
+  lemma ValidJournalLocationConcat(loc1: Location, loc2: Location)
+  requires ValidJournalLocation(loc1)
+  requires ValidJournalLocation(loc2)
+  ensures loc1.len + loc2.len < 0x1_0000_0000_0000_0000
+  ensures ValidJournalLocation(
+    Location(loc1.addr, loc1.len + loc2.len))
+  {
+  }
+
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr
   //    reveals BlockSize
   //export extends S

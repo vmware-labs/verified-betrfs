@@ -23,6 +23,8 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import opened DiskLayout
   import opened SectorType
   import opened Options
+  import opened Sequences
+  import opened JournalRanges
 
   function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp
   requires M.ValidDiskOp(diskOp)
@@ -220,6 +222,35 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   {
   }
 
+  lemma ChecksummedJournalIsCorrect(
+      realContents: seq<byte>, fakeContents: seq<byte>)
+  requires |realContents| == |fakeContents|
+  requires D.AllChecksumsCheckOut(realContents, fakeContents)
+  requires M.JournalRangeOfByteSeq(realContents).Some?
+  requires M.JournalRangeOfByteSeq(fakeContents).Some?
+  ensures fakeContents == realContents
+  {
+    M.reveal_JournalRangeOfByteSeq();
+    if realContents == [] {
+    } else {
+      assert D.ChecksumsCheckOutForSlice(
+          realContents, fakeContents, 0, 4096);
+
+      var realContents' := realContents[4096..];
+      var fakeContents' := fakeContents[4096..];
+
+      forall i, j | 0 <= i <= j <= |realContents'|
+      ensures D.ChecksumsCheckOutForSlice(realContents', fakeContents', i, j)
+      {
+        assert D.ChecksumsCheckOutForSlice(realContents, fakeContents, i+4096, j+4096);
+        lemma_seq_suffix_slice(realContents, 4096, i, j);
+        lemma_seq_suffix_slice(fakeContents, 4096, i, j);
+      }
+
+      ChecksummedJournalIsCorrect(realContents', fakeContents');
+    }
+  }
+
   lemma ProcessReadFailureRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(k, s)
   requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id, fakeContents)
@@ -239,6 +270,10 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     //assert M.ValidLocationAndBytes(loc, realContents);
 
     if ValidJournalLocation(loc) {
+      if M.JournalRangeOfByteSeq(fakeContents).Some? {
+        ChecksummedJournalIsCorrect(realContents, fakeContents);
+        assert false;
+      }
       assert I(k, s').disk.respReads == I(k, s).disk.respReads[id := SD.RespRead(None)];
     } else {
       assert D.ChecksumsCheckOutForSlice(realContents, fakeContents, 0, |realContents|);
@@ -291,6 +326,43 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     }
   }
 
+  lemma ClosedUnderLogConcatenation_IContents(contents: seq<byte>)
+  ensures SD.ClosedUnderLogConcatenation(IContents(contents))
+  {
+    var blocks := IContents(contents);
+    forall loc1, loc2, loc3
+    ensures SD.ClosedUnderLogConcatenationLocs(blocks, loc1, loc2, loc3)
+    {
+      if
+        && loc1 in blocks
+        && loc2 in blocks
+        && blocks[loc1].SectorJournal?
+        && blocks[loc2].SectorJournal?
+        && loc2.addr as int == loc1.addr as int + loc1.len as int
+        && loc3.addr == loc1.addr
+        && loc3.len as int == loc1.len as int + loc2.len as int
+      {
+        var c1 := contents[loc1.addr .. loc1.addr as int + loc1.len as int];
+        var c2 := contents[loc2.addr .. loc2.addr as int + loc2.len as int];
+        var c3 := contents[loc3.addr .. loc3.addr as int + loc3.len as int];
+        M.ValidJournalLocationOfIBytes(loc1, c1);
+        M.ValidJournalLocationOfIBytes(loc2, c2);
+        assert c3 == c1 + c2;
+        M.JournalRangeOfByteSeqAdditive(c1, c2);
+        DiskLayout.ValidJournalLocationConcat(loc1, loc2);
+        assert loc3 in blocks;
+        M.reveal_IBytes();
+        assert blocks[loc3] == SectorJournal(JournalRangeConcat(
+              blocks[loc1].journal, blocks[loc2].journal));
+      }
+    }
+  }
+
+  lemma LogLookupSingleBlockConsistent_IContents(contents: seq<byte>)
+  ensures SD.LogLookupSingleBlockConsistent(IContents(contents))
+  {
+  }
+
   lemma {:fuel M.IBytes,0}
   ProcessWriteRefines(k: Constants, s: Variables, s': Variables, id: D.ReqId)
   requires Inv(k, s)
@@ -316,6 +388,23 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
     {
       SplicePreserves(s.disk.contents, DiskLayout.Location(req1.addr, |req1.bytes| as uint64), req1.bytes, loc);
     }
+
+    forall loc:Location | loc in b2 && !DiskLayout.overlap(loc, req.loc)
+    ensures loc in b1
+    ensures b1[loc] == b2[loc]
+    {
+      var revBytes := s.disk.contents[req1.addr .. req1.addr as int + |req1.bytes|];
+      SplicePreserves(
+        s'.disk.contents,
+        DiskLayout.Location(req1.addr, |req1.bytes| as uint64),
+        revBytes,
+        loc);
+      assert D.splice(s'.disk.contents, req1.addr as int, revBytes)
+          == s.disk.contents;
+    }
+
+    ClosedUnderLogConcatenation_IContents(s'.disk.contents);
+    LogLookupSingleBlockConsistent_IContents(s'.disk.contents);
   }
 
   lemma HavocConflictingWriteReadStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
@@ -323,6 +412,9 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   requires D.HavocConflictingWriteRead(k.disk, s.disk, s'.disk, id, id')
   ensures false
   {
+    BCS.RequestsDontOverlap(Ik(k), I(k,s));
+    assert id in IReqWrites(s.disk.reqWrites);
+    assert id' in IReqReads(s.disk.reqReads);
   }
 
   lemma HavocConflictingWritesStepImpossible(k: Constants, s: Variables, s': Variables, id: D.ReqId, id': D.ReqId)
@@ -330,6 +422,9 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   requires D.HavocConflictingWrites(k.disk, s.disk, s'.disk, id, id')
   ensures false
   {
+    BCS.RequestsDontOverlap(Ik(k), I(k,s));
+    assert id in IReqWrites(s.disk.reqWrites);
+    assert id' in IReqWrites(s.disk.reqWrites);
   }
 
   lemma {:fuel BC.NextStep,0} {:fuel M.IBytes,0}

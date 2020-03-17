@@ -460,4 +460,56 @@ module Sequences {
     }
   }
 
+  lemma lemma_seq_suffix_slice<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= |s|
+  requires 0 <= j <= k <= |s| - i
+  ensures s[i..][j..k] == s[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_slice_suffix<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= j <= |s|
+  requires 0 <= k <= j - i
+  ensures s[i..j][k..] == s[i+k..j];
+  {
+  }
+
+  lemma lemma_array_suffix_slice<T>(ar: array<T>, i: int, j: int, k: int)
+  requires 0 <= i <= ar.Length
+  requires 0 <= j <= k <= ar.Length - i
+  ensures ar[i..][j..k] == ar[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_extensionality<T>(s: seq<T>, t: seq<T>)
+  requires |s| == |t|
+  requires forall i | 0 <= i < |s| :: s[i] == t[i]
+  ensures s == t
+  {
+  }
+
+  lemma lemma_seq_slice_slice<T>(s: seq<T>, i: int, j: int, k: int, l: int)
+  requires 0 <= i <= j <= |s|
+  requires 0 <= k <= l <= j - i
+  ensures s[i..j][k..l] == s[i+k..i+l];
+  {
+    lemma_seq_extensionality(s[i..j][k..l], s[i+k..i+l]);
+  }
+
+  lemma lemma_array_slice_slice<T>(ar: array<T>, i: int, j: int, k: int, l: int)
+  requires 0 <= i <= j <= ar.Length
+  requires 0 <= k <= l <= j - i
+  ensures ar[i..j][k..l] == ar[i+k..i+l];
+  {
+    lemma_seq_slice_slice(ar[..], i, j, k, l);
+  }
+
+  lemma lemma_seq_extensionality_slice<T>(s: seq<T>, t: seq<T>, a: int, b: int)
+  requires 0 <= a <= b <= |s|
+  requires b <= |t|
+  requires forall i | a <= i < b :: s[i] == t[i]
+  ensures s[a..b] == t[a..b]
+  {
+  }
+
 }

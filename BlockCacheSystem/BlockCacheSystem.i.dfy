@@ -4031,4 +4031,11 @@ module BlockCacheSystem {
       assert QueueLookupIdByLocation(s.disk.reqWrites, s.machine.ephemeralIndirectionTable.locs[ref]).None?;*/
     }
   }
+
+  lemma RequestsDontOverlap(k: Constants, s: Variables)
+  requires Inv(k, s)
+  ensures WriteRequestsDontOverlap(s.disk.reqWrites)
+  ensures ReadWritesDontOverlap(s.disk.reqReads, s.disk.reqWrites)
+  {
+  }
 }

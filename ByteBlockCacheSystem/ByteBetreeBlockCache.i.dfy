@@ -73,6 +73,14 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
     )
   }
 
+  lemma JournalRangeOfByteSeqAdditive(a: seq<byte>, b: seq<byte>)
+  requires JournalRangeOfByteSeq(a).Some?
+  requires JournalRangeOfByteSeq(b).Some?
+  ensures JournalRangeOfByteSeq(a + b).Some?
+  ensures JournalRangeOfByteSeq(a + b).value
+        == JournalRangeOfByteSeq(a).value
+         + JournalRangeOfByteSeq(b).value
+
   predicate ValidJournalBytes(bytes: seq<byte>)
   {
     && JournalRangeOfByteSeq(bytes).Some?
@@ -100,6 +108,11 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
       Parse(bytes[32..]).value
     )
   }
+
+  lemma ValidJournalLocationOfIBytes(loc: Location, bytes: seq<byte>)
+  requires ValidLocationAndBytes(loc, bytes)
+  requires IBytes(loc, bytes).SectorJournal?
+  ensures ValidJournalLocation(loc)
 
   function IBytesOpt(loc: Location, bytes: seq<byte>) : Option<Sector>
   {
