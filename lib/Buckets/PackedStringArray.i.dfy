@@ -474,10 +474,19 @@ module PackedStringArray {
     psaSubSeq(psa, 0, psaNumStrings(psa)-1)
   }
 
-  predicate method psaCanAppend(psa: Psa, key: seq<byte>)
+  predicate psaCanAppend(psa: Psa, key: seq<byte>)
   {
     && |psa.offsets| < 0x1_0000_0000 - 1
     && |psa.data| + |key| < 0x1_0000_0000
+  }
+  
+  method PsaCanAppend(psa: Psa, key: seq<byte>) returns (result: bool)
+    requires WF(psa)
+    requires |key| < 0x1_0000_0000
+  {
+    result :=
+      && |psa.offsets| as uint64 < 0x1_0000_0000 - 1
+      && |psa.data| as uint64 + |key| as uint64 < 0x1_0000_0000;
   }
   
   function psaAppend(psa: Psa, key: seq<byte>) : (result: Psa)
@@ -700,13 +709,36 @@ module PackedStringArray {
         Psa(offsets[..nstrings], data[..offsets[nstrings-1]])
     }
 
-    predicate method canAppend(str: seq<byte>)
+    method TotalLength() returns (result: uint64)
+      requires WF()
+      ensures result == psaTotalLength(toPsa())
+    {
+      if nstrings == 0 {
+        result := 0;
+      } else {
+        result := offsets[nstrings-1] as uint64;
+      }
+    }
+    
+    predicate canAppend(str: seq<byte>)
       requires WF()
       reads this, this.Repr
     {
       && psaCanAppend(toPsa(), str)
-      && nstrings as int < offsets.Length
-      && psaTotalLength(toPsa()) as int + |str| <= data.Length
+      && nstrings < offsets.Length as uint64
+      && psaTotalLength(toPsa()) + |str| as uint64 <= data.Length as uint64
+    }
+    
+    method CanAppendWORealloc(str: seq<byte>) returns (result: bool)
+      requires WF()
+      requires |str| < 0x1_0000_0000
+      ensures result ==> psaCanAppend(toPsa(), str)
+    {
+      var tl := TotalLength();
+      result := 
+        && nstrings < offsets.Length as uint64
+        && nstrings < 0x1_0000_0000 - 1
+        && tl + |str| as uint64 <= data.Length as uint64;
     }
     
     method append(str: seq<byte>)

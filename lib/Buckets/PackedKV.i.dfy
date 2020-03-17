@@ -295,35 +295,35 @@ module PackedKV {
     return true;
   }
 
-  method MergePart(oldpkv: Pkv, newpkv: Pkv, start: uint64, end: uint64)
-    returns (resultpkv: Pkv, newstart: uint64)
-    requires WF(oldpkv)
-    requires WF(newpkv)
-    requires start as int <= end as int < |newpkv.keys.offsets|
-  {
-    PackedStringArray.psaStartsLte(newpkv.keys, start, end);
-    var maxkeyslen :=
-      |oldpkv.keys.data| as uint64
-      + PackedStringArray.psaStart(newpkv.keys, end) as uint64
-      - PackedStringArray.psaStart(newpkv.keys, start) as uint64;
-    var maxkeysoffsetslen := |oldpkv.keys.offsets| as uint64 + end - start;
-    var newkeys := newArrayFill(maxkeyslen, 0);
-    var newkeyoffsets := newArrayFill(maxkeysoffsetslen, 0);
+  // method MergePart(oldpkv: Pkv, newpkv: Pkv, start: uint64, end: uint64)
+  //   returns (resultpkv: Pkv, newstart: uint64)
+  //   requires WF(oldpkv)
+  //   requires WF(newpkv)
+  //   requires start as int <= end as int < |newpkv.keys.offsets|
+  // {
+  //   PackedStringArray.psaStartsLte(newpkv.keys, start, end);
+  //   var maxkeyslen :=
+  //     |oldpkv.keys.data| as uint64
+  //     + PackedStringArray.psaStart(newpkv.keys, end) as uint64
+  //     - PackedStringArray.psaStart(newpkv.keys, start) as uint64;
+  //   var maxkeysoffsetslen := |oldpkv.keys.offsets| as uint64 + end - start;
+  //   var newkeys := newArrayFill(maxkeyslen, 0);
+  //   var newkeyoffsets := newArrayFill(maxkeysoffsetslen, 0);
 
-    PackedStringArray.psaStartsLte(newpkv.messages, start, end);
-    var maxmessageslen :=
-      |oldpkv.messages.data| as uint64
-      + PackedStringArray.psaStart(newpkv.messages, end) as uint64
-      - PackedStringArray.psaStart(newpkv.messages, start) as uint64;
-    var maxmessagesoffsetslen := |oldpkv.messages.offsets| as uint64 + end - start;
-    var newmessages := newArrayFill(maxmessageslen, 0);
-    var newmessagesoffsets := newArrayFill(maxmessagesoffsetslen, 0);
+  //   PackedStringArray.psaStartsLte(newpkv.messages, start, end);
+  //   var maxmessageslen :=
+  //     |oldpkv.messages.data| as uint64
+  //     + PackedStringArray.psaStart(newpkv.messages, end) as uint64
+  //     - PackedStringArray.psaStart(newpkv.messages, start) as uint64;
+  //   var maxmessagesoffsetslen := |oldpkv.messages.offsets| as uint64 + end - start;
+  //   var newmessages := newArrayFill(maxmessageslen, 0);
+  //   var newmessagesoffsets := newArrayFill(maxmessagesoffsetslen, 0);
 
-    var oldindex := 0;
-    var newindex := start;
-    while oldindex < |oldpkv.keys.offsets| && newindex < end
-    {
-    }
+  //   var oldindex := 0;
+  //   var newindex := start;
+  //   while oldindex < |oldpkv.keys.offsets| && newindex < end
+  //   {
+  //   }
     
-  }
+  // }
 }
