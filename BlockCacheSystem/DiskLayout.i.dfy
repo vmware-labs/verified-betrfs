@@ -274,9 +274,18 @@ module DiskLayout {
   lemma ValidJournalLocationConcat(loc1: Location, loc2: Location)
   requires ValidJournalLocation(loc1)
   requires ValidJournalLocation(loc2)
-  ensures loc1.len + loc2.len < 0x1_0000_0000_0000_0000
+  ensures loc1.len as int + loc2.len as int < 0x1_0000_0000_0000_0000
   ensures ValidJournalLocation(
     Location(loc1.addr, loc1.len + loc2.len))
+  {
+  }
+
+  lemma ValidJournalLocationGetI(loc1: Location, i: int)
+  requires 0 <= i
+  requires 4096*(i+1) <= loc1.len as int
+  requires ValidJournalLocation(loc1)
+  ensures loc1.addr as int + 4096 * i < 0x1_0000_0000_0000_0000
+  ensures ValidJournalLocation(Location(loc1.addr + 4096 * i as uint64, 4096))
   {
   }
 

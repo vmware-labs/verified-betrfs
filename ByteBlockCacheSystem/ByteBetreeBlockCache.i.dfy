@@ -81,6 +81,31 @@ module ByteBetreeBlockCache refines AsyncDiskMachine {
         == JournalRangeOfByteSeq(a).value
          + JournalRangeOfByteSeq(b).value
 
+  lemma JournalRangeOfByteSeqGetI(a: seq<byte>, i: int)
+  requires JournalRangeOfByteSeq(a).Some?
+  requires 0 <= i
+  requires 4096*(i+1) <= |a|
+  ensures JournalRangeOfByteSeq(a[4096*i .. 4096*(i+1)]).Some?
+  ensures i < JournalRangeLen(JournalRangeOfByteSeq(a).value)
+  ensures JournalRangeOfByteSeq(a[4096*i .. 4096*(i+1)]).value
+      == JournalBlockGet(JournalRangeOfByteSeq(a).value, i)
+  {
+    reveal_JournalRangeOfByteSeq();
+    if i == 0 {
+      var c := a[4096*i .. 4096*(i+1)];
+      assert JournalRangeOfByteSeq(c[4096..]) == Some([]);
+      assert c[0..4096] == c;
+    } else {
+      var a' := a[4096..];
+      assert a[4096*i .. 4096*(i+1)] == a'[4096*(i-1) .. 4096*i];
+      JournalRangeOfByteSeqGetI(a', i-1);
+      var rest := JournalRangeOfByteSeq(a');
+      assert ([a[32..4096]] + rest.value)[i] == rest.value[i-1];
+      //assert JournalRangeOfByteSeq(a[4096*i .. 4096*(i+1)])
+      //    == JournalRangeOfByteSeq(a'[4096*(i-1) .. 4096*i]);
+    }
+  }
+
   predicate ValidJournalBytes(bytes: seq<byte>)
   {
     && JournalRangeOfByteSeq(bytes).Some?

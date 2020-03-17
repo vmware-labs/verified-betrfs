@@ -361,6 +361,33 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   lemma LogLookupSingleBlockConsistent_IContents(contents: seq<byte>)
   ensures SD.LogLookupSingleBlockConsistent(IContents(contents))
   {
+    var blocks := IContents(contents);
+    forall loc1, loc2, i
+    ensures SD.LogLookupSingleBlockConsistentLoc(blocks, loc1, loc2, i)
+    {
+      if
+        && loc1 in blocks
+        && blocks[loc1].SectorJournal?
+        && loc2.addr as int == loc1.addr as int + 4096*i
+        && loc2.len == 4096
+        && loc2.addr >= loc1.addr
+        && loc2.addr as int + loc2.len as int
+            <= loc1.addr as int + loc1.len as int
+      {
+        var c1 := contents[loc1.addr .. loc1.addr as int + loc1.len as int];
+        var c2 := contents[loc2.addr .. loc2.addr as int + loc2.len as int];
+        M.ValidJournalLocationOfIBytes(loc1, c1);
+        M.JournalRangeOfByteSeqGetI(c1, i);
+        lemma_seq_slice_slice(contents, loc1.addr as int, loc1.addr as int + loc1.len as int, 4096*i, 4096*(i+1));
+        assert c1[4096*i .. 4096*(i+1)] == c2;
+        ValidJournalLocationGetI(loc1, i);
+        M.reveal_IBytes();
+        assert loc2 in blocks;
+        assert 0 <= i < JournalRangeLen(blocks[loc1].journal);
+        assert blocks[loc2] == SectorJournal(
+          JournalBlockGet(blocks[loc1].journal, i));
+      }
+    }
   }
 
   lemma {:fuel M.IBytes,0}
