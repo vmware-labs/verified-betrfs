@@ -25,6 +25,7 @@ module ByteBetreeBlockCacheSystem refines AsyncDiskModel {
   import opened Options
   import opened Sequences
   import opened JournalRanges
+  import opened JournalBytes
 
   function IDiskOp(diskOp: D.DiskOp) : SD.DiskOp
   requires M.ValidDiskOp(diskOp)
