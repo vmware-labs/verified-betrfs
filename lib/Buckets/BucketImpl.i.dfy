@@ -61,6 +61,28 @@ module BucketImpl {
     assume false;
   }
 
+  method kvl_to_pkv(kvl: KVList.Kvl)
+    returns (pkv: PackedKV.Pkv)
+    requires KVList.WF(kvl)
+    ensures PackedKV.WF(pkv)
+    ensures PackedKV.I(pkv) == KVList.I(kvl)
+  {
+    var dmsgs := new PSA.DynamicPsa.PreSized(|kvl.messages| as uint32, |kvl.messages| as uint32);
+    var i: uint64 := 0;
+    while i < |kvl.messages| as uint64
+      invariant i <= |kvl.messages| as uint64
+      invariant dmsgs.WF();
+      invariant fresh(dmsgs.Repr)
+    {
+      assume kvl.messages[i].Define?;
+      assume PSA.psaCanAppend(dmsgs.toPsa(), kvl.messages[i].value);
+      dmsgs.Append(kvl.messages[i].value);
+      i := i + 1;
+    }
+    pkv := PackedKV.Pkv(kvl.keys, dmsgs.toPsa());
+    assume false;
+  }
+  
   method pkv_to_kvl(pkv: PackedKV.Pkv)
   returns (kvl: KVList.Kvl)
   requires PackedKV.WF(pkv)
@@ -220,6 +242,23 @@ module BucketImpl {
       }
     }
 
+    method GetPkv() returns (rpkv: PackedKV.Pkv)
+      requires Inv()
+      ensures PackedKV.WF(pkv)
+      ensures PackedKV.I(pkv) == Bucket
+    {
+      if format.BFTree? {
+        assume KMBBOps.NumElements(tree) < Uint64UpperBound();
+        var rkvl := tree_to_kvl(tree);
+        rpkv := kvl_to_pkv(rkvl);
+      } else if format.BFKvl? {
+        rpkv := kvl_to_pkv(kvl);
+      } else {
+        rpkv := pkv;
+      }
+      assume false;
+    }
+    
     static function {:opaque} ReprSeq(s: seq<MutBucket>) : set<object>
     reads s
     {
