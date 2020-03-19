@@ -5,6 +5,7 @@ include "../Betree/Graph.i.dfy"
 include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "JournalRange.i.dfy"
+include "JournalInterval.i.dfy"
 
 //
 // A BlockCache implements the BlockInterface by caching over an
@@ -24,6 +25,7 @@ module BlockCache refines Transactable {
   import opened DiskLayout
   import opened Journal
   import opened JournalRanges
+  import opened JournalIntervals
   import opened SectorType
 
   import Disk = AsyncSectorDisk
@@ -193,17 +195,21 @@ module BlockCache refines Transactable {
   // Journal is written in a circular array, so to load the log
   // we may have to read back two chunks.
 
-  function JournalFrontLocationOfSuperblock(superblock: Superblock) : Option<Location>
+  function JournalFrontIntervalOfSuperblock(superblock: Superblock) : Option<JournalInterval>
   requires superblock.journalStart < NumJournalBlocks()
   {
-    JournalFrontLocation(superblock.journalStart, superblock.journalLen)
+    JournalFrontInterval(
+      superblock.journalStart as int,
+      superblock.journalLen as int)
   }
 
-  function JournalBackLocationOfSuperblock(superblock: Superblock) : Option<Location>
+  function JournalBackIntervalOfSuperblock(superblock: Superblock) : Option<JournalInterval>
   requires superblock.journalStart < NumJournalBlocks()
   requires superblock.journalLen <= NumJournalBlocks()
   {
-    JournalBackLocation(superblock.journalStart, superblock.journalLen)
+    JournalBackInterval(
+      superblock.journalStart as int,
+      superblock.journalLen as int)
   }
 
   predicate WFSuperblock(superblock: Superblock)
@@ -223,7 +229,6 @@ module BlockCache refines Transactable {
     | WriteBackIndirectionTableReqStep
     | WriteBackIndirectionTableRespStep
     | WriteBackJournalReqStep(jr: JournalRange)
-    | WriteBackJournalReqWraparoundStep(jr: JournalRange)
     | WriteBackJournalRespStep
     | WriteBackSuperblockReq_Basic_Step
     | WriteBackSuperblockReq_UpdateIndirectionTable_Step
@@ -261,28 +266,28 @@ module BlockCache refines Transactable {
 
   predicate WriteBackReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
-    && dop.ReqWriteOp?
+    && dop.ReqWriteNodeOp?
     && s.Ready?
     && ref in s.cache
-    && ValidNodeLocation(dop.reqWrite.loc)
-    && dop.reqWrite.sector == SectorNode(s.cache[ref])
+    && ValidNodeLocation(dop.reqWriteNode.loc)
+    && dop.reqWriteNode.node == s.cache[ref]
     && s'.Ready?
     && s'.persistentIndirectionTable == s.persistentIndirectionTable
 
     // TODO I don't think we really need this.
     && s.outstandingIndirectionTableWrite.None?
 
-    && ValidAllocation(s, dop.reqWrite.loc)
+    && ValidAllocation(s, dop.reqWriteNode.loc)
 
-    && s'.ephemeralIndirectionTable == assignRefToLocation(s.ephemeralIndirectionTable, ref, dop.reqWrite.loc)
+    && s'.ephemeralIndirectionTable == assignRefToLocation(s.ephemeralIndirectionTable, ref, dop.reqWriteNode.loc)
 
     && (s.frozenIndirectionTable.Some? ==> (
-      s'.frozenIndirectionTable == Some(assignRefToLocation(s.frozenIndirectionTable.value, ref, dop.reqWrite.loc)))
+      s'.frozenIndirectionTable == Some(assignRefToLocation(s.frozenIndirectionTable.value, ref, dop.reqWriteNode.loc)))
     )
     && (s.frozenIndirectionTable.None? ==> s'.frozenIndirectionTable.None?)
 
     && s'.cache == s.cache
-    && s'.outstandingBlockWrites == s.outstandingBlockWrites[dop.id := OutstandingWrite(ref, dop.reqWrite.loc)]
+    && s'.outstandingBlockWrites == s.outstandingBlockWrites[dop.id := OutstandingWrite(ref, dop.reqWriteNode.loc)]
     && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.outstandingIndirectionTableWrite == s.outstandingIndirectionTableWrite
     && s'.syncReqs == s.syncReqs
@@ -301,7 +306,7 @@ module BlockCache refines Transactable {
 
   predicate WriteBackResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.RespWriteOp?
+    && dop.RespWriteNodeOp?
     && s.Ready?
     && dop.id in s.outstandingBlockWrites
     && s' == s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, dop.id))
@@ -309,26 +314,27 @@ module BlockCache refines Transactable {
 
   predicate WriteBackIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.ReqWriteOp?
+    && dop.ReqWriteIndirectionTableOp?
     && s.Ready?
     && s.frozenIndirectionTable.Some?
-    && ValidIndirectionTableLocation(dop.reqWrite.loc)
+    && var loc := dop.reqWriteIndirectionTable.loc;
+    && ValidIndirectionTableLocation(loc)
     && s.newSuperblock.None?
     && !overlap(
-          dop.reqWrite.loc,
+          loc,
           s.superblock.indirectionTableLoc)
-    && dop.reqWrite.sector == SectorIndirectionTable(s.frozenIndirectionTable.value)
+    && dop.reqWriteIndirectionTable.indirectionTable == s.frozenIndirectionTable.value
     && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.locs.Keys
     && s.outstandingIndirectionTableWrite.None?
     //&& s.outstandingBlockWrites == map[]
     && s' == s
       .(outstandingIndirectionTableWrite := Some(dop.id))
-      .(frozenIndirectionTableLoc := Some(dop.reqWrite.loc))
+      .(frozenIndirectionTableLoc := Some(loc))
   }
 
   predicate WriteBackIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.RespWriteOp?
+    && dop.RespWriteIndirectionTableOp?
     && s.Ready?
     && s.outstandingIndirectionTableWrite == Some(dop.id)
     && s' == s.(outstandingIndirectionTableWrite := None)
@@ -377,70 +383,11 @@ module BlockCache refines Transactable {
 
     && var inMemoryJournalFrozen' := [];
 
-    && JournalRangeLen(jr) + startPos <= NumJournalBlocks() as int
-    && dop.ReqWriteOp?
-    && dop.reqWrite.sector == SectorJournal(jr)
-    && dop.reqWrite.loc == JournalRangeLocation(startPos as uint64, JournalRangeLen(jr) as uint64)
+    && dop.ReqWriteJournalOp?
+    && dop.reqWriteJournal.journal == jr
+    && dop.reqWriteJournal.start == startPos
     && s' == s
         .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
-        .(writtenJournalLen := writtenJournalLen')
-        .(frozenJournalPosition := frozenJournalPosition')
-        .(inMemoryJournal := inMemoryJournal')
-        .(inMemoryJournalFrozen := inMemoryJournalFrozen')
-        .(syncReqs := syncReqs')
-  }
-
-  predicate WriteBackJournalReqWraparound(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
-  {
-    && s.Ready?
-
-    && var j :=
-        if s.inMemoryJournalFrozen == [] then
-          s.inMemoryJournal
-        else
-          s.inMemoryJournalFrozen;
-
-    && JournalRangeParses(jr, j)
-    && JournalRangeLen(jr) + s.writtenJournalLen <= NumJournalBlocks() as int
-    && JournalRangeLen(jr) > 0
-    && s.superblockWrite.None?
-    && s.superblock.journalStart < NumJournalBlocks()
-    && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
-    && var startPos := JournalPosAdd(
-        s.superblock.journalStart as int,
-        s.writtenJournalLen);
-
-    && var writtenJournalLen' :=
-        s.writtenJournalLen + JournalRangeLen(jr);
-
-    && var frozenJournalPosition' := 
-        if s.inMemoryJournalFrozen == [] then
-          s.frozenJournalPosition
-        else
-          writtenJournalLen';
-
-    && var inMemoryJournal' :=
-        if s.inMemoryJournalFrozen == [] then
-          []
-        else
-          s.inMemoryJournal;
-
-    && var syncReqs' :=
-        if s.inMemoryJournalFrozen == [] then
-          syncReqs3to2(s.syncReqs)
-        else
-          s.syncReqs;
-
-    && var inMemoryJournalFrozen' := [];
-
-    && JournalRangeLen(jr) + startPos > NumJournalBlocks() as int
-    && dop.ReqWrite2Op?
-    && dop.reqWrite1.sector == SectorJournal(JournalRangePrefix(jr, NumJournalBlocks() as int - startPos))
-    && dop.reqWrite1.loc == JournalRangeLocation(startPos as uint64, NumJournalBlocks() - startPos as uint64)
-    && dop.reqWrite2.sector == SectorJournal(JournalRangeSuffix(jr, NumJournalBlocks() as int - startPos))
-    && dop.reqWrite2.loc == JournalRangeLocation(0, JournalRangeLen(jr) as uint64 - (NumJournalBlocks() - startPos as uint64))
-    && s' == s
-        .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id1, dop.id2})
         .(writtenJournalLen := writtenJournalLen')
         .(frozenJournalPosition := frozenJournalPosition')
         .(inMemoryJournal := inMemoryJournal')
@@ -451,7 +398,7 @@ module BlockCache refines Transactable {
   predicate WriteBackJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Ready?
-    && dop.RespWriteOp?
+    && dop.RespWriteJournalOp?
     && dop.id in s.outstandingJournalWrites
     && s' == s
        .(outstandingJournalWrites := s.outstandingJournalWrites - {dop.id})
@@ -460,12 +407,11 @@ module BlockCache refines Transactable {
   predicate WriteBackSuperblockReq_Basic(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Ready?
-    && dop.ReqWriteOp?
+    && dop.ReqWriteSuperblockOp?
     && s.superblockWrite.None?
     && s.outstandingJournalWrites == {}
     && s.inMemoryJournalFrozen == []
-    && dop.reqWrite.loc == (if s.whichSuperblock == 0 then
-        Superblock2Location() else Superblock1Location())
+    && dop.which == (if s.whichSuperblock == 0 then 1 else 0)
     && 0 <= s.writtenJournalLen <= NumJournalBlocks() as int
     && var newSuperblock := Superblock(
       IncrementSuperblockCounter(s.superblock.counter),
@@ -473,7 +419,7 @@ module BlockCache refines Transactable {
       s.writtenJournalLen as uint64,
       s.superblock.indirectionTableLoc
     );
-    && dop.reqWrite.sector == SectorSuperblock(newSuperblock)
+    && dop.reqWriteSuperblock.superblock == newSuperblock
     && s' == s
         .(newSuperblock := Some(newSuperblock))
         .(superblockWrite := Some(dop.id))
@@ -482,14 +428,13 @@ module BlockCache refines Transactable {
   predicate WriteBackSuperblockReq_UpdateIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Ready?
-    && dop.ReqWriteOp?
+    && dop.ReqWriteSuperblockOp?
     && s.frozenIndirectionTableLoc.Some?
     && s.outstandingIndirectionTableWrite.None?
     && s.superblockWrite.None?
     && s.outstandingBlockWrites == map[]
     && s.outstandingJournalWrites == {}
-    && dop.reqWrite.loc == (if s.whichSuperblock == 0 then
-        Superblock2Location() else Superblock1Location())
+    && dop.which == (if s.whichSuperblock == 0 then 1 else 0)
     && 0 <= s.superblock.journalStart < NumJournalBlocks()
     && 0 <= s.frozenJournalPosition
          <= s.writtenJournalLen
@@ -503,7 +448,7 @@ module BlockCache refines Transactable {
       (s.writtenJournalLen - s.frozenJournalPosition) as uint64,
       s.frozenIndirectionTableLoc.value
     );
-    && dop.reqWrite.sector == SectorSuperblock(newSuperblock)
+    && dop.reqWriteSuperblock.superblock == newSuperblock
     && s' == s
         .(newSuperblock := Some(newSuperblock))
         .(superblockWrite := Some(dop.id))
@@ -512,7 +457,7 @@ module BlockCache refines Transactable {
   predicate WriteBackSuperblockResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && s.Ready?
-    && dop.RespWriteOp?
+    && dop.RespWriteSuperblockOp?
     && Some(dop.id) == s.superblockWrite
     && s.newSuperblock.Some?
     && s'.Ready?
@@ -584,26 +529,25 @@ module BlockCache refines Transactable {
 
   predicate PageInReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
-    && dop.ReqReadOp?
+    && dop.ReqReadNodeOp?
     && s.Ready?
     && IsAllocated(s, ref)
     && ref in s.ephemeralIndirectionTable.locs
     && ref !in s.cache
-    && s.ephemeralIndirectionTable.locs[ref] == dop.reqRead.loc
+    && s.ephemeralIndirectionTable.locs[ref] == dop.reqReadNode.loc
     && OutstandingRead(ref) !in s.outstandingBlockReads.Values
     && s' == s.(outstandingBlockReads := s.outstandingBlockReads[dop.id := OutstandingRead(ref)])
   }
 
   predicate PageInResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.RespReadOp?
+    && dop.RespReadNodeOp?
     && s.Ready?
     && dop.id in s.outstandingBlockReads
     && var ref := s.outstandingBlockReads[dop.id].ref;
     && ref !in s.cache
-    && dop.respRead.sector.Some?
-    && dop.respRead.sector.value.SectorNode?
-    && var block := dop.respRead.sector.value.block;
+    && dop.node.Some?
+    && var block := dop.node.value;
     && ref in s.ephemeralIndirectionTable.graph
     && (iset r | r in s.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
     && s' == s.(cache := s.cache[ref := block])
@@ -612,47 +556,48 @@ module BlockCache refines Transactable {
 
   predicate PageInIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.ReqReadOp?
+    && dop.ReqReadIndirectionTableOp?
     && s.LoadingOther?
 
     && s.indirectionTableRead.None?
     && s.indirectionTable.None?
-    && dop.reqRead.loc == s.superblock.indirectionTableLoc
+    && dop.reqReadIndirectionTable.loc == s.superblock.indirectionTableLoc
     && s' == s.(indirectionTableRead := Some(dop.id))
   }
 
   predicate PageInIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.RespReadOp?
+    && dop.RespReadIndirectionTableOp?
     && s.LoadingOther?
-    && dop.respRead.sector.Some?
-    && dop.respRead.sector.value.SectorIndirectionTable?
-    && WFCompleteIndirectionTable(dop.respRead.sector.value.indirectionTable)
-    && AllLocationsForDifferentRefsDontOverlap(dop.respRead.sector.value.indirectionTable)
+    && dop.indirectionTable.Some?
+    && WFCompleteIndirectionTable(dop.indirectionTable.value)
+    && AllLocationsForDifferentRefsDontOverlap(dop.indirectionTable.value)
 
     && s.indirectionTableRead == Some(dop.id)
     && s' == s
         .(indirectionTableRead := None)
-        .(indirectionTable := Some(dop.respRead.sector.value.indirectionTable))
+        .(indirectionTable := Some(dop.indirectionTable.value))
   }
 
   predicate PageInJournalReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
   {
-    && dop.ReqReadOp?
+    && dop.ReqReadJournalOp?
     && s.LoadingOther?
     && (which == 0 || which == 1)
     && s.superblock.journalStart < NumJournalBlocks()
     && s.superblock.journalLen <= NumJournalBlocks()
     && (which == 0 ==>
-      && JournalFrontLocationOfSuperblock(s.superblock).Some?
-      && dop.reqRead.loc == JournalFrontLocationOfSuperblock(s.superblock).value
+      && JournalFrontIntervalOfSuperblock(s.superblock).Some?
+      && dop.reqReadJournal.interval
+          == JournalFrontIntervalOfSuperblock(s.superblock).value
       && s.journalFrontRead.None?
       && s.journalFront.None?
       && s' == s.(journalFrontRead := Some(dop.id))
     )
     && (which == 1 ==>
-      && JournalBackLocationOfSuperblock(s.superblock).Some?
-      && dop.reqRead.loc == JournalBackLocationOfSuperblock(s.superblock).value
+      && JournalBackIntervalOfSuperblock(s.superblock).Some?
+      && dop.reqReadJournal.interval
+          == JournalBackIntervalOfSuperblock(s.superblock).value
       && s.journalBackRead.None?
       && s.journalBack.None?
       && s' == s.(journalBackRead := Some(dop.id))
@@ -661,38 +606,36 @@ module BlockCache refines Transactable {
 
   predicate PageInJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
   {
-    && dop.RespReadOp?
+    && dop.RespReadJournalOp?
     && s.LoadingOther?
-    && dop.respRead.sector.Some?
-    && dop.respRead.sector.value.SectorJournal?
+    && dop.journal.Some?
     && (which == 0 || which == 1)
     && (which == 0 ==>
       && s.journalFrontRead == Some(dop.id)
       && s' == s
           .(journalFrontRead := None)
-          .(journalFront := Some(dop.respRead.sector.value.journal))
+          .(journalFront := Some(dop.journal.value))
     )
     && (which == 1 ==>
       && s.journalBackRead == Some(dop.id)
       && s' == s
           .(journalBackRead := None)
-          .(journalBack := Some(dop.respRead.sector.value.journal))
+          .(journalBack := Some(dop.journal.value))
     )
   }
 
   predicate PageInSuperblockReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
   {
-    && dop.ReqReadOp?
+    && dop.ReqReadSuperblockOp?
     && s.LoadingSuperblock?
+    && dop.which == which
     && (which == 0 || which == 1)
     && (which == 0 ==> 
-      && dop.reqRead.loc == Superblock1Location()
       && s.outstandingSuperblock1Read.None?
       && s.superblock1.SuperblockUnfinished?
       && s' == s.(outstandingSuperblock1Read := Some(dop.id))
     )
     && (which == 1 ==> 
-      && dop.reqRead.loc == Superblock2Location()
       && s.outstandingSuperblock2Read.None?
       && s.superblock2.SuperblockUnfinished?
       && s' == s.(outstandingSuperblock2Read := Some(dop.id))
@@ -701,13 +644,12 @@ module BlockCache refines Transactable {
 
   predicate PageInSuperblockResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, which: int)
   {
-    && dop.RespReadOp?
+    && dop.RespReadSuperblockOp?
     && s.LoadingSuperblock?
     && var sup := (
-        if dop.respRead.sector.Some? &&
-            dop.respRead.sector.value.SectorSuperblock? &&
-            WFSuperblock(dop.respRead.sector.value.superblock) then
-          SuperblockSuccess(dop.respRead.sector.value.superblock)
+        if dop.superblock.Some? &&
+            WFSuperblock(dop.superblock.value) then
+          SuperblockSuccess(dop.superblock.value)
         else
           SuperblockCorruption
     );
@@ -768,13 +710,13 @@ module BlockCache refines Transactable {
     && s.indirectionTable.Some?
     && s.superblock.journalStart < NumJournalBlocks()
     && s.superblock.journalLen <= NumJournalBlocks()
-    && (JournalFrontLocationOfSuperblock(s.superblock).Some? ==> s.journalFront.Some?)
-    && (JournalBackLocationOfSuperblock(s.superblock).Some? ==> s.journalBack.Some?)
+    && (JournalFrontIntervalOfSuperblock(s.superblock).Some? ==> s.journalFront.Some?)
+    && (JournalBackIntervalOfSuperblock(s.superblock).Some? ==> s.journalBack.Some?)
 
     && var fullRange := (
-        if JournalBackLocationOfSuperblock(s.superblock).Some? then
+        if JournalBackIntervalOfSuperblock(s.superblock).Some? then
           JournalRangeConcat(s.journalFront.value, s.journalBack.value)
-        else if JournalFrontLocationOfSuperblock(s.superblock).Some? then
+        else if JournalFrontIntervalOfSuperblock(s.superblock).Some? then
           s.journalFront.value
         else
           JournalRangeEmpty()
@@ -849,27 +791,42 @@ module BlockCache refines Transactable {
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && (
-    || dop.NoDiskOp?
-    || (
-      && dop.RespReadOp?
-      && !(
-        || (s.Ready? && dop.id in s.outstandingBlockReads)
-        || (s.LoadingSuperblock? && s.outstandingSuperblock1Read == Some(dop.id))
-        || (s.LoadingSuperblock? && s.outstandingSuperblock2Read == Some(dop.id))
-        || (s.LoadingOther? && s.indirectionTableRead == Some(dop.id))
-        || (s.LoadingOther? && s.journalFrontRead == Some(dop.id))
-        || (s.LoadingOther? && s.journalBackRead == Some(dop.id))
+      || dop.NoDiskOp?
+      || (
+        && dop.RespReadSuperblockOp?
+        && !(s.LoadingSuperblock? && s.outstandingSuperblock1Read == Some(dop.id))
+        && !(s.LoadingSuperblock? && s.outstandingSuperblock2Read == Some(dop.id))
+      )
+      || (
+        && dop.RespReadJournalOp?
+        && !(s.LoadingOther? && s.journalFrontRead == Some(dop.id))
+        && !(s.LoadingOther? && s.journalBackRead == Some(dop.id))
+      )
+      || (
+        && dop.RespReadIndirectionTableOp?
+        && !(s.LoadingOther? && s.indirectionTableRead == Some(dop.id))
+      )
+      || (
+        && dop.RespReadNodeOp?
+        && !(s.Ready? && dop.id in s.outstandingBlockReads)
+      )
+      || (
+        && dop.RespWriteSuperblockOp?
+        && !(s.Ready? && s.superblockWrite == Some(dop.id))
+      )
+      || (
+        && dop.RespWriteJournalOp?
+        && !(s.Ready? && dop.id in s.outstandingJournalWrites)
+      )
+      || (
+        && dop.RespWriteIndirectionTableOp?
+        && !(s.Ready? && s.outstandingIndirectionTableWrite == Some(dop.id))
+      )
+      || (
+        && dop.RespWriteNodeOp?
+        && !(s.Ready? && dop.id in s.outstandingBlockWrites)
       )
     )
-    || (
-      && dop.RespWriteOp?
-      && !(
-        || (s.Ready? && s.outstandingIndirectionTableWrite == Some(dop.id))
-        || (s.Ready? && dop.id in s.outstandingBlockWrites)
-        || (s.Ready? && dop.id in s.outstandingJournalWrites)
-        || (s.Ready? && s.superblockWrite == Some(dop.id))
-      )
-    ))
     && s' == s
   }
 
@@ -1014,7 +971,6 @@ module BlockCache refines Transactable {
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReq(k, s, s', dop)
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableResp(k, s, s', dop)
       case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReq(k, s, s', dop, jr)
-      case WriteBackJournalReqWraparoundStep(jr: JournalRange) => WriteBackJournalReqWraparound(k, s, s', dop, jr)
       case WriteBackJournalRespStep => WriteBackJournalResp(k, s, s', dop)
       case WriteBackSuperblockReq_Basic_Step => WriteBackSuperblockReq_Basic(k, s, s', dop)
       case WriteBackSuperblockReq_UpdateIndirectionTable_Step => WriteBackSuperblockReq_UpdateIndirectionTable(k, s, s', dop)
@@ -1293,17 +1249,6 @@ module BlockCache refines Transactable {
     }
   }
 
-  lemma WriteBackJournalReqWraparoundStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, jr: JournalRange)
-    requires Inv(k, s)
-    requires WriteBackJournalReqWraparound(k, s, s', dop, jr)
-    ensures Inv(k, s')
-  {
-    if (s'.Ready?) {
-      assert InvReady(k, s');
-    }
-  }
-
-
   lemma WriteBackJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
     requires WriteBackJournalResp(k, s, s', dop)
@@ -1571,7 +1516,6 @@ module BlockCache refines Transactable {
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReqStepPreservesInv(k, s, s', dop, jr);
-      case WriteBackJournalReqWraparoundStep(jr: JournalRange) => WriteBackJournalReqWraparoundStepPreservesInv(k, s, s', dop, jr);
       case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(k, s, s', dop);
       case WriteBackSuperblockReq_Basic_Step => WriteBackSuperblockReq_Basic_StepPreservesInv(k, s, s', dop);
       case WriteBackSuperblockReq_UpdateIndirectionTable_Step => WriteBackSuperblockReq_UpdateIndirectionTable_StepPreservesInv(k, s, s', dop);

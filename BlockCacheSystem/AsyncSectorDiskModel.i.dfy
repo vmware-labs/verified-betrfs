@@ -3,7 +3,7 @@ include "../lib/Base/Maps.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
-include "JournalDisk.i.dfy"
+include "JournalInterval.i.dfy"
 
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
@@ -25,13 +25,13 @@ module AsyncSectorDisk {
   import opened DiskLayout
   import opened SectorType
   import opened JournalRanges
+  import opened JournalIntervals
   import opened PivotBetreeGraph
   import opened Sequences
-  import opened JournalDisk
 
   type ReqId = uint64
 
-  datatype ReqReadJournal = ReqReadJournal(start: int, len: int)
+  datatype ReqReadJournal = ReqReadJournal(interval: JournalInterval)
   datatype ReqReadIndirectionTable = ReqReadIndirectionTable(loc: Location)
   datatype ReqReadNode = ReqReadNode(loc: Location)
 
@@ -75,7 +75,7 @@ module AsyncSectorDisk {
 
     reqWriteSuperblock1: Option<ReqId>,
     reqWriteSuperblock2: Option<ReqId>,
-    reqWriteJournals: map<ReqId, JournalIndices>,
+    reqWriteJournals: map<ReqId, JournalInterval>,
     reqWriteIndirectionTables: map<ReqId, Location>,
     reqWriteNodes: map<ReqId, Location>,
 
@@ -120,8 +120,7 @@ module AsyncSectorDisk {
   {
     && dop.ReqReadJournalOp?
     && dop.id !in s.reqReadJournals
-    && 0 <= dop.reqReadJournal.start < NumJournalBlocks() as int
-    && 0 <= dop.reqReadJournal.start + dop.reqReadJournal.len <= NumJournalBlocks() as int
+    && ContiguousJournalInterval(dop.reqReadJournal.interval)
     && s' == s.(reqReadJournals := s.reqReadJournals[dop.id := dop.reqReadJournal])
   }
 
@@ -157,19 +156,19 @@ module AsyncSectorDisk {
     )
   }
 
-  predicate ValidJournalIndices(indices: JournalIndices)
+  predicate ValidJournalInterval(interval: JournalInterval)
   {
-    && 0 <= indices.start < NumJournalBlocks() as int
-    && 0 <= indices.len <= NumJournalBlocks() as int
+    && 0 <= interval.start < NumJournalBlocks() as int
+    && 0 <= interval.len <= NumJournalBlocks() as int
   }
 
   predicate RecvWriteJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteJournalOp?
     && dop.id !in s.reqWriteJournals
-    && var indices := JournalIndices(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
-    && JournalUpdate(s.journal, s'.journal, indices, dop.reqWriteJournal.journal)
-    && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id := indices])
+    && var interval := JournalInterval(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+    && JournalUpdate(s.journal, s'.journal, interval, dop.reqWriteJournal.journal)
+    && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id := interval])
               .(journal := s'.journal)
   }
 
@@ -234,10 +233,10 @@ module AsyncSectorDisk {
   {
     && dop.RespReadJournalOp?
     && dop.id in s.reqReadJournals
-    && var req := s.reqReadJournals[dop.id];
-    && 0 <= req.start <= req.start + req.len <= |s.journal|
+    && var ind := s.reqReadJournals[dop.id].interval;
+    && 0 <= ind.start <= ind.start + ind.len <= |s.journal|
     && (dop.journal.Some? ==>
-      dop.journal == journalRead(s.journal[req.start .. req.start + req.len]))
+      dop.journal == journalRead(s.journal[ind.start .. ind.start + ind.len]))
     && s' == s.(reqReadJournals := MapRemove1(s.reqReadJournals, dop.id))
   }
 
@@ -339,7 +338,7 @@ module AsyncSectorDisk {
 
   predicate JournalUntouched(
     i: int, 
-    reqWriteJournals: map<ReqId, JournalIndices>)
+    reqWriteJournals: map<ReqId, JournalInterval>)
   {
     forall id | id in reqWriteJournals ::
         !InCyclicRange(i, reqWriteJournals[id])
@@ -348,7 +347,7 @@ module AsyncSectorDisk {
   predicate havocJournal(
     journal: seq<Option<JournalBlock>>,
     journal': seq<Option<JournalBlock>>,
-    reqWriteJournals: map<ReqId, JournalIndices>)
+    reqWriteJournals: map<ReqId, JournalInterval>)
   {
     && |journal'| == |journal|
     && forall i | 0 <= i < |journal| ::

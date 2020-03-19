@@ -1,17 +1,23 @@
 include "JournalRange.i.dfy"
 include "DiskLayout.i.dfy"
 
-module JournalDisk {
+module JournalIntervals {
   import opened DiskLayout
   import opened JournalRanges
   import opened Options
 
-  datatype JournalIndices = JournalIndices(start: int, len: int)
+  datatype JournalInterval = JournalInterval(start: int, len: int)
 
-  predicate ValidJournalIndices(indices: JournalIndices)
+  predicate ValidJournalInterval(indices: JournalInterval)
   {
     && 0 <= indices.start < NumJournalBlocks() as int
     && 0 <= indices.len <= NumJournalBlocks() as int
+  }
+
+  predicate ContiguousJournalInterval(indices: JournalInterval)
+  {
+    && ValidJournalInterval(indices)
+    && 0 <= indices.start + indices.len <= NumJournalBlocks() as int
   }
 
   predicate ValidJournal(journal: seq<Option<JournalBlock>>)
@@ -21,12 +27,12 @@ module JournalDisk {
 
   function CyclicSliceValue(
     journal: seq<Option<JournalBlock>>,
-    indices: JournalIndices,
+    indices: JournalInterval,
     newEntries: seq<JournalBlock>,
     i: int
   ) : Option<JournalBlock>
   requires ValidJournal(journal)
-  requires ValidJournalIndices(indices)
+  requires ValidJournalInterval(indices)
   requires indices.len == |newEntries|
   requires 0 <= i < NumJournalBlocks() as int
   {
@@ -41,20 +47,50 @@ module JournalDisk {
   predicate {:opaque} JournalUpdate(
       journal: seq<Option<JournalBlock>>,
       journal': seq<Option<JournalBlock>>,
-      indices: JournalIndices,
+      indices: JournalInterval,
       newEntries: seq<JournalBlock>)
   {
     && ValidJournal(journal)
     && ValidJournal(journal')
-    && ValidJournalIndices(indices)
+    && ValidJournalInterval(indices)
     && indices.len == |newEntries|
     && (forall i | 0 <= i < |journal| ::
         journal'[i] == CyclicSliceValue(journal, indices, newEntries, i))
   }
 
-  predicate InCyclicRange(i: int, indices: JournalIndices)
+  predicate InCyclicRange(i: int, indices: JournalInterval)
   {
     || (indices.start <= i < indices.start + indices.len)
     || (indices.start <= i + NumJournalBlocks() as int < indices.start + indices.len)
+  }
+
+  function JournalFrontInterval(start: int, len: int) : Option<JournalInterval>
+  requires start < NumJournalBlocks() as int
+  {
+    if len == 0 then
+      None
+    else
+      Some(JournalInterval(
+          start,
+          if len <= NumJournalBlocks() as int - start
+          then
+            len
+          else
+            NumJournalBlocks() as int - start
+      ))
+  }
+
+  function JournalBackInterval(start: int, len: int) : Option<JournalInterval>
+  requires start < NumJournalBlocks() as int
+  requires len <= NumJournalBlocks() as int
+  {
+    if len == 0 then
+      None
+    else if len <= NumJournalBlocks() as int - start then
+      None
+    else
+      Some(JournalInterval(0, 
+          len - (NumJournalBlocks() as int - start)))
+
   }
 }
