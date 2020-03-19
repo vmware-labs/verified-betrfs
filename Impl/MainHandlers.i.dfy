@@ -11,11 +11,14 @@ include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
 include "Mkfs.i.dfy"
 include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
+include "AllocationReport.i.dfy"
 //
 // Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
 
 module {:compileName "MainHandlers"} MainHandlers refines Main { 
+  import IndirectionTableModel
+  import NodeImpl
   import DebugAccumulator
   import SM = StateModel
   import SI = StateImpl
@@ -38,6 +41,7 @@ module {:compileName "MainHandlers"} MainHandlers refines Main {
   import ADM = ByteBetreeBlockCacheSystem
 
   import System_Ref = ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap
+  import AllocationReport
 
   type Constants = SI.ImplConstants
   type Variables = SI.ImplVariables
@@ -110,6 +114,42 @@ module {:compileName "MainHandlers"} MainHandlers refines Main {
     print "\nAfter\n";
     acc := s.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
+    assume false;
+  }
+
+  // jonh hack UNVERIFIED DEBUG ONLY
+  method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    AllocationReport.start();
+    var s := hs.s;
+    var table/*:MutableMap.ResizingHashMap*/ := s.ephemeralIndirectionTable.t;
+    var iter := table.SimpleIterStart();
+    var output := table.SimpleIterOutput(iter);
+    while (!output.Done?) {
+      var ref/*:IndirectionTableModel.Entry*/ := output.key;
+      var nodeOpt/*:Option<NodeImpl.Node>*/ := s.cache.GetOpt(ref);
+      if nodeOpt.Some? {
+        var node:NodeImpl.Node := nodeOpt.value;
+        var bi:uint64 := 0;
+        while (bi < |node.buckets| as uint64) {
+          var bucket := node.buckets[bi];
+          AllocationReport.sampleBucket(ref, bucket);
+          /*
+          if (bucket.format.BFKvl?) {
+            var kvl := bucket.kvl;
+            var keys := kvl.keys;
+            var messages := kvl.messages;
+            // ship things off to C++ here?
+            print "amassCount ", ref, " ", bi, " ", |keys|, " ", |messages|, "\n";
+          }
+          */
+          bi := bi + 1;
+        }
+      }
+      iter := table.SimpleIterInc(iter);
+      output := table.SimpleIterOutput(iter);
+    }
+    AllocationReport.stop();
     assume false;
   }
 

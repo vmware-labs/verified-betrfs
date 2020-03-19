@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DafnyRuntime.h"
+//#include "Bundle.i.h"
 
 #include <map>
 #include <cstring>
@@ -202,6 +203,19 @@ namespace NativeBenchmarking_Compile {
   public:
     static void start(DafnySequence<char> dafnyName);
     static void end(DafnySequence<char> dafnyName);
+  };
+}
+
+namespace BucketImpl_Compile {
+class MutBucket;
+}
+
+namespace AllocationReport_Compile {
+  class __default {
+  public:
+    static void start();
+    static void sampleBucket(uint64 ref, std::shared_ptr<BucketImpl_Compile::MutBucket> bucket);
+    static void stop();
   };
 }
 

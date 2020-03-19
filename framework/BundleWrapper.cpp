@@ -26,6 +26,11 @@ void handle_EvictEverything(Constants k, Variables hs, std::shared_ptr<MainDiskI
   __default::handleEvictEverything(*k.k, hs.hs, io);
 }
 
+void handle_CountAmassAllocations(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
+{
+  __default::handleCountAmassAllocations(*k.k, hs.hs, io);
+}
+
 uint64 handle_PushSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
   return __default::handlePushSync(*k.k, hs.hs, io);

@@ -161,17 +161,30 @@ def parse(filename):
     line.set_label("malloc total")
     axes[3].legend()
 
-    xs_byteToMalloc = [t for t in xs_bytearys]
-    ys_byteToMalloc = [ microscopes["total"][t].open_byte / focus_bytearys[t].open_byte for t in xs_byteToMalloc]
-    line, = axes[4].plot(xs_byteToMalloc, ys_byteToMalloc)
-    line.set_label("malloc total / bytes in byte[]")
-    axes[4].set_ylim(bottom = 0)
-    xs_mallocToOs = microscopes["total"].keys()
-    ys_mallocToOs = [os_map_total[t] / microscopes["total"][t].open_byte for t in xs_mallocToOs]
-    line, = axes[4].plot(xs_mallocToOs, ys_mallocToOs)
-    line.set_label("OS mapping / malloc total")
-    axes[4].legend()
-    axes[4].set_title("overheads")
+    def cdf(axis, data):
+        vals = list(data)
+        vals.sort()
+        sums = [0]
+        for v in vals:
+            sums.append(sums[-1] + v)
+        sums = sums[1:]
+        total = float(sums[-1])
+        xs = vals
+        ys = [sums[i]/total for i in range(len(vals))]
+        axis.plot(xs, ys)
+    dataset = microscopes["sfaLarge"]
+    cdf(axes[4], [dataset[t].open_byte for t in dataset])
+#    xs_byteToMalloc = [t for t in xs_bytearys]
+#    ys_byteToMalloc = [ microscopes["total"][t].open_byte / focus_bytearys[t].open_byte for t in xs_byteToMalloc]
+#    line, = axes[4].plot(xs_byteToMalloc, ys_byteToMalloc)
+#    line.set_label("malloc total / bytes in byte[]")
+#    axes[4].set_ylim(bottom = 0)
+#    xs_mallocToOs = microscopes["total"].keys()
+#    ys_mallocToOs = [os_map_total[t] / microscopes["total"][t].open_byte for t in xs_mallocToOs]
+#    line, = axes[4].plot(xs_mallocToOs, ys_mallocToOs)
+#    line.set_label("OS mapping / malloc total")
+#    axes[4].legend()
+#    axes[4].set_title("overheads")
 
     figname = "%s-timeseries.png" % filename
     plt.savefig(figname)

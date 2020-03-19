@@ -235,8 +235,9 @@ module KVListPartialFlush {
       var child := children[childrenIdx];
       if parentIdx == |parent.keys| as uint64 {
         if childIdx == |child.keys| as uint64 {
+          var newChildBucket := AmassKvl(Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]));
           var bucket := new MutBucket.InitWithWeight(
-            Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]),
+            newChildBucket,
             childrenMutBuckets[childrenIdx].Weight + bucketStartWeightSlack - weightSlack);
           bucketStartWeightSlack := weightSlack;
           childrenIdx := childrenIdx + 1;
@@ -381,9 +382,8 @@ module KVListPartialFlush {
     }
 
     newChildren := acc;
-    newParent := new MutBucket(
-      Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx])
-    );
+    var newParentKvl := AmassKvl(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]));
+    newParent := new MutBucket(newParentKvl);
   }
 
   /*method MutBucketPartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)

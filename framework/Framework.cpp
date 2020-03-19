@@ -455,6 +455,10 @@ void Application::EvictEverything() {
   handle_EvictEverything(k, hs, io);
 }
 
+void Application::CountAmassAllocations() {
+  handle_CountAmassAllocations(k, hs, io);
+}
+
 void Application::Sync() {
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_SYNC;
@@ -752,3 +756,14 @@ void Mkfs(string filename) {
   close(fd);
 }
 
+namespace AllocationReport_Compile {
+static void __default::start() {
+}
+
+static void __default::sampleBucket(uint64 ref, std::shared_ptr<BucketImpl_Compile::MutBucket> bucket) {
+}
+
+static void __default::stop() {
+}
+
+} // AllocationReport_Compile

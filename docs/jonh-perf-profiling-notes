@@ -352,3 +352,43 @@ are never stranded (because treetop nodes are evicted), and pageins for
 evicted nodes are GCd, because they can only be referenced by Nodes below,
 which in general are also evicted.
 
+
+[malloc-exp/wprofile-amassparent-100-timeseries.png]
+Next idea: amass on the way down the tree.
+First variant because I'm lazy (and maybe it'll improve perf): only amass
+the parent bucket. Idea is that children will eventually get freed; we fix
+the problem where a parent hangs onto one stray allocation even after most
+of the messages have been pushed below. Children are evicted, ancestors are
+not. On the other hand, this may fail if *siblings* hang on to those apron
+strings.
+Yeah, we're already at 2X amass vs Node. Well, actually that would be
+fine if they're smaller (1MB) allocations. Hmm. I guess I need
+amass-bytes/Node? Overheads are staying pretty tight, which is good. Oh,
+but they don't suck until page-in time anyway.
+Didn't really work; overall allocations are still pretty high.
+
+[malloc-exp/wprofile-amassflush-100-timeseries.png]
+Okay, so let's amass both parent and children on flush. This may still
+not work, since the root still has an 8MB allocation that hangs around until
+flushed to each child -- but that's only a single Node.
+
+
+Okay, one totally reasonable possibility:
+With the current strategy, replacing a bucket at a time, the worst case
+is that each node is paged-in (8MB); perhaps
+the paged-in seq is never deallocated because of refs to keys as pivots.
+Then each bucket gets reassembled with amass. This would explain a 2x
+factor - it would explain amass not dropping off once page-in starts.
+(I mean, it eventually does, but not apparenttly as an effect of page-in.)
+But that's not the whole story.
+
+Okay, so it would be NICE to keep track of all the amass allocations and
+then check in later and look at the sptr ref counts. But I fought gdb for
+a couple hours trying to look into the shared pointers. The _M_ptr technique
+I used once doesn't seem to be in play; we're now using different
+header (/usr/include/c++/v1/memory). I used clang++ -E to ensure I was
+looking at the right guts, and a sptr should have a __cntrl_.__shared_count
+field, but for some reason gdb can't see it.
+The use_count() method is available, but if I'm going to do this at the
+source level (instead of the debugger level), I'm gonna have to use
+weak refs, too. Blearggh.

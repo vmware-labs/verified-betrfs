@@ -168,6 +168,13 @@ void ycsbRun(
     int next_evict_ms = evict_interval_ms;
 #endif // HACK_EVICT_PERIODIC
 
+#define HACK_PROBE_PERIODIC 1
+#if HACK_PROBE_PERIODIC
+// An experiment to periodically study how the kv allocations are distributed
+    int probe_interval_ms = 100000;
+    int next_probe_ms = /*probe_interval_ms*/ 10000;
+#endif // HACK_PROBE_PERIODIC
+
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
         switch (next_operation) {
@@ -209,6 +216,13 @@ void ycsbRun(
             next_evict_ms += evict_interval_ms;
         }
 #endif // HACK_EVICT_PERIODIC
+#if HACK_PROBE_PERIODIC
+        if (elapsed_ms >= next_probe_ms) {
+            printf("probe.");
+            db.CountAmassAllocations();
+            next_probe_ms += probe_interval_ms;
+        }
+#endif // HACK_PROBE_PERIODIC
 
         if (elapsed_ms >= next_display_ms) {
             malloc_accounting_display("periodic");
@@ -314,6 +328,10 @@ public:
     inline void evictEverything() {
         app.EvictEverything();
     }
+
+    inline void CountAmassAllocations() {
+        app.CountAmassAllocations();
+    }
 };
 
 const string VeribetrkvFacade::name = string("veribetrkv");
@@ -386,6 +404,10 @@ public:
     }
 
     inline void evictEverything() {
+        asm volatile ("nop");
+    }
+
+    inline void CountAmassAllocations() {
         asm volatile ("nop");
     }
 };
