@@ -24,96 +24,299 @@ module AsyncSectorDisk {
   import opened DiskLayout
   import opened SectorType
   import opened JournalRanges
+  import opened PivotBetreeGraph
+  import opened Sequences
 
   type ReqId = uint64
 
-  datatype ReqRead = ReqRead(loc: Location)
-  datatype ReqWrite = ReqWrite(loc: Location, sector: Sector)
-  datatype RespRead = RespRead(sector: Option<Sector>)
-  datatype RespWrite = RespWrite
+  datatype ReqReadJournal = ReqReadJournal(start: int, len: int)
+  datatype ReqReadIndirectionTable = ReqReadIndirectionTable(loc: Location)
+  datatype ReqReadNode = ReqReadNode(loc: Location)
+
+  datatype ReqWriteSuperblock = ReqWriteSuperblock(superblock: Superblock)
+  datatype ReqWriteJournal = ReqWriteJournal(start: int, journal: JournalRange)
+  datatype ReqWriteIndirectionTable = ReqWriteIndirectionTable(loc: Location, indirectionTable: IndirectionTable)
+  datatype ReqWriteNode = ReqWriteNode(loc: Location, node: Node)
+
+  datatype ReqWriteSuperblockId = ReqWriteSuperblockId(id: ReqId, req: ReqWriteSuperblock)
+
+  datatype RespReadSuperblockId = RespReadSuperblockId(id: ReqId, superblock: Option<Superblock>)
 
   datatype DiskOp =
-    | ReqReadOp(id: ReqId, reqRead: ReqRead)
-    | ReqWriteOp(id: ReqId, reqWrite: ReqWrite)
-    | ReqWrite2Op(id1: ReqId, id2: ReqId,
-        reqWrite1: ReqWrite,
-        reqWrite2: ReqWrite)
-    | RespReadOp(id: ReqId, respRead: RespRead)
-    | RespWriteOp(id: ReqId, respWrite: RespWrite)
+    | ReqReadSuperblockOp(id: ReqId, which: int)
+    | ReqReadJournalOp(id: ReqId, reqReadJournal: ReqReadJournal)
+    | ReqReadIndirectionTableOp(id: ReqId, reqReadIndirectionTable: ReqReadIndirectionTable)
+    | ReqReadNodeOp(id: ReqId, reqReadNode: ReqReadNode)
+
+    | ReqWriteSuperblockOp(id: ReqId, which: int, reqWriteSuperblock: ReqWriteSuperblock)
+    | ReqWriteJournalOp(id: ReqId, reqWriteJournal: ReqWriteJournal)
+    | ReqWriteJournalOp2(
+      id1: ReqId, reqWriteJournal1: ReqWriteJournal,
+      id2: ReqId, reqWriteJournal2: ReqWriteJournal)
+    | ReqWriteIndirectionTableOp(id: ReqId, reqWriteIndirectionTable: ReqWriteIndirectionTable)
+    | ReqWriteNodeOp(id: ReqId, reqWriteNode: ReqWriteNode)
+
+    | RespReadSuperblockOp(id: ReqId, which: int, superblock: Option<Superblock>)
+    | RespReadJournalOp(id: ReqId, journal: Option<JournalRange>)
+    | RespReadIndirectionTableOp(id: ReqId, indirectionTable: Option<IndirectionTable>)
+    | RespReadNodeOp(id: ReqId, node: Option<Node>)
+
+    | RespWriteSuperblockOp(id: ReqId, which: int)
+    | RespWriteJournalOp(id: ReqId)
+    | RespWriteIndirectionTableOp(id: ReqId)
+    | RespWriteNodeOp(id: ReqId)
+
     | NoDiskOp
 
   datatype Constants = Constants()
   datatype Variables = Variables(
-    // Queue of requests and responses:
-    reqReads: map<ReqId, ReqRead>,
-    reqWrites: map<ReqId, ReqWrite>,
-    respReads: map<ReqId, RespRead>,
-    respWrites: map<ReqId, RespWrite>,
+    reqReadSuperblock1: Option<ReqId>,
+    reqReadSuperblock2: Option<ReqId>,
+    reqReadJournals: map<ReqId, ReqReadJournal>,
+    reqReadIndirectionTables: map<ReqId, ReqReadIndirectionTable>,
+    reqReadNodes: map<ReqId, ReqReadNode>,
+
+    reqWriteSuperblock1: Option<ReqWriteSuperblockId>,
+    reqWriteSuperblock2: Option<ReqWriteSuperblockId>,
+    reqWriteJournals: map<ReqId, ReqWriteJournal>,
+    reqWriteIndirectionTables: map<ReqId, ReqWriteIndirectionTable>,
+    reqWriteNodes: map<ReqId, ReqWriteNode>,
+
+    respReadSuperblock1: Option<RespReadSuperblockId>,
+    respReadSuperblock2: Option<RespReadSuperblockId>,
+    respReadJournals: map<ReqId, Option<JournalRange>>,
+    respReadIndirectionTables: map<ReqId, Option<IndirectionTable>>,
+    respReadNodes: map<ReqId, Option<Node>>,
+
+    respWriteSuperblock1: Option<ReqId>,
+    respWriteSuperblock2: Option<ReqId>,
+    respWriteJournals: set<ReqId>,
+    respWriteIndirectionTables: set<ReqId>,
+    respWriteNodes: set<ReqId>,
 
     // The disk:
-    blocks: imap<Location, Sector>
+    superblock1: Option<Superblock>,
+    superblock2: Option<Superblock>,
+    journal: seq<Option<JournalBlock>>,
+    indirectionTables: imap<Location, IndirectionTable>,
+    nodes: imap<Location, Node>
   )
 
   predicate Init(k: Constants, s: Variables)
   {
-    && s.reqReads == map[]
-    && s.reqWrites == map[]
-    && s.respReads == map[]
-    && s.respWrites == map[]
-    && ClosedUnderLogConcatenation(s.blocks)
+    && s.reqReadSuperblock1 == None
+    && s.reqReadSuperblock2 == None
+    && s.reqReadJournals == map[]
+    && s.reqReadIndirectionTables == map[]
+    && s.reqReadNodes == map[]
+
+    && s.reqWriteSuperblock1 == None
+    && s.reqWriteSuperblock2 == None
+    && s.reqWriteJournals == map[]
+    && s.reqWriteIndirectionTables == map[]
+    && s.reqWriteNodes == map[]
+
+    && s.respReadSuperblock1 == None
+    && s.respReadSuperblock2 == None
+    && s.respReadJournals == map[]
+    && s.respReadIndirectionTables == map[]
+    && s.respReadNodes == map[]
+
+    && s.respWriteSuperblock1 == None
+    && s.respWriteSuperblock2 == None
+    && s.respWriteJournals == {}
+    && s.respWriteIndirectionTables == {}
+    && s.respWriteNodes == {}
   }
 
-  datatype Step =
-    | RecvReadStep
-    | RecvWriteStep
-    | RecvWrite2Step
-    | AckReadStep
-    | AckWriteStep
-    | StutterStep
+  ///////// RecvRead
 
-  predicate RecvRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.ReqReadOp?
-    && dop.id !in s.reqReads
-    && dop.id !in s.respReads
-    && s' == s.(reqReads := s.reqReads[dop.id := dop.reqRead])
+    && dop.ReqReadSuperblockOp?
+    && Some(dop.id) != s.reqReadSuperblock1
+    && Some(dop.id) != s.reqReadSuperblock2
+    && (s.respReadSuperblock1.Some? ==> s.respReadSuperblock1.value.id != dop.id)
+    && (s.respReadSuperblock2.Some? ==> s.respReadSuperblock2.value.id != dop.id)
+    && (dop.which == 0 || dop.which == 1)
+    && (dop.which == 0 ==>
+      s' == s.(reqReadSuperblock1 := Some(dop.id)))
+    && (dop.which == 1 ==>
+      s' == s.(reqReadSuperblock2 := Some(dop.id)))
   }
 
-  predicate RecvWrite(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.ReqWriteOp?
-    && dop.id !in s.reqWrites
-    && dop.id !in s.respWrites
-    && s' == s.(reqWrites := s.reqWrites[dop.id := dop.reqWrite])
+    && dop.ReqReadJournalOp?
+    && dop.id !in s.reqReadJournals
+    && dop.id !in s.respReadJournals
+    && 0 <= dop.reqReadJournal.start < NumJournalBlocks() as int
+    && 0 <= dop.reqReadJournal.start + dop.reqReadJournal.len <= NumJournalBlocks() as int
+    && s' == s.(reqReadJournals := s.reqReadJournals[dop.id := dop.reqReadJournal])
   }
 
-  predicate RecvWrite2(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.ReqWrite2Op?
-    && dop.id1 !in s.reqWrites
-    && dop.id1 !in s.respWrites
-    && dop.id2 !in s.reqWrites
-    && dop.id2 !in s.respWrites
-    && dop.id1 != dop.id2
-    && s' == s.(reqWrites := s.reqWrites[dop.id1 := dop.reqWrite1]
-                                        [dop.id2 := dop.reqWrite2])
+    && dop.ReqReadIndirectionTableOp?
+    && dop.id !in s.reqReadIndirectionTables
+    && dop.id !in s.respReadIndirectionTables
+    && s' == s.(reqReadIndirectionTables := s.reqReadIndirectionTables[dop.id := dop.reqReadIndirectionTable])
   }
 
-  predicate AckRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.RespReadOp?
-    && dop.id in s.respReads
-    && s.respReads[dop.id] == dop.respRead
-    && s' == s.(respReads := MapRemove1(s.respReads, dop.id))
+    && dop.ReqReadNodeOp?
+    && dop.id !in s.reqReadNodes
+    && dop.id !in s.respReadNodes
+    && s' == s.(reqReadNodes := s.reqReadNodes[dop.id := dop.reqReadNode])
   }
 
-  predicate AckWrite(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  ///////// RecvWrite
+
+  predicate RecvWriteSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
-    && dop.RespWriteOp?
-    && dop.id in s.respWrites
-    && s.respWrites[dop.id] == dop.respWrite
-    && s' == s.(respWrites := MapRemove1(s.respWrites, dop.id))
+    && dop.ReqWriteSuperblockOp?
+    && Some(dop.id) != s.respWriteSuperblock1
+    && Some(dop.id) != s.respWriteSuperblock2
+    && (s.reqWriteSuperblock1.Some? ==> s.reqWriteSuperblock1.value.id != dop.id)
+    && (s.reqWriteSuperblock2.Some? ==> s.reqWriteSuperblock2.value.id != dop.id)
+    && (dop.which == 0 || dop.which == 1)
+    && (dop.which == 0 ==>
+      s' == s.(reqWriteSuperblock1 := Some(ReqWriteSuperblockId(dop.id, dop.reqWriteSuperblock))))
+    && (dop.which == 1 ==>
+      s' == s.(reqWriteSuperblock2 := Some(ReqWriteSuperblockId(dop.id, dop.reqWriteSuperblock))))
   }
+
+  predicate ValidReqWriteJournal(reqWriteJournal: ReqWriteJournal)
+  {
+    && 0 <= reqWriteJournal.start < NumJournalBlocks() as int
+    && 0 <= reqWriteJournal.start + |reqWriteJournal.journal| <= NumJournalBlocks() as int
+  }
+
+  predicate RecvWriteJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWriteJournalOp?
+    && dop.id !in s.reqWriteJournals
+    && dop.id !in s.respWriteJournals
+    && ValidReqWriteJournal(dop.reqWriteJournal)
+    && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id := dop.reqWriteJournal])
+  }
+
+  predicate RecvWriteJournal2(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWriteJournalOp2?
+    && dop.id1 !in s.reqWriteJournals
+    && dop.id1 !in s.respWriteJournals
+    && dop.id2 !in s.reqWriteJournals
+    && dop.id2 !in s.respWriteJournals
+    && ValidReqWriteJournal(dop.reqWriteJournal1)
+    && ValidReqWriteJournal(dop.reqWriteJournal2)
+    && s' == s.(reqWriteJournals :=
+        s.reqWriteJournals[dop.id1 := dop.reqWriteJournal1]
+                          [dop.id2 := dop.reqWriteJournal2]
+      )
+  }
+
+  predicate RecvWriteIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWriteIndirectionTableOp?
+    && dop.id !in s.reqWriteIndirectionTables
+    && dop.id !in s.respWriteIndirectionTables
+    && s' == s.(reqWriteIndirectionTables := s.reqWriteIndirectionTables[dop.id := dop.reqWriteIndirectionTable])
+  }
+
+  predicate RecvWriteNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWriteNodeOp?
+    && dop.id !in s.reqWriteNodes
+    && dop.id !in s.respWriteNodes
+    && s' == s.(reqWriteNodes := s.reqWriteNodes[dop.id := dop.reqWriteNode])
+  }
+
+  ///////// AckRead
+
+  predicate AckReadSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespReadSuperblockOp?
+    && (dop.which == 0 || dop.which == 1)
+    && (dop.which == 0 ==>
+      && s.respReadSuperblock1.Some?
+      && dop.id == s.respReadSuperblock1.value.id
+      && dop.superblock == s.respReadSuperblock1.value.superblock
+      && s' == s.(respReadSuperblock1 := None)
+    )
+    && (dop.which == 1 ==>
+      && s.respReadSuperblock2.Some?
+      && dop.id == s.respReadSuperblock2.value.id
+      && dop.superblock == s.respReadSuperblock2.value.superblock
+      && s' == s.(respReadSuperblock2 := None)
+    )
+  }
+
+  predicate AckReadJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespReadJournalOp?
+    && dop.id in s.respReadJournals
+    && s.respReadJournals[dop.id] == dop.journal
+    && s' == s.(respReadJournals := MapRemove1(s.respReadJournals, dop.id))
+  }
+
+  predicate AckReadIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespReadIndirectionTableOp?
+    && dop.id in s.respReadIndirectionTables
+    && s.respReadIndirectionTables[dop.id] == dop.indirectionTable
+    && s' == s.(respReadIndirectionTables := MapRemove1(s.respReadIndirectionTables, dop.id))
+  }
+
+  predicate AckReadNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespReadNodeOp?
+    && dop.id in s.respReadNodes
+    && s.respReadNodes[dop.id] == dop.node
+    && s' == s.(respReadNodes := MapRemove1(s.respReadNodes, dop.id))
+  }
+
+  ///////// AckWrite
+
+  predicate AckWriteSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespWriteSuperblockOp?
+    && (dop.which == 0 || dop.which == 1)
+    && (dop.which == 0 ==>
+      && s.respWriteSuperblock1.Some?
+      && dop.id == s.respWriteSuperblock1.value
+      && s' == s.(respWriteSuperblock1 := None)
+    )
+    && (dop.which == 1 ==>
+      && s.respWriteSuperblock2.Some?
+      && dop.id == s.respWriteSuperblock2.value
+      && s' == s.(respWriteSuperblock2 := None)
+    )
+  }
+
+  predicate AckWriteJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespWriteJournalOp?
+    && dop.id in s.respWriteJournals
+    && s' == s.(respWriteJournals := s.respWriteJournals - {dop.id})
+  }
+
+  predicate AckWriteIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespWriteIndirectionTableOp?
+    && dop.id in s.respWriteIndirectionTables
+    && s' == s.(respWriteIndirectionTables := s.respWriteIndirectionTables - {dop.id})
+  }
+
+  predicate AckWriteNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.RespWriteNodeOp?
+    && dop.id in s.respWriteNodes
+    && s' == s.(respWriteNodes := s.respWriteNodes - {dop.id})
+  }
+
+  //// Stutter
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
@@ -121,118 +324,226 @@ module AsyncSectorDisk {
     && s' == s
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step) {
-    match step {
-      case RecvReadStep => RecvRead(k, s, s', dop)
-      case RecvWriteStep => RecvWrite(k, s, s', dop)
-      case RecvWrite2Step => RecvWrite2(k, s, s', dop)
-      case AckReadStep => AckRead(k, s, s', dop)
-      case AckWriteStep => AckWrite(k, s, s', dop)
-      case StutterStep => Stutter(k, s, s', dop)
-    }
-  }
-
   predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
-    exists step :: NextStep(k, s, s', dop, step)
+    && (dop.ReqReadSuperblockOp? ==> RecvReadSuperblock(k, s, s', dop))
+    && (dop.ReqReadJournalOp? ==> RecvReadJournal(k, s, s', dop))
+    && (dop.ReqReadIndirectionTableOp? ==> RecvReadIndirectionTable(k, s, s', dop))
+    && (dop.ReqReadNodeOp? ==> RecvReadNode(k, s, s', dop))
+
+    && (dop.ReqWriteSuperblockOp? ==> RecvWriteSuperblock(k, s, s', dop))
+    && (dop.ReqWriteJournalOp? ==> RecvWriteJournal(k, s, s', dop))
+    && (dop.ReqWriteJournalOp2? ==> RecvWriteJournal2(k, s, s', dop))
+    && (dop.ReqWriteIndirectionTableOp? ==> RecvWriteIndirectionTable(k, s, s', dop))
+    && (dop.ReqWriteNodeOp? ==> RecvWriteNode(k, s, s', dop))
+
+    && (dop.RespReadSuperblockOp? ==> AckReadSuperblock(k, s, s', dop))
+    && (dop.RespReadJournalOp? ==> AckReadJournal(k, s, s', dop))
+    && (dop.RespReadIndirectionTableOp? ==> AckReadIndirectionTable(k, s, s', dop))
+    && (dop.RespReadNodeOp? ==> AckReadNode(k, s, s', dop))
+
+    && (dop.RespWriteSuperblockOp? ==> AckWriteSuperblock(k, s, s', dop))
+    && (dop.RespWriteJournalOp? ==> AckWriteJournal(k, s, s', dop))
+    && (dop.RespWriteIndirectionTableOp? ==> AckWriteIndirectionTable(k, s, s', dop))
+    && (dop.RespWriteNodeOp? ==> AckWriteNode(k, s, s', dop))
+
+    && (dop.NoDiskOp? ==> Stutter(k, s, s', dop))
   }
 
   datatype InternalStep =
-    | ProcessReadStep(id: ReqId)
-    | ProcessReadFailureStep(id: ReqId)
-    | ProcessWriteStep(id: ReqId)
+    | ProcessReadSuperblockStep(which: int, id: ReqId)
+    | ProcessReadJournalStep(id: ReqId)
+    | ProcessReadIndirectionTableStep(id: ReqId)
+    | ProcessReadNodeStep(id: ReqId)
 
-  predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
+    | ProcessReadFailureSuperblockStep(which: int, id: ReqId)
+    | ProcessReadFailureJournalStep(id: ReqId)
+    | ProcessReadFailureIndirectionTableStep(id: ReqId)
+    | ProcessReadFailureNodeStep(id: ReqId)
+
+    | ProcessWriteSuperblockStep(which: int, id: ReqId)
+    | ProcessWriteJournalStep(id: ReqId)
+    | ProcessWriteIndirectionTableStep(id: ReqId)
+    | ProcessWriteNodeStep(id: ReqId)
+
+  ///////// ProcessRead
+
+  predicate ProcessReadSuperblock(k: Constants, s: Variables, s': Variables, which: int, id: ReqId)
   {
-    && id in s.reqReads
-    && var req := s.reqReads[id];
-    && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(ImapLookupOption(s.blocks, req.loc))])
+    && (which == 0 || which == 1)
+    && (which == 0 ==>
+      && s.reqReadSuperblock1 == Some(id)
+      && s' == s.(reqReadSuperblock1 := None)
+                .(respReadSuperblock1 := Some(RespReadSuperblockId(id, s.superblock1)))
+    )
+    && (which == 1 ==>
+      && s.reqReadSuperblock2 == Some(id)
+      && s' == s.(reqReadSuperblock2 := None)
+                .(respReadSuperblock2 := Some(RespReadSuperblockId(id, s.superblock2)))
+    )
   }
 
-  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId)
+  function {:opaque} journalRead(a: seq<Option<JournalBlock>>) : Option<seq<JournalBlock>>
   {
-    && id in s.reqReads
-    && var req := s.reqReads[id];
-    && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(None)])
+    if a == [] then Some([]) else (
+      var p := journalRead(DropLast(a));
+      if p.Some? && Last(a).Some? then
+        Some(p.value + [Last(a).value])
+      else
+        None
+    )
   }
 
-  predicate ClosedUnderLogConcatenationLocs(
-      blocks: imap<Location, Sector>,
-      loc1: Location,
-      loc2: Location,
-      loc3: Location)
+  predicate ProcessReadJournal(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
-    && loc1 in blocks
-    && loc2 in blocks
-    && blocks[loc1].SectorJournal?
-    && blocks[loc2].SectorJournal?
-    && loc2.addr as int == loc1.addr as int + loc1.len as int
-    && loc3.addr == loc1.addr
-    && loc3.len as int == loc1.len as int + loc2.len as int
-        ==> (
-          && loc3 in blocks
-          && blocks[loc3] == SectorJournal(JournalRangeConcat(
-              blocks[loc1].journal, blocks[loc2].journal))
-        )
+    && id in s.reqReadJournals
+    && var req := s.reqReadJournals[id];
+    && 0 <= req.start <= req.start + req.len <= |s.journal|
+    && var jr := journalRead(s.journal[req.start .. req.start + req.len]);
+    && s' == s.(reqReadJournals := MapRemove1(s.reqReadJournals, id))
+              .(respReadJournals := s.respReadJournals[id := jr])
   }
 
-  predicate ClosedUnderLogConcatenation(blocks: imap<Location, Sector>)
+  predicate ProcessReadIndirectionTable(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
-    forall loc1, loc2, loc3 ::
-        ClosedUnderLogConcatenationLocs(blocks, loc1, loc2, loc3)
+    && id in s.reqReadIndirectionTables
+    && var req := s.reqReadIndirectionTables[id];
+    && s' == s.(reqReadIndirectionTables := MapRemove1(s.reqReadIndirectionTables, id))
+              .(respReadIndirectionTables := s.respReadIndirectionTables[id := ImapLookupOption(s.indirectionTables, req.loc)])
   }
 
-  predicate LogLookupSingleBlockConsistentLoc(
-      blocks: imap<Location, Sector>,
-      loc: Location, loc2: Location, i: int)
+  predicate ProcessReadNode(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
-    && loc in blocks
-    && blocks[loc].SectorJournal?
-    && loc2.addr as int == loc.addr as int + 4096*i
-    && loc2.len == 4096
-    && loc2.addr >= loc.addr
-    && loc2.addr as int + loc2.len as int
-        <= loc.addr as int + loc.len as int
-      ==>
-    && loc2 in blocks
-    && 0 <= i < JournalRangeLen(blocks[loc].journal)
-    && blocks[loc2] == SectorJournal(
-        JournalBlockGet(blocks[loc].journal, i))
+    && id in s.reqReadNodes
+    && var req := s.reqReadNodes[id];
+    && s' == s.(reqReadNodes := MapRemove1(s.reqReadNodes, id))
+              .(respReadNodes := s.respReadNodes[id := ImapLookupOption(s.nodes, req.loc)])
   }
 
-  predicate LogLookupSingleBlockConsistent(blocks: imap<Location, Sector>)
+  ////////// ProcessReadFailure
+
+  predicate ProcessReadFailureSuperblock(k: Constants, s: Variables, s': Variables, which: int, id: ReqId)
   {
-    forall loc, loc2, i ::
-        LogLookupSingleBlockConsistentLoc(blocks, loc, loc2, i)
+    && (which == 0 || which == 1)
+    && (which == 0 ==>
+      && s.reqReadSuperblock1 == Some(id)
+      && s' == s.(reqReadSuperblock1 := None)
+                .(respReadSuperblock1 := Some(RespReadSuperblockId(id, None)))
+    )
+    && (which == 1 ==>
+      && s.reqReadSuperblock2 == Some(id)
+      && s' == s.(reqReadSuperblock2 := None)
+                .(respReadSuperblock2 := Some(RespReadSuperblockId(id, None)))
+    )
   }
 
-  predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
+  predicate ProcessReadFailureJournal(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
-    && id in s.reqWrites
-    && var req := s.reqWrites[id];
-    && s' == s.(reqWrites := MapRemove1(s.reqWrites, id))
-              .(respWrites := s.respWrites[id := RespWrite])
-              .(blocks := s'.blocks)
+    && id in s.reqReadJournals
+    && s' == s.(reqReadJournals := MapRemove1(s.reqReadJournals, id))
+              .(respReadJournals := s.respReadJournals[id := None])
+  }
 
-    // It would be easier to say s'.blocks == s.blocks[req.loc := req.sector]
+  predicate ProcessReadFailureIndirectionTable(k: Constants, s: Variables, s': Variables, id: ReqId)
+  {
+    && id in s.reqReadIndirectionTables
+    && s' == s.(reqReadIndirectionTables := MapRemove1(s.reqReadIndirectionTables, id))
+              .(respReadIndirectionTables := s.respReadIndirectionTables[id := None])
+  }
+
+  predicate ProcessReadFailureNode(k: Constants, s: Variables, s': Variables, id: ReqId)
+  {
+    && id in s.reqReadNodes
+    && s' == s.(reqReadNodes := MapRemove1(s.reqReadNodes, id))
+              .(respReadNodes := s.respReadNodes[id := None])
+  }
+
+  //////// ProcessWrite
+
+  predicate ProcessWriteSuperblock(k: Constants, s: Variables, s': Variables, which: int, id: ReqId)
+  {
+    && (which == 0 || which == 1)
+    && (which == 0 ==>
+      && s.reqWriteSuperblock1.Some?
+      && s.reqWriteSuperblock1.value.id == id
+      && s' == s.(superblock1 := Some(s.reqWriteSuperblock1.value.req.superblock))
+                .(reqWriteSuperblock1 := None)
+                .(respWriteSuperblock1 := Some(id))
+    )
+    && (which == 1 ==>
+      && s.reqWriteSuperblock2.Some?
+      && s.reqWriteSuperblock2.value.id == id
+      && s' == s.(superblock2 := Some(s.reqWriteSuperblock2.value.req.superblock))
+                .(reqWriteSuperblock2 := None)
+                .(respWriteSuperblock2 := Some(id))
+    )
+  }
+
+  predicate ProcessWriteJournal(k: Constants, s: Variables, s': Variables, which: int, id: ReqId)
+  {
+    && (which == 0 || which == 1)
+    && (which == 0 ==>
+      && s.reqWriteSuperblock1.Some?
+      && s.reqWriteSuperblock1.value.id == id
+      && s' == s.(superblock1 := Some(s.reqWriteSuperblock1.value.req.superblock))
+                .(reqWriteSuperblock1 := None)
+                .(respWriteSuperblock1 := Some(id))
+    )
+    && (which == 1 ==>
+      && s.reqWriteSuperblock2.Some?
+      && s.reqWriteSuperblock2.value.id == id
+      && s' == s.(superblock2 := Some(s.reqWriteSuperblock2.value.req.superblock))
+                .(reqWriteSuperblock2 := None)
+                .(respWriteSuperblock2 := Some(id))
+    )
+  }
+
+  predicate ProcessWriteIndirectionTable(k: Constants, s: Variables, s': Variables, id: ReqId)
+  {
+    && id in s.reqWriteIndirectionTables
+    && var req := s.reqWriteIndirectionTables[id];
+    && s' == s.(reqWriteIndirectionTables := MapRemove1(s.reqWriteIndirectionTables, id))
+              .(respWriteIndirectionTables := s.respWriteIndirectionTables + {id})
+              .(indirectionTables := s'.indirectionTables)
+
+    && req.loc in s'.indirectionTables
+    && s'.indirectionTables[req.loc] == req.indirectionTable
+    && (forall loc | loc in s.indirectionTables && !overlap(loc, req.loc) :: loc in s'.indirectionTables && s'.indirectionTables[loc] == s.indirectionTables[loc])
+    && (forall loc | loc in s'.indirectionTables && !overlap(loc, req.loc) :: loc in s.indirectionTables)
+  }
+
+  predicate ProcessWriteNode(k: Constants, s: Variables, s': Variables, id: ReqId)
+  {
+    && id in s.reqWriteNodes
+    && var req := s.reqWriteNodes[id];
+    && s' == s.(reqWriteNodes := MapRemove1(s.reqWriteNodes, id))
+              .(respWriteNodes := s.respWriteNodes + {id})
+              .(nodes := s'.nodes)
+
+    // It would be easier to say s'.nodes == s.nodes[req.loc := req.sector]
     // but to make the refinement from AsyncDiskModel easier, we only require that
     // the map preserves every location not intersecting the given region. We don't
     // have to say anything about potential intervals which could intersect this one.
-    && req.loc in s'.blocks
-    && s'.blocks[req.loc] == req.sector
-    && (forall loc | loc in s.blocks && !overlap(loc, req.loc) :: loc in s'.blocks && s'.blocks[loc] == s.blocks[loc])
-    && (forall loc | loc in s'.blocks && !overlap(loc, req.loc) :: loc in s.blocks)
-    && ClosedUnderLogConcatenation(s'.blocks)
-    && LogLookupSingleBlockConsistent(s'.blocks)
+    && req.loc in s'.nodes
+    && s'.nodes[req.loc] == req.node
+    && (forall loc | loc in s.nodes && !overlap(loc, req.loc) :: loc in s'.nodes && s'.nodes[loc] == s.nodes[loc])
+    && (forall loc | loc in s'.nodes && !overlap(loc, req.loc) :: loc in s.nodes)
   }
 
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
   {
     match step {
-      case ProcessReadStep(id) => ProcessRead(k, s, s', id)
-      case ProcessReadFailureStep(id) => ProcessReadFailure(k, s, s', id)
-      case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
+      case ProcessReadSuperblockStep(which, id) => ProcessReadSuperblock(k, s, s', which, id)
+      case ProcessReadJournalStep(id) => ProcessReadJournal(k, s, s', id)
+      case ProcessReadIndirectionTableStep(id) => ProcessReadIndirectionTable(k, s, s', id)
+      case ProcessReadNodeStep(id) => ProcessReadNode(k, s, s', id)
+      case ProcessReadFailureSuperblockStep(which, id) => ProcessReadFailureSuperblock(k, s, s', which, id)
+      case ProcessReadFailureJournalStep(id) => ProcessReadFailureJournal(k, s, s', id)
+      case ProcessReadFailureIndirectionTableStep(id) => ProcessReadFailureIndirectionTable(k, s, s', id)
+      case ProcessReadFailureNodeStep(id) => ProcessReadFailureNode(k, s, s', id)
+      case ProcessWriteSuperblockStep(which, id) => ProcessWriteSuperblock(k, s, s', which, id)
+      case ProcessWriteJournalStep(id) => ProcessWriteJournal(k, s, s', id)
+      case ProcessWriteIndirectionTableStep(id) => ProcessWriteIndirectionTable(k, s, s', id)
+      case ProcessWriteNodeStep(id) => ProcessWriteNode(k, s, s', id)
     }
   }
 
@@ -247,7 +558,7 @@ module AsyncSectorDisk {
   }
 }
 
-abstract module AsyncSectorDiskMachine {
+/*abstract module AsyncSectorDiskMachine {
   import D = AsyncSectorDisk
   import UI
 
@@ -330,4 +641,4 @@ abstract module AsyncSectorDiskModel {
     requires Inv(k, s)
     requires Next(k, s, s', uiop)
     ensures Inv(k, s')
-}
+}*/
