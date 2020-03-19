@@ -39,6 +39,8 @@ def parse(filename):
     first_op_completed_t = None
     ops_completed = {}
     scopes = {}
+    kvl_underlying = {}
+    kvl_underlying_count = {}
     for line in open(filename, "r").readlines():
         line = line.strip()
         fields = line.split()
@@ -65,8 +67,12 @@ def parse(filename):
             if label not in microscopes:
                 microscopes[label] = {}
             microscopes[label][t] = arow
+        
+        if line.startswith("allocationreport stop underyling_count"):
+            kvl_underlying_count[t] = int(fields[3])
+            kvl_underlying[t] = int(fields[5])
 
-    fig, axes = plt.subplots(5, 1, figsize=(5,10))
+    fig, axes = plt.subplots(6, 1, figsize=(5,12))
     plt.subplots_adjust(left=0.10, right=0.90, hspace=0.4, top=0.95, bottom=0.05);
 
     t_end = max(os_map_total.keys())
@@ -109,7 +115,8 @@ def parse(filename):
     axes[1].set_title("allocations")
     axes[1].set_ylabel("GB")
 
-    label_bytearys = "seq-from-array.[T = unsigned char]"
+    #label_bytearys = "seq-from-array.[T = unsigned char]"
+    label_bytearys = "in_amass.[T = unsigned char]"
     focus_bytearys = scopes[label_bytearys]
     xs_bytearys = [t for t in focus_bytearys]
     ys_bytearys = [focus_bytearys[t].open_byte/GB for t in xs_bytearys]
@@ -148,18 +155,40 @@ def parse(filename):
     stack = [
               (microscopes["esLarge"], "pagein"),
               (microscopes["sfaLarge"], "amass"),
+              (scopes["in_amass.[T = unsigned char]"], "in_amass"),
             ]
     xs = [t for t in stack[0][0]]
     prev = [0 for t in xs]
     for i in range(len(stack)):
         (item,label) = stack[i]
-        ys = [item[xs[i]].open_byte + prev[i] for i in range(len(xs))]
+        ys = [(item[xs[i]].open_byte + prev[i])/GB for i in range(len(xs))]
         line, = axes[3].plot(xs, ys)
         line.set_label(label)
         prev = ys
-    line, = axes[3].plot(xs, [microscopes["total"][t].open_byte for t in xs])
+    line, = axes[3].plot(xs, [microscopes["total"][t].open_byte/GB for t in xs])
     line.set_label("malloc total")
     axes[3].legend()
+
+    xs = [t for t in kvl_underlying]
+    ys = [kvl_underlying[t]/GB for t in xs]
+    line, = axes[4].plot(xs, ys)
+    line.set_label("underlying sum");
+    ys = [scopes["in_amass.[T = unsigned char]"][t].open_byte/GB for t in xs]
+    line, = axes[4].plot(xs, ys)
+    line.set_label("amass");
+    axes[4].legend()
+    axes[4].set_ylabel("GB")
+    axes[4].set_title("malloc amass vs underlying sum")
+
+    xs = [t for t in kvl_underlying_count]
+    ys = [kvl_underlying_count[t] for t in xs]
+    line, = axes[5].plot(xs, ys)
+    line.set_label("reachable underlying allocs")
+    ys = [scopes["in_amass.[T = unsigned char]"][t].open_count for t in xs]
+    line, = axes[5].plot(xs, ys)
+    line.set_label("amass live alloc count")
+    axes[4].legend()
+    axes[5].set_title("amass live allocs vs reachable underlying allocs")
 
     def cdf(axis, data):
         vals = list(data)
@@ -172,8 +201,9 @@ def parse(filename):
         xs = vals
         ys = [sums[i]/total for i in range(len(vals))]
         axis.plot(xs, ys)
-    dataset = microscopes["sfaLarge"]
-    cdf(axes[4], [dataset[t].open_byte for t in dataset])
+#    dataset = microscopes["sfaLarge"]
+#    cdf(axes[4], [dataset[t].open_byte for t in dataset])
+
 #    xs_byteToMalloc = [t for t in xs_bytearys]
 #    ys_byteToMalloc = [ microscopes["total"][t].open_byte / focus_bytearys[t].open_byte for t in xs_byteToMalloc]
 #    line, = axes[4].plot(xs_byteToMalloc, ys_byteToMalloc)

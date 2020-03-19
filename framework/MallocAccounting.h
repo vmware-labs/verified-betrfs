@@ -53,3 +53,5 @@ inline std::string malloc_accounting_std_string(const char* c_str) {
   malloc_accounting_default_scope();
   return std_string;
 }
+
+extern const char* horrible_amass_label;

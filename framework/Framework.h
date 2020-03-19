@@ -4,6 +4,7 @@
 //#include "Bundle.i.h"
 
 #include <map>
+#include <unordered_map>
 #include <cstring>
 
 namespace Maps_Compile {
@@ -206,15 +207,22 @@ namespace NativeBenchmarking_Compile {
   };
 }
 
-namespace BucketImpl_Compile {
-class MutBucket;
+namespace MallocAccounting_Compile {
+  class __default {
+  public:
+    static void set_amass_mode(bool b);
+  };
+}
+
+namespace NodeImpl_Compile {
+class Node;
 }
 
 namespace AllocationReport_Compile {
   class __default {
   public:
     static void start();
-    static void sampleBucket(uint64 ref, std::shared_ptr<BucketImpl_Compile::MutBucket> bucket);
+    static void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node);
     static void stop();
   };
 }

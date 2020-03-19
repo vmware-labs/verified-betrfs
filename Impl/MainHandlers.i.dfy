@@ -122,33 +122,55 @@ module {:compileName "MainHandlers"} MainHandlers refines Main {
   {
     AllocationReport.start();
     var s := hs.s;
-    var table/*:MutableMap.ResizingHashMap*/ := s.ephemeralIndirectionTable.t;
-    var iter := table.SimpleIterStart();
-    var output := table.SimpleIterOutput(iter);
+
+    var cache := s.cache.cache;
+    var iter := cache.SimpleIterStart();
+    var output := cache.SimpleIterOutput(iter);
     while (!output.Done?) {
-      var ref/*:IndirectionTableModel.Entry*/ := output.key;
-      var nodeOpt/*:Option<NodeImpl.Node>*/ := s.cache.GetOpt(ref);
-      if nodeOpt.Some? {
-        var node:NodeImpl.Node := nodeOpt.value;
-        var bi:uint64 := 0;
-        while (bi < |node.buckets| as uint64) {
-          var bucket := node.buckets[bi];
-          AllocationReport.sampleBucket(ref, bucket);
-          /*
-          if (bucket.format.BFKvl?) {
-            var kvl := bucket.kvl;
-            var keys := kvl.keys;
-            var messages := kvl.messages;
-            // ship things off to C++ here?
-            print "amassCount ", ref, " ", bi, " ", |keys|, " ", |messages|, "\n";
-          }
-          */
-          bi := bi + 1;
-        }
+      var node := output.value;
+
+      AllocationReport.sampleNode(0, node);
+      /*
+      var bi:uint64 := 0;
+      while (bi < |node.buckets| as uint64) {
+        var bucket := node.buckets[bi];
+        AllocationReport.sampleBucket(0, bucket);
+        bi := bi + 1;
       }
-      iter := table.SimpleIterInc(iter);
-      output := table.SimpleIterOutput(iter);
+      */
+
+      iter := cache.SimpleIterInc(iter);
+      output := cache.SimpleIterOutput(iter);
     }
+
+//    var table/*:MutableMap.ResizingHashMap*/ := s.ephemeralIndirectionTable.t;
+//    var iter := table.SimpleIterStart();
+//    var output := table.SimpleIterOutput(iter);
+//    while (!output.Done?) {
+//      var ref/*:IndirectionTableModel.Entry*/ := output.key;
+//      var nodeOpt/*:Option<NodeImpl.Node>*/ := s.cache.GetOpt(ref);
+//      if nodeOpt.Some? {
+//        var node:NodeImpl.Node := nodeOpt.value;
+//        var bi:uint64 := 0;
+//        while (bi < |node.buckets| as uint64) {
+//          var bucket := node.buckets[bi];
+//          AllocationReport.sampleBucket(ref, bucket);
+//          /*
+//          if (bucket.format.BFKvl?) {
+//            var kvl := bucket.kvl;
+//            var keys := kvl.keys;
+//            var messages := kvl.messages;
+//            // ship things off to C++ here?
+//            print "amassCount ", ref, " ", bi, " ", |keys|, " ", |messages|, "\n";
+//          }
+//          */
+//          bi := bi + 1;
+//        }
+//      }
+//      iter := table.SimpleIterInc(iter);
+//      output := table.SimpleIterOutput(iter);
+//    }
+
     AllocationReport.stop();
     assume false;
   }

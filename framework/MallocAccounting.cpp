@@ -544,3 +544,5 @@ void malloc_accounting_default_scope() {
 #else // MALLOC_ACCOUNTING
 // implementations are empty inlines in .h
 #endif // MALLOC_ACCOUNTING
+
+const char* horrible_amass_label = NULL;

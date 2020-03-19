@@ -4,6 +4,7 @@ include "../Base/Maps.s.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"
+include "../Base/MallocAccounting.i.dfy"
 //
 // A list of key-message pairs, with unique, sorted keys.
 // TODO(robj,thance): How is it used... in BucketImpl?
@@ -27,6 +28,7 @@ module KVList {
   import P = PivotsLib
   import SeqComparison
   import opened KeyType
+  import MallocAccounting
 
   datatype Kvl = Kvl(keys: seq<Key>, messages: seq<Message>)
 
@@ -67,7 +69,9 @@ module KVList {
     }
 
     // Glue into a seq
+    MallocAccounting.set_amass_mode(true);
     var amassedSeq := ary[..];
+    MallocAccounting.set_amass_mode(false);
 
     // String together the refs to the bytes, pointing into the amassed seq
     var keyAry := new Key[|kvl.keys| as uint64];

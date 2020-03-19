@@ -392,3 +392,27 @@ field, but for some reason gdb can't see it.
 The use_count() method is available, but if I'm going to do this at the
 source level (instead of the debugger level), I'm gonna have to use
 weak refs, too. Blearggh.
+
+
+Next question is: are we really sure that the 'amass' allocation microscope
+is finding the allocations we think it is? Andrea suggested walking through
+the underlying sptrs and adding up all of their usage as viewed from inside
+C++.
+
+
+[malloc-exp/wprofile-amass-countpivots-timeseries.png]
+Okay, we're amassing all the children on the way out of flush (yay), and we're
+amassing in Split, and we're CopyKey-ing pivot keys.
+We also added a special hack to label amass allocations very precisely.
+Finally, we see most of what we want: the reachable-underlying count eventually converges
+to amass live allocs, and the overall malloc is 0.8GB, what we'd hope.
+
+Some mysteries survive:
+- Why isn't live amass allocs exactly equal to underlying alloc count? (graph 6)
+- What are we counting in graph 5? pkvs? I thought my counting code didn't touch those.
+  ...maybe they're being accessed by way of pivot keys, now that we're counting those.
+- OS/mmap ratio is still creeping up (graph 2). Maybe we should still use a big-pool policy?
+
+And open questions:
+- Do we really need to amass splits? flushes? Maybe the pivots were the ony
+  thing causing the real trouble.
