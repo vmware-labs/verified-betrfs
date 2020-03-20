@@ -24,6 +24,7 @@ abstract module FullVersioned {
   {
     && s.version == 0
     && |s.states| == 1
+    && SM.Init(k.k, s.states[0])
     && s.syncReqs == map[]
   }
 
@@ -65,7 +66,7 @@ abstract module FullVersioned {
     && s'.syncReqs == s.syncReqs
   }
 
-  predicate PushSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: int)
+  predicate PushSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: SyncReqId)
   {
     && uiop == UI.PushSyncOp(id)
     && id !in s.syncReqs
@@ -75,7 +76,7 @@ abstract module FullVersioned {
         s.syncReqs[id := s.version + |s.states| - 1]
   }
 
-  predicate PopSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: int)
+  predicate PopSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: SyncReqId)
   {
     && uiop == UI.PopSyncOp(id)
     && id in s.syncReqs
