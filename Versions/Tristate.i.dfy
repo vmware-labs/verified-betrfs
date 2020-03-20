@@ -150,7 +150,7 @@ abstract module TriState {
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && (vop.JournalInternalOp? || vop.TristateInternalOp?)
     && s' == s
   }
 

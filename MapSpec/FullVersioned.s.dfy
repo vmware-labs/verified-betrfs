@@ -31,6 +31,7 @@ abstract module FullVersioned {
   datatype Step =
     | CrashStep
     | AdvanceStep
+    | QueryStep
     | PersistStep
     | PushSyncStep(ghost id: SyncReqId)
     | PopSyncStep(ghost id: SyncReqId)
@@ -56,6 +57,16 @@ abstract module FullVersioned {
         uiop)
     && s'.version == s.version
     && s'.syncReqs == s.syncReqs
+  }
+
+  predicate Query(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
+  {
+    && s' == s
+    && |s.states| > 0
+    && SM.Next(k.k,
+        s.states[|s.states| - 1],
+        s.states[|s.states| - 1],
+        uiop)
   }
 
   predicate Persist(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
@@ -97,6 +108,7 @@ abstract module FullVersioned {
     match step {
       case CrashStep => Crash(k, s, s', uiop)
       case AdvanceStep => Advance(k, s, s', uiop)
+      case QueryStep => Query(k, s, s', uiop)
       case PersistStep => Persist(k, s, s', uiop)
       case PushSyncStep(id) => PushSync(k, s, s', uiop, id)
       case PopSyncStep(id) => PopSync(k, s, s', uiop, id)

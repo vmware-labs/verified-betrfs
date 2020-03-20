@@ -21,10 +21,10 @@ module JournalChain {
 
       persistentStateIndex: Version,
       persistentJournalIndex: Version,
-      persistentIndirectionTableLoc: Location,
+      persistentLoc: Location,
 
       frozenStateIndex: Option<Version>,
-      frozenIndirectionTableLoc: Option<Location>,
+      frozenLoc: Option<Location>,
 
       ephemeralStateIndex: int,
 
@@ -37,9 +37,9 @@ module JournalChain {
     && s.journal == []
     && s.persistentStateIndex == 0
     && s.persistentJournalIndex == 0
-    && s.persistentIndirectionTableLoc == Loc1
+    && s.persistentLoc == Loc1
     && s.frozenStateIndex == None
-    && s.frozenIndirectionTableLoc == None
+    && s.frozenLoc == None
     && s.ephemeralStateIndex == 0
     && s.syncReqs == map[]
   }
@@ -59,15 +59,15 @@ module JournalChain {
   predicate PresentPersistentLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendPersistentLocOp?
-    && vop.loc == s.persistentIndirectionTableLoc
+    && vop.loc == s.persistentLoc
 
     && s'.startVersion == s.startVersion
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == s.syncReqs
   }
@@ -84,9 +84,9 @@ module JournalChain {
     && s'.journal == s.journal + jes
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex + |jes|
     && s'.syncReqs == s.syncReqs
   }
@@ -107,9 +107,9 @@ module JournalChain {
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex + |jes|
     && s'.syncReqs == s.syncReqs
   }
@@ -121,13 +121,13 @@ module JournalChain {
     && s'.startVersion == 0
     && 0 <= s.persistentStateIndex - s.startVersion <= |s.journal|
     && s'.journal
-        == s.journal[0 .. s.persistentStateIndex - s.startVersion]
+        == s.journal[0 .. s.persistentJournalIndex - s.startVersion]
     && s'.persistentStateIndex == 0
     && s'.persistentJournalIndex
         == s.persistentJournalIndex - s.startVersion
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == None
-    && s'.frozenIndirectionTableLoc == None
+    && s'.frozenLoc == None
     && s'.ephemeralStateIndex == 0
     && s'.syncReqs == s.syncReqs
   }
@@ -137,15 +137,20 @@ module JournalChain {
     && vop.JournalInternalOp?
 
     && s.frozenStateIndex.Some?
-    && s.frozenIndirectionTableLoc.Some?
+    && s.frozenLoc.Some?
 
     && s'.startVersion == s.startVersion
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.frozenStateIndex.value
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.frozenIndirectionTableLoc.value
+    && s'.persistentJournalIndex == (
+      if s.persistentJournalIndex < s.frozenStateIndex.value then
+        s.frozenStateIndex.value
+      else
+        s.persistentJournalIndex
+    )
+    && s'.persistentLoc == s.frozenLoc.value
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == s.syncReqs
   }
@@ -160,9 +165,9 @@ module JournalChain {
     && s'.journal == s.journal[s'.startVersion - s.startVersion ..]
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == s.syncReqs
   }
@@ -175,9 +180,9 @@ module JournalChain {
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == Some(vop.loc)
+    && s'.frozenLoc == Some(vop.loc)
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == s.syncReqs
   }
@@ -187,14 +192,15 @@ module JournalChain {
     && vop.ForgetOldOp?
 
     && s.frozenStateIndex == Some(s.persistentStateIndex)
+    && s.frozenLoc.Some?
 
     && s'.startVersion == s.startVersion
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.frozenLoc.value
     && s'.frozenStateIndex == None
-    && s'.frozenIndirectionTableLoc == None
+    && s'.frozenLoc == None
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == s.syncReqs
   }
@@ -209,9 +215,9 @@ module JournalChain {
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == s.syncReqs[vop.id := s.startVersion + |s.journal|]
   }
@@ -227,16 +233,16 @@ module JournalChain {
     && s'.journal == s.journal
     && s'.persistentStateIndex == s.persistentStateIndex
     && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenIndirectionTableLoc == s.frozenIndirectionTableLoc
+    && s'.frozenLoc == s.frozenLoc
     && s'.ephemeralStateIndex == s.ephemeralStateIndex
     && s'.syncReqs == MapRemove1(s.syncReqs, vop.id)
   }
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && vop.JournalInternalOp?
+    && (vop.JournalInternalOp? || vop.TristateInternalOp?)
     && s' == s
   }
 
