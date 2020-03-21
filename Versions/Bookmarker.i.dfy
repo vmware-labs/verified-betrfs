@@ -119,10 +119,16 @@ module Bookmarker {
     s.jc.journal[a - s.jc.startVersion ..]
   }
 
-  function JournalForPersistent(s: Variables) : seq<JournalEntry>
+  function AllJournalFromPersistentState(s: Variables) : seq<JournalEntry>
   requires 0 <= s.jc.persistentStateIndex - s.jc.startVersion <= |s.jc.journal|
   {
     JournalSuffix(s, s.jc.persistentStateIndex)
+  }
+
+  function PersistentJournal(s: Variables) : seq<JournalEntry>
+  requires 0 <= s.jc.persistentStateIndex - s.jc.startVersion <= |s.jc.journal|
+  {
+    JournalSlice(s, s.jc.persistentStateIndex, s.jc.persistentJournalIndex)
   }
 
   predicate StatesConsistent(

@@ -50,6 +50,7 @@ module JournalChain {
     | ReplayStep
     | CrashStep
     | AdvancePersistentStep
+    | CleanUpStep
     | ObtainFrozenLocStep
     | ForgetOldStep
     | PushSyncStep
@@ -121,15 +122,16 @@ module JournalChain {
     && s'.startVersion == 0
     && 0 <= s.persistentStateIndex - s.startVersion <= |s.journal|
     && s'.journal
-        == s.journal[0 .. s.persistentJournalIndex - s.startVersion]
+        == s.journal[s.persistentStateIndex - s.startVersion
+                  .. s.persistentJournalIndex - s.startVersion]
     && s'.persistentStateIndex == 0
     && s'.persistentJournalIndex
-        == s.persistentJournalIndex - s.startVersion
+        == s.persistentJournalIndex - s.persistentStateIndex
     && s'.persistentLoc == s.persistentLoc
     && s'.frozenStateIndex == None
     && s'.frozenLoc == None
     && s'.ephemeralStateIndex == 0
-    && s'.syncReqs == s.syncReqs
+    && s'.syncReqs == map[]
   }
 
   predicate AdvancePersistent(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -155,7 +157,7 @@ module JournalChain {
     && s'.syncReqs == s.syncReqs
   }
 
-  predicate CleanUpStep(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate CleanUp(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
     && vop.JournalInternalOp?
 
@@ -254,6 +256,7 @@ module JournalChain {
       case ReplayStep => Replay(k, s, s', vop)
       case CrashStep => Crash(k, s, s', vop)
       case AdvancePersistentStep => AdvancePersistent(k, s, s', vop)
+      case CleanUpStep => CleanUp(k, s, s', vop)
       case ObtainFrozenLocStep => ObtainFrozenLoc(k, s, s', vop)
       case ForgetOldStep => ForgetOld(k, s, s', vop)
       case PushSyncStep => PushSync(k, s, s', vop)

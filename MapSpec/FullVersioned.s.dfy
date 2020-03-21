@@ -15,14 +15,12 @@ abstract module FullVersioned {
 
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
-      ghost version: Version,
       states: seq<SM.Variables>,
       ghost syncReqs: map<SyncReqId, Version>
   )
 
   predicate Init(k: Constants, s: Variables)
   {
-    && s.version == 0
     && |s.states| == 1
     && SM.Init(k.k, s.states[0])
     && s.syncReqs == map[]
@@ -32,7 +30,7 @@ abstract module FullVersioned {
     | CrashStep
     | AdvanceStep
     | QueryStep
-    | PersistStep
+    | PersistStep(amt: int)
     | PushSyncStep(ghost id: SyncReqId)
     | PopSyncStep(ghost id: SyncReqId)
     | StutterStep
@@ -40,7 +38,6 @@ abstract module FullVersioned {
   predicate Crash(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
     && uiop.CrashOp?
-    && s'.version == 0
     && |s.states| > 0
     && s'.states == [s.states[0]]
     && s'.syncReqs == map[]
@@ -55,7 +52,6 @@ abstract module FullVersioned {
         s'.states[|s'.states| - 2],
         s'.states[|s'.states| - 1],
         uiop)
-    && s'.version == s.version
     && s'.syncReqs == s.syncReqs
   }
 
@@ -69,30 +65,28 @@ abstract module FullVersioned {
         uiop)
   }
 
-  predicate Persist(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
+  predicate Persist(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, amt: int)
   {
     && uiop.NoOp?
-    && s.version <= s'.version <= s.version + |s.states| - 1
-    && s'.states == s.states[s'.version - s.version ..]
-    && s'.syncReqs == s.syncReqs
+    && 0 <= amt <= |s.states| - 1
+    && s'.states == s.states[amt ..]
+    && s'.syncReqs == (map id | id in s.syncReqs :: s.syncReqs[id] - amt)
   }
 
   predicate PushSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: SyncReqId)
   {
     && uiop == UI.PushSyncOp(id)
     && id !in s.syncReqs
-    && s'.version == s.version
     && s'.states == s.states
     && s'.syncReqs ==
-        s.syncReqs[id := s.version + |s.states| - 1]
+        s.syncReqs[id := |s.states| - 1]
   }
 
   predicate PopSync(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, id: SyncReqId)
   {
     && uiop == UI.PopSyncOp(id)
     && id in s.syncReqs
-    && s.syncReqs[id] <= s.version
-    && s'.version == s.version
+    && s.syncReqs[id] <= 0
     && s'.states == s.states
     && s'.syncReqs == MapRemove1(s.syncReqs, id)
   }
@@ -109,7 +103,7 @@ abstract module FullVersioned {
       case CrashStep => Crash(k, s, s', uiop)
       case AdvanceStep => Advance(k, s, s', uiop)
       case QueryStep => Query(k, s, s', uiop)
-      case PersistStep => Persist(k, s, s', uiop)
+      case PersistStep(amt) => Persist(k, s, s', uiop, amt)
       case PushSyncStep(id) => PushSync(k, s, s', uiop, id)
       case PopSyncStep(id) => PopSync(k, s, s', uiop, id)
       case StutterStep => Stutter(k, s, s', uiop)

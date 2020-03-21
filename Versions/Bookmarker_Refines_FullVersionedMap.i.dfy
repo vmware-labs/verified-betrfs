@@ -3,6 +3,7 @@ include "../MapSpec/FullVersionedMap.s.dfy"
 
 module Bookmarker_Refines_FullVersionedMap {
   import Bookmarker
+  import TriStateMap
   import FVM = FullVersionedMap
   import opened Options
   import opened Sequences
@@ -44,17 +45,22 @@ module Bookmarker_Refines_FullVersionedMap {
   ensures |res| == |s.jc.journal| + 1
       - (s.jc.persistentJournalIndex - s.jc.startVersion)
   {
-    statesOf(persistentState(k, s), Bookmarker.JournalForPersistent(s))
+    statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s))
         [s.jc.persistentJournalIndex - s.jc.persistentStateIndex ..]
+  }
+
+  function syncReqs(s: Bookmarker.Variables) : map<int, int>
+  {
+      map id | id in s.jc.syncReqs ::
+          s.jc.syncReqs[id] - s.jc.persistentJournalIndex
   }
 
   function I(k: Bookmarker.Constants, s: Bookmarker.Variables) : FVM.Variables
   requires Bookmarker.Inv(k, s)
   {
     FVM.Variables(
-      s.jc.persistentJournalIndex,
       states(k, s),
-      s.jc.syncReqs
+      syncReqs(s)
     )
   }
 
@@ -73,9 +79,8 @@ module Bookmarker_Refines_FullVersionedMap {
     requires vop.SendPersistentLocOp?
     ensures FVM.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    assert I(k, s).version == I(k, s').version;
-    assert Bookmarker.JournalForPersistent(s)
-        == Bookmarker.JournalForPersistent(s') by {
+    assert Bookmarker.AllJournalFromPersistentState(s)
+        == Bookmarker.AllJournalFromPersistentState(s') by {
       Bookmarker.reveal_JournalSuffix();
     } 
     assert I(k, s).states == I(k, s').states by {
@@ -98,13 +103,13 @@ module Bookmarker_Refines_FullVersionedMap {
         Bookmarker.reveal_JournalSlice();
         Bookmarker.reveal_JournalSuffix();
         assert Bookmarker.JournalSlice(s, s.jc.persistentStateIndex, s.jc.ephemeralStateIndex)
-            == Bookmarker.JournalForPersistent(s);
+            == Bookmarker.AllJournalFromPersistentState(s);
       }
-      Bookmarker.ApplySeq(persistentState(k, s), Bookmarker.JournalForPersistent(s));
+      Bookmarker.ApplySeq(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s));
       {
-        Last_statesOf_ApplySeq(persistentState(k, s), Bookmarker.JournalForPersistent(s));
+        Last_statesOf_ApplySeq(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s));
       }
-      Last(statesOf(persistentState(k, s), Bookmarker.JournalForPersistent(s)));
+      Last(statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s)));
       {
         reveal_states();
       }
@@ -127,7 +132,7 @@ module Bookmarker_Refines_FullVersionedMap {
         s'.tsm.ephemeralState.value,
         uiop);
 
-      assert Bookmarker.JournalForPersistent(s)
+      assert Bookmarker.AllJournalFromPersistentState(s)
           == Bookmarker.JournalSlice(s, s.jc.persistentStateIndex, s.jc.ephemeralStateIndex)
         by {
           Bookmarker.reveal_JournalSlice();
@@ -140,20 +145,31 @@ module Bookmarker_Refines_FullVersionedMap {
         assert s'.jc.journal == s.jc.journal;
         assert s == s';
         assert I(k, s) == I(k, s');
-        Last_statesOf_ApplySeq(persistentState(k, s), Bookmarker.JournalForPersistent(s));
+        Last_statesOf_ApplySeq(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s));
         assert FVM.Query(Ik(k), I(k, s), I(k, s'), uiop);
         assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.QueryStep);
       } else if |jes| == 1 {
-        assert DropLast(Bookmarker.JournalForPersistent(s')) == Bookmarker.JournalForPersistent(s);
-        assert Last(Bookmarker.JournalForPersistent(s')) == jes[0];
+        assert DropLast(Bookmarker.AllJournalFromPersistentState(s')) == Bookmarker.AllJournalFromPersistentState(s);
+        assert Last(Bookmarker.AllJournalFromPersistentState(s')) == jes[0];
 
-        assert Bookmarker.JournalForPersistent(s')
+        assert Bookmarker.AllJournalFromPersistentState(s')
             == Bookmarker.JournalSlice(s', s'.jc.persistentStateIndex, s'.jc.ephemeralStateIndex)
           by { Bookmarker.reveal_JournalSlice(); }
 
         ephemeralIsLast(k, s');
 
-        reveal_states();
+        calc {
+          DropLast(states(k, s'));
+          { reveal_states(); }
+          DropLast(statesOf(persistentState(k, s'),
+              Bookmarker.AllJournalFromPersistentState(s'))
+              [s'.jc.persistentJournalIndex - s'.jc.persistentStateIndex ..]);
+          statesOf(persistentState(k, s),
+              Bookmarker.AllJournalFromPersistentState(s))
+              [s.jc.persistentJournalIndex - s.jc.persistentStateIndex ..];
+          { reveal_states(); }
+          states(k, s);
+        }
 
         assert FVM.Advance(Ik(k), I(k, s), I(k, s'), uiop);
         assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.AdvanceStep);
@@ -169,6 +185,72 @@ module Bookmarker_Refines_FullVersionedMap {
     }
   }
 
+  lemma statesOfI(m: MapSpec.Variables, jes: seq<JournalEntry>, i: int)
+  requires 0 <= i <= |jes|
+  ensures statesOf(m, jes)[i] == Bookmarker.ApplySeq(m, jes[..i])
+  {
+    if i == |jes| {
+      Last_statesOf_ApplySeq(m, jes);
+      assert jes == jes[..i];
+    } else {
+      calc {
+        statesOf(m, jes)[i];
+        statesOf(m, DropLast(jes))[i];
+        { statesOfI(m, DropLast(jes), i); }
+        Bookmarker.ApplySeq(m, DropLast(jes)[..i]);
+        { assert DropLast(jes)[..i] == jes[..i]; }
+        Bookmarker.ApplySeq(m, jes[..i]);
+      }
+    }
+  }
+
+  lemma states0(k: Bookmarker.Constants, s: Bookmarker.Variables)
+    requires Bookmarker.Inv(k, s)
+    ensures states(k, s)[0]
+        == Bookmarker.ApplySeq(persistentState(k, s),
+            Bookmarker.PersistentJournal(s))
+  {
+    calc {
+      states(k, s)[0];
+        { reveal_states(); }
+      statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s))
+        [s.jc.persistentJournalIndex - s.jc.persistentStateIndex];
+        { statesOfI(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s), s.jc.persistentJournalIndex - s.jc.persistentStateIndex); }
+      Bookmarker.ApplySeq(persistentState(k, s),
+            Bookmarker.AllJournalFromPersistentState(s)[.. s.jc.persistentJournalIndex - s.jc.persistentStateIndex]);
+      {
+        Bookmarker.reveal_JournalSlice();
+        Bookmarker.reveal_JournalSuffix();
+        assert Bookmarker.AllJournalFromPersistentState(s)[.. s.jc.persistentJournalIndex - s.jc.persistentStateIndex]
+            == Bookmarker.PersistentJournal(s);
+      }
+      Bookmarker.ApplySeq(persistentState(k, s), Bookmarker.PersistentJournal(s));
+    }
+  }
+
+  lemma CrashPreservesPersistentJournal(k: Bookmarker.Constants, s: Bookmarker.Variables, s':Bookmarker.Variables, uiop: UI.Op, vop: VOp)
+    requires Bookmarker.Inv(k, s)
+    requires Bookmarker.Inv(k, s')
+    requires Bookmarker.NextStep(k, s, s', vop, uiop)
+    requires vop.CrashOp?
+    ensures Bookmarker.PersistentJournal(s)
+        == Bookmarker.PersistentJournal(s')
+  {
+    calc {
+      Bookmarker.PersistentJournal(s);
+      { Bookmarker.reveal_JournalSlice(); }
+      s.jc.journal[s.jc.persistentStateIndex - s.jc.startVersion
+                .. s.jc.persistentJournalIndex - s.jc.startVersion];
+      //s.jc.journal[0 .. s.jc.persistentJournalIndex - s.jc.startVersion]
+      //  [0 .. s.jc.persistentJournalIndex - s.jc.persistentStateIndex];
+      s'.jc.journal[0 .. s.jc.persistentJournalIndex - s.jc.persistentStateIndex];
+      s'.jc.journal[s'.jc.persistentStateIndex - s'.jc.startVersion
+                .. s'.jc.persistentJournalIndex - s'.jc.startVersion];
+      { Bookmarker.reveal_JournalSlice(); }
+      Bookmarker.PersistentJournal(s');
+    }
+  }
+
   lemma CrashRefines(k: Bookmarker.Constants, s: Bookmarker.Variables, s':Bookmarker.Variables, uiop: UI.Op, vop: VOp)
     requires Bookmarker.Inv(k, s)
     requires Bookmarker.Inv(k, s')
@@ -176,6 +258,18 @@ module Bookmarker_Refines_FullVersionedMap {
     requires vop.CrashOp?
     ensures FVM.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
+    assert |states(k, s')| == 1;
+    assert persistentState(k, s) == persistentState(k, s');
+    CrashPreservesPersistentJournal(k, s, s', uiop, vop);
+    calc {
+      states(k, s')[0];
+      {
+        states0(k, s);
+        states0(k, s');
+      }
+      states(k, s)[0];
+    }
+
     assert FVM.Crash(Ik(k), I(k, s), I(k, s'), uiop);
     assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.CrashStep);
   }
@@ -197,7 +291,53 @@ module Bookmarker_Refines_FullVersionedMap {
     requires vop.TristateInternalOp?
     ensures FVM.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    reveal_states();
+    Bookmarker.reveal_JournalSuffix();
+    if TriStateMap.DiskChange(k.tsm, s.tsm, s'.tsm, vop) {
+      assert persistentState(k, s) == persistentState(k, s');
+      assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    } 
+    else if TriStateMap.DiskChange(k.tsm, s.tsm, s'.tsm, vop) {
+      assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    }
+    else {
+      assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    }
+  }
+
+  lemma AdvancePersistentRefines(k: Bookmarker.Constants, s: Bookmarker.Variables, s':Bookmarker.Variables, uiop: UI.Op, vop: VOp)
+    requires Bookmarker.Inv(k, s)
+    requires Bookmarker.Inv(k, s')
+    requires Bookmarker.NextStep(k, s, s', vop, uiop)
+    requires vop.JournalInternalOp?
+    requires JournalChain.AdvancePersistent(k.jc, s.jc, s'.jc, vop)
+    requires s.tsm == s'.tsm
+    ensures FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.PersistStep(
+        s'.jc.persistentJournalIndex - s.jc.persistentJournalIndex));
+  {
+    var amt := s'.jc.persistentJournalIndex - s.jc.persistentJournalIndex;
+    assert Bookmarker.AllJournalFromPersistentState(s')
+        == Bookmarker.AllJournalFromPersistentState(s');
+    calc {
+      states(k, s');
+      { reveal_states(); }
+      statesOf(persistentState(k, s'), Bookmarker.AllJournalFromPersistentState(s'))
+        [s'.jc.persistentJournalIndex - s'.jc.persistentStateIndex ..];
+      statesOf(persistentState(k, s'), Bookmarker.AllJournalFromPersistentState(s'))
+        [s'.jc.persistentJournalIndex - s'.jc.persistentStateIndex ..];
+
+      
+      statesOf(s.tsm.frozenState.value, Bookmarker.AllJournalFromPersistentState(s))
+        [s'.jc.persistentJournalIndex - s.jc.persistentStateIndex ..];
+      statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s))
+        [s'.jc.persistentJournalIndex - s.jc.persistentStateIndex ..];
+      statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s))
+        [s.jc.persistentJournalIndex - s.jc.persistentStateIndex ..][amt ..];
+      { reveal_states(); }
+      states(k, s)[amt ..];
+    }
+    assert FVM.Persist(Ik(k), I(k, s), I(k, s'), uiop,
+        s'.jc.persistentJournalIndex - s.jc.persistentJournalIndex);
   }
 
   lemma JournalInternalRefines(k: Bookmarker.Constants, s: Bookmarker.Variables, s':Bookmarker.Variables, uiop: UI.Op, vop: VOp)
@@ -207,7 +347,17 @@ module Bookmarker_Refines_FullVersionedMap {
     requires vop.JournalInternalOp?
     ensures FVM.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
-    assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    reveal_states();
+    Bookmarker.reveal_JournalSuffix();
+    if JournalChain.AdvancePersistent(k.jc, s.jc, s'.jc, vop) {
+      AdvancePersistentRefines(k, s, s', uiop, vop);
+    }
+    else if JournalChain.CleanUp(k.jc, s.jc, s'.jc, vop) {
+      assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    }
+    else {
+      assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
+    }
   }
 
   lemma SendFrozenLocRefines(k: Bookmarker.Constants, s: Bookmarker.Variables, s':Bookmarker.Variables, uiop: UI.Op, vop: VOp)
@@ -217,6 +367,8 @@ module Bookmarker_Refines_FullVersionedMap {
     requires vop.SendFrozenLocOp?
     ensures FVM.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
+    reveal_states();
+    Bookmarker.reveal_JournalSuffix();
     assert FVM.NextStep(Ik(k), I(k, s), I(k, s'), uiop, FVM.StutterStep);
   }
 
